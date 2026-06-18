@@ -811,6 +811,120 @@ describe("PortMaster plugin", () => {
     }
   })
 
+  it("applies declarative compatibility profiles to installed launches", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-portmaster-compat-"))
+    const zipBytes = makeZip({
+      "Digger.sh": Buffer.from("#!/bin/bash\n./digger/digger.x86_64\n"),
+      "Digger-x11.sh": Buffer.from("#!/bin/bash\n./digger/digger.x86_64\n"),
+      "digger/digger.x86_64": fakeElf("x86_64"),
+    })
+    const catalog = {
+      ports: {
+        "digger.zip": {
+          name: "digger.zip",
+          items: ["Digger.sh", "Digger-x11.sh", "digger"],
+          attr: {
+            title: "Digger",
+            desc: "A tiny x86_64 game.",
+            inst: "Ready to run.",
+            genres: ["arcade"],
+            porter: ["PortMaster"],
+            rtr: true,
+            exp: false,
+            runtime: [],
+            reqs: [],
+            arch: ["x86_64"],
+            availability: "full",
+          },
+          source: {
+            md5: createHash("md5").update(zipBytes).digest("hex"),
+            size: zipBytes.length,
+            url: "https://example.invalid/digger.zip",
+          },
+        },
+      },
+    }
+    const productPlugin = createPortMasterPlugin({
+      catalogPath: "/catalog/ports.json",
+      installRoot: root,
+      compatibility: {
+        "digger.zip": {
+          launchScript: "Digger-x11.sh",
+          deviceArch: "x86_64",
+          env: { SDL_VIDEODRIVER: "x11" },
+          presentation: {
+            mode: "sway-fullscreen",
+            windowMatcher: '[title="Digger"]',
+          },
+        },
+      },
+      readFileText: async () => JSON.stringify(catalog),
+      fetchImpl: async () =>
+        new Response(zipBytes, {
+          status: 200,
+          headers: { "content-type": "application/zip" },
+        }),
+    })
+
+    try {
+      const install = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.install",
+      ) as PluginHandler | undefined
+      if (!install) throw new Error("missing portmaster.install handler")
+      const manifest = await Effect.runPromise(
+        runPluginHandler(install, {
+          operation: "portmaster.install",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            id: "digger.zip",
+            installedAt: "2026-06-18T00:00:00.000Z",
+          },
+        }),
+      )
+      expect(manifest.compatibility).toMatchObject({
+        launchScript: "Digger-x11.sh",
+        deviceArch: "x86_64",
+        env: { SDL_VIDEODRIVER: "x11" },
+      })
+
+      const prepareLaunch = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.prepare-launch",
+      ) as PluginHandler | undefined
+      if (!prepareLaunch) throw new Error("missing portmaster.prepare-launch")
+      const envelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            useBubblewrap: false,
+          },
+        }),
+      )
+
+      expect(envelope).toMatchObject({
+        command: join(root, "PortMaster", "launch.sh"),
+        args: [],
+        launchScriptPath: join(root, "ports", "Digger-x11.sh"),
+        cwd: join(root, "ports"),
+        env: {
+          DEVICE_ARCH: "x86_64",
+          SDL_VIDEODRIVER: "x11",
+        },
+        presentation: {
+          mode: "sway-fullscreen",
+          windowMatcher: '[title="Digger"]',
+        },
+      })
+      const launcher = await readFile(envelope.command, "utf8")
+      expect(launcher).toContain("Digger-x11.sh")
+      expect(launcher).toContain("SDL_VIDEODRIVER='x11'")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("exposes installed PortMaster manifests as playable library entries", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-portmaster-library-"))
     const zipBytes = makeZip({

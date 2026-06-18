@@ -1,4 +1,11 @@
 export type {
+  PortMasterCompatibilityProfile,
+  PortMasterCompatibilityProfileMap,
+  PortMasterInputCompatibilityProfile,
+  PortMasterPresentationProfile,
+  PortMasterRuntimeCompatibilityProfile,
+} from "./src/compatibility"
+export type {
   PortMasterLaunchEnvelope,
   PortMasterLaunchEnvelopeInput,
   PortMasterLaunchInputCompatibility,

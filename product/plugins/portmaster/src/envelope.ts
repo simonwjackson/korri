@@ -1,5 +1,10 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises"
 import { basename, dirname, join, relative } from "node:path"
+import type {
+  PortMasterInputCompatibilityProfile,
+  PortMasterPresentationProfile,
+  PortMasterRuntimeCompatibilityProfile,
+} from "./compatibility"
 import type { PortMasterInstalledManifest } from "./installer"
 
 export interface PortMasterLaunchEnvelopeInput {
@@ -16,11 +21,8 @@ export interface PortMasterLaunchEnvelopeInput {
   readonly runtimeCompatibility?: PortMasterLaunchRuntimeCompatibilityInput
 }
 
-export interface PortMasterLaunchRuntimeCompatibilityInput {
-  readonly mode: "none" | "retroarch-libretro"
-  readonly retroarchPath?: string
-  readonly retroarchLogPath?: string
-}
+export type PortMasterLaunchRuntimeCompatibilityInput =
+  PortMasterRuntimeCompatibilityProfile
 
 export interface PortMasterLaunchRuntimeCompatibility {
   readonly mode: "none" | "retroarch-libretro"
@@ -29,14 +31,8 @@ export interface PortMasterLaunchRuntimeCompatibility {
   readonly retroarchLogPath?: string
 }
 
-export interface PortMasterLaunchInputCompatibilityInput {
-  readonly mode: "none" | "sdl-gamecontroller" | "gptokeyb"
-  readonly sdlGameControllerConfig?: string
-  readonly gptokeybPath?: string
-  readonly gptokeybLoaderPath?: string
-  readonly gptokeybLogPath?: string
-  readonly bindRealUinput?: boolean
-}
+export type PortMasterLaunchInputCompatibilityInput =
+  PortMasterInputCompatibilityProfile
 
 export interface PortMasterLaunchInputCompatibility {
   readonly mode: "none" | "sdl-gamecontroller" | "gptokeyb"
@@ -48,15 +44,7 @@ export interface PortMasterLaunchInputCompatibility {
   readonly gptokeybLogPath?: string
 }
 
-export interface PortMasterLaunchPresentationInput {
-  readonly mode: "none" | "sway-fullscreen"
-  readonly swaymsgPath?: string
-  readonly windowMatcher?: string
-  readonly logPath?: string
-  readonly windowProbe?: string
-  readonly startupPollAttempts?: number
-  readonly startupPollDelayMs?: number
-}
+export type PortMasterLaunchPresentationInput = PortMasterPresentationProfile
 
 export interface PortMasterLaunchPresentation {
   readonly mode: "sway-fullscreen"
@@ -89,7 +77,10 @@ export async function preparePortMasterLaunchEnvelope(
   input: PortMasterLaunchEnvelopeInput,
 ): Promise<PortMasterLaunchEnvelope> {
   const manifest = input.manifest ?? (await readManifest(input.manifestPath))
-  const launchScript = selectLaunchScript(manifest, input.launchScript)
+  const launchScript = selectLaunchScript(
+    manifest,
+    input.launchScript ?? manifest.compatibility?.launchScript,
+  )
   const launchScriptPath = join(manifest.portsRoot, launchScript)
   const controlRoot = join(manifest.installRoot, "PortMaster")
   const tasksetterPath = join(controlRoot, "tasksetter")
@@ -102,16 +93,20 @@ export async function preparePortMasterLaunchEnvelope(
   const useBubblewrap = input.useBubblewrap ?? false
   const fexWrapper = manifest.extracted.fexWrappers?.[0]
   const armhfQemuWrapper = manifest.extracted.armhfQemuWrappers?.[0]
-  const presentationInput = input.presentation
+  const presentationInput =
+    input.presentation ?? manifest.compatibility?.presentation
   const inputCompatibility = normalizeInputCompatibility({
     manifest,
     controlRoot,
-    input: input.inputCompatibility,
+    input:
+      input.inputCompatibility ?? manifest.compatibility?.inputCompatibility,
   })
   const runtimeCompatibility = normalizeRuntimeCompatibility({
     manifest,
     controlRoot,
-    input: input.runtimeCompatibility,
+    input:
+      input.runtimeCompatibility ??
+      manifest.compatibility?.runtimeCompatibility,
   })
   const env: Record<string, string> = {
     XDG_DATA_HOME: manifest.installRoot,
@@ -120,7 +115,10 @@ export async function preparePortMasterLaunchEnvelope(
     KORRI_PORTMASTER_PORTS_ROOT: manifest.portsRoot,
     KORRI_PORTMASTER_INPUT_MODE: inputCompatibility.mode,
     KORRI_PORTMASTER_RUNTIME_MODE: runtimeCompatibility.mode,
-    DEVICE_ARCH: input.deviceArch ?? preferredDeviceArch(manifest),
+    DEVICE_ARCH:
+      input.deviceArch ??
+      manifest.compatibility?.deviceArch ??
+      preferredDeviceArch(manifest),
     SDL_GAMECONTROLLERCONFIG: inputCompatibility.sdlGameControllerConfig,
     ...(inputCompatibility.gptokeybPath
       ? { KORRI_PORTMASTER_GPTOKEYB_TARGET: inputCompatibility.gptokeybPath }
@@ -162,6 +160,7 @@ export async function preparePortMasterLaunchEnvelope(
           ...fexWrapper.env,
         }
       : {}),
+    ...(manifest.compatibility?.env ?? {}),
   }
 
   await mkdir(controlRoot, { recursive: true })

@@ -13,6 +13,7 @@ import { basename, dirname, join, normalize, sep } from "node:path"
 import { promisify } from "node:util"
 import { inflateRawSync } from "node:zlib"
 import type { ProviderId } from "@platform/plugin"
+import type { PortMasterCompatibilityProfile } from "./compatibility"
 
 const execFileAsync = promisify(execFile)
 
@@ -94,6 +95,7 @@ export interface PortMasterInstallInput {
   readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
   readonly fexWrapper?: PortMasterFexWrapperOptions
   readonly armhfQemuWrapper?: PortMasterArmhfQemuWrapperOptions
+  readonly compatibility?: PortMasterCompatibilityProfile
   readonly installedAt?: string
 }
 
@@ -113,6 +115,7 @@ export interface PortMasterInstalledManifest {
   readonly installRoot: string
   readonly portsRoot: string
   readonly manifestPath: string
+  readonly compatibility?: PortMasterCompatibilityProfile
   readonly source: {
     readonly url: string
     readonly sizeBytes: number
@@ -240,6 +243,7 @@ export async function installPortMasterEntry(
       "manifests",
       `${portSlug(input.id)}.json`,
     ),
+    ...(input.compatibility ? { compatibility: input.compatibility } : {}),
     source: {
       url: input.downloadUrl,
       sizeBytes: archive.length,

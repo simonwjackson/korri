@@ -12,6 +12,10 @@ import type { ProviderHealth } from "@platform/protocol/acquisition/source-healt
 import { Effect } from "effect"
 import { KORRI_FEX_PLUGIN_ID } from "../../fex-runtime"
 import { KORRI_RETROARCH_PLUGIN_ID } from "../../retroarch"
+import type {
+  PortMasterCompatibilityProfile,
+  PortMasterCompatibilityProfileMap,
+} from "./compatibility"
 import {
   type PortMasterLaunchInputCompatibilityInput,
   type PortMasterLaunchPresentationInput,
@@ -43,6 +47,8 @@ export interface PortMasterPluginOptions {
   readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
   readonly fexWrapper?: PortMasterFexWrapperOptions
   readonly armhfQemuWrapper?: PortMasterArmhfQemuWrapperOptions
+  readonly compatibilityPath?: string
+  readonly compatibility?: PortMasterCompatibilityProfileMap
 }
 
 interface PortMasterRuntime {
@@ -54,7 +60,10 @@ interface PortMasterRuntime {
   readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
   readonly fexWrapper?: PortMasterFexWrapperOptions
   readonly armhfQemuWrapper?: PortMasterArmhfQemuWrapperOptions
+  readonly compatibilityPath?: string
+  readonly compatibility?: PortMasterCompatibilityProfileMap
   catalog?: Promise<readonly PortMasterEntry[]>
+  compatibilityDb?: Promise<ReadonlyMap<string, PortMasterCompatibilityProfile>>
 }
 
 interface PortMasterEntry {
@@ -306,36 +315,50 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                 const armhfQemuWrapper =
                   armhfQemuWrapperFromInput(input.armhfQemuWrapper) ??
                   runtime.armhfQemuWrapper
+                const inlineCompatibility = compatibilityFromInput(
+                  input.compatibility,
+                )
 
-                return Effect.tryPromise({
-                  try: () =>
-                    installPortMasterEntry({
-                      providerId: context.provider,
-                      id: entry.id,
-                      title: entry.title,
-                      downloadUrl: entry.downloadUrl,
-                      ...(entry.md5 ? { md5: entry.md5 } : {}),
-                      ...(entry.size !== undefined ? { size: entry.size } : {}),
-                      items: entry.items,
-                      arch: entry.arch,
-                      runtime: entry.runtime,
-                      readyToRun: entry.readyToRun,
-                      installRoot,
-                      fetchImpl: runtime.fetchImpl,
-                      ...(nativeElfRepair ? { nativeElfRepair } : {}),
-                      ...(fexWrapper ? { fexWrapper } : {}),
-                      ...(armhfQemuWrapper ? { armhfQemuWrapper } : {}),
-                      ...(installedAt ? { installedAt } : {}),
+                return loadCompatibilityDb(runtime).pipe(
+                  Effect.flatMap(compatibilityDb =>
+                    Effect.tryPromise({
+                      try: () =>
+                        installPortMasterEntry({
+                          providerId: context.provider,
+                          id: entry.id,
+                          title: entry.title,
+                          downloadUrl: entry.downloadUrl,
+                          ...(entry.md5 ? { md5: entry.md5 } : {}),
+                          ...(entry.size !== undefined
+                            ? { size: entry.size }
+                            : {}),
+                          items: entry.items,
+                          arch: entry.arch,
+                          runtime: entry.runtime,
+                          readyToRun: entry.readyToRun,
+                          installRoot,
+                          fetchImpl: runtime.fetchImpl,
+                          ...(nativeElfRepair ? { nativeElfRepair } : {}),
+                          ...(fexWrapper ? { fexWrapper } : {}),
+                          ...(armhfQemuWrapper ? { armhfQemuWrapper } : {}),
+                          compatibility:
+                            inlineCompatibility ??
+                            compatibilityDb.get(entry.id),
+                          ...(installedAt ? { installedAt } : {}),
+                        }),
+                      catch: error =>
+                        new AcquisitionError({
+                          reason: "provider",
+                          providerId: context.provider,
+                          message: `Failed to install PortMaster entry ${id}: ${
+                            error instanceof Error
+                              ? error.message
+                              : String(error)
+                          }`,
+                        }),
                     }),
-                  catch: error =>
-                    new AcquisitionError({
-                      reason: "provider",
-                      providerId: context.provider,
-                      message: `Failed to install PortMaster entry ${id}: ${
-                        error instanceof Error ? error.message : String(error)
-                      }`,
-                    }),
-                })
+                  ),
+                )
               }),
             )
           },
@@ -398,6 +421,10 @@ function createRuntime(options: PortMasterPluginOptions): PortMasterRuntime {
       options.readFileText ??
       (async path => readFile(path, { encoding: "utf8" })),
     installRoot: options.installRoot ?? defaultInstallRoot(),
+    compatibilityPath:
+      options.compatibilityPath ??
+      process.env.KORRI_PORTMASTER_COMPATIBILITY_PATH,
+    compatibility: options.compatibility,
     ...(options.nativeElfRepair
       ? { nativeElfRepair: options.nativeElfRepair }
       : {}),
@@ -691,6 +718,85 @@ function nativeElfRepairFromInput(
     return undefined
   }
   return { arch, interpreter, patchelfPath, libraryPaths }
+}
+
+function loadCompatibilityDb(
+  runtime: PortMasterRuntime,
+): Effect.Effect<
+  ReadonlyMap<string, PortMasterCompatibilityProfile>,
+  AcquisitionError
+> {
+  runtime.compatibilityDb ??=
+    loadCompatibilityJson(runtime).then(parseCompatibilityDb)
+  return Effect.tryPromise({
+    try: () =>
+      runtime.compatibilityDb as Promise<
+        ReadonlyMap<string, PortMasterCompatibilityProfile>
+      >,
+    catch: error =>
+      new AcquisitionError({
+        reason: "provider",
+        providerId: KORRI_PORTMASTER_PLUGIN_ID,
+        message: `Failed to load PortMaster compatibility DB: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      }),
+  })
+}
+
+async function loadCompatibilityJson(
+  runtime: PortMasterRuntime,
+): Promise<unknown> {
+  if (runtime.compatibilityPath) {
+    return JSON.parse(await runtime.readFileText(runtime.compatibilityPath))
+  }
+  return runtime.compatibility ?? {}
+}
+
+function parseCompatibilityDb(
+  raw: unknown,
+): ReadonlyMap<string, PortMasterCompatibilityProfile> {
+  const records = readRecord(raw)
+  return new Map(
+    Object.entries(records).flatMap(([id, value]) => {
+      const profile = compatibilityFromInput(value)
+      return profile ? [[normalizePortmasterId(id), profile] as const] : []
+    }),
+  )
+}
+
+function compatibilityFromInput(
+  value: unknown,
+): PortMasterCompatibilityProfile | undefined {
+  const record = readRecord(value)
+  const launchScript = stringValue(record.launchScript)
+  const deviceArch = stringValue(record.deviceArch)
+  const env = stringRecord(record.env)
+  const runtimeCompatibility = runtimeCompatibilityFromInput(
+    record.runtimeCompatibility,
+  )
+  const inputCompatibility = inputCompatibilityFromInput(
+    record.inputCompatibility,
+  )
+  const presentation = presentationFromInput(record.presentation)
+  if (
+    !launchScript &&
+    !deviceArch &&
+    !env &&
+    !runtimeCompatibility &&
+    !inputCompatibility &&
+    !presentation
+  ) {
+    return undefined
+  }
+  return {
+    ...(launchScript ? { launchScript } : {}),
+    ...(deviceArch ? { deviceArch } : {}),
+    ...(env ? { env } : {}),
+    ...(runtimeCompatibility ? { runtimeCompatibility } : {}),
+    ...(inputCompatibility ? { inputCompatibility } : {}),
+    ...(presentation ? { presentation } : {}),
+  }
 }
 
 function runtimeCompatibilityFromInput(
