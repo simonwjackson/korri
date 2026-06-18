@@ -215,6 +215,7 @@ Result:
 - Bandai validation rendered 2048 using the original `2048.sh` and generated RetroArch wrapper.
 - Follow-up implemented install-time runtime detection for incomplete catalog metadata: extracted launch scripts are scanned for `retroarch`/`-L`, extracted files are scanned for `*_libretro.so.*`, detections are recorded in `extracted.runtimeDetections`, and `prepare-launch` auto-selects `runtimeCompatibility.mode = "retroarch-libretro"` unless explicitly overridden.
 - Added a generic PortMaster `runtime-mounts` seam for FRT/Godot/Weston-style `.squashfs` runtime contracts. Install records `portmaster-squashfs-runtime` detections from catalog runtime names such as `frt_3.5.2.squashfs`, `godot_4.3.squashfs`, and `weston_pkg_0.2.squashfs`; compatibility profiles can provide fulfilled runtime roots; `prepare-launch` generates placeholder `PortMaster/libs/*.squashfs` files and fake `mount`/`umount` helpers that symlink those roots into the paths expected by upstream scripts.
+- Broadened the same seam to common Mono, dotnet, Java/Zulu, Ren'Py, Pyxel, GM Toolkit, Solarus, and RLVM squashfs runtime families. The generated mount helper also supports `mount --bind` overlays used by Ren'Py-style scripts.
 
 ---
 
