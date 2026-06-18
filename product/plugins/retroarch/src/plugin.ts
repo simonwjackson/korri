@@ -7,6 +7,7 @@ export const KORRI_RETROARCH_APP_ID =
 export const KORRI_RETROARCH_GBA_SYSTEM_ID = "gba" as const
 export const KORRI_RETROARCH_GENESIS_SYSTEM_ID = "genesis" as const
 export const KORRI_RETROARCH_NES_SYSTEM_ID = "nes" as const
+export const KORRI_RETROARCH_PC98_SYSTEM_ID = "pc98" as const
 export const KORRI_RETROARCH_PSP_SYSTEM_ID = "psp" as const
 export const KORRI_RETROARCH_PSX_SYSTEM_ID = "psx" as const
 export const KORRI_RETROARCH_SNES_SYSTEM_ID = "snes" as const
@@ -20,6 +21,9 @@ export const KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_LOCAL_ID =
   "genesis-plus-gx" as const
 export const KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID =
   `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_LOCAL_ID}` as const
+export const KORRI_RETROARCH_NP2KAI_RUNTIME_LOCAL_ID = "np2kai" as const
+export const KORRI_RETROARCH_NP2KAI_RUNTIME_ID =
+  `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_NP2KAI_RUNTIME_LOCAL_ID}` as const
 export const KORRI_RETROARCH_PCSX_REARMED_RUNTIME_LOCAL_ID =
   "pcsx-rearmed" as const
 export const KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID =
@@ -88,6 +92,16 @@ export const retroarchPlugin = plugin({
             },
           ],
         },
+        [KORRI_RETROARCH_PC98_SYSTEM_ID]: {
+          id: KORRI_RETROARCH_PC98_SYSTEM_ID,
+          title: "NEC PC-98",
+          apps: [
+            {
+              id: KORRI_RETROARCH_APP_ID,
+              runtime: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
+            },
+          ],
+        },
         [KORRI_RETROARCH_PSP_SYSTEM_ID]: {
           id: KORRI_RETROARCH_PSP_SYSTEM_ID,
           title: "Sony PlayStation Portable",
@@ -140,6 +154,13 @@ export const retroarchPlugin = plugin({
           app: KORRI_RETROARCH_APP_ID,
           path: "/etc/korri/cores/genesis_plus_gx_libretro.so",
           supports: { systems: [KORRI_RETROARCH_GENESIS_SYSTEM_ID] },
+        },
+        [KORRI_RETROARCH_NP2KAI_RUNTIME_LOCAL_ID]: {
+          id: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
+          kind: "libretro-core",
+          app: KORRI_RETROARCH_APP_ID,
+          path: "/etc/korri/cores/np2kai_libretro.so",
+          supports: { systems: [KORRI_RETROARCH_PC98_SYSTEM_ID] },
         },
         [KORRI_RETROARCH_PCSX_REARMED_RUNTIME_LOCAL_ID]: {
           id: KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,

@@ -236,6 +236,11 @@ let
           cfg.environment.etc."korri/cores/mesen_libretro.so".source or ""
         )
       ))
+      (check "${name}: RetroArch NP2Kai core is exposed at the stable launch path" (
+        lib.hasSuffix "/lib/retroarch/cores/np2kai_libretro.so" (
+          cfg.environment.etc."korri/cores/np2kai_libretro.so".source or ""
+        )
+      ))
       (check "${name}: RetroArch PCSX ReARMed core is exposed at the stable launch path" (
         lib.hasSuffix "/lib/retroarch/cores/pcsx_rearmed_libretro.so" (
           cfg.environment.etc."korri/cores/pcsx_rearmed_libretro.so".source or ""
@@ -251,31 +256,33 @@ let
           cfg.environment.etc."korri/cores/bsnes_libretro.so".source or ""
         )
       ))
-      (check "${name}: compositor RetroArch closure contains mGBA, Genesis Plus GX, Mesen, PCSX ReARMed, PPSSPP, and bsnes cores" (
+      (check "${name}: compositor RetroArch closure contains mGBA, Genesis Plus GX, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes cores" (
         let
           wrappers = findRetroarchWrappers compositor.path;
           cores = retroarchCoresFor compositor.path;
         in
         builtins.length wrappers == 1
-        && builtins.length cores == 6
+        && builtins.length cores == 7
         && hasCore "mgba" cores
         && hasCore "genesis-plus-gx" cores
         && hasCore "mesen" cores
+        && hasCore "np2kai" cores
         && hasCore "pcsx-rearmed" cores
         && hasCore "ppsspp" cores
         && hasCore "bsnes" cores
       ))
-      (check "${name}: sessiond RetroArch closure contains mGBA, Genesis Plus GX, Mesen, PCSX ReARMed, PPSSPP, and bsnes cores" (
+      (check "${name}: sessiond RetroArch closure contains mGBA, Genesis Plus GX, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes cores" (
         let
           sessiondPath = sessiondUnit.path or [ ];
           wrappers = findRetroarchWrappers sessiondPath;
           cores = retroarchCoresFor sessiondPath;
         in
         builtins.length wrappers == 1
-        && builtins.length cores == 6
+        && builtins.length cores == 7
         && hasCore "mgba" cores
         && hasCore "genesis-plus-gx" cores
         && hasCore "mesen" cores
+        && hasCore "np2kai" cores
         && hasCore "pcsx-rearmed" cores
         && hasCore "ppsspp" cores
         && hasCore "bsnes" cores

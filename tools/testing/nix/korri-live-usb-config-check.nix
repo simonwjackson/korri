@@ -174,14 +174,14 @@ let
     ))
     (check "debug SSH defaults to off without injected keys" (!cfg.services.openssh.enable))
     # Kiosk RetroArch closure-shape: one RetroArch-owned bundle with the
-    # first-party mGBA, Genesis Plus GX, Mesen, PCSX ReARMed, PPSSPP, and bsnes libretro cores.
+    # first-party mGBA, Genesis Plus GX, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes libretro cores.
     (check "live USB compositor PATH must include exactly one retroarch-bare wrapper" (
       builtins.length retroarchWrappers == 1
     ))
-    (check "live USB RetroArch closure must contain exactly six libretro cores" (
+    (check "live USB RetroArch closure must contain exactly seven libretro cores" (
       builtins.length retroarchCores == 4
     ))
-    (check "live USB RetroArch closure must contain mGBA, Genesis Plus GX, Mesen, PCSX ReARMed, PPSSPP, and bsnes" (
+    (check "live USB RetroArch closure must contain mGBA, Genesis Plus GX, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes" (
       hasRetroarchCore "mgba" && hasRetroarchCore "genesis-plus-gx" && hasRetroarchCore "mesen" && hasRetroarchCore "bsnes"
     ))
     (check "live USB RetroArch must advertise XDelta patch support" (

@@ -24,6 +24,7 @@ let
       pkgs.libretro.mgba
       pkgs.libretro.genesis-plus-gx
       pkgs.libretro.mesen
+      pkgs.libretro.np2kai
       pkgs.libretro.pcsx-rearmed
       ppssppCore
       pkgs.libretro.bsnes
@@ -33,6 +34,7 @@ let
         pkgs.libretro.mgba
         pkgs.libretro.genesis-plus-gx
         pkgs.libretro.mesen
+        pkgs.libretro.np2kai
         pkgs.libretro.pcsx-rearmed
         ppssppCore
         pkgs.libretro.bsnes
@@ -54,6 +56,8 @@ in
       "${pkgs.libretro.genesis-plus-gx}/lib/retroarch/cores/genesis_plus_gx_libretro.so";
     environment.etc."korri/cores/mesen_libretro.so".source =
       "${pkgs.libretro.mesen}/lib/retroarch/cores/mesen_libretro.so";
+    environment.etc."korri/cores/np2kai_libretro.so".source =
+      "${pkgs.libretro.np2kai}/lib/retroarch/cores/np2kai_libretro.so";
     environment.etc."korri/cores/pcsx_rearmed_libretro.so".source =
       "${pkgs.libretro.pcsx-rearmed}/lib/retroarch/cores/pcsx_rearmed_libretro.so";
     environment.etc."korri/cores/ppsspp_libretro.so".source =
