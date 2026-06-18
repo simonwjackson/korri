@@ -6,6 +6,7 @@ export const KORRI_RETROARCH_APP_ID =
   `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_APP_LOCAL_ID}` as const
 export const KORRI_RETROARCH_GBA_SYSTEM_ID = "gba" as const
 export const KORRI_RETROARCH_GENESIS_SYSTEM_ID = "genesis" as const
+export const KORRI_RETROARCH_N64_SYSTEM_ID = "n64" as const
 export const KORRI_RETROARCH_NES_SYSTEM_ID = "nes" as const
 export const KORRI_RETROARCH_PC98_SYSTEM_ID = "pc98" as const
 export const KORRI_RETROARCH_PSP_SYSTEM_ID = "psp" as const
@@ -15,6 +16,10 @@ export const KORRI_RETROARCH_TG16_SYSTEM_ID = "tg16" as const
 export const KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID = "mgba" as const
 export const KORRI_RETROARCH_MGBA_RUNTIME_ID =
   `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID}` as const
+export const KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_LOCAL_ID =
+  "mupen64plus-next" as const
+export const KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID =
+  `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_LOCAL_ID}` as const
 export const KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_LOCAL_ID =
   "mednafen-pce-fast" as const
 export const KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID =
@@ -84,6 +89,16 @@ export const retroarchPlugin = plugin({
             {
               id: KORRI_RETROARCH_APP_ID,
               runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+            },
+          ],
+        },
+        [KORRI_RETROARCH_N64_SYSTEM_ID]: {
+          id: KORRI_RETROARCH_N64_SYSTEM_ID,
+          title: "Nintendo 64",
+          apps: [
+            {
+              id: KORRI_RETROARCH_APP_ID,
+              runtime: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
             },
           ],
         },
@@ -162,6 +177,13 @@ export const retroarchPlugin = plugin({
           app: KORRI_RETROARCH_APP_ID,
           path: "/etc/korri/cores/mednafen_pce_fast_libretro.so",
           supports: { systems: [KORRI_RETROARCH_TG16_SYSTEM_ID] },
+        },
+        [KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_LOCAL_ID]: {
+          id: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
+          kind: "libretro-core",
+          app: KORRI_RETROARCH_APP_ID,
+          path: "/etc/korri/cores/mupen64plus_next_libretro.so",
+          supports: { systems: [KORRI_RETROARCH_N64_SYSTEM_ID] },
         },
         [KORRI_RETROARCH_MESEN_RUNTIME_LOCAL_ID]: {
           id: KORRI_RETROARCH_MESEN_RUNTIME_ID,

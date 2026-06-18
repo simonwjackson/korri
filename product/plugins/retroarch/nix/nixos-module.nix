@@ -22,6 +22,7 @@ let
     paths = [
       pkgs.retroarch-bare
       pkgs.libretro.mgba
+      pkgs.libretro.mupen64plus
       pkgs.libretro.genesis-plus-gx
       pkgs.libretro.beetle-pce-fast
       pkgs.libretro.mesen
@@ -33,6 +34,7 @@ let
     passthru = {
       cores = [
         pkgs.libretro.mgba
+        pkgs.libretro.mupen64plus
         pkgs.libretro.genesis-plus-gx
         pkgs.libretro.beetle-pce-fast
         pkgs.libretro.mesen
@@ -54,6 +56,8 @@ in
 
     environment.etc."korri/cores/mgba_libretro.so".source =
       "${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so";
+    environment.etc."korri/cores/mupen64plus_next_libretro.so".source =
+      "${pkgs.libretro.mupen64plus}/lib/retroarch/cores/mupen64plus_next_libretro.so";
     environment.etc."korri/cores/genesis_plus_gx_libretro.so".source =
       "${pkgs.libretro.genesis-plus-gx}/lib/retroarch/cores/genesis_plus_gx_libretro.so";
     environment.etc."korri/cores/mednafen_pce_fast_libretro.so".source =

@@ -26,6 +26,8 @@ import {
   KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID,
   KORRI_RETROARCH_MESEN_RUNTIME_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
+  KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
+  KORRI_RETROARCH_N64_SYSTEM_ID,
   KORRI_RETROARCH_NES_SYSTEM_ID,
   KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
   KORRI_RETROARCH_PC98_SYSTEM_ID,
@@ -115,7 +117,7 @@ describe("first-party plugins", () => {
     )
   })
 
-  it("enables RetroArch-owned GBA, Genesis, NES, PC-98, PSP, PSX, SNES, TG16, and core runtimes when requested", () => {
+  it("enables RetroArch-owned GBA, Genesis, N64, NES, PC-98, PSP, PSX, SNES, TG16, and core runtimes when requested", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,
     })
@@ -156,6 +158,23 @@ describe("first-party plugins", () => {
       kind: "libretro-core",
       path: "/etc/korri/cores/genesis_plus_gx_libretro.so",
       supports: { systems: [KORRI_RETROARCH_GENESIS_SYSTEM_ID] },
+    })
+    expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/n64`]).toMatchObject({
+      id: KORRI_RETROARCH_N64_SYSTEM_ID,
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(
+      registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/mupen64plus-next`],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
+      kind: "libretro-core",
+      path: "/etc/korri/cores/mupen64plus_next_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_N64_SYSTEM_ID] },
     })
     expect(
       registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/tg16`],

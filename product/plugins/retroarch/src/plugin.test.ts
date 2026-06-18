@@ -9,6 +9,8 @@ import {
   KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID,
   KORRI_RETROARCH_MESEN_RUNTIME_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
+  KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
+  KORRI_RETROARCH_N64_SYSTEM_ID,
   KORRI_RETROARCH_NES_SYSTEM_ID,
   KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
   KORRI_RETROARCH_PC98_SYSTEM_ID,
@@ -109,6 +111,32 @@ describe("RetroArch plugin", () => {
       app: KORRI_RETROARCH_APP_ID,
       path: "/etc/korri/cores/mednafen_pce_fast_libretro.so",
       supports: { systems: [KORRI_RETROARCH_TG16_SYSTEM_ID] },
+    })
+  })
+
+  it("contributes Mupen64Plus-Next as a RetroArch-owned Nintendo 64 runtime", () => {
+    expect(KORRI_RETROARCH_N64_SYSTEM_ID).toBe("n64")
+    expect(KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID).toBe(
+      "@korri:retroarch/mupen64plus-next",
+    )
+    expect(retroarchPlugin.contributes.config.systems?.n64).toMatchObject({
+      id: KORRI_RETROARCH_N64_SYSTEM_ID,
+      title: "Nintendo 64",
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(
+      retroarchPlugin.contributes.config.runtimes?.["mupen64plus-next"],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
+      kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
+      path: "/etc/korri/cores/mupen64plus_next_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_N64_SYSTEM_ID] },
     })
   })
 
