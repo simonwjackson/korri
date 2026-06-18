@@ -18,6 +18,7 @@ import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
 import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
 import {
   KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_BSNES_RUNTIME_ID,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
   KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
   KORRI_RETROARCH_GENESIS_SYSTEM_ID,
@@ -34,12 +35,16 @@ import {
   KORRI_RETROARCH_PLUGIN_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
   KORRI_RETROARCH_TG16_SYSTEM_ID,
-  KORRI_RETROARCH_BSNES_RUNTIME_ID,
 } from "./retroarch"
 import { KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
 import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
 import { KORRI_SMWCENTRAL_PLUGIN_ID } from "./smwcentral"
 import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
+import {
+  KORRI_STEAM_APP_ID,
+  KORRI_STEAM_PLUGIN_ID,
+  KORRI_STEAM_STORAGE_ID,
+} from "./steam"
 import { KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID } from "./super-mario-bros-remastered"
 
 describe("first-party plugins", () => {
@@ -84,6 +89,29 @@ describe("first-party plugins", () => {
       path: "product/plugins/ryubing/packages/ryubing-korri",
       capabilities: ["package.expose", "launch.runtime"],
     })
+  })
+
+  it("registers Steam as a first-party app provider plugin", () => {
+    const steam = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_STEAM_PLUGIN_ID,
+    )
+
+    expect(steam?.contributes.config.apps?.steam).toMatchObject({
+      id: KORRI_STEAM_APP_ID,
+      kind: KORRI_STEAM_PLUGIN_ID,
+      command: "steam",
+      plugin: {
+        [KORRI_STEAM_PLUGIN_ID]: {
+          state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+          extra: { args: ["-silent", "-gamepadui"] },
+        },
+      },
+    })
+    expect(steam?.contributes.config.apps?.steam).not.toHaveProperty("state")
+    expect(steam?.contributes.config.apps?.steam).not.toHaveProperty("extra")
+    expect(steam?.contributes.config.apps?.steam).not.toHaveProperty(
+      "launch-options",
+    )
   })
 
   it("enables RetroArch-owned GBA, Genesis, NES, PC-98, PSP, PSX, SNES, TG16, and core runtimes when requested", () => {
@@ -271,6 +299,7 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_PROTON_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_SRB2_PLUGIN_ID)).toBe(false)
+    expect(registry.enabledPluginIds.has(KORRI_STEAM_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PICO8_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PORTMASTER_PLUGIN_ID)).toBe(
       false,
@@ -291,7 +320,25 @@ describe("first-party plugins", () => {
     expect(
       registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
     ).toBeUndefined()
+    expect(registry.apps[KORRI_STEAM_APP_ID]).toBeUndefined()
     expect(registry.catalog).toEqual({})
+  })
+
+  it("enables Steam when composition explicitly opts in without auto-enabling Gamescope", () => {
+    const registry = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_STEAM_PLUGIN_ID,
+    })
+
+    expect(registry.enabledPluginIds.has(KORRI_STEAM_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
+    expect(registry.apps[KORRI_STEAM_APP_ID]).toMatchObject({
+      id: KORRI_STEAM_APP_ID,
+      kind: KORRI_STEAM_PLUGIN_ID,
+      command: "steam",
+    })
+    expect(registry.storage[KORRI_STEAM_STORAGE_ID]).toMatchObject({
+      root: "/var/lib/korri/steam",
+    })
   })
 
   it("enables Gamescope when composition explicitly opts in", () => {
