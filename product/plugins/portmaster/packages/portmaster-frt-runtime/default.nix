@@ -3,10 +3,21 @@
   stdenv,
   fetchurl,
   squashfsTools,
+  patchelf,
+  SDL2,
+  zlib,
 }:
 
 let
   runtimeName = "frt_3.5.2";
+  runtimeLibraryPath = lib.makeLibraryPath [
+    SDL2
+    zlib
+    stdenv.cc.cc.lib
+  ];
+  linuxInterpreter = lib.optionalString stdenv.hostPlatform.isLinux (
+    lib.removeSuffix "\n" (builtins.readFile "${stdenv.cc}/nix-support/dynamic-linker")
+  );
 in
 stdenv.mkDerivation {
   pname = "portmaster-frt-runtime";
@@ -17,7 +28,7 @@ stdenv.mkDerivation {
     sha256 = "0ppl632da7mghvva9iyr3skbr67jji358vxdzjzab4vp80q94ndp";
   };
 
-  nativeBuildInputs = [ squashfsTools ];
+  nativeBuildInputs = [ squashfsTools patchelf ];
 
   dontUnpack = true;
 
@@ -28,9 +39,17 @@ stdenv.mkDerivation {
     mkdir -p "$runtime_root"
     unsquashfs -f -d "$runtime_root" "$src"
 
+    ${lib.optionalString stdenv.hostPlatform.isAarch64 ''
+      patchelf \
+        --set-interpreter '${linuxInterpreter}' \
+        --set-rpath '${runtimeLibraryPath}' \
+        "$runtime_root/${runtimeName}"
+    ''}
+
     mkdir -p "$out/nix-support"
     printf '%s\n' '${runtimeName}' > "$out/nix-support/runtime-name"
     printf '%s\n' "$runtime_root" > "$out/nix-support/runtime-root"
+    printf '%s\n' '${runtimeLibraryPath}' > "$out/nix-support/library-path"
     cat > "$out/nix-support/compatibility-profile.json" <<EOF
     {
       "runtimeCompatibility": {

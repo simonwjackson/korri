@@ -930,6 +930,12 @@ describe("PortMaster plugin", () => {
       expect(mountWrapper).toContain("frt_3.3.4.squashfs")
       expect(mountWrapper).toContain("bind_mode=1")
       expect(mountWrapper).toContain(runtimeRoot)
+      await expect(
+        readFile(join(root, "PortMaster", "device_info.txt"), "utf8"),
+      ).resolves.toContain("PM_CAN_MOUNT")
+      await expect(
+        readFile(join(root, "ports", "PortMaster", "device_info.txt"), "utf8"),
+      ).resolves.toContain("DEVICE_NAME")
     } finally {
       await rm(root, { recursive: true, force: true })
     }
