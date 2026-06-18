@@ -66,6 +66,7 @@ export function composeLaunchCompanions(
     const diagnostics: LaunchCompanionDiagnostic[] = []
 
     for (const [provider, policy] of companionEntries) {
+      if (isDisabledLaunchCompanionPolicy(policy)) continue
       const plugin = input.registry.get(provider)
       if (plugin === undefined) {
         diagnostics.push(
@@ -156,6 +157,14 @@ export function launchCompanionDiagnosticSummary(
   diagnostics: readonly LaunchCompanionDiagnostic[],
 ): string {
   return diagnostics.map(diagnostic => diagnostic.message).join("; ")
+}
+
+function isDisabledLaunchCompanionPolicy(policy: unknown): boolean {
+  return isRecord(policy) && policy.enable === false
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function isLaunchComposeHandler(handler: PluginHandler): boolean {

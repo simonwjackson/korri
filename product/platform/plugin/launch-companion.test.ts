@@ -134,6 +134,26 @@ describe("composeLaunchCompanions", () => {
     })
   })
 
+  it("skips explicitly disabled launch companion policies", async () => {
+    const registry = createPluginRegistry([wrapperPlugin])
+
+    const result = await Effect.runPromise(
+      composeLaunchCompanions({
+        spec: baseSpec,
+        registry,
+        launchCompanions: {
+          [wrapperPlugin.id]: { enable: false },
+          "@test:missing": { enable: false },
+        },
+      }),
+    )
+
+    expect(result).toEqual({
+      _tag: "LaunchCompanionsComposed",
+      spec: baseSpec,
+    })
+  })
+
   it("returns structured diagnostics for missing and disabled providers", async () => {
     const registry = createPluginRegistry([wrapperPlugin])
 
