@@ -5,6 +5,9 @@
  * community stats, media gallery, not-installed. Composed from screens/kit.tsx;
  * screen-specific layout in screens/detail.css (namespace pcDet-).
  */
+
+import { picoGames } from "../fixtures"
+import { picoAppChoices, picoReleases, picoStats } from "../fixtures-extra"
 import {
   Badge,
   BlockBar,
@@ -19,8 +22,6 @@ import {
   Stat,
   Title,
 } from "./kit"
-import { picoGames } from "../fixtures"
-import { picoAppChoices, picoReleases, picoStats } from "../fixtures-extra"
 
 // A representative game for every detail screen (matches Variant D's pick).
 const game = picoGames[1] ?? picoGames[0]
