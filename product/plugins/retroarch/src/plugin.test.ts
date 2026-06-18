@@ -6,6 +6,8 @@ import {
   KORRI_RETROARCH_GBA_SYSTEM_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_PLUGIN_ID,
+  KORRI_RETROARCH_SNES_SYSTEM_ID,
+  KORRI_RETROARCH_BSNES_RUNTIME_ID,
   retroarchPlugin,
 } from ".."
 
@@ -43,6 +45,30 @@ describe("RetroArch plugin", () => {
       app: KORRI_RETROARCH_APP_ID,
       path: "/etc/korri/cores/mgba_libretro.so",
       supports: { systems: [KORRI_RETROARCH_GBA_SYSTEM_ID] },
+    })
+  })
+
+  it("contributes bsnes as a RetroArch-owned SNES runtime", () => {
+    expect(KORRI_RETROARCH_SNES_SYSTEM_ID).toBe("snes")
+    expect(KORRI_RETROARCH_BSNES_RUNTIME_ID).toBe(
+      "@korri:retroarch/bsnes",
+    )
+    expect(retroarchPlugin.contributes.config.systems?.snes).toMatchObject({
+      id: KORRI_RETROARCH_SNES_SYSTEM_ID,
+      title: "Super Nintendo Entertainment System",
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_BSNES_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(retroarchPlugin.contributes.config.runtimes?.bsnes).toMatchObject({
+      id: KORRI_RETROARCH_BSNES_RUNTIME_ID,
+      kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
+      path: "/etc/korri/cores/bsnes_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_SNES_SYSTEM_ID] },
     })
   })
 

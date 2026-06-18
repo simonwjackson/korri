@@ -85,7 +85,7 @@ let
       retroarchCoresFor =
         path: lib.concatLists (map (wrapper: wrapper.passthru.cores or [ ]) (findRetroarchWrappers path));
       fake08CoreSource = "${targetPackages.libretro-fake-08}/lib/retroarch/cores/fake08_libretro.so";
-      mgbaCoreSource = "${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so";
+      hasCore = coreName: cores: builtins.any (core: (core.core or null) == coreName) cores;
     in
     [
       (check "${name}: eval has no assertion failures" (
@@ -222,26 +222,35 @@ let
         (cfg.environment.etc."korri/cores/fake08_libretro.so".source or null) == fake08CoreSource
       ))
       (check "${name}: RetroArch mGBA core is exposed at the stable launch path" (
-        (cfg.environment.etc."korri/cores/mgba_libretro.so".source or null) == mgbaCoreSource
+        lib.hasSuffix "/lib/retroarch/cores/mgba_libretro.so" (
+          cfg.environment.etc."korri/cores/mgba_libretro.so".source or ""
+        )
       ))
-      (check "${name}: compositor RetroArch closure contains exactly one mGBA core" (
+      (check "${name}: RetroArch bsnes core is exposed at the stable launch path" (
+        lib.hasSuffix "/lib/retroarch/cores/bsnes_libretro.so" (
+          cfg.environment.etc."korri/cores/bsnes_libretro.so".source or ""
+        )
+      ))
+      (check "${name}: compositor RetroArch closure contains mGBA and bsnes cores" (
         let
           wrappers = findRetroarchWrappers compositor.path;
           cores = retroarchCoresFor compositor.path;
         in
         builtins.length wrappers == 1
-        && builtins.length cores == 1
-        && ((builtins.head cores).core or null) == "mgba"
+        && builtins.length cores == 2
+        && hasCore "mgba" cores
+        && hasCore "bsnes" cores
       ))
-      (check "${name}: sessiond RetroArch closure contains exactly one mGBA core" (
+      (check "${name}: sessiond RetroArch closure contains mGBA and bsnes cores" (
         let
           sessiondPath = sessiondUnit.path or [ ];
           wrappers = findRetroarchWrappers sessiondPath;
           cores = retroarchCoresFor sessiondPath;
         in
         builtins.length wrappers == 1
-        && builtins.length cores == 1
-        && ((builtins.head cores).core or null) == "mgba"
+        && builtins.length cores == 2
+        && hasCore "mgba" cores
+        && hasCore "bsnes" cores
       ))
       # Mesa 25.2.6 Turnip is pathologically slow for Ryujinx on Adreno
       # (validated on bandai 2026-06-11: 4-vs-60-FPS class delta, see

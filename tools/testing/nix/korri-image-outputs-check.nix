@@ -147,6 +147,7 @@ let
       wrappers = findRetroarchWrappers path;
     in
     if wrappers == [ ] then [ ] else (builtins.head wrappers).passthru.cores;
+  hasRetroarchCore = coreName: cores: builtins.any (core: (core.core or null) == coreName) cores;
 
   checks = [
     (check "headless system package must be exposed" (packages ? korri-headless-system))
@@ -351,29 +352,28 @@ let
       builtins.all (file: !(sourceContainsHardwareFact file)) hardwareFactSourceFiles
     ))
     # Kiosk RetroArch closure-shape: the RetroArch plugin owns the bare
-    # RetroArch binary wrapper and ships the nixpkgs mGBA libretro core by
-    # default. Other plugin-owned cores may expose stable /etc paths without
-    # appending duplicate RetroArch wrappers to PATH.
-    (check "x86 kiosk RetroArch closure must contain exactly one libretro core" (
-      builtins.length (retroarchCoresFor kiosk) == 1
+    # RetroArch binary wrapper and ships the first-party mGBA and bsnes
+    # libretro cores by default.
+    (check "x86 kiosk RetroArch closure must contain exactly two libretro cores" (
+      builtins.length (retroarchCoresFor kiosk) == 2
     ))
-    (check "x86 kiosk RetroArch's single libretro core must be mgba" (
+    (check "x86 kiosk RetroArch closure must contain mGBA and bsnes" (
       let cores = retroarchCoresFor kiosk; in
-      cores != [ ] && ((builtins.head cores).core or null) == "mgba"
+      hasRetroarchCore "mgba" cores && hasRetroarchCore "bsnes" cores
     ))
-    (check "Product live USB RetroArch closure must contain exactly one libretro core" (
-      builtins.length (retroarchCoresFor liveUsb) == 1
+    (check "Product live USB RetroArch closure must contain exactly two libretro cores" (
+      builtins.length (retroarchCoresFor liveUsb) == 2
     ))
-    (check "Product live USB RetroArch's single libretro core must be mgba" (
+    (check "Product live USB RetroArch closure must contain mGBA and bsnes" (
       let cores = retroarchCoresFor liveUsb; in
-      cores != [ ] && ((builtins.head cores).core or null) == "mgba"
+      hasRetroarchCore "mgba" cores && hasRetroarchCore "bsnes" cores
     ))
-    (check "Developer live USB RetroArch closure must contain exactly one libretro core" (
-      builtins.length (retroarchCoresFor liveUsbDeveloper) == 1
+    (check "Developer live USB RetroArch closure must contain exactly two libretro cores" (
+      builtins.length (retroarchCoresFor liveUsbDeveloper) == 2
     ))
-    (check "Developer live USB RetroArch's single libretro core must be mgba" (
+    (check "Developer live USB RetroArch closure must contain mGBA and bsnes" (
       let cores = retroarchCoresFor liveUsbDeveloper; in
-      cores != [ ] && ((builtins.head cores).core or null) == "mgba"
+      hasRetroarchCore "mgba" cores && hasRetroarchCore "bsnes" cores
     ))
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;

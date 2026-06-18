@@ -15,9 +15,13 @@ let
     paths = [
       pkgs.retroarch-bare
       pkgs.libretro.mgba
+      pkgs.libretro.bsnes
     ];
     passthru = {
-      cores = [ pkgs.libretro.mgba ];
+      cores = [
+        pkgs.libretro.mgba
+        pkgs.libretro.bsnes
+      ];
       unwrapped = pkgs.retroarch-bare;
     };
   };
@@ -28,6 +32,8 @@ in
     # baking a per-build nix store hash into user-authored launch data.
     environment.etc."korri/cores/mgba_libretro.so".source =
       "${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so";
+    environment.etc."korri/cores/bsnes_libretro.so".source =
+      "${pkgs.libretro.bsnes}/lib/retroarch/cores/bsnes_libretro.so";
 
     services.korri.compositor.path = lib.mkAfter [ retroarchKiosk ];
     systemd.user.services.korri-sessiond.path = lib.mkAfter [ retroarchKiosk ];

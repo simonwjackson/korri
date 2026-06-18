@@ -55,6 +55,7 @@ let
   retroarchWrappers = findRetroarchWrappers compositorPath;
   retroarchCores =
     if retroarchWrappers == [ ] then [ ] else (builtins.head retroarchWrappers).passthru.cores;
+  hasRetroarchCore = coreName: builtins.any (core: (core.core or null) == coreName) retroarchCores;
 
   expectedScope = if expectedArtifact == "developer" then "developer-broad" else "product-allowlist";
   expectedHome =
@@ -172,17 +173,16 @@ let
       == cfg.services.korri.liveUsbPersistence.label
     ))
     (check "debug SSH defaults to off without injected keys" (!cfg.services.openssh.enable))
-    # Kiosk RetroArch closure-shape: exactly one RetroArch-owned core (mGBA).
-    # Additional plugin-owned cores expose stable /etc paths without appending
-    # duplicate RetroArch wrappers to PATH.
+    # Kiosk RetroArch closure-shape: one RetroArch-owned bundle with the
+    # first-party mGBA and bsnes libretro cores.
     (check "live USB compositor PATH must include exactly one retroarch-bare wrapper" (
       builtins.length retroarchWrappers == 1
     ))
-    (check "live USB RetroArch closure must contain exactly one libretro core" (
-      builtins.length retroarchCores == 1
+    (check "live USB RetroArch closure must contain exactly two libretro cores" (
+      builtins.length retroarchCores == 2
     ))
-    (check "live USB RetroArch's single libretro core must be mgba" (
-      retroarchCores != [ ] && ((builtins.head retroarchCores).core or null) == "mgba"
+    (check "live USB RetroArch closure must contain mGBA and bsnes" (
+      hasRetroarchCore "mgba" && hasRetroarchCore "bsnes"
     ))
     (check "live USB RetroArch must advertise XDelta patch support" (
       retroarchWrappers != [ ]
