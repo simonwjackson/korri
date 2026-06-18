@@ -9,6 +9,8 @@ import {
   KORRI_RETROARCH_MESEN_RUNTIME_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_NES_SYSTEM_ID,
+  KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
+  KORRI_RETROARCH_PSX_SYSTEM_ID,
   KORRI_RETROARCH_PLUGIN_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
@@ -99,6 +101,32 @@ describe("RetroArch plugin", () => {
       app: KORRI_RETROARCH_APP_ID,
       path: "/etc/korri/cores/mesen_libretro.so",
       supports: { systems: [KORRI_RETROARCH_NES_SYSTEM_ID] },
+    })
+  })
+
+  it("contributes PCSX ReARMed as a RetroArch-owned PlayStation runtime", () => {
+    expect(KORRI_RETROARCH_PSX_SYSTEM_ID).toBe("psx")
+    expect(KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID).toBe(
+      "@korri:retroarch/pcsx-rearmed",
+    )
+    expect(retroarchPlugin.contributes.config.systems?.psx).toMatchObject({
+      id: KORRI_RETROARCH_PSX_SYSTEM_ID,
+      title: "Sony PlayStation",
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(
+      retroarchPlugin.contributes.config.runtimes?.["pcsx-rearmed"],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
+      kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
+      path: "/etc/korri/cores/pcsx_rearmed_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_PSX_SYSTEM_ID] },
     })
   })
 

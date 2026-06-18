@@ -7,6 +7,7 @@ export const KORRI_RETROARCH_APP_ID =
 export const KORRI_RETROARCH_GBA_SYSTEM_ID = "gba" as const
 export const KORRI_RETROARCH_GENESIS_SYSTEM_ID = "genesis" as const
 export const KORRI_RETROARCH_NES_SYSTEM_ID = "nes" as const
+export const KORRI_RETROARCH_PSX_SYSTEM_ID = "psx" as const
 export const KORRI_RETROARCH_SNES_SYSTEM_ID = "snes" as const
 export const KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID = "mgba" as const
 export const KORRI_RETROARCH_MGBA_RUNTIME_ID =
@@ -18,6 +19,10 @@ export const KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_LOCAL_ID =
   "genesis-plus-gx" as const
 export const KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID =
   `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_LOCAL_ID}` as const
+export const KORRI_RETROARCH_PCSX_REARMED_RUNTIME_LOCAL_ID =
+  "pcsx-rearmed" as const
+export const KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID =
+  `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_PCSX_REARMED_RUNTIME_LOCAL_ID}` as const
 export const KORRI_RETROARCH_BSNES_RUNTIME_LOCAL_ID = "bsnes" as const
 export const KORRI_RETROARCH_BSNES_RUNTIME_ID =
   `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_BSNES_RUNTIME_LOCAL_ID}` as const
@@ -79,6 +84,16 @@ export const retroarchPlugin = plugin({
             },
           ],
         },
+        [KORRI_RETROARCH_PSX_SYSTEM_ID]: {
+          id: KORRI_RETROARCH_PSX_SYSTEM_ID,
+          title: "Sony PlayStation",
+          apps: [
+            {
+              id: KORRI_RETROARCH_APP_ID,
+              runtime: KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
+            },
+          ],
+        },
         [KORRI_RETROARCH_SNES_SYSTEM_ID]: {
           id: KORRI_RETROARCH_SNES_SYSTEM_ID,
           title: "Super Nintendo Entertainment System",
@@ -111,6 +126,13 @@ export const retroarchPlugin = plugin({
           app: KORRI_RETROARCH_APP_ID,
           path: "/etc/korri/cores/genesis_plus_gx_libretro.so",
           supports: { systems: [KORRI_RETROARCH_GENESIS_SYSTEM_ID] },
+        },
+        [KORRI_RETROARCH_PCSX_REARMED_RUNTIME_LOCAL_ID]: {
+          id: KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
+          kind: "libretro-core",
+          app: KORRI_RETROARCH_APP_ID,
+          path: "/etc/korri/cores/pcsx_rearmed_libretro.so",
+          supports: { systems: [KORRI_RETROARCH_PSX_SYSTEM_ID] },
         },
         [KORRI_RETROARCH_BSNES_RUNTIME_LOCAL_ID]: {
           id: KORRI_RETROARCH_BSNES_RUNTIME_ID,
