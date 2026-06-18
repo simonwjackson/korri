@@ -1,3 +1,4 @@
+import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type { LaunchSpec } from "./launcher"
 import {
   decodeSessiondManagedLaunchStartResponse,
@@ -55,6 +56,7 @@ export type SessiondManagedLaunchTerminateResult =
 export interface SessiondManagedLaunchStartInput {
   readonly spec: LaunchSpec
   readonly lifecycle?: SessiondManagedLaunchLifecycle
+  readonly launchMetadata?: LaunchMetadata
   readonly wait?: LaunchSpec
 }
 
@@ -89,6 +91,7 @@ export async function requestSessiondManagedLaunchStart(
 ): Promise<SessiondManagedLaunchStartResult> {
   const body: Record<string, unknown> = { spec: input.spec }
   if (input.lifecycle) body.lifecycle = input.lifecycle
+  if (input.launchMetadata) body.launchMetadata = input.launchMetadata
   if (input.wait) body.wait = input.wait
 
   const response = await requestSessiondManagedLaunchJson(

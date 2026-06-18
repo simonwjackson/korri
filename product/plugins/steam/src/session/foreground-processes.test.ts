@@ -3,10 +3,13 @@ import {
   collectSteamForegroundProcesses,
   isSteamForegroundProcess,
   type SteamForegroundProcessInfo,
-} from "./steam-foreground-processes"
+} from "./foreground-processes"
 
-const steamLaunch = (appId = "584400"): SteamForegroundProcessInfo => ({
-  pid: 42,
+const steamLaunch = (
+  appId = "584400",
+  pid = 42,
+): SteamForegroundProcessInfo => ({
+  pid,
   uid: 1000,
   cmdline: [
     "/var/lib/korri/steam/steamrtarm64/reaper",
@@ -43,6 +46,55 @@ describe("Steam foreground process classification", () => {
         ],
       }),
     ).toBe(true)
+  })
+
+  it("scopes Proton, FEX, pressure-vessel, and game exe children to the AppID root", () => {
+    const processes: readonly SteamForegroundProcessInfo[] = [
+      steamLaunch("1029210"),
+      {
+        pid: 43,
+        ppid: 42,
+        uid: 1000,
+        cmdline: [
+          "/usr/bin/FEX",
+          "/var/lib/korri/steam/steamapps/common/30XX/30XX.exe",
+        ],
+      },
+      {
+        pid: 44,
+        ppid: 42,
+        uid: 1000,
+        cmdline: [
+          "/var/lib/korri/steam/steamapps/common/Proton - Experimental/proton",
+          "waitforexitandrun",
+        ],
+      },
+      {
+        pid: 45,
+        ppid: 44,
+        uid: 1000,
+        cmdline: [
+          "/var/lib/korri/steam/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/bin/pv-bwrap",
+        ],
+      },
+      {
+        pid: 47,
+        ppid: 45,
+        uid: 1000,
+        cmdline: [
+          "/usr/bin/FEXInterpreter",
+          "--rootfs",
+          "/run/pressure-vessel",
+        ],
+      },
+      steamLaunch("452060", 46),
+    ]
+
+    expect(
+      collectSteamForegroundProcesses(processes, { appId: "1029210" }).map(
+        process => process.pid,
+      ),
+    ).toEqual([42, 43, 44, 45, 47])
   })
 
   it("does not match warm Steam client or service processes", () => {

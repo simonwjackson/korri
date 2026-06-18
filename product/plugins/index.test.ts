@@ -4,6 +4,7 @@ import {
   createFirstPartyPluginRegistryFromEnv,
   firstPartyLaunchIntegrationsForRegistry,
   firstPartyPlugins,
+  firstPartySessionLifecycleHooksForRegistry,
 } from "."
 import { KORRI_FEX_PLUGIN_ID } from "./fex-runtime"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
@@ -264,6 +265,20 @@ describe("first-party plugins", () => {
       path: "/etc/korri/cores/bsnes_libretro.so",
       supports: { systems: [KORRI_RETROARCH_SNES_SYSTEM_ID] },
     })
+  })
+
+  it("filters plugin-owned session lifecycle hooks by enabled provider", () => {
+    const disabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: undefined,
+    })
+    const enabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: `${KORRI_GAMESCOPE_PLUGIN_ID},${KORRI_STEAM_PLUGIN_ID}`,
+    })
+
+    expect(firstPartySessionLifecycleHooksForRegistry(disabled)).toEqual([])
+    expect(
+      firstPartySessionLifecycleHooksForRegistry(enabled).map(hook => hook.id),
+    ).toEqual([KORRI_GAMESCOPE_PLUGIN_ID, KORRI_STEAM_PLUGIN_ID])
   })
 
   it("filters plugin-owned launch integrations by enabled provider", () => {

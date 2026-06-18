@@ -739,7 +739,7 @@ describe("session launcher", () => {
     args: ["--pid-tree"],
   }
 
-  it("forwards lifecycle + wait into the managed-launch start request", async () => {
+  it("forwards lifecycle, launch metadata, and wait into the managed-launch start request", async () => {
     let startBody: unknown
     const launcher = createSessionLauncher({
       socketPath: "/run/user/1000/korri/sessiond.sock",
@@ -760,12 +760,17 @@ describe("session launcher", () => {
     })
     const spawn = launcher.spawn
     if (!spawn) throw new Error("missing managed spawn")
-    void spawn(spec, { lifecycle: "session", wait: waitSpec })
+    void spawn(spec, {
+      lifecycle: "session",
+      launchMetadata: { appProviderId: "@korri:steam" },
+      wait: waitSpec,
+    })
     // Allow the preflight + start request to flush.
     await new Promise(resolve => setTimeout(resolve, 5))
     expect(startBody).toEqual({
       spec,
       lifecycle: "session",
+      launchMetadata: { appProviderId: "@korri:steam" },
       wait: waitSpec,
     })
   })

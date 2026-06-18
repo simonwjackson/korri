@@ -105,6 +105,7 @@ async function spawnViaSessiond(
   extras: LaunchExtras = {},
 ): Promise<ManagedLaunchResult> {
   const lifecycle = extras.lifecycle
+  const launchMetadata = extras.launchMetadata
   const wait = extras.wait
   const fetchImpl = options.fetchImpl ?? fetch
   const url =
@@ -153,7 +154,12 @@ async function spawnViaSessiond(
   }
 
   const startResult = await requestSessiondManagedLaunchStart(
-    { spec, ...(lifecycle ? { lifecycle } : {}), ...(wait ? { wait } : {}) },
+    {
+      spec,
+      ...(lifecycle ? { lifecycle } : {}),
+      ...(launchMetadata ? { launchMetadata } : {}),
+      ...(wait ? { wait } : {}),
+    },
     {
       ...(options.socketPath ? { socketPath: options.socketPath } : { url }),
       fetchImpl,

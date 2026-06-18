@@ -151,9 +151,21 @@ export type SessiondManagedLaunchStatus = Schema.Schema.Type<
   typeof SessiondManagedLaunchStatus
 >
 
+const LaunchMetadataProviderId = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^@[^:]+:.+$/)),
+)
+
+const SessiondLaunchMetadata = Schema.Struct({
+  appProviderId: Schema.optional(LaunchMetadataProviderId),
+  annotations: Schema.optional(
+    Schema.Record(LaunchMetadataProviderId, Schema.Unknown),
+  ),
+})
+
 export const SessiondManagedLaunchStartRequest = Schema.Struct({
   launchId: Schema.optional(Schema.String),
   spec: LaunchSpec,
+  launchMetadata: Schema.optional(SessiondLaunchMetadata),
   /**
    * Phase 4D / Track A. Defaults to `"foreground"` when omitted; the
    * daemon treats absence as foreground for Phase 4B back-compat.

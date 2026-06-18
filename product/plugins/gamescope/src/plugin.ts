@@ -5,6 +5,7 @@ import {
   type LaunchMetadata,
 } from "@platform/plugin/launch-metadata"
 import {
+  type ComposeGamescopeLaunchSpecOptions,
   composeGamescopeLaunchSpec,
   decodeGamescopePolicy,
   type GamescopePolicyValue,
@@ -22,9 +23,7 @@ const KORRI_STEAM_PROVIDER_ID = "@korri:steam" as const
 export interface GamescopeLaunchComposeInput {
   readonly spec: LaunchSpec
   readonly policy: GamescopePolicyValue
-  readonly options?: {
-    readonly launchMetadata?: LaunchMetadata
-  }
+  readonly options?: ComposeGamescopeLaunchSpecOptions
 }
 
 export interface GamescopePluginDiagnostic {

@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises"
 
 export interface SteamForegroundProcessInfo {
   readonly pid: number
+  readonly ppid?: number
   readonly uid?: number
   readonly cmdline: readonly string[]
 }
@@ -41,23 +42,42 @@ export function collectSteamForegroundProcesses(
   processes: readonly SteamForegroundProcessInfo[],
   filter: SteamForegroundProcessFilter = {},
 ): readonly SteamForegroundProcessInfo[] {
-  return processes.filter(process => isSteamForegroundProcess(process, filter))
+  if (!filter.appId) {
+    return processes.filter(process => isSteamForegroundProcess(process))
+  }
+
+  const roots = processes.filter(
+    process => steamAppIdFromProcess(process) === filter.appId,
+  )
+  const descendantPids = descendantsOf(
+    processes,
+    roots.map(root => root.pid),
+  )
+  return processes.filter(process => {
+    if (steamAppIdFromProcess(process) === filter.appId) return true
+    return descendantPids.has(process.pid)
+  })
 }
 
 export function isSteamForegroundProcess(
   process: SteamForegroundProcessInfo,
   filter: SteamForegroundProcessFilter = {},
 ): boolean {
-  if (filter.appId && steamAppIdFromProcess(process) !== filter.appId) {
-    return false
+  if (filter.appId) {
+    return collectSteamForegroundProcesses([process], filter).length > 0
   }
 
   const commandLine = commandLineForMatch(process)
   if (/\bSteamLaunch AppId=\d+\b/.test(commandLine)) return true
-  if (!commandLine.includes("/var/lib/korri/steam/steamapps/common/")) {
+  if (!commandLine.includes("/var/lib/korri/steam/steamapps/")) {
     return false
   }
-  return /\.exe(?:\s|$)/i.test(commandLine)
+  return (
+    /\.exe(?:\s|$)/i.test(commandLine) ||
+    /(?:^|[\s/])(?:FEX|FEXInterpreter|proton|pressure-vessel)(?:[\s/]|$)/i.test(
+      commandLine,
+    )
+  )
 }
 
 export async function cleanupSteamForegroundProcesses(
@@ -141,15 +161,21 @@ export async function scanCurrentUserProcesses(): Promise<
   for (const entry of entries) {
     if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue
     const pid = Number(entry.name)
-    const [uid, cmdline] = await Promise.all([
+    const [uid, ppid, cmdline] = await Promise.all([
       readProcUid(pid),
+      readProcParentPid(pid),
       readProcCmdline(pid),
     ])
     if (cmdline.length === 0) continue
     if (currentUid !== undefined && uid !== undefined && uid !== currentUid) {
       continue
     }
-    processes.push({ pid, ...(uid !== undefined ? { uid } : {}), cmdline })
+    processes.push({
+      pid,
+      ...(ppid !== undefined ? { ppid } : {}),
+      ...(uid !== undefined ? { uid } : {}),
+      cmdline,
+    })
   }
   return processes
 }
@@ -171,12 +197,49 @@ function commandLineForMatch(process: SteamForegroundProcessInfo): string {
   return process.cmdline.join(" ")
 }
 
+function descendantsOf(
+  processes: readonly SteamForegroundProcessInfo[],
+  rootPids: readonly number[],
+): ReadonlySet<number> {
+  const childrenByParent = new Map<number, SteamForegroundProcessInfo[]>()
+  for (const process of processes) {
+    if (process.ppid === undefined) continue
+    const siblings = childrenByParent.get(process.ppid) ?? []
+    siblings.push(process)
+    childrenByParent.set(process.ppid, siblings)
+  }
+
+  const descendants = new Set<number>()
+  const pending = [...rootPids]
+  while (pending.length > 0) {
+    const parent = pending.shift()
+    if (parent === undefined) continue
+    for (const child of childrenByParent.get(parent) ?? []) {
+      if (descendants.has(child.pid)) continue
+      descendants.add(child.pid)
+      pending.push(child.pid)
+    }
+  }
+  return descendants
+}
+
 async function readProcUid(pid: number): Promise<number | undefined> {
   try {
     const status = await readFile(`/proc/${pid}/status`, "utf8")
     const uidLine = status.split("\n").find(line => line.startsWith("Uid:"))
     const realUid = uidLine?.trim().split(/\s+/)[1]
     return realUid ? Number(realUid) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function readProcParentPid(pid: number): Promise<number | undefined> {
+  try {
+    const status = await readFile(`/proc/${pid}/status`, "utf8")
+    const ppidLine = status.split("\n").find(line => line.startsWith("PPid:"))
+    const ppid = ppidLine?.trim().split(/\s+/)[1]
+    return ppid ? Number(ppid) : undefined
   } catch {
     return undefined
   }

@@ -53,6 +53,13 @@ export const steamPlugin = plugin({
           apps: [{ id: KORRI_STEAM_APP_ID }],
         },
       },
+      modules: {
+        "session-cleanup": {
+          id: "session-cleanup",
+          kind: "session-hook",
+          capabilities: ["session.cleanup"],
+        },
+      },
       apps: {
         [KORRI_STEAM_APP_LOCAL_ID]: {
           id: KORRI_STEAM_APP_ID,
@@ -71,5 +78,13 @@ export const steamPlugin = plugin({
         },
       },
     },
+    handlers: [
+      {
+        id: "steam.session-cleanup",
+        operation: "session.cleanup",
+        capabilities: ["session.cleanup"],
+        run: context => ({ provider: context.provider, input: context.input }),
+      },
+    ],
   },
 })

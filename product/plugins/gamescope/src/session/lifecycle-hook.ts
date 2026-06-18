@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
-import type { KorriSessiondLifecycleHook } from "@product/services/device/sessiond"
+import type { KorriSessionLifecycleHook } from "@platform/plugin/session-lifecycle"
 import {
   createProcessGamescopeControlBridge,
   type GamescopeControlBridgeProcessManager,
@@ -15,7 +15,7 @@ export interface GamescopeSessionLifecycleHookOptions {
 
 export function createGamescopeSessionLifecycleHook(
   options: GamescopeSessionLifecycleHookOptions = {},
-): KorriSessiondLifecycleHook {
+): KorriSessionLifecycleHook {
   const env = options.env ?? process.env
   const reaper =
     options.reaper === false

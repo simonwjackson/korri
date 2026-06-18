@@ -4,6 +4,12 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { LaunchResult, LaunchSpec } from "@platform/library/launcher"
 import type { SessiondManagedLaunchEvent } from "@platform/library/sessiond-managed-launch-protocol"
+import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
+import {
+  createSteamSessionLifecycleHook,
+  KORRI_STEAM_PLUGIN_ID,
+  type SteamForegroundProcessInfo,
+} from "@product/plugins/steam"
 import {
   createKorriSessiondCore,
   type KorriSessiondCore,
@@ -18,9 +24,19 @@ import type {
   SessiondLifecycleSnapshot,
   StatusSidecar,
 } from "./sessiond-status-sidecar"
-import type { SteamForegroundProcessInfo } from "./steam-foreground-processes"
 
 const spec: LaunchSpec = { command: "/bin/game", args: ["rom.smc"] }
+
+function steamLaunchMetadata(appId: string): LaunchMetadata {
+  return {
+    appProviderId: KORRI_STEAM_PLUGIN_ID,
+    annotations: {
+      [KORRI_STEAM_PLUGIN_ID]: {
+        foregroundCleanup: { appId },
+      },
+    },
+  }
+}
 
 function startHarness(
   options: {
@@ -38,14 +54,6 @@ function startHarness(
     }>
     readonly sessionHooks?: readonly KorriSessiondLifecycleHook[]
     readonly managedStopGraceMs?: number
-    readonly steamForegroundProcessScanner?: () => Promise<
-      readonly SteamForegroundProcessInfo[]
-    >
-    readonly steamForegroundProcessSignaler?: (
-      pid: number,
-      signal: NodeJS.Signals,
-    ) => void
-    readonly steamForegroundKillGraceMs?: number
     readonly heartbeatIntervalMs?: number
   } = {},
 ) {
@@ -128,18 +136,6 @@ function startHarness(
     sessionHooks: options.sessionHooks,
     ...(options.managedStopGraceMs !== undefined
       ? { managedStopGraceMs: options.managedStopGraceMs }
-      : {}),
-    ...(options.steamForegroundProcessScanner
-      ? { steamForegroundProcessScanner: options.steamForegroundProcessScanner }
-      : {}),
-    ...(options.steamForegroundProcessSignaler
-      ? {
-          steamForegroundProcessSignaler:
-            options.steamForegroundProcessSignaler,
-        }
-      : {}),
-    ...(options.steamForegroundKillGraceMs !== undefined
-      ? { steamForegroundKillGraceMs: options.steamForegroundKillGraceMs }
       : {}),
     ...(options.heartbeatIntervalMs !== undefined
       ? { heartbeatIntervalMs: options.heartbeatIntervalMs }
@@ -793,12 +789,10 @@ describe("korri sessiond", () => {
     expect(events).not.toContain("terminate-game")
   })
 
-  it("escalates a managed Steam launch when graceful termination does not exit", async () => {
+  it("escalates a managed launch when graceful termination does not exit", async () => {
     const control = deferred<LaunchResult>()
     const { core, events } = startHarness({
       managedStopGraceMs: 0,
-      steamForegroundKillGraceMs: 0,
-      steamForegroundProcessScanner: async () => [],
       spawnLaunch: async () => ({
         result: control.promise,
         processGroupId: 584400,
@@ -819,11 +813,8 @@ describe("korri sessiond", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          launchId: "steam-launch",
-          spec: {
-            command: "/run/current-system/sw/bin/korri-steam-app",
-            args: ["584400"],
-          },
+          launchId: "managed-launch",
+          spec,
         }),
       }),
     )
@@ -834,7 +825,7 @@ describe("korri sessiond", () => {
       authorized({
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ launchId: "steam-launch" }),
+        body: JSON.stringify({ launchId: "managed-launch" }),
       }),
     )
 
@@ -843,17 +834,17 @@ describe("korri sessiond", () => {
     expect(events).toContain("terminate-game-now")
   })
 
-  it("kills AppID-scoped Steam foreground residuals before returning home", async () => {
+  it("runs Steam plugin cleanup before returning home", async () => {
     const control = deferred<LaunchResult>()
     const signals: Array<{ pid: number; signal: NodeJS.Signals }> = []
     let scan = 0
-    const sonicRoot: SteamForegroundProcessInfo = {
+    const thirtyXxRoot: SteamForegroundProcessInfo = {
       pid: 420,
       uid: 1000,
       cmdline: [
         "/var/lib/korri/steam/steamrtarm64/cleanup",
         "SteamLaunch",
-        "AppId=584400",
+        "AppId=1029210",
       ],
     }
     const caveblazersRoot: SteamForegroundProcessInfo = {
@@ -870,16 +861,62 @@ describe("korri sessiond", () => {
       uid: 1000,
       cmdline: ["/var/lib/korri/steam/steamrtarm64/steam", "-silent"],
     }
+    const thirtyXxExe: SteamForegroundProcessInfo = {
+      pid: 423,
+      ppid: 420,
+      uid: 1000,
+      cmdline: [
+        "/usr/bin/FEX",
+        "/var/lib/korri/steam/steamapps/common/30XX/30XX.exe",
+      ],
+    }
+    const proton: SteamForegroundProcessInfo = {
+      pid: 424,
+      ppid: 420,
+      uid: 1000,
+      cmdline: [
+        "/var/lib/korri/steam/steamapps/common/Proton - Experimental/proton",
+        "waitforexitandrun",
+      ],
+    }
+    const fex: SteamForegroundProcessInfo = {
+      pid: 425,
+      ppid: 424,
+      uid: 1000,
+      cmdline: [
+        "/usr/bin/FEXInterpreter",
+        "/var/lib/korri/steam/steamapps/common/30XX/30XX.exe",
+      ],
+    }
+    const pressureVessel: SteamForegroundProcessInfo = {
+      pid: 426,
+      ppid: 424,
+      uid: 1000,
+      cmdline: [
+        "/var/lib/korri/steam/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/bin/pv-bwrap",
+      ],
+    }
+    const thirtyXxProcesses = [
+      thirtyXxRoot,
+      thirtyXxExe,
+      proton,
+      fex,
+      pressureVessel,
+    ]
     const { core } = startHarness({
       managedStopGraceMs: 0,
-      steamForegroundKillGraceMs: 0,
-      steamForegroundProcessScanner: async () => {
-        scan += 1
-        if (scan <= 2) return [sonicRoot, caveblazersRoot, warmSteam]
-        return [caveblazersRoot, warmSteam]
-      },
-      steamForegroundProcessSignaler: (pid, signal) =>
-        signals.push({ pid, signal }),
+      sessionHooks: [
+        createSteamSessionLifecycleHook({
+          graceMs: 0,
+          processScanner: async () => {
+            scan += 1
+            if (scan <= 2)
+              return [...thirtyXxProcesses, caveblazersRoot, warmSteam]
+            return [caveblazersRoot, warmSteam]
+          },
+          signalProcess: (pid, signal) => signals.push({ pid, signal }),
+        }),
+      ],
       spawnLaunch: async () => ({
         result: control.promise,
         processGroupId: 584400,
@@ -889,36 +926,50 @@ describe("korri sessiond", () => {
       }),
     })
     await request(core, "/control/start", authorized({ method: "POST" }))
-    await request(
+    const start = await request(
       core,
       "/managed-launch",
       authorized({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          launchId: "sonic-steam-launch",
-          spec: {
-            command: "/run/current-system/sw/bin/korri-steam-app",
-            args: ["584400"],
-          },
+          launchId: "thirty-xx-steam-launch",
+          spec,
+          launchMetadata: steamLaunchMetadata("1029210"),
         }),
       }),
     )
+    expect(await start.json()).toEqual({
+      status: "accepted",
+      launchId: "thirty-xx-steam-launch",
+    })
 
-    await request(
+    const terminated = await request(
       core,
       "/managed-launch/terminate",
       authorized({
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ launchId: "sonic-steam-launch" }),
+        body: JSON.stringify({ launchId: "thirty-xx-steam-launch" }),
       }),
     )
+    expect(await terminated.json()).toEqual({
+      status: "accepted",
+      launchId: "thirty-xx-steam-launch",
+    })
 
     await waitForSessionMode(core, "home")
     expect(signals).toEqual([
       { pid: 420, signal: "SIGTERM" },
+      { pid: 423, signal: "SIGTERM" },
+      { pid: 424, signal: "SIGTERM" },
+      { pid: 425, signal: "SIGTERM" },
+      { pid: 426, signal: "SIGTERM" },
       { pid: 420, signal: "SIGKILL" },
+      { pid: 423, signal: "SIGKILL" },
+      { pid: 424, signal: "SIGKILL" },
+      { pid: 425, signal: "SIGKILL" },
+      { pid: 426, signal: "SIGKILL" },
     ])
   })
 

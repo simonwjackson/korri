@@ -5,9 +5,15 @@ import {
   type PluginRegistry,
   parseEnabledPluginIds,
 } from "@platform/plugin/registry"
+import type {
+  KorriSessionLifecycleHook,
+  KorriSessionLifecycleHookFactory,
+  KorriSessionLifecycleHookFactoryOptions,
+} from "@platform/plugin/session-lifecycle"
 import { fixtureAcquisitionPlugins } from "./acquisition-fixtures"
 import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin } from "./gamescope"
+import { createGamescopeSessionLifecycleHook } from "./gamescope/src/session/lifecycle-hook"
 import { levelShareSquarePlugin } from "./levelsharesquare"
 import { megaManArenaPlugin } from "./mega-man-arena"
 import { megaManMakerPlugin } from "./mega-man-maker"
@@ -26,7 +32,11 @@ import { ryubingPlugin, ryubingReadableLaunchIntegration } from "./ryubing"
 import { smbxGamePlugin } from "./smbxgame"
 import { smwCentralPlugin } from "./smwcentral"
 import { srb2Plugin } from "./srb2"
-import { steamPlugin, steamReadableLaunchIntegration } from "./steam"
+import {
+  createSteamSessionLifecycleHook,
+  steamPlugin,
+  steamReadableLaunchIntegration,
+} from "./steam"
 import { superMario127Plugin } from "./super-mario-127"
 import { superMarioBrosRemasteredPlugin } from "./super-mario-bros-remastered"
 import { yoshisFabricationStationPlugin } from "./yoshis-fabrication-station"
@@ -45,6 +55,26 @@ export function firstPartyLaunchIntegrationsForRegistry(
       integration.providerId === undefined ||
       registry.enabledPluginIds.has(integration.providerId),
   )
+}
+
+export const firstPartySessionLifecycleHookFactories = [
+  {
+    pluginId: gamescopePlugin.id,
+    create: createGamescopeSessionLifecycleHook,
+  },
+  {
+    pluginId: steamPlugin.id,
+    create: () => createSteamSessionLifecycleHook(),
+  },
+] satisfies readonly KorriSessionLifecycleHookFactory[]
+
+export function firstPartySessionLifecycleHooksForRegistry(
+  registry: Pick<PluginRegistry, "enabledPluginIds">,
+  options: KorriSessionLifecycleHookFactoryOptions = {},
+): readonly KorriSessionLifecycleHook[] {
+  return firstPartySessionLifecycleHookFactories
+    .filter(factory => registry.enabledPluginIds.has(factory.pluginId))
+    .map(factory => factory.create(options))
 }
 
 export const firstPartyPlugins = [

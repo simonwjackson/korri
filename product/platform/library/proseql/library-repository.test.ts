@@ -413,7 +413,12 @@ describe("createLibraryRepository — readable playable entries", () => {
       })
       expect(resolved.launchMetadata).toEqual({
         appProviderId: KORRI_STEAM_PLUGIN_ID,
-        annotations: { [KORRI_STEAM_PLUGIN_ID]: { steamSession: true } },
+        annotations: {
+          [KORRI_STEAM_PLUGIN_ID]: {
+            steamSession: true,
+            foregroundCleanup: { appId: "1029210" },
+          },
+        },
       })
       expect(resolved.artifacts?.root).toBe(join(steamStorageRoot, "Steam"))
     })

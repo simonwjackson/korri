@@ -271,8 +271,15 @@ export function createGameStreamRunner(
     // -- daemons defaulting to foreground on absence accept the
     // redundant field; strict decoders accept it because the protocol
     // includes it as an optional literal.
-    const extras: { lifecycle: "foreground" | "session"; wait?: LaunchSpec } = {
+    const extras: {
+      lifecycle: "foreground" | "session"
+      launchMetadata?: ClaimedGameStreamLaunchIntent["intent"]["launchMetadata"]
+      wait?: LaunchSpec
+    } = {
       lifecycle: launchClaim.intent.lifecycle,
+      ...(launchClaim.intent.launchMetadata
+        ? { launchMetadata: launchClaim.intent.launchMetadata }
+        : {}),
       ...(launchClaim.intent.wait ? { wait: launchClaim.intent.wait } : {}),
     }
     let spawned: ManagedLaunchResult

@@ -12,3 +12,21 @@ export {
   type SteamPluginPolicy,
   steamPlugin,
 } from "./src/plugin"
+export {
+  cleanupSteamForegroundProcesses,
+  collectSteamForegroundProcesses,
+  isSteamForegroundProcess,
+  type SteamForegroundCleanupOutcome,
+  type SteamForegroundProcessInfo,
+  type SteamForegroundProcessScanner,
+  type SteamForegroundProcessSignaler,
+  scanCurrentUserProcesses as scanCurrentUserSteamForegroundProcesses,
+  signalProcessByPid as signalSteamForegroundProcessByPid,
+  steamAppIdFromProcess,
+} from "./src/session/foreground-processes"
+export {
+  createSteamSessionLifecycleHook,
+  type SteamLaunchCleanupMetadata,
+  type SteamSessionLifecycleHookOptions,
+  steamLaunchCleanupMetadata,
+} from "./src/session/lifecycle-hook"

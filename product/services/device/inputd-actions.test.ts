@@ -108,40 +108,11 @@ describe("inputd actions", () => {
     })
   })
 
-  it("kills stale Steam foreground processes when sessiond has returned home", async () => {
-    const signals: Array<{ pid: number; signal: NodeJS.Signals }> = []
+  it("falls back to the kill file when sessiond has no active launch", async () => {
+    const dir = await tempDir()
+    const killFilePath = join(dir, "process-kill-data")
+    await writeFile(killFilePath, "retroarch\n")
     const { dispatcher, commands, warnings } = createHarness({
-      staleSteamKillGraceMs: 0,
-      processScanner: async () => [
-        {
-          pid: 42,
-          uid: 1000,
-          cmdline: [
-            "/nix/store/.../bin/frame-wrapper",
-            "--mangoapp",
-            "--",
-            "/var/lib/korri/steam/steamrtarm64/reaper",
-            "SteamLaunch",
-            "AppId=584400",
-            "--",
-            "/var/lib/korri/steam/steamapps/common/Sonic Mania/SonicMania.exe",
-          ],
-        },
-        {
-          pid: 43,
-          uid: 1000,
-          cmdline: [
-            "/usr/bin/FEX",
-            "/var/lib/korri/steam/steamapps/common/Sonic Mania/SonicMania.exe",
-          ],
-        },
-        {
-          pid: 44,
-          uid: 1000,
-          cmdline: ["/var/lib/korri/steam/steamrtarm64/steam", "-silent"],
-        },
-      ],
-      signalProcess: (pid, signal) => signals.push({ pid, signal }),
       sessiond: {
         socketPath: "/run/user/1000/korri/sessiond.sock",
         fetchImpl: async input => {
@@ -163,16 +134,10 @@ describe("inputd actions", () => {
       },
     })
 
-    await dispatcher.dispatch("kill-current-game")
+    await dispatcher.dispatch("kill-current-game", { killFilePath })
 
-    expect(commands).toEqual([])
-    expect(warnings).toHaveLength(2)
-    expect(signals).toEqual([
-      { pid: 42, signal: "SIGTERM" },
-      { pid: 43, signal: "SIGTERM" },
-      { pid: 42, signal: "SIGKILL" },
-      { pid: 43, signal: "SIGKILL" },
-    ])
+    expect(commands).toEqual([{ command: "killall", args: ["retroarch"] }])
+    expect(warnings).toHaveLength(1)
   })
 
   it("can still fall back to the ROCKNIX process-kill-data file", async () => {

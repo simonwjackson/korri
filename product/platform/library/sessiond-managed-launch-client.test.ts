@@ -61,6 +61,7 @@ describe("sessiond managed-launch client", () => {
       {
         spec: { command: "/bin/game", args: ["rom"] },
         lifecycle: "session",
+        launchMetadata: { appProviderId: "@korri:steam" },
         wait: { command: "/bin/wait", args: [] },
       },
       {
@@ -83,6 +84,7 @@ describe("sessiond managed-launch client", () => {
     expect(JSON.parse(String(requests[0].init?.body))).toEqual({
       spec: { command: "/bin/game", args: ["rom"] },
       lifecycle: "session",
+      launchMetadata: { appProviderId: "@korri:steam" },
       wait: { command: "/bin/wait", args: [] },
     })
   })

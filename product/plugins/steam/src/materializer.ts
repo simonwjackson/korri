@@ -12,6 +12,7 @@ import { Effect } from "effect"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
 import { parseSteamAppId } from "./launch-spec"
 import { KORRI_STEAM_PLUGIN_ID } from "./plugin"
+import { steamLaunchCleanupMetadata } from "./session/lifecycle-hook"
 import {
   materializeSteamDesiredState,
   type SteamLifecycle,
@@ -31,6 +32,7 @@ export interface MaterializedReadableLaunch {
 
 interface MaterializedSteamResources {
   readonly paths: Readonly<Record<string, string>>
+  readonly appId: string
   readonly spec: LaunchSpec
   readonly stateRoot: string
 }
@@ -74,7 +76,7 @@ export const materializeReadableSteamLaunch = (input: {
     return {
       spec: resources.spec,
       context: input.context,
-      launchMetadata: steamLaunchMetadata(),
+      launchMetadata: steamLaunchMetadata(resources.appId),
       artifacts: { root: resources.stateRoot, paths: resources.paths },
     }
   })
@@ -95,11 +97,14 @@ function canMaterializeSteamContext(
   }
 }
 
-function steamLaunchMetadata(): LaunchMetadata {
+function steamLaunchMetadata(appId: string): LaunchMetadata {
   return {
     appProviderId: KORRI_STEAM_PLUGIN_ID,
     annotations: {
-      [KORRI_STEAM_PLUGIN_ID]: { steamSession: true },
+      [KORRI_STEAM_PLUGIN_ID]: {
+        steamSession: true,
+        foregroundCleanup: steamLaunchCleanupMetadata({ appId }),
+      },
     },
   }
 }
@@ -182,6 +187,15 @@ const materializeReadableSteamResources = (input: {
       try: () => assertGamescopeCompanionEnabled(input.context),
       catch: error => error as ResolutionError,
     })
+    const parsedAppId = parseSteamAppId(input.context.target)
+    if (parsedAppId._tag === "Left") {
+      return yield* Effect.fail(
+        new AppMaterializationFailed({
+          appId: input.context.app.id,
+          reason: `InvalidSteamTarget: ${parsedAppId.left.target}`,
+        }),
+      )
+    }
     const rawPolicy = yield* Effect.try({
       try: () => readSteamPluginPolicy(input.context),
       catch: error => error as ResolutionError,
@@ -232,6 +246,7 @@ const materializeReadableSteamResources = (input: {
       ),
     )
     return {
+      appId: parsedAppId.right,
       stateRoot,
       paths: materialized.paths,
       spec: materialized.spec,

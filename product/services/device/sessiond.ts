@@ -19,6 +19,17 @@ import {
 import { createShellLauncher } from "@platform/library/shell-launcher"
 import { logger as defaultLogger } from "@platform/logger"
 import {
+  decodeLaunchMetadata,
+  type LaunchMetadata,
+} from "@platform/plugin/launch-metadata"
+import type {
+  KorriSessionLifecycleHook as KorriSessiondLifecycleHook,
+  KorriSessionLifecycleHookCleanupRequest as KorriSessiondLifecycleHookCleanupRequest,
+  KorriSessionLifecycleHookCleanupResult as KorriSessiondLifecycleHookCleanupResult,
+  KorriSessionLifecycleHookHandle as KorriSessiondLifecycleHookHandle,
+  KorriSessionLifecycleHookStartRequest as KorriSessiondLifecycleHookStartRequest,
+} from "@platform/plugin/session-lifecycle"
+import {
   findStreamSurfaceWindows,
   repairStreamSurface,
 } from "./game-stream-fullscreen"
@@ -64,13 +75,6 @@ import {
   type SwayController,
   type SwayWindowSelector,
 } from "./sessiond-sway"
-import {
-  cleanupSteamForegroundProcesses,
-  type SteamForegroundProcessScanner,
-  type SteamForegroundProcessSignaler,
-  scanCurrentUserProcesses as scanCurrentUserSteamProcesses,
-  signalProcessByPid as signalSteamProcessByPid,
-} from "./steam-foreground-processes"
 
 export interface KorriSessiondLogger {
   debug: (input: unknown, message?: string) => void
@@ -89,36 +93,12 @@ export interface KorriSessiondLauncher {
   spawn?: (spec: LaunchSpec) => Promise<ManagedLaunchResult>
 }
 
-export interface KorriSessiondLifecycleHookStartRequest {
-  readonly launchId: string
-  readonly spec: LaunchSpec
-}
-
-export interface KorriSessiondLifecycleHookHandle {
-  readonly label?: string
-  readonly resource?: string
-  readonly stopBeforeCleanup?: () => Promise<void>
-}
-
-export interface KorriSessiondLifecycleHookCleanupRequest {
-  readonly launchId: string
-  readonly processGroupId?: number
-}
-
-export interface KorriSessiondLifecycleHookCleanupResult {
-  readonly cleaned?: readonly number[]
-  readonly residual?: readonly number[]
-}
-
-export interface KorriSessiondLifecycleHook {
-  readonly id: string
-  readonly failurePolicy?: "fail-launch" | "warn"
-  readonly afterChildRunning?: (
-    request: KorriSessiondLifecycleHookStartRequest,
-  ) => Promise<KorriSessiondLifecycleHookHandle | undefined>
-  readonly cleanup?: (
-    request: KorriSessiondLifecycleHookCleanupRequest,
-  ) => Promise<KorriSessiondLifecycleHookCleanupResult | undefined>
+export type {
+  KorriSessiondLifecycleHook,
+  KorriSessiondLifecycleHookCleanupRequest,
+  KorriSessiondLifecycleHookCleanupResult,
+  KorriSessiondLifecycleHookHandle,
+  KorriSessiondLifecycleHookStartRequest,
 }
 
 export interface KorriSessiondOptions {
@@ -139,12 +119,6 @@ export interface KorriSessiondOptions {
    * lifecycle and invokes these only at bounded launch/cleanup phases.
    */
   readonly sessionHooks?: readonly KorriSessiondLifecycleHook[]
-  /** Process scanner used to clean escaped Steam foreground AppID children. */
-  readonly steamForegroundProcessScanner?: SteamForegroundProcessScanner
-  /** Process signaler used to clean escaped Steam foreground AppID children. */
-  readonly steamForegroundProcessSignaler?: SteamForegroundProcessSignaler
-  /** Grace window before escaped Steam foreground cleanup escalates. */
-  readonly steamForegroundKillGraceMs?: number
   /**
    * Back-compat `status.json` sidecar (source-machine role only). When
    * configured, sessiond writes a runner-shaped JSON snapshot on every
@@ -200,11 +174,6 @@ export function createKorriSessiondCore(
   const role: SessionRole =
     options.role ?? createKioskSessionRole({ renderer, sway, serviceManager })
   const sessionHooks = options.sessionHooks ?? []
-  const steamForegroundProcessScanner =
-    options.steamForegroundProcessScanner ?? scanCurrentUserSteamProcesses
-  const steamForegroundProcessSignaler =
-    options.steamForegroundProcessSignaler ?? signalSteamProcessByPid
-  const steamForegroundKillGraceMs = options.steamForegroundKillGraceMs ?? 1500
   const statusSidecar = options.statusSidecar
   let state: KorriSessionState = initialKorriSessionState
   let eventSequence = 0
@@ -353,6 +322,7 @@ export function createKorriSessiondCore(
     requestedLaunchId?: string,
     lifecycleOptions: {
       readonly lifecycle?: "foreground" | "session"
+      readonly launchMetadata?: LaunchMetadata
       readonly wait?: LaunchSpec
     } = {},
   ): Promise<{
@@ -392,6 +362,7 @@ export function createKorriSessiondCore(
   async function startLifecycleHooksForLaunch(
     launchId: string,
     spec: LaunchSpec,
+    launchMetadata: LaunchMetadata | undefined,
     active:
       | {
           readonly launchId: string
@@ -403,7 +374,11 @@ export function createKorriSessiondCore(
     for (const hook of sessionHooks) {
       if (!hook.afterChildRunning) continue
       try {
-        const handle = await hook.afterChildRunning({ launchId, spec })
+        const handle = await hook.afterChildRunning({
+          launchId,
+          spec,
+          ...(launchMetadata ? { launchMetadata } : {}),
+        })
         if (handle) handles.push(handle)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -433,11 +408,13 @@ export function createKorriSessiondCore(
     spec: LaunchSpec,
     lifecycleOptions: {
       readonly lifecycle?: "foreground" | "session"
+      readonly launchMetadata?: LaunchMetadata
       readonly wait?: LaunchSpec
     } = {},
   ): Promise<LaunchResult> {
     const lifecycle = lifecycleOptions.lifecycle ?? "foreground"
     const wait = lifecycleOptions.wait
+    const launchMetadata = lifecycleOptions.launchMetadata
     let result: LaunchResult | undefined
 
     try {
@@ -469,7 +446,12 @@ export function createKorriSessiondCore(
           }
           pushLifecycleEvent(launchId, { type: "child-running" })
           if (!result) {
-            result = await startLifecycleHooksForLaunch(launchId, spec, active)
+            result = await startLifecycleHooksForLaunch(
+              launchId,
+              spec,
+              launchMetadata,
+              active,
+            )
             if (result) {
               try {
                 spawned.session.terminate()
@@ -578,24 +560,7 @@ export function createKorriSessiondCore(
         : undefined
     const pgid = activeForRestore?.processGroupId
     await stopLifecycleHookHandles(activeForRestore?.sessionHookHandles ?? [])
-    await cleanupLifecycleHooks(launchId, pgid)
-
-    const steamAppId = steamAppIdFromLaunchSpec(spec)
-    if (steamAppId) {
-      const outcome = await cleanupSteamForegroundProcesses({
-        processScanner: steamForegroundProcessScanner,
-        signalProcess: steamForegroundProcessSignaler,
-        appId: steamAppId,
-        graceMs: steamForegroundKillGraceMs,
-        logger,
-      })
-      if (outcome.residual.length > 0) {
-        logger.warn(
-          { launchId, appId: steamAppId, residualPids: outcome.residual },
-          "sessiond: Steam foreground residuals remain after cleanup",
-        )
-      }
-    }
+    await cleanupLifecycleHooks(launchId, pgid, launchMetadata)
 
     while (true) {
       try {
@@ -673,11 +638,16 @@ export function createKorriSessiondCore(
   async function cleanupLifecycleHooks(
     launchId: string,
     processGroupId: number | undefined,
+    launchMetadata: LaunchMetadata | undefined,
   ): Promise<void> {
     for (const hook of sessionHooks) {
       if (!hook.cleanup) continue
       try {
-        const outcome = await hook.cleanup({ launchId, processGroupId })
+        const outcome = await hook.cleanup({
+          launchId,
+          processGroupId,
+          ...(launchMetadata ? { launchMetadata } : {}),
+        })
         if (outcome?.residual && outcome.residual.length > 0) {
           logger.warn(
             {
@@ -876,20 +846,6 @@ export function createKorriSessiondCore(
     return await started.result
   }
 
-  function steamAppIdFromLaunchSpec(spec: LaunchSpec): string | undefined {
-    const directApp = spec.args?.[0]
-    if (
-      spec.command.includes("korri-steam-app") &&
-      /^\d+$/.test(directApp ?? "")
-    ) {
-      return directApp
-    }
-    const applaunchIndex = spec.args?.indexOf("-applaunch") ?? -1
-    const appId =
-      applaunchIndex >= 0 ? spec.args?.[applaunchIndex + 1] : undefined
-    return /^\d+$/.test(appId ?? "") ? appId : undefined
-  }
-
   function terminateManagedLaunchById(
     launchId: string,
     force = false,
@@ -1039,6 +995,13 @@ export function createKorriSessiondCore(
             {
               ...(body.value.lifecycle
                 ? { lifecycle: body.value.lifecycle }
+                : {}),
+              ...(body.value.launchMetadata
+                ? {
+                    launchMetadata: decodeLaunchMetadata(
+                      body.value.launchMetadata,
+                    ),
+                  }
                 : {}),
               ...(body.value.wait ? { wait: body.value.wait } : {}),
             },

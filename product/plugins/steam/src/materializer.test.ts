@@ -148,7 +148,12 @@ describe("steamReadableLaunchIntegration", () => {
       })
       expect(result.launchMetadata).toEqual({
         appProviderId: KORRI_STEAM_PLUGIN_ID,
-        annotations: { [KORRI_STEAM_PLUGIN_ID]: { steamSession: true } },
+        annotations: {
+          [KORRI_STEAM_PLUGIN_ID]: {
+            steamSession: true,
+            foregroundCleanup: { appId: "1029210" },
+          },
+        },
       })
       expect(result.artifacts?.root).toBe(join(root, "Steam"))
       expect(Object.values(result.artifacts?.paths ?? {})).toEqual([

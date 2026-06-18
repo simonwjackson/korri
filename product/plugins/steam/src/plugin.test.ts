@@ -57,6 +57,18 @@ describe("Steam plugin descriptor", () => {
     })
   })
 
+  it("contributes a typed session cleanup capability", () => {
+    expect(
+      steamPlugin.contributes.config.modules?.["session-cleanup"],
+    ).toMatchObject({
+      kind: "session-hook",
+      capabilities: ["session.cleanup"],
+    })
+    expect(steamPlugin.handlers).toContainEqual(
+      expect.objectContaining({ operation: "session.cleanup" }),
+    )
+  })
+
   it("models Gamescope as an explicit non-auto-enabled launch requirement", () => {
     expect(steamPlugin.requires).toContainEqual({
       capability: "launch.compose",
