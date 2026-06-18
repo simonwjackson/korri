@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test"
 import {
   composeRetroArchLaunchSpec,
   renderRetroArchConfig,
-} from "./retroarch-launch-spec"
+} from "./launch-spec"
 
 describe("typed RetroArch launch spec rendering", () => {
   it("renders minimal argv and safe generated config defaults", () => {

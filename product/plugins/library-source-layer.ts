@@ -10,24 +10,26 @@ import {
 import { Effect, Layer } from "effect"
 import {
   createFirstPartyPluginRegistryFromEnv,
-  firstPartyLaunchIntegrations,
+  firstPartyLaunchIntegrationsForRegistry,
 } from "."
 
 const DEFAULT_PLUGIN_RESOURCE_ROOT = "/var/lib/korri/plugins/resources"
 
 export const PluginLibrarySourceLayerLive = Layer.effect(
   LibrarySource,
-  Effect.sync(() =>
-    withPluginLibrarySource(
+  Effect.sync(() => {
+    const registry = createFirstPartyPluginRegistryFromEnv(process.env)
+    return withPluginLibrarySource(
       createLiveLibrarySourceService({
         repositoryOptions: {
-          launchIntegrations: firstPartyLaunchIntegrations,
+          pluginRegistry: registry,
+          launchIntegrations: firstPartyLaunchIntegrationsForRegistry(registry),
         },
       }),
-      createFirstPartyPluginRegistryFromEnv(process.env),
+      registry,
       createNixOutLinkResolver({ stateRoot: pluginResourceRoot(process.env) }),
-    ),
-  ),
+    )
+  }),
 )
 
 export function createPluginResourceFulfillerFromEnv(

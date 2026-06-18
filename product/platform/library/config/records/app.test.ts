@@ -52,10 +52,16 @@ describe("AppPayload", () => {
 
   it("rejects RetroArch-owned fields on app records", () => {
     expect(() =>
-      decodeAppPayload({ kind: "@korri:retroarch", video: { fullscreen: true } }),
+      decodeAppPayload({
+        kind: "@korri:retroarch",
+        video: { fullscreen: true },
+      }),
     ).toThrow(/Unexpected key|video/)
     expect(() =>
-      decodeAppPayload({ kind: "@korri:retroarch", drivers: { menu: "ozone" } }),
+      decodeAppPayload({
+        kind: "@korri:retroarch",
+        drivers: { menu: "ozone" },
+      }),
     ).toThrow(/Unexpected key|drivers/)
   })
 
@@ -95,11 +101,12 @@ describe("AppPayload", () => {
       }),
     ).toThrow(/config/)
     expect(() =>
-      decodeAppPayload({ kind: "@korri:retroarch", "launch-options": "%command%" }),
+      decodeAppPayload({
+        kind: "@korri:retroarch",
+        "launch-options": "%command%",
+      }),
     ).toThrow(/kind: steam/)
   })
-
-
 
   it("rejects unknown app keys", () => {
     expect(() =>

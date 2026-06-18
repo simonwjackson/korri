@@ -1,5 +1,9 @@
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
+import {
+  createFirstPartyPluginRegistryFromEnv,
+  firstPartyLaunchIntegrationsForRegistry,
+} from "@product/plugins"
 import { Cause, Effect, Exit } from "effect"
 
 export type LauncherConfigValidationResult =
@@ -37,6 +41,7 @@ export type LauncherConfigValidationResult =
 export async function validateLauncherConfig(args: {
   readonly root: string
   readonly gameId: string
+  readonly env?: Readonly<Record<string, string | undefined>>
 }): Promise<LauncherConfigValidationResult> {
   const exit = await Effect.runPromiseExit(
     Effect.scoped(
@@ -45,7 +50,14 @@ export async function validateLauncherConfig(args: {
           root: args.root,
           writeDebounce: 1,
         })
-        const repository = createLibraryRepository(db)
+        const env = args.env ?? process.env
+        const pluginRegistry = createFirstPartyPluginRegistryFromEnv(env)
+        const repository = createLibraryRepository(db, {
+          env,
+          pluginRegistry,
+          launchIntegrations:
+            firstPartyLaunchIntegrationsForRegistry(pluginRegistry),
+        })
         return yield* repository.resolveLaunchForGame(args.gameId)
       }),
     ),

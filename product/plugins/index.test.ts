@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import { executableResources } from "@platform/plugin/registry"
-import { createFirstPartyPluginRegistryFromEnv, firstPartyPlugins } from "."
+import {
+  createFirstPartyPluginRegistryFromEnv,
+  firstPartyLaunchIntegrationsForRegistry,
+  firstPartyPlugins,
+} from "."
 import { KORRI_FEX_PLUGIN_ID } from "./fex-runtime"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
 import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "./levelsharesquare"
@@ -61,6 +65,28 @@ describe("first-party plugins", () => {
       path: "product/plugins/ryubing/packages/ryubing-korri",
       capabilities: ["package.expose", "launch.runtime"],
     })
+  })
+
+  it("filters plugin-owned launch integrations by enabled provider", () => {
+    const disabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: undefined,
+    })
+    const enabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,
+    })
+
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(disabled).some(
+        integration => integration.kind === KORRI_RETROARCH_PLUGIN_ID,
+      ),
+    ).toBe(false)
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(enabled).some(
+        integration =>
+          integration.kind === KORRI_RETROARCH_PLUGIN_ID &&
+          integration.integration === "retroarch",
+      ),
+    ).toBe(true)
   })
 
   it("does not enable plugin capabilities unless composition opts in", () => {
@@ -161,6 +187,17 @@ describe("first-party plugins", () => {
         binary: "portmaster",
       },
     })
+  })
+
+  it("does not auto-enable RetroArch when PICO-8 is requested alone", () => {
+    const registry = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_PICO8_PLUGIN_ID,
+    })
+
+    expect(registry.enabledPluginIds.has(KORRI_PICO8_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_RETROARCH_PLUGIN_ID)).toBe(false)
+    expect(registry.systems[`${KORRI_PICO8_PLUGIN_ID}/pico8`]).toBeDefined()
+    expect(registry.apps[KORRI_RETROARCH_APP_ID]).toBeUndefined()
   })
 
   it("enables Proton-GE only when explicitly requested", () => {

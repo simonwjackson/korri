@@ -50,19 +50,29 @@ The package conforms to the nixpkgs `mkLibretroCore` contract that
 - `passthru.core = "fake08"` — string identifier the wrapper's
   `longDescription` reads and the kiosk closure-shape check asserts on
 
-Korri's kiosk product module (`product/systems/nixos/images/kiosk.nix`) exposes this core at the stable launch-module path `/etc/korri/cores/fake08_libretro.so` and joins it with `retroarch-bare` without using nixpkgs' flag-injecting RetroArch wrapper. Launch YAML should model it as a top-level module:
+Korri's kiosk product module (`product/systems/nixos/images/kiosk.nix`) exposes this core at the stable runtime path `/etc/korri/cores/fake08_libretro.so` and joins it with `retroarch-bare` without using nixpkgs' flag-injecting RetroArch wrapper. Launch YAML should model it as a runtime owned by the PICO-8 plugin and hosted by the RetroArch plugin app:
 
 ```yaml
-modules:
-  fake08:
+apps:
+  "@korri:retroarch/retroarch":
+    kind: "@korri:retroarch"
+    command: retroarch
+    plugin:
+      "@korri:retroarch": {}
+
+runtimes:
+  "@korri:pico8/fake08":
     kind: libretro-core
+    app: "@korri:retroarch/retroarch"
     path: /etc/korri/cores/fake08_libretro.so
+    supports:
+      systems: [pico8]
 
 systems:
   pico8:
-    launch:
-      app: retroarch
-      module: fake08
+    apps:
+      - id: "@korri:retroarch/retroarch"
+        runtime: "@korri:pico8/fake08"
 ```
 
 Every kiosk image (Sobo, Thor, x86 kiosk, live USB) inherits the same minimal RetroArch closure.
@@ -105,6 +115,6 @@ package, while system-level closure-shape assertions remain under
 
 - The licensed standalone `pico8_64` binary (requires a Lexaloffle license).
 - PICOLOVE, LIKO-12, TIC-80, zepto8, or any other PICO-8-flavored runtime.
-- Additional launch modules beyond `fake08`. New libretro cores should be packaged separately and enabled through product/image opt-ins.
+- Additional libretro runtimes beyond `@korri:pico8/fake08`. New libretro cores should be packaged separately and enabled through product/image opt-ins.
 - ROCKNIX host changes (host-side `fake08-lr` is unreachable from the
   guest closure and not consulted).

@@ -6,13 +6,12 @@ import {
   normalize,
   relative,
 } from "node:path"
-import type { RetroArchPolicy } from "@platform/library/config/inheritable-fields"
-import type { LaunchSettingValue } from "@platform/library/config/launch-block"
+import type { LaunchSettingValue, RetroArchPolicy } from "./policy"
 import {
   isRetroArchConfigKey,
   isRetroArchPlaintextCredentialSettingKey,
   validateNullableRetroArchHttpsUrl,
-} from "@platform/library/config/retroarch-setting-policy"
+} from "./setting-policy"
 import type { LaunchSpec } from "@platform/library/launcher"
 
 const DEFAULT_RETROARCH_COMMAND = "retroarch"

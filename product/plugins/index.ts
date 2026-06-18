@@ -1,6 +1,8 @@
 import type { PluginId } from "@platform/plugin"
+import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
 import {
   createPluginRegistry,
+  type PluginRegistry,
   parseEnabledPluginIds,
 } from "@platform/plugin/registry"
 import { fixtureAcquisitionPlugins } from "./acquisition-fixtures"
@@ -32,6 +34,16 @@ export const firstPartyLaunchIntegrations = [
   retroarchReadableLaunchIntegration,
   ryubingReadableLaunchIntegration,
 ]
+
+export function firstPartyLaunchIntegrationsForRegistry(
+  registry: Pick<PluginRegistry, "enabledPluginIds">,
+): readonly ReadableLaunchIntegration[] {
+  return firstPartyLaunchIntegrations.filter(
+    integration =>
+      integration.providerId === undefined ||
+      registry.enabledPluginIds.has(integration.providerId),
+  )
+}
 
 export const firstPartyPlugins = [
   retroarchPlugin,

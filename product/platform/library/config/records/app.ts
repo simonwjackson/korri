@@ -3,7 +3,6 @@ import { Schema } from "effect"
 import {
   decodeSteamPolicy,
   InheritableLayer,
-  RetroArchPolicy,
   SteamPolicy,
 } from "../inheritable-fields"
 import { LaunchSettings } from "../launch-block"
@@ -28,32 +27,6 @@ export const STEAM_APP_FIELD_KEYS = [
   "launch-options",
 ] as const
 
-export const RETROARCH_APP_FIELD_KEYS = [
-  "environment",
-  "configFile",
-  "core",
-  "content",
-  "logging",
-  "lifecycle",
-  "drivers",
-  "paths",
-  "video",
-  "audio",
-  "input",
-  "menu",
-  "saves",
-  "rewind",
-  "playback",
-  "latency",
-  "achievements",
-  "haptics",
-  "playlists",
-  "privacy",
-  "updater",
-  "extraSettings",
-  "extraArgs",
-] as const
-
 const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
@@ -74,12 +47,6 @@ const isTypedAppPayload = (payload: {
   readonly [key: string]: unknown
 }): string | undefined => {
   const kind = payload.kind
-  const retiredRetroArchKey = RETROARCH_APP_FIELD_KEYS.find(
-    key => payload[key] !== undefined,
-  )
-  if (retiredRetroArchKey) {
-    return `RetroArch field ${retiredRetroArchKey} moved to plugin.@korri:retroarch`
-  }
   const isSteam = kind === "steam"
   if (!isSteam && payload["launch-options"] !== undefined) {
     return "Steam field launch-options requires kind: steam"
@@ -120,7 +87,6 @@ const AppPayloadBase = Schema.Struct({
 
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
-  ...RetroArchPolicy.fields,
   state: SteamPolicy.fields.state,
   extra: SteamPolicy.fields.extra,
   "launch-options": SteamPolicy.fields["launch-options"],

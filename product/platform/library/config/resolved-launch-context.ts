@@ -26,7 +26,6 @@ import {
   LaunchCompanionMap,
   MoonlightPolicy,
   PluginPolicyMap,
-  RetroArchPolicy,
   SteamPolicy,
 } from "./inheritable-fields"
 import { LaunchSettings } from "./launch-block"
@@ -61,7 +60,6 @@ export const ResolvedLaunchContext = Schema.Struct({
   // Resolved inheritable behavior fields (post-merge).
   launchCompanions: Schema.optional(LaunchCompanionMap),
   moonlight: Schema.optional(MoonlightPolicy),
-  retroarch: Schema.optional(RetroArchPolicy),
   plugin: Schema.optional(PluginPolicyMap),
   steam: Schema.optional(SteamPolicy),
   settings: Schema.optional(LaunchSettings),
@@ -92,7 +90,6 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
   ),
   launchCompanions: Schema.optional(LaunchCompanionMap),
   moonlight: Schema.optional(MoonlightPolicy),
-  retroarch: Schema.optional(RetroArchPolicy),
   plugin: Schema.optional(PluginPolicyMap),
   steam: Schema.optional(SteamPolicy),
   storage: Schema.optional(Schema.Record(Schema.String, StorageRecord)),

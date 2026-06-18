@@ -140,7 +140,11 @@ function expandRequiredPluginIds(
 
     for (const requirement of plugin.requires ?? []) {
       const requiredPluginId = requirement.ref?.provider
-      if (requiredPluginId === undefined || enabled.has(requiredPluginId)) {
+      if (
+        requirement.autoEnable === false ||
+        requiredPluginId === undefined ||
+        enabled.has(requiredPluginId)
+      ) {
         continue
       }
       enabled.add(requiredPluginId)

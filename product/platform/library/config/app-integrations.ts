@@ -18,7 +18,6 @@ import type { LauncherRecord } from "./records/launcher"
 import type { ModuleRecord } from "./records/module"
 
 export type AppIntegrationKind =
-  | "retroarch"
   | "mame"
   | "dolphin"
   | "solarus"
@@ -248,26 +247,13 @@ export const unknownSettingDiagnostics = (input: {
 export const validateAppModuleCompatibility = (input: {
   readonly app: AppDescriptor
   readonly module: ModuleRecord
-}): Effect.Effect<void, ResolutionError> => {
-  if (
-    input.app.integration === "retroarch" ||
-    input.app.integration === "@korri:retroarch"
-  ) {
-    return input.module.kind === "libretro-core"
-      ? Effect.void
-      : Effect.fail(
-          new IncompatibleModule({
-            appId: input.app.id,
-            moduleId: input.module.id,
-            moduleKind: input.module.kind,
-          }),
-        )
-  }
-  return Effect.fail(
-    new IncompatibleModule({
-      appId: input.app.id,
-      moduleId: input.module.id,
-      moduleKind: input.module.kind,
-    }),
-  )
-}
+}): Effect.Effect<void, ResolutionError> =>
+  input.app.kind?.startsWith("@")
+    ? Effect.void
+    : Effect.fail(
+        new IncompatibleModule({
+          appId: input.app.id,
+          moduleId: input.module.id,
+          moduleKind: input.module.kind,
+        }),
+      )

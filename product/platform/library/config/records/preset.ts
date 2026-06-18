@@ -33,7 +33,6 @@ export const PresetPayload = Schema.Struct({
   // sees every key on the same struct (Effect Schema's struct-extension
   // helpers don't flatten cleanly for excess-property checking).
   moonlight: InheritableLayer.fields.moonlight,
-  retroarch: InheritableLayer.fields.retroarch,
   plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,

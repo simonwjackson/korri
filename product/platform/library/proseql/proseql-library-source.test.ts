@@ -2,8 +2,14 @@ import { describe, expect, it } from "bun:test"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { plugin } from "@platform/plugin"
+import { createPluginRegistry } from "@platform/plugin/registry"
+import {
+  KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_PLUGIN_ID,
+  retroarchReadableLaunchIntegration,
+} from "@product/plugins/retroarch"
 import { Effect } from "effect"
-
 import { openKorriLibraryDb } from "./library-db"
 import { createLibraryRepository } from "./library-repository"
 import { createProseqlLibrarySource } from "./proseql-library-source"
@@ -17,15 +23,90 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   }
 }
 
-function setEnv(key: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[key]
-    return
-  }
-  process.env[key] = value
-}
-
 describe("createProseqlLibrarySource", () => {
+  it("projects enabled plugin readable records into launch resolution", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            yield* db.library.upsert({
+              where: { id: "plugin-game" },
+              create: {
+                id: "plugin-game",
+                releases: [
+                  {
+                    id: "default",
+                    system: "toy",
+                    target: { kind: "file", storage: "roms", path: "game.rom" },
+                  },
+                ],
+              },
+              update: {
+                id: "plugin-game",
+                releases: [
+                  {
+                    id: "default",
+                    system: "toy",
+                    target: { kind: "file", storage: "roms", path: "game.rom" },
+                  },
+                ],
+              },
+            })
+            yield* db.storage.upsert({
+              where: { id: "roms" },
+              create: { id: "roms", root },
+              update: { id: "roms", root },
+            })
+            const registry = createPluginRegistry(
+              [
+                plugin({
+                  namespace: "@korri",
+                  name: "toy-host",
+                  contributes: {
+                    config: {
+                      apps: {
+                        echo: {
+                          id: "@korri:toy-host/echo",
+                          command: "/bin/echo",
+                          args: ["{target}"],
+                        },
+                      },
+                      systems: {
+                        toy: {
+                          id: "toy",
+                          apps: [{ id: "@korri:toy-host/echo" }],
+                        },
+                      },
+                      runtimes: {
+                        capabilityOnly: {
+                          id: "capabilityOnly",
+                          kind: "cpu-translation",
+                        },
+                      },
+                    },
+                  },
+                }),
+              ],
+              { enabledPluginIds: ["@korri:toy-host"] },
+            )
+            const source = createProseqlLibrarySource(
+              createLibraryRepository(db, { pluginRegistry: registry }),
+            )
+            return yield* Effect.promise(() =>
+              source.resolveLaunchForGame("plugin-game"),
+            )
+          }),
+        ),
+      )
+
+      expect(result.spec).toEqual({
+        command: "/bin/echo",
+        args: ["game.rom"],
+      })
+    })
+  })
+
   it("reads games and resolves launch specs through the cascade", async () => {
     await withTempRoot(async root => {
       const result = await Effect.runPromise(
@@ -147,125 +228,127 @@ describe("createProseqlLibrarySource", () => {
 
   it("resolves legacy patch-bearing games through the readable launch path", async () => {
     await withTempRoot(async root => {
-      const previous = {
-        artifacts: process.env.KORRI_LAUNCH_ARTIFACTS_DIR,
-        data: process.env.XDG_DATA_HOME,
-        state: process.env.XDG_STATE_HOME,
-      }
-      process.env.KORRI_LAUNCH_ARTIFACTS_DIR = join(root, "launch-artifacts")
-      process.env.XDG_DATA_HOME = join(root, "data")
-      process.env.XDG_STATE_HOME = join(root, "state")
-      try {
-        const rom = join(root, "roms", "game.gba")
-        const patch = join(root, "patches", "color.ips")
-        await mkdir(join(root, "roms"), { recursive: true })
-        await mkdir(join(root, "patches"), { recursive: true })
-        await writeFile(rom, "rom")
-        await writeFile(patch, "patch")
+      const rom = join(root, "roms", "game.gba")
+      const patch = join(root, "patches", "color.ips")
+      await mkdir(join(root, "roms"), { recursive: true })
+      await mkdir(join(root, "patches"), { recursive: true })
+      await writeFile(rom, "rom")
+      await writeFile(patch, "patch")
 
-        const result = await Effect.runPromise(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-              const repo = createLibraryRepository(db)
-              yield* repo.upsertSystem({
-                id: "gba",
-                apps: [{ id: "retroarch", runtime: "mgba" }],
-              })
-              yield* repo.upsertRuntime({
-                id: "mgba",
-                kind: "libretro-core",
-                path: "/cores/mgba_libretro.so",
-              })
-              yield* repo.upsertLauncher({
-                id: "retroarch",
-                command: "/bin/echo",
-                args: ["{contentPath}"],
-                systems: ["gba"],
-              })
-              yield* repo.upsertGame({
-                id: "gba/game",
-                system: "gba",
-                contentPath: rom,
-                patches: [patch],
-              })
-              const source = createProseqlLibrarySource(repo)
-              return yield* Effect.promise(() =>
-                source.resolveLaunchForGame("gba/game"),
-              )
-            }),
-          ),
-        )
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db, {
+              env: {
+                KORRI_LAUNCH_ARTIFACTS_DIR: join(root, "launch-artifacts"),
+              },
+              launchIntegrations: [retroarchReadableLaunchIntegration],
+            })
+            yield* repo.upsertSystem({
+              id: "gba",
+              apps: [{ id: KORRI_RETROARCH_APP_ID, runtime: "mgba" }],
+            })
+            yield* repo.upsertRuntime({
+              id: "mgba",
+              kind: "libretro-core",
+              path: "/cores/mgba_libretro.so",
+            })
+            yield* db.apps.upsert({
+              where: { id: KORRI_RETROARCH_APP_ID },
+              create: {
+                id: KORRI_RETROARCH_APP_ID,
+                kind: KORRI_RETROARCH_PLUGIN_ID,
+                command: "retroarch",
+                plugin: {
+                  [KORRI_RETROARCH_PLUGIN_ID]: {},
+                },
+              },
+              update: {
+                id: KORRI_RETROARCH_APP_ID,
+                kind: KORRI_RETROARCH_PLUGIN_ID,
+                command: "retroarch",
+                plugin: {
+                  [KORRI_RETROARCH_PLUGIN_ID]: {},
+                },
+              },
+            })
+            yield* repo.upsertGame({
+              id: "gba/game",
+              system: "gba",
+              contentPath: rom,
+              patches: [patch],
+            })
+            const source = createProseqlLibrarySource(repo)
+            return yield* Effect.promise(() =>
+              source.resolveLaunchForGame("gba/game"),
+            )
+          }),
+        ),
+      )
 
-        expect(result.spec.args).toEqual([
-          "-c",
-          expect.stringMatching(/retroarch\.cfg$/),
-          "-L",
-          "/cores/mgba_libretro.so",
-          expect.stringMatching(/game\.gba$/),
-        ])
-        expect(result.artifacts?.paths.configPath).toBe(result.spec.args[1])
-      } finally {
-        setEnv("KORRI_LAUNCH_ARTIFACTS_DIR", previous.artifacts)
-        setEnv("XDG_DATA_HOME", previous.data)
-        setEnv("XDG_STATE_HOME", previous.state)
-      }
+      expect(result.spec.args).toEqual([
+        "-c",
+        expect.stringMatching(/retroarch\.cfg$/),
+        "-L",
+        "/cores/mgba_libretro.so",
+        expect.stringMatching(/game\.gba$/),
+      ])
+      expect(result.artifacts?.paths.configPath).toBe(result.spec.args[1])
     })
   })
 
   it("resolves checked-in expanded RetroArch examples through the library source seam", async () => {
     await withTempRoot(async root => {
-      const previous = process.env.KORRI_LAUNCH_ARTIFACTS_DIR
-      process.env.KORRI_LAUNCH_ARTIFACTS_DIR = join(root, "launch-artifacts")
-      try {
-        await writeFile(
-          join(root, "library.yaml"),
-          await readFile("korri-catalog-display-metadata.example.yaml", "utf8"),
-          "utf8",
-        )
+      await writeFile(
+        join(root, "library.yaml"),
+        await readFile("korri-catalog-display-metadata.example.yaml", "utf8"),
+        "utf8",
+      )
 
-        const result = await Effect.runPromise(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-              const source = createProseqlLibrarySource(
-                createLibraryRepository(db),
-              )
-              const canResolve = source.canResolveLaunchForGame
-              if (!canResolve)
-                throw new Error("expected canResolveLaunchForGame")
-              return {
-                canResolve: yield* Effect.promise(() =>
-                  canResolve("sonic-the-hedgehog", { releaseId: "genesis" }),
-                ),
-                resolved: yield* Effect.promise(() =>
-                  source.resolveLaunchForGame("sonic-the-hedgehog", {
-                    releaseId: "genesis",
-                  }),
-                ),
-              }
-            }),
-          ),
-        )
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const source = createProseqlLibrarySource(
+              createLibraryRepository(db, {
+                env: {
+                  KORRI_LAUNCH_ARTIFACTS_DIR: join(root, "launch-artifacts"),
+                },
+                launchIntegrations: [retroarchReadableLaunchIntegration],
+              }),
+            )
+            const canResolve = source.canResolveLaunchForGame
+            if (!canResolve) throw new Error("expected canResolveLaunchForGame")
+            return {
+              canResolve: yield* Effect.promise(() =>
+                canResolve("sonic-the-hedgehog", { releaseId: "genesis" }),
+              ),
+              resolved: yield* Effect.promise(() =>
+                source.resolveLaunchForGame("sonic-the-hedgehog", {
+                  releaseId: "genesis",
+                }),
+              ),
+            }
+          }),
+        ),
+      )
 
-        expect(result.canResolve).toBe(true)
-        expect(result.resolved.spec.args).toEqual([
-          "-c",
-          expect.stringMatching(/retroarch\.cfg$/),
-          "-L",
-          "/run/current-system/sw/lib/libretro/genesis_plus_gx_libretro.so",
-          "/roms/genesis/Sonic The Hedgehog.md",
-        ])
-        const config = await readFile(
-          String(result.resolved.artifacts?.paths.configPath),
-          "utf8",
-        )
-        expect(config).toContain("aspect_ratio_index = 24")
-        expect(config).toContain("video_frame_delay = 0")
-        expect(config).toContain("rewind_buffer_size = 20")
-      } finally {
-        setEnv("KORRI_LAUNCH_ARTIFACTS_DIR", previous)
-      }
+      expect(result.canResolve).toBe(true)
+      expect(result.resolved.spec.args).toEqual([
+        "-c",
+        expect.stringMatching(/retroarch\.cfg$/),
+        "-L",
+        "/run/current-system/sw/lib/libretro/genesis_plus_gx_libretro.so",
+        "/roms/genesis/Sonic The Hedgehog.md",
+      ])
+      const config = await readFile(
+        String(result.resolved.artifacts?.paths.configPath),
+        "utf8",
+      )
+      expect(config).toContain("aspect_ratio_index = 24")
+      expect(config).toContain("video_frame_delay = 0")
+      expect(config).toContain("rewind_buffer_size = 20")
     })
   })
 
@@ -295,7 +378,9 @@ describe("createProseqlLibrarySource", () => {
             Effect.gen(function* () {
               const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
               const source = createProseqlLibrarySource(
-                createLibraryRepository(db),
+                createLibraryRepository(db, {
+                  launchIntegrations: [retroarchReadableLaunchIntegration],
+                }),
               )
               return yield* Effect.promise(() =>
                 source.resolveLaunchForGame("missing"),

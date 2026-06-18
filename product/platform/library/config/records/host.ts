@@ -11,7 +11,6 @@ export const HostPayload = Schema.Struct({
   // plain block: no role taxonomy, launch block, or nested profile defaults.
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
-  retroarch: InheritableLayer.fields.retroarch,
   plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,

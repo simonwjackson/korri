@@ -48,7 +48,6 @@ export const LauncherPayload = Schema.Struct({
   // Inlined inheritable whitelist (see preset.ts for the rationale).
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
-  retroarch: InheritableLayer.fields.retroarch,
   plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,

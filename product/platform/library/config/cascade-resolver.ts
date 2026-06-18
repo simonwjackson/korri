@@ -702,6 +702,15 @@ export class RuntimeNotFound extends Data.TaggedError("RuntimeNotFound")<{
   readonly runtimeId: string
 }> {}
 
+export class IncompatibleLaunchSelection extends Data.TaggedError(
+  "IncompatibleLaunchSelection",
+)<{
+  readonly appId: string
+  readonly runtimeId?: string
+  readonly systemId: string
+  readonly reason: string
+}> {}
+
 export class AmbiguousAppChoice extends Data.TaggedError("AmbiguousAppChoice")<{
   readonly playableId: string
   readonly releaseId: string
@@ -833,7 +842,6 @@ const readableBuiltInArgs = (
   appId: string,
   legacyArgs: readonly string[],
 ): readonly string[] => {
-  if (appId === "retroarch") return []
   if (appId === "mame") return ["{content.path}"]
   if (appId === "dolphin") return ["--batch", "--exec", "{content.path}"]
   if (appId === "solarus") return ["{content.path}"]
@@ -882,6 +890,57 @@ const resolveReadableAppRecord = (
     inherit: override?.inherit,
     presets: override?.presets ?? builtIn.presets,
   }
+}
+
+const validateReadableLaunchCompatibility = (input: {
+  readonly appId: string
+  readonly app: AppRecord
+  readonly runtime?: RuntimeRecord
+  readonly systemId: string
+}): Effect.Effect<void, IncompatibleLaunchSelection> => {
+  const expectedApp = input.runtime?.app
+  if (expectedApp !== undefined && expectedApp !== input.appId) {
+    return Effect.fail(
+      new IncompatibleLaunchSelection({
+        appId: input.appId,
+        runtimeId: input.runtime?.id,
+        systemId: input.systemId,
+        reason: `runtime ${input.runtime?.id} requires app ${expectedApp}`,
+      }),
+    )
+  }
+
+  const supportedSystems = input.runtime?.supports?.systems
+  if (
+    supportedSystems !== undefined &&
+    !supportedSystems.includes(input.systemId)
+  ) {
+    return Effect.fail(
+      new IncompatibleLaunchSelection({
+        appId: input.appId,
+        runtimeId: input.runtime?.id,
+        systemId: input.systemId,
+        reason: `runtime ${input.runtime?.id} does not support system ${input.systemId}`,
+      }),
+    )
+  }
+
+  if (
+    input.app.systems !== undefined &&
+    input.app.systems.length > 0 &&
+    !input.app.systems.includes(input.systemId)
+  ) {
+    return Effect.fail(
+      new IncompatibleLaunchSelection({
+        appId: input.appId,
+        runtimeId: input.runtime?.id,
+        systemId: input.systemId,
+        reason: `app ${input.appId} does not support system ${input.systemId}`,
+      }),
+    )
+  }
+
+  return Effect.void
 }
 
 const readableViewOfRuntime = (
@@ -1168,6 +1227,12 @@ export const resolveReadableLaunchContext = (
     if (runtimeId !== undefined && runtime === undefined) {
       return yield* Effect.fail(new RuntimeNotFound({ runtimeId }))
     }
+    yield* validateReadableLaunchCompatibility({
+      appId,
+      app,
+      runtime,
+      systemId: release.system,
+    })
 
     const folded = mergeReadableLayers([
       snapshot.host ?? {},

@@ -120,71 +120,72 @@ apps:
     args: ["{target}"]
     systems: [windows, linux]
 
-  retroarch:
-    kind: retroarch
+  "@korri:retroarch/retroarch":
+    kind: "@korri:retroarch"
     command: retroarch
-    systems: [genesis, gba]
-    # Generated mode keeps Korri in charge of exactly one per-launch cfg file.
-    # configFile path/default modes remain deferred.
-    configFile:
-      mode: generated
-    lifecycle:
-      saveOnExit: false
-      autoOverrides: false
-      autoRemaps: false
-      gameSpecificOptions: false
-      autoShaders: false
-    drivers:
-      video: glcore
-      audio: alsathread
-      menu: ozone
-    paths:
-      systemDirectory: /storage/bios
-      savefileDirectory: /storage/saves/retroarch
-      savestateDirectory: /storage/states/retroarch
-      screenshotDirectory: /storage/screenshots
-      cacheDirectory: /storage/cache/retroarch
-    video:
-      fullscreen: true
-      aspectRatio: full
-      sync:
-        frameDelay: 0
-        frameDelayAuto: false
-    audio:
-      enable: true
-      outputRate: 48000
-      latencyMs: 64
-    input:
-      autodetect: true
-      maxUsers: 4
-      menuToggleGamepadCombo: start-select
-      ports:
-        "1":
-          libretroDevice: 1
-          joypadIndex: 0
-    menu:
-      showStartScreen: false
-      pauseLibretro: true
-    saves:
-      autosaveIntervalSeconds: 60
-      autoLoadState: true
-      autoSaveState: true
-    rewind:
-      enable: true
-      bufferSizeMb: 20
-    latency:
-      runAhead:
-        enable: false
-        frames: 0
-    achievements:
-      enable: false
-    # Escape hatches for non-secret cfg keys and argv gaps. Prefer typed fields
-    # above when they exist. Plaintext credential keys, netplay, remote command,
-    # secrets, full bind maps, startup argv groups, and package/core wrapper
-    # changes stay deferred to dedicated slices.
-    extraSettings:
-      notification_show_autoconfig: false
-    extraArgs: []
+    plugin:
+      "@korri:retroarch":
+          # Generated mode keeps Korri in charge of exactly one per-launch cfg file.
+          # configFile path/default modes remain deferred.
+          configFile:
+            mode: generated
+          lifecycle:
+            saveOnExit: false
+            autoOverrides: false
+            autoRemaps: false
+            gameSpecificOptions: false
+            autoShaders: false
+          drivers:
+            video: glcore
+            audio: alsathread
+            menu: ozone
+          paths:
+            systemDirectory: /storage/bios
+            savefileDirectory: /storage/saves/retroarch
+            savestateDirectory: /storage/states/retroarch
+            screenshotDirectory: /storage/screenshots
+            cacheDirectory: /storage/cache/retroarch
+          video:
+            fullscreen: true
+            aspectRatio: full
+            sync:
+              frameDelay: 0
+              frameDelayAuto: false
+          audio:
+            enable: true
+            outputRate: 48000
+            latencyMs: 64
+          input:
+            autodetect: true
+            maxUsers: 4
+            menuToggleGamepadCombo: start-select
+            ports:
+              "1":
+                libretroDevice: 1
+                joypadIndex: 0
+          menu:
+            showStartScreen: false
+            pauseLibretro: true
+          saves:
+            autosaveIntervalSeconds: 60
+            autoLoadState: true
+            autoSaveState: true
+          rewind:
+            enable: true
+            bufferSizeMb: 20
+          latency:
+            runAhead:
+              enable: false
+              frames: 0
+          achievements:
+            enable: false
+          # Escape hatches for non-secret cfg keys and argv gaps. Prefer typed fields
+          # above when they exist. Plaintext credential keys, netplay, remote command,
+          # secrets, full bind maps, startup argv groups, and package/core wrapper
+          # changes stay deferred to dedicated slices.
+          extraSettings:
+            notification_show_autoconfig: false
+          extraArgs: []
 
 runtimes:
   genesis-plus-gx:
@@ -273,7 +274,7 @@ library:
           storage: roms
           path: genesis/Sonic The Hedgehog.md
         apps:
-          - id: retroarch
+          - id: "@korri:retroarch/retroarch"
             runtime: genesis-plus-gx
         display:
           aspect: [1.333333]
@@ -318,5 +319,5 @@ library:
           storage: roms
           path: gba/Super Mario Advance 2.gba
         apps:
-          - id: retroarch
+          - id: "@korri:retroarch/retroarch"
             runtime: mgba

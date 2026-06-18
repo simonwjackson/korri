@@ -4,6 +4,10 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Cause, Effect } from "effect"
 
+import {
+  KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_PLUGIN_ID,
+} from "@product/plugins/retroarch"
 import { resolveAppDescriptor } from "./app-integrations"
 import { resolveModuleSelection } from "./module-resolution"
 import type { ModuleRecord } from "./records/module"
@@ -22,8 +26,17 @@ const runErrTag = async <A, E>(eff: Effect.Effect<A, E>) => {
 const retroarch = () =>
   run(
     resolveAppDescriptor({
-      appId: "retroarch",
-      apps: new Map(),
+      appId: KORRI_RETROARCH_APP_ID,
+      apps: new Map([
+        [
+          KORRI_RETROARCH_APP_ID,
+          {
+            id: KORRI_RETROARCH_APP_ID,
+            kind: KORRI_RETROARCH_PLUGIN_ID,
+            command: "retroarch",
+          },
+        ],
+      ]),
       launchers: new Map(),
     }),
   )

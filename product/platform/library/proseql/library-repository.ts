@@ -31,6 +31,7 @@ import {
 import {
   type AppRecord,
   appRecordKind,
+  decodeAppRecord,
   isSteamAppRecord,
 } from "@platform/library/config/records/app"
 import type { CollectionRecord } from "@platform/library/config/records/collection"
@@ -41,12 +42,21 @@ import type { LauncherRecord } from "@platform/library/config/records/launcher"
 import type { LibraryItemRecord } from "@platform/library/config/records/library-item"
 import type { ModuleRecord } from "@platform/library/config/records/module"
 import type { ProfileRecord } from "@platform/library/config/records/profile"
-import type { ProviderRecord } from "@platform/library/config/records/provider"
+import {
+  decodeProviderRecord,
+  type ProviderRecord,
+} from "@platform/library/config/records/provider"
 import type { ProviderLinkRecord } from "@platform/library/config/records/provider-link"
-import type { RuntimeRecord } from "@platform/library/config/records/runtime"
+import {
+  decodeRuntimeRecord,
+  type RuntimeRecord,
+} from "@platform/library/config/records/runtime"
 import type { SourceRecord } from "@platform/library/config/records/source"
 import type { StorageRecord } from "@platform/library/config/records/storage"
-import type { SystemRecord } from "@platform/library/config/records/system"
+import {
+  decodeSystemRecord,
+  type SystemRecord,
+} from "@platform/library/config/records/system"
 import type { UserRecord } from "@platform/library/config/records/user"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
@@ -57,6 +67,8 @@ import type {
   PlayableLibraryEntry,
   PlayableReleaseEntry,
 } from "@platform/library/playable-library"
+import type { ConfigRecordMap, PluginId } from "@platform/plugin"
+import type { PluginRegistry } from "@platform/plugin/registry"
 import type { ArtifactRecord } from "@platform/protocol/artifact/artifact"
 import { parseSteamAppId } from "@platform/stream/steam-launch-spec"
 import { Effect } from "effect"
@@ -146,12 +158,18 @@ export interface AdoptArtifactOutput {
   readonly game?: GameRecord
 }
 
+export interface ReadableLaunchMaterializationOptions {
+  readonly env?: Record<string, string | undefined>
+}
+
 export interface ReadableLaunchIntegration {
+  readonly providerId?: PluginId
   readonly kind: string
   readonly integration: AppIntegrationKind
   readonly canResolve: (context: ReadableResolvedLaunchContext) => boolean
   readonly materialize: (
     context: ReadableResolvedLaunchContext,
+    options?: ReadableLaunchMaterializationOptions,
   ) => Effect.Effect<
     {
       readonly spec: LaunchSpec
@@ -165,6 +183,7 @@ export interface ReadableLaunchIntegration {
 export interface CreateLibraryRepositoryOptions {
   readonly env?: Record<string, string | undefined>
   readonly launchIntegrations?: readonly ReadableLaunchIntegration[]
+  readonly pluginRegistry?: PluginRegistry
 }
 
 export interface LibraryRepository {
@@ -280,7 +299,7 @@ export function createLibraryRepository(
 ): LibraryRepository {
   const repository: LibraryRepository = {
     listPlayableEntries: () =>
-      loadReadableSnapshot(db).pipe(
+      loadReadableSnapshot(db, _options).pipe(
         Effect.map(snapshot =>
           derivePlayableEntries([...snapshot.library.values()]).map(entry =>
             toPlayableLibraryEntry(entry),
@@ -312,7 +331,7 @@ export function createLibraryRepository(
 
     canResolveLaunchForPlayable: (playableId, opts) =>
       Effect.gen(function* () {
-        const snapshot = yield* loadReadableSnapshot(db)
+        const snapshot = yield* loadReadableSnapshot(db, _options)
         const entry = derivePlayableEntries([
           ...snapshot.library.values(),
         ]).find(candidate => candidate.id === playableId)
@@ -331,20 +350,23 @@ export function createLibraryRepository(
             profileId: opts?.profileId ?? opts?.presetId,
             override: opts?.override,
           }).pipe(
-            Effect.flatMap(context =>
-              findReadableLaunchIntegration(context, _options)
-                ? Effect.succeed(
-                    findReadableLaunchIntegration(
-                      context,
-                      _options,
-                    )?.canResolve(context) ?? false,
+            Effect.flatMap(context => {
+              const integration = findReadableLaunchIntegration(
+                context,
+                _options,
+              )
+              if (integration) {
+                return Effect.succeed(integration.canResolve(context))
+              }
+              if (isProviderQualifiedReadableApp(context)) {
+                return Effect.succeed(false)
+              }
+              return isSteamAppRecord(context.app)
+                ? Effect.succeed(canMaterializeSteamContext(context))
+                : composeReadableLaunchSpec(context.app, context).pipe(
+                    Effect.as(true),
                   )
-                : isSteamAppRecord(context.app)
-                  ? Effect.succeed(canMaterializeSteamContext(context))
-                  : composeReadableLaunchSpec(context.app, context).pipe(
-                      Effect.as(true),
-                    ),
-            ),
+            }),
             Effect.match({
               onFailure: () => false,
               onSuccess: result => result,
@@ -357,7 +379,7 @@ export function createLibraryRepository(
 
     resolveLaunchForPlayable: (playableId, opts) =>
       Effect.gen(function* () {
-        const snapshot = yield* loadReadableSnapshot(db)
+        const snapshot = yield* loadReadableSnapshot(db, _options)
         const context = yield* resolveReadableLaunchContext(snapshot, {
           playableId,
           releaseId: opts?.releaseId,
@@ -370,20 +392,31 @@ export function createLibraryRepository(
           readonly spec: LaunchSpec
           readonly artifacts?: LaunchArtifacts
           readonly diagnostics?: readonly string[]
-        } = yield* (
-          findReadableLaunchIntegration(context, _options)
-            ? (findReadableLaunchIntegration(context, _options)?.materialize(
-                context,
-              ) ??
-              composeReadableLaunchSpec(context.app, context).pipe(
-                Effect.map(spec => ({ spec })),
-              ))
-            : isSteamAppRecord(context.app)
-              ? materializeReadableSteamLaunch({ context })
-              : composeReadableLaunchSpec(context.app, context).pipe(
-                  Effect.map(spec => ({ spec })),
-                )
-        ).pipe(Effect.mapError(toLibraryConfigError))
+        } = yield* Effect.gen(function* () {
+          const integration = findReadableLaunchIntegration(context, _options)
+          if (integration) {
+            return yield* integration
+              .materialize(context, { env: _options.env })
+              .pipe(Effect.mapError(toLibraryConfigError))
+          }
+          if (isProviderQualifiedReadableApp(context)) {
+            return yield* Effect.fail(
+              new LibraryError({
+                reason: "config",
+                message: `no launch integration registered for provider-qualified app kind ${appRecordKind(context.app)}`,
+              }),
+            )
+          }
+          if (isSteamAppRecord(context.app)) {
+            return yield* materializeReadableSteamLaunch({ context }).pipe(
+              Effect.mapError(toLibraryConfigError),
+            )
+          }
+          return yield* composeReadableLaunchSpec(context.app, context).pipe(
+            Effect.map(spec => ({ spec })),
+            Effect.mapError(toLibraryConfigError),
+          )
+        })
         const spec = materialized.spec
         const entry = derivePlayableEntries([
           ...snapshot.library.values(),
@@ -486,7 +519,7 @@ export function createLibraryRepository(
     resolveLaunchForGame: (gameId, opts) =>
       repository.resolveLaunchForPlayable(gameId, opts),
     resolveLocalLauncherPolicy: (launcherId, opts) =>
-      loadReadableSnapshot(db).pipe(
+      loadReadableSnapshot(db, _options).pipe(
         Effect.map(snapshot =>
           resolveReadableLocalLauncherPolicy(snapshot, {
             launcherId,
@@ -512,6 +545,12 @@ type CollectionApi<T extends { readonly id: string }> = {
   readonly query: () => {
     readonly runPromise: Promise<ReadonlyArray<T>>
   }
+}
+
+function isProviderQualifiedReadableApp(
+  context: ReadableResolvedLaunchContext,
+): boolean {
+  return appRecordKind(context.app).startsWith("@")
 }
 
 function findReadableLaunchIntegration(
@@ -947,6 +986,7 @@ function toPlayableReleaseEntry(release: {
 
 function loadReadableSnapshot(
   db: KorriLibraryDb,
+  options: CreateLibraryRepositoryOptions = {},
 ): Effect.Effect<ReadableConfigSnapshot, LibraryError> {
   return Effect.gen(function* () {
     const [
@@ -981,19 +1021,66 @@ function loadReadableSnapshot(
       hostRows[0] ??
       null
 
+    const plugin = pluginReadableRecords(options.pluginRegistry)
+
     return {
       host,
       users: new Map(users.map(record => [record.id, record])),
-      systems: new Map(systems.map(record => [record.id, record])),
-      providers: new Map(providers.map(record => [record.id, record])),
+      systems: mergeRecordMaps(plugin.systems, systems),
+      providers: mergeRecordMaps(plugin.providers, providers),
       providerLinks: new Map(providerLinks.map(record => [record.id, record])),
       storage: new Map(storage.map(record => [record.id, record])),
-      apps: new Map(apps.map(record => [record.id, record])),
-      runtimes: new Map(runtimes.map(record => [record.id, record])),
+      apps: mergeRecordMaps(plugin.apps, apps),
+      runtimes: mergeRecordMaps(plugin.runtimes, runtimes),
       profiles: new Map(profiles.map(record => [record.id, record])),
       library: new Map(library.map(record => [record.id, record])),
     }
   })
+}
+
+interface PluginReadableRecords {
+  readonly providers: readonly ProviderRecord[]
+  readonly systems: readonly SystemRecord[]
+  readonly apps: readonly AppRecord[]
+  readonly runtimes: readonly RuntimeRecord[]
+}
+
+function pluginReadableRecords(
+  registry: PluginRegistry | undefined,
+): PluginReadableRecords {
+  if (!registry) return { providers: [], systems: [], apps: [], runtimes: [] }
+  return {
+    providers: decodePluginReadableMap(
+      registry.providers,
+      decodeProviderRecord,
+    ),
+    systems: decodePluginReadableMap(registry.systems, decodeSystemRecord),
+    apps: decodePluginReadableMap(registry.apps, decodeAppRecord),
+    runtimes: decodePluginReadableMap(registry.runtimes, decodeRuntimeRecord),
+  }
+}
+
+function decodePluginReadableMap<T extends { readonly id: string }>(
+  records: ConfigRecordMap,
+  decode: (input: unknown) => T,
+): readonly T[] {
+  return Object.values(records).flatMap(record => {
+    try {
+      return [decode(record)]
+    } catch {
+      return []
+    }
+  })
+}
+
+function mergeRecordMaps<T extends { readonly id: string }>(
+  pluginRecords: readonly T[],
+  storedRecords: readonly T[],
+): ReadonlyMap<string, T> {
+  return new Map([
+    ...pluginRecords.map(record => [record.id, record] as const),
+    ...storedRecords.map(record => [record.id, record] as const),
+  ])
 }
 
 function readCollection<T extends { readonly id: string }>(

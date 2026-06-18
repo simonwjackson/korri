@@ -31,6 +31,13 @@ export type PluginOperation =
 export interface PluginRequirement {
   readonly capability: string
   readonly ref?: ProviderRecordRef
+  /**
+   * Whether enabling this plugin should also enable the required provider.
+   * Defaults to true for historical runtime/package requirements. Set false
+   * when the requirement is a fail-closed composition contract that must be
+   * opted into explicitly by the product/configuration.
+   */
+  readonly autoEnable?: boolean
   readonly reason?: string
 }
 

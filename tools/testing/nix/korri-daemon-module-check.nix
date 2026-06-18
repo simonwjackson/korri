@@ -52,7 +52,8 @@ let
   withPlatformDefaults = evaluateWith {
     services.korri.daemon = {
       enable = true;
-      library.platformDefaults.apps.retroarch.command = "retroarch";
+      library.platformDefaults.apps."@korri:retroarch/retroarch".command = "retroarch";
+      library.platformDefaults.apps."@korri:retroarch/retroarch".kind = "@korri:retroarch";
     };
   };
   withExtraConfigRoots = evaluateWith {

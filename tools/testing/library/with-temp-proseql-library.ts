@@ -7,6 +7,7 @@ import type { GameRecord } from "@platform/library/config/records/game"
 import type { GlobalConfigPayload } from "@platform/library/config/records/global"
 import type { LauncherRecord } from "@platform/library/config/records/launcher"
 import type { ModuleRecord } from "@platform/library/config/records/module"
+import type { RuntimeRecord } from "@platform/library/config/records/runtime"
 import type { SystemRecord } from "@platform/library/config/records/system"
 import type { UserRecord } from "@platform/library/config/records/user"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
@@ -27,6 +28,7 @@ export interface TempProseqlLibrarySeed {
   readonly launchers?: readonly LauncherRecord[]
   readonly apps?: readonly AppRecord[]
   readonly modules?: readonly ModuleRecord[]
+  readonly runtimes?: readonly RuntimeRecord[]
   readonly games?: readonly GameRecord[]
   readonly collections?: readonly CollectionRecord[]
 }
@@ -93,6 +95,9 @@ export async function withTempProseqlLibrary(
           }
           for (const module of seed.modules ?? []) {
             yield* repository.upsertModule(module)
+          }
+          for (const runtime of seed.runtimes ?? []) {
+            yield* repository.upsertRuntime(runtime)
           }
           for (const game of seed.games ?? []) {
             yield* repository.upsertGame(game)

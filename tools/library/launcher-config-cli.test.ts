@@ -2,24 +2,28 @@ import { describe, expect, it } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import {
+  KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_PLUGIN_ID,
+} from "@product/plugins/retroarch"
 import { withTempProseqlLibrary } from "../testing/library/with-temp-proseql-library"
 import { validateLauncherConfig } from "./launcher-config-cli"
 
-async function withLaunchArtifactsRoot<T>(fn: () => Promise<T>): Promise<T> {
+async function withLaunchArtifactsRoot<T>(
+  fn: (root: string) => Promise<T>,
+): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), "korri-launch-artifacts-"))
-  const previous = process.env.KORRI_LAUNCH_ARTIFACTS_DIR
-  process.env.KORRI_LAUNCH_ARTIFACTS_DIR = root
   try {
-    return await fn()
+    return await fn(root)
   } finally {
-    if (previous === undefined) {
-      delete process.env.KORRI_LAUNCH_ARTIFACTS_DIR
-    } else {
-      process.env.KORRI_LAUNCH_ARTIFACTS_DIR = previous
-    }
     await rm(root, { recursive: true, force: true })
   }
 }
+
+const retroarchCliEnv = (launchArtifactsRoot: string) => ({
+  KORRI_LAUNCH_ARTIFACTS_DIR: launchArtifactsRoot,
+  KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,
+})
 
 describe("validateLauncherConfig", () => {
   it("resolves a game id to a LaunchSpec via the cascade", async () => {
@@ -103,7 +107,7 @@ describe("validateLauncherConfig", () => {
   })
 
   it("reports materialized expanded RetroArch policy from the checked-in example", async () => {
-    await withLaunchArtifactsRoot(async () => {
+    await withLaunchArtifactsRoot(async launchArtifactsRoot => {
       const root = await mkdtemp(join(tmpdir(), "korri-launcher-cli-example-"))
       try {
         await writeFile(
@@ -115,6 +119,7 @@ describe("validateLauncherConfig", () => {
         const result = await validateLauncherConfig({
           root,
           gameId: "super-mario-advance-2/super-mario-world",
+          env: retroarchCliEnv(launchArtifactsRoot),
         })
 
         if (result.status !== "resolved") throw new Error("expected resolved")
@@ -124,7 +129,7 @@ describe("validateLauncherConfig", () => {
         )
         expect(result).toMatchObject({
           status: "resolved",
-          app: { id: "retroarch", integration: "retroarch" },
+          app: { id: KORRI_RETROARCH_APP_ID, integration: "retroarch" },
           module: {
             id: "mgba",
             path: "/run/current-system/sw/lib/libretro/mgba_libretro.so",
@@ -140,6 +145,7 @@ describe("validateLauncherConfig", () => {
             ],
           },
         })
+        expect(result.artifacts?.root).toStartWith(launchArtifactsRoot)
         expect(result.artifacts?.paths.configPath).toBe(generatedConfigArg)
         const config = await readFile(
           String(result.artifacts?.paths.configPath),
@@ -156,19 +162,37 @@ describe("validateLauncherConfig", () => {
   })
 
   it("reports app/module/settings/materialized artifact details for built-in RetroArch", async () => {
-    await withLaunchArtifactsRoot(async () => {
+    await withLaunchArtifactsRoot(async launchArtifactsRoot => {
       await using library = await withTempProseqlLibrary({
         apps: [
           {
-            id: "retroarch",
-            settings: { video_driver: "glcore", video_scale_integer: true },
+            id: KORRI_RETROARCH_APP_ID,
+            kind: KORRI_RETROARCH_PLUGIN_ID,
+            command: "retroarch",
+            args: [
+              "-c",
+              "{configPath}",
+              "-L",
+              "{runtime.path}",
+              "{content.path}",
+            ],
+            plugin: {
+              [KORRI_RETROARCH_PLUGIN_ID]: {
+                extraSettings: {
+                  video_driver: "glcore",
+                  video_scale_integer: true,
+                },
+              },
+            },
           },
         ],
-        modules: [
+        runtimes: [
           {
-            id: "fake08",
+            id: "@korri:pico8/fake08",
             kind: "libretro-core",
+            app: KORRI_RETROARCH_APP_ID,
             path: "/etc/korri/cores/fake08_libretro.so",
+            supports: { systems: ["pico8"] },
           },
         ],
         systems: [
@@ -176,8 +200,8 @@ describe("validateLauncherConfig", () => {
             id: "pico8",
             apps: [
               {
-                id: "retroarch",
-                runtime: "fake08",
+                id: KORRI_RETROARCH_APP_ID,
+                runtime: "@korri:pico8/fake08",
               },
             ],
           },
@@ -194,6 +218,7 @@ describe("validateLauncherConfig", () => {
       const result = await validateLauncherConfig({
         root: library.root,
         gameId: "porklike",
+        env: retroarchCliEnv(launchArtifactsRoot),
       })
 
       const generatedConfigArg =
@@ -201,8 +226,11 @@ describe("validateLauncherConfig", () => {
 
       expect(result).toMatchObject({
         status: "resolved",
-        app: { id: "retroarch", integration: "retroarch" },
-        module: { id: "fake08", path: "/etc/korri/cores/fake08_libretro.so" },
+        app: { id: KORRI_RETROARCH_APP_ID, integration: "retroarch" },
+        module: {
+          id: "@korri:pico8/fake08",
+          path: "/etc/korri/cores/fake08_libretro.so",
+        },
         spec: {
           command: "retroarch",
           args: [
@@ -215,6 +243,7 @@ describe("validateLauncherConfig", () => {
         },
       })
       if (result.status === "resolved") {
+        expect(result.artifacts?.root).toStartWith(launchArtifactsRoot)
         expect(result.artifacts?.paths.configPath).toBe(generatedConfigArg)
       }
     })

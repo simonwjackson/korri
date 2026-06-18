@@ -4,6 +4,11 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect } from "effect"
 
+import {
+  KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_PLUGIN_ID,
+  retroarchReadableLaunchIntegration,
+} from "@product/plugins/retroarch"
 import type { LibraryItemRecord } from "../config/records/library-item"
 import { LibraryError } from "../library-services"
 import { openKorriLibraryDb } from "./library-db"
@@ -39,7 +44,7 @@ const sonic: LibraryItemRecord = {
       id: "genesis",
       system: "genesis",
       target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
-      apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
+      apps: [{ id: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" }],
     },
     {
       id: "windows-known",
@@ -70,12 +75,15 @@ const marioPackage: LibraryItemRecord = {
         storage: "roms",
         path: "gba/Super Mario Advance 2.gba",
       },
-      apps: [{ id: "retroarch", runtime: "mgba" }],
+      apps: [{ id: KORRI_RETROARCH_APP_ID, runtime: "mgba" }],
     },
   ],
 }
 
-async function seedReadableLibrary(root: string) {
+async function seedReadableLibrary(
+  root: string,
+  options: { readonly launchIntegrations?: boolean } = {},
+) {
   return await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -121,24 +129,32 @@ async function seedReadableLibrary(root: string) {
           },
         })
         yield* db.apps.upsert({
-          where: { id: "retroarch" },
+          where: { id: KORRI_RETROARCH_APP_ID },
           create: {
-            id: "retroarch",
-            kind: "retroarch",
+            id: KORRI_RETROARCH_APP_ID,
+            kind: KORRI_RETROARCH_PLUGIN_ID,
             command: "retroarch",
-            configFile: { mode: "generated" },
-            lifecycle: { saveOnExit: false },
-            paths: { systemDirectory: "/bios" },
-            video: { fullscreen: true },
+            plugin: {
+              [KORRI_RETROARCH_PLUGIN_ID]: {
+                configFile: { mode: "generated" },
+                lifecycle: { saveOnExit: false },
+                paths: { systemDirectory: "/bios" },
+                video: { fullscreen: true },
+              },
+            },
           },
           update: {
-            id: "retroarch",
-            kind: "retroarch",
+            id: KORRI_RETROARCH_APP_ID,
+            kind: KORRI_RETROARCH_PLUGIN_ID,
             command: "retroarch",
-            configFile: { mode: "generated" },
-            lifecycle: { saveOnExit: false },
-            paths: { systemDirectory: "/bios" },
-            video: { fullscreen: true },
+            plugin: {
+              [KORRI_RETROARCH_PLUGIN_ID]: {
+                configFile: { mode: "generated" },
+                lifecycle: { saveOnExit: false },
+                paths: { systemDirectory: "/bios" },
+                video: { fullscreen: true },
+              },
+            },
           },
         })
         for (const runtime of [
@@ -168,6 +184,10 @@ async function seedReadableLibrary(root: string) {
         }
         return createLibraryRepository(db, {
           env: { KORRI_LAUNCH_ARTIFACTS_DIR: join(root, "launch-artifacts") },
+          launchIntegrations:
+            options.launchIntegrations === false
+              ? []
+              : [retroarchReadableLaunchIntegration],
         })
       }),
     ),
@@ -221,7 +241,7 @@ describe("createLibraryRepository — readable playable entries", () => {
                 path: "genesis/Multi.md",
               },
               apps: [
-                { id: "retroarch", runtime: "genesis-plus-gx" },
+                { id: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" },
                 { id: "steam" },
               ],
             },
@@ -232,7 +252,7 @@ describe("createLibraryRepository — readable playable entries", () => {
       const entries = await Effect.runPromise(repo.listPlayableEntries())
       expect(
         entries.find(entry => entry.id === "multi-app")?.releases[0]?.apps,
-      ).toEqual(["retroarch", "steam"])
+      ).toEqual([KORRI_RETROARCH_APP_ID, "steam"])
     })
   })
 
@@ -253,7 +273,7 @@ describe("createLibraryRepository — readable playable entries", () => {
                 path: "genesis/Multi.md",
               },
               apps: [
-                { id: "retroarch", runtime: "genesis-plus-gx" },
+                { id: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" },
                 { id: "steam" },
               ],
             },
@@ -269,7 +289,7 @@ describe("createLibraryRepository — readable playable entries", () => {
       )
 
       expect(resolved.app.id).toBe("steam")
-      expect(resolved.release.apps).toEqual(["retroarch", "steam"])
+      expect(resolved.release.apps).toEqual([KORRI_RETROARCH_APP_ID, "steam"])
       expect(resolved.spec).toEqual({
         command: "steam",
         args: ["genesis/Multi.md"],
@@ -293,7 +313,7 @@ describe("createLibraryRepository — readable playable entries", () => {
                 storage: "roms",
                 path: "genesis/Multi.md",
               },
-              apps: [{ id: "retroarch" }, { id: "steam" }],
+              apps: [{ id: KORRI_RETROARCH_APP_ID }, { id: "steam" }],
             },
           ],
         }),
@@ -517,7 +537,7 @@ describe("createLibraryRepository — readable playable entries", () => {
                 storage: "roms",
                 path: "genesis/Coreless.md",
               },
-              apps: [{ id: "retroarch" }],
+              apps: [{ id: KORRI_RETROARCH_APP_ID }],
             },
           ],
         }),
@@ -526,6 +546,27 @@ describe("createLibraryRepository — readable playable entries", () => {
       await expect(
         Effect.runPromise(
           repo.canResolveLaunchForPlayable("coreless", {
+            releaseId: "genesis",
+          }),
+        ),
+      ).resolves.toBe(false)
+    })
+  })
+
+  it("does not report RetroArch releases launchable with non-libretro runtimes", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertRuntime({
+          id: "genesis-plus-gx",
+          kind: "tool",
+          path: "/tools/not-a-core",
+        }),
+      )
+
+      await expect(
+        Effect.runPromise(
+          repo.canResolveLaunchForPlayable("sonic-the-hedgehog", {
             releaseId: "genesis",
           }),
         ),
@@ -544,13 +585,17 @@ describe("createLibraryRepository — readable playable entries", () => {
             {
               id: "genesis",
               system: "genesis",
-              apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
-              retroarch: {
-                configFile: { mode: "generated" },
-                video: { aspectRatio: "full", sync: { frameDelay: 0 } },
-                rewind: { enable: true, bufferSizeMb: 20 },
-                achievements: { enable: false },
-                extraSettings: { notification_show_autoconfig: false },
+              apps: [
+                { id: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" },
+              ],
+              plugin: {
+                [KORRI_RETROARCH_PLUGIN_ID]: {
+                  configFile: { mode: "generated" },
+                  video: { aspectRatio: "full", sync: { frameDelay: 0 } },
+                  rewind: { enable: true, bufferSizeMb: 20 },
+                  achievements: { enable: false },
+                  extraSettings: { notification_show_autoconfig: false },
+                },
               },
             },
             {
@@ -570,6 +615,30 @@ describe("createLibraryRepository — readable playable entries", () => {
           }),
         ),
       ).resolves.toBe(false)
+    })
+  })
+
+  it("fails closed for provider-qualified app kinds without a registered integration", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root, {
+        launchIntegrations: false,
+      })
+
+      await expect(
+        Effect.runPromise(
+          repo.canResolveLaunchForPlayable("sonic-the-hedgehog", {
+            releaseId: "genesis",
+          }),
+        ),
+      ).resolves.toBe(false)
+
+      await expect(
+        Effect.runPromise(
+          repo.resolveLaunchForPlayable("sonic-the-hedgehog", {
+            releaseId: "genesis",
+          }),
+        ),
+      ).rejects.toThrow("no launch integration registered")
     })
   })
 
@@ -605,8 +674,6 @@ describe("createLibraryRepository — readable playable entries", () => {
       expect(config).toContain('video_fullscreen = "true"')
     })
   })
-
-
 
   it("applies package releases to contained playable ids", async () => {
     await withTempRoot(async root => {

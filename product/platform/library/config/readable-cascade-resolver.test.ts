@@ -17,6 +17,7 @@ import type { SystemRecord } from "./records/system"
 import type { UserRecord } from "./records/user"
 
 const wrapperProvider = "@example:wrapper"
+const retroarchProvider = "@korri:retroarch"
 const retiredWrapperKey = ["game", "scope"].join("")
 type WrapperPolicy = {
   readonly enable?: boolean
@@ -60,31 +61,33 @@ const host: HostRecord = {
     stream: { resolution: { width: 1280 } },
     extraArgs: ["host"],
   },
-  retroarch: {
-    environment: { RA_KEEP: "host", RA_UNSET: "1" },
-    configFile: { append: ["/tmp/host.cfg"] },
-    logging: { verbosity: false, fpsShow: false },
-    drivers: { video: "glcore", menu: "rgui" },
-    paths: { cacheDirectory: "/host/cache" },
-    video: { fullscreen: true, sync: { hardSync: true, frameDelay: 0 } },
-    audio: { mute: false, outputRate: 48000 },
-    input: {
-      ports: { "1": { libretroDevice: 1, joypadIndex: 0 } },
+  plugin: {
+    [retroarchProvider]: {
+      environment: { RA_KEEP: "host", RA_UNSET: "1" },
+      configFile: { append: ["/tmp/host.cfg"] },
+      logging: { verbosity: false, fpsShow: false },
+      drivers: { video: "glcore", menu: "rgui" },
+      paths: { cacheDirectory: "/host/cache" },
+      video: { fullscreen: true, sync: { hardSync: true, frameDelay: 0 } },
+      audio: { mute: false, outputRate: 48000 },
+      input: {
+        ports: { "1": { libretroDevice: 1, joypadIndex: 0 } },
+      },
+      menu: { showStartScreen: false, pauseLibretro: true },
+      saves: { autosaveIntervalSeconds: 60, autoLoadState: true },
+      rewind: { enable: true, bufferSizeMb: 20 },
+      playback: { pauseNonactive: true, slowmotionRatio: 3 },
+      latency: {
+        runAhead: { enable: true, frames: 1 },
+        preemptiveFrames: { enable: false },
+      },
+      achievements: { enable: true, username: "host-user", badges: false },
+      haptics: { vibrateOnKeypress: false },
+      playlists: { useOldFormat: true },
+      privacy: { cameraAllow: false, locationAllow: false },
+      updater: { showOnlineUpdater: false, buildbotUrl: null },
+      extraArgs: ["host"],
     },
-    menu: { showStartScreen: false, pauseLibretro: true },
-    saves: { autosaveIntervalSeconds: 60, autoLoadState: true },
-    rewind: { enable: true, bufferSizeMb: 20 },
-    playback: { pauseNonactive: true, slowmotionRatio: 3 },
-    latency: {
-      runAhead: { enable: true, frames: 1 },
-      preemptiveFrames: { enable: false },
-    },
-    achievements: { enable: true, username: "host-user", badges: false },
-    haptics: { vibrateOnKeypress: false },
-    playlists: { useOldFormat: true },
-    privacy: { cameraAllow: false, locationAllow: false },
-    updater: { showOnlineUpdater: false, buildbotUrl: null },
-    extraArgs: ["host"],
   },
 }
 const user: UserRecord = {
@@ -99,45 +102,47 @@ const user: UserRecord = {
     stream: { resolution: { height: 720 } },
     extraArgs: ["user"],
   },
-  retroarch: {
-    configFile: { append: ["/tmp/user.cfg"] },
-    logging: { fpsShow: true },
-    drivers: { menu: "ozone" },
-    paths: { thumbnailsDirectory: "/user/thumbnails" },
-    video: { sync: { frameDelay: 99, frameDelayAuto: true } },
-    input: {
-      ports: {
-        "1": { joypadIndex: 2, analogDpadMode: 1 },
-        "2": { libretroDevice: 257, joypadIndex: 1 },
+  plugin: {
+    [retroarchProvider]: {
+      configFile: { append: ["/tmp/user.cfg"] },
+      logging: { fpsShow: true },
+      drivers: { menu: "ozone" },
+      paths: { thumbnailsDirectory: "/user/thumbnails" },
+      video: { sync: { frameDelay: 99, frameDelayAuto: true } },
+      input: {
+        ports: {
+          "1": { joypadIndex: 2, analogDpadMode: 1 },
+          "2": { libretroDevice: 257, joypadIndex: 1 },
+        },
       },
-    },
-    menu: { pointerEnable: true },
-    saves: { autoSaveState: true },
-    rewind: { bufferSizeMb: 24, granularity: 2 },
-    playback: { fastforwardRatio: 0 },
-    latency: {
-      runAhead: { frames: 2 },
-      preemptiveFrames: { enable: true, frames: 3 },
-    },
-    achievements: { username: "user-name", hardcoreMode: true },
-    haptics: { deviceVibration: true },
-    playlists: { useOldFormat: false },
-    privacy: { cameraDevice: "/dev/video0" },
-    updater: {
-      showCoreUpdater: false,
-      buildbotAssetsUrl: "https://updates.example.invalid/assets",
+      menu: { pointerEnable: true },
+      saves: { autoSaveState: true },
+      rewind: { bufferSizeMb: 24, granularity: 2 },
+      playback: { fastforwardRatio: 0 },
+      latency: {
+        runAhead: { frames: 2 },
+        preemptiveFrames: { enable: true, frames: 3 },
+      },
+      achievements: { username: "user-name", hardcoreMode: true },
+      haptics: { deviceVibration: true },
+      playlists: { useOldFormat: false },
+      privacy: { cameraDevice: "/dev/video0" },
+      updater: {
+        showCoreUpdater: false,
+        buildbotAssetsUrl: "https://updates.example.invalid/assets",
+      },
     },
   },
 }
 const system: SystemRecord = {
   id: "genesis",
-  apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
+  apps: [{ id: "@korri:retroarch/retroarch", runtime: "genesis-plus-gx" }],
   ...wrapperLaunch({
     extraArgs: ["system"],
     display: { nested: { width: 320 } },
   }),
   moonlight: { extraArgs: ["system"], window: { autoResize: true } },
-  retroarch: { extraArgs: ["system"] },
+  plugin: { [retroarchProvider]: { extraArgs: ["system"] } },
 }
 const source: SourceRecord = {
   id: "roms",
@@ -148,14 +153,16 @@ const source: SourceRecord = {
     display: { nested: { height: 240 } },
   }),
   moonlight: { extraArgs: ["source"], platform: { name: "v4l2m2m" } },
-  retroarch: {
-    paths: { systemDirectory: "/bios", cacheDirectory: "/source/cache" },
-    extraArgs: ["source"],
+  plugin: {
+    [retroarchProvider]: {
+      paths: { systemDirectory: "/bios", cacheDirectory: "/source/cache" },
+      extraArgs: ["source"],
+    },
   },
 }
 const app: AppRecord = {
-  id: "retroarch",
-  kind: "retroarch",
+  id: "@korri:retroarch/retroarch",
+  kind: retroarchProvider,
   command: "retroarch",
   args: ["-L", "{runtime.path}", "{content.path}"],
   systems: ["genesis"],
@@ -165,9 +172,13 @@ const app: AppRecord = {
     logging: { verbose: true },
     platform: { name: "v4l2m2m" },
   },
-  paths: { systemDirectory: "/bios", cacheDirectory: "/source/cache" },
-  lifecycle: { saveOnExit: false },
-  extraArgs: ["app"],
+  plugin: {
+    [retroarchProvider]: {
+      paths: { systemDirectory: "/bios", cacheDirectory: "/source/cache" },
+      lifecycle: { saveOnExit: false },
+      extraArgs: ["app"],
+    },
+  },
 }
 const runtime: RuntimeRecord = {
   id: "genesis-plus-gx",
@@ -175,9 +186,11 @@ const runtime: RuntimeRecord = {
   path: "/cores/genesis_plus_gx.so",
   ...wrapperLaunch({ extraArgs: ["runtime"], scaling: { filter: "fsr" } }),
   moonlight: { extraArgs: ["runtime"], stream: { fps: 60 } },
-  retroarch: {
-    core: { path: "/cores/runtime-override.so" },
-    extraArgs: ["runtime"],
+  plugin: {
+    [retroarchProvider]: {
+      core: { path: "/cores/runtime-override.so" },
+      extraArgs: ["runtime"],
+    },
   },
 }
 const profile: ProfileRecord = {
@@ -191,12 +204,14 @@ const profile: ProfileRecord = {
     extraArgs: ["profile"],
     window: { autoResize: false },
   },
-  retroarch: {
-    environment: { RA_UNSET: null },
-    video: { fullscreen: false, sync: { hardSyncFrames: 1 } },
-    audio: { mute: true },
-    extraSettings: { video_font_enable: false },
-    extraArgs: ["profile"],
+  plugin: {
+    [retroarchProvider]: {
+      environment: { RA_UNSET: null },
+      video: { fullscreen: false, sync: { hardSyncFrames: 1 } },
+      audio: { mute: true },
+      extraSettings: { video_font_enable: false },
+      extraArgs: ["profile"],
+    },
   },
   env: { SCALE: "profile" },
 }
@@ -212,9 +227,11 @@ const sonic: LibraryItemRecord = {
       target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
       ...wrapperLaunch({ extraArgs: ["release"] }),
       moonlight: { extraArgs: ["release"] },
-      retroarch: {
-        extraSettings: { video_font_enable: true },
-        extraArgs: ["release"],
+      plugin: {
+        [retroarchProvider]: {
+          extraSettings: { video_font_enable: true },
+          extraArgs: ["release"],
+        },
       },
     },
   ],
@@ -252,7 +269,7 @@ const snapshot = (item: LibraryItemRecord = sonic): ReadableConfigSnapshot => ({
   users: new Map([["simon", user]]),
   systems: new Map([["genesis", system]]),
   sources: new Map([["roms", source]]),
-  apps: new Map([["retroarch", app]]),
+  apps: new Map([["@korri:retroarch/retroarch", app]]),
   runtimes: new Map([["genesis-plus-gx", runtime]]),
   profiles: new Map([["handheld", profile]]),
   storage: new Map([["roms", storage]]),
@@ -347,7 +364,7 @@ describe("resolveReadableLaunchContext", () => {
 
     expect(context.playableId).toBe("sonic-the-hedgehog")
     expect(context.releaseId).toBe("genesis")
-    expect(context.app.id).toBe("retroarch")
+    expect(context.app.id).toBe("@korri:retroarch/retroarch")
     expect(context.runtime?.path).toBe("/cores/genesis_plus_gx.so")
     expect(context.target).toBe("genesis/Sonic.md")
     expect(context.content?.path).toBe("/games/genesis/Sonic.md")
@@ -396,7 +413,7 @@ describe("resolveReadableLaunchContext", () => {
         "profile",
       ],
     })
-    expect(context.retroarch).toMatchObject({
+    expect(context.plugin?.[retroarchProvider]).toMatchObject({
       environment: { RA_KEEP: "host", RA_UNSET: null },
       configFile: { append: ["/tmp/host.cfg", "/tmp/user.cfg"] },
       core: { path: "/cores/runtime-override.so" },
@@ -494,7 +511,12 @@ describe("resolveReadableLaunchContext", () => {
               "genesis",
               {
                 ...system,
-                apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
+                apps: [
+                  {
+                    id: "@korri:retroarch/retroarch",
+                    runtime: "genesis-plus-gx",
+                  },
+                ],
               },
             ],
           ]),
@@ -506,7 +528,7 @@ describe("resolveReadableLaunchContext", () => {
       ),
     )
 
-    expect(context.app.id).toBe("retroarch")
+    expect(context.app.id).toBe("@korri:retroarch/retroarch")
     expect(context.runtime?.id).toBe("genesis-plus-gx")
   })
 
@@ -541,7 +563,10 @@ describe("resolveReadableLaunchContext", () => {
               {
                 ...system,
                 apps: [
-                  { id: "retroarch", runtime: "genesis-plus-gx" },
+                  {
+                    id: "@korri:retroarch/retroarch",
+                    runtime: "genesis-plus-gx",
+                  },
                   { id: "plugin-app", argsAppend: ["system"] },
                 ],
               },
@@ -551,7 +576,7 @@ describe("resolveReadableLaunchContext", () => {
             ["roms", { ...source, app: undefined, runtime: undefined }],
           ]),
           apps: new Map([
-            ["retroarch", app],
+            ["@korri:retroarch/retroarch", app],
             ["plugin-app", pluginApp],
           ]),
         },
@@ -571,7 +596,7 @@ describe("resolveReadableLaunchContext", () => {
           "genesis",
           {
             ...system,
-            apps: [{ id: "retroarch" }, { id: "plugin-app" }],
+            apps: [{ id: "@korri:retroarch/retroarch" }, { id: "plugin-app" }],
           },
         ],
       ]),
@@ -589,7 +614,7 @@ describe("resolveReadableLaunchContext", () => {
     )
     expect(ambiguous).toMatchObject({
       _tag: "AmbiguousAppChoice",
-      appIds: ["retroarch", "plugin-app"],
+      appIds: ["@korri:retroarch/retroarch", "plugin-app"],
     })
 
     const unknown = await Effect.runPromise(
@@ -603,7 +628,7 @@ describe("resolveReadableLaunchContext", () => {
     expect(unknown).toMatchObject({
       _tag: "AppChoiceNotFound",
       appId: "missing",
-      appIds: ["retroarch", "plugin-app"],
+      appIds: ["@korri:retroarch/retroarch", "plugin-app"],
     })
   })
 
@@ -629,9 +654,9 @@ describe("resolveReadableLaunchContext", () => {
           ...snapshot(),
           apps: new Map([
             [
-              "retroarch",
+              "@korri:retroarch/retroarch",
               {
-                id: "retroarch",
+                ...app,
                 settings: { video_fullscreen: false },
               },
             ],
@@ -640,10 +665,10 @@ describe("resolveReadableLaunchContext", () => {
         { playableId: "sonic-the-hedgehog" },
       ),
     )
-    expect(context.app.id).toBe("retroarch")
-    expect(context.app.kind).toBe("retroarch")
-    expect(context.app.args).toEqual([])
-    expect(context.retroarch).toBeDefined()
+    expect(context.app.id).toBe("@korri:retroarch/retroarch")
+    expect(context.app.kind).toBe(retroarchProvider)
+    expect(context.app.args).toEqual(["-L", "{runtime.path}", "{content.path}"])
+    expect(context.plugin?.[retroarchProvider]).toBeDefined()
   })
 
   it("preserves extraArgs-only wrapper policies without provider-specific defaults", async () => {
@@ -656,7 +681,11 @@ describe("resolveReadableLaunchContext", () => {
           systems: new Map([
             [
               "genesis",
-              { id: "genesis", title: "Genesis", apps: [{ id: "retroarch" }] },
+              {
+                id: "genesis",
+                title: "Genesis",
+                apps: [{ id: "@korri:retroarch/retroarch" }],
+              },
             ],
           ]),
           sources: new Map([
@@ -666,11 +695,13 @@ describe("resolveReadableLaunchContext", () => {
                 id: "roms",
                 kind: ["files"],
                 storage: "roms",
-                app: "retroarch",
+                app: "@korri:retroarch/retroarch",
               },
             ],
           ]),
-          apps: new Map([["retroarch", { ...app, launch: undefined }]]),
+          apps: new Map([
+            ["@korri:retroarch/retroarch", { ...app, launch: undefined }],
+          ]),
           runtimes: new Map(),
           profiles: new Map([
             [
@@ -711,7 +742,7 @@ describe("resolveReadableLaunchContext", () => {
         {
           ...snapshot(),
           apps: new Map([
-            ["retroarch", app],
+            ["@korri:retroarch/retroarch", app],
             ["steam", steam],
           ]),
           runtimes: new Map([
@@ -870,6 +901,64 @@ describe("resolveReadableLaunchContext", () => {
     expect(error).toMatchObject({ _tag: "AppNotFound", appId: "steam" })
   })
 
+  it("rejects runtime/app mismatches through shared launch compatibility", async () => {
+    const error = await Effect.runPromise(
+      Effect.flip(
+        resolveReadableLaunchContext(
+          {
+            ...snapshot(),
+            runtimes: new Map([
+              [
+                "genesis-plus-gx",
+                {
+                  ...runtime,
+                  app: "steam",
+                },
+              ],
+            ]),
+          },
+          { playableId: "sonic-the-hedgehog" },
+        ),
+      ),
+    )
+
+    expect(error).toMatchObject({
+      _tag: "IncompatibleLaunchSelection",
+      appId: "@korri:retroarch/retroarch",
+      runtimeId: "genesis-plus-gx",
+      systemId: "genesis",
+    })
+  })
+
+  it("rejects runtime/system mismatches through shared launch compatibility", async () => {
+    const error = await Effect.runPromise(
+      Effect.flip(
+        resolveReadableLaunchContext(
+          {
+            ...snapshot(),
+            runtimes: new Map([
+              [
+                "genesis-plus-gx",
+                {
+                  ...runtime,
+                  supports: { systems: ["gba"] },
+                },
+              ],
+            ]),
+          },
+          { playableId: "sonic-the-hedgehog" },
+        ),
+      ),
+    )
+
+    expect(error).toMatchObject({
+      _tag: "IncompatibleLaunchSelection",
+      appId: "@korri:retroarch/retroarch",
+      runtimeId: "genesis-plus-gx",
+      systemId: "genesis",
+    })
+  })
+
   it("rejects Steam launch-options when the selected app is not Steam", async () => {
     const error = await Effect.runPromise(
       Effect.flip(
@@ -883,7 +972,7 @@ describe("resolveReadableLaunchContext", () => {
                   ...system,
                   apps: [
                     {
-                      id: "retroarch",
+                      id: "@korri:retroarch/retroarch",
                       runtime: "genesis-plus-gx",
                       "launch-options": "%command%",
                     },
@@ -899,9 +988,9 @@ describe("resolveReadableLaunchContext", () => {
 
     expect(error).toMatchObject({
       _tag: "InvalidAppChoiceForKind",
-      appId: "retroarch",
+      appId: "@korri:retroarch/retroarch",
       field: "launch-options",
-      kind: "retroarch",
+      kind: retroarchProvider,
     })
   })
 
@@ -922,7 +1011,7 @@ describe("resolveReadableLaunchContext", () => {
         {
           ...snapshot(),
           apps: new Map([
-            ["retroarch", app],
+            ["@korri:retroarch/retroarch", app],
             ["steam", steam],
           ]),
           runtimes: new Map([
@@ -935,7 +1024,10 @@ describe("resolveReadableLaunchContext", () => {
               {
                 ...system,
                 apps: [
-                  { id: "retroarch", runtime: "genesis-plus-gx" },
+                  {
+                    id: "@korri:retroarch/retroarch",
+                    runtime: "genesis-plus-gx",
+                  },
                   { id: "steam", runtime: "proton" },
                 ],
               },
@@ -948,12 +1040,12 @@ describe("resolveReadableLaunchContext", () => {
         {
           playableId: "sonic-the-hedgehog",
           profileId: "handheld",
-          appId: "retroarch",
+          appId: "@korri:retroarch/retroarch",
         },
       ),
     )
 
-    expect(context.app.id).toBe("retroarch")
+    expect(context.app.id).toBe("@korri:retroarch/retroarch")
     expect(context.runtime?.id).toBe("genesis-plus-gx")
   })
 
@@ -970,7 +1062,6 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.releaseId).toBe("gba")
     expect(wrapperPolicyFrom(context)?.extraArgs).toContain("contained")
   })
-
 
   it("rejects release omission when multiple launchable releases exist", async () => {
     const exit = await Effect.runPromiseExit(
