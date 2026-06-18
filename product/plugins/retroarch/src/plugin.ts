@@ -5,10 +5,14 @@ export const KORRI_RETROARCH_APP_LOCAL_ID = "retroarch" as const
 export const KORRI_RETROARCH_APP_ID =
   `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_APP_LOCAL_ID}` as const
 export const KORRI_RETROARCH_GBA_SYSTEM_ID = "gba" as const
+export const KORRI_RETROARCH_NES_SYSTEM_ID = "nes" as const
 export const KORRI_RETROARCH_SNES_SYSTEM_ID = "snes" as const
 export const KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID = "mgba" as const
 export const KORRI_RETROARCH_MGBA_RUNTIME_ID =
   `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID}` as const
+export const KORRI_RETROARCH_MESEN_RUNTIME_LOCAL_ID = "mesen" as const
+export const KORRI_RETROARCH_MESEN_RUNTIME_ID =
+  `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_MESEN_RUNTIME_LOCAL_ID}` as const
 export const KORRI_RETROARCH_BSNES_RUNTIME_LOCAL_ID = "bsnes" as const
 export const KORRI_RETROARCH_BSNES_RUNTIME_ID =
   `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_BSNES_RUNTIME_LOCAL_ID}` as const
@@ -50,6 +54,16 @@ export const retroarchPlugin = plugin({
             },
           ],
         },
+        [KORRI_RETROARCH_NES_SYSTEM_ID]: {
+          id: KORRI_RETROARCH_NES_SYSTEM_ID,
+          title: "Nintendo Entertainment System",
+          apps: [
+            {
+              id: KORRI_RETROARCH_APP_ID,
+              runtime: KORRI_RETROARCH_MESEN_RUNTIME_ID,
+            },
+          ],
+        },
         [KORRI_RETROARCH_SNES_SYSTEM_ID]: {
           id: KORRI_RETROARCH_SNES_SYSTEM_ID,
           title: "Super Nintendo Entertainment System",
@@ -68,6 +82,13 @@ export const retroarchPlugin = plugin({
           app: KORRI_RETROARCH_APP_ID,
           path: "/etc/korri/cores/mgba_libretro.so",
           supports: { systems: [KORRI_RETROARCH_GBA_SYSTEM_ID] },
+        },
+        [KORRI_RETROARCH_MESEN_RUNTIME_LOCAL_ID]: {
+          id: KORRI_RETROARCH_MESEN_RUNTIME_ID,
+          kind: "libretro-core",
+          app: KORRI_RETROARCH_APP_ID,
+          path: "/etc/korri/cores/mesen_libretro.so",
+          supports: { systems: [KORRI_RETROARCH_NES_SYSTEM_ID] },
         },
         [KORRI_RETROARCH_BSNES_RUNTIME_LOCAL_ID]: {
           id: KORRI_RETROARCH_BSNES_RUNTIME_ID,

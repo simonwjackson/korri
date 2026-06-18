@@ -226,30 +226,37 @@ let
           cfg.environment.etc."korri/cores/mgba_libretro.so".source or ""
         )
       ))
+      (check "${name}: RetroArch Mesen core is exposed at the stable launch path" (
+        lib.hasSuffix "/lib/retroarch/cores/mesen_libretro.so" (
+          cfg.environment.etc."korri/cores/mesen_libretro.so".source or ""
+        )
+      ))
       (check "${name}: RetroArch bsnes core is exposed at the stable launch path" (
         lib.hasSuffix "/lib/retroarch/cores/bsnes_libretro.so" (
           cfg.environment.etc."korri/cores/bsnes_libretro.so".source or ""
         )
       ))
-      (check "${name}: compositor RetroArch closure contains mGBA and bsnes cores" (
+      (check "${name}: compositor RetroArch closure contains mGBA, Mesen, and bsnes cores" (
         let
           wrappers = findRetroarchWrappers compositor.path;
           cores = retroarchCoresFor compositor.path;
         in
         builtins.length wrappers == 1
-        && builtins.length cores == 2
+        && builtins.length cores == 3
         && hasCore "mgba" cores
+        && hasCore "mesen" cores
         && hasCore "bsnes" cores
       ))
-      (check "${name}: sessiond RetroArch closure contains mGBA and bsnes cores" (
+      (check "${name}: sessiond RetroArch closure contains mGBA, Mesen, and bsnes cores" (
         let
           sessiondPath = sessiondUnit.path or [ ];
           wrappers = findRetroarchWrappers sessiondPath;
           cores = retroarchCoresFor sessiondPath;
         in
         builtins.length wrappers == 1
-        && builtins.length cores == 2
+        && builtins.length cores == 3
         && hasCore "mgba" cores
+        && hasCore "mesen" cores
         && hasCore "bsnes" cores
       ))
       # Mesa 25.2.6 Turnip is pathologically slow for Ryujinx on Adreno
