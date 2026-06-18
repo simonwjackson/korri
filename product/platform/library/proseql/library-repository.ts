@@ -66,6 +66,8 @@ import type {
   PlayableReleaseEntry,
 } from "@platform/library/playable-library"
 import type { ConfigRecordMap, PluginId } from "@platform/plugin"
+import { isProviderId } from "@platform/plugin/ids"
+import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type { PluginRegistry } from "@platform/plugin/registry"
 import type { ArtifactRecord } from "@platform/protocol/artifact/artifact"
 import { Effect } from "effect"
@@ -84,6 +86,7 @@ export interface ResolveLaunchOptions {
 export interface ResolvedLaunchOutput {
   readonly spec: LaunchSpec
   readonly launchCompanions?: LaunchCompanionMap
+  readonly launchMetadata?: LaunchMetadata
   readonly moonlight?: MoonlightPolicy
   readonly app: {
     readonly id: string
@@ -170,6 +173,7 @@ export interface ReadableLaunchIntegration {
   ) => Effect.Effect<
     {
       readonly spec: LaunchSpec
+      readonly launchMetadata?: LaunchMetadata
       readonly artifacts?: LaunchArtifacts
       readonly diagnostics?: readonly string[]
     },
@@ -385,6 +389,7 @@ export function createLibraryRepository(
         }).pipe(Effect.mapError(toLibraryConfigError))
         const materialized: {
           readonly spec: LaunchSpec
+          readonly launchMetadata?: LaunchMetadata
           readonly artifacts?: LaunchArtifacts
           readonly diagnostics?: readonly string[]
         } = yield* Effect.gen(function* () {
@@ -414,10 +419,15 @@ export function createLibraryRepository(
         const release = entry?.releases.find(
           candidate => candidate.id === context.releaseId,
         )
+        const launchMetadata = launchMetadataForContext(
+          context,
+          materialized.launchMetadata,
+        )
 
         return {
           spec,
           launchCompanions: context.launchCompanions,
+          ...(launchMetadata ? { launchMetadata } : {}),
           ...(context.moonlight ? { moonlight: context.moonlight } : {}),
           app: {
             id: context.app.id,
@@ -560,6 +570,22 @@ function resolvedIntegration(
   const integration = findReadableLaunchIntegration(context, options)
   if (integration) return integration.integration
   return "generic-process"
+}
+
+function launchMetadataForContext(
+  context: ReadableResolvedLaunchContext,
+  materialized: LaunchMetadata | undefined,
+): LaunchMetadata | undefined {
+  const appKind = appRecordKind(context.app)
+  const appProviderId = isProviderId(appKind)
+    ? appKind
+    : materialized?.appProviderId
+  const annotations = materialized?.annotations
+  if (appProviderId === undefined && annotations === undefined) return undefined
+  return {
+    ...(appProviderId ? { appProviderId } : {}),
+    ...(annotations ? { annotations } : {}),
+  }
 }
 
 function upsertSystemWithCoreRuntime(

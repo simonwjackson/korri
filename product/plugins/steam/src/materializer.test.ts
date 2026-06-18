@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { Effect } from "effect"
+import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
 import {
   materializeReadableSteamLaunch,
   steamReadableLaunchIntegration,
@@ -103,6 +104,7 @@ const context = (root: string): ReadableResolvedLaunchContext => ({
       root,
     },
   },
+  launchCompanions: { [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: true } },
 })
 
 describe("steamReadableLaunchIntegration", () => {
@@ -144,6 +146,10 @@ describe("steamReadableLaunchIntegration", () => {
         command: "steam",
         args: ["-applaunch", "1029210"],
       })
+      expect(result.launchMetadata).toEqual({
+        appProviderId: KORRI_STEAM_PLUGIN_ID,
+        annotations: { [KORRI_STEAM_PLUGIN_ID]: { steamSession: true } },
+      })
       expect(result.artifacts?.root).toBe(join(root, "Steam"))
       expect(Object.values(result.artifacts?.paths ?? {})).toEqual([
         join(root, "Steam", "userdata", "0", "config", "localconfig.vdf"),
@@ -156,6 +162,28 @@ describe("steamReadableLaunchIntegration", () => {
         "ready",
       ])
       expect(writes.length).toBe(2)
+    })
+  })
+
+  it("fails closed when the Gamescope launch companion is unavailable", async () => {
+    await withRoot(async root => {
+      await mkdir(root, { recursive: true })
+      const error = await Effect.runPromise(
+        Effect.flip(
+          materializeReadableSteamLaunch({
+            context: { ...context(root), launchCompanions: {} },
+            fs: memoryFs().fs,
+            lifecycle: lifecycle([]),
+            lock: inlineLock,
+          }),
+        ),
+      )
+
+      expect(error).toMatchObject({
+        _tag: "AppMaterializationFailed",
+        appId: KORRI_STEAM_APP_ID,
+      })
+      expect(errorReason(error)).toContain("@korri:gamescope")
     })
   })
 

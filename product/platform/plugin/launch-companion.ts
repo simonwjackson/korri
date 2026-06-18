@@ -3,6 +3,7 @@ import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 import { Effect, Schema } from "effect"
 import type { PluginHandler, ProviderId } from "./index"
 import { runPluginHandler } from "./index"
+import type { LaunchMetadata } from "./launch-metadata"
 import type { PluginRegistry } from "./registry"
 
 export const LAUNCH_COMPOSE_OPERATION = "launch.compose" as const
@@ -30,7 +31,7 @@ export type LaunchCompanionDiagnostic = Schema.Schema.Type<
 >
 
 export interface LaunchCompanionComposeOptions {
-  readonly appIntegration?: string
+  readonly launchMetadata?: LaunchMetadata
 }
 
 export type LaunchCompanionCompositionResult =

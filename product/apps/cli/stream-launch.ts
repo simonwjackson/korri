@@ -164,8 +164,7 @@ async function prepareKnownGameStreamLaunch(options: {
     gameId: options.game.id,
     spec: resolvedResult.value.spec,
     launchCompanions: resolvedResult.value.launchCompanions,
-    appIntegration:
-      resolvedResult.value.app?.integration === "steam" ? "steam" : undefined,
+    launchMetadata: resolvedResult.value.launchMetadata,
     artifacts: resolvedResult.value.artifacts,
     intentStore: options.intentStore,
   })
@@ -224,7 +223,7 @@ async function enqueueLaunchIntent(options: {
   readonly gameId: string
   readonly spec: LaunchSpec
   readonly launchCompanions?: GameStreamLaunchIntent["launchCompanions"]
-  readonly appIntegration?: GameStreamLaunchIntent["appIntegration"]
+  readonly launchMetadata?: GameStreamLaunchIntent["launchMetadata"]
   readonly artifacts?: LaunchArtifacts
   readonly intentStore: GameStreamLaunchIntentStore
 }): Promise<StreamLaunchPrepareResult> {
@@ -232,7 +231,7 @@ async function enqueueLaunchIntent(options: {
   try {
     intent = createLaunchIntent(options.spec, {
       launchCompanions: options.launchCompanions,
-      appIntegration: options.appIntegration,
+      launchMetadata: options.launchMetadata,
       artifacts: options.artifacts,
     })
   } catch (error) {

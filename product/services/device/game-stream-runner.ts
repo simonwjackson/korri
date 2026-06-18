@@ -418,7 +418,7 @@ export function createGameStreamRunner(
             spec: launchClaim.intent.launch,
             launchCompanions,
             registry: pluginRegistry,
-            options: { appIntegration: launchClaim.intent.appIntegration },
+            options: { launchMetadata: launchClaim.intent.launchMetadata },
           }),
         )
         if (specResult._tag === "LaunchCompanionDiagnostics") {

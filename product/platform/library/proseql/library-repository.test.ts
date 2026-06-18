@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { KORRI_GAMESCOPE_PLUGIN_ID } from "@product/plugins/gamescope"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_PLUGIN_ID,
@@ -370,6 +371,7 @@ describe("createLibraryRepository — readable playable entries", () => {
           kind: KORRI_STEAM_PLUGIN_ID,
           command: "steam",
           runtime: "proton-arm64",
+          launch: { with: { [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: true } } },
           plugin: {
             [KORRI_STEAM_PLUGIN_ID]: {
               state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
@@ -408,6 +410,10 @@ describe("createLibraryRepository — readable playable entries", () => {
       expect(resolved.spec).toEqual({
         command: "steam",
         args: ["-applaunch", "1029210"],
+      })
+      expect(resolved.launchMetadata).toEqual({
+        appProviderId: KORRI_STEAM_PLUGIN_ID,
+        annotations: { [KORRI_STEAM_PLUGIN_ID]: { steamSession: true } },
       })
       expect(resolved.artifacts?.root).toBe(join(steamStorageRoot, "Steam"))
     })

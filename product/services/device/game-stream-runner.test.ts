@@ -66,7 +66,11 @@ const framePluginRegistry = createPluginRegistry(
                     readonly exposeWayland?: boolean
                   }
                 }
-                readonly options?: { readonly appIntegration?: string }
+                readonly options?: {
+                  readonly launchMetadata?: {
+                    readonly appProviderId?: string
+                  }
+                }
               }
               const policy = input.policy ?? {}
               if (policy.enable === false) return input.spec
@@ -88,7 +92,10 @@ const framePluginRegistry = createPluginRegistry(
               if (policy.window?.exposeWayland !== false) {
                 args.push("--expose-wayland")
               }
-              if (input.options?.appIntegration === "steam") args.push("-e")
+              if (
+                input.options?.launchMetadata?.appProviderId === "@korri:steam"
+              )
+                args.push("-e")
               args.push("--", input.spec.command, ...input.spec.args)
               return { command, args }
             },
@@ -448,7 +455,7 @@ describe("game stream runner", () => {
     })
   })
 
-  it("adds launch companion Steam integration for resolved Steam launches", async () => {
+  it("adds launch companion Steam integration for provider-qualified Steam launches", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const controlled = createControlledChild(206)
     const { spawner, specs } = createControlledSpawner(controlled.child)
@@ -460,7 +467,7 @@ describe("game stream runner", () => {
         },
         {
           ...frameCompanion({ enable: true }),
-          appIntegration: "steam",
+          launchMetadata: { appProviderId: "@korri:steam" },
         },
       ),
       spawner,

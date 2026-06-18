@@ -99,11 +99,53 @@ describe("app.stream.prepare handler", () => {
     expect(intent.launchCompanions).toEqual({
       "@example:wrapper": {
         enable: true,
-        backend: { type: "wayland" },
-        window: { fullscreen: true, borderless: true, exposeWayland: true },
         extraArgs: ["--nested-refresh", "60"],
       },
     })
+  })
+
+  it("writes provider-qualified metadata for Steam plugin launches", async () => {
+    const intentDir = await mkdtemp(
+      join(tmpdir(), "korri-stream-prepare-steam-"),
+    )
+    await chmod(intentDir, 0o700)
+    cleanups.push(() => rm(intentDir, { recursive: true, force: true }))
+    process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
+    process.env.KORRI_GAME_STREAM_INTENT_PATH = join(
+      intentDir,
+      "next-launch.json",
+    )
+    delete process.env.XDG_RUNTIME_DIR
+
+    const result = await Effect.runPromise(
+      handlePrepareStream({ id: "steam/sonic" }).pipe(
+        Effect.provide(
+          makeInMemoryLibrarySourceLayer({
+            games: [{ id: "steam/sonic", system: "steam" }],
+            resolvedLaunchById: new Map([
+              [
+                "steam/sonic",
+                {
+                  spec: {
+                    command: "/run/current-system/sw/bin/steam",
+                    args: ["-applaunch", "584400"],
+                  },
+                  launchMetadata: { appProviderId: "@korri:steam" },
+                },
+              ],
+            ]),
+          }),
+        ),
+      ),
+    )
+
+    const intent = decodeLaunchIntent(
+      JSON.parse(await readFile(result.intentPath, "utf8")),
+    )
+    expect(intent.launchMetadata).toEqual({ appProviderId: "@korri:steam" })
+    expect(
+      JSON.parse(await readFile(result.intentPath, "utf8")),
+    ).not.toHaveProperty("appIntegration")
   })
 
   it("cleans resolved artifacts when enqueueing the stream intent fails", async () => {

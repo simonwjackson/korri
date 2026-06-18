@@ -369,6 +369,28 @@ describe("prepareStreamLaunchForGame", () => {
     })
   })
 
+  it("writes provider-qualified metadata for resolved Steam plugin launches", async () => {
+    const intentPath = await tempIntentPath()
+    const result = await prepareStreamLaunchForGame({
+      gameId: game.id,
+      librarySource: librarySource({
+        games: [game],
+        launchSpecs: new Map([[game.id, launchSpec]]),
+        launchMetadata: new Map([[game.id, { appProviderId: "@korri:steam" }]]),
+      }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+    })
+
+    expect(result.status).toBe("prepared")
+    const raw = JSON.parse(await readFile(intentPath, "utf8")) as Record<
+      string,
+      unknown
+    >
+    const intent = decodeLaunchIntent(raw)
+    expect(intent.launchMetadata).toEqual({ appProviderId: "@korri:steam" })
+    expect(raw).not.toHaveProperty("appIntegration")
+  })
+
   it("reports no-such-game without writing an intent", async () => {
     const intentPath = await tempIntentPath()
     const result = await prepareStreamLaunchForGame({
@@ -540,6 +562,10 @@ function librarySource(options: {
     Readonly<Record<`@${string}:${string}`, unknown>>
   >
   readonly artifacts?: ReadonlyMap<string, LaunchArtifacts>
+  readonly launchMetadata?: ReadonlyMap<
+    string,
+    { readonly appProviderId?: `@${string}:${string}` }
+  >
 }): LibrarySourceService {
   return {
     list: () => Effect.succeed(options.games),
@@ -548,10 +574,12 @@ function librarySource(options: {
       const spec = options.launchSpecs.get(id)
       const launchCompanions = options.launchCompanions?.get(id)
       const artifacts = options.artifacts?.get(id)
+      const launchMetadata = options.launchMetadata?.get(id)
       return spec
         ? Effect.succeed({
             spec,
             ...(launchCompanions ? { launchCompanions } : {}),
+            ...(launchMetadata ? { launchMetadata } : {}),
             ...(artifacts ? { artifacts } : {}),
           })
         : Effect.fail(

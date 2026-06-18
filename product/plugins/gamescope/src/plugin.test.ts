@@ -67,6 +67,56 @@ describe("Gamescope plugin descriptor", () => {
     })
   })
 
+  it("derives Steam-session flags from provider-qualified launch metadata", async () => {
+    const launchCompose = gamescopePlugin.contributes.handlers?.find(
+      handler => handler.operation === "launch.compose",
+    )
+    if (!launchCompose) throw new Error("missing launch compose handler")
+
+    await expect(
+      Effect.runPromise(
+        runPluginHandler(launchCompose, {
+          operation: "launch.compose",
+          provider: KORRI_GAMESCOPE_PLUGIN_ID,
+          input: {
+            spec: {
+              command: "/run/current-system/sw/bin/steam",
+              args: ["-applaunch", "1332010"],
+            },
+            policy: { command: "gamescope-korri" },
+            options: { launchMetadata: { appProviderId: "@korri:steam" } },
+          },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      command: "gamescope-korri",
+      args: expect.arrayContaining(["-e"]),
+    })
+  })
+
+  it("does not add Steam-session flags for non-Steam provider metadata", async () => {
+    const launchCompose = gamescopePlugin.contributes.handlers?.find(
+      handler => handler.operation === "launch.compose",
+    )
+    if (!launchCompose) throw new Error("missing launch compose handler")
+
+    const result = await Effect.runPromise(
+      runPluginHandler(launchCompose, {
+        operation: "launch.compose",
+        provider: KORRI_GAMESCOPE_PLUGIN_ID,
+        input: {
+          spec: { command: "/bin/game", args: [] },
+          policy: { command: "gamescope-korri" },
+          options: { launchMetadata: { appProviderId: "@korri:retroarch" } },
+        },
+      }),
+    )
+
+    expect((result as { readonly args: readonly string[] }).args).not.toContain(
+      "-e",
+    )
+  })
+
   it("rejects malformed launch.compose input through the handler boundary", async () => {
     const launchCompose = gamescopePlugin.contributes.handlers?.find(
       handler => handler.operation === "launch.compose",

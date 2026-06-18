@@ -259,7 +259,7 @@ function composeResolvedLaunch(
     spec: resolved.spec,
     launchCompanions: resolved.launchCompanions,
     registry,
-    options: { appIntegration: resolved.app?.integration },
+    options: { launchMetadata: resolved.launchMetadata },
   }).pipe(
     Effect.map(result =>
       result._tag === "LaunchCompanionsComposed"

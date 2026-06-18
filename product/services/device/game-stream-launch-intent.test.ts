@@ -13,6 +13,7 @@ import type { LaunchSpec } from "@platform/library/launcher"
 import {
   createFileGameStreamLaunchIntentStore,
   createLaunchIntent,
+  decodeLaunchIntent,
   defaultGameStreamIntentPath,
 } from "./game-stream-launch-intent"
 
@@ -106,16 +107,47 @@ describe("game stream launch intent store", () => {
     })
   })
 
-  it("preserves resolved app integration metadata separately from launch companion policy", () => {
+  it("preserves provider-qualified launch metadata separately from launch companion policy", () => {
     const intent = createLaunchIntent(launch, {
       launchCompanions: { [companionProvider]: { enable: true } },
-      appIntegration: "steam",
+      launchMetadata: {
+        appProviderId: "@korri:steam",
+        annotations: { "@korri:steam": { steamSession: true } },
+      },
     })
 
     expect(intent.launchCompanions).toEqual({
       [companionProvider]: { enable: true },
     })
-    expect(intent.appIntegration).toBe("steam")
+    expect(intent.launchMetadata).toEqual({
+      appProviderId: "@korri:steam",
+      annotations: { "@korri:steam": { steamSession: true } },
+    })
+    expect(JSON.stringify(intent)).not.toContain("appIntegration")
+  })
+
+  it("rejects retired app integration launch intents", () => {
+    expect(() =>
+      decodeLaunchIntent({
+        ...createLaunchIntent(launch),
+        appIntegration: "steam",
+      }),
+    ).toThrow("appIntegration is retired")
+  })
+
+  it("rejects malformed provider-qualified launch metadata", () => {
+    expect(() =>
+      decodeLaunchIntent({
+        ...createLaunchIntent(launch),
+        launchMetadata: { appProviderId: "steam" },
+      }),
+    ).toThrow("appProviderId must be a provider id")
+    expect(() =>
+      decodeLaunchIntent({
+        ...createLaunchIntent(launch),
+        launchMetadata: { annotations: { steam: {} } },
+      }),
+    ).toThrow("annotation provider must be a provider id")
   })
 
   it("drops empty launch companion maps", () => {

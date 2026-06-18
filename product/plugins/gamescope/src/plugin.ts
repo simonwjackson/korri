@@ -1,6 +1,10 @@
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 import { plugin } from "@platform/plugin"
 import {
+  decodeLaunchMetadata,
+  type LaunchMetadata,
+} from "@platform/plugin/launch-metadata"
+import {
   composeGamescopeLaunchSpec,
   decodeGamescopePolicy,
   type GamescopePolicyValue,
@@ -13,13 +17,13 @@ import {
 } from "./stream-control"
 
 export const KORRI_GAMESCOPE_PLUGIN_ID = "@korri:gamescope" as const
+const KORRI_STEAM_PROVIDER_ID = "@korri:steam" as const
 
 export interface GamescopeLaunchComposeInput {
   readonly spec: LaunchSpec
   readonly policy: GamescopePolicyValue
   readonly options?: {
-    readonly appIntegration?: string
-    readonly steamSession?: boolean
+    readonly launchMetadata?: LaunchMetadata
   }
 }
 
@@ -184,12 +188,9 @@ function decodeLaunchComposeInput(input: unknown): GamescopeLaunchComposeInput {
     policy: decodeGamescopePolicy(input.policy ?? {}),
     options: isRecord(input.options)
       ? {
-          steamSession:
-            optionalBoolean(input.options.steamSession) ??
-            input.options.appIntegration === "steam",
-          ...(typeof input.options.appIntegration === "string"
-            ? { appIntegration: input.options.appIntegration }
-            : {}),
+          steamSession: steamSessionFromLaunchMetadata(
+            decodeOptionalLaunchMetadata(input.options.launchMetadata),
+          ),
         }
       : undefined,
   }
@@ -207,8 +208,26 @@ function decodeHandlerLaunchSpec(value: unknown): LaunchSpec {
   }
 }
 
-function optionalBoolean(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined
+function decodeOptionalLaunchMetadata(
+  value: unknown,
+): LaunchMetadata | undefined {
+  return value === undefined
+    ? undefined
+    : decodeLaunchMetadata(
+        value,
+        "Gamescope launch.compose input.options.launchMetadata",
+      )
+}
+
+function steamSessionFromLaunchMetadata(
+  launchMetadata: LaunchMetadata | undefined,
+): boolean | undefined {
+  if (launchMetadata?.appProviderId === KORRI_STEAM_PROVIDER_ID) return true
+  const steamAnnotation = launchMetadata?.annotations?.[KORRI_STEAM_PROVIDER_ID]
+  if (isRecord(steamAnnotation) && steamAnnotation.steamSession === true) {
+    return true
+  }
+  return undefined
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

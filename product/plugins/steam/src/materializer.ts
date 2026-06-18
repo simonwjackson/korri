@@ -7,7 +7,9 @@ import type { ReadableResolvedLaunchContext } from "@platform/library/config/res
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
+import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import { Effect } from "effect"
+import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
 import { parseSteamAppId } from "./launch-spec"
 import { KORRI_STEAM_PLUGIN_ID } from "./plugin"
 import {
@@ -22,6 +24,7 @@ const STORAGE_TOKEN_PATTERN = /\{storage:([^}]+)\}/g
 export interface MaterializedReadableLaunch {
   readonly spec: LaunchSpec
   readonly context: ReadableResolvedLaunchContext
+  readonly launchMetadata?: LaunchMetadata
   readonly artifacts?: LaunchArtifacts
   readonly diagnostics?: readonly string[]
 }
@@ -71,6 +74,7 @@ export const materializeReadableSteamLaunch = (input: {
     return {
       spec: resources.spec,
       context: input.context,
+      launchMetadata: steamLaunchMetadata(),
       artifacts: { root: resources.stateRoot, paths: resources.paths },
     }
   })
@@ -81,12 +85,35 @@ function canMaterializeSteamContext(
   if (context.app.kind !== KORRI_STEAM_PLUGIN_ID) return false
   if (parseSteamAppId(context.target)._tag === "Left") return false
   try {
+    assertGamescopeCompanionEnabled(context)
     const policy = readSteamPluginPolicy(context)
     return (
       typeof policy.state?.root === "string" && policy.state.root.length > 0
     )
   } catch {
     return false
+  }
+}
+
+function steamLaunchMetadata(): LaunchMetadata {
+  return {
+    appProviderId: KORRI_STEAM_PLUGIN_ID,
+    annotations: {
+      [KORRI_STEAM_PLUGIN_ID]: { steamSession: true },
+    },
+  }
+}
+
+function assertGamescopeCompanionEnabled(
+  context: ReadableResolvedLaunchContext,
+): void {
+  const policy = context.launchCompanions?.[KORRI_GAMESCOPE_PLUGIN_ID]
+  if (!isRecord(policy) || policy.enable === false) {
+    throw new AppMaterializationFailed({
+      appId: context.app.id,
+      reason:
+        "Steam AppID launches require the @korri:gamescope launch companion",
+    })
   }
 }
 
@@ -151,6 +178,10 @@ const materializeReadableSteamResources = (input: {
   readonly lock?: SteamStateLock
 }): Effect.Effect<MaterializedSteamResources, ResolutionError> =>
   Effect.gen(function* () {
+    yield* Effect.try({
+      try: () => assertGamescopeCompanionEnabled(input.context),
+      catch: error => error as ResolutionError,
+    })
     const rawPolicy = yield* Effect.try({
       try: () => readSteamPluginPolicy(input.context),
       catch: error => error as ResolutionError,

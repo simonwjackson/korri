@@ -31,6 +31,35 @@ const wrapperPlugin = plugin({
   },
 })
 
+const metadataPlugin = plugin({
+  namespace: "@test",
+  name: "metadata",
+  contributes: {
+    handlers: [
+      {
+        id: "test.metadata.launch-compose",
+        operation: "launch.compose",
+        capabilities: ["launch.compose"],
+        run: context => {
+          const input = context.input as {
+            readonly spec: LaunchSpec
+            readonly options?: {
+              readonly launchMetadata?: { readonly appProviderId?: string }
+            }
+          }
+          return {
+            ...input.spec,
+            args: [
+              ...input.spec.args,
+              input.options?.launchMetadata?.appProviderId ?? "missing",
+            ],
+          }
+        },
+      },
+    ],
+  },
+})
+
 const envPlugin = plugin({
   namespace: "@test",
   name: "env",
@@ -82,6 +111,26 @@ describe("composeLaunchCompanions", () => {
         args: ["--wrap", "--", "/bin/game"],
         env: { WRAPPED: "1" },
       },
+    })
+  })
+
+  it("passes provider-qualified launch metadata to launch companions", async () => {
+    const registry = createPluginRegistry([metadataPlugin], {
+      enabledPluginIds: [metadataPlugin.id],
+    })
+
+    const result = await Effect.runPromise(
+      composeLaunchCompanions({
+        spec: baseSpec,
+        registry,
+        launchCompanions: { [metadataPlugin.id]: {} },
+        options: { launchMetadata: { appProviderId: "@korri:steam" } },
+      }),
+    )
+
+    expect(result).toEqual({
+      _tag: "LaunchCompanionsComposed",
+      spec: { command: "/bin/game", args: ["--run", "@korri:steam"] },
     })
   })
 

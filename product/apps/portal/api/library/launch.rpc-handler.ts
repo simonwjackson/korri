@@ -112,7 +112,7 @@ export const handleLaunchLibrary = (
       spec: resolvedResult.resolved.spec,
       launchCompanions: resolvedResult.resolved.launchCompanions,
       registry: createFirstPartyPluginRegistryFromEnv(process.env),
-      options: { appIntegration: resolvedResult.resolved.app?.integration },
+      options: { launchMetadata: resolvedResult.resolved.launchMetadata },
     })
     if (specResult._tag === "LaunchCompanionDiagnostics") {
       const response = launchConfigurationFailureFromDiagnostics(

@@ -9,18 +9,18 @@ import {
   writeFile,
 } from "node:fs/promises"
 import { dirname, isAbsolute, join } from "node:path"
-import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 import type { ProviderId } from "@platform/plugin"
 import { isProviderId } from "@platform/plugin/ids"
+import {
+  decodeLaunchMetadata,
+  hasLaunchMetadata,
+  type LaunchMetadata,
+} from "@platform/plugin/launch-metadata"
 
 export type GameStreamLaunchLifecycle = "foreground" | "session"
-export type GameStreamLaunchAppIntegration = Extract<
-  AppIntegrationKind,
-  "steam"
->
 
 export interface GameStreamLaunchIntent {
   readonly version: 1
@@ -29,7 +29,7 @@ export interface GameStreamLaunchIntent {
   readonly lifecycle: GameStreamLaunchLifecycle
   readonly launch: LaunchSpec
   readonly launchCompanions?: LaunchCompanionMap
-  readonly appIntegration?: GameStreamLaunchAppIntegration
+  readonly launchMetadata?: LaunchMetadata
   readonly wait?: LaunchSpec
   readonly artifacts?: LaunchArtifacts
 }
@@ -66,7 +66,7 @@ export function createLaunchIntent(
   options: {
     readonly lifecycle?: GameStreamLaunchLifecycle
     readonly launchCompanions?: LaunchCompanionMap
-    readonly appIntegration?: GameStreamLaunchAppIntegration
+    readonly launchMetadata?: LaunchMetadata
     readonly wait?: LaunchSpec
     readonly artifacts?: LaunchArtifacts
   } = {},
@@ -86,8 +86,8 @@ export function createLaunchIntent(
     ...(hasLaunchCompanionEntries(options.launchCompanions)
       ? { launchCompanions: options.launchCompanions }
       : {}),
-    ...(options.appIntegration
-      ? { appIntegration: options.appIntegration }
+    ...(hasLaunchMetadata(options.launchMetadata)
+      ? { launchMetadata: options.launchMetadata }
       : {}),
     ...(options.wait ? { wait: options.wait } : {}),
     ...(artifacts ? { artifacts } : {}),
@@ -99,7 +99,7 @@ export function createStaticGameStreamLaunchIntentStore(
   options: {
     readonly lifecycle?: GameStreamLaunchLifecycle
     readonly launchCompanions?: LaunchCompanionMap
-    readonly appIntegration?: GameStreamLaunchAppIntegration
+    readonly launchMetadata?: LaunchMetadata
     readonly wait?: LaunchSpec
     readonly artifacts?: LaunchArtifacts
   } = {},
@@ -214,6 +214,12 @@ export function decodeLaunchIntent(value: unknown): GameStreamLaunchIntent {
   assertAbsoluteLaunchSpec(launch)
   if (wait) assertAbsoluteLaunchSpec(wait)
 
+  if (record.appIntegration !== undefined) {
+    throw new Error(
+      "launch intent appIntegration is retired; use launchMetadata",
+    )
+  }
+
   return withOptionalLaunchIntentFields(
     {
       version: 1,
@@ -224,7 +230,7 @@ export function decodeLaunchIntent(value: unknown): GameStreamLaunchIntent {
     },
     {
       launchCompanions: decodeOptionalLaunchCompanions(record.launchCompanions),
-      appIntegration: decodeOptionalAppIntegration(record.appIntegration),
+      launchMetadata: decodeOptionalLaunchMetadata(record.launchMetadata),
       wait,
       artifacts: decodeOptionalLaunchArtifacts(record.artifacts),
     },
@@ -255,12 +261,12 @@ function decodeOptionalLaunchCompanions(
   return decoded as LaunchCompanionMap
 }
 
-function decodeOptionalAppIntegration(
+function decodeOptionalLaunchMetadata(
   value: unknown,
-): GameStreamLaunchAppIntegration | undefined {
-  if (value === undefined) return undefined
-  if (value === "steam") return value
-  throw new Error("launch intent appIntegration must be steam when present")
+): LaunchMetadata | undefined {
+  return value === undefined
+    ? undefined
+    : decodeLaunchMetadata(value, "launch intent launchMetadata")
 }
 
 function decodeOptionalLaunchArtifacts(
@@ -279,7 +285,7 @@ function withOptionalLaunchIntentFields(
   base: GameStreamLaunchIntent,
   optional: {
     readonly launchCompanions?: LaunchCompanionMap
-    readonly appIntegration?: GameStreamLaunchAppIntegration
+    readonly launchMetadata?: LaunchMetadata
     readonly wait?: LaunchSpec
     readonly artifacts?: LaunchArtifacts
   },
@@ -289,8 +295,8 @@ function withOptionalLaunchIntentFields(
     ...(hasLaunchCompanionEntries(optional.launchCompanions)
       ? { launchCompanions: optional.launchCompanions }
       : {}),
-    ...(optional.appIntegration
-      ? { appIntegration: optional.appIntegration }
+    ...(hasLaunchMetadata(optional.launchMetadata)
+      ? { launchMetadata: optional.launchMetadata }
       : {}),
     ...(optional.wait ? { wait: optional.wait } : {}),
     ...(optional.artifacts ? { artifacts: optional.artifacts } : {}),

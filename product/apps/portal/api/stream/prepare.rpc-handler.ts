@@ -100,8 +100,7 @@ export function prepareStreamLaunch(
       try: () =>
         createLaunchIntent(resolved.spec, {
           launchCompanions: resolved.launchCompanions,
-          appIntegration:
-            resolved.app?.integration === "steam" ? "steam" : undefined,
+          launchMetadata: resolved.launchMetadata,
           artifacts: resolved.artifacts,
         }),
       catch: error => toDataError(error, "invalid stream launch target"),
