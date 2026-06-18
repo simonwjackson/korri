@@ -20,6 +20,7 @@ import {
 } from "./envelope"
 import {
   installPortMasterEntry,
+  type PortMasterArmhfQemuWrapperOptions,
   type PortMasterFexWrapperOptions,
   type PortMasterNativeElfRepairOptions,
 } from "./installer"
@@ -41,6 +42,7 @@ export interface PortMasterPluginOptions {
   readonly installRoot?: string
   readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
   readonly fexWrapper?: PortMasterFexWrapperOptions
+  readonly armhfQemuWrapper?: PortMasterArmhfQemuWrapperOptions
 }
 
 interface PortMasterRuntime {
@@ -51,6 +53,7 @@ interface PortMasterRuntime {
   readonly installRoot: string
   readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
   readonly fexWrapper?: PortMasterFexWrapperOptions
+  readonly armhfQemuWrapper?: PortMasterArmhfQemuWrapperOptions
   catalog?: Promise<readonly PortMasterEntry[]>
 }
 
@@ -300,6 +303,9 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                   runtime.nativeElfRepair
                 const fexWrapper =
                   fexWrapperFromInput(input.fexWrapper) ?? runtime.fexWrapper
+                const armhfQemuWrapper =
+                  armhfQemuWrapperFromInput(input.armhfQemuWrapper) ??
+                  runtime.armhfQemuWrapper
 
                 return Effect.tryPromise({
                   try: () =>
@@ -318,6 +324,7 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                       fetchImpl: runtime.fetchImpl,
                       ...(nativeElfRepair ? { nativeElfRepair } : {}),
                       ...(fexWrapper ? { fexWrapper } : {}),
+                      ...(armhfQemuWrapper ? { armhfQemuWrapper } : {}),
                       ...(installedAt ? { installedAt } : {}),
                     }),
                   catch: error =>
@@ -395,6 +402,9 @@ function createRuntime(options: PortMasterPluginOptions): PortMasterRuntime {
       ? { nativeElfRepair: options.nativeElfRepair }
       : {}),
     ...(options.fexWrapper ? { fexWrapper: options.fexWrapper } : {}),
+    ...(options.armhfQemuWrapper
+      ? { armhfQemuWrapper: options.armhfQemuWrapper }
+      : {}),
   }
 }
 
@@ -741,6 +751,23 @@ function presentationFromInput(
     ...(logPath ? { logPath } : {}),
     ...(startupPollAttempts !== undefined ? { startupPollAttempts } : {}),
     ...(startupPollDelayMs !== undefined ? { startupPollDelayMs } : {}),
+  }
+}
+
+function armhfQemuWrapperFromInput(
+  value: unknown,
+): PortMasterArmhfQemuWrapperOptions | undefined {
+  const record = readRecord(value)
+  const qemuArmPath = stringValue(record.qemuArmPath)
+  const rootfs = stringValue(record.rootfs)
+  if (!qemuArmPath || !rootfs) return undefined
+  const libraryPaths = stringArray(record.libraryPaths)
+  const env = stringRecord(record.env)
+  return {
+    qemuArmPath,
+    rootfs,
+    ...(libraryPaths.length > 0 ? { libraryPaths } : {}),
+    ...(env ? { env } : {}),
   }
 }
 

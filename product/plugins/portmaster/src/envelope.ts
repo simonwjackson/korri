@@ -101,6 +101,7 @@ export async function preparePortMasterLaunchEnvelope(
   const shellPath = input.shellPath ?? DEFAULT_SHELL
   const useBubblewrap = input.useBubblewrap ?? false
   const fexWrapper = manifest.extracted.fexWrappers?.[0]
+  const armhfQemuWrapper = manifest.extracted.armhfQemuWrappers?.[0]
   const presentationInput = input.presentation
   const inputCompatibility = normalizeInputCompatibility({
     manifest,
@@ -141,6 +142,18 @@ export async function preparePortMasterLaunchEnvelope(
     ...(runtimeCompatibility.retroarchLogPath
       ? {
           KORRI_PORTMASTER_RETROARCH_LOG: runtimeCompatibility.retroarchLogPath,
+        }
+      : {}),
+    ...(armhfQemuWrapper
+      ? {
+          KORRI_PORTMASTER_ARMHF_ROOTFS: armhfQemuWrapper.rootfs,
+          ...(armhfQemuWrapper.libraryPaths.length > 0
+            ? {
+                KORRI_PORTMASTER_ARMHF_LIBRARY_PATH:
+                  armhfQemuWrapper.libraryPaths.join(":"),
+              }
+            : {}),
+          ...armhfQemuWrapper.env,
         }
       : {}),
     ...(fexWrapper
@@ -195,7 +208,10 @@ export async function preparePortMasterLaunchEnvelope(
 
   const bwrapPath = input.bwrapPath ?? DEFAULT_BWRAP
   const envPath = input.envPath ?? DEFAULT_ENV
-  const fexRootfsBind = fexWrapper ? fexRootfsBindArgs(fexWrapper.rootfs) : []
+  const fexRootfsBind = fexWrapper ? rootfsBindArgs(fexWrapper.rootfs) : []
+  const armhfRootfsBind = armhfQemuWrapper
+    ? rootfsBindArgs(armhfQemuWrapper.rootfs)
+    : []
   return withPresentation({
     envelope: {
       command: bwrapPath,
@@ -243,6 +259,7 @@ export async function preparePortMasterLaunchEnvelope(
         ...fakeUinputBindArgs({ fakeUinput, inputCompatibility }),
         ...runtimeBindArgs(runtimeCompatibility),
         ...fexRootfsBind,
+        ...armhfRootfsBind,
         "--chdir",
         dirname(launchScriptPath),
         "/bin/bash",
@@ -567,6 +584,8 @@ function selectLaunchScript(
 }
 
 function preferredDeviceArch(manifest: PortMasterInstalledManifest): string {
+  const armhfArch = manifest.extracted.armhfQemuWrappers?.[0]?.arch
+  if (armhfArch) return armhfArch
   const fexArch = manifest.extracted.fexWrappers?.[0]?.arch
   if (fexArch) return fexArch
   const detected = manifest.extracted.binaries.find(binary => binary.arch)?.arch
@@ -574,7 +593,7 @@ function preferredDeviceArch(manifest: PortMasterInstalledManifest): string {
   return manifest.catalog.arch[0] ?? DEFAULT_DEVICE_ARCH
 }
 
-function fexRootfsBindArgs(rootfs: string): readonly string[] {
+function rootfsBindArgs(rootfs: string): readonly string[] {
   if (!rootfs.startsWith("/")) return []
   if (rootfs === "/var" || rootfs.startsWith("/var/")) {
     return ["--bind-try", "/var", "/var"]

@@ -666,6 +666,154 @@ describe("PortMaster plugin", () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  it("wraps armhf PortMaster executables for qemu-arm", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-portmaster-armhf-"))
+    const zipBytes = makeZip({
+      "Lineoff.sh": Buffer.from(
+        '#!/bin/bash\nsource "$XDG_DATA_HOME/PortMaster/control.txt"\nGAMEDIR="/$directory/ports/lineoff"\ncd "$GAMEDIR"\n./gmloader lineoff.apk\n',
+      ),
+      "lineoff/gmloader": fakeElf("armhf"),
+      "lineoff/libs/libzip.so.5": fakeElf("armhf"),
+      "lineoff/lineoff.apk": Buffer.from("apk"),
+    })
+    const catalog = {
+      ports: {
+        "lineoff.zip": {
+          name: "lineoff.zip",
+          items: ["Lineoff.sh", "lineoff"],
+          attr: {
+            title: "Lineoff",
+            desc: "A tiny armhf game.",
+            inst: "Ready to run.",
+            genres: ["puzzle"],
+            porter: ["PortMaster"],
+            rtr: true,
+            exp: false,
+            runtime: [],
+            reqs: [],
+            arch: ["armhf"],
+            availability: "full",
+          },
+          source: {
+            md5: createHash("md5").update(zipBytes).digest("hex"),
+            size: zipBytes.length,
+            url: "https://example.invalid/lineoff.zip",
+          },
+        },
+      },
+    }
+    const productPlugin = createPortMasterPlugin({
+      catalogPath: "/catalog/ports.json",
+      installRoot: root,
+      readFileText: async () => JSON.stringify(catalog),
+      fetchImpl: async () =>
+        new Response(zipBytes, {
+          status: 200,
+          headers: { "content-type": "application/zip" },
+        }),
+      armhfQemuWrapper: {
+        qemuArmPath: "/nix/store/qemu/bin/qemu-arm",
+        rootfs: "/var/lib/korri/armhf-rootfs",
+        libraryPaths: [
+          "/nix/store/glibc-armhf/lib",
+          "/nix/store/gcc-armhf/lib",
+        ],
+        env: {
+          SDL_AUDIODRIVER: "dummy",
+          SDL_VIDEODRIVER: "x11",
+        },
+      },
+    })
+
+    try {
+      const install = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.install",
+      ) as PluginHandler | undefined
+      if (!install) throw new Error("missing portmaster.install handler")
+      const manifest = await Effect.runPromise(
+        runPluginHandler(install, {
+          operation: "portmaster.install",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            id: "lineoff.zip",
+            installedAt: "2026-06-18T00:00:00.000Z",
+          },
+        }),
+      )
+
+      expect(manifest.extracted.armhfQemuWrappers).toEqual([
+        {
+          path: "lineoff/gmloader",
+          arch: "armhf",
+          originalPath: "lineoff/.korri-qemu-arm/gmloader",
+          qemuArmPath: "/nix/store/qemu/bin/qemu-arm",
+          rootfs: "/var/lib/korri/armhf-rootfs",
+          libraryPaths: [
+            "/nix/store/glibc-armhf/lib",
+            "/nix/store/gcc-armhf/lib",
+          ],
+          env: {
+            SDL_AUDIODRIVER: "dummy",
+            SDL_VIDEODRIVER: "x11",
+          },
+        },
+      ])
+      expect(
+        manifest.extracted.armhfQemuWrappers.map(wrapper => wrapper.path),
+      ).not.toContain("lineoff/libs/libzip.so.5")
+      expect(
+        await stat(
+          join(root, "ports", "lineoff", ".korri-qemu-arm", "gmloader"),
+        ),
+      ).toBeDefined()
+      const wrapper = await readFile(
+        join(root, "ports", "lineoff", "gmloader"),
+        "utf8",
+      )
+      expect(wrapper).toStartWith("#!/usr/bin/env bash")
+      expect(wrapper).toContain("/nix/store/qemu/bin/qemu-arm")
+      expect(wrapper).toContain("KORRI_PORTMASTER_ARMHF_ROOTFS")
+      expect(wrapper).toContain("/var/lib/korri/armhf-rootfs")
+      expect(wrapper).toContain("LD_LIBRARY_PATH")
+      expect(wrapper).toContain(
+        "/nix/store/glibc-armhf/lib:/nix/store/gcc-armhf/lib",
+      )
+      expect(wrapper).toContain("SDL_VIDEODRIVER")
+      expect(wrapper).toContain("x11")
+
+      const prepareLaunch = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.prepare-launch",
+      ) as PluginHandler | undefined
+      if (!prepareLaunch) throw new Error("missing portmaster.prepare-launch")
+      const envelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            bwrapPath: "/nix/store/example-bubblewrap/bin/bwrap",
+            envPath: "/run/current-system/sw/bin/env",
+            useBubblewrap: true,
+          },
+        }),
+      )
+
+      expect(envelope.env).toMatchObject({
+        DEVICE_ARCH: "armhf",
+        KORRI_PORTMASTER_ARMHF_ROOTFS: "/var/lib/korri/armhf-rootfs",
+        KORRI_PORTMASTER_ARMHF_LIBRARY_PATH:
+          "/nix/store/glibc-armhf/lib:/nix/store/gcc-armhf/lib",
+        SDL_AUDIODRIVER: "dummy",
+        SDL_VIDEODRIVER: "x11",
+      })
+      expect(envelope.args).toContain("--bind-try")
+      expect(envelope.args).toContain("/var")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
 
 function fakeElf(arch: "aarch64" | "x86_64" | "x86" | "armhf"): Buffer {

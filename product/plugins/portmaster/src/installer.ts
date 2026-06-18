@@ -61,6 +61,23 @@ export interface PortMasterFexWrapperRecord {
   readonly env: Readonly<Record<string, string>>
 }
 
+export interface PortMasterArmhfQemuWrapperOptions {
+  readonly qemuArmPath: string
+  readonly rootfs: string
+  readonly libraryPaths?: readonly string[]
+  readonly env?: Readonly<Record<string, string>>
+}
+
+export interface PortMasterArmhfQemuWrapperRecord {
+  readonly path: string
+  readonly arch: "armhf"
+  readonly originalPath: string
+  readonly qemuArmPath: string
+  readonly rootfs: string
+  readonly libraryPaths: readonly string[]
+  readonly env: Readonly<Record<string, string>>
+}
+
 export interface PortMasterInstallInput {
   readonly providerId: ProviderId
   readonly id: string
@@ -76,6 +93,7 @@ export interface PortMasterInstallInput {
   readonly fetchImpl: typeof fetch
   readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
   readonly fexWrapper?: PortMasterFexWrapperOptions
+  readonly armhfQemuWrapper?: PortMasterArmhfQemuWrapperOptions
   readonly installedAt?: string
 }
 
@@ -106,6 +124,7 @@ export interface PortMasterInstalledManifest {
     readonly binaries: readonly PortMasterInstalledBinary[]
     readonly nativeElfRepairs: readonly PortMasterNativeElfRepairRecord[]
     readonly fexWrappers: readonly PortMasterFexWrapperRecord[]
+    readonly armhfQemuWrappers: readonly PortMasterArmhfQemuWrapperRecord[]
   }
 }
 
@@ -186,7 +205,12 @@ export async function installPortMasterEntry(
     binaries,
     options: input.fexWrapper,
   })
-  if (fexWrappers.length > 0) {
+  const armhfQemuWrappers = await installArmhfQemuWrappers({
+    portsRoot,
+    binaries,
+    options: input.armhfQemuWrapper,
+  })
+  if (fexWrappers.length > 0 || armhfQemuWrappers.length > 0) {
     files = await inspectInstalledFiles(portsRoot, extracted)
   }
 
@@ -221,6 +245,7 @@ export async function installPortMasterEntry(
       binaries,
       nativeElfRepairs,
       fexWrappers,
+      armhfQemuWrappers,
     },
   }
 
@@ -324,6 +349,51 @@ async function installFexWrappers(input: {
   return wrappers
 }
 
+async function installArmhfQemuWrappers(input: {
+  readonly portsRoot: string
+  readonly binaries: readonly PortMasterInstalledBinary[]
+  readonly options?: PortMasterArmhfQemuWrapperOptions
+}): Promise<readonly PortMasterArmhfQemuWrapperRecord[]> {
+  if (!input.options) return []
+  const wrappers: PortMasterArmhfQemuWrapperRecord[] = []
+
+  for (const binary of input.binaries) {
+    if (binary.arch !== "armhf") continue
+    if (!isExecutablePayload(binary.path)) continue
+
+    const originalPath = join(
+      dirname(binary.path),
+      ".korri-qemu-arm",
+      basename(binary.path),
+    )
+    const target = join(input.portsRoot, binary.path)
+    const originalTarget = join(input.portsRoot, originalPath)
+    await mkdir(dirname(originalTarget), { recursive: true })
+    await rm(originalTarget, { force: true })
+    await rename(target, originalTarget)
+    await chmod(originalTarget, 0o755).catch(() => undefined)
+    await writeFile(
+      target,
+      armhfQemuWrapperText({
+        ...input.options,
+        originalTarget,
+      }),
+    )
+    await chmod(target, 0o755)
+    wrappers.push({
+      path: binary.path,
+      arch: "armhf",
+      originalPath,
+      qemuArmPath: input.options.qemuArmPath,
+      rootfs: input.options.rootfs,
+      libraryPaths: input.options.libraryPaths ?? [],
+      env: input.options.env ?? {},
+    })
+  }
+
+  return wrappers
+}
+
 function isExecutablePayload(path: string): boolean {
   const name = basename(path).toLowerCase()
   if (path.includes("/libs.")) return false
@@ -353,6 +423,27 @@ function fexWrapperText(
     )
     .join("\n")
   return `#!/usr/bin/env bash\nset -e\nexport FEX_ROOTFS="\${FEX_ROOTFS:-${shellParameterDefault(input.rootfs)}}"\nexport KORRI_FEX_RUNTIME_APP_ID="\${KORRI_FEX_RUNTIME_APP_ID:-${shellParameterDefault(appId)}}"\nexport KORRI_FEX_RUNTIME_RUN_DIR="\${KORRI_FEX_RUNTIME_RUN_DIR:-${shellParameterDefault(runDir)}}"\n${setupEnv}${envLines ? `${envLines}\n` : ""}exec ${shellQuote(input.fexPath)} ${shellQuote(input.originalTarget)} "$@"\n`
+}
+
+function armhfQemuWrapperText(
+  input: PortMasterArmhfQemuWrapperOptions & {
+    readonly originalTarget: string
+  },
+): string {
+  const envDefaults = Object.entries(input.env ?? {}).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )
+  const envLines = envDefaults
+    .map(
+      ([key, value]) =>
+        `export ${key}="\${${key}:-${shellParameterDefault(value)}}"`,
+    )
+    .join("\n")
+  const extraLibraryPath = (input.libraryPaths ?? []).join(":")
+  const libraryPathLine = extraLibraryPath
+    ? `export KORRI_PORTMASTER_ARMHF_LIBRARY_PATH="\${KORRI_PORTMASTER_ARMHF_LIBRARY_PATH:-${shellParameterDefault(extraLibraryPath)}}"\nexport LD_LIBRARY_PATH="\${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$KORRI_PORTMASTER_ARMHF_LIBRARY_PATH"\n`
+    : ""
+  return `#!/usr/bin/env bash\nset -e\nexport KORRI_PORTMASTER_ARMHF_ROOTFS="\${KORRI_PORTMASTER_ARMHF_ROOTFS:-${shellParameterDefault(input.rootfs)}}"\n${envLines ? `${envLines}\n` : ""}${libraryPathLine}exec ${shellQuote(input.qemuArmPath)} -L "$KORRI_PORTMASTER_ARMHF_ROOTFS" ${shellQuote(input.originalTarget)} "$@"\n`
 }
 
 function shellQuote(value: string): string {

@@ -210,6 +210,8 @@ Validation launch:
 
 ### Phase 8 — armhf / 32-bit ARM lane
 
+Status: **implemented locally; qemu-arm verified on Bandai; game rendering blocked on armhf runtime libs**.
+
 Goal: 32-bit ARM PortMaster ports run on Bandai.
 
 Plugin owns either:
@@ -221,6 +223,25 @@ Validation launch:
 
 - small ready-to-run `armhf` port, e.g. **Clockwind** or another tiny armhf-ready title
 - Success: plugin forces `DEVICE_ARCH=armhf` and launches it.
+
+Result:
+
+- Added plugin-owned install-time armhf qemu wrapper lane.
+- Moves detected executable `armhf` payloads under `.korri-qemu-arm/` and replaces them with `#!/usr/bin/env bash` wrappers that run `qemu-arm -L $KORRI_PORTMASTER_ARMHF_ROOTFS`.
+- Records `extracted.armhfQemuWrappers` in the installed manifest.
+- `portmaster.prepare-launch` now prefers `DEVICE_ARCH=armhf` when an armhf qemu wrapper exists, exports armhf rootfs/library-path environment, and bubblewrap-binds absolute rootfs paths.
+- Added wrapper `libraryPaths` support so plugin-provided armhf runtime libraries can be appended to `LD_LIBRARY_PATH` without editing upstream scripts.
+- Focused test covers a fake Lineoff-style armhf port, verifies executable wrapping, avoids wrapping `.so` payloads, and verifies launch envelope env/bwrap behavior.
+- Bandai verification:
+  - No host `qemu-arm`, binfmt, or armhf rootfs was present before the phase.
+  - Copied Nix-built aarch64 `qemu-arm` plus cross armhf glibc/gcc/zlib stores to Bandai.
+  - Verified real PortMaster armhf helper binaries execute under qemu-arm: `xdelta3.armhf -h` and `7zzs.armhf` printed usage successfully.
+  - Tried forced-armhf SkiFree through the generated wrapper; the qemu path executed but the game failed at `libSDL2-2.0.so.0` because the ready-to-run port omits the base armhf SDL2 runtime library and Bandai does not yet have a plugin-owned armhf runtime-lib pack.
+  - Cross-building armhf SDL2 from nixpkgs proved too heavy/unstable for this phase window.
+
+Follow-up:
+
+- Package a small plugin-owned PortMaster armhf runtime-lib resource (or narrow SDL2/libSDL1.2 runtime pack) and repeat the game-rendering validation with Apotris, SkiFree, or another direct armhf port.
 
 ---
 

@@ -13,6 +13,8 @@ export {
   preparePortMasterLaunchEnvelope,
 } from "./src/envelope"
 export type {
+  PortMasterArmhfQemuWrapperOptions,
+  PortMasterArmhfQemuWrapperRecord,
   PortMasterBinaryArch,
   PortMasterCommandRunner,
   PortMasterFexWrapperOptions,
