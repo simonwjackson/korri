@@ -11,7 +11,6 @@ import {
   launchCompanionsFromLaunch,
   type MoonlightPolicy,
   type RetroArchPolicy,
-  type RyubingPolicy,
 } from "./inheritable-fields"
 import type { LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
@@ -20,7 +19,6 @@ import {
   type AppRecord,
   appRecordKind,
   appRetroArchPolicyFromRecord,
-  appRyubingPolicyFromRecord,
 } from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
 import type { ModuleRecord } from "./records/module"
@@ -31,7 +29,7 @@ export type AppIntegrationKind =
   | "dolphin"
   | "solarus"
   | "generic-process"
-  | "ryubing"
+  | (string & {})
   | "steam"
 
 export interface AppDescriptor {
@@ -50,11 +48,16 @@ export interface AppDescriptor {
   readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
-  readonly ryubing?: RyubingPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
   readonly presets?: LauncherRecord["presets"]
+}
+
+const integrationForKind = (kind: AppKind): AppIntegrationKind => {
+  if (kind === "process") return "generic-process"
+  if (kind === "generic-process") return "generic-process"
+  return kind as AppIntegrationKind
 }
 
 const builtInApps: Readonly<Record<string, AppDescriptor>> = {
@@ -176,14 +179,7 @@ export const resolveAppDescriptor = (input: {
         {
           id: input.appId,
           kind: appRecordKind(appOverride),
-          integration:
-            appRecordKind(appOverride) === "retroarch"
-              ? "retroarch"
-              : appRecordKind(appOverride) === "ryubing"
-                ? "ryubing"
-                : appRecordKind(appOverride) === "steam"
-                  ? "steam"
-                  : "generic-process",
+          integration: integrationForKind(appRecordKind(appOverride)),
           command: appOverride.command,
           args: appOverride.args ?? ["{contentPath}"],
           systems: appOverride.systems ?? [],
@@ -239,14 +235,7 @@ const mergeDescriptor = (
     ...(appOverride?.kind ? { kind: appOverride.kind } : {}),
     ...(appOverride
       ? {
-          integration:
-            appRecordKind(appOverride) === "retroarch"
-              ? "retroarch"
-              : appRecordKind(appOverride) === "ryubing"
-                ? "ryubing"
-                : appRecordKind(appOverride) === "steam"
-                  ? "steam"
-                  : base.integration,
+          integration: integrationForKind(appRecordKind(appOverride)),
         }
       : {}),
     ...(appOverride?.command ? { command: appOverride.command } : {}),
@@ -262,7 +251,6 @@ const mergeDescriptor = (
             appRetroArchPolicyFromRecord(appOverride) ??
             legacyLauncher?.retroarch ??
             base.retroarch,
-          ryubing: appRyubingPolicyFromRecord(appOverride) ?? base.ryubing,
         }
       : {}),
     ...(appOverride?.env ? { env: appOverride.env } : {}),
@@ -282,7 +270,6 @@ const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
   launchCompanions: launchCompanionsFromLaunch(launcher),
   moonlight: launcher.moonlight,
   retroarch: launcher.retroarch,
-  ryubing: launcher.ryubing,
   env: launcher.env,
   cwd: launcher.cwd,
   argsAppend: launcher.argsAppend,

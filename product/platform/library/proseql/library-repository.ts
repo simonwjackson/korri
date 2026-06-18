@@ -9,7 +9,6 @@ import { artifactsRoot } from "@platform/artifacts/artifact-store"
 import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import {
   materializeReadableRetroArchLaunch,
-  materializeReadableRyubingLaunch,
   materializeReadableSteamLaunch,
 } from "@platform/library/config/app-materializer"
 import {
@@ -20,6 +19,7 @@ import {
 } from "@platform/library/config/cascade-resolver"
 import { composeReadableLaunchSpec } from "@platform/library/config/compose-launch-spec"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
+import type { ResolutionError } from "@platform/library/config/errors"
 import {
   type LaunchCompanionMap,
   launchCompanionsFromLaunch,
@@ -33,8 +33,8 @@ import {
 } from "@platform/library/config/playable-id"
 import {
   type AppRecord,
+  appRecordKind,
   isRetroArchAppRecord,
-  isRyubingAppRecord,
   isSteamAppRecord,
 } from "@platform/library/config/records/app"
 import type { CollectionRecord } from "@platform/library/config/records/collection"
@@ -150,8 +150,25 @@ export interface AdoptArtifactOutput {
   readonly game?: GameRecord
 }
 
+export interface ReadableLaunchIntegration {
+  readonly kind: string
+  readonly integration: AppIntegrationKind
+  readonly canResolve: (context: ReadableResolvedLaunchContext) => boolean
+  readonly materialize: (
+    context: ReadableResolvedLaunchContext,
+  ) => Effect.Effect<
+    {
+      readonly spec: LaunchSpec
+      readonly artifacts?: LaunchArtifacts
+      readonly diagnostics?: readonly string[]
+    },
+    ResolutionError
+  >
+}
+
 export interface CreateLibraryRepositoryOptions {
   readonly env?: Record<string, string | undefined>
+  readonly launchIntegrations?: readonly ReadableLaunchIntegration[]
 }
 
 export interface LibraryRepository {
@@ -321,8 +338,13 @@ export function createLibraryRepository(
             Effect.flatMap(context =>
               isRetroArchAppRecord(context.app)
                 ? Effect.succeed(canMaterializeRetroArchContext(context))
-                : isRyubingAppRecord(context.app)
-                  ? Effect.succeed(canMaterializeRyubingContext(context))
+                : findReadableLaunchIntegration(context, _options)
+                  ? Effect.succeed(
+                      findReadableLaunchIntegration(
+                        context,
+                        _options,
+                      )?.canResolve(context) ?? false,
+                    )
                   : isSteamAppRecord(context.app)
                     ? Effect.succeed(canMaterializeSteamContext(context))
                     : composeReadableLaunchSpec(context.app, context).pipe(
@@ -360,8 +382,13 @@ export function createLibraryRepository(
                 context,
                 env: _options.env ?? process.env,
               })
-            : isRyubingAppRecord(context.app)
-              ? materializeReadableRyubingLaunch({ context })
+            : findReadableLaunchIntegration(context, _options)
+              ? (findReadableLaunchIntegration(context, _options)?.materialize(
+                  context,
+                ) ??
+                composeReadableLaunchSpec(context.app, context).pipe(
+                  Effect.map(spec => ({ spec })),
+                ))
               : isSteamAppRecord(context.app)
                 ? materializeReadableSteamLaunch({ context })
                 : composeReadableLaunchSpec(context.app, context).pipe(
@@ -382,13 +409,7 @@ export function createLibraryRepository(
           ...(context.moonlight ? { moonlight: context.moonlight } : {}),
           app: {
             id: context.app.id,
-            integration: isRetroArchAppRecord(context.app)
-              ? "retroarch"
-              : isRyubingAppRecord(context.app)
-                ? "ryubing"
-                : isSteamAppRecord(context.app)
-                  ? "steam"
-                  : "generic-process",
+            integration: resolvedIntegration(context, _options),
           },
           ...(materialized.artifacts
             ? { artifacts: materialized.artifacts }
@@ -504,6 +525,27 @@ type CollectionApi<T extends { readonly id: string }> = {
   }
 }
 
+function findReadableLaunchIntegration(
+  context: ReadableResolvedLaunchContext,
+  options: CreateLibraryRepositoryOptions,
+): ReadableLaunchIntegration | undefined {
+  const kind = appRecordKind(context.app)
+  return options.launchIntegrations?.find(
+    integration => integration.kind === kind,
+  )
+}
+
+function resolvedIntegration(
+  context: ReadableResolvedLaunchContext,
+  options: CreateLibraryRepositoryOptions,
+): AppIntegrationKind {
+  if (isRetroArchAppRecord(context.app)) return "retroarch"
+  const integration = findReadableLaunchIntegration(context, options)
+  if (integration) return integration.integration
+  if (isSteamAppRecord(context.app)) return "steam"
+  return "generic-process"
+}
+
 function canMaterializeRetroArchContext(
   context: ReadableResolvedLaunchContext,
 ): boolean {
@@ -514,12 +556,6 @@ function canMaterializeRetroArchContext(
     context.retroarch?.core?.path !== undefined ||
     context.runtime?.path !== undefined
   return hasContentPath && hasCorePath
-}
-
-function canMaterializeRyubingContext(
-  context: ReadableResolvedLaunchContext,
-): boolean {
-  return Boolean(context.content?.path && context.ryubing?.state?.root)
 }
 
 function canMaterializeSteamContext(

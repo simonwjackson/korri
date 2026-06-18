@@ -37,6 +37,10 @@ const GENERIC_GAMESCOPE_COMPOSITION_ALLOWLIST = new Map<string, string>([
     "composition test verifies enabled and disabled plugin lifecycle-hook wiring",
   ],
   [
+    "product/systems/nixos/flake/plugins.nix",
+    "Nix plugin composition seam accepts legacy Gamescope package overrides while discovering plugin-owned compositions",
+  ],
+  [
     "product/systems/nixos/flake/plugins.test.ts",
     "Nix plugin composition test verifies enabled and disabled plugin outputs",
   ],
@@ -108,6 +112,10 @@ function sourceFilesWithExtensions(
 
 function containsGamescopeName(source: string): boolean {
   return source.toLowerCase().includes("gamescope")
+}
+
+function containsRyubingName(source: string): boolean {
+  return source.toLowerCase().includes("ryubing")
 }
 
 function importsGamescopePlugin(source: string): boolean {
@@ -651,6 +659,19 @@ describe("standards: product platform reorganization guardrails", () => {
     expect(current.filter(file => !isInsideOwnedContentPlugin(file))).toEqual(
       [],
     )
+  })
+
+  it("keeps generic Ryubing strings out of platform, app, service, and theme code", () => {
+    const current = existingRoots(GENERIC_IMPORT_SCAN_ROOTS).flatMap(root =>
+      sourceFilesWithExtensions(
+        root,
+        new Set([".ts", ".tsx", ".nix", ".yaml", ".yml"]),
+      )
+        .filter(file => containsRyubingName(readSource(file)))
+        .map(repoRelative),
+    )
+
+    expect(current).toEqual([])
   })
 
   it("keeps generic Gamescope strings limited to explicit composition files", () => {

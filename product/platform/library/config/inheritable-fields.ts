@@ -27,8 +27,8 @@
  *                         → map merge; environment `null` means env unset
  * - `retroarch.extraArgs` / `retroarch.configFile.append`
  *                         → list concat in inheritance order
- * - `ryubing`            → deep merge per nested key; `env`/`extra.config`
- *                         → map merge; `extra.args` concatenates
+ * - `plugin`            → provider-keyed map; object values deep merge,
+ *                         → arrays concatenate in inheritance order
  * - `steam`              → deep merge per nested key; `extra.args` concatenates;
  *                         → `launch-options` last-wins
  * - `env`                → map merge per key; more-specific wins
@@ -122,6 +122,12 @@ export type LaunchCompanionMap = Readonly<Record<ProviderId, unknown>>
 
 export const LaunchWithPolicy = LaunchCompanionMap
 export type LaunchWithPolicy = LaunchCompanionMap
+
+export const PluginPolicyPayload = Schema.Unknown
+export type PluginPolicyPayload = Schema.Schema.Type<typeof PluginPolicyPayload>
+
+export const PluginPolicyMap = Schema.Record(ProviderIdKey, PluginPolicyPayload)
+export type PluginPolicyMap = Readonly<Record<ProviderId, unknown>>
 
 export const LaunchPolicy = Schema.Struct({
   with: Schema.optional(LaunchWithPolicy),
@@ -675,160 +681,6 @@ export const RetroArchPolicy = Schema.Struct({
 })
 export type RetroArchPolicy = Schema.Schema.Type<typeof RetroArchPolicy>
 
-const RyubingPath = NonEmptyString("ryubing.path")
-const RyubingEnv = Schema.Record(EnvironmentKey, Schema.String)
-const RyubingStringList = Schema.Array(Schema.String)
-const RyubingUnknownRecord = Schema.Record(Schema.String, Schema.Unknown)
-
-const RyubingStatePolicy = Schema.Struct({
-  root: Schema.optional(RyubingPath),
-  create: Schema.optional(Schema.Boolean),
-  "config-file": Schema.optional(NonEmptyString("state.config-file")),
-  require: Schema.optional(
-    Schema.Struct({
-      keys: Schema.optional(RyubingStringList),
-    }),
-  ),
-})
-
-const RyubingConfigPolicy = Schema.Struct({
-  mode: Schema.optional(Schema.Literal("generated")),
-  "merge-existing": Schema.optional(Schema.Boolean),
-  "preserve-unknown": Schema.optional(Schema.Boolean),
-})
-
-const RyubingContentPolicy = Schema.Struct({
-  "game-dirs": Schema.optional(RyubingStringList),
-  "autoload-dirs": Schema.optional(RyubingStringList),
-  "shown-file-types": Schema.optional(RyubingStringList),
-})
-
-const RyubingDisplayPolicy = Schema.Struct({
-  fullscreen: Schema.optional(Schema.Boolean),
-  "show-console": Schema.optional(Schema.Boolean),
-  "hide-cursor": Schema.optional(
-    Schema.Literals(["never", "on-idle", "always"]),
-  ),
-  "focus-lost-action": Schema.optional(Schema.String),
-  "confirm-exit": Schema.optional(Schema.Boolean),
-  "remember-window-state": Schema.optional(Schema.Boolean),
-  "title-bar": Schema.optional(Schema.Boolean),
-  window: Schema.optional(RyubingUnknownRecord),
-  "game-list": Schema.optional(RyubingUnknownRecord),
-  ui: Schema.optional(RyubingUnknownRecord),
-})
-
-const RyubingGraphicsPolicy = Schema.Struct({
-  backend: Schema.optional(Schema.Literals(["vulkan", "opengl"])),
-  "backend-threading": Schema.optional(Schema.Literals(["auto", "off", "on"])),
-  pptc: Schema.optional(Schema.Literals(["enabled", "disabled"])),
-  "resolution-scale": Schema.optional(Schema.Number),
-  "custom-resolution-scale": Schema.optional(Schema.Number),
-  "max-anisotropy": Schema.optional(Schema.Number),
-  "aspect-ratio": Schema.optional(Schema.String),
-  "anti-aliasing": Schema.optional(Schema.String),
-  "scaling-filter": Schema.optional(Schema.String),
-  "scaling-filter-level": Schema.optional(Schema.Number),
-  "shaders-dump-path": Schema.optional(Schema.String),
-  "v-sync": Schema.optional(RyubingUnknownRecord),
-  "shader-cache": Schema.optional(Schema.Boolean),
-  "texture-recompression": Schema.optional(Schema.Boolean),
-  "macro-hle": Schema.optional(Schema.Boolean),
-  "color-space-passthrough": Schema.optional(Schema.Boolean),
-  "preferred-gpu": Schema.optional(Schema.String),
-  "debug-level": Schema.optional(Schema.String),
-})
-
-const RyubingConsolePolicy = Schema.Struct({
-  mode: Schema.optional(Schema.Literals(["handheld", "docked"])),
-  language: Schema.optional(Schema.String),
-  region: Schema.optional(Schema.String),
-  time: Schema.optional(RyubingUnknownRecord),
-  memory: Schema.optional(RyubingUnknownRecord),
-  profile: Schema.optional(Schema.NullOr(Schema.String)),
-  "low-power-ptc": Schema.optional(Schema.Boolean),
-  "tick-scalar": Schema.optional(Schema.Number),
-  "internet-access": Schema.optional(Schema.Boolean),
-  "fs-integrity-checks": Schema.optional(Schema.Boolean),
-  "fs-global-access-log-mode": Schema.optional(Schema.Number),
-  "ignore-missing-services": Schema.optional(Schema.Boolean),
-  "ignore-controller-applet": Schema.optional(Schema.Boolean),
-  "skip-user-profile-manager": Schema.optional(Schema.Boolean),
-  hypervisor: Schema.optional(Schema.Boolean),
-})
-
-const RyubingAudioPolicy = Schema.Struct({
-  backend: Schema.optional(Schema.String),
-  volume: Schema.optional(Schema.Number),
-})
-
-const RyubingInputControllerPolicy = Schema.Struct({
-  id: Schema.optional(Schema.String),
-  name: Schema.optional(Schema.String),
-  backend: Schema.optional(Schema.String),
-  player: Schema.optional(Schema.String),
-  type: Schema.optional(Schema.String),
-  deadzone: Schema.optional(RyubingUnknownRecord),
-  range: Schema.optional(RyubingUnknownRecord),
-  "trigger-threshold": Schema.optional(Schema.Number),
-  rumble: Schema.optional(Schema.Boolean),
-  motion: Schema.optional(Schema.Boolean),
-  mapping: Schema.optional(RyubingUnknownRecord),
-})
-
-const RyubingInputPolicy = Schema.Struct({
-  "require-config": Schema.optional(Schema.Boolean),
-  "global-config": Schema.optional(Schema.Boolean),
-  keyboard: Schema.optional(Schema.Boolean),
-  mouse: Schema.optional(Schema.Boolean),
-  "disable-when-out-of-focus": Schema.optional(Schema.Boolean),
-  "rainbow-speed": Schema.optional(Schema.Number),
-  hotkeys: Schema.optional(RyubingUnknownRecord),
-  controllers: Schema.optional(Schema.Array(RyubingInputControllerPolicy)),
-})
-
-const RyubingNetworkPolicy = Schema.Struct({
-  multiplayer: Schema.optional(Schema.String),
-  "lan-interface-id": Schema.optional(Schema.String),
-  p2p: Schema.optional(Schema.Boolean),
-  "ldn-passphrase": Schema.optional(Schema.String),
-  "ldn-server": Schema.optional(Schema.String),
-})
-
-const RyubingLoggingPolicy = Schema.Struct({
-  file: Schema.optional(Schema.Boolean),
-  levels: Schema.optional(RyubingUnknownRecord),
-  "filtered-classes": Schema.optional(RyubingStringList),
-})
-
-const RyubingDebugPolicy = Schema.Struct({
-  "gdb-stub": Schema.optional(RyubingUnknownRecord),
-  "suspend-on-start": Schema.optional(Schema.Boolean),
-  "dirty-hacks": Schema.optional(RyubingUnknownRecord),
-})
-
-const RyubingExtraPolicy = Schema.Struct({
-  args: Schema.optional(Schema.Array(Schema.String)),
-  config: Schema.optional(RyubingUnknownRecord),
-})
-
-export const RyubingPolicy = Schema.Struct({
-  state: Schema.optional(RyubingStatePolicy),
-  env: Schema.optional(RyubingEnv),
-  config: Schema.optional(RyubingConfigPolicy),
-  content: Schema.optional(RyubingContentPolicy),
-  display: Schema.optional(RyubingDisplayPolicy),
-  graphics: Schema.optional(RyubingGraphicsPolicy),
-  console: Schema.optional(RyubingConsolePolicy),
-  audio: Schema.optional(RyubingAudioPolicy),
-  input: Schema.optional(RyubingInputPolicy),
-  network: Schema.optional(RyubingNetworkPolicy),
-  logging: Schema.optional(RyubingLoggingPolicy),
-  debug: Schema.optional(RyubingDebugPolicy),
-  extra: Schema.optional(RyubingExtraPolicy),
-})
-export type RyubingPolicy = Schema.Schema.Type<typeof RyubingPolicy>
-
 const SteamStatePolicy = Schema.Struct({
   root: NonEmptyString("state.root"),
 })
@@ -848,7 +700,7 @@ export const InheritableLayer = Schema.Struct({
   launch: Schema.optional(LaunchPolicy),
   moonlight: Schema.optional(MoonlightPolicy),
   retroarch: Schema.optional(RetroArchPolicy),
-  ryubing: Schema.optional(RyubingPolicy),
+  plugin: Schema.optional(PluginPolicyMap),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
   argsAppend: Schema.optional(Schema.Array(Schema.String)),
@@ -861,9 +713,6 @@ export type ByLauncherPayload = Schema.Schema.Type<typeof ByLauncherPayload>
 
 export const decodeRetroArchPolicy = (input: unknown): RetroArchPolicy =>
   Schema.decodeUnknownSync(RetroArchPolicy)(input, STRICT)
-
-export const decodeRyubingPolicy = (input: unknown): RyubingPolicy =>
-  Schema.decodeUnknownSync(RyubingPolicy)(input, STRICT)
 
 export const decodeSteamPolicy = (input: unknown): SteamPolicy =>
   Schema.decodeUnknownSync(SteamPolicy)(input, STRICT)

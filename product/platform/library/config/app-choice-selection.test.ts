@@ -11,13 +11,13 @@ describe("app choice selection", () => {
       resolveEffectiveAppChoices(
         [
           { id: "retroarch", runtime: "snes9x", argsAppend: ["system"] },
-          { id: "ryubing", argsAppend: ["system-ryubing"] },
+          { id: "plugin-app", argsAppend: ["system-plugin-app"] },
         ],
         [{ id: "retroarch", runtime: "mgba", argsAppend: ["release"] }],
       ),
     ).toEqual([
       { id: "retroarch", runtime: "mgba", argsAppend: ["system", "release"] },
-      { id: "ryubing", argsAppend: ["system-ryubing"] },
+      { id: "plugin-app", argsAppend: ["system-plugin-app"] },
     ])
   })
 
@@ -109,16 +109,16 @@ describe("app choice selection", () => {
       _tag: "SelectedAppChoice",
       choice: { id: "retroarch" },
     })
-    expect(selectAppChoice([{ id: "retroarch" }, { id: "ryubing" }])).toEqual({
+    expect(selectAppChoice([{ id: "retroarch" }, { id: "plugin-app" }])).toEqual({
       _tag: "AmbiguousAppChoice",
-      appIds: ["retroarch", "ryubing"],
+      appIds: ["retroarch", "plugin-app"],
     })
   })
 
   it("selects an explicit appId and reports unknown ids", () => {
     expect(
-      selectAppChoice([{ id: "retroarch" }, { id: "ryubing" }], "ryubing"),
-    ).toEqual({ _tag: "SelectedAppChoice", choice: { id: "ryubing" } })
+      selectAppChoice([{ id: "retroarch" }, { id: "plugin-app" }], "plugin-app"),
+    ).toEqual({ _tag: "SelectedAppChoice", choice: { id: "plugin-app" } })
     expect(selectAppChoice([{ id: "retroarch" }], "missing")).toEqual({
       _tag: "AppChoiceNotFound",
       appId: "missing",

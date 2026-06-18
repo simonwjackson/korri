@@ -17,6 +17,7 @@ import {
   REMOVABLE_CONFIG_COLLECTIONS,
 } from "./proseql/config-graph-db"
 import {
+  type CreateLibraryRepositoryOptions,
   createLibraryRepository,
   type LibraryRepository,
 } from "./proseql/library-repository"
@@ -35,7 +36,13 @@ export const LibrarySourceLayerLive = Layer.succeed(
   createLiveLibrarySourceService(),
 )
 
-function createLiveLibrarySourceService(): LibrarySourceService {
+export interface LiveLibrarySourceServiceOptions {
+  readonly repositoryOptions?: CreateLibraryRepositoryOptions
+}
+
+export function createLiveLibrarySourceService(
+  options: LiveLibrarySourceServiceOptions = {},
+): LibrarySourceService {
   return {
     list: () =>
       selectedLibrarySourceMode() === "rocknix"
@@ -46,6 +53,7 @@ function createLiveLibrarySourceService(): LibrarySourceService {
                 .listPlayableEntries()
                 .pipe(Effect.map(entries => entries.map(toCompatGameRecord))),
             "list",
+            options.repositoryOptions,
           ),
     listPlayableEntries: () =>
       selectedLibrarySourceMode() === "rocknix"
@@ -57,6 +65,7 @@ function createLiveLibrarySourceService(): LibrarySourceService {
         : withLibraryRepository(
             repository => repository.listPlayableEntries(),
             "listPlayableEntries",
+            options.repositoryOptions,
           ),
     launchSpecFor: (id, releaseId) =>
       selectedLibrarySourceMode() === "rocknix"
@@ -67,6 +76,7 @@ function createLiveLibrarySourceService(): LibrarySourceService {
                 .resolveLaunchForPlayable(id, { releaseId })
                 .pipe(Effect.map(resolved => resolved.spec)),
             "launchSpecFor",
+            options.repositoryOptions,
           ).pipe(
             Effect.matchEffect({
               onSuccess: spec => Effect.succeed(spec),
@@ -88,6 +98,7 @@ function createLiveLibrarySourceService(): LibrarySourceService {
         : withLibraryRepository(
             repository => repository.canResolveLaunchForPlayable(id, inputs),
             "canResolveLaunchForGame",
+            options.repositoryOptions,
           ),
     resolveLaunchForGame: (id, inputs) =>
       selectedLibrarySourceMode() === "rocknix"
@@ -98,11 +109,13 @@ function createLiveLibrarySourceService(): LibrarySourceService {
         : withLibraryRepository(
             repository => repository.resolveLaunchForPlayable(id, inputs),
             "resolveLaunchForGame",
+            options.repositoryOptions,
           ),
     resolveLocalLauncherPolicy: (launcherId, inputs) =>
       withLibraryRepository(
         repository => repository.resolveLocalLauncherPolicy(launcherId, inputs),
         "resolveLocalLauncherPolicy",
+        options.repositoryOptions,
       ),
   }
 }
@@ -138,6 +151,7 @@ function withRocknixSource<T>(
 function withLibraryRepository<T>(
   useRepository: (repository: LibraryRepository) => Effect.Effect<T, unknown>,
   operation: string,
+  repositoryOptions: CreateLibraryRepositoryOptions | undefined = undefined,
 ): Effect.Effect<T, LibraryError> {
   return Effect.scoped(
     Effect.gen(function* () {
@@ -151,7 +165,9 @@ function withLibraryRepository<T>(
         "library-source-layer-live: opening Korri config graph",
       )
       const db = yield* openKorriConfigGraph({ roots })
-      return yield* useRepository(createLibraryRepository(db))
+      return yield* useRepository(
+        createLibraryRepository(db, repositoryOptions),
+      )
     }),
   ).pipe(Effect.mapError(toLibraryError))
 }

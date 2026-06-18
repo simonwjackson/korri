@@ -25,8 +25,8 @@ import { Schema } from "effect"
 import {
   LaunchCompanionMap,
   MoonlightPolicy,
+  PluginPolicyMap,
   RetroArchPolicy,
-  RyubingPolicy,
   SteamPolicy,
 } from "./inheritable-fields"
 import { LaunchSettings } from "./launch-block"
@@ -62,7 +62,7 @@ export const ResolvedLaunchContext = Schema.Struct({
   launchCompanions: Schema.optional(LaunchCompanionMap),
   moonlight: Schema.optional(MoonlightPolicy),
   retroarch: Schema.optional(RetroArchPolicy),
-  ryubing: Schema.optional(RyubingPolicy),
+  plugin: Schema.optional(PluginPolicyMap),
   steam: Schema.optional(SteamPolicy),
   settings: Schema.optional(LaunchSettings),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -93,7 +93,7 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
   launchCompanions: Schema.optional(LaunchCompanionMap),
   moonlight: Schema.optional(MoonlightPolicy),
   retroarch: Schema.optional(RetroArchPolicy),
-  ryubing: Schema.optional(RyubingPolicy),
+  plugin: Schema.optional(PluginPolicyMap),
   steam: Schema.optional(SteamPolicy),
   storage: Schema.optional(Schema.Record(Schema.String, StorageRecord)),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),

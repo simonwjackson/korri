@@ -4,7 +4,7 @@ import {
   composeRyubingLaunchSpec,
   RYUBING_CONFIG_VERSION,
   renderRyubingConfig,
-} from "./ryubing-launch-spec"
+} from "./launch-spec"
 
 describe("typed Ryubing launch spec rendering", () => {
   it("renders minimal headless argv with content path last", () => {

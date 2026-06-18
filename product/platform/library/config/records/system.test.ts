@@ -37,13 +37,13 @@ describe("SystemPayload", () => {
     const system = decodeSystemPayload({
       apps: [
         { id: "retroarch", runtime: "mgba" },
-        { id: "ryubing", inherit: false, argsAppend: ["--fullscreen"] },
+        { id: "plugin-app", inherit: false, argsAppend: ["--fullscreen"] },
       ],
     })
 
     expect(system.apps).toEqual([
       { id: "retroarch", runtime: "mgba" },
-      { id: "ryubing", inherit: false, argsAppend: ["--fullscreen"] },
+      { id: "plugin-app", inherit: false, argsAppend: ["--fullscreen"] },
     ])
   })
 

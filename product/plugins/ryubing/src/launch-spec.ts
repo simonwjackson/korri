@@ -1,5 +1,5 @@
-import type { RyubingPolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchSpec } from "@platform/library/launcher"
+import type { RyubingPolicy } from "./policy"
 
 export const RYUBING_CONFIG_VERSION = 70
 

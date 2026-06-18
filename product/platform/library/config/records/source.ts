@@ -51,7 +51,7 @@ export const SourcePayload = Schema.Struct({
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
-  ryubing: InheritableLayer.fields.ryubing,
+  plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,

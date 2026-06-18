@@ -1,6 +1,6 @@
 import { korriStatePath } from "@platform/config/xdg-paths"
 import { LibrarySource } from "@platform/library/library-services"
-import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
+import { createLiveLibrarySourceService } from "@platform/library/library-source-layer-live"
 import { withPluginLibrarySource } from "@platform/plugin/catalog-library-source"
 import {
   bunProcessRunner,
@@ -8,21 +8,27 @@ import {
   createNixOutLinkResolver,
 } from "@platform/plugin/resources"
 import { Effect, Layer } from "effect"
-import { createFirstPartyPluginRegistryFromEnv } from "."
+import {
+  createFirstPartyPluginRegistryFromEnv,
+  firstPartyLaunchIntegrations,
+} from "."
 
 const DEFAULT_PLUGIN_RESOURCE_ROOT = "/var/lib/korri/plugins/resources"
 
-export const PluginLibrarySourceLayerLive = Layer.effect(LibrarySource)(
-  Effect.gen(function* () {
-    const base = yield* LibrarySource
-    const registry = createFirstPartyPluginRegistryFromEnv(process.env)
-    return withPluginLibrarySource(
-      base,
-      registry,
+export const PluginLibrarySourceLayerLive = Layer.effect(
+  LibrarySource,
+  Effect.sync(() =>
+    withPluginLibrarySource(
+      createLiveLibrarySourceService({
+        repositoryOptions: {
+          launchIntegrations: firstPartyLaunchIntegrations,
+        },
+      }),
+      createFirstPartyPluginRegistryFromEnv(process.env),
       createNixOutLinkResolver({ stateRoot: pluginResourceRoot(process.env) }),
-    )
-  }),
-).pipe(Layer.provide(LibrarySourceLayerLive))
+    ),
+  ),
+)
 
 export function createPluginResourceFulfillerFromEnv(
   env: NodeJS.ProcessEnv = process.env,

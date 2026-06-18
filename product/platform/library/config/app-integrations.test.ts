@@ -106,14 +106,14 @@ describe("resolveAppDescriptor", () => {
     expect(app.retroarch?.video?.fullscreen).toBe(false)
   })
 
-  it("resolves a first-class Ryubing app without a built-in command default", () => {
+  it("resolves a first-class plugin app app without a built-in command default", () => {
     const app = run(
       resolveAppDescriptor({
-        appId: "ryubing",
+        appId: "plugin-app",
         apps: appMap([
           {
-            id: "ryubing",
-            kind: "ryubing",
+            id: "plugin-app",
+            kind: "plugin-app",
             command: "/bin/Ryujinx",
             state: { root: "/state/Ryujinx" },
           },
@@ -122,9 +122,8 @@ describe("resolveAppDescriptor", () => {
       }),
     )
 
-    expect(app.integration).toBe("ryubing")
+    expect(app.integration).toBe("plugin-app")
     expect(app.command).toBe("/bin/Ryujinx")
-    expect(app.ryubing?.state?.root).toBe("/state/Ryujinx")
   })
 
   it("resolves an active first-class Steam app from the built-in baseline", () => {
@@ -312,12 +311,12 @@ describe("resolveAppDescriptor", () => {
     ).toBe("CustomAppMissingCommand")
   })
 
-  it("fails a first-class Ryubing app without command", () => {
+  it("fails a first-class plugin app app without command", () => {
     expect(
       runErrTag(
         resolveAppDescriptor({
-          appId: "ryubing",
-          apps: appMap([{ id: "ryubing", kind: "ryubing" }]),
+          appId: "plugin-app",
+          apps: appMap([{ id: "plugin-app", kind: "plugin-app" }]),
           launchers: launcherMap(),
         }),
       ),

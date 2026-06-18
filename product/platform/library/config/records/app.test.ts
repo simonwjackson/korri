@@ -1,15 +1,13 @@
 import { describe, expect, it } from "bun:test"
 
-import { RetroArchPolicy, RyubingPolicy } from "../inheritable-fields"
+import { RetroArchPolicy } from "../inheritable-fields"
 import {
   type AppRecord,
   appRetroArchPolicyFromRecord,
-  appRyubingPolicyFromRecord,
   appSteamPolicyFromRecord,
   decodeAppPayload,
   decodeAppRecord,
   RETROARCH_APP_FIELD_KEYS,
-  RYUBING_APP_FIELD_KEYS,
 } from "./app"
 
 describe("AppPayload", () => {
@@ -142,60 +140,7 @@ describe("AppPayload", () => {
     ).toThrow(/kind: steam/)
   })
 
-  it("decodes a flat first-class Ryubing app and extracts policy", () => {
-    const record: AppRecord = {
-      id: "ryubing",
-      kind: "ryubing",
-      command: "/bin/Ryujinx",
-      state: {
-        root: "{storage:switch-card}/.config/Ryujinx",
-        create: true,
-        require: { keys: ["prod.keys"] },
-      },
-      env: { XDG_CONFIG_HOME: "{storage:switch-card}/.config" },
-      content: { "game-dirs": ["{storage:switch-card}/roms/switch"] },
-      display: { fullscreen: true },
-      graphics: { backend: "vulkan" },
-      console: { mode: "handheld" },
-      audio: { backend: "sdl2", volume: 1 },
-      input: { "require-config": true, controllers: [{ id: "0" }] },
-      extra: { args: ["--future"], config: { future_key: true } },
-    }
 
-    expect(decodeAppRecord(record).state?.root).toBe(
-      "{storage:switch-card}/.config/Ryujinx",
-    )
-    expect(appRyubingPolicyFromRecord(record)).toEqual(
-      Object.fromEntries(
-        ["env", ...RYUBING_APP_FIELD_KEYS]
-          .map(key => [key, record[key as keyof AppRecord]])
-          .filter(([, value]) => value !== undefined),
-      ),
-    )
-    expect(new Set<string>(RYUBING_APP_FIELD_KEYS)).toEqual(
-      new Set<string>(
-        Object.keys(RyubingPolicy.fields).filter(key => key !== "env"),
-      ),
-    )
-  })
-
-  it("rejects misplaced Ryubing and RetroArch flat app vocabulary", () => {
-    expect(() => decodeAppPayload({ state: { root: "/state" } })).toThrow(
-      /kind: ryubing/,
-    )
-    expect(() =>
-      decodeAppPayload({ kind: "retroarch", state: { root: "/state" } }),
-    ).toThrow(/kind: ryubing/)
-    expect(() =>
-      decodeAppPayload({ kind: "ryubing", drivers: { menu: "ozone" } }),
-    ).toThrow(/kind: retroarch/)
-    expect(() =>
-      decodeAppPayload({ kind: "ryubing", input: { maxUsers: 4 } }),
-    ).toThrow(/RetroArch field input/)
-    expect(() =>
-      decodeAppPayload({ kind: "ryubing", input: { completelybogus: 99 } }),
-    ).toThrow(/Unexpected key/)
-  })
 
   it("rejects unknown app keys", () => {
     expect(() =>
