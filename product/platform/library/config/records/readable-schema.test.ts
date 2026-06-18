@@ -24,7 +24,6 @@ const wrapperPolicy = (value: unknown): WrapperPolicy | undefined =>
   value as WrapperPolicy | undefined
 
 describe("readable library schema records", () => {
-
   it("decodes the full Steam readable fixture", async () => {
     const fixture = parse(
       await readFile(
@@ -62,7 +61,10 @@ describe("readable library schema records", () => {
     expect(
       decodeLibraryItemPayload(fixture.library["gba-choice-demo"]).releases[0]
         ?.apps,
-    ).toEqual([{ id: "retroarch", runtime: "mgba" }, { id: "mgba-standalone" }])
+    ).toEqual([
+      { id: "@korri:retroarch/retroarch", runtime: "mgba" },
+      { id: "mgba-standalone" },
+    ])
   })
 
   it("decodes a plain host block without role/launch/profile nesting", () => {
@@ -245,147 +247,25 @@ describe("readable library schema records", () => {
     }
   })
 
-  it("decodes RetroArch policy on readable cascade records and flat app records", () => {
+  it("decodes RetroArch policy only inside plugin-owned policy maps", () => {
     const retroarch = {
-      environment: { WAYLAND_DISPLAY: null },
       configFile: { mode: "generated" },
-      lifecycle: { saveOnExit: false, showHiddenFiles: true },
-      logging: { verbosity: true, fpsShow: true },
-      drivers: { menu: "ozone", resampler: "sinc" },
-      paths: { contentDirectory: null, cacheDirectory: "/outside/cache" },
-      video: {
-        fullscreen: true,
-        fullscreenWidth: 0,
-        aspectRatio: "full",
-        sync: { frameDelay: 99, frameDelayAuto: true },
-      },
-      audio: { outputRate: 48000, mute: false, rateControlDelta: 0.005 },
-      input: {
-        pollTypeBehavior: 2,
-        overlay: { enable: true, opacity: 0.9 },
-        quitGamepadCombo: "start-select",
-        ports: { "1": { libretroDevice: 1, joypadIndex: 0 } },
-      },
-      menu: { showStartScreen: false, pauseLibretro: true },
-      saves: { autosaveIntervalSeconds: 60, autoLoadState: true },
-      rewind: { enable: true, bufferSizeMb: 20 },
-      playback: { pauseNonactive: true, fastforwardRatio: 0 },
-      latency: {
-        runAhead: { enable: true, frames: 2 },
-        preemptiveFrames: { enable: true, frames: 3 },
-      },
-      achievements: {
-        enable: true,
-        username: "player-one",
-        hardcoreMode: true,
-        badges: true,
-        richPresence: false,
-        testUnofficial: true,
-      },
-      haptics: { vibrateOnKeypress: true, deviceVibration: false },
-      playlists: { useOldFormat: false },
-      privacy: { cameraDevice: null, cameraAllow: false, locationAllow: false },
-      updater: {
-        showOnlineUpdater: false,
-        showCoreUpdater: false,
-        buildbotUrl: null,
-        buildbotAssetsUrl: "https://updates.example.invalid/assets",
-        autoExtractArchive: false,
-      },
+      drivers: { menu: "ozone" },
       extraSettings: { video_font_enable: false },
       extraArgs: ["--features"],
     }
+    const plugin = { "@korri:retroarch": retroarch }
 
-    expect(
-      decodeAppPayload({
-        kind: "retroarch",
-        command: "retroarch",
-        ...retroarch,
-      }).drivers?.menu,
-    ).toBe("ozone")
-
-    const cases: Array<readonly [string, () => { retroarch?: unknown }]> = [
-      ["global", () => decodeGlobalConfigPayload({ retroarch })],
-      ["host", () => decodeHostPayload({ retroarch })],
-      ["user", () => decodeUserPayload({ retroarch })],
-      ["system", () => decodeSystemPayload({ retroarch })],
-      [
-        "launcher",
-        () =>
-          decodeLauncherPayload({
-            command: "retroarch",
-            args: [],
-            systems: [],
-            retroarch,
-          }),
-      ],
-      ["preset", () => decodePresetPayload({ retroarch })],
-      [
-        "runtime",
-        () =>
-          decodeRuntimePayload({
-            kind: "libretro-core",
-            path: "/cores/mgba_libretro.so",
-            retroarch,
-          }),
-      ],
-      [
-        "source",
-        () =>
-          decodeSourcePayload({ kind: ["files"], storage: "roms", retroarch }),
-      ],
-      ["profile", () => decodeProfilePayload({ retroarch })],
-      [
-        "library-item",
-        () =>
-          decodeLibraryItemPayload({
-            retroarch,
-            releases: [{ id: "default", system: "gba", target: "game.gba" }],
-          }),
-      ],
-      [
-        "library-release",
-        () =>
-          decodeLibraryItemPayload({
-            releases: [
-              { id: "default", system: "gba", target: "game.gba", retroarch },
-            ],
-          }).releases[0] ?? {},
-      ],
-      [
-        "contained-playable",
-        () =>
-          decodeLibraryItemPayload({
-            contains: { child: { retroarch } },
-            releases: [{ id: "default", system: "gba", target: "game.gba" }],
-          }).contains?.child ?? {},
-      ],
-      [
-        "game",
-        () =>
-          decodeGamePayload({
-            system: "gba",
-            contentPath: "game.gba",
-            retroarch,
-          }),
-      ],
-    ]
-
-    for (const [, decode] of cases) {
-      expect(decode().retroarch).toMatchObject(retroarch)
-    }
-
+    expect(decodeGlobalConfigPayload({ plugin }).plugin).toMatchObject(plugin)
     expect(
       decodeAppRecord({
-        id: "retroarch",
+        id: "@korri:retroarch/retroarch",
+        kind: "@korri:retroarch",
         command: "retroarch",
-        drivers: { video: "glcore" },
-        achievements: { username: "player-two" },
-        updater: { showOnlineUpdater: false },
-      }).achievements?.username,
-    ).toBe("player-two")
+        plugin,
+      }).plugin,
+    ).toMatchObject(plugin)
   })
-
 
   it("rejects retired RetroArch typed-app vocabulary", () => {
     expect(() =>
@@ -395,18 +275,7 @@ describe("readable library schema records", () => {
       decodeAppPayload({ kind: "retroarch", integration: "retroarch" }),
     ).toThrow()
     expect(() =>
-      decodeAppPayload({
-        kind: "retroarch",
-        settings: { video_fullscreen: true },
-      }),
-    ).toThrow()
-    expect(() =>
       decodeHostPayload({ retroarch: { configFile: { mode: "path" } } }),
-    ).toThrow()
-    expect(() =>
-      decodeHostPayload({
-        retroarch: { configFile: { mode: "generated", path: "/tmp/cfg" } },
-      }),
     ).toThrow()
     expect(() =>
       decodeAppPayload({ kind: "retroarch", achievements: { password: "x" } }),

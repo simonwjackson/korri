@@ -16,6 +16,10 @@ import { portmasterPlugin } from "./portmaster"
 import { protonGeRuntimePlugin } from "./proton-ge-runtime"
 import { protonRuntimePlugin } from "./proton-runtime"
 import { psychoWaluigiPlugin } from "./psycho-waluigi"
+import {
+  retroarchPlugin,
+  retroarchReadableLaunchIntegration,
+} from "./retroarch"
 import { ryubingPlugin, ryubingReadableLaunchIntegration } from "./ryubing"
 import { smbxGamePlugin } from "./smbxgame"
 import { smwCentralPlugin } from "./smwcentral"
@@ -24,9 +28,13 @@ import { superMario127Plugin } from "./super-mario-127"
 import { superMarioBrosRemasteredPlugin } from "./super-mario-bros-remastered"
 import { yoshisFabricationStationPlugin } from "./yoshis-fabrication-station"
 
-export const firstPartyLaunchIntegrations = [ryubingReadableLaunchIntegration]
+export const firstPartyLaunchIntegrations = [
+  retroarchReadableLaunchIntegration,
+  ryubingReadableLaunchIntegration,
+]
 
 export const firstPartyPlugins = [
+  retroarchPlugin,
   gamescopePlugin,
   fexRuntimePlugin,
   protonRuntimePlugin,

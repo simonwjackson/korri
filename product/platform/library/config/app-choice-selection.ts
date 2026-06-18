@@ -2,7 +2,6 @@ import type {
   LaunchCompanionMap,
   LaunchPolicy,
   MoonlightPolicy,
-  RetroArchPolicy,
   SteamPolicy,
 } from "./inheritable-fields"
 import type { AppChoice } from "./records/app-choice"
@@ -116,14 +115,6 @@ const mergeChoice = (base: AppChoice, override: AppChoice): AppChoice => ({
           base.moonlight,
           override.moonlight,
         ) as MoonlightPolicy,
-      }
-    : {}),
-  ...(mergeObject(base.retroarch, override.retroarch) !== undefined
-    ? {
-        retroarch: mergeObject(
-          base.retroarch,
-          override.retroarch,
-        ) as RetroArchPolicy,
       }
     : {}),
   ...spreadSteamExtra(base.extra, override.extra),

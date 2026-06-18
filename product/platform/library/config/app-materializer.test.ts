@@ -31,14 +31,30 @@ import type {
 } from "./resolved-launch-context"
 
 const runPromise = <A, E>(eff: Effect.Effect<A, E>) => Effect.runPromise(eff)
-const app = (id: string) =>
-  Effect.runSync(
+const app = (id: string) => {
+  if (id === "retroarch") {
+    return {
+      id: "@korri:retroarch/retroarch",
+      kind: "@korri:retroarch",
+      integration: "retroarch",
+      command: "retroarch",
+      args: ["--config", "{configPath}", "-L", "{modulePath}", "{contentPath}"],
+      systems: [],
+      policy: { allowedCommands: ["retroarch"] },
+      settings: {
+        config_save_on_exit: false,
+        video_fullscreen: true,
+      },
+    } as const
+  }
+  return Effect.runSync(
     resolveAppDescriptor({
       appId: id,
       apps: new Map(),
       launchers: new Map(),
     }),
   )
+}
 
 const context: ResolvedLaunchContext = {
   gameId: "porklike",
@@ -525,11 +541,9 @@ describe("materializeReadableRetroArchLaunch", () => {
     sourceId: "roms",
     target: "genesis/Sonic.md",
     app: {
-      id: "retroarch",
-      kind: "retroarch",
+      id: "@korri:retroarch/retroarch",
+      kind: "@korri:retroarch",
       command: "retroarch",
-      configFile: { mode: "generated" },
-      video: { fullscreen: true },
     },
     runtime: {
       id: "genesis-plus-gx",
@@ -746,18 +760,24 @@ describe("materializeReadableRetroArchLaunch", () => {
     expect(exitFailureMessage(exit)).toContain("resolved content path")
   })
 
-  it("rejects non-RetroArch apps at the materializer boundary", async () => {
-    const exit = await Effect.runPromiseExit(
-      materializeReadableRetroArchLaunch({
-        context: {
-          ...readableContext,
-          app: { id: "steam", command: "steam", args: ["{target}"] },
-        },
-        artifactsRoot: "/tmp/unused",
-      }),
-    )
+  it("trusts the plugin integration boundary to select the RetroArch host", async () => {
+    await withRoot(async root => {
+      const result = await runPromise(
+        materializeReadableRetroArchLaunch({
+          context: {
+            ...readableContext,
+            app: {
+              id: "@korri:retroarch/retroarch",
+              kind: "@korri:retroarch",
+              command: "retroarch",
+            },
+          },
+          artifactsRoot: root,
+        }),
+      )
 
-    expect(exitFailureMessage(exit)).toContain("requires kind: retroarch")
+      expect(result.spec.command).toBe("retroarch")
+    })
   })
 })
 

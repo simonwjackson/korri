@@ -8,6 +8,10 @@ import type {
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
+import {
+  KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_PLUGIN_ID,
+} from "../../retroarch"
 
 export const KORRI_PICO8_PLUGIN_ID = "@korri:pico8" as const
 
@@ -56,13 +60,23 @@ export function createPico8Plugin(options: Pico8PluginOptions = {}) {
     title: "PICO-8",
     description:
       "Adds PICO-8 BBS acquisition provider claims, cart download resolution, and the fake-08 PICO-8 runtime package.",
+    requires: [
+      {
+        capability: "libretro.app-host",
+        ref: { provider: KORRI_RETROARCH_PLUGIN_ID, id: "retroarch" },
+        autoEnable: false,
+        reason: "fake-08 launches through the RetroArch libretro app host",
+      },
+    ],
     contributes: {
       config: {
         systems: {
           pico8: {
             id: "pico8",
             title: "PICO-8",
-            launch: { app: "retroarch", module: "fake08" },
+            apps: [
+              { id: KORRI_RETROARCH_APP_ID, runtime: "@korri:pico8/fake08" },
+            ],
           },
         },
         modules: {
@@ -74,12 +88,14 @@ export function createPico8Plugin(options: Pico8PluginOptions = {}) {
             capabilities: ["package.expose", "launch.runtime", "pico8"],
             core: "fake08",
           },
+        },
+        runtimes: {
           fake08: {
-            id: "fake08",
+            id: "@korri:pico8/fake08",
             kind: "libretro-core",
+            app: KORRI_RETROARCH_APP_ID,
             path: "/etc/korri/cores/fake08_libretro.so",
-            package: "libretro-fake-08",
-            capabilities: ["launch.module", "pico8"],
+            supports: { systems: ["pico8"] },
           },
         },
       },

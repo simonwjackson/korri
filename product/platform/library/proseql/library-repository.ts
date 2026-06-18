@@ -7,10 +7,7 @@ import {
 } from "@platform/artifacts/artifact-import-service"
 import { artifactsRoot } from "@platform/artifacts/artifact-store"
 import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
-import {
-  materializeReadableRetroArchLaunch,
-  materializeReadableSteamLaunch,
-} from "@platform/library/config/app-materializer"
+import { materializeReadableSteamLaunch } from "@platform/library/config/app-materializer"
 import {
   type ReadableConfigSnapshot,
   type ResolvedLocalLauncherPolicy,
@@ -34,7 +31,6 @@ import {
 import {
   type AppRecord,
   appRecordKind,
-  isRetroArchAppRecord,
   isSteamAppRecord,
 } from "@platform/library/config/records/app"
 import type { CollectionRecord } from "@platform/library/config/records/collection"
@@ -336,20 +332,18 @@ export function createLibraryRepository(
             override: opts?.override,
           }).pipe(
             Effect.flatMap(context =>
-              isRetroArchAppRecord(context.app)
-                ? Effect.succeed(canMaterializeRetroArchContext(context))
-                : findReadableLaunchIntegration(context, _options)
-                  ? Effect.succeed(
-                      findReadableLaunchIntegration(
-                        context,
-                        _options,
-                      )?.canResolve(context) ?? false,
-                    )
-                  : isSteamAppRecord(context.app)
-                    ? Effect.succeed(canMaterializeSteamContext(context))
-                    : composeReadableLaunchSpec(context.app, context).pipe(
-                        Effect.as(true),
-                      ),
+              findReadableLaunchIntegration(context, _options)
+                ? Effect.succeed(
+                    findReadableLaunchIntegration(
+                      context,
+                      _options,
+                    )?.canResolve(context) ?? false,
+                  )
+                : isSteamAppRecord(context.app)
+                  ? Effect.succeed(canMaterializeSteamContext(context))
+                  : composeReadableLaunchSpec(context.app, context).pipe(
+                      Effect.as(true),
+                    ),
             ),
             Effect.match({
               onFailure: () => false,
@@ -377,23 +371,18 @@ export function createLibraryRepository(
           readonly artifacts?: LaunchArtifacts
           readonly diagnostics?: readonly string[]
         } = yield* (
-          isRetroArchAppRecord(context.app)
-            ? materializeReadableRetroArchLaunch({
+          findReadableLaunchIntegration(context, _options)
+            ? (findReadableLaunchIntegration(context, _options)?.materialize(
                 context,
-                env: _options.env ?? process.env,
-              })
-            : findReadableLaunchIntegration(context, _options)
-              ? (findReadableLaunchIntegration(context, _options)?.materialize(
-                  context,
-                ) ??
-                composeReadableLaunchSpec(context.app, context).pipe(
+              ) ??
+              composeReadableLaunchSpec(context.app, context).pipe(
+                Effect.map(spec => ({ spec })),
+              ))
+            : isSteamAppRecord(context.app)
+              ? materializeReadableSteamLaunch({ context })
+              : composeReadableLaunchSpec(context.app, context).pipe(
                   Effect.map(spec => ({ spec })),
-                ))
-              : isSteamAppRecord(context.app)
-                ? materializeReadableSteamLaunch({ context })
-                : composeReadableLaunchSpec(context.app, context).pipe(
-                    Effect.map(spec => ({ spec })),
-                  )
+                )
         ).pipe(Effect.mapError(toLibraryConfigError))
         const spec = materialized.spec
         const entry = derivePlayableEntries([
@@ -539,23 +528,10 @@ function resolvedIntegration(
   context: ReadableResolvedLaunchContext,
   options: CreateLibraryRepositoryOptions,
 ): AppIntegrationKind {
-  if (isRetroArchAppRecord(context.app)) return "retroarch"
   const integration = findReadableLaunchIntegration(context, options)
   if (integration) return integration.integration
   if (isSteamAppRecord(context.app)) return "steam"
   return "generic-process"
-}
-
-function canMaterializeRetroArchContext(
-  context: ReadableResolvedLaunchContext,
-): boolean {
-  const hasContentPath =
-    context.retroarch?.content?.path !== undefined ||
-    context.content?.path !== undefined
-  const hasCorePath =
-    context.retroarch?.core?.path !== undefined ||
-    context.runtime?.path !== undefined
-  return hasContentPath && hasCorePath
 }
 
 function canMaterializeSteamContext(

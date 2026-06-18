@@ -36,16 +36,17 @@ apps:
     # Literal Steam syntax; Korri does not substitute inside %command%.
     launch-options: "gamescope --fullscreen -- %command%"
 
-  retroarch:
-    kind: retroarch
+  "@korri:retroarch/retroarch":
+    kind: "@korri:retroarch"
     command: retroarch
-    systems: [gba]
-    configFile:
-      mode: generated
-    core:
-      path: "{runtime.path}"
-    content:
-      path: "{content.path}"
+    plugin:
+      "@korri:retroarch":
+        configFile:
+          mode: generated
+        core:
+          path: "{runtime.path}"
+        content:
+          path: "{content.path}"
 
   mgba-standalone:
     kind: process
@@ -66,7 +67,10 @@ runtimes:
     tool: proton-experimental
   mgba:
     kind: libretro-core
+    app: "@korri:retroarch/retroarch"
     path: /run/current-system/sw/lib/libretro/mgba_libretro.so
+    supports:
+      systems: [gba]
 
 library:
   balatro:
@@ -99,6 +103,6 @@ library:
           storage: roms
           path: gba/choice-demo.gba
         apps:
-          - id: retroarch
+          - id: "@korri:retroarch/retroarch"
             runtime: mgba
           - id: mgba-standalone

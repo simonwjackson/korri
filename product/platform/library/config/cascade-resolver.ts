@@ -49,7 +49,6 @@ import {
   launchCompanionsFromLaunch,
   type MoonlightPolicy,
   type PluginPolicyMap,
-  type RetroArchPolicy,
   type SteamPolicy,
 } from "./inheritable-fields"
 import type { LaunchBlock, LaunchSettings } from "./launch-block"
@@ -63,7 +62,6 @@ import {
 import {
   type AppRecord,
   appRecordKind,
-  appRetroArchPolicyFromRecord,
   appSteamPolicyFromRecord,
 } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
@@ -177,7 +175,6 @@ interface InheritableView {
   readonly inherit?: boolean
   readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
-  readonly retroarch?: RetroArchPolicy
   readonly plugin?: PluginPolicyMap
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
@@ -208,7 +205,6 @@ const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
         settings: g.launch?.settings,
         launchCompanions: launchCompanionsFromLaunch(g),
         moonlight: g.moonlight,
-        retroarch: g.retroarch,
         plugin: g.plugin,
         env: g.env,
         cwd: g.cwd,
@@ -224,7 +220,6 @@ const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
         inherit: l.inherit,
         launchCompanions: launchCompanionsFromLaunch(l),
         moonlight: l.moonlight,
-        retroarch: l.retroarch,
         plugin: l.plugin,
         env: l.env,
         cwd: l.cwd,
@@ -284,7 +279,6 @@ const foldLayers = (
 
   let launchCompanions: LaunchCompanionMap | undefined
   let moonlight: MoonlightPolicy | undefined
-  let retroarch: RetroArchPolicy | undefined
   let plugin: PluginPolicyMap | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
@@ -317,9 +311,6 @@ const foldLayers = (
     if (merged.moonlight !== undefined) {
       moonlight = foldMoonlight(moonlight, merged.moonlight)
     }
-    if (merged.retroarch !== undefined) {
-      retroarch = foldRetroArch(retroarch, merged.retroarch)
-    }
     if (merged.plugin !== undefined) {
       plugin = foldPluginPolicies(plugin, merged.plugin)
     }
@@ -348,7 +339,6 @@ const foldLayers = (
   return {
     launchCompanions,
     moonlight,
-    retroarch,
     plugin,
     env,
     cwd,
@@ -379,9 +369,6 @@ const mergeByLauncher = (
     moonlight: extra.moonlight
       ? foldMoonlight(base.moonlight, extra.moonlight)
       : base.moonlight,
-    retroarch: extra.retroarch
-      ? foldRetroArch(base.retroarch, extra.retroarch)
-      : base.retroarch,
     plugin: extra.plugin
       ? foldPluginPolicies(base.plugin, extra.plugin)
       : base.plugin,
@@ -446,43 +433,6 @@ const isPlainPolicyObject = (
   value: unknown,
 ): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
-
-const mergeRetroArchValue = (
-  base: unknown,
-  extra: unknown,
-  path: readonly string[],
-): unknown => {
-  if (extra === undefined) return base
-  const key = path.join(".")
-  if (key === "extraArgs" || key === "configFile.append") {
-    return Array.isArray(extra)
-      ? [...(Array.isArray(base) ? base : []), ...extra]
-      : extra
-  }
-  if (key === "environment" || key === "extraSettings") {
-    return isPlainPolicyObject(extra)
-      ? { ...(isPlainPolicyObject(base) ? base : {}), ...extra }
-      : extra
-  }
-  if (isPlainPolicyObject(base) && isPlainPolicyObject(extra)) {
-    const merged: Record<string, unknown> = { ...base }
-    for (const [childKey, childValue] of Object.entries(extra)) {
-      merged[childKey] = mergeRetroArchValue(merged[childKey], childValue, [
-        ...path,
-        childKey,
-      ])
-    }
-    return merged
-  }
-  return extra
-}
-
-/** Deep-merge two RetroArch policies; extraArgs/configFile.append concat. */
-export const foldRetroArch = (
-  base: RetroArchPolicy | undefined,
-  extra: RetroArchPolicy,
-): RetroArchPolicy =>
-  mergeRetroArchValue(base ?? {}, extra, []) as RetroArchPolicy
 
 const mergePluginPolicyValue = (
   base: unknown,
@@ -783,7 +733,6 @@ export class MultiTargetUnsupported extends Data.TaggedError(
 interface ReadableOverride {
   readonly launch?: LaunchPolicy
   readonly moonlight?: MoonlightPolicy
-  readonly retroarch?: RetroArchPolicy
   readonly plugin?: PluginPolicyMap
   readonly steam?: SteamPolicy
   readonly env?: Readonly<Record<string, string>>
@@ -805,7 +754,6 @@ interface ReadableLayerView {
   readonly launch?: LaunchPolicy
   readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
-  readonly retroarch?: RetroArchPolicy
   readonly plugin?: PluginPolicyMap
   readonly steam?: SteamPolicy
   readonly env?: Readonly<Record<string, string>>
@@ -819,7 +767,6 @@ const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
     ? {
         launchCompanions: launchCompanionsFromLaunch(user),
         moonlight: user.moonlight,
-        retroarch: user.retroarch,
         plugin: user.plugin,
         env: user.env,
         cwd: user.cwd,
@@ -835,7 +782,6 @@ const readableViewOfSystem = (
     ? {
         launchCompanions: launchCompanionsFromLaunch(system),
         moonlight: system.moonlight,
-        retroarch: system.retroarch,
         plugin: system.plugin,
         env: system.env,
         cwd: system.cwd,
@@ -849,7 +795,6 @@ const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
     ? {
         launchCompanions: launchCompanionsFromLaunch(app),
         moonlight: app.moonlight,
-        retroarch: appRetroArchPolicyFromRecord(app),
         plugin: app.plugin,
         steam: appSteamPolicyFromRecord(app),
         env: app.env,
@@ -869,7 +814,6 @@ const readableViewOfAppChoice = (
   launchCompanions:
     choice.launchCompanions ?? launchCompanionsFromLaunch(choice),
   moonlight: choice.moonlight,
-  retroarch: choice.retroarch,
   steam:
     appRecordKind(app) === "steam"
       ? {
@@ -924,11 +868,6 @@ const resolveReadableAppRecord = (
     settings: override?.settings ?? builtIn.settings,
     launch: launchPolicyWithCompanions(launchCompanions),
     moonlight: override?.moonlight ?? builtIn.moonlight,
-    ...(override?.kind === "retroarch" || builtIn.kind === "retroarch"
-      ? override !== undefined
-        ? (appRetroArchPolicyFromRecord(override) ?? builtIn.retroarch)
-        : builtIn.retroarch
-      : {}),
     ...(override?.kind === "steam" || builtIn.kind === "steam"
       ? {
           state: override?.state,
@@ -952,7 +891,6 @@ const readableViewOfRuntime = (
     ? {
         launchCompanions: launchCompanionsFromLaunch(runtime),
         moonlight: runtime.moonlight,
-        retroarch: runtime.retroarch,
         plugin: runtime.plugin,
         env: runtime.env,
         cwd: runtime.cwd,
@@ -966,7 +904,6 @@ const readableViewOfLibraryItem = (
 ): ReadableLayerView => ({
   launchCompanions: launchCompanionsFromLaunch(item),
   moonlight: item.moonlight,
-  retroarch: item.retroarch,
   plugin: item.plugin,
   env: item.env,
   cwd: item.cwd,
@@ -979,7 +916,6 @@ const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
     ? launchCompanionsFromLaunch(entry.contained)
     : undefined,
   moonlight: entry.contained?.moonlight,
-  retroarch: entry.contained?.retroarch,
   plugin: entry.contained?.plugin,
   env: entry.contained?.env,
   cwd: entry.contained?.cwd,
@@ -992,7 +928,6 @@ const readableViewOfRelease = (
 ): ReadableLayerView => ({
   launchCompanions: launchCompanionsFromLaunch(release),
   moonlight: release.moonlight,
-  retroarch: release.retroarch,
   plugin: release.plugin,
   env: release.env,
   cwd: release.cwd,
@@ -1007,7 +942,6 @@ const readableViewOfProfile = (
     ? {
         launchCompanions: launchCompanionsFromLaunch(profile),
         moonlight: profile.moonlight,
-        retroarch: profile.retroarch,
         plugin: profile.plugin,
         env: profile.env,
         cwd: profile.cwd,
@@ -1023,7 +957,6 @@ const readableViewOfOverride = (
     ? {
         launchCompanions: launchCompanionsFromLaunch(override),
         moonlight: override.moonlight,
-        retroarch: override.retroarch,
         plugin: override.plugin,
         steam: override.steam,
         env: override.env,
@@ -1038,7 +971,6 @@ const mergeReadableLayers = (
 ): ReadableLayerView => {
   let launchCompanions: LaunchCompanionMap | undefined
   let moonlight: MoonlightPolicy | undefined
-  let retroarch: RetroArchPolicy | undefined
   let plugin: PluginPolicyMap | undefined
   let steam: SteamPolicy | undefined
   let env: Record<string, string> | undefined
@@ -1054,9 +986,6 @@ const mergeReadableLayers = (
     }
     if (layer.moonlight !== undefined) {
       moonlight = foldMoonlight(moonlight, layer.moonlight)
-    }
-    if (layer.retroarch !== undefined) {
-      retroarch = foldRetroArch(retroarch, layer.retroarch)
     }
     if (layer.plugin !== undefined) {
       plugin = foldPluginPolicies(plugin, layer.plugin)
@@ -1077,7 +1006,6 @@ const mergeReadableLayers = (
   return {
     launchCompanions,
     moonlight,
-    retroarch,
     plugin,
     steam,
     env,
@@ -1289,7 +1217,6 @@ export const resolveReadableLaunchContext = (
       ...(resolvedTarget.content ? { content: resolvedTarget.content } : {}),
       launchCompanions: folded.launchCompanions ?? {},
       ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
-      ...(folded.retroarch ? { retroarch: folded.retroarch } : {}),
       ...(folded.plugin ? { plugin: folded.plugin } : {}),
       ...(folded.steam ? { steam: folded.steam } : {}),
       storage: Object.fromEntries(snapshot.storage),

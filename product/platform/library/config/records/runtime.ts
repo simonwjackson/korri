@@ -32,11 +32,17 @@ export const RuntimeKind = Schema.Literals([
 ])
 export type RuntimeKind = Schema.Schema.Type<typeof RuntimeKind>
 
+const RuntimeSupportsPayload = Schema.Struct({
+  systems: Schema.optional(Schema.Array(NonEmptyString)),
+})
+
 export const RuntimePayload = Schema.Struct({
   kind: RuntimeKind,
   path: AbsolutePath,
   title: Schema.optional(NonEmptyString),
   tool: Schema.optional(NonEmptyString),
+  app: Schema.optional(NonEmptyString),
+  supports: Schema.optional(RuntimeSupportsPayload),
 
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,

@@ -12,6 +12,7 @@ import { KORRI_PORTMASTER_PLUGIN_ID } from "./portmaster"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
 import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
+import { KORRI_RETROARCH_APP_ID, KORRI_RETROARCH_PLUGIN_ID } from "./retroarch"
 import { KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
 import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
 import { KORRI_SMWCENTRAL_PLUGIN_ID } from "./smwcentral"
@@ -19,6 +20,18 @@ import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
 import { KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID } from "./super-mario-bros-remastered"
 
 describe("first-party plugins", () => {
+  it("registers RetroArch as a first-party app host plugin", () => {
+    const retroarch = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_RETROARCH_PLUGIN_ID,
+    )
+
+    expect(retroarch?.contributes.config.apps?.retroarch).toMatchObject({
+      id: KORRI_RETROARCH_APP_ID,
+      kind: KORRI_RETROARCH_PLUGIN_ID,
+      command: "retroarch",
+    })
+  })
+
   it("registers Gamescope as a first-party handler/config plugin", () => {
     const gamescope = firstPartyPlugins.find(
       plugin => plugin.id === KORRI_GAMESCOPE_PLUGIN_ID,
@@ -55,6 +68,7 @@ describe("first-party plugins", () => {
       KORRI_ENABLED_PLUGINS: undefined,
     })
 
+    expect(registry.enabledPluginIds.has(KORRI_RETROARCH_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_FEX_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_PLUGIN_ID)).toBe(false)

@@ -32,39 +32,36 @@ describe("resolveAppDescriptor", () => {
     })
   })
 
-  it("resolves built-in retroarch without an apps YAML record", () => {
-    const app = run(
-      resolveAppDescriptor({
-        appId: "retroarch",
-        apps: appMap(),
-        launchers: launcherMap(),
-      }),
-    )
-
-    expect(app.integration).toBe("retroarch")
-    expect(app.command).toBe("retroarch")
-    expect(app.args).toContain("{modulePath}")
+  it("does not provide RetroArch as a generic built-in app", () => {
+    expect(
+      runErrTag(
+        resolveAppDescriptor({
+          appId: "retroarch",
+          apps: appMap(),
+          launchers: launcherMap(),
+        }),
+      ),
+    ).toBe("AppNotFound")
   })
 
-  it("merges apps.retroarch.settings while preserving built-in integration", () => {
+  it("resolves plugin-qualified RetroArch from an authored app record", () => {
     const app = run(
       resolveAppDescriptor({
-        appId: "retroarch",
+        appId: "@korri:retroarch/retroarch",
         apps: appMap([
           {
-            id: "retroarch",
-            settings: { video_driver: "glcore" },
+            id: "@korri:retroarch/retroarch",
+            kind: "@korri:retroarch",
+            command: "retroarch",
+            args: ["-L", "{runtime.path}", "{content.path}"],
           },
         ]),
         launchers: launcherMap(),
       }),
     )
 
-    expect(app.integration).toBe("retroarch")
-    expect(app.settings).toMatchObject({
-      config_save_on_exit: false,
-      video_driver: "glcore",
-    })
+    expect(app.integration).toBe("@korri:retroarch")
+    expect(app.command).toBe("retroarch")
   })
 
   it("does not extract RetroArch policy from non-RetroArch app records", () => {
@@ -75,7 +72,7 @@ describe("resolveAppDescriptor", () => {
           {
             id: "dolphin",
             kind: "dolphin",
-            video: { fullscreen: true },
+            command: "dolphin-emu",
           },
         ]),
         launchers: launcherMap(),
@@ -83,27 +80,7 @@ describe("resolveAppDescriptor", () => {
     )
 
     expect(app.integration).toBe("dolphin")
-    expect(app.retroarch).toBeUndefined()
-  })
-
-  it("preserves legacy launcher RetroArch policy when app override has no RetroArch fields", () => {
-    const app = run(
-      resolveAppDescriptor({
-        appId: "retroarch",
-        apps: appMap([{ id: "retroarch", command: "retroarch" }]),
-        launchers: launcherMap([
-          {
-            id: "retroarch",
-            command: "retroarch",
-            args: ["{contentPath}"],
-            systems: ["snes"],
-            retroarch: { video: { fullscreen: false } },
-          },
-        ]),
-      }),
-    )
-
-    expect(app.retroarch?.video?.fullscreen).toBe(false)
+    expect("retroarch" in app).toBe(false)
   })
 
   it("resolves a first-class plugin app app without a built-in command default", () => {
@@ -343,11 +320,17 @@ describe("validateAppModuleCompatibility", () => {
     path: "/etc/korri/cores/fake08_libretro.so",
   }
 
-  it("allows libretro modules for RetroArch", () => {
+  it("allows libretro modules for the RetroArch plugin app", () => {
     const retroarch = run(
       resolveAppDescriptor({
-        appId: "retroarch",
-        apps: appMap(),
+        appId: "@korri:retroarch/retroarch",
+        apps: appMap([
+          {
+            id: "@korri:retroarch/retroarch",
+            kind: "@korri:retroarch",
+            command: "retroarch",
+          },
+        ]),
         launchers: launcherMap(),
       }),
     )

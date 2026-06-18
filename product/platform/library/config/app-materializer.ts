@@ -38,7 +38,7 @@ import {
 } from "./errors"
 import type { RetroArchPolicy, SteamPolicy } from "./inheritable-fields"
 import type { LaunchSettings, LaunchSettingValue } from "./launch-block"
-import { isRetroArchAppRecord, isSteamAppRecord } from "./records/app"
+import { isSteamAppRecord } from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
 import type {
   ReadableResolvedLaunchContext,
@@ -78,15 +78,6 @@ export const materializeReadableRetroArchLaunch = (input: {
   readonly env?: XdgPathEnv
 }): Effect.Effect<MaterializedReadableLaunch, ResolutionError> =>
   Effect.gen(function* () {
-    if (!isRetroArchAppRecord(input.context.app)) {
-      return yield* Effect.fail(
-        new AppMaterializationFailed({
-          appId: input.context.app.id,
-          reason: "typed RetroArch materialization requires kind: retroarch",
-        }),
-      )
-    }
-
     const root = yield* resolveArtifactsRoot(
       {
         app: { id: input.context.app.id },

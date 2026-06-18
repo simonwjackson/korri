@@ -10,16 +10,10 @@ import {
   type LaunchCompanionMap,
   launchCompanionsFromLaunch,
   type MoonlightPolicy,
-  type RetroArchPolicy,
 } from "./inheritable-fields"
 import type { LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
-import {
-  type AppKind,
-  type AppRecord,
-  appRecordKind,
-  appRetroArchPolicyFromRecord,
-} from "./records/app"
+import { type AppKind, type AppRecord, appRecordKind } from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
 import type { ModuleRecord } from "./records/module"
 
@@ -47,7 +41,6 @@ export interface AppDescriptor {
   readonly knownSettings?: readonly string[]
   readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
-  readonly retroarch?: RetroArchPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -61,29 +54,6 @@ const integrationForKind = (kind: AppKind): AppIntegrationKind => {
 }
 
 const builtInApps: Readonly<Record<string, AppDescriptor>> = {
-  retroarch: {
-    id: "retroarch",
-    kind: "retroarch",
-    integration: "retroarch",
-    command: "retroarch",
-    args: ["--config", "{configPath}", "-L", "{modulePath}", "{contentPath}"],
-    systems: [],
-    policy: { allowedCommands: ["retroarch"] },
-    settings: {
-      config_save_on_exit: false,
-      video_fullscreen: true,
-    },
-    knownSettings: [
-      "audio_driver",
-      "config_save_on_exit",
-      "input_joypad_driver",
-      "menu_driver",
-      "rewind_enable",
-      "video_driver",
-      "video_fullscreen",
-      "video_scale_integer",
-    ],
-  },
   mame: {
     id: "mame",
     integration: "mame",
@@ -226,7 +196,6 @@ const mergeDescriptor = (
           presets: legacyLauncher.presets ?? base.presets,
           launchCompanions,
           moonlight: legacyLauncher.moonlight ?? base.moonlight,
-          retroarch: legacyLauncher.retroarch ?? base.retroarch,
           env: legacyLauncher.env ?? base.env,
           cwd: legacyLauncher.cwd ?? base.cwd,
           argsAppend: legacyLauncher.argsAppend ?? base.argsAppend,
@@ -245,14 +214,6 @@ const mergeDescriptor = (
     ...(appOverride?.presets ? { presets: appOverride.presets } : {}),
     ...(launchCompanions ? { launchCompanions } : {}),
     ...(appOverride?.moonlight ? { moonlight: appOverride.moonlight } : {}),
-    ...(appOverride
-      ? {
-          retroarch:
-            appRetroArchPolicyFromRecord(appOverride) ??
-            legacyLauncher?.retroarch ??
-            base.retroarch,
-        }
-      : {}),
     ...(appOverride?.env ? { env: appOverride.env } : {}),
     ...(appOverride?.cwd !== undefined ? { cwd: appOverride.cwd } : {}),
     ...(appOverride?.argsAppend ? { argsAppend: appOverride.argsAppend } : {}),
@@ -269,7 +230,6 @@ const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
   policy: launcher.policy,
   launchCompanions: launchCompanionsFromLaunch(launcher),
   moonlight: launcher.moonlight,
-  retroarch: launcher.retroarch,
   env: launcher.env,
   cwd: launcher.cwd,
   argsAppend: launcher.argsAppend,
@@ -289,7 +249,10 @@ export const validateAppModuleCompatibility = (input: {
   readonly app: AppDescriptor
   readonly module: ModuleRecord
 }): Effect.Effect<void, ResolutionError> => {
-  if (input.app.integration === "retroarch") {
+  if (
+    input.app.integration === "retroarch" ||
+    input.app.integration === "@korri:retroarch"
+  ) {
     return input.module.kind === "libretro-core"
       ? Effect.void
       : Effect.fail(

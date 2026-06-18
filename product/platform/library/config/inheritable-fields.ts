@@ -22,11 +22,6 @@
  *                         → list concat in inheritance order
  * - `moonlight.environment`
  *                         → map merge; `null` means executable env unset
- * - `retroarch`          → deep merge per nested key; scalars last-wins
- * - `retroarch.environment` / `retroarch.extraSettings`
- *                         → map merge; environment `null` means env unset
- * - `retroarch.extraArgs` / `retroarch.configFile.append`
- *                         → list concat in inheritance order
  * - `plugin`            → provider-keyed map; object values deep merge,
  *                         → arrays concatenate in inheritance order
  * - `steam`              → deep merge per nested key; `extra.args` concatenates;
@@ -681,6 +676,15 @@ export const RetroArchPolicy = Schema.Struct({
 })
 export type RetroArchPolicy = Schema.Schema.Type<typeof RetroArchPolicy>
 
+const RetiredRetroArchPolicy = RetroArchPolicy.pipe(
+  Schema.check(
+    Schema.makeFilter(() => ({
+      path: ["retroarch"],
+      issue: "retroarch policy moved to plugin.@korri:retroarch",
+    })),
+  ),
+)
+
 const SteamStatePolicy = Schema.Struct({
   root: NonEmptyString("state.root"),
 })
@@ -699,7 +703,7 @@ export type SteamPolicy = Schema.Schema.Type<typeof SteamPolicy>
 export const InheritableLayer = Schema.Struct({
   launch: Schema.optional(LaunchPolicy),
   moonlight: Schema.optional(MoonlightPolicy),
-  retroarch: Schema.optional(RetroArchPolicy),
+  retroarch: Schema.optional(RetiredRetroArchPolicy),
   plugin: Schema.optional(PluginPolicyMap),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),

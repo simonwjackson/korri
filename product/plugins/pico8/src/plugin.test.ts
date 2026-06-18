@@ -7,6 +7,10 @@ import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plu
 import { acquisitionPluginDefinitionsFromPluginRegistry } from "@platform/acquisition/product-plugin-adapter"
 import { createPluginRegistry } from "@platform/plugin/registry"
 import { Effect } from "effect"
+import {
+  KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_PLUGIN_ID,
+} from "../../retroarch"
 import { createPico8Plugin, KORRI_PICO8_PLUGIN_ID, pico8Plugin } from ".."
 
 const searchHtml = [
@@ -42,15 +46,23 @@ describe("PICO-8 plugin", () => {
       path: "product/plugins/pico8/packages/libretro-fake-08",
       capabilities: ["package.expose", "launch.runtime", "pico8"],
     })
-    expect(pico8Plugin.contributes.config.modules?.fake08).toMatchObject({
+    expect(pico8Plugin.contributes.config.runtimes?.fake08).toMatchObject({
+      id: "@korri:pico8/fake08",
       kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
       path: "/etc/korri/cores/fake08_libretro.so",
-      package: "libretro-fake-08",
+      supports: { systems: ["pico8"] },
     })
     expect(pico8Plugin.contributes.config.systems?.pico8).toMatchObject({
       title: "PICO-8",
-      launch: { app: "retroarch", module: "fake08" },
+      apps: [{ id: KORRI_RETROARCH_APP_ID, runtime: "@korri:pico8/fake08" }],
     })
+    expect(pico8Plugin.requires).toContainEqual(
+      expect.objectContaining({
+        ref: { provider: KORRI_RETROARCH_PLUGIN_ID, id: "retroarch" },
+        autoEnable: false,
+      }),
+    )
     expect(pico8Plugin.handlers.map(handler => handler.operation)).toEqual([
       "claims.search",
       "claims.details",

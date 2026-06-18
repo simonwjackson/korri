@@ -57,9 +57,6 @@ export const RETROARCH_APP_FIELD_KEYS = [
 const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const hasAnyKey = (value: unknown, keys: readonly string[]): boolean =>
-  isPlainRecord(value) && keys.some(key => value[key] !== undefined)
-
 const steamPolicyPayloadFromRecord = (payload: {
   readonly [key: string]: unknown
 }): Record<string, unknown> => {
@@ -70,36 +67,20 @@ const steamPolicyPayloadFromRecord = (payload: {
   return policy
 }
 
-const RETROARCH_OVERLAP_MARKERS: Readonly<Record<string, readonly string[]>> = {
-  content: ["path"],
-  audio: ["enable", "latencyMs", "outputRate", "volumeDb"],
-  input: ["autodetect", "maxUsers", "ports", "overlay"],
-  logging: ["verbose", "verbosity", "fpsShow", "logFile"],
-}
-
 const isTypedAppPayload = (payload: {
   readonly id?: string
   readonly kind?: AppKind
   readonly settings?: unknown
   readonly [key: string]: unknown
 }): string | undefined => {
-  const kind =
-    payload.kind ?? (payload.id === "retroarch" ? "retroarch" : undefined)
-  const isRetroArch = kind === "retroarch"
+  const kind = payload.kind
+  const retiredRetroArchKey = RETROARCH_APP_FIELD_KEYS.find(
+    key => payload[key] !== undefined,
+  )
+  if (retiredRetroArchKey) {
+    return `RetroArch field ${retiredRetroArchKey} moved to plugin.@korri:retroarch`
+  }
   const isSteam = kind === "steam"
-  if (isRetroArch && payload.settings !== undefined) {
-    return "RetroArch apps use typed fields and extraSettings, not raw settings"
-  }
-  if (!isRetroArch) {
-    const misplacedKey = RETROARCH_APP_FIELD_KEYS.find(key => {
-      if (payload[key] === undefined) return false
-      const overlapMarkers = RETROARCH_OVERLAP_MARKERS[key]
-      return overlapMarkers ? hasAnyKey(payload[key], overlapMarkers) : true
-    })
-    if (misplacedKey) {
-      return `RetroArch field ${misplacedKey} requires kind: retroarch`
-    }
-  }
   if (!isSteam && payload["launch-options"] !== undefined) {
     return "Steam field launch-options requires kind: steam"
   }
@@ -168,80 +149,11 @@ export const decodeAppRecord = (input: unknown): AppRecord =>
   Schema.decodeUnknownSync(AppRecord)(input, STRICT)
 
 export const appRecordKind = (app: Pick<AppRecord, "id" | "kind">): AppKind =>
-  app.kind ?? (app.id === "retroarch" ? "retroarch" : "process")
-
-export const isRetroArchAppRecord = (
-  app: Pick<AppRecord, "id" | "kind">,
-): boolean => appRecordKind(app) === "retroarch"
+  app.kind ?? "process"
 
 export const isSteamAppRecord = (
   app: Pick<AppRecord, "id" | "kind">,
 ): boolean => appRecordKind(app) === "steam"
-
-export const appRetroArchPolicyFromRecord = (
-  app: AppRecord,
-): RetroArchPolicy | undefined => {
-  if (!isRetroArchAppRecord(app)) return undefined
-  const {
-    environment,
-    configFile,
-    core,
-    content,
-    logging,
-    lifecycle,
-    drivers,
-    paths,
-    video,
-    audio,
-    input,
-    menu,
-    saves,
-    rewind,
-    playback,
-    latency,
-    achievements,
-    haptics,
-    playlists,
-    privacy,
-    updater,
-    extraSettings,
-    extraArgs,
-  } = app
-  const policy: RetroArchPolicy = {
-    ...(environment !== undefined ? { environment } : {}),
-    ...(configFile !== undefined ? { configFile } : {}),
-    ...(core !== undefined ? { core } : {}),
-    ...(content !== undefined
-      ? { content: content as RetroArchPolicy["content"] }
-      : {}),
-    ...(logging !== undefined
-      ? { logging: logging as RetroArchPolicy["logging"] }
-      : {}),
-    ...(lifecycle !== undefined ? { lifecycle } : {}),
-    ...(drivers !== undefined ? { drivers } : {}),
-    ...(paths !== undefined ? { paths } : {}),
-    ...(video !== undefined ? { video } : {}),
-    ...(audio !== undefined
-      ? { audio: audio as RetroArchPolicy["audio"] }
-      : {}),
-    ...(input !== undefined
-      ? { input: input as RetroArchPolicy["input"] }
-      : {}),
-    ...(menu !== undefined ? { menu } : {}),
-    ...(saves !== undefined ? { saves } : {}),
-    ...(rewind !== undefined ? { rewind } : {}),
-    ...(playback !== undefined ? { playback } : {}),
-    ...(latency !== undefined ? { latency } : {}),
-    ...(achievements !== undefined ? { achievements } : {}),
-    ...(haptics !== undefined ? { haptics } : {}),
-    ...(playlists !== undefined ? { playlists } : {}),
-    ...(privacy !== undefined ? { privacy } : {}),
-    ...(updater !== undefined ? { updater } : {}),
-    ...(extraSettings !== undefined ? { extraSettings } : {}),
-    ...(extraArgs !== undefined ? { extraArgs } : {}),
-  }
-  return Object.keys(policy).length > 0 ? policy : undefined
-}
 
 export const appSteamPolicyFromRecord = (
   app: AppRecord,
