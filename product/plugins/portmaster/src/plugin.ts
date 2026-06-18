@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises"
+import { join } from "node:path"
 import { AcquisitionError } from "@platform/acquisition/errors"
 import type { ProviderId } from "@platform/plugin"
 import { plugin } from "@platform/plugin"
@@ -9,6 +10,7 @@ import type {
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
+import { installPortMasterEntry } from "./installer"
 
 export const KORRI_PORTMASTER_PLUGIN_ID = "@korri:portmaster" as const
 
@@ -24,6 +26,7 @@ export interface PortMasterPluginOptions {
   readonly catalogPath?: string
   readonly fetchImpl?: typeof fetch
   readonly readFileText?: (path: string) => Promise<string>
+  readonly installRoot?: string
 }
 
 interface PortMasterRuntime {
@@ -31,6 +34,7 @@ interface PortMasterRuntime {
   readonly catalogPath?: string
   readonly fetchImpl: typeof fetch
   readonly readFileText: (path: string) => Promise<string>
+  readonly installRoot: string
   catalog?: Promise<readonly PortMasterEntry[]>
 }
 
@@ -44,6 +48,7 @@ interface PortMasterEntry {
   readonly runtime: readonly string[]
   readonly reqs: readonly string[]
   readonly arch: readonly string[]
+  readonly items: readonly string[]
   readonly readyToRun: boolean
   readonly experimental: boolean
   readonly availability?: string
@@ -55,6 +60,7 @@ interface PortMasterEntry {
 
 interface RawPortMasterEntry {
   readonly name?: unknown
+  readonly items?: unknown
   readonly attr?: unknown
   readonly source?: unknown
 }
@@ -227,6 +233,69 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
           },
         },
         {
+          id: "portmaster.install",
+          operation: "portmaster.install",
+          capabilities: ["portmaster.install", "portmaster"],
+          run: context => {
+            const input = readRecord(context.input)
+            const id = normalizePortmasterId(stringField(input, "id"))
+            const installRoot =
+              stringValue(input.installRoot) ?? runtime.installRoot
+            const installedAt = stringValue(input.installedAt)
+
+            return loadCatalog(runtime).pipe(
+              Effect.flatMap(entries => {
+                const entry = entries.find(candidate => candidate.id === id)
+                if (!entry) {
+                  return Effect.fail(
+                    new AcquisitionError({
+                      reason: "caller",
+                      providerId: context.provider,
+                      message: `Unknown PortMaster catalog entry: ${id}`,
+                    }),
+                  )
+                }
+                if (!entry.downloadUrl) {
+                  return Effect.fail(
+                    new AcquisitionError({
+                      reason: "provider",
+                      providerId: context.provider,
+                      message: `PortMaster catalog entry has no download URL: ${id}`,
+                    }),
+                  )
+                }
+
+                return Effect.tryPromise({
+                  try: () =>
+                    installPortMasterEntry({
+                      providerId: context.provider,
+                      id: entry.id,
+                      title: entry.title,
+                      downloadUrl: entry.downloadUrl,
+                      ...(entry.md5 ? { md5: entry.md5 } : {}),
+                      ...(entry.size !== undefined ? { size: entry.size } : {}),
+                      items: entry.items,
+                      arch: entry.arch,
+                      runtime: entry.runtime,
+                      readyToRun: entry.readyToRun,
+                      installRoot,
+                      fetchImpl: runtime.fetchImpl,
+                      ...(installedAt ? { installedAt } : {}),
+                    }),
+                  catch: error =>
+                    new AcquisitionError({
+                      reason: "provider",
+                      providerId: context.provider,
+                      message: `Failed to install PortMaster entry ${id}: ${
+                        error instanceof Error ? error.message : String(error)
+                      }`,
+                    }),
+                })
+              }),
+            )
+          },
+        },
+        {
           id: "portmaster.diagnostics",
           operation: "diagnostics.collect",
           capabilities: ["portmaster"],
@@ -248,7 +317,15 @@ function createRuntime(options: PortMasterPluginOptions): PortMasterRuntime {
     readFileText:
       options.readFileText ??
       (async path => readFile(path, { encoding: "utf8" })),
+    installRoot: options.installRoot ?? defaultInstallRoot(),
   }
+}
+
+function defaultInstallRoot(): string {
+  const dataHome =
+    process.env.XDG_DATA_HOME ??
+    (process.env.HOME ? join(process.env.HOME, ".local", "share") : "/tmp")
+  return join(dataHome, "korri", "portmaster")
 }
 
 function loadCatalog(
@@ -303,6 +380,7 @@ function parseEntry(key: string, value: unknown): PortMasterEntry | null {
   const runtime = stringArray(attr.runtime)
   const reqs = stringArray(attr.reqs)
   const arch = stringArray(attr.arch)
+  const items = stringArray(raw.items)
   const readyToRun = attr.rtr === true
   const experimental = attr.exp === true
   const availability = stringValue(attr.availability)
@@ -320,6 +398,7 @@ function parseEntry(key: string, value: unknown): PortMasterEntry | null {
     runtime,
     reqs,
     arch,
+    items,
     readyToRun,
     experimental,
     ...(availability ? { availability } : {}),

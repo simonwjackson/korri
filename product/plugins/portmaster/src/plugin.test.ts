@@ -1,10 +1,15 @@
 import { describe, expect, it } from "bun:test"
+import { createHash } from "node:crypto"
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import {
   Acquisition,
   makeLiveAcquisitionLayer,
 } from "@platform/acquisition/acquisition-service"
 import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plugin-loader"
 import { acquisitionPluginDefinitionsFromPluginRegistry } from "@platform/acquisition/product-plugin-adapter"
+import { type PluginHandler, runPluginHandler } from "@platform/plugin"
 import {
   createPluginRegistry,
   executableResources,
@@ -82,6 +87,7 @@ describe("PortMaster plugin", () => {
         "claims.parse-url",
         "provider.validate",
         "artifact.resolve-download",
+        "portmaster.install",
         "diagnostics.collect",
       ],
     )
@@ -183,4 +189,176 @@ describe("PortMaster plugin", () => {
       message: "PortMaster entry is not ready-to-run",
     })
   })
+
+  it("installs a ready-to-run catalog zip into a PortMaster ports layout", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-portmaster-install-"))
+    const zipBytes = makeZip({
+      "Wordle SDL.sh": Buffer.from("#!/bin/bash\n./wordlesdl/wordle\n"),
+      "wordlesdl/wordle": fakeElf("aarch64"),
+      "wordlesdl/data/words.txt": Buffer.from("korri\n"),
+    })
+    const catalog = {
+      ports: {
+        "wordlesdl.zip": {
+          name: "wordlesdl.zip",
+          items: ["Wordle SDL.sh", "wordlesdl/"],
+          attr: {
+            title: "Wordle SDL",
+            desc: "A tiny word game.",
+            inst: "Ready to run.",
+            genres: ["puzzle"],
+            porter: ["tabreturn"],
+            rtr: true,
+            exp: false,
+            runtime: [],
+            reqs: [],
+            arch: ["aarch64"],
+            availability: "full",
+          },
+          source: {
+            md5: createHash("md5").update(zipBytes).digest("hex"),
+            size: zipBytes.length,
+            url: "https://example.invalid/wordlesdl.zip",
+          },
+        },
+      },
+    }
+    const productPlugin = createPortMasterPlugin({
+      catalogPath: "/catalog/ports.json",
+      installRoot: root,
+      readFileText: async () => JSON.stringify(catalog),
+      fetchImpl: async () =>
+        new Response(zipBytes, {
+          status: 200,
+          headers: { "content-type": "application/zip" },
+        }),
+    })
+
+    try {
+      const handler = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.install",
+      ) as PluginHandler | undefined
+      if (!handler) throw new Error("missing portmaster.install handler")
+
+      const manifest = await Effect.runPromise(
+        runPluginHandler(handler, {
+          operation: "portmaster.install",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            id: "wordlesdl.zip",
+            installedAt: "2026-06-18T00:00:00.000Z",
+          },
+        }),
+      )
+
+      expect(manifest).toMatchObject({
+        schemaVersion: 1,
+        id: "wordlesdl.zip",
+        title: "Wordle SDL",
+        portsRoot: join(root, "ports"),
+        catalog: {
+          items: ["Wordle SDL.sh", "wordlesdl/"],
+          arch: ["aarch64"],
+          runtime: [],
+          readyToRun: true,
+        },
+      })
+      expect(manifest.extracted.launchScripts).toEqual([
+        { path: "Wordle SDL.sh", sizeBytes: 31 },
+      ])
+      expect(manifest.extracted.binaries).toEqual([
+        {
+          path: "wordlesdl/wordle",
+          sizeBytes: 64,
+          format: "elf",
+          elfClass: "64",
+          machine: "EM_AARCH64",
+          arch: "aarch64",
+        },
+      ])
+      expect(await stat(join(root, "ports", "Wordle SDL.sh"))).toBeDefined()
+      expect(
+        await stat(join(root, "ports", "wordlesdl", "wordle")),
+      ).toBeDefined()
+      expect(
+        JSON.parse(await readFile(manifest.manifestPath, "utf8")),
+      ).toMatchObject({ id: "wordlesdl.zip", title: "Wordle SDL" })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
+
+function fakeElf(arch: "aarch64" | "x86_64" | "x86" | "armhf"): Buffer {
+  const bytes = Buffer.alloc(64)
+  bytes[0] = 0x7f
+  bytes[1] = 0x45
+  bytes[2] = 0x4c
+  bytes[3] = 0x46
+  bytes[4] = arch === "aarch64" || arch === "x86_64" ? 2 : 1
+  bytes[5] = 1
+  const machine = {
+    aarch64: 183,
+    x86_64: 62,
+    x86: 3,
+    armhf: 40,
+  }[arch]
+  bytes.writeUInt16LE(machine, 18)
+  return bytes
+}
+
+function makeZip(entries: Record<string, Buffer>): Buffer {
+  const localParts: Buffer[] = []
+  const centralParts: Buffer[] = []
+  let offset = 0
+
+  for (const [path, data] of Object.entries(entries)) {
+    const name = Buffer.from(path)
+    const localHeader = Buffer.alloc(30)
+    localHeader.writeUInt32LE(0x04034b50, 0)
+    localHeader.writeUInt16LE(20, 4)
+    localHeader.writeUInt16LE(0, 6)
+    localHeader.writeUInt16LE(0, 8)
+    localHeader.writeUInt32LE(0, 10)
+    localHeader.writeUInt32LE(0, 14)
+    localHeader.writeUInt32LE(data.length, 18)
+    localHeader.writeUInt32LE(data.length, 22)
+    localHeader.writeUInt16LE(name.length, 26)
+    localHeader.writeUInt16LE(0, 28)
+    localParts.push(localHeader, name, data)
+
+    const centralHeader = Buffer.alloc(46)
+    centralHeader.writeUInt32LE(0x02014b50, 0)
+    centralHeader.writeUInt16LE(20, 4)
+    centralHeader.writeUInt16LE(20, 6)
+    centralHeader.writeUInt16LE(0, 8)
+    centralHeader.writeUInt16LE(0, 10)
+    centralHeader.writeUInt32LE(0, 12)
+    centralHeader.writeUInt32LE(0, 16)
+    centralHeader.writeUInt32LE(data.length, 20)
+    centralHeader.writeUInt32LE(data.length, 24)
+    centralHeader.writeUInt16LE(name.length, 28)
+    centralHeader.writeUInt16LE(0, 30)
+    centralHeader.writeUInt16LE(0, 32)
+    centralHeader.writeUInt16LE(0, 34)
+    centralHeader.writeUInt16LE(0, 36)
+    centralHeader.writeUInt32LE(0, 38)
+    centralHeader.writeUInt32LE(offset, 42)
+    centralParts.push(centralHeader, name)
+
+    offset += localHeader.length + name.length + data.length
+  }
+
+  const centralDirectory = Buffer.concat(centralParts)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0)
+  end.writeUInt16LE(0, 4)
+  end.writeUInt16LE(0, 6)
+  end.writeUInt16LE(Object.keys(entries).length, 8)
+  end.writeUInt16LE(Object.keys(entries).length, 10)
+  end.writeUInt32LE(centralDirectory.length, 12)
+  end.writeUInt32LE(offset, 16)
+  end.writeUInt16LE(0, 20)
+
+  return Buffer.concat([...localParts, centralDirectory, end])
+}
