@@ -83,6 +83,13 @@ export const PICO_SCREENS: readonly PicoScreen[] = [
 
   // ── Personality (character experiments — mascot, rituals, attract) ──────
   {
+    id: "per-home",
+    group: "Personality",
+    name: "Reactive Home (interactive)",
+    note: "Hover carts: Pixl gazes, click to launch",
+    render: () => <Personality.ReactiveHomeScreen />,
+  },
+  {
     id: "per-mascot",
     group: "Personality",
     name: "Mascot — Meet Pixl",

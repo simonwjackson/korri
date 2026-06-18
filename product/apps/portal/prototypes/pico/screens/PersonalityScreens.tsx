@@ -5,10 +5,97 @@
  * an arcade attract mode, and a voiced boot POST. Self-contained so the rest of
  * the gallery stays stable; motion lives in screens/personality.css (pcPer-).
  */
+import type { CSSProperties } from "react"
+import { useState } from "react"
 import { picoGames } from "../fixtures"
 import { picoHero } from "../fixtures-extra"
 import { PicoMascot } from "../PicoMascot"
+import { sfx } from "../pico-sfx"
 import { Dim, PicoCart, Screen, Sub, Title } from "./kit"
+
+/**
+ * The "woven in + reactive" demo: an actually-interactive home. Hover/click a
+ * cart to focus it — Pixl gazes toward it (and chirps), the caption updates, and
+ * selecting fires the launch ritual (CRT power-on) with a fanfare. Personality
+ * in context, not a museum exhibit.
+ */
+export function ReactiveHomeScreen() {
+  const games = picoGames.slice(0, 5)
+  const [focus, setFocus] = useState(2)
+  const [launching, setLaunching] = useState(false)
+  const hero = games[focus]
+  const mid = (games.length - 1) / 2
+  const gaze = mid === 0 ? 0 : (focus - mid) / mid // -1 (left) .. 1 (right)
+
+  function pick(index: number) {
+    if (index === focus) return
+    setFocus(index)
+    sfx.move()
+  }
+  function launch() {
+    if (launching) return
+    sfx.launch()
+    setLaunching(true)
+    window.setTimeout(() => setLaunching(false), 2200)
+  }
+
+  return (
+    <Screen
+      title="PICO ▸ HOME"
+      hints={[
+        { key: "a", label: "PLAY" },
+        { key: "y", label: "INFO" },
+        { key: "b", label: "BACK" },
+      ]}
+    >
+      <div className="pcPer-react">
+        <div
+          className="pcPer-react-pixl"
+          style={{ transform: `translateX(${gaze * 16}%)` }}
+        >
+          <PicoMascot
+            state={launching ? "happy" : "idle"}
+            className="pcMascot-lg"
+          />
+        </div>
+        <div className="pcPer-react-rail">
+          {games.map((game, index) => (
+            <button
+              type="button"
+              key={game.id}
+              className={`pcPer-react-cart ${index === focus ? "on" : ""}`}
+              onMouseEnter={() => pick(index)}
+              onFocus={() => pick(index)}
+              onClick={launch}
+              style={cartReset}
+            >
+              <PicoCart game={game} showFav={false} />
+            </button>
+          ))}
+        </div>
+        <div className="pcPer-react-cap">
+          <span className="pcPer-react-name">{hero?.title ?? "—"}</span>
+          <Dim>
+            {hero ? `${hero.genre} · ${hero.developer}` : ""} — hover a cart
+          </Dim>
+        </div>
+        {launching && hero ? (
+          <div className="pcPer-react-crt" key={hero.id}>
+            <div className="pcPer-react-crt-line" />
+            <div className="pcPer-react-crt-msg">LAUNCHING {hero.title}</div>
+          </div>
+        ) : null}
+      </div>
+    </Screen>
+  )
+}
+
+const cartReset: CSSProperties = {
+  background: "transparent",
+  border: "none",
+  padding: 0,
+  cursor: "pointer",
+}
 
 const MOODS = [
   { state: "idle" as const, label: "IDLE" },

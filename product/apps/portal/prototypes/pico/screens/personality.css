@@ -371,3 +371,130 @@
 	top: var(--pico-space-3);
 	right: var(--pico-space-3);
 }
+
+/* ── Reactive home (interactive: gaze + launch ritual) ─────────────────── */
+.pcPer-react {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--pico-space-2);
+}
+.pcPer-react-pixl {
+	transition: transform 0.2s steps(3);
+}
+.pcPer-react-rail {
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	gap: 3cqw;
+	height: min(40cqh, calc(var(--pico-base) * 11));
+}
+.pcPer-react-cart {
+	container-type: size;
+	aspect-ratio: 3 / 4;
+	height: 76%;
+	opacity: 0.55;
+	filter: saturate(0.6);
+	transition:
+		height 0.25s steps(4),
+		opacity 0.25s steps(4);
+}
+.pcPer-react-cart .pico-cart {
+	width: 100%;
+	height: 100%;
+}
+.pcPer-react-cart .pico-cart-initials {
+	font-size: 30cqh;
+}
+.pcPer-react-cart.on {
+	height: 100%;
+	opacity: 1;
+	filter: none;
+}
+.pcPer-react-cart.on .pico-cart {
+	outline: 0.4688cqw solid var(--pico-accent);
+	outline-offset: 0.4688cqw;
+}
+.pcPer-react-cap {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.2em;
+	text-align: center;
+}
+.pcPer-react-name {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-0);
+	color: var(--pico-ink);
+}
+
+/* One-shot CRT power-on overlay fired on launch. */
+.pcPer-react-crt {
+	position: absolute;
+	inset: 0;
+	z-index: 20;
+	display: grid;
+	place-items: center;
+	background: #000;
+	overflow: hidden;
+	animation: pcPer-react-fade 2.2s steps(4) both;
+}
+.pcPer-react-crt-line {
+	position: absolute;
+	left: 6%;
+	right: 6%;
+	height: 0.7cqh;
+	background: var(--p8-white);
+	box-shadow: 0 0 2cqw var(--p8-white);
+	transform: scaleX(0);
+	animation: pcPer-react-line 2.2s steps(6) both;
+}
+.pcPer-react-crt-msg {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-1);
+	color: var(--pico-accent);
+	text-align: center;
+	transform: scaleY(0);
+	opacity: 0;
+	transform-origin: center;
+	animation: pcPer-react-msg 2.2s steps(6) both;
+}
+@keyframes pcPer-react-fade {
+	0% {
+		opacity: 0;
+	}
+	6%,
+	100% {
+		opacity: 1;
+	}
+}
+@keyframes pcPer-react-line {
+	0% {
+		transform: scaleX(0);
+		opacity: 0;
+	}
+	10% {
+		transform: scaleX(1);
+		opacity: 1;
+	}
+	22%,
+	100% {
+		opacity: 0;
+	}
+}
+@keyframes pcPer-react-msg {
+	0%,
+	18% {
+		transform: scaleY(0);
+		opacity: 0;
+	}
+	26%,
+	100% {
+		transform: scaleY(1);
+		opacity: 1;
+	}
+}
