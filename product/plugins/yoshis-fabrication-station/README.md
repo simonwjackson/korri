@@ -1,4 +1,4 @@
-# Yoshi's Fabrication Station vendor package
+# Yoshi's Fabrication Station plugin package
 
 Packages the public Construct 3 web export of Yoshi's Fabrication Station as a
 static app launched by Chromium through a Unix-style `yfs` CLI.

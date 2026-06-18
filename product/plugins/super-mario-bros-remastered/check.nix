@@ -177,7 +177,7 @@ else
       ${lib.concatMapStringsSep "\n" (h: ''
         if ! grep -qa "${h}" ${pkg}/share/smb-remastered/SMB1R.pck; then
           echo "error: upstream ROMVerifier no longer accepts pinned hash ${h}" >&2
-          echo "       update product/vendor/super-mario-bros-remastered/{check.nix,README.md}" >&2
+          echo "       update product/plugins/super-mario-bros-remastered/{check.nix,README.md}" >&2
           exit 1
         fi
       '') pinnedRomHashes}

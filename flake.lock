@@ -208,43 +208,7 @@
         "nixpkgs-2405": "nixpkgs-2405",
         "nixpkgs-godot": "nixpkgs-godot",
         "nixpkgs-mesa": "nixpkgs-mesa",
-        "sm127-src": "sm127-src",
-        "smbr-src": "smbr-src",
         "wasm4-src": "wasm4-src"
-      }
-    },
-    "sm127-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1734805364,
-        "narHash": "sha256-G46nJ6aaCiStworbAx1+sTH1QAygY5haoCVohfXEScw=",
-        "owner": "Level-Share-Square",
-        "repo": "SuperMario127",
-        "rev": "6118c65d8e799dae73f2c02596af827c8056a330",
-        "type": "github"
-      },
-      "original": {
-        "owner": "Level-Share-Square",
-        "repo": "SuperMario127",
-        "rev": "6118c65d8e799dae73f2c02596af827c8056a330",
-        "type": "github"
-      }
-    },
-    "smbr-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1779874410,
-        "narHash": "sha256-AIQVH8xZkAx4JMnUtCu0mnMcmLdz7jUpWsf7Clay62k=",
-        "owner": "JHDev2006",
-        "repo": "Super-Mario-Bros.-Remastered-Public",
-        "rev": "21b068182fdf07bf5aa7c73b4d399650970fd2f0",
-        "type": "github"
-      },
-      "original": {
-        "owner": "JHDev2006",
-        "repo": "Super-Mario-Bros.-Remastered-Public",
-        "rev": "21b068182fdf07bf5aa7c73b4d399650970fd2f0",
-        "type": "github"
       }
     },
     "systems": {

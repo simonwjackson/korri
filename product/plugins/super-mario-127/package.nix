@@ -1,7 +1,7 @@
 # Super Mario 127 (community Godot fan game by Level Share Square),
 # exported natively for the Korri target system from upstream sources.
 #
-# Why this vendor entry exists:
+# Why this plugin package exists:
 #
 # Upstream distributes source plus desktop/web builds for the public
 # release, but Korri's primary device target is Linux aarch64. Shipping
@@ -52,10 +52,16 @@
   systemdLibs,
   wayland,
   xorg,
-  # Engine + game source pin, wired by the overlay.
+  # Engine + game source pin, wired by plugin composition.
   godot3-headless,
   godot3-export-templates,
-  sm127-src,
+  fetchFromGitHub,
+  game-src ? fetchFromGitHub {
+    owner = "Level-Share-Square";
+    repo = "SuperMario127";
+    rev = "6118c65d8e799dae73f2c02596af827c8056a330";
+    hash = "sha256-G46nJ6aaCiStworbAx1+sTH1QAygY5haoCVohfXEScw=";
+  },
 }:
 
 let
@@ -100,15 +106,14 @@ let
     xorg.libXrender
   ];
 
-  version =
-    if sm127-src ? shortRev then sm127-src.shortRev else sm127-src.lastModifiedDate or "unknown";
+  version = if game-src ? shortRev then game-src.shortRev else game-src.lastModifiedDate or "unknown";
 in
 
 stdenv.mkDerivation {
   pname = "super-mario-127";
   inherit version;
 
-  src = sm127-src;
+  src = game-src;
 
   nativeBuildInputs = [
     autoPatchelfHook
@@ -201,7 +206,7 @@ stdenv.mkDerivation {
     pname=super-mario-127
     version=${version}
     upstream-repo=github.com/Level-Share-Square/SuperMario127
-    upstream-rev=${sm127-src.rev or "unknown"}
+    upstream-rev=${game-src.rev or "unknown"}
     engine=godot3 ${godotVersion}
     export-preset=${archEntry.preset}
     binary=${archEntry.binaryName}

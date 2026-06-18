@@ -7,8 +7,6 @@ inputs@{
   nix-on-rocks,
   fake-08-src,
   wasm4-src,
-  smbr-src,
-  sm127-src,
   nixpkgs-godot,
   nixpkgs-mesa,
   ...
@@ -25,8 +23,6 @@ flake-utils.lib.eachDefaultSystem (
         nix-on-rocks
         fake-08-src
         wasm4-src
-        smbr-src
-        sm127-src
         nixpkgs-godot
         nixpkgs-mesa
         ;
@@ -217,6 +213,7 @@ flake-utils.lib.eachDefaultSystem (
       inherit pkgs bunDeps;
       src = korriSources.cli;
       enable = pkgs.stdenv.isLinux;
+      pluginArgs = { inherit nixpkgs-godot; };
     };
 
     korriImages = import ../../../../product/systems/nixos/images/common.nix {
@@ -229,10 +226,6 @@ flake-utils.lib.eachDefaultSystem (
     steamKorri = pkgs.steam-korri;
     libretroFake08 = pkgs.libretro-fake-08;
     libretroWasm4 = pkgs.libretro-wasm4;
-    smbRemastered = pkgs.smb-remastered;
-    superMario127 = pkgs.super-mario-127;
-    yoshisFabricationStation = pkgs.yoshis-fabrication-station;
-
     # The named outputs match the overlay-substituted runtime package names
     # so downstream consumers can ask for either name and get the same
     # derivation.
@@ -299,9 +292,6 @@ flake-utils.lib.eachDefaultSystem (
         steamKorri
         libretroFake08
         libretroWasm4
-        smbRemastered
-        superMario127
-        yoshisFabricationStation
         electrobunBinaries
         korriDesktopUnwrapped
         korriDesktop

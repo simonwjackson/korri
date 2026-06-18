@@ -3,8 +3,6 @@
   nixpkgs,
   nix-on-rocks,
   fake-08-src,
-  smbr-src,
-  sm127-src,
   nixpkgs-godot,
   ...
 }@inputs:

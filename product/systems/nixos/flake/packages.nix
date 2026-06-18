@@ -23,9 +23,6 @@
   steamKorri,
   libretroFake08,
   libretroWasm4,
-  smbRemastered,
-  superMario127,
-  yoshisFabricationStation,
   electrobunBinaries,
   korriDesktopUnwrapped,
   korriDesktop,
@@ -56,9 +53,6 @@
   steam-korri = steamKorri;
   libretro-fake-08 = libretroFake08;
   libretro-wasm4 = libretroWasm4;
-  smb-remastered = smbRemastered;
-  super-mario-127 = superMario127;
-  yoshis-fabrication-station = yoshisFabricationStation;
 }
 // pluginPackages
 // pkgs.lib.optionalAttrs isSupportedDesktopSystem {

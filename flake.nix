@@ -21,12 +21,6 @@
     wasm4-src.url = "git+https://github.com/aduros/wasm4?rev=92490f261659921d8b724f10b5b842cdf5a0a1bb&submodules=1";
     wasm4-src.flake = false;
 
-    smbr-src.url = "github:JHDev2006/Super-Mario-Bros.-Remastered-Public?rev=21b068182fdf07bf5aa7c73b4d399650970fd2f0";
-    smbr-src.flake = false;
-
-    sm127-src.url = "github:Level-Share-Square/SuperMario127?rev=6118c65d8e799dae73f2c02596af827c8056a330";
-    sm127-src.flake = false;
-
     nixpkgs-godot.url = "github:NixOS/nixpkgs/331800de5053fcebacf6813adb5db9c9dca22a0c";
 
     # Mesa >= 26 pin for the ryubing-korri Turnip wrapper. The main

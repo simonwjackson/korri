@@ -5,6 +5,7 @@
   enable ? pkgs.stdenv.isLinux,
   gamescopePackage ? null,
   controlBridgePackage ? null,
+  ...
 }:
 
 let

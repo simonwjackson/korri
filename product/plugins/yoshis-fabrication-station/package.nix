@@ -28,7 +28,11 @@ let
     pname = "yoshis-fabrication-station-upstream-zip";
     inherit version;
 
-    nativeBuildInputs = [ curl jq cacert ];
+    nativeBuildInputs = [
+      curl
+      jq
+      cacert
+    ];
     dontUnpack = true;
     dontConfigure = true;
     dontBuild = true;
@@ -166,7 +170,13 @@ stdenvNoCC.mkDerivation {
     makeWrapper "$out/bin/yfs.unwrapped" "$out/bin/yfs" \
       --set YFS_APP_DIR "$out/share/yoshis-fabrication-station" \
       --set-default YFS_BROWSER ${lib.getExe chromium} \
-      --prefix PATH : ${lib.makeBinPath [ jq python3 curl ]}
+      --prefix PATH : ${
+        lib.makeBinPath [
+          jq
+          python3
+          curl
+        ]
+      }
 
     cat > "$out/nix-support/yoshis-fabrication-station/manifest.txt" <<EOF
     pname=yoshis-fabrication-station

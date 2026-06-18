@@ -35,10 +35,10 @@ way.
 
 ## Source pin policy
 
-The game source is pinned via the `smbr-src` flake input in the repo
-root `flake.nix`. The input is `github:JHDev2006/...?rev=<commit>` with
-`flake = false` (the repo has no `flake.nix` and no submodules; the
-default tarball fetch is sufficient).
+The game source is pinned inside this plugin package via the `game-src`
+`fetchFromGitHub` default in `package.nix`. Keep the source revision and
+fixed-output hash colocated with the package so generic Korri flake
+wiring does not name this content.
 
 Current pin: commit `21b0681...` (the `1.1-26w21c` release tag), which
 is the snapshot tested against the engine version below. That weekly
@@ -50,7 +50,7 @@ marks it runnable for Godot's CLI export path.
 Bump with:
 
 ```
-nix flake update smbr-src
+update the `game-src` fetcher in `package.nix` and refresh its hash
 ```
 
 and re-run `nix flake check` to verify the colocated package check
@@ -98,7 +98,7 @@ each one is documented.
 
 ### `godotgif` — works natively
 
-Upstream `smbr-src` already includes
+The pinned upstream source already includes
 `godotgif/bin/libgodotgif.linux.template_release.arm64.so` (and the
 debug variant). The `godotgif.gdextension` manifest declares
 `linux.release.arm64`, so the Godot export picks it up automatically
@@ -146,9 +146,9 @@ SDK. There is no upstream-supportable alternative.
 ## Layout
 
 ```
-product/vendor/super-mario-bros-remastered/
+product/plugins/super-mario-bros-remastered/
 ├── README.md       # this file
-├── package.nix     # stdenv.mkDerivation wired through product/systems/nixos/overlays/korri-packages.nix
+├── package.nix     # stdenv.mkDerivation wired through this plugin's Nix composition
 ├── check.nix       # colocated package-level check exposed as
 │                   # self.checks.<system>.smb-remastered-check
 └── patches/

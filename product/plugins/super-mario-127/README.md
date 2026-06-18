@@ -1,4 +1,4 @@
-# Super Mario 127 vendor package
+# Super Mario 127 plugin package
 
 This directory packages [Level Share Square's Super Mario 127][upstream]
 as a native Linux Godot export for Korri.
@@ -6,7 +6,7 @@ as a native Linux Godot export for Korri.
 Korri builds the game from source instead of using the published desktop
 release artifacts because the public Linux build is x86_64-only and
 Korri's primary handheld target is Linux aarch64. The package follows the
-same additive vendor-package model as `product/vendor/super-mario-bros-remastered/`:
+same additive plugin-package model as `product/plugins/super-mario-bros-remastered/`:
 it adds a package and colocated checks, but it does not install a kiosk
 launch module or make the game a runtime default.
 
@@ -14,7 +14,7 @@ launch module or make the game a runtime default.
 
 ## Source and engine pins
 
-- Upstream source input: `sm127-src` in `flake.nix`
+- Upstream source pin: `game-src` fetcher in this plugin package's `package.nix`
 - Initial pin: `v0.9.1` (`6118c65d8e799dae73f2c02596af827c8056a330`)
 - Engine: Godot 3.6 from the repo's main nixpkgs pin
 
@@ -142,7 +142,7 @@ This package does not add:
 
 ## Bump checklist
 
-When updating `sm127-src` or Godot 3 packages:
+When updating the pinned upstream source or Godot 3 packages:
 
 1. Re-run the x86_64 colocated check.
 2. Re-run the aarch64 colocated check on an ARM builder.

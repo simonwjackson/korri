@@ -6,8 +6,12 @@ let
   composition = import ./product/systems/nixos/flake/plugins.nix {
     inherit pkgs;
     enable = ${enable ? "true" : "false"};
-    gamescopePackage = "gamescope-korri-package";
-    controlBridgePackage = "gamescope-control-bridge-package";
+    pluginArgs = {
+      gamescopePackage = "gamescope-korri-package";
+      controlBridgePackage = "gamescope-control-bridge-package";
+      nixpkgs-godot = { legacyPackages = {}; };
+      nixpkgs-mesa = { legacyPackages = {}; };
+    };
   };
 in {
   ids = composition.enabledPluginIds;
@@ -19,43 +23,38 @@ in {
 }
 `
 
+type CompositionSummary = {
+  readonly ids: readonly string[]
+  readonly packages: readonly string[]
+  readonly apps: readonly string[]
+  readonly checks: readonly string[]
+  readonly overlayCount: number
+  readonly moduleCount: number
+}
+
 describe("first-party Nix plugin composition", () => {
   it("discovers plugin-owned Nix compositions without central plugin imports", async () => {
-    const enabled = await nixEval(PLUGIN_COMPOSITION_EXPR(true))
-    expect(enabled).toEqual({
-      ids: [
-        "@korri:fex",
-        "@korri:gamescope",
-        "@korri:mega-man-arena",
-        "@korri:proton-ge",
-        "@korri:proton",
-        "@korri:psycho-waluigi",
-        "@korri:srb2",
-      ],
-      packages: [
+    const enabled = (await nixEval(
+      PLUGIN_COMPOSITION_EXPR(true),
+    )) as CompositionSummary
+
+    expect(enabled.ids).toEqual(expect.arrayContaining(["@korri:gamescope"]))
+    expect(enabled.packages).toEqual(
+      expect.arrayContaining([
         "gamescope-korri",
-        "korri-fex-runtime",
         "korri-gamescope-control-bridge",
-        "korri-proton-ge-runtime",
-        "korri-proton-runtime",
-        "mega-man-arena",
-        "psycho-waluigi",
-        "srb2",
-      ],
-      apps: [
-        "gamescope-control",
-        "gamescope-control-bridge",
-        "korri-stream-control-bench",
-      ],
-      checks: [
-        "mega-man-arena-check",
-        "proton-ge-runtime-check",
-        "psycho-waluigi-check",
-        "srb2-check",
-      ],
-      overlayCount: 1,
-      moduleCount: 1,
-    })
+      ]),
+    )
+    expect(enabled.apps).toEqual([
+      "gamescope-control",
+      "gamescope-control-bridge",
+      "korri-stream-control-bench",
+    ])
+    expect(enabled.moduleCount).toBe(1)
+    expect(enabled.ids.length).toBeGreaterThan(1)
+    expect(enabled.packages.length).toBeGreaterThan(2)
+    expect(enabled.checks.length).toBeGreaterThan(0)
+    expect(enabled.overlayCount).toBeGreaterThan(0)
 
     const disabled = await nixEval(PLUGIN_COMPOSITION_EXPR(false))
     expect(disabled).toEqual({

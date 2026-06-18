@@ -37,10 +37,6 @@ const GENERIC_GAMESCOPE_COMPOSITION_ALLOWLIST = new Map<string, string>([
     "composition test verifies enabled and disabled plugin lifecycle-hook wiring",
   ],
   [
-    "product/systems/nixos/flake/plugins.nix",
-    "Nix plugin composition exports plugin-owned packages, apps, overlays, and modules",
-  ],
-  [
     "product/systems/nixos/flake/plugins.test.ts",
     "Nix plugin composition test verifies enabled and disabled plugin outputs",
   ],
@@ -54,6 +50,29 @@ const GENERIC_GAMESCOPE_COMPOSITION_ALLOWLIST = new Map<string, string>([
   ],
 ])
 
+const PLUGIN_OWNED_CONTENT_PACKAGE_NAMES = [
+  "super-mario-bros-remastered",
+  "smb-remastered",
+  "super-mario-127",
+  "yoshis-fabrication-station",
+] as const
+
+const PRODUCT_CONTENT_SCAN_ROOTS = [
+  join(REPO_ROOT, "product"),
+  join(REPO_ROOT, "flake.nix"),
+]
+
+function containsPluginOwnedContentPackageName(source: string): boolean {
+  const lower = source.toLowerCase()
+  return PLUGIN_OWNED_CONTENT_PACKAGE_NAMES.some(name => lower.includes(name))
+}
+
+function isInsideOwnedContentPlugin(file: string): boolean {
+  return /^(?:product\/plugins\/(?:super-mario-bros-remastered|super-mario-127|yoshis-fabrication-station)\/|product\/plugins\/index\.ts|product\/plugins\/index\.test\.ts)/.test(
+    file,
+  )
+}
+
 const GENERIC_GAMESCOPE_IMPORT_ALLOWLIST = new Set<string>([
   "product/services/device/sessiond-plugin-composition.ts",
   "product/services/device/sessiond-plugin-composition.test.ts",
@@ -64,6 +83,9 @@ function sourceFilesWithExtensions(
   extensions: ReadonlySet<string>,
 ): readonly string[] {
   if (!existsSync(root)) return []
+  if (statSync(root).isFile()) {
+    return extensions.has(extname(root)) ? [root] : []
+  }
 
   const files: string[] = []
   const walk = (dir: string) => {
@@ -566,6 +588,18 @@ describe("standards: product platform reorganization guardrails", () => {
     for (const [alias, target] of Object.entries(FINAL_ALIAS_PATH_INVENTORY)) {
       expect(aliases[alias]).toEqual([target])
     }
+  })
+
+  it("keeps plugin-owned first-party game package names inside their plugins", () => {
+    const current = existingRoots(PRODUCT_CONTENT_SCAN_ROOTS).flatMap(root =>
+      sourceFilesWithExtensions(root, GAMESCOPE_SOURCE_EXTENSIONS)
+        .filter(file => containsPluginOwnedContentPackageName(readSource(file)))
+        .map(repoRelative),
+    )
+
+    expect(current.filter(file => !isInsideOwnedContentPlugin(file))).toEqual(
+      [],
+    )
   })
 
   it("keeps generic Gamescope strings limited to explicit composition files", () => {

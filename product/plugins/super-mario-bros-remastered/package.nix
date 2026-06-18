@@ -1,7 +1,7 @@
 # Super Mario Bros. Remastered (community Godot remake by JHDev2006),
 # exported natively for the Korri target system out of upstream sources.
 #
-# Why this vendor entry exists:
+# Why this plugin package exists:
 #
 # Upstream publishes only `Linux.zip` and `Windows.zip` on its GitHub
 # release page. The Linux zip is x86_64 only. On Linux aarch64 (Korri's
@@ -26,7 +26,7 @@
 #
 # GDExtensions:
 #
-#   - `godotgif` (in-game GIF capture): upstream `smbr-src` already
+#   - `godotgif` (in-game GIF capture): the pinned upstream source already
 #     ships `libgodotgif.linux.template_release.arm64.so` at
 #     `godotgif/bin/`. The `godotgif.gdextension` manifest declares the
 #     arm64 entry, so the Godot export picks it up automatically. No
@@ -89,9 +89,15 @@
   systemdLibs,
   wayland,
   xorg,
-  # Engine + game source pins, wired by the overlay.
+  # Engine pin supplied by Nix plugin composition.
   nixpkgs-godot,
-  smbr-src,
+  fetchFromGitHub,
+  game-src ? fetchFromGitHub {
+    owner = "JHDev2006";
+    repo = "Super-Mario-Bros.-Remastered-Public";
+    rev = "21b068182fdf07bf5aa7c73b4d399650970fd2f0";
+    hash = "sha256-AIQVH8xZkAx4JMnUtCu0mnMcmLdz7jUpWsf7Clay62k=";
+  },
 }:
 
 let
@@ -153,15 +159,15 @@ let
   # Use upstream's tag or fall back to the rev-derived version. The
   # release tag (e.g. "1.1-26w21c") is the human-readable handle; the
   # rev is the machine pin. Match the version-string shape used by
-  # neighbouring vendor packages.
-  version = if smbr-src ? shortRev then smbr-src.shortRev else smbr-src.lastModifiedDate or "unknown";
+  # neighbouring plugin packages.
+  version = if game-src ? shortRev then game-src.shortRev else game-src.lastModifiedDate or "unknown";
 in
 
 stdenv.mkDerivation {
   pname = "smb-remastered";
   inherit version;
 
-  src = smbr-src;
+  src = game-src;
 
   nativeBuildInputs = [
     # autoPatchelfHook rewrites the ELF interpreter
@@ -288,7 +294,7 @@ stdenv.mkDerivation {
       printf '%s\n' 'pname=smb-remastered'
       printf '%s\n' 'version=${version}'
       printf '%s\n' 'upstream-repo=github.com/JHDev2006/Super-Mario-Bros.-Remastered-Public'
-      printf '%s\n' 'upstream-rev=${smbr-src.rev or "unknown"}'
+      printf '%s\n' 'upstream-rev=${game-src.rev or "unknown"}'
       printf '%s\n' 'engine=godot ${godotVersion}'
       printf '%s\n' 'export-preset=${archEntry.preset}'
       printf '%s\n' 'binary=${archEntry.binaryName}'

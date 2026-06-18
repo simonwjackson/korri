@@ -6,8 +6,6 @@
   nix-on-rocks,
   fake-08-src,
   wasm4-src,
-  smbr-src,
-  sm127-src,
   nixpkgs-godot,
   nixpkgs-mesa,
 }:
@@ -18,8 +16,6 @@ let
       nix-on-rocks
       fake-08-src
       wasm4-src
-      smbr-src
-      sm127-src
       nixpkgs-godot
       nixpkgs-mesa
       ;

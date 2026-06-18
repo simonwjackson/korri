@@ -72,7 +72,6 @@ in
       sway
       gamescopePackage
       pkgs.moonlight-embedded
-      korri.packages.${targetSystem}.smb-remastered
     ];
 
     environment = panfrostEnvironment;
@@ -99,13 +98,15 @@ in
     path = [
       gamescopePackage
       pkgs.moonlight-embedded
-      korri.packages.${targetSystem}.smb-remastered
     ];
     # The plugin-owned foreground runtime inherits this env, so the PanVK
     # runtime knobs must live here alongside the Panfrost ones.
-    extraEnvironment = panfrostEnvironment // gamescopeRuntimeEnvironment // {
-      KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
-    };
+    extraEnvironment =
+      panfrostEnvironment
+      // gamescopeRuntimeEnvironment
+      // {
+        KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
+      };
   };
 
   # RK3566/PanVK RetroArch is the known deadlock case, but platform defaults
@@ -116,8 +117,7 @@ in
   services.korri.daemon.library.platformDefaults.host.gamescope.app.environment.WAYLAND_DISPLAY =
     null;
 
-  systemd.user.services.korrid.environment.KORRI_ENABLED_PLUGINS =
-    enabledFirstPartyPlugins;
+  systemd.user.services.korrid.environment.KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
 
   # Keep the nix-on-rocks boot-selected guest profile in sync after switches.
   system.activationScripts.korri-rocknix-guest-profile = {
@@ -137,10 +137,6 @@ in
       "${config.services.inputplumber.package}/share"
     ]
   );
-
-  environment.systemPackages = [
-    korri.packages.${targetSystem}.smb-remastered
-  ];
 
   environment.etc."rocknix-stage10-proof-marker".text = ''
     korri-rk3566-kiosk-system

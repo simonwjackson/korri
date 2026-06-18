@@ -7,8 +7,6 @@
   nix-on-rocks,
   fake-08-src,
   wasm4-src,
-  smbr-src,
-  sm127-src,
   nixpkgs-godot,
   nixpkgs-mesa,
 }:
@@ -52,13 +50,4 @@ in
   libretro-fake-08 = final.callPackage ../../../vendor/libretro-fake-08/package.nix {
     inherit fake-08-src;
   };
-  smb-remastered = final.callPackage ../../../vendor/super-mario-bros-remastered/package.nix {
-    inherit smbr-src nixpkgs-godot;
-  };
-  super-mario-127 = final.callPackage ../../../vendor/super-mario-127/package.nix {
-    inherit sm127-src;
-  };
-  yoshis-fabrication-station =
-    final.callPackage ../../../vendor/yoshis-fabrication-station/package.nix
-      { };
 }

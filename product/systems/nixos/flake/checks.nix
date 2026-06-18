@@ -177,20 +177,6 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     libretroWasm4Package = self.packages.${system}.libretro-wasm4;
   };
-  smb-remastered-check = import ../../../../product/vendor/super-mario-bros-remastered/check.nix {
-    inherit pkgs;
-    smbRemasteredPackage = self.packages.${system}.smb-remastered;
-  };
-  super-mario-127-check = import ../../../../product/vendor/super-mario-127/check.nix {
-    inherit pkgs;
-    superMario127Package = self.packages.${system}.super-mario-127;
-  };
-  yoshis-fabrication-station-check =
-    import ../../../../product/vendor/yoshis-fabrication-station/check.nix
-      {
-        inherit pkgs;
-        yfsPackage = self.packages.${system}.yoshis-fabrication-station;
-      };
 }
 // pkgs.lib.optionalAttrs isX86Linux {
   korri-sm8550-kiosk-config =
@@ -388,14 +374,6 @@ pkgs.lib.optionalAttrs isX86Linux {
       }
       {
         name = "libretro-wasm4-check";
-        owner = "package-output";
-      }
-      {
-        name = "smb-remastered-check";
-        owner = "package-output";
-      }
-      {
-        name = "super-mario-127-check";
         owner = "package-output";
       }
       {

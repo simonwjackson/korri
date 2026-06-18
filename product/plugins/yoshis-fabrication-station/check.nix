@@ -11,7 +11,9 @@ let
     (builtins.elem "enableAudio" (pkg.passthru.launchSettings or [ ]))
     (builtins.elem "VolumeBGM" (pkg.passthru.launchSettings or [ ]))
   ];
-  failures = pkgs.lib.imap0 (i: ok: if ok then null else "metadata check ${toString i} failed") checks;
+  failures = pkgs.lib.imap0 (
+    i: ok: if ok then null else "metadata check ${toString i} failed"
+  ) checks;
   failureText = pkgs.lib.concatStringsSep "\n" (builtins.filter (x: x != null) failures);
 in
 if failureText != "" then

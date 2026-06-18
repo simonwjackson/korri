@@ -6,6 +6,7 @@
   pluginRoot ? ../../../../product/plugins,
   gamescopePackage ? null,
   controlBridgePackage ? null,
+  pluginArgs ? { },
 }:
 
 let
@@ -27,7 +28,7 @@ let
       controlBridgePackage
       ;
     pluginPackages = packages;
-  };
+  } // pluginArgs;
 
   callComposition =
     path:
