@@ -10,6 +10,13 @@ let
   # first-party libretro cores that nixpkgs already provides. Keep this as a
   # flag-free symlinkJoin; Korri's launch materializer passes exactly one
   # `-L <core> <content>` pair per foreground launch.
+  ppssppCore = pkgs.libretro.ppsspp.overrideAttrs (old: {
+    # nixpkgs marks libretro-ppsspp as aarch64-linux-bad even though PPSSPP is
+    # the only first-party Libretro PSP core and Sobo's SM8550 target should be
+    # able to build/run it. Keep the override local to this plugin-owned bundle.
+    meta = old.meta // { badPlatforms = [ ]; };
+  });
+
   retroarchKiosk = pkgs.symlinkJoin {
     name = "korri-retroarch";
     paths = [
@@ -18,6 +25,7 @@ let
       pkgs.libretro.genesis-plus-gx
       pkgs.libretro.mesen
       pkgs.libretro.pcsx-rearmed
+      ppssppCore
       pkgs.libretro.bsnes
     ];
     passthru = {
@@ -26,6 +34,7 @@ let
         pkgs.libretro.genesis-plus-gx
         pkgs.libretro.mesen
         pkgs.libretro.pcsx-rearmed
+        ppssppCore
         pkgs.libretro.bsnes
       ];
       unwrapped = pkgs.retroarch-bare;
@@ -47,6 +56,8 @@ in
       "${pkgs.libretro.mesen}/lib/retroarch/cores/mesen_libretro.so";
     environment.etc."korri/cores/pcsx_rearmed_libretro.so".source =
       "${pkgs.libretro.pcsx-rearmed}/lib/retroarch/cores/pcsx_rearmed_libretro.so";
+    environment.etc."korri/cores/ppsspp_libretro.so".source =
+      "${ppssppCore}/lib/retroarch/cores/ppsspp_libretro.so";
     environment.etc."korri/cores/bsnes_libretro.so".source =
       "${pkgs.libretro.bsnes}/lib/retroarch/cores/bsnes_libretro.so";
 
