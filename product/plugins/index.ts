@@ -14,6 +14,7 @@ import { fixtureAcquisitionPlugins } from "./acquisition-fixtures"
 import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin } from "./gamescope"
 import { createGamescopeSessionLifecycleHook } from "./gamescope/src/session/lifecycle-hook"
+import { itchioPlugin } from "./itchio"
 import { levelShareSquarePlugin } from "./levelsharesquare"
 import { megaManArenaPlugin } from "./mega-man-arena"
 import { megaManMakerPlugin } from "./mega-man-maker"
@@ -114,6 +115,7 @@ export const firstPartyPlugins = [
   megaManMakerPlugin,
   midasMachinePlugin,
   levelShareSquarePlugin,
+  itchioPlugin,
   srb2Plugin,
   smbxGamePlugin,
   smwCentralPlugin,

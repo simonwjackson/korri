@@ -735,7 +735,6 @@ export const wasm4GalleryFixturePlugin = fixtureAcquisitionPlugin({
 export const fixtureAcquisitionPlugins = [
   chip8ArchiveFixturePlugin,
   homebrewHubFixturePlugin,
-  itchioFixturePlugin,
   puzzleScriptFixturePlugin,
   retrobrewsFixturePlugin,
   tic80GalleryFixturePlugin,

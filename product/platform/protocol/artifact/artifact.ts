@@ -8,8 +8,7 @@ const SOURCE_DATA_NAMESPACE =
   /^[a-z][a-z0-9-]*(?:\.(?!v[1-9][0-9]*(?:\.|$))[a-z][a-z0-9-]*)*\.v[1-9][0-9]*$/
 const SEMANTIC_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
 const SAFE_EXTENSION = /^[a-z0-9][a-z0-9-]{0,31}$/
-const BASE64 =
-  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+const BASE64_CHARACTERS = /^[A-Za-z0-9+/]*={0,2}$/
 
 export const ArtifactId = Schema.String.check(
   Schema.isPattern(/^sha256:[a-f0-9]{64}$/),
@@ -240,7 +239,12 @@ export type SourceData = Schema.Schema.Type<typeof SourceData>
 export const Base64Bytes = Schema.String.check(
   Schema.makeFilter(value => {
     if (value.length === 0) return "bytes must not be empty"
-    if (!BASE64.test(value)) return "bytes must be base64 encoded"
+    if (value.length % 4 !== 0) return "bytes must be base64 encoded"
+    if (!BASE64_CHARACTERS.test(value)) return "bytes must be base64 encoded"
+    const paddingIndex = value.indexOf("=")
+    if (paddingIndex >= 0 && !/^={1,2}$/.test(value.slice(paddingIndex))) {
+      return "bytes must be base64 encoded"
+    }
     return undefined
   }),
 )

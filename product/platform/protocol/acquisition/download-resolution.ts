@@ -9,6 +9,9 @@ const ProviderId = Schema.String.pipe(
 export const ResolveDownloadRequest = Schema.Struct({
   providerId: ProviderId,
   candidateUrl: Schema.String,
+  fileName: Schema.optional(Schema.String),
+  size: Schema.optional(Schema.String),
+  artifactFormat: Schema.optional(Schema.String),
 })
 export type ResolveDownloadRequest = Schema.Schema.Type<
   typeof ResolveDownloadRequest
@@ -21,6 +24,14 @@ export const FinalDownloadResolution = Schema.TaggedStruct("FinalDownload", {
   contentType: Schema.optional(Schema.String),
 })
 
+export const DownloadChoice = Schema.Struct({
+  id: Schema.String,
+  fileName: Schema.optional(Schema.String),
+  size: Schema.optional(Schema.String),
+  platforms: Schema.optional(Schema.Array(Schema.String)),
+})
+export type DownloadChoice = Schema.Schema.Type<typeof DownloadChoice>
+
 export const NonFinalDownloadResolution = Schema.TaggedStruct(
   "NonFinalDownload",
   {
@@ -31,6 +42,7 @@ export const NonFinalDownloadResolution = Schema.TaggedStruct(
       "unsupported",
     ]),
     url: Schema.optional(Schema.String),
+    choices: Schema.optional(Schema.Array(DownloadChoice)),
   },
 )
 

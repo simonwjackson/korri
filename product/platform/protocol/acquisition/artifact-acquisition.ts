@@ -25,6 +25,9 @@ const ProviderId = Schema.String.pipe(
 export const AcquireArtifactRequest = Schema.Struct({
   providerId: ProviderId,
   id: Schema.String,
+  fileName: Schema.optional(Schema.String),
+  size: Schema.optional(Schema.String),
+  artifactFormat: Schema.optional(Schema.String),
 })
 export type AcquireArtifactRequest = Schema.Schema.Type<
   typeof AcquireArtifactRequest

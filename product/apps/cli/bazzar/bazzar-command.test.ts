@@ -146,7 +146,16 @@ describe("korri bazzar command routing", () => {
       "validate-providers",
       ["--providers", "--timeout", "--log-level", "--log-json"],
     ],
-    ["acquire", ["--log-level", "--log-json"]],
+    [
+      "acquire",
+      [
+        "--file-name",
+        "--size",
+        "--artifact-format",
+        "--log-level",
+        "--log-json",
+      ],
+    ],
     [
       "resolve-download",
       [
@@ -238,6 +247,201 @@ describe("korri bazzar command routing", () => {
     expect(envelope.data).not.toHaveProperty("game")
     expect(envelope.data).not.toHaveProperty("libraryRecord")
     expect(envelope.data).not.toHaveProperty("launchSpec")
+  })
+
+  it("passes acquire artifact hints through to the acquisition service", async () => {
+    let captured: unknown
+    const layer = makeInMemoryAcquisitionLayer({
+      search: () => Effect.succeed({ claims: [] }),
+      details: () => Effect.die("unused"),
+      detailsByUrl: () => Effect.die("unused"),
+      providers: () => Effect.succeed({ providers: [] }),
+      validateProviders: () => Effect.succeed({ providers: [] }),
+      resolveDownload: () => Effect.die("unused"),
+      acquireArtifact: request => {
+        captured = request
+        return Effect.succeed({
+          id: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          kind: "content",
+          format: { id: "itchio-public-download" },
+          file: { name: "xmoon.love", extension: "love" },
+          stagedPath: "/tmp/korri/acquisition/xmoon.love",
+          digests: {
+            sha256:
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          },
+        })
+      },
+    })
+
+    const result = await captureCliOutput(() =>
+      Effect.runPromise(
+        Command.runWith(bazzarCommand, { version: "test" })([
+          "acquire",
+          "@korri:itchio",
+          "https://leafo.itch.io/x-moon",
+          "--file-name",
+          "xmoon.love",
+          "--artifact-format",
+          "love",
+        ]).pipe(Effect.provide(layer), Effect.provide(BunServices.layer)),
+      ),
+    )
+
+    expect(result.exitCode).toBe(0)
+    expect(captured).toEqual({
+      providerId: "@korri:itchio",
+      id: "https://leafo.itch.io/x-moon",
+      fileName: "xmoon.love",
+      artifactFormat: "love",
+    })
+  })
+
+  it("emits non-final download choices for retryable handoffs", async () => {
+    const layer = makeInMemoryAcquisitionLayer({
+      search: () => Effect.succeed({ claims: [] }),
+      details: () => Effect.die("unused"),
+      detailsByUrl: () => Effect.die("unused"),
+      providers: () => Effect.succeed({ providers: [] }),
+      validateProviders: () => Effect.succeed({ providers: [] }),
+      acquireArtifact: () => Effect.die("unused"),
+      resolveDownload: () =>
+        Effect.succeed({
+          _tag: "NonFinalDownload",
+          providerId: "@korri:itchio",
+          reason: "requires-user-action",
+          url: "https://leafo.itch.io/x-moon",
+          choices: [
+            { id: "2", fileName: "xmoon-win32.zip", platforms: ["windows"] },
+            { id: "3", fileName: "xmoon.love", platforms: ["linux", "macos"] },
+          ],
+        }),
+    })
+
+    const result = await captureCliOutput(() =>
+      Effect.runPromise(
+        Command.runWith(bazzarCommand, { version: "test" })([
+          "resolve-download",
+          "@korri:itchio",
+          "https://leafo.itch.io/x-moon",
+          "--title",
+          "X-Moon",
+        ]).pipe(Effect.provide(layer), Effect.provide(BunServices.layer)),
+      ),
+    )
+
+    expect(result.exitCode).toBe(11)
+    const envelope = parseSingleJsonLine(result.stdout) as {
+      data: { outcome: { choices: unknown } }
+    }
+    expect(envelope.data.outcome.choices).toEqual([
+      { id: "2", fileName: "xmoon-win32.zip", platforms: ["windows"] },
+      { id: "3", fileName: "xmoon.love", platforms: ["linux", "macos"] },
+    ])
+  })
+
+  it("covers the itch.io CLI search/details/resolve/acquire happy path", async () => {
+    const claim = {
+      _tag: "ProviderClaim" as const,
+      providerId: "@korri:itchio",
+      id: "jonnys-games/slide-in-the-woods",
+      title: "Slide in the woods",
+      url: "https://jonnys-games.itch.io/slide-in-the-woods",
+      platform: "windows",
+    }
+    const layer = makeInMemoryAcquisitionLayer({
+      search: () => Effect.succeed({ claims: [claim] }),
+      detailsByUrl: () => Effect.die("unused"),
+      details: () =>
+        Effect.succeed({
+          _tag: "ProviderClaimDetails" as const,
+          providerId: "@korri:itchio",
+          id: claim.id,
+          title: claim.title,
+          url: claim.url,
+          downloadPageUrl: claim.url,
+        }),
+      providers: () => Effect.succeed({ providers: [] }),
+      validateProviders: () => Effect.succeed({ providers: [] }),
+      resolveDownload: request =>
+        Effect.succeed({
+          _tag: "FinalDownload" as const,
+          providerId: request.providerId,
+          url: "https://cdn.example.com/slide.zip",
+          filename: request.fileName ?? "slide.zip",
+        }),
+      acquireArtifact: () =>
+        Effect.succeed({
+          id: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          kind: "content",
+          format: { id: "itchio-public-download" },
+          file: { name: "slide.zip", extension: "zip" },
+          stagedPath: "/tmp/korri/acquisition/slide.zip",
+          digests: {
+            sha256:
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          },
+        }),
+    })
+    const run = (args: readonly string[]) =>
+      captureCliOutput(() =>
+        Effect.runPromise(
+          Command.runWith(bazzarCommand, { version: "test" })(args).pipe(
+            Effect.provide(layer),
+            Effect.provide(BunServices.layer),
+          ),
+        ),
+      )
+
+    const search = await run([
+      "search",
+      "slide in the woods",
+      "--providers",
+      "@korri:itchio",
+      "--format",
+      "json",
+    ])
+    expect(JSON.parse(search.stdout)).toContainEqual(
+      expect.objectContaining({ providerId: "@korri:itchio", id: claim.id }),
+    )
+
+    const details = await run([
+      "details",
+      "@korri:itchio:jonnys-games/slide-in-the-woods",
+    ])
+    expect(JSON.parse(details.stdout)).toMatchObject({
+      providerId: "@korri:itchio",
+      id: claim.id,
+    })
+
+    const resolved = await run([
+      "resolve-download",
+      "@korri:itchio",
+      claim.url,
+      "--title",
+      claim.title,
+      "--file-name",
+      "slide.zip",
+    ])
+    expectFinalDownloadEnvelope(resolved, {
+      name: "slide.zip",
+      url: "https://cdn.example.com/slide.zip",
+    })
+
+    const acquired = await run([
+      "acquire",
+      "@korri:itchio",
+      claim.url,
+      "--file-name",
+      "slide.zip",
+    ])
+    const acquiredEnvelope = parseSingleJsonLine(acquired.stdout) as {
+      data: { artifact: { format: { id: string }; file: { name: string } } }
+    }
+    expect(acquiredEnvelope.data.artifact).toMatchObject({
+      format: { id: "itchio-public-download" },
+      file: { name: "slide.zip" },
+    })
   })
 
   it("requires resolve-download title flag for Bazzar compatibility", async () => {
@@ -540,28 +744,16 @@ describe("korri bazzar command routing", () => {
     })
   }
 
-  it("keeps credential-gated itch.io safe without credentials", async () => {
+  it("keeps public itch.io safe without credentials", async () => {
     const plugins = JSON.parse(
       (await runCli(["bazzar", "plugins", "--format", "json"])).stdout,
     ) as Array<{ providerId: string; credentialRequired: boolean }>
     expect(plugins).toContainEqual(
       expect.objectContaining({
         providerId: "@korri:itchio",
-        credentialRequired: true,
+        credentialRequired: false,
       }),
     )
-
-    const details = await runCli([
-      "bazzar",
-      "details",
-      "@korri:itchio:creator/game",
-    ])
-    expect(details.exitCode).toBe(21)
-    expect(details.stdout).toBe("")
-    expect(details.stderr).toContain(
-      "Unknown @korri:itchio candidate: creator/game",
-    )
-    expect(details.stderr).not.toContain("not wired yet")
 
     const resolution = await runCli([
       "bazzar",
@@ -574,7 +766,6 @@ describe("korri bazzar command routing", () => {
     expectSourceFailureEnvelope(resolution, {
       status: "access_required",
       reason: "requires-user-action",
-      handoffUrl: "https://creator.itch.io/game",
     })
   })
 

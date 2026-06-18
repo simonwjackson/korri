@@ -9,6 +9,7 @@ export interface AcquisitionClock {
 export interface AcquisitionPluginContext {
   readonly clock: AcquisitionClock
   readonly logger: AcquisitionLogger
+  readonly env?: XdgPathEnv
 }
 
 export interface AcquisitionRuntimeOptions {
@@ -23,5 +24,6 @@ export function createAcquisitionPluginContext(
   return {
     clock: options.clock ?? { nowIso: () => new Date().toISOString() },
     logger: options.logger ?? silentAcquisitionLogger,
+    env: options.env ?? process.env,
   }
 }

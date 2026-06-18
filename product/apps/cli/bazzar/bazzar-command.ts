@@ -225,14 +225,28 @@ const acquireCommand = Command.make(
   {
     provider: Argument.string("provider"),
     id: Argument.string("id"),
+    fileName: Flag.optional(Flag.string("file-name")),
+    size: Flag.optional(Flag.string("size")),
+    artifactFormat: Flag.optional(Flag.string("artifact-format")),
     logLevel: logLevelFlag,
     logJson: logJsonFlag,
   },
-  ({ provider, id }) =>
+  ({ provider, id, fileName, size, artifactFormat }) =>
     Effect.gen(function* () {
       const acquisition = yield* Acquisition
+      const requestedFileName = Option.getOrUndefined(fileName)
+      const requestedSize = Option.getOrUndefined(size)
+      const requestedArtifactFormat = Option.getOrUndefined(artifactFormat)
       const response = yield* acquisition
-        .acquireArtifact({ providerId: provider, id })
+        .acquireArtifact({
+          providerId: provider,
+          id,
+          ...(requestedFileName ? { fileName: requestedFileName } : {}),
+          ...(requestedSize ? { size: requestedSize } : {}),
+          ...(requestedArtifactFormat
+            ? { artifactFormat: requestedArtifactFormat }
+            : {}),
+        })
         .pipe(toResult)
       if (response._tag === "Left") {
         printStderr(safeErrorMessage(response.left))
@@ -267,8 +281,19 @@ const resolveDownloadCommand = Command.make(
     Effect.gen(function* () {
       const acquisition = yield* Acquisition
       const checkedAt = nowIso()
+      const requestedFileName = Option.getOrUndefined(fileName)
+      const requestedSize = Option.getOrUndefined(size)
+      const requestedArtifactFormat = Option.getOrUndefined(artifactFormat)
       const response = yield* acquisition
-        .resolveDownload({ providerId: provider, candidateUrl })
+        .resolveDownload({
+          providerId: provider,
+          candidateUrl,
+          ...(requestedFileName ? { fileName: requestedFileName } : {}),
+          ...(requestedSize ? { size: requestedSize } : {}),
+          ...(requestedArtifactFormat
+            ? { artifactFormat: requestedArtifactFormat }
+            : {}),
+        })
         .pipe(toResult)
       const outcome =
         response._tag === "Right"
@@ -277,9 +302,9 @@ const resolveDownloadCommand = Command.make(
               checkedAt,
               title,
               site: Option.getOrUndefined(site),
-              fileName: Option.getOrUndefined(fileName),
-              size: Option.getOrUndefined(size),
-              artifactFormat: Option.getOrUndefined(artifactFormat),
+              fileName: requestedFileName,
+              size: requestedSize,
+              artifactFormat: requestedArtifactFormat,
             })
           : resolutionErrorOutcome({
               error: response.left,
@@ -534,6 +559,7 @@ function nonFinalResolutionOutcome({
     checkedAt,
     status: nonFinalStatus(resolution.reason),
     ...(resolution.url ? { handoffUrl: resolution.url } : {}),
+    ...(resolution.choices ? { choices: resolution.choices } : {}),
     reason: resolution.reason,
   }
 }
