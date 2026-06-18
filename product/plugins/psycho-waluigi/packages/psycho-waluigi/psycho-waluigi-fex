@@ -62,7 +62,7 @@ if [ "${PWL_USE_PROTON_GE:-1}" = "1" ]; then
   export PROTON_USE_XALIA="${PROTON_USE_XALIA:-0}"
   export WINEDLLPATH="$KORRI_PROTON_GE_RUNTIME_FILES/lib/wine/i386-windows:$KORRI_PROTON_GE_RUNTIME_FILES/lib/wine/dxvk/i386-windows${WINEDLLPATH:+:$WINEDLLPATH}"
   export WINEDLLOVERRIDES="${PWL_WINEDLLOVERRIDES:-ddraw,d3d8,d3d9,dxgi=b;d3d11=n,b}"
-  if [ "${PWL_USE_PROTON_GE_SCRIPT:-0}" = "1" ]; then
+  if [ "${PWL_USE_PROTON_GE_SCRIPT:-1}" = "1" ]; then
     exec "$fex_bin" "$KORRI_PROTON_GE_RUNTIME_PYTHON" "$KORRI_PROTON_GE_RUNTIME_PROTON" waitforexitandrun "$run_dir/psychowaluigi.exe" "$@"
   fi
   exec "$fex_bin" "$KORRI_PROTON_GE_RUNTIME_FILES/bin/wine" psychowaluigi.exe "$@"

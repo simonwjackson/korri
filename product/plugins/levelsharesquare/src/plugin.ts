@@ -1,16 +1,20 @@
+import { AcquisitionError } from "@platform/acquisition/errors"
+import type { ProviderId } from "@platform/plugin"
+import { plugin } from "@platform/plugin"
 import type { PluginAcquireOutput } from "@platform/protocol/acquisition/artifact-acquisition"
 import type {
   ArtifactAcquisitionHint,
   ProviderClaim,
   ProviderClaimDetails,
-} from "@platform/protocol/acquisition/candidate"
+} from "@platform/protocol/acquisition/claim"
+import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import type { ArtifactFacets } from "@platform/protocol/artifact/artifact"
 import { Effect } from "effect"
-import { AcquisitionError } from "../errors"
-import type { AcquisitionPluginContext } from "../plugin-runtime"
-import type { AcquisitionPluginDefinition } from "./registry"
 
-const PROVIDER_ID = "@korri:levelsharesquare"
+export const KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID =
+  "@korri:levelsharesquare" as const
+
+const PROVIDER_ID = KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID
 const DISPLAY_NAME = "Level Share Square"
 const DEFAULT_BASE_URL = "https://levelsharesquare.com"
 const SMBR_INTERNAL_GAME_ID = 5
@@ -80,60 +84,163 @@ const smbrArtifactHint = (file?: ArtifactAcquisitionHint["file"]) => ({
   ...(file ? { file } : {}),
 })
 
-export function createLevelShareSquarePluginDefinition(
+export function createLevelShareSquarePlugin(
   options: LevelShareSquarePluginOptions = {},
-): AcquisitionPluginDefinition {
+) {
   const runtime = createRuntime(options)
-  return {
-    metadata: {
-      providerId: PROVIDER_ID,
-      displayName: DISPLAY_NAME,
-      module: "product/platform/acquisition/plugins/levelsharesquare",
-      builtIn: true,
-      enabledByDefault: true,
-      legalRisk: "medium",
-      credentialRequired: false,
+  return plugin({
+    namespace: "@korri",
+    name: "levelsharesquare",
+    title: DISPLAY_NAME,
+    description:
+      "Adds Level Share Square SMBR level search and acquisition for Super Mario Bros. Remastered.",
+    requires: [
+      {
+        capability: "smbr.package",
+        ref: {
+          provider: "@korri:super-mario-bros-remastered",
+          id: "self",
+        },
+        reason:
+          "Level Share Square SMBR levels need the SMBR game package to play.",
+      },
+    ],
+    contributes: {
+      handlers: [
+        {
+          id: "levelsharesquare.claims-search",
+          operation: "claims.search",
+          capabilities: ["claims.search", "levelsharesquare", "smbr"],
+          run: context => {
+            const input = readRecord(context.input)
+            const query = typeof input.query === "string" ? input.query : ""
+            const platforms = Array.isArray(input.platforms)
+              ? input.platforms.filter(
+                  (platform): platform is string =>
+                    typeof platform === "string",
+                )
+              : undefined
+            return searchLevelShareSquare(
+              runtime,
+              context.provider,
+              query,
+              platforms,
+            )
+          },
+        },
+        {
+          id: "levelsharesquare.claims-details",
+          operation: "claims.details",
+          capabilities: ["claims.details", "levelsharesquare", "smbr"],
+          run: context => {
+            const input = readRecord(context.input)
+            const id = stringField(input, "id")
+            return Effect.gen(function* () {
+              yield* fetchSmbrGame(runtime)
+              const level = yield* fetchLevelDetails(runtime, id)
+              return yield* decodeLssShape(() =>
+                detailsFor(runtime, context.provider, level),
+              )
+            })
+          },
+        },
+        {
+          id: "levelsharesquare.claims-parse-url",
+          operation: "claims.parse-url",
+          capabilities: ["claims.parse-url", "levelsharesquare", "smbr"],
+          run: context => {
+            const input = readRecord(context.input)
+            const url = typeof input.url === "string" ? input.url : ""
+            return parseLevelShareSquareCandidateUrl(url, runtime)
+          },
+        },
+        {
+          id: "levelsharesquare.provider-validate",
+          operation: "provider.validate",
+          capabilities: ["provider.validate", "levelsharesquare", "smbr"],
+          run: context => {
+            const input = readRecord(context.input)
+            return fetchSmbrGame(runtime).pipe(
+              Effect.map(
+                () =>
+                  ({
+                    _tag: "HealthyProvider" as const,
+                    providerId: context.provider,
+                    checkedAt:
+                      typeof input.checkedAt === "string"
+                        ? input.checkedAt
+                        : new Date(0).toISOString(),
+                  }) satisfies ProviderHealth,
+              ),
+            )
+          },
+        },
+        {
+          id: "levelsharesquare.artifact-acquire",
+          operation: "artifact.acquire",
+          capabilities: ["artifact.acquire", "levelsharesquare", "smbr"],
+          run: context => {
+            const input = readRecord(context.input)
+            const id = stringField(input, "id")
+            return Effect.gen(function* () {
+              const game = yield* fetchSmbrGame(runtime)
+              const level = yield* fetchLevelDetails(runtime, id)
+              const bytes = yield* fetchLevelBytes(runtime, id)
+              return yield* decodeLssShape(() =>
+                acquireOutputFor({
+                  runtime,
+                  providerId: context.provider,
+                  acquiredAt: new Date().toISOString(),
+                  game,
+                  level,
+                  bytes,
+                }),
+              )
+            })
+          },
+        },
+        {
+          id: "levelsharesquare.diagnostics",
+          operation: "diagnostics.collect",
+          capabilities: ["levelsharesquare", "smbr"],
+          run: context => ({
+            provider: context.provider,
+            status: "ok",
+            game: "Super Mario Bros. Remastered",
+            system: SMBR_SYSTEM,
+          }),
+        },
+      ],
     },
-    parseCandidateUrl: url => parseLevelShareSquareCandidateUrl(url, runtime),
-    search: (_context, request) =>
-      Effect.gen(function* () {
-        yield* fetchSmbrGame(runtime)
-        const payload = yield* fetchJson(
-          runtime,
-          `/api/levels/filter/get?page=1&game=${SMBR_INTERNAL_GAME_ID}&search=${encodeURIComponent(request.query)}`,
-        )
-        return yield* decodeLssShape(() =>
-          levelsFromSearch(payload).map(level => candidateFor(runtime, level)),
-        )
-      }),
-    details: (_context, request) =>
-      Effect.gen(function* () {
-        yield* fetchSmbrGame(runtime)
-        const level = yield* fetchLevelDetails(runtime, request.id)
-        return yield* decodeLssShape(() => detailsFor(runtime, level))
-      }),
-    validateProvider: context =>
-      fetchSmbrGame(runtime).pipe(
-        Effect.map(() => ({
-          _tag: "HealthyProvider" as const,
-          providerId: PROVIDER_ID,
-          checkedAt: context.checkedAt,
-        })),
-      ),
-    acquireArtifact: (context, request) =>
-      Effect.gen(function* () {
-        const game = yield* fetchSmbrGame(runtime)
-        const level = yield* fetchLevelDetails(runtime, request.id)
-        const bytes = yield* fetchLevelBytes(runtime, request.id)
-        return yield* decodeLssShape(() =>
-          acquireOutputFor({ runtime, context, game, level, bytes }),
-        )
-      }),
-  }
+  })
 }
 
-export const levelShareSquarePluginDefinition =
-  createLevelShareSquarePluginDefinition()
+export const levelShareSquarePlugin = createLevelShareSquarePlugin()
+
+function searchLevelShareSquare(
+  runtime: LevelShareSquareRuntime,
+  providerId: ProviderId,
+  query: string,
+  platforms?: readonly string[],
+): Effect.Effect<readonly ProviderClaim[], AcquisitionError> {
+  if (query.trim().length === 0) return Effect.succeed([])
+  if (platforms && platforms.length > 0 && !platforms.includes(SMBR_SYSTEM)) {
+    return Effect.succeed([])
+  }
+
+  return Effect.gen(function* () {
+    yield* fetchSmbrGame(runtime)
+    const payload = yield* fetchJson(
+      runtime,
+      `/api/levels/filter/get?page=1&game=${SMBR_INTERNAL_GAME_ID}&search=${encodeURIComponent(query)}`,
+    )
+    return yield* decodeLssShape(() =>
+      levelsFromSearch(payload).map(level =>
+        candidateFor(runtime, providerId, level),
+      ),
+    )
+  })
+}
 
 export function parseLevelShareSquareCandidateUrl(
   input: string,
@@ -294,12 +401,13 @@ function fetchJson(
 
 function candidateFor(
   runtime: LevelShareSquareRuntime,
+  providerId: ProviderId,
   level: LssLevel,
 ): ProviderClaim {
   const id = requiredString(level._id ?? level.id, "level id")
   return {
     _tag: "ProviderClaim",
-    providerId: PROVIDER_ID,
+    providerId,
     id,
     ref: { kind: "provider-item-id", value: id },
     title: requiredString(level.name ?? level.title, "level title"),
@@ -309,19 +417,20 @@ function candidateFor(
       extension: SMBR_EXTENSION,
       name: `${id}.lvl`,
     }),
-    playable: playableFor(runtime, level),
+    playable: playableFor(runtime, providerId, level),
   }
 }
 
 function detailsFor(
   runtime: LevelShareSquareRuntime,
+  providerId: ProviderId,
   level: LssLevel,
 ): ProviderClaimDetails {
   const id = requiredString(level._id ?? level.id, "level id")
   const description = stringValue(level.description)
   return withoutUndefined({
     _tag: "ProviderClaimDetails" as const,
-    providerId: PROVIDER_ID,
+    providerId,
     id,
     ref: { kind: "provider-item-id", value: id },
     title: requiredString(level.name ?? level.title, "level title"),
@@ -331,21 +440,25 @@ function detailsFor(
       name: `${id}.lvl`,
       extension: SMBR_EXTENSION,
     }),
-    playable: playableFor(runtime, level),
+    playable: playableFor(runtime, providerId, level),
     facets: facetsFor(runtime, level),
   })
 }
 
-function playableFor(runtime: LevelShareSquareRuntime, level: LssLevel) {
+function playableFor(
+  runtime: LevelShareSquareRuntime,
+  providerId: ProviderId,
+  level: LssLevel,
+) {
   const id = requiredString(level._id ?? level.id, "level id")
   return {
     id,
     title: requiredString(level.name ?? level.title, "level title"),
-    providerId: PROVIDER_ID,
+    providerId,
     releases: [
       {
         id: "smbr-level",
-        providerId: PROVIDER_ID,
+        providerId,
         system: SMBR_SYSTEM,
         target: levelUrl(runtime, id),
         apps: [{ id: "smbr" }],
@@ -356,13 +469,15 @@ function playableFor(runtime: LevelShareSquareRuntime, level: LssLevel) {
 
 function acquireOutputFor({
   runtime,
-  context,
+  providerId,
+  acquiredAt,
   game,
   level,
   bytes,
 }: {
   readonly runtime: LevelShareSquareRuntime
-  readonly context: AcquisitionPluginContext
+  readonly providerId: ProviderId
+  readonly acquiredAt: string
   readonly game: LssGame
   readonly level: LssLevel
   readonly bytes: Buffer
@@ -381,11 +496,11 @@ function acquireOutputFor({
     bytesBase64: bytes.toString("base64"),
     facets: facetsFor(runtime, level),
     provenance: {
-      source: PROVIDER_ID,
-      acquiredAt: context.clock.nowIso(),
+      source: providerId,
+      acquiredAt,
       url: levelUrl(runtime, id),
     },
-    externalIds: [{ namespace: PROVIDER_ID, id }],
+    externalIds: [{ namespace: providerId, id }],
     sourceData: {
       [SOURCE_DATA_NAMESPACE]: withoutUndefined({
         levelId: id,
@@ -505,6 +620,24 @@ function validateSmbrLevelBytes(bytes: Buffer): void {
 
 function levelUrl(runtime: LevelShareSquareRuntime, id: string): string {
   return `${runtime.webBaseUrl}/levels/${encodeURIComponent(id)}`
+}
+
+function readRecord(input: unknown): Readonly<Record<string, unknown>> {
+  if (typeof input === "object" && input !== null && !Array.isArray(input)) {
+    return input as Readonly<Record<string, unknown>>
+  }
+  return {}
+}
+
+function stringField(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+): string {
+  const value = input[key]
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${key} is required`)
+  }
+  return value
 }
 
 function requiredString(value: unknown, label: string): string {

@@ -241,7 +241,6 @@ describe("live acquisition service", () => {
       "@korri:chip8archive",
       "@korri:homebrewhub",
       "@korri:itchio",
-      "@korri:levelsharesquare",
       "@korri:portmaster",
       "@korri:puzzlescript",
       "@korri:retrobrews",

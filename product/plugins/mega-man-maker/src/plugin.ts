@@ -10,6 +10,9 @@ import type {
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
+import { KORRI_FEX_PLUGIN_ID } from "../../fex-runtime"
+import { KORRI_PROTON_GE_PLUGIN_ID } from "../../proton-ge-runtime"
+import { KORRI_PROTON_PLUGIN_ID } from "../../proton-runtime"
 
 export const KORRI_MEGA_MAN_MAKER_PLUGIN_ID = "@korri:mega-man-maker" as const
 
@@ -73,8 +76,59 @@ export function createMegaManMakerPlugin(
     name: "mega-man-maker",
     title: "Mega Man Maker",
     description:
-      "Adds Mega Man Maker explore search, level details, and .mmlv.gz download resolution.",
+      "Adds Mega Man Maker explore search, level details, .mmlv.gz download resolution, and the packaged Windows creator runtime.",
+    requires: [
+      {
+        capability: "runtime.resolve",
+        ref: { provider: KORRI_FEX_PLUGIN_ID, id: "linux-user" },
+        reason:
+          "Mega Man Maker's aarch64 launch path runs the Windows x86_64 payload through FEX.",
+      },
+      {
+        capability: "runtime.resolve",
+        ref: { provider: KORRI_PROTON_PLUGIN_ID, id: "proton-10" },
+        reason:
+          "Mega Man Maker's Windows payload uses Proton 10's wine64, DXVK, and VKD3D runtime files.",
+      },
+      {
+        capability: "runtime.resolve",
+        ref: { provider: KORRI_PROTON_GE_PLUGIN_ID, id: "ge-proton-10-34" },
+        reason:
+          "Mega Man Maker keeps the GloriousEggroll runtime lane available for compatibility debugging on Bandai.",
+      },
+    ],
     contributes: {
+      config: {
+        catalog: {
+          "mega-man-maker": {
+            id: "mega-man-maker",
+            title: "Mega Man Maker",
+            kind: "game",
+            releases: [
+              {
+                id: "windows-fex-proton",
+                title: "Mega Man Maker 1.10.4.2 for Windows via FEX/Proton",
+                launch: {
+                  kind: "process",
+                  executable: { resource: "mega-man-maker" },
+                  cwd: "/home/korri",
+                },
+              },
+            ],
+          },
+        },
+        modules: {
+          "mega-man-maker": {
+            id: "mega-man-maker",
+            kind: "executable",
+            fulfill: {
+              provider: "nix",
+              installable: ".#mega-man-maker",
+              binary: "mega-man-maker",
+            },
+          },
+        },
+      },
       handlers: [
         {
           id: "mega-man-maker.claims-search",

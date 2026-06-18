@@ -1,5 +1,8 @@
 import { plugin } from "@platform/plugin"
 
+export const KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID =
+  "@korri:super-mario-bros-remastered" as const
+
 export const superMarioBrosRemasteredPlugin = plugin({
   namespace: "@korri",
   name: "super-mario-bros-remastered",

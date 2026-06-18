@@ -93,6 +93,7 @@ else
       grep -q 'UMU_ID' ${payload}/bin/psycho-waluigi-fex
       grep -q 'PROTON_USE_XALIA' ${payload}/bin/psycho-waluigi-fex
       grep -q 'KORRI_PROTON_GE_RUNTIME_FILES' ${payload}/bin/psycho-waluigi-fex
+      grep -q 'PWL_USE_PROTON_GE_SCRIPT:-1' ${payload}/bin/psycho-waluigi-fex
       grep -q '/bin/wine' ${payload}/bin/psycho-waluigi-fex
       grep -q 'i386-windows' ${payload}/bin/psycho-waluigi-fex
 

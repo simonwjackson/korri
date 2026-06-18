@@ -5,8 +5,10 @@ import {
 } from "@platform/plugin/registry"
 import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin } from "./gamescope"
+import { levelShareSquarePlugin } from "./levelsharesquare"
 import { megaManArenaPlugin } from "./mega-man-arena"
 import { megaManMakerPlugin } from "./mega-man-maker"
+import { midasMachinePlugin } from "./midas-machine"
 import { neverballPlugin } from "./neverball"
 import { pico8BbsPlugin } from "./pico8-bbs"
 import { protonGeRuntimePlugin } from "./proton-ge-runtime"
@@ -28,6 +30,8 @@ export const firstPartyPlugins = [
   neverballPlugin,
   megaManArenaPlugin,
   megaManMakerPlugin,
+  midasMachinePlugin,
+  levelShareSquarePlugin,
   srb2Plugin,
   pico8BbsPlugin,
   psychoWaluigiPlugin,

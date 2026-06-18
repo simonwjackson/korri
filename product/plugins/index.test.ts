@@ -3,14 +3,17 @@ import { executableResources } from "@platform/plugin/registry"
 import { createFirstPartyPluginRegistryFromEnv, firstPartyPlugins } from "."
 import { KORRI_FEX_PLUGIN_ID } from "./fex-runtime"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
+import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "./levelsharesquare"
 import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "./mega-man-arena"
 import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "./mega-man-maker"
+import { KORRI_MIDAS_MACHINE_PLUGIN_ID } from "./midas-machine"
 import { KORRI_PICO8_BBS_PLUGIN_ID } from "./pico8-bbs"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
 import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
 import { KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
 import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
+import { KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID } from "./super-mario-bros-remastered"
 
 describe("first-party plugins", () => {
   it("registers Gamescope as a first-party handler/config plugin", () => {
@@ -58,6 +61,9 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_MEGA_MAN_MAKER_PLUGIN_ID)).toBe(
       false,
     )
+    expect(
+      registry.enabledPluginIds.has(KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID),
+    ).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PSYCHO_WALUIGI_PLUGIN_ID)).toBe(
       false,
     )
@@ -79,6 +85,26 @@ describe("first-party plugins", () => {
     ).toMatchObject({
       kind: "launch-wrapper",
     })
+  })
+
+  it("enables SMBR package when Level Share Square is explicitly requested", () => {
+    const registry = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID,
+    })
+
+    expect(
+      registry.enabledPluginIds.has(KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID),
+    ).toBe(true)
+    expect(
+      registry.enabledPluginIds.has(
+        KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID,
+      ),
+    ).toBe(true)
+    expect(
+      registry.catalog[
+        `${KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID}/super-mario-bros-remastered`
+      ],
+    ).toMatchObject({ title: "Super Mario Bros. Remastered" })
   })
 
   it("enables Ryubing when composition explicitly opts in", () => {
@@ -153,7 +179,7 @@ describe("first-party plugins", () => {
   it("preserves env-enabled first-party catalog plugins", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS:
-        "@korri:neverball,@korri:mega-man-arena,@korri:srb2,@korri:psycho-waluigi,@korri:mega-man-maker",
+        "@korri:neverball,@korri:mega-man-arena,@korri:srb2,@korri:psycho-waluigi,@korri:mega-man-maker,@korri:midas-machine",
     })
 
     expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
@@ -166,6 +192,9 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_MEGA_MAN_MAKER_PLUGIN_ID)).toBe(
       true,
     )
+    expect(registry.enabledPluginIds.has(KORRI_MIDAS_MACHINE_PLUGIN_ID)).toBe(
+      true,
+    )
     expect(registry.enabledPluginIds.has(KORRI_PSYCHO_WALUIGI_PLUGIN_ID)).toBe(
       true,
     )
@@ -175,11 +204,20 @@ describe("first-party plugins", () => {
     expect(Object.keys(registry.catalog)).toEqual([
       "@korri:neverball/neverball",
       "@korri:mega-man-arena/mega-man-arena",
+      "@korri:mega-man-maker/mega-man-maker",
+      "@korri:midas-machine/midas-machine",
       "@korri:srb2/srb2",
       "@korri:psycho-waluigi/psycho-waluigi",
     ])
     expect(
       executableResources(registry).map(entry => entry.resource.id),
-    ).toEqual(["neverball", "mega-man-arena", "srb2", "psycho-waluigi"])
+    ).toEqual([
+      "neverball",
+      "mega-man-arena",
+      "mega-man-maker",
+      "midas-machine",
+      "srb2",
+      "psycho-waluigi",
+    ])
   })
 })

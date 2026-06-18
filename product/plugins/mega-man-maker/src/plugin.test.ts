@@ -77,6 +77,33 @@ describe("Mega Man Maker plugin", () => {
       ],
     ).toMatchObject({ title: "Mega Man Maker" })
     expect(
+      megaManMakerPlugin.contributes.config.catalog?.["mega-man-maker"],
+    ).toMatchObject({
+      id: "mega-man-maker",
+      title: "Mega Man Maker",
+      releases: [
+        {
+          id: "windows-fex-proton",
+          launch: {
+            kind: "process",
+            executable: { resource: "mega-man-maker" },
+            cwd: "/home/korri",
+          },
+        },
+      ],
+    })
+    expect(
+      megaManMakerPlugin.contributes.config.modules?.["mega-man-maker"],
+    ).toMatchObject({
+      id: "mega-man-maker",
+      kind: "executable",
+      fulfill: {
+        provider: "nix",
+        installable: ".#mega-man-maker",
+        binary: "mega-man-maker",
+      },
+    })
+    expect(
       megaManMakerPlugin.handlers.map(handler => handler.operation),
     ).toEqual([
       "claims.search",

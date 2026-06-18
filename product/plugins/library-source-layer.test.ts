@@ -91,6 +91,86 @@ describe("PluginLibrarySourceLayerLive", () => {
     }
   })
 
+  it("exposes the enabled Mega Man Maker plugin through fulfilled resources", async () => {
+    const previous = snapshotEnv()
+    const stateRoot = await mktemp()
+    await seedMegaManMakerExecutable(stateRoot)
+    process.env.KORRI_CONFIG_ROOTS = ""
+    process.env.KORRI_ENABLED_PLUGINS = "@korri:mega-man-maker"
+    process.env.KORRI_PLUGIN_RESOURCE_ROOT = stateRoot
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const source = yield* LibrarySource
+          const listPlayableEntries = source.listPlayableEntries
+          if (!listPlayableEntries)
+            throw new Error("expected playable list support")
+          const entries = yield* listPlayableEntries()
+          const resolved = yield* source.resolveLaunchForGame(
+            "@korri:mega-man-maker/mega-man-maker",
+          )
+          return { entries, resolved }
+        }).pipe(Effect.provide(PluginLibrarySourceLayerLive)),
+      )
+
+      expect(result.entries.map(entry => entry.id)).toContain(
+        "@korri:mega-man-maker/mega-man-maker",
+      )
+      expect(result.resolved.spec.command).toBe(
+        join(
+          stateRoot,
+          "x406b6f7272693a6d6567612d6d616e2d6d616b6572",
+          "x6d6567612d6d616e2d6d616b6572",
+          "result",
+          "bin",
+          "mega-man-maker",
+        ),
+      )
+    } finally {
+      restoreEnv(previous)
+    }
+  })
+
+  it("exposes the enabled Midas Machine plugin through fulfilled resources", async () => {
+    const previous = snapshotEnv()
+    const stateRoot = await mktemp()
+    await seedMidasMachineExecutable(stateRoot)
+    process.env.KORRI_CONFIG_ROOTS = ""
+    process.env.KORRI_ENABLED_PLUGINS = "@korri:midas-machine"
+    process.env.KORRI_PLUGIN_RESOURCE_ROOT = stateRoot
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const source = yield* LibrarySource
+          const listPlayableEntries = source.listPlayableEntries
+          if (!listPlayableEntries)
+            throw new Error("expected playable list support")
+          const entries = yield* listPlayableEntries()
+          const resolved = yield* source.resolveLaunchForGame(
+            "@korri:midas-machine/midas-machine",
+          )
+          return { entries, resolved }
+        }).pipe(Effect.provide(PluginLibrarySourceLayerLive)),
+      )
+
+      expect(result.entries.map(entry => entry.id)).toContain(
+        "@korri:midas-machine/midas-machine",
+      )
+      expect(result.resolved.spec.command).toBe(
+        join(
+          stateRoot,
+          "x406b6f7272693a6d696461732d6d616368696e65",
+          "x6d696461732d6d616368696e65",
+          "result",
+          "bin",
+          "midas-machine",
+        ),
+      )
+    } finally {
+      restoreEnv(previous)
+    }
+  })
+
   it("exposes the enabled SRB2 plugin through fulfilled resources", async () => {
     const previous = snapshotEnv()
     const stateRoot = await mktemp()
@@ -268,6 +348,26 @@ async function seedMegaManArenaExecutable(stateRoot: string): Promise<void> {
     resourceId: "mega-man-arena",
     binary: "mega-man-arena",
     storeName: "store-mega-man-arena",
+  })
+}
+
+async function seedMegaManMakerExecutable(stateRoot: string): Promise<void> {
+  await seedExecutableResource({
+    stateRoot,
+    pluginId: "@korri:mega-man-maker",
+    resourceId: "mega-man-maker",
+    binary: "mega-man-maker",
+    storeName: "store-mega-man-maker",
+  })
+}
+
+async function seedMidasMachineExecutable(stateRoot: string): Promise<void> {
+  await seedExecutableResource({
+    stateRoot,
+    pluginId: "@korri:midas-machine",
+    resourceId: "midas-machine",
+    binary: "midas-machine",
+    storeName: "store-midas-machine",
   })
 }
 
