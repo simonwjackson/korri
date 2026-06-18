@@ -53,6 +53,36 @@
 		"@tanstack/router-plugin",
 		"framer-motion"
 	],
+	"ignoreExports": [
+		{
+			"file": "product/apps/portal/prototypes/pico/screens/kit.tsx",
+			"exports": ["*"]
+		},
+		{ "file": "product/plugins/acquisition-fixtures.ts", "exports": ["*"] },
+		{ "file": "product/plugins/index.ts", "exports": ["*"] },
+		{ "file": "product/plugins/portmaster/index.ts", "exports": ["*"] },
+		{ "file": "product/plugins/portmaster/src/envelope.ts", "exports": ["*"] },
+		{ "file": "product/plugins/retroarch/index.ts", "exports": ["*"] },
+		{
+			"file": "product/plugins/retroarch/src/materializer.ts",
+			"exports": ["*"]
+		},
+		{ "file": "product/plugins/retroarch/src/plugin.ts", "exports": ["*"] },
+		{ "file": "product/plugins/retroarch/src/policy.ts", "exports": ["*"] }
+	],
+	"duplicates": {
+		"enabled": false
+	},
+	"health": {
+		"maxCyclomatic": 40,
+		"maxCognitive": 30,
+		"maxCrap": 350,
+		"ignore": [
+			"**/*.test.ts",
+			"product/apps/portal/prototypes/pico/**",
+			"product/apps/portal/routes/+pico-prototype.tsx"
+		]
+	},
 	"rules": {
 		"unresolved-imports": "error",
 		"unlisted-dependencies": "error",
