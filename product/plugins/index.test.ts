@@ -177,6 +177,12 @@ describe("first-party plugins", () => {
     })
 
     expect(registry.enabledPluginIds.has(KORRI_PORTMASTER_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_FEX_PLUGIN_ID)).toBe(true)
+    expect(
+      registry.runtimes[`${KORRI_FEX_PLUGIN_ID}/linux-user`],
+    ).toMatchObject({
+      kind: "cpu-translation",
+    })
     expect(
       registry.modules[`${KORRI_PORTMASTER_PLUGIN_ID}/portmaster`],
     ).toMatchObject({

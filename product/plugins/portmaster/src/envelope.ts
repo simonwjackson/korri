@@ -44,6 +44,7 @@ export async function preparePortMasterLaunchEnvelope(
   const fakeUinput = join(fakeDeviceRoot, "uinput")
   const shellPath = input.shellPath ?? DEFAULT_SHELL
   const useBubblewrap = input.useBubblewrap ?? false
+  const fexWrapper = manifest.extracted.fexWrappers?.[0]
   const env: Record<string, string> = {
     XDG_DATA_HOME: manifest.installRoot,
     KORRI_PORTMASTER_HOME: controlRoot,
@@ -51,6 +52,12 @@ export async function preparePortMasterLaunchEnvelope(
     KORRI_PORTMASTER_PORTS_ROOT: manifest.portsRoot,
     DEVICE_ARCH: input.deviceArch ?? preferredDeviceArch(manifest),
     SDL_GAMECONTROLLERCONFIG: "",
+    ...(fexWrapper
+      ? {
+          FEX_ROOTFS: fexWrapper.rootfs,
+          ...fexWrapper.env,
+        }
+      : {}),
   }
 
   await mkdir(controlRoot, { recursive: true })
@@ -83,6 +90,7 @@ export async function preparePortMasterLaunchEnvelope(
 
   const bwrapPath = input.bwrapPath ?? DEFAULT_BWRAP
   const envPath = input.envPath ?? DEFAULT_ENV
+  const fexRootfsBind = fexWrapper ? fexRootfsBindArgs(fexWrapper.rootfs) : []
   return {
     command: bwrapPath,
     args: [
@@ -129,6 +137,7 @@ export async function preparePortMasterLaunchEnvelope(
       "--bind",
       fakeUinput,
       "/dev/uinput",
+      ...fexRootfsBind,
       "--chdir",
       dirname(launchScriptPath),
       "/bin/bash",
@@ -164,9 +173,19 @@ function selectLaunchScript(
 }
 
 function preferredDeviceArch(manifest: PortMasterInstalledManifest): string {
+  const fexArch = manifest.extracted.fexWrappers?.[0]?.arch
+  if (fexArch) return fexArch
   const detected = manifest.extracted.binaries.find(binary => binary.arch)?.arch
   if (detected) return detected
   return manifest.catalog.arch[0] ?? DEFAULT_DEVICE_ARCH
+}
+
+function fexRootfsBindArgs(rootfs: string): readonly string[] {
+  if (!rootfs.startsWith("/")) return []
+  if (rootfs === "/var" || rootfs.startsWith("/var/")) {
+    return ["--bind-try", "/var", "/var"]
+  }
+  return ["--bind-try", rootfs, rootfs]
 }
 
 function stripLeadingSlash(path: string): string {

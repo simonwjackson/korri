@@ -371,6 +371,166 @@ describe("PortMaster plugin", () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  it("wraps x86_64 PortMaster executables for FEX", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-portmaster-fex-"))
+    const shellDeviceArch = "$" + "{DEVICE_ARCH}"
+    const zipBytes = makeZip({
+      "Digger.sh": Buffer.from(
+        `#!/bin/bash\nsource "$XDG_DATA_HOME/PortMaster/control.txt"\nGAMEDIR="/$directory/ports/digger"\nexport LD_LIBRARY_PATH="$GAMEDIR/libs.${shellDeviceArch}:$LD_LIBRARY_PATH"\ncd "$GAMEDIR"\n./digger.${shellDeviceArch}\n`,
+      ),
+      "digger/digger.aarch64": fakeElf("aarch64"),
+      "digger/digger.x86_64": fakeElf("x86_64"),
+      "digger/libs.x86_64/libz.so.1": fakeElf("x86_64"),
+    })
+    const catalog = {
+      ports: {
+        "digger.zip": {
+          name: "digger.zip",
+          items: ["Digger.sh", "digger"],
+          attr: {
+            title: "Digger",
+            desc: "A tiny arcade game.",
+            inst: "Ready to run.",
+            genres: ["arcade"],
+            porter: ["PortMaster"],
+            rtr: true,
+            exp: false,
+            runtime: [],
+            reqs: [],
+            arch: ["aarch64", "x86_64"],
+            availability: "full",
+          },
+          source: {
+            md5: createHash("md5").update(zipBytes).digest("hex"),
+            size: zipBytes.length,
+            url: "https://example.invalid/digger.zip",
+          },
+        },
+      },
+    }
+    const productPlugin = createPortMasterPlugin({
+      catalogPath: "/catalog/ports.json",
+      installRoot: root,
+      readFileText: async () => JSON.stringify(catalog),
+      fetchImpl: async () =>
+        new Response(zipBytes, {
+          status: 200,
+          headers: { "content-type": "application/zip" },
+        }),
+      fexWrapper: {
+        arch: "x86_64",
+        fexPath: "/nix/store/fex/bin/FEX",
+        rootfs: "/var/lib/korri/steam/fex-rootfs",
+        setupEnvPath:
+          "/nix/store/korri-fex-runtime/share/korri/fex-runtime/setup-env",
+        env: {
+          SDL_AUDIODRIVER: "dummy",
+          SDL_VIDEODRIVER: "x11",
+        },
+      },
+    })
+
+    try {
+      const install = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.install",
+      ) as PluginHandler | undefined
+      if (!install) throw new Error("missing portmaster.install handler")
+      const manifest = await Effect.runPromise(
+        runPluginHandler(install, {
+          operation: "portmaster.install",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            id: "digger.zip",
+            installedAt: "2026-06-18T00:00:00.000Z",
+          },
+        }),
+      )
+
+      expect(manifest.extracted.fexWrappers).toEqual([
+        {
+          path: "digger/digger.x86_64",
+          arch: "x86_64",
+          originalPath: "digger/.korri-fex/digger.x86_64",
+          fexPath: "/nix/store/fex/bin/FEX",
+          rootfs: "/var/lib/korri/steam/fex-rootfs",
+          setupEnvPath:
+            "/nix/store/korri-fex-runtime/share/korri/fex-runtime/setup-env",
+          env: {
+            SDL_AUDIODRIVER: "dummy",
+            SDL_VIDEODRIVER: "x11",
+          },
+        },
+      ])
+      expect(
+        manifest.extracted.fexWrappers.map(wrapper => wrapper.path),
+      ).not.toContain("digger/libs.x86_64/libz.so.1")
+      expect(
+        await stat(
+          join(root, "ports", "digger", ".korri-fex", "digger.x86_64"),
+        ),
+      ).toBeDefined()
+      const wrapper = await readFile(
+        join(root, "ports", "digger", "digger.x86_64"),
+        "utf8",
+      )
+      expect(wrapper).toStartWith("#!/usr/bin/env bash")
+      expect(wrapper).toContain("/nix/store/fex/bin/FEX")
+      expect(wrapper).toContain("FEX_ROOTFS")
+      expect(wrapper).toContain("SDL_VIDEODRIVER")
+      expect(wrapper).toContain("x11")
+
+      const prepareLaunch = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.prepare-launch",
+      ) as PluginHandler | undefined
+      if (!prepareLaunch) throw new Error("missing portmaster.prepare-launch")
+      const envelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            bwrapPath: "/nix/store/example-bubblewrap/bin/bwrap",
+            envPath: "/run/current-system/sw/bin/env",
+            useBubblewrap: true,
+          },
+        }),
+      )
+
+      expect(envelope.env).toMatchObject({
+        DEVICE_ARCH: "x86_64",
+        FEX_ROOTFS: "/var/lib/korri/steam/fex-rootfs",
+        SDL_AUDIODRIVER: "dummy",
+        SDL_VIDEODRIVER: "x11",
+      })
+      expect(envelope.args).toContain("--bind-try")
+      expect(envelope.args).toContain("/var")
+
+      const directEnvelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            useBubblewrap: false,
+          },
+        }),
+      )
+      expect(directEnvelope).toMatchObject({
+        command: "/run/current-system/sw/bin/bash",
+        args: [join(root, "ports", "Digger.sh")],
+        env: {
+          DEVICE_ARCH: "x86_64",
+          FEX_ROOTFS: "/var/lib/korri/steam/fex-rootfs",
+          SDL_VIDEODRIVER: "x11",
+        },
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
 
 function fakeElf(arch: "aarch64" | "x86_64" | "x86" | "armhf"): Buffer {

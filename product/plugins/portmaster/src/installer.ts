@@ -39,6 +39,28 @@ export interface PortMasterNativeElfRepairRecord {
   readonly patchelfPath: string
 }
 
+export interface PortMasterFexWrapperOptions {
+  readonly arch: Extract<PortMasterBinaryArch, "x86" | "x86_64">
+  readonly fexPath: string
+  readonly rootfs: string
+  readonly setupEnvPath?: string
+  readonly appId?: string
+  readonly runDir?: string
+  readonly env?: Readonly<Record<string, string>>
+}
+
+export interface PortMasterFexWrapperRecord {
+  readonly path: string
+  readonly arch: Extract<PortMasterBinaryArch, "x86" | "x86_64">
+  readonly originalPath: string
+  readonly fexPath: string
+  readonly rootfs: string
+  readonly setupEnvPath?: string
+  readonly appId?: string
+  readonly runDir?: string
+  readonly env: Readonly<Record<string, string>>
+}
+
 export interface PortMasterInstallInput {
   readonly providerId: ProviderId
   readonly id: string
@@ -53,6 +75,7 @@ export interface PortMasterInstallInput {
   readonly installRoot: string
   readonly fetchImpl: typeof fetch
   readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
+  readonly fexWrapper?: PortMasterFexWrapperOptions
   readonly installedAt?: string
 }
 
@@ -82,6 +105,7 @@ export interface PortMasterInstalledManifest {
     readonly launchScripts: readonly PortMasterInstalledFile[]
     readonly binaries: readonly PortMasterInstalledBinary[]
     readonly nativeElfRepairs: readonly PortMasterNativeElfRepairRecord[]
+    readonly fexWrappers: readonly PortMasterFexWrapperRecord[]
   }
 }
 
@@ -157,6 +181,15 @@ export async function installPortMasterEntry(
     binaries = await inspectInstalledBinaries(portsRoot, files)
   }
 
+  const fexWrappers = await installFexWrappers({
+    portsRoot,
+    binaries,
+    options: input.fexWrapper,
+  })
+  if (fexWrappers.length > 0) {
+    files = await inspectInstalledFiles(portsRoot, extracted)
+  }
+
   const manifest: PortMasterInstalledManifest = {
     schemaVersion: 1,
     providerId: input.providerId,
@@ -187,6 +220,7 @@ export async function installPortMasterEntry(
       launchScripts,
       binaries,
       nativeElfRepairs,
+      fexWrappers,
     },
   }
 
@@ -238,6 +272,95 @@ async function defaultCommandRunner(
   args: readonly string[],
 ): Promise<void> {
   await execFileAsync(command, [...args])
+}
+
+async function installFexWrappers(input: {
+  readonly portsRoot: string
+  readonly binaries: readonly PortMasterInstalledBinary[]
+  readonly options?: PortMasterFexWrapperOptions
+}): Promise<readonly PortMasterFexWrapperRecord[]> {
+  if (!input.options) return []
+  const wrappers: PortMasterFexWrapperRecord[] = []
+
+  for (const binary of input.binaries) {
+    if (binary.arch !== input.options.arch) continue
+    if (!isExecutablePayload(binary.path)) continue
+
+    const originalPath = join(
+      dirname(binary.path),
+      ".korri-fex",
+      basename(binary.path),
+    )
+    const target = join(input.portsRoot, binary.path)
+    const originalTarget = join(input.portsRoot, originalPath)
+    await mkdir(dirname(originalTarget), { recursive: true })
+    await rm(originalTarget, { force: true })
+    await rename(target, originalTarget)
+    await chmod(originalTarget, 0o755).catch(() => undefined)
+    await writeFile(
+      target,
+      fexWrapperText({
+        ...input.options,
+        originalTarget,
+        path: binary.path,
+      }),
+    )
+    await chmod(target, 0o755)
+    wrappers.push({
+      path: binary.path,
+      arch: input.options.arch,
+      originalPath,
+      fexPath: input.options.fexPath,
+      rootfs: input.options.rootfs,
+      ...(input.options.setupEnvPath
+        ? { setupEnvPath: input.options.setupEnvPath }
+        : {}),
+      ...(input.options.appId ? { appId: input.options.appId } : {}),
+      ...(input.options.runDir ? { runDir: input.options.runDir } : {}),
+      env: input.options.env ?? {},
+    })
+  }
+
+  return wrappers
+}
+
+function isExecutablePayload(path: string): boolean {
+  const name = basename(path).toLowerCase()
+  if (path.includes("/libs.")) return false
+  if (name.startsWith("lib")) return false
+  if (name.includes(".so")) return false
+  return true
+}
+
+function fexWrapperText(
+  input: PortMasterFexWrapperOptions & {
+    readonly originalTarget: string
+    readonly path: string
+  },
+): string {
+  const envDefaults = Object.entries(input.env ?? {}).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )
+  const appId = input.appId ?? portSlug(input.path)
+  const runDir = input.runDir ?? `${dirname(input.originalTarget)}/runtime`
+  const setupEnv = input.setupEnvPath
+    ? `if [ -f ${shellQuote(input.setupEnvPath)} ]; then\n  . ${shellQuote(input.setupEnvPath)}\nfi\n`
+    : ""
+  const envLines = envDefaults
+    .map(
+      ([key, value]) =>
+        `export ${key}="\${${key}:-${shellParameterDefault(value)}}"`,
+    )
+    .join("\n")
+  return `#!/usr/bin/env bash\nset -e\nexport FEX_ROOTFS="\${FEX_ROOTFS:-${shellParameterDefault(input.rootfs)}}"\nexport KORRI_FEX_RUNTIME_APP_ID="\${KORRI_FEX_RUNTIME_APP_ID:-${shellParameterDefault(appId)}}"\nexport KORRI_FEX_RUNTIME_RUN_DIR="\${KORRI_FEX_RUNTIME_RUN_DIR:-${shellParameterDefault(runDir)}}"\n${setupEnv}${envLines ? `${envLines}\n` : ""}exec ${shellQuote(input.fexPath)} ${shellQuote(input.originalTarget)} "$@"\n`
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`
+}
+
+function shellParameterDefault(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')
 }
 
 async function fetchArchive(input: PortMasterInstallInput): Promise<Buffer> {

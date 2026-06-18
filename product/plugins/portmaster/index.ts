@@ -9,6 +9,8 @@ export {
 export type {
   PortMasterBinaryArch,
   PortMasterCommandRunner,
+  PortMasterFexWrapperOptions,
+  PortMasterFexWrapperRecord,
   PortMasterInstalledBinary,
   PortMasterInstalledFile,
   PortMasterInstalledManifest,

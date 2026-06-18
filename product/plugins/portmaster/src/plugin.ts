@@ -10,9 +10,11 @@ import type {
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
+import { KORRI_FEX_PLUGIN_ID } from "../../fex-runtime"
 import { preparePortMasterLaunchEnvelope } from "./envelope"
 import {
   installPortMasterEntry,
+  type PortMasterFexWrapperOptions,
   type PortMasterNativeElfRepairOptions,
 } from "./installer"
 
@@ -32,6 +34,7 @@ export interface PortMasterPluginOptions {
   readonly readFileText?: (path: string) => Promise<string>
   readonly installRoot?: string
   readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
+  readonly fexWrapper?: PortMasterFexWrapperOptions
 }
 
 interface PortMasterRuntime {
@@ -41,6 +44,7 @@ interface PortMasterRuntime {
   readonly readFileText: (path: string) => Promise<string>
   readonly installRoot: string
   readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
+  readonly fexWrapper?: PortMasterFexWrapperOptions
   catalog?: Promise<readonly PortMasterEntry[]>
 }
 
@@ -80,6 +84,14 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
     title: "PortMaster",
     description:
       "Adds the PortMaster handheld port manager plus the upstream PortMaster ports catalog as an acquisition source.",
+    requires: [
+      {
+        capability: "runtime.resolve",
+        ref: { provider: KORRI_FEX_PLUGIN_ID, id: "linux-user" },
+        reason:
+          "PortMaster's x86/x86_64 compatibility lane launches Linux userland ports through FEX on aarch64 devices.",
+      },
+    ],
     contributes: {
       config: {
         providers: {
@@ -274,6 +286,8 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                 const nativeElfRepair =
                   nativeElfRepairFromInput(input.nativeElfRepair) ??
                   runtime.nativeElfRepair
+                const fexWrapper =
+                  fexWrapperFromInput(input.fexWrapper) ?? runtime.fexWrapper
 
                 return Effect.tryPromise({
                   try: () =>
@@ -291,6 +305,7 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                       installRoot,
                       fetchImpl: runtime.fetchImpl,
                       ...(nativeElfRepair ? { nativeElfRepair } : {}),
+                      ...(fexWrapper ? { fexWrapper } : {}),
                       ...(installedAt ? { installedAt } : {}),
                     }),
                   catch: error =>
@@ -360,6 +375,7 @@ function createRuntime(options: PortMasterPluginOptions): PortMasterRuntime {
     ...(options.nativeElfRepair
       ? { nativeElfRepair: options.nativeElfRepair }
       : {}),
+    ...(options.fexWrapper ? { fexWrapper: options.fexWrapper } : {}),
   }
 }
 
@@ -642,7 +658,41 @@ function nativeElfRepairFromInput(
   return { arch, interpreter, patchelfPath, libraryPaths }
 }
 
+function fexWrapperFromInput(
+  value: unknown,
+): PortMasterFexWrapperOptions | undefined {
+  const record = readRecord(value)
+  const arch = stringValue(record.arch)
+  if (arch !== "x86" && arch !== "x86_64") return undefined
+  const fexPath = stringValue(record.fexPath)
+  const rootfs = stringValue(record.rootfs)
+  if (!fexPath || !rootfs) return undefined
+  const setupEnvPath = stringValue(record.setupEnvPath)
+  const appId = stringValue(record.appId)
+  const runDir = stringValue(record.runDir)
+  const env = stringRecord(record.env)
+  return {
+    arch,
+    fexPath,
+    rootfs,
+    ...(setupEnvPath ? { setupEnvPath } : {}),
+    ...(appId ? { appId } : {}),
+    ...(runDir ? { runDir } : {}),
+    ...(env ? { env } : {}),
+  }
+}
+
 function stringArray(value: unknown): readonly string[] {
   if (!Array.isArray(value)) return []
   return value.filter((entry): entry is string => typeof entry === "string")
+}
+
+function stringRecord(
+  value: unknown,
+): Readonly<Record<string, string>> | undefined {
+  const record = readRecord(value)
+  const entries = Object.entries(record).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  )
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
