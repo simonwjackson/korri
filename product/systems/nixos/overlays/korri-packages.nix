@@ -8,7 +8,6 @@
   fake-08-src,
   wasm4-src,
   nixpkgs-godot,
-  nixpkgs-mesa,
 }:
 
 final: prev:
@@ -17,17 +16,11 @@ let
     inherit nix-on-rocks;
   };
 
-  ryubingKorri = final.callPackage ../../../vendor/ryubing-korri/package.nix {
-    ryubing = prev.ryubing;
-    inherit nixpkgs-mesa;
-  };
 in
 {
   moonlight-embedded = moonlightEmbeddedKorri;
   moonlight-embedded-korri = moonlightEmbeddedKorri;
 
-  ryubing = if prev.stdenv.hostPlatform.isAarch64 then ryubingKorri else prev.ryubing;
-  ryubing-korri = ryubingKorri;
 
   retroarch-bare = prev.retroarch-bare.overrideAttrs (old: {
     buildInputs = (old.buildInputs or [ ]) ++ [ final.xz ];

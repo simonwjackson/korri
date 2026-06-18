@@ -27,7 +27,8 @@
     # nixpkgs-25.11 pin ships Mesa 25.2.6, whose Turnip driver is
     # pathologically slow for Ryujinx on Adreno (SM8550); Mesa >= 26
     # fixes it. Narrow-scope cross-channel substitution mirroring the
-    # nixpkgs-godot precedent — see product/vendor/ryubing-korri/package.nix.
+    # nixpkgs-godot precedent — see
+    # product/plugins/ryubing/packages/ryubing-korri/default.nix.
     nixpkgs-mesa.url = "github:NixOS/nixpkgs/9ae611a455b90cf061d8f332b977e387bda8e1ca";
   };
 

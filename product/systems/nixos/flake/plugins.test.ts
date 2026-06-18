@@ -38,11 +38,14 @@ describe("first-party Nix plugin composition", () => {
       PLUGIN_COMPOSITION_EXPR(true),
     )) as CompositionSummary
 
-    expect(enabled.ids).toEqual(expect.arrayContaining(["@korri:gamescope"]))
+    expect(enabled.ids).toEqual(
+      expect.arrayContaining(["@korri:gamescope", "@korri:ryubing"]),
+    )
     expect(enabled.packages).toEqual(
       expect.arrayContaining([
         "gamescope-korri",
         "korri-gamescope-control-bridge",
+        "ryubing-korri",
       ]),
     )
     expect(enabled.apps).toEqual([

@@ -352,6 +352,9 @@ describe("standards: product platform reorganization guardrails", () => {
       existsSync(join(REPO_ROOT, "product", "vendor", "sunshine-korri")),
     ).toBe(true)
     expect(
+      existsSync(join(REPO_ROOT, "product", "vendor", "ryubing-korri")),
+    ).toBe(false)
+    expect(
       existsSync(join(REPO_ROOT, "product", "vendor", "gamescope-korri")),
     ).toBe(false)
     expect(
@@ -428,6 +431,54 @@ describe("standards: product platform reorganization guardrails", () => {
         ),
       ),
     ).toBe(true)
+  })
+
+  it("keeps Ryubing's downstream package lane under the Ryubing plugin", () => {
+    expect(
+      existsSync(join(REPO_ROOT, "product", "vendor", "ryubing-korri")),
+    ).toBe(false)
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "product",
+          "plugins",
+          "ryubing",
+          "packages",
+          "ryubing-korri",
+          "default.nix",
+        ),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(REPO_ROOT, "product", "plugins", "ryubing", "nix", "overlay.nix"),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "product",
+          "plugins",
+          "ryubing",
+          "nix",
+          "composition.nix",
+        ),
+      ),
+    ).toBe(true)
+
+    const staleReferences = existingRoots([
+      join(REPO_ROOT, "product"),
+      join(REPO_ROOT, "flake.nix"),
+    ]).flatMap(root =>
+      sourceFilesWithExtensions(root, new Set([".ts", ".tsx", ".nix", ".md"]))
+        .filter(file =>
+          readSource(file).includes("product/vendor/ryubing-korri"),
+        )
+        .map(repoRelative),
+    )
+    expect(staleReferences).toEqual([])
   })
 
   it("keeps runtime TypeScript from importing product vendor directly", () => {

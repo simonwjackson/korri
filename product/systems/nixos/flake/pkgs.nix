@@ -7,7 +7,6 @@
   fake-08-src,
   wasm4-src,
   nixpkgs-godot,
-  nixpkgs-mesa,
 }:
 
 let
@@ -17,7 +16,6 @@ let
       fake-08-src
       wasm4-src
       nixpkgs-godot
-      nixpkgs-mesa
       ;
   };
 

@@ -5,7 +5,6 @@
   fake-08-src,
   wasm4-src,
   nixpkgs-godot,
-  nixpkgs-mesa,
   productRegistry,
   rocknixTargetSystem ? "aarch64-linux",
   ...
@@ -23,7 +22,6 @@ let
           fake-08-src
           wasm4-src
           nixpkgs-godot
-          nixpkgs-mesa
           ;
       })
     ];

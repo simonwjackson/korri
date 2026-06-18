@@ -8,6 +8,7 @@ import { KORRI_PICO8_BBS_PLUGIN_ID } from "./pico8-bbs"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
 import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
+import { KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
 import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
 
 describe("first-party plugins", () => {
@@ -27,12 +28,27 @@ describe("first-party plugins", () => {
     ).toContain("launch.compose")
   })
 
-  it("enables only default infrastructure when catalog plugins are disabled", () => {
+  it("registers Ryubing as a first-party package plugin", () => {
+    const ryubing = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_RYUBING_PLUGIN_ID,
+    )
+
+    expect(
+      ryubing?.contributes.config.modules?.["ryubing-korri-package"],
+    ).toMatchObject({
+      kind: "nix-package",
+      package: "ryubing-korri",
+      path: "product/plugins/ryubing/packages/ryubing-korri",
+      capabilities: ["package.expose", "launch.runtime"],
+    })
+  })
+
+  it("does not enable plugin capabilities unless composition opts in", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: undefined,
     })
 
-    expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_FEX_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(false)
@@ -43,19 +59,36 @@ describe("first-party plugins", () => {
     )
     expect(
       registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
+    ).toBeUndefined()
+    expect(registry.catalog).toEqual({})
+  })
+
+  it("enables Gamescope when composition explicitly opts in", () => {
+    const registry = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: "@korri:gamescope,@korri:neverball",
+    })
+
+    expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has("@korri:neverball")).toBe(true)
+    expect(
+      registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
     ).toMatchObject({
       kind: "launch-wrapper",
     })
+  })
+
+  it("enables Ryubing when composition explicitly opts in", () => {
+    const registry = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_RYUBING_PLUGIN_ID,
+    })
+
+    expect(registry.enabledPluginIds.has(KORRI_RYUBING_PLUGIN_ID)).toBe(true)
     expect(
-      registry.runtimes[`${KORRI_FEX_PLUGIN_ID}/linux-user`],
-    ).toBeUndefined()
-    expect(
-      registry.runtimes[`${KORRI_PROTON_PLUGIN_ID}/proton-10`],
-    ).toBeUndefined()
-    expect(
-      registry.runtimes[`${KORRI_PROTON_GE_PLUGIN_ID}/ge-proton-10-34`],
-    ).toBeUndefined()
-    expect(registry.catalog).toEqual({})
+      registry.modules[`${KORRI_RYUBING_PLUGIN_ID}/ryubing-korri-package`],
+    ).toMatchObject({
+      kind: "nix-package",
+      package: "ryubing-korri",
+    })
   })
 
   it("enables Proton-GE only when explicitly requested", () => {
@@ -119,7 +152,7 @@ describe("first-party plugins", () => {
         "@korri:neverball,@korri:mega-man-arena,@korri:srb2,@korri:psycho-waluigi",
     })
 
-    expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_FEX_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(true)
@@ -131,9 +164,7 @@ describe("first-party plugins", () => {
     )
     expect(
       registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
-    ).toMatchObject({
-      kind: "launch-wrapper",
-    })
+    ).toBeUndefined()
     expect(Object.keys(registry.catalog)).toEqual([
       "@korri:neverball/neverball",
       "@korri:mega-man-arena/mega-man-arena",

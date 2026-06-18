@@ -24,7 +24,6 @@ flake-utils.lib.eachDefaultSystem (
         fake-08-src
         wasm4-src
         nixpkgs-godot
-        nixpkgs-mesa
         ;
     };
     inherit (pkgsContext)
@@ -213,7 +212,7 @@ flake-utils.lib.eachDefaultSystem (
       inherit pkgs bunDeps;
       src = korriSources.cli;
       enable = pkgs.stdenv.isLinux;
-      pluginArgs = { inherit nixpkgs-godot; };
+      pluginArgs = { inherit nixpkgs-godot nixpkgs-mesa; };
     };
 
     korriImages = import ../../../../product/systems/nixos/images/common.nix {

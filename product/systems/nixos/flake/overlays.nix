@@ -3,7 +3,6 @@
   fake-08-src,
   wasm4-src,
   nixpkgs-godot,
-  nixpkgs-mesa,
   ...
 }:
 
@@ -19,7 +18,6 @@ rec {
       fake-08-src
       wasm4-src
       nixpkgs-godot
-      nixpkgs-mesa
       ;
   };
   default = korri-packages;

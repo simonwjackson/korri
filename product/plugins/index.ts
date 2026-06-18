@@ -11,6 +11,7 @@ import { pico8BbsPlugin } from "./pico8-bbs"
 import { protonGeRuntimePlugin } from "./proton-ge-runtime"
 import { protonRuntimePlugin } from "./proton-runtime"
 import { psychoWaluigiPlugin } from "./psycho-waluigi"
+import { ryubingPlugin } from "./ryubing"
 import { srb2Plugin } from "./srb2"
 import { superMario127Plugin } from "./super-mario-127"
 import { superMarioBrosRemasteredPlugin } from "./super-mario-bros-remastered"
@@ -26,6 +27,7 @@ export const firstPartyPlugins = [
   srb2Plugin,
   pico8BbsPlugin,
   psychoWaluigiPlugin,
+  ryubingPlugin,
   superMarioBrosRemasteredPlugin,
   superMario127Plugin,
   yoshisFabricationStationPlugin,

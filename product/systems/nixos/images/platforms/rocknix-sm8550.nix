@@ -17,8 +17,9 @@ let
   substratePackages = nix-on-rocks.packages.${targetSystem};
   gamescopeNix = import ../../../../plugins/gamescope/nix/platform-environments.nix { inherit pkgs; };
   gamescopePackage = korri.packages.${targetSystem}.gamescope-korri;
+  ryubingPackage = korri.packages.${targetSystem}.ryubing-korri;
   gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
-  enabledFirstPartyPlugins = "@korri:gamescope,@korri:neverball";
+  enabledFirstPartyPlugins = "@korri:gamescope,@korri:neverball,@korri:ryubing";
   moonlightRuntimeSettingsEnvironment = {
     # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
     # These are intentionally enumerated and preserved as Moonlight process env
@@ -462,7 +463,7 @@ in
       sway
       gamescopePackage
       substratePackages.cemu
-      pkgs.ryubing
+      ryubingPackage
       # `pkgs.moonlight-embedded` is globally replaced by
       # `moonlight-embedded-korri` via the Korri package overlay.
       pkgs.moonlight-embedded
@@ -587,6 +588,6 @@ in
 
   environment.systemPackages = [
     substratePackages.cemu
-    pkgs.ryubing
+    ryubingPackage
   ];
 }
