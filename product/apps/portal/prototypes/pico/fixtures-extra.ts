@@ -107,7 +107,8 @@ export const PICO_FAILURE_KINDS: readonly {
   {
     kind: "host-unavailable",
     title: "NO HOST",
-    detail: "No connected Korri server. Check the host is awake on your network.",
+    detail:
+      "No connected Korri server. Check the host is awake on your network.",
   },
   {
     kind: "moonlight-failed",
@@ -207,8 +208,18 @@ export const picoReleases: readonly PicoRelease[] = [
 ]
 
 export const picoAppChoices: readonly PicoAppChoice[] = [
-  { id: "mgba", name: "mGBA", runtime: "libretro", note: "Accurate, recommended" },
-  { id: "vbam", name: "VBA-M", runtime: "libretro", note: "Faster, less accurate" },
+  {
+    id: "mgba",
+    name: "mGBA",
+    runtime: "libretro",
+    note: "Accurate, recommended",
+  },
+  {
+    id: "vbam",
+    name: "VBA-M",
+    runtime: "libretro",
+    note: "Faster, less accurate",
+  },
   { id: "gpsp", name: "gpSP", runtime: "libretro", note: "Lightweight" },
 ]
 
@@ -230,17 +241,53 @@ export const picoSaveSlots: readonly PicoSaveSlot[] = [
 ]
 
 export const picoHosts: readonly PicoHost[] = [
-  { id: "den", name: "DEN-RIG", addr: "192.168.1.10", status: "online", latencyMs: 4 },
-  { id: "office", name: "OFFICE-NUC", addr: "192.168.1.22", status: "busy", latencyMs: 11 },
-  { id: "thor", name: "THOR-DECK", addr: "192.168.1.31", status: "paired", latencyMs: 7 },
-  { id: "attic", name: "ATTIC-PI", addr: "192.168.1.44", status: "offline", latencyMs: null },
+  {
+    id: "den",
+    name: "DEN-RIG",
+    addr: "192.168.1.10",
+    status: "online",
+    latencyMs: 4,
+  },
+  {
+    id: "office",
+    name: "OFFICE-NUC",
+    addr: "192.168.1.22",
+    status: "busy",
+    latencyMs: 11,
+  },
+  {
+    id: "thor",
+    name: "THOR-DECK",
+    addr: "192.168.1.31",
+    status: "paired",
+    latencyMs: 7,
+  },
+  {
+    id: "attic",
+    name: "ATTIC-PI",
+    addr: "192.168.1.44",
+    status: "offline",
+    latencyMs: null,
+  },
 ]
 
 export const picoSeats: readonly PicoSeat[] = [
   { id: "s1", name: "RG353M", kind: "HANDHELD", battery: 82, active: true },
   { id: "s2", name: "THOR", kind: "HANDHELD", battery: 64, active: false },
-  { id: "s3", name: "8BITDO PRO 2", kind: "GAMEPAD", battery: 91, active: true },
-  { id: "s4", name: '65" 4K TV', kind: "DISPLAY", battery: null, active: false },
+  {
+    id: "s3",
+    name: "8BITDO PRO 2",
+    kind: "GAMEPAD",
+    battery: 91,
+    active: true,
+  },
+  {
+    id: "s4",
+    name: '65" 4K TV',
+    kind: "DISPLAY",
+    battery: null,
+    active: false,
+  },
 ]
 
 export const picoFriends: readonly PicoFriend[] = [
@@ -252,11 +299,41 @@ export const picoFriends: readonly PicoFriend[] = [
 ]
 
 export const picoAchievements: readonly PicoAchievement[] = [
-  { id: "a1", name: "FIRST BLOOD", desc: "Win your first match", unlocked: true, rarity: "COMMON" },
-  { id: "a2", name: "SPEEDRUNNER", desc: "Finish under 30 minutes", unlocked: true, rarity: "RARE" },
-  { id: "a3", name: "NO HIT", desc: "Beat a boss without taking damage", unlocked: false, rarity: "EPIC" },
-  { id: "a4", name: "COMPLETIONIST", desc: "Collect every item", unlocked: false, rarity: "LEGENDARY" },
-  { id: "a5", name: "NIGHT OWL", desc: "Play after midnight", unlocked: true, rarity: "COMMON" },
+  {
+    id: "a1",
+    name: "FIRST BLOOD",
+    desc: "Win your first match",
+    unlocked: true,
+    rarity: "COMMON",
+  },
+  {
+    id: "a2",
+    name: "SPEEDRUNNER",
+    desc: "Finish under 30 minutes",
+    unlocked: true,
+    rarity: "RARE",
+  },
+  {
+    id: "a3",
+    name: "NO HIT",
+    desc: "Beat a boss without taking damage",
+    unlocked: false,
+    rarity: "EPIC",
+  },
+  {
+    id: "a4",
+    name: "COMPLETIONIST",
+    desc: "Collect every item",
+    unlocked: false,
+    rarity: "LEGENDARY",
+  },
+  {
+    id: "a5",
+    name: "NIGHT OWL",
+    desc: "Play after midnight",
+    unlocked: true,
+    rarity: "COMMON",
+  },
 ]
 
 export const picoScores: readonly PicoScoreRow[] = [
@@ -268,10 +345,34 @@ export const picoScores: readonly PicoScoreRow[] = [
 ]
 
 export const picoStoreItems: readonly PicoStoreItem[] = [
-  { id: "st1", title: "PORTMASTER PICKS", tag: "CURATED", price: "FREE", source: "PortMaster" },
-  { id: "st2", title: "PICO-8 SPLORE", tag: "BBS", price: "FREE", source: "PICO-8" },
-  { id: "st3", title: "FANGAME VAULT", tag: "FEX", price: "FREE", source: "Community" },
-  { id: "st4", title: "ROM HACK ARCHIVE", tag: "SMW", price: "FREE", source: "SMW Central" },
+  {
+    id: "st1",
+    title: "PORTMASTER PICKS",
+    tag: "CURATED",
+    price: "FREE",
+    source: "PortMaster",
+  },
+  {
+    id: "st2",
+    title: "PICO-8 SPLORE",
+    tag: "BBS",
+    price: "FREE",
+    source: "PICO-8",
+  },
+  {
+    id: "st3",
+    title: "FANGAME VAULT",
+    tag: "FEX",
+    price: "FREE",
+    source: "Community",
+  },
+  {
+    id: "st4",
+    title: "ROM HACK ARCHIVE",
+    tag: "SMW",
+    price: "FREE",
+    source: "SMW Central",
+  },
 ]
 
 /** Convenience: a representative "current" game for in-session screens. */

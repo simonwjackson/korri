@@ -13,6 +13,7 @@ import {
   Chip,
   List,
   PicoCart,
+  PicoIcon,
   Progress,
   Row,
   Screen,
@@ -77,8 +78,10 @@ export function FriendsScreen() {
                     label={friend.name}
                     meta={
                       friend.playing
-                        ? `playing ${friend.playing}`
-                        : friend.status.toUpperCase()
+                        ? `deep in ${friend.playing}`
+                        : friend.status === "offline"
+                          ? "off doing other things"
+                          : friend.status.toUpperCase()
                     }
                     trailing={
                       <span
@@ -190,10 +193,12 @@ export function AchievementsScreen() {
         </Badge>
       </div>
       <div className="pcFut-ach-toast">
-        <span className="pcFut-ach-toast-ico">★</span>
+        <span className="pcFut-ach-toast-ico">
+          <PicoIcon name="star" />
+        </span>
         <span className="pcFut-ach-toast-text">
           <b>UNLOCKED · NIGHT OWL</b>
-          Play after midnight · just now
+          Still playing past midnight · just now
         </span>
         <Badge tone="good">+10</Badge>
       </div>
@@ -206,7 +211,7 @@ export function AchievementsScreen() {
               <span
                 className={`pcFut-ach-ico ${ach.unlocked ? "got" : "locked"}`}
               >
-                {ach.unlocked ? "★" : "✦"}
+                {ach.unlocked ? <PicoIcon name="star" /> : "✦"}
               </span>
             }
             label={
@@ -314,7 +319,7 @@ export function CloudSaveConflictScreen() {
       <div className="pcFut-conf-head">
         <Title size={0}>SAVE CONFLICT</Title>
         <p className="pcFut-conf-note">
-          Two saves disagree. Keep which? The other is overwritten.
+          Two saves, one truth — which do we keep? The other gets tidied away.
         </p>
       </div>
       <div className="pcFut-conf-grid">
@@ -373,7 +378,8 @@ export function StoreScreen() {
             <div className="pc-sub">FEATURED COLLECTION</div>
             <Title size={1}>{featured.title}</Title>
             <p className="pcFut-store-blurb">
-              Hand-picked ports that play great on a handheld. New drops weekly.
+              Ports we hand-dusted to feel right in your palms. Fresh crates
+              land every week.
             </p>
             <div className="pcFut-store-banner-meta">
               <Badge tone="good">{featured.price}</Badge>
@@ -389,7 +395,9 @@ export function StoreScreen() {
             key={item.id}
             className={`pcFut-store-tile ${index === 1 ? "sel" : ""}`}
           >
-            <span className="pcFut-store-tile-art">{item.title.slice(0, 1)}</span>
+            <span className="pcFut-store-tile-art">
+              {item.title.slice(0, 1)}
+            </span>
             <div className="pcFut-store-tile-body">
               <div className="pcFut-store-tile-title">{item.title}</div>
               <div className="pcFut-store-tile-meta">
@@ -426,11 +434,12 @@ export function FeaturedScreen() {
             <div className="pc-sub">GAME OF THE DAY</div>
             <Title size={2}>{picoHero.title}</Title>
             <div className="pcFut-feat-tags">
-              {picoHero.genre.toUpperCase()} · {picoHero.developer.toUpperCase()}
+              {picoHero.genre.toUpperCase()} ·{" "}
+              {picoHero.developer.toUpperCase()}
             </div>
             <p className="pcFut-feat-blurb">
-              A pixel-perfect classic that still holds up. Tight controls, hidden
-              routes, and a soundtrack that lives rent-free.
+              Today's pick, hand-dusted just for you. Tight controls, sneaky
+              shortcuts, and a soundtrack that lives rent-free in your skull.
             </p>
             <div className="pcFut-feat-why">
               <Badge tone="accent">WHY?</Badge>
@@ -440,9 +449,11 @@ export function FeaturedScreen() {
             </div>
             <div className="pcFut-feat-actions">
               <Btn kind="primary" sel>
-                ▶ PLAY
+                <PicoIcon name="play" /> PLAY
               </Btn>
-              <Btn>＋ WISHLIST</Btn>
+              <Btn>
+                <PicoIcon name="plus" /> WISHLIST
+              </Btn>
             </div>
           </div>
         </div>

@@ -25,13 +25,21 @@
 			rgba(41, 173, 255, 0.16) 0 3cqw,
 			rgba(131, 118, 156, 0.1) 3cqw 6cqw
 		),
-		radial-gradient(circle at 30% 30%, rgba(255, 236, 39, 0.18), transparent 55%);
-	background-size: 12cqw 12cqw, 100% 100%;
+		radial-gradient(
+			circle at 30% 30%,
+			rgba(255, 236, 39, 0.18),
+			transparent 55%
+		);
+	background-size:
+		12cqw 12cqw,
+		100% 100%;
 	animation: pcShow-scroll 1.6s steps(8) infinite;
 }
 @keyframes pcShow-scroll {
 	to {
-		background-position: 12cqw 12cqw, 0 0;
+		background-position:
+			12cqw 12cqw,
+			0 0;
 	}
 }
 

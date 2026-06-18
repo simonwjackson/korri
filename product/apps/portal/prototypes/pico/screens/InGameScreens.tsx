@@ -8,7 +8,7 @@
  * (namespace pcIg-).
  */
 import { picoHero, picoSaveSlots } from "../fixtures-extra"
-import { Badge, Btn, Hero, Modal, Spinner, Stat, Title } from "./kit"
+import { Badge, Btn, Hero, Modal, PicoIcon, Spinner, Stat, Title } from "./kit"
 
 const REMAP_ACTIONS: readonly {
   readonly action: string
@@ -49,8 +49,10 @@ export function InGameHudScreen() {
           </span>
         </div>
         <div className="pcIg-toast">
-          <span className="pcIg-toast-ico">✓</span>
-          SAVED
+          <span className="pcIg-toast-ico">
+            <PicoIcon name="check" />
+          </span>
+          SAVED &amp; SOUND
         </div>
       </div>
     </div>
@@ -77,7 +79,7 @@ export function SaveSlotsScreen() {
             <span className="pcIg-slot-no">{slot.index}</span>
             <span className="pcIg-slot-label">{slot.label}</span>
             <span className="pcIg-slot-stamp">
-              {slot.empty ? "— empty —" : slot.stamp}
+              {slot.empty ? "empty — your story goes here" : slot.stamp}
             </span>
           </div>
         ))}
@@ -106,7 +108,7 @@ export function LoadSlotsScreen() {
             <span className="pcIg-slot-no">{slot.index}</span>
             <span className="pcIg-slot-label">{slot.label}</span>
             <span className="pcIg-slot-stamp">
-              {slot.empty ? "— empty —" : slot.stamp}
+              {slot.empty ? "empty — your story goes here" : slot.stamp}
             </span>
             {index === 0 && !slot.empty ? (
               <span className="pcIg-slot-restore">↺ RESTORE</span>
@@ -154,9 +156,15 @@ export function StreamOverlayScreen() {
       </div>
 
       <div className="pcIg-stream-ctl">
-        <Btn kind="primary">⏸ PAUSE</Btn>
-        <Btn>▶ RESUME</Btn>
-        <Btn kind="danger">✕ QUIT</Btn>
+        <Btn kind="primary">
+          <PicoIcon name="pause" /> PAUSE
+        </Btn>
+        <Btn>
+          <PicoIcon name="play" /> RESUME
+        </Btn>
+        <Btn kind="danger">
+          <PicoIcon name="close" /> QUIT
+        </Btn>
       </div>
     </Modal>
   )
@@ -171,7 +179,7 @@ export function ReconnectingScreen() {
           glyph="⚠"
           glyphTone="info"
           title="RECONNECTING…"
-          message="Stream connection lost. Trying to re-establish the link to the host."
+          message="Lost the thread — reeling it back in…"
           spinner
         >
           <div className="pcIg-attempt">ATTEMPT 2 OF 5</div>
@@ -186,7 +194,9 @@ export function ReconnectingScreen() {
             </span>
             <span className="pcIg-quality-tag">DROPPING</span>
           </div>
-          <Btn kind="danger">✕ QUIT</Btn>
+          <Btn kind="danger">
+            <PicoIcon name="close" /> QUIT
+          </Btn>
         </Hero>
       </div>
     </div>
@@ -215,7 +225,7 @@ export function InputRemapScreen() {
             <span className="pcIg-remap-btn">
               {row.listening ? (
                 <>
-                  press a button… <Spinner />
+                  press any button… <Spinner />
                 </>
               ) : (
                 row.button

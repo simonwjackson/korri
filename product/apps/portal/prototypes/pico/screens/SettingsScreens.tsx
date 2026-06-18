@@ -12,6 +12,7 @@ import {
   Card,
   Modal,
   Opt,
+  PicoIcon,
   Progress,
   Screen,
   Toggle,
@@ -103,7 +104,7 @@ export function StorageSettingsScreen() {
         { key: "b", label: "BACK" },
       ]}
     >
-      <Card title="DEVICE STORAGE">
+      <Card title="DEVICE STORAGE — WHERE YOUR CARTS LIVE">
         <Progress pct={41} />
         <div className="pcSet-usage">
           <span className="pcSet-used">26 GB USED</span>
@@ -157,7 +158,9 @@ export function ThemeSettingsScreen() {
         <div className="pcSet-theme sel">
           <span className="pcSet-theme-swatch pico" />
           <span className="pcSet-theme-name">PICO</span>
-          <span className="pcSet-theme-tick">✓</span>
+          <span className="pcSet-theme-tick">
+            <PicoIcon name="check" />
+          </span>
         </div>
         <div className="pcSet-theme">
           <span className="pcSet-theme-swatch demo" />
@@ -195,7 +198,7 @@ export function AccountsSettingsScreen() {
           <span className="pcSet-avatar you">P1</span>
           <span className="pcSet-profile-text">
             <span className="pcSet-label">PIXELPETE</span>
-            <span className="pcSet-profile-meta">Signed in · you</span>
+            <span className="pcSet-profile-meta">Signed in · player one</span>
           </span>
           <span className="pcSet-info">▸</span>
         </div>
@@ -209,7 +212,9 @@ export function AccountsSettingsScreen() {
         </div>
       </div>
       <div className="pcSet-actions">
-        <Btn kind="primary">＋ ADD PROFILE</Btn>
+        <Btn kind="primary">
+          <PicoIcon name="plus" /> ADD PROFILE
+        </Btn>
         <Btn kind="ghost">MANAGE HOUSEHOLD</Btn>
       </div>
     </Screen>
@@ -226,7 +231,7 @@ export function LabsPanelScreen() {
       ]}
     >
       <p className="pcSet-modal-desc">
-        Experimental controls for tuning this kiosk surface.
+        Knobs we're still messing with. Flip at your own risk.
       </p>
       <div className="pcSet-list">
         <div className="pcSet-row sel">
@@ -249,14 +254,18 @@ export function LabsPanelScreen() {
 export function SystemPanelScreen() {
   return (
     <Modal
-      title="⚙ SYSTEM"
+      title={
+        <>
+          <PicoIcon name="gear" /> SYSTEM
+        </>
+      }
       hints={[
         { key: "a", label: "ADJUST" },
         { key: "b", label: "CLOSE" },
       ]}
     >
       <p className="pcSet-modal-desc">
-        Device controls for the active session.
+        The dials that keep this little box happy.
       </p>
       <div className="pcSet-list">
         <div className="pcSet-row sel">

@@ -14,6 +14,7 @@ import {
   Glyph,
   List,
   PicoCart,
+  PicoIcon,
   Progress,
   Row,
   Screen,
@@ -25,13 +26,19 @@ import {
 /** Maps a host status to the kit Badge tone the palette rules dictate. */
 function hostBadge(status: "online" | "busy" | "paired" | "offline") {
   if (status === "busy") return <Badge tone="accent">BUSY</Badge>
-  if (status === "offline") return <span className="pcMd-badge-off">OFFLINE</span>
+  if (status === "offline")
+    return <span className="pcMd-badge-off">OFFLINE</span>
   if (status === "paired") return <Badge tone="good">PAIRED</Badge>
   return <Badge tone="good">ONLINE</Badge>
 }
 
 /** The negotiation stepper stages, in order. */
-const CONNECT_STEPS: readonly string[] = ["HANDSHAKE", "CODEC", "VIDEO", "INPUT"]
+const CONNECT_STEPS: readonly string[] = [
+  "HANDSHAKE",
+  "CODEC",
+  "VIDEO",
+  "INPUT",
+]
 
 export function DualPrimaryScreen() {
   return (
@@ -62,7 +69,9 @@ export function DualPrimaryScreen() {
           <Title size={1}>{picoHero.title}</Title>
           <div className="pc-sub">{picoHero.developer}</div>
           <div className="pcMd-launch-row">
-            <Btn kind="primary">▶ LAUNCH ON TV</Btn>
+            <Btn kind="primary">
+              <PicoIcon name="play" /> LAUNCH ON TV
+            </Btn>
             <Btn>HERE</Btn>
           </div>
         </div>
@@ -94,8 +103,8 @@ export function HostDiscoveryScreen() {
     <Screen title="PICO ▸ HOSTS · SCAN" hints={[{ key: "b", label: "CANCEL" }]}>
       <div className="pcMd-scan">
         <Spinner />
-        <Title size={1}>SEARCHING FOR HOSTS…</Title>
-        <div className="pc-sub">Listening on 192.168.1.0/24</div>
+        <Title size={1}>SNIFFING OUT HOSTS…</Title>
+        <div className="pc-sub">poking around 192.168.1.0/24 for friends</div>
         <List>
           {picoHosts.slice(0, 2).map((host, index) => (
             <div
@@ -146,7 +155,9 @@ export function HostListScreen() {
         ))}
       </div>
       <div className="pcMd-host-cta">
-        <Btn kind="primary">▶ CONNECT</Btn>
+        <Btn kind="primary">
+          <PicoIcon name="play" /> CONNECT
+        </Btn>
       </div>
     </Screen>
   )
@@ -173,7 +184,7 @@ export function ConnectingScreen() {
           ))}
         </div>
         <Progress pct={58} />
-        <div className="pc-dim">negotiating 1080p60 H.265</div>
+        <div className="pc-dim">haggling over 1080p60 H.265…</div>
       </div>
     </Screen>
   )
@@ -224,14 +235,16 @@ export function PairingScreen() {
       className="center"
     >
       <div className="pcMd-pair">
-        <Glyph tone="accent">⊕</Glyph>
+        <Glyph tone="accent">
+          <PicoIcon name="plus" />
+        </Glyph>
         <Title size={1}>PAIR A CONTROLLER</Title>
         <div className="pcMd-code">8-4-2-7</div>
         <div className="pcMd-pair-wait">
           <Spinner />
-          <span className="pc-sub">WAITING FOR DEVICE…</span>
+          <span className="pc-sub">listening for a new pad…</span>
         </div>
-        <p className="pc-hero-msg">hold SELECT+START to pair</p>
+        <p className="pc-hero-msg">hold SELECT + START to say hello</p>
       </div>
     </Screen>
   )

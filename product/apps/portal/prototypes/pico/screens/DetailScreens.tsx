@@ -13,6 +13,7 @@ import {
   Chip,
   List,
   PicoCart,
+  PicoIcon,
   Row,
   Screen,
   Stat,
@@ -44,7 +45,7 @@ export function ReleasePickerScreen() {
             {game.genre.toUpperCase()} · {game.developer.toUpperCase()}
           </div>
           <p className="pcDet-note">
-            This game has multiple launchable releases — pick one.
+            This cart ships in a few flavors — pick the one you want to boot.
           </p>
         </div>
       </div>
@@ -88,7 +89,7 @@ export function EmulatorChooserScreen() {
           <Title size={1}>{game.title}</Title>
           <div className="pcDet-tags">CHOOSE EMULATOR · GBA</div>
           <p className="pcDet-note">
-            Multiple cores can run this release — pick which one launches.
+            A few cores know how to run this one — pick who drives.
           </p>
         </div>
       </div>
@@ -215,13 +216,13 @@ export function NotInstalledScreen() {
             <Chip>104 MB</Chip>
           </div>
           <p className="pcDet-note">
-            This game must be acquired before it can launch.
+            You don't own this cart yet — grab it and it's good to go.
           </p>
         </div>
       </div>
       <div className="pcDet-actions">
         <Btn kind="primary" sel>
-          ⬇ DOWNLOAD
+          <PicoIcon name="download" /> DOWNLOAD
         </Btn>
         <Btn>DETAILS</Btn>
       </div>
