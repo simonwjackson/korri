@@ -1,0 +1,169 @@
+/* PROTOTYPE — pico theme. Throwaway. Gallery group SESSION (pcSes-). */
+
+/* Launching gate -------------------------------------------------------- */
+.pcSes-launch {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-2);
+}
+.pcSes-launch-status {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+}
+
+/* Blocked gate: the four host-busy reasons as a status list ------------- */
+.pcSes-reasons {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--pico-space-1) var(--pico-space-2);
+}
+.pcSes-reason {
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink-dim);
+	background: var(--p8-black);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+.pcSes-reason.active {
+	color: var(--p8-white);
+	background: var(--p8-red);
+	border-color: var(--p8-red);
+}
+
+/* Launch-failure banner + the eight failure kinds ----------------------- */
+.pcSes-fail-banner {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	flex: 0 0 auto;
+	padding: var(--pico-space-2);
+	background: var(--p8-black);
+	border: 0.4cqw solid var(--p8-red);
+}
+.pcSes-fail-banner-ico {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-1);
+	color: var(--p8-red);
+}
+.pcSes-fail-banner-text {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15em;
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: var(--pico-text--1);
+	color: var(--pico-ink-dim);
+}
+.pcSes-fail-banner-text b {
+	font-weight: normal;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink);
+}
+.pcSes-fail-list {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: var(--pico-space-1) var(--pico-space-2);
+	overflow: hidden;
+}
+.pcSes-fail {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15em;
+	min-width: 0;
+	padding: var(--pico-space-1) var(--pico-space-2);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+.pcSes-fail.active {
+	background: var(--pico-panel);
+	border-color: var(--p8-red);
+}
+.pcSes-fail-title {
+	font-weight: normal;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-accent);
+}
+.pcSes-fail.active .pcSes-fail-title {
+	color: var(--p8-red);
+}
+.pcSes-fail-detail {
+	font-size: var(--pico-text--3);
+	line-height: 1.35;
+	color: var(--pico-ink-dim);
+}
+
+/* Boot stepper ---------------------------------------------------------- */
+.pcSes-boot {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-2);
+}
+.pcSes-steps {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	text-align: left;
+}
+.pcSes-step {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink-dim);
+}
+.pcSes-step.done {
+	color: var(--p8-lime);
+}
+.pcSes-step.active {
+	color: var(--pico-accent);
+}
+.pcSes-step-mark {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 3cqw;
+	color: inherit;
+}
+.pcSes-boot-bar {
+	width: min(72cqw, 100%);
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	font-size: var(--pico-text--2);
+}
+
+/* Cooldown countdown ---------------------------------------------------- */
+.pcSes-countdown {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-1);
+	color: var(--p8-blue);
+	letter-spacing: 0.0625em;
+}
+
+/* Crash failure stage --------------------------------------------------- */
+.pcSes-stage {
+	display: inline-grid;
+	grid-template-columns: auto auto;
+	gap: var(--pico-space-1) var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	background: var(--p8-black);
+	border: 0.3125cqw solid var(--p8-slate);
+	font-family: var(--font-term);
+	font-size: var(--pico-text--2);
+}
+.pcSes-stage-k {
+	color: var(--pico-ink-dim);
+}
+.pcSes-stage-v {
+	color: var(--p8-red);
+}

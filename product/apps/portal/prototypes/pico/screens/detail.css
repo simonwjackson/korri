@@ -1,0 +1,133 @@
+/* PROTOTYPE — pico theme. Throwaway. Gallery group DETAIL (pcDet-). */
+
+/* Compact header: small art chip beside title + meta, reused by most variants. */
+.pcDet-head {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-3);
+}
+.pcDet-head-info {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	min-width: 0;
+}
+.pcDet-tags {
+	font-size: var(--pico-text--2);
+	letter-spacing: 0.0625em;
+	color: var(--pico-accent);
+}
+.pcDet-note {
+	margin: 0;
+	max-width: 64cqw;
+	font-size: var(--pico-text--2);
+	line-height: 1.5;
+	color: var(--pico-ink-dim);
+}
+.pcDet-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--pico-space-1);
+}
+
+/* Dimmed art for the not-installed state. */
+.pcDet-dim {
+	opacity: 0.45;
+	filter: grayscale(0.5);
+}
+
+/* Emulator chooser: a column of choice cards, one selected. */
+.pcDet-choices {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+	min-height: 0;
+}
+.pcDet-choice.sel {
+	border-color: var(--pico-focus);
+	outline: 0.4688cqw solid var(--pico-focus);
+	outline-offset: 0.3125cqw;
+}
+.pcDet-choice-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--pico-space-2);
+}
+
+/* Community stats: stat readouts + difficulty card. */
+.pcDet-stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-2) var(--pico-space-3);
+}
+.pcDet-diff {
+	flex: 0 0 auto;
+}
+.pcDet-diff-row {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	font-size: var(--pico-text--2);
+}
+
+/* Media gallery: one big frame over a thumbnail filmstrip. */
+.pcDet-gallery {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+}
+.pcDet-shot {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-3);
+	padding: var(--pico-space-2);
+	background: var(--pico-panel);
+	border: 0.4cqw solid var(--p8-slate);
+}
+.pcDet-shot-art {
+	container-type: size;
+	flex: 0 0 auto;
+	aspect-ratio: 4 / 3;
+	height: min(36cqh, calc(var(--pico-base) * 8));
+}
+.pcDet-shot-art .pico-cart {
+	width: 100%;
+	height: 100%;
+}
+.pcDet-shot-art .pico-cart-initials {
+	font-size: 30cqh;
+}
+.pcDet-shot-cap {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	min-width: 0;
+}
+.pcDet-strip {
+	flex: 0 0 auto;
+	display: flex;
+	gap: var(--pico-space-2);
+}
+.pcDet-thumb {
+	opacity: 0.6;
+}
+.pcDet-thumb.sel {
+	opacity: 1;
+	outline: 0.4688cqw solid var(--pico-focus);
+	outline-offset: 0.3125cqw;
+}
+
+/* Not-installed primary actions. */
+.pcDet-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-2);
+	margin-top: var(--pico-space-1);
+}

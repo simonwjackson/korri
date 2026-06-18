@@ -1,0 +1,218 @@
+/* PROTOTYPE — pico theme. Throwaway. Gallery group SETTINGS (pcSet-). */
+
+/* Detail pane: a column of label + control rows, one focused. -------------- */
+.pcSet-list {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.pcSet-row {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-size: var(--pico-text-1);
+	color: var(--pico-ink-dim);
+}
+.pcSet-row.sel {
+	background: var(--pico-focus);
+	color: var(--p8-black);
+}
+.pcSet-label {
+	flex: 1 1 auto;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--pico-ink);
+}
+.pcSet-row.sel .pcSet-label {
+	color: var(--p8-black);
+}
+.pcSet-info {
+	flex: 0 0 auto;
+	color: var(--pico-ink);
+}
+.pcSet-row.sel .pcSet-info {
+	color: var(--p8-black);
+}
+
+/* Storage usage --------------------------------------------------------- */
+.pcSet-usage {
+	display: flex;
+	justify-content: space-between;
+	font-size: var(--pico-text--2);
+}
+.pcSet-used {
+	color: var(--pico-accent);
+}
+.pcSet-free {
+	color: var(--pico-ink-dim);
+}
+.pcSet-swatch {
+	flex: 0 0 auto;
+	width: 2.2cqw;
+	height: 2.2cqw;
+	border: 0.3125cqw solid var(--p8-black);
+}
+.pcSet-swatch.games {
+	background: var(--p8-blue);
+}
+.pcSet-swatch.saves {
+	background: var(--p8-lime);
+}
+.pcSet-swatch.system {
+	background: var(--p8-orange);
+}
+.pcSet-swatch.free {
+	background: var(--p8-slate);
+}
+
+/* Action button row ----------------------------------------------------- */
+.pcSet-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-1) var(--pico-space-2);
+}
+
+/* Theme picker ---------------------------------------------------------- */
+.pcSet-themes {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: var(--pico-space-2);
+}
+.pcSet-theme {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-2);
+	background: var(--pico-panel);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+.pcSet-theme.sel {
+	border-color: var(--pico-accent);
+	background: var(--p8-black);
+}
+.pcSet-theme-swatch {
+	width: 100%;
+	height: min(14cqh, calc(var(--pico-base) * 3));
+	border: 0.3125cqw solid var(--p8-black);
+}
+.pcSet-theme-swatch.shift {
+	background: linear-gradient(135deg, var(--p8-navy), var(--p8-blue));
+}
+.pcSet-theme-swatch.pico {
+	background: linear-gradient(135deg, var(--p8-yellow), var(--p8-red));
+}
+.pcSet-theme-swatch.demo {
+	background: linear-gradient(135deg, var(--p8-green), var(--p8-lime));
+}
+.pcSet-theme-name {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink-dim);
+}
+.pcSet-theme.sel .pcSet-theme-name {
+	color: var(--pico-accent);
+}
+.pcSet-theme-tick {
+	position: absolute;
+	top: var(--pico-space-1);
+	right: var(--pico-space-1);
+	font-size: var(--pico-text-0);
+	color: var(--pico-accent);
+}
+
+/* Accent swatches (PICO-8 palette) -------------------------------------- */
+.pcSet-accents {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-2);
+}
+.pcSet-accent {
+	width: 4cqw;
+	height: 4cqw;
+	border: 0.4cqw solid var(--p8-black);
+}
+.pcSet-accent.sel {
+	outline: 0.4688cqw solid var(--pico-focus);
+	outline-offset: 0.3125cqw;
+}
+.pcSet-accent.yellow {
+	background: var(--p8-yellow);
+}
+.pcSet-accent.red {
+	background: var(--p8-red);
+}
+.pcSet-accent.orange {
+	background: var(--p8-orange);
+}
+.pcSet-accent.lime {
+	background: var(--p8-lime);
+}
+.pcSet-accent.blue {
+	background: var(--p8-blue);
+}
+.pcSet-accent.pink {
+	background: var(--p8-pink);
+}
+.pcSet-accent.lilac {
+	background: var(--p8-lilac);
+}
+.pcSet-accent.peach {
+	background: var(--p8-peach);
+}
+
+/* Accounts / profiles --------------------------------------------------- */
+.pcSet-profile {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+}
+.pcSet-profile.sel {
+	background: var(--pico-focus);
+}
+.pcSet-avatar {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: min(10cqh, calc(var(--pico-base) * 2.5));
+	height: min(10cqh, calc(var(--pico-base) * 2.5));
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--p8-black);
+	border: 0.3125cqw solid var(--p8-black);
+}
+.pcSet-avatar.you {
+	background: var(--pico-accent);
+}
+.pcSet-avatar.member {
+	background: var(--p8-blue);
+}
+.pcSet-profile-text {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15em;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+.pcSet-profile-meta {
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink-dim);
+}
+.pcSet-profile.sel .pcSet-label,
+.pcSet-profile.sel .pcSet-profile-meta,
+.pcSet-profile.sel .pcSet-info {
+	color: var(--p8-black);
+}
+
+/* Modal description (Labs / System) ------------------------------------- */
+.pcSet-modal-desc {
+	margin: 0;
+	font-size: var(--pico-text--1);
+	color: var(--pico-ink-dim);
+}

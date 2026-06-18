@@ -1,31 +1,24 @@
 /**
  * PROTOTYPE — pico theme exploration. Throwaway (sub-shape B route).
  *
- * Three structurally-different 8-bit home-screen directions for a future
- * "pico" theme targeting the Anbernic RG353M (640x480). Switch with the
- * floating bar or ?variant=A|B|C. The physical-size calibration desk is the
- * reusable device-lab kit (prototypes/pico/device-lab/); pico is its first
- * consumer. Delete this route + prototypes/pico/ once a direction wins; see
- * prototypes/pico/NOTES.md.
+ * The max-out STATE GALLERY for the future "pico" theme: every distinct state
+ * (current Korri + plausible future), each reachable from the floating gallery
+ * navigator or ?screen=<id>. The physical-size calibration desk is the reusable
+ * device-lab kit (prototypes/pico/device-lab/). Delete this route +
+ * prototypes/pico/ once a direction wins; see prototypes/pico/NOTES.md.
  */
 import {
   type DeviceConfig,
   DeviceLab,
   type ThemeKnob,
 } from "@product/apps/portal/prototypes/pico/device-lab"
+import { PicoGallery } from "@product/apps/portal/prototypes/pico/PicoGallery"
 import {
-  picoGames,
-  picoRecent,
-} from "@product/apps/portal/prototypes/pico/fixtures"
-import {
-  PicoPrototypeSwitcher,
-  type PicoVariantDef,
-} from "@product/apps/portal/prototypes/pico/PicoPrototypeSwitcher"
-import { VariantCartridgeShelf } from "@product/apps/portal/prototypes/pico/VariantCartridgeShelf"
-import { VariantGameDetail } from "@product/apps/portal/prototypes/pico/VariantGameDetail"
-import { VariantIconGrid } from "@product/apps/portal/prototypes/pico/VariantIconGrid"
-import { VariantInGame } from "@product/apps/portal/prototypes/pico/VariantInGame"
-import { VariantSettings } from "@product/apps/portal/prototypes/pico/VariantSettings"
+  findScreen,
+  PICO_FIRST_SCREEN,
+  PICO_GROUPS,
+  PICO_SCREENS,
+} from "@product/apps/portal/prototypes/pico/screen-catalog"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import "@product/apps/portal/prototypes/pico/device-lab/device-lab.css"
 import "@product/apps/portal/prototypes/pico/pico-prototype.css"
@@ -33,14 +26,6 @@ import "@product/apps/portal/prototypes/pico/pico-prototype.css"
 export const Route = createFileRoute("/pico-prototype")({
   component: PicoPrototypeRoute,
 })
-
-const VARIANTS: readonly PicoVariantDef[] = [
-  { key: "A", name: "Home" },
-  { key: "B", name: "Settings" },
-  { key: "C", name: "Browse" },
-  { key: "D", name: "Game Detail" },
-  { key: "E", name: "In-Game" },
-]
 
 // Calibrated seed exported from the device-lab desk. SCALE (px/mm) is
 // monitor-specific — recalibrate per monitor via the credit card. Device mm +
@@ -141,7 +126,8 @@ const PICO_KNOBS: readonly ThemeKnob[] = [
 function PicoPrototypeRoute() {
   const search = Route.useSearch()
   const navigate = useNavigate()
-  const variant = readVariant(search)
+  const screenId = readScreen(search)
+  const screen = findScreen(screenId)
 
   return (
     <div data-pico>
@@ -155,37 +141,27 @@ function PicoPrototypeRoute() {
         screensClassName="pico-screens"
         bezelClassName="pico-bezel"
         screenClassName="pico-screen"
-        render={() => renderVariant(variant)}
+        render={() => screen.render()}
       />
-      <PicoPrototypeSwitcher
-        variants={VARIANTS}
-        current={variant}
-        onSelect={key =>
-          navigate({ to: "/pico-prototype", search: { variant: key } })
+      <PicoGallery
+        screens={PICO_SCREENS}
+        groups={PICO_GROUPS}
+        current={screenId}
+        onSelect={id =>
+          navigate({ to: "/pico-prototype", search: { screen: id } })
         }
       />
     </div>
   )
 }
 
-function renderVariant(variant: string) {
-  if (variant === "A") return <VariantCartridgeShelf games={picoGames} />
-  if (variant === "B") return <VariantSettings />
-  if (variant === "C") return <VariantIconGrid games={picoGames} />
-  if (variant === "D") return <VariantGameDetail games={picoGames} />
-  if (variant === "E") {
-    const hero = picoRecent[0] ?? picoGames[0]
-    return hero ? <VariantInGame game={hero} /> : null
-  }
-  return null
-}
-
-function readVariant(search: unknown): string {
+function readScreen(search: unknown): string {
   const value =
-    typeof search === "object" && search !== null && "variant" in search
-      ? (search as { readonly variant?: unknown }).variant
+    typeof search === "object" && search !== null && "screen" in search
+      ? (search as { readonly screen?: unknown }).screen
       : undefined
-  return value === "B" || value === "C" || value === "D" || value === "E"
-    ? value
-    : "A"
+  if (typeof value === "string" && PICO_SCREENS.some(s => s.id === value)) {
+    return value
+  }
+  return PICO_FIRST_SCREEN
 }

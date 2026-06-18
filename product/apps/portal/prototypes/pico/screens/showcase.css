@@ -1,0 +1,296 @@
+/* PROTOTYPE — pico theme. Throwaway. Gallery group SHOWCASE (pcShow-).
+ * The "more pop" iteration: janky retro motion via steps() timing. All sizing
+ * stays bounded-intrinsic (type via --pico-text-*, art via min(cqh, base*N)). */
+
+/* ── Spotlight (content-first auto-rotating hero + coverflow) ───────────── */
+.pcShow-spot {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-2);
+	overflow: hidden;
+}
+
+/* Parallax dither field that scrolls in chunky steps behind everything. */
+.pcShow-spot-bg {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	background:
+		repeating-linear-gradient(
+			135deg,
+			rgba(41, 173, 255, 0.16) 0 3cqw,
+			rgba(131, 118, 156, 0.1) 3cqw 6cqw
+		),
+		radial-gradient(circle at 30% 30%, rgba(255, 236, 39, 0.18), transparent 55%);
+	background-size: 12cqw 12cqw, 100% 100%;
+	animation: pcShow-scroll 1.6s steps(8) infinite;
+}
+@keyframes pcShow-scroll {
+	to {
+		background-position: 12cqw 12cqw, 0 0;
+	}
+}
+
+/* Hero: big art + minimal text. Pops in (remounted per rotation). */
+.pcShow-spot-hero {
+	position: relative;
+	z-index: 1;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-3);
+	animation: pcShow-popin 0.34s steps(5) both;
+}
+@keyframes pcShow-popin {
+	from {
+		opacity: 0;
+		transform: translateY(6cqh) scale(0.94);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+.pcShow-spot-art {
+	container-type: size;
+	flex: 0 0 auto;
+	aspect-ratio: 3 / 4;
+	/* `100%` keeps the art inside its (flex) hero row so it can never overflow
+	 * and overlap the rail/info; the cqh + base terms (base max 200px) are the
+	 * art-forward ceiling that also bounds the huge TV. */
+	height: min(100%, 64cqh, calc(var(--pico-base) * 18));
+	animation: pcShow-bob 1.1s steps(4) infinite alternate;
+}
+.pcShow-spot-art .pico-cart {
+	width: 100%;
+	height: 100%;
+	outline: 0.4688cqw solid var(--pico-focus);
+	outline-offset: 0.625cqw;
+	animation: pcShow-glow 1.4s steps(3) infinite alternate;
+}
+.pcShow-spot-art .pico-cart-initials {
+	font-size: 34cqh;
+}
+@keyframes pcShow-bob {
+	from {
+		transform: translateY(0);
+	}
+	to {
+		transform: translateY(-2.2cqh);
+	}
+}
+@keyframes pcShow-glow {
+	from {
+		box-shadow: 0 0 0 0.625cqw rgba(41, 173, 255, 0.2);
+	}
+	to {
+		box-shadow: 0 0 0 1.5cqw rgba(41, 173, 255, 0.45);
+	}
+}
+.pcShow-spot-info {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcShow-kicker {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-accent);
+	letter-spacing: 0.125em;
+	animation: pcShow-flicker 0.9s steps(2) infinite;
+}
+@keyframes pcShow-flicker {
+	0%,
+	60% {
+		opacity: 1;
+	}
+	60.01%,
+	100% {
+		opacity: 0.35;
+	}
+}
+.pcShow-spot-title {
+	color: var(--pico-ink);
+	text-shadow: 0.4688cqw 0.4688cqw 0 var(--p8-red);
+}
+.pcShow-spot-tags {
+	font-size: var(--pico-text--1);
+	letter-spacing: 0.0625em;
+	color: var(--pico-ink-dim);
+}
+.pcShow-play {
+	align-self: flex-start;
+	margin-top: var(--pico-space-1);
+	padding: var(--pico-space-1) var(--pico-space-3);
+	font-family: var(--font-display);
+	font-size: var(--pico-text-0);
+	color: #000;
+	background: var(--pico-accent);
+	animation: pcShow-pulse 0.7s steps(2) infinite alternate;
+}
+@keyframes pcShow-pulse {
+	from {
+		background: var(--pico-accent);
+		transform: scale(1);
+	}
+	to {
+		background: var(--p8-lime);
+		transform: scale(1.06);
+	}
+}
+
+/* Coverflow strip: focused cart scales up + bobs; others recede. Janky
+ * transition so focus changes "snap" in steps rather than glide. */
+.pcShow-rail {
+	position: relative;
+	z-index: 1;
+	flex: 0 0 auto;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	gap: 2cqw;
+	height: min(22cqh, calc(var(--pico-base) * 7));
+	overflow: hidden;
+}
+.pcShow-rail-cart {
+	container-type: size;
+	flex: 0 0 auto;
+	aspect-ratio: 3 / 4;
+	height: 72%;
+	opacity: 0.5;
+	filter: saturate(0.55);
+	transform: translateY(0.6cqh);
+	transition:
+		height 0.3s steps(5),
+		opacity 0.3s steps(5),
+		transform 0.3s steps(5);
+}
+/* Make the cart FILL its 3:4 box; without this the inner .pico-cart sizes to
+ * its (short) text content and renders wider-than-tall. */
+.pcShow-rail-cart .pico-cart {
+	width: 100%;
+	height: 100%;
+}
+.pcShow-rail-cart .pico-cart-initials {
+	font-size: 30cqh;
+}
+.pcShow-rail-cart.on {
+	height: 100%;
+	opacity: 1;
+	filter: none;
+	transform: translateY(0);
+	animation: pcShow-bob 1.1s steps(4) infinite alternate;
+}
+.pcShow-rail-cart.on .pico-cart {
+	outline: 0.4688cqw solid var(--pico-accent);
+	outline-offset: 0.4688cqw;
+}
+
+/* ── For You (curated, contextual shelves — no system picker, no A–Z) ───── */
+.pcShow-shelves {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-2) var(--pico-space-3);
+	overflow: hidden;
+}
+.pcShow-shelf {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	/* rows slide in, staggered, in chunky steps */
+	animation: pcShow-slidein 0.4s steps(6) both;
+}
+.pcShow-shelf:nth-child(2) {
+	animation-delay: 0.08s;
+}
+.pcShow-shelf:nth-child(3) {
+	animation-delay: 0.16s;
+}
+.pcShow-shelf:nth-child(4) {
+	animation-delay: 0.24s;
+}
+@keyframes pcShow-slidein {
+	from {
+		opacity: 0;
+		transform: translateX(10cqw);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+.pcShow-shelf-title {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink);
+	letter-spacing: 0.0625em;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.pcShow-shelf-title::after {
+	content: "_";
+	color: var(--pico-accent);
+	animation: pcShow-flicker 0.8s steps(2) infinite;
+}
+.pcShow-shelf-row {
+	display: flex;
+	align-items: center;
+	gap: 2cqw;
+	min-height: 0;
+	overflow: hidden;
+}
+.pcShow-tile {
+	container-type: size;
+	flex: 0 0 auto;
+	aspect-ratio: 3 / 4;
+	height: min(34cqh, calc(var(--pico-base) * 12));
+	transition:
+		transform 0.25s steps(4),
+		outline-color 0.25s steps(4);
+}
+/* Fill the 3:4 box (see rail note above). */
+.pcShow-tile .pico-cart {
+	width: 100%;
+	height: 100%;
+}
+.pcShow-tile .pico-cart-initials {
+	font-size: 30cqh;
+}
+.pcShow-tile.on {
+	transform: scale(1.08);
+	animation: pcShow-bob 1.1s steps(4) infinite alternate;
+}
+.pcShow-tile.on .pico-cart {
+	outline: 0.4688cqw solid var(--pico-accent);
+	outline-offset: 0.4688cqw;
+	box-shadow: 0 0 0 0.9375cqw rgba(255, 236, 39, 0.25);
+}
+
+/* Stack the spotlight hero on tall/handheld form factors. */
+@container (max-aspect-ratio: 1 / 1) {
+	.pcShow-spot-hero {
+		flex-direction: column;
+		justify-content: center;
+		text-align: center;
+	}
+	.pcShow-spot-art {
+		height: min(100%, 46cqh, calc(var(--pico-base) * 14));
+	}
+	.pcShow-spot-info {
+		align-items: center;
+	}
+	.pcShow-play {
+		align-self: center;
+	}
+}

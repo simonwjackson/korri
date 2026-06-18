@@ -46,7 +46,9 @@
 	position: fixed;
 	inset: 0;
 	display: grid;
-	place-items: center;
+	/* `safe` so a device taller than the viewport falls back to start-alignment
+	 * instead of centering its top out of reach under the page chrome. */
+	place-items: safe center;
 	background: radial-gradient(circle at 50% 30%, #14122a, #050410 70%);
 	overflow: auto;
 }
@@ -682,6 +684,133 @@
 	color: var(--p8-yellow);
 }
 
+/* Floating state-gallery navigator (dev chrome, not part of the design) -- */
+.pico-gallerybar {
+	position: fixed;
+	bottom: 14px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 1000;
+	display: flex;
+	align-items: stretch;
+	gap: 8px;
+	padding: 6px 8px;
+	border-radius: 10px;
+	background: #000;
+	border: 2px solid var(--p8-yellow);
+	color: var(--p8-white);
+	font-family: var(--font-term);
+	font-size: 17px;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+}
+.pico-gallerybar button {
+	cursor: pointer;
+	border: none;
+	background: var(--p8-yellow);
+	color: #000;
+	font-family: var(--font-display);
+	font-size: 11px;
+	border-radius: 6px;
+	padding: 0 10px;
+}
+.pico-gallerybar .pico-gallerybar-label {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	min-width: 260px;
+	background: #111;
+	color: var(--p8-white);
+	font-family: var(--font-term);
+	font-size: 16px;
+	letter-spacing: 0.5px;
+	padding: 4px 12px;
+}
+.pico-gallerybar .pico-gallerybar-label b {
+	color: var(--p8-yellow);
+}
+.pico-gallerybar .pico-gallerybar-count {
+	font-size: 12px;
+	color: var(--p8-silver);
+}
+.pico-gallerybar .pico-gallerybar-map {
+	background: var(--p8-lime);
+}
+
+.pico-gallerymap {
+	position: fixed;
+	inset: 24px;
+	z-index: 1001;
+	display: flex;
+	flex-direction: column;
+	background: rgba(5, 4, 16, 0.97);
+	border: 2px solid var(--p8-yellow);
+	border-radius: 12px;
+	color: var(--p8-white);
+	font-family: var(--font-term);
+	box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7);
+	overflow: hidden;
+}
+.pico-gallerymap-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 16px;
+	border-bottom: 2px solid var(--p8-slate);
+	font-family: var(--font-display);
+	font-size: 13px;
+	color: var(--p8-yellow);
+}
+.pico-gallerymap-head button {
+	cursor: pointer;
+	border: none;
+	background: var(--p8-red);
+	color: var(--p8-white);
+	font-family: var(--font-display);
+	font-size: 12px;
+	padding: 4px 8px;
+	border-radius: 6px;
+}
+.pico-gallerymap-body {
+	flex: 1;
+	overflow: auto;
+	padding: 16px;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 18px 24px;
+	align-content: start;
+}
+.pico-gallerymap-gtitle {
+	font-family: var(--font-display);
+	font-size: 12px;
+	color: var(--p8-lime);
+	letter-spacing: 1px;
+	padding-bottom: 6px;
+	margin-bottom: 6px;
+	border-bottom: 1px solid var(--p8-slate);
+}
+.pico-gallerymap-item {
+	display: block;
+	width: 100%;
+	text-align: left;
+	cursor: pointer;
+	border: none;
+	background: transparent;
+	color: var(--p8-silver);
+	font-family: var(--font-term);
+	font-size: 17px;
+	padding: 4px 8px;
+	border-radius: 6px;
+}
+.pico-gallerymap-item:hover {
+	background: #1a2547;
+	color: var(--p8-white);
+}
+.pico-gallerymap-item.on {
+	background: var(--p8-yellow);
+	color: #000;
+}
+
 /* Variant D — Game Detail ------------------------------------------------ */
 .pcD {
 	position: relative;
@@ -703,7 +832,12 @@
 	container-type: size;
 	flex: 0 0 auto;
 	aspect-ratio: 3 / 4;
-	height: min(42cqh, 100%);
+	/* Bounded by the type scale, not a raw cqh: the cart shares the base's
+	 * ceiling so it tracks the text instead of running away on big screens.
+	 * The MAX generator knob (--pico-base-max) is now the A<->B dial:
+	 *   low MAX  -> base caps early -> cart + text plateau (B: whitespace)
+	 *   high MAX -> base follows cqi -> cart + text scale up (A: scaled-up). */
+	height: min(42cqh, calc(var(--pico-base) * 11));
 }
 .pcD-art .pico-cart {
 	width: 100%;
@@ -783,7 +917,7 @@
 		gap: 5cqw;
 	}
 	.pcD-art {
-		height: min(74cqh, 100%);
+		height: min(74cqh, calc(var(--pico-base) * 12));
 	}
 	.pcD-info {
 		flex: 1;
@@ -903,4 +1037,476 @@
 }
 .pcE-mi.sel .pcE-slot {
 	color: #000;
+}
+
+/* =====================================================================
+ * SHARED KIT ATOMS (pc-*) — the max-out state gallery
+ * Every gallery screen (screens/*.tsx) composes from screens/kit.tsx, which
+ * renders these classes. Sizing is bounded-intrinsic: text via --pico-text-*,
+ * space via --pico-space-*, big art via min(cqh, calc(base * N)). No raw
+ * runaway cqh/cqw on leaves; selection state lives here, never inline.
+ * ===================================================================== */
+
+/* Screen shell ---------------------------------------------------------- */
+.pc-root {
+	position: relative;
+	height: 100%;
+	display: grid;
+	grid-template-rows: auto 1fr auto;
+}
+.pc-root.tone-dim {
+	background: var(--pico-panel);
+}
+.pc-root.tone-alert {
+	background: linear-gradient(180deg, #2a0a14, var(--pico-bg) 55%);
+}
+.pc-main {
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-2) var(--pico-space-3);
+	overflow: hidden;
+}
+.pc-main.pad-0 {
+	padding: 0;
+}
+.pc-main.center {
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+}
+
+/* Generic layout helpers ------------------------------------------------ */
+.pc-col {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	min-height: 0;
+}
+.pc-rowflex {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+}
+.pc-wrap {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-1) var(--pico-space-2);
+}
+.pc-fill {
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+.pc-scroll {
+	overflow: hidden;
+	min-height: 0;
+}
+.pc-grid-2 {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: var(--pico-space-2);
+	min-height: 0;
+}
+.pc-grid-3 {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: var(--pico-space-2);
+	min-height: 0;
+}
+.pc-grid-4 {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: var(--pico-space-2);
+	min-height: 0;
+}
+
+/* Bounded art chip (3:4 cartridge), tracks the type scale, never runs away. */
+.pc-art {
+	container-type: size;
+	flex: 0 0 auto;
+	aspect-ratio: 3 / 4;
+	height: min(46cqh, calc(var(--pico-base) * 11));
+}
+.pc-art .pico-cart {
+	width: 100%;
+	height: 100%;
+}
+.pc-art .pico-cart-initials {
+	font-size: 34cqh;
+}
+.pc-art.sm {
+	height: min(24cqh, calc(var(--pico-base) * 6));
+}
+
+/* Typography ------------------------------------------------------------ */
+.pc-title {
+	margin: 0;
+	font-family: var(--font-display);
+	line-height: 1.2;
+	color: var(--pico-ink);
+	text-shadow: 0.3125cqw 0.3125cqw 0 #000;
+}
+.pc-t-2 {
+	font-size: var(--pico-text--2);
+}
+.pc-t-1 {
+	font-size: var(--pico-text--1);
+}
+.pc-t0 {
+	font-size: var(--pico-text-0);
+}
+.pc-t1 {
+	font-size: var(--pico-text-1);
+}
+.pc-t2 {
+	font-size: var(--pico-text-2);
+}
+.pc-t3 {
+	font-size: var(--pico-text-3);
+}
+.pc-sub {
+	font-size: var(--pico-text-0);
+	color: var(--pico-accent);
+	letter-spacing: 0.0625em;
+}
+.pc-dim {
+	color: var(--pico-ink-dim);
+}
+
+/* Buttons --------------------------------------------------------------- */
+.pc-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5em;
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink);
+	background: transparent;
+	border: 0.4cqw solid var(--p8-slate);
+}
+.pc-btn.primary {
+	color: #000;
+	background: var(--pico-accent);
+	border-color: var(--pico-accent);
+}
+.pc-btn.danger {
+	color: var(--p8-white);
+	background: var(--p8-red);
+	border-color: var(--p8-red);
+}
+.pc-btn.ghost {
+	border-color: transparent;
+	color: var(--pico-ink-dim);
+}
+.pc-btn.sel {
+	outline: 0.4688cqw solid var(--pico-focus);
+	outline-offset: 0.3125cqw;
+}
+
+/* Lists ----------------------------------------------------------------- */
+.pc-list {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+}
+.pc-row {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-size: var(--pico-text-0);
+	color: var(--pico-ink-dim);
+}
+.pc-row.sel {
+	background: var(--pico-focus);
+	color: var(--p8-black);
+}
+.pc-row-ico {
+	flex: 0 0 auto;
+	display: inline-flex;
+	color: var(--pico-accent);
+}
+.pc-row.sel .pc-row-ico {
+	color: var(--p8-black);
+}
+.pc-row-text {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15em;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+.pc-row-label {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--pico-ink);
+}
+.pc-row.sel .pc-row-label {
+	color: var(--p8-black);
+}
+.pc-row-meta {
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink-dim);
+}
+.pc-row.sel .pc-row-meta {
+	color: #1a1a1a;
+}
+.pc-row-trail {
+	flex: 0 0 auto;
+	margin-left: auto;
+	font-size: var(--pico-text--1);
+}
+
+/* Cards ----------------------------------------------------------------- */
+.pc-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-2);
+	background: var(--pico-panel);
+	border: 0.3125cqw solid var(--p8-slate);
+	min-height: 0;
+}
+.pc-card-title {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-accent);
+	letter-spacing: 0.0625em;
+}
+
+/* Modal / sheet --------------------------------------------------------- */
+.pc-gamebg {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	background:
+		repeating-linear-gradient(135deg, #11203f 0 8cqw, #0c1730 8cqw 16cqw),
+		radial-gradient(circle at 50% 38%, rgba(41, 173, 255, 0.35), transparent 60%);
+}
+.pc-modal {
+	position: relative;
+	z-index: 1;
+	min-height: 0;
+	display: grid;
+	place-items: center;
+	padding: var(--pico-space-2);
+	background: rgba(0, 0, 0, 0.62);
+}
+.pc-modal-panel {
+	width: min(82cqw, 100%);
+	max-height: 100%;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-3);
+	background: var(--pico-panel);
+	border: 0.4cqw solid var(--p8-slate);
+	overflow: hidden;
+}
+.pc-modal-title {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-1);
+	color: var(--pico-accent);
+	text-shadow: 0.3125cqw 0.3125cqw 0 #000;
+}
+
+/* Progress -------------------------------------------------------------- */
+.pc-progress {
+	width: 100%;
+	height: 2.2cqw;
+	background: var(--p8-black);
+	border: 0.3125cqw solid var(--p8-slate);
+	overflow: hidden;
+}
+.pc-progress-fill {
+	height: 100%;
+	background: var(--pico-accent);
+	background-image: repeating-linear-gradient(
+		90deg,
+		rgba(0, 0, 0, 0.25) 0 0.6cqw,
+		transparent 0.6cqw 1.2cqw
+	);
+}
+
+/* Block slider / toggle / option (reused control vocabulary) ------------ */
+.pc-bar {
+	letter-spacing: 0.1563cqw;
+	font-size: var(--pico-text-0);
+}
+.pc-bar-on {
+	color: var(--pico-accent);
+}
+.pc-bar-off {
+	color: var(--p8-slate);
+}
+.pc-toggle {
+	display: inline-flex;
+	gap: 0.4688cqw;
+	font-size: var(--pico-text--1);
+}
+.pc-toggle span {
+	padding: 0.3125cqw 0.9375cqw;
+	background: var(--p8-black);
+	color: var(--pico-ink-dim);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+.pc-toggle span.on {
+	background: var(--pico-accent);
+	color: var(--p8-black);
+	border-color: var(--pico-accent);
+}
+.pc-opt {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.9375cqw;
+	color: var(--pico-ink);
+	font-size: var(--pico-text-0);
+}
+.pc-opt-arr {
+	color: var(--pico-accent);
+}
+
+/* Tabs ------------------------------------------------------------------ */
+.pc-tabs {
+	display: flex;
+	gap: var(--pico-space-1);
+	flex-wrap: wrap;
+	flex: 0 0 auto;
+}
+.pc-tab {
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink-dim);
+	background: var(--p8-black);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+.pc-tab.sel {
+	color: var(--p8-black);
+	background: var(--pico-accent);
+	border-color: var(--pico-accent);
+}
+
+/* Stats / badges / chips ------------------------------------------------ */
+.pc-stat {
+	display: inline-flex;
+	flex-direction: column;
+	gap: 0.1em;
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink-dim);
+}
+.pc-stat b {
+	font-weight: normal;
+	font-family: var(--font-display);
+	font-size: var(--pico-text-0);
+	color: var(--pico-accent);
+}
+.pc-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.25em 0.6em;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--p8-black);
+	background: var(--p8-silver);
+}
+.pc-badge.accent {
+	background: var(--pico-accent);
+}
+.pc-badge.good {
+	background: var(--p8-lime);
+}
+.pc-badge.bad {
+	background: var(--p8-red);
+	color: var(--p8-white);
+}
+.pc-badge.info {
+	background: var(--p8-blue);
+}
+.pc-chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.2em 0.6em;
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink-dim);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+
+/* Spinner / glyph ------------------------------------------------------- */
+.pc-spinner {
+	display: inline-flex;
+	gap: 0.8cqw;
+}
+.pc-spinner b {
+	width: 2.2cqw;
+	height: 2.2cqw;
+	background: var(--pico-accent);
+	animation: pc-blink 0.9s steps(2, end) infinite;
+}
+.pc-spinner b:nth-child(2) {
+	animation-delay: 0.15s;
+}
+.pc-spinner b:nth-child(3) {
+	animation-delay: 0.3s;
+}
+@keyframes pc-blink {
+	0%,
+	50% {
+		opacity: 1;
+	}
+	50.01%,
+	100% {
+		opacity: 0.2;
+	}
+}
+.pc-glyph {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-3);
+	line-height: 1;
+	color: var(--pico-ink);
+	text-shadow: 0.4688cqw 0.4688cqw 0 #000;
+}
+.pc-glyph.accent {
+	color: var(--pico-accent);
+}
+.pc-glyph.good {
+	color: var(--p8-lime);
+}
+.pc-glyph.bad {
+	color: var(--p8-red);
+}
+.pc-glyph.info {
+	color: var(--p8-blue);
+}
+
+/* Hero (centered status: glyph + title + message + actions) -------------- */
+.pc-hero {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-2);
+}
+.pc-hero-msg {
+	margin: 0;
+	max-width: 72cqw;
+	font-size: var(--pico-text-0);
+	line-height: 1.5;
+	color: var(--pico-ink-dim);
+}
+.pc-hero-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--pico-space-2);
+	margin-top: var(--pico-space-1);
 }

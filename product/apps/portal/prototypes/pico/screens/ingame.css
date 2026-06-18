@@ -1,0 +1,235 @@
+/* PROTOTYPE — pico theme. Throwaway. Gallery group IN-GAME (pcIg-). */
+
+/* HUD: corner readouts + transient SAVED toast over a running game --------- */
+.pcIg-hud {
+	position: relative;
+	z-index: 1;
+	min-height: 0;
+}
+.pcIg-hud-corner {
+	position: absolute;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcIg-hud-corner.tl {
+	top: var(--pico-space-2);
+	left: var(--pico-space-3);
+	align-items: flex-start;
+}
+.pcIg-hud-corner.tr {
+	top: var(--pico-space-2);
+	right: var(--pico-space-3);
+	align-items: flex-end;
+}
+.pcIg-read {
+	padding: 0.3125cqw var(--pico-space-1);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink-dim);
+	background: rgba(0, 0, 0, 0.55);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+.pcIg-read b {
+	font-weight: normal;
+	color: var(--pico-accent);
+}
+.pcIg-toast {
+	position: absolute;
+	left: 50%;
+	bottom: var(--pico-space-3);
+	transform: translateX(-50%);
+	display: inline-flex;
+	align-items: center;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--p8-black);
+	background: var(--p8-lime);
+}
+.pcIg-toast-ico {
+	font-size: var(--pico-text-0);
+}
+
+/* Save / load slot grid --------------------------------------------------- */
+.pcIg-slots {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: var(--pico-space-2);
+	min-height: 0;
+}
+.pcIg-slot {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-2);
+	background: var(--p8-black);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+.pcIg-slot.empty {
+	border-style: dashed;
+	opacity: 0.6;
+}
+.pcIg-slot.sel {
+	border-color: var(--pico-focus);
+	outline: 0.4688cqw solid var(--pico-focus);
+	outline-offset: 0.3125cqw;
+}
+.pcIg-slots.load .pcIg-slot.sel {
+	border-color: var(--p8-lime);
+	outline-color: var(--p8-lime);
+}
+.pcIg-slot-no {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-1);
+	color: var(--pico-accent);
+}
+.pcIg-slot.empty .pcIg-slot-no {
+	color: var(--p8-slate);
+}
+.pcIg-slot-label {
+	font-size: var(--pico-text--1);
+	color: var(--pico-ink);
+}
+.pcIg-slot-stamp {
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink-dim);
+}
+.pcIg-slot-restore {
+	margin-top: var(--pico-space-1);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--p8-black);
+	background: var(--p8-lime);
+	padding: 0.3125cqw var(--pico-space-1);
+	align-self: flex-start;
+}
+
+/* Stream overlay ---------------------------------------------------------- */
+.pcIg-stream-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--pico-space-2);
+}
+.pcIg-stream-name {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-0);
+	color: var(--pico-ink);
+}
+.pcIg-stream-stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-2) var(--pico-space-3);
+}
+.pcIg-stream-stats .pc-stat b {
+	color: var(--p8-blue);
+}
+.pcIg-stream-ctl {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-2);
+}
+
+/* Connection-quality meter ------------------------------------------------ */
+.pcIg-quality {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+}
+.pcIg-quality-label {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink-dim);
+}
+.pcIg-quality-bar {
+	display: inline-flex;
+	gap: 0.625cqw;
+}
+.pcIg-quality-bar i {
+	width: 1.6cqw;
+	height: var(--pico-text-0);
+	background: var(--p8-slate);
+}
+.pcIg-quality-bar.good i.on {
+	background: var(--p8-lime);
+}
+.pcIg-quality-bar.drop i.on {
+	background: var(--p8-orange);
+}
+.pcIg-quality-tag {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink);
+}
+.pcIg-quality-bar.drop ~ .pcIg-quality-tag {
+	color: var(--p8-orange);
+}
+
+/* Reconnecting overlay ---------------------------------------------------- */
+.pcIg-reconnect {
+	position: relative;
+	z-index: 1;
+	min-height: 0;
+	display: grid;
+	place-items: center;
+	padding: var(--pico-space-2);
+	background: rgba(0, 0, 0, 0.62);
+}
+.pcIg-attempt {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-accent);
+	letter-spacing: 0.0625em;
+}
+
+/* Input remap panel ------------------------------------------------------- */
+.pcIg-remap {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+}
+.pcIg-remap-row {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-size: var(--pico-text--1);
+	color: var(--pico-ink);
+}
+.pcIg-remap-row.listen {
+	background: var(--pico-focus);
+	color: var(--p8-black);
+}
+.pcIg-remap-act {
+	flex: 0 0 auto;
+	width: 18cqw;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-accent);
+}
+.pcIg-remap-row.listen .pcIg-remap-act {
+	color: var(--p8-black);
+}
+.pcIg-remap-arrow {
+	flex: 0 0 auto;
+	color: var(--pico-ink-dim);
+}
+.pcIg-remap-row.listen .pcIg-remap-arrow {
+	color: var(--p8-black);
+}
+.pcIg-remap-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--pico-space-1);
+	margin-left: auto;
+	font-family: var(--font-term);
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink-dim);
+}
+.pcIg-remap-row.listen .pcIg-remap-btn {
+	color: var(--p8-black);
+}

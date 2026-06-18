@@ -1,0 +1,133 @@
+/* PROTOTYPE — pico theme. Throwaway. Gallery group LIBRARY (pcLib-). */
+
+/* Home coverflow rail --------------------------------------------------- */
+.pcLib-coverflow {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--pico-space-2);
+}
+.pcLib-cart {
+	container-type: size;
+	flex: 0 0 auto;
+	aspect-ratio: 3 / 4;
+	height: min(34cqh, calc(var(--pico-base) * 8));
+	opacity: 0.55;
+	filter: saturate(0.6);
+}
+.pcLib-cart.focused {
+	height: min(48cqh, calc(var(--pico-base) * 12));
+	opacity: 1;
+	filter: none;
+	outline: 0.4688cqw solid var(--pico-focus);
+	outline-offset: 0.3125cqw;
+}
+.pcLib-cart .pico-cart {
+	width: 100%;
+	height: 100%;
+}
+.pcLib-cart .pico-cart-initials {
+	font-size: 30cqh;
+}
+.pcLib-caption {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-1);
+	text-align: center;
+}
+
+/* Console picker grid --------------------------------------------------- */
+.pcLib-systems {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: var(--pico-space-2);
+}
+.pcLib-system {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-2);
+	background: var(--pico-panel);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+.pcLib-system.sel {
+	border-color: var(--pico-focus);
+	outline: 0.3125cqw solid var(--pico-focus);
+}
+.pcLib-system-name {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--1);
+	color: var(--pico-ink);
+}
+
+/* Search query box + on-screen keyboard --------------------------------- */
+.pcLib-query {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	background: var(--p8-black);
+	border: 0.4cqw solid var(--pico-accent);
+}
+.pcLib-query-text {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-1);
+	color: var(--pico-ink);
+	letter-spacing: 0.1em;
+}
+.pcLib-caret {
+	font-size: var(--pico-text-1);
+	color: var(--pico-accent);
+	animation: pcLib-caret-blink 0.9s steps(2, end) infinite;
+}
+@keyframes pcLib-caret-blink {
+	0%,
+	50% {
+		opacity: 1;
+	}
+	50.01%,
+	100% {
+		opacity: 0;
+	}
+}
+.pcLib-keyboard {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcLib-keyrow {
+	display: flex;
+	justify-content: center;
+	gap: var(--pico-space-1);
+}
+.pcLib-key {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 7cqw;
+	padding: var(--pico-space-1) 0;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--1);
+	color: var(--pico-ink);
+	background: var(--p8-black);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+
+/* Filter & sort overlay ------------------------------------------------- */
+.pcLib-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcLib-sort-rest {
+	display: flex;
+	gap: var(--pico-space-2);
+	font-size: var(--pico-text-0);
+}
