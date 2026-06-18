@@ -697,6 +697,65 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(capturedExtras).toEqual({ lifecycle: "session" })
   })
 
+  it("forwards provider launch metadata to managed session cleanup", async () => {
+    let capturedExtras: unknown = "not-called"
+    const sourceLayer = Layer.succeed(LibrarySource)({
+      list: () =>
+        Effect.succeed([{ id: "game", system: "s", contentPath: "rom" }]),
+      launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
+      resolveLaunchForGame: () =>
+        Effect.succeed({
+          spec: { command: "/usr/bin/steam", args: ["-applaunch", "1029210"] },
+          launchMetadata: {
+            appProviderId: "@korri:steam",
+            annotations: {
+              "@korri:steam": {
+                steamSession: true,
+                foregroundCleanup: { appId: "1029210" },
+              },
+            },
+          },
+        }),
+    })
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: () => Effect.succeed({ status: "failed" as const, exitCode: 1 }),
+      spawn: (_spec, options) => {
+        capturedExtras = options?.extras
+        return Effect.succeed({
+          status: "started" as const,
+          result: Promise.resolve({ status: "launched" as const }),
+          session: completedSessionHandle(),
+        })
+      },
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            sourceLayer,
+            launcherLayer,
+            Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+            remoteStreamPrepareNeverCalledLayer,
+          ),
+        ),
+      ),
+    )
+
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
+    expect(capturedExtras).toEqual({
+      launchMetadata: {
+        appProviderId: "@korri:steam",
+        annotations: {
+          "@korri:steam": {
+            steamSession: true,
+            foregroundCleanup: { appId: "1029210" },
+          },
+        },
+      },
+    })
+  })
+
   it("omits options entirely when ResolvedLaunch has no extras (default foreground semantics)", async () => {
     // Regression guard for the additive-only contract: when a source
     // does not supply extras, the handler must NOT synthesize a

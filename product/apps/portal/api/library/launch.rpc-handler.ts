@@ -1,5 +1,6 @@
 import { DataError, NotFoundError } from "@platform/api/rpc/errors"
 import {
+  type LaunchExtras,
   type LaunchFailureKind,
   type LaunchSpec,
   launchFailureExitCode,
@@ -139,8 +140,11 @@ export const handleLaunchLibrary = (
             // launches without extras (the common case today) are
             // unchanged — the sessiond launcher treats absent
             // `lifecycle` as foreground for back-compat.
-            const spawnOptions = resolvedResult.resolved.extras
-              ? { extras: resolvedResult.resolved.extras }
+            const launchExtras = launchExtrasForResolvedLaunch(
+              resolvedResult.resolved,
+            )
+            const spawnOptions = launchExtras
+              ? { extras: launchExtras }
               : undefined
             return await Effect.runPromise(
               launcher
@@ -176,6 +180,19 @@ export const handleLaunchLibrary = (
   })
 
 const LAUNCH_CONFIG_ERROR_EXIT_CODE = 124
+
+function launchExtrasForResolvedLaunch(
+  resolved: ResolvedLaunch,
+): LaunchExtras | undefined {
+  if (!resolved.extras && !resolved.launchMetadata) return undefined
+  return {
+    ...(resolved.extras ?? {}),
+    ...(resolved.launchMetadata
+      ? { launchMetadata: resolved.launchMetadata }
+      : {}),
+  }
+}
+
 function unsupportedManagedSpawn(): ManagedLaunchResult {
   return {
     status: "failed",
