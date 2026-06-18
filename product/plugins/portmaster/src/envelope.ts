@@ -4,6 +4,7 @@ import type {
   PortMasterInputCompatibilityProfile,
   PortMasterPresentationProfile,
   PortMasterRuntimeCompatibilityProfile,
+  PortMasterRuntimeMountProfile,
 } from "./compatibility"
 import type { PortMasterInstalledManifest } from "./installer"
 
@@ -25,10 +26,12 @@ export type PortMasterLaunchRuntimeCompatibilityInput =
   PortMasterRuntimeCompatibilityProfile
 
 export interface PortMasterLaunchRuntimeCompatibility {
-  readonly mode: "none" | "retroarch-libretro"
+  readonly mode: "none" | "retroarch-libretro" | "runtime-mounts"
   readonly retroarchWrapperPath?: string
   readonly retroarchPath?: string
   readonly retroarchLogPath?: string
+  readonly runtimeMounts?: readonly PortMasterRuntimeMountProfile[]
+  readonly runtimeMountWrapperDir?: string
 }
 
 export type PortMasterLaunchInputCompatibilityInput =
@@ -160,6 +163,11 @@ export async function preparePortMasterLaunchEnvelope(
           ...fexWrapper.env,
         }
       : {}),
+    ...(runtimeCompatibility.runtimeMountWrapperDir
+      ? {
+          PATH: `${runtimeCompatibility.runtimeMountWrapperDir}:${process.env.PATH ?? ""}`,
+        }
+      : {}),
     ...(manifest.compatibility?.env ?? {}),
   }
 
@@ -173,6 +181,13 @@ export async function preparePortMasterLaunchEnvelope(
   }
   if (runtimeCompatibility.retroarchWrapperPath) {
     await writeRetroarchWrapper({ shellPath, runtimeCompatibility })
+  }
+  if (runtimeCompatibility.runtimeMountWrapperDir) {
+    await writeRuntimeMountHelpers({
+      shellPath,
+      controlRoot,
+      runtimeCompatibility,
+    })
   }
   const tasksetter = tasksetterText()
   const control = controlText({
@@ -257,6 +272,7 @@ export async function preparePortMasterLaunchEnvelope(
         "/dev/tty0",
         ...fakeUinputBindArgs({ fakeUinput, inputCompatibility }),
         ...runtimeBindArgs(runtimeCompatibility),
+        ...runtimeMountBindArgs(runtimeCompatibility),
         ...fexRootfsBind,
         ...armhfRootfsBind,
         "--chdir",
@@ -284,6 +300,13 @@ function normalizeRuntimeCompatibility(input: {
   readonly input?: PortMasterLaunchRuntimeCompatibilityInput
 }): PortMasterLaunchRuntimeCompatibility {
   const mode = input.input?.mode ?? detectedRuntimeMode(input.manifest)
+  if (mode === "runtime-mounts") {
+    return {
+      mode,
+      runtimeMounts: input.input?.runtimeMounts ?? [],
+      runtimeMountWrapperDir: join(input.controlRoot, "runtime-bin"),
+    }
+  }
   if (mode === "retroarch-libretro") {
     const retroarchLogPath =
       input.input?.retroarchLogPath ??
@@ -311,6 +334,90 @@ function detectedRuntimeMode(
     detection => detection.kind === "retroarch-libretro",
   )
   return detected ? "retroarch-libretro" : "none"
+}
+
+async function writeRuntimeMountHelpers(input: {
+  readonly shellPath: string
+  readonly controlRoot: string
+  readonly runtimeCompatibility: PortMasterLaunchRuntimeCompatibility
+}): Promise<void> {
+  const wrapperDir = input.runtimeCompatibility.runtimeMountWrapperDir
+  if (!wrapperDir) return
+  const mounts = input.runtimeCompatibility.runtimeMounts ?? []
+  await mkdir(wrapperDir, { recursive: true })
+  await mkdir(join(input.controlRoot, "libs"), { recursive: true })
+  for (const mount of mounts) {
+    await writeFile(
+      join(input.controlRoot, "libs", `${mount.runtime}.squashfs`),
+      "",
+    )
+  }
+  await writeFile(
+    join(wrapperDir, "mount"),
+    runtimeMountWrapperText({ shellPath: input.shellPath, mounts }),
+    { mode: 0o755 },
+  )
+  await chmod(join(wrapperDir, "mount"), 0o755).catch(() => undefined)
+  await writeFile(
+    join(wrapperDir, "umount"),
+    runtimeUmountWrapperText(input.shellPath),
+    {
+      mode: 0o755,
+    },
+  )
+  await chmod(join(wrapperDir, "umount"), 0o755).catch(() => undefined)
+}
+
+function runtimeMountWrapperText(input: {
+  readonly shellPath: string
+  readonly mounts: readonly PortMasterRuntimeMountProfile[]
+}): string {
+  const cases = input.mounts
+    .map(
+      mount =>
+        `${shellQuote(`${mount.runtime}.squashfs`)}) runtime_root=${shellQuote(
+          mount.sourcePath,
+        )} ;;
+`,
+    )
+    .join("")
+  return `#!${input.shellPath}
+set -eu
+if [ "$#" -lt 2 ]; then
+  echo "korri PortMaster runtime mount: expected source and target" >&2
+  exit 64
+fi
+source_path=""
+target_path=""
+for arg in "$@"; do
+  source_path="$target_path"
+  target_path="$arg"
+done
+runtime_name="$(basename "$source_path")"
+runtime_root=""
+case "$runtime_name" in
+${cases}esac
+if [ -z "$runtime_root" ]; then
+  echo "korri PortMaster runtime mount: unsupported runtime $runtime_name" >&2
+  exit 1
+fi
+if [ ! -d "$runtime_root" ]; then
+  echo "korri PortMaster runtime mount: runtime root is not a directory: $runtime_root" >&2
+  exit 1
+fi
+mkdir -p "$target_path"
+shopt -s dotglob nullglob
+for entry in "$runtime_root"/*; do
+  ln -sfn "$entry" "$target_path/$(basename "$entry")"
+done
+`
+}
+
+function runtimeUmountWrapperText(shellPath: string): string {
+  return `#!${shellPath}
+# Generated by @korri:portmaster. Runtime mounts are symlink overlays.
+exit 0
+`
 }
 
 async function writeRetroarchWrapper(input: {
@@ -367,6 +474,21 @@ function runtimeBindArgs(
     runtimeCompatibility.retroarchWrapperPath,
     "/usr/bin/retroarch",
   ]
+}
+
+function runtimeMountBindArgs(
+  runtimeCompatibility: PortMasterLaunchRuntimeCompatibility,
+): readonly string[] {
+  const mounts = runtimeCompatibility.runtimeMounts ?? []
+  return mounts.flatMap(mount => {
+    if (
+      !mount.sourcePath.startsWith("/") ||
+      mount.sourcePath.startsWith("/nix/")
+    ) {
+      return []
+    }
+    return ["--ro-bind", mount.sourcePath, mount.sourcePath]
+  })
 }
 
 function normalizeInputCompatibility(input: {

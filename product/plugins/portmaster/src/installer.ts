@@ -99,12 +99,20 @@ export interface PortMasterInstallInput {
   readonly installedAt?: string
 }
 
-export interface PortMasterRuntimeDetection {
-  readonly kind: "retroarch-libretro"
-  readonly launchScriptPaths: readonly string[]
-  readonly corePaths: readonly string[]
-  readonly evidence: readonly string[]
-}
+export type PortMasterRuntimeDetection =
+  | {
+      readonly kind: "retroarch-libretro"
+      readonly launchScriptPaths: readonly string[]
+      readonly corePaths: readonly string[]
+      readonly evidence: readonly string[]
+    }
+  | {
+      readonly kind: "portmaster-squashfs-runtime"
+      readonly runtimeNames: readonly string[]
+      readonly families: readonly string[]
+      readonly launchScriptPaths: readonly string[]
+      readonly evidence: readonly string[]
+    }
 
 export interface PortMasterInstalledManifest {
   readonly schemaVersion: 1
@@ -228,6 +236,7 @@ export async function installPortMasterEntry(
     portsRoot,
     files,
     launchScripts,
+    catalogRuntime: input.runtime,
   })
 
   const manifest: PortMasterInstalledManifest = {
@@ -416,6 +425,7 @@ async function detectRuntimeCompatibility(input: {
   readonly portsRoot: string
   readonly files: readonly PortMasterInstalledFile[]
   readonly launchScripts: readonly PortMasterInstalledFile[]
+  readonly catalogRuntime: readonly string[]
 }): Promise<readonly PortMasterRuntimeDetection[]> {
   const corePaths = input.files
     .map(file => file.path)
@@ -442,17 +452,62 @@ async function detectRuntimeCompatibility(input: {
     evidence.add(`file:${path}:libretro-core`)
   }
 
-  if (corePaths.length === 0 && launchScriptPaths.length === 0) return []
-  return [
-    {
+  const detections: PortMasterRuntimeDetection[] = []
+  if (corePaths.length > 0 || launchScriptPaths.length > 0) {
+    detections.push({
       kind: "retroarch-libretro",
       launchScriptPaths: launchScriptPaths.sort((left, right) =>
         left.localeCompare(right),
       ),
       corePaths,
       evidence: [...evidence].sort((left, right) => left.localeCompare(right)),
-    },
-  ]
+    })
+  }
+
+  const squashfsRuntime = detectSquashfsRuntimes({
+    catalogRuntime: input.catalogRuntime,
+    launchScripts: input.launchScripts,
+  })
+  if (squashfsRuntime) detections.push(squashfsRuntime)
+  return detections
+}
+
+function detectSquashfsRuntimes(input: {
+  readonly catalogRuntime: readonly string[]
+  readonly launchScripts: readonly PortMasterInstalledFile[]
+}): Extract<
+  PortMasterRuntimeDetection,
+  { readonly kind: "portmaster-squashfs-runtime" }
+> | null {
+  const runtimeNames = input.catalogRuntime
+    .map(runtime => runtime.replace(/\.squashfs$/i, ""))
+    .filter(runtime => runtimeFamily(runtime) !== undefined)
+    .sort((left, right) => left.localeCompare(right))
+  if (runtimeNames.length === 0) return null
+  const uniqueRuntimeNames = [...new Set(runtimeNames)]
+  return {
+    kind: "portmaster-squashfs-runtime",
+    runtimeNames: uniqueRuntimeNames,
+    families: [
+      ...new Set(
+        uniqueRuntimeNames
+          .map(runtime => runtimeFamily(runtime))
+          .filter((family): family is string => family !== undefined),
+      ),
+    ].sort((left, right) => left.localeCompare(right)),
+    launchScriptPaths: input.launchScripts.map(script => script.path),
+    evidence: uniqueRuntimeNames.map(runtime => `catalog-runtime:${runtime}`),
+  }
+}
+
+function runtimeFamily(runtime: string): string | undefined {
+  const normalized = runtime.toLowerCase()
+  if (normalized.startsWith("frt_")) return "frt"
+  if (normalized.startsWith("godot_") || normalized.startsWith("godot-")) {
+    return "godot"
+  }
+  if (normalized.startsWith("weston_pkg_")) return "weston"
+  return undefined
 }
 
 function isExecutablePayload(path: string): boolean {

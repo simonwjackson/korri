@@ -1,7 +1,13 @@
+export interface PortMasterRuntimeMountProfile {
+  readonly runtime: string
+  readonly sourcePath: string
+}
+
 export interface PortMasterRuntimeCompatibilityProfile {
-  readonly mode: "none" | "retroarch-libretro"
+  readonly mode: "none" | "retroarch-libretro" | "runtime-mounts"
   readonly retroarchPath?: string
   readonly retroarchLogPath?: string
+  readonly runtimeMounts?: readonly PortMasterRuntimeMountProfile[]
 }
 
 export interface PortMasterInputCompatibilityProfile {

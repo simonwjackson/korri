@@ -804,14 +804,32 @@ function runtimeCompatibilityFromInput(
 ): PortMasterLaunchRuntimeCompatibilityInput | undefined {
   const record = readRecord(value)
   const mode = stringValue(record.mode)
-  if (mode !== "none" && mode !== "retroarch-libretro") return undefined
+  if (
+    mode !== "none" &&
+    mode !== "retroarch-libretro" &&
+    mode !== "runtime-mounts"
+  ) {
+    return undefined
+  }
   const retroarchPath = stringValue(record.retroarchPath)
   const retroarchLogPath = stringValue(record.retroarchLogPath)
+  const runtimeMounts = runtimeMountsFromInput(record.runtimeMounts)
   return {
     mode,
     ...(retroarchPath ? { retroarchPath } : {}),
     ...(retroarchLogPath ? { retroarchLogPath } : {}),
+    ...(runtimeMounts.length > 0 ? { runtimeMounts } : {}),
   }
+}
+
+function runtimeMountsFromInput(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.flatMap(item => {
+    const record = readRecord(item)
+    const runtime = stringValue(record.runtime)?.replace(/\.squashfs$/i, "")
+    const sourcePath = stringValue(record.sourcePath)
+    return runtime && sourcePath ? [{ runtime, sourcePath }] : []
+  })
 }
 
 function inputCompatibilityFromInput(

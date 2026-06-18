@@ -4,6 +4,7 @@ export type {
   PortMasterInputCompatibilityProfile,
   PortMasterPresentationProfile,
   PortMasterRuntimeCompatibilityProfile,
+  PortMasterRuntimeMountProfile,
 } from "./src/compatibility"
 export type {
   PortMasterLaunchEnvelope,

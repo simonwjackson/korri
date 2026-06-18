@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { createHash } from "node:crypto"
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
@@ -806,6 +806,129 @@ describe("PortMaster plugin", () => {
       expect(disabledEnvelope.env).toMatchObject({
         KORRI_PORTMASTER_RUNTIME_MODE: "none",
       })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("generates runtime mount helpers for FRT and Godot squashfs ports", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-portmaster-frt-"))
+    const runtimeRoot = join(root, "runtime-frt")
+    await mkdir(runtimeRoot, { recursive: true })
+    await Bun.write(join(runtimeRoot, "frt_3.3.4"), "#!/bin/sh\n")
+    const runtimeExpansion = "$" + "{runtime}"
+    const zipBytes = makeZip({
+      "A Key.sh": Buffer.from(
+        `#!/bin/bash\nsource "$XDG_DATA_HOME/PortMaster/control.txt"\nGAMEDIR="/$directory/ports/akey"\nruntime="frt_3.3.4"\nmount "$controlfolder/libs/${runtimeExpansion}.squashfs" "$HOME/godot"\nPATH="$HOME/godot:$PATH"\n"$runtime" --main-pack "$GAMEDIR/game.pck"\numount "$HOME/godot"\n`,
+      ),
+      "akey/game.pck": Buffer.from("pck"),
+    })
+    const catalog = {
+      ports: {
+        "akey.zip": {
+          name: "akey.zip",
+          items: ["A Key.sh", "akey"],
+          attr: {
+            title: "A Key",
+            desc: "A tiny FRT game.",
+            inst: "Ready to run.",
+            genres: ["puzzle"],
+            porter: ["PortMaster"],
+            rtr: true,
+            exp: false,
+            runtime: ["frt_3.3.4.squashfs"],
+            reqs: [],
+            arch: [],
+            availability: "full",
+          },
+          source: {
+            md5: createHash("md5").update(zipBytes).digest("hex"),
+            size: zipBytes.length,
+            url: "https://example.invalid/akey.zip",
+          },
+        },
+      },
+    }
+    const productPlugin = createPortMasterPlugin({
+      catalogPath: "/catalog/ports.json",
+      installRoot: root,
+      compatibility: {
+        "akey.zip": {
+          runtimeCompatibility: {
+            mode: "runtime-mounts",
+            runtimeMounts: [
+              { runtime: "frt_3.3.4.squashfs", sourcePath: runtimeRoot },
+            ],
+          },
+        },
+      },
+      readFileText: async () => JSON.stringify(catalog),
+      fetchImpl: async () =>
+        new Response(zipBytes, {
+          status: 200,
+          headers: { "content-type": "application/zip" },
+        }),
+    })
+
+    try {
+      const install = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.install",
+      ) as PluginHandler | undefined
+      if (!install) throw new Error("missing portmaster.install handler")
+      const manifest = await Effect.runPromise(
+        runPluginHandler(install, {
+          operation: "portmaster.install",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            id: "akey.zip",
+            installedAt: "2026-06-18T00:00:00.000Z",
+          },
+        }),
+      )
+      expect(manifest.extracted.runtimeDetections).toContainEqual({
+        kind: "portmaster-squashfs-runtime",
+        runtimeNames: ["frt_3.3.4"],
+        families: ["frt"],
+        launchScriptPaths: ["A Key.sh"],
+        evidence: ["catalog-runtime:frt_3.3.4"],
+      })
+
+      const prepareLaunch = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.prepare-launch",
+      ) as PluginHandler | undefined
+      if (!prepareLaunch) throw new Error("missing portmaster.prepare-launch")
+      const envelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/bin/bash",
+            bwrapPath: "/nix/store/example-bubblewrap/bin/bwrap",
+            envPath: "/run/current-system/sw/bin/env",
+            useBubblewrap: true,
+          },
+        }),
+      )
+
+      expect(envelope.runtimeCompatibility).toMatchObject({
+        mode: "runtime-mounts",
+        runtimeMountWrapperDir: join(root, "PortMaster", "runtime-bin"),
+        runtimeMounts: [{ runtime: "frt_3.3.4", sourcePath: runtimeRoot }],
+      })
+      expect(envelope.env.PATH).toStartWith(
+        `${join(root, "PortMaster", "runtime-bin")}:`,
+      )
+      expect(envelope.args).toContain(runtimeRoot)
+      await expect(
+        stat(join(root, "PortMaster", "libs", "frt_3.3.4.squashfs")),
+      ).resolves.toBeDefined()
+      const mountWrapper = await readFile(
+        join(root, "PortMaster", "runtime-bin", "mount"),
+        "utf8",
+      )
+      expect(mountWrapper).toContain("frt_3.3.4.squashfs")
+      expect(mountWrapper).toContain(runtimeRoot)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
