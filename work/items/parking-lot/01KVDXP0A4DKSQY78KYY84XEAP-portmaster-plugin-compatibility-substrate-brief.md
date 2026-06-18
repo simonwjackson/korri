@@ -210,7 +210,7 @@ Validation launch:
 
 ### Phase 8 — armhf / 32-bit ARM lane
 
-Status: **implemented locally; qemu-arm verified on Bandai; game rendering blocked on armhf runtime libs**.
+Status: **complete locally, validated on Bandai with packaged aarch64 qemu + armhf runtime**.
 
 Goal: 32-bit ARM PortMaster ports run on Bandai.
 
@@ -221,8 +221,8 @@ Plugin owns either:
 
 Validation launch:
 
-- small ready-to-run `armhf` port, e.g. **Clockwind** or another tiny armhf-ready title
-- Success: plugin forces `DEVICE_ARCH=armhf` and launches it.
+- **SkiFree**, forced `skifree_sdl.armhf`
+- Success: plugin forces `DEVICE_ARCH=armhf`, wraps the armhf executable with qemu-arm, supplies armhf runtime libraries, and renders the game.
 
 Result:
 
@@ -234,14 +234,12 @@ Result:
 - Focused test covers a fake Lineoff-style armhf port, verifies executable wrapping, avoids wrapping `.so` payloads, and verifies launch envelope env/bwrap behavior.
 - Bandai verification:
   - No host `qemu-arm`, binfmt, or armhf rootfs was present before the phase.
-  - Copied Nix-built aarch64 `qemu-arm` plus cross armhf glibc/gcc/zlib stores to Bandai.
   - Verified real PortMaster armhf helper binaries execute under qemu-arm: `xdelta3.armhf -h` and `7zzs.armhf` printed usage successfully.
-  - Tried forced-armhf SkiFree through the generated wrapper; the qemu path executed but the game failed at `libSDL2-2.0.so.0` because the ready-to-run port omits the base armhf SDL2 runtime library and Bandai does not yet have a plugin-owned armhf runtime-lib pack.
-  - Cross-building armhf SDL2 from nixpkgs proved too heavy/unstable for this phase window.
-
-Follow-up:
-
-- Package a small plugin-owned PortMaster armhf runtime-lib resource (or narrow SDL2/libSDL1.2 runtime pack) and repeat the game-rendering validation with Apotris, SkiFree, or another direct armhf port.
+  - Added `.#portmaster-armhf-runtime`, a plugin-owned Debian bookworm armhf SDL runtime rootfs package with `nix-support/armhf-rootfs`, `nix-support/library-path`, `nix-support/qemu-arm`, and `nix-support/env` metadata.
+  - Package includes qemu-arm plus the armhf glibc/libstdc++/SDL2/SDL2_image/SDL2_mixer/SDL2_ttf dependency closure needed by small direct SDL armhf ports.
+  - Built `.#packages.aarch64-linux.portmaster-armhf-runtime` via Fuji and copied it to Bandai.
+  - Installed `skifree.zip` from the packaged catalog, generated a qemu wrapper for `skifree/skifree_sdl.armhf`, and launched the original `SkiFree.sh` unchanged.
+  - Screenshot `/tmp/portmaster-phase8-skifree5-screen-focused.png` confirmed SkiFree rendered on Bandai through package-provided aarch64 `qemu-arm` and the package-provided armhf rootfs/library path.
 
 ---
 
