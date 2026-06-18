@@ -7,10 +7,14 @@ export {
   preparePortMasterLaunchEnvelope,
 } from "./src/envelope"
 export type {
+  PortMasterBinaryArch,
+  PortMasterCommandRunner,
   PortMasterInstalledBinary,
   PortMasterInstalledFile,
   PortMasterInstalledManifest,
   PortMasterInstallInput,
+  PortMasterNativeElfRepairOptions,
+  PortMasterNativeElfRepairRecord,
 } from "./src/installer"
 export { installPortMasterEntry } from "./src/installer"
 export {

@@ -11,7 +11,10 @@ import type { DownloadResolution } from "@platform/protocol/acquisition/download
 import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
 import { preparePortMasterLaunchEnvelope } from "./envelope"
-import { installPortMasterEntry } from "./installer"
+import {
+  installPortMasterEntry,
+  type PortMasterNativeElfRepairOptions,
+} from "./installer"
 
 export const KORRI_PORTMASTER_PLUGIN_ID = "@korri:portmaster" as const
 
@@ -28,6 +31,7 @@ export interface PortMasterPluginOptions {
   readonly fetchImpl?: typeof fetch
   readonly readFileText?: (path: string) => Promise<string>
   readonly installRoot?: string
+  readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
 }
 
 interface PortMasterRuntime {
@@ -36,6 +40,7 @@ interface PortMasterRuntime {
   readonly fetchImpl: typeof fetch
   readonly readFileText: (path: string) => Promise<string>
   readonly installRoot: string
+  readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
   catalog?: Promise<readonly PortMasterEntry[]>
 }
 
@@ -266,6 +271,10 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                   )
                 }
 
+                const nativeElfRepair =
+                  nativeElfRepairFromInput(input.nativeElfRepair) ??
+                  runtime.nativeElfRepair
+
                 return Effect.tryPromise({
                   try: () =>
                     installPortMasterEntry({
@@ -281,6 +290,7 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                       readyToRun: entry.readyToRun,
                       installRoot,
                       fetchImpl: runtime.fetchImpl,
+                      ...(nativeElfRepair ? { nativeElfRepair } : {}),
                       ...(installedAt ? { installedAt } : {}),
                     }),
                   catch: error =>
@@ -347,6 +357,9 @@ function createRuntime(options: PortMasterPluginOptions): PortMasterRuntime {
       options.readFileText ??
       (async path => readFile(path, { encoding: "utf8" })),
     installRoot: options.installRoot ?? defaultInstallRoot(),
+    ...(options.nativeElfRepair
+      ? { nativeElfRepair: options.nativeElfRepair }
+      : {}),
   }
 }
 
@@ -605,6 +618,28 @@ function numberValue(value: unknown) {
 
 function booleanValue(value: unknown) {
   return typeof value === "boolean" ? value : undefined
+}
+
+function nativeElfRepairFromInput(
+  value: unknown,
+): PortMasterNativeElfRepairOptions | undefined {
+  const record = readRecord(value)
+  const arch = stringValue(record.arch)
+  if (
+    arch !== "aarch64" &&
+    arch !== "armhf" &&
+    arch !== "x86" &&
+    arch !== "x86_64"
+  ) {
+    return undefined
+  }
+  const interpreter = stringValue(record.interpreter)
+  const patchelfPath = stringValue(record.patchelfPath)
+  const libraryPaths = stringArray(record.libraryPaths)
+  if (!interpreter || !patchelfPath || libraryPaths.length === 0) {
+    return undefined
+  }
+  return { arch, interpreter, patchelfPath, libraryPaths }
 }
 
 function stringArray(value: unknown): readonly string[] {

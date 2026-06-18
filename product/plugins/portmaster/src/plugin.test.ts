@@ -224,6 +224,10 @@ describe("PortMaster plugin", () => {
         },
       },
     }
+    const repairCommands: Array<{
+      readonly command: string
+      readonly args: readonly string[]
+    }> = []
     const productPlugin = createPortMasterPlugin({
       catalogPath: "/catalog/ports.json",
       installRoot: root,
@@ -233,6 +237,15 @@ describe("PortMaster plugin", () => {
           status: 200,
           headers: { "content-type": "application/zip" },
         }),
+      nativeElfRepair: {
+        arch: "aarch64",
+        interpreter: "/nix/store/glibc/lib/ld-linux-aarch64.so.1",
+        libraryPaths: ["/nix/store/glibc/lib", "/nix/store/sdl2/lib"],
+        patchelfPath: "/nix/store/patchelf/bin/patchelf",
+        runCommand: async (command, args) => {
+          repairCommands.push({ command, args })
+        },
+      },
     })
 
     try {
@@ -277,6 +290,27 @@ describe("PortMaster plugin", () => {
           arch: "aarch64",
         },
       ])
+      expect(manifest.extracted.nativeElfRepairs).toEqual([
+        {
+          path: "wordlesdl/wordle",
+          arch: "aarch64",
+          interpreter: "/nix/store/glibc/lib/ld-linux-aarch64.so.1",
+          rpath: "/nix/store/glibc/lib:/nix/store/sdl2/lib",
+          patchelfPath: "/nix/store/patchelf/bin/patchelf",
+        },
+      ])
+      expect(repairCommands).toEqual([
+        {
+          command: "/nix/store/patchelf/bin/patchelf",
+          args: [
+            "--set-interpreter",
+            "/nix/store/glibc/lib/ld-linux-aarch64.so.1",
+            "--set-rpath",
+            "/nix/store/glibc/lib:/nix/store/sdl2/lib",
+            join(root, "ports", "wordlesdl", "wordle"),
+          ],
+        },
+      ])
       expect(await stat(join(root, "ports", "Wordle SDL.sh"))).toBeDefined()
       expect(
         await stat(join(root, "ports", "wordlesdl", "wordle")),
@@ -319,10 +353,14 @@ describe("PortMaster plugin", () => {
         },
       })
       expect(envelope.args).toContain("/bin/bash")
+      expect(envelope.args).toContain("/sys")
       expect(envelope.args).toContain(join(root, "ports", "Wordle SDL.sh"))
       expect(await readFile(envelope.controlPath, "utf8")).toContain(
         "get_controls()",
       )
+      const controlText = await readFile(envelope.controlPath, "utf8")
+      expect(controlText).toContain('ESUDO="')
+      expect(controlText).toContain(':-}"')
       expect(await readFile(envelope.controlPath, "utf8")).toContain(
         "GPTOKEYB=",
       )

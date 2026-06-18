@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process"
 import { createHash } from "node:crypto"
 import {
   chmod,
@@ -9,8 +10,34 @@ import {
   writeFile,
 } from "node:fs/promises"
 import { basename, dirname, join, normalize, sep } from "node:path"
+import { promisify } from "node:util"
 import { inflateRawSync } from "node:zlib"
 import type { ProviderId } from "@platform/plugin"
+
+const execFileAsync = promisify(execFile)
+
+export type PortMasterBinaryArch = "aarch64" | "armhf" | "x86" | "x86_64"
+
+export type PortMasterCommandRunner = (
+  command: string,
+  args: readonly string[],
+) => Promise<void>
+
+export interface PortMasterNativeElfRepairOptions {
+  readonly arch: PortMasterBinaryArch
+  readonly interpreter: string
+  readonly libraryPaths: readonly string[]
+  readonly patchelfPath: string
+  readonly runCommand?: PortMasterCommandRunner
+}
+
+export interface PortMasterNativeElfRepairRecord {
+  readonly path: string
+  readonly arch: PortMasterBinaryArch
+  readonly interpreter: string
+  readonly rpath: string
+  readonly patchelfPath: string
+}
 
 export interface PortMasterInstallInput {
   readonly providerId: ProviderId
@@ -25,6 +52,7 @@ export interface PortMasterInstallInput {
   readonly readyToRun: boolean
   readonly installRoot: string
   readonly fetchImpl: typeof fetch
+  readonly nativeElfRepair?: PortMasterNativeElfRepairOptions
   readonly installedAt?: string
 }
 
@@ -53,6 +81,7 @@ export interface PortMasterInstalledManifest {
     readonly files: readonly PortMasterInstalledFile[]
     readonly launchScripts: readonly PortMasterInstalledFile[]
     readonly binaries: readonly PortMasterInstalledBinary[]
+    readonly nativeElfRepairs: readonly PortMasterNativeElfRepairRecord[]
   }
 }
 
@@ -65,7 +94,7 @@ export interface PortMasterInstalledBinary extends PortMasterInstalledFile {
   readonly format: "elf"
   readonly elfClass: "32" | "64"
   readonly machine: string
-  readonly arch?: "aarch64" | "armhf" | "x86" | "x86_64"
+  readonly arch?: PortMasterBinaryArch
 }
 
 interface ZipEntry {
@@ -109,12 +138,23 @@ export async function installPortMasterEntry(
   }
 
   const extracted = await extractZipArchive(archive, portsRoot)
-  const files = await inspectInstalledFiles(portsRoot, extracted)
-  const launchScripts = files.filter(file => isLaunchScript(file.path))
-  const binaries = await inspectInstalledBinaries(portsRoot, files)
+  let files = await inspectInstalledFiles(portsRoot, extracted)
+  let launchScripts = files.filter(file => isLaunchScript(file.path))
+  let binaries = await inspectInstalledBinaries(portsRoot, files)
 
   for (const file of [...launchScripts, ...binaries]) {
     await chmod(join(portsRoot, file.path), 0o755).catch(() => undefined)
+  }
+
+  const nativeElfRepairs = await repairNativeElfs({
+    portsRoot,
+    binaries,
+    options: input.nativeElfRepair,
+  })
+  if (nativeElfRepairs.length > 0) {
+    files = await inspectInstalledFiles(portsRoot, extracted)
+    launchScripts = files.filter(file => isLaunchScript(file.path))
+    binaries = await inspectInstalledBinaries(portsRoot, files)
   }
 
   const manifest: PortMasterInstalledManifest = {
@@ -146,6 +186,7 @@ export async function installPortMasterEntry(
       files,
       launchScripts,
       binaries,
+      nativeElfRepairs,
     },
   }
 
@@ -158,6 +199,45 @@ export async function installPortMasterEntry(
   await rename(`${manifest.manifestPath}.tmp`, manifest.manifestPath)
 
   return manifest
+}
+
+async function repairNativeElfs(input: {
+  readonly portsRoot: string
+  readonly binaries: readonly PortMasterInstalledBinary[]
+  readonly options?: PortMasterNativeElfRepairOptions
+}): Promise<readonly PortMasterNativeElfRepairRecord[]> {
+  if (!input.options) return []
+  const rpath = input.options.libraryPaths.join(":")
+  const runCommand = input.options.runCommand ?? defaultCommandRunner
+  const repairs: PortMasterNativeElfRepairRecord[] = []
+
+  for (const binary of input.binaries) {
+    if (binary.arch !== input.options.arch) continue
+    const target = join(input.portsRoot, binary.path)
+    await runCommand(input.options.patchelfPath, [
+      "--set-interpreter",
+      input.options.interpreter,
+      "--set-rpath",
+      rpath,
+      target,
+    ])
+    repairs.push({
+      path: binary.path,
+      arch: input.options.arch,
+      interpreter: input.options.interpreter,
+      rpath,
+      patchelfPath: input.options.patchelfPath,
+    })
+  }
+
+  return repairs
+}
+
+async function defaultCommandRunner(
+  command: string,
+  args: readonly string[],
+): Promise<void> {
+  await execFileAsync(command, [...args])
 }
 
 async function fetchArchive(input: PortMasterInstallInput): Promise<Buffer> {
