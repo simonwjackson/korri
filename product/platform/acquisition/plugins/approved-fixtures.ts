@@ -255,13 +255,6 @@ function parseItchioUrl(input: string): string | null {
   return creator && slug ? `${creator}/${slug}` : null
 }
 
-function parsePico8BbsUrl(input: string): string | null {
-  const url = parseUrl(input)
-  if (!url || url.hostname !== "www.lexaloffle.com") return null
-  if (url.pathname !== "/bbs/") return null
-  return url.searchParams.get("tid")
-}
-
 function parsePortmasterUrl(input: string): string | null {
   const url = parseUrl(input)
   if (!url) return null
@@ -383,32 +376,6 @@ const homebrewHubEntries = [
     description: "Homebrew Hub fixture with disabled downloads.",
     disabledMessage: "Homebrew Hub entry has disabled downloads",
     searchText: "disabled downloads homebrewhub nintendo-gameboy",
-  },
-] as const satisfies readonly FixtureEntry[]
-
-const pico8Entries = [
-  {
-    providerId: "@korri:pico8bbs",
-    id: "101",
-    title: "Celeste Classic",
-    url: "https://www.lexaloffle.com/bbs/?tid=101",
-    platform: "pico8",
-    description: "A tiny platformer from the PICO-8 BBS by Maddy Thorson.",
-    downloadUrl:
-      "https://www.lexaloffle.com/bbs/cposts/1/celeste-classic.p8.png",
-    filename: "celeste-classic.p8.png",
-    contentType: "image/png",
-    searchText:
-      "101 celeste classic maddy thorson pico8 p8.png cc-by-nc-sa-4.0",
-  },
-  {
-    providerId: "@korri:pico8bbs",
-    id: "105",
-    title: "No Cart Thread",
-    url: "https://www.lexaloffle.com/bbs/?tid=105",
-    platform: "pico8",
-    disabledMessage: "PICO-8 BBS thread has no downloadable cart",
-    searchText: "105 no cart thread pico8",
   },
 ] as const satisfies readonly FixtureEntry[]
 
@@ -617,13 +584,6 @@ export const approvedFixturePluginDefinitions = [
     entries: [],
     parseCandidateUrl: parseItchioUrl,
     unsupportedDownloadReason: "requires-user-action",
-  }),
-  fixturePluginDefinition({
-    providerId: "@korri:pico8bbs",
-    displayName: "PICO-8 BBS",
-    legalRisk: "medium",
-    entries: pico8Entries,
-    parseCandidateUrl: parsePico8BbsUrl,
   }),
   fixturePluginDefinition({
     providerId: "@korri:portmaster",

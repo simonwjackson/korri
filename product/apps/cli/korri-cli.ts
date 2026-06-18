@@ -1,7 +1,6 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { makeLiveAcquisitionLayer } from "@platform/acquisition/acquisition-service"
 import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plugin-loader"
-import { approvedTypeScriptPluginDefinitions } from "@platform/acquisition/plugins/approved"
 import { KorriControl } from "@platform/control/korri-control"
 import { KorriControlLayerLiveWithPlugins } from "@platform/control/korri-control-live"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
@@ -9,6 +8,7 @@ import { Launcher, LibrarySource } from "@platform/library/library-services"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { createKorriControlRpc } from "@product/apps/portal/control/korri-control-rpc"
 import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
+import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugins/acquisition"
 import { Effect, Layer, Option } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 import {
@@ -269,7 +269,7 @@ export const korriCommand = Command.make("korri").pipe(
 
 const AcquisitionLayerLive = makeLiveAcquisitionLayer({
   registry: createStaticAcquisitionPluginRegistry(
-    approvedTypeScriptPluginDefinitions,
+    createFirstPartyAcquisitionPluginDefinitionsFromEnv(process.env),
   ),
 })
 

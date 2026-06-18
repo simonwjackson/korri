@@ -9,11 +9,15 @@ import { bazzarCommand } from "./bazzar-command"
 
 const cliPath = new URL("../korri-cli.ts", import.meta.url).pathname
 
-async function runCli(args: readonly string[]) {
+async function runCli(
+  args: readonly string[],
+  options: { readonly env?: Record<string, string | undefined> } = {},
+) {
   const proc = Bun.spawn(["bun", cliPath, ...args], {
     cwd: new URL("../../../..", import.meta.url).pathname,
     stdout: "pipe",
     stderr: "pipe",
+    env: { ...process.env, ...options.env },
   })
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -440,18 +444,26 @@ describe("korri bazzar command routing", () => {
   ] as const
 
   for (const provider of approvedProviderCases) {
+    const env =
+      provider.providerId === "@korri:pico8bbs"
+        ? { KORRI_ENABLED_PLUGINS: "@korri:pico8bbs" }
+        : undefined
+
     it(`returns provider-backed ${provider.providerId} search results`, async () => {
-      const result = await runCli([
-        "bazzar",
-        "search",
-        provider.query,
-        "--providers",
-        provider.providerId,
-        "--platforms",
-        provider.platform,
-        "--format",
-        "json",
-      ])
+      const result = await runCli(
+        [
+          "bazzar",
+          "search",
+          provider.query,
+          "--providers",
+          provider.providerId,
+          "--platforms",
+          provider.platform,
+          "--format",
+          "json",
+        ],
+        { env },
+      )
 
       expect(result.exitCode).toBe(0)
       expect(result.stderr).toBe("")
@@ -473,7 +485,7 @@ describe("korri bazzar command routing", () => {
 
     it(`returns provider-backed ${provider.providerId} details for locators and URLs`, async () => {
       for (const input of [provider.locator, provider.url]) {
-        const result = await runCli(["bazzar", "details", input])
+        const result = await runCli(["bazzar", "details", input], { env })
 
         expect(result.exitCode).toBe(0)
         expect(result.stderr).toBe("")
@@ -491,14 +503,17 @@ describe("korri bazzar command routing", () => {
     })
 
     it(`emits ${provider.providerId} final downloads as exactly one contract JSON line`, async () => {
-      const result = await runCli([
-        "bazzar",
-        "resolve-download",
-        provider.providerId,
-        provider.url,
-        "--title",
-        provider.title,
-      ])
+      const result = await runCli(
+        [
+          "bazzar",
+          "resolve-download",
+          provider.providerId,
+          provider.url,
+          "--title",
+          provider.title,
+        ],
+        { env },
+      )
 
       expectFinalDownloadEnvelope(result, {
         name: provider.filename,

@@ -1,6 +1,5 @@
 import { makeLiveAcquisitionLayer } from "@platform/acquisition/acquisition-service"
 import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plugin-loader"
-import { approvedTypeScriptPluginDefinitions } from "@platform/acquisition/plugins/approved"
 import { BatchJsonSerializationLive } from "@platform/api/rpc/serialization"
 import { KorriControlLayerLiveWithPlugins } from "@platform/control/korri-control-live"
 import { FeatureGatesMiddlewareLive } from "@platform/gates/middleware"
@@ -16,6 +15,7 @@ import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
 import { createFirstPartyPluginRegistryFromEnv } from "../../../../plugins"
+import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "../../../../plugins/acquisition"
 import { PluginLibrarySourceLayerLive } from "../../../../plugins/library-source-layer"
 import { handleAcquisitionDetails } from "../acquisition/details.rpc-handler"
 import { handleAcquisitionPlugins } from "../acquisition/plugins.rpc-handler"
@@ -77,7 +77,7 @@ const PeerDiscoveryConfigured =
 
 const AcquisitionLayerLive = makeLiveAcquisitionLayer({
   registry: createStaticAcquisitionPluginRegistry(
-    approvedTypeScriptPluginDefinitions,
+    createFirstPartyAcquisitionPluginDefinitionsFromEnv(process.env),
   ),
 })
 

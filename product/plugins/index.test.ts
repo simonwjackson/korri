@@ -4,6 +4,7 @@ import { createFirstPartyPluginRegistryFromEnv, firstPartyPlugins } from "."
 import { KORRI_FEX_PLUGIN_ID } from "./fex-runtime"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
 import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "./mega-man-arena"
+import { KORRI_PICO8_BBS_PLUGIN_ID } from "./pico8-bbs"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
 import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
@@ -35,6 +36,7 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_PROTON_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_SRB2_PLUGIN_ID)).toBe(false)
+    expect(registry.enabledPluginIds.has(KORRI_PICO8_BBS_PLUGIN_ID)).toBe(false)
     expect(
       registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
     ).toMatchObject({

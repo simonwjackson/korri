@@ -7,6 +7,7 @@ import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin, KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
 import { megaManArenaPlugin } from "./mega-man-arena"
 import { neverballPlugin } from "./neverball"
+import { pico8BbsPlugin } from "./pico8-bbs"
 import { protonGeRuntimePlugin } from "./proton-ge-runtime"
 import { protonRuntimePlugin } from "./proton-runtime"
 import { srb2Plugin } from "./srb2"
@@ -19,6 +20,7 @@ export const firstPartyPlugins = [
   neverballPlugin,
   megaManArenaPlugin,
   srb2Plugin,
+  pico8BbsPlugin,
 ] as const
 
 export function createFirstPartyPluginRegistryFromEnv(
