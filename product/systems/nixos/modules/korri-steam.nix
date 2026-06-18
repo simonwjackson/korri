@@ -667,7 +667,7 @@ let
     }
 
     started_steam=0
-    if /bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
+    if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
       :
     else
       if control_steam_service start; then
