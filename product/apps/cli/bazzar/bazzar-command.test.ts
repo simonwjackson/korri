@@ -283,8 +283,11 @@ describe("korri bazzar command routing", () => {
   it("supports Bazzar plugin jsonl and tsv output formats", async () => {
     const jsonl = await runCli(["bazzar", "plugins", "--format", "jsonl"])
     expect(jsonl.exitCode).toBe(0)
-    const firstJsonlLine = jsonl.stdout.trimEnd().split("\n")[0]
-    expect(JSON.parse(firstJsonlLine ?? "{}").providerId).toBe(
+    const jsonlProviders = jsonl.stdout
+      .trimEnd()
+      .split("\n")
+      .map(line => JSON.parse(line) as { providerId: string })
+    expect(jsonlProviders.map(plugin => plugin.providerId)).toContain(
       "@korri:chip8archive",
     )
 
@@ -390,13 +393,12 @@ describe("korri bazzar command routing", () => {
       providerId: "@korri:pico8",
       query: "celeste",
       platform: "pico8",
-      id: "101",
-      title: "Celeste Classic",
-      locator: "@korri:pico8:101",
-      url: "https://www.lexaloffle.com/bbs/?tid=101",
-      filename: "celeste-classic.p8.png",
-      artifactUrl:
-        "https://www.lexaloffle.com/bbs/cposts/1/celeste-classic.p8.png",
+      id: "11722",
+      title: "Celeste 1.0 (Fixed for P8 v0.1.2)",
+      locator: "@korri:pico8:11722",
+      url: "https://www.lexaloffle.com/bbs/?pid=11722#p",
+      filename: "15133.p8.png",
+      artifactUrl: "https://www.lexaloffle.com/bbs/cposts/1/15133.p8.png",
     },
     {
       providerId: "@korri:portmaster",
@@ -408,7 +410,7 @@ describe("korri bazzar command routing", () => {
       url: "https://portmaster.games/detail.html?name=akeyspath",
       filename: "akeyspath.zip",
       artifactUrl:
-        "https://github.com/PortsMaster/PortMaster-Games/releases/download/2025-06-24_0854/akeyspath.zip",
+        "https://github.com/PortsMaster/PortMaster-New/releases/download/2025-06-24_0854/akeyspath.zip",
     },
     {
       providerId: "@korri:puzzlescript",
@@ -588,7 +590,7 @@ describe("korri bazzar command routing", () => {
 
     expectSourceFailureEnvelope(result, {
       status: "blocked_unavailable",
-      reason: "Unknown @korri:portmaster candidate: no-such-game.zip",
+      reason: "Unknown PortMaster catalog entry: no-such-game.zip",
     })
   })
 

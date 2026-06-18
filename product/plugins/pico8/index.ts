@@ -1,1 +1,5 @@
-export { KORRI_PICO8_PLUGIN_ID, pico8Plugin } from "./src/plugin"
+export {
+  createPico8Plugin,
+  KORRI_PICO8_PLUGIN_ID,
+  pico8Plugin,
+} from "./src/plugin"
