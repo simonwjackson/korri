@@ -54,11 +54,47 @@ const smwHackFile = {
   },
 }
 
+const sm64HackFile = {
+  id: 29003,
+  section: "sm64hacks",
+  name: "SM64: The Search For The 120 Stars Ver 2.0",
+  authors: [{ id: 1234, name: "SM64Author" }],
+  tags: [],
+  images: [],
+  rating: 4,
+  size: 2048,
+  downloads: 12,
+  download_url: `https://${DOWNLOAD_HOST}/29003/SM64%20The%20Search%20For%20The%20120%20Stars%20Ver%202.0.zip`,
+  fields: {
+    difficulty: "Intermediate",
+    length: "150 star(s)",
+    description: "A Super Mario 64 hack fixture.",
+  },
+  raw_fields: {
+    difficulty: "diff_3",
+    length: 150,
+    demo: false,
+    description: "A Super Mario 64 hack fixture.",
+  },
+}
+
 function fakeFetch(input: RequestInfo | URL): Promise<Response> {
   const url = new URL(String(input))
   if (url.hostname === "smwc.fixture.test" && url.pathname === "/ajax.php") {
     if (url.searchParams.get("a") === "getsectionlist") {
-      return jsonResponse({ data: [smwHackFile] })
+      const section = url.searchParams.get("s")
+      const query = url.searchParams.get("f[name]")?.toLowerCase() ?? ""
+      if (section === "smwhacks") {
+        return jsonResponse({
+          data: query.includes("tower") ? [smwHackFile] : [],
+        })
+      }
+      if (section === "sm64hacks") {
+        return jsonResponse({
+          data: query.includes("120 stars") ? [sm64HackFile] : [],
+        })
+      }
+      return jsonResponse({ data: [] })
     }
     if (
       url.searchParams.get("a") === "getfile" &&
@@ -94,7 +130,7 @@ describe("SMW Central plugin", () => {
     expect(smwCentralPlugin.id).toBe(KORRI_SMWCENTRAL_PLUGIN_ID)
     expect(
       smwCentralPlugin.contributes.config.providers[KORRI_SMWCENTRAL_PLUGIN_ID],
-    ).toMatchObject({ title: "SMW Central SMW Hacks" })
+    ).toMatchObject({ title: "SMW Central Hacks" })
     expect(smwCentralPlugin.handlers.map(handler => handler.operation)).toEqual(
       [
         "claims.search",
@@ -144,6 +180,10 @@ describe("SMW Central plugin", () => {
         const acquisition = yield* Acquisition
         return {
           search: yield* acquisition.search({ query: "Tower" }),
+          sm64Search: yield* acquisition.search({
+            query: "120 Stars",
+            platforms: ["super-mario-64"],
+          }),
           details: yield* acquisition.detailsByUrl(DETAILS_URL),
           health: yield* acquisition.validateProviders({
             providerIds: [KORRI_SMWCENTRAL_PLUGIN_ID],
@@ -170,6 +210,16 @@ describe("SMW Central plugin", () => {
         kind: "patch",
         system: "super-mario-world",
         format: { id: "smwcentral-smw-hack-archive" },
+      },
+    })
+    expect(result.sm64Search.claims).toHaveLength(1)
+    expect(result.sm64Search.claims[0]).toMatchObject({
+      id: "29003",
+      platform: "super-mario-64",
+      artifact: {
+        kind: "patch",
+        system: "super-mario-64",
+        format: { id: "smwcentral-sm64-hack-archive" },
       },
     })
     expect(result.details).toMatchObject({

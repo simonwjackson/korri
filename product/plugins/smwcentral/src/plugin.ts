@@ -17,11 +17,38 @@ export const KORRI_SMWCENTRAL_PLUGIN_ID = "@korri:smwcentral" as const
 const DEFAULT_API_BASE_URL = "https://www.smwcentral.net/ajax.php"
 const DEFAULT_WEB_BASE_URL = "https://www.smwcentral.net"
 const DEFAULT_DOWNLOAD_HOST = "dl.smwcentral.net"
-const SMW_HACKS_SECTION = "smwhacks"
-const SMW_HACK_SYSTEM = "super-mario-world"
-const SMW_HACK_FORMAT = "smwcentral-smw-hack-archive"
 const ZIP_MEDIA_TYPE = "application/zip"
-const SOURCE_DATA_NAMESPACE = "smwcentral.smwhacks.v1"
+
+const HACK_SECTIONS = {
+  smwhacks: {
+    label: "Super Mario World Hacks",
+    system: "super-mario-world",
+    format: "smwcentral-smw-hack-archive",
+    aliases: ["smw-hack", "smwcentral-smwhacks"],
+  },
+  sm64hacks: {
+    label: "Super Mario 64 Hacks",
+    system: "super-mario-64",
+    format: "smwcentral-sm64-hack-archive",
+    aliases: ["sm64", "sm64-hack", "smwcentral-sm64hacks"],
+  },
+  yihacks: {
+    label: "Yoshi's Island Hacks",
+    system: "yoshis-island",
+    format: "smwcentral-yoshi-island-hack-archive",
+    aliases: [
+      "yi-hack",
+      "yoshi-island-hack",
+      "super-mario-world-2-yoshis-island",
+      "smwcentral-yihacks",
+    ],
+  },
+} as const
+
+const HACK_SECTION_IDS = Object.keys(HACK_SECTIONS) as HackSectionId[]
+const DEFAULT_SEARCH_SECTION_IDS = ["smwhacks", "sm64hacks"] as const
+
+type HackSectionId = keyof typeof HACK_SECTIONS
 
 export interface SmwCentralPluginOptions {
   readonly apiBaseUrl?: string
@@ -73,27 +100,27 @@ interface ParsedSmwCentralUrl {
   readonly kind: "details" | "download"
 }
 
-const hackArtifactHint = {
-  kind: "patch" as const,
-  system: SMW_HACK_SYSTEM,
-  format: { id: SMW_HACK_FORMAT },
-} satisfies ArtifactAcquisitionHint
-
 export function createSmwCentralPlugin(options: SmwCentralPluginOptions = {}) {
   const runtime = createRuntime(options)
 
   return plugin({
     namespace: "@korri",
     name: "smwcentral",
-    title: "SMW Central SMW Hacks",
+    title: "SMW Central Hacks",
     description:
-      "Adds SMW Central Super Mario World hack search, details, direct download resolution, and ZIP acquisition.",
+      "Adds SMW Central game hack search, details, direct download resolution, and ZIP acquisition for supported hack sections.",
     contributes: {
       handlers: [
         {
           id: "smwcentral.claims-search",
           operation: "claims.search",
-          capabilities: ["claims.search", "smwcentral", "smwhacks"],
+          capabilities: [
+            "claims.search",
+            "smwcentral",
+            "smwhacks",
+            "sm64hacks",
+            "yihacks",
+          ],
           run: context => {
             const input = readRecord(context.input)
             const query = typeof input.query === "string" ? input.query : ""
@@ -103,13 +130,24 @@ export function createSmwCentralPlugin(options: SmwCentralPluginOptions = {}) {
                     typeof platform === "string",
                 )
               : undefined
-            return searchSmwHacks(runtime, context.provider, query, platforms)
+            return searchSmwCentralHacks(
+              runtime,
+              context.provider,
+              query,
+              platforms,
+            )
           },
         },
         {
           id: "smwcentral.claims-details",
           operation: "claims.details",
-          capabilities: ["claims.details", "smwcentral", "smwhacks"],
+          capabilities: [
+            "claims.details",
+            "smwcentral",
+            "smwhacks",
+            "sm64hacks",
+            "yihacks",
+          ],
           run: context => {
             const input = readRecord(context.input)
             const id = stringField(input, "id")
@@ -121,7 +159,7 @@ export function createSmwCentralPlugin(options: SmwCentralPluginOptions = {}) {
         {
           id: "smwcentral.claims-parse-url",
           operation: "claims.parse-url",
-          capabilities: ["claims.parse-url", "smwcentral", "smwhacks"],
+          capabilities: ["claims.parse-url", "smwcentral"],
           run: context => {
             const input = readRecord(context.input)
             const url = typeof input.url === "string" ? input.url : ""
@@ -131,10 +169,10 @@ export function createSmwCentralPlugin(options: SmwCentralPluginOptions = {}) {
         {
           id: "smwcentral.provider-validate",
           operation: "provider.validate",
-          capabilities: ["provider.validate", "smwcentral", "smwhacks"],
+          capabilities: ["provider.validate", "smwcentral"],
           run: context => {
             const input = readRecord(context.input)
-            return fetchSection(runtime, { perPage: 1 }).pipe(
+            return fetchSection(runtime, "smwhacks", { perPage: 1 }).pipe(
               Effect.map(
                 () =>
                   ({
@@ -152,11 +190,11 @@ export function createSmwCentralPlugin(options: SmwCentralPluginOptions = {}) {
         {
           id: "smwcentral.artifact-resolve-download",
           operation: "artifact.resolve-download",
-          capabilities: ["artifact.resolve-download", "smwcentral", "smwhacks"],
+          capabilities: ["artifact.resolve-download", "smwcentral"],
           run: context => {
             const input = readRecord(context.input)
             const candidateUrl = stringField(input, "candidateUrl")
-            return resolveSmwHackDownload(
+            return resolveSmwCentralDownload(
               runtime,
               context.provider,
               candidateUrl,
@@ -166,7 +204,7 @@ export function createSmwCentralPlugin(options: SmwCentralPluginOptions = {}) {
         {
           id: "smwcentral.artifact-acquire",
           operation: "artifact.acquire",
-          capabilities: ["artifact.acquire", "smwcentral", "smwhacks"],
+          capabilities: ["artifact.acquire", "smwcentral"],
           run: context => {
             const input = readRecord(context.input)
             const id = stringField(input, "id")
@@ -190,13 +228,13 @@ export function createSmwCentralPlugin(options: SmwCentralPluginOptions = {}) {
         {
           id: "smwcentral.diagnostics",
           operation: "diagnostics.collect",
-          capabilities: ["smwcentral", "smwhacks"],
+          capabilities: ["smwcentral"],
           run: context => ({
             provider: context.provider,
             status: "ok",
             apiBaseUrl: runtime.apiBaseUrl,
             webBaseUrl: runtime.webBaseUrl,
-            section: SMW_HACKS_SECTION,
+            sections: HACK_SECTION_IDS,
           }),
         },
       ],
@@ -227,7 +265,7 @@ function createRuntime({
   }
 }
 
-function searchSmwHacks(
+function searchSmwCentralHacks(
   runtime: SmwCentralRuntime,
   providerId: ProviderId,
   query: string,
@@ -235,25 +273,28 @@ function searchSmwHacks(
 ): Effect.Effect<readonly ProviderClaim[], AcquisitionError> {
   const normalized = query.trim()
   if (normalized.length === 0) return Effect.succeed([])
-  if (
-    platforms &&
-    platforms.length > 0 &&
-    !platforms.includes(SMW_HACK_SYSTEM) &&
-    !platforms.includes("smw-hack")
-  ) {
-    return Effect.succeed([])
-  }
+  const sectionIds = sectionIdsForPlatforms(platforms)
+  if (sectionIds.length === 0) return Effect.succeed([])
 
   if (/^\d+$/.test(normalized)) {
     return fetchFile(runtime, normalized).pipe(
-      Effect.map(file => [claimFor(runtime, providerId, file)]),
+      Effect.map(file =>
+        sectionIds.includes(sectionIdForFile(file))
+          ? [claimFor(runtime, providerId, file)]
+          : [],
+      ),
       Effect.catchTag("AcquisitionError", () => Effect.succeed([])),
     )
   }
 
-  return fetchSection(runtime, { query: normalized }).pipe(
-    Effect.map(payload =>
-      arrayValue(payload.data)
+  return Effect.forEach(
+    sectionIds,
+    sectionId => fetchSection(runtime, sectionId, { query: normalized }),
+    { concurrency: 1 },
+  ).pipe(
+    Effect.map(payloads =>
+      payloads
+        .flatMap(payload => arrayValue(payload.data))
         .map(asFile)
         .filter((file): file is SmwCentralFile => file !== null)
         .map(file => claimFor(runtime, providerId, file)),
@@ -261,7 +302,7 @@ function searchSmwHacks(
   )
 }
 
-function resolveSmwHackDownload(
+function resolveSmwCentralDownload(
   runtime: SmwCentralRuntime,
   providerId: ProviderId,
   candidateUrl: string,
@@ -310,11 +351,12 @@ function resolveSmwHackDownload(
 
 function fetchSection(
   runtime: SmwCentralRuntime,
+  sectionId: HackSectionId,
   options: { readonly query?: string; readonly perPage?: number } = {},
 ): Effect.Effect<SmwCentralSectionPayload, AcquisitionError> {
   const url = new URL(runtime.apiBaseUrl)
   url.searchParams.set("a", "getsectionlist")
-  url.searchParams.set("s", SMW_HACKS_SECTION)
+  url.searchParams.set("s", sectionId)
   url.searchParams.set("u", "0")
   if (options.query) url.searchParams.set("f[name]", options.query)
   if (options.perPage) url.searchParams.set("l", String(options.perPage))
@@ -343,12 +385,13 @@ function fetchFile(
           }),
         )
       }
-      if (stringValue(file.section) !== SMW_HACKS_SECTION) {
+      const sectionId = stringValue(file.section)
+      if (!isHackSectionId(sectionId)) {
         return Effect.fail(
           new AcquisitionError({
             reason: "caller",
             providerId: KORRI_SMWCENTRAL_PLUGIN_ID,
-            message: `SMW Central file ${id} is not in ${SMW_HACKS_SECTION}`,
+            message: `SMW Central file ${id} is not a supported game hack section`,
           }),
         )
       }
@@ -425,6 +468,7 @@ function claimFor(
 ): ProviderClaim {
   const id = requiredString(file.id, "id")
   const title = requiredString(file.name, "name")
+  const section = sectionConfigForFile(file)
   const thumbnailUrl = arrayOfStrings(file.images)[0]
   return withoutUndefined({
     _tag: "ProviderClaim" as const,
@@ -433,7 +477,7 @@ function claimFor(
     ref: { kind: "provider-item-id" as const, value: id },
     title,
     url: detailsUrl(runtime, id),
-    platform: SMW_HACK_SYSTEM,
+    platform: section.system,
     thumbnailUrl,
     artifact: artifactHintFor(file),
     playable: playableFor(runtime, providerId, file),
@@ -470,6 +514,7 @@ function playableFor(
 ) {
   const id = requiredString(file.id, "id")
   const title = requiredString(file.name, "name")
+  const section = sectionConfigForFile(file)
   return {
     id,
     title,
@@ -478,18 +523,22 @@ function playableFor(
       {
         id: "patch-archive",
         providerId,
-        system: SMW_HACK_SYSTEM,
+        system: section.system,
         target: detailsUrl(runtime, id),
+        display: { section: section.label },
       },
     ],
   }
 }
 
 function artifactHintFor(file: SmwCentralFile): ArtifactAcquisitionHint {
+  const section = sectionConfigForFile(file)
   const downloadUrl = stringValue(file.download_url)
   const sizeBytes = numberValue(file.size)
   return withoutUndefined({
-    ...hackArtifactHint,
+    kind: "patch" as const,
+    system: section.system,
+    format: { id: section.format },
     file: downloadUrl
       ? withoutUndefined({
           name:
@@ -517,11 +566,12 @@ function acquireOutputFor({
   readonly bytes: Buffer
 }): PluginAcquireOutput {
   const id = requiredString(file.id, "id")
+  const section = sectionConfigForFile(file)
   const downloadUrl = requiredString(file.download_url, "download_url")
   return withoutUndefined({
     kind: "patch" as const,
-    system: SMW_HACK_SYSTEM,
-    format: { id: SMW_HACK_FORMAT },
+    system: section.system,
+    format: { id: section.format },
     file: {
       name: safeFileNameFromUrl(downloadUrl) ?? `${id}.zip`,
       extension: "zip" as const,
@@ -545,7 +595,9 @@ function facetsFor(
   file: SmwCentralFile,
 ): ArtifactFacets {
   const authors = authorsFor(runtime, file)
+  const section = sectionConfigForFile(file)
   const tags = [
+    section.label,
     ...arrayOfStrings(file.tags),
     displayFieldFrom(file, "difficulty"),
     displayFieldFrom(file, "type"),
@@ -572,10 +624,11 @@ function facetsFor(
 }
 
 function sourceDataFor(file: SmwCentralFile) {
+  const sectionId = sectionIdForFile(file)
   return {
-    [SOURCE_DATA_NAMESPACE]: withoutUndefined({
+    [`smwcentral.${sectionId}.v1`]: withoutUndefined({
       fileId: requiredString(file.id, "id"),
-      section: stringValue(file.section),
+      section: sectionId,
       submittedAt: numberValue(file.submitted_at),
       moderatedAt: numberValue(file.moderated_at),
       version: stringFieldFrom(file, "version"),
@@ -630,6 +683,42 @@ export function parseSmwCentralUrl(
   }
 
   return null
+}
+
+function sectionIdsForPlatforms(
+  platforms?: readonly string[],
+): HackSectionId[] {
+  if (!platforms || platforms.length === 0)
+    return [...DEFAULT_SEARCH_SECTION_IDS]
+  return HACK_SECTION_IDS.filter(sectionId => {
+    const section = HACK_SECTIONS[sectionId]
+    return platforms.some(
+      platform =>
+        platform === sectionId ||
+        platform === section.system ||
+        section.aliases.includes(platform),
+    )
+  })
+}
+
+function sectionConfigForFile(file: SmwCentralFile) {
+  return HACK_SECTIONS[sectionIdForFile(file)]
+}
+
+function sectionIdForFile(file: SmwCentralFile): HackSectionId {
+  const sectionId = stringValue(file.section)
+  if (!isHackSectionId(sectionId)) {
+    throw new Error(
+      `Unsupported SMW Central section: ${sectionId ?? "unknown"}`,
+    )
+  }
+  return sectionId
+}
+
+function isHackSectionId(
+  sectionId: string | undefined,
+): sectionId is HackSectionId {
+  return sectionId !== undefined && sectionId in HACK_SECTIONS
 }
 
 function detailsUrl(runtime: SmwCentralRuntime, id: string): string {
