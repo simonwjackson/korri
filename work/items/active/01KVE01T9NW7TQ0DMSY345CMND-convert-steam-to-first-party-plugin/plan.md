@@ -1,7 +1,7 @@
 ---
 title: refactor: Convert Steam to a first-party plugin
 type: refactor
-status: active
+status: completed
 date: 2026-06-18
 origin: direct prompt: product/plugins/AGENTS.md and .worktrees/refactor/retroarch-plugin/
 verify_command: "bun test product/plugins/steam/src/plugin.test.ts product/plugins/steam/src/materializer.test.ts product/plugins/steam/src/launch-spec.test.ts product/plugins/steam/src/state-materializer.test.ts product/plugins/steam/src/observability/*.test.ts product/plugins/index.test.ts product/plugins/library-source-layer.test.ts product/platform/library/config/records/app.test.ts product/platform/library/config/app-choice-selection.test.ts product/platform/library/config/readable-cascade-resolver.test.ts product/platform/library/config/app-materializer.test.ts product/platform/library/proseql/library-repository.test.ts product/services/device/game-stream-launch-intent.test.ts product/platform/plugin/launch-companion.test.ts product/plugins/gamescope/src/plugin.test.ts product/apps/portal/api/stream/prepare.rpc-handler.test.ts product/apps/portal/api/plugin-diagnostics/*.test.ts product/apps/portal/api/server/rpc-server.test.ts product/services/device/sessiond.test.ts product/services/device/inputd-actions.test.ts product/systems/nixos/flake/plugins.test.ts && just test-nix && just typecheck && just lint"
