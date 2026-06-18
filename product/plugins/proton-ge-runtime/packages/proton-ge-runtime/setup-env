@@ -1,0 +1,60 @@
+# Source this file from a launcher after it has created a writable run dir.
+# Inputs:
+#   KORRI_PROTON_GE_RUNTIME_ROOT        defaults to this package's GE-Proton root
+#   KORRI_PROTON_GE_RUNTIME_FILES       defaults to $KORRI_PROTON_GE_RUNTIME_ROOT/files
+#   KORRI_PROTON_GE_RUNTIME_WINEPREFIX  writable Wine prefix path
+# Outputs:
+#   KORRI_PROTON_GE_RUNTIME_PROTON      resolved GE-Proton launcher script
+#   KORRI_PROTON_GE_RUNTIME_PYTHON      x86 Python path for running the launcher under FEX
+#   KORRI_PROTON_GE_RUNTIME_WINE64      resolved GE-Proton wine64 path
+#   KORRI_PROTON_GE_RUNTIME_ROOT/FILES  resolved GE-Proton directories
+#   Wine/DXVK/VKD3D env for direct GE-Proton launches under FEX
+
+proton_root="${KORRI_PROTON_GE_RUNTIME_ROOT:-@protonGeRoot@}"
+proton_files="${KORRI_PROTON_GE_RUNTIME_FILES:-$proton_root/files}"
+wine_prefix="${KORRI_PROTON_GE_RUNTIME_WINEPREFIX:-${WINEPREFIX:-}}"
+
+if [ -z "$wine_prefix" ]; then
+  echo "korri-proton-ge-runtime: KORRI_PROTON_GE_RUNTIME_WINEPREFIX or WINEPREFIX is required" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+if [ ! -x "$proton_files/bin/wine64" ]; then
+  echo "korri-proton-ge-runtime: GE-Proton wine64 is missing: $proton_files/bin/wine64" >&2
+  echo "hint: install korri-proton-ge-runtime or set KORRI_PROTON_GE_RUNTIME_FILES" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+if [ ! -x "$proton_root/proton" ]; then
+  echo "korri-proton-ge-runtime: GE-Proton launcher is missing: $proton_root/proton" >&2
+  echo "hint: install korri-proton-ge-runtime or set KORRI_PROTON_GE_RUNTIME_ROOT" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+export KORRI_PROTON_GE_RUNTIME_ROOT="$proton_root"
+export KORRI_PROTON_GE_RUNTIME_FILES="$proton_files"
+export KORRI_PROTON_GE_RUNTIME_PROTON="$proton_root/proton"
+export KORRI_PROTON_GE_RUNTIME_PYTHON="${KORRI_PROTON_GE_RUNTIME_PYTHON:-/usr/bin/python3}"
+export KORRI_PROTON_GE_RUNTIME_WINE64="$proton_files/bin/wine64"
+export WINEPREFIX="$wine_prefix"
+export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-dxgi,d3d11=n,b}"
+export WINEDLLPATH="$proton_files/lib/wine:$proton_files/lib/wine/x86_64-windows:$proton_files/lib/wine/dxvk/x86_64-windows:$proton_files/lib/vkd3d/x86_64-windows:$proton_files/lib64/wine${WINEDLLPATH:+:$WINEDLLPATH}"
+export LD_LIBRARY_PATH="/run/opengl-driver/lib:$proton_files/lib:$proton_files/lib64:$proton_files/lib/x86_64-linux-gnu:$proton_files/lib/i386-linux-gnu:$proton_files/lib/wine/x86_64-unix:$proton_files/lib/wine/i386-unix${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LIBGL_DRIVERS_PATH="${LIBGL_DRIVERS_PATH:-/run/opengl-driver/lib/dri}"
+export PATH="$proton_files/bin:$PATH"
+
+# Proton usually installs these via its Python launcher. The direct Wine path
+# keeps optional GE smoke tests independent of Steam app ids, so copy the native
+# DXVK/VKD3D payload into the prefix before launching D3D11 Windows binaries.
+system32="$wine_prefix/drive_c/windows/system32"
+"@coreutils@/mkdir" -p "$system32"
+for dll in d3d11.dll dxgi.dll; do
+  if [ -f "$proton_files/lib/wine/dxvk/x86_64-windows/$dll" ]; then
+    "@coreutils@/cp" -f "$proton_files/lib/wine/dxvk/x86_64-windows/$dll" "$system32/$dll"
+  fi
+done
+for dll in libvkd3d-1.dll libvkd3d-shader-1.dll; do
+  if [ -f "$proton_files/lib/vkd3d/x86_64-windows/$dll" ]; then
+    "@coreutils@/cp" -f "$proton_files/lib/vkd3d/x86_64-windows/$dll" "$system32/$dll"
+  fi
+done

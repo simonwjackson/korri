@@ -51,6 +51,46 @@ describe("PluginLibrarySourceLayerLive", () => {
     }
   })
 
+  it("exposes the enabled Mega Man Arena plugin through fulfilled resources", async () => {
+    const previous = snapshotEnv()
+    const stateRoot = await mktemp()
+    await seedMegaManArenaExecutable(stateRoot)
+    process.env.KORRI_CONFIG_ROOTS = ""
+    process.env.KORRI_ENABLED_PLUGINS = "@korri:mega-man-arena"
+    process.env.KORRI_PLUGIN_RESOURCE_ROOT = stateRoot
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const source = yield* LibrarySource
+          const listPlayableEntries = source.listPlayableEntries
+          if (!listPlayableEntries)
+            throw new Error("expected playable list support")
+          const entries = yield* listPlayableEntries()
+          const resolved = yield* source.resolveLaunchForGame(
+            "@korri:mega-man-arena/mega-man-arena",
+          )
+          return { entries, resolved }
+        }).pipe(Effect.provide(PluginLibrarySourceLayerLive)),
+      )
+
+      expect(result.entries.map(entry => entry.id)).toContain(
+        "@korri:mega-man-arena/mega-man-arena",
+      )
+      expect(result.resolved.spec.command).toBe(
+        join(
+          stateRoot,
+          "x406b6f7272693a6d6567612d6d616e2d6172656e61",
+          "x6d6567612d6d616e2d6172656e61",
+          "result",
+          "bin",
+          "mega-man-arena",
+        ),
+      )
+    } finally {
+      restoreEnv(previous)
+    }
+  })
+
   it("keeps launch resolution read-only even when a Nix command is configured", async () => {
     const previous = snapshotEnv()
     const stateRoot = await mktemp()
@@ -133,12 +173,38 @@ async function mktemp(): Promise<string> {
 }
 
 async function seedNeverballExecutable(stateRoot: string): Promise<void> {
-  const store = join(stateRoot, "store-neverball")
+  await seedExecutableResource({
+    stateRoot,
+    pluginId: "@korri:neverball",
+    resourceId: "neverball",
+    binary: "neverball",
+    storeName: "store-neverball",
+  })
+}
+
+async function seedMegaManArenaExecutable(stateRoot: string): Promise<void> {
+  await seedExecutableResource({
+    stateRoot,
+    pluginId: "@korri:mega-man-arena",
+    resourceId: "mega-man-arena",
+    binary: "mega-man-arena",
+    storeName: "store-mega-man-arena",
+  })
+}
+
+async function seedExecutableResource(input: {
+  readonly stateRoot: string
+  readonly pluginId: `@${string}:${string}`
+  readonly resourceId: string
+  readonly binary: string
+  readonly storeName: string
+}): Promise<void> {
+  const store = join(input.stateRoot, input.storeName)
   await mkdir(join(store, "bin"), { recursive: true })
-  const executable = join(store, "bin", "neverball")
+  const executable = join(store, "bin", input.binary)
   await Bun.write(executable, "#!/bin/sh\n")
   await chmod(executable, 0o755)
-  const link = outLinkPath(stateRoot, "@korri:neverball", "neverball")
+  const link = outLinkPath(input.stateRoot, input.pluginId, input.resourceId)
   await mkdir(join(link, ".."), { recursive: true })
   await symlink(store, link)
 }

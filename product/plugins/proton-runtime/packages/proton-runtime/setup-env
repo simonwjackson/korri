@@ -1,0 +1,50 @@
+# Source this file from a launcher after it has created a writable run dir.
+# Inputs:
+#   KORRI_PROTON_RUNTIME_ROOT        defaults to Steam's Proton 10.0 path
+#   KORRI_PROTON_RUNTIME_FILES       defaults to $KORRI_PROTON_RUNTIME_ROOT/files
+#   KORRI_PROTON_RUNTIME_WINEPREFIX  writable Wine prefix path
+# Outputs:
+#   KORRI_PROTON_RUNTIME_WINE64      resolved Proton wine64 path
+#   KORRI_PROTON_RUNTIME_ROOT/FILES  resolved Proton directories
+#   Wine/DXVK/VKD3D env matching the known-good Bandai direct-wine path
+
+proton_root="${KORRI_PROTON_RUNTIME_ROOT:-/var/lib/korri/steam/steamapps/common/Proton 10.0}"
+proton_files="${KORRI_PROTON_RUNTIME_FILES:-$proton_root/files}"
+wine_prefix="${KORRI_PROTON_RUNTIME_WINEPREFIX:-${WINEPREFIX:-}}"
+
+if [ -z "$wine_prefix" ]; then
+  echo "korri-proton-runtime: KORRI_PROTON_RUNTIME_WINEPREFIX or WINEPREFIX is required" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+if [ ! -x "$proton_files/bin/wine64" ]; then
+  echo "korri-proton-runtime: Proton wine64 is missing: $proton_files/bin/wine64" >&2
+  echo "hint: seed Steam/Proton first or set KORRI_PROTON_RUNTIME_FILES to a Proton files directory" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+export KORRI_PROTON_RUNTIME_ROOT="$proton_root"
+export KORRI_PROTON_RUNTIME_FILES="$proton_files"
+export KORRI_PROTON_RUNTIME_WINE64="$proton_files/bin/wine64"
+export WINEPREFIX="$wine_prefix"
+export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-dxgi,d3d11=n,b}"
+export WINEDLLPATH="$proton_files/lib/wine:$proton_files/lib/wine/x86_64-windows:$proton_files/lib/wine/dxvk/x86_64-windows:$proton_files/lib/vkd3d/x86_64-windows:$proton_files/lib64/wine${WINEDLLPATH:+:$WINEDLLPATH}"
+export LD_LIBRARY_PATH="/run/opengl-driver/lib:$proton_files/lib:$proton_files/lib64:$proton_files/lib/wine/x86_64-unix:$proton_files/lib/wine/i386-unix${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LIBGL_DRIVERS_PATH="${LIBGL_DRIVERS_PATH:-/run/opengl-driver/lib/dri}"
+export PATH="$proton_files/bin:$PATH"
+
+# Proton usually installs these via its Python launcher. The direct Wine path
+# keeps launchers independent of Steam app ids, so copy the native DXVK/VKD3D
+# payload into the prefix before launching D3D11 Windows binaries.
+system32="$wine_prefix/drive_c/windows/system32"
+"@coreutils@/mkdir" -p "$system32"
+for dll in d3d11.dll dxgi.dll; do
+  if [ -f "$proton_files/lib/wine/dxvk/x86_64-windows/$dll" ]; then
+    "@coreutils@/cp" -f "$proton_files/lib/wine/dxvk/x86_64-windows/$dll" "$system32/$dll"
+  fi
+done
+for dll in libvkd3d-1.dll libvkd3d-shader-1.dll; do
+  if [ -f "$proton_files/lib/vkd3d/x86_64-windows/$dll" ]; then
+    "@coreutils@/cp" -f "$proton_files/lib/vkd3d/x86_64-windows/$dll" "$system32/$dll"
+  fi
+done

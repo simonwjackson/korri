@@ -17,6 +17,7 @@
   korriKioskLiveUsbDeveloperSystem,
   korriSourceMachineSystem,
   korriSources,
+  pluginChecks ? { },
   ...
 }:
 
@@ -444,3 +445,4 @@ pkgs.lib.optionalAttrs isX86Linux {
     ];
   };
 }
+// pluginChecks

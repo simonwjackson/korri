@@ -347,6 +347,7 @@ flake-utils.lib.eachDefaultSystem (
         korriSourceMachineSystem
         korriSources
         ;
+      pluginChecks = firstPartyPluginComposition.checks;
     };
 
     apps = import ./apps.nix {

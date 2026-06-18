@@ -13,22 +13,37 @@ in {
   ids = composition.enabledPluginIds;
   packages = builtins.attrNames composition.packages;
   apps = builtins.attrNames composition.apps;
+  checks = builtins.attrNames composition.checks;
   overlayCount = builtins.length composition.overlays;
   moduleCount = builtins.length composition.nixosModules;
 }
 `
 
 describe("first-party Nix plugin composition", () => {
-  it("exposes Gamescope packages/apps only when the Gamescope plugin is enabled", async () => {
+  it("discovers plugin-owned Nix compositions without central plugin imports", async () => {
     const enabled = await nixEval(PLUGIN_COMPOSITION_EXPR(true))
     expect(enabled).toEqual({
-      ids: ["@korri:gamescope"],
-      packages: ["gamescope-korri", "korri-gamescope-control-bridge"],
+      ids: [
+        "@korri:fex",
+        "@korri:gamescope",
+        "@korri:mega-man-arena",
+        "@korri:proton-ge",
+        "@korri:proton",
+      ],
+      packages: [
+        "gamescope-korri",
+        "korri-fex-runtime",
+        "korri-gamescope-control-bridge",
+        "korri-proton-ge-runtime",
+        "korri-proton-runtime",
+        "mega-man-arena",
+      ],
       apps: [
         "gamescope-control",
         "gamescope-control-bridge",
         "korri-stream-control-bench",
       ],
+      checks: ["mega-man-arena-check", "proton-ge-runtime-check"],
       overlayCount: 1,
       moduleCount: 1,
     })
@@ -38,6 +53,7 @@ describe("first-party Nix plugin composition", () => {
       ids: [],
       packages: [],
       apps: [],
+      checks: [],
       overlayCount: 0,
       moduleCount: 0,
     })

@@ -3,10 +3,21 @@ import {
   createPluginRegistry,
   parseEnabledPluginIds,
 } from "@platform/plugin/registry"
-import { gamescopePlugin } from "./gamescope"
+import { fexRuntimePlugin } from "./fex-runtime"
+import { gamescopePlugin, KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
+import { megaManArenaPlugin } from "./mega-man-arena"
 import { neverballPlugin } from "./neverball"
+import { protonGeRuntimePlugin } from "./proton-ge-runtime"
+import { protonRuntimePlugin } from "./proton-runtime"
 
-export const firstPartyPlugins = [gamescopePlugin, neverballPlugin] as const
+export const firstPartyPlugins = [
+  gamescopePlugin,
+  fexRuntimePlugin,
+  protonRuntimePlugin,
+  protonGeRuntimePlugin,
+  neverballPlugin,
+  megaManArenaPlugin,
+] as const
 
 export function createFirstPartyPluginRegistryFromEnv(
   env: Readonly<Record<string, string | undefined>> = process.env,
@@ -18,4 +29,9 @@ export function createFirstPartyPluginRegistryFromEnv(
 
 const enabledFirstPartyPluginIds = (
   enabledPlugins: string | undefined,
-): readonly PluginId[] => [...new Set(parseEnabledPluginIds(enabledPlugins))]
+): readonly PluginId[] => [
+  ...new Set([
+    KORRI_GAMESCOPE_PLUGIN_ID,
+    ...parseEnabledPluginIds(enabledPlugins),
+  ]),
+]

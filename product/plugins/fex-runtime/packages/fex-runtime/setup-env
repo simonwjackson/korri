@@ -1,0 +1,58 @@
+# Source this file from a launcher after it has created a writable run dir.
+# Inputs:
+#   KORRI_FEX_RUNTIME_RUN_DIR       writable per-app runtime directory
+#   KORRI_FEX_RUNTIME_APP_ID        stable app id used for the FEX app config name
+#   KORRI_FEX_RUNTIME_ENABLE_THUNKS defaults to 1
+# Outputs preserve the known-good Bandai FEX/DXVK contract used by Mega Man Arena.
+
+export FEX_ROOTFS="${FEX_ROOTFS:-/var/lib/korri/steam/fex-rootfs}"
+
+if [ -z "${FEX_SERVERSOCKETPATH:-}" ]; then
+  uid="$(@coreutils@/id -u)"
+  runtime_dir="/run/user/$uid"
+  if [ -d "$runtime_dir" ]; then
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$runtime_dir}"
+    export FEX_SERVERSOCKETPATH="$runtime_dir/$uid.FEXServer.Socket"
+  fi
+fi
+
+if [ "${KORRI_FEX_RUNTIME_ENABLE_THUNKS:-1}" = "1" ]; then
+  fex_thunk_config="${FEX_THUNKCONFIG:-/usr/share/fex-emu/ThunksDB.json}"
+  fex_host_thunks="${FEX_THUNKHOSTLIBS:-/usr/lib/fex-emu/HostThunks}"
+  fex_guest_thunks="${FEX_THUNKGUESTLIBS:-/usr/share/fex-emu/GuestThunks}"
+  fex_rootfs_freedreno_icd="$FEX_ROOTFS/usr/share/vulkan/icd.d/freedreno_icd.x86_64.json"
+
+  if [ -f "$fex_thunk_config" ]; then
+    export FEX_THUNKCONFIG="$fex_thunk_config"
+    if [ -d "$fex_host_thunks" ]; then
+      export FEX_THUNKHOSTLIBS="$fex_host_thunks"
+    fi
+    if [ -d "$fex_guest_thunks" ]; then
+      export FEX_THUNKGUESTLIBS="$fex_guest_thunks"
+    fi
+    if [ -z "${FEX_APP_CONFIG:-}" ]; then
+      fex_app_id="${KORRI_FEX_RUNTIME_APP_ID:-korri-app}"
+      fex_run_dir="${KORRI_FEX_RUNTIME_RUN_DIR:-${XDG_RUNTIME_DIR:-/tmp}}"
+      fex_app_config="$fex_run_dir/fex-$fex_app_id.json"
+      "@coreutils@/mkdir" -p "$fex_run_dir"
+      "@coreutils@/cat" > "$fex_app_config" <<EOF
+{
+  "Config": {
+    "ThunkConfig": "$fex_thunk_config"
+  },
+  "ThunksDB": {
+    "GL": 1,
+    "Vulkan": 1,
+    "drm": 1,
+    "WaylandClient": 1
+  }
+}
+EOF
+      export FEX_APP_CONFIG="$fex_app_config"
+    fi
+  fi
+
+  if [ -z "${VK_ICD_FILENAMES:-}" ] && [ -f "$fex_rootfs_freedreno_icd" ]; then
+    export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/freedreno_icd.x86_64.json
+  fi
+fi

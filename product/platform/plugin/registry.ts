@@ -63,7 +63,10 @@ export function createPluginRegistry(
     byId.set(candidate.id, candidate)
   }
 
-  const enabledPluginIds = new Set<PluginId>(options.enabledPluginIds ?? [])
+  const enabledPluginIds = expandRequiredPluginIds(
+    options.enabledPluginIds ?? [],
+    byId,
+  )
   const enabledPlugins = plugins.filter(candidate =>
     enabledPluginIds.has(candidate.id),
   )
@@ -120,6 +123,32 @@ export function executableResources(
       },
     ]
   })
+}
+
+function expandRequiredPluginIds(
+  requestedPluginIds: readonly PluginId[],
+  byId: ReadonlyMap<PluginId, KorriPlugin>,
+): ReadonlySet<PluginId> {
+  const enabled = new Set<PluginId>(requestedPluginIds)
+  const pending = [...requestedPluginIds]
+
+  while (pending.length > 0) {
+    const pluginId = pending.shift()
+    if (pluginId === undefined) continue
+    const plugin = byId.get(pluginId)
+    if (plugin === undefined) continue
+
+    for (const requirement of plugin.requires ?? []) {
+      const requiredPluginId = requirement.ref?.provider
+      if (requiredPluginId === undefined || enabled.has(requiredPluginId)) {
+        continue
+      }
+      enabled.add(requiredPluginId)
+      pending.push(requiredPluginId)
+    }
+  }
+
+  return enabled
 }
 
 export function parseEnabledPluginIds(

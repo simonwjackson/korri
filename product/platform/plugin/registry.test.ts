@@ -85,6 +85,41 @@ describe("createPluginRegistry", () => {
     ])
   })
 
+  it("enables explicit plugin requirements as dependency closure", () => {
+    const runtime = plugin({
+      namespace: "@korri",
+      name: "runtime",
+      contributes: {
+        config: {
+          runtimes: {
+            default: { id: "default", kind: "test-runtime" },
+          },
+        },
+      },
+    })
+    const game = plugin({
+      namespace: "@korri",
+      name: "game",
+      requires: [
+        {
+          capability: "runtime.resolve",
+          ref: { provider: runtime.id, id: "default" },
+        },
+      ],
+    })
+
+    const registry = createPluginRegistry([runtime, game], {
+      enabledPluginIds: [game.id],
+    })
+
+    expect(registry.enabledPluginIds.has(game.id)).toBe(true)
+    expect(registry.enabledPluginIds.has(runtime.id)).toBe(true)
+    expect(registry.runtimes[`${runtime.id}/default`]).toEqual({
+      id: "default",
+      kind: "test-runtime",
+    })
+  })
+
   it("projects executable resources from generic module config records", () => {
     const resources = executableResources(
       createPluginRegistry(
