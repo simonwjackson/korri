@@ -71,69 +71,15 @@ let
     KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER = "1";
   };
 
-  # Minimal RetroArch closure for the kiosk: retroarch-bare (zero
-  # default cores) joined with exactly one libretro core
-  # (libretro-fake-08, PICO-8). We INTENTIONALLY do NOT use
-  # `pkgs.retroarch-bare.passthru.wrapper { cores = ...; }` here.
-  #
-  # That nixpkgs wrapper unconditionally prepends
-  #   -L <wrapper-out>/lib/retroarch/cores --appendconfig=<cfg>
-  # to every `retroarch` invocation. When our launcher then passes its
-  # own `-L <core> <content>`, RetroArch sees two `-L` flags AND the
-  # first one is a directory (not a core file). The CLI parser does
-  # not cleanly last-wins in that case: it routes by content extension
-  # and frequently picks the built-in `image display` core for `.png`
-  # files, ignoring the explicit `-L` we asked for. The user-visible
-  # symptom on Sobo was "press A on celeste-classic shows a cart
-  # browser, not the game".
-  #
-  # `symlinkJoin` exposes the bare retroarch binary AND the core .so on
-  # PATH / lib/retroarch/cores without injecting any flags. The
-  # closure-shape assertions in `tools/testing/nix/korri-*-config-check.nix`
-  # match on `passthru.cores` + `passthru.unwrapped`, so we propagate
-  # both attributes here to keep the assertions valid.
-  #
-  # IMPORTANT: `cores` here intentionally contains exactly one entry.
-  # Korri ships RetroArch as a per-cart runtime, not as an emulator-
-  # of-everything; adding cores grows every kiosk image's closure for
-  # every user. New libretro cores should land as their own packages
-  # with their own kiosk opt-ins, not appended here. The closure-shape
-  # check guards this.
-  retroarchKiosk = pkgs.symlinkJoin {
-    name = "korri-retroarch-fake-08";
-    paths = [
-      pkgs.retroarch-bare
-      pkgs.libretro-fake-08
-    ];
-    passthru = {
-      cores = [ pkgs.libretro-fake-08 ];
-      unwrapped = pkgs.retroarch-bare;
-    };
-  };
 in
 {
   imports = [ ./headless.nix ];
 
   services.korri.client.enable = lib.mkDefault true;
 
-  # Stable abs path the cascade-side launcher YAML can reference for
-  # the fake-08 core without baking a per-build nix store hash into
-  # user data under /var/lib/korrid/.local/share/korri/library/.
-  # Pairs with the `retroarchKiosk` symlinkJoin above: the YAML uses
-  #   command: retroarch                          # PATH-resolved
-  #   cores: { retroarch-fake-08: /etc/korri/cores/fake08_libretro.so }
-  # which is rebuild-safe.
-  environment.etc."korri/cores/fake08_libretro.so".source =
-    "${pkgs.libretro-fake-08}/lib/retroarch/cores/fake08_libretro.so";
-
   services.korri.compositor = {
     enable = true;
     kiosk.enable = true;
-    # RetroArch wired into the compositor unit PATH so the Korri launch
-    # flow can invoke `retroarch -L fake08_libretro.so <cart>` once the
-    # cascade-side launcher record lands. Closure-shape assertion in
-    # tools/testing/nix/korri-*-config-check.nix prevents core bloat.
-    path = [ retroarchKiosk ];
   };
 
   # Kiosk appliance images require host-side normalized appliance input via
@@ -170,14 +116,11 @@ in
     #     the renderer is already up. Without sway on PATH, every
     #     /control/start throws "Executable not found in $PATH:
     #     swaymsg" before the renderer-launch path runs.
-    #   - retroarchKiosk: kiosk RetroArch wrapper so cascade-resolved
-    #     `retroarch -L ... <cart>` launches resolve.
     #   - client.package: the renderer (Electrobun) binary that
     #     sessiond's enterIdle spawns by name ("korri-desktop-device").
     path = [
       pkgs.bashInteractive
       compositorCfg.sway.package
-      retroarchKiosk
       config.services.korri.client.package
     ];
     # Foreground children spawned by sessiond connect to the kiosk compositor's

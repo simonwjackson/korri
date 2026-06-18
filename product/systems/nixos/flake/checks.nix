@@ -169,10 +169,6 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     steamKorriPackage = self.packages.${system}.steam-korri;
   };
-  libretro-fake-08-check = import ../../../../product/vendor/libretro-fake-08/check.nix {
-    inherit pkgs;
-    libretroFake08Package = self.packages.${system}.libretro-fake-08;
-  };
   libretro-wasm4-check = import ../../../../product/vendor/libretro-wasm4/check.nix {
     inherit pkgs;
     libretroWasm4Package = self.packages.${system}.libretro-wasm4;

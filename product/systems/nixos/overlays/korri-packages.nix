@@ -5,7 +5,6 @@
 # product/image plugin composition seam.
 {
   nix-on-rocks,
-  fake-08-src,
   wasm4-src,
   nixpkgs-godot,
 }:
@@ -20,7 +19,6 @@ in
 {
   moonlight-embedded = moonlightEmbeddedKorri;
   moonlight-embedded-korri = moonlightEmbeddedKorri;
-
 
   retroarch-bare = prev.retroarch-bare.overrideAttrs (old: {
     buildInputs = (old.buildInputs or [ ]) ++ [ final.xz ];
@@ -38,9 +36,5 @@ in
   steam-korri = final.callPackage ../../../vendor/steam-korri/package.nix { };
   libretro-wasm4 = final.callPackage ../../../vendor/libretro-wasm4/package.nix {
     inherit wasm4-src;
-  };
-
-  libretro-fake-08 = final.callPackage ../../../vendor/libretro-fake-08/package.nix {
-    inherit fake-08-src;
   };
 }

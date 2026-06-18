@@ -10,11 +10,13 @@ from inside the Nix-on-rocks guest.
   source-tree `fake08_libretro.info` metadata file. Nothing else from
   upstream's standalone SDL2 player is included.
 
-## Why this lives in Korri
+## Why this lives with the PICO-8 BBS plugin
 
 `fake-08` is not in upstream nixpkgs. ROCKNIX ships a `fake08-lr` package
 on the host, but Korri launches everything from inside the guest closure,
 so the host packaging is unreachable. A guest-side derivation is required.
+The PICO-8 BBS provider and fake-08 runtime form one first-party PICO-8
+bundle: the provider discovers carts and the runtime executes them.
 
 ## Source pin policy
 
@@ -87,9 +89,9 @@ RetroArch without growing the per-image closure for every user.
 ## Layout
 
 ```
-product/vendor/libretro-fake-08/
+product/plugins/pico8-bbs/packages/libretro-fake-08/
 ├── README.md       # this file
-├── package.nix     # stdenv.mkDerivation wired through product/systems/nixos/overlays/korri-packages.nix
+├── package.nix     # stdenv.mkDerivation wired through the PICO-8 plugin composition
 └── check.nix       # colocated package-level check exposed as
                     # self.checks.<system>.libretro-fake-08-check
 ```

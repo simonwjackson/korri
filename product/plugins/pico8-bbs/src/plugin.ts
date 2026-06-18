@@ -52,8 +52,35 @@ export const pico8BbsPlugin = plugin({
   namespace: "@korri",
   name: "pico8bbs",
   title: "PICO-8 BBS",
-  description: "Adds PICO-8 BBS provider claims and cart download resolution.",
+  description:
+    "Adds PICO-8 BBS provider claims, cart download resolution, and the fake-08 PICO-8 runtime package.",
   contributes: {
+    config: {
+      systems: {
+        pico8: {
+          id: "pico8",
+          title: "PICO-8",
+          launch: { app: "retroarch", module: "fake08" },
+        },
+      },
+      modules: {
+        "libretro-fake-08-package": {
+          id: "libretro-fake-08-package",
+          kind: "nix-package",
+          package: "libretro-fake-08",
+          path: "product/plugins/pico8-bbs/packages/libretro-fake-08",
+          capabilities: ["package.expose", "launch.runtime", "pico8"],
+          core: "fake08",
+        },
+        fake08: {
+          id: "fake08",
+          kind: "libretro-core",
+          path: "/etc/korri/cores/fake08_libretro.so",
+          package: "libretro-fake-08",
+          capabilities: ["launch.module", "pico8"],
+        },
+      },
+    },
     handlers: [
       {
         id: "pico8bbs.claims-search",

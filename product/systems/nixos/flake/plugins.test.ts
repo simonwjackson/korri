@@ -9,6 +9,7 @@ let
     pluginArgs = {
       gamescopePackage = "gamescope-korri-package";
       controlBridgePackage = "gamescope-control-bridge-package";
+      fake-08-src = ./.;
       nixpkgs-godot = { legacyPackages = {}; };
       nixpkgs-mesa = { legacyPackages = {}; };
     };
@@ -21,6 +22,16 @@ in {
   overlayCount = builtins.length composition.overlays;
   moduleCount = builtins.length composition.nixosModules;
 }
+`
+
+const DISABLED_DEFAULT_ARGS_EXPR = `
+let
+  pkgs = import <nixpkgs> {};
+  composition = import ./product/systems/nixos/flake/plugins.nix {
+    inherit pkgs;
+    enable = false;
+  };
+in composition.enabledPluginIds
 `
 
 type CompositionSummary = {
@@ -39,12 +50,17 @@ describe("first-party Nix plugin composition", () => {
     )) as CompositionSummary
 
     expect(enabled.ids).toEqual(
-      expect.arrayContaining(["@korri:gamescope", "@korri:ryubing"]),
+      expect.arrayContaining([
+        "@korri:gamescope",
+        "@korri:pico8bbs",
+        "@korri:ryubing",
+      ]),
     )
     expect(enabled.packages).toEqual(
       expect.arrayContaining([
         "gamescope-korri",
         "korri-gamescope-control-bridge",
+        "libretro-fake-08",
         "ryubing-korri",
       ]),
     )
@@ -53,9 +69,12 @@ describe("first-party Nix plugin composition", () => {
       "gamescope-control-bridge",
       "korri-stream-control-bench",
     ])
-    expect(enabled.moduleCount).toBe(1)
+    expect(enabled.moduleCount).toBeGreaterThan(1)
     expect(enabled.ids.length).toBeGreaterThan(1)
     expect(enabled.packages.length).toBeGreaterThan(2)
+    expect(enabled.checks).toEqual(
+      expect.arrayContaining(["libretro-fake-08-check"]),
+    )
     expect(enabled.checks.length).toBeGreaterThan(0)
     expect(enabled.overlayCount).toBeGreaterThan(0)
 
@@ -68,6 +87,8 @@ describe("first-party Nix plugin composition", () => {
       overlayCount: 0,
       moduleCount: 0,
     })
+
+    expect(await nixEval(DISABLED_DEFAULT_ARGS_EXPR)).toEqual([])
   })
 })
 

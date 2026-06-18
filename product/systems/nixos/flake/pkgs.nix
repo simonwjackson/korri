@@ -4,7 +4,6 @@
   nixpkgs-2405,
   bun2nix,
   nix-on-rocks,
-  fake-08-src,
   wasm4-src,
   nixpkgs-godot,
 }:
@@ -13,7 +12,6 @@ let
   korriPackagesOverlay = import ../overlays/korri-packages.nix {
     inherit
       nix-on-rocks
-      fake-08-src
       wasm4-src
       nixpkgs-godot
       ;

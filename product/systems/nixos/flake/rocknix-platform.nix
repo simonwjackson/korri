@@ -5,26 +5,36 @@
   fake-08-src,
   wasm4-src,
   nixpkgs-godot,
+  nixpkgs-mesa,
   productRegistry,
   rocknixTargetSystem ? "aarch64-linux",
   ...
 }:
 
 let
+  korriPackagesOverlay = import ../overlays/korri-packages.nix {
+    inherit
+      nix-on-rocks
+      wasm4-src
+      nixpkgs-godot
+      ;
+  };
+  pluginPkgs = import nix-on-rocks.inputs.nixpkgs {
+    system = rocknixTargetSystem;
+    config.allowUnfree = true;
+    overlays = [ korriPackagesOverlay ];
+  };
+  firstPartyPluginComposition = import ./plugins.nix {
+    pkgs = pluginPkgs;
+    enable = pluginPkgs.stdenv.isLinux;
+    pluginArgs = { inherit fake-08-src nixpkgs-godot nixpkgs-mesa; };
+  };
   rocknixImages = import ../images/common.nix {
     korri = self;
     nixpkgs = nix-on-rocks.inputs.nixpkgs;
     system = rocknixTargetSystem;
-    overlays = [
-      (import ../overlays/korri-packages.nix {
-        inherit
-          nix-on-rocks
-          fake-08-src
-          wasm4-src
-          nixpkgs-godot
-          ;
-      })
-    ];
+    overlays = [ korriPackagesOverlay ] ++ firstPartyPluginComposition.overlays;
+    pluginNixosModules = firstPartyPluginComposition.nixosModules;
   };
 
   compatible = builtins.getEnv "ROCKNIX_GUEST_DEVICE_COMPATIBLE";

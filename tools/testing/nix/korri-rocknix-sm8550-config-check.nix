@@ -44,7 +44,8 @@ let
       runtime = cfg.services.korri.runtime;
       korriUser = cfg.users.users.${runtime.user} or { };
       userServices = cfg.systemd.user.services or { };
-      sessiondEnv = (userServices.korri-sessiond or { }).environment or { };
+      sessiondUnit = userServices.korri-sessiond or { };
+      sessiondEnv = sessiondUnit.environment or { };
       daemonEnv = (userServices.korrid or { }).environment or { };
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
@@ -72,6 +73,18 @@ let
       kioskEnvUnit = userServices."korri-kiosk-session-environment" or { };
       compositor = cfg.services.korri.compositor;
       hasPackagePname = pname: packages: builtins.any (pkg: (pkg.pname or "") == pname) packages;
+      findRetroarchWrappers =
+        path:
+        builtins.filter (
+          p:
+          let
+            pt = p.passthru or { };
+          in
+          builtins.hasAttr "cores" pt && builtins.hasAttr "unwrapped" pt
+        ) path;
+      retroarchCoresFor =
+        path: lib.concatLists (map (wrapper: wrapper.passthru.cores or [ ]) (findRetroarchWrappers path));
+      fake08CoreSource = "${targetPackages.libretro-fake-08}/lib/retroarch/cores/fake08_libretro.so";
     in
     [
       (check "${name}: eval has no assertion failures" (
@@ -203,6 +216,28 @@ let
       (check "${name}: Switch emulator is installed and available to the compositor" (
         hasPackagePname "ryubing" cfg.environment.systemPackages
         && hasPackagePname "ryubing" compositor.path
+      ))
+      (check "${name}: PICO-8 fake-08 core is exposed at the stable launch path" (
+        (cfg.environment.etc."korri/cores/fake08_libretro.so".source or null) == fake08CoreSource
+      ))
+      (check "${name}: compositor RetroArch closure contains exactly one fake-08 core" (
+        let
+          wrappers = findRetroarchWrappers compositor.path;
+          cores = retroarchCoresFor compositor.path;
+        in
+        builtins.length wrappers == 1
+        && builtins.length cores == 1
+        && ((builtins.head cores).core or null) == "fake08"
+      ))
+      (check "${name}: sessiond RetroArch closure contains exactly one fake-08 core" (
+        let
+          sessiondPath = sessiondUnit.path or [ ];
+          wrappers = findRetroarchWrappers sessiondPath;
+          cores = retroarchCoresFor sessiondPath;
+        in
+        builtins.length wrappers == 1
+        && builtins.length cores == 1
+        && ((builtins.head cores).core or null) == "fake08"
       ))
       # Mesa 25.2.6 Turnip is pathologically slow for Ryujinx on Adreno
       # (validated on bandai 2026-06-11: 4-vs-60-FPS class delta, see

@@ -4,7 +4,7 @@
 # `nix flake update wasm4-src` and re-verify this package's colocated check.
 #
 # This derivation matches the same nixpkgs `mkLibretroCore`-style contract as
-# `product/vendor/libretro-fake-08`: the core and info file live under
+# `product/plugins/pico8-bbs/packages/libretro-fake-08`: the core and info file live under
 # `lib/retroarch/cores`, and the passthru attributes describe that layout for
 # RetroArch wrappers and closure-shape checks.
 {

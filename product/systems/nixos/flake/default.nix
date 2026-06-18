@@ -21,7 +21,6 @@ flake-utils.lib.eachDefaultSystem (
         nixpkgs-2405
         bun2nix
         nix-on-rocks
-        fake-08-src
         wasm4-src
         nixpkgs-godot
         ;
@@ -212,7 +211,7 @@ flake-utils.lib.eachDefaultSystem (
       inherit pkgs bunDeps;
       src = korriSources.cli;
       enable = pkgs.stdenv.isLinux;
-      pluginArgs = { inherit nixpkgs-godot nixpkgs-mesa; };
+      pluginArgs = { inherit fake-08-src nixpkgs-godot nixpkgs-mesa; };
     };
 
     korriImages = import ../../../../product/systems/nixos/images/common.nix {
@@ -223,7 +222,6 @@ flake-utils.lib.eachDefaultSystem (
     };
 
     steamKorri = pkgs.steam-korri;
-    libretroFake08 = pkgs.libretro-fake-08;
     libretroWasm4 = pkgs.libretro-wasm4;
     # The named outputs match the overlay-substituted runtime package names
     # so downstream consumers can ask for either name and get the same
@@ -289,7 +287,6 @@ flake-utils.lib.eachDefaultSystem (
         sunshineKorri
         moonlightEmbeddedKorri
         steamKorri
-        libretroFake08
         libretroWasm4
         electrobunBinaries
         korriDesktopUnwrapped

@@ -51,7 +51,6 @@ let
       korri.nixosModules.korri
       productModule
     ]
-    ++ pluginNixosModules
     ++ platformModules
     ++ modules;
 
@@ -93,9 +92,13 @@ rec {
       inherit platformModules includeBase;
       # Kiosk images run foreground sessions through sessiond. Without this
       # module included here, korrid has no lifecycle service to delegate to.
+      # First-party plugin NixOS modules are kiosk-scoped today: they extend
+      # foreground-session runtime PATHs and assume the sessiond option surface
+      # imported above exists.
       modules = [
         korri.nixosModules.korri-sessiond
       ]
+      ++ pluginNixosModules
       ++ modules;
     };
 

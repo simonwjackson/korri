@@ -21,7 +21,6 @@
   sunshineKorri,
   moonlightEmbeddedKorri,
   steamKorri,
-  libretroFake08,
   libretroWasm4,
   electrobunBinaries,
   korriDesktopUnwrapped,
@@ -51,7 +50,6 @@
   sunshine-korri = sunshineKorri;
   moonlight-embedded-korri = moonlightEmbeddedKorri;
   steam-korri = steamKorri;
-  libretro-fake-08 = libretroFake08;
   libretro-wasm4 = libretroWasm4;
 }
 // pluginPackages

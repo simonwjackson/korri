@@ -18,6 +18,23 @@ describe("PICO-8 BBS plugin", () => {
     ).toMatchObject({
       title: "PICO-8 BBS",
     })
+    expect(
+      pico8BbsPlugin.contributes.config.modules?.["libretro-fake-08-package"],
+    ).toMatchObject({
+      kind: "nix-package",
+      package: "libretro-fake-08",
+      path: "product/plugins/pico8-bbs/packages/libretro-fake-08",
+      capabilities: ["package.expose", "launch.runtime", "pico8"],
+    })
+    expect(pico8BbsPlugin.contributes.config.modules?.fake08).toMatchObject({
+      kind: "libretro-core",
+      path: "/etc/korri/cores/fake08_libretro.so",
+      package: "libretro-fake-08",
+    })
+    expect(pico8BbsPlugin.contributes.config.systems?.pico8).toMatchObject({
+      title: "PICO-8",
+      launch: { app: "retroarch", module: "fake08" },
+    })
     expect(pico8BbsPlugin.handlers.map(handler => handler.operation)).toEqual([
       "claims.search",
       "claims.details",

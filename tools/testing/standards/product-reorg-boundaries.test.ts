@@ -398,6 +398,19 @@ describe("standards: product platform reorganization guardrails", () => {
     ).toBe(true)
     expect(
       existsSync(join(REPO_ROOT, "product", "vendor", "libretro-fake-08")),
+    ).toBe(false)
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "product",
+          "plugins",
+          "pico8-bbs",
+          "packages",
+          "libretro-fake-08",
+          "package.nix",
+        ),
+      ),
     ).toBe(true)
     expect(
       existsSync(join(REPO_ROOT, "product", "vendor", "SDL2-mali-fbdev")),
@@ -439,6 +452,61 @@ describe("standards: product platform reorganization guardrails", () => {
         ),
       ),
     ).toBe(true)
+  })
+
+  it("keeps fake-08's PICO-8 runtime package lane with the PICO-8 BBS plugin", () => {
+    expect(
+      existsSync(join(REPO_ROOT, "product", "vendor", "libretro-fake-08")),
+    ).toBe(false)
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "product",
+          "plugins",
+          "pico8-bbs",
+          "packages",
+          "libretro-fake-08",
+          "package.nix",
+        ),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "product",
+          "plugins",
+          "pico8-bbs",
+          "nix",
+          "composition.nix",
+        ),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "product",
+          "plugins",
+          "pico8-bbs",
+          "nix",
+          "overlay.nix",
+        ),
+      ),
+    ).toBe(true)
+
+    const staleReferences = existingRoots([
+      join(REPO_ROOT, "product"),
+      join(REPO_ROOT, "flake.nix"),
+    ]).flatMap(root =>
+      sourceFilesWithExtensions(root, new Set([".ts", ".tsx", ".nix", ".md"]))
+        .filter(file =>
+          readSource(file).includes("product/vendor/libretro-fake-08"),
+        )
+        .map(repoRelative),
+    )
+    expect(staleReferences).toEqual([])
   })
 
   it("keeps Ryubing's downstream package lane under the Ryubing plugin", () => {

@@ -1,6 +1,5 @@
 {
   nix-on-rocks,
-  fake-08-src,
   wasm4-src,
   nixpkgs-godot,
   ...
@@ -15,7 +14,6 @@ rec {
   korri-packages = import ../overlays/korri-packages.nix {
     inherit
       nix-on-rocks
-      fake-08-src
       wasm4-src
       nixpkgs-godot
       ;

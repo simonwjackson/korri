@@ -2,7 +2,6 @@
   self,
   nixpkgs,
   nix-on-rocks,
-  fake-08-src,
   nixpkgs-godot,
   ...
 }@inputs:
