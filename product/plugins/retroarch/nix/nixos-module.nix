@@ -23,6 +23,7 @@ let
       pkgs.retroarch-bare
       pkgs.libretro.mgba
       pkgs.libretro.genesis-plus-gx
+      pkgs.libretro.beetle-pce-fast
       pkgs.libretro.mesen
       pkgs.libretro.np2kai
       pkgs.libretro.pcsx-rearmed
@@ -33,6 +34,7 @@ let
       cores = [
         pkgs.libretro.mgba
         pkgs.libretro.genesis-plus-gx
+        pkgs.libretro.beetle-pce-fast
         pkgs.libretro.mesen
         pkgs.libretro.np2kai
         pkgs.libretro.pcsx-rearmed
@@ -54,6 +56,8 @@ in
       "${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so";
     environment.etc."korri/cores/genesis_plus_gx_libretro.so".source =
       "${pkgs.libretro.genesis-plus-gx}/lib/retroarch/cores/genesis_plus_gx_libretro.so";
+    environment.etc."korri/cores/mednafen_pce_fast_libretro.so".source =
+      "${pkgs.libretro.beetle-pce-fast}/lib/retroarch/cores/mednafen_pce_fast_libretro.so";
     environment.etc."korri/cores/mesen_libretro.so".source =
       "${pkgs.libretro.mesen}/lib/retroarch/cores/mesen_libretro.so";
     environment.etc."korri/cores/np2kai_libretro.so".source =

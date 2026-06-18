@@ -6,6 +6,7 @@ import {
   KORRI_RETROARCH_GBA_SYSTEM_ID,
   KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
   KORRI_RETROARCH_GENESIS_SYSTEM_ID,
+  KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID,
   KORRI_RETROARCH_MESEN_RUNTIME_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_NES_SYSTEM_ID,
@@ -17,6 +18,7 @@ import {
   KORRI_RETROARCH_PSX_SYSTEM_ID,
   KORRI_RETROARCH_PLUGIN_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
+  KORRI_RETROARCH_TG16_SYSTEM_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
   retroarchPlugin,
 } from ".."
@@ -81,6 +83,32 @@ describe("RetroArch plugin", () => {
       app: KORRI_RETROARCH_APP_ID,
       path: "/etc/korri/cores/genesis_plus_gx_libretro.so",
       supports: { systems: [KORRI_RETROARCH_GENESIS_SYSTEM_ID] },
+    })
+  })
+
+  it("contributes Beetle PCE Fast as a RetroArch-owned TurboGrafx-16 runtime", () => {
+    expect(KORRI_RETROARCH_TG16_SYSTEM_ID).toBe("tg16")
+    expect(KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID).toBe(
+      "@korri:retroarch/mednafen-pce-fast",
+    )
+    expect(retroarchPlugin.contributes.config.systems?.tg16).toMatchObject({
+      id: KORRI_RETROARCH_TG16_SYSTEM_ID,
+      title: "NEC TurboGrafx-16",
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(
+      retroarchPlugin.contributes.config.runtimes?.["mednafen-pce-fast"],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID,
+      kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
+      path: "/etc/korri/cores/mednafen_pce_fast_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_TG16_SYSTEM_ID] },
     })
   })
 
