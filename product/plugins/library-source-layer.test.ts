@@ -130,6 +130,46 @@ describe("PluginLibrarySourceLayerLive", () => {
     }
   })
 
+  it("exposes the enabled Psycho Waluigi plugin through fulfilled resources", async () => {
+    const previous = snapshotEnv()
+    const stateRoot = await mktemp()
+    await seedPsychoWaluigiExecutable(stateRoot)
+    process.env.KORRI_CONFIG_ROOTS = ""
+    process.env.KORRI_ENABLED_PLUGINS = "@korri:psycho-waluigi"
+    process.env.KORRI_PLUGIN_RESOURCE_ROOT = stateRoot
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const source = yield* LibrarySource
+          const listPlayableEntries = source.listPlayableEntries
+          if (!listPlayableEntries)
+            throw new Error("expected playable list support")
+          const entries = yield* listPlayableEntries()
+          const resolved = yield* source.resolveLaunchForGame(
+            "@korri:psycho-waluigi/psycho-waluigi",
+          )
+          return { entries, resolved }
+        }).pipe(Effect.provide(PluginLibrarySourceLayerLive)),
+      )
+
+      expect(result.entries.map(entry => entry.id)).toContain(
+        "@korri:psycho-waluigi/psycho-waluigi",
+      )
+      expect(result.resolved.spec.command).toBe(
+        join(
+          stateRoot,
+          "x406b6f7272693a70737963686f2d77616c75696769",
+          "x70737963686f2d77616c75696769",
+          "result",
+          "bin",
+          "psycho-waluigi",
+        ),
+      )
+    } finally {
+      restoreEnv(previous)
+    }
+  })
+
   it("keeps launch resolution read-only even when a Nix command is configured", async () => {
     const previous = snapshotEnv()
     const stateRoot = await mktemp()
@@ -238,6 +278,16 @@ async function seedSrb2Executable(stateRoot: string): Promise<void> {
     resourceId: "srb2",
     binary: "srb2",
     storeName: "store-srb2",
+  })
+}
+
+async function seedPsychoWaluigiExecutable(stateRoot: string): Promise<void> {
+  await seedExecutableResource({
+    stateRoot,
+    pluginId: "@korri:psycho-waluigi",
+    resourceId: "psycho-waluigi",
+    binary: "psycho-waluigi",
+    storeName: "store-psycho-waluigi",
   })
 }
 

@@ -7,6 +7,7 @@ import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "./mega-man-arena"
 import { KORRI_PICO8_BBS_PLUGIN_ID } from "./pico8-bbs"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
+import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
 import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
 
 describe("first-party plugins", () => {
@@ -37,6 +38,9 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_SRB2_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PICO8_BBS_PLUGIN_ID)).toBe(false)
+    expect(registry.enabledPluginIds.has(KORRI_PSYCHO_WALUIGI_PLUGIN_ID)).toBe(
+      false,
+    )
     expect(
       registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
     ).toMatchObject({
@@ -91,19 +95,40 @@ describe("first-party plugins", () => {
     })
   })
 
+  it("enables required runtime plugins through Psycho Waluigi requirements", () => {
+    const registry = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_PSYCHO_WALUIGI_PLUGIN_ID,
+    })
+
+    expect(registry.enabledPluginIds.has(KORRI_PSYCHO_WALUIGI_PLUGIN_ID)).toBe(
+      true,
+    )
+    expect(registry.enabledPluginIds.has(KORRI_FEX_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_PROTON_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(true)
+    expect(
+      registry.catalog[`${KORRI_PSYCHO_WALUIGI_PLUGIN_ID}/psycho-waluigi`],
+    ).toMatchObject({
+      title: "Psycho Waluigi",
+    })
+  })
+
   it("preserves env-enabled first-party catalog plugins", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS:
-        "@korri:neverball,@korri:mega-man-arena,@korri:srb2",
+        "@korri:neverball,@korri:mega-man-arena,@korri:srb2,@korri:psycho-waluigi",
     })
 
     expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_FEX_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_PLUGIN_ID)).toBe(true)
-    expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(false)
+    expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has("@korri:neverball")).toBe(true)
     expect(registry.enabledPluginIds.has("@korri:mega-man-arena")).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_SRB2_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_PSYCHO_WALUIGI_PLUGIN_ID)).toBe(
+      true,
+    )
     expect(
       registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
     ).toMatchObject({
@@ -113,9 +138,10 @@ describe("first-party plugins", () => {
       "@korri:neverball/neverball",
       "@korri:mega-man-arena/mega-man-arena",
       "@korri:srb2/srb2",
+      "@korri:psycho-waluigi/psycho-waluigi",
     ])
     expect(
       executableResources(registry).map(entry => entry.resource.id),
-    ).toEqual(["neverball", "mega-man-arena", "srb2"])
+    ).toEqual(["neverball", "mega-man-arena", "srb2", "psycho-waluigi"])
   })
 })

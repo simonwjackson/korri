@@ -10,6 +10,7 @@ import { neverballPlugin } from "./neverball"
 import { pico8BbsPlugin } from "./pico8-bbs"
 import { protonGeRuntimePlugin } from "./proton-ge-runtime"
 import { protonRuntimePlugin } from "./proton-runtime"
+import { psychoWaluigiPlugin } from "./psycho-waluigi"
 import { srb2Plugin } from "./srb2"
 
 export const firstPartyPlugins = [
@@ -21,6 +22,7 @@ export const firstPartyPlugins = [
   megaManArenaPlugin,
   srb2Plugin,
   pico8BbsPlugin,
+  psychoWaluigiPlugin,
 ] as const
 
 export function createFirstPartyPluginRegistryFromEnv(
