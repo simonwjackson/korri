@@ -12,6 +12,7 @@ import { megaManMakerPlugin } from "./mega-man-maker"
 import { midasMachinePlugin } from "./midas-machine"
 import { neverballPlugin } from "./neverball"
 import { pico8Plugin } from "./pico8"
+import { portmasterPlugin } from "./portmaster"
 import { protonGeRuntimePlugin } from "./proton-ge-runtime"
 import { protonRuntimePlugin } from "./proton-runtime"
 import { psychoWaluigiPlugin } from "./psycho-waluigi"
@@ -39,6 +40,7 @@ export const firstPartyPlugins = [
   smbxGamePlugin,
   smwCentralPlugin,
   pico8Plugin,
+  portmasterPlugin,
   psychoWaluigiPlugin,
   ryubingPlugin,
   superMarioBrosRemasteredPlugin,

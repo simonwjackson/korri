@@ -42,6 +42,7 @@ else
       test -x "$portmaster_dir/gptokeyb2"
       test -f "$portmaster_dir/control.txt"
       test -f "$portmaster_dir/pylibs.zip"
+      test -f ${pkg}/share/korri/portmaster/catalog/ports.json
       test -d "$portmaster_dir/autoinstall"
       test -d "$portmaster_dir/runtimes"
       test -d "$portmaster_dir/libs"
@@ -50,7 +51,10 @@ else
       grep -q 'KORRI_PORTMASTER_HOME' "$portmaster_dir/control.txt"
       grep -q 'KORRI_PORTMASTER_DIRECTORY' "$portmaster_dir/control.txt"
       grep -q 'korri/portmaster-roms' ${pkg}/bin/portmaster
+      grep -q 'KORRI_PORTMASTER_CATALOG_PATH' ${pkg}/bin/portmaster
       grep -q '.korri-portmaster-source-version' ${pkg}/bin/portmaster
+      grep -q '"2048.zip"' ${pkg}/share/korri/portmaster/catalog/ports.json
+      grep -q '"source"' ${pkg}/share/korri/portmaster/catalog/ports.json
 
       file -b "$portmaster_dir/gptokeyb" > "$out/gptokeyb-file.txt"
       grep -q 'ARM aarch64' "$out/gptokeyb-file.txt"

@@ -15,6 +15,11 @@
 
 let
   version = "2026.05.24-0035";
+  catalogRelease = "2026-06-09_2128";
+  portsJson = fetchurl {
+    url = "https://github.com/PortsMaster/PortMaster-New/releases/download/${catalogRelease}/ports.json";
+    hash = "sha256-g8MzPmh9dyPkfLzRO64jbbq/4QNBvAVAgju++aBYfDU=";
+  };
   runtimeLibs = [
     SDL2
     SDL2_image
@@ -73,8 +78,9 @@ stdenv.mkDerivation rec {
   installPhase = ''
     runHook preInstall
 
-    install -d "$out/share/korri/portmaster"
+    install -d "$out/share/korri/portmaster/catalog"
     cp -a PortMaster "$out/share/korri/portmaster/"
+    cp ${portsJson} "$out/share/korri/portmaster/catalog/ports.json"
 
     portmaster_dir="$out/share/korri/portmaster/PortMaster"
     chmod -R u+rwX "$portmaster_dir"
@@ -145,6 +151,7 @@ ports_root="''${KORRI_PORTMASTER_PORTS_ROOT:-''${XDG_DATA_HOME:-$HOME/.local/sha
 mkdir -p "$ports_root/ports"
 export KORRI_PORTMASTER_HOME="$data_home"
 export KORRI_PORTMASTER_DIRECTORY="''${KORRI_PORTMASTER_DIRECTORY:-''${ports_root#/}}"
+export KORRI_PORTMASTER_CATALOG_PATH="''${KORRI_PORTMASTER_CATALOG_PATH:-@out@/share/korri/portmaster/catalog/ports.json}"
 export PATH="@pythonBin@:@coreutilsBin@:@gnusedBin@:$PATH"
 export LD_LIBRARY_PATH="@runtimeLibraryPath@''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 

@@ -23,8 +23,6 @@ interface FixtureEntry {
   readonly aliases?: readonly string[]
 }
 
-export const KORRI_PORTMASTER_PLUGIN_ID = "@korri:portmaster" as const
-
 interface FixturePluginOptions {
   readonly providerId: string
   readonly displayName: string
@@ -355,26 +353,6 @@ function parseItchioUrl(input: string): string | null {
   return creator && slug ? `${creator}/${slug}` : null
 }
 
-function parsePortmasterUrl(input: string): string | null {
-  const url = parseUrl(input)
-  if (!url) return null
-  if (url.hostname === "portmaster.games" && url.pathname === "/detail.html") {
-    return normalizePortmasterId(url.searchParams.get("name"))
-  }
-  const release = url.pathname.match(
-    /^\/PortsMaster\/PortMaster-Games\/releases\/download\/[^/]+\/([^/]+\.zip)$/,
-  )
-  if (url.hostname === "github.com" && release?.[1]) {
-    return normalizePortmasterId(decodeURIComponent(release[1]))
-  }
-  return null
-}
-
-function normalizePortmasterId(id: string | null | undefined) {
-  if (!id) return null
-  return id.endsWith(".zip") ? id : `${id}.zip`
-}
-
 function parsePuzzleScriptUrl(input: string): string | null {
   const url = parseUrl(input)
   if (!url) return null
@@ -545,49 +523,6 @@ const homebrewHubEntries = [
     description: "Homebrew Hub fixture with disabled downloads.",
     disabledMessage: "Homebrew Hub entry has disabled downloads",
     searchText: "disabled downloads homebrewhub nintendo-gameboy",
-  },
-] as const satisfies readonly FixtureEntry[]
-
-const portmasterEntries = [
-  {
-    providerId: "@korri:portmaster",
-    id: "2048.zip",
-    aliases: ["2048"],
-    title: "2048",
-    url: "https://portmaster.games/detail.html?name=2048",
-    platform: "linux-port",
-    description: "Ready-to-run PortMaster package for 2048.",
-    downloadUrl:
-      "https://github.com/PortsMaster/PortMaster-Games/releases/download/2026-04-12_1606/2048.zip",
-    filename: "2048.zip",
-    contentType: "application/zip",
-    searchText: "2048 christian haitian portmaster linux-port zip ready-to-run",
-  },
-  {
-    providerId: "@korri:portmaster",
-    id: "akeyspath.zip",
-    aliases: ["akeyspath"],
-    title: "A Key(s) Path",
-    url: "https://portmaster.games/detail.html?name=akeyspath",
-    platform: "linux-port",
-    description: "A puzzle platformer port by tabreturn.",
-    downloadUrl:
-      "https://github.com/PortsMaster/PortMaster-Games/releases/download/2025-06-24_0854/akeyspath.zip",
-    filename: "akeyspath.zip",
-    contentType: "application/zip",
-    searchText:
-      "a key keys path tabreturn puzzle platformer portmaster linux-port zip",
-  },
-  {
-    providerId: "@korri:portmaster",
-    id: "absolutereflex.zip",
-    aliases: ["absolutereflex"],
-    title: "Absolute Reflex",
-    url: "https://portmaster.games/detail.html?name=absolutereflex",
-    platform: "linux-port",
-    description: "PortMaster fixture that is not ready-to-run.",
-    disabledMessage: "PortMaster entry is not ready-to-run",
-    searchText: "absolute reflex not ready-to-run linux-port",
   },
 ] as const satisfies readonly FixtureEntry[]
 
@@ -765,27 +700,6 @@ export const itchioFixturePlugin = fixtureAcquisitionPlugin({
   unsupportedDownloadReason: "requires-user-action",
 })
 
-export const portmasterFixturePlugin = fixtureAcquisitionPlugin({
-  providerId: KORRI_PORTMASTER_PLUGIN_ID,
-  displayName: "PortMaster",
-  legalRisk: "low",
-  entries: portmasterEntries,
-  parseCandidateUrl: parsePortmasterUrl,
-  config: {
-    modules: {
-      portmaster: {
-        id: "portmaster",
-        kind: "executable",
-        fulfill: {
-          provider: "nix",
-          installable: ".#portmaster",
-          binary: "portmaster",
-        },
-      },
-    },
-  },
-})
-
 export const puzzleScriptFixturePlugin = fixtureAcquisitionPlugin({
   providerId: "@korri:puzzlescript",
   displayName: "PuzzleScript",
@@ -822,7 +736,6 @@ export const fixtureAcquisitionPlugins = [
   chip8ArchiveFixturePlugin,
   homebrewHubFixturePlugin,
   itchioFixturePlugin,
-  portmasterFixturePlugin,
   puzzleScriptFixturePlugin,
   retrobrewsFixturePlugin,
   tic80GalleryFixturePlugin,
