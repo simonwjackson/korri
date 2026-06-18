@@ -1,19 +1,23 @@
 import { describe, expect, it } from "bun:test"
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "./acquisition"
+import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "./mega-man-maker"
 import { KORRI_PICO8_BBS_PLUGIN_ID } from "./pico8-bbs"
 
 describe("first-party acquisition plugin composition", () => {
-  it("exposes PICO-8 BBS only through enabled product plugin composition", () => {
-    expect(
+  it("exposes acquisition product plugins only when enabled", () => {
+    const defaultProviderIds =
       createFirstPartyAcquisitionPluginDefinitionsFromEnv({
         KORRI_ENABLED_PLUGINS: undefined,
-      }).map(definition => definition.metadata.providerId),
-    ).not.toContain(KORRI_PICO8_BBS_PLUGIN_ID)
+      }).map(definition => definition.metadata.providerId)
+
+    expect(defaultProviderIds).not.toContain(KORRI_PICO8_BBS_PLUGIN_ID)
+    expect(defaultProviderIds).not.toContain(KORRI_MEGA_MAN_MAKER_PLUGIN_ID)
 
     const providerIds = createFirstPartyAcquisitionPluginDefinitionsFromEnv({
-      KORRI_ENABLED_PLUGINS: KORRI_PICO8_BBS_PLUGIN_ID,
+      KORRI_ENABLED_PLUGINS: `${KORRI_PICO8_BBS_PLUGIN_ID},${KORRI_MEGA_MAN_MAKER_PLUGIN_ID}`,
     }).map(definition => definition.metadata.providerId)
 
     expect(providerIds).toContain(KORRI_PICO8_BBS_PLUGIN_ID)
+    expect(providerIds).toContain(KORRI_MEGA_MAN_MAKER_PLUGIN_ID)
   })
 })

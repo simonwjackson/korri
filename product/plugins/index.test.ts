@@ -4,6 +4,7 @@ import { createFirstPartyPluginRegistryFromEnv, firstPartyPlugins } from "."
 import { KORRI_FEX_PLUGIN_ID } from "./fex-runtime"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
 import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "./mega-man-arena"
+import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "./mega-man-maker"
 import { KORRI_PICO8_BBS_PLUGIN_ID } from "./pico8-bbs"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
@@ -54,6 +55,9 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_SRB2_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PICO8_BBS_PLUGIN_ID)).toBe(false)
+    expect(registry.enabledPluginIds.has(KORRI_MEGA_MAN_MAKER_PLUGIN_ID)).toBe(
+      false,
+    )
     expect(registry.enabledPluginIds.has(KORRI_PSYCHO_WALUIGI_PLUGIN_ID)).toBe(
       false,
     )
@@ -149,7 +153,7 @@ describe("first-party plugins", () => {
   it("preserves env-enabled first-party catalog plugins", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS:
-        "@korri:neverball,@korri:mega-man-arena,@korri:srb2,@korri:psycho-waluigi",
+        "@korri:neverball,@korri:mega-man-arena,@korri:srb2,@korri:psycho-waluigi,@korri:mega-man-maker",
     })
 
     expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
@@ -159,6 +163,9 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has("@korri:neverball")).toBe(true)
     expect(registry.enabledPluginIds.has("@korri:mega-man-arena")).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_SRB2_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_MEGA_MAN_MAKER_PLUGIN_ID)).toBe(
+      true,
+    )
     expect(registry.enabledPluginIds.has(KORRI_PSYCHO_WALUIGI_PLUGIN_ID)).toBe(
       true,
     )

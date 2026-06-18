@@ -6,6 +6,7 @@ import {
 import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin } from "./gamescope"
 import { megaManArenaPlugin } from "./mega-man-arena"
+import { megaManMakerPlugin } from "./mega-man-maker"
 import { neverballPlugin } from "./neverball"
 import { pico8BbsPlugin } from "./pico8-bbs"
 import { protonGeRuntimePlugin } from "./proton-ge-runtime"
@@ -26,6 +27,7 @@ export const firstPartyPlugins = [
   protonGeRuntimePlugin,
   neverballPlugin,
   megaManArenaPlugin,
+  megaManMakerPlugin,
   srb2Plugin,
   pico8BbsPlugin,
   psychoWaluigiPlugin,
