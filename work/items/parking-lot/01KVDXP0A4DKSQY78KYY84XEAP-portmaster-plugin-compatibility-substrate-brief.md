@@ -191,6 +191,8 @@ Validation launch:
 
 ### Phase 7 — Runtime plugin seam
 
+Status: **complete locally, validated on Bandai with RetroArch/libretro auto-detection follow-up**.
+
 Goal: PortMaster plugin can request runtime plugins without Korri knowing PortMaster details.
 
 Add runtime plugins such as:
@@ -205,6 +207,13 @@ Validation launch:
 
 - **2048.zip** through RetroArch/libretro
 - Success: previously skipped libretro port now launches via runtime dependency.
+
+Result:
+
+- Added plugin-owned RetroArch/libretro runtime mode that generates `PortMaster/retroarch` and binds it at `/usr/bin/retroarch` inside the PortMaster envelope.
+- Added plugin dependency on the RetroArch app-host provider so PortMaster can request RetroArch without Korri core knowing PortMaster runtime names.
+- Bandai validation rendered 2048 using the original `2048.sh` and generated RetroArch wrapper.
+- Follow-up implemented install-time runtime detection for incomplete catalog metadata: extracted launch scripts are scanned for `retroarch`/`-L`, extracted files are scanned for `*_libretro.so.*`, detections are recorded in `extracted.runtimeDetections`, and `prepare-launch` auto-selects `runtimeCompatibility.mode = "retroarch-libretro"` unless explicitly overridden.
 
 ---
 
