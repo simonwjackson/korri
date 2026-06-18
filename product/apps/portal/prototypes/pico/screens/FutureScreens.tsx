@@ -6,6 +6,15 @@
  * device-lab has something to dream against. Composed from screens/kit.tsx;
  * screen-specific layout in screens/future.css (namespace pcFut-).
  */
+
+import { picoGames } from "../fixtures"
+import {
+  picoAchievements,
+  picoFriends,
+  picoHero,
+  picoScores,
+  picoStoreItems,
+} from "../fixtures-extra"
 import {
   Badge,
   Btn,
@@ -21,14 +30,6 @@ import {
   Tabs,
   Title,
 } from "./kit"
-import { picoGames } from "../fixtures"
-import {
-  picoAchievements,
-  picoFriends,
-  picoHero,
-  picoScores,
-  picoStoreItems,
-} from "../fixtures-extra"
 
 function statusClass(status: string): string {
   if (status === "playing" || status === "online") return "on"

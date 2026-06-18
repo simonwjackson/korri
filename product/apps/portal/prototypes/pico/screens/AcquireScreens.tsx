@@ -7,7 +7,7 @@
  * screen-specific layout in screens/acquire.css (namespace pcAcq-).
  */
 import { picoGames } from "../fixtures"
-import { picoHero, picoReleases, PICO_RUNTIMES } from "../fixtures-extra"
+import { PICO_RUNTIMES, picoHero, picoReleases } from "../fixtures-extra"
 import {
   Badge,
   Btn,
