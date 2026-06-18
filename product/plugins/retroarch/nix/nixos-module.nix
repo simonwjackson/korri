@@ -17,6 +17,7 @@ let
       pkgs.libretro.mgba
       pkgs.libretro.genesis-plus-gx
       pkgs.libretro.mesen
+      pkgs.libretro.pcsx-rearmed
       pkgs.libretro.bsnes
     ];
     passthru = {
@@ -24,6 +25,7 @@ let
         pkgs.libretro.mgba
         pkgs.libretro.genesis-plus-gx
         pkgs.libretro.mesen
+        pkgs.libretro.pcsx-rearmed
         pkgs.libretro.bsnes
       ];
       unwrapped = pkgs.retroarch-bare;
@@ -43,6 +45,8 @@ in
       "${pkgs.libretro.genesis-plus-gx}/lib/retroarch/cores/genesis_plus_gx_libretro.so";
     environment.etc."korri/cores/mesen_libretro.so".source =
       "${pkgs.libretro.mesen}/lib/retroarch/cores/mesen_libretro.so";
+    environment.etc."korri/cores/pcsx_rearmed_libretro.so".source =
+      "${pkgs.libretro.pcsx-rearmed}/lib/retroarch/cores/pcsx_rearmed_libretro.so";
     environment.etc."korri/cores/bsnes_libretro.so".source =
       "${pkgs.libretro.bsnes}/lib/retroarch/cores/bsnes_libretro.so";
 
