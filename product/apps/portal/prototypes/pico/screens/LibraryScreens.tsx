@@ -17,6 +17,7 @@ import {
   List,
   Opt,
   PicoCart,
+  PicoIcon,
   Row,
   Screen,
   Stat,
@@ -25,7 +26,10 @@ import {
   Toggle,
 } from "./kit"
 
-const COLLECTIONS: readonly { readonly name: string; readonly count: number }[] = [
+const COLLECTIONS: readonly {
+  readonly name: string
+  readonly count: number
+}[] = [
   { name: "FAVORITES", count: 12 },
   { name: "RECENTLY ADDED", count: 24 },
   { name: "CO-OP NIGHT", count: 8 },
@@ -184,7 +188,7 @@ export function SearchScreen() {
         {results.map(game => (
           <Row
             key={game.id}
-            icon="▸"
+            icon={<PicoIcon name="play" />}
             label={game.title}
             meta={game.genre}
           />
@@ -211,7 +215,7 @@ export function SearchEmptyScreen() {
         glyph="○"
         glyphTone="info"
         title="NO RESULTS"
-        message="Nothing matches “ZXQWPLK”. Try a shorter query or check a different system."
+        message="nothin' matches “ZXQWPLK” — try fewer letters, or poke a different system?"
       />
     </Screen>
   )
@@ -257,7 +261,7 @@ export function FilterSortScreen() {
 export function LibraryLoadingScreen() {
   return (
     <Screen title="PICO ▸ LIBRARY" className="center">
-      <Hero spinner title="LOADING LIBRARY…" message="Reading your games…" />
+      <Hero spinner title="LOADING LIBRARY…" message="waking up the carts…" />
     </Screen>
   )
 }
@@ -273,9 +277,11 @@ export function LibraryEmptyScreen() {
         glyph="◰"
         glyphTone="info"
         title="NO GAMES YET"
-        message="Your library is empty. Add a source and Korri will fill this shelf."
+        message="no carts on the shelf yet — add a source and Korri will go dig some up."
       >
-        <Btn kind="primary">＋ ADD A SOURCE</Btn>
+        <Btn kind="primary">
+          <PicoIcon name="plus" /> ADD A SOURCE
+        </Btn>
       </Hero>
     </Screen>
   )
@@ -296,9 +302,11 @@ export function LibraryErrorScreen() {
         glyph="⚠"
         glyphTone="bad"
         title="COULD NOT LOAD LIBRARY"
-        message="The library service did not respond. Check your host connection and try again."
+        message="couldn't find your stash — check the host's plugged in and give it another go?"
       >
-        <Btn kind="primary">↻ RETRY</Btn>
+        <Btn kind="primary">
+          <PicoIcon name="restart" /> RETRY
+        </Btn>
       </Hero>
     </Screen>
   )
@@ -313,12 +321,14 @@ export function LibraryDefectScreen() {
       className="center"
     >
       <Hero
-        glyph="✕"
+        glyph={<PicoIcon name="close" />}
         glyphTone="bad"
         title="UNEXPECTED DEFECT"
-        message="Something went wrong rendering the library. This shouldn't happen — please restart."
+        message="somethin' glitched out drawing the library. blow on the cartridge and restart?"
       >
-        <Btn kind="primary">↻ RESTART KORRI</Btn>
+        <Btn kind="primary">
+          <PicoIcon name="restart" /> RESTART KORRI
+        </Btn>
       </Hero>
     </Screen>
   )

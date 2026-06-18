@@ -80,8 +80,11 @@
 .pcSys-stub {
 	display: grid;
 	place-items: center;
-	background:
-		repeating-linear-gradient(135deg, #11203f 0 8cqw, #0c1730 8cqw 16cqw);
+	background: repeating-linear-gradient(
+		135deg,
+		#11203f 0 8cqw,
+		#0c1730 8cqw 16cqw
+	);
 	font-size: var(--pico-text-0);
 }
 

@@ -1295,7 +1295,11 @@
 	z-index: 0;
 	background:
 		repeating-linear-gradient(135deg, #11203f 0 8cqw, #0c1730 8cqw 16cqw),
-		radial-gradient(circle at 50% 38%, rgba(41, 173, 255, 0.35), transparent 60%);
+		radial-gradient(
+			circle at 50% 38%,
+			rgba(41, 173, 255, 0.35),
+			transparent 60%
+		);
 }
 .pc-modal {
 	position: relative;

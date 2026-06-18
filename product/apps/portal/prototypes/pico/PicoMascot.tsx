@@ -16,7 +16,10 @@ export function PicoMascot({
   readonly className?: string
 }) {
   return (
-    <span className={`pcMascot pcMascot-${state} ${className ?? ""}`} aria-hidden>
+    <span
+      className={`pcMascot pcMascot-${state} ${className ?? ""}`}
+      aria-hidden
+    >
       <svg className="pcMascot-svg" viewBox="0 0 10 10">
         <title>Pixl</title>
         <g className="pcMascot-body">

@@ -14,6 +14,7 @@ import {
   Card,
   Hero,
   PicoCart,
+  PicoIcon,
   Progress,
   Screen,
   Spinner,
@@ -25,7 +26,10 @@ import {
 const target = picoGames[2] ?? picoHero
 const fexRelease = picoReleases.find(release => release.runtime === "FEX")
 
-const INSTALL_STEPS: readonly { readonly label: string; readonly state: string }[] = [
+const INSTALL_STEPS: readonly {
+  readonly label: string
+  readonly state: string
+}[] = [
   { label: "FETCH", state: "done" },
   { label: "VERIFY", state: "done" },
   { label: "UNPACK", state: "done" },
@@ -33,7 +37,10 @@ const INSTALL_STEPS: readonly { readonly label: string; readonly state: string }
   { label: "REGISTER", state: "pending" },
 ]
 
-const REPAIR_FILES: readonly { readonly name: string; readonly state: string }[] = [
+const REPAIR_FILES: readonly {
+  readonly name: string
+  readonly state: string
+}[] = [
   { name: "game.exe", state: "ok" },
   { name: "data/assets.pak", state: "ok" },
   { name: "data/audio.bank", state: "repairing" },
@@ -65,7 +72,7 @@ export function DownloadConfirmScreen() {
           </div>
           <div className="pc-hero-actions">
             <Btn kind="primary" sel>
-              ⬇ DOWNLOAD
+              <PicoIcon name="download" /> DOWNLOAD
             </Btn>
             <Btn>CANCEL</Btn>
           </div>
@@ -112,13 +119,15 @@ export function OpenInBrowserScreen() {
         glyph="↗"
         glyphTone="info"
         title="OPEN IN BROWSER"
-        message="This download can't be resolved automatically — the provider requires you to start it by hand. Open the page, then return here."
+        message="this one won't fetch itself — the provider wants you to kick it off by hand. pop the page open, then hop back here."
       >
         <Badge tone="info">REQUIRES USER ACTION</Badge>
         <Btn kind="primary" sel>
           ↗ OPEN IN BROWSER
         </Btn>
-        <code className="pcAcq-url">https://portmaster.games/get/{target.id}</code>
+        <code className="pcAcq-url">
+          https://portmaster.games/get/{target.id}
+        </code>
       </Hero>
     </Screen>
   )
@@ -138,11 +147,11 @@ export function DownloadFailedScreen() {
         glyph="⚠"
         glyphTone="bad"
         title="DOWNLOAD FAILED"
-        message="The connection dropped before the file finished. Check your network and try again — partial data was discarded."
+        message="the download tripped on the way home. we tossed the half-finished bits — check your connection and retry?"
       >
         <Badge tone="bad">NETWORK</Badge>
         <Btn kind="primary" sel>
-          ↻ RETRY
+          <PicoIcon name="restart" /> RETRY
         </Btn>
         <Btn>CANCEL</Btn>
       </Hero>
@@ -160,12 +169,18 @@ export function InstallingScreen() {
       <div className="pcAcq-progress">
         <Spinner />
         <Title size={1}>INSTALLING</Title>
-        <Sub>PREPARING {PICO_RUNTIMES[0]} RUNTIME</Sub>
+        <Sub>WARMING UP THE {PICO_RUNTIMES[0]} RUNTIME</Sub>
         <Card title="STEPS" className="pcAcq-checklist">
           {INSTALL_STEPS.map(step => (
             <div key={step.label} className={`pcAcq-step ${step.state}`}>
               <span className="pcAcq-step-mark">
-                {step.state === "done" ? "✓" : step.state === "active" ? "▸" : "·"}
+                {step.state === "done" ? (
+                  <PicoIcon name="check" />
+                ) : step.state === "active" ? (
+                  "▸"
+                ) : (
+                  "·"
+                )}
               </span>
               <span className="pcAcq-step-label">{step.label}</span>
             </div>
@@ -188,14 +203,14 @@ export function InstalledScreen() {
       className="center"
     >
       <Hero
-        glyph="✓"
+        glyph={<PicoIcon name="check" />}
         glyphTone="good"
         title="READY TO PLAY"
-        message={`${target.title} is installed and ready. Launch when you're ready — nothing auto-starts.`}
+        message={`${target.title} is tucked in and ready — all set, go play! nothing launches on its own.`}
       >
         <Badge tone="good">INSTALLED</Badge>
         <Btn kind="primary" sel>
-          ▶ PLAY
+          <PicoIcon name="play" /> PLAY
         </Btn>
       </Hero>
     </Screen>
@@ -228,7 +243,7 @@ export function UpdateAvailableScreen() {
         </Card>
         <div className="pc-hero-actions">
           <Btn kind="primary" sel>
-            ⬇ UPDATE
+            <PicoIcon name="download" /> UPDATE
           </Btn>
           <Btn>SKIP</Btn>
         </div>

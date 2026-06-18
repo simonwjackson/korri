@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from "react"
 import { picoGames, picoRecent } from "../fixtures"
-import { PicoCart, Screen } from "./kit"
+import { PicoCart, PicoIcon, Screen } from "./kit"
 
 /**
  * Content-first home: one big featured game that auto-rotates, with a live
@@ -55,7 +55,9 @@ export function SpotlightHomeScreen() {
             <div className="pcShow-spot-tags">
               {hero.genre.toUpperCase()} · {hero.developer.toUpperCase()}
             </div>
-            <span className="pcShow-play">▶ {played ? "CONTINUE" : "PLAY"}</span>
+            <span className="pcShow-play">
+              <PicoIcon name="play" /> {played ? "CONTINUE" : "PLAY"}
+            </span>
           </div>
         </div>
         <div className="pcShow-rail">
@@ -82,7 +84,10 @@ export function ForYouShelvesScreen() {
   const anchor = picoRecent[0]?.title ?? picoGames[0]?.title ?? "YOUR GAMES"
   const shelves = [
     { title: "CONTINUE", games: picoRecent.slice(0, 6) },
-    { title: `BECAUSE YOU PLAYED ${anchor.toUpperCase()}`, games: picoGames.slice(2, 8) },
+    {
+      title: `BECAUSE YOU PLAYED ${anchor.toUpperCase()}`,
+      games: picoGames.slice(2, 8),
+    },
     { title: "FRESH DROPS", games: picoGames.slice(8, 14) },
     { title: "PICK UP & PLAY", games: picoGames.slice(1, 7) },
   ].filter(shelf => shelf.games.length > 0)

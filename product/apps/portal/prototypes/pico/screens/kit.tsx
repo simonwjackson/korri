@@ -108,7 +108,9 @@ export function Row({
       {icon !== undefined ? <span className="pc-row-ico">{icon}</span> : null}
       <span className="pc-row-text">
         <span className="pc-row-label">{label}</span>
-        {meta !== undefined ? <span className="pc-row-meta">{meta}</span> : null}
+        {meta !== undefined ? (
+          <span className="pc-row-meta">{meta}</span>
+        ) : null}
       </span>
       {trailing !== undefined ? (
         <span className="pc-row-trail">{trailing}</span>
@@ -129,7 +131,9 @@ export function Card({
 }) {
   return (
     <div className={`pc-card ${className ?? ""}`}>
-      {title !== undefined ? <div className="pc-card-title">{title}</div> : null}
+      {title !== undefined ? (
+        <div className="pc-card-title">{title}</div>
+      ) : null}
       {children}
     </div>
   )

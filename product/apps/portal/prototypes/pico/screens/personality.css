@@ -205,17 +205,17 @@
 	inset: 0;
 	background:
 		radial-gradient(
-				0.25cqw 0.25cqw at 30% 30%,
-				var(--p8-white) 99%,
-				transparent 100%
-			)
-			0 0 / 7cqw 7cqw,
+			0.25cqw 0.25cqw at 30% 30%,
+			var(--p8-white) 99%,
+			transparent 100%
+		)
+		0 0 / 7cqw 7cqw,
 		radial-gradient(
-				0.3cqw 0.3cqw at 70% 60%,
-				var(--p8-silver) 99%,
-				transparent 100%
-			)
-			0 0 / 11cqw 11cqw;
+			0.3cqw 0.3cqw at 70% 60%,
+			var(--p8-silver) 99%,
+			transparent 100%
+		)
+		0 0 / 11cqw 11cqw;
 	opacity: 0.85;
 	animation: pcPer-drift 6s linear infinite;
 }

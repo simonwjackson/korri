@@ -11,6 +11,7 @@ import {
   Card,
   Hero,
   List,
+  PicoIcon,
   Progress,
   Row,
   Screen,
@@ -25,7 +26,7 @@ export function BootSplashScreen() {
         <div className="pcSys-logo">KORRI</div>
         <div className="pcSys-boot-sub">PICO EDITION</div>
         <Spinner />
-        <div className="pcSys-boot-ver">v2.4.1 · loading library…</div>
+        <div className="pcSys-boot-ver">v2.4.1 · dusting off carts…</div>
       </div>
     </Screen>
   )
@@ -61,10 +62,27 @@ export function PowerMenuScreen() {
     <Screen title="PICO ▸ POWER" hints={[{ key: "b", label: "CANCEL" }]}>
       <div className="pcSys-power">
         <List>
-          <Row icon="◐" label="SLEEP" meta="Suspend to RAM, resume instantly" sel />
-          <Row icon="↻" label="RESTART" meta="Reboot the device" />
-          <Row icon="⏻" label="SHUT DOWN" meta="Power off completely" />
-          <Row icon="⎋" label="RETURN TO DESKTOP" meta="Exit to host shell" />
+          <Row
+            icon={<PicoIcon name="moon" />}
+            label="SLEEP"
+            meta="Suspend to RAM, resume instantly"
+            sel
+          />
+          <Row
+            icon={<PicoIcon name="restart" />}
+            label="RESTART"
+            meta="Reboot the device"
+          />
+          <Row
+            icon={<PicoIcon name="power" />}
+            label="SHUT DOWN"
+            meta="Power off completely"
+          />
+          <Row
+            icon={<PicoIcon name="exit" />}
+            label="RETURN TO DESKTOP"
+            meta="Exit to host shell"
+          />
         </List>
       </div>
     </Screen>
@@ -82,12 +100,14 @@ export function SystemUpdateScreen() {
       className="center"
     >
       <Hero
-        glyph="⬇"
+        glyph={<PicoIcon name="download" />}
         glyphTone="info"
         title="UPDATE READY"
         message="System update v2.5.0 is ready to install. 248 MB · ~3 min. The device will restart once."
       >
-        <Btn kind="primary">▶ INSTALL NOW</Btn>
+        <Btn kind="primary">
+          <PicoIcon name="play" /> INSTALL NOW
+        </Btn>
         <Btn>RELEASE NOTES</Btn>
       </Hero>
       <div className="pcSys-upd-bar">
@@ -100,7 +120,11 @@ export function SystemUpdateScreen() {
 
 export function BatteryLowScreen() {
   return (
-    <Screen tone="alert" hints={[{ key: "a", label: "DISMISS" }]} className="center">
+    <Screen
+      tone="alert"
+      hints={[{ key: "a", label: "DISMISS" }]}
+      className="center"
+    >
       <Hero
         glyph="▮"
         glyphTone="bad"
@@ -116,9 +140,13 @@ export function BatteryLowScreen() {
 
 export function PanicScreen() {
   return (
-    <Screen tone="alert" hints={[{ key: "a", label: "RESTART" }]} className="center">
+    <Screen
+      tone="alert"
+      hints={[{ key: "a", label: "RESTART" }]}
+      className="center"
+    >
       <Hero
-        glyph="✕"
+        glyph={<PicoIcon name="close" />}
         glyphTone="bad"
         title="SOMETHING BROKE"
         message="The session manager hit a fatal error and had to stop. Your saves are safe."
@@ -130,7 +158,9 @@ export function PanicScreen() {
             code 0x5F · korri-portal 2.4.1
           </code>
         </Card>
-        <Btn kind="primary">↻ RESTART KORRI</Btn>
+        <Btn kind="primary">
+          <PicoIcon name="restart" /> RESTART KORRI
+        </Btn>
         <Btn>COPY REPORT</Btn>
       </Hero>
     </Screen>
@@ -150,7 +180,9 @@ export function NotificationToastScreen() {
         <div className="pc-dim">…home surface behind…</div>
       </div>
       <div className="pcSys-toast">
-        <span className="pcSys-toast-ico">⬇</span>
+        <span className="pcSys-toast-ico">
+          <PicoIcon name="download" />
+        </span>
         <span className="pcSys-toast-text">
           <b>DOWNLOAD COMPLETE</b>
           Sonic Robo Blast 2 is ready to play
