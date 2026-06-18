@@ -20,7 +20,7 @@ describe("Vigie live cockpit data", () => {
     expect(fixture.scenarios[0]?.session).toMatchObject({
       health: "nominal",
       headline: "Running · Steam 584400",
-      gameId: "steam:584400",
+      gameId: "@korri:steam/584400",
       requestId: "launch-1",
     })
     expect(fixture.scenarios[0]?.session.stream).toEqual(
@@ -32,6 +32,11 @@ describe("Vigie live cockpit data", () => {
         expect.objectContaining({
           id: `${presentationProvider}/filter`,
           value: "soft",
+        }),
+        expect.objectContaining({
+          id: "@korri:steam/tracked-processes",
+          label: "Steam processes",
+          value: "1",
         }),
         expect.objectContaining({ id: "battery", value: "82%" }),
       ]),
@@ -52,7 +57,18 @@ describe("Vigie live cockpit data", () => {
       }),
     )
     expect(fixture.subsystems.map(subsystem => subsystem.id)).toEqual(
-      expect.arrayContaining(["server", "sessiond", "steam", "moonlight"]),
+      expect.arrayContaining([
+        "server",
+        "sessiond",
+        "@korri:steam/diagnostics",
+        "moonlight",
+      ]),
+    )
+    expect(fixture.subsystems).toContainEqual(
+      expect.objectContaining({
+        id: "@korri:steam/diagnostics",
+        label: "Steam diagnostics",
+      }),
     )
     expect(fixture.log).toContainEqual(
       expect.objectContaining({
@@ -107,6 +123,38 @@ describe("Vigie live cockpit data", () => {
     expect(fixture.device.id).toBe("local")
     expect(fixture.device.id).not.toBe(vigieCockpitFixture.device.id)
     expect(fixture.fleet).toHaveLength(1)
+  })
+
+  it("treats missing provider diagnostics as optional plugin telemetry", () => {
+    const fixture = createVigieLiveFixture(vigieCockpitFixture, {
+      observedAt: "2026-06-14T19:40:00.000Z",
+      server: {
+        serverId: "bandai",
+        displayName: "Bandai",
+        capabilities: ["source"],
+        status: "available",
+        sessiond: { mode: "home" },
+      },
+      source: { status: "available" },
+      providerDiagnostics: [
+        {
+          providerId: "@korri:steam",
+          error:
+            "Plugin provider @korri:steam is not enabled or does not exist",
+        },
+      ],
+    })
+
+    expect(fixture.scenarios[0]?.session).toMatchObject({
+      health: "idle",
+      headline: "No active session",
+    })
+    expect(fixture.subsystems.map(subsystem => subsystem.id)).not.toContain(
+      "@korri:steam/diagnostics",
+    )
+    expect(fixture.log).not.toContainEqual(
+      expect.objectContaining({ source: "@korri:steam" }),
+    )
   })
 })
 
@@ -233,45 +281,51 @@ const liveSnapshot = {
       generation: 4,
     },
   },
-  steam: {
-    observer: {
-      state: "running",
-      logDir: "/var/lib/korri/steam/logs",
-      watchedFiles: ["content_log.txt", "gameprocess_log.txt"],
-      activeFiles: ["content_log.txt"],
-      missingFiles: [],
-      lastLineAt: "2026-06-14T19:39:58.000Z",
-    },
-    active: {
-      appId: "584400",
-      status: "Running",
-      confidence: "confirmed",
-      ownership: "korri-correlated",
-      firstObservedAt: "2026-06-14T19:39:02.000Z",
-      lastObservedAt: "2026-06-14T19:39:58.000Z",
-      lastProgressAt: "2026-06-14T19:39:58.000Z",
-      steam: {
-        appState: "Fully Installed,App Running,",
-        running: true,
-        taskHistory: ["CreatingProcess"],
-        trackedPids: [1234],
-        removedPids: [],
+  providerDiagnostics: [
+    {
+      providerId: "@korri:steam",
+      diagnostics: {
+        observer: {
+          state: "running",
+          logDir: "/var/lib/korri/steam/logs",
+          watchedFiles: ["content_log.txt", "gameprocess_log.txt"],
+          activeFiles: ["content_log.txt"],
+          missingFiles: [],
+          lastLineAt: "2026-06-14T19:39:58.000Z",
+        },
+        active: {
+          appId: "584400",
+          status: "Running",
+          confidence: "confirmed",
+          ownership: "korri-correlated",
+          firstObservedAt: "2026-06-14T19:39:02.000Z",
+          lastObservedAt: "2026-06-14T19:39:58.000Z",
+          lastProgressAt: "2026-06-14T19:39:58.000Z",
+          steam: {
+            appState: "Fully Installed,App Running,",
+            running: true,
+            taskHistory: ["CreatingProcess"],
+            trackedPids: [1234],
+            removedPids: [],
+          },
+          evidence: [],
+        },
+        recentEvidence: [
+          {
+            source: "content_log",
+            logFile: "content_log.txt",
+            steamTimestamp: "2026-06-14 19:39:02",
+            observedAt: "2026-06-14T19:39:02.000Z",
+            sequence: 1,
+            confidence: "confirmed",
+            parser: "content_log",
+            excerpt:
+              "AppID 584400 state changed : Fully Installed,App Running,",
+          },
+        ],
       },
-      evidence: [],
     },
-    recentEvidence: [
-      {
-        source: "content_log",
-        logFile: "content_log.txt",
-        steamTimestamp: "2026-06-14 19:39:02",
-        observedAt: "2026-06-14T19:39:02.000Z",
-        sequence: 1,
-        confidence: "confirmed",
-        parser: "content_log",
-        excerpt: "AppID 584400 state changed : Fully Installed,App Running,",
-      },
-    ],
-  },
+  ],
   streamConfig: {
     moonlight: { enabled: true },
     brightness: { enabled: true },

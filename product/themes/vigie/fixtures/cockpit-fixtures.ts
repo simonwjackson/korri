@@ -44,7 +44,7 @@ export const vigieCockpitFixture: CockpitFixture = {
       session: {
         health: "active",
         headline: "Preparing · Sonic Mania",
-        gameId: "steam:1090630",
+        gameId: ":steam/1090630",
         requestId: "req_8f21",
         phases: [
           { ...PREPARE_DONE, status: "active", substate: "Spawning" },
@@ -63,7 +63,7 @@ export const vigieCockpitFixture: CockpitFixture = {
       session: {
         health: "nominal",
         headline: "Streaming · Sonic Mania",
-        gameId: "steam:1090630",
+        gameId: ":steam/1090630",
         requestId: "req_8f21",
         phases: [PREPARE_DONE, { ...RUN, substate: "Streaming" }, COOL],
         stream: [
@@ -91,7 +91,7 @@ export const vigieCockpitFixture: CockpitFixture = {
       session: {
         health: "critical",
         headline: "Recovering · Sonic Mania",
-        gameId: "steam:1090630",
+        gameId: ":steam/1090630",
         requestId: "req_8f21",
         note: "Failed at stage spawn-launch-wrapper — mangoapp GLXBadFBConfig",
         phases: [
@@ -173,7 +173,7 @@ export const vigieCockpitFixture: CockpitFixture = {
       ts: "12:04:18.221",
       level: "info",
       source: "sessiond",
-      message: "foreground.request req_8f21 game=steam:1090630",
+      message: "foreground.request req_8f21 game=:steam/1090630",
     },
     {
       ts: "12:04:18.244",
@@ -314,7 +314,7 @@ export const vigieCockpitFixture: CockpitFixture = {
   ],
   library: [
     {
-      id: "steam:584400",
+      id: ":steam/584400",
       title: "Sonic Mania",
       system: "steam",
       source: "self",
@@ -323,7 +323,7 @@ export const vigieCockpitFixture: CockpitFixture = {
       collections: ["Platformers", "Favorites"],
     },
     {
-      id: "steam:360740",
+      id: ":steam/360740",
       title: "Downwell",
       system: "steam",
       source: "self",
@@ -332,7 +332,7 @@ export const vigieCockpitFixture: CockpitFixture = {
       collections: ["Arcade"],
     },
     {
-      id: "steam:452060",
+      id: ":steam/452060",
       title: "Caveblazers",
       system: "steam",
       source: "bandai",

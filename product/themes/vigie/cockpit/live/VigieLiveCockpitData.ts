@@ -78,41 +78,46 @@ type SourceStatusResponse = {
   readonly catalog?: string
 }
 
-type SteamDiagnosticsResponse = {
-  readonly [key: string]: unknown
+type ProviderDiagnosticsEntry = {
+  readonly providerId: string
+  readonly diagnostics?: unknown
+  readonly error?: string
+}
+
+type ProviderLaunchDiagnostics = {
+  readonly providerId: string
+  readonly providerLabel: string
   readonly observer: {
-    readonly [key: string]: unknown
     readonly state: string
     readonly activeFiles: readonly string[]
     readonly watchedFiles: readonly string[]
     readonly lastError?: string
   }
-  readonly active?: SteamSessionStatus
-  readonly latest?: SteamSessionStatus
-  readonly recentEvidence: readonly {
-    readonly [key: string]: unknown
-    readonly observedAt: string
-    readonly confidence: string
-    readonly source: string
-    readonly excerpt: string
-  }[]
+  readonly active?: ProviderLaunchStatus
+  readonly latest?: ProviderLaunchStatus
+  readonly recentEvidence: readonly ProviderEvidence[]
 }
 
-type SteamSessionStatus = {
-  readonly [key: string]: unknown
+type ProviderLaunchStatus = {
+  readonly providerId: string
+  readonly providerLabel: string
   readonly status: string
   readonly appId: string
   readonly firstObservedAt: string
   readonly lastObservedAt: string
   readonly confidence: string
   readonly ownership: string
-  readonly steam: {
-    readonly [key: string]: unknown
-    readonly trackedPids: readonly number[]
-    readonly taskHistory: readonly string[]
-    readonly lastTask?: string
-    readonly commandExcerpt?: string
-  }
+  readonly trackedProcessCount: number
+  readonly taskHistory: readonly string[]
+  readonly lastTask?: string
+  readonly commandExcerpt?: string
+}
+
+type ProviderEvidence = {
+  readonly observedAt: string
+  readonly confidence: string
+  readonly source: string
+  readonly excerpt: string
 }
 
 type StreamReadbackEntry =
@@ -180,8 +185,7 @@ export interface VigieLiveSnapshot {
   readonly sessionError?: string
   readonly source?: SourceStatusResponse
   readonly sourceError?: string
-  readonly steam?: SteamDiagnosticsResponse
-  readonly steamError?: string
+  readonly providerDiagnostics?: readonly ProviderDiagnosticsEntry[]
   readonly catalog?: CatalogSnapshotResponse
   readonly catalogError?: string
   readonly streamConfig?: GetStreamControlConfigResponse
@@ -233,7 +237,7 @@ export function createVigieLoadingFixture(
             phase("cool", "Render", "pending"),
           ],
           stream: [],
-          note: "Polling /api/rpc for session, Steam, catalog, source, and stream-control status.",
+          note: "Polling /api/rpc for session, provider diagnostics, catalog, source, and stream-control status.",
         },
       },
     ],
@@ -258,7 +262,7 @@ export function createVigieLoadingFixture(
 }
 
 function cockpitSessionFromLive(snapshot: VigieLiveSnapshot): CockpitSession {
-  const steam = snapshot.steam?.active ?? snapshot.steam?.latest
+  const launch = providerLaunchStatus(snapshot)
   const serverSessiond = snapshot.server?.sessiond
   const sessionMode =
     serverSessiond?.mode ?? sessionStatusMode(snapshot.session)
@@ -266,15 +270,15 @@ function cockpitSessionFromLive(snapshot: VigieLiveSnapshot): CockpitSession {
     serverSessiond?.active ?? sessionStatusActive(snapshot.session)
   const stream = streamReadouts(snapshot)
 
-  if (steam) {
+  if (launch) {
     return {
-      health: healthFromSteam(steam.status, snapshot),
-      headline: `${steam.status} · Steam ${steam.appId}`,
-      gameId: `steam:${steam.appId}`,
+      health: healthFromProviderLaunch(launch.status, snapshot),
+      headline: `${launch.status} · ${launch.providerLabel} ${launch.appId}`,
+      gameId: `${launch.providerId}/${launch.appId}`,
       requestId: activeSession?.launchId,
-      phases: phasesFromSteam(steam.status),
+      phases: phasesFromProviderLaunch(launch),
       stream,
-      note: steamNote(snapshot),
+      note: providerLaunchNote(snapshot),
     }
   }
 
@@ -386,15 +390,13 @@ function streamReadouts(snapshot: VigieLiveSnapshot): CockpitSession["stream"] {
             : "nominal",
     })
   }
-  if (snapshot.steam?.active) {
+  const launch = providerLaunchStatus(snapshot, "active")
+  if (launch) {
     readouts.push({
-      id: "steam-pids",
-      label: "Steam PIDs",
-      value: String(snapshot.steam.active.steam.trackedPids.length),
-      accent:
-        snapshot.steam.active.steam.trackedPids.length > 0
-          ? "nominal"
-          : "caution",
+      id: `${launch.providerId}/tracked-processes`,
+      label: `${launch.providerLabel} processes`,
+      value: String(launch.trackedProcessCount),
+      accent: launch.trackedProcessCount > 0 ? "nominal" : "caution",
     })
   }
   return readouts
@@ -601,22 +603,18 @@ function subsystemsFromLive(snapshot: VigieLiveSnapshot): readonly Subsystem[] {
       subsystem("catalog", "catalog", snapshot.catalogError, false),
     )
   }
-  if (snapshot.steam) {
+  for (const diagnostics of providerLaunchDiagnostics(snapshot)) {
     subsystems.push({
-      id: "steam",
-      label: "Steam observer",
+      id: `${diagnostics.providerId}/diagnostics`,
+      label: `${diagnostics.providerLabel} diagnostics`,
       status:
-        snapshot.steam.observer.state === "running"
+        diagnostics.observer.state === "running"
           ? "nominal"
-          : snapshot.steam.observer.state === "degraded"
+          : diagnostics.observer.state === "degraded"
             ? "degraded"
             : "down",
-      detail: `${snapshot.steam.observer.state} · ${snapshot.steam.observer.activeFiles.length}/${snapshot.steam.observer.watchedFiles.length} logs active${snapshot.steam.active ? ` · app ${snapshot.steam.active.appId}` : ""}${snapshot.steam.observer.lastError ? ` · ${snapshot.steam.observer.lastError}` : ""}`,
+      detail: `${diagnostics.observer.state} · ${diagnostics.observer.activeFiles.length}/${diagnostics.observer.watchedFiles.length} logs active${diagnostics.active ? ` · app ${diagnostics.active.appId}` : ""}${diagnostics.observer.lastError ? ` · ${diagnostics.observer.lastError}` : ""}`,
     })
-  } else {
-    subsystems.push(
-      subsystem("steam", "Steam observer", snapshot.steamError, false),
-    )
   }
   addStreamStateSubsystems(subsystems, snapshot)
   return subsystems
@@ -643,8 +641,8 @@ function logsFromLive(
       message: snapshot.server.sessiond.failureReason,
     })
   }
-  if (snapshot.steam) {
-    for (const evidence of snapshot.steam.recentEvidence) {
+  for (const diagnostics of providerLaunchDiagnostics(snapshot)) {
+    for (const evidence of diagnostics.recentEvidence) {
       logs.push({
         ts: shortTime(evidence.observedAt),
         level: evidence.confidence === "low" ? "warn" : "info",
@@ -673,18 +671,18 @@ function lifecycleFromLive(
       level: sessiond.failureReason ? "warn" : "info",
     })
   }
-  const steam = snapshot.steam?.active ?? snapshot.steam?.latest
-  if (steam) {
+  const launch = providerLaunchStatus(snapshot)
+  if (launch) {
     events.push({
-      ts: shortTime(steam.lastObservedAt),
-      phase: steam.status,
-      detail: `Steam ${steam.appId} · ${steam.confidence} · ${steam.ownership}`,
-      level: steam.status === "Stuck" ? "warn" : "info",
+      ts: shortTime(launch.lastObservedAt),
+      phase: launch.status,
+      detail: `${launch.providerLabel} ${launch.appId} · ${launch.confidence} · ${launch.ownership}`,
+      level: launch.status === "Stuck" ? "warn" : "info",
     })
-    for (const task of steam.steam.taskHistory.slice(-4)) {
+    for (const task of launch.taskHistory.slice(-4)) {
       events.push({
-        ts: shortTime(steam.lastObservedAt),
-        phase: "Steam task",
+        ts: shortTime(launch.lastObservedAt),
+        phase: `${launch.providerLabel} task`,
         detail: task,
         level: "debug",
       })
@@ -712,11 +710,11 @@ function sessionHistoryFromLive(
   fallback: readonly SessionHistoryEntry[],
   snapshot: VigieLiveSnapshot,
 ): readonly SessionHistoryEntry[] {
-  const latest = snapshot.steam?.latest
+  const latest = providerLaunchStatus(snapshot, "latest")
   if (!latest) return fallback
   const liveEntry: SessionHistoryEntry = {
-    id: `steam-${latest.appId}-${latest.firstObservedAt}`,
-    game: `Steam ${latest.appId}`,
+    id: `${latest.providerId}-${latest.appId}-${latest.firstObservedAt}`,
+    game: `${latest.providerLabel} ${latest.appId}`,
     mode: "local",
     outcome:
       latest.status === "Running"
@@ -732,6 +730,158 @@ function sessionHistoryFromLive(
     liveEntry,
     ...fallback.filter(entry => entry.id !== liveEntry.id),
   ].slice(0, 12)
+}
+
+function providerLaunchStatus(
+  snapshot: VigieLiveSnapshot,
+  preference: "active" | "latest" = "active",
+): ProviderLaunchStatus | undefined {
+  for (const diagnostics of providerLaunchDiagnostics(snapshot)) {
+    const preferred =
+      preference === "active" ? diagnostics.active : diagnostics.latest
+    const fallback =
+      preference === "active" ? diagnostics.latest : diagnostics.active
+    const launch = preferred ?? fallback
+    if (launch) return launch
+  }
+  return undefined
+}
+
+function providerLaunchDiagnostics(
+  snapshot: VigieLiveSnapshot,
+): readonly ProviderLaunchDiagnostics[] {
+  return (snapshot.providerDiagnostics ?? [])
+    .map(entry => providerLaunchDiagnosticsFromEntry(entry))
+    .filter((entry): entry is ProviderLaunchDiagnostics => entry !== undefined)
+}
+
+function providerLaunchDiagnosticsFromEntry(
+  entry: ProviderDiagnosticsEntry,
+): ProviderLaunchDiagnostics | undefined {
+  if (!isRecord(entry.diagnostics)) return undefined
+  const observer = providerObserverFromDiagnostics(entry.diagnostics)
+  if (!observer) return undefined
+  const providerLabel = providerLabelFromId(entry.providerId)
+  const active = providerLaunchStatusFromDiagnostics(
+    entry.providerId,
+    providerLabel,
+    entry.diagnostics.active,
+  )
+  const latest = providerLaunchStatusFromDiagnostics(
+    entry.providerId,
+    providerLabel,
+    entry.diagnostics.latest,
+  )
+  return {
+    providerId: entry.providerId,
+    providerLabel,
+    observer,
+    ...(active ? { active } : {}),
+    ...(latest ? { latest } : {}),
+    recentEvidence: providerEvidenceFromDiagnostics(
+      entry.diagnostics.recentEvidence,
+    ),
+  }
+}
+
+function providerObserverFromDiagnostics(
+  diagnostics: Record<string, unknown>,
+): ProviderLaunchDiagnostics["observer"] | undefined {
+  if (!isRecord(diagnostics.observer)) return undefined
+  const state = stringValue(diagnostics.observer.state)
+  if (!state) return undefined
+  return {
+    state,
+    activeFiles: stringArrayValue(diagnostics.observer.activeFiles),
+    watchedFiles: stringArrayValue(diagnostics.observer.watchedFiles),
+    ...(typeof diagnostics.observer.lastError === "string"
+      ? { lastError: diagnostics.observer.lastError }
+      : {}),
+  }
+}
+
+function providerLaunchStatusFromDiagnostics(
+  providerId: string,
+  providerLabel: string,
+  value: unknown,
+): ProviderLaunchStatus | undefined {
+  if (!isRecord(value)) return undefined
+  const status = stringValue(value.status)
+  const appId = stringValue(value.appId)
+  const firstObservedAt = stringValue(value.firstObservedAt)
+  const lastObservedAt = stringValue(value.lastObservedAt)
+  const confidence = stringValue(value.confidence)
+  const ownership = stringValue(value.ownership)
+  if (!status || !appId || !firstObservedAt || !lastObservedAt) return undefined
+  const launchFacet = providerLaunchFacet(value)
+  return {
+    providerId,
+    providerLabel,
+    status,
+    appId,
+    firstObservedAt,
+    lastObservedAt,
+    confidence: confidence ?? "unknown",
+    ownership: ownership ?? "unknown",
+    trackedProcessCount: numberArrayValue(launchFacet.trackedPids).length,
+    taskHistory: stringArrayValue(launchFacet.taskHistory),
+    ...(typeof launchFacet.lastTask === "string"
+      ? { lastTask: launchFacet.lastTask }
+      : {}),
+    ...(typeof launchFacet.commandExcerpt === "string"
+      ? { commandExcerpt: launchFacet.commandExcerpt }
+      : {}),
+  }
+}
+
+function providerLaunchFacet(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  for (const candidate of Object.values(value)) {
+    if (
+      isRecord(candidate) &&
+      (Array.isArray(candidate.trackedPids) ||
+        Array.isArray(candidate.taskHistory))
+    ) {
+      return candidate
+    }
+  }
+  return {}
+}
+
+function providerEvidenceFromDiagnostics(
+  value: unknown,
+): readonly ProviderEvidence[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap(entry => {
+    if (!isRecord(entry)) return []
+    const observedAt = stringValue(entry.observedAt)
+    const confidence = stringValue(entry.confidence)
+    const source = stringValue(entry.source)
+    const excerpt = stringValue(entry.excerpt)
+    if (!observedAt || !confidence || !source || !excerpt) return []
+    return [{ observedAt, confidence, source, excerpt }]
+  })
+}
+
+function providerLabelFromId(providerId: string): string {
+  return labelize(providerId.split(":").at(-1) ?? providerId)
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined
+}
+
+function stringArrayValue(value: unknown): readonly string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : []
+}
+
+function numberArrayValue(value: unknown): readonly number[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is number => typeof item === "number")
+    : []
 }
 
 function addStreamStateSubsystems(
@@ -823,7 +973,7 @@ function addStreamStateLogs(logs: LogLine[], snapshot: VigieLiveSnapshot) {
   }
 }
 
-function healthFromSteam(
+function healthFromProviderLaunch(
   status: string,
   snapshot: VigieLiveSnapshot,
 ): SessionHealth {
@@ -841,7 +991,10 @@ function healthFromSessiondMode(mode: string): SessionHealth {
   return "active"
 }
 
-function phasesFromSteam(status: string): readonly SessionPhaseStep[] {
+function phasesFromProviderLaunch(
+  launch: ProviderLaunchStatus,
+): readonly SessionPhaseStep[] {
+  const { status, providerLabel } = launch
   if (status === "Preparing" || status === "Launching") {
     return [
       phase("prepare", "Prepare", "active", status),
@@ -852,7 +1005,7 @@ function phasesFromSteam(status: string): readonly SessionPhaseStep[] {
   if (status === "Running") {
     return [
       phase("prepare", "Prepare", "done"),
-      phase("run", "Run", "active", "Steam Running"),
+      phase("run", "Run", "active", `${providerLabel} Running`),
       phase("cool", "Cool down", "pending"),
     ]
   }
@@ -913,13 +1066,14 @@ function phasesFromSessiondMode(mode: string): readonly SessionPhaseStep[] {
   ]
 }
 
-function steamNote(snapshot: VigieLiveSnapshot): string | undefined {
-  const steam = snapshot.steam?.active ?? snapshot.steam?.latest
+function providerLaunchNote(snapshot: VigieLiveSnapshot): string | undefined {
+  const diagnostics = providerLaunchDiagnostics(snapshot)[0]
+  const launch = diagnostics?.active ?? diagnostics?.latest
   return (
     snapshot.server?.sessiond?.failureReason ??
-    snapshot.steam?.observer.lastError ??
-    steam?.steam.lastTask ??
-    steam?.steam.commandExcerpt
+    diagnostics?.observer.lastError ??
+    launch?.lastTask ??
+    launch?.commandExcerpt
   )
 }
 
@@ -1022,7 +1176,6 @@ function errors(
     ["server", snapshot.serverError],
     ["session", snapshot.sessionError],
     ["source", snapshot.sourceError],
-    ["steam", snapshot.steamError],
     ["catalog", snapshot.catalogError],
     ["stream-config", snapshot.streamConfigError],
     ["stream-controls", snapshot.streamControlsError],

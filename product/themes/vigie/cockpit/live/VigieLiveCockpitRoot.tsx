@@ -20,6 +20,7 @@ import {
 const LIVE_REFRESH_MS = 1_500
 
 type PluginDiagnosticsEnvelope = {
+  readonly providerId?: unknown
   readonly diagnostics?: unknown
 }
 
@@ -106,7 +107,7 @@ export async function fetchVigieLiveSnapshot(
     server,
     session,
     source,
-    steam,
+    providerDiagnostics,
     catalog,
     streamConfig,
     streamControls,
@@ -133,12 +134,11 @@ export async function fetchVigieLiveSnapshot(
       ? { session: session.value }
       : { sessionError: session.error }),
     ...(source.ok ? { source: source.value } : { sourceError: source.error }),
-    ...(steam.ok
-      ? {
-          steam: (steam.value as PluginDiagnosticsEnvelope)
-            .diagnostics as VigieLiveSnapshot["steam"],
-        }
-      : { steamError: steam.error }),
+    providerDiagnostics: [
+      providerDiagnostics.ok
+        ? providerDiagnosticsEntry(providerDiagnostics.value)
+        : { providerId: "@korri:steam", error: providerDiagnostics.error },
+    ],
     ...(catalog.ok
       ? { catalog: catalog.value }
       : { catalogError: catalog.error }),
@@ -163,6 +163,17 @@ async function settle<T>(promise: Promise<T>): Promise<Settled<T>> {
     return { ok: true, value: await promise }
   } catch (error) {
     return { ok: false, error: errorMessage(error) }
+  }
+}
+
+function providerDiagnosticsEntry(
+  value: unknown,
+): NonNullable<VigieLiveSnapshot["providerDiagnostics"]>[number] {
+  const envelope = value as PluginDiagnosticsEnvelope
+  return {
+    providerId:
+      typeof envelope.providerId === "string" ? envelope.providerId : "unknown",
+    diagnostics: envelope.diagnostics,
   }
 }
 

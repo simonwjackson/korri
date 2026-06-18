@@ -45,12 +45,17 @@ const READ_ONLY_COMMANDS = {
   "session-status": { tag: "app.session.status", payload: {} },
   "stream-state": { tag: "app.stream-control.state.get", payload: {} },
   "stream-config": { tag: "app.stream-control.config.get", payload: {} },
+  "plugin-diagnostics": {
+    tag: "app.plugin.diagnostics.collect",
+    payload: { providerId: "@korri:steam" },
+  },
 } as const
 
 const READ_ONLY_RPC_TAGS = new Set<string>([
   ...Object.values(READ_ONLY_COMMANDS).map(command => command.tag),
   "app.hello.get",
   "app.library.launch.dry-run",
+  "app.plugin.diagnostics.collect",
 ])
 
 export default function register(pi: PiApi) {
@@ -80,6 +85,11 @@ export function registerKorridTools(
       },
       payload: {
         description: "Payload object when command is rpc. Defaults to {}.",
+      },
+      providerId: {
+        type: "string",
+        description:
+          "Plugin provider id when command is plugin-diagnostics. Defaults to @korri:steam.",
       },
       compact: {
         type: "boolean",
@@ -301,7 +311,26 @@ function readOnlySpec(params: Record<string, unknown>): CommandSpec {
     throw new Error(`unknown read-only command: ${command}`)
   }
   const spec = READ_ONLY_COMMANDS[command]
-  return { ...spec, mutates: false, confirmed: true }
+  return {
+    ...spec,
+    payload:
+      command === "plugin-diagnostics"
+        ? pluginDiagnosticsPayload(params)
+        : spec.payload,
+    mutates: false,
+    confirmed: true,
+  }
+}
+
+function pluginDiagnosticsPayload(
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    providerId:
+      typeof params.providerId === "string"
+        ? params.providerId
+        : "@korri:steam",
+  }
 }
 
 function readOnlyRpcPayload(tag: string, payload: unknown): unknown {

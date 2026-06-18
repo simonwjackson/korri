@@ -29,6 +29,8 @@ describe("korrid-tools Pi package", () => {
       "korri_steam_runtime_verify",
     ])
     expect(JSON.stringify(tools[0].parameters)).toContain("source-status")
+    expect(JSON.stringify(tools[0].parameters)).toContain("plugin-diagnostics")
+    expect(JSON.stringify(tools[0].parameters)).toContain("providerId")
     expect(JSON.stringify(tools[0].parameters)).toContain("rpc")
     expect(JSON.stringify(tools[1].parameters)).toContain("query")
     expect(JSON.stringify(tools[2].parameters)).toContain("profileId")
@@ -83,6 +85,51 @@ describe("korrid-tools Pi package", () => {
     expect(JSON.parse(body)).toMatchObject({
       tag: "app.catalog.snapshot",
       payload: { compact: true },
+    })
+  })
+
+  it("queries provider diagnostics through the generic plugin diagnostics RPC", async () => {
+    let body = ""
+    const tool = registeredTool(
+      "korrid_query",
+      recordingSuccessFetch(bodyText => {
+        body = bodyText
+      }),
+    )
+
+    const result = await tool.execute("call-1", {
+      command: "plugin-diagnostics",
+      providerId: "@korri:steam",
+      url: "http://bandai:3001",
+    })
+
+    expect(result).toMatchObject({ details: { ok: true } })
+    expect(JSON.parse(body)).toMatchObject({
+      tag: "app.plugin.diagnostics.collect",
+      payload: { providerId: "@korri:steam" },
+    })
+  })
+
+  it("allowlists generic plugin diagnostics raw rpc queries", async () => {
+    let body = ""
+    const tool = registeredTool(
+      "korrid_query",
+      recordingSuccessFetch(bodyText => {
+        body = bodyText
+      }),
+    )
+
+    const result = await tool.execute("call-1", {
+      command: "rpc",
+      tag: "app.plugin.diagnostics.collect",
+      payload: { providerId: "@korri:steam" },
+      url: "http://bandai:3001",
+    })
+
+    expect(result).toMatchObject({ details: { ok: true } })
+    expect(JSON.parse(body)).toMatchObject({
+      tag: "app.plugin.diagnostics.collect",
+      payload: { providerId: "@korri:steam" },
     })
   })
 
