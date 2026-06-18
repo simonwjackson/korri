@@ -145,6 +145,19 @@ generators → expose only generators. The lab is the *explore* phase (every val
 a hand-set leaf is fine here); tokenising is the *collapse* phase. The deliverable
 deletes the leaf-level sliders and keeps the formulas.
 
+**Bounded scaling — every scaling thing must share one ceiling.** A raw `cqh` /
+`cqw` / `vw` value with no `clamp()` / `min()` is a leak: it scales linearly with
+the screen forever. When the type scale is clamped (caps at the BASE `MAX`) but
+an element (art, a hero image, a cartridge) is a raw unit, the text plateaus on a
+big screen while the element keeps growing — their *ratio drifts* and the element
+looks "humongous." Fix: derive the element from the same generator, e.g.
+`height: min(74cqh, calc(var(--pico-base) * 12))`. Because art and text now share
+`--pico-base`, they share its ceiling and never drift. A useful consequence: the
+BASE `MAX` knob becomes a single **scale-up vs cap** dial — low MAX = content
+plateaus and big screens gain whitespace; high MAX = the layout scales up as a
+proportional whole. The bug to watch for is never "too big" in isolation; it is
+*two elements on different scaling laws.*
+
 ## The generator recipe (theme-agnostic default)
 
 This is the canonical knob set. Every theme instantiates the **same** generators
