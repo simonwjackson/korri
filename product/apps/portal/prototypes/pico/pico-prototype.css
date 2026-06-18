@@ -736,6 +736,15 @@
 .pico-gallerybar .pico-gallerybar-map {
 	background: var(--p8-lime);
 }
+.pico-gallerybar .pico-gallerybar-mute {
+	background: var(--p8-pink);
+	font-family: var(--font-term);
+	font-size: 16px;
+}
+.pico-gallerybar .pico-gallerybar-mute.off {
+	background: var(--p8-slate);
+	color: var(--p8-white);
+}
 
 .pico-gallerymap {
 	position: fixed;
@@ -1726,4 +1735,14 @@
 	transform-box: fill-box;
 	transform-origin: center;
 	transform: scaleY(0.12);
+}
+
+/* Pixel icons (PicoIcon.tsx) — currentColor, em-sized, crisp. */
+.pcIcon {
+	display: inline-block;
+	width: 1em;
+	height: 1em;
+	vertical-align: -0.12em;
+	fill: currentColor;
+	shape-rendering: crispedges;
 }

@@ -15,9 +15,11 @@
  *  - All classes are scoped under [data-pico]; shared atoms use the `pc-` prefix.
  */
 import type { ReactNode } from "react"
+import { PicoIcon } from "../PicoIcon"
 import { PicoButtonBar, PicoStatusBar } from "../PicoStatusBar"
 
 export { PicoCart } from "../PicoCart"
+export { PicoIcon } from "../PicoIcon"
 
 type Hint = { readonly key: "a" | "b" | "y"; readonly label: string }
 
@@ -200,9 +202,9 @@ export function Toggle({ on }: { readonly on: boolean }) {
 export function Opt({ value }: { readonly value: ReactNode }) {
   return (
     <span className="pc-opt">
-      <span className="pc-opt-arr">◂</span>
+      <PicoIcon name="back" className="pc-opt-arr" />
       {value}
-      <span className="pc-opt-arr">▸</span>
+      <PicoIcon name="play" className="pc-opt-arr" />
     </span>
   )
 }
