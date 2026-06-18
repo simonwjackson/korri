@@ -464,3 +464,16 @@
 .pcFut-feat-thumb {
 	opacity: 0.85;
 }
+
+/* Motion: live "playing/online" presence dots breathe. */
+.pcFut-dot.on {
+	animation: pcFut-dotpulse 1.1s steps(2) infinite alternate;
+}
+@keyframes pcFut-dotpulse {
+	from {
+		box-shadow: 0 0 0 0.2cqw rgba(0, 228, 54, 0.2);
+	}
+	to {
+		box-shadow: 0 0 0 0.7cqw rgba(0, 228, 54, 0.55);
+	}
+}

@@ -233,3 +233,26 @@
 .pcIg-remap-row.listen .pcIg-remap-btn {
 	color: var(--p8-black);
 }
+
+/* Motion: the stream quality meter wiggles like a live equalizer. */
+.pcIg-quality-bar.good i.on {
+	transform-origin: bottom;
+	animation: pcIg-eq 0.6s steps(3) infinite alternate;
+}
+.pcIg-quality-bar.good i.on:nth-child(2) {
+	animation-delay: 0.12s;
+}
+.pcIg-quality-bar.good i.on:nth-child(3) {
+	animation-delay: 0.24s;
+}
+.pcIg-quality-bar.good i.on:nth-child(4) {
+	animation-delay: 0.36s;
+}
+@keyframes pcIg-eq {
+	from {
+		transform: scaleY(0.55);
+	}
+	to {
+		transform: scaleY(1);
+	}
+}
