@@ -16,6 +16,7 @@ import { protonRuntimePlugin } from "./proton-runtime"
 import { psychoWaluigiPlugin } from "./psycho-waluigi"
 import { ryubingPlugin, ryubingReadableLaunchIntegration } from "./ryubing"
 import { smbxGamePlugin } from "./smbxgame"
+import { smwCentralPlugin } from "./smwcentral"
 import { srb2Plugin } from "./srb2"
 import { superMario127Plugin } from "./super-mario-127"
 import { superMarioBrosRemasteredPlugin } from "./super-mario-bros-remastered"
@@ -35,6 +36,7 @@ export const firstPartyPlugins = [
   levelShareSquarePlugin,
   srb2Plugin,
   smbxGamePlugin,
+  smwCentralPlugin,
   pico8Plugin,
   psychoWaluigiPlugin,
   ryubingPlugin,
