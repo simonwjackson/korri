@@ -131,3 +131,18 @@
 	background: var(--p8-orange);
 	box-shadow: 0.4688cqw 0.4688cqw 0 #000;
 }
+
+/* Motion: the notification toast slides up into view. */
+.pcSys-toast {
+	animation: pcSys-toastin 0.32s steps(4) both;
+}
+@keyframes pcSys-toastin {
+	from {
+		opacity: 0;
+		transform: translate(-50%, 60%);
+	}
+	to {
+		opacity: 1;
+		transform: translate(-50%, 0);
+	}
+}
