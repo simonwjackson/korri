@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import { runPluginHandler } from "@platform/plugin"
 import { Effect } from "effect"
-import { steamRuntimePaths } from "../../steam/src/plugin"
+import {
+  KORRI_STEAM_PLUGIN_ID,
+  steamRuntimePaths,
+} from "../../steam/src/plugin"
 import {
   type FexRuntimeResolveOutput,
   fexRuntimePlugin,
@@ -12,6 +15,15 @@ describe("FEX runtime plugin descriptor", () => {
   it("uses a stable first-party plugin identity", () => {
     expect(KORRI_FEX_PLUGIN_ID).toBe("@korri:fex")
     expect(fexRuntimePlugin.id).toBe(KORRI_FEX_PLUGIN_ID)
+  })
+
+  it("declares the Steam runtime contract for its default rootfs", () => {
+    expect(fexRuntimePlugin.requires).toContainEqual({
+      capability: "steam.runtime",
+      ref: { provider: KORRI_STEAM_PLUGIN_ID, id: "steam-korri-package" },
+      reason:
+        "The default Bandai FEX rootfs is provisioned by the Steam plugin runtime.",
+    })
   })
 
   it("contributes the reusable FEX runtime and package surfaces", () => {

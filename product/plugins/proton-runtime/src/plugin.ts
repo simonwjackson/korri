@@ -1,5 +1,8 @@
 import { plugin } from "@platform/plugin"
-import { steamRuntimePaths } from "../../steam/src/plugin"
+import {
+  KORRI_STEAM_PLUGIN_ID,
+  steamRuntimePaths,
+} from "../../steam/src/plugin"
 
 export const KORRI_PROTON_PLUGIN_ID = "@korri:proton" as const
 
@@ -29,6 +32,14 @@ export const protonRuntimePlugin = plugin({
   title: "Proton",
   description:
     "Contributes Korri's first-party Proton runtime resolver for Windows x86_64 payloads on FEX-capable devices.",
+  requires: [
+    {
+      capability: "steam.runtime",
+      ref: { provider: KORRI_STEAM_PLUGIN_ID, id: "steam-korri-package" },
+      reason:
+        "The default Proton root is provisioned by the Steam plugin runtime.",
+    },
+  ],
   contributes: {
     config: {
       runtimes: {

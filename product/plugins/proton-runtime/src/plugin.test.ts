@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import { runPluginHandler } from "@platform/plugin"
 import { Effect } from "effect"
-import { steamRuntimePaths } from "../../steam/src/plugin"
+import {
+  KORRI_STEAM_PLUGIN_ID,
+  steamRuntimePaths,
+} from "../../steam/src/plugin"
 import {
   KORRI_PROTON_PLUGIN_ID,
   type ProtonRuntimeResolveOutput,
@@ -12,6 +15,15 @@ describe("Proton runtime plugin descriptor", () => {
   it("uses a stable first-party plugin identity", () => {
     expect(KORRI_PROTON_PLUGIN_ID).toBe("@korri:proton")
     expect(protonRuntimePlugin.id).toBe(KORRI_PROTON_PLUGIN_ID)
+  })
+
+  it("declares the Steam runtime contract for its default Proton root", () => {
+    expect(protonRuntimePlugin.requires).toContainEqual({
+      capability: "steam.runtime",
+      ref: { provider: KORRI_STEAM_PLUGIN_ID, id: "steam-korri-package" },
+      reason:
+        "The default Proton root is provisioned by the Steam plugin runtime.",
+    })
   })
 
   it("contributes the current Steam-contract Proton 10 runtime and package helper", () => {

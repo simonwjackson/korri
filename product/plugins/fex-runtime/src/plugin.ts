@@ -1,5 +1,8 @@
 import { plugin } from "@platform/plugin"
-import { steamRuntimePaths } from "../../steam/src/plugin"
+import {
+  KORRI_STEAM_PLUGIN_ID,
+  steamRuntimePaths,
+} from "../../steam/src/plugin"
 
 export const KORRI_FEX_PLUGIN_ID = "@korri:fex" as const
 
@@ -32,6 +35,14 @@ export const fexRuntimePlugin = plugin({
   title: "FEX",
   description:
     "Contributes Korri's first-party FEX runtime resolver for aarch64 devices running x86_64 Linux userland payloads.",
+  requires: [
+    {
+      capability: "steam.runtime",
+      ref: { provider: KORRI_STEAM_PLUGIN_ID, id: "steam-korri-package" },
+      reason:
+        "The default Bandai FEX rootfs is provisioned by the Steam plugin runtime.",
+    },
+  ],
   contributes: {
     config: {
       runtimes: {
