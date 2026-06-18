@@ -4,7 +4,9 @@ import { decodeRuntimeRecord } from "@platform/library/config/records/runtime"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
+  KORRI_RETROARCH_MESEN_RUNTIME_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
+  KORRI_RETROARCH_NES_SYSTEM_ID,
   KORRI_RETROARCH_PLUGIN_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
@@ -45,6 +47,30 @@ describe("RetroArch plugin", () => {
       app: KORRI_RETROARCH_APP_ID,
       path: "/etc/korri/cores/mgba_libretro.so",
       supports: { systems: [KORRI_RETROARCH_GBA_SYSTEM_ID] },
+    })
+  })
+
+  it("contributes Mesen as a RetroArch-owned NES runtime", () => {
+    expect(KORRI_RETROARCH_NES_SYSTEM_ID).toBe("nes")
+    expect(KORRI_RETROARCH_MESEN_RUNTIME_ID).toBe(
+      "@korri:retroarch/mesen",
+    )
+    expect(retroarchPlugin.contributes.config.systems?.nes).toMatchObject({
+      id: KORRI_RETROARCH_NES_SYSTEM_ID,
+      title: "Nintendo Entertainment System",
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_MESEN_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(retroarchPlugin.contributes.config.runtimes?.mesen).toMatchObject({
+      id: KORRI_RETROARCH_MESEN_RUNTIME_ID,
+      kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
+      path: "/etc/korri/cores/mesen_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_NES_SYSTEM_ID] },
     })
   })
 
