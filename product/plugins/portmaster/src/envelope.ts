@@ -13,6 +13,20 @@ export interface PortMasterLaunchEnvelopeInput {
   readonly useBubblewrap?: boolean
   readonly presentation?: PortMasterLaunchPresentationInput
   readonly inputCompatibility?: PortMasterLaunchInputCompatibilityInput
+  readonly runtimeCompatibility?: PortMasterLaunchRuntimeCompatibilityInput
+}
+
+export interface PortMasterLaunchRuntimeCompatibilityInput {
+  readonly mode: "none" | "retroarch-libretro"
+  readonly retroarchPath?: string
+  readonly retroarchLogPath?: string
+}
+
+export interface PortMasterLaunchRuntimeCompatibility {
+  readonly mode: "none" | "retroarch-libretro"
+  readonly retroarchWrapperPath?: string
+  readonly retroarchPath?: string
+  readonly retroarchLogPath?: string
 }
 
 export interface PortMasterLaunchInputCompatibilityInput {
@@ -63,6 +77,7 @@ export interface PortMasterLaunchEnvelope {
   readonly fakeDeviceRoot?: string
   readonly presentation?: PortMasterLaunchPresentation
   readonly inputCompatibility: PortMasterLaunchInputCompatibility
+  readonly runtimeCompatibility: PortMasterLaunchRuntimeCompatibility
 }
 
 const DEFAULT_DEVICE_ARCH = "aarch64"
@@ -92,12 +107,18 @@ export async function preparePortMasterLaunchEnvelope(
     controlRoot,
     input: input.inputCompatibility,
   })
+  const runtimeCompatibility = normalizeRuntimeCompatibility({
+    manifest,
+    controlRoot,
+    input: input.runtimeCompatibility,
+  })
   const env: Record<string, string> = {
     XDG_DATA_HOME: manifest.installRoot,
     KORRI_PORTMASTER_HOME: controlRoot,
     KORRI_PORTMASTER_DIRECTORY: stripLeadingSlash(manifest.installRoot),
     KORRI_PORTMASTER_PORTS_ROOT: manifest.portsRoot,
     KORRI_PORTMASTER_INPUT_MODE: inputCompatibility.mode,
+    KORRI_PORTMASTER_RUNTIME_MODE: runtimeCompatibility.mode,
     DEVICE_ARCH: input.deviceArch ?? preferredDeviceArch(manifest),
     SDL_GAMECONTROLLERCONFIG: inputCompatibility.sdlGameControllerConfig,
     ...(inputCompatibility.gptokeybPath
@@ -111,6 +132,16 @@ export async function preparePortMasterLaunchEnvelope(
       : {}),
     ...(inputCompatibility.gptokeybLogPath
       ? { KORRI_PORTMASTER_GPTOKEYB_LOG: inputCompatibility.gptokeybLogPath }
+      : {}),
+    ...(runtimeCompatibility.retroarchPath
+      ? {
+          KORRI_PORTMASTER_RETROARCH_TARGET: runtimeCompatibility.retroarchPath,
+        }
+      : {}),
+    ...(runtimeCompatibility.retroarchLogPath
+      ? {
+          KORRI_PORTMASTER_RETROARCH_LOG: runtimeCompatibility.retroarchLogPath,
+        }
       : {}),
     ...(fexWrapper
       ? {
@@ -127,6 +158,9 @@ export async function preparePortMasterLaunchEnvelope(
   await writeFile(fakeUinput, "")
   if (inputCompatibility.gptokeybWrapperPath) {
     await writeGptokeybWrapper(inputCompatibility)
+  }
+  if (runtimeCompatibility.retroarchWrapperPath) {
+    await writeRetroarchWrapper({ shellPath, runtimeCompatibility })
   }
   const tasksetter = tasksetterText()
   const control = controlText({
@@ -152,6 +186,7 @@ export async function preparePortMasterLaunchEnvelope(
         tasksetterPath,
         fakeDeviceRoot,
         inputCompatibility,
+        runtimeCompatibility,
       },
       manifest,
       presentation: presentationInput,
@@ -206,6 +241,7 @@ export async function preparePortMasterLaunchEnvelope(
         fakeTty,
         "/dev/tty0",
         ...fakeUinputBindArgs({ fakeUinput, inputCompatibility }),
+        ...runtimeBindArgs(runtimeCompatibility),
         ...fexRootfsBind,
         "--chdir",
         dirname(launchScriptPath),
@@ -219,10 +255,93 @@ export async function preparePortMasterLaunchEnvelope(
       tasksetterPath,
       fakeDeviceRoot,
       inputCompatibility,
+      runtimeCompatibility,
     },
     manifest,
     presentation: presentationInput,
   })
+}
+
+function normalizeRuntimeCompatibility(input: {
+  readonly manifest: PortMasterInstalledManifest
+  readonly controlRoot: string
+  readonly input?: PortMasterLaunchRuntimeCompatibilityInput
+}): PortMasterLaunchRuntimeCompatibility {
+  const mode = input.input?.mode ?? "none"
+  if (mode === "retroarch-libretro") {
+    const retroarchLogPath =
+      input.input?.retroarchLogPath ??
+      join(
+        input.manifest.installRoot,
+        "logs",
+        `${manifestSlug(input.manifest)}-retroarch.log`,
+      )
+    return {
+      mode,
+      retroarchWrapperPath: join(input.controlRoot, "retroarch"),
+      ...(input.input?.retroarchPath
+        ? { retroarchPath: input.input.retroarchPath }
+        : {}),
+      retroarchLogPath,
+    }
+  }
+  return { mode }
+}
+
+async function writeRetroarchWrapper(input: {
+  readonly shellPath: string
+  readonly runtimeCompatibility: PortMasterLaunchRuntimeCompatibility
+}): Promise<void> {
+  const wrapperPath = input.runtimeCompatibility.retroarchWrapperPath
+  if (!wrapperPath) return
+  await mkdir(dirname(wrapperPath), { recursive: true })
+  if (input.runtimeCompatibility.retroarchLogPath) {
+    await mkdir(dirname(input.runtimeCompatibility.retroarchLogPath), {
+      recursive: true,
+    })
+  }
+  await writeFile(
+    wrapperPath,
+    retroarchWrapperText({
+      shellPath: input.shellPath,
+      runtimeCompatibility: input.runtimeCompatibility,
+    }),
+    { mode: 0o755 },
+  )
+  await chmod(wrapperPath, 0o755).catch(() => undefined)
+}
+
+function retroarchWrapperText(input: {
+  readonly shellPath: string
+  readonly runtimeCompatibility: PortMasterLaunchRuntimeCompatibility
+}): string {
+  const target = input.runtimeCompatibility.retroarchPath ?? "retroarch"
+  const logPath =
+    input.runtimeCompatibility.retroarchLogPath ??
+    "/tmp/korri-portmaster-retroarch.log"
+  return `#!${input.shellPath}
+set -u
+log_path=\${KORRI_PORTMASTER_RETROARCH_LOG:-${shellQuote(logPath)}}
+target=\${KORRI_PORTMASTER_RETROARCH_TARGET:-${shellQuote(target)}}
+mkdir -p "$(dirname "$log_path")"
+{
+  printf '[korri-portmaster] retroarch args:'
+  printf ' %q' "$@"
+  printf '\\n'
+} >> "$log_path" 2>&1
+exec "$target" "$@" >> "$log_path" 2>&1
+`
+}
+
+function runtimeBindArgs(
+  runtimeCompatibility: PortMasterLaunchRuntimeCompatibility,
+): readonly string[] {
+  if (!runtimeCompatibility.retroarchWrapperPath) return []
+  return [
+    "--ro-bind",
+    runtimeCompatibility.retroarchWrapperPath,
+    "/usr/bin/retroarch",
+  ]
 }
 
 function normalizeInputCompatibility(input: {
@@ -400,7 +519,7 @@ function launcherText(input: {
   const command = [input.envelope.command, ...input.envelope.args]
     .map(shellQuote)
     .join(" ")
-  return `#!/usr/bin/env bash\nset -euo pipefail\nset -m\n${exports}\nmkdir -p ${shellQuote(dirname(input.logPath))}\ncd ${shellQuote(input.envelope.cwd)}\nchild_pid=\ncleanup() {\n  if [ -n "\${child_pid:-}" ]; then\n    kill -- "-$child_pid" 2>/dev/null || kill "$child_pid" 2>/dev/null || true\n    wait "$child_pid" 2>/dev/null || true\n  fi\n}\ntrap cleanup INT TERM EXIT\n${command} > ${shellQuote(input.logPath)} 2>&1 &\nchild_pid=$!\nfor ((attempt = 0; attempt < ${input.startupPollAttempts}; attempt += 1)); do\n  if ${shellQuote(input.swaymsgPath)} -t get_tree 2>/dev/null | grep -F ${shellQuote(input.windowProbe)} >/dev/null 2>&1; then\n    ${shellQuote(input.swaymsgPath)} ${shellQuote(input.windowMatcher)} focus >/dev/null 2>&1 || true\n    ${shellQuote(input.swaymsgPath)} ${shellQuote(input.windowMatcher)} fullscreen enable >/dev/null 2>&1 || true\n    break\n  fi\n  sleep ${input.startupPollDelayMs / 1000}\ndone\nset +e\nwait "$child_pid"\nstatus=$?\nset -e\ntrap - INT TERM EXIT\nexit "$status"\n`
+  return `#!/usr/bin/env bash\nset -euo pipefail\nset -m\n${exports}\nmkdir -p ${shellQuote(dirname(input.logPath))}\ncd ${shellQuote(input.envelope.cwd)}\nchild_pid=\ncleanup() {\n  if [ -n "\${child_pid:-}" ]; then\n    kill -- "-$child_pid" 2>/dev/null || kill "$child_pid" 2>/dev/null || true\n    sleep 1\n    kill -KILL -- "-$child_pid" 2>/dev/null || kill -KILL "$child_pid" 2>/dev/null || true\n    wait "$child_pid" 2>/dev/null || true\n  fi\n}\nterminate() {\n  cleanup\n  exit 143\n}\ntrap terminate INT TERM\ntrap cleanup EXIT\n${command} > ${shellQuote(input.logPath)} 2>&1 &\nchild_pid=$!\nfor ((attempt = 0; attempt < ${input.startupPollAttempts}; attempt += 1)); do\n  if ${shellQuote(input.swaymsgPath)} -t get_tree 2>/dev/null | grep -F ${shellQuote(input.windowProbe)} >/dev/null 2>&1; then\n    ${shellQuote(input.swaymsgPath)} ${shellQuote(input.windowMatcher)} focus >/dev/null 2>&1 || true\n    ${shellQuote(input.swaymsgPath)} ${shellQuote(input.windowMatcher)} fullscreen enable >/dev/null 2>&1 || true\n    break\n  fi\n  sleep ${input.startupPollDelayMs / 1000}\ndone\nset +e\nwait "$child_pid"\nstatus=$?\nset -e\ntrap - INT TERM EXIT\nexit "$status"\n`
 }
 
 function defaultWindowMatcher(manifest: PortMasterInstalledManifest): string {

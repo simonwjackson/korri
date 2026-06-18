@@ -11,9 +11,11 @@ import type { DownloadResolution } from "@platform/protocol/acquisition/download
 import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
 import { KORRI_FEX_PLUGIN_ID } from "../../fex-runtime"
+import { KORRI_RETROARCH_PLUGIN_ID } from "../../retroarch"
 import {
   type PortMasterLaunchInputCompatibilityInput,
   type PortMasterLaunchPresentationInput,
+  type PortMasterLaunchRuntimeCompatibilityInput,
   preparePortMasterLaunchEnvelope,
 } from "./envelope"
 import {
@@ -94,6 +96,12 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
         ref: { provider: KORRI_FEX_PLUGIN_ID, id: "linux-user" },
         reason:
           "PortMaster's x86/x86_64 compatibility lane launches Linux userland ports through FEX on aarch64 devices.",
+      },
+      {
+        capability: "libretro.app-host",
+        ref: { provider: KORRI_RETROARCH_PLUGIN_ID, id: "retroarch" },
+        reason:
+          "PortMaster libretro ports launch their packaged cores through the RetroArch app host.",
       },
     ],
     contributes: {
@@ -344,6 +352,9 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                   presentation: presentationFromInput(input.presentation),
                   inputCompatibility: inputCompatibilityFromInput(
                     input.inputCompatibility,
+                  ),
+                  runtimeCompatibility: runtimeCompatibilityFromInput(
+                    input.runtimeCompatibility,
                   ),
                 }),
               catch: error =>
@@ -670,6 +681,21 @@ function nativeElfRepairFromInput(
     return undefined
   }
   return { arch, interpreter, patchelfPath, libraryPaths }
+}
+
+function runtimeCompatibilityFromInput(
+  value: unknown,
+): PortMasterLaunchRuntimeCompatibilityInput | undefined {
+  const record = readRecord(value)
+  const mode = stringValue(record.mode)
+  if (mode !== "none" && mode !== "retroarch-libretro") return undefined
+  const retroarchPath = stringValue(record.retroarchPath)
+  const retroarchLogPath = stringValue(record.retroarchLogPath)
+  return {
+    mode,
+    ...(retroarchPath ? { retroarchPath } : {}),
+    ...(retroarchLogPath ? { retroarchLogPath } : {}),
+  }
 }
 
 function inputCompatibilityFromInput(

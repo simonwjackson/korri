@@ -562,6 +562,46 @@ describe("PortMaster plugin", () => {
         "/nix/store/portmaster/PortMaster/gptokeyb",
       )
 
+      const runtimeEnvelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            bwrapPath: "/nix/store/example-bubblewrap/bin/bwrap",
+            envPath: "/run/current-system/sw/bin/env",
+            useBubblewrap: true,
+            runtimeCompatibility: {
+              mode: "retroarch-libretro",
+              retroarchPath: "/nix/store/retroarch/bin/retroarch",
+            },
+          },
+        }),
+      )
+      expect(runtimeEnvelope.runtimeCompatibility).toMatchObject({
+        mode: "retroarch-libretro",
+        retroarchWrapperPath: join(root, "PortMaster", "retroarch"),
+        retroarchPath: "/nix/store/retroarch/bin/retroarch",
+        retroarchLogPath: join(root, "logs", "digger-retroarch.log"),
+      })
+      expect(runtimeEnvelope.env).toMatchObject({
+        KORRI_PORTMASTER_RUNTIME_MODE: "retroarch-libretro",
+        KORRI_PORTMASTER_RETROARCH_TARGET: "/nix/store/retroarch/bin/retroarch",
+      })
+      expect(runtimeEnvelope.args).toContain("--ro-bind")
+      expect(runtimeEnvelope.args).toContain(
+        join(root, "PortMaster", "retroarch"),
+      )
+      expect(runtimeEnvelope.args).toContain("/usr/bin/retroarch")
+      const retroarchWrapper = await readFile(
+        join(root, "PortMaster", "retroarch"),
+        "utf8",
+      )
+      expect(retroarchWrapper).toStartWith("#!/run/current-system/sw/bin/bash")
+      expect(retroarchWrapper).toContain("KORRI_PORTMASTER_RETROARCH_TARGET")
+      expect(retroarchWrapper).toContain("/nix/store/retroarch/bin/retroarch")
+
       const directEnvelope = await Effect.runPromise(
         runPluginHandler(prepareLaunch, {
           operation: "portmaster.prepare-launch",
@@ -614,7 +654,10 @@ describe("PortMaster plugin", () => {
       const launcher = await readFile(foregroundEnvelope.command, "utf8")
       expect(launcher).toContain("set -m")
       expect(launcher).toContain('kill -- "-$child_pid"')
-      expect(launcher).toContain("trap cleanup INT TERM EXIT")
+      expect(launcher).toContain('kill -KILL -- "-$child_pid"')
+      expect(launcher).toContain("terminate()")
+      expect(launcher).toContain("trap terminate INT TERM")
+      expect(launcher).toContain("trap cleanup EXIT")
       expect(launcher).toContain("/run/current-system/sw/bin/swaymsg")
       expect(launcher).toContain('[class="digger.x86_64"]')
       expect(launcher).toContain(join(root, "logs", "digger.log"))

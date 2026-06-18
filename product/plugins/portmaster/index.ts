@@ -5,6 +5,8 @@ export type {
   PortMasterLaunchInputCompatibilityInput,
   PortMasterLaunchPresentation,
   PortMasterLaunchPresentationInput,
+  PortMasterLaunchRuntimeCompatibility,
+  PortMasterLaunchRuntimeCompatibilityInput,
 } from "./src/envelope"
 export {
   launchScriptDisplayName,
