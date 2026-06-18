@@ -1,4 +1,12 @@
 export type {
+  PortMasterLaunchEnvelope,
+  PortMasterLaunchEnvelopeInput,
+} from "./src/envelope"
+export {
+  launchScriptDisplayName,
+  preparePortMasterLaunchEnvelope,
+} from "./src/envelope"
+export type {
   PortMasterInstalledBinary,
   PortMasterInstalledFile,
   PortMasterInstalledManifest,

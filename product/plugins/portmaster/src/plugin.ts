@@ -10,6 +10,7 @@ import type {
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
+import { preparePortMasterLaunchEnvelope } from "./envelope"
 import { installPortMasterEntry } from "./installer"
 
 export const KORRI_PORTMASTER_PLUGIN_ID = "@korri:portmaster" as const
@@ -296,6 +297,34 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
           },
         },
         {
+          id: "portmaster.prepare-launch",
+          operation: "portmaster.prepare-launch",
+          capabilities: ["portmaster.prepare-launch", "portmaster"],
+          run: context => {
+            const input = readRecord(context.input)
+            return Effect.tryPromise({
+              try: () =>
+                preparePortMasterLaunchEnvelope({
+                  manifestPath: stringValue(input.manifestPath),
+                  launchScript: stringValue(input.launchScript),
+                  deviceArch: stringValue(input.deviceArch),
+                  shellPath: stringValue(input.shellPath),
+                  bwrapPath: stringValue(input.bwrapPath),
+                  envPath: stringValue(input.envPath),
+                  useBubblewrap: booleanValue(input.useBubblewrap),
+                }),
+              catch: error =>
+                new AcquisitionError({
+                  reason: "provider",
+                  providerId: context.provider,
+                  message: `Failed to prepare PortMaster launch envelope: ${
+                    error instanceof Error ? error.message : String(error)
+                  }`,
+                }),
+            })
+          },
+        },
+        {
           id: "portmaster.diagnostics",
           operation: "diagnostics.collect",
           capabilities: ["portmaster"],
@@ -572,6 +601,10 @@ function stringValue(value: unknown) {
 
 function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function booleanValue(value: unknown) {
+  return typeof value === "boolean" ? value : undefined
 }
 
 function stringArray(value: unknown): readonly string[] {

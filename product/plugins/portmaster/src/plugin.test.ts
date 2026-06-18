@@ -88,6 +88,7 @@ describe("PortMaster plugin", () => {
         "provider.validate",
         "artifact.resolve-download",
         "portmaster.install",
+        "portmaster.prepare-launch",
         "diagnostics.collect",
       ],
     )
@@ -283,6 +284,51 @@ describe("PortMaster plugin", () => {
       expect(
         JSON.parse(await readFile(manifest.manifestPath, "utf8")),
       ).toMatchObject({ id: "wordlesdl.zip", title: "Wordle SDL" })
+
+      const prepareLaunch = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.prepare-launch",
+      ) as PluginHandler | undefined
+      if (!prepareLaunch) {
+        throw new Error("missing portmaster.prepare-launch handler")
+      }
+      const envelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            bwrapPath: "/nix/store/example-bubblewrap/bin/bwrap",
+            envPath: "/run/current-system/sw/bin/env",
+            useBubblewrap: true,
+          },
+        }),
+      )
+
+      expect(envelope).toMatchObject({
+        command: "/nix/store/example-bubblewrap/bin/bwrap",
+        cwd: join(root, "ports"),
+        launchScriptPath: join(root, "ports", "Wordle SDL.sh"),
+        controlPath: join(root, "PortMaster", "control.txt"),
+        tasksetterPath: join(root, "PortMaster", "tasksetter"),
+        env: {
+          XDG_DATA_HOME: root,
+          KORRI_PORTMASTER_DIRECTORY: root.replace(/^\/+/, ""),
+          KORRI_PORTMASTER_PORTS_ROOT: join(root, "ports"),
+          DEVICE_ARCH: "aarch64",
+        },
+      })
+      expect(envelope.args).toContain("/bin/bash")
+      expect(envelope.args).toContain(join(root, "ports", "Wordle SDL.sh"))
+      expect(await readFile(envelope.controlPath, "utf8")).toContain(
+        "get_controls()",
+      )
+      expect(await readFile(envelope.controlPath, "utf8")).toContain(
+        "GPTOKEYB=",
+      )
+      expect(await readFile(envelope.tasksetterPath, "utf8")).toContain(
+        "TASKSET=",
+      )
     } finally {
       await rm(root, { recursive: true, force: true })
     }

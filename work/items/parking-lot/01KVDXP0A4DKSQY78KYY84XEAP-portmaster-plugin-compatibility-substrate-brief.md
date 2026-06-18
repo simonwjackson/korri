@@ -81,6 +81,8 @@ Result:
 
 ### Phase 2 — PortMaster compatibility envelope
 
+Status: **complete locally, validated on Bandai**.
+
 Goal: ports run through a generic PortMaster shell environment without per-port script edits.
 
 Plugin owns:
@@ -99,6 +101,13 @@ Validation launch:
 
 - **Wordle SDL using its original `Wordle SDL.sh`**
 - Success: no manual shebang/script patching.
+
+Result:
+
+- Added plugin-owned `portmaster.prepare-launch` handler/exported envelope generator.
+- Wrote generated `control.txt` and `tasksetter` into both `$XDG_DATA_HOME/PortMaster` and `/roms/ports/PortMaster` compatible locations.
+- Generated a bwrap/bash launch command with `/roms/ports`, `/bin/bash`, `/usr/bin/env`, fake `/dev/tty0`, and fake `/dev/uinput` bindings.
+- Bandai milestone launched the original `Wordle SDL.sh` with its `#!/bin/bash` shebang unchanged and captured Wordle rendering. ELF patching remained the phase-allowed manual step pending Phase 3.
 
 ---
 
