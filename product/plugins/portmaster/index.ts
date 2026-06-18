@@ -1,6 +1,8 @@
 export type {
   PortMasterLaunchEnvelope,
   PortMasterLaunchEnvelopeInput,
+  PortMasterLaunchPresentation,
+  PortMasterLaunchPresentationInput,
 } from "./src/envelope"
 export {
   launchScriptDisplayName,

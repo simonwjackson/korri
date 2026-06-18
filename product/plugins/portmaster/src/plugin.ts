@@ -11,7 +11,10 @@ import type { DownloadResolution } from "@platform/protocol/acquisition/download
 import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
 import { KORRI_FEX_PLUGIN_ID } from "../../fex-runtime"
-import { preparePortMasterLaunchEnvelope } from "./envelope"
+import {
+  type PortMasterLaunchPresentationInput,
+  preparePortMasterLaunchEnvelope,
+} from "./envelope"
 import {
   installPortMasterEntry,
   type PortMasterFexWrapperOptions,
@@ -337,6 +340,7 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                   bwrapPath: stringValue(input.bwrapPath),
                   envPath: stringValue(input.envPath),
                   useBubblewrap: booleanValue(input.useBubblewrap),
+                  presentation: presentationFromInput(input.presentation),
                 }),
               catch: error =>
                 new AcquisitionError({
@@ -632,6 +636,12 @@ function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
+function positiveIntegerValue(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : undefined
+}
+
 function booleanValue(value: unknown) {
   return typeof value === "boolean" ? value : undefined
 }
@@ -656,6 +666,29 @@ function nativeElfRepairFromInput(
     return undefined
   }
   return { arch, interpreter, patchelfPath, libraryPaths }
+}
+
+function presentationFromInput(
+  value: unknown,
+): PortMasterLaunchPresentationInput | undefined {
+  const record = readRecord(value)
+  const mode = stringValue(record.mode)
+  if (mode !== "none" && mode !== "sway-fullscreen") return undefined
+  const swaymsgPath = stringValue(record.swaymsgPath)
+  const windowMatcher = stringValue(record.windowMatcher)
+  const windowProbe = stringValue(record.windowProbe)
+  const logPath = stringValue(record.logPath)
+  const startupPollAttempts = positiveIntegerValue(record.startupPollAttempts)
+  const startupPollDelayMs = positiveIntegerValue(record.startupPollDelayMs)
+  return {
+    mode,
+    ...(swaymsgPath ? { swaymsgPath } : {}),
+    ...(windowMatcher ? { windowMatcher } : {}),
+    ...(windowProbe ? { windowProbe } : {}),
+    ...(logPath ? { logPath } : {}),
+    ...(startupPollAttempts !== undefined ? { startupPollAttempts } : {}),
+    ...(startupPollDelayMs !== undefined ? { startupPollDelayMs } : {}),
+  }
 }
 
 function fexWrapperFromInput(

@@ -527,6 +527,43 @@ describe("PortMaster plugin", () => {
           SDL_VIDEODRIVER: "x11",
         },
       })
+
+      const foregroundEnvelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            useBubblewrap: false,
+            presentation: {
+              mode: "sway-fullscreen",
+              swaymsgPath: "/run/current-system/sw/bin/swaymsg",
+              startupPollAttempts: 2,
+              startupPollDelayMs: 1,
+            },
+          },
+        }),
+      )
+      expect(foregroundEnvelope).toMatchObject({
+        command: join(root, "PortMaster", "launch.sh"),
+        args: [],
+        presentation: {
+          mode: "sway-fullscreen",
+          launcherPath: join(root, "PortMaster", "launch.sh"),
+          logPath: join(root, "logs", "digger.log"),
+          windowMatcher: '[class="digger.x86_64"]',
+          swaymsgPath: "/run/current-system/sw/bin/swaymsg",
+        },
+      })
+      const launcher = await readFile(foregroundEnvelope.command, "utf8")
+      expect(launcher).toContain("set -m")
+      expect(launcher).toContain('kill -- "-$child_pid"')
+      expect(launcher).toContain("trap cleanup INT TERM EXIT")
+      expect(launcher).toContain("/run/current-system/sw/bin/swaymsg")
+      expect(launcher).toContain('[class="digger.x86_64"]')
+      expect(launcher).toContain(join(root, "logs", "digger.log"))
+      expect(launcher).toContain("DEVICE_ARCH='x86_64'")
     } finally {
       await rm(root, { recursive: true, force: true })
     }
