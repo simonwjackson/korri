@@ -17,15 +17,8 @@ import type {
   ReadableResolvedLaunchContext,
   ResolvedLaunchContext,
 } from "./resolved-launch-context"
-import {
-  materializeSteamDesiredState,
-  type SteamLifecycle,
-  type SteamStateFileSystem,
-  type SteamStateLock,
-} from "./steam-state-materializer"
 
 const LAUNCH_ARTIFACTS_DIR_ENV = "KORRI_LAUNCH_ARTIFACTS_DIR" as const
-const KORRI_STEAM_PLUGIN_ID = "@korri:steam" as const
 const MATERIALIZER_PLACEHOLDER_PATTERN =
   /\{(?:configPath|configDir|userDir|modulePath)\}/
 export const STALE_ARTIFACT_RETENTION_MS = 24 * 60 * 60 * 1000
@@ -44,29 +37,6 @@ export interface MaterializedReadableLaunch {
   readonly artifacts?: MaterializedLaunchArtifacts
   readonly diagnostics?: readonly string[]
 }
-
-export const materializeReadableSteamLaunch = (input: {
-  readonly context: ReadableResolvedLaunchContext
-  readonly fs?: SteamStateFileSystem
-  readonly lifecycle?: SteamLifecycle
-  readonly lock?: SteamStateLock
-}): Effect.Effect<MaterializedReadableLaunch, ResolutionError> =>
-  Effect.gen(function* () {
-    if (input.context.app.kind !== KORRI_STEAM_PLUGIN_ID) {
-      return yield* Effect.fail(
-        new AppMaterializationFailed({
-          appId: input.context.app.id,
-          reason: "typed Steam materialization requires kind: @korri:steam",
-        }),
-      )
-    }
-    const resources = yield* materializeReadableSteamResources(input)
-    return {
-      spec: resources.spec,
-      context: input.context,
-      artifacts: { root: resources.stateRoot, paths: resources.paths },
-    }
-  })
 
 export const materializeAppLaunch = (input: {
   readonly app: AppDescriptor
@@ -115,7 +85,6 @@ const canBypassMaterialization = (
   hasPatches: boolean,
 ): boolean =>
   !hasPatches &&
-  app.integration !== "steam" &&
   !isProviderQualifiedIntegration(app.integration) &&
   (app.integration === "generic-process" ||
     (app.integration !== "solarus" && !requiresMaterialization(app)))
@@ -175,166 +144,6 @@ const materializeInsideArtifactRoot = (
     }
   })
 
-interface MaterializedReadableResources {
-  readonly paths: Readonly<Record<string, string>>
-  readonly spec: LaunchSpec
-  readonly diagnostics?: readonly string[]
-}
-
-const STORAGE_TOKEN_PATTERN = /\{storage:([^}]+)\}/g
-
-interface SteamPolicy {
-  readonly state?: {
-    readonly root: string
-  }
-  readonly extra?: {
-    readonly args?: readonly string[]
-  }
-  readonly "launch-options"?: string
-}
-
-interface MaterializedSteamResources extends MaterializedReadableResources {
-  readonly stateRoot: string
-}
-
-const materializeReadableSteamResources = (input: {
-  readonly context: ReadableResolvedLaunchContext
-  readonly fs?: SteamStateFileSystem
-  readonly lifecycle?: SteamLifecycle
-  readonly lock?: SteamStateLock
-}): Effect.Effect<MaterializedSteamResources, ResolutionError> =>
-  Effect.gen(function* () {
-    const rawPolicy =
-      (input.context.plugin?.[KORRI_STEAM_PLUGIN_ID] as
-        | SteamPolicy
-        | undefined) ?? {}
-    const storage = input.context.storage ?? {}
-    yield* assertSteamStorageTokensAvailable(
-      input.context.app.id,
-      rawPolicy,
-      storage,
-    )
-    const policy = yield* tryMaterialize(input.context.app.id, async () =>
-      resolveSteamPolicyPaths(rawPolicy, storage),
-    )
-    const stateRoot = policy.state?.root
-    if (!stateRoot) {
-      return yield* Effect.fail(
-        new AppMaterializationFailed({
-          appId: input.context.app.id,
-          reason: "typed Steam launches require state.root",
-        }),
-      )
-    }
-    const materialized = yield* materializeSteamDesiredState({
-      desired: {
-        stateRoot,
-        command: input.context.app.command,
-        target: input.context.target,
-        launchOptions: policy["launch-options"],
-        runtime: input.context.runtime
-          ? {
-              id: input.context.runtime.id,
-              path: input.context.runtime.path,
-              tool: input.context.runtime.tool,
-            }
-          : undefined,
-        extraArgs: policy.extra?.args,
-      },
-      fs: input.fs,
-      lifecycle: input.lifecycle,
-      lock: input.lock,
-    }).pipe(
-      Effect.mapError(
-        error =>
-          new AppMaterializationFailed({
-            appId: input.context.app.id,
-            reason: `${error._tag}: ${"reason" in error ? error.reason : "message" in error ? error.message : JSON.stringify(error)}`,
-          }),
-      ),
-    )
-    return {
-      stateRoot,
-      paths: materialized.paths,
-      spec: materialized.spec,
-    }
-  })
-
-type StorageRoots = Readonly<Record<string, { readonly root?: string }>>
-
-const resolveSteamPolicyPaths = (
-  policy: SteamPolicy,
-  storage: StorageRoots,
-): SteamPolicy => ({
-  ...policy,
-  state: policy.state
-    ? {
-        ...policy.state,
-        root: resolveStorageTokens(policy.state.root, storage),
-      }
-    : undefined,
-  extra: policy.extra
-    ? {
-        ...policy.extra,
-        ...(policy.extra.args
-          ? {
-              args: policy.extra.args.map(arg =>
-                resolveStorageTokens(arg, storage),
-              ),
-            }
-          : {}),
-      }
-    : undefined,
-})
-
-const resolveStorageTokens = (value: string, storage: StorageRoots): string =>
-  value.replace(STORAGE_TOKEN_PATTERN, (_match, storageId: string) => {
-    const root = storage[storageId]?.root
-    if (!root) throw new Error(`unknown storage token: ${storageId}`)
-    return root
-  })
-
-const storageTokensInValue = (value: unknown): readonly string[] => {
-  const tokens = new Set<string>()
-  const visit = (entry: unknown) => {
-    if (typeof entry === "string") {
-      for (const match of entry.matchAll(STORAGE_TOKEN_PATTERN)) {
-        if (match[1]) tokens.add(match[1])
-      }
-    } else if (Array.isArray(entry)) {
-      for (const item of entry) visit(item)
-    } else if (entry && typeof entry === "object") {
-      for (const item of Object.values(entry)) visit(item)
-    }
-  }
-  visit(value)
-  return [...tokens]
-}
-
-const assertSteamStorageTokensAvailable = (
-  appId: string,
-  policy: SteamPolicy,
-  storage: StorageRoots,
-): Effect.Effect<void, ResolutionError> =>
-  tryMaterialize(appId, async () => {
-    for (const storageId of storageTokensInValue({
-      state: policy.state,
-      extra: policy.extra,
-    })) {
-      const root = storage[storageId]?.root
-      if (!root) throw new Error(`storage ${storageId} is not configured`)
-      let info: Awaited<ReturnType<typeof stat>>
-      try {
-        info = await stat(root)
-      } catch {
-        throw new Error(`storage ${storageId} root is unavailable: ${root}`)
-      }
-      if (!info.isDirectory()) {
-        throw new Error(`storage ${storageId} root is not a directory: ${root}`)
-      }
-    }
-  })
-
 interface MaterializedAppResources {
   readonly paths: Readonly<Record<string, string>>
   readonly contextExtras: ContextExtras
@@ -362,13 +171,6 @@ const materializeAppResources = (
       return materializeSolarusResources(input, artifactRoot)
     case "generic-process":
       return Effect.succeed({ paths: {}, contextExtras: {} })
-    case "steam":
-      return Effect.fail(
-        new AppMaterializationFailed({
-          appId: input.app.id,
-          reason: "Steam apps must use readable Steam materialization",
-        }),
-      )
     default:
       return isProviderQualifiedIntegration(input.app.integration)
         ? Effect.fail(

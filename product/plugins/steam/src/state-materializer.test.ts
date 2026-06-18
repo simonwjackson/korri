@@ -9,7 +9,7 @@ import {
   type SteamStateLock,
   steamConfigPath,
   steamLocalConfigPath,
-} from "./steam-state-materializer"
+} from "./state-materializer"
 
 const memoryFs = (initial: Readonly<Record<string, string>> = {}) => {
   const files = new Map(Object.entries(initial))

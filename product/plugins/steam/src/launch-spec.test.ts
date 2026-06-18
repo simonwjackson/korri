@@ -5,7 +5,7 @@ import {
   parseSteamAppId,
   renderSteamLaunchSpec,
   validateSteamLaunchOptions,
-} from "./steam-launch-spec"
+} from "./launch-spec"
 
 describe("steam launch spec", () => {
   it("parses Steam rungameid targets", () => {

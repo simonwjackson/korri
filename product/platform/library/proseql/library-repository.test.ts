@@ -7,6 +7,12 @@ import {
   KORRI_RETROARCH_PLUGIN_ID,
   retroarchReadableLaunchIntegration,
 } from "@product/plugins/retroarch"
+import {
+  KORRI_STEAM_APP_ID,
+  KORRI_STEAM_PLUGIN_ID,
+  KORRI_STEAM_STORAGE_ID,
+  steamReadableLaunchIntegration,
+} from "@product/plugins/steam"
 import { Effect } from "effect"
 import type { LibraryItemRecord } from "../config/records/library-item"
 import { LibraryError } from "../library-services"
@@ -81,7 +87,10 @@ const marioPackage: LibraryItemRecord = {
 
 async function seedReadableLibrary(
   root: string,
-  options: { readonly launchIntegrations?: boolean } = {},
+  options: {
+    readonly launchIntegrations?: boolean
+    readonly steamLaunchIntegration?: boolean
+  } = {},
 ) {
   return await Effect.runPromise(
     Effect.scoped(
@@ -186,7 +195,12 @@ async function seedReadableLibrary(
           launchIntegrations:
             options.launchIntegrations === false
               ? []
-              : [retroarchReadableLaunchIntegration],
+              : [
+                  retroarchReadableLaunchIntegration,
+                  ...(options.steamLaunchIntegration
+                    ? [steamReadableLaunchIntegration]
+                    : []),
+                ],
         })
       }),
     ),
@@ -329,6 +343,76 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
+  it("resolves provider-qualified Steam AppID launches through the registered integration", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root, {
+        steamLaunchIntegration: true,
+      })
+      const steamStorageRoot = join(root, "steam-storage")
+      await mkdir(steamStorageRoot, { recursive: true })
+      await Effect.runPromise(
+        repo.upsertStorage({
+          id: KORRI_STEAM_STORAGE_ID,
+          root: steamStorageRoot,
+        }),
+      )
+      await Effect.runPromise(
+        repo.upsertRuntime({
+          id: "proton-arm64",
+          kind: "tool",
+          path: "/compat/proton-arm64",
+          tool: "proton-arm64",
+        }),
+      )
+      await Effect.runPromise(
+        repo.upsertApp({
+          id: KORRI_STEAM_APP_ID,
+          kind: KORRI_STEAM_PLUGIN_ID,
+          command: "steam",
+          runtime: "proton-arm64",
+          plugin: {
+            [KORRI_STEAM_PLUGIN_ID]: {
+              state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+              extra: { args: ["-silent"] },
+              "launch-options": "wrapper -- %command%",
+            },
+          },
+        }),
+      )
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "thirty-xx",
+          title: "30XX",
+          releases: [
+            {
+              id: "steam",
+              system: "windows",
+              target: "steam://rungameid/1029210",
+              apps: [{ id: KORRI_STEAM_APP_ID, runtime: "proton-arm64" }],
+            },
+          ],
+        }),
+      )
+
+      await expect(
+        Effect.runPromise(repo.canResolveLaunchForPlayable("thirty-xx")),
+      ).resolves.toBe(true)
+      const resolved = await Effect.runPromise(
+        repo.resolveLaunchForPlayable("thirty-xx"),
+      )
+
+      expect(resolved.app).toEqual({
+        id: KORRI_STEAM_APP_ID,
+        integration: "steam",
+      })
+      expect(resolved.spec).toEqual({
+        command: "steam",
+        args: ["-applaunch", "1029210"],
+      })
+      expect(resolved.artifacts?.root).toBe(join(steamStorageRoot, "Steam"))
+    })
+  })
+
   it("fails closed for provider-qualified Steam apps without a registered integration", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
@@ -343,12 +427,12 @@ describe("createLibraryRepository — readable playable entries", () => {
       )
       await Effect.runPromise(
         repo.upsertApp({
-          id: "steam",
-          kind: "@korri:steam",
+          id: KORRI_STEAM_APP_ID,
+          kind: KORRI_STEAM_PLUGIN_ID,
           command: "steam",
           runtime: "proton-arm64",
           plugin: {
-            "@korri:steam": {
+            [KORRI_STEAM_PLUGIN_ID]: {
               state: { root: join(root, "steam-home") },
               extra: { args: ["-silent"] },
               "launch-options": "wrapper -- %command%",
@@ -356,12 +440,28 @@ describe("createLibraryRepository — readable playable entries", () => {
           },
         }),
       )
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "thirty-xx-disabled",
+          title: "30XX Disabled",
+          releases: [
+            {
+              id: "steam",
+              system: "windows",
+              target: "steam://rungameid/1029210",
+              apps: [{ id: KORRI_STEAM_APP_ID, runtime: "proton-arm64" }],
+            },
+          ],
+        }),
+      )
 
       await expect(
-        Effect.runPromise(repo.canResolveLaunchForPlayable("downwell")),
+        Effect.runPromise(
+          repo.canResolveLaunchForPlayable("thirty-xx-disabled"),
+        ),
       ).resolves.toBe(false)
       await expect(
-        Effect.runPromise(repo.resolveLaunchForPlayable("downwell")),
+        Effect.runPromise(repo.resolveLaunchForPlayable("thirty-xx-disabled")),
       ).rejects.toMatchObject({ _tag: "LibraryError", reason: "config" })
     })
   })
@@ -371,11 +471,11 @@ describe("createLibraryRepository — readable playable entries", () => {
       const repo = await seedReadableLibrary(root)
       await Effect.runPromise(
         repo.upsertApp({
-          id: "steam",
-          kind: "@korri:steam",
+          id: KORRI_STEAM_APP_ID,
+          kind: KORRI_STEAM_PLUGIN_ID,
           command: "steam",
           plugin: {
-            "@korri:steam": {
+            [KORRI_STEAM_PLUGIN_ID]: {
               state: { root: join(root, "steam-home") },
             },
           },
@@ -390,7 +490,7 @@ describe("createLibraryRepository — readable playable entries", () => {
               id: "store-page",
               system: "windows",
               target: "steam://store/2379780",
-              apps: [{ id: "steam" }],
+              apps: [{ id: KORRI_STEAM_APP_ID }],
             },
           ],
         }),

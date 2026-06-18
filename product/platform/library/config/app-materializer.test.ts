@@ -8,10 +8,7 @@ import {
   cleanupLaunchArtifacts,
   materializeAppLaunch,
 } from "./app-materializer"
-import type {
-  ReadableResolvedLaunchContext,
-  ResolvedLaunchContext,
-} from "./resolved-launch-context"
+import type { ResolvedLaunchContext } from "./resolved-launch-context"
 
 const runPromise = <A, E>(eff: Effect.Effect<A, E>) => Effect.runPromise(eff)
 

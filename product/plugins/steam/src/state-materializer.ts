@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import type { LaunchSpec } from "@platform/library/launcher"
+import { Data, Effect } from "effect"
 import {
   type InvalidSteamLaunchOptions,
   type InvalidSteamTarget,
   parseSteamAppId,
   renderSteamLaunchSpec,
   validateSteamLaunchOptions,
-} from "@platform/stream/steam-launch-spec"
-import { Data, Effect } from "effect"
+} from "./launch-spec"
 
 export class SteamStateMutationFailed extends Data.TaggedError(
   "SteamStateMutationFailed",

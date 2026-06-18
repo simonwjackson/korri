@@ -26,7 +26,7 @@ import { ryubingPlugin, ryubingReadableLaunchIntegration } from "./ryubing"
 import { smbxGamePlugin } from "./smbxgame"
 import { smwCentralPlugin } from "./smwcentral"
 import { srb2Plugin } from "./srb2"
-import { steamPlugin } from "./steam"
+import { steamPlugin, steamReadableLaunchIntegration } from "./steam"
 import { superMario127Plugin } from "./super-mario-127"
 import { superMarioBrosRemasteredPlugin } from "./super-mario-bros-remastered"
 import { yoshisFabricationStationPlugin } from "./yoshis-fabrication-station"
@@ -34,6 +34,7 @@ import { yoshisFabricationStationPlugin } from "./yoshis-fabrication-station"
 export const firstPartyLaunchIntegrations = [
   retroarchReadableLaunchIntegration,
   ryubingReadableLaunchIntegration,
+  steamReadableLaunchIntegration,
 ]
 
 export function firstPartyLaunchIntegrationsForRegistry(

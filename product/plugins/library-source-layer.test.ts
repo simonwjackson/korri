@@ -9,6 +9,11 @@ import {
   createPluginResourceFulfillerFromEnv,
   PluginLibrarySourceLayerLive,
 } from "./library-source-layer"
+import {
+  KORRI_STEAM_APP_ID,
+  KORRI_STEAM_PLUGIN_ID,
+  KORRI_STEAM_STORAGE_ID,
+} from "./steam"
 
 describe("PluginLibrarySourceLayerLive", () => {
   it("exposes the enabled Neverball plugin through the live library source", async () => {
@@ -297,6 +302,65 @@ describe("PluginLibrarySourceLayerLive", () => {
     }
   })
 
+  it("resolves enabled Steam AppID launches through the live plugin library source", async () => {
+    const previous = snapshotEnv()
+    const configRoot = await mktemp()
+    const steamRoot = await mktemp()
+    await seedSteamLaunchConfig(configRoot, steamRoot)
+    process.env.KORRI_CONFIG_ROOTS = configRoot
+    process.env.KORRI_ENABLED_PLUGINS = KORRI_STEAM_PLUGIN_ID
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const source = yield* LibrarySource
+          const canResolve = source.canResolveLaunchForGame
+            ? yield* source.canResolveLaunchForGame("thirty-xx")
+            : false
+          const resolved = yield* source.resolveLaunchForGame("thirty-xx")
+          return { canResolve, resolved }
+        }).pipe(Effect.provide(PluginLibrarySourceLayerLive)),
+      )
+
+      expect(result.canResolve).toBe(true)
+      expect(result.resolved.app).toEqual({
+        id: KORRI_STEAM_APP_ID,
+        integration: "steam",
+      })
+      expect(result.resolved.spec).toEqual({
+        command: "steam",
+        args: ["-applaunch", "1029210"],
+      })
+    } finally {
+      restoreEnv(previous)
+    }
+  })
+
+  it("fails closed for Steam AppID launches when the Steam plugin is disabled", async () => {
+    const previous = snapshotEnv()
+    const configRoot = await mktemp()
+    const steamRoot = await mktemp()
+    await seedSteamLaunchConfig(configRoot, steamRoot, { includeApp: true })
+    process.env.KORRI_CONFIG_ROOTS = configRoot
+    process.env.KORRI_ENABLED_PLUGINS = ""
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const source = yield* LibrarySource
+          const canResolve = source.canResolveLaunchForGame
+            ? yield* source.canResolveLaunchForGame("thirty-xx")
+            : true
+          const launchSpec = yield* source.launchSpecFor("thirty-xx")
+          return { canResolve, launchSpec }
+        }).pipe(Effect.provide(PluginLibrarySourceLayerLive)),
+      )
+
+      expect(result.canResolve).toBe(false)
+      expect(result.launchSpec).toBeUndefined()
+    } finally {
+      restoreEnv(previous)
+    }
+  })
+
   it("keeps launch resolution read-only even when a Nix command is configured", async () => {
     const previous = snapshotEnv()
     const stateRoot = await mktemp()
@@ -492,6 +556,45 @@ async function seedPsychoWaluigiExecutable(stateRoot: string): Promise<void> {
     binary: "psycho-waluigi",
     storeName: "store-psycho-waluigi",
   })
+}
+
+async function seedSteamLaunchConfig(
+  configRoot: string,
+  steamRoot: string,
+  options: { readonly includeApp?: boolean } = {},
+): Promise<void> {
+  await mkdir(configRoot, { recursive: true })
+  await mkdir(steamRoot, { recursive: true })
+  const appBlock = options.includeApp
+    ? [
+        "apps:",
+        `  "${KORRI_STEAM_APP_ID}":`,
+        `    kind: "${KORRI_STEAM_PLUGIN_ID}"`,
+        "    command: steam",
+        "    plugin:",
+        `      "${KORRI_STEAM_PLUGIN_ID}":`,
+        `        state: { root: "{storage:${KORRI_STEAM_STORAGE_ID}}/Steam" }`,
+      ]
+    : []
+  await Bun.write(
+    join(configRoot, "steam.korri.yaml"),
+    [
+      "storage:",
+      `  "${KORRI_STEAM_STORAGE_ID}":`,
+      `    root: ${JSON.stringify(steamRoot)}`,
+      ...appBlock,
+      "library:",
+      "  thirty-xx:",
+      "    title: 30XX",
+      "    releases:",
+      "      - id: steam",
+      "        system: steam",
+      "        target: steam://rungameid/1029210",
+      "        apps:",
+      `          - id: "${KORRI_STEAM_APP_ID}"`,
+      "",
+    ].join("\n"),
+  )
 }
 
 async function seedExecutableResource(input: {

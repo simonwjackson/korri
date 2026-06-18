@@ -286,6 +286,22 @@ describe("first-party plugins", () => {
           integration.integration === "retroarch",
       ),
     ).toBe(true)
+
+    const steamEnabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_STEAM_PLUGIN_ID,
+    })
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(disabled).some(
+        integration => integration.kind === KORRI_STEAM_PLUGIN_ID,
+      ),
+    ).toBe(false)
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(steamEnabled).some(
+        integration =>
+          integration.kind === KORRI_STEAM_PLUGIN_ID &&
+          integration.integration === "steam",
+      ),
+    ).toBe(true)
   })
 
   it("does not enable plugin capabilities unless composition opts in", () => {

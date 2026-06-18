@@ -1,4 +1,8 @@
 export {
+  materializeReadableSteamLaunch,
+  steamReadableLaunchIntegration,
+} from "./src/materializer"
+export {
   defaultSteamPluginPolicy,
   KORRI_STEAM_APP_ID,
   KORRI_STEAM_APP_LOCAL_ID,
