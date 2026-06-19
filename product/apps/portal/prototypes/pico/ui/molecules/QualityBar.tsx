@@ -4,6 +4,8 @@
  * A streaming-quality segmented bar with a tone + tag. Shared by the stream
  * overlay (GOOD) and the reconnecting screen (DROPPING).
  */
+const SEGMENTS = ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"] as const
+
 export function QualityBar({
   level,
   max = 5,
@@ -19,8 +21,8 @@ export function QualityBar({
     <div className="pcIg-quality">
       <span className="pcIg-quality-label">QUALITY</span>
       <span className={`pcIg-quality-bar ${tone}`}>
-        {Array.from({ length: max }, (_, index) => (
-          <i key={`seg-${index}`} className={index < level ? "on" : ""} />
+        {SEGMENTS.slice(0, max).map((seg, index) => (
+          <i key={seg} className={index < level ? "on" : ""} />
         ))}
       </span>
       <span className="pcIg-quality-tag">{tag}</span>
