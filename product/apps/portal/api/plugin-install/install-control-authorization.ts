@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto"
 import { ValidationError } from "@platform/api/rpc/errors"
 import { Context, Effect, Layer } from "effect"
 import { RpcMiddleware } from "effect/unstable/rpc"
@@ -25,9 +24,11 @@ export const InstallControlMiddlewareLive = Layer.succeed(
   InstallControlMiddleware,
 )(
   (effect, { headers }) =>
-    Effect.provideService(effect, CurrentInstallControl, {
-      authorized: installControlAuthorized(headers, process.env),
-    }),
+    Effect.flatMap(
+      Effect.promise(() => installControlAuthorized(headers, process.env)),
+      authorized =>
+        Effect.provideService(effect, CurrentInstallControl, { authorized }),
+    ),
 )
 
 export const requireInstallControl = Effect.gen(function* () {
@@ -39,10 +40,10 @@ export const requireInstallControl = Effect.gen(function* () {
   }
 })
 
-export function installControlAuthorized(
+export async function installControlAuthorized(
   headers: Readonly<Record<string, unknown>>,
   env: NodeJS.ProcessEnv,
-): boolean {
+): Promise<boolean> {
   const expected = installControlSecret(env)
   if (!expected) return false
   const direct = headerValue(headers, INSTALL_CONTROL_HEADER)
@@ -51,9 +52,9 @@ export function installControlAuthorized(
   if (auth?.startsWith("Bearer ") && constantTimeEqual(auth.slice(7), expected)) {
     return true
   }
-  return (
-    cookieValue(headerValue(headers, "cookie"), INSTALL_CONTROL_COOKIE) ===
-    installControlSessionToken(expected)
+  return constantTimeEqual(
+    cookieValue(headerValue(headers, "cookie"), INSTALL_CONTROL_COOKIE),
+    await installControlSessionToken(expected),
   )
 }
 
@@ -74,14 +75,30 @@ function isStrongInstallControlSecret(value: string): boolean {
   return classes >= 2
 }
 
-export function installControlCookie(secret: string): string {
-  return `${INSTALL_CONTROL_COOKIE}=${encodeURIComponent(installControlSessionToken(secret))}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400`
+export async function installControlCookie(secret: string): Promise<string> {
+  return `${INSTALL_CONTROL_COOKIE}=${encodeURIComponent(await installControlSessionToken(secret))}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400`
 }
 
-export function installControlSessionToken(secret: string): string {
-  return `v1.${createHmac("sha256", secret)
-    .update("korri-install-control-session")
-    .digest("base64url")}`
+export async function installControlSessionToken(secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  )
+  const signature = new Uint8Array(
+    await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode("korri-install-control-session"),
+    ),
+  )
+  return `v1.${bytesToHex(signature)}`
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("")
 }
 
 function headerValue(

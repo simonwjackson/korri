@@ -106,7 +106,7 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
       status: 200,
       headers: {
         "content-type": "application/json",
-        "set-cookie": installControlCookie(expected),
+        "set-cookie": await installControlCookie(expected),
       },
     })
   })
