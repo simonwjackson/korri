@@ -1,0 +1,3 @@
+# shellcheck shell=sh
+# Korri Box64 runtime environment fragment.
+export KORRI_BOX64_RUNTIME_BIN="@box64@/bin/box64"
