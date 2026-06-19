@@ -34,3 +34,7 @@ Completed a no-backwards-compat Korri readable-config and plugin-contract big-ba
   - Schema/game-assets/config-graph regression suite: 118 pass.
   - `nix build --impure .#checks.$system.zquest-classic-check --no-link`.
   - Full `bun test` no longer reports standardization/schema regressions; remaining failures are unrelated existing guardrail/environment tests (`nix` boundary, naming guardrails, mDNS bootstrap, local foreground adapter).
+- Post-rebase Steam proof preservation:
+  - Restored local-trunk `steam-guest-runtime-prep`/smoke proof so `srt-bwrap` direct-FEXs `${FEX_ROOTFS}/usr/bin/bwrap` via `/usr/bin/FEX` with `/run/current-system/sw/bin` prepended to `PATH`.
+  - Verified 30XX/`thirty-xx` still resolves through the Steam AppID path (`steam -applaunch 1029210`) in the Steam materializer and repository launch-resolution tests; no direct `30XX.exe` launch path was introduced.
+  - Verified Steam boundary tests still prevent generic platform/server code from importing Steam plugin internals.
