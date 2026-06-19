@@ -10,10 +10,11 @@
  * add a PicoScreen entry. Group css is side-effect-imported here so a new group
  * is wired in one place.
  */
-import type { ReactNode } from "react"
+import type { Screen } from "@tools/theme-workshop"
 import { picoGames } from "./fixtures"
 import { picoHero } from "./fixtures-extra"
 import * as Acquire from "./screens/AcquireScreens"
+import * as DataEffect from "./screens/DataEffectScreens"
 import * as Detail from "./screens/DetailScreens"
 import * as Future from "./screens/FutureScreens"
 import * as InGame from "./screens/InGameScreens"
@@ -31,6 +32,7 @@ import { VariantIconGrid } from "./VariantIconGrid"
 import { VariantInGame } from "./VariantInGame"
 import { VariantSettings } from "./VariantSettings"
 import "./screens/acquire.css"
+import "./screens/data.css"
 import "./screens/detail.css"
 import "./screens/future.css"
 import "./screens/ingame.css"
@@ -43,13 +45,8 @@ import "./screens/settings.css"
 import "./screens/showcase.css"
 import "./screens/system.css"
 
-export interface PicoScreen {
-  readonly id: string
-  readonly group: string
-  readonly name: string
-  readonly note?: string
-  readonly render: () => ReactNode
-}
+/** A pico screen is the kit's generic Screen; the alias keeps the local name. */
+export type PicoScreen = Screen
 
 /** Display order of the groups in the gallery. */
 export const PICO_GROUPS: readonly string[] = [
@@ -65,6 +62,7 @@ export const PICO_GROUPS: readonly string[] = [
   "Multiplayer",
   "System",
   "Future",
+  "Data",
 ]
 
 export const PICO_SCREENS: readonly PicoScreen[] = [
@@ -678,6 +676,15 @@ export const PICO_SCREENS: readonly PicoScreen[] = [
     group: "Future",
     name: "Featured / Game of the Day",
     render: () => <Future.FeaturedScreen />,
+  },
+
+  // ── Data (Effect v4 mount-without-mocking shape) ─────────────────────────
+  {
+    id: "data-effect",
+    group: "Data",
+    name: "Effect Layer Swap (Fixtures/Live)",
+    note: "v4 shape: same screen, swap the provided layer — no mocking",
+    render: () => <DataEffect.DataEffectScreen />,
   },
 ]
 
