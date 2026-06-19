@@ -27,7 +27,7 @@ const retroarch = () =>
   run(
     resolveAppDescriptor({
       appId: KORRI_RETROARCH_APP_ID,
-      apps: new Map([
+      readableLaunchers: new Map([
         [
           KORRI_RETROARCH_APP_ID,
           {

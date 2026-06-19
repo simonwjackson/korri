@@ -112,12 +112,12 @@ export const mergeAppLaunchCompanions = (
 
 export const resolveAppDescriptor = (input: {
   readonly appId: string
-  readonly apps: ReadonlyMap<string, AppRecord>
+  readonly readableLaunchers: ReadonlyMap<string, AppRecord>
   readonly launchers: ReadonlyMap<string, LauncherRecord>
 }): Effect.Effect<AppDescriptor, ResolutionError> =>
   Effect.gen(function* () {
     const builtIn = builtInApps[input.appId]
-    const appOverride = input.apps.get(input.appId)
+    const appOverride = input.readableLaunchers.get(input.appId)
     const legacyLauncher = input.launchers.get(input.appId)
 
     if (builtIn) {

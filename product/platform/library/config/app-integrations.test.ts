@@ -20,8 +20,8 @@ const runErrTag = <A, E>(eff: Effect.Effect<A, E>): string | undefined => {
   return result?.success?._tag
 }
 
-const appMap = (apps: readonly AppRecord[] = []) =>
-  new Map(apps.map(app => [app.id, app]))
+const readableLauncherMap = (readableLaunchers: readonly AppRecord[] = []) =>
+  new Map(readableLaunchers.map(launcher => [launcher.id, launcher]))
 const launcherMap = (launchers: readonly LauncherRecord[] = []) =>
   new Map(launchers.map(launcher => [launcher.id, launcher]))
 
@@ -32,7 +32,7 @@ describe("resolveAppDescriptor", () => {
       runErrTag(
         resolveAppDescriptor({
           appId: "steam",
-          apps: appMap(),
+          readableLaunchers: readableLauncherMap(),
           launchers: launcherMap(),
         }),
       ),
@@ -44,7 +44,7 @@ describe("resolveAppDescriptor", () => {
       runErrTag(
         resolveAppDescriptor({
           appId: "retroarch",
-          apps: appMap(),
+          readableLaunchers: readableLauncherMap(),
           launchers: launcherMap(),
         }),
       ),
@@ -55,7 +55,7 @@ describe("resolveAppDescriptor", () => {
     const app = run(
       resolveAppDescriptor({
         appId: "@korri:retroarch/retroarch",
-        apps: appMap([
+        readableLaunchers: readableLauncherMap([
           {
             id: "@korri:retroarch/retroarch",
             plugin: "@korri:retroarch",
@@ -75,7 +75,7 @@ describe("resolveAppDescriptor", () => {
     const app = run(
       resolveAppDescriptor({
         appId: "dolphin",
-        apps: appMap([
+        readableLaunchers: readableLauncherMap([
           {
             id: "dolphin",
             plugin: "dolphin",
@@ -94,7 +94,7 @@ describe("resolveAppDescriptor", () => {
     const app = run(
       resolveAppDescriptor({
         appId: "plugin-app",
-        apps: appMap([
+        readableLaunchers: readableLauncherMap([
           {
             id: "plugin-app",
             plugin: "plugin-app",
@@ -116,7 +116,7 @@ describe("resolveAppDescriptor", () => {
     const app = run(
       resolveAppDescriptor({
         appId: "@korri:steam/steam",
-        apps: appMap([
+        readableLaunchers: readableLauncherMap([
           {
             id: "@korri:steam/steam",
             plugin: "@korri:steam",
@@ -144,7 +144,7 @@ describe("resolveAppDescriptor", () => {
     const app = run(
       resolveAppDescriptor({
         appId: "my-runner",
-        apps: appMap([
+        readableLaunchers: readableLauncherMap([
           {
             id: "my-runner",
             command: "/usr/bin/my-runner",
@@ -164,7 +164,7 @@ describe("resolveAppDescriptor", () => {
       runErrTag(
         resolveAppDescriptor({
           appId: "my-runner",
-          apps: appMap([{ id: "my-runner", settings: { fullscreen: true } }]),
+          readableLaunchers: readableLauncherMap([{ id: "my-runner", settings: { fullscreen: true } }]),
           launchers: launcherMap(),
         }),
       ),
@@ -176,7 +176,7 @@ describe("resolveAppDescriptor", () => {
       runErrTag(
         resolveAppDescriptor({
           appId: "plugin-app",
-          apps: appMap([{ id: "plugin-app", plugin: "plugin-app" }]),
+          readableLaunchers: readableLauncherMap([{ id: "plugin-app", plugin: "plugin-app" }]),
           launchers: launcherMap(),
         }),
       ),
@@ -188,7 +188,7 @@ describe("resolveAppDescriptor", () => {
       runErrTag(
         resolveAppDescriptor({
           appId: "missing",
-          apps: appMap(),
+          readableLaunchers: readableLauncherMap(),
           launchers: launcherMap(),
         }),
       ),
@@ -207,7 +207,7 @@ describe("validateAppModuleCompatibility", () => {
     const retroarch = run(
       resolveAppDescriptor({
         appId: "@korri:retroarch/retroarch",
-        apps: appMap([
+        readableLaunchers: readableLauncherMap([
           {
             id: "@korri:retroarch/retroarch",
             plugin: "@korri:retroarch",
@@ -226,7 +226,7 @@ describe("validateAppModuleCompatibility", () => {
     const dolphin = run(
       resolveAppDescriptor({
         appId: "dolphin",
-        apps: appMap(),
+        readableLaunchers: readableLauncherMap(),
         launchers: launcherMap(),
       }),
     )

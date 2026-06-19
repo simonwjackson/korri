@@ -9,10 +9,10 @@ export function installMetadataForRelease(
   release: Pick<LibraryReleasePayload, "launch" | "target" | "system"> & {
     readonly id?: string
   },
-  apps: ReadonlyMap<string, AppRecord>,
+  readableLaunchers: ReadonlyMap<string, AppRecord>,
 ): ProviderInstallMetadata | undefined {
   const appId = release.launch?.use ?? release.launch?.plugin
-  const app = appId === undefined ? undefined : apps.get(appId)
+  const app = appId === undefined ? undefined : readableLaunchers.get(appId)
   const providerId = app === undefined ? release.launch?.plugin : appRecordKind(app)
   if (providerId !== STEAM_PROVIDER_ID) return undefined
   const steamAppId = steamAppIdFromTarget(release.target)

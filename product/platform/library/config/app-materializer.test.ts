@@ -16,7 +16,7 @@ const app = (id: string) =>
   Effect.runSync(
     resolveAppDescriptor({
       appId: id,
-      apps: new Map(),
+      readableLaunchers: new Map(),
       launchers: new Map(),
     }),
   )
@@ -118,7 +118,7 @@ describe("materializeAppLaunch", () => {
     const providerApp = Effect.runSync(
       resolveAppDescriptor({
         appId: "@example:host/app",
-        apps: new Map([
+        readableLaunchers: new Map([
           [
             "@example:host/app",
             {

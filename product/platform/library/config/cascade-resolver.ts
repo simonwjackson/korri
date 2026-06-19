@@ -88,7 +88,7 @@ export interface ConfigSnapshot {
   readonly users: ReadonlyMap<string, UserRecord>
   readonly systems: ReadonlyMap<string, SystemRecord>
   readonly launchers: ReadonlyMap<string, LauncherRecord>
-  readonly apps: ReadonlyMap<string, AppRecord>
+  readonly readableLaunchers: ReadonlyMap<string, AppRecord>
   readonly modules: ReadonlyMap<string, ModuleRecord>
   readonly games: ReadonlyMap<string, GameRecord>
   readonly collections: ReadonlyMap<string, CollectionRecord>
@@ -99,7 +99,7 @@ export const emptySnapshot = (): ConfigSnapshot => ({
   users: new Map(),
   systems: new Map(),
   launchers: new Map(),
-  apps: new Map(),
+  readableLaunchers: new Map(),
   modules: new Map(),
   games: new Map(),
   collections: new Map(),
@@ -627,7 +627,7 @@ export interface ReadableConfigSnapshot {
   readonly providerLinks?: ReadonlyMap<string, ProviderLinkRecord>
   /** @deprecated old source records are ignored by readable launch resolution. */
   readonly sources?: ReadonlyMap<string, unknown>
-  readonly apps: ReadonlyMap<string, AppRecord>
+  readonly readableLaunchers: ReadonlyMap<string, AppRecord>
   readonly runtimes: ReadonlyMap<string, RuntimeRecord>
   readonly profiles: ReadonlyMap<string, ProfileRecord>
   readonly storage: ReadonlyMap<string, StorageRecord>
@@ -764,11 +764,11 @@ const launchPolicyWithCompanions = (
 ): LaunchPolicy | undefined =>
   launchCompanions === undefined ? undefined : { with: launchCompanions }
 
-const resolveReadableAppRecord = (
+const resolveReadableLauncherRecord = (
   appId: string,
-  apps: ReadonlyMap<string, AppRecord>,
+  readableLaunchers: ReadonlyMap<string, AppRecord>,
 ): AppRecord | undefined => {
-  const override = apps.get(appId)
+  const override = readableLaunchers.get(appId)
   const builtIn = getBuiltInAppDescriptor(appId)
   if (builtIn === undefined) return override
   const launchCompanions = mergeAppLaunchCompanions(
@@ -1003,7 +1003,7 @@ export const resolveReadableLocalLauncherPolicy = (
   snapshot: ReadableConfigSnapshot,
   inputs: ResolveReadableLocalLauncherPolicyInputs,
 ): ResolvedLocalLauncherPolicy => {
-  const app = resolveReadableAppRecord(inputs.launcherId, snapshot.apps)
+  const app = resolveReadableLauncherRecord(inputs.launcherId, snapshot.readableLaunchers)
   const folded = mergeReadableLayers([
     snapshot.host ?? {},
     readableViewOfApp(app),
@@ -1072,7 +1072,7 @@ export const resolveReadableLaunchContext = (
         new ReleaseNotLaunchable({ releaseId: release.id }),
       )
     }
-    const app = resolveReadableAppRecord(appId, snapshot.apps)
+    const app = resolveReadableLauncherRecord(appId, snapshot.readableLaunchers)
     if (app === undefined) return yield* Effect.fail(new AppNotFound({ appId }))
     const runtimeId = release.launch?.runtime ?? app.runtime
     const runtime =

@@ -275,7 +275,7 @@ const snapshot = (item: LibraryItemRecord = sonic): ReadableConfigSnapshot => ({
   users: new Map([["simon", user]]),
   systems: new Map([["genesis", system]]),
   sources: new Map([["roms", source]]),
-  apps: new Map([["@korri:retroarch/retroarch", app]]),
+  readableLaunchers: new Map([["@korri:retroarch/retroarch", app]]),
   runtimes: new Map([["genesis-plus-gx", runtime]]),
   profiles: new Map([["handheld", profile]]),
   storage: new Map([["roms", storage]]),
@@ -304,7 +304,7 @@ const steamReadableSnapshot = (
   systems: new Map([["steam", { id: "steam" }]]),
   sources: new Map([["steam", { id: "steam", kind: ["service"] }]]),
   storage: new Map([[steamAppId, { id: steamAppId, root: "/state" }]]),
-  apps: input.app ? new Map([[input.app.id, input.app]]) : new Map(),
+  readableLaunchers: input.app ? new Map([[input.app.id, input.app]]) : new Map(),
   runtimes: new Map(),
   profiles: new Map(),
   library: new Map([
@@ -556,7 +556,7 @@ describe("resolveReadableLaunchContext", () => {
           sources: new Map([
             ["roms", { ...source, app: undefined, runtime: undefined }],
           ]),
-          apps: new Map([
+          readableLaunchers: new Map([
             ["@korri:retroarch/retroarch", app],
             ["plugin-app", pluginApp],
           ]),
@@ -658,7 +658,7 @@ describe("resolveReadableLaunchContext", () => {
       resolveReadableLaunchContext(
         {
           ...snapshot(),
-          apps: new Map([
+          readableLaunchers: new Map([
             [
               "@korri:retroarch/retroarch",
               {
@@ -720,7 +720,7 @@ describe("resolveReadableLaunchContext", () => {
               },
             ],
           ]),
-          apps: new Map([
+          readableLaunchers: new Map([
             ["@korri:retroarch/retroarch", { ...app, launch: undefined }],
           ]),
           runtimes: new Map(),
@@ -763,7 +763,7 @@ describe("resolveReadableLaunchContext", () => {
       resolveReadableLaunchContext(
         {
           ...snapshot(),
-          apps: new Map([
+          readableLaunchers: new Map([
             ["@korri:retroarch/retroarch", app],
             [steamAppId, steam],
           ]),
@@ -995,7 +995,7 @@ describe("resolveReadableLaunchContext", () => {
       resolveReadableLaunchContext(
         {
           ...snapshot(),
-          apps: new Map([
+          readableLaunchers: new Map([
             ["@korri:retroarch/retroarch", app],
             [steamAppId, steam],
           ]),

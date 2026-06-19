@@ -306,7 +306,7 @@ export function createLibraryRepository(
       loadReadableSnapshot(db, _options).pipe(
         Effect.map(snapshot =>
           derivePlayableEntries([...snapshot.library.values()]).map(entry =>
-            toPlayableLibraryEntry(entry, snapshot.apps, snapshot.systems),
+            toPlayableLibraryEntry(entry, snapshot.readableLaunchers, snapshot.systems),
           ),
         ),
         Effect.flatMap(entries =>
@@ -849,7 +849,7 @@ function legacyPlayableParts(id: string): {
 
 function toPlayableLibraryEntry(
   entry: PlayableEntry,
-  apps: ReadonlyMap<string, AppRecord> = new Map(),
+  readableLaunchers: ReadonlyMap<string, AppRecord> = new Map(),
   systems: ReadonlyMap<string, SystemRecord> = new Map(),
 ): PlayableLibraryEntry {
   const collections = entry.contained?.collections ?? entry.item.collections
@@ -860,7 +860,7 @@ function toPlayableLibraryEntry(
   const releases = entry.releases.map(release =>
     toPlayableReleaseEntry(
       release,
-      installMetadataForRelease(release, apps, systems),
+      installMetadataForRelease(release, readableLaunchers, systems),
     ),
   )
   return {
@@ -1020,7 +1020,7 @@ function loadReadableSnapshot(
       providers,
       providerLinks,
       storage,
-      apps,
+      persistedLaunchers,
       runtimes,
       profiles,
       library,
@@ -1054,7 +1054,7 @@ function loadReadableSnapshot(
       providers: mergeRecordMaps(plugin.providers, providers),
       providerLinks: new Map(providerLinks.map(record => [record.id, record])),
       storage: new Map(storage.map(record => [record.id, record])),
-      apps: mergeRecordMaps(plugin.launchers, apps),
+      readableLaunchers: mergeRecordMaps(plugin.launchers, persistedLaunchers),
       runtimes: mergeRecordMaps(plugin.runtimes, runtimes),
       profiles: new Map(profiles.map(record => [record.id, record])),
       library: new Map(library.map(record => [record.id, record])),
