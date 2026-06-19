@@ -133,7 +133,10 @@ export const picoConfig: ThemeWorkshopConfig = {
     stage: "pico-stage",
     screens: "pico-screens",
     bezel: "pico-bezel",
-    screen: "pico-screen",
+    // `intrinsic` makes @korri/intrinsic-design re-derive the token scale against
+    // this screen's own container; pico maps its knobs + aliases its --pico-*
+    // tokens onto it (see pico-prototype.css). The recipe is loaded by the host.
+    screen: "pico-screen intrinsic",
   },
   // pico's CSS variables + fonts are scoped under [data-pico]; the chrome is
   // fixed-position but stays a DOM descendant of the root, so they resolve.
