@@ -72,6 +72,18 @@ export interface PicoFriend {
   readonly playing: string | null
 }
 
+/** A player in a local/remote session (seat + readiness + controller kind). */
+export interface PicoPlayer {
+  readonly id: string
+  readonly name: string
+  readonly seat: 1 | 2 | 3 | 4
+  readonly status: "host" | "ready" | "joining" | "open"
+  readonly controller: "HANDHELD" | "GAMEPAD" | "PHONE" | "KEYBOARD"
+  /** Pixelized avatar art (reuses cover art as a stand-in). */
+  readonly avatar?: string
+  readonly you?: boolean
+}
+
 /** An achievement. */
 export interface PicoAchievement {
   readonly id: string
@@ -296,6 +308,35 @@ export const picoFriends: readonly PicoFriend[] = [
   { id: "f3", name: "8BITBEN", status: "online", playing: null },
   { id: "f4", name: "MEGAMARA", status: "away", playing: null },
   { id: "f5", name: "VECTORVIV", status: "offline", playing: null },
+]
+
+export const picoPlayers: readonly PicoPlayer[] = [
+  {
+    id: "p1",
+    name: "YOU",
+    seat: 1,
+    status: "host",
+    controller: "HANDHELD",
+    avatar: picoGames[12]?.art,
+    you: true,
+  },
+  {
+    id: "p2",
+    name: "PIXELPETE",
+    seat: 2,
+    status: "ready",
+    controller: "GAMEPAD",
+    avatar: picoGames[14]?.art,
+  },
+  {
+    id: "p3",
+    name: "8BITBEN",
+    seat: 3,
+    status: "joining",
+    controller: "PHONE",
+    avatar: picoGames[18]?.art,
+  },
+  { id: "p4", name: "OPEN", seat: 4, status: "open", controller: "KEYBOARD" },
 ]
 
 export const picoAchievements: readonly PicoAchievement[] = [
