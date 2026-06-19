@@ -22,5 +22,8 @@ describe("Steam plugin Nix module", () => {
       'korri-steam-guest -console +app_install "$appid"',
     )
     expect(moduleSource).toContain("KORRI_STEAM_APP_INSTALL_HELPER")
+    expect(moduleSource).toContain(
+      "systemd.user.services.korrid.environment.KORRI_STEAM_APP_INSTALL_HELPER",
+    )
   })
 })

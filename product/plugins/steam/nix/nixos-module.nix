@@ -901,6 +901,7 @@ in
     ];
 
     environment.sessionVariables.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
+    systemd.user.services.korrid.environment.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
 
     security.sudo.extraRules = [
       {
