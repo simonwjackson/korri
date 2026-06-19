@@ -7,10 +7,18 @@
  * is rolled out wider. Composed from screens/kit.tsx; motion lives in
  * screens/showcase.css (namespace pcShow-). Intrinsic tokens still rule: type
  * via --pico-text-*, art bounded by min(<cqh>, calc(var(--pico-base) * N)).
+ *
+ * Data comes from PicoLibrary via atoms (never a fixture import) — the screen
+ * reads `picoGamesAtom` / `picoShowcaseAtom` through `PicoData`.
  */
 import { useEffect, useState } from "react"
-import { picoGames, picoRecent } from "../fixtures"
+import {
+  picoGamesAtom,
+  picoShowcaseAtom,
+} from "../data/pico-library-atoms"
+import type { PicoGame } from "../fixtures"
 import { PicoArtImage } from "../PicoArtImage"
+import { PicoData } from "./PicoData"
 import { PicoCart, PicoIcon, Screen } from "./kit"
 
 /**
@@ -19,7 +27,19 @@ import { PicoCart, PicoIcon, Screen } from "./kit"
  * tag line. No list, no taxonomy.
  */
 export function SpotlightHomeScreen() {
-  const games = picoGames.slice(0, 8)
+  return (
+    <PicoData atom={picoGamesAtom} title="PICO ▸ SPOTLIGHT">
+      {games => <SpotlightBody allGames={games} />}
+    </PicoData>
+  )
+}
+
+function SpotlightBody({
+  allGames,
+}: {
+  readonly allGames: readonly PicoGame[]
+}) {
+  const games = allGames.slice(0, 8)
   const [index, setIndex] = useState(0)
   useEffect(() => {
     if (games.length === 0) return
@@ -29,7 +49,7 @@ export function SpotlightHomeScreen() {
     return () => clearInterval(timer)
   }, [games.length])
 
-  const hero = games[index] ?? picoGames[0]
+  const hero = games[index] ?? allGames[0]
   if (!hero) return null
   const played = hero.lastPlayedLabel !== null
 
@@ -100,44 +120,51 @@ export function SpotlightHomeScreen() {
  * replaces is "choose a system, then an A–Z list".
  */
 export function ForYouShelvesScreen() {
-  const anchor = picoRecent[0]?.title ?? picoGames[0]?.title ?? "YOUR GAMES"
-  const shelves = [
-    { title: "CONTINUE", games: picoRecent.slice(0, 6) },
-    {
-      title: `BECAUSE YOU PLAYED ${anchor.toUpperCase()}`,
-      games: picoGames.slice(2, 8),
-    },
-    { title: "FRESH DROPS", games: picoGames.slice(8, 14) },
-    { title: "PICK UP & PLAY", games: picoGames.slice(1, 7) },
-  ].filter(shelf => shelf.games.length > 0)
-
   return (
-    <Screen
-      title="PICO ▸ FOR YOU"
-      hints={[
-        { key: "a", label: "PLAY" },
-        { key: "y", label: "INFO" },
-        { key: "b", label: "BACK" },
-      ]}
-      className="pad-0"
-    >
-      <div className="pcShow-shelves">
-        {shelves.map((shelf, row) => (
-          <div className="pcShow-shelf" key={shelf.title}>
-            <div className="pcShow-shelf-title">{shelf.title}</div>
-            <div className="pcShow-shelf-row">
-              {shelf.games.map((game, col) => (
-                <div
-                  key={game.id}
-                  className={`pcShow-tile ${row === 0 && col === 0 ? "on" : ""}`}
-                >
-                  <PicoCart game={game} showFav={false} />
+    <PicoData atom={picoShowcaseAtom} title="PICO ▸ FOR YOU">
+      {({ games, recent }) => {
+        const anchor =
+          recent[0]?.title ?? games[0]?.title ?? "YOUR GAMES"
+        const shelves = [
+          { title: "CONTINUE", games: recent.slice(0, 6) },
+          {
+            title: `BECAUSE YOU PLAYED ${anchor.toUpperCase()}`,
+            games: games.slice(2, 8),
+          },
+          { title: "FRESH DROPS", games: games.slice(8, 14) },
+          { title: "PICK UP & PLAY", games: games.slice(1, 7) },
+        ].filter(shelf => shelf.games.length > 0)
+
+        return (
+          <Screen
+            title="PICO ▸ FOR YOU"
+            hints={[
+              { key: "a", label: "PLAY" },
+              { key: "y", label: "INFO" },
+              { key: "b", label: "BACK" },
+            ]}
+            className="pad-0"
+          >
+            <div className="pcShow-shelves">
+              {shelves.map((shelf, row) => (
+                <div className="pcShow-shelf" key={shelf.title}>
+                  <div className="pcShow-shelf-title">{shelf.title}</div>
+                  <div className="pcShow-shelf-row">
+                    {shelf.games.map((game, col) => (
+                      <div
+                        key={game.id}
+                        className={`pcShow-tile ${row === 0 && col === 0 ? "on" : ""}`}
+                      >
+                        <PicoCart game={game} showFav={false} />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
-        ))}
-      </div>
-    </Screen>
+          </Screen>
+        )
+      }}
+    </PicoData>
   )
 }

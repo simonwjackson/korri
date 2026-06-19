@@ -4,13 +4,19 @@
  * the Pixl mascot, a signature launch ritual (cartridge insert + CRT power-on),
  * an arcade attract mode, and a voiced boot POST. Self-contained so the rest of
  * the gallery stays stable; motion lives in screens/personality.css (pcPer-).
+ *
+ * Data comes from PicoLibrary via atoms (never a fixture import).
  */
 import type { CSSProperties } from "react"
 import { useState } from "react"
-import { picoGames } from "../fixtures"
-import { picoHero } from "../fixtures-extra"
+import {
+  picoGamesAtom,
+  picoHeroAtom,
+} from "../data/pico-library-atoms"
+import type { PicoGame } from "../fixtures"
 import { PicoMascot } from "../PicoMascot"
 import { sfx } from "../pico-sfx"
+import { PicoData } from "./PicoData"
 import { Dim, PicoCart, Screen, Sub, Title } from "./kit"
 
 /**
@@ -20,7 +26,19 @@ import { Dim, PicoCart, Screen, Sub, Title } from "./kit"
  * in context, not a museum exhibit.
  */
 export function ReactiveHomeScreen() {
-  const games = picoGames.slice(0, 5)
+  return (
+    <PicoData atom={picoGamesAtom} title="PICO ▸ HOME">
+      {games => <ReactiveHomeBody allGames={games} />}
+    </PicoData>
+  )
+}
+
+function ReactiveHomeBody({
+  allGames,
+}: {
+  readonly allGames: readonly PicoGame[]
+}) {
+  const games = allGames.slice(0, 5)
   const [focus, setFocus] = useState(2)
   const [launching, setLaunching] = useState(false)
   const hero = games[focus]
@@ -134,57 +152,72 @@ export function MascotScreen() {
 }
 
 export function LaunchRitualScreen() {
-  const game = picoHero ?? picoGames[0]
   return (
-    <Screen
-      title="PICO ▸ LAUNCH"
-      hints={[{ key: "b", label: "BACK" }]}
-      className="center"
-    >
-      <div className="pcPer-ritual">
-        <div className="pcPer-tube">
-          <div className="pcPer-slot" />
-          {game ? (
-            <div className="pcPer-cart">
-              <PicoCart game={game} showFav={false} />
-            </div>
-          ) : null}
-          <div className="pcPer-power">
-            <div className="pcPer-power-line" />
-            <div className="pcPer-power-game">
-              <div className="pcPer-power-title">NOW PLAYING</div>
-              <div className="pcPer-power-name">{game?.title ?? "GAME"}</div>
+    <PicoData atom={picoHeroAtom} title="PICO ▸ LAUNCH">
+      {game => (
+        <Screen
+          title="PICO ▸ LAUNCH"
+          hints={[{ key: "b", label: "BACK" }]}
+          className="center"
+        >
+          <div className="pcPer-ritual">
+            <div className="pcPer-tube">
+              <div className="pcPer-slot" />
+              {game ? (
+                <div className="pcPer-cart">
+                  <PicoCart game={game} showFav={false} />
+                </div>
+              ) : null}
+              <div className="pcPer-power">
+                <div className="pcPer-power-line" />
+                <div className="pcPer-power-game">
+                  <div className="pcPer-power-title">NOW PLAYING</div>
+                  <div className="pcPer-power-name">{game?.title ?? "GAME"}</div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-      <Dim>cartridge insert → CRT power-on</Dim>
-    </Screen>
+          <Dim>cartridge insert → CRT power-on</Dim>
+        </Screen>
+      )}
+    </PicoData>
   )
 }
 
 export function AttractModeScreen() {
-  const carts = picoGames.slice(0, 6)
   return (
-    <Screen title="PICO ▸ ATTRACT" hints={[{ key: "a", label: "PRESS START" }]}>
-      <div className="pcPer-attract">
-        <div className="pcPer-stars" />
-        <div className="pcPer-attract-mid">
-          <div className="pcPer-logo">PICO</div>
-          <div className="pcPer-attract-rail">
-            {[...carts, ...carts].map((game, index) => (
-              <div className="pcPer-attract-cart" key={`${game.id}-${index}`}>
-                <PicoCart game={game} showFav={false} />
+    <PicoData atom={picoGamesAtom} title="PICO ▸ ATTRACT">
+      {games => {
+        const carts = games.slice(0, 6)
+        return (
+          <Screen
+            title="PICO ▸ ATTRACT"
+            hints={[{ key: "a", label: "PRESS START" }]}
+          >
+            <div className="pcPer-attract">
+              <div className="pcPer-stars" />
+              <div className="pcPer-attract-mid">
+                <div className="pcPer-logo">PICO</div>
+                <div className="pcPer-attract-rail">
+                  {[...carts, ...carts].map((game, index) => (
+                    <div
+                      className="pcPer-attract-cart"
+                      key={`${game.id}-${index}`}
+                    >
+                      <PicoCart game={game} showFav={false} />
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-        <div className="pcPer-hiscore">
-          <span>HI-SCORE 999999</span>
-          <span className="pcPer-press">PRESS START</span>
-        </div>
-      </div>
-    </Screen>
+              <div className="pcPer-hiscore">
+                <span>HI-SCORE 999999</span>
+                <span className="pcPer-press">PRESS START</span>
+              </div>
+            </div>
+          </Screen>
+        )
+      }}
+    </PicoData>
   )
 }
 
