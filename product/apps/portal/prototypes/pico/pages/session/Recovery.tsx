@@ -1,0 +1,26 @@
+/**
+ * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Recovery (static).
+ */
+import { Badge, Hero } from "../../screens/kit"
+import { Icon } from "../../ui/atoms/Icon"
+import { ScreenShell } from "../../ui/templates/ScreenShell"
+
+export function Recovery() {
+  return (
+    <ScreenShell
+      title="PICO ▸ SESSION"
+      hints={[{ key: "b", label: "CANCEL" }]}
+      className="center"
+    >
+      <Hero
+        glyph={<Icon name="restart" />}
+        glyphTone="accent"
+        title="RECOVERING SESSION"
+        message="Tidying up after a rough exit — the last session crashed, so we're putting things back in order before another go."
+        spinner
+      >
+        <Badge tone="bad">FAILED → RECOVERING</Badge>
+      </Hero>
+    </ScreenShell>
+  )
+}
