@@ -19,7 +19,9 @@ export function getGranularity(): number {
 
 /** Step to the next granularity in the ring (used by the gallery control). */
 export function cycleGranularity(): number {
-  const index = GRANULARITIES.indexOf(granularity as (typeof GRANULARITIES)[number])
+  const index = GRANULARITIES.indexOf(
+    granularity as (typeof GRANULARITIES)[number],
+  )
   granularity = GRANULARITIES[(index + 1) % GRANULARITIES.length] ?? 72
   for (const notify of subscribers) notify()
   return granularity

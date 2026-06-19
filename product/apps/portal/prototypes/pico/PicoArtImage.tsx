@@ -7,8 +7,8 @@
  * it crisp via `image-rendering: pixelated`. Works on any same-origin / CORS art.
  */
 import { useEffect, useRef } from "react"
-import { quantizePico8 } from "./pico8-remap"
 import { useGranularity } from "./pico-settings"
+import { quantizePico8 } from "./pico8-remap"
 
 export function PicoArtImage({
   src,

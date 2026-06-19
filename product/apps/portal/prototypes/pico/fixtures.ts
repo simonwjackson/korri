@@ -89,7 +89,12 @@ const SPIKE: readonly {
   { art: lib05, title: "Cuphead", heroUrl: hero05, logoUrl: logo05 },
   { art: lib06, title: "Doom Eternal", heroUrl: hero06, logoUrl: logo06 },
   { art: lib07, title: "Disco Elysium", heroUrl: hero07, logoUrl: logo07 },
-  { art: lib08, title: "Hyper Light Drifter", heroUrl: hero08, logoUrl: logo08 },
+  {
+    art: lib08,
+    title: "Hyper Light Drifter",
+    heroUrl: hero08,
+    logoUrl: logo08,
+  },
   { art: lib09, title: "Dead Cells" },
   { art: lib10, title: "Ori and the Will of the Wisps" },
   { art: lib11, title: "Katana Zero" },
