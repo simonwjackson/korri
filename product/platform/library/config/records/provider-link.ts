@@ -45,17 +45,34 @@ const ProviderRefKind = Schema.Literals([
   "external-id",
 ])
 
+const ProviderRefScope = Schema.Literals(["playable", "release", "targetPart"])
+
 export const ProviderRef = Schema.Struct({
   kind: ProviderRefKind,
   value: SafeRefValue,
+  scope: Schema.optional(ProviderRefScope),
+  targetPart: Schema.optional(NonEmptyString),
 })
 export type ProviderRef = Schema.Schema.Type<typeof ProviderRef>
+
+const ProviderRefs = Schema.Array(ProviderRef).pipe(
+  Schema.check(
+    Schema.makeFilter((refs: readonly ProviderRef[]) =>
+      refs.length > 0
+        ? undefined
+        : {
+            path: ["refs"],
+            issue: "provider links must declare at least one ref",
+          },
+    ),
+  ),
+)
 
 export const ProviderLinkPayload = Schema.Struct({
   provider: ProviderId,
   playable: PlayableId,
   release: Schema.optional(NonEmptyString),
-  ref: ProviderRef,
+  refs: ProviderRefs,
 })
 export type ProviderLinkPayload = Schema.Schema.Type<typeof ProviderLinkPayload>
 

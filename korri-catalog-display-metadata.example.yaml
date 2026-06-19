@@ -64,41 +64,46 @@ provider-links:
     provider: "@korri:steam"
     playable: downwell
     release: windows
-    ref:
-      kind: external-id
-      value: "360740"
+    refs:
+      - kind: external-id
+        value: "360740"
+        scope: release
 
   sonic-roms:
     provider: "@korri:roms"
     playable: sonic-the-hedgehog
     release: genesis
-    ref:
-      kind: provider-item-id
-      value: genesis/Sonic The Hedgehog.md
+    refs:
+      - kind: provider-item-id
+        value: genesis/Sonic The Hedgehog.md
+        scope: release
 
   sonic-pcgamingwiki:
     provider: "@korri:pcgamingwiki"
     playable: sonic-the-hedgehog
     release: windows-known
-    ref:
-      kind: external-id
-      value: sonic-the-hedgehog
+    refs:
+      - kind: external-id
+        value: sonic-the-hedgehog
+        scope: release
 
   sonic-steam:
     provider: "@korri:steam"
     playable: sonic-the-hedgehog
     release: steam
-    ref:
-      kind: external-id
-      value: "71113"
+    refs:
+      - kind: external-id
+        value: "71113"
+        scope: release
 
   super-mario-advance-2-roms:
     provider: "@korri:roms"
     playable: super-mario-advance-2
     release: gba
-    ref:
-      kind: provider-item-id
-      value: gba/Super Mario Advance 2.gba
+    refs:
+      - kind: provider-item-id
+        value: gba/Super Mario Advance 2.gba
+        scope: release
 
 systems:
   windows:
