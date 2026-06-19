@@ -14,6 +14,10 @@ export const KORRI_RETROARCH_PSX_SYSTEM_ID = "psx" as const
 export const KORRI_RETROARCH_SMS_SYSTEM_ID = "sms" as const
 export const KORRI_RETROARCH_SNES_SYSTEM_ID = "snes" as const
 export const KORRI_RETROARCH_TG16_SYSTEM_ID = "tg16" as const
+export const KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID = "zxspectrum" as const
+export const KORRI_RETROARCH_FUSE_RUNTIME_LOCAL_ID = "fuse" as const
+export const KORRI_RETROARCH_FUSE_RUNTIME_ID =
+  `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_FUSE_RUNTIME_LOCAL_ID}` as const
 export const KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID = "mgba" as const
 export const KORRI_RETROARCH_MGBA_RUNTIME_ID =
   `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID}` as const
@@ -73,6 +77,16 @@ export const retroarchPlugin = plugin({
         },
       },
       systems: {
+        [KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID]: {
+          id: KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
+          title: "Sinclair ZX Spectrum",
+          apps: [
+            {
+              id: KORRI_RETROARCH_APP_ID,
+              runtime: KORRI_RETROARCH_FUSE_RUNTIME_ID,
+            },
+          ],
+        },
         [KORRI_RETROARCH_GBA_SYSTEM_ID]: {
           id: KORRI_RETROARCH_GBA_SYSTEM_ID,
           title: "Game Boy Advance",
@@ -175,6 +189,13 @@ export const retroarchPlugin = plugin({
         },
       },
       runtimes: {
+        [KORRI_RETROARCH_FUSE_RUNTIME_LOCAL_ID]: {
+          id: KORRI_RETROARCH_FUSE_RUNTIME_ID,
+          kind: "libretro-core",
+          app: KORRI_RETROARCH_APP_ID,
+          path: "/etc/korri/cores/fuse_libretro.so",
+          supports: { systems: [KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID] },
+        },
         [KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID]: {
           id: KORRI_RETROARCH_MGBA_RUNTIME_ID,
           kind: "libretro-core",

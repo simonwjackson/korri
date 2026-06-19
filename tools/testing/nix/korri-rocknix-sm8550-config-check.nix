@@ -222,6 +222,11 @@ let
       (check "${name}: PICO-8 fake-08 core is exposed at the stable launch path" (
         (cfg.environment.etc."korri/cores/fake08_libretro.so".source or null) == fake08CoreSource
       ))
+      (check "${name}: RetroArch Fuse core is exposed at the stable launch path" (
+        lib.hasSuffix "/lib/retroarch/cores/fuse_libretro.so" (
+          cfg.environment.etc."korri/cores/fuse_libretro.so".source or ""
+        )
+      ))
       (check "${name}: RetroArch mGBA core is exposed at the stable launch path" (
         lib.hasSuffix "/lib/retroarch/cores/mgba_libretro.so" (
           cfg.environment.etc."korri/cores/mgba_libretro.so".source or ""
@@ -268,14 +273,15 @@ let
         )
       ))
       (check
-        "${name}: compositor RetroArch closure contains mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes cores"
+        "${name}: compositor RetroArch closure contains Fuse, mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes cores"
         (
           let
             wrappers = findRetroarchWrappers compositor.path;
             cores = retroarchCoresFor compositor.path;
           in
           builtins.length wrappers == 1
-          && builtins.length cores == 9
+          && builtins.length cores == 10
+          && hasCore "fuse" cores
           && hasCore "mgba" cores
           && hasCore "mupen64plus-next" cores
           && hasCore "genesis-plus-gx" cores
@@ -288,7 +294,7 @@ let
         )
       )
       (check
-        "${name}: sessiond RetroArch closure contains mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes cores"
+        "${name}: sessiond RetroArch closure contains Fuse, mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes cores"
         (
           let
             sessiondPath = sessiondUnit.path or [ ];
@@ -296,7 +302,8 @@ let
             cores = retroarchCoresFor sessiondPath;
           in
           builtins.length wrappers == 1
-          && builtins.length cores == 9
+          && builtins.length cores == 10
+          && hasCore "fuse" cores
           && hasCore "mgba" cores
           && hasCore "mupen64plus-next" cores
           && hasCore "genesis-plus-gx" cores

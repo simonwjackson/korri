@@ -3,6 +3,7 @@ import { decodeAppRecord } from "@platform/library/config/records/app"
 import { decodeRuntimeRecord } from "@platform/library/config/records/runtime"
 import {
   KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_FUSE_RUNTIME_ID,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
   KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
   KORRI_RETROARCH_GENESIS_SYSTEM_ID,
@@ -22,6 +23,7 @@ import {
   KORRI_RETROARCH_SMS_SYSTEM_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
   KORRI_RETROARCH_TG16_SYSTEM_ID,
+  KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
   retroarchPlugin,
 } from ".."
@@ -38,6 +40,30 @@ describe("RetroArch plugin", () => {
       kind: KORRI_RETROARCH_PLUGIN_ID,
       command: "retroarch",
       plugin: { [KORRI_RETROARCH_PLUGIN_ID]: {} },
+    })
+  })
+
+  it("contributes Fuse as a RetroArch-owned ZX Spectrum runtime", () => {
+    expect(KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID).toBe("zxspectrum")
+    expect(KORRI_RETROARCH_FUSE_RUNTIME_ID).toBe("@korri:retroarch/fuse")
+    expect(
+      retroarchPlugin.contributes.config.systems?.zxspectrum,
+    ).toMatchObject({
+      id: KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
+      title: "Sinclair ZX Spectrum",
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_FUSE_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(retroarchPlugin.contributes.config.runtimes?.fuse).toMatchObject({
+      id: KORRI_RETROARCH_FUSE_RUNTIME_ID,
+      kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
+      path: "/etc/korri/cores/fuse_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID] },
     })
   })
 

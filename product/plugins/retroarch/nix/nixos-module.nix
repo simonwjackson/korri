@@ -39,6 +39,7 @@ let
     name = "korri-retroarch";
     paths = [
       retroarchBinary
+      pkgs.libretro.fuse
       pkgs.libretro.mgba
       pkgs.libretro.mupen64plus
       pkgs.libretro.genesis-plus-gx
@@ -51,6 +52,7 @@ let
     ];
     passthru = {
       cores = [
+        pkgs.libretro.fuse
         pkgs.libretro.mgba
         pkgs.libretro.mupen64plus
         pkgs.libretro.genesis-plus-gx
@@ -76,6 +78,8 @@ in
     nixpkgs.config.allowUnfreePredicate =
       pkg: builtins.elem (lib.getName pkg) [ "libretro-genesis-plus-gx" ];
 
+    environment.etc."korri/cores/fuse_libretro.so".source =
+      "${pkgs.libretro.fuse}/lib/retroarch/cores/fuse_libretro.so";
     environment.etc."korri/cores/mgba_libretro.so".source =
       "${pkgs.libretro.mgba}/lib/retroarch/cores/mgba_libretro.so";
     environment.etc."korri/cores/mupen64plus_next_libretro.so".source =

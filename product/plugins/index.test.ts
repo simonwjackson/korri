@@ -20,6 +20,7 @@ import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
+  KORRI_RETROARCH_FUSE_RUNTIME_ID,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
   KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
   KORRI_RETROARCH_GENESIS_SYSTEM_ID,
@@ -39,6 +40,7 @@ import {
   KORRI_RETROARCH_SMS_SYSTEM_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
   KORRI_RETROARCH_TG16_SYSTEM_ID,
+  KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
 } from "./retroarch"
 import { KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
 import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
@@ -141,12 +143,31 @@ describe("first-party plugins", () => {
     })
   })
 
-  it("enables RetroArch-owned GBA, Genesis, SMS, N64, NES, PC-98, PSP, PSX, SNES, TG16, and core runtimes when requested", () => {
+  it("enables RetroArch-owned ZX Spectrum, GBA, Genesis, SMS, N64, NES, PC-98, PSP, PSX, SNES, TG16, and core runtimes when requested", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,
     })
 
     expect(registry.apps[KORRI_RETROARCH_APP_ID]).toBeDefined()
+    expect(
+      registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/zxspectrum`],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_FUSE_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(
+      registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/fuse`],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_FUSE_RUNTIME_ID,
+      kind: "libretro-core",
+      path: "/etc/korri/cores/fuse_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID] },
+    })
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/gba`]).toMatchObject({
       id: KORRI_RETROARCH_GBA_SYSTEM_ID,
       apps: [
