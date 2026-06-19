@@ -14,10 +14,11 @@
     display.swayDeviceConfig = ''
       # Korri Sobo / AYN Odin 2 Portal display block (SM8550).
       # Portal exposes a single 1080x1920 DSI panel as DSI-1. The Korri
-      # appliance owns the user-facing orientation; keep this local so future
-      # installs do not depend on a substrate profile to set product posture.
+      # appliance owns the user-facing orientation. Transform 270 is the
+      # live-validated upright orientation; keep this local so future installs
+      # do not depend on a substrate profile to set product posture.
       output DSI-1 enable
-      output DSI-1 transform 90
+      output DSI-1 transform 270
       output DSI-1 pos 0 0
       output DSI-1 bg #000000 solid_color
       output DSI-1 allow_tearing yes

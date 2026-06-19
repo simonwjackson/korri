@@ -513,9 +513,9 @@ let
       products.thor.deviceProfile == ../../../product/systems/nixos/devices/rocknix/thor.nix
       && products.odin2portal.deviceProfile == ../../../product/systems/nixos/devices/rocknix/odin2portal.nix
     ))
-    (check "Sobo display orientation is owned by Korri and persists transform 90" (
-      lib.hasInfix "output DSI-1 transform 90" soboSystem.config.rocknix.sm8550.display.swayDeviceConfig
-      && !(lib.hasInfix "output DSI-1 transform 270" soboSystem.config.rocknix.sm8550.display.swayDeviceConfig)
+    (check "Sobo display orientation is owned by Korri and persists transform 270" (
+      lib.hasInfix "output DSI-1 transform 270" soboSystem.config.rocknix.sm8550.display.swayDeviceConfig
+      && !(lib.hasInfix "output DSI-1 transform 90" soboSystem.config.rocknix.sm8550.display.swayDeviceConfig)
     ))
     (check "SM8550 product payload branding patch is owned by Korri" (
       products.thor.brandingSplashPatch == ../../../product/systems/rocknix/branding/rocknix-splash-boot-logo.patch
