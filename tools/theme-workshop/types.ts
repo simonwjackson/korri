@@ -67,6 +67,50 @@ export interface WorkshopClassNames {
 /** Navigation cue kinds the Gallery emits so a theme can play sound, etc. */
 export type CueKind = "move" | "open" | "back" | "confirm" | "toggle"
 
+/**
+ * A declarative live control a theme drops into the gallery bar. The theme
+ * provides the knob + behavior (value + handler); the WORKSHOP renders it with
+ * neutral `wk-control-*` chrome, so controls look consistent across every theme
+ * (the inversion: theme declares, workshop fills the UI). Mirrors how the
+ * device-lab already renders generator knobs from `ThemeKnob` data.
+ */
+export type WorkshopControl =
+  | {
+      /** A value the theme advances on click (e.g. cycle a list). */
+      readonly kind: "cycle"
+      readonly id: string
+      readonly label?: string
+      readonly value: ReactNode
+      readonly onClick: () => void
+      readonly title?: string
+    }
+  | {
+      readonly kind: "toggle"
+      readonly id: string
+      readonly label: string
+      readonly value: boolean
+      readonly onChange: (next: boolean) => void
+      readonly title?: string
+    }
+  | {
+      readonly kind: "select"
+      readonly id: string
+      readonly label?: string
+      readonly value: string
+      readonly options: readonly {
+        readonly value: string
+        readonly label?: string
+      }[]
+      readonly onChange: (next: string) => void
+      readonly title?: string
+    }
+  | {
+      /** Escape hatch for a bespoke widget the kinds above can't express. */
+      readonly kind: "custom"
+      readonly id: string
+      readonly render: () => ReactNode
+    }
+
 /** Everything a theme contributes to mount the workshop. */
 export interface ThemeWorkshopConfig {
   /** Stable id; used as the device-lab localStorage namespace and root attr. */
@@ -86,7 +130,12 @@ export interface ThemeWorkshopConfig {
   /** Extra attributes merged onto the root wrapper (e.g. `{ "data-pico": true }`
    * so a theme's attribute-scoped CSS variables resolve for the chrome). */
   readonly rootProps?: Record<string, unknown>
-  /** Theme-specific live controls rendered inside the gallery bar (after MAP). */
+  /** Declarative live controls the workshop renders neutrally in the gallery bar
+   * (after MAP). A hook — the kit calls it inside the bar — so control `value`s
+   * can read the theme's reactive state. Preferred over `workshopControls`. */
+  readonly controls?: () => readonly WorkshopControl[]
+  /** @deprecated Escape hatch: a fully-built, theme-styled controls node. Prefer
+   * `controls` (declarative + neutral chrome). Rendered after `controls`. */
   readonly workshopControls?: ReactNode
   /** Called on each navigation cue; a theme can play SFX here (kit stays silent). */
   readonly onCue?: (kind: CueKind) => void

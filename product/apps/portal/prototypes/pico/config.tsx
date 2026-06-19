@@ -14,7 +14,7 @@ import type {
   ThemeWorkshopConfig,
 } from "@tools/theme-workshop"
 import { picoCue } from "./pico-cue"
-import { PicoWorkshopControls } from "./PicoWorkshopControls"
+import { usePicoControls } from "./pico-controls"
 import { PICO_GROUPS, PICO_SCREENS } from "./screen-catalog"
 import "./pico-prototype.css"
 
@@ -124,36 +124,20 @@ export const picoConfig: ThemeWorkshopConfig = {
   groups: PICO_GROUPS,
   // Pico's existing CSS drives the chrome; the kit emits these exact classes
   // so pico-prototype.css applies unchanged (no neutral wk-* fallback used).
+  // Pico skins only the CANVAS — the device-lab frame where its screens render
+  // (the `screen` class carries pico's container + token generators, and is also
+  // applied to wall cells, so it travels everywhere a pico screen renders). The
+  // navigator + montage CHROME (bar / map / wall) is left to the workshop's
+  // neutral `wk-*` design, so the workshop looks like the workshop, not pico.
   classNames: {
     stage: "pico-stage",
     screens: "pico-screens",
     bezel: "pico-bezel",
     screen: "pico-screen",
-    bar: "pico-gallerybar",
-    label: "pico-gallerybar-label",
-    count: "pico-gallerybar-count",
-    view: "pico-gallerybar-view",
-    mapToggle: "pico-gallerybar-map",
-    mapPanel: "pico-gallerymap",
-    mapHead: "pico-gallerymap-head",
-    mapBody: "pico-gallerymap-body",
-    mapGroup: "pico-gallerymap-group",
-    mapGroupTitle: "pico-gallerymap-gtitle",
-    mapItem: "pico-gallerymap-item",
-    wall: "pcWall",
-    wallGroup: "pcWall-group",
-    wallGroupTitle: "pcWall-gtitle",
-    wallGroupCount: "pcWall-gcount",
-    wallGrid: "pcWall-grid",
-    wallCell: "pcWall-cell",
-    wallFrame: "pcWall-frame",
-    wallScreen: "pcWall-screen",
-    wallHit: "pcWall-hit",
-    wallLabel: "pcWall-label",
   },
   // pico's CSS variables + fonts are scoped under [data-pico]; the chrome is
   // fixed-position but stays a DOM descendant of the root, so they resolve.
   rootProps: { "data-pico": true },
-  workshopControls: <PicoWorkshopControls />,
+  controls: usePicoControls,
   onCue: picoCue,
 }

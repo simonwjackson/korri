@@ -17,6 +17,7 @@ import { Gallery } from "./Gallery"
 import type { ThemeWorkshopConfig } from "./types"
 import { setViewMode, useViewMode } from "./view-store"
 import { Wall } from "./Wall"
+import { WorkshopControls } from "./WorkshopControls"
 
 export function ThemeWorkshop({
   config,
@@ -45,6 +46,15 @@ export function ThemeWorkshop({
   const cn = resolveClassNames(config.classNames)
   const screen =
     config.screens.find(s => s.id === currentId) ?? config.screens[0]
+
+  // Declarative controls (the kit renders them neutrally) take precedence; the
+  // legacy theme-styled node is the fallback escape hatch. config never changes
+  // for a mounted theme, so this branch is stable for hooks.
+  const controls = config.controls ? (
+    <WorkshopControls useControls={config.controls} />
+  ) : (
+    config.workshopControls
+  )
 
   return (
     <div data-theme={config.id} {...config.rootProps}>
@@ -79,7 +89,7 @@ export function ThemeWorkshop({
         current={currentId}
         onSelect={select}
         cn={cn}
-        controls={config.workshopControls}
+        controls={controls}
         onCue={config.onCue}
       />
     </div>

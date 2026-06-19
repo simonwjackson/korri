@@ -20,6 +20,7 @@
 export { Gallery } from "./Gallery"
 export { ThemeWorkshop } from "./ThemeWorkshop"
 export { Wall } from "./Wall"
+export { WorkshopControls } from "./WorkshopControls"
 export { cx, resolveClassNames } from "./classnames"
 export type { ResolvedClassNames } from "./classnames"
 export {
@@ -33,6 +34,7 @@ export type {
   Screen,
   ThemeWorkshopConfig,
   WorkshopClassNames,
+  WorkshopControl,
 } from "./types"
 export {
   getViewMode,

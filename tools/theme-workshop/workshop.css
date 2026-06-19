@@ -60,6 +60,47 @@
 	color: #888;
 }
 
+/* Theme-declared controls (kit renders them neutrally) -------------------- */
+.wk-control {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+	border: none;
+	background: #333;
+	color: #eee;
+	font:
+		12px / 1 ui-monospace,
+		monospace;
+	border-radius: 6px;
+	padding: 0 10px;
+}
+.wk-control:hover {
+	background: #3d3d3d;
+}
+.wk-control-label {
+	color: #888;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.wk-control-value {
+	color: #eee;
+}
+.wk-control-toggle.on {
+	background: #2cc55a;
+	color: #06120a;
+}
+.wk-control-toggle.on .wk-control-label {
+	color: #06120a;
+}
+.wk-control-select select {
+	background: #222;
+	color: #eee;
+	border: 1px solid #555;
+	border-radius: 4px;
+	font: inherit;
+}
+
 /* Jump map ---------------------------------------------------------------- */
 .wk-map {
 	position: fixed;
