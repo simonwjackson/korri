@@ -105,7 +105,7 @@
         ;
       rootfsPackage = self.packages.${system}.${product.rootfsPackageName};
       device = product.id;
-      inherit (product) compatible buildTarget;
+      inherit (product) compatible buildTarget brandingSplashPatch;
       authorityRepo = "simonwjackson/korri";
       sourceSubdir = ".";
       substrateRevision = nixOnRocksRevision;

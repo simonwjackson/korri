@@ -35,6 +35,13 @@ rec {
     overlay = import ../overlays/korri-x86-compositor.nix;
   };
 
+  # Korri-owned product device profiles. nix-on-rocks still supplies the
+  # product-neutral ROCKNIX guest substrate modules; these profiles carry the
+  # appliance identity and user-facing device posture.
+  rocknix-device-thor = ../devices/rocknix/thor.nix;
+  rocknix-device-odin2portal = ../devices/rocknix/odin2portal.nix;
+  rocknix-device-rg353m = ../devices/rocknix/rg353m.nix;
+
   korri-runtime = import ../modules/korri-runtime.nix;
   korri-setup = import ../modules/korri-setup.nix;
   # Per-platform opt-in: removable-media mounting + card-wins config-root

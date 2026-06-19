@@ -234,6 +234,7 @@ pkgs.lib.optionalAttrs isX86Linux {
             productShortRevision = fixtureShortRevision;
             productRevisionIsClean = true;
             substrateRevision = "fixture-nix-on-rocks";
+            inherit (product) brandingSplashPatch;
           };
         };
     in

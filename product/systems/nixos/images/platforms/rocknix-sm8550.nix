@@ -547,7 +547,7 @@ in
       };
 
     sway.extraConfig = ''
-      # ROCKNIX SM8550 display/session fragment supplied by nix-on-rocks.
+      # ROCKNIX SM8550 display/session fragment supplied by Korri's product device profile.
       seat * hide_cursor 1000
       default_border none
 

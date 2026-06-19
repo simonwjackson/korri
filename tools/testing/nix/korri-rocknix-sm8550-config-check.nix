@@ -509,8 +509,20 @@ let
   checks = [
     (check "SM8550 adapter does not hard-code substrate literals" sm8550PlatformAdapterFreeOfHardwareLiterals)
     (check "SM8550 adapter does not explicitly install substrate Steam" sm8550PlatformAdapterFreeOfSubstrateSteam)
+    (check "explicit SM8550 device profiles are owned by Korri" (
+      products.thor.deviceProfile == ../../../product/systems/nixos/devices/rocknix/thor.nix
+      && products.odin2portal.deviceProfile == ../../../product/systems/nixos/devices/rocknix/odin2portal.nix
+    ))
+    (check "Sobo display orientation is owned by Korri and persists transform 90" (
+      lib.hasInfix "output DSI-1 transform 90" soboSystem.config.rocknix.sm8550.display.swayDeviceConfig
+      && !(lib.hasInfix "output DSI-1 transform 270" soboSystem.config.rocknix.sm8550.display.swayDeviceConfig)
+    ))
+    (check "SM8550 product payload branding patch is owned by Korri" (
+      products.thor.brandingSplashPatch == ../../../product/systems/rocknix/branding/rocknix-splash-boot-logo.patch
+      && products.odin2portal.brandingSplashPatch == ../../../product/systems/rocknix/branding/rocknix-splash-boot-logo.patch
+    ))
   ]
-  ++ (checkSystem "Odin 2 Portal" thorSystem)
+  ++ (checkSystem "Thor" thorSystem)
   ++ (checkSystem "Sobo" soboSystem);
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;

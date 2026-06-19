@@ -10,11 +10,11 @@
   productShortRevision,
   productRevisionIsClean,
   substrateRevision,
+  brandingSplashPatch,
 }:
 
 let
   archiveName = "rocknix-guest-rootfs-${device}-${productShortRevision}.tar.zst";
-  brandingSplashPatch = ./branding/rocknix-splash-boot-logo.patch;
   brandingArchiveName = "rocknix-splash-branding-${device}-${productShortRevision}.patch";
   candidateLockPath = "nix-support/product-payload/candidate-product-payload.lock";
   manifestPath = "nix-support/product-payload/manifest.txt";
