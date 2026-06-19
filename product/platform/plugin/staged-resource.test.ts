@@ -1,19 +1,24 @@
 import { describe, expect, it } from "bun:test"
-import { chmod, mkdir, writeFile } from "node:fs/promises"
+import { chmod, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Cause, Effect } from "effect"
-import type { ExecutablePluginResource } from "."
+import type {
+  ExecutablePluginResource,
+  StagedPathExecutableFulfillment,
+} from "."
 import { createStagedExecutableResolver } from "./resources"
+
+const stagedFulfillment = {
+  provider: "staged-path",
+  root: "/games/3dsen",
+  binary: "3dSen.exe",
+} satisfies StagedPathExecutableFulfillment
 
 const resource: ExecutablePluginResource = {
   id: "3dsen",
   kind: "executable",
-  fulfill: {
-    provider: "staged-path",
-    root: "/games/3dsen",
-    binary: "3dSen.exe",
-  },
+  fulfill: stagedFulfillment,
 }
 
 describe("staged executable resources", () => {
@@ -28,7 +33,10 @@ describe("staged executable resources", () => {
       Effect.runPromise(
         resolver.resolveExecutable({
           pluginId: "@korri:3dsen",
-          resource: { ...resource, fulfill: { ...resource.fulfill, root } },
+          resource: {
+            ...resource,
+            fulfill: { ...stagedFulfillment, root },
+          },
         }),
       ),
     ).resolves.toEqual({
@@ -47,7 +55,10 @@ describe("staged executable resources", () => {
     const exit = await Effect.runPromiseExit(
       resolver.resolveExecutable({
         pluginId: "@korri:3dsen",
-        resource: { ...resource, fulfill: { ...resource.fulfill, root } },
+        resource: {
+          ...resource,
+          fulfill: { ...stagedFulfillment, root },
+        },
       }),
     )
 

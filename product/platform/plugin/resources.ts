@@ -148,6 +148,7 @@ export function fulfillNixOutLinkExecutable(input: {
       )
     }
 
+    const fulfill = input.resource.fulfill
     const link = outLinkPath(input.stateRoot, input.pluginId, input.resource.id)
     yield* Effect.tryPromise({
       try: () => mkdir(join(link, ".."), { recursive: true }),
@@ -163,7 +164,7 @@ export function fulfillNixOutLinkExecutable(input: {
       try: () =>
         input.runner.run(input.nixCommand, [
           "build",
-          input.resource.fulfill.installable,
+          fulfill.installable,
           "--out-link",
           link,
         ]),
@@ -203,11 +204,12 @@ export function resolveNixOutLinkExecutable(input: {
       }),
     )
   }
+  const fulfill = input.resource.fulfill
   const command = executablePath(
     input.stateRoot,
     input.pluginId,
     input.resource.id,
-    input.resource.fulfill.binary,
+    fulfill.binary,
   )
   return Effect.tryPromise({
     try: async () => {
@@ -269,7 +271,8 @@ export function resolveStagedExecutable(input: {
       }),
     )
   }
-  const command = join(input.resource.fulfill.root, input.resource.fulfill.binary)
+  const fulfill = input.resource.fulfill
+  const command = join(fulfill.root, fulfill.binary)
   return Effect.tryPromise({
     try: async () => {
       await access(command, constants.X_OK)
@@ -277,7 +280,7 @@ export function resolveStagedExecutable(input: {
         pluginId: input.pluginId,
         resourceId: input.resource.id,
         command,
-        cwd: input.resource.fulfill.root,
+        cwd: fulfill.root,
       }
     },
     catch: () =>
