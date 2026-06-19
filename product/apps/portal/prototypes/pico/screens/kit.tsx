@@ -21,10 +21,10 @@ import { PicoIcon } from "../PicoIcon"
 import { PicoMascot } from "../PicoMascot"
 import { PicoButtonBar, PicoStatusBar } from "../PicoStatusBar"
 
+export { PicoArtImage } from "../PicoArtImage"
 export { PicoCart } from "../PicoCart"
 export { PicoIcon } from "../PicoIcon"
 export { PicoMascot } from "../PicoMascot"
-export { PicoArtImage } from "../PicoArtImage"
 
 type Hint = { readonly key: "a" | "b" | "y"; readonly label: string }
 
