@@ -18,8 +18,9 @@ let
   gamescopeNix = import ../../../../plugins/gamescope/nix/platform-environments.nix { inherit pkgs; };
   gamescopePackage = korri.packages.${targetSystem}.gamescope-korri;
   ryubingPackage = korri.packages.${targetSystem}.ryubing-korri;
+  box64RuntimePackage = korri.packages.${targetSystem}.korri-box64-runtime or pkgs.box64;
   gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
-  enabledFirstPartyPlugins = "@korri:gamescope,@korri:neverball,@korri:retroarch,@korri:ryubing,@korri:steam,@korri:turnip";
+  enabledFirstPartyPlugins = "@korri:3dsen,@korri:box64-runtime,@korri:gamescope,@korri:neverball,@korri:retroarch,@korri:ryubing,@korri:steam,@korri:turnip";
   moonlightRuntimeSettingsEnvironment = {
     # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
     # These are intentionally enumerated and preserved as Moonlight process env
@@ -585,6 +586,7 @@ in
   services.korri.sessiond = {
     path = [
       gamescopePackage
+      box64RuntimePackage
       pkgs.moonlight-embedded
     ];
     extraEnvironment =
@@ -592,6 +594,13 @@ in
       // gamescopeControlEnvironment
       // {
         KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
+        # 3dSen's validated Linux path is x86_64 Unity -> Box64 -> native
+        # Turnip Vulkan -> Xwayland/Sway. Keep foreground children on the
+        # X11 backend by default; hosts whose Sway allocates a non-default
+        # Xwayland display can override this unit env without changing app
+        # policy or plugin composition.
+        DISPLAY = ":0";
+        GDK_BACKEND = "x11";
         PULSE_SERVER = korriPulseServer;
       };
   };
