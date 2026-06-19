@@ -59,6 +59,12 @@ import {
 } from "./steam"
 import { KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID } from "./super-mario-bros-remastered"
 import { KORRI_TURNIP_PLUGIN_ID, KORRI_TURNIP_WRAPPER_PACKAGE } from "./turnip"
+import {
+  KORRI_ZQUEST_CLASSIC_APP_ID,
+  KORRI_ZQUEST_CLASSIC_PACKAGE,
+  KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
+  KORRI_ZQUEST_CLASSIC_SYSTEM_ID,
+} from "./zquest-classic"
 
 describe("first-party plugins", () => {
   it("registers RetroArch as a first-party app host plugin", () => {
@@ -199,6 +205,43 @@ describe("first-party plugins", () => {
       kind: "graphics-driver",
       driver: "turnip",
       capabilities: ["graphics.vulkan"],
+    })
+  })
+
+  it("registers ZQuest Classic as a standalone .qst runtime plugin", () => {
+    const zquestClassic = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
+    )
+
+    expect(zquestClassic?.contributes.config.launchers?.zplayer).toMatchObject({
+      id: KORRI_ZQUEST_CLASSIC_APP_ID,
+      plugin: KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
+      command: "zplayer",
+      args: [
+        "-standalone",
+        "{content.path}",
+        "{playable.id}.sav",
+      ],
+      cwd: "/storage/saves/zquest-classic",
+      env: {
+        ZQUEST_CLASSIC_SAVE_FOLDER: "/storage/saves/zquest-classic",
+      },
+      policy: { allowedCommands: ["zplayer"] },
+    })
+    expect(
+      zquestClassic?.contributes.config.systems?.[KORRI_ZQUEST_CLASSIC_SYSTEM_ID],
+    ).toMatchObject({
+      id: KORRI_ZQUEST_CLASSIC_SYSTEM_ID,
+      title: "Zelda Classic Quest",
+    })
+    expect(
+      zquestClassic?.contributes.config.modules?.["zquest-classic-package"],
+    ).toMatchObject({
+      kind: "nix-package",
+      package: KORRI_ZQUEST_CLASSIC_PACKAGE,
+      path: "product/plugins/zquest-classic/packages/zquest-classic",
+      capabilities: ["package.expose", "launch.runtime"],
+      binaries: ["zplayer", "zlauncher"],
     })
   })
 

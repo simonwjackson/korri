@@ -1,0 +1,92 @@
+--- src/tiles.cpp	1969-12-31 17:00:01.000000000 -0700
++++ /tmp/zquest-patch-src/src/tiles.cpp	2026-06-18 21:45:25.009077793 -0600
+@@ -1,7 +1,9 @@
+ #include "zalleg/zalleg.h"
+ #include <cstring>
++#if !defined(__aarch64__)
+ #include <emmintrin.h>
+ #include <tmmintrin.h>
++#endif
+ 
+ #include "base/zc_math.h"
+ #include "core/zdefs.h"
+@@ -35,6 +37,7 @@
+ 
+ byte unpackbuf[256];
+ 
++#if !defined(__aarch64__)
+ static bool can_use_sse2()
+ {
+ 	return (cpu_capabilities & CPU_SSE2) != 0;
+@@ -44,6 +47,17 @@
+ {
+ 	return (cpu_capabilities & CPU_SSSE3) != 0;
+ }
++#else
++static bool can_use_sse2()
++{
++	return false;
++}
++
++static bool can_use_ssse3()
++{
++	return false;
++}
++#endif
+ 
+ extern bool is_in_scrolling_region();
+ 
+@@ -854,6 +868,7 @@
+     }
+ }
+ 
++#if !defined(__aarch64__)
+ static void draw_tile8_transparent_fast(BITMAP* dest, const byte* __restrict si, int32_t x, int32_t y, int32_t cset, int32_t flip)
+ {
+ 	bool h_flip = flip & 1;
+@@ -923,6 +938,9 @@
+ 		src_row += 16;
+ 	}
+ }
++#else
++static void draw_tile8_transparent_fast(BITMAP*, const byte*, int32_t, int32_t, int32_t, int32_t) {}
++#endif
+ 
+ // A (slow) function to handle any transparent tile8 draw.
+ static void draw_tile8_unified(BITMAP* dest, int cl, int ct, int cr, int cb, const byte* __restrict si, int32_t x, int32_t y, int32_t cset, int32_t flip)
+@@ -1000,6 +1018,7 @@
+ // Fast drawing for 16x16 tiles, given:
+ // - Tile is fully on screen (no clipping needed)
+ // - No transparency
++#if !defined(__aarch64__)
+ static void draw_tile16_opaque_fast(BITMAP* dest, const byte* __restrict si, int32_t x, int32_t y, int32_t cset, int32_t flip)
+ {
+ 	__m128i cset_vec = _mm_set1_epi8((char)cset);
+@@ -1040,6 +1059,9 @@
+ 		}
+ 	}
+ }
++#else
++static void draw_tile16_opaque_fast(BITMAP*, const byte*, int32_t, int32_t, int32_t, int32_t) {}
++#endif
+ 
+ static void draw_tile16_unified(BITMAP* dest, int cl, int ct, int cr, int cb, const byte* __restrict si, int32_t x, int32_t y, int32_t cset, int32_t flip, bool transparency)
+ {
+@@ -2592,6 +2614,7 @@
+ 	masked_stretch_blit(tmp,dest,0,0,16,16,x,y,dw,dh);
+ }
+ 
++#if !defined(__aarch64__)
+ static void draw_tile16_cs2_fast(BITMAP *dest, const byte *si, int32_t x, int32_t y, int32_t cset[], int32_t flip, bool over)
+ {
+ 	// Vertical flip.
+@@ -2660,6 +2683,9 @@
+ 		src_ptr += 16;
+ 	}
+ }
++#else
++static void draw_tile16_cs2_fast(BITMAP*, const byte*, int32_t, int32_t, int32_t[], int32_t, bool) {}
++#endif
+ 
+ static void draw_tile16_cs2_safe(BITMAP *dest, int cl, int ct, int cr, int cb, const byte *si, int32_t x, int32_t y, int32_t cset[], int32_t flip, bool over)
+ {
