@@ -35,6 +35,12 @@
 	--pico-accent: var(--p8-yellow);
 	--pico-focus: var(--p8-blue);
 
+	/* Player / seat colors (P1–P4) — distinct + readable on the navy body. */
+	--pico-p1: var(--p8-lime);
+	--pico-p2: var(--p8-blue);
+	--pico-p3: var(--p8-orange);
+	--pico-p4: var(--p8-pink);
+
 	/* Chrome (status/button bars): a deep navy from the same family as the body,
 	 * not pure black — so the bars read as part of the design, separated from the
 	 * lighter body navy by a cool blue-tinted edge rather than a warm slate one. */
@@ -1717,7 +1723,8 @@
 	height: 2.4em;
 }
 .pcMascot-body rect {
-	fill: var(--pico-accent);
+	/* recolorable per player: seat classes set --pico-mascot-body */
+	fill: var(--pico-mascot-body, var(--pico-accent));
 }
 .pcMascot-eyes {
 	transform-box: fill-box;
