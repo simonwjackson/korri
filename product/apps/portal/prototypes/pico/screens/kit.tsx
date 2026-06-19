@@ -15,11 +15,16 @@
  *  - All classes are scoped under [data-pico]; shared atoms use the `pc-` prefix.
  */
 import type { ReactNode } from "react"
+import type { PicoPlayer } from "../fixtures-extra"
+import { PicoArtImage } from "../PicoArtImage"
 import { PicoIcon } from "../PicoIcon"
+import { PicoMascot } from "../PicoMascot"
 import { PicoButtonBar, PicoStatusBar } from "../PicoStatusBar"
 
 export { PicoCart } from "../PicoCart"
 export { PicoIcon } from "../PicoIcon"
+export { PicoMascot } from "../PicoMascot"
+export { PicoArtImage } from "../PicoArtImage"
 
 type Hint = { readonly key: "a" | "b" | "y"; readonly label: string }
 
@@ -282,6 +287,54 @@ export function Glyph({
   readonly tone?: "accent" | "good" | "bad" | "info"
 }) {
   return <div className={`pc-glyph ${tone ?? ""}`}>{children}</div>
+}
+
+/** Player chip with a swappable representation. The four reps let us compare
+ * how players should read on screen (recolored Pixl / seat tag / avatar / pad). */
+export type PlayerRep = "mascot" | "tag" | "avatar" | "pad"
+
+const PLAYER_SUB: Record<PicoPlayer["status"], string> = {
+  host: "HOST",
+  ready: "READY",
+  joining: "JOINING…",
+  open: "PRESS START",
+}
+
+function playerMark(player: PicoPlayer, rep: PlayerRep): ReactNode {
+  if (player.status === "open") return <span className="pcPlayer-open">+</span>
+  if (rep === "tag") return <span className="pcPlayer-tag">P{player.seat}</span>
+  if (rep === "pad") return <PicoIcon name="pad" className="pcPlayer-pad" />
+  if (rep === "avatar") {
+    return player.avatar ? (
+      <PicoArtImage src={player.avatar} ratio={1} className="pcPlayer-av" />
+    ) : (
+      <span className="pcPlayer-tag">P{player.seat}</span>
+    )
+  }
+  return (
+    <PicoMascot
+      className="pcPlayer-pixl"
+      state={player.status === "ready" ? "happy" : "idle"}
+    />
+  )
+}
+
+export function Player({
+  player,
+  rep = "mascot",
+}: {
+  readonly player: PicoPlayer
+  readonly rep?: PlayerRep
+}) {
+  return (
+    <span className={`pcPlayer p${player.seat} ${player.status}`}>
+      <span className="pcPlayer-mark">{playerMark(player, rep)}</span>
+      <span className="pcPlayer-name">
+        {player.status === "open" ? "OPEN" : player.name}
+      </span>
+      <span className="pcPlayer-sub">{PLAYER_SUB[player.status]}</span>
+    </span>
+  )
 }
 
 /** Centered hero state: glyph + title + message + actions. Reused by most
