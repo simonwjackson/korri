@@ -409,12 +409,12 @@
 	width: auto;
 }
 .pcA-cart.side {
-	height: min(70%, 30cqh);
+	height: min(70%, 30cqh, calc(var(--pico-base) * 8));
 	opacity: 0.5;
 	filter: saturate(0.6);
 }
 .pcA-cart.hero {
-	height: min(100%, 42cqh);
+	height: min(100%, 42cqh, calc(var(--pico-base) * 12));
 	outline: 0.4688cqw solid var(--pico-focus);
 	outline-offset: 0.625cqw;
 	box-shadow: 0 0 0 0.9375cqw rgba(41, 173, 255, 0.25);
