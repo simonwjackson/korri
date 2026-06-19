@@ -11,6 +11,7 @@ export const KORRI_RETROARCH_NES_SYSTEM_ID = "nes" as const
 export const KORRI_RETROARCH_PC98_SYSTEM_ID = "pc98" as const
 export const KORRI_RETROARCH_PSP_SYSTEM_ID = "psp" as const
 export const KORRI_RETROARCH_PSX_SYSTEM_ID = "psx" as const
+export const KORRI_RETROARCH_SMS_SYSTEM_ID = "sms" as const
 export const KORRI_RETROARCH_SNES_SYSTEM_ID = "snes" as const
 export const KORRI_RETROARCH_TG16_SYSTEM_ID = "tg16" as const
 export const KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID = "mgba" as const
@@ -85,6 +86,16 @@ export const retroarchPlugin = plugin({
         [KORRI_RETROARCH_GENESIS_SYSTEM_ID]: {
           id: KORRI_RETROARCH_GENESIS_SYSTEM_ID,
           title: "Sega Genesis",
+          apps: [
+            {
+              id: KORRI_RETROARCH_APP_ID,
+              runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+            },
+          ],
+        },
+        [KORRI_RETROARCH_SMS_SYSTEM_ID]: {
+          id: KORRI_RETROARCH_SMS_SYSTEM_ID,
+          title: "Sega Master System",
           apps: [
             {
               id: KORRI_RETROARCH_APP_ID,
@@ -197,7 +208,12 @@ export const retroarchPlugin = plugin({
           kind: "libretro-core",
           app: KORRI_RETROARCH_APP_ID,
           path: "/etc/korri/cores/genesis_plus_gx_libretro.so",
-          supports: { systems: [KORRI_RETROARCH_GENESIS_SYSTEM_ID] },
+          supports: {
+            systems: [
+              KORRI_RETROARCH_GENESIS_SYSTEM_ID,
+              KORRI_RETROARCH_SMS_SYSTEM_ID,
+            ],
+          },
         },
         [KORRI_RETROARCH_NP2KAI_RUNTIME_LOCAL_ID]: {
           id: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,

@@ -36,6 +36,7 @@ import {
   KORRI_RETROARCH_PSP_SYSTEM_ID,
   KORRI_RETROARCH_PSX_SYSTEM_ID,
   KORRI_RETROARCH_PLUGIN_ID,
+  KORRI_RETROARCH_SMS_SYSTEM_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
   KORRI_RETROARCH_TG16_SYSTEM_ID,
 } from "./retroarch"
@@ -49,10 +50,7 @@ import {
   KORRI_STEAM_STORAGE_ID,
 } from "./steam"
 import { KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID } from "./super-mario-bros-remastered"
-import {
-  KORRI_TURNIP_PLUGIN_ID,
-  KORRI_TURNIP_WRAPPER_PACKAGE,
-} from "./turnip"
+import { KORRI_TURNIP_PLUGIN_ID, KORRI_TURNIP_WRAPPER_PACKAGE } from "./turnip"
 
 describe("first-party plugins", () => {
   it("registers RetroArch as a first-party app host plugin", () => {
@@ -134,14 +132,16 @@ describe("first-party plugins", () => {
       path: "product/plugins/turnip/packages/turnip-wrapper",
       capabilities: ["graphics.vulkan", "package.wrap"],
     })
-    expect(turnip?.contributes.config.runtimes?.["adreno-vulkan"]).toMatchObject({
+    expect(
+      turnip?.contributes.config.runtimes?.["adreno-vulkan"],
+    ).toMatchObject({
       kind: "graphics-driver",
       driver: "turnip",
       capabilities: ["graphics.vulkan"],
     })
   })
 
-  it("enables RetroArch-owned GBA, Genesis, N64, NES, PC-98, PSP, PSX, SNES, TG16, and core runtimes when requested", () => {
+  it("enables RetroArch-owned GBA, Genesis, SMS, N64, NES, PC-98, PSP, PSX, SNES, TG16, and core runtimes when requested", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,
     })
@@ -181,7 +181,21 @@ describe("first-party plugins", () => {
       id: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
       kind: "libretro-core",
       path: "/etc/korri/cores/genesis_plus_gx_libretro.so",
-      supports: { systems: [KORRI_RETROARCH_GENESIS_SYSTEM_ID] },
+      supports: {
+        systems: [
+          KORRI_RETROARCH_GENESIS_SYSTEM_ID,
+          KORRI_RETROARCH_SMS_SYSTEM_ID,
+        ],
+      },
+    })
+    expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/sms`]).toMatchObject({
+      id: KORRI_RETROARCH_SMS_SYSTEM_ID,
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+        },
+      ],
     })
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/n64`]).toMatchObject({
       id: KORRI_RETROARCH_N64_SYSTEM_ID,
@@ -200,17 +214,17 @@ describe("first-party plugins", () => {
       path: "/etc/korri/cores/mupen64plus_next_libretro.so",
       supports: { systems: [KORRI_RETROARCH_N64_SYSTEM_ID] },
     })
-    expect(
-      registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/tg16`],
-    ).toMatchObject({
-      id: KORRI_RETROARCH_TG16_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID,
-        },
-      ],
-    })
+    expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/tg16`]).toMatchObject(
+      {
+        id: KORRI_RETROARCH_TG16_SYSTEM_ID,
+        apps: [
+          {
+            id: KORRI_RETROARCH_APP_ID,
+            runtime: KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID,
+          },
+        ],
+      },
+    )
     expect(
       registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/mednafen-pce-fast`],
     ).toMatchObject({
@@ -236,17 +250,17 @@ describe("first-party plugins", () => {
       path: "/etc/korri/cores/mesen_libretro.so",
       supports: { systems: [KORRI_RETROARCH_NES_SYSTEM_ID] },
     })
-    expect(
-      registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/pc98`],
-    ).toMatchObject({
-      id: KORRI_RETROARCH_PC98_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
-        },
-      ],
-    })
+    expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/pc98`]).toMatchObject(
+      {
+        id: KORRI_RETROARCH_PC98_SYSTEM_ID,
+        apps: [
+          {
+            id: KORRI_RETROARCH_APP_ID,
+            runtime: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
+          },
+        ],
+      },
+    )
     expect(
       registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/np2kai`],
     ).toMatchObject({
@@ -289,17 +303,17 @@ describe("first-party plugins", () => {
       path: "/etc/korri/cores/pcsx_rearmed_libretro.so",
       supports: { systems: [KORRI_RETROARCH_PSX_SYSTEM_ID] },
     })
-    expect(
-      registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/snes`],
-    ).toMatchObject({
-      id: KORRI_RETROARCH_SNES_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_BSNES_RUNTIME_ID,
-        },
-      ],
-    })
+    expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/snes`]).toMatchObject(
+      {
+        id: KORRI_RETROARCH_SNES_SYSTEM_ID,
+        apps: [
+          {
+            id: KORRI_RETROARCH_APP_ID,
+            runtime: KORRI_RETROARCH_BSNES_RUNTIME_ID,
+          },
+        ],
+      },
+    )
     expect(
       registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/bsnes`],
     ).toMatchObject({

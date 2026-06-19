@@ -19,6 +19,7 @@ import {
   KORRI_RETROARCH_PSP_SYSTEM_ID,
   KORRI_RETROARCH_PSX_SYSTEM_ID,
   KORRI_RETROARCH_PLUGIN_ID,
+  KORRI_RETROARCH_SMS_SYSTEM_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
   KORRI_RETROARCH_TG16_SYSTEM_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
@@ -84,7 +85,40 @@ describe("RetroArch plugin", () => {
       kind: "libretro-core",
       app: KORRI_RETROARCH_APP_ID,
       path: "/etc/korri/cores/genesis_plus_gx_libretro.so",
-      supports: { systems: [KORRI_RETROARCH_GENESIS_SYSTEM_ID] },
+      supports: {
+        systems: [
+          KORRI_RETROARCH_GENESIS_SYSTEM_ID,
+          KORRI_RETROARCH_SMS_SYSTEM_ID,
+        ],
+      },
+    })
+  })
+
+  it("contributes Genesis Plus GX as a RetroArch-owned Master System runtime", () => {
+    expect(KORRI_RETROARCH_SMS_SYSTEM_ID).toBe("sms")
+    expect(retroarchPlugin.contributes.config.systems?.sms).toMatchObject({
+      id: KORRI_RETROARCH_SMS_SYSTEM_ID,
+      title: "Sega Master System",
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(
+      retroarchPlugin.contributes.config.runtimes?.["genesis-plus-gx"],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+      kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
+      path: "/etc/korri/cores/genesis_plus_gx_libretro.so",
+      supports: {
+        systems: [
+          KORRI_RETROARCH_GENESIS_SYSTEM_ID,
+          KORRI_RETROARCH_SMS_SYSTEM_ID,
+        ],
+      },
     })
   })
 
@@ -142,9 +176,7 @@ describe("RetroArch plugin", () => {
 
   it("contributes Mesen as a RetroArch-owned NES runtime", () => {
     expect(KORRI_RETROARCH_NES_SYSTEM_ID).toBe("nes")
-    expect(KORRI_RETROARCH_MESEN_RUNTIME_ID).toBe(
-      "@korri:retroarch/mesen",
-    )
+    expect(KORRI_RETROARCH_MESEN_RUNTIME_ID).toBe("@korri:retroarch/mesen")
     expect(retroarchPlugin.contributes.config.systems?.nes).toMatchObject({
       id: KORRI_RETROARCH_NES_SYSTEM_ID,
       title: "Nintendo Entertainment System",
@@ -166,9 +198,7 @@ describe("RetroArch plugin", () => {
 
   it("contributes NP2Kai as a RetroArch-owned PC-98 runtime", () => {
     expect(KORRI_RETROARCH_PC98_SYSTEM_ID).toBe("pc98")
-    expect(KORRI_RETROARCH_NP2KAI_RUNTIME_ID).toBe(
-      "@korri:retroarch/np2kai",
-    )
+    expect(KORRI_RETROARCH_NP2KAI_RUNTIME_ID).toBe("@korri:retroarch/np2kai")
     expect(retroarchPlugin.contributes.config.systems?.pc98).toMatchObject({
       id: KORRI_RETROARCH_PC98_SYSTEM_ID,
       title: "NEC PC-98",
@@ -190,9 +220,7 @@ describe("RetroArch plugin", () => {
 
   it("contributes PPSSPP as a RetroArch-owned PSP runtime", () => {
     expect(KORRI_RETROARCH_PSP_SYSTEM_ID).toBe("psp")
-    expect(KORRI_RETROARCH_PPSSPP_RUNTIME_ID).toBe(
-      "@korri:retroarch/ppsspp",
-    )
+    expect(KORRI_RETROARCH_PPSSPP_RUNTIME_ID).toBe("@korri:retroarch/ppsspp")
     expect(retroarchPlugin.contributes.config.systems?.psp).toMatchObject({
       id: KORRI_RETROARCH_PSP_SYSTEM_ID,
       title: "Sony PlayStation Portable",
@@ -240,9 +268,7 @@ describe("RetroArch plugin", () => {
 
   it("contributes bsnes as a RetroArch-owned SNES runtime", () => {
     expect(KORRI_RETROARCH_SNES_SYSTEM_ID).toBe("snes")
-    expect(KORRI_RETROARCH_BSNES_RUNTIME_ID).toBe(
-      "@korri:retroarch/bsnes",
-    )
+    expect(KORRI_RETROARCH_BSNES_RUNTIME_ID).toBe("@korri:retroarch/bsnes")
     expect(retroarchPlugin.contributes.config.systems?.snes).toMatchObject({
       id: KORRI_RETROARCH_SNES_SYSTEM_ID,
       title: "Super Nintendo Entertainment System",
