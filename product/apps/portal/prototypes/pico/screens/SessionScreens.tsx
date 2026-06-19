@@ -6,11 +6,12 @@
  * cooldown, recovery, crash. Composed from screens/kit.tsx; screen-specific
  * layout in screens/session.css (namespace pcSes-).
  */
+import { picoHeroAtom } from "../data/pico-library-atoms"
 import {
-  PICO_BOOT_STEPS,
-  PICO_FAILURE_KINDS,
-  picoHero,
-} from "../fixtures-extra"
+  picoBootStepsAtom,
+  picoFailureKindsAtom,
+} from "../data/pico-session-atoms"
+import { PicoData } from "./PicoData"
 import {
   Badge,
   Btn,
@@ -36,22 +37,26 @@ const BLOCK_REASONS: readonly {
 
 export function LaunchingScreen() {
   return (
-    <Screen
-      title="PICO ▸ LAUNCH"
-      hints={[{ key: "b", label: "CANCEL" }]}
-      className="center"
-    >
-      <div className="pcSes-launch">
-        <div className="pc-art">
-          <PicoCart game={picoHero} showFav={false} />
-        </div>
-        <Title size={1}>{picoHero.title}</Title>
-        <div className="pcSes-launch-status">
-          <Spinner />
-          <span className="pc-sub">SPINNING UP THE STREAM…</span>
-        </div>
-      </div>
-    </Screen>
+    <PicoData atom={picoHeroAtom} title="PICO ▸ LAUNCH">
+      {game => (
+        <Screen
+          title="PICO ▸ LAUNCH"
+          hints={[{ key: "b", label: "CANCEL" }]}
+          className="center"
+        >
+          <div className="pcSes-launch">
+            <div className="pc-art">
+              <PicoCart game={game} showFav={false} />
+            </div>
+            <Title size={1}>{game.title}</Title>
+            <div className="pcSes-launch-status">
+              <Spinner />
+              <span className="pc-sub">SPINNING UP THE STREAM…</span>
+            </div>
+          </div>
+        </Screen>
+      )}
+    </PicoData>
   )
 }
 
@@ -135,56 +140,64 @@ export function LaunchFailureScreen() {
           <PicoIcon name="restart" /> RETRY
         </Btn>
       </div>
-      <div className="pcSes-fail-list pc-fill">
-        {PICO_FAILURE_KINDS.map(failure => (
-          <span
-            key={failure.kind}
-            className={`pcSes-fail ${failure.kind === "moonlight-failed" ? "active" : ""}`}
-          >
-            <b className="pcSes-fail-title">{failure.title}</b>
-            <span className="pcSes-fail-detail">{failure.detail}</span>
-          </span>
-        ))}
-      </div>
+      <PicoData atom={picoFailureKindsAtom}>
+        {failureKinds => (
+          <div className="pcSes-fail-list pc-fill">
+            {failureKinds.map(failure => (
+              <span
+                key={failure.kind}
+                className={`pcSes-fail ${failure.kind === "moonlight-failed" ? "active" : ""}`}
+              >
+                <b className="pcSes-fail-title">{failure.title}</b>
+                <span className="pcSes-fail-detail">{failure.detail}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </PicoData>
     </Screen>
   )
 }
 
 export function BootSequenceScreen() {
   return (
-    <Screen
-      title="PICO ▸ SESSION"
-      hints={[{ key: "b", label: "CANCEL" }]}
-      className="center"
-    >
-      <div className="pcSes-boot">
-        <Title size={1}>WAKING THE SESSION</Title>
-        <ol className="pcSes-steps">
-          {PICO_BOOT_STEPS.map((step, index) => {
-            const state =
-              index < 2 ? "done" : index === 2 ? "active" : "pending"
-            return (
-              <li key={step} className={`pcSes-step ${state}`}>
-                <span className="pcSes-step-mark">
-                  {state === "done" ? (
-                    <PicoIcon name="check" />
-                  ) : state === "active" ? (
-                    <Spinner />
-                  ) : (
-                    "·"
-                  )}
-                </span>
-                <span className="pcSes-step-label">{step}</span>
-              </li>
-            )
-          })}
-        </ol>
-        <div className="pcSes-boot-bar">
-          <Progress pct={66} />
-          <div className="pc-dim">FOREGROUNDING · 2 / 4</div>
-        </div>
-      </div>
-    </Screen>
+    <PicoData atom={picoBootStepsAtom} title="PICO ▸ SESSION">
+      {bootSteps => (
+        <Screen
+          title="PICO ▸ SESSION"
+          hints={[{ key: "b", label: "CANCEL" }]}
+          className="center"
+        >
+          <div className="pcSes-boot">
+            <Title size={1}>WAKING THE SESSION</Title>
+            <ol className="pcSes-steps">
+              {bootSteps.map((step, index) => {
+                const state =
+                  index < 2 ? "done" : index === 2 ? "active" : "pending"
+                return (
+                  <li key={step} className={`pcSes-step ${state}`}>
+                    <span className="pcSes-step-mark">
+                      {state === "done" ? (
+                        <PicoIcon name="check" />
+                      ) : state === "active" ? (
+                        <Spinner />
+                      ) : (
+                        "·"
+                      )}
+                    </span>
+                    <span className="pcSes-step-label">{step}</span>
+                  </li>
+                )
+              })}
+            </ol>
+            <div className="pcSes-boot-bar">
+              <Progress pct={66} />
+              <div className="pc-dim">FOREGROUNDING · 2 / 4</div>
+            </div>
+          </div>
+        </Screen>
+      )}
+    </PicoData>
   )
 }
 
