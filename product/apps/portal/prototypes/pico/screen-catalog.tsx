@@ -19,6 +19,7 @@ import * as Future from "./screens/FutureScreens"
 import * as InGame from "./screens/InGameScreens"
 import * as Library from "./screens/LibraryScreens"
 import * as MultiDevice from "./screens/MultiDeviceScreens"
+import * as Multiplayer from "./screens/MultiplayerScreens"
 import * as Personality from "./screens/PersonalityScreens"
 import * as Session from "./screens/SessionScreens"
 import * as Settings from "./screens/SettingsScreens"
@@ -35,6 +36,7 @@ import "./screens/future.css"
 import "./screens/ingame.css"
 import "./screens/library.css"
 import "./screens/multidevice.css"
+import "./screens/multiplayer.css"
 import "./screens/personality.css"
 import "./screens/session.css"
 import "./screens/settings.css"
@@ -60,6 +62,7 @@ export const PICO_GROUPS: readonly string[] = [
   "In-Game",
   "Settings",
   "Multi-Device",
+  "Multiplayer",
   "System",
   "Future",
 ]
@@ -484,6 +487,97 @@ export const PICO_SCREENS: readonly PicoScreen[] = [
     group: "Multi-Device",
     name: "Pairing",
     render: () => <MultiDevice.PairingScreen />,
+  },
+
+  // ── Multiplayer (player-facing: lobby feels, player reps, hub + inline) ──
+  {
+    id: "mp-hub",
+    group: "Multiplayer",
+    name: "Players & Devices Hub",
+    note: "Art-forward hub (the 'where it lives' hub option)",
+    render: () => <Multiplayer.HubScreen />,
+  },
+  {
+    id: "mp-players",
+    group: "Multiplayer",
+    name: "Player Styles (compare)",
+    note: "All 4 player representations side by side",
+    render: () => <Multiplayer.PlayerStylesScreen />,
+  },
+  {
+    id: "mp-lobby-art",
+    group: "Multiplayer",
+    name: "Lobby · Art-Forward",
+    note: "Feel 1: big art, players quiet along the bottom",
+    render: () => <Multiplayer.LobbyArtScreen />,
+  },
+  {
+    id: "mp-lobby-crew",
+    group: "Multiplayer",
+    name: "Lobby · Crew (retro ritual)",
+    note: "Feel 2: playful 'gather your crew', Pixl-driven",
+    render: () => <Multiplayer.LobbyCrewScreen />,
+  },
+  {
+    id: "mp-countdown",
+    group: "Multiplayer",
+    name: "Lobby · Ready & Countdown",
+    render: () => <Multiplayer.CountdownScreen />,
+  },
+  {
+    id: "mp-nearby",
+    group: "Multiplayer",
+    name: "Nearby Devices (found)",
+    render: () => <Multiplayer.NearbyScreen />,
+  },
+  {
+    id: "mp-join",
+    group: "Multiplayer",
+    name: "Join by Code / QR",
+    render: () => <Multiplayer.JoinCodeScreen />,
+  },
+  {
+    id: "mp-invite",
+    group: "Multiplayer",
+    name: "Invite a Friend (remote)",
+    render: () => <Multiplayer.InviteScreen />,
+  },
+  {
+    id: "mp-joining",
+    group: "Multiplayer",
+    name: "Joining Session",
+    render: () => <Multiplayer.JoiningScreen />,
+  },
+  {
+    id: "mp-failed",
+    group: "Multiplayer",
+    name: "Couldn't Connect",
+    render: () => <Multiplayer.JoinFailedScreen />,
+  },
+  {
+    id: "mp-seats",
+    group: "Multiplayer",
+    name: "Seat & Controller Assign",
+    render: () => <Multiplayer.SeatAssignScreen />,
+  },
+  {
+    id: "mp-session",
+    group: "Multiplayer",
+    name: "In-Session Players HUD",
+    render: () => <Multiplayer.SessionHudScreen />,
+  },
+  {
+    id: "mp-toast",
+    group: "Multiplayer",
+    name: "Player Joined Toast",
+    render: () => <Multiplayer.PlayerToastScreen />,
+  },
+  {
+    id: "mp-inline",
+    group: "Multiplayer",
+    name: "Inline Seat Strip",
+    note: "The no-hub placement: persistent seat strip on home",
+    render: () => <Multiplayer.InlineStripScreen />,
   },
 
   // ── System ─────────────────────────────────────────────────────────────

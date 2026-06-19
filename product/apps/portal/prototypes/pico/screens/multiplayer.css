@@ -1,0 +1,682 @@
+/* PROTOTYPE — pico theme. Throwaway. Gallery group MULTIPLAYER (pcMp-) + the
+ * shared player chip (.pcPlayer). All sizing bounded-intrinsic: type via
+ * --pico-text-*, space via --pico-space-*, big art via min(<cqh>, base*N). */
+
+/* ── Player chip — swappable representation, seat-colored ──────────────────── */
+.pcPlayer {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.4em;
+	text-align: center;
+	--seat: var(--pico-accent);
+}
+.pcPlayer.p1 {
+	--seat: var(--pico-p1);
+	--pico-mascot-body: var(--pico-p1);
+}
+.pcPlayer.p2 {
+	--seat: var(--pico-p2);
+	--pico-mascot-body: var(--pico-p2);
+}
+.pcPlayer.p3 {
+	--seat: var(--pico-p3);
+	--pico-mascot-body: var(--pico-p3);
+}
+.pcPlayer.p4 {
+	--seat: var(--pico-p4);
+	--pico-mascot-body: var(--pico-p4);
+}
+.pcPlayer-mark {
+	display: grid;
+	place-items: center;
+	width: 3em;
+	height: 3em;
+}
+.pcPlayer-tag {
+	display: grid;
+	place-items: center;
+	width: 2.6em;
+	height: 2.6em;
+	background: var(--seat);
+	color: var(--p8-black);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--1);
+	box-shadow:
+		inset 0 0.16em 0 rgba(255, 255, 255, 0.45),
+		inset 0 -0.16em 0 rgba(0, 0, 0, 0.3);
+}
+.pcPlayer-av {
+	width: 2.9em;
+	height: 2.9em;
+	border: 0.16em solid var(--seat);
+}
+.pcPlayer-pad {
+	font-size: 2.4em;
+	color: var(--seat);
+}
+.pcPlayer-pixl .pcMascot-svg {
+	width: 3em;
+	height: 3em;
+}
+/* Seat recolor must beat the Pixl's mood-state body fills (.pcMascot-happy
+ * etc., specificity 0,2,1) so a "ready" player still shows its seat color. */
+.pcMascot.pcPlayer-pixl .pcMascot-body rect {
+	fill: var(--pico-mascot-body, var(--pico-accent));
+}
+.pcPlayer-open {
+	display: grid;
+	place-items: center;
+	width: 2.6em;
+	height: 2.6em;
+	border: 0.16em dashed var(--p8-slate);
+	color: var(--p8-slate);
+	font-family: var(--font-display);
+	font-size: var(--pico-text-0);
+}
+.pcPlayer-name {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink);
+	white-space: nowrap;
+}
+.pcPlayer-sub {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink-dim);
+	letter-spacing: 0.04em;
+}
+.pcPlayer.ready .pcPlayer-sub {
+	color: var(--p8-lime);
+}
+.pcPlayer.host .pcPlayer-sub {
+	color: var(--pico-accent);
+}
+.pcPlayer.joining .pcPlayer-sub {
+	color: var(--p8-blue);
+	animation: pcMp-blink 0.8s steps(2) infinite;
+}
+.pcPlayer.open {
+	opacity: 0.7;
+}
+.pcPlayer.open .pcPlayer-name,
+.pcPlayer.open .pcPlayer-sub {
+	color: var(--p8-slate);
+}
+.pcPlayer.open .pcPlayer-sub {
+	animation: pcMp-blink 0.7s steps(2) infinite;
+}
+
+@keyframes pcMp-blink {
+	0%,
+	55% {
+		opacity: 1;
+	}
+	55.01%,
+	100% {
+		opacity: 0.25;
+	}
+}
+
+/* Shared bits ------------------------------------------------------------- */
+.pcMp-row {
+	display: flex;
+	gap: var(--pico-space-3);
+	flex-wrap: wrap;
+	align-items: flex-start;
+}
+.pcMp-backdrop {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	opacity: 0.32;
+	z-index: 0;
+}
+/* Presence dot. */
+.pcMp-pres {
+	width: 0.7em;
+	height: 0.7em;
+	flex: 0 0 auto;
+	background: var(--p8-slate);
+}
+.pcMp-pres.playing {
+	background: var(--p8-lime);
+}
+.pcMp-pres.online {
+	background: var(--p8-blue);
+}
+.pcMp-pres.away {
+	background: var(--pico-accent);
+}
+
+/* ── Hub ──────────────────────────────────────────────────────────────────── */
+.pcMp-hub {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-2);
+}
+.pcMp-hub-session {
+	display: flex;
+	gap: var(--pico-space-3);
+	align-items: center;
+}
+.pcMp-hub-art {
+	width: min(26cqh, calc(var(--pico-base) * 9));
+	height: auto;
+	flex: 0 0 auto;
+	border: 0.18em solid var(--pico-chrome-edge);
+}
+.pcMp-hub-session-info {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	align-items: flex-start;
+}
+.pcMp-hub-cols {
+	display: flex;
+	gap: var(--pico-space-2);
+}
+.pcMp-hub-card {
+	flex: 1 1 0;
+	min-width: 0;
+}
+.pcMp-hub-seat {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-1) 0;
+}
+.pcMp-friend {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-1) 0;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+}
+.pcMp-friend-name {
+	color: var(--pico-ink);
+}
+
+/* ── Player Styles (comparison) ───────────────────────────────────────────── */
+.pcMp-styles {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-2);
+}
+.pcMp-styles-row {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	padding-bottom: var(--pico-space-2);
+	border-bottom: 0.14em solid var(--pico-chrome-edge);
+}
+.pcMp-styles-label {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-accent);
+	letter-spacing: 0.1em;
+}
+
+/* ── Lobby · Art-forward ──────────────────────────────────────────────────── */
+.pcMp-lobbyA {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-3);
+	overflow: hidden;
+}
+.pcMp-lobbyA-head {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcMp-logo {
+	align-self: flex-start;
+	width: auto;
+	max-width: 80%;
+	height: min(16cqh, calc(var(--pico-base) * 6));
+	object-fit: contain;
+	object-position: left center;
+	image-rendering: pixelated;
+	filter: drop-shadow(0.4688cqw 0.4688cqw 0 rgba(0, 0, 0, 0.6));
+}
+.pcMp-lobbyA-seats {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	gap: var(--pico-space-4);
+	justify-content: center;
+	padding: var(--pico-space-2);
+	background: color-mix(in srgb, var(--pico-chrome) 80%, transparent);
+	border: 0.14em solid var(--pico-chrome-edge);
+}
+
+/* ── Lobby · Crew (retro ritual) ──────────────────────────────────────────── */
+.pcMp-crew {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-2);
+	background: repeating-linear-gradient(
+		90deg,
+		rgba(41, 173, 255, 0.07) 0 4cqw,
+		transparent 4cqw 8cqw
+	);
+}
+.pcMp-crew-marquee {
+	overflow: hidden;
+	white-space: nowrap;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--1);
+	color: var(--pico-accent);
+	text-align: center;
+	animation: pcMp-blink 1s steps(2) infinite;
+}
+.pcMp-crew-slots {
+	flex: 1 1 auto;
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: var(--pico-space-2);
+	align-items: stretch;
+}
+.pcMp-crew-slot {
+	display: grid;
+	place-items: center;
+	padding: var(--pico-space-2);
+	border: 0.25em solid var(--seat, var(--p8-slate));
+	background: var(--pico-panel);
+	box-shadow: inset 0 0 0 0.18em rgba(0, 0, 0, 0.5);
+}
+.pcMp-crew-slot.open {
+	border-style: dashed;
+	border-color: var(--p8-slate);
+}
+.pcMp-crew-slot.joining {
+	animation: pcMp-pop 0.5s steps(4) infinite alternate;
+}
+.pcMp-crew-foot {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--pico-space-1);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink-dim);
+}
+@keyframes pcMp-pop {
+	from {
+		transform: translateY(0);
+	}
+	to {
+		transform: translateY(-0.6em);
+	}
+}
+
+/* ── Countdown ────────────────────────────────────────────────────────────── */
+.pcMp-count {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--pico-space-2);
+	overflow: hidden;
+	text-align: center;
+}
+.pcMp-count-num {
+	position: relative;
+	z-index: 1;
+	font-family: var(--font-display);
+	font-size: min(40cqh, calc(var(--pico-base) * 14));
+	color: var(--pico-accent);
+	line-height: 1;
+	text-shadow: 0.9375cqw 0.9375cqw 0 var(--p8-red);
+	animation: pcMp-pop 0.5s steps(3) infinite alternate;
+}
+.pcMp-count-row {
+	position: relative;
+	z-index: 1;
+	justify-content: center;
+}
+
+/* ── Nearby devices ───────────────────────────────────────────────────────── */
+.pcMp-nearby-head {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-2) var(--pico-space-2) 0;
+}
+.pcMp-nearby {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(38cqw, 14em), 1fr));
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-2);
+}
+.pcMp-dev {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-1);
+	text-align: center;
+}
+.pcMp-dev.sel {
+	outline: 0.3125cqw solid var(--pico-focus);
+	outline-offset: 0.3125cqw;
+}
+.pcMp-dev.far {
+	opacity: 0.55;
+}
+.pcMp-dev-name {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink);
+}
+
+/* ── Join by code / QR ────────────────────────────────────────────────────── */
+.pcMp-join {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-4);
+	flex-wrap: wrap;
+	justify-content: center;
+}
+.pcMp-qr {
+	display: flex;
+	flex-direction: column;
+	padding: 0.5em;
+	background: var(--p8-white);
+	width: min(36cqh, calc(var(--pico-base) * 12));
+	height: min(36cqh, calc(var(--pico-base) * 12));
+}
+.pcMp-qr-row {
+	display: flex;
+	flex: 1 1 0;
+}
+.pcMp-qr-row span {
+	flex: 1 1 0;
+}
+.pcMp-qr-row span.on {
+	background: var(--p8-black);
+}
+.pcMp-join-side {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	align-items: flex-start;
+}
+.pcMp-code {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-1);
+	color: var(--pico-accent);
+	letter-spacing: 0.12em;
+	padding: var(--pico-space-1) var(--pico-space-2);
+	border: 0.18em solid var(--pico-chrome-edge);
+}
+
+/* ── Invite friends ───────────────────────────────────────────────────────── */
+.pcMp-invite {
+	display: flex;
+	flex-direction: column;
+	padding: var(--pico-space-2);
+}
+.pcMp-invite-row {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+}
+.pcMp-invite-row.sel {
+	background: var(--pico-focus);
+	color: var(--p8-black);
+}
+.pcMp-invite-row.sel .pc-dim {
+	color: var(--p8-black);
+}
+.pcMp-invite-row.off {
+	opacity: 0.5;
+}
+.pcMp-invite-name {
+	color: inherit;
+	flex: 1 1 auto;
+}
+.pcMp-invite-cta {
+	color: var(--p8-lime);
+}
+.pcMp-invite-row.sel .pcMp-invite-cta {
+	color: var(--p8-black);
+}
+.pcMp-invite-cta.off {
+	color: var(--p8-slate);
+}
+
+/* ── Joining / steps ──────────────────────────────────────────────────────── */
+.pcMp-joining {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-2);
+	text-align: center;
+}
+.pcMp-joining-art {
+	width: min(24cqh, calc(var(--pico-base) * 8));
+	aspect-ratio: 3 / 4;
+}
+.pcMp-steps {
+	display: flex;
+	gap: var(--pico-space-1);
+	flex-wrap: wrap;
+	justify-content: center;
+}
+.pcMp-step {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	color: var(--pico-ink-dim);
+	border: 0.14em solid var(--pico-chrome-edge);
+}
+.pcMp-step.done {
+	color: var(--p8-black);
+	background: var(--p8-lime);
+	border-color: var(--p8-lime);
+}
+.pcMp-step.active {
+	color: var(--p8-black);
+	background: var(--pico-accent);
+	border-color: var(--pico-accent);
+	animation: pcMp-blink 0.7s steps(2) infinite;
+}
+
+/* ── Join failed ──────────────────────────────────────────────────────────── */
+.pcMp-failed {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-2);
+	text-align: center;
+}
+.pcMp-failed-actions {
+	display: flex;
+	gap: var(--pico-space-2);
+}
+
+/* ── Seat assignment ──────────────────────────────────────────────────────── */
+.pcMp-assign {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-2);
+}
+.pcMp-assign-row {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-3);
+	border-left: 0.4em solid var(--seat, var(--p8-slate));
+}
+.pcMp-assign-seat {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-0);
+	color: var(--seat);
+}
+.pcMp-assign-ctrl {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--pico-space-1);
+	margin-left: auto;
+	font-size: var(--pico-text-0);
+	color: var(--pico-ink-dim);
+}
+.pcMp-assign-act {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-accent);
+}
+
+/* ── In-session HUD ───────────────────────────────────────────────────────── */
+.pcMp-session {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	padding: var(--pico-space-2);
+	overflow: hidden;
+}
+.pcMp-session-grid {
+	position: relative;
+	z-index: 1;
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: var(--pico-space-2);
+}
+.pcMp-hud {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	background: color-mix(in srgb, var(--pico-chrome) 78%, transparent);
+	border-left: 0.4em solid var(--seat, var(--p8-slate));
+}
+.pcMp-hud-lives {
+	color: var(--p8-red);
+	font-size: var(--pico-text--1);
+}
+.pcMp-hud-sig {
+	margin-left: auto;
+	color: var(--p8-lime);
+}
+.pcMp-session-foot {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+}
+
+/* ── Player toast ─────────────────────────────────────────────────────────── */
+.pcMp-toastwrap {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+.pcMp-toast {
+	position: absolute;
+	z-index: 1;
+	right: var(--pico-space-3);
+	bottom: var(--pico-space-3);
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-2);
+	background: var(--pico-panel);
+	border: 0.18em solid var(--seat, var(--pico-accent));
+	border-left-width: 0.5em;
+	animation: pcMp-slidein 0.4s steps(5) both;
+}
+.pcMp-toast-text {
+	display: flex;
+	flex-direction: column;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+}
+.pcMp-toast-text b {
+	color: var(--seat);
+}
+.pcMp-toast-text span {
+	color: var(--pico-ink-dim);
+}
+@keyframes pcMp-slidein {
+	from {
+		opacity: 0;
+		transform: translateX(8cqw);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+/* ── Inline seat strip ────────────────────────────────────────────────────── */
+.pcMp-inline {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-2);
+}
+.pcMp-inline-rail {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	min-height: 0;
+	overflow: hidden;
+}
+.pcMp-inline-cart {
+	flex: 0 0 auto;
+	aspect-ratio: 3 / 4;
+	height: min(40cqh, calc(var(--pico-base) * 12));
+	opacity: 0.6;
+}
+.pcMp-inline-cart .pico-cart {
+	width: 100%;
+	height: 100%;
+}
+.pcMp-inline-cart.on {
+	opacity: 1;
+	outline: 0.4688cqw solid var(--pico-accent);
+	outline-offset: 0.3125cqw;
+}
+.pcMp-strip {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-2);
+	background: var(--pico-chrome);
+	border-top: 0.18em solid var(--pico-chrome-edge);
+}
+.pcMp-strip-players {
+	display: flex;
+	gap: var(--pico-space-4);
+	justify-content: center;
+}
