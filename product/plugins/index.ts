@@ -19,6 +19,7 @@ import {
   threeDSenPlugin,
   threeDSenReadableLaunchIntegration,
 } from "./3dsen"
+import { communityCatalogPlugin } from "./community-catalog"
 import { itchioPlugin } from "./itchio"
 import { levelShareSquarePlugin } from "./levelsharesquare"
 import { megaManArenaPlugin } from "./mega-man-arena"
@@ -125,6 +126,7 @@ export const firstPartyPlugins = [
   midasMachinePlugin,
   levelShareSquarePlugin,
   itchioPlugin,
+  communityCatalogPlugin,
   threeDSenPlugin,
   srb2Plugin,
   smbxGamePlugin,

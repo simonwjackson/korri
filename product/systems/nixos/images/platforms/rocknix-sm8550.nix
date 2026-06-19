@@ -20,7 +20,7 @@ let
   ryubingPackage = korri.packages.${targetSystem}.ryubing-korri;
   box64RuntimePackage = korri.packages.${targetSystem}.korri-box64-runtime or pkgs.box64;
   gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
-  enabledFirstPartyPlugins = "@korri:3dsen,@korri:box64-runtime,@korri:gamescope,@korri:neverball,@korri:retroarch,@korri:ryubing,@korri:smb-wonderland-1987,@korri:steam,@korri:turnip";
+  enabledFirstPartyPlugins = "@korri:3dsen,@korri:box64-runtime,@korri:community-catalog,@korri:gamescope,@korri:neverball,@korri:retroarch,@korri:ryubing,@korri:smb-wonderland-1987,@korri:steam,@korri:turnip";
   moonlightRuntimeSettingsEnvironment = {
     # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
     # These are intentionally enumerated and preserved as Moonlight process env
