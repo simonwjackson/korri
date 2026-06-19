@@ -1,5 +1,6 @@
 import { BatchJsonSerializationLive } from "@platform/api/rpc/serialization"
 import { FeatureGatesMiddlewareLive } from "@platform/gates/middleware"
+import { InstallControlMiddlewareLive } from "./plugin-install/install-control-authorization"
 import { GameAssetsLayerLive } from "@platform/library/game-assets/game-assets-service"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import {
@@ -63,6 +64,7 @@ const LibraryInfrastructureLive = Layer.mergeAll(
 const ServerLive = Layer.mergeAll(
   HandlersLive.pipe(Layer.provide(LibraryInfrastructureLive)),
   FeatureGatesMiddlewareLive,
+  InstallControlMiddlewareLive,
   BatchJsonSerializationLive,
 )
 

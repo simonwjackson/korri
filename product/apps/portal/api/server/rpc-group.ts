@@ -1,4 +1,5 @@
 import { FeatureGatesMiddleware } from "@platform/gates/middleware"
+import { InstallControlMiddleware } from "../plugin-install/install-control-authorization"
 import { RpcGroup } from "effect/unstable/rpc"
 import { AcquisitionDetailsRpc as appAcquisitionDetails } from "../acquisition/details.rpc"
 import { AcquisitionPluginsRpc as appAcquisitionPlugins } from "../acquisition/plugins.rpc"
@@ -13,6 +14,8 @@ import { GetHelloRpc as appHelloGet } from "../hello/rpc"
 import { DryRunLaunchRpc as appLibraryLaunchDryRun } from "../library/dry-run.rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "../library/launch.rpc"
 import { CollectPluginDiagnosticsRpc as appPluginDiagnosticsCollect } from "../plugin-diagnostics/collect.rpc"
+import { RequestPluginInstallRpc as appPluginInstallRequest } from "../plugin-install/request.rpc"
+import { PluginInstallStatusRpc as appPluginInstallStatus } from "../plugin-install/status.rpc"
 import { CollectPluginLifecycleRpc as appPluginLifecycleCollect } from "../plugin-lifecycle/collect.rpc"
 import { FulfillPluginResourceRpc as appPluginResourceFulfill } from "../plugins/fulfill-resource.rpc"
 import { SessionStatusRpc as appSessionStatus } from "../session/status.rpc"
@@ -43,6 +46,8 @@ export const serverRpcGroup = RpcGroup.make(
   appLibraryLaunch,
   appLibraryLaunchDryRun,
   appPluginDiagnosticsCollect,
+  appPluginInstallRequest,
+  appPluginInstallStatus,
   appPluginLifecycleCollect,
   appPluginResourceFulfill,
   appSourceStatus,
@@ -58,7 +63,7 @@ export const serverRpcGroup = RpcGroup.make(
   appStreamControlMoonlightFpsSet,
   appStreamControlMoonlightResolutionSet,
   appStreamControlActionSet,
-).middleware(FeatureGatesMiddleware)
+).middleware(FeatureGatesMiddleware).middleware(InstallControlMiddleware)
 
 // fallow-ignore-next-line unused-types
 export type ServerRpcGroup = typeof serverRpcGroup

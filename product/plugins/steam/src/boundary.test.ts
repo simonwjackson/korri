@@ -34,6 +34,10 @@ const REQUIRED_PLUGIN_OWNED_STEAM_FILES = [
   "product/plugins/steam/src/session/foreground-processes.ts",
   "product/plugins/steam/src/session/lifecycle-hook.ts",
   "product/plugins/steam/src/observability/log-observer.ts",
+  "product/plugins/steam/src/observability/install-state.ts",
+  "product/plugins/steam/src/observability/install-api.ts",
+  "product/plugins/steam/src/app-control/install-trigger.ts",
+  "product/plugins/steam/src/app-control/install-request-ledger.ts",
   "product/plugins/steam/nix/nixos-module.nix",
   "product/plugins/steam/packages/steam-korri/package.nix",
 ]

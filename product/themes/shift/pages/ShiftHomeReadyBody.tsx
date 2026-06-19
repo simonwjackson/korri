@@ -16,6 +16,7 @@ import { useShiftCatalogCase } from "../catalog/ShiftCatalogStateRoot"
 import { ShiftForegroundSessionGateNotice } from "../molecules/ShiftForegroundSessionGateNotice"
 import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
 import { ShiftLabsButton } from "../molecules/ShiftLabsButton"
+import { ShiftInstallStatusNotice } from "../molecules/ShiftInstallStatusNotice"
 import { ShiftLaunchFailureBanner } from "../molecules/ShiftLaunchFailureBanner"
 import { ShiftUiScaleControl } from "../molecules/ShiftUiScaleControl"
 import { ShiftHomeBottomBar } from "../organisms/ShiftHomeBottomBar"
@@ -93,7 +94,7 @@ function ShiftHomeLaunchSurface({
 }: {
   readonly launch: LaunchController
 }) {
-  const { items } = useShiftHome()
+  const { items, focused } = useShiftHome()
   const foregroundGateResult = useAtomValue(foregroundSessionGateStateAtom)
   const foregroundGate = foregroundGateStateFromResult(foregroundGateResult)
   const actionState = launchActionStateFrom({
@@ -120,6 +121,7 @@ function ShiftHomeLaunchSurface({
           onRetry={launch.retry}
         />
       ) : null}
+      <ShiftInstallStatusNotice install={installMetadataFor(focused)} />
       {shouldShowForegroundGateNotice(actionState) ? (
         <ShiftForegroundSessionGateNotice
           state={actionState}
@@ -153,6 +155,11 @@ function foregroundGateStateFromResult(
     onDefect: defect => ({ _tag: "LoadError", message: String(defect) }),
     onSuccess: success => success.value,
   })
+}
+
+function installMetadataFor(item: ShiftHomeItem) {
+  if (!("releases" in item)) return undefined
+  return item.releases.find(release => release.install)?.install
 }
 
 function actionGameFor(

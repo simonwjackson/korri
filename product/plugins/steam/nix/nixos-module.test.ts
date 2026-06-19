@@ -13,4 +13,14 @@ describe("Steam plugin Nix module", () => {
       `if \${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name"`,
     )
   })
+
+  it("exposes a narrow Steam AppID install helper", () => {
+    expect(moduleSource).toContain(
+      'pkgs.writeShellScriptBin "korri-steam-app-install"',
+    )
+    expect(moduleSource).toContain(
+      'korri-steam-guest -console +app_install "$appid"',
+    )
+    expect(moduleSource).toContain("KORRI_STEAM_APP_INSTALL_HELPER")
+  })
 })

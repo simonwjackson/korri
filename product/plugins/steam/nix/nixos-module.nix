@@ -379,6 +379,23 @@ let
     exec ${cfg.package}/bin/steam-arm64-fhs "$@"
   '';
 
+  steamAppInstall = pkgs.writeShellScriptBin "korri-steam-app-install" ''
+    set -eu
+
+    usage() {
+      echo "usage: korri-steam-app-install <steam-appid>" >&2
+      exit 64
+    }
+
+    [ "$#" -eq 1 ] || usage
+    appid="$1"
+    case "$appid" in
+      ""|*[!0-9]*) usage ;;
+    esac
+
+    exec ${steamLauncher}/bin/korri-steam-guest -console +app_install "$appid"
+  '';
+
   steamServiceControl = pkgs.writeShellScriptBin "korri-steam-service-control" ''
     set -eu
 
@@ -876,11 +893,14 @@ in
       cfg.package
       steamLauncher
       steamAppLauncher
+      steamAppInstall
       steamServiceControl
       steamWarmup
       steamUinputPrep
       fexRootfsPreparer
     ];
+
+    environment.sessionVariables.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
 
     security.sudo.extraRules = [
       {

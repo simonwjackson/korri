@@ -7,6 +7,7 @@ import {
 } from "@platform/artifacts/artifact-import-service"
 import { artifactsRoot } from "@platform/artifacts/artifact-store"
 import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
+import { installMetadataForRelease } from "@platform/library/config/app-install-metadata"
 import {
   type ReadableConfigSnapshot,
   type ResolvedLocalLauncherPolicy,
@@ -305,7 +306,7 @@ export function createLibraryRepository(
       loadReadableSnapshot(db, _options).pipe(
         Effect.map(snapshot =>
           derivePlayableEntries([...snapshot.library.values()]).map(entry =>
-            toPlayableLibraryEntry(entry),
+            toPlayableLibraryEntry(entry, snapshot.apps, snapshot.systems),
           ),
         ),
         Effect.flatMap(entries =>
@@ -857,13 +858,22 @@ function legacyPlayableParts(id: string): {
   return { itemId: id.replaceAll("/", "-") }
 }
 
-function toPlayableLibraryEntry(entry: PlayableEntry): PlayableLibraryEntry {
+function toPlayableLibraryEntry(
+  entry: PlayableEntry,
+  apps: ReadonlyMap<string, AppRecord> = new Map(),
+  systems: ReadonlyMap<string, SystemRecord> = new Map(),
+): PlayableLibraryEntry {
   const collections = entry.contained?.collections ?? entry.item.collections
   const title = entry.title ?? entry.id
   const versionOf = entry.contained?.["version-of"] ?? entry.item["version-of"]
   const relation = entry.contained?.relation ?? entry.item.relation
   const display = entry.contained?.display ?? entry.item.display
-  const releases = entry.releases.map(toPlayableReleaseEntry)
+  const releases = entry.releases.map(release =>
+    toPlayableReleaseEntry(
+      release,
+      installMetadataForRelease(release, apps, systems),
+    ),
+  )
   return {
     id: entry.id,
     itemId: entry.itemId,
@@ -985,13 +995,14 @@ function toPlayableReleaseEntry(release: {
   readonly target?: PlayableReleaseEntry["target"]
   readonly apps?: readonly { readonly id: string }[]
   readonly display?: Readonly<Record<string, unknown>>
-}): PlayableReleaseEntry {
+}, install?: PlayableReleaseEntry["install"]): PlayableReleaseEntry {
   return {
     id: release.id,
     system: release.system,
     ...(release.target !== undefined ? { target: release.target } : {}),
     ...(release.apps ? { apps: release.apps.map(app => app.id) } : {}),
     ...(release.display ? { display: release.display } : {}),
+    ...(install ? { install } : {}),
     launchable: release.target !== undefined,
   }
 }

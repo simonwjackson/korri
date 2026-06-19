@@ -1,6 +1,8 @@
 import { plugin } from "@platform/plugin"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
+import { requestSteamAppInstall } from "./app-control/install-trigger"
 import { collectSteamDiagnostics } from "./observability/diagnostics"
+import { collectSteamInstallStatus } from "./observability/install-api"
 import {
   collectSteamLifecycle,
   openSteamLifecycleCorrelation,
@@ -114,6 +116,24 @@ export const steamPlugin = plugin({
         operation: "diagnostics.collect",
         capabilities: ["diagnostics.collect"],
         run: context => collectSteamDiagnostics(context.input),
+      },
+      {
+        id: "steam.install.request",
+        operation: "install.request",
+        capabilities: ["install.request"],
+        run: context =>
+          requestSteamAppInstall(
+            context.input as Parameters<typeof requestSteamAppInstall>[0],
+          ),
+      },
+      {
+        id: "steam.install.status",
+        operation: "install.status",
+        capabilities: ["install.status"],
+        run: context =>
+          collectSteamInstallStatus(
+            context.input as Parameters<typeof collectSteamInstallStatus>[0],
+          ),
       },
       {
         id: "steam.lifecycle.collect",

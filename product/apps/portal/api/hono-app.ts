@@ -11,6 +11,10 @@ import { bodyLimit } from "hono/body-limit"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
 import { handleConfigEvents } from "./config/events"
+import {
+  installControlCookie,
+  installControlSecret,
+} from "./plugin-install/install-control-authorization"
 import { rpcHandler } from "./rpc-server"
 import { serverRpcHandler } from "./server/rpc-server"
 
@@ -77,6 +81,36 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
     c.json({ status: "ok", timestamp: new Date().toISOString() }),
   )
 
+  app.use(
+    "/api/*",
+    bodyLimit({
+      maxSize: MAX_BODY_SIZE,
+      onError: c => c.text("Payload Too Large", 413),
+    }),
+  )
+
+  app.post("/api/install-control/session", async c => {
+    const expected = installControlSecret(process.env)
+    if (!expected) return c.json({ ok: false, reason: "not-configured-or-weak" }, 404)
+    let submitted: unknown
+    try {
+      const body = (await c.req.json()) as { readonly pin?: unknown; readonly secret?: unknown }
+      submitted = body.pin ?? body.secret
+    } catch {
+      return c.json({ ok: false, reason: "invalid-json" }, 400)
+    }
+    if (typeof submitted !== "string" || submitted !== expected) {
+      return c.json({ ok: false, reason: "unauthorized" }, 401)
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "set-cookie": installControlCookie(expected),
+      },
+    })
+  })
+
   app.on(["GET", "HEAD"], "/api/game-assets/*", c =>
     serveGameAssetBytes(c.req.raw),
   )
@@ -93,14 +127,6 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
       c,
       configGraphController ?? getDefaultConfigGraphController(),
     ),
-  )
-
-  app.use(
-    "/api/*",
-    bodyLimit({
-      maxSize: MAX_BODY_SIZE,
-      onError: c => c.text("Payload Too Large", 413),
-    }),
   )
 
   if (isDev) {

@@ -82,6 +82,18 @@ describe("Steam plugin descriptor", () => {
     expect(steamPlugin.handlers).toContainEqual(
       expect.objectContaining({ operation: "session.cleanup" }),
     )
+    expect(steamPlugin.handlers).toContainEqual(
+      expect.objectContaining({
+        operation: "install.request",
+        capabilities: ["install.request"],
+      }),
+    )
+    expect(steamPlugin.handlers).toContainEqual(
+      expect.objectContaining({
+        operation: "install.status",
+        capabilities: ["install.status"],
+      }),
+    )
   })
 
   it("models Gamescope as an explicit non-auto-enabled launch requirement", () => {

@@ -1,4 +1,5 @@
 import { FeatureGatesMiddleware } from "@platform/gates/middleware"
+import { InstallControlMiddleware } from "./plugin-install/install-control-authorization"
 import { RpcGroup } from "effect/unstable/rpc"
 import { CatalogSnapshotRpc as appCatalogSnapshot } from "./catalog/snapshot.rpc"
 import { AssignGameAssetRpc as appGameAssetsAssign } from "./game-assets/assign.rpc"
@@ -7,6 +8,8 @@ import { UnassignGameAssetRpc as appGameAssetsUnassign } from "./game-assets/una
 import { GetHelloRpc as appHelloGet } from "./hello/rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "./library/launch.rpc"
 import { CollectPluginDiagnosticsRpc as appPluginDiagnosticsCollect } from "./plugin-diagnostics/collect.rpc"
+import { RequestPluginInstallRpc as appPluginInstallRequest } from "./plugin-install/request.rpc"
+import { PluginInstallStatusRpc as appPluginInstallStatus } from "./plugin-install/status.rpc"
 import { CollectPluginLifecycleRpc as appPluginLifecycleCollect } from "./plugin-lifecycle/collect.rpc"
 import { SourceStatusRpc as appSourceStatus } from "./source/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "./stream/prepare.rpc"
@@ -27,6 +30,8 @@ export const appRpcGroup = RpcGroup.make(
   appCatalogSnapshot,
   appLibraryLaunch,
   appPluginDiagnosticsCollect,
+  appPluginInstallRequest,
+  appPluginInstallStatus,
   appPluginLifecycleCollect,
   appSourceStatus,
   appStreamPrepare,
@@ -38,7 +43,7 @@ export const appRpcGroup = RpcGroup.make(
   appStreamControlMoonlightFpsSet,
   appStreamControlMoonlightResolutionSet,
   appStreamControlActionSet,
-).middleware(FeatureGatesMiddleware)
+).middleware(FeatureGatesMiddleware).middleware(InstallControlMiddleware)
 
 // fallow-ignore-next-line unused-types
 export type AppRpcGroup = typeof appRpcGroup

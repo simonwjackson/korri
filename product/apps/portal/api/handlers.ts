@@ -6,6 +6,8 @@ import { handleUnassignGameAsset } from "./game-assets/unassign.rpc-handler"
 import { handleGetHello } from "./hello/rpc-handler"
 import { handleLaunchLibrary } from "./library/launch.rpc-handler"
 import { handleCollectPluginDiagnostics } from "./plugin-diagnostics/collect.rpc-handler"
+import { handleRequestPluginInstall } from "./plugin-install/request.rpc-handler"
+import { handlePluginInstallStatus } from "./plugin-install/status.rpc-handler"
 import { handleCollectPluginLifecycle } from "./plugin-lifecycle/collect.rpc-handler"
 import { handleSourceStatus } from "./source/status.rpc-handler"
 import { handlePrepareStream } from "./stream/prepare.rpc-handler"
@@ -27,6 +29,8 @@ export const HandlersLive = appRpcGroup.toLayer(
     "app.catalog.snapshot": handleCatalogSnapshot,
     "app.library.launch": handleLaunchLibrary,
     "app.plugin.diagnostics.collect": handleCollectPluginDiagnostics,
+    "app.plugin.install.request": handleRequestPluginInstall,
+    "app.plugin.install.status": handlePluginInstallStatus,
     "app.plugin.lifecycle.collect": handleCollectPluginLifecycle,
     "app.source.status": handleSourceStatus,
     "app.stream.prepare": handlePrepareStream,

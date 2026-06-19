@@ -2,6 +2,7 @@ import {
   ResolvedGameMedia,
   type ResolvedGameRecord,
 } from "@platform/fixtures/games/game"
+import { ProviderInstallMetadataSchema } from "@platform/library/install-state"
 import { Schema } from "effect"
 
 const DisplayMetadata = Schema.Record(Schema.String, Schema.Unknown)
@@ -30,6 +31,7 @@ export const PlayableReleaseEntry = Schema.Struct({
   target: Schema.optional(ReleaseTarget),
   apps: Schema.optional(Schema.Array(Schema.String)),
   display: Schema.optional(DisplayMetadata),
+  install: Schema.optional(ProviderInstallMetadataSchema),
   launchable: Schema.Boolean,
 })
 export type PlayableReleaseEntry = Schema.Schema.Type<
