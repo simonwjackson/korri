@@ -22,9 +22,14 @@ export function PicoCart({
         backgroundImage: ditherStyle(art.seed, art.fill, art.accent),
       }}
     >
+      {game.art ? (
+        <img className="pico-cart-art" src={game.art} alt="" />
+      ) : null}
       <span className="pico-cart-notch" />
       {showFav && game.favorite ? <span className="pico-fav">★</span> : null}
-      <span className="pico-cart-initials">{art.initials}</span>
+      {game.art ? null : (
+        <span className="pico-cart-initials">{art.initials}</span>
+      )}
     </div>
   )
 }

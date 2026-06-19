@@ -280,6 +280,17 @@
 	box-shadow: inset 0 0 0 0.3125cqw rgba(255, 255, 255, 0.15);
 	overflow: hidden;
 }
+
+/* SPIKE: real pixelized cover art fills the cart, under the notch/fav chrome.
+ * `pixelated` keeps the small (72x96) PICO-8 raster crisp as it upscales. */
+.pico-cart-art {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	image-rendering: pixelated;
+}
 .pico-cart .pico-cart-initials {
 	position: relative;
 	z-index: 2;
