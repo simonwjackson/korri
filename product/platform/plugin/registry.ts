@@ -207,8 +207,9 @@ function isExecutablePluginResource(
   return (
     candidate.kind === "executable" &&
     typeof candidate.id === "string" &&
-    fulfill?.provider === "nix" &&
-    typeof fulfill.installable === "string" &&
-    typeof fulfill.binary === "string"
+    typeof fulfill?.provider === "string" &&
+    typeof fulfill.binary === "string" &&
+    ((fulfill.provider === "nix" && typeof fulfill.installable === "string") ||
+      (fulfill.provider === "staged-path" && typeof fulfill.root === "string"))
   )
 }

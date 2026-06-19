@@ -25,6 +25,7 @@ export interface ResolvedExecutableResource {
   readonly pluginId: PluginId
   readonly resourceId: string
   readonly command: string
+  readonly cwd?: string
 }
 
 export type PluginResourceError =
@@ -94,6 +95,12 @@ export function createNixOutLinkFulfiller(options: {
   }
 }
 
+export function createStagedExecutableResolver(): PluginExecutableResourceResolver {
+  return {
+    resolveExecutable: input => resolveStagedExecutable(input),
+  }
+}
+
 export const bunProcessRunner: ProcessRunner = {
   run: async (command, args) => {
     const proc = Bun.spawn([command, ...args], {
@@ -127,6 +134,16 @@ export function fulfillNixOutLinkExecutable(input: {
           pluginId: input.pluginId,
           resourceId: input.resource.id,
           message: "Nix command must be an absolute path",
+        }),
+      )
+    }
+
+    if (input.resource.fulfill.provider !== "nix") {
+      return yield* Effect.fail(
+        new PluginResourceFulfillmentFailed({
+          pluginId: input.pluginId,
+          resourceId: input.resource.id,
+          message: "Only nix executable resources can be fulfilled by Nix",
         }),
       )
     }
@@ -177,6 +194,15 @@ export function resolveNixOutLinkExecutable(input: {
   readonly pluginId: PluginId
   readonly resource: ExecutablePluginResource
 }): Effect.Effect<ResolvedExecutableResource, PluginResourceMissing> {
+  if (input.resource.fulfill.provider !== "nix") {
+    return Effect.fail(
+      new PluginResourceMissing({
+        pluginId: input.pluginId,
+        resourceId: input.resource.id,
+        path: input.resource.id,
+      }),
+    )
+  }
   const command = executablePath(
     input.stateRoot,
     input.pluginId,
@@ -228,4 +254,37 @@ function sanitizePathSegment(input: string): string {
     byte.toString(16).padStart(2, "0"),
   ).join("")
   return `x${hex}`
+}
+
+export function resolveStagedExecutable(input: {
+  readonly pluginId: PluginId
+  readonly resource: ExecutablePluginResource
+}): Effect.Effect<ResolvedExecutableResource, PluginResourceMissing> {
+  if (input.resource.fulfill.provider !== "staged-path") {
+    return Effect.fail(
+      new PluginResourceMissing({
+        pluginId: input.pluginId,
+        resourceId: input.resource.id,
+        path: input.resource.id,
+      }),
+    )
+  }
+  const command = join(input.resource.fulfill.root, input.resource.fulfill.binary)
+  return Effect.tryPromise({
+    try: async () => {
+      await access(command, constants.X_OK)
+      return {
+        pluginId: input.pluginId,
+        resourceId: input.resource.id,
+        command,
+        cwd: input.resource.fulfill.root,
+      }
+    },
+    catch: () =>
+      new PluginResourceMissing({
+        pluginId: input.pluginId,
+        resourceId: input.resource.id,
+        path: command,
+      }),
+  })
 }

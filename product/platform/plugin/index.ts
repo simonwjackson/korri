@@ -243,8 +243,18 @@ export interface NixExecutableFulfillment {
   readonly binary: string
 }
 
+export interface StagedPathExecutableFulfillment {
+  readonly provider: "staged-path"
+  readonly root: string
+  readonly binary: string
+}
+
+export type ExecutableFulfillment =
+  | NixExecutableFulfillment
+  | StagedPathExecutableFulfillment
+
 export interface ExecutablePluginResource {
   readonly id: string
   readonly kind: "executable"
-  readonly fulfill: NixExecutableFulfillment
+  readonly fulfill: ExecutableFulfillment
 }
