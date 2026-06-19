@@ -49,6 +49,10 @@ import {
   KORRI_STEAM_STORAGE_ID,
 } from "./steam"
 import { KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID } from "./super-mario-bros-remastered"
+import {
+  KORRI_TURNIP_PLUGIN_ID,
+  KORRI_TURNIP_WRAPPER_PACKAGE,
+} from "./turnip"
 
 describe("first-party plugins", () => {
   it("registers RetroArch as a first-party app host plugin", () => {
@@ -115,6 +119,26 @@ describe("first-party plugins", () => {
     expect(steam?.contributes.config.apps?.steam).not.toHaveProperty(
       "launch-options",
     )
+  })
+
+  it("registers Turnip as a first-party graphics runtime plugin", () => {
+    const turnip = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_TURNIP_PLUGIN_ID,
+    )
+
+    expect(
+      turnip?.contributes.config.modules?.["turnip-wrapper-package"],
+    ).toMatchObject({
+      kind: "nix-package",
+      package: KORRI_TURNIP_WRAPPER_PACKAGE,
+      path: "product/plugins/turnip/packages/turnip-wrapper",
+      capabilities: ["graphics.vulkan", "package.wrap"],
+    })
+    expect(turnip?.contributes.config.runtimes?.["adreno-vulkan"]).toMatchObject({
+      kind: "graphics-driver",
+      driver: "turnip",
+      capabilities: ["graphics.vulkan"],
+    })
   })
 
   it("enables RetroArch-owned GBA, Genesis, N64, NES, PC-98, PSP, PSX, SNES, TG16, and core runtimes when requested", () => {

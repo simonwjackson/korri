@@ -23,37 +23,14 @@ let
     };
   });
 
-  system = pkgs.stdenv.hostPlatform.system;
-  cpuName = pkgs.stdenv.hostPlatform.parsed.cpu.name;
   canPinTurnip = pkgs.stdenv.hostPlatform.isAarch64 && nixpkgs-mesa != null;
-  mesaTurnip = if canPinTurnip then nixpkgs-mesa.legacyPackages.${system}.mesa else null;
-  turnipIcd =
-    if canPinTurnip then "${mesaTurnip}/share/vulkan/icd.d/freedreno_icd.${cpuName}.json" else null;
-
   retroarchBinary =
     if canPinTurnip then
-      pkgs.symlinkJoin {
+      pkgs.callPackage ../../turnip/packages/turnip-wrapper/default.nix {
+        inherit nixpkgs-mesa;
+        package = pkgs.retroarch-bare;
+        executable = "retroarch";
         name = "retroarch-bare-korri-turnip-${pkgs.retroarch-bare.version or "unknown"}";
-        pname = "retroarch-bare";
-        version = pkgs.retroarch-bare.version or "unknown";
-        paths = [ pkgs.retroarch-bare ];
-        nativeBuildInputs = [ pkgs.makeWrapper ];
-        postBuild = ''
-          rm -f "$out/bin/retroarch"
-          makeWrapper ${pkgs.retroarch-bare}/bin/retroarch "$out/bin/retroarch" \
-            --set VK_DRIVER_FILES ${turnipIcd} \
-            --set VK_ICD_FILENAMES ${turnipIcd}
-        '';
-        passthru = (pkgs.retroarch-bare.passthru or { }) // {
-          inherit mesaTurnip turnipIcd;
-          turnipPinned = true;
-          unwrapped = pkgs.retroarch-bare;
-        };
-        meta = (pkgs.retroarch-bare.meta or { }) // {
-          description = "${
-            pkgs.retroarch-bare.meta.description or "RetroArch"
-          } (Korri: Turnip pinned to Mesa ${mesaTurnip.version})";
-        };
       }
     else
       pkgs.retroarch-bare;
@@ -84,8 +61,9 @@ let
         ppssppCore
         pkgs.libretro.bsnes
       ];
-      inherit mesaTurnip turnipIcd;
-      turnipPinned = canPinTurnip;
+      mesaTurnip = retroarchBinary.passthru.mesaTurnip or null;
+      turnipIcd = retroarchBinary.passthru.vulkanIcd or null;
+      turnipPinned = retroarchBinary.passthru.turnipPinned or false;
       unwrapped = pkgs.retroarch-bare;
       wrapped = retroarchBinary;
     };

@@ -128,6 +128,7 @@ let
       ))
       (check "${name}: korrid enables first-party plugin resources" (
         lib.hasInfix "@korri:neverball" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
+        && lib.hasInfix "@korri:turnip" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasPrefix "/" (daemonEnv.KORRI_NIX_COMMAND or "")
         && lib.hasSuffix "/bin/nix" (daemonEnv.KORRI_NIX_COMMAND or "")
         && (daemonEnv.KORRI_PLUGIN_RESOURCE_ROOT or null) == "/var/lib/korri/plugins/resources"

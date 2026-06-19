@@ -41,6 +41,7 @@ import {
 } from "./steam"
 import { superMario127Plugin } from "./super-mario-127"
 import { superMarioBrosRemasteredPlugin } from "./super-mario-bros-remastered"
+import { turnipPlugin } from "./turnip"
 import { yoshisFabricationStationPlugin } from "./yoshis-fabrication-station"
 
 export const firstPartyLaunchIntegrations = [
@@ -126,6 +127,7 @@ export const firstPartyPlugins = [
   ryubingPlugin,
   superMarioBrosRemasteredPlugin,
   superMario127Plugin,
+  turnipPlugin,
   yoshisFabricationStationPlugin,
   ...fixtureAcquisitionPlugins,
 ] as const
