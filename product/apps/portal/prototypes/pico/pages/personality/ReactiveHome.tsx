@@ -1,0 +1,68 @@
+/**
+ * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ *
+ * The "woven in + reactive" home: hover/click a cart to focus it, Pixl gazes
+ * toward it (and chirps), and selecting fires the launch ritual. Owns the
+ * focus/launch state + sfx; composes ScreenShell + ReactiveStage.
+ */
+import { useState } from "react"
+import { picoGamesAtom } from "../../data/pico-library-atoms"
+import type { PicoGame } from "../../fixtures"
+import { sfx } from "../../pico-sfx"
+import { PicoData } from "../../screens/PicoData"
+import { ReactiveStage } from "../../ui/organisms/ReactiveStage"
+import { ScreenShell } from "../../ui/templates/ScreenShell"
+
+export function ReactiveHome() {
+  return (
+    <PicoData atom={picoGamesAtom} title="PICO ▸ HOME">
+      {games => <ReactiveHomeBody allGames={games} />}
+    </PicoData>
+  )
+}
+
+function ReactiveHomeBody({
+  allGames,
+}: {
+  readonly allGames: readonly PicoGame[]
+}) {
+  const games = allGames.slice(0, 5)
+  const [focus, setFocus] = useState(2)
+  const [launching, setLaunching] = useState(false)
+  const hero = games[focus]
+  const mid = (games.length - 1) / 2
+  const gaze = mid === 0 ? 0 : (focus - mid) / mid
+
+  function pick(index: number) {
+    if (index === focus) return
+    setFocus(index)
+    sfx.move()
+  }
+  function launch() {
+    if (launching) return
+    sfx.launch()
+    setLaunching(true)
+    window.setTimeout(() => setLaunching(false), 2200)
+  }
+
+  return (
+    <ScreenShell
+      title="PICO ▸ HOME"
+      hints={[
+        { key: "a", label: "PLAY" },
+        { key: "y", label: "INFO" },
+        { key: "b", label: "BACK" },
+      ]}
+    >
+      <ReactiveStage
+        games={games}
+        focus={focus}
+        gaze={gaze}
+        launching={launching}
+        hero={hero}
+        onPick={pick}
+        onLaunch={launch}
+      />
+    </ScreenShell>
+  )
+}
