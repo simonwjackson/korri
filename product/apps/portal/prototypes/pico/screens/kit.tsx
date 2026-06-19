@@ -20,6 +20,7 @@ import { PicoArtImage } from "../PicoArtImage"
 import { PicoIcon } from "../PicoIcon"
 import { PicoMascot } from "../PicoMascot"
 import { PicoButtonBar } from "../PicoStatusBar"
+import { Title } from "../ui/atoms/Title"
 import type { Hint } from "../ui/templates/ScreenShell"
 
 export { PicoArtImage } from "../PicoArtImage"
@@ -27,8 +28,9 @@ export { PicoCart } from "../PicoCart"
 export { PicoIcon } from "../PicoIcon"
 export { PicoMascot } from "../PicoMascot"
 // Migrated to the atomic-design layers; re-exported so the not-yet-migrated
-// screens keep importing `Screen` / `Title` from the kit unchanged.
-export { Title } from "../ui/atoms/Title"
+// screens keep importing `Screen` / `Title` from the kit unchanged. Title is
+// imported above (not just re-exported) because kit's own Hero composes it.
+export { Title }
 export { ScreenShell as Screen } from "../ui/templates/ScreenShell"
 
 export function Sub({ children }: { readonly children: ReactNode }) {
