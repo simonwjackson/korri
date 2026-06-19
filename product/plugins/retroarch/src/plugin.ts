@@ -58,10 +58,10 @@ export const retroarchPlugin = plugin({
     "Owns the RetroArch app/runtime host integration for libretro core launches.",
   contributes: {
     config: {
-      apps: {
+      launchers: {
         [KORRI_RETROARCH_APP_LOCAL_ID]: {
           id: KORRI_RETROARCH_APP_ID,
-          kind: KORRI_RETROARCH_PLUGIN_ID,
+          plugin: KORRI_RETROARCH_PLUGIN_ID,
           command: "retroarch",
           args: [
             "--config",
@@ -70,9 +70,7 @@ export const retroarchPlugin = plugin({
             "{runtime.path}",
             "{content.path}",
           ],
-          plugin: {
-            [KORRI_RETROARCH_PLUGIN_ID]: {},
-          },
+          settings: { plugin: {} },
           policy: { allowedCommands: ["retroarch"] },
         },
       },
@@ -80,112 +78,46 @@ export const retroarchPlugin = plugin({
         [KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID]: {
           id: KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
           title: "Sinclair ZX Spectrum",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_FUSE_RUNTIME_ID,
-            },
-          ],
         },
         [KORRI_RETROARCH_GBA_SYSTEM_ID]: {
           id: KORRI_RETROARCH_GBA_SYSTEM_ID,
           title: "Game Boy Advance",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
-            },
-          ],
         },
         [KORRI_RETROARCH_GENESIS_SYSTEM_ID]: {
           id: KORRI_RETROARCH_GENESIS_SYSTEM_ID,
           title: "Sega Genesis",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
-            },
-          ],
         },
         [KORRI_RETROARCH_SMS_SYSTEM_ID]: {
           id: KORRI_RETROARCH_SMS_SYSTEM_ID,
           title: "Sega Master System",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
-            },
-          ],
         },
         [KORRI_RETROARCH_N64_SYSTEM_ID]: {
           id: KORRI_RETROARCH_N64_SYSTEM_ID,
           title: "Nintendo 64",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
-            },
-          ],
         },
         [KORRI_RETROARCH_NES_SYSTEM_ID]: {
           id: KORRI_RETROARCH_NES_SYSTEM_ID,
           title: "Nintendo Entertainment System",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_MESEN_RUNTIME_ID,
-            },
-          ],
         },
         [KORRI_RETROARCH_PC98_SYSTEM_ID]: {
           id: KORRI_RETROARCH_PC98_SYSTEM_ID,
           title: "NEC PC-98",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
-            },
-          ],
         },
         [KORRI_RETROARCH_PSP_SYSTEM_ID]: {
           id: KORRI_RETROARCH_PSP_SYSTEM_ID,
           title: "Sony PlayStation Portable",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
-            },
-          ],
         },
         [KORRI_RETROARCH_PSX_SYSTEM_ID]: {
           id: KORRI_RETROARCH_PSX_SYSTEM_ID,
           title: "Sony PlayStation",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
-            },
-          ],
         },
         [KORRI_RETROARCH_SNES_SYSTEM_ID]: {
           id: KORRI_RETROARCH_SNES_SYSTEM_ID,
           title: "Super Nintendo Entertainment System",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_BSNES_RUNTIME_ID,
-            },
-          ],
         },
         [KORRI_RETROARCH_TG16_SYSTEM_ID]: {
           id: KORRI_RETROARCH_TG16_SYSTEM_ID,
           title: "NEC TurboGrafx-16",
-          apps: [
-            {
-              id: KORRI_RETROARCH_APP_ID,
-              runtime: KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID,
-            },
-          ],
         },
       },
       runtimes: {

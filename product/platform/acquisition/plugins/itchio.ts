@@ -1003,7 +1003,7 @@ function releasesForPlatforms(platforms: readonly string[], target: string) {
     system: platform,
     ...(platform === "html"
       ? { display: { acquisition: "container-required" } }
-      : { target }),
+      : { target: { kind: "url", value: target } }),
   }))
 }
 

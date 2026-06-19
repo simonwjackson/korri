@@ -9,10 +9,10 @@
 # Korri config decodes the provider map, and the Gamescope plugin owns the
 # payload fields and rendering to argv/env.
 
-apps:
+launchers:
   retroarch:
-    launch:
-      with:
+    settings:
+      plugin:
         "@korri:gamescope":
           # Korri wrapper switch. No direct Gamescope flag; controls whether Korri
           # wraps the child launch with Gamescope at all.

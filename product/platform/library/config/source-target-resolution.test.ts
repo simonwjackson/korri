@@ -8,10 +8,10 @@ const storage = new Map<string, StorageRecord>([
 ])
 
 describe("resolveReleaseTarget", () => {
-  it("passes URI targets through as launch locators", async () => {
+  it("passes URL targets through as launch locators", async () => {
     const resolved = await Effect.runPromise(
       resolveReleaseTarget({
-        target: "steam://rungameid/360740",
+        target: { kind: "url", value: "steam://rungameid/360740" },
         storage,
       }),
     )

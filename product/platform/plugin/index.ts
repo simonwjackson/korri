@@ -80,7 +80,7 @@ export interface PluginConfigContributions {
   readonly providerLinks?: ConfigRecordMap
   readonly storage?: ConfigRecordMap
   readonly systems?: ConfigRecordMap
-  readonly apps?: ConfigRecordMap
+  readonly launchers?: ConfigRecordMap
   readonly modules?: ConfigRecordMap
   readonly runtimes?: ConfigRecordMap
   readonly profiles?: ConfigRecordMap

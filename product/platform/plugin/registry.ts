@@ -28,7 +28,7 @@ export interface PluginRegistry {
   readonly providerLinks: ConfigRecordMap
   readonly storage: ConfigRecordMap
   readonly systems: ConfigRecordMap
-  readonly apps: ConfigRecordMap
+  readonly launchers: ConfigRecordMap
   readonly modules: ConfigRecordMap
   readonly runtimes: ConfigRecordMap
   readonly profiles: ConfigRecordMap
@@ -80,7 +80,7 @@ export function createPluginRegistry(
     providerLinks: mergePluginConfigMaps(enabledPlugins, "providerLinks"),
     storage: mergePluginConfigMaps(enabledPlugins, "storage"),
     systems: mergePluginConfigMaps(enabledPlugins, "systems"),
-    apps: mergePluginConfigMaps(enabledPlugins, "apps"),
+    launchers: mergePluginConfigMaps(enabledPlugins, "launchers"),
     modules: mergePluginConfigMaps(enabledPlugins, "modules"),
     runtimes: mergePluginConfigMaps(enabledPlugins, "runtimes"),
     profiles: mergePluginConfigMaps(enabledPlugins, "profiles"),

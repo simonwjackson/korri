@@ -128,7 +128,7 @@ function remoteGame(
         id: "remote",
         system: "remote",
         launchable: true,
-        apps: ["moonlight"],
+        launch: { use: "moonlight" },
       },
     ],
     launchable: true,

@@ -41,6 +41,7 @@ describe("createProseqlLibrarySource", () => {
                     id: "default",
                     system: "toy",
                     target: { kind: "file", storage: "roms", path: "game.rom" },
+                    launch: { use: "@korri:toy-host/echo" },
                   },
                 ],
               },
@@ -51,6 +52,7 @@ describe("createProseqlLibrarySource", () => {
                     id: "default",
                     system: "toy",
                     target: { kind: "file", storage: "roms", path: "game.rom" },
+                    launch: { use: "@korri:toy-host/echo" },
                   },
                 ],
               },
@@ -67,18 +69,16 @@ describe("createProseqlLibrarySource", () => {
                   name: "toy-host",
                   contributes: {
                     config: {
-                      apps: {
+                      launchers: {
                         echo: {
                           id: "@korri:toy-host/echo",
+                          plugin: "@korri:process",
                           command: "/bin/echo",
                           args: ["{target}"],
                         },
                       },
                       systems: {
-                        toy: {
-                          id: "toy",
-                          apps: [{ id: "@korri:toy-host/echo" }],
-                        },
+                        toy: { id: "toy" },
                       },
                       runtimes: {
                         capabilityOnly: {
@@ -133,12 +133,10 @@ describe("createProseqlLibrarySource", () => {
                       storage: "roms",
                       path: "gba/Super Mario Advance 2.gba",
                     },
-                    apps: [
-                      {
-                        id: KORRI_RETROARCH_APP_ID,
-                        runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
-                      },
-                    ],
+                    launch: {
+                      use: KORRI_RETROARCH_APP_ID,
+                      runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
+                    },
                   },
                 ],
               },
@@ -153,12 +151,10 @@ describe("createProseqlLibrarySource", () => {
                       storage: "roms",
                       path: "gba/Super Mario Advance 2.gba",
                     },
-                    apps: [
-                      {
-                        id: KORRI_RETROARCH_APP_ID,
-                        runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
-                      },
-                    ],
+                    launch: {
+                      use: KORRI_RETROARCH_APP_ID,
+                      runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
+                    },
                   },
                 ],
               },
@@ -203,6 +199,7 @@ describe("createProseqlLibrarySource", () => {
                 id: "snes/f-zero.smc",
                 system: "snes",
                 contentPath: "/storage/roms/snes/f-zero.smc",
+                launch: { app: "echo" },
                 metadata: { name: "F-Zero" },
                 userData: {
                   lastPlayed: new Date("2026-01-01T00:00:00.000Z"),
@@ -211,7 +208,7 @@ describe("createProseqlLibrarySource", () => {
               launcher: {
                 id: "echo",
                 command: "/bin/echo",
-                args: ["{contentPath}"],
+                args: ["{content.path}"],
                 systems: ["snes"],
               },
               systemDelta: { id: "snes" },
@@ -264,20 +261,20 @@ describe("createProseqlLibrarySource", () => {
                 {
                   id: "genesis",
                   system: "genesis",
-                  apps: [{ id: "echo" }],
+                  launch: { use: "echo" },
                   target: { kind: "file", storage: "roms", path: "sonic.md" },
                 },
                 {
                   id: "steam",
                   system: "pc",
-                  apps: [{ id: "echo" }],
+                  launch: { use: "echo" },
                   target: {
                     kind: "file",
                     storage: "roms",
                     path: "sonic-steam.bin",
                   },
                 },
-                { id: "known-only", system: "pc", apps: [{ id: "echo" }] },
+                { id: "known-only", system: "pc", launch: { use: "echo" } },
               ],
             })
             yield* Effect.promise(() => db.flush())
@@ -329,38 +326,32 @@ describe("createProseqlLibrarySource", () => {
               },
               launchIntegrations: [retroarchReadableLaunchIntegration],
             })
-            yield* repo.upsertSystem({
-              id: "gba",
-              apps: [{ id: KORRI_RETROARCH_APP_ID, runtime: "mgba" }],
-            })
+            yield* repo.upsertSystem({ id: "gba" })
             yield* repo.upsertRuntime({
               id: "mgba",
               kind: "libretro-core",
               path: "/cores/mgba_libretro.so",
             })
-            yield* db.apps.upsert({
+            yield* db.launchers.upsert({
               where: { id: KORRI_RETROARCH_APP_ID },
               create: {
                 id: KORRI_RETROARCH_APP_ID,
-                kind: KORRI_RETROARCH_PLUGIN_ID,
+                plugin: KORRI_RETROARCH_PLUGIN_ID,
                 command: "retroarch",
-                plugin: {
-                  [KORRI_RETROARCH_PLUGIN_ID]: {},
-                },
+                settings: { plugin: {} },
               },
               update: {
                 id: KORRI_RETROARCH_APP_ID,
-                kind: KORRI_RETROARCH_PLUGIN_ID,
+                plugin: KORRI_RETROARCH_PLUGIN_ID,
                 command: "retroarch",
-                plugin: {
-                  [KORRI_RETROARCH_PLUGIN_ID]: {},
-                },
+                settings: { plugin: {} },
               },
             })
             yield* repo.upsertGame({
               id: "gba/game",
               system: "gba",
               contentPath: rom,
+              launch: { app: KORRI_RETROARCH_APP_ID, module: "mgba" },
               patches: [patch],
             })
             const source = createProseqlLibrarySource(repo)

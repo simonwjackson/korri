@@ -168,28 +168,27 @@ describe("checked-in readable library example", () => {
     expect(String(result.knownOnly)).toContain("ReleaseNotLaunchable")
   })
 
-  it("keeps RetroArch examples on the app-flat generated-config contract", async () => {
+  it("keeps RetroArch examples on the launcher generated-config contract", async () => {
     for (const path of RETROARCH_EXAMPLE_PATHS) {
       const example = await readFile(path, "utf8")
       const active = activeYaml(example)
       const parsed = parse(example) as {
-        readonly apps?: Record<string, Record<string, unknown>>
+        readonly launchers?: Record<string, Record<string, unknown>>
       }
-      const retroarchApp =
-        parsed.apps?.["@korri:retroarch/retroarch"] ?? parsed.apps?.retroarch
+      const retroarchLauncher =
+        parsed.launchers?.["@korri:retroarch/retroarch"] ?? parsed.launchers?.retroarch
 
-      expect(retroarchApp).toBeDefined()
-      if (retroarchApp === undefined) continue
+      expect(retroarchLauncher).toBeDefined()
+      if (retroarchLauncher === undefined) continue
       const decoded = Effect.try({
-        try: () => decodeAppPayload(retroarchApp),
+        try: () => decodeAppPayload(retroarchLauncher),
         catch: error => error,
       })
       const result = Effect.runSyncExit(decoded)
       if (result._tag === "Success") {
-        expect(result.value.kind).toMatch(/^(@korri:)?retroarch$/)
-        expect(retroarchApp).not.toHaveProperty("retroarch")
-        expect(retroarchApp).not.toHaveProperty("integration")
-        expect(retroarchApp).not.toHaveProperty("settings")
+        expect(result.value.plugin).toMatch(/^(@korri:)?retroarch$/)
+        expect(retroarchLauncher).not.toHaveProperty("retroarch")
+        expect(retroarchLauncher).not.toHaveProperty("integration")
       }
       expect(active).not.toMatch(/\bintegration\s*:\s*retroarch\b/)
       expect(active).not.toMatch(
@@ -199,46 +198,45 @@ describe("checked-in readable library example", () => {
     }
   })
 
-  it("keeps Steam examples on the apps-by-id authoring contract", async () => {
+  it("keeps Steam examples on the launchers-by-id authoring contract", async () => {
     for (const path of STEAM_EXAMPLE_PATHS) {
       const example = await readFile(path, "utf8")
       const parsed = parse(example) as {
         readonly systems?: Record<string, Record<string, unknown>>
-        readonly apps?: Record<string, Record<string, unknown>>
+        readonly launchers?: Record<string, Record<string, unknown>>
         readonly runtimes?: Record<string, Record<string, unknown>>
         readonly library?: Record<string, Record<string, unknown>>
       }
 
-      const steamApp = decodeAppPayload(parsed.apps?.["@korri:steam/steam"])
-      expect(steamApp.kind).toBe("@korri:steam")
-      expect(steamApp.plugin?.["@korri:steam"]).toMatchObject({
+      const steamApp = decodeAppPayload(parsed.launchers?.["@korri:steam/steam"])
+      expect(steamApp.plugin).toBe("@korri:steam")
+      expect(steamApp.settings?.plugin).toMatchObject({
         state: { root: "{storage:@korri:steam/steam}/Steam" },
       })
       expect(
-        (
-          steamApp.plugin?.["@korri:steam"] as {
-            readonly "launch-options"?: string
-          }
-        )?.["launch-options"],
+        (steamApp.settings?.plugin as { readonly "launch-options"?: string })?.[
+          "launch-options"
+        ],
       ).toContain("%command%")
-      expect(decodeSystemPayload(parsed.systems?.steam).apps).toEqual([
-        { id: "@korri:steam/steam" },
-      ])
+      expect(decodeSystemPayload(parsed.systems?.steam)).toMatchObject({
+        name: "Steam",
+      })
       expect(decodeRuntimePayload(parsed.runtimes?.["proton-arm64"]).tool).toBe(
         "proton-arm64",
       )
       expect(
         Object.values(parsed.library ?? {}).some(item =>
           decodeLibraryItemPayload(item).releases.some(
-            release => release.target === "steam://rungameid/2379780",
+            release =>
+              release.target?.kind === "url" &&
+              release.target.value === "steam://rungameid/2379780" &&
+              release.launch?.use === "@korri:steam/steam",
           ),
         ),
       ).toBe(true)
       for (const item of Object.values(parsed.library ?? {})) {
         for (const release of decodeLibraryItemPayload(item).releases) {
-          for (const choice of release.apps ?? []) {
-            expect(choice).not.toHaveProperty("kind")
-          }
+          expect(release).not.toHaveProperty("apps")
         }
       }
     }

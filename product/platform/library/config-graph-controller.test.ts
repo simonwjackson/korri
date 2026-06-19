@@ -21,13 +21,26 @@ async function withRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
 
 const validFragment = (title: string, id = "solo") =>
   [
+    "storage:",
+    "  roms:",
+    "    root: /storage/roms",
+    "launchers:",
+    "  echo:",
+    "    plugin: '@korri:process'",
+    "    command: /bin/echo",
+    "    args: ['{content.path}']",
     "library:",
     `  ${id}:`,
     `    title: ${title}`,
     "    releases:",
     "      - id: r1",
     "        system: fixture",
-    `        target: fixture/${id}.rom`,
+    "        target:",
+    "          kind: file",
+    "          storage: roms",
+    `          path: fixture/${id}.rom`,
+    "        launch:",
+    "          use: echo",
     "",
   ].join("\n")
 

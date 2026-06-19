@@ -55,7 +55,6 @@ describe("PICO-8 plugin", () => {
     })
     expect(pico8Plugin.contributes.config.systems?.pico8).toMatchObject({
       title: "PICO-8",
-      apps: [{ id: KORRI_RETROARCH_APP_ID, runtime: "@korri:pico8/fake08" }],
     })
     expect(pico8Plugin.requires).toContainEqual(
       expect.objectContaining({

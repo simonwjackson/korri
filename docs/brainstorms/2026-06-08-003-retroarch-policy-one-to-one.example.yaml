@@ -1,33 +1,4 @@
-# Draft: one-to-one RetroArch policy inventory reconciled to Korri's current
-# typed readable contract.
-#
-# Status: reconciled reference. The active YAML below now exercises the
-# implemented expanded RetroArch cfg groups while leaving deferred launch,
-# control, secret, config-file path/default, and package surfaces as comments.
-#
-# Current contract:
-# - App records select the typed renderer with `kind: retroarch`.
-# - RetroArch app fields are flat on that app record; do not add another nested
-#   app-level policy object.
-# - Non-app cascade layers such as runtimes, profiles, sources, systems,
-#   releases, and library items use a namespaced `retroarch:` override.
-# - `configFile` is only the launch-time generated config selector.
-# - Generated retroarch.cfg fields are typed groups plus `extraSettings` as
-#   the raw cfg escape hatch.
-# - Raw app `settings`, generic integration fields, author-provided config file
-#   paths, and non-generated config selection are not active schema here.
-# - Netplay, remote command/control, plaintext secrets, full per-button bind
-#   maps, broad launch argv groups, and package/core wrapper changes remain
-#   deferred to dedicated follow-up tasks.
-#
-# Drift traps encoded by the active schema and tests:
-# - `input.menuToggleGamepadCombo: start-select` renders
-#   `input_menu_toggle_gamepad_combo = 4`.
-# - `aspect_ratio_index` includes `full = 24`.
-# - `video_frame_delay` accepts 0..99.
-# - `rewind_buffer_size` is authored in MB.
-# - Plaintext credential cfg keys such as cheevos_password, cheevos_token, and
-#   network_cmd_password do not belong in readable policy or extraSettings.
+# RetroArch readable policy one-to-one v1 example (migrated launcher vocabulary).
 
 storage:
   roms:
@@ -35,289 +6,67 @@ storage:
 
 sources:
   roms:
-    title: Local ROM library
     kind: [files]
     storage: roms
 
-apps:
+launchers:
   retroarch:
-    kind: retroarch
+    plugin: "@korri:retroarch"
     command: retroarch
-
-    environment:
-      WAYLAND_DISPLAY: null
-      SDL_VIDEODRIVER: x11
-
-    configFile:
-      mode: generated
-      append: []
-
-    core:
-      path: "{runtime.path}"
-
-    content:
-      path: "{content.path}"
-
-    lifecycle:
-      saveOnExit: false # config_save_on_exit
-      autoOverrides: false # auto_overrides_enable
-      autoRemaps: false # auto_remaps_enable
-      gameSpecificOptions: false # game_specific_options
-      autoShaders: false # auto_shaders_enable
-      showHiddenFiles: false # show_hidden_files
-      loadDummyOnCoreShutdown: false # load_dummy_on_core_shutdown
-      historyListEnable: true # history_list_enable
-      performanceCounters: false # perfcnt_enable
-      allUsersControlMenu: false # all_users_control_menu
-      suspendScreensaver: true # suspend_screensaver_enable
-      sustainedPerformanceMode: false # sustained_performance_mode
-      gameMode: true # gamemode_enable
-
-    logging:
-      verbose: false
-      logFile: null # relative names resolve under launch artifacts/logs
-      verbosity: false # log_verbosity
-      libretroLogLevel: info # libretro_log_level
-      fpsShow: false # fps_show
-      memoryShow: false # memory_show
-      framecountShow: false # framecount_show
-
-    drivers:
-      input: udev # input_driver
-      joypad: udev # input_joypad_driver
-      video: glcore # video_driver
-      audio: alsathread # audio_driver
-      resampler: sinc # audio_resampler
-      menu: ozone # menu_driver; canonical home
-      camera: 'null' # camera_driver
-      location: 'null' # location_driver
-      record: ffmpeg # record_driver
-
-    paths:
-      systemDirectory: /storage/bios # system_directory
-      savefileDirectory: /storage/saves/retroarch # savefile_directory
-      savestateDirectory: /storage/states/retroarch # savestate_directory
-      screenshotDirectory: /storage/screenshots # screenshot_directory
-      contentDirectory: null # omit content_directory
-      cacheDirectory: /storage/.cache/retroarch # cache_directory
-      assetsDirectory: /run/current-system/sw/share/retroarch/assets
-      thumbnailsDirectory: /storage/.local/share/retroarch/thumbnails
-      playlistDirectory: /storage/.local/share/retroarch/playlists
-      libretroDirectory: /run/current-system/sw/lib/retroarch/cores
-      libretroInfoPath: /run/current-system/sw/share/libretro/info
-      coreAssetsDirectory: /storage/.local/share/retroarch/downloads
-      coreOptionsPath: /storage/.config/retroarch/core-options.cfg
-      joypadAutoconfigDirectory: /run/current-system/sw/share/retroarch/autoconfig
-      inputRemappingDirectory: /storage/.config/retroarch/remaps
-      overlayDirectory: /storage/.config/retroarch/overlays
-      videoShaderDirectory: /run/current-system/sw/share/retroarch/shaders
-      cheatDatabasePath: /storage/.local/share/retroarch/cheats
-      contentDatabasePath: /storage/.local/share/retroarch/database/rdb
-      contentRuntimeLog: true # content_runtime_log
-      recordingOutputDirectory: /storage/captures/retroarch
-
-    video:
-      fullscreen: true # video_fullscreen
-      windowedFullscreen: true # video_windowed_fullscreen
-      fullscreenWidth: 0 # video_fullscreen_x; 0 means automatic
-      fullscreenHeight: 720 # video_fullscreen_y
-      refreshRate: 59.94 # video_refresh_rate
-      vsync: true # video_vsync
-      aspectRatio: full # aspect_ratio_index = 24
-      forceAspect: true # video_force_aspect
-      scale: 3 # video_scale
-      integerScale: true # video_scale_integer
-      cropOverscan: false # video_crop_overscan
-      smooth: false # video_smooth
-      shader: /run/current-system/sw/share/retroarch/shaders/crt.glslp
-      shaderEnable: true # video_shader_enable
-      hdr:
-        enable: false # video_hdr_enable
-        maxNits: 1000 # video_hdr_max_nits
-        paperWhiteNits: 200 # video_hdr_paper_white_nits
-        contrast: 1.25 # video_hdr_contrast
-        expandGamut: false # video_hdr_expand_gamut
-      recording:
-        postFilter: true # video_post_filter_record
-        gpu: true # video_gpu_record
-      gpuScreenshot: true # video_gpu_screenshot
-      shaderWatchFiles: true # video_shader_watch_files
-      sync:
-        hardSync: true # video_hard_sync
-        hardSyncFrames: 1 # video_hard_sync_frames
-        frameDelay: 0 # video_frame_delay, 0..99
-        frameDelayAuto: false # video_frame_delay_auto
-
-    audio:
-      enable: true # audio_enable
-      menuEnable: false # audio_enable_menu
-      mute: false # audio_mute_enable
-      mixerMute: false # audio_mixer_mute_enable
-      outputRate: 48000 # audio_out_rate
-      device: null # audio_device
-      sync: true # audio_sync
-      latencyMs: 64 # audio_latency
-      rateControl: true # audio_rate_control
-      rateControlDelta: 0.005 # audio_rate_control_delta
-      maxTimingSkew: 0.05 # audio_max_timing_skew
-      volumeDb: -3 # audio_volume
-      mixerVolumeDb: -6 # audio_mixer_volume
-      resamplerQuality: 4 # audio_resampler_quality
-
-    input:
-      autodetect: true # input_autodetect_enable
-      maxUsers: 4 # input_max_users
-      pollTypeBehavior: 2 # input_poll_type_behavior
-      axisThreshold: 0.5 # input_axis_threshold
-      analogDeadzone: 0.15 # input_analog_deadzone
-      analogSensitivity: 1 # input_analog_sensitivity
-      remapBinds: true # input_remap_binds_enable
-      descriptors:
-        labelShow: true # input_descriptor_label_show
-        hideUnbound: false # input_descriptor_hide_unbound
-      overlay:
-        enable: false # input_overlay_enable
-        path: null # input_overlay
-        opacity: 0.9 # input_overlay_opacity
-        scale: 1.1 # input_overlay_scale
-        behindMenu: false # input_overlay_behind_menu
-        hideInMenu: true # input_overlay_hide_in_menu
-      autoGameFocus: 0 # input_auto_game_focus
-      menuToggleGamepadCombo: start-select # input_menu_toggle_gamepad_combo = 4
-      quitGamepadCombo: l3-r3 # input_quit_gamepad_combo = 2
-      ports:
-        "1":
-          libretroDevice: 1 # input_libretro_device_p1
-          joypadIndex: 0 # input_player1_joypad_index
-          analogDpadMode: 1 # input_player1_analog_dpad_mode
-        "2":
-          libretroDevice: 257 # input_libretro_device_p2
-          joypadIndex: 1 # input_player2_joypad_index
-
-    menu:
-      showStartScreen: false # menu_show_start_screen
-      pauseLibretro: true # menu_pause_libretro
-      mouseEnable: false # menu_mouse_enable
-      pointerEnable: true # menu_pointer_enable
-      timedateEnable: true # menu_timedate_enable
-      batteryLevelEnable: true # menu_battery_level_enable
-      coreEnable: true # menu_core_enable
-      dynamicWallpaper: false # menu_dynamic_wallpaper
-      wallpaper: null # menu_wallpaper
-      screensaverTimeoutSeconds: 300 # menu_screensaver_timeout
-
-    saves:
-      autosaveIntervalSeconds: 60 # autosave_interval
-      autoLoadState: true # savestate_auto_load
-      autoSaveState: true # savestate_auto_save
-      autoIndex: true # savestate_auto_index
-      maxKeep: 10 # savestate_max_keep
-      thumbnailEnable: true # savestate_thumbnail_enable
-      sortSavefiles: true # sort_savefiles_enable
-      sortSavestates: true # sort_savestates_enable
-      savefilesInContentDir: false # savefiles_in_content_dir
-      savestatesInContentDir: false # savestates_in_content_dir
-      systemfilesInContentDir: false # systemfiles_in_content_dir
-      blockSramOverwrite: true # block_sram_overwrite
-      saveFileCompression: true # save_file_compression
-      stateFileCompression: true # state_file_compression
-
-    rewind:
-      enable: true # rewind_enable
-      granularity: 2 # rewind_granularity
-      bufferSizeMb: 20 # rewind_buffer_size, MB
-      bufferSizeStepMb: 5 # rewind_buffer_size_step, MB
-      autoStride: true # rewind_auto_stride
-
-    playback:
-      pauseNonactive: true # pause_nonactive
-      pauseOnDisconnect: false # pause_on_disconnect
-      slowmotionRatio: 3 # slowmotion_ratio
-      fastforwardRatio: 0 # fastforward_ratio
-      fastforwardFrameskip: true # fastforward_frameskip
-
-    latency:
-      runAhead:
-        enable: false # run_ahead_enabled
-        frames: 0 # run_ahead_frames
-        secondaryInstance: false # run_ahead_secondary_instance
-        hideWarnings: true # run_ahead_hide_warnings
-      preemptiveFrames:
-        enable: false # preemptive_frames_enable
-        frames: 0 # preemptive_frames
-
-    achievements:
-      enable: false # cheevos_enable; no plaintext password field
-      username: player-one # cheevos_username
-      hardcoreMode: false # cheevos_hardcore_mode_enable
-      badges: true # cheevos_badges_enable
-      richPresence: false # cheevos_richpresence_enable
-      testUnofficial: false # cheevos_test_unofficial
-
-    haptics:
-      vibrateOnKeypress: false # vibrate_on_keypress
-      deviceVibration: false # enable_device_vibration
-
-    playlists:
-      useOldFormat: false # playlist_use_old_format
-
-    privacy:
-      cameraDevice: null # camera_device
-      cameraAllow: false # camera_allow
-      locationAllow: false # location_allow
-
-    updater:
-      showOnlineUpdater: false # menu_show_online_updater
-      showCoreUpdater: false # menu_show_core_updater
-      buildbotUrl: null # core_updater_buildbot_url
-      buildbotAssetsUrl: null # core_updater_buildbot_assets_url
-      autoExtractArchive: false # core_updater_auto_extract_archive
-
-    extraSettings:
-      # Break-glass cfg keys render after typed fields and win on collision.
-      notification_show_autoconfig: false
-    extraArgs: []
-      # Break-glass argv only. Config, core, and appendconfig authority are
-      # guarded and must use typed fields instead.
+    args: ["--config", "{configPath}", "-L", "{runtime.path}", "{content.path}"]
+    settings:
+      plugin:
+        configFile:
+          mode: generated
+        logging:
+          verbosity: false
+          fpsShow: false
+        drivers:
+          video: glcore
+          audio: alsathread
+          menu: ozone
+        paths:
+          systemDirectory: /storage/bios
+          savefileDirectory: /storage/saves/retroarch
+          savestateDirectory: /storage/states/retroarch
+          cacheDirectory: /storage/.cache/retroarch
+        video:
+          fullscreen: true
+          vsync: true
+          sync:
+            frameDelay: 0
+        audio:
+          outputRate: 48000
+        input:
+          ports:
+            "1":
+              libretroDevice: 1
+              joypadIndex: 0
+        rewind:
+          enable: true
+          bufferSizeMb: 20
+        extraSettings:
+          video_font_enable: false
 
 systems:
   gba:
     name: Game Boy Advance
-    apps:
-      - id: retroarch
 
 runtimes:
   gba-mgba:
     kind: libretro-core
     path: /run/current-system/sw/lib/retroarch/cores/mgba_libretro.so
-    retroarch:
-      core:
-        path: "{runtime.path}"
+    app: retroarch
+    supports:
+      systems: [gba]
 
 profiles:
-  handheld-retroarch:
+  handheld-retroarch-v1:
     title: Handheld RetroArch defaults
-    retroarch:
-      lifecycle:
-        saveOnExit: false
-        autoOverrides: false
-        autoRemaps: false
-        gameSpecificOptions: false
-        autoShaders: false
-      drivers:
-        video: glcore
-        menu: ozone
-      video:
-        fullscreen: true
-        windowedFullscreen: true
-        vsync: true
-        sync:
-          frameDelay: 0
-      audio:
-        outputRate: 48000
-        latencyMs: 64
-      rewind:
-        bufferSizeMb: 20
+    plugin:
+      "@korri:retroarch":
+        video:
+          fullscreen: true
 
 library:
   super-mario-advance:
@@ -326,19 +75,14 @@ library:
       - id: gba-us-eu
         system: gba
         source: roms
-        target: gba/Super Mario Advance (USA, Europe).gba
-        apps:
-          - id: retroarch
-            runtime: gba-mgba
-        retroarch:
-          video:
-            aspectRatio: core-provided
-
-# ---------------------------------------------------------------------------
-# Deferred surfaces (not active schema in this reference)
-# ---------------------------------------------------------------------------
-# configFile.path and configFile.mode: default remain deferred.
-# Netplay, remote command/control, replay/recording argv, library import,
-# subsystem/automation startup flags, full per-button bind maps, plaintext
-# achievement secrets, and platform package/core wrapper changes require
-# dedicated schema, security, renderer, materialization, and Nix guard slices.
+        target:
+          kind: file
+          storage: roms
+          path: gba/Super Mario Advance (USA, Europe).gba
+        launch:
+          use: retroarch
+          runtime: gba-mgba
+          settings:
+            plugin:
+              video:
+                aspectRatio: core-provided

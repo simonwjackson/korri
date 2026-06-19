@@ -278,7 +278,7 @@ function applySignalToSnapshot(
       if (!preserveStopped && status._tag !== "Running") {
         status = { _tag: "Preparing" }
       }
-      steam.lastTask = "CheckShaderDepotManifest"
+      if (!preserveStopped) steam.lastTask = "CheckShaderDepotManifest"
       steam.taskHistory = addUniqueBounded(
         steam.taskHistory,
         "CheckShaderDepotManifest",

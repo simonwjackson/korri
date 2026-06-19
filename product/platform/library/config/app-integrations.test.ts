@@ -58,7 +58,7 @@ describe("resolveAppDescriptor", () => {
         apps: appMap([
           {
             id: "@korri:retroarch/retroarch",
-            kind: "@korri:retroarch",
+            plugin: "@korri:retroarch",
             command: "retroarch",
             args: ["-L", "{runtime.path}", "{content.path}"],
           },
@@ -78,7 +78,7 @@ describe("resolveAppDescriptor", () => {
         apps: appMap([
           {
             id: "dolphin",
-            kind: "dolphin",
+            plugin: "dolphin",
             command: "dolphin-emu",
           },
         ]),
@@ -97,10 +97,10 @@ describe("resolveAppDescriptor", () => {
         apps: appMap([
           {
             id: "plugin-app",
-            kind: "plugin-app",
+            plugin: "plugin-app",
             command: "/bin/Ryujinx",
-            plugin: {
-              "@example:plugin-app": { state: { root: "/state/Ryujinx" } },
+            settings: {
+              plugin: { state: { root: "/state/Ryujinx" } },
             },
           },
         ]),
@@ -119,11 +119,11 @@ describe("resolveAppDescriptor", () => {
         apps: appMap([
           {
             id: "@korri:steam/steam",
-            kind: "@korri:steam",
+            plugin: "@korri:steam",
             command: "steam",
             launch: { with: { "@fixture:frame": { enable: true } } },
-            plugin: {
-              "@korri:steam": {
+            settings: {
+              plugin: {
                 state: { root: "/steam-home" },
               },
             },
@@ -148,7 +148,7 @@ describe("resolveAppDescriptor", () => {
           {
             id: "my-runner",
             command: "/usr/bin/my-runner",
-            args: ["{contentPath}"],
+            args: ["{content.path}"],
           },
         ]),
         launchers: launcherMap(),
@@ -176,7 +176,7 @@ describe("resolveAppDescriptor", () => {
       runErrTag(
         resolveAppDescriptor({
           appId: "plugin-app",
-          apps: appMap([{ id: "plugin-app", kind: "plugin-app" }]),
+          apps: appMap([{ id: "plugin-app", plugin: "plugin-app" }]),
           launchers: launcherMap(),
         }),
       ),
@@ -210,7 +210,7 @@ describe("validateAppModuleCompatibility", () => {
         apps: appMap([
           {
             id: "@korri:retroarch/retroarch",
-            kind: "@korri:retroarch",
+            plugin: "@korri:retroarch",
             command: "retroarch",
           },
         ]),

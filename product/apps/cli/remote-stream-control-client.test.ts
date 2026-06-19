@@ -46,13 +46,13 @@ describe("remote stream control client", () => {
       snapshotValue({
         entries: [
           catalogEntry("gba/wario-land-4", "Wario Land 4", {
-            apps: ["moonlight"],
+            launch: { use: "moonlight" },
           }),
           catalogEntry("gba/not-ready", "Not Ready", {
             launchable: false,
-            apps: ["moonlight"],
+            launch: { use: "moonlight" },
           }),
-          catalogEntry("gba/no-app", "No App", { apps: [] }),
+          catalogEntry("gba/no-app", "No App", {}),
         ],
       }),
     )
@@ -128,12 +128,12 @@ describe("remote stream control client", () => {
 
 async function setupRemoteLibrary(options: { readonly enabled: boolean }) {
   const library = await withTempProseqlLibrary({
-    systems: [{ id: "gba", apps: [{ id: "mgba" }] }],
+    systems: [{ id: "gba" }],
     launchers: [
       {
         id: "mgba",
         command: "/bin/echo",
-        args: ["{contentPath}"],
+        args: ["{content.path}"],
         systems: ["gba"],
       },
     ],
@@ -142,6 +142,7 @@ async function setupRemoteLibrary(options: { readonly enabled: boolean }) {
         id: "gba/wario-land-4",
         system: "gba",
         contentPath: "/srv/games/wl4.gba",
+        launch: { app: "mgba" },
         metadata: { name: "Wario Land 4" },
       },
     ],
@@ -209,7 +210,7 @@ function snapshotValue(options: {
 function catalogEntry(
   id: string,
   title: string,
-  options: { readonly launchable?: boolean; readonly apps?: readonly string[] },
+  options: { readonly launchable?: boolean; readonly launch?: { readonly use?: string } },
 ) {
   const launchable = options.launchable ?? true
   return {
@@ -222,7 +223,7 @@ function catalogEntry(
         id: "gba",
         system: "gba",
         launchable,
-        apps: options.apps,
+        ...(options.launch ? { launch: options.launch } : {}),
       },
     ],
     launchable,

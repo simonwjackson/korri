@@ -75,15 +75,8 @@ const context = (root: string): ReadableResolvedLaunchContext => ({
   target: "steam://rungameid/1029210",
   app: {
     id: KORRI_STEAM_APP_ID,
-    kind: KORRI_STEAM_PLUGIN_ID,
+    plugin: KORRI_STEAM_PLUGIN_ID,
     command: "steam",
-    plugin: {
-      [KORRI_STEAM_PLUGIN_ID]: {
-        state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
-        extra: { args: ["-silent", "-gamepadui"] },
-        "launch-options": "wrapper -- %command%",
-      },
-    },
   },
   runtime: {
     id: "proton-arm64",

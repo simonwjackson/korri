@@ -540,7 +540,7 @@ function playableFor(
         id: "level",
         providerId,
         system: MEGA_MAN_MAKER_SYSTEM,
-        target: webLevelUrl(runtime, id),
+        target: { kind: "url", value: webLevelUrl(runtime, id) },
       },
     ],
   }

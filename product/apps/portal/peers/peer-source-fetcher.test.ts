@@ -28,7 +28,7 @@ describe("PeerSourceFetcherLive", () => {
             id: "pico8",
             system: "pico-8",
             launchable: true,
-            apps: ["moonlight"],
+            launch: { use: "moonlight" },
           },
         ],
         launchable: true,

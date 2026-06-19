@@ -26,9 +26,9 @@ describe("3dSen plugin descriptor", () => {
         ref: { provider: KORRI_TURNIP_PLUGIN_ID, id: "adreno-vulkan" },
       }),
     ])
-    expect(threeDSenPlugin.contributes.config.apps?.["3dsen"]).toMatchObject({
+    expect(threeDSenPlugin.contributes.config.launchers?.["3dsen"]).toMatchObject({
       id: KORRI_3DSEN_APP_ID,
-      kind: KORRI_3DSEN_PLUGIN_ID,
+      plugin: KORRI_3DSEN_PLUGIN_ID,
       launch: {
         with: {
           [KORRI_BOX64_RUNTIME_PLUGIN_ID]: {

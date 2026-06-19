@@ -142,16 +142,16 @@ describe("runStreamLaunchCommand", () => {
 
   it("uses the live library source configuration with a temp ProseQL library", async () => {
     await using library = await withTempProseqlLibrary({
-      systems: [{ id: game.system, apps: [{ id: "echo" }] }],
+      systems: [{ id: game.system }],
       launchers: [
         {
           id: "echo",
           command: "/bin/echo",
-          args: ["{contentPath}"],
+          args: ["{content.path}"],
           systems: [game.system],
         },
       ],
-      games: [{ ...game, contentPath: "content.smc" }],
+      games: [{ ...game, contentPath: "content.smc", launch: { app: "echo" } }],
     })
     const previousRoot = process.env.KORRI_LIBRARY_ROOT
     const previousConfigRoots = process.env.KORRI_CONFIG_ROOTS

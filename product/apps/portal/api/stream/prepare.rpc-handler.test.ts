@@ -251,7 +251,8 @@ async function withTempProseqlLibrary(): Promise<{
           const repository = createLibraryRepository(db)
           yield* repository.upsertSystem({
             id: "snes",
-            apps: [{ id: "rocknix-retroarch" }],
+          })
+          yield* repository.upsertGlobalConfig({
             launch: {
               with: {
                 "@example:wrapper": {
@@ -264,13 +265,14 @@ async function withTempProseqlLibrary(): Promise<{
           yield* repository.upsertLauncher({
             id: "rocknix-retroarch",
             command: FAKE_GAME,
-            args: ["{contentPath}"],
+            args: ["{content.path}"],
             systems: ["snes"],
           })
           yield* repository.upsertGame({
             id: "snes/echo.smc",
             system: "snes",
             contentPath: "/storage/roms/snes/echo.smc",
+            launch: { app: "rocknix-retroarch" },
             metadata: { name: "Echo" },
           })
           yield* Effect.promise(() => db.flush())

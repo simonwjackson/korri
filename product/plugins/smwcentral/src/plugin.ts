@@ -524,7 +524,7 @@ function playableFor(
         id: "patch-archive",
         providerId,
         system: section.system,
-        target: detailsUrl(runtime, id),
+        target: { kind: "url", value: detailsUrl(runtime, id) },
         display: { section: section.label },
       },
     ],

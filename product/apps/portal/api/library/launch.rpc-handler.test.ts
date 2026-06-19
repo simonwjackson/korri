@@ -544,7 +544,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     if (result.status === "failed") {
       expect(result.exitCode).toBe(7)
       expect(result.stderrTail).toContain("-Psnes")
-      expect(result.stderrTail).toContain("--core=/legacy-cores/snes9x")
+      expect(result.stderrTail).toContain("--emulator=retroarch")
       expect(result.stderrTail).toContain("--emulator=retroarch")
     }
   })
@@ -1281,22 +1281,20 @@ async function withTempProseqlLibrary(
             id: "snes/echo.smc",
             system: "snes",
             contentPath: "/tmp/roms/snes/echo.smc",
+            launch: { app: "rocknix-retroarch" },
             metadata: { name: "Echo" },
             userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
           })
           yield* repository.upsertSystem({
             id: "snes",
-            apps: [{ id: "rocknix-retroarch", runtime: "snes9x" }],
-            cores: { "rocknix-retroarch": "snes9x" },
           })
           if (!options.missingProfile) {
             yield* repository.upsertLauncher({
               id: "rocknix-retroarch",
               command: FAKE_GAME,
               args: [
-                "{contentPath}",
+                "{content.path}",
                 "-P{system}",
-                "--core={core}",
                 "--emulator=retroarch",
               ],
               systems: ["snes"],

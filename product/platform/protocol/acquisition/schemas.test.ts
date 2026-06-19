@@ -107,8 +107,8 @@ describe("source candidate playable shape", () => {
               {
                 id: "steam",
                 system: "windows",
-                target: "steam://rungameid/360740",
-                apps: [{ id: "@korri:steam/steam" }],
+                target: { kind: "url", value: "steam://rungameid/360740" },
+                launch: { use: "@korri:steam/steam" },
               },
             ],
           },
@@ -116,9 +116,10 @@ describe("source candidate playable shape", () => {
       ],
     })
 
-    expect(decoded.claims[0]?.playable?.releases[0]?.target).toBe(
-      "steam://rungameid/360740",
-    )
+    expect(decoded.claims[0]?.playable?.releases[0]?.target).toEqual({
+      kind: "url",
+      value: "steam://rungameid/360740",
+    })
   })
 
   it("represents metadata-only claims", () => {

@@ -1,59 +1,4 @@
-# Draft: minimal buildable RetroArch v1 policy for Korri readable config.
-#
-# Purpose: define the smallest RetroArch-specific readable contract worth
-# implementing first, while leaving a direct path to the fuller one-to-one
-# RetroArch surface in:
-#
-#   docs/brainstorms/2026-06-08-003-retroarch-policy-one-to-one.example.yaml
-#
-# This v1 intentionally models only the seams Korri already needs for normal
-# library launches:
-#
-# - RetroArch command and process environment.
-# - Generated per-launch retroarch.cfg file.
-# - Explicit libretro core selection from the chosen runtime.
-# - Explicit content path from the selected release.
-# - Deterministic baseline config for lifecycle, paths, video, audio, and input.
-# - Escape hatches for new RetroArch flags/settings Korri has not typed yet.
-#
-# Naming/layout rules:
-#
-# - `kind` selects the app-specific contract/renderer: retroarch, mame,
-#   dolphin, solarus, process, web, etc.
-# - The app record itself is the RetroArch app, so do NOT nest
-#   `apps.retroarch.retroarch`.
-# - RetroArch fields live directly on app records whose `kind: retroarch`.
-# - Other cascade layers that are not app records, such as runtimes, profiles,
-#   sources, systems, or releases, use a `retroarch:` override namespace.
-# - `configFile` is the launch-time `-c/--config` file selection. It is not the
-#   generated retroarch.cfg setting tree.
-# - Generated retroarch.cfg setting groups (`lifecycle`, `paths`, `video`,
-#   `audio`, `input`, etc.) are lifted to the same level as `core`, `content`,
-#   and `logging`.
-#
-# Precedence/rendering rules for v1:
-#
-# - Korri merges readable cascade layers first, producing one RetroArch policy.
-# - Korri renders exactly one generated retroarch.cfg for normal launches.
-# - Korri uses argv only for launch identity/control: `-c`, `-L`, content,
-#   logging, and `extraArgs`.
-# - Do not represent the same stable option twice. For example, fullscreen is
-#   `video.fullscreen`, not both `video.fullscreen` and a `--fullscreen` flag.
-# - `extraSettings` is a permanent NixOS-style escape hatch for RetroArch config
-#   keys not yet typed by Korri. It renders after typed settings.
-# - `extraArgs` is a permanent escape hatch for RetroArch launch flags not yet
-#   typed by Korri. It renders after typed launch flags and before content.
-# - Product configs should prefer typed fields when available; escape hatches
-#   are for newer upstream options, experiments, or urgent platform fixes.
-#
-# Renderer target for a normal library launch:
-#
-#   retroarch -c <generated-config-path> -L {runtime.path} {content.path}
-#
-# Generated config should include the safe lifecycle defaults below even if
-# authors omit them, because RetroArch defaults would otherwise allow mutation
-# and core/content/game override files to silently win. `extraSettings` remains
-# a break-glass escape hatch and renders last.
+# RetroArch readable policy minimal v1 example (migrated launcher vocabulary).
 
 storage:
   roms:
@@ -65,114 +10,60 @@ sources:
     kind: [files]
     storage: roms
 
-apps:
+launchers:
   retroarch:
-    # The app id can still be `retroarch`, but `kind` is the readable
-    # discriminator that tells Korri which app-specific contract applies. This
-    # leaves room for alternate ids such as `retroarch-nightly` or
-    # `retroarch-flatpak` while preserving the same typed contract.
-    kind: retroarch
+    plugin: "@korri:retroarch"
     command: retroarch
-
-    # Environment for the RetroArch process. Values are strings; null unsets.
-    # This is process environment only, not a second spelling for retroarch.cfg
-    # keys. Prefer typed fields below for normal RetroArch paths/settings.
-    environment:
-      WAYLAND_DISPLAY: null
-
-    # Launch-time config file selection. In v1, product launches should use a
-    # generated per-launch config so Korri owns the final cfg contents.
-    configFile:
-      mode: generated # v1 supports generated only; path/default are future modes
-      append: [] # --appendconfig path list; avoid unless there is a concrete need
-
-    # Runtime/content defaults are resolved after the readable cascade picks
-    # the release and runtime. These fields may be omitted by authors; shown
-    # here to document the renderer contract.
-    core:
-      path: "{runtime.path}" # optional; default is selected runtime.path
-
-    content:
-      path: "{content.path}" # optional; default is resolved release content path
-
-    logging:
-      verbose: false # -v, --verbose
-      logFile: null # --log-file=FILE; null means omit
-
-    # Deterministic generated-config baseline.
-    lifecycle:
-      saveOnExit: false # config_save_on_exit = "false"
-      autoOverrides: false # auto_overrides_enable = "false"
-      autoRemaps: false # auto_remaps_enable = "false"
-      gameSpecificOptions: false # game_specific_options = "false"
-      autoShaders: false # auto_shaders_enable = "false"
-
-    paths:
-      systemDirectory: /storage/bios # system_directory
-      savefileDirectory: /storage/saves/retroarch # savefile_directory
-      savestateDirectory: /storage/states/retroarch # savestate_directory
-      screenshotDirectory: /storage/screenshots # screenshot_directory
-
-    video:
-      fullscreen: true # video_fullscreen
-      windowedFullscreen: true # video_windowed_fullscreen
-      vsync: true # video_vsync
-      aspectRatio: core-provided # aspect_ratio_index = 22
-
-    audio:
-      enable: true # audio_enable
-      latencyMs: 64 # audio_latency
-
-    input:
-      autodetect: true # input_autodetect_enable
-      maxUsers: 4 # input_max_users
-      menuToggleGamepadCombo: start-select # input_menu_toggle_gamepad_combo = 4
-
-    # Permanent NixOS-style escape hatches. These are intentionally part of the
-    # v1 contract so operators can use new RetroArch settings/flags before Korri
-    # grows typed fields for them.
-    extraSettings: {}
-      # Example only; add only when needed:
-      # video_font_enable: false
-      # notification_show_autoconfig: false
-    extraArgs: []
-      # Example only; add only when needed:
-      # - --features
+    args: ["--config", "{configPath}", "-L", "{runtime.path}", "{content.path}"]
+    settings:
+      plugin:
+        configFile:
+          mode: generated
+          append: []
+        core:
+          path: "{runtime.path}"
+        content:
+          path: "{content.path}"
+        lifecycle:
+          saveOnExit: false
+          autoOverrides: false
+          autoRemaps: false
+          gameSpecificOptions: false
+          autoShaders: false
+        paths:
+          systemDirectory: /storage/bios
+          savefileDirectory: /storage/saves/retroarch
+          savestateDirectory: /storage/states/retroarch
+        video:
+          fullscreen: true
+          windowedFullscreen: true
+          vsync: true
+          aspectRatio: core-provided
+        audio:
+          latencyMs: 64
+        extraSettings:
+          notification_show_autoconfig: false
+        extraArgs: []
 
 systems:
   gba:
     name: Game Boy Advance
-    apps:
-      - id: retroarch
 
 runtimes:
   gba-mgba:
     kind: libretro-core
     path: /run/current-system/sw/lib/retroarch/cores/mgba_libretro.so
-
-    # Runtime-specific RetroArch overrides are namespaced because this is not
-    # the app record. Most runtimes should not need this; the default app-level
-    # `core.path: "{runtime.path}"` is enough.
-    retroarch:
-      core:
-        path: "{runtime.path}"
+    app: retroarch
+    supports:
+      systems: [gba]
 
 profiles:
   handheld-retroarch-v1:
     title: Minimal handheld RetroArch defaults
-    retroarch:
-      lifecycle:
-        saveOnExit: false
-        autoOverrides: false
-        autoRemaps: false
-        gameSpecificOptions: false
-        autoShaders: false
-      video:
-        fullscreen: true
-        windowedFullscreen: true
-        vsync: true
-      audio:
-        latencyMs: 64
+    plugin:
+      "@korri:retroarch":
+        video:
+          fullscreen: true
 
 library:
   super-mario-advance:
@@ -181,49 +72,14 @@ library:
       - id: gba-us-eu
         system: gba
         source: roms
-        target: gba/Super Mario Advance (USA, Europe).gba
-        apps:
-          - id: retroarch
-            runtime: gba-mgba
-
-        # Release-specific RetroArch overrides, if any, also use the namespaced
-        # form because this is a release layer rather than the app definition.
-        retroarch:
-          video:
-            aspectRatio: core-provided
-
-# Minimal platform-default fragment shape if a device wants RetroArch defaults
-# rendered by Nix into the readable library root:
-#
-# apps:
-#   retroarch:
-#     kind: retroarch
-#     command: /run/current-system/sw/bin/retroarch
-#     configFile:
-#       mode: generated
-#     lifecycle:
-#       saveOnExit: false
-#       autoOverrides: false
-#       autoRemaps: false
-#       gameSpecificOptions: false
-#       autoShaders: false
-#     paths:
-#       systemDirectory: /storage/bios
-#       savefileDirectory: /storage/saves/retroarch
-#       savestateDirectory: /storage/states/retroarch
-#
-# Kept out of this minimal copy-paste example; see the one-to-one reference
-# for implemented expanded groups and active drift traps:
-# - lifecycle/logging/drivers/path inventory beyond the core launch defaults
-# - video sync/shader/HDR/scaling, audio tuning, and port-keyed input fields
-# - menu, saves, rewind, playback, latency, achievements, haptics, playlists,
-#   privacy, and updater groups
-#
-# Still deferred from the active contract:
-# - full input binding maps
-# - netplay
-# - achievements / cheevos secrets
-# - recording/replay/scan/remote command launch argv groups
-# - configFile path/default modes
-# - package/core wrapper changes
-# - direct patch CLI modelling beyond Korri's existing content materialization
+        target:
+          kind: file
+          storage: roms
+          path: gba/Super Mario Advance (USA, Europe).gba
+        launch:
+          use: retroarch
+          runtime: gba-mgba
+          settings:
+            plugin:
+              video:
+                aspectRatio: core-provided

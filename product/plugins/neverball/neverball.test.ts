@@ -24,7 +24,7 @@ describe("Neverball plugin descriptor", () => {
         binary: "neverball",
       },
     })
-    expect(neverballPlugin.contributes.config.apps).toBeUndefined()
+    expect(neverballPlugin.contributes.config.launchers).toBeUndefined()
   })
 
   it("is enabled explicitly by the first-party registry", () => {

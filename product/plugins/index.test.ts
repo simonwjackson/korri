@@ -66,9 +66,9 @@ describe("first-party plugins", () => {
       plugin => plugin.id === KORRI_RETROARCH_PLUGIN_ID,
     )
 
-    expect(retroarch?.contributes.config.apps?.retroarch).toMatchObject({
+    expect(retroarch?.contributes.config.launchers?.retroarch).toMatchObject({
       id: KORRI_RETROARCH_APP_ID,
-      kind: KORRI_RETROARCH_PLUGIN_ID,
+      plugin: KORRI_RETROARCH_PLUGIN_ID,
       command: "retroarch",
     })
   })
@@ -109,20 +109,20 @@ describe("first-party plugins", () => {
       plugin => plugin.id === KORRI_STEAM_PLUGIN_ID,
     )
 
-    expect(steam?.contributes.config.apps?.steam).toMatchObject({
+    expect(steam?.contributes.config.launchers?.steam).toMatchObject({
       id: KORRI_STEAM_APP_ID,
-      kind: KORRI_STEAM_PLUGIN_ID,
+      plugin: KORRI_STEAM_PLUGIN_ID,
       command: "steam",
-      plugin: {
-        [KORRI_STEAM_PLUGIN_ID]: {
+      settings: {
+        plugin: {
           state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
           extra: { args: ["-silent", "-gamepadui"] },
         },
       },
     })
-    expect(steam?.contributes.config.apps?.steam).not.toHaveProperty("state")
-    expect(steam?.contributes.config.apps?.steam).not.toHaveProperty("extra")
-    expect(steam?.contributes.config.apps?.steam).not.toHaveProperty(
+    expect(steam?.contributes.config.launchers?.steam).not.toHaveProperty("state")
+    expect(steam?.contributes.config.launchers?.steam).not.toHaveProperty("extra")
+    expect(steam?.contributes.config.launchers?.steam).not.toHaveProperty(
       "launch-options",
     )
   })
@@ -140,9 +140,9 @@ describe("first-party plugins", () => {
       kind: "nix-package",
       package: "korri-box64-runtime",
     })
-    expect(threeDSen?.contributes.config.apps?.["3dsen"]).toMatchObject({
+    expect(threeDSen?.contributes.config.launchers?.["3dsen"]).toMatchObject({
       id: KORRI_3DSEN_APP_ID,
-      kind: KORRI_3DSEN_PLUGIN_ID,
+      plugin: KORRI_3DSEN_PLUGIN_ID,
     })
   })
 
@@ -154,7 +154,7 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_3DSEN_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_BOX64_RUNTIME_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_TURNIP_PLUGIN_ID)).toBe(true)
-    expect(registry.apps[`${KORRI_3DSEN_PLUGIN_ID}/3dsen`]).toMatchObject({
+    expect(registry.launchers[`${KORRI_3DSEN_PLUGIN_ID}/3dsen`]).toMatchObject({
       id: KORRI_3DSEN_APP_ID,
     })
   })
@@ -207,17 +207,11 @@ describe("first-party plugins", () => {
       KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,
     })
 
-    expect(registry.apps[KORRI_RETROARCH_APP_ID]).toBeDefined()
+    expect(registry.launchers[KORRI_RETROARCH_APP_ID]).toBeDefined()
     expect(
       registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/zxspectrum`],
     ).toMatchObject({
       id: KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_FUSE_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/fuse`],
@@ -229,12 +223,6 @@ describe("first-party plugins", () => {
     })
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/gba`]).toMatchObject({
       id: KORRI_RETROARCH_GBA_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/mgba`],
@@ -248,12 +236,6 @@ describe("first-party plugins", () => {
       registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/genesis`],
     ).toMatchObject({
       id: KORRI_RETROARCH_GENESIS_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/genesis-plus-gx`],
@@ -270,21 +252,9 @@ describe("first-party plugins", () => {
     })
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/sms`]).toMatchObject({
       id: KORRI_RETROARCH_SMS_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
-        },
-      ],
     })
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/n64`]).toMatchObject({
       id: KORRI_RETROARCH_N64_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/mupen64plus-next`],
@@ -297,12 +267,6 @@ describe("first-party plugins", () => {
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/tg16`]).toMatchObject(
       {
         id: KORRI_RETROARCH_TG16_SYSTEM_ID,
-        apps: [
-          {
-            id: KORRI_RETROARCH_APP_ID,
-            runtime: KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID,
-          },
-        ],
       },
     )
     expect(
@@ -315,12 +279,6 @@ describe("first-party plugins", () => {
     })
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/nes`]).toMatchObject({
       id: KORRI_RETROARCH_NES_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_MESEN_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/mesen`],
@@ -333,12 +291,6 @@ describe("first-party plugins", () => {
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/pc98`]).toMatchObject(
       {
         id: KORRI_RETROARCH_PC98_SYSTEM_ID,
-        apps: [
-          {
-            id: KORRI_RETROARCH_APP_ID,
-            runtime: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
-          },
-        ],
       },
     )
     expect(
@@ -351,12 +303,6 @@ describe("first-party plugins", () => {
     })
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/psp`]).toMatchObject({
       id: KORRI_RETROARCH_PSP_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/ppsspp`],
@@ -368,12 +314,6 @@ describe("first-party plugins", () => {
     })
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/psx`]).toMatchObject({
       id: KORRI_RETROARCH_PSX_SYSTEM_ID,
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/pcsx-rearmed`],
@@ -386,12 +326,6 @@ describe("first-party plugins", () => {
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/snes`]).toMatchObject(
       {
         id: KORRI_RETROARCH_SNES_SYSTEM_ID,
-        apps: [
-          {
-            id: KORRI_RETROARCH_APP_ID,
-            runtime: KORRI_RETROARCH_BSNES_RUNTIME_ID,
-          },
-        ],
       },
     )
     expect(
@@ -488,7 +422,7 @@ describe("first-party plugins", () => {
     expect(
       registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
     ).toBeUndefined()
-    expect(registry.apps[KORRI_STEAM_APP_ID]).toBeUndefined()
+    expect(registry.launchers[KORRI_STEAM_APP_ID]).toBeUndefined()
     expect(registry.catalog).toEqual({})
   })
 
@@ -499,9 +433,9 @@ describe("first-party plugins", () => {
 
     expect(registry.enabledPluginIds.has(KORRI_STEAM_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
-    expect(registry.apps[KORRI_STEAM_APP_ID]).toMatchObject({
+    expect(registry.launchers[KORRI_STEAM_APP_ID]).toMatchObject({
       id: KORRI_STEAM_APP_ID,
-      kind: KORRI_STEAM_PLUGIN_ID,
+      plugin: KORRI_STEAM_PLUGIN_ID,
       command: "steam",
     })
     expect(registry.storage[KORRI_STEAM_STORAGE_ID]).toMatchObject({
@@ -570,7 +504,7 @@ describe("first-party plugins", () => {
     ).toMatchObject({
       kind: "cpu-translation",
     })
-    expect(registry.apps[KORRI_RETROARCH_APP_ID]).toMatchObject({
+    expect(registry.launchers[KORRI_RETROARCH_APP_ID]).toMatchObject({
       command: "retroarch",
     })
     expect(
@@ -593,7 +527,7 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_PICO8_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_RETROARCH_PLUGIN_ID)).toBe(false)
     expect(registry.systems[`${KORRI_PICO8_PLUGIN_ID}/pico8`]).toBeDefined()
-    expect(registry.apps[KORRI_RETROARCH_APP_ID]).toBeUndefined()
+    expect(registry.launchers[KORRI_RETROARCH_APP_ID]).toBeUndefined()
   })
 
   it("enables Proton-GE only when explicitly requested", () => {

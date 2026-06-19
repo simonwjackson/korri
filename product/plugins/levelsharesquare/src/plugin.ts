@@ -460,8 +460,8 @@ function playableFor(
         id: "smbr-level",
         providerId,
         system: SMBR_SYSTEM,
-        target: levelUrl(runtime, id),
-        apps: [{ id: "smbr" }],
+        target: { kind: "url", value: levelUrl(runtime, id) },
+        launch: { use: "smbr" },
       },
     ],
   }

@@ -28,19 +28,20 @@ const retroarchCliEnv = (launchArtifactsRoot: string) => ({
 describe("validateLauncherConfig", () => {
   it("resolves a game id to a LaunchSpec via the cascade", async () => {
     await using library = await withTempProseqlLibrary({
-      systems: [
-        {
-          id: "snes",
-          apps: [{ id: "echo", runtime: "snes9x_libretro.so" }],
-          cores: { echo: "snes9x_libretro.so" },
-        },
-      ],
+      systems: [{ id: "snes" }],
       launchers: [
         {
           id: "echo",
           command: "/bin/echo",
-          args: ["{contentPath}"],
+          args: ["{content.path}"],
           systems: ["snes"],
+        },
+      ],
+      runtimes: [
+        {
+          id: "snes9x_libretro.so",
+          kind: "libretro-core",
+          path: "/legacy-cores/snes9x_libretro.so",
         },
       ],
       games: [
@@ -48,6 +49,7 @@ describe("validateLauncherConfig", () => {
           id: "game-1",
           system: "snes",
           contentPath: "content with spaces.smc",
+          launch: { app: "echo", module: "snes9x_libretro.so" },
           metadata: { name: "Game 1" },
         },
       ],
@@ -164,10 +166,10 @@ describe("validateLauncherConfig", () => {
   it("reports app/module/settings/materialized artifact details for built-in RetroArch", async () => {
     await withLaunchArtifactsRoot(async launchArtifactsRoot => {
       await using library = await withTempProseqlLibrary({
-        apps: [
+        launchers: [
           {
             id: KORRI_RETROARCH_APP_ID,
-            kind: KORRI_RETROARCH_PLUGIN_ID,
+            plugin: KORRI_RETROARCH_PLUGIN_ID,
             command: "retroarch",
             args: [
               "-c",
@@ -176,8 +178,8 @@ describe("validateLauncherConfig", () => {
               "{runtime.path}",
               "{content.path}",
             ],
-            plugin: {
-              [KORRI_RETROARCH_PLUGIN_ID]: {
+            settings: {
+              plugin: {
                 extraSettings: {
                   video_driver: "glcore",
                   video_scale_integer: true,
@@ -195,22 +197,13 @@ describe("validateLauncherConfig", () => {
             supports: { systems: ["pico8"] },
           },
         ],
-        systems: [
-          {
-            id: "pico8",
-            apps: [
-              {
-                id: KORRI_RETROARCH_APP_ID,
-                runtime: "@korri:pico8/fake08",
-              },
-            ],
-          },
-        ],
+        systems: [{ id: "pico8" }],
         games: [
           {
             id: "porklike",
             system: "pico8",
             contentPath: "/storage/roms/pico8/porklike.p8",
+            launch: { app: KORRI_RETROARCH_APP_ID, module: "@korri:pico8/fake08" },
           },
         ],
       })

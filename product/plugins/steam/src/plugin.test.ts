@@ -19,12 +19,12 @@ describe("Steam plugin descriptor", () => {
     expect(
       steamPlugin.contributes.config.providers[KORRI_STEAM_PLUGIN_ID],
     ).toMatchObject({ title: "Steam" })
-    expect(steamPlugin.contributes.config.apps?.steam).toMatchObject({
+    expect(steamPlugin.contributes.config.launchers?.steam).toMatchObject({
       id: KORRI_STEAM_APP_ID,
-      kind: KORRI_STEAM_PLUGIN_ID,
+      plugin: KORRI_STEAM_PLUGIN_ID,
       command: "steam",
-      plugin: {
-        [KORRI_STEAM_PLUGIN_ID]: {
+      settings: {
+        plugin: {
           state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
           extra: { args: ["-silent", "-gamepadui"] },
         },
@@ -33,7 +33,7 @@ describe("Steam plugin descriptor", () => {
   })
 
   it("keeps Steam authored policy under the plugin payload", () => {
-    const app = steamPlugin.contributes.config.apps?.steam
+    const app = steamPlugin.contributes.config.launchers?.steam
 
     expect(app).toBeDefined()
     expect(app).not.toHaveProperty("state")
@@ -41,15 +41,15 @@ describe("Steam plugin descriptor", () => {
     expect(app).not.toHaveProperty("launch-options")
     expect(decodeAppRecord(app)).toMatchObject({
       id: KORRI_STEAM_APP_ID,
-      kind: KORRI_STEAM_PLUGIN_ID,
+      plugin: KORRI_STEAM_PLUGIN_ID,
       command: "steam",
       launch: {
         with: {
           [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: true },
         },
       },
-      plugin: {
-        [KORRI_STEAM_PLUGIN_ID]: {
+      settings: {
+        plugin: {
           state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
           extra: { args: ["-silent", "-gamepadui"] },
         },
@@ -115,12 +115,12 @@ describe("Steam plugin descriptor", () => {
 
     expect(disabled.pluginIds.has(KORRI_STEAM_PLUGIN_ID)).toBe(true)
     expect(disabled.enabledPluginIds.has(KORRI_STEAM_PLUGIN_ID)).toBe(false)
-    expect(disabled.apps[KORRI_STEAM_APP_ID]).toBeUndefined()
+    expect(disabled.launchers[KORRI_STEAM_APP_ID]).toBeUndefined()
     expect(enabled.enabledPluginIds.has(KORRI_STEAM_PLUGIN_ID)).toBe(true)
     expect(enabled.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
-    expect(enabled.apps[KORRI_STEAM_APP_ID]).toMatchObject({
+    expect(enabled.launchers[KORRI_STEAM_APP_ID]).toMatchObject({
       id: KORRI_STEAM_APP_ID,
-      kind: KORRI_STEAM_PLUGIN_ID,
+      plugin: KORRI_STEAM_PLUGIN_ID,
       command: "steam",
     })
   })

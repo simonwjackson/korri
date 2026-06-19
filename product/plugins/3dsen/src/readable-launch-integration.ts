@@ -3,6 +3,7 @@ import {
   AppMaterializationFailed,
   type ResolutionError,
 } from "@platform/library/config/errors"
+import { appRecordKind } from "@platform/library/config/records/app"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
@@ -40,7 +41,7 @@ export const materializeReadable3dSenLaunch = (input: {
   readonly context: ReadableResolvedLaunchContext
 }): Effect.Effect<MaterializedReadable3dSenLaunch, ResolutionError> =>
   Effect.gen(function* () {
-    if (input.context.app.kind !== KORRI_3DSEN_PLUGIN_ID) {
+    if (appRecordKind(input.context.app) !== KORRI_3DSEN_PLUGIN_ID) {
       return yield* Effect.fail(
         new AppMaterializationFailed({
           appId: input.context.app.id,
@@ -77,7 +78,7 @@ export const materializeReadable3dSenLaunch = (input: {
 function canMaterialize3dSenContext(
   context: ReadableResolvedLaunchContext,
 ): boolean {
-  if (context.app.kind !== KORRI_3DSEN_PLUGIN_ID) return false
+  if (appRecordKind(context.app) !== KORRI_3DSEN_PLUGIN_ID) return false
   try {
     readThreeDSenPluginPolicy(context)
     return true

@@ -33,13 +33,10 @@ describe("LaunchBlock", () => {
     ).toThrow()
   })
 
-  it("rejects null and nested settings values", () => {
-    expect(() =>
-      decodeLaunchBlock({ settings: { video_driver: null } }),
-    ).toThrow()
-    expect(() =>
-      decodeLaunchBlock({ settings: { nested: { value: true } } }),
-    ).toThrow()
+  it("decodes nested settings packs", () => {
+    expect(
+      decodeLaunchBlock({ settings: { display: { fullscreen: true } } }),
+    ).toMatchObject({ settings: { display: { fullscreen: true } } })
   })
 
   it("prefers launch.app over the legacy launcher alias", () => {

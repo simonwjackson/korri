@@ -1,8 +1,8 @@
 # First-party Steam plugin readable-library example (v1 grammar).
 #
 # Authoring contract:
-# - systems/releases choose launch behavior with apps[] entries by id.
-# - kind lives only on top-level apps.<id>, never on an app choice.
+# - releases choose launch behavior with launch.use / launch.plugin.
+# - plugin lives only on top-level launchers.<id>, never on a system record.
 # - Steam appid comes only from target: steam://rungameid/<appid>.
 # - Steam LaunchOptions are literal Steam syntax; %command% is not a Korri placeholder.
 # - Readiness probing, VDF/localconfig paths, wrapper provisioning, and daemon
@@ -18,20 +18,19 @@ sources:
 
 systems:
   steam:
-    apps:
-      - id: "@korri:steam/steam"
+    name: Steam
 
-apps:
+launchers:
   "@korri:steam/steam":
-    kind: "@korri:steam"
+    plugin: "@korri:steam"
     command: steam
     runtime: proton-arm64
     launch:
       with:
         "@korri:gamescope":
           enable: true
-    plugin:
-      "@korri:steam":
+    settings:
+      plugin:
         state:
           root: "{storage:@korri:steam/steam}/Steam"
         extra:
@@ -51,13 +50,19 @@ library:
     releases:
       - id: steam-store
         system: steam
-        target: steam://rungameid/2379780
+        target:
+          kind: url
+          value: steam://rungameid/2379780
+        launch:
+          use: "@korri:steam/steam"
 
       - id: steam-store-mangohud
         system: steam
-        target: steam://rungameid/2379780
-        apps:
-          - id: "@korri:steam/steam"
+        target:
+          kind: url
+          value: steam://rungameid/2379780
+        launch:
+          use: "@korri:steam/steam"
+          settings:
             plugin:
-              "@korri:steam":
-                launch-options: "MANGOHUD=1 %command%"
+              launch-options: "MANGOHUD=1 %command%"

@@ -174,7 +174,7 @@ function client(options: {
             id: game.system,
             system: game.system,
             launchable: true,
-            apps: ["moonlight"],
+            launch: { use: "moonlight" },
           },
         ],
         launchable: true,

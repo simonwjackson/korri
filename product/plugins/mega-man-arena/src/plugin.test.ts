@@ -59,7 +59,7 @@ describe("Mega Man Arena plugin descriptor", () => {
           "Mega Man Arena's Windows payload uses Proton 10's wine64, DXVK, and VKD3D runtime files.",
       },
     ])
-    expect(megaManArenaPlugin.contributes.config.apps).toBeUndefined()
+    expect(megaManArenaPlugin.contributes.config.launchers).toBeUndefined()
   })
 
   it("is enabled explicitly by the plugin registry", () => {

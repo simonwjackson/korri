@@ -36,7 +36,7 @@ const readableContext: ReadableResolvedLaunchContext = {
   target: "genesis/Sonic.md",
   app: {
     id: KORRI_RETROARCH_APP_ID,
-    kind: KORRI_RETROARCH_PLUGIN_ID,
+    plugin: KORRI_RETROARCH_PLUGIN_ID,
     command: "retroarch",
   },
   runtime: {

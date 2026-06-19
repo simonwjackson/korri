@@ -39,10 +39,10 @@ export const threeDSenPlugin = plugin({
   ],
   contributes: {
     config: {
-      apps: {
+      launchers: {
         [KORRI_3DSEN_APP_LOCAL_ID]: {
           id: KORRI_3DSEN_APP_ID,
-          kind: KORRI_3DSEN_PLUGIN_ID,
+          plugin: KORRI_3DSEN_PLUGIN_ID,
           command: "3dSen.exe",
           systems: ["3dsen"],
           launch: {
@@ -64,9 +64,7 @@ export const threeDSenPlugin = plugin({
               [KORRI_TURNIP_PLUGIN_ID]: { enable: true },
             },
           },
-          plugin: {
-            [KORRI_3DSEN_PLUGIN_ID]: {},
-          },
+          settings: { plugin: {} },
           policy: { allowedCommands: ["3dSen.exe"] },
         },
       },
@@ -74,7 +72,6 @@ export const threeDSenPlugin = plugin({
         "3dsen": {
           id: "3dsen",
           title: "3dSen",
-          apps: [{ id: KORRI_3DSEN_APP_ID }],
         },
       },
       modules: {

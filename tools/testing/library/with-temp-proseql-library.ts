@@ -5,7 +5,6 @@ import type { AppRecord } from "@platform/library/config/records/app"
 import type { CollectionRecord } from "@platform/library/config/records/collection"
 import type { GameRecord } from "@platform/library/config/records/game"
 import type { GlobalConfigPayload } from "@platform/library/config/records/global"
-import type { LauncherRecord } from "@platform/library/config/records/launcher"
 import type { ModuleRecord } from "@platform/library/config/records/module"
 import type { RuntimeRecord } from "@platform/library/config/records/runtime"
 import type { SystemRecord } from "@platform/library/config/records/system"
@@ -25,8 +24,7 @@ export interface TempProseqlLibrarySeed {
   readonly global?: GlobalConfigPayload
   readonly users?: readonly UserRecord[]
   readonly systems?: readonly SystemRecord[]
-  readonly launchers?: readonly LauncherRecord[]
-  readonly apps?: readonly AppRecord[]
+  readonly launchers?: readonly AppRecord[]
   readonly modules?: readonly ModuleRecord[]
   readonly runtimes?: readonly RuntimeRecord[]
   readonly games?: readonly GameRecord[]
@@ -84,13 +82,10 @@ export async function withTempProseqlLibrary(
             yield* repository.upsertSystem(system)
           }
           for (const launcher of seed.launchers ?? []) {
-            yield* repository.upsertLauncher(launcher)
-          }
-          for (const app of seed.apps ?? []) {
-            yield* db.apps.upsert({
-              where: { id: app.id },
-              create: app,
-              update: app,
+            yield* db.launchers.upsert({
+              where: { id: launcher.id },
+              create: launcher,
+              update: launcher,
             })
           }
           for (const module of seed.modules ?? []) {

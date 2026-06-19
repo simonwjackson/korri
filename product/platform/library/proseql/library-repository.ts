@@ -1054,7 +1054,7 @@ function loadReadableSnapshot(
       providers: mergeRecordMaps(plugin.providers, providers),
       providerLinks: new Map(providerLinks.map(record => [record.id, record])),
       storage: new Map(storage.map(record => [record.id, record])),
-      apps: mergeRecordMaps(plugin.apps, apps),
+      apps: mergeRecordMaps(plugin.launchers, apps),
       runtimes: mergeRecordMaps(plugin.runtimes, runtimes),
       profiles: new Map(profiles.map(record => [record.id, record])),
       library: new Map(library.map(record => [record.id, record])),
@@ -1065,21 +1065,21 @@ function loadReadableSnapshot(
 interface PluginReadableRecords {
   readonly providers: readonly ProviderRecord[]
   readonly systems: readonly SystemRecord[]
-  readonly apps: readonly AppRecord[]
+  readonly launchers: readonly AppRecord[]
   readonly runtimes: readonly RuntimeRecord[]
 }
 
 function pluginReadableRecords(
   registry: PluginRegistry | undefined,
 ): PluginReadableRecords {
-  if (!registry) return { providers: [], systems: [], apps: [], runtimes: [] }
+  if (!registry) return { providers: [], systems: [], launchers: [], runtimes: [] }
   return {
     providers: decodePluginReadableMap(
       registry.providers,
       decodeProviderRecord,
     ),
     systems: decodePluginReadableMap(registry.systems, decodeSystemRecord),
-    apps: decodePluginReadableMap(registry.apps, decodeAppRecord),
+    launchers: decodePluginReadableMap(registry.launchers, decodeAppRecord),
     runtimes: decodePluginReadableMap(registry.runtimes, decodeRuntimeRecord),
   }
 }

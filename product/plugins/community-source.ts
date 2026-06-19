@@ -266,7 +266,7 @@ function playableFor(entry: CommunitySourcePluginEntry, providerId: ProviderId) 
         id: entry.platform,
         providerId,
         system: entry.platform,
-        target: entry.download?.url ?? entry.url,
+        target: { kind: "url", value: entry.download?.url ?? entry.url },
       },
     ],
   }

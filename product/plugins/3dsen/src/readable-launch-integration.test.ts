@@ -20,7 +20,7 @@ const context: ReadableResolvedLaunchContext = {
   target: "smb.nes",
   app: {
     id: KORRI_3DSEN_APP_ID,
-    kind: KORRI_3DSEN_PLUGIN_ID,
+    plugin: KORRI_3DSEN_PLUGIN_ID,
     command: "3dSen.exe",
   },
   launchCompanions: {

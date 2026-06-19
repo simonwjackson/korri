@@ -71,11 +71,21 @@ export type ArtifactAcquisitionHint = Schema.Schema.Type<
 
 const ClaimDisplayMetadata = Schema.Record(Schema.String, Schema.Unknown)
 const ClaimTarget = Schema.Union([
-  Schema.NonEmptyString,
-  Schema.Array(Schema.NonEmptyString),
+  Schema.Struct({ kind: Schema.Literal("url"), value: Schema.NonEmptyString }),
+  Schema.Struct({ kind: Schema.Literal("file"), path: Schema.NonEmptyString }),
+  Schema.Struct({ kind: Schema.Literal("executable"), command: Schema.NonEmptyString }),
+  Schema.Struct({ kind: Schema.Literal("provider-ref"), provider: ProviderId, ref: ProviderRef }),
+  Schema.Struct({
+    kind: Schema.Literal("file-set"),
+    files: Schema.NonEmptyArray(
+      Schema.Struct({ id: Schema.NonEmptyString, path: Schema.NonEmptyString }),
+    ),
+    primary: Schema.optional(Schema.NonEmptyString),
+  }),
 ])
-const ProviderClaimAppChoice = Schema.Struct({
-  id: Schema.NonEmptyString,
+const ProviderClaimLaunchHint = Schema.Struct({
+  use: Schema.optional(Schema.NonEmptyString),
+  plugin: Schema.optional(ProviderId),
   runtime: Schema.optional(Schema.NonEmptyString),
 })
 
@@ -84,7 +94,7 @@ export const ProviderClaimReleaseHint = Schema.Struct({
   providerId: Schema.optional(ProviderId),
   system: Schema.NonEmptyString,
   target: Schema.optional(ClaimTarget),
-  apps: Schema.optional(Schema.Array(ProviderClaimAppChoice)),
+  launch: Schema.optional(ProviderClaimLaunchHint),
   display: Schema.optional(ClaimDisplayMetadata),
 })
 export type ProviderClaimReleaseHint = Schema.Schema.Type<

@@ -74,9 +74,6 @@ export function createPico8Plugin(options: Pico8PluginOptions = {}) {
           pico8: {
             id: "pico8",
             title: "PICO-8",
-            apps: [
-              { id: KORRI_RETROARCH_APP_ID, runtime: "@korri:pico8/fake08" },
-            ],
           },
         },
         modules: {
@@ -330,7 +327,7 @@ function playableFor(providerId: ProviderId, entry: Pico8CartDetails) {
         id: entry.platform,
         providerId,
         system: entry.platform,
-        ...(entry.downloadUrl ? { target: entry.downloadUrl } : {}),
+        ...(entry.downloadUrl ? { target: { kind: "url", value: entry.downloadUrl } } : {}),
       },
     ],
   }

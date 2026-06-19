@@ -35,11 +35,11 @@ describe("RetroArch plugin", () => {
     expect(
       retroarchPlugin.contributes.config.providers[KORRI_RETROARCH_PLUGIN_ID],
     ).toMatchObject({ title: "RetroArch" })
-    expect(retroarchPlugin.contributes.config.apps?.retroarch).toMatchObject({
+    expect(retroarchPlugin.contributes.config.launchers?.retroarch).toMatchObject({
       id: KORRI_RETROARCH_APP_ID,
-      kind: KORRI_RETROARCH_PLUGIN_ID,
+      plugin: KORRI_RETROARCH_PLUGIN_ID,
       command: "retroarch",
-      plugin: { [KORRI_RETROARCH_PLUGIN_ID]: {} },
+      settings: { plugin: {} },
     })
   })
 
@@ -51,12 +51,6 @@ describe("RetroArch plugin", () => {
     ).toMatchObject({
       id: KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
       title: "Sinclair ZX Spectrum",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_FUSE_RUNTIME_ID,
-        },
-      ],
     })
     expect(retroarchPlugin.contributes.config.runtimes?.fuse).toMatchObject({
       id: KORRI_RETROARCH_FUSE_RUNTIME_ID,
@@ -73,12 +67,6 @@ describe("RetroArch plugin", () => {
     expect(retroarchPlugin.contributes.config.systems?.gba).toMatchObject({
       id: KORRI_RETROARCH_GBA_SYSTEM_ID,
       title: "Game Boy Advance",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
-        },
-      ],
     })
     expect(retroarchPlugin.contributes.config.runtimes?.mgba).toMatchObject({
       id: KORRI_RETROARCH_MGBA_RUNTIME_ID,
@@ -97,12 +85,6 @@ describe("RetroArch plugin", () => {
     expect(retroarchPlugin.contributes.config.systems?.genesis).toMatchObject({
       id: KORRI_RETROARCH_GENESIS_SYSTEM_ID,
       title: "Sega Genesis",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       retroarchPlugin.contributes.config.runtimes?.["genesis-plus-gx"],
@@ -125,12 +107,6 @@ describe("RetroArch plugin", () => {
     expect(retroarchPlugin.contributes.config.systems?.sms).toMatchObject({
       id: KORRI_RETROARCH_SMS_SYSTEM_ID,
       title: "Sega Master System",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       retroarchPlugin.contributes.config.runtimes?.["genesis-plus-gx"],
@@ -156,12 +132,6 @@ describe("RetroArch plugin", () => {
     expect(retroarchPlugin.contributes.config.systems?.tg16).toMatchObject({
       id: KORRI_RETROARCH_TG16_SYSTEM_ID,
       title: "NEC TurboGrafx-16",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_MEDNAFEN_PCE_FAST_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       retroarchPlugin.contributes.config.runtimes?.["mednafen-pce-fast"],
@@ -182,12 +152,6 @@ describe("RetroArch plugin", () => {
     expect(retroarchPlugin.contributes.config.systems?.n64).toMatchObject({
       id: KORRI_RETROARCH_N64_SYSTEM_ID,
       title: "Nintendo 64",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       retroarchPlugin.contributes.config.runtimes?.["mupen64plus-next"],
@@ -206,12 +170,6 @@ describe("RetroArch plugin", () => {
     expect(retroarchPlugin.contributes.config.systems?.nes).toMatchObject({
       id: KORRI_RETROARCH_NES_SYSTEM_ID,
       title: "Nintendo Entertainment System",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_MESEN_RUNTIME_ID,
-        },
-      ],
     })
     expect(retroarchPlugin.contributes.config.runtimes?.mesen).toMatchObject({
       id: KORRI_RETROARCH_MESEN_RUNTIME_ID,
@@ -228,12 +186,6 @@ describe("RetroArch plugin", () => {
     expect(retroarchPlugin.contributes.config.systems?.pc98).toMatchObject({
       id: KORRI_RETROARCH_PC98_SYSTEM_ID,
       title: "NEC PC-98",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
-        },
-      ],
     })
     expect(retroarchPlugin.contributes.config.runtimes?.np2kai).toMatchObject({
       id: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
@@ -250,12 +202,6 @@ describe("RetroArch plugin", () => {
     expect(retroarchPlugin.contributes.config.systems?.psp).toMatchObject({
       id: KORRI_RETROARCH_PSP_SYSTEM_ID,
       title: "Sony PlayStation Portable",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
-        },
-      ],
     })
     expect(retroarchPlugin.contributes.config.runtimes?.ppsspp).toMatchObject({
       id: KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
@@ -274,12 +220,6 @@ describe("RetroArch plugin", () => {
     expect(retroarchPlugin.contributes.config.systems?.psx).toMatchObject({
       id: KORRI_RETROARCH_PSX_SYSTEM_ID,
       title: "Sony PlayStation",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
-        },
-      ],
     })
     expect(
       retroarchPlugin.contributes.config.runtimes?.["pcsx-rearmed"],
@@ -298,12 +238,6 @@ describe("RetroArch plugin", () => {
     expect(retroarchPlugin.contributes.config.systems?.snes).toMatchObject({
       id: KORRI_RETROARCH_SNES_SYSTEM_ID,
       title: "Super Nintendo Entertainment System",
-      apps: [
-        {
-          id: KORRI_RETROARCH_APP_ID,
-          runtime: KORRI_RETROARCH_BSNES_RUNTIME_ID,
-        },
-      ],
     })
     expect(retroarchPlugin.contributes.config.runtimes?.bsnes).toMatchObject({
       id: KORRI_RETROARCH_BSNES_RUNTIME_ID,
@@ -318,7 +252,7 @@ describe("RetroArch plugin", () => {
     expect(() =>
       decodeAppRecord({
         id: KORRI_RETROARCH_APP_ID,
-        kind: KORRI_RETROARCH_PLUGIN_ID,
+        plugin: KORRI_RETROARCH_PLUGIN_ID,
         command: "retroarch",
         supports: { systems: ["pico8"] },
       }),

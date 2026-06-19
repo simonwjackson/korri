@@ -8,19 +8,20 @@ describe("withTempProseqlLibrary", () => {
   it("seeds the six collections through real ProseQL + real disk", async () => {
     await using library = await withTempProseqlLibrary({
       global: { launch: { with: { "@example:wrapper": { enable: false } } } },
-      systems: [
-        {
-          id: "snes",
-          apps: [{ id: "echo", runtime: "snes9x_libretro.so" }],
-          cores: { echo: "snes9x_libretro.so" },
-        },
-      ],
+      systems: [{ id: "snes" }],
       launchers: [
         {
           id: "echo",
           command: "/bin/echo",
-          args: ["-L", "{core}", "{contentPath}"],
+          args: ["-L", "{runtime.path}", "{content.path}"],
           systems: ["snes"],
+        },
+      ],
+      runtimes: [
+        {
+          id: "snes9x_libretro.so",
+          kind: "libretro-core",
+          path: "/legacy-cores/snes9x_libretro.so",
         },
       ],
       games: [
@@ -28,6 +29,7 @@ describe("withTempProseqlLibrary", () => {
           id: "game-1",
           system: "snes",
           contentPath: "/storage/roms/snes/game-1.smc",
+          launch: { app: "echo", module: "snes9x_libretro.so" },
           metadata: { name: "Game 1" },
         },
       ],

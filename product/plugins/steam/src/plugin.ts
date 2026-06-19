@@ -63,7 +63,6 @@ export const steamPlugin = plugin({
         steam: {
           id: "steam",
           name: "Steam",
-          apps: [{ id: KORRI_STEAM_APP_ID }],
         },
       },
       modules: {
@@ -86,10 +85,10 @@ export const steamPlugin = plugin({
           capabilities: ["system.service", "steam.runtime"],
         },
       },
-      apps: {
+      launchers: {
         [KORRI_STEAM_APP_LOCAL_ID]: {
           id: KORRI_STEAM_APP_ID,
-          kind: KORRI_STEAM_PLUGIN_ID,
+          plugin: KORRI_STEAM_PLUGIN_ID,
           command: "steam",
           systems: ["steam"],
           launch: {
@@ -97,9 +96,7 @@ export const steamPlugin = plugin({
               [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: true },
             },
           },
-          plugin: {
-            [KORRI_STEAM_PLUGIN_ID]: defaultSteamPluginPolicy,
-          },
+          settings: { plugin: defaultSteamPluginPolicy },
           policy: { allowedCommands: ["steam"] },
         },
       },

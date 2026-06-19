@@ -565,15 +565,16 @@ async function seedSteamLaunchConfig(
 ): Promise<void> {
   await mkdir(configRoot, { recursive: true })
   await mkdir(steamRoot, { recursive: true })
-  const appBlock = options.includeApp
+  const launcherBlock = options.includeApp
     ? [
-        "apps:",
+        "launchers:",
         `  "${KORRI_STEAM_APP_ID}":`,
-        `    kind: "${KORRI_STEAM_PLUGIN_ID}"`,
+        `    plugin: "${KORRI_STEAM_PLUGIN_ID}"`,
         "    command: steam",
-        "    plugin:",
-        `      "${KORRI_STEAM_PLUGIN_ID}":`,
-        `        state: { root: "{storage:${KORRI_STEAM_STORAGE_ID}}/Steam" }`,
+        "    settings:",
+        "      plugin:",
+        `        "${KORRI_STEAM_PLUGIN_ID}":`,
+        `          state: { root: "{storage:${KORRI_STEAM_STORAGE_ID}}/Steam" }`,
       ]
     : []
   await Bun.write(
@@ -582,16 +583,15 @@ async function seedSteamLaunchConfig(
       "storage:",
       `  "${KORRI_STEAM_STORAGE_ID}":`,
       `    root: ${JSON.stringify(steamRoot)}`,
-      ...appBlock,
+      ...launcherBlock,
       "library:",
       "  thirty-xx:",
       "    title: 30XX",
       "    releases:",
       "      - id: steam",
       "        system: steam",
-      "        target: steam://rungameid/1029210",
-      "        apps:",
-      `          - id: "${KORRI_STEAM_APP_ID}"`,
+      "        target: { kind: url, value: steam://rungameid/1029210 }",
+      `        launch: { use: "${KORRI_STEAM_APP_ID}" }`,
       "",
     ].join("\n"),
   )

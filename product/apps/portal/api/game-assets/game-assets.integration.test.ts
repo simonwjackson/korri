@@ -197,24 +197,25 @@ async function seedLibrary(root: string): Promise<void> {
         })
         yield* repository.upsertSystem({
           id: "snes",
-          apps: [{ id: "fake-game" }],
         })
         yield* repository.upsertLauncher({
           id: "fake-game",
           command: FAKE_GAME,
-          args: ["{contentPath}"],
+          args: ["{content.path}"],
           systems: ["snes"],
         })
         yield* repository.upsertGame({
           id: gameWithAssetId,
           system: "snes",
           contentPath: "/storage/roms/snes/asset-game.smc",
+          launch: { app: "fake-game" },
           metadata: { name: "Asset Game" },
         })
         yield* repository.upsertGame({
           id: gameWithoutAssetsId,
           system: "snes",
           contentPath: "/storage/roms/snes/plain-game.smc",
+          launch: { app: "fake-game" },
           metadata: { name: "Plain Game" },
         })
         yield* Effect.promise(() => db.flush())

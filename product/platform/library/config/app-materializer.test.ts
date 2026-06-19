@@ -123,9 +123,9 @@ describe("materializeAppLaunch", () => {
             "@example:host/app",
             {
               id: "@example:host/app",
-              kind: "@example:host",
+              plugin: "@example:host",
               command: "example-host",
-              args: ["{contentPath}"],
+              args: ["{content.path}"],
             },
           ],
         ]),

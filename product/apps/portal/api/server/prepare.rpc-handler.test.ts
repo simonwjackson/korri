@@ -75,19 +75,34 @@ describe("app.server.stream.prepare handler", () => {
       JSON.parse(await readFile(intentPath, "utf8")),
     )
     expect(intent.launchCompanions).toEqual({
-      "@example:wrapper": { enable: false },
+      "@example:wrapper": {
+        enable: false,
+        backend: { type: "wayland" },
+        window: { fullscreen: true, borderless: true, exposeWayland: true },
+      },
     })
   })
 })
 
 async function setupRemoteLibrary() {
   const library = await withTempProseqlLibrary({
-    systems: [{ id: "gba", apps: [{ id: "mgba" }] }],
+    global: {
+      launch: {
+        with: {
+          "@example:wrapper": {
+            enable: true,
+            backend: { type: "wayland" },
+            window: { fullscreen: true, borderless: true, exposeWayland: true },
+          },
+        },
+      },
+    },
+    systems: [{ id: "gba" }],
     launchers: [
       {
         id: "mgba",
         command: "/bin/echo",
-        args: ["{contentPath}"],
+        args: ["{content.path}"],
         systems: ["gba"],
       },
     ],
@@ -96,6 +111,7 @@ async function setupRemoteLibrary() {
         id: "gba/wario-land-4",
         system: "gba",
         contentPath: "/srv/games/wl4.gba",
+        launch: { app: "mgba" },
         metadata: { name: "Wario Land 4" },
         presets: {
           raw: { launch: { with: { "@example:wrapper": { enable: false } } } },

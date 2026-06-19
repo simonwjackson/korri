@@ -74,7 +74,7 @@ describe("importRocknixLibrary", () => {
               storage: yield* Effect.promise(
                 () => db.storage.query().runPromise,
               ),
-              apps: yield* Effect.promise(() => db.apps.query().runPromise),
+              launchers: yield* Effect.promise(() => db.launchers.query().runPromise),
               runtimes: yield* Effect.promise(
                 () => db.runtimes.query().runPromise,
               ),
@@ -96,7 +96,7 @@ describe("importRocknixLibrary", () => {
               storage: "local-roms",
               path: "snes/new.smc",
             },
-            apps: [{ id: "rocknix-retroarch", runtime: "snes9x" }],
+            launch: { use: "rocknix-retroarch", runtime: "snes9x" },
           },
         ],
         [
@@ -108,12 +108,12 @@ describe("importRocknixLibrary", () => {
               storage: "local-roms",
               path: "snes/old.smc",
             },
-            apps: [{ id: "rocknix-retroarch", runtime: "snes9x" }],
+            launch: { use: "rocknix-retroarch", runtime: "snes9x" },
           },
         ],
       ])
       expect(result.storage).toEqual([{ id: "local-roms", root: lib.rootDir }])
-      expect(result.apps[0]).toMatchObject({
+      expect(result.launchers[0]).toMatchObject({
         id: "rocknix-retroarch",
         command: lib.launchCommand,
         args: [
@@ -174,7 +174,7 @@ describe("importRocknixLibrary", () => {
               first,
               second,
               games: yield* repository.listPlayableEntries(),
-              apps: yield* Effect.promise(() => db.apps.query().runPromise),
+              launchers: yield* Effect.promise(() => db.launchers.query().runPromise),
               systems: yield* Effect.promise(
                 () => db.systems.query().runPromise,
               ),
@@ -192,11 +192,9 @@ describe("importRocknixLibrary", () => {
         storage: "local-roms",
         path: "snes/echo.smc",
       })
-      expect(result.apps).toHaveLength(1)
-      expect(result.apps[0]?.id).toBe("rocknix-retroarch")
-      expect(
-        result.systems.find(s => s.id === "snes")?.cores?.["rocknix-retroarch"],
-      ).toBe("snes9x")
+      expect(result.launchers).toHaveLength(1)
+      expect(result.launchers[0]?.id).toBe("rocknix-retroarch")
+      expect(result.systems.find(s => s.id === "snes")).toEqual({ id: "snes" })
     })
   })
 
