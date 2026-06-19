@@ -5,16 +5,20 @@
  * save-conflict, storefront, game-of-the-day. Pure 8-bit fan-fiction so the
  * device-lab has something to dream against. Composed from screens/kit.tsx;
  * screen-specific layout in screens/future.css (namespace pcFut-).
+ *
+ * Data comes from PicoSocial / PicoStore (+ PicoLibrary) via atoms (never a
+ * fixture import).
  */
 
-import { picoGames } from "../fixtures"
 import {
-  picoAchievements,
-  picoFriends,
-  picoHero,
-  picoScores,
-  picoStoreItems,
-} from "../fixtures-extra"
+  picoAchievementsAtom,
+  picoFeaturedAtom,
+  picoFriendsAtom,
+  picoProfileAtom,
+  picoScoresAtom,
+  picoStoreItemsAtom,
+} from "../data/pico-social-atoms"
+import { PicoData } from "./PicoData"
 import {
   Badge,
   Btn,
@@ -38,65 +42,71 @@ function statusClass(status: string): string {
 }
 
 export function FriendsScreen() {
-  const playing = picoFriends.filter(friend => friend.status === "playing")
-  const online = picoFriends.filter(
-    friend => friend.status === "online" || friend.status === "away",
-  )
-  const offline = picoFriends.filter(friend => friend.status === "offline")
   return (
-    <Screen
-      title="PICO ▸ FRIENDS"
-      hints={[
-        { key: "a", label: "JOIN" },
-        { key: "y", label: "INVITE" },
-        { key: "b", label: "BACK" },
-      ]}
-    >
-      <div className="pcFut-friends">
-        {[
-          { label: "PLAYING NOW", list: playing },
-          { label: "ONLINE", list: online },
-          { label: "OFFLINE", list: offline },
-        ].map(group =>
-          group.list.length === 0 ? null : (
-            <div key={group.label} className="pcFut-group">
-              <div className="pcFut-group-h">
-                {group.label}
-                <span className="pc-dim"> · {group.list.length}</span>
-              </div>
-              <List>
-                {group.list.map((friend, index) => (
-                  <Row
-                    key={friend.id}
-                    sel={group.label === "PLAYING NOW" && index === 0}
-                    icon={
-                      <span
-                        className={`pcFut-ava ${statusClass(friend.status)}`}
-                      >
-                        {friend.name.slice(0, 2)}
-                      </span>
-                    }
-                    label={friend.name}
-                    meta={
-                      friend.playing
-                        ? `deep in ${friend.playing}`
-                        : friend.status === "offline"
-                          ? "off doing other things"
-                          : friend.status.toUpperCase()
-                    }
-                    trailing={
-                      <span
-                        className={`pcFut-dot ${statusClass(friend.status)}`}
-                      />
-                    }
-                  />
-                ))}
-              </List>
+    <PicoData atom={picoFriendsAtom} title="PICO ▸ FRIENDS">
+      {friends => {
+        const playing = friends.filter(friend => friend.status === "playing")
+        const online = friends.filter(
+          friend => friend.status === "online" || friend.status === "away",
+        )
+        const offline = friends.filter(friend => friend.status === "offline")
+        return (
+          <Screen
+            title="PICO ▸ FRIENDS"
+            hints={[
+              { key: "a", label: "JOIN" },
+              { key: "y", label: "INVITE" },
+              { key: "b", label: "BACK" },
+            ]}
+          >
+            <div className="pcFut-friends">
+              {[
+                { label: "PLAYING NOW", list: playing },
+                { label: "ONLINE", list: online },
+                { label: "OFFLINE", list: offline },
+              ].map(group =>
+                group.list.length === 0 ? null : (
+                  <div key={group.label} className="pcFut-group">
+                    <div className="pcFut-group-h">
+                      {group.label}
+                      <span className="pc-dim"> · {group.list.length}</span>
+                    </div>
+                    <List>
+                      {group.list.map((friend, index) => (
+                        <Row
+                          key={friend.id}
+                          sel={group.label === "PLAYING NOW" && index === 0}
+                          icon={
+                            <span
+                              className={`pcFut-ava ${statusClass(friend.status)}`}
+                            >
+                              {friend.name.slice(0, 2)}
+                            </span>
+                          }
+                          label={friend.name}
+                          meta={
+                            friend.playing
+                              ? `deep in ${friend.playing}`
+                              : friend.status === "offline"
+                                ? "off doing other things"
+                                : friend.status.toUpperCase()
+                          }
+                          trailing={
+                            <span
+                              className={`pcFut-dot ${statusClass(friend.status)}`}
+                            />
+                          }
+                        />
+                      ))}
+                    </List>
+                  </div>
+                ),
+              )}
             </div>
-          ),
-        )}
-      </div>
-    </Screen>
+          </Screen>
+        )
+      }}
+    </PicoData>
   )
 }
 
@@ -177,132 +187,148 @@ export function ActivityFeedScreen() {
 }
 
 export function AchievementsScreen() {
-  const unlocked = picoAchievements.filter(a => a.unlocked).length
-  const total = picoAchievements.length
   return (
-    <Screen
-      title="PICO ▸ TROPHIES"
-      hints={[
-        { key: "a", label: "DETAILS" },
-        { key: "b", label: "BACK" },
-      ]}
-    >
-      <div className="pcFut-ach-summary">
-        <Title size={0}>ACHIEVEMENTS</Title>
-        <Badge tone="accent">
-          {unlocked} / {total}
-        </Badge>
-      </div>
-      <div className="pcFut-ach-toast">
-        <span className="pcFut-ach-toast-ico">
-          <PicoIcon name="star" />
-        </span>
-        <span className="pcFut-ach-toast-text">
-          <b>UNLOCKED · NIGHT OWL</b>
-          Still playing past midnight · just now
-        </span>
-        <Badge tone="good">+10</Badge>
-      </div>
-      <List>
-        {picoAchievements.map((ach, index) => (
-          <Row
-            key={ach.id}
-            sel={index === 1}
-            icon={
-              <span
-                className={`pcFut-ach-ico ${ach.unlocked ? "got" : "locked"}`}
-              >
-                {ach.unlocked ? <PicoIcon name="star" /> : "✦"}
+    <PicoData atom={picoAchievementsAtom} title="PICO ▸ TROPHIES">
+      {achievements => {
+        const unlocked = achievements.filter(a => a.unlocked).length
+        const total = achievements.length
+        return (
+          <Screen
+            title="PICO ▸ TROPHIES"
+            hints={[
+              { key: "a", label: "DETAILS" },
+              { key: "b", label: "BACK" },
+            ]}
+          >
+            <div className="pcFut-ach-summary">
+              <Title size={0}>ACHIEVEMENTS</Title>
+              <Badge tone="accent">
+                {unlocked} / {total}
+              </Badge>
+            </div>
+            <div className="pcFut-ach-toast">
+              <span className="pcFut-ach-toast-ico">
+                <PicoIcon name="star" />
               </span>
-            }
-            label={
-              <span className={ach.unlocked ? "" : "pc-dim"}>{ach.name}</span>
-            }
-            meta={ach.unlocked ? ach.desc : `LOCKED · ${ach.desc}`}
-            trailing={
-              <span className={`pcFut-rarity r-${ach.rarity.toLowerCase()}`}>
-                {ach.rarity}
+              <span className="pcFut-ach-toast-text">
+                <b>UNLOCKED · NIGHT OWL</b>
+                Still playing past midnight · just now
               </span>
-            }
-          />
-        ))}
-      </List>
-    </Screen>
+              <Badge tone="good">+10</Badge>
+            </div>
+            <List>
+              {achievements.map((ach, index) => (
+                <Row
+                  key={ach.id}
+                  sel={index === 1}
+                  icon={
+                    <span
+                      className={`pcFut-ach-ico ${ach.unlocked ? "got" : "locked"}`}
+                    >
+                      {ach.unlocked ? <PicoIcon name="star" /> : "✦"}
+                    </span>
+                  }
+                  label={
+                    <span className={ach.unlocked ? "" : "pc-dim"}>
+                      {ach.name}
+                    </span>
+                  }
+                  meta={ach.unlocked ? ach.desc : `LOCKED · ${ach.desc}`}
+                  trailing={
+                    <span className={`pcFut-rarity r-${ach.rarity.toLowerCase()}`}>
+                      {ach.rarity}
+                    </span>
+                  }
+                />
+              ))}
+            </List>
+          </Screen>
+        )
+      }}
+    </PicoData>
   )
 }
 
 export function LeaderboardScreen() {
   return (
-    <Screen
-      title="PICO ▸ RANKS"
-      hints={[
-        { key: "a", label: "VIEW" },
-        { key: "y", label: "SCOPE" },
-        { key: "b", label: "BACK" },
-      ]}
-    >
-      <div className="pcFut-lb-head">
-        <Title size={0}>CELESTE · TIME ATTACK</Title>
-        <Tabs items={["FRIENDS", "GLOBAL"]} sel={0} />
-      </div>
-      <div className="pcFut-lb">
-        <div className="pcFut-lb-row head">
-          <span className="pcFut-lb-rank">#</span>
-          <span className="pcFut-lb-name">PLAYER</span>
-          <span className="pcFut-lb-score">SCORE</span>
-        </div>
-        {picoScores.map(row => (
-          <div
-            key={`${row.rank}-${row.name}`}
-            className={`pcFut-lb-row ${row.you ? "you" : ""}`}
-          >
-            <span className="pcFut-lb-rank">
-              {row.rank <= 3 ? ["①", "②", "③"][row.rank - 1] : row.rank}
-            </span>
-            <span className="pcFut-lb-name">{row.name}</span>
-            <span className="pcFut-lb-score">{row.score}</span>
+    <PicoData atom={picoScoresAtom} title="PICO ▸ RANKS">
+      {scores => (
+        <Screen
+          title="PICO ▸ RANKS"
+          hints={[
+            { key: "a", label: "VIEW" },
+            { key: "y", label: "SCOPE" },
+            { key: "b", label: "BACK" },
+          ]}
+        >
+          <div className="pcFut-lb-head">
+            <Title size={0}>CELESTE · TIME ATTACK</Title>
+            <Tabs items={["FRIENDS", "GLOBAL"]} sel={0} />
           </div>
-        ))}
-      </div>
-    </Screen>
+          <div className="pcFut-lb">
+            <div className="pcFut-lb-row head">
+              <span className="pcFut-lb-rank">#</span>
+              <span className="pcFut-lb-name">PLAYER</span>
+              <span className="pcFut-lb-score">SCORE</span>
+            </div>
+            {scores.map(row => (
+              <div
+                key={`${row.rank}-${row.name}`}
+                className={`pcFut-lb-row ${row.you ? "you" : ""}`}
+              >
+                <span className="pcFut-lb-rank">
+                  {row.rank <= 3 ? ["①", "②", "③"][row.rank - 1] : row.rank}
+                </span>
+                <span className="pcFut-lb-name">{row.name}</span>
+                <span className="pcFut-lb-score">{row.score}</span>
+              </div>
+            ))}
+          </div>
+        </Screen>
+      )}
+    </PicoData>
   )
 }
 
 export function ProfileScreen() {
   return (
-    <Screen
-      title="PICO ▸ PROFILE"
-      hints={[
-        { key: "a", label: "EDIT" },
-        { key: "b", label: "BACK" },
-      ]}
-    >
-      <div className="pcFut-prof-head">
-        <span className="pcFut-prof-ava">PJ</span>
-        <div className="pcFut-prof-id">
-          <Title size={1}>PIXELJ</Title>
-          <div className="pc-sub">LEVEL 24 · ROVING ROMHACKER</div>
-          <div className="pcFut-prof-xp">
-            <Progress pct={68} />
-            <span className="pc-dim">6,820 / 10,000 XP</span>
+    <PicoData atom={picoProfileAtom} title="PICO ▸ PROFILE">
+      {({ games, friends }) => (
+        <Screen
+          title="PICO ▸ PROFILE"
+          hints={[
+            { key: "a", label: "EDIT" },
+            { key: "b", label: "BACK" },
+          ]}
+        >
+          <div className="pcFut-prof-head">
+            <span className="pcFut-prof-ava">PJ</span>
+            <div className="pcFut-prof-id">
+              <Title size={1}>PIXELJ</Title>
+              <div className="pc-sub">LEVEL 24 · ROVING ROMHACKER</div>
+              <div className="pcFut-prof-xp">
+                <Progress pct={68} />
+                <span className="pc-dim">6,820 / 10,000 XP</span>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-      <div className="pcFut-prof-stats">
-        <Stat label="GAMES" value={picoGames.length} />
-        <Stat label="PLAYTIME" value="312h" />
-        <Stat label="TROPHIES" value="3 / 5" />
-        <Stat label="FRIENDS" value={picoFriends.length} />
-      </div>
-      <Card title="FAVORITE GENRES">
-        <div className="pcFut-prof-chips">
-          <Chip>PLATFORMER</Chip>
-          <Chip>METROIDVANIA</Chip>
-          <Chip>SHMUP</Chip>
-          <Chip>ROGUELITE</Chip>
-        </div>
-      </Card>
-    </Screen>
+          <div className="pcFut-prof-stats">
+            <Stat label="GAMES" value={games.length} />
+            <Stat label="PLAYTIME" value="312h" />
+            <Stat label="TROPHIES" value="3 / 5" />
+            <Stat label="FRIENDS" value={friends.length} />
+          </div>
+          <Card title="FAVORITE GENRES">
+            <div className="pcFut-prof-chips">
+              <Chip>PLATFORMER</Chip>
+              <Chip>METROIDVANIA</Chip>
+              <Chip>SHMUP</Chip>
+              <Chip>ROGUELITE</Chip>
+            </div>
+          </Card>
+        </Screen>
+      )}
+    </PicoData>
   )
 }
 
@@ -364,111 +390,123 @@ export function CloudSaveConflictScreen() {
 }
 
 export function StoreScreen() {
-  const featured = picoStoreItems[0]
   return (
-    <Screen
-      title="PICO ▸ STORE"
-      hints={[
-        { key: "a", label: "BROWSE" },
-        { key: "b", label: "BACK" },
-      ]}
-    >
-      {featured ? (
-        <div className="pcFut-store-banner">
-          <div className="pcFut-store-banner-text">
-            <div className="pc-sub">FEATURED COLLECTION</div>
-            <Title size={1}>{featured.title}</Title>
-            <p className="pcFut-store-blurb">
-              Ports we hand-dusted to feel right in your palms. Fresh crates
-              land every week.
-            </p>
-            <div className="pcFut-store-banner-meta">
-              <Badge tone="good">{featured.price}</Badge>
-              <Chip>{featured.source}</Chip>
-            </div>
-          </div>
-          <span className="pcFut-store-banner-tag">{featured.tag}</span>
-        </div>
-      ) : null}
-      <div className="pcFut-store-grid">
-        {picoStoreItems.map((item, index) => (
-          <Card
-            key={item.id}
-            className={`pcFut-store-tile ${index === 1 ? "sel" : ""}`}
+    <PicoData atom={picoStoreItemsAtom} title="PICO ▸ STORE">
+      {storeItems => {
+        const featured = storeItems[0]
+        return (
+          <Screen
+            title="PICO ▸ STORE"
+            hints={[
+              { key: "a", label: "BROWSE" },
+              { key: "b", label: "BACK" },
+            ]}
           >
-            <span className="pcFut-store-tile-art">
-              {item.title.slice(0, 1)}
-            </span>
-            <div className="pcFut-store-tile-body">
-              <div className="pcFut-store-tile-title">{item.title}</div>
-              <div className="pcFut-store-tile-meta">
-                <Chip>{item.tag}</Chip>
-                <Badge tone="good">{item.price}</Badge>
+            {featured ? (
+              <div className="pcFut-store-banner">
+                <div className="pcFut-store-banner-text">
+                  <div className="pc-sub">FEATURED COLLECTION</div>
+                  <Title size={1}>{featured.title}</Title>
+                  <p className="pcFut-store-blurb">
+                    Ports we hand-dusted to feel right in your palms. Fresh crates
+                    land every week.
+                  </p>
+                  <div className="pcFut-store-banner-meta">
+                    <Badge tone="good">{featured.price}</Badge>
+                    <Chip>{featured.source}</Chip>
+                  </div>
+                </div>
+                <span className="pcFut-store-banner-tag">{featured.tag}</span>
               </div>
-              <span className="pc-dim">via {item.source}</span>
+            ) : null}
+            <div className="pcFut-store-grid">
+              {storeItems.map((item, index) => (
+                <Card
+                  key={item.id}
+                  className={`pcFut-store-tile ${index === 1 ? "sel" : ""}`}
+                >
+                  <span className="pcFut-store-tile-art">
+                    {item.title.slice(0, 1)}
+                  </span>
+                  <div className="pcFut-store-tile-body">
+                    <div className="pcFut-store-tile-title">{item.title}</div>
+                    <div className="pcFut-store-tile-meta">
+                      <Chip>{item.tag}</Chip>
+                      <Badge tone="good">{item.price}</Badge>
+                    </div>
+                    <span className="pc-dim">via {item.source}</span>
+                  </div>
+                </Card>
+              ))}
             </div>
-          </Card>
-        ))}
-      </div>
-    </Screen>
+          </Screen>
+        )
+      }}
+    </PicoData>
   )
 }
 
 export function FeaturedScreen() {
-  if (!picoHero) return null
-  const more = picoGames.slice(0, 4)
   return (
-    <Screen
-      title="PICO ▸ TODAY"
-      hints={[
-        { key: "a", label: "PLAY" },
-        { key: "y", label: "DETAILS" },
-        { key: "b", label: "BACK" },
-      ]}
-    >
-      <div className="pcFut-feat">
-        <div className="pcFut-feat-top">
-          <div className="pc-art pcFut-feat-art">
-            <PicoCart game={picoHero} showFav={false} />
-          </div>
-          <div className="pcFut-feat-info">
-            <div className="pc-sub">GAME OF THE DAY</div>
-            <Title size={2}>{picoHero.title}</Title>
-            <div className="pcFut-feat-tags">
-              {picoHero.genre.toUpperCase()} ·{" "}
-              {picoHero.developer.toUpperCase()}
-            </div>
-            <p className="pcFut-feat-blurb">
-              Today's pick, hand-dusted just for you. Tight controls, sneaky
-              shortcuts, and a soundtrack that lives rent-free in your skull.
-            </p>
-            <div className="pcFut-feat-why">
-              <Badge tone="accent">WHY?</Badge>
-              <span className="pc-dim">
-                3 friends played it this week · trending in PORTMASTER
-              </span>
-            </div>
-            <div className="pcFut-feat-actions">
-              <Btn kind="primary" sel>
-                <PicoIcon name="play" /> PLAY
-              </Btn>
-              <Btn>
-                <PicoIcon name="plus" /> WISHLIST
-              </Btn>
-            </div>
-          </div>
-        </div>
-        <div className="pcFut-feat-more">
-          <div className="pcFut-group-h">MORE LIKE THIS</div>
-          <div className="pcFut-feat-rail">
-            {more.map(g => (
-              <div key={g.id} className="pc-art sm pcFut-feat-thumb">
-                <PicoCart game={g} showFav={false} />
+    <PicoData atom={picoFeaturedAtom} title="PICO ▸ TODAY">
+      {({ hero, games }) => {
+        if (!hero) return null
+        const more = games.slice(0, 4)
+        return (
+          <Screen
+            title="PICO ▸ TODAY"
+            hints={[
+              { key: "a", label: "PLAY" },
+              { key: "y", label: "DETAILS" },
+              { key: "b", label: "BACK" },
+            ]}
+          >
+            <div className="pcFut-feat">
+              <div className="pcFut-feat-top">
+                <div className="pc-art pcFut-feat-art">
+                  <PicoCart game={hero} showFav={false} />
+                </div>
+                <div className="pcFut-feat-info">
+                  <div className="pc-sub">GAME OF THE DAY</div>
+                  <Title size={2}>{hero.title}</Title>
+                  <div className="pcFut-feat-tags">
+                    {hero.genre.toUpperCase()} ·{" "}
+                    {hero.developer.toUpperCase()}
+                  </div>
+                  <p className="pcFut-feat-blurb">
+                    Today's pick, hand-dusted just for you. Tight controls, sneaky
+                    shortcuts, and a soundtrack that lives rent-free in your skull.
+                  </p>
+                  <div className="pcFut-feat-why">
+                    <Badge tone="accent">WHY?</Badge>
+                    <span className="pc-dim">
+                      3 friends played it this week · trending in PORTMASTER
+                    </span>
+                  </div>
+                  <div className="pcFut-feat-actions">
+                    <Btn kind="primary" sel>
+                      <PicoIcon name="play" /> PLAY
+                    </Btn>
+                    <Btn>
+                      <PicoIcon name="plus" /> WISHLIST
+                    </Btn>
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </Screen>
+              <div className="pcFut-feat-more">
+                <div className="pcFut-group-h">MORE LIKE THIS</div>
+                <div className="pcFut-feat-rail">
+                  {more.map(g => (
+                    <div key={g.id} className="pc-art sm pcFut-feat-thumb">
+                      <PicoCart game={g} showFav={false} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Screen>
+        )
+      }}
+    </PicoData>
   )
 }
