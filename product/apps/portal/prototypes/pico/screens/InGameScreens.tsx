@@ -7,7 +7,9 @@
  * Composed from screens/kit.tsx; screen-specific layout in screens/ingame.css
  * (namespace pcIg-).
  */
-import { picoHero, picoSaveSlots } from "../fixtures-extra"
+import { picoHeroAtom } from "../data/pico-library-atoms"
+import { picoSaveSlotsAtom } from "../data/pico-ingame-atoms"
+import { PicoData } from "./PicoData"
 import { Badge, Btn, Hero, Modal, PicoIcon, Spinner, Stat, Title } from "./kit"
 
 const REMAP_ACTIONS: readonly {
@@ -61,62 +63,70 @@ export function InGameHudScreen() {
 
 export function SaveSlotsScreen() {
   return (
-    <Modal
-      title="SAVE STATE"
-      hints={[
-        { key: "a", label: "SAVE" },
-        { key: "b", label: "BACK" },
-      ]}
-    >
-      <div className="pcIg-slots">
-        {picoSaveSlots.map((slot, index) => (
-          <div
-            key={slot.index}
-            className={`pcIg-slot ${slot.empty ? "empty" : ""} ${
-              index === 0 ? "sel" : ""
-            }`}
-          >
-            <span className="pcIg-slot-no">{slot.index}</span>
-            <span className="pcIg-slot-label">{slot.label}</span>
-            <span className="pcIg-slot-stamp">
-              {slot.empty ? "empty — your story goes here" : slot.stamp}
-            </span>
+    <PicoData atom={picoSaveSlotsAtom} title="SAVE STATE">
+      {slots => (
+        <Modal
+          title="SAVE STATE"
+          hints={[
+            { key: "a", label: "SAVE" },
+            { key: "b", label: "BACK" },
+          ]}
+        >
+          <div className="pcIg-slots">
+            {slots.map((slot, index) => (
+              <div
+                key={slot.index}
+                className={`pcIg-slot ${slot.empty ? "empty" : ""} ${
+                  index === 0 ? "sel" : ""
+                }`}
+              >
+                <span className="pcIg-slot-no">{slot.index}</span>
+                <span className="pcIg-slot-label">{slot.label}</span>
+                <span className="pcIg-slot-stamp">
+                  {slot.empty ? "empty — your story goes here" : slot.stamp}
+                </span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-    </Modal>
+        </Modal>
+      )}
+    </PicoData>
   )
 }
 
 export function LoadSlotsScreen() {
   return (
-    <Modal
-      title="LOAD STATE"
-      hints={[
-        { key: "a", label: "RESTORE" },
-        { key: "b", label: "BACK" },
-      ]}
-    >
-      <div className="pcIg-slots load">
-        {picoSaveSlots.map((slot, index) => (
-          <div
-            key={slot.index}
-            className={`pcIg-slot ${slot.empty ? "empty" : ""} ${
-              index === 0 ? "sel" : ""
-            }`}
-          >
-            <span className="pcIg-slot-no">{slot.index}</span>
-            <span className="pcIg-slot-label">{slot.label}</span>
-            <span className="pcIg-slot-stamp">
-              {slot.empty ? "empty — your story goes here" : slot.stamp}
-            </span>
-            {index === 0 && !slot.empty ? (
-              <span className="pcIg-slot-restore">↺ RESTORE</span>
-            ) : null}
+    <PicoData atom={picoSaveSlotsAtom} title="LOAD STATE">
+      {slots => (
+        <Modal
+          title="LOAD STATE"
+          hints={[
+            { key: "a", label: "RESTORE" },
+            { key: "b", label: "BACK" },
+          ]}
+        >
+          <div className="pcIg-slots load">
+            {slots.map((slot, index) => (
+              <div
+                key={slot.index}
+                className={`pcIg-slot ${slot.empty ? "empty" : ""} ${
+                  index === 0 ? "sel" : ""
+                }`}
+              >
+                <span className="pcIg-slot-no">{slot.index}</span>
+                <span className="pcIg-slot-label">{slot.label}</span>
+                <span className="pcIg-slot-stamp">
+                  {slot.empty ? "empty — your story goes here" : slot.stamp}
+                </span>
+                {index === 0 && !slot.empty ? (
+                  <span className="pcIg-slot-restore">↺ RESTORE</span>
+                ) : null}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-    </Modal>
+        </Modal>
+      )}
+    </PicoData>
   )
 }
 
@@ -130,10 +140,14 @@ export function StreamOverlayScreen() {
         { key: "y", label: "QUIT" },
       ]}
     >
-      <div className="pcIg-stream-head">
-        <span className="pcIg-stream-name">{picoHero?.title ?? "SESSION"}</span>
-        <Badge tone="info">STREAM</Badge>
-      </div>
+      <PicoData atom={picoHeroAtom}>
+        {hero => (
+          <div className="pcIg-stream-head">
+            <span className="pcIg-stream-name">{hero?.title ?? "SESSION"}</span>
+            <Badge tone="info">STREAM</Badge>
+          </div>
+        )}
+      </PicoData>
 
       <div className="pcIg-stream-stats">
         <Stat label="BITRATE" value="18 Mbps" />
