@@ -1,0 +1,41 @@
+/**
+ * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ *
+ * Art-forward lobby: big key-art backdrop + logo, players quiet along the
+ * bottom. Reuses KeyArtBackdrop + GameLogo.
+ */
+import type { PicoGame } from "../../fixtures"
+import type { PicoPlayer } from "../../fixtures-extra"
+import { Dim, Player } from "../../screens/kit"
+import { GameLogo } from "../molecules/GameLogo"
+import { KeyArtBackdrop } from "../molecules/KeyArtBackdrop"
+
+export function LobbyArtStage({
+  game,
+  players,
+}: {
+  readonly game: PicoGame | undefined
+  readonly players: readonly PicoPlayer[]
+}) {
+  const active = players.filter(player => player.status !== "open")
+  return (
+    <div className="pcMp-lobbyA">
+      <KeyArtBackdrop src={game?.heroUrl} className="pcMp-backdrop" />
+      <div className="pcMp-lobbyA-head">
+        <GameLogo
+          logoUrl={game?.logoUrl}
+          title={game?.title ?? "LOBBY"}
+          scale={2.4}
+          logoClassName="pcMp-logo"
+          titleSize={2}
+        />
+        <Dim>WAITING FOR PLAYERS · {active.length}/4</Dim>
+      </div>
+      <div className="pcMp-lobbyA-seats">
+        {players.map(player => (
+          <Player key={player.id} player={player} rep="avatar" />
+        ))}
+      </div>
+    </div>
+  )
+}
