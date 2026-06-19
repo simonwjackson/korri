@@ -326,7 +326,7 @@ export function createLibraryRepository(
           message: "source records were removed; use providers/provider-links",
         }),
       ),
-    upsertSystem: system => upsertSystemWithCoreRuntime(db, system),
+    upsertSystem: system => upsertSystemMetadata(db, system),
     upsertApp: app => upsert(db.launchers, app),
     upsertRuntime: runtime => upsert(db.runtimes, runtime),
     upsertProfile: profile => upsert(db.profiles, profile),
@@ -557,7 +557,8 @@ type CollectionApi<T extends { readonly id: string }> = {
 function isProviderQualifiedReadableApp(
   context: ReadableResolvedLaunchContext,
 ): boolean {
-  return appRecordKind(context.app).startsWith("@")
+  const kind = appRecordKind(context.app)
+  return kind.startsWith("@") && kind !== "@korri:process"
 }
 
 function findReadableLaunchIntegration(
@@ -595,30 +596,11 @@ function launchMetadataForContext(
   }
 }
 
-function upsertSystemWithCoreRuntime(
+function upsertSystemMetadata(
   db: KorriLibraryDb,
   system: SystemRecord,
 ): Effect.Effect<SystemRecord, LibraryError> {
-  return Effect.gen(function* () {
-    const normalizedApps = (system.apps ?? []).map(choice => {
-      const runtime = choice.runtime ?? system.cores?.[choice.id]
-      return runtime === undefined ? choice : { ...choice, runtime }
-    })
-    for (const choice of normalizedApps) {
-      if (choice.runtime !== undefined) {
-        yield* upsert(db.runtimes, {
-          id: choice.runtime,
-          kind: "libretro-core",
-          path: choice.runtime.startsWith("/")
-            ? choice.runtime
-            : `/legacy-cores/${choice.runtime}`,
-        })
-      }
-    }
-    const normalized: SystemRecord =
-      normalizedApps.length > 0 ? { ...system, apps: normalizedApps } : system
-    return yield* upsert(db.systems, normalized)
-  })
+  return upsert(db.systems, system)
 }
 
 const upsert = <T extends { readonly id: string }>(
@@ -675,15 +657,22 @@ function upsertLegacySystemDelta(
   delta: SystemDelta,
   defaultApp: string,
 ): Effect.Effect<SystemRecord, LibraryError> {
-  const runtime = delta.cores?.[defaultApp]
-  const system: SystemRecord = {
-    id: delta.id,
-    apps: [{ id: defaultApp, ...(runtime ? { runtime } : {}) }],
-    ...(delta.name ? { name: delta.name } : {}),
-    ...(delta.manufacturer ? { manufacturer: delta.manufacturer } : {}),
-    ...(delta.cores ? { cores: delta.cores } : {}),
-  }
-  return upsertSystemWithCoreRuntime(db, system)
+  return Effect.gen(function* () {
+    const runtime = delta.cores?.[defaultApp]
+    if (runtime !== undefined) {
+      yield* upsert(db.runtimes, {
+        id: runtime,
+        kind: "libretro-core",
+        path: runtime.startsWith("/") ? runtime : `/legacy-cores/${runtime}`,
+      })
+    }
+    const system: SystemRecord = {
+      id: delta.id,
+      ...(delta.name ? { name: delta.name } : {}),
+      ...(delta.manufacturer ? { manufacturer: delta.manufacturer } : {}),
+    }
+    return yield* upsertSystemMetadata(db, system)
+  })
 }
 
 function adoptArtifactIntoReadableLibrary(
@@ -814,7 +803,7 @@ function upsertLegacyGame(
         : {}),
       ...(appId
         ? {
-            apps: [{ id: appId, ...(runtimeId ? { runtime: runtimeId } : {}) }],
+            launch: { use: appId, ...(runtimeId ? { runtime: runtimeId } : {}) },
           }
         : {}),
     }
@@ -993,17 +982,29 @@ function toPlayableReleaseEntry(release: {
   readonly system: string
   readonly source?: unknown
   readonly target?: PlayableReleaseEntry["target"]
-  readonly apps?: readonly { readonly id: string }[]
+  readonly launch?: {
+    readonly use?: string
+    readonly plugin?: string
+    readonly runtime?: string
+  }
   readonly display?: Readonly<Record<string, unknown>>
 }, install?: PlayableReleaseEntry["install"]): PlayableReleaseEntry {
   return {
     id: release.id,
     system: release.system,
     ...(release.target !== undefined ? { target: release.target } : {}),
-    ...(release.apps ? { apps: release.apps.map(app => app.id) } : {}),
+    ...(release.launch
+      ? {
+          launch: {
+            ...(release.launch.use ? { use: release.launch.use } : {}),
+            ...(release.launch.plugin ? { plugin: release.launch.plugin } : {}),
+            ...(release.launch.runtime ? { runtime: release.launch.runtime } : {}),
+          },
+        }
+      : {}),
     ...(release.display ? { display: release.display } : {}),
     ...(install ? { install } : {}),
-    launchable: release.target !== undefined,
+    launchable: release.target !== undefined && release.launch !== undefined,
   }
 }
 

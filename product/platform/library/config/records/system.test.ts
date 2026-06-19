@@ -2,94 +2,48 @@ import { describe, expect, it } from "bun:test"
 
 import { decodeSystemPayload } from "./system"
 
-const wrapperProvider = "@example:wrapper"
-type WrapperPolicy = { readonly enable?: boolean }
-const wrapperPolicy = (value: unknown): WrapperPolicy | undefined =>
-  value as WrapperPolicy | undefined
-
 describe("SystemPayload", () => {
   it("decodes a minimal system (every field optional)", () => {
     const system = decodeSystemPayload({})
     expect(system).toEqual({})
   })
 
-  it("decodes a system carrying a 'cores' map (per-launcher defaults)", () => {
+  it("decodes system identity metadata", () => {
     const system = decodeSystemPayload({
-      cores: {
-        retroarch: "snes9x_libretro.so",
-        snes9x: "snes9x_native",
-      },
+      name: "Mega Drive",
+      manufacturer: "Sega",
+      aliases: ["genesis", "md"],
+      metadata: { generation: 4 },
     })
-    expect(system.cores?.retroarch).toBe("snes9x_libretro.so")
-    expect(system.cores?.snes9x).toBe("snes9x_native")
+    expect(system).toEqual({
+      name: "Mega Drive",
+      manufacturer: "Sega",
+      aliases: ["genesis", "md"],
+      metadata: { generation: 4 },
+    })
   })
 
-  it("rejects legacy launch and launcher fields", () => {
+  it("rejects retired launch/app/runtime fields", () => {
     expect(() => decodeSystemPayload({ launcher: "retroarch" })).toThrow(
-      /apps\[\]|system\.launcher/i,
+      /system\.launcher|Unexpected key/i,
     )
-    expect(() => decodeSystemPayload({ launch: { app: "retroarch" } })).toThrow(
+    expect(() => decodeSystemPayload({ launch: { with: {} } })).toThrow(
       /Unexpected key|launch/i,
     )
-  })
-
-  it("decodes system app choices", () => {
-    const system = decodeSystemPayload({
-      apps: [
-        { id: "retroarch", runtime: "mgba" },
-        { id: "plugin-app", inherit: false, argsAppend: ["--fullscreen"] },
-      ],
-    })
-
-    expect(system.apps).toEqual([
-      { id: "retroarch", runtime: "mgba" },
-      { id: "plugin-app", inherit: false, argsAppend: ["--fullscreen"] },
-    ])
-  })
-
-  it("rejects empty and duplicate system app choices", () => {
-    expect(() => decodeSystemPayload({ apps: [] })).toThrow(
-      /apps.*empty|at least one app choice/i,
+    expect(() => decodeSystemPayload({ apps: [{ id: "retroarch" }] })).toThrow(
+      /Unexpected key|apps/i,
     )
-    expect(() =>
-      decodeSystemPayload({ apps: [{ id: "retroarch" }, { id: "retroarch" }] }),
-    ).toThrow(/unique/)
+    expect(() => decodeSystemPayload({ cores: { retroarch: "mgba" } })).toThrow(
+      /Unexpected key|cores/i,
+    )
   })
 
-  it("decodes inheritable layer + presets + byLauncher + inherit", () => {
-    const system = decodeSystemPayload({
-      cores: { retroarch: "snes9x_libretro.so" },
-      launch: { with: { [wrapperProvider]: { enable: false } } },
-      env: { LANG: "C" },
-      argsAppend: ["--snes"],
-      patches: ["/patches/system.ips"],
-      presets: {
-        perf: {
-          launch: { with: { [wrapperProvider]: { enable: true } } },
-          patches: ["/patches/perf.bps"],
-        },
-      },
-      byLauncher: {
-        dolphin: {
-          argsAppend: ["--snes-mode"],
-          patches: ["/patches/dolphin.ups"],
-        },
-      },
-      inherit: false,
-    })
-    expect(wrapperPolicy(system.launch?.with?.[wrapperProvider])?.enable).toBe(
-      false,
-    )
-    expect(system.patches).toEqual(["/patches/system.ips"])
-    expect(
-      wrapperPolicy(system.presets?.perf?.launch?.with?.[wrapperProvider])
-        ?.enable,
-    ).toBe(true)
-    expect(system.presets?.perf?.patches).toEqual(["/patches/perf.bps"])
-    expect(system.byLauncher?.dolphin?.argsAppend).toEqual(["--snes-mode"])
-    expect(system.byLauncher?.dolphin?.patches).toEqual([
-      "/patches/dolphin.ups",
-    ])
+  it("rejects inherited launcher policy fields", () => {
+    expect(() => decodeSystemPayload({ env: { LANG: "C" } })).toThrow()
+    expect(() => decodeSystemPayload({ presets: { perf: {} } })).toThrow()
+    expect(() => decodeSystemPayload({ byLauncher: { retroarch: {} } })).toThrow()
+    expect(() => decodeSystemPayload({ inherit: false })).toThrow()
+    expect(() => decodeSystemPayload({ plugin: { "@korri:retroarch": {} } })).toThrow()
   })
 
   it("rejects identity-field bypass: 'contentPath' is not allowed", () => {

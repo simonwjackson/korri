@@ -1,8 +1,9 @@
 import { Schema } from "effect"
 
-import { InheritableLayer } from "../inheritable-fields"
+import { InheritableLayer, LaunchWithPolicy } from "../inheritable-fields"
 import { LocalPlayableId, PlayableId } from "../playable-id"
-import { AppChoiceList } from "./app-choice"
+import { LaunchSettings } from "../launch-block"
+import { ProviderId } from "./provider"
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -36,29 +37,101 @@ const FileTarget = Schema.Struct({
   path: TargetString,
 })
 
-const UriTarget = Schema.Struct({
-  kind: Schema.Literal("uri"),
+const FileSetPart = Schema.Struct({
+  id: NonEmptyString,
+  role: Schema.optional(NonEmptyString),
+  path: TargetString,
+})
+
+const FileSetTarget = Schema.Struct({
+  kind: Schema.Literal("file-set"),
+  storage: NonEmptyString,
+  root: Schema.optional(TargetString),
+  files: Schema.Array(FileSetPart).pipe(
+    Schema.check(
+      Schema.makeFilter((files: readonly Schema.Schema.Type<typeof FileSetPart>[]) => {
+        if (files.length === 0) {
+          return { path: ["files"], issue: "file-set targets must declare at least one file" }
+        }
+        const ids = new Set<string>()
+        for (const file of files) {
+          if (ids.has(file.id)) {
+            return { path: ["files"], issue: `file-set target file id '${file.id}' must be unique` }
+          }
+          ids.add(file.id)
+        }
+        return undefined
+      }),
+    ),
+  ),
+})
+
+const ExecutableTarget = Schema.Struct({
+  kind: Schema.Literal("executable"),
+  path: TargetString,
+})
+
+const UrlTarget = Schema.Struct({
+  kind: Schema.Literal("url"),
   value: TargetString,
 })
 
-const TargetAtom = Schema.Union([TargetString, UriTarget, FileTarget])
+const ProviderRefTarget = Schema.Struct({
+  kind: Schema.Literal("provider-ref"),
+  provider: ProviderId,
+  ref: NonEmptyString,
+})
 
 const Target = Schema.Union([
-  TargetAtom,
-  Schema.Array(TargetAtom).pipe(
-    Schema.check(
-      Schema.makeFilter(
-        (targets: readonly Schema.Schema.Type<typeof TargetAtom>[]) =>
-          targets.length > 0
-            ? undefined
-            : {
-                path: ["target"],
-                issue: "release target array must not be empty",
-              },
-      ),
+  FileTarget,
+  FileSetTarget,
+  ExecutableTarget,
+  UrlTarget,
+  ProviderRefTarget,
+])
+
+const LaunchInput = Schema.Struct({
+  part: Schema.optional(NonEmptyString),
+  roles: Schema.optional(Schema.Array(NonEmptyString)),
+})
+
+const LaunchOverrides = Schema.Struct({
+  args: Schema.optional(
+    Schema.Struct({
+      prepend: Schema.optional(Schema.Array(Schema.String)),
+      append: Schema.optional(Schema.Array(Schema.String)),
+      replace: Schema.optional(Schema.Array(Schema.String)),
+    }),
+  ),
+  config: Schema.optional(
+    Schema.Struct({
+      prepend: Schema.optional(Schema.String),
+      append: Schema.optional(Schema.String),
+      replace: Schema.optional(Schema.String),
+    }),
+  ),
+})
+
+const ReleaseLaunch = Schema.Struct({
+  use: Schema.optional(NonEmptyString),
+  plugin: Schema.optional(ProviderId),
+  runtime: Schema.optional(NonEmptyString),
+  input: Schema.optional(LaunchInput),
+  settings: Schema.optional(LaunchSettings),
+  with: Schema.optional(LaunchWithPolicy),
+  env: InheritableLayer.fields.env,
+  cwd: InheritableLayer.fields.cwd,
+  argsAppend: InheritableLayer.fields.argsAppend,
+  overrides: Schema.optional(LaunchOverrides),
+}).pipe(
+  Schema.check(
+    Schema.makeFilter(launch =>
+      launch.use !== undefined && launch.plugin !== undefined
+        ? { path: ["launch"], issue: "release.launch cannot specify both use and plugin" }
+        : undefined,
     ),
   ),
-])
+)
 
 export const LibraryReleasePayload = Schema.Struct({
   id: LocalPlayableId,
@@ -67,12 +140,11 @@ export const LibraryReleasePayload = Schema.Struct({
   target: Schema.optional(Target),
   app: Schema.optional(Schema.Unknown),
   runtime: Schema.optional(Schema.Unknown),
-  apps: Schema.optional(AppChoiceList),
+  apps: Schema.optional(Schema.Unknown),
   display: Schema.optional(DisplayMetadata),
 
-  launch: InheritableLayer.fields.launch,
+  launch: Schema.optional(ReleaseLaunch),
   moonlight: InheritableLayer.fields.moonlight,
-  plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
@@ -89,13 +161,19 @@ export const LibraryReleasePayload = Schema.Struct({
       if (release.app !== undefined) {
         return {
           path: ["app"],
-          issue: "release.app was removed; use release.apps[] choices",
+          issue: "release.app was removed; use release.launch",
         }
       }
       if (release.runtime !== undefined) {
         return {
           path: ["runtime"],
-          issue: "release.runtime was removed; use release.apps[].runtime",
+          issue: "release.runtime was removed; use release.launch.runtime",
+        }
+      }
+      if (release.apps !== undefined) {
+        return {
+          path: ["apps"],
+          issue: "release.apps was removed; use release.launch",
         }
       }
       return undefined

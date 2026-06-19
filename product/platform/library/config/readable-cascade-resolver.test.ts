@@ -138,13 +138,6 @@ const user: UserRecord = {
 }
 const system: SystemRecord = {
   id: "genesis",
-  apps: [{ id: "@korri:retroarch/retroarch", runtime: "genesis-plus-gx" }],
-  ...wrapperLaunch({
-    extraArgs: ["system"],
-    display: { nested: { width: 320 } },
-  }),
-  moonlight: { extraArgs: ["system"], window: { autoResize: true } },
-  plugin: { [retroarchProvider]: { extraArgs: ["system"] } },
 }
 const source: SourceRecord = {
   id: "roms",
@@ -164,7 +157,7 @@ const source: SourceRecord = {
 }
 const app: AppRecord = {
   id: "@korri:retroarch/retroarch",
-  kind: retroarchProvider,
+  plugin: retroarchProvider,
   command: "retroarch",
   args: ["-L", "{runtime.path}", "{content.path}"],
   systems: ["genesis"],
@@ -174,8 +167,8 @@ const app: AppRecord = {
     logging: { verbose: true },
     platform: { name: "v4l2m2m" },
   },
-  plugin: {
-    [retroarchProvider]: {
+  settings: {
+    plugin: {
       paths: { systemDirectory: "/bios", cacheDirectory: "/source/cache" },
       lifecycle: { saveOnExit: false },
       extraArgs: ["app"],
@@ -227,14 +220,18 @@ const sonic: LibraryItemRecord = {
       id: "genesis",
       system: "genesis",
       target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
-      ...wrapperLaunch({ extraArgs: ["release"] }),
-      moonlight: { extraArgs: ["release"] },
-      plugin: {
-        [retroarchProvider]: {
-          extraSettings: { video_font_enable: true },
-          extraArgs: ["release"],
+      launch: {
+        use: "@korri:retroarch/retroarch",
+        runtime: "genesis-plus-gx",
+        with: { [wrapperProvider]: { extraArgs: ["release"] } },
+        settings: {
+          plugin: {
+            extraSettings: { video_font_enable: true },
+            extraArgs: ["release"],
+          },
         },
       },
+      moonlight: { extraArgs: ["release"] },
     },
   ],
 }
@@ -245,8 +242,14 @@ const sonicMulti: LibraryItemRecord = {
       id: "genesis",
       system: "genesis",
       target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
+      launch: { use: "@korri:retroarch/retroarch", runtime: "genesis-plus-gx" },
     },
-    { id: "steam", system: "windows", target: "steam://rungameid/71113" },
+    {
+      id: "steam",
+      system: "windows",
+      target: { kind: "url", value: "steam://rungameid/71113" },
+      launch: { use: steamAppId },
+    },
   ],
 }
 const gbaPackage: LibraryItemRecord = {
@@ -262,6 +265,7 @@ const gbaPackage: LibraryItemRecord = {
       id: "gba",
       system: "genesis",
       target: { kind: "file", storage: "roms", path: "gba/sma2.gba" },
+      launch: { use: "@korri:retroarch/retroarch", runtime: "genesis-plus-gx" },
     },
   ],
 }
@@ -280,11 +284,11 @@ const snapshot = (item: LibraryItemRecord = sonic): ReadableConfigSnapshot => ({
 
 const steamApp = (overrides: Partial<AppRecord> = {}): AppRecord => ({
   id: steamAppId,
-  kind: steamProvider,
+  plugin: steamProvider,
   command: "steam",
   systems: ["steam"],
-  plugin: {
-    [steamProvider]: { state: { root: "{storage:@korri:steam/steam}/Steam" } },
+  settings: {
+    plugin: { state: { root: "{storage:@korri:steam/steam}/Steam" } },
   },
   ...overrides,
 })
@@ -297,7 +301,7 @@ const steamReadableSnapshot = (
 ): ReadableConfigSnapshot => ({
   host: null,
   users: input.users ?? new Map(),
-  systems: new Map([["steam", { id: "steam", apps: [{ id: steamAppId }] }]]),
+  systems: new Map([["steam", { id: "steam" }]]),
   sources: new Map([["steam", { id: "steam", kind: ["service"] }]]),
   storage: new Map([[steamAppId, { id: steamAppId, root: "/state" }]]),
   apps: input.app ? new Map([[input.app.id, input.app]]) : new Map(),
@@ -313,7 +317,8 @@ const steamReadableSnapshot = (
           {
             id: "steam",
             system: "steam",
-            target: "steam://rungameid/2379780",
+            target: { kind: "url", value: "steam://rungameid/2379780" },
+            launch: { use: steamAppId },
           },
         ],
       },
@@ -384,7 +389,6 @@ describe("resolveReadableLaunchContext", () => {
     })
     expect(wrapperPolicyFrom(context)?.display).toEqual({
       output: { width: 640, height: 480 },
-      nested: { width: 320 },
     })
     expect(wrapperPolicyFrom(context)?.backend).toEqual({
       allowDeferred: true,
@@ -393,7 +397,6 @@ describe("resolveReadableLaunchContext", () => {
     expect(wrapperPolicyFrom(context)?.extraArgs).toEqual([
       "host",
       "user",
-      "system",
       "app",
       "runtime",
       "item",
@@ -411,7 +414,6 @@ describe("resolveReadableLaunchContext", () => {
       extraArgs: [
         "host",
         "user",
-        "system",
         "app",
         "runtime",
         "item",
@@ -487,7 +489,7 @@ describe("resolveReadableLaunchContext", () => {
         buildbotAssetsUrl: "https://updates.example.invalid/assets",
       },
       extraSettings: { video_font_enable: false },
-      extraArgs: ["host", "system", "app", "runtime", "release", "profile"],
+      extraArgs: ["host", "app", "runtime", "release", "profile"],
     })
     expect(context.env?.SCALE).toBe("override")
   })
@@ -507,25 +509,12 @@ describe("resolveReadableLaunchContext", () => {
     expect(wrapperPolicyFrom(context)?.extraArgs).toContain("override")
   })
 
-  it("selects a single inherited system app choice", async () => {
+  it("selects the explicit release launch", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         {
           ...snapshot(),
-          systems: new Map([
-            [
-              "genesis",
-              {
-                ...system,
-                apps: [
-                  {
-                    id: "@korri:retroarch/retroarch",
-                    runtime: "genesis-plus-gx",
-                  },
-                ],
-              },
-            ],
-          ]),
+          systems: new Map([["genesis", system]]),
           sources: new Map([
             ["roms", { ...source, app: undefined, runtime: undefined }],
           ]),
@@ -538,7 +527,7 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.runtime?.id).toBe("genesis-plus-gx")
   })
 
-  it("overlays release app choices and selects by appId", async () => {
+  it("lets an explicit appId override the release launch selection", async () => {
     const pluginApp: AppRecord = {
       id: "plugin-app",
       command: "plugin-app",
@@ -559,25 +548,11 @@ describe("resolveReadableLaunchContext", () => {
                   storage: "roms",
                   path: "genesis/Sonic.md",
                 },
-                apps: [{ id: "plugin-app", argsAppend: ["release"] }],
+                launch: { use: "plugin-app", argsAppend: ["release"] },
               },
             ],
           }),
-          systems: new Map([
-            [
-              "genesis",
-              {
-                ...system,
-                apps: [
-                  {
-                    id: "@korri:retroarch/retroarch",
-                    runtime: "genesis-plus-gx",
-                  },
-                  { id: "plugin-app", argsAppend: ["system"] },
-                ],
-              },
-            ],
-          ]),
+          systems: new Map([["genesis", system]]),
           sources: new Map([
             ["roms", { ...source, app: undefined, runtime: undefined }],
           ]),
@@ -591,37 +566,50 @@ describe("resolveReadableLaunchContext", () => {
     )
 
     expect(context.app.id).toBe("plugin-app")
-    expect(context.argsAppend).toEqual(["system", "release"])
+    expect(context.argsAppend).toEqual(["release"])
   })
 
-  it("rejects ambiguous and unknown app choice selections", async () => {
+  it("rejects missing release launches and unknown explicit launcher selections", async () => {
     const base = {
       ...snapshot(),
-      systems: new Map([
-        [
-          "genesis",
-          {
-            ...system,
-            apps: [{ id: "@korri:retroarch/retroarch" }, { id: "plugin-app" }],
-          },
-        ],
-      ]),
+      systems: new Map([["genesis", system]]),
       sources: new Map([
         ["roms", { ...source, app: undefined, runtime: undefined }],
       ]),
     }
 
-    const ambiguous = await Effect.runPromise(
+    const notLaunchable = await Effect.runPromise(
       Effect.flip(
-        resolveReadableLaunchContext(base, {
-          playableId: "sonic-the-hedgehog",
-        }),
+        resolveReadableLaunchContext(
+          {
+            ...base,
+            library: new Map([
+              [
+                "sonic-the-hedgehog",
+                {
+                  ...sonic,
+                  releases: [
+                    {
+                      id: "genesis",
+                      system: "genesis",
+                      target: {
+                        kind: "file",
+                        storage: "roms",
+                        path: "genesis/Sonic.md",
+                      },
+                    },
+                  ],
+                },
+              ],
+            ]),
+          },
+          {
+            playableId: "sonic-the-hedgehog",
+          },
+        ),
       ),
     )
-    expect(ambiguous).toMatchObject({
-      _tag: "AmbiguousAppChoice",
-      appIds: ["@korri:retroarch/retroarch", "plugin-app"],
-    })
+    expect(notLaunchable).toMatchObject({ _tag: "ReleaseNotLaunchable" })
 
     const unknown = await Effect.runPromise(
       Effect.flip(
@@ -632,17 +620,29 @@ describe("resolveReadableLaunchContext", () => {
       ),
     )
     expect(unknown).toMatchObject({
-      _tag: "AppChoiceNotFound",
+      _tag: "AppNotFound",
       appId: "missing",
-      appIds: ["@korri:retroarch/retroarch", "plugin-app"],
     })
   })
 
-  it("rejects launchable releases without app choices", async () => {
+  it("rejects releases without launch selection", async () => {
     const exit = await Effect.runPromiseExit(
       resolveReadableLaunchContext(
         {
-          ...snapshot(),
+          ...snapshot({
+            ...sonic,
+            releases: [
+              {
+                id: "genesis",
+                system: "genesis",
+                target: {
+                  kind: "file",
+                  storage: "roms",
+                  path: "genesis/Sonic.md",
+                },
+              },
+            ],
+          }),
           systems: new Map([["genesis", { id: "genesis" }]]),
         },
         { playableId: "sonic-the-hedgehog" },
@@ -672,7 +672,7 @@ describe("resolveReadableLaunchContext", () => {
       ),
     )
     expect(context.app.id).toBe("@korri:retroarch/retroarch")
-    expect(context.app.kind).toBe(retroarchProvider)
+    expect(context.app.plugin).toBe(retroarchProvider)
     expect(context.app.args).toEqual(["-L", "{runtime.path}", "{content.path}"])
     expect(context.plugin?.[retroarchProvider]).toBeDefined()
   })
@@ -681,7 +681,24 @@ describe("resolveReadableLaunchContext", () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         {
-          ...snapshot(),
+          ...snapshot({
+            ...sonic,
+            releases: [
+              {
+                id: "genesis",
+                system: "genesis",
+                target: {
+                  kind: "file",
+                  storage: "roms",
+                  path: "genesis/Sonic.md",
+                },
+                launch: {
+                  use: "@korri:retroarch/retroarch",
+                  with: { [wrapperProvider]: { extraArgs: ["release"] } },
+                },
+              },
+            ],
+          }),
           host: null,
           users: new Map(),
           systems: new Map([
@@ -690,7 +707,6 @@ describe("resolveReadableLaunchContext", () => {
               {
                 id: "genesis",
                 title: "Genesis",
-                apps: [{ id: "@korri:retroarch/retroarch" }],
               },
             ],
           ]),
@@ -701,7 +717,6 @@ describe("resolveReadableLaunchContext", () => {
                 id: "roms",
                 kind: ["files"],
                 storage: "roms",
-                app: "@korri:retroarch/retroarch",
               },
             ],
           ]),
@@ -736,8 +751,8 @@ describe("resolveReadableLaunchContext", () => {
   it("resolves Steam app choices through plugin payload defaults and choice overrides", async () => {
     const steam = steamApp({
       runtime: "proton-default",
-      plugin: {
-        [steamProvider]: {
+      settings: {
+        plugin: {
           state: { root: "{storage:@korri:steam/steam}/Steam" },
           extra: { args: ["-silent"] },
           "launch-options": "%command%",
@@ -772,22 +787,7 @@ describe("resolveReadableLaunchContext", () => {
               },
             ],
           ]),
-          systems: new Map([
-            [
-              "steam",
-              {
-                id: "steam",
-                apps: [
-                  {
-                    id: steamAppId,
-                    plugin: {
-                      [steamProvider]: { extra: { args: ["-gamepadui"] } },
-                    },
-                  },
-                ],
-              },
-            ],
-          ]),
+          systems: new Map([["steam", { id: "steam" }]]),
           sources: new Map([["steam", { id: "steam", kind: ["service"] }]]),
           storage: new Map([[steamAppId, { id: steamAppId, root: "/state" }]]),
           library: new Map([
@@ -800,18 +800,17 @@ describe("resolveReadableLaunchContext", () => {
                   {
                     id: "steam",
                     system: "steam",
-                    target: "steam://rungameid/2379780",
-                    apps: [
-                      {
-                        id: steamAppId,
-                        runtime: "proton-experimental",
+                    target: { kind: "url", value: "steam://rungameid/2379780" },
+                    launch: {
+                      use: steamAppId,
+                      runtime: "proton-experimental",
+                      settings: {
                         plugin: {
-                          [steamProvider]: {
-                            "launch-options": "wrapper -- %command%",
-                          },
+                          extra: { args: ["-gamepadui"] },
+                          "launch-options": "wrapper -- %command%",
                         },
                       },
-                    ],
+                    },
                   },
                 ],
               },
@@ -841,7 +840,7 @@ describe("resolveReadableLaunchContext", () => {
 
     expect(context.app).toMatchObject({
       id: steamAppId,
-      kind: steamProvider,
+      plugin: steamProvider,
       command: "steam",
     })
     expect(wrapperPolicyFrom(context)).toBeUndefined()
@@ -1004,21 +1003,7 @@ describe("resolveReadableLaunchContext", () => {
             ["genesis-plus-gx", runtime],
             ["proton", proton],
           ]),
-          systems: new Map([
-            [
-              "genesis",
-              {
-                ...system,
-                apps: [
-                  {
-                    id: "@korri:retroarch/retroarch",
-                    runtime: "genesis-plus-gx",
-                  },
-                  { id: steamAppId, runtime: "proton" },
-                ],
-              },
-            ],
-          ]),
+          systems: new Map([["genesis", system]]),
           profiles: new Map([
             ["handheld", { ...profile, app: steamAppId, runtime: "proton" }],
           ]),
@@ -1060,8 +1045,8 @@ describe("resolveReadableLaunchContext", () => {
     expect(String(exit)).toContain("AmbiguousRelease")
   })
 
-  it("fails explicitly instead of crashing for multi-target releases", async () => {
-    const exit = await Effect.runPromiseExit(
+  it("resolves file-set releases through their first declared part", async () => {
+    const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         snapshot({
           ...sonic,
@@ -1069,7 +1054,19 @@ describe("resolveReadableLaunchContext", () => {
             {
               id: "multi",
               system: "genesis",
-              target: ["disc1.cue", "disc2.cue"],
+              target: {
+                kind: "file-set",
+                storage: "roms",
+                root: "genesis",
+                files: [
+                  { id: "disc1", role: "entrypoint", path: "disc1.cue" },
+                  { id: "disc2", role: "data", path: "disc2.cue" },
+                ],
+              },
+              launch: {
+                use: "@korri:retroarch/retroarch",
+                runtime: "genesis-plus-gx",
+              },
             },
           ],
         }),
@@ -1077,8 +1074,8 @@ describe("resolveReadableLaunchContext", () => {
       ),
     )
 
-    expect(exit._tag).toBe("Failure")
-    expect(String(exit)).toContain("MultiTargetUnsupported")
+    expect(context.target).toBe("genesis/disc1.cue")
+    expect(context.content?.path).toBe("/games/genesis/disc1.cue")
   })
 
   it("rejects known-only release selection", async () => {

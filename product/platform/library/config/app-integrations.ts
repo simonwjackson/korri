@@ -46,8 +46,7 @@ export interface AppDescriptor {
 }
 
 const integrationForKind = (kind: AppKind): AppIntegrationKind => {
-  if (kind === "process") return "generic-process"
-  if (kind === "generic-process") return "generic-process"
+  if (kind === "@korri:process") return "generic-process"
   return kind as AppIntegrationKind
 }
 
@@ -187,7 +186,7 @@ const mergeDescriptor = (
           argsAppend: legacyLauncher.argsAppend ?? base.argsAppend,
         }
       : {}),
-    ...(appOverride?.kind ? { kind: appOverride.kind } : {}),
+    ...(appOverride?.plugin ? { kind: appOverride.plugin } : {}),
     ...(appOverride
       ? {
           integration: integrationForKind(appRecordKind(appOverride)),

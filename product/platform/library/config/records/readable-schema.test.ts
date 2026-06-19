@@ -34,7 +34,7 @@ describe("readable library schema records", () => {
       readonly storage: Record<string, unknown>
       readonly providers: Record<string, unknown>
       readonly systems: Record<string, unknown>
-      readonly apps: Record<string, unknown>
+      readonly launchers: Record<string, unknown>
       readonly runtimes: Record<string, unknown>
       readonly library: Record<string, unknown>
     }
@@ -43,34 +43,29 @@ describe("readable library schema records", () => {
       decodeStoragePayload(fixture.storage["@korri:steam/steam"]).root,
     ).toBe("/var/lib/korri/steam")
     expect(fixture.providers["@korri:steam"]).toBeDefined()
-    expect(decodeSystemPayload(fixture.systems.steam).apps).toEqual([
-      { id: "@korri:steam/steam" },
-    ])
-    const steam = decodeAppPayload(fixture.apps["@korri:steam/steam"])
-    expect(steam.kind).toBe("@korri:steam")
-    expect(steam.plugin?.["@korri:steam"]).toMatchObject({
+    expect(decodeSystemPayload(fixture.systems.steam).name).toBe("Steam")
+    const steam = decodeAppPayload(fixture.launchers["@korri:steam/steam"])
+    expect(steam.plugin).toBe("@korri:steam")
+    expect(steam.settings?.plugin).toMatchObject({
       state: { root: "{storage:@korri:steam/steam}/Steam" },
     })
     expect(
-      (
-        steam.plugin?.["@korri:steam"] as { readonly "launch-options"?: string }
-      )?.["launch-options"],
+      (steam.settings?.plugin as { readonly "launch-options"?: string })?.[
+        "launch-options"
+      ],
     ).toContain("%command%")
     expect(decodeRuntimePayload(fixture.runtimes["proton-arm64"]).tool).toBe(
       "proton-arm64",
     )
     expect(
       decodeLibraryItemPayload(fixture.library.balatro).releases.map(
-        release => release.apps?.map(choice => choice.id) ?? [],
+        release => release.launch?.use ?? null,
       ),
-    ).toEqual([[], ["@korri:steam/steam"], []])
+    ).toEqual(["@korri:steam/steam", "@korri:steam/steam", null])
     expect(
       decodeLibraryItemPayload(fixture.library["gba-choice-demo"]).releases[0]
-        ?.apps,
-    ).toEqual([
-      { id: "@korri:retroarch/retroarch", runtime: "mgba" },
-      { id: "mgba-standalone" },
-    ])
+        ?.launch,
+    ).toEqual({ use: "@korri:retroarch/retroarch", runtime: "mgba" })
   })
 
   it("decodes a plain host block without role/launch/profile nesting", () => {
@@ -140,7 +135,7 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             ...retired,
-            releases: [{ id: "default", system: "stream", target: "peer" }],
+            releases: [{ id: "default", system: "stream", target: { kind: "url", value: "peer" } }],
           }),
       ],
       [
@@ -148,7 +143,7 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             releases: [
-              { id: "default", system: "stream", target: "peer", ...retired },
+              { id: "default", system: "stream", target: { kind: "url", value: "peer" }, ...retired },
             ],
           }),
       ],
@@ -157,7 +152,7 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             contains: { child: retired },
-            releases: [{ id: "default", system: "stream", target: "peer" }],
+            releases: [{ id: "default", system: "stream", target: { kind: "url", value: "peer" } }],
           }),
       ],
       [
@@ -176,7 +171,7 @@ describe("readable library schema records", () => {
     }
   })
 
-  it("decodes moonlight policy on every readable cascade record", () => {
+  it("decodes moonlight policy on readable cascade records", () => {
     const moonlight = {
       environment: { OLD_VALUE: null },
       platform: { name: "v4l2m2m" },
@@ -188,7 +183,6 @@ describe("readable library schema records", () => {
       ["global", () => decodeGlobalConfigPayload({ moonlight })],
       ["host", () => decodeHostPayload({ moonlight })],
       ["user", () => decodeUserPayload({ moonlight })],
-      ["system", () => decodeSystemPayload({ moonlight })],
       [
         "launcher",
         () =>
@@ -217,7 +211,7 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             moonlight,
-            releases: [{ id: "default", system: "stream", target: "peer" }],
+            releases: [{ id: "default", system: "stream", target: { kind: "url", value: "peer" } }],
           }),
       ],
       [
@@ -225,7 +219,7 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             releases: [
-              { id: "default", system: "stream", target: "peer", moonlight },
+              { id: "default", system: "stream", target: { kind: "url", value: "peer" }, moonlight },
             ],
           }).releases[0] ?? {},
       ],
@@ -234,7 +228,7 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             contains: { child: { moonlight } },
-            releases: [{ id: "default", system: "stream", target: "peer" }],
+            releases: [{ id: "default", system: "stream", target: { kind: "url", value: "peer" } }],
           }).contains?.child ?? {},
       ],
       [
@@ -266,31 +260,31 @@ describe("readable library schema records", () => {
     expect(
       decodeAppRecord({
         id: "@korri:retroarch/retroarch",
-        kind: "@korri:retroarch",
+        plugin: "@korri:retroarch",
         command: "retroarch",
-        plugin,
-      }).plugin,
-    ).toMatchObject(plugin)
+        settings: { plugin: retroarch },
+      }).settings?.plugin,
+    ).toMatchObject(retroarch)
   })
 
   it("rejects retired RetroArch typed-app vocabulary", () => {
     expect(() =>
-      decodeAppPayload({ kind: "retroarch", retroarch: {} }),
+      decodeAppPayload({ plugin: "@korri:retroarch", retroarch: {} }),
     ).toThrow()
     expect(() =>
-      decodeAppPayload({ kind: "retroarch", integration: "retroarch" }),
+      decodeAppPayload({ plugin: "@korri:retroarch", integration: "retroarch" }),
     ).toThrow()
     expect(() =>
       decodeHostPayload({ retroarch: { configFile: { mode: "path" } } }),
     ).toThrow()
     expect(() =>
-      decodeAppPayload({ kind: "retroarch", achievements: { password: "x" } }),
+      decodeAppPayload({ plugin: "@korri:retroarch", achievements: { password: "x" } }),
     ).toThrow()
     expect(() =>
-      decodeAppPayload({ kind: "retroarch", netplay: { enable: true } }),
+      decodeAppPayload({ plugin: "@korri:retroarch", netplay: { enable: true } }),
     ).toThrow()
     expect(() =>
-      decodeAppPayload({ kind: "retroarch", remoteCommand: { enable: true } }),
+      decodeAppPayload({ plugin: "@korri:retroarch", remoteCommand: { enable: true } }),
     ).toThrow()
   })
 
@@ -377,15 +371,15 @@ describe("readable library schema records", () => {
         {
           id: "windows",
           system: "windows",
-          target: "steam://rungameid/360740",
-          apps: [{ id: "@korri:steam/steam" }],
+          target: { kind: "url", value: "steam://rungameid/360740" },
+          launch: { use: "@korri:steam/steam" },
         },
       ],
     })
 
     expect(item.releases.map(release => release.id)).toEqual(["windows"])
-    expect(item.releases[0]?.target).toBe("steam://rungameid/360740")
-    expect(item.releases[0]?.apps).toEqual([{ id: "@korri:steam/steam" }])
+    expect(item.releases[0]?.target).toEqual({ kind: "url", value: "steam://rungameid/360740" })
+    expect(item.releases[0]?.launch).toEqual({ use: "@korri:steam/steam" })
     expect(() =>
       decodeLibraryItemPayload({
         title: "Downwell",
@@ -393,12 +387,12 @@ describe("readable library schema records", () => {
           {
             id: "windows",
             system: "windows",
-            target: "steam://rungameid/360740",
+            target: { kind: "url", value: "steam://rungameid/360740" },
             app: "@korri:steam/steam",
           },
         ],
       }),
-    ).toThrow(/apps\[\]|release\.app/i)
+    ).toThrow(/release\.app|app/i)
     expect(() =>
       decodeLibraryItemPayload({
         title: "Downwell",
@@ -406,23 +400,23 @@ describe("readable library schema records", () => {
           {
             id: "windows",
             system: "windows",
-            target: "steam://rungameid/360740",
+            target: { kind: "url", value: "steam://rungameid/360740" },
             runtime: "proton",
           },
         ],
       }),
-    ).toThrow(/apps\[\]|release\.runtime/i)
+    ).toThrow(/release\.runtime|runtime/i)
     expect(() =>
       decodeLibraryItemPayload({
         title: "Downwell",
         system: "windows",
-        target: "steam://rungameid/360740",
-        apps: [{ id: "@korri:steam/steam", runtime: "proton" }],
+        target: { kind: "url", value: "steam://rungameid/360740" },
+        launch: { use: "@korri:steam/steam", runtime: "proton" },
         releases: [
           {
             id: "windows",
             system: "windows",
-            target: "steam://rungameid/360740",
+            target: { kind: "url", value: "steam://rungameid/360740" },
           },
         ],
       }),

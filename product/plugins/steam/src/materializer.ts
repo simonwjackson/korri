@@ -4,6 +4,7 @@ import {
   type ResolutionError,
 } from "@platform/library/config/errors"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
+import { appRecordKind } from "@platform/library/config/records/app"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
@@ -64,7 +65,7 @@ export const materializeReadableSteamLaunch = (input: {
   readonly lock?: SteamStateLock
 }): Effect.Effect<MaterializedReadableLaunch, ResolutionError> =>
   Effect.gen(function* () {
-    if (input.context.app.kind !== KORRI_STEAM_PLUGIN_ID) {
+    if (appRecordKind(input.context.app) !== KORRI_STEAM_PLUGIN_ID) {
       return yield* Effect.fail(
         new AppMaterializationFailed({
           appId: input.context.app.id,
@@ -84,7 +85,7 @@ export const materializeReadableSteamLaunch = (input: {
 function canMaterializeSteamContext(
   context: ReadableResolvedLaunchContext,
 ): boolean {
-  if (context.app.kind !== KORRI_STEAM_PLUGIN_ID) return false
+  if (appRecordKind(context.app) !== KORRI_STEAM_PLUGIN_ID) return false
   if (parseSteamAppId(context.target)._tag === "Left") return false
   try {
     assertGamescopeCompanionEnabled(context)

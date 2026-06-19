@@ -27,10 +27,6 @@
 
 import { Data, Effect } from "effect"
 import {
-  resolveEffectiveAppChoices,
-  selectAppChoice,
-} from "./app-choice-selection"
-import {
   getBuiltInAppDescriptor,
   mergeAppLaunchCompanions,
 } from "./app-integrations"
@@ -676,27 +672,6 @@ export class IncompatibleLaunchSelection extends Data.TaggedError(
   readonly reason: string
 }> {}
 
-export class AmbiguousAppChoice extends Data.TaggedError("AmbiguousAppChoice")<{
-  readonly playableId: string
-  readonly releaseId: string
-  readonly appIds: readonly string[]
-}> {}
-
-export class AppChoiceNotFound extends Data.TaggedError("AppChoiceNotFound")<{
-  readonly playableId: string
-  readonly releaseId: string
-  readonly appId: string
-  readonly appIds: readonly string[]
-}> {}
-
-export class InvalidAppChoiceForKind extends Data.TaggedError(
-  "InvalidAppChoiceForKind",
-)<{
-  readonly appId: string
-  readonly kind: string
-  readonly field: string
-}> {}
-
 export class MultiTargetUnsupported extends Data.TaggedError(
   "MultiTargetUnsupported",
 )<{
@@ -747,46 +722,32 @@ const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
       }
     : {}
 
-const readableViewOfSystem = (
-  system: SystemRecord | undefined,
-): ReadableLayerView =>
-  system
-    ? {
-        launchCompanions: launchCompanionsFromLaunch(system),
-        moonlight: system.moonlight,
-        plugin: system.plugin,
-        env: system.env,
-        cwd: system.cwd,
-        argsAppend: system.argsAppend,
-        patches: system.patches,
-      }
-    : {}
+const readableViewOfSystem = (_system: SystemRecord | undefined): ReadableLayerView =>
+  ({})
+
+const pluginPolicyFromSettings = (
+  launcherPlugin: string | undefined,
+  settings: LaunchSettings | undefined,
+): PluginPolicyMap | undefined => {
+  const pluginSettings = settings?.plugin
+  if (launcherPlugin === undefined || pluginSettings === undefined) {
+    return undefined
+  }
+  return { [launcherPlugin]: pluginSettings }
+}
 
 const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
   app
     ? {
         launchCompanions: launchCompanionsFromLaunch(app),
         moonlight: app.moonlight,
-        plugin: app.plugin,
+        plugin: pluginPolicyFromSettings(app.plugin, app.settings),
         env: app.env,
         cwd: app.cwd,
         argsAppend: app.argsAppend,
         patches: app.patches,
       }
     : {}
-
-const readableViewOfAppChoice = (
-  choice: ReadableLayerView,
-): ReadableLayerView => ({
-  launchCompanions:
-    choice.launchCompanions ?? launchCompanionsFromLaunch(choice),
-  moonlight: choice.moonlight,
-  plugin: choice.plugin,
-  env: choice.env,
-  cwd: choice.cwd,
-  argsAppend: choice.argsAppend,
-  patches: choice.patches,
-})
 
 const readableBuiltInArgs = (
   appId: string,
@@ -816,7 +777,7 @@ const resolveReadableAppRecord = (
   )
   return {
     id: appId,
-    kind: override?.kind ?? builtIn.kind,
+    plugin: override?.plugin ?? builtIn.kind,
     command: override?.command ?? builtIn.command,
     runtime: override?.runtime,
     args: override?.args ?? readableBuiltInArgs(appId, builtIn.args),
@@ -825,7 +786,6 @@ const resolveReadableAppRecord = (
     settings: override?.settings ?? builtIn.settings,
     launch: launchPolicyWithCompanions(launchCompanions),
     moonlight: override?.moonlight ?? builtIn.moonlight,
-    plugin: override?.plugin,
     env: override?.env ?? builtIn.env,
     cwd: override?.cwd ?? builtIn.cwd,
     argsAppend: override?.argsAppend ?? builtIn.argsAppend,
@@ -927,13 +887,14 @@ const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
 
 const readableViewOfRelease = (
   release: LibraryReleasePayload,
+  app: AppRecord | undefined,
 ): ReadableLayerView => ({
-  launchCompanions: launchCompanionsFromLaunch(release),
+  launchCompanions: release.launch?.with,
   moonlight: release.moonlight,
-  plugin: release.plugin,
-  env: release.env,
-  cwd: release.cwd,
-  argsAppend: release.argsAppend,
+  plugin: pluginPolicyFromSettings(app?.plugin ?? release.launch?.plugin, release.launch?.settings),
+  env: release.launch?.env ?? release.env,
+  cwd: release.launch?.cwd ?? release.cwd,
+  argsAppend: release.launch?.argsAppend ?? release.argsAppend,
   patches: release.patches,
 })
 
@@ -1103,35 +1064,9 @@ export const resolveReadableLaunchContext = (
     }
 
     const system = snapshot.systems.get(release.system)
-    const appChoiceSelection = selectAppChoice(
-      resolveEffectiveAppChoices(system?.apps, release.apps),
-      inputs.appId,
-    )
-    const selectedChoice =
-      appChoiceSelection._tag === "SelectedAppChoice"
-        ? appChoiceSelection.choice
-        : undefined
-    if (appChoiceSelection._tag === "AmbiguousAppChoice") {
-      return yield* Effect.fail(
-        new AmbiguousAppChoice({
-          playableId: inputs.playableId,
-          releaseId: release.id,
-          appIds: appChoiceSelection.appIds,
-        }),
-      )
-    }
-    if (appChoiceSelection._tag === "AppChoiceNotFound") {
-      return yield* Effect.fail(
-        new AppChoiceNotFound({
-          playableId: inputs.playableId,
-          releaseId: release.id,
-          appId: appChoiceSelection.appId,
-          appIds: appChoiceSelection.appIds,
-        }),
-      )
-    }
-
-    const appId = selectedChoice?.id
+    const explicitAppId = inputs.appId ?? release.launch?.use
+    const directPluginId = release.launch?.plugin
+    const appId = explicitAppId ?? directPluginId
     if (appId === undefined) {
       return yield* Effect.fail(
         new ReleaseNotLaunchable({ releaseId: release.id }),
@@ -1139,7 +1074,7 @@ export const resolveReadableLaunchContext = (
     }
     const app = resolveReadableAppRecord(appId, snapshot.apps)
     if (app === undefined) return yield* Effect.fail(new AppNotFound({ appId }))
-    const runtimeId = selectedChoice?.runtime ?? app.runtime
+    const runtimeId = release.launch?.runtime ?? app.runtime
     const runtime =
       runtimeId === undefined ? undefined : snapshot.runtimes.get(runtimeId)
     if (runtimeId !== undefined && runtime === undefined) {
@@ -1157,24 +1092,15 @@ export const resolveReadableLaunchContext = (
       readableViewOfUser(user),
       readableViewOfSystem(system),
       readableViewOfApp(app),
-      selectedChoice ? readableViewOfAppChoice(selectedChoice) : {},
       readableViewOfRuntime(runtime),
       readableViewOfLibraryItem(item),
       readableViewOfContained(entry),
-      readableViewOfRelease(release),
+      readableViewOfRelease(release, app),
       readableViewOfProfile(profile),
       readableViewOfOverride(inputs.override),
     ])
 
     const target = release.target
-    if (Array.isArray(target)) {
-      return yield* Effect.fail(
-        new MultiTargetUnsupported({
-          playableId: inputs.playableId,
-          releaseId: release.id,
-        }),
-      )
-    }
     if (target === undefined) {
       return yield* Effect.fail(
         new ReleaseNotLaunchable({ releaseId: release.id }),

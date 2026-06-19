@@ -11,25 +11,49 @@ const FileReleaseTarget = Schema.Struct({
   storage: Schema.String,
   path: Schema.String,
 })
-const UriReleaseTarget = Schema.Struct({
-  kind: Schema.Literal("uri"),
+const UrlReleaseTarget = Schema.Struct({
+  kind: Schema.Literal("url"),
   value: Schema.String,
 })
-const ReleaseTargetAtom = Schema.Union([
-  Schema.String,
-  UriReleaseTarget,
-  FileReleaseTarget,
-])
+const ExecutableReleaseTarget = Schema.Struct({
+  kind: Schema.Literal("executable"),
+  path: Schema.String,
+})
+const ProviderRefReleaseTarget = Schema.Struct({
+  kind: Schema.Literal("provider-ref"),
+  provider: Schema.String,
+  ref: Schema.String,
+})
+const FileSetReleaseTarget = Schema.Struct({
+  kind: Schema.Literal("file-set"),
+  storage: Schema.String,
+  root: Schema.optional(Schema.String),
+  files: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      role: Schema.String,
+      path: Schema.String,
+    }),
+  ),
+})
 const ReleaseTarget = Schema.Union([
-  ReleaseTargetAtom,
-  Schema.Array(ReleaseTargetAtom),
+  UrlReleaseTarget,
+  FileReleaseTarget,
+  FileSetReleaseTarget,
+  ExecutableReleaseTarget,
+  ProviderRefReleaseTarget,
 ])
+const ReleaseLaunchSummary = Schema.Struct({
+  use: Schema.optional(Schema.String),
+  plugin: Schema.optional(Schema.String),
+  runtime: Schema.optional(Schema.String),
+})
 
 export const PlayableReleaseEntry = Schema.Struct({
   id: Schema.String,
   system: Schema.String,
   target: Schema.optional(ReleaseTarget),
-  apps: Schema.optional(Schema.Array(Schema.String)),
+  launch: Schema.optional(ReleaseLaunchSummary),
   display: Schema.optional(DisplayMetadata),
   install: Schema.optional(ProviderInstallMetadataSchema),
   launchable: Schema.Boolean,

@@ -10,115 +10,134 @@ const steamPluginPolicy = {
   "launch-options": "wrapper -- %command%",
 }
 
-describe("AppPayload", () => {
-  it("decodes apps.retroarch.settings without requiring command boilerplate", () => {
+describe("launcher payload", () => {
+  it("decodes launcher settings with common packs and typed plugin settings", () => {
     expect(
       decodeAppPayload({
+        plugin: "@korri:retroarch",
         settings: {
-          video_driver: "glcore",
-          config_save_on_exit: false,
+          display: { fullscreen: true },
+          audio: { latencyMs: 64 },
+          plugin: {
+            drivers: { video: "glcore" },
+            configFile: { mode: "generated" },
+          },
         },
       }),
     ).toEqual({
+      plugin: "@korri:retroarch",
       settings: {
-        video_driver: "glcore",
-        config_save_on_exit: false,
+        display: { fullscreen: true },
+        audio: { latencyMs: 64 },
+        plugin: {
+          drivers: { video: "glcore" },
+          configFile: { mode: "generated" },
+        },
       },
     })
   })
 
-  it("decodes a custom process app with command and args", () => {
+  it("decodes a custom process launcher with command and args", () => {
     expect(
       decodeAppPayload({
+        plugin: "@korri:process",
         command: "/usr/bin/my-runner",
-        args: ["--run", "{contentPath}"],
+        args: ["--run", "{content.path}"],
         policy: { allowedCommands: ["/usr/bin/my-runner"] },
       }),
     ).toEqual({
+      plugin: "@korri:process",
       command: "/usr/bin/my-runner",
-      args: ["--run", "{contentPath}"],
+      args: ["--run", "{content.path}"],
       policy: { allowedCommands: ["/usr/bin/my-runner"] },
     })
   })
 
-  it("decodes app-level patch contributions through the inheritable whitelist", () => {
+  it("decodes launcher-level patch contributions through the inheritable whitelist", () => {
     expect(
       decodeAppPayload({
-        settings: { video_driver: "glcore" },
+        plugin: "@korri:retroarch",
+        settings: { plugin: { drivers: { video: "glcore" } } },
         patches: ["/patches/app.ips"],
       }),
     ).toEqual({
-      settings: { video_driver: "glcore" },
+      plugin: "@korri:retroarch",
+      settings: { plugin: { drivers: { video: "glcore" } } },
       patches: ["/patches/app.ips"],
     })
   })
 
-  it("rejects RetroArch-owned fields on app records", () => {
+  it("rejects plugin-owned settings outside settings.plugin", () => {
     expect(() =>
       decodeAppPayload({
-        kind: "@korri:retroarch",
+        plugin: "@korri:retroarch",
         video: { fullscreen: true },
       }),
     ).toThrow(/Unexpected key|video/)
     expect(() =>
       decodeAppPayload({
-        kind: "@korri:retroarch",
+        plugin: "@korri:retroarch",
         drivers: { menu: "ozone" },
       }),
     ).toThrow(/Unexpected key|drivers/)
   })
 
-  it("decodes a provider-qualified Steam app with plugin policy payload", () => {
+  it("decodes a provider-qualified Steam launcher with settings.plugin payload", () => {
     expect(
       decodeAppRecord({
         id: "@korri:steam/steam",
-        kind: steamProvider,
+        plugin: steamProvider,
         command: "steam",
         runtime: "proton-arm64",
-        plugin: { [steamProvider]: steamPluginPolicy },
+        settings: { plugin: steamPluginPolicy },
       }),
     ).toMatchObject({
       id: "@korri:steam/steam",
-      kind: steamProvider,
+      plugin: steamProvider,
       command: "steam",
       runtime: "proton-arm64",
-      plugin: { [steamProvider]: steamPluginPolicy },
+      settings: { plugin: steamPluginPolicy },
     })
   })
 
-  it("rejects retired kind: steam", () => {
-    expect(() =>
-      decodeAppPayload({
-        kind: "steam",
-        command: "steam",
-      }),
-    ).toThrow(/kind: steam was retired/)
-  })
-
-  it("rejects retired top-level Steam policy fields as unknown app keys", () => {
+  it("rejects retired launcher kind and plugin policy map fields", () => {
     expect(() =>
       decodeAppPayload({
         kind: steamProvider,
+        command: "steam",
+      }),
+    ).toThrow()
+    expect(() =>
+      decodeAppPayload({
+        plugin: { [steamProvider]: steamPluginPolicy },
+      }),
+    ).toThrow()
+  })
+
+  it("rejects retired top-level Steam policy fields as unknown launcher keys", () => {
+    expect(() =>
+      decodeAppPayload({
+        plugin: steamProvider,
         state: { root: "/steam" },
       }),
     ).toThrow(/Unexpected key|state/)
     expect(() =>
       decodeAppPayload({
-        kind: steamProvider,
+        plugin: steamProvider,
         extra: { args: ["-silent"] },
       }),
     ).toThrow(/Unexpected key|extra/)
     expect(() =>
       decodeAppPayload({
-        kind: steamProvider,
+        plugin: steamProvider,
         "launch-options": "%command%",
       }),
     ).toThrow(/Unexpected key|launch-options/)
   })
 
-  it("rejects unknown app keys", () => {
+  it("rejects unknown launcher keys", () => {
     expect(() =>
-      decodeAppPayload({ settings: {}, type: "retroarch" }),
+      decodeAppPayload({ plugin: "@korri:process", type: "retroarch" }),
     ).toThrow()
   })
 })

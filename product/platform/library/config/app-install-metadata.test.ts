@@ -4,18 +4,18 @@ import type { AppRecord } from "./records/app"
 
 const steamApp: AppRecord = {
   id: "@korri:steam/steam",
-  kind: "@korri:steam",
+  plugin: "@korri:steam",
   command: "steam",
 }
 
 describe("install metadata projection", () => {
-  it("projects provider install metadata from app choice and numeric target", () => {
+  it("projects provider install metadata from release launch and numeric URL target", () => {
     const install = installMetadataForRelease(
       {
         id: "steam",
         system: "steam",
-        target: "steam://rungameid/1029210",
-        apps: [{ id: "@korri:steam/steam" }],
+        target: { kind: "url", value: "steam://rungameid/1029210" },
+        launch: { use: "@korri:steam/steam" },
       },
       new Map([[steamApp.id, steamApp]]),
     )
@@ -27,20 +27,15 @@ describe("install metadata projection", () => {
     })
   })
 
-  it("uses system app choices when releases inherit them", () => {
+  it("can project provider metadata from a direct launch plugin selector", () => {
     const install = installMetadataForRelease(
       {
         id: "steam",
         system: "steam",
-        target: "steam://rungameid/1029210",
+        target: { kind: "url", value: "steam://install/1029210" },
+        launch: { plugin: "@korri:steam" },
       },
-      new Map([[steamApp.id, steamApp]]),
-      new Map([
-        [
-          "steam",
-          { id: "steam", apps: [{ id: "@korri:steam/steam" }] },
-        ],
-      ]),
+      new Map(),
     )
 
     expect(install).toMatchObject({
@@ -49,41 +44,15 @@ describe("install metadata projection", () => {
     })
   })
 
-  it("overlays release app choices while preserving inherited Steam install metadata", () => {
-    const install = installMetadataForRelease(
-      {
-        id: "steam",
-        system: "steam",
-        target: "steam://rungameid/1029210",
-        apps: [{ id: "local-companion" }],
-      },
-      new Map([
-        [steamApp.id, steamApp],
-        ["local-companion", { id: "local-companion", kind: "process" }],
-      ]),
-      new Map([
-        [
-          "steam",
-          { id: "steam", apps: [{ id: "@korri:steam/steam" }] },
-        ],
-      ]),
-    )
-
-    expect(install).toMatchObject({
-      providerId: "@korri:steam",
-      appId: "1029210",
-    })
-  })
-
-  it("does not infer metadata without a provider-qualified app", () => {
+  it("does not infer metadata without a provider-qualified launcher", () => {
     const install = installMetadataForRelease(
       {
         id: "pc",
         system: "pc",
-        target: "steam://rungameid/1029210",
-        apps: [{ id: "local-app" }],
+        target: { kind: "url", value: "steam://rungameid/1029210" },
+        launch: { use: "local-app" },
       },
-      new Map([["local-app", { id: "local-app", kind: "process" }]]),
+      new Map([["local-app", { id: "local-app", plugin: "@korri:process" }]]),
     )
 
     expect(install).toBeUndefined()

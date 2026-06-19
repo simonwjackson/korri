@@ -171,9 +171,9 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "          kind: file",
           "          storage: roms",
           "          path: genesis/Sonic The Hedgehog.md",
-          "        apps:",
-          "          - id: retroarch",
-          "            runtime: genesis-plus-gx",
+          "        launch:",
+          "          use: retroarch",
+          "          runtime: genesis-plus-gx",
           "",
         ].join("\n"),
         "utf8",
@@ -227,9 +227,10 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
       )
 
       expect(loaded.host.title).toBe("AKA desktop host")
-      expect(loaded.downwell.releases[0]?.target).toBe(
-        "steam://rungameid/360740",
-      )
+      expect(loaded.downwell.releases[0]?.target).toEqual({
+        kind: "url",
+        value: "steam://rungameid/360740",
+      })
       expect(loaded.sonic.releases.map(release => release.id)).toEqual([
         "genesis",
         "windows-known",
@@ -298,9 +299,9 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "          kind: file",
           "          storage: roms",
           "          path: snes/zelda.sfc",
-          "        apps:",
-          "          - id: retroarch",
-          "            runtime: snes9x",
+          "        launch:",
+          "          use: retroarch",
+          "          runtime: snes9x",
           "",
         ].join("\n"),
         "utf8",

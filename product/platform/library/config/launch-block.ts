@@ -6,7 +6,7 @@ const STRICT = { onExcessProperty: "error" } as const
 
 export { LaunchSettingValue }
 
-export const LaunchSettings = Schema.Record(Schema.String, LaunchSettingValue)
+export const LaunchSettings = Schema.Record(Schema.String, Schema.Unknown)
 export type LaunchSettings = Schema.Schema.Type<typeof LaunchSettings>
 
 export const LaunchBlock = Schema.Struct({

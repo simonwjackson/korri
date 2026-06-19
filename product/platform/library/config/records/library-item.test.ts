@@ -23,7 +23,7 @@ describe("LibraryItemPayload playable/release identity", () => {
         {
           id: "gba",
           system: "gba",
-          target: "gba/Super Mario Advance 2.gba",
+          target: { kind: "file", storage: "roms", path: "gba/Super Mario Advance 2.gba" },
         },
       ],
     })
@@ -41,7 +41,7 @@ describe("LibraryItemPayload playable/release identity", () => {
             title: "Super Mario World",
           },
         },
-        releases: [{ id: "gba", system: "gba", target: "gba/cart.gba" }],
+        releases: [{ id: "gba", system: "gba", target: { kind: "file", storage: "roms", path: "gba/cart.gba" } }],
       }),
     ).toThrow()
   })
@@ -50,14 +50,14 @@ describe("LibraryItemPayload playable/release identity", () => {
     expect(() =>
       decodeLibraryItemPayload({
         collection: "handheld",
-        releases: [{ id: "windows", system: "windows", target: "steam://x" }],
+        releases: [{ id: "windows", system: "windows", target: { kind: "url", value: "steam://x" } }],
       }),
     ).toThrow()
 
     expect(() =>
       decodeLibraryItemPayload({
         "version-of": "super-mario-advance-2/super-mario-world/extra",
-        releases: [{ id: "windows", system: "windows", target: "steam://x" }],
+        releases: [{ id: "windows", system: "windows", target: { kind: "url", value: "steam://x" } }],
       }),
     ).toThrow()
   })
@@ -66,8 +66,8 @@ describe("LibraryItemPayload playable/release identity", () => {
     expect(() =>
       decodeLibraryItemPayload({
         releases: [
-          { id: "windows", system: "windows", target: "steam://one" },
-          { id: "windows", system: "windows", target: "steam://two" },
+          { id: "windows", system: "windows", target: { kind: "url", value: "steam://one" } },
+          { id: "windows", system: "windows", target: { kind: "url", value: "steam://two" } },
         ],
       }),
     ).toThrow()
@@ -80,26 +80,26 @@ describe("LibraryItemPayload playable/release identity", () => {
           {
             id: "windows/steam",
             system: "windows",
-            target: "steam://rungameid/360740",
+            target: { kind: "url", value: "steam://rungameid/360740" },
           },
         ],
       }),
     ).toThrow()
   })
 
-  it("rejects legacy release app and runtime fields", () => {
+  it("rejects legacy release app/app-choice and runtime fields", () => {
     expect(() =>
       decodeLibraryItemPayload({
         releases: [
           {
             id: "gba",
             system: "gba",
-            target: "gba/cart.gba",
+            target: { kind: "file", storage: "roms", path: "gba/cart.gba" },
             app: "retroarch",
           },
         ],
       }),
-    ).toThrow(/apps\[\]|release\.app/i)
+    ).toThrow(/apps|release\.app/i)
 
     expect(() =>
       decodeLibraryItemPayload({
@@ -107,39 +107,40 @@ describe("LibraryItemPayload playable/release identity", () => {
           {
             id: "gba",
             system: "gba",
-            target: "gba/cart.gba",
+            target: { kind: "file", storage: "roms", path: "gba/cart.gba" },
             runtime: "mgba",
           },
         ],
       }),
-    ).toThrow(/apps\[\]|release\.runtime/i)
+    ).toThrow(/apps|release\.runtime/i)
   })
 
-  it("decodes release app choices", () => {
+  it("decodes release launch overlays", () => {
     const item = decodeLibraryItemPayload({
       releases: [
         {
           id: "gba",
           system: "gba",
-          target: "gba/cart.gba",
-          apps: [{ id: "retroarch", runtime: "mgba" }],
+          target: { kind: "file", storage: "roms", path: "gba/cart.gba" },
+          launch: { use: "retroarch", runtime: "mgba" },
         },
       ],
     })
 
-    expect(item.releases[0]?.apps).toEqual([
-      { id: "retroarch", runtime: "mgba" },
-    ])
+    expect(item.releases[0]?.launch).toEqual({
+      use: "retroarch",
+      runtime: "mgba",
+    })
   })
 
-  it("rejects empty and duplicate release app choices", () => {
+  it("rejects release app choices", () => {
     expect(() =>
       decodeLibraryItemPayload({
         releases: [
-          { id: "gba", system: "gba", target: "gba/cart.gba", apps: [] },
+          { id: "gba", system: "gba", target: { kind: "file", storage: "roms", path: "gba/cart.gba" }, apps: [] },
         ],
       }),
-    ).toThrow(/apps.*empty|at least one app choice/i)
+    ).toThrow(/Unexpected key|apps/i)
 
     expect(() =>
       decodeLibraryItemPayload({
@@ -147,12 +148,12 @@ describe("LibraryItemPayload playable/release identity", () => {
           {
             id: "gba",
             system: "gba",
-            target: "gba/cart.gba",
+            target: { kind: "file", storage: "roms", path: "gba/cart.gba" },
             apps: [{ id: "retroarch" }, { id: "retroarch" }],
           },
         ],
       }),
-    ).toThrow(/unique/)
+    ).toThrow(/Unexpected key|apps/i)
   })
 })
 

@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { InheritableLayer } from "../inheritable-fields"
 import { LaunchSettings } from "../launch-block"
 import { PresetMapPayload } from "./preset"
+import { ProviderId } from "./provider"
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -14,22 +15,14 @@ const NonEmptyString = Schema.String.pipe(
   ),
 )
 
-export const AppKind = NonEmptyString.pipe(
-  Schema.check(
-    Schema.makeFilter(value =>
-      value === "steam"
-        ? "kind: steam was retired; use kind: @korri:steam"
-        : undefined,
-    ),
-  ),
-)
+export const AppKind = ProviderId
 export type AppKind = Schema.Schema.Type<typeof AppKind>
 
 const AppPayloadBase = Schema.Struct({
   settings: Schema.optional(LaunchSettings),
-  kind: Schema.optional(AppKind),
+  plugin: Schema.optional(AppKind),
 
-  // Optional executable shape for custom apps or built-in overrides.
+  // Optional executable shape for custom launchers or built-in overrides.
   command: Schema.optional(NonEmptyString),
   runtime: Schema.optional(NonEmptyString),
   args: Schema.optional(Schema.Array(Schema.String)),
@@ -45,7 +38,6 @@ const AppPayloadBase = Schema.Struct({
 
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
-  plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
@@ -67,5 +59,5 @@ export const decodeAppPayload = (input: unknown): AppPayload =>
 export const decodeAppRecord = (input: unknown): AppRecord =>
   Schema.decodeUnknownSync(AppRecord)(input, STRICT)
 
-export const appRecordKind = (app: Pick<AppRecord, "id" | "kind">): AppKind =>
-  app.kind ?? "process"
+export const appRecordKind = (app: Pick<AppRecord, "id" | "plugin">): AppKind =>
+  app.plugin ?? "@korri:process"

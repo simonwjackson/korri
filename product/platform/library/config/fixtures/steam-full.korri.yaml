@@ -18,14 +18,12 @@ providers:
 systems:
   steam:
     name: Steam
-    apps:
-      - id: "@korri:steam/steam"
   gba:
     name: Game Boy Advance
 
-apps:
+launchers:
   "@korri:steam/steam":
-    kind: "@korri:steam"
+    plugin: "@korri:steam"
     command: steam
     systems: [steam]
     runtime: proton-arm64
@@ -33,8 +31,8 @@ apps:
       with:
         "@korri:gamescope":
           enable: true
-    plugin:
-      "@korri:steam":
+    settings:
+      plugin:
         state:
           root: "{storage:@korri:steam/steam}/Steam"
         extra:
@@ -44,10 +42,10 @@ apps:
         launch-options: "gamescope --fullscreen -- %command%"
 
   "@korri:retroarch/retroarch":
-    kind: "@korri:retroarch"
+    plugin: "@korri:retroarch"
     command: retroarch
-    plugin:
-      "@korri:retroarch":
+    settings:
+      plugin:
         configFile:
           mode: generated
         core:
@@ -56,7 +54,7 @@ apps:
           path: "{content.path}"
 
   mgba-standalone:
-    kind: process
+    plugin: "@korri:process"
     command: /run/current-system/sw/bin/mgba
     args: ["{content.path}"]
     systems: [gba]
@@ -85,18 +83,23 @@ library:
     releases:
       - id: steam-store
         system: steam
-        target: steam://rungameid/2379780
-        # Inherits systems.steam.apps[@korri:steam/steam].
+        target:
+          kind: url
+          value: steam://rungameid/2379780
+        launch:
+          use: "@korri:steam/steam"
 
       - id: steam-store-experimental
         system: steam
-        target: steam://rungameid/2379780
-        apps:
-          - id: "@korri:steam/steam"
-            runtime: proton-experimental
+        target:
+          kind: url
+          value: steam://rungameid/2379780
+        launch:
+          use: "@korri:steam/steam"
+          runtime: proton-experimental
+          settings:
             plugin:
-              "@korri:steam":
-                launch-options: "MANGOHUD=1 %command%"
+              launch-options: "MANGOHUD=1 %command%"
 
       - id: store-page
         system: steam
@@ -111,7 +114,6 @@ library:
           kind: file
           storage: roms
           path: gba/choice-demo.gba
-        apps:
-          - id: "@korri:retroarch/retroarch"
-            runtime: mgba
-          - id: mgba-standalone
+        launch:
+          use: "@korri:retroarch/retroarch"
+          runtime: mgba

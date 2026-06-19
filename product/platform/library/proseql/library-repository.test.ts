@@ -36,8 +36,8 @@ const downwell: LibraryItemRecord = {
     {
       id: "windows",
       system: "windows",
-      target: "steam://rungameid/360740",
-      apps: [{ id: "steam" }],
+      target: { kind: "url", value: "steam://rungameid/360740" },
+      launch: { use: "steam" },
     },
   ],
 }
@@ -50,7 +50,7 @@ const sonic: LibraryItemRecord = {
       id: "genesis",
       system: "genesis",
       target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
-      apps: [{ id: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" }],
+      launch: { use: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" },
     },
     {
       id: "windows-known",
@@ -60,8 +60,8 @@ const sonic: LibraryItemRecord = {
     {
       id: "steam",
       system: "windows",
-      target: "steam://rungameid/71113",
-      apps: [{ id: "steam" }],
+      target: { kind: "url", value: "steam://rungameid/71113" },
+      launch: { use: "steam" },
     },
   ],
 }
@@ -81,7 +81,7 @@ const marioPackage: LibraryItemRecord = {
         storage: "roms",
         path: "gba/Super Mario Advance 2.gba",
       },
-      apps: [{ id: KORRI_RETROARCH_APP_ID, runtime: "mgba" }],
+      launch: { use: KORRI_RETROARCH_APP_ID, runtime: "mgba" },
     },
   ],
 }
@@ -122,29 +122,29 @@ async function seedReadableLibrary(
           create: { id: "windows", name: "Windows" },
           update: { id: "windows", name: "Windows" },
         })
-        yield* db.apps.upsert({
+        yield* db.launchers.upsert({
           where: { id: "steam" },
           create: {
             id: "steam",
-            kind: "process",
+            plugin: "@korri:process",
             command: "steam",
             args: ["{target}"],
           },
           update: {
             id: "steam",
-            kind: "process",
+            plugin: "@korri:process",
             command: "steam",
             args: ["{target}"],
           },
         })
-        yield* db.apps.upsert({
+        yield* db.launchers.upsert({
           where: { id: KORRI_RETROARCH_APP_ID },
           create: {
             id: KORRI_RETROARCH_APP_ID,
-            kind: KORRI_RETROARCH_PLUGIN_ID,
+            plugin: KORRI_RETROARCH_PLUGIN_ID,
             command: "retroarch",
-            plugin: {
-              [KORRI_RETROARCH_PLUGIN_ID]: {
+            settings: {
+              plugin: {
                 configFile: { mode: "generated" },
                 lifecycle: { saveOnExit: false },
                 paths: { systemDirectory: "/bios" },
@@ -154,10 +154,10 @@ async function seedReadableLibrary(
           },
           update: {
             id: KORRI_RETROARCH_APP_ID,
-            kind: KORRI_RETROARCH_PLUGIN_ID,
+            plugin: KORRI_RETROARCH_PLUGIN_ID,
             command: "retroarch",
-            plugin: {
-              [KORRI_RETROARCH_PLUGIN_ID]: {
+            settings: {
+              plugin: {
                 configFile: { mode: "generated" },
                 lifecycle: { saveOnExit: false },
                 paths: { systemDirectory: "/bios" },
@@ -238,7 +238,7 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
-  it("lists app choice ids on readable release entries", async () => {
+  it("lists release launcher selections on readable release entries", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
       await Effect.runPromise(
@@ -254,10 +254,10 @@ describe("createLibraryRepository — readable playable entries", () => {
                 storage: "roms",
                 path: "genesis/Multi.md",
               },
-              apps: [
-                { id: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" },
-                { id: "steam" },
-              ],
+              launch: {
+                use: KORRI_RETROARCH_APP_ID,
+                runtime: "genesis-plus-gx",
+              },
             },
           ],
         }),
@@ -265,12 +265,12 @@ describe("createLibraryRepository — readable playable entries", () => {
 
       const entries = await Effect.runPromise(repo.listPlayableEntries())
       expect(
-        entries.find(entry => entry.id === "multi-app")?.releases[0]?.apps,
-      ).toEqual([KORRI_RETROARCH_APP_ID, "steam"])
+        entries.find(entry => entry.id === "multi-app")?.releases[0]?.launch,
+      ).toEqual({ use: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" })
     })
   })
 
-  it("launches a selected app choice via appId", async () => {
+  it("lets appId override the release launcher selection", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
       await Effect.runPromise(
@@ -286,10 +286,10 @@ describe("createLibraryRepository — readable playable entries", () => {
                 storage: "roms",
                 path: "genesis/Multi.md",
               },
-              apps: [
-                { id: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" },
-                { id: "steam" },
-              ],
+              launch: {
+                use: KORRI_RETROARCH_APP_ID,
+                runtime: "genesis-plus-gx",
+              },
             },
           ],
         }),
@@ -303,7 +303,10 @@ describe("createLibraryRepository — readable playable entries", () => {
       )
 
       expect(resolved.app.id).toBe("steam")
-      expect(resolved.release.apps).toEqual([KORRI_RETROARCH_APP_ID, "steam"])
+      expect(resolved.release.launch).toEqual({
+        use: KORRI_RETROARCH_APP_ID,
+        runtime: "genesis-plus-gx",
+      })
       expect(resolved.spec).toEqual({
         command: "steam",
         args: ["genesis/Multi.md"],
@@ -311,7 +314,7 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
-  it("reports app choice ambiguity through repository config errors", async () => {
+  it("reports unknown explicit launcher selections through repository config errors", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
       await Effect.runPromise(
@@ -327,7 +330,7 @@ describe("createLibraryRepository — readable playable entries", () => {
                 storage: "roms",
                 path: "genesis/Multi.md",
               },
-              apps: [{ id: KORRI_RETROARCH_APP_ID }, { id: "steam" }],
+              launch: { use: KORRI_RETROARCH_APP_ID },
             },
           ],
         }),
@@ -335,11 +338,14 @@ describe("createLibraryRepository — readable playable entries", () => {
 
       try {
         await Effect.runPromise(
-          repo.resolveLaunchForPlayable("multi-app", { releaseId: "genesis" }),
+          repo.resolveLaunchForPlayable("multi-app", {
+            releaseId: "genesis",
+            appId: "missing-launcher",
+          }),
         )
-        throw new Error("expected ambiguous app launch to fail")
+        throw new Error("expected unknown launcher launch to fail")
       } catch (error) {
-        expectLibraryConfigFailure(error, "AmbiguousAppChoice")
+        expectLibraryConfigFailure(error, "AppNotFound")
       }
     })
   })
@@ -368,12 +374,12 @@ describe("createLibraryRepository — readable playable entries", () => {
       await Effect.runPromise(
         repo.upsertApp({
           id: KORRI_STEAM_APP_ID,
-          kind: KORRI_STEAM_PLUGIN_ID,
+          plugin: KORRI_STEAM_PLUGIN_ID,
           command: "steam",
           runtime: "proton-arm64",
           launch: { with: { [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: true } } },
-          plugin: {
-            [KORRI_STEAM_PLUGIN_ID]: {
+          settings: {
+            plugin: {
               state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
               extra: { args: ["-silent"] },
               "launch-options": "wrapper -- %command%",
@@ -389,8 +395,8 @@ describe("createLibraryRepository — readable playable entries", () => {
             {
               id: "steam",
               system: "windows",
-              target: "steam://rungameid/1029210",
-              apps: [{ id: KORRI_STEAM_APP_ID, runtime: "proton-arm64" }],
+              target: { kind: "url", value: "steam://rungameid/1029210" },
+              launch: { use: KORRI_STEAM_APP_ID, runtime: "proton-arm64" },
             },
           ],
         }),
@@ -439,11 +445,11 @@ describe("createLibraryRepository — readable playable entries", () => {
       await Effect.runPromise(
         repo.upsertApp({
           id: KORRI_STEAM_APP_ID,
-          kind: KORRI_STEAM_PLUGIN_ID,
+          plugin: KORRI_STEAM_PLUGIN_ID,
           command: "steam",
           runtime: "proton-arm64",
-          plugin: {
-            [KORRI_STEAM_PLUGIN_ID]: {
+          settings: {
+            plugin: {
               state: { root: join(root, "steam-home") },
               extra: { args: ["-silent"] },
               "launch-options": "wrapper -- %command%",
@@ -459,8 +465,8 @@ describe("createLibraryRepository — readable playable entries", () => {
             {
               id: "steam",
               system: "windows",
-              target: "steam://rungameid/1029210",
-              apps: [{ id: KORRI_STEAM_APP_ID, runtime: "proton-arm64" }],
+              target: { kind: "url", value: "steam://rungameid/1029210" },
+              launch: { use: KORRI_STEAM_APP_ID, runtime: "proton-arm64" },
             },
           ],
         }),
@@ -483,10 +489,10 @@ describe("createLibraryRepository — readable playable entries", () => {
       await Effect.runPromise(
         repo.upsertApp({
           id: KORRI_STEAM_APP_ID,
-          kind: KORRI_STEAM_PLUGIN_ID,
+          plugin: KORRI_STEAM_PLUGIN_ID,
           command: "steam",
-          plugin: {
-            [KORRI_STEAM_PLUGIN_ID]: {
+          settings: {
+            plugin: {
               state: { root: join(root, "steam-home") },
             },
           },
@@ -500,8 +506,8 @@ describe("createLibraryRepository — readable playable entries", () => {
             {
               id: "store-page",
               system: "windows",
-              target: "steam://store/2379780",
-              apps: [{ id: KORRI_STEAM_APP_ID }],
+              target: { kind: "url", value: "steam://store/2379780" },
+              launch: { use: KORRI_STEAM_APP_ID },
             },
           ],
         }),
@@ -647,7 +653,7 @@ describe("createLibraryRepository — readable playable entries", () => {
                 storage: "roms",
                 path: "genesis/Coreless.md",
               },
-              apps: [{ id: KORRI_RETROARCH_APP_ID }],
+              launch: { use: KORRI_RETROARCH_APP_ID },
             },
           ],
         }),
@@ -695,24 +701,25 @@ describe("createLibraryRepository — readable playable entries", () => {
             {
               id: "genesis",
               system: "genesis",
-              apps: [
-                { id: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" },
-              ],
-              plugin: {
-                [KORRI_RETROARCH_PLUGIN_ID]: {
-                  configFile: { mode: "generated" },
-                  video: { aspectRatio: "full", sync: { frameDelay: 0 } },
-                  rewind: { enable: true, bufferSizeMb: 20 },
-                  achievements: { enable: false },
-                  extraSettings: { notification_show_autoconfig: false },
+              launch: {
+                use: KORRI_RETROARCH_APP_ID,
+                runtime: "genesis-plus-gx",
+                settings: {
+                  plugin: {
+                    configFile: { mode: "generated" },
+                    video: { aspectRatio: "full", sync: { frameDelay: 0 } },
+                    rewind: { enable: true, bufferSizeMb: 20 },
+                    achievements: { enable: false },
+                    extraSettings: { notification_show_autoconfig: false },
+                  },
                 },
               },
             },
             {
               id: "steam",
               system: "windows",
-              apps: [{ id: "steam" }],
-              target: "steam://rungameid/123",
+              launch: { use: "steam" },
+              target: { kind: "url", value: "steam://rungameid/123" },
             },
           ],
         }),

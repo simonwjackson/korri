@@ -117,6 +117,7 @@ systems:
 
 launchers:
   "@korri:steam/steam":
+    plugin: "@korri:steam"
     command: steam
     args: ["{target}"]
     systems: [windows, linux]
@@ -124,15 +125,16 @@ launchers:
       with:
         "@korri:gamescope":
           enable: true
-    plugin:
-      "@korri:steam":
+    settings:
+      plugin:
         state:
           root: "{storage:@korri:steam/steam}/Steam"
 
   "@korri:retroarch/retroarch":
+    plugin: "@korri:retroarch"
     command: retroarch
-    plugin:
-      "@korri:retroarch":
+    settings:
+      plugin:
           # Generated mode keeps Korri in charge of exactly one per-launch cfg file.
           # configFile path/default modes remain deferred.
           configFile:
@@ -258,9 +260,11 @@ library:
     releases:
       - id: windows
         system: windows
-        target: steam://rungameid/360740
-        apps:
-          - id: "@korri:steam/steam"
+        target:
+          kind: url
+          value: steam://rungameid/360740
+        launch:
+          use: "@korri:steam/steam"
         display:
           aspect: [1.333333]
           resolution: unrestricted
@@ -277,9 +281,9 @@ library:
           kind: file
           storage: roms
           path: genesis/Sonic The Hedgehog.md
-        apps:
-          - id: "@korri:retroarch/retroarch"
-            runtime: genesis-plus-gx
+        launch:
+          use: "@korri:retroarch/retroarch"
+          runtime: genesis-plus-gx
         display:
           aspect: [1.333333]
           resolution: unrestricted
@@ -295,9 +299,11 @@ library:
 
       - id: steam
         system: windows
-        target: steam://rungameid/71113
-        apps:
-          - id: "@korri:steam/steam"
+        target:
+          kind: url
+          value: steam://rungameid/71113
+        launch:
+          use: "@korri:steam/steam"
         display:
           aspect: unrestricted
           sources:
@@ -322,6 +328,6 @@ library:
           kind: file
           storage: roms
           path: gba/Super Mario Advance 2.gba
-        apps:
-          - id: "@korri:retroarch/retroarch"
-            runtime: "@korri:retroarch/mgba"
+        launch:
+          use: "@korri:retroarch/retroarch"
+          runtime: "@korri:retroarch/mgba"

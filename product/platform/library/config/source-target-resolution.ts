@@ -5,7 +5,7 @@ import type { LibraryReleasePayload } from "./records/library-item"
 import type { StorageRecord } from "./records/storage"
 
 type ReleaseTarget = NonNullable<LibraryReleasePayload["target"]>
-export type ReleaseTargetAtom = Exclude<ReleaseTarget, readonly unknown[]>
+export type ReleaseTargetAtom = ReleaseTarget
 
 export class StorageNotFound extends Data.TaggedError("StorageNotFound")<{
   readonly storageId: string
@@ -45,21 +45,40 @@ const isFileTarget = (
 ): target is Extract<ReleaseTargetAtom, { readonly kind: "file" }> =>
   typeof target === "object" && target !== null && target.kind === "file"
 
-const isUriTarget = (
+const isFileSetTarget = (
   target: ReleaseTargetAtom,
-): target is Extract<ReleaseTargetAtom, { readonly kind: "uri" }> =>
-  typeof target === "object" && target !== null && target.kind === "uri"
+): target is Extract<ReleaseTargetAtom, { readonly kind: "file-set" }> =>
+  typeof target === "object" && target !== null && target.kind === "file-set"
+
+const isUrlTarget = (
+  target: ReleaseTargetAtom,
+): target is Extract<ReleaseTargetAtom, { readonly kind: "url" }> =>
+  typeof target === "object" && target !== null && target.kind === "url"
+
+const isExecutableTarget = (
+  target: ReleaseTargetAtom,
+): target is Extract<ReleaseTargetAtom, { readonly kind: "executable" }> =>
+  typeof target === "object" && target !== null && target.kind === "executable"
+
+const isProviderRefTarget = (
+  target: ReleaseTargetAtom,
+): target is Extract<ReleaseTargetAtom, { readonly kind: "provider-ref" }> =>
+  typeof target === "object" && target !== null && target.kind === "provider-ref"
 
 export const resolveReleaseTarget = (
   input: ResolveReleaseTargetInput,
 ): Effect.Effect<ResolvedReleaseTarget, TargetResolutionError> =>
   Effect.gen(function* () {
-    if (typeof input.target === "string") {
-      return { target: input.target }
+    if (isUrlTarget(input.target)) {
+      return { target: input.target.value }
     }
 
-    if (isUriTarget(input.target)) {
-      return { target: input.target.value }
+    if (isExecutableTarget(input.target)) {
+      return { target: input.target.path, content: { path: input.target.path } }
+    }
+
+    if (isProviderRefTarget(input.target)) {
+      return { target: `${input.target.provider}:${input.target.ref}` }
     }
 
     if (isFileTarget(input.target)) {
@@ -92,5 +111,16 @@ export const resolveReleaseTarget = (
       }
     }
 
-    return { target: String(input.target) }
+    if (isFileSetTarget(input.target)) {
+      const first = input.target.files[0]
+      if (first === undefined) return { target: input.target.storage }
+      const root = input.target.root ?? ""
+      const partPath = path.posix.join(root, first.path)
+      return yield* resolveReleaseTarget({
+        target: { kind: "file", storage: input.target.storage, path: partPath },
+        storage: input.storage,
+      })
+    }
+
+    return { target: "" }
   })
