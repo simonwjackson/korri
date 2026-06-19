@@ -373,14 +373,13 @@
 	/* vw (not %) avoids the circular percentage of a content-sized flex item. */
 	width: min(480px, 90vw);
 }
-/* BARE parts render at a FIXED inspection scale (the SCALE control), not the
- * device/viewport scale — a loose part isn't tied to a device, so it mustn't
+/* ALL parts render at a FIXED inspection scale driven by the SCALE control, not
+ * the device/viewport scale — a part isn't tied to a device here, so it mustn't
  * balloon (cqi against the viewport made atoms ~35px and overflow). `0 · 1cqi`
- * collapses to the clamp floor. FRAMED parts (surfaces/templates) instead keep
- * the theme's cqi, so the screen adapts to ITS frame (a query container, below)
- * — like the device lab. `.wk-parts .wk-parts-bare.wk-parts-canvas` = 0,3,0,
- * beats the theme's per-screen knobs (0,1,0). */
-.wk-parts .wk-parts-bare.wk-parts-canvas {
+ * collapses to the clamp floor; SCALE sets the base, so framed screens AND loose
+ * parts both respond. `.wk-parts .wk-parts-canvas` = 0,2,0, beats the theme's
+ * per-screen knobs (0,1,0). */
+.wk-parts .wk-parts-canvas {
 	--intrinsic-base-cqi: 0;
 	--intrinsic-base-min: var(--wk-parts-base, 14px);
 	--intrinsic-base-max: var(--wk-parts-base, 14px);
