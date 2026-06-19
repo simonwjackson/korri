@@ -53,6 +53,11 @@ let
     XDG_SESSION_TYPE = "wayland";
     XDG_CURRENT_DESKTOP = "sway";
     DISPLAY = ":0";
+    # The kiosk renderer and managed Steam launches are currently validated
+    # through Sway's eager Xwayland server. Keep GTK/WebKit on that stable path
+    # instead of letting a stale user drop-in or backend autodetection pick a
+    # different display after reboot.
+    GDK_BACKEND = "x11";
   }
   //
     lib.optionalAttrs
@@ -184,6 +189,14 @@ in
         NO_AT_BRIDGE=1
     '';
   };
+
+  # Remove the pre-Nix manual workaround that pinned sessiond to a volatile
+  # Xwayland display number. It persisted under /home across reboots and could
+  # override the declarative DISPLAY=:0 above, leaving /control/start stuck in
+  # `starting` when sway recreated Xwayland as :0.
+  system.activationScripts.korri-remove-legacy-sessiond-display-dropin.text = ''
+    rm -f ${compositorCfg.home}/.config/systemd/user/korri-sessiond.service.d/display.conf
+  '';
 
   # Boot ordering: sessiond's enterIdle spawns Electrobun, which
   # attaches to sway's wayland-1 socket and dials the inputd bridge

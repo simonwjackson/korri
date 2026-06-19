@@ -47,6 +47,7 @@ let
       sessiondUnit = userServices.korri-sessiond or { };
       sessiondEnv = sessiondUnit.environment or { };
       daemonEnv = (userServices.korrid or { }).environment or { };
+      activationScripts = cfg.system.activationScripts or { };
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
@@ -210,6 +211,15 @@ let
         builtins.hasAttr "korri-kiosk-session-environment" userServices
         && builtins.elem "korri-compositor.service" (kioskEnvUnit.before or [ ])
         && builtins.elem "korri-sessiond.service" (kioskEnvUnit.before or [ ])
+      ))
+      (check "${name}: sessiond uses declarative kiosk display environment" (
+        (sessiondEnv.DISPLAY or null) == ":0"
+        && (sessiondEnv.WAYLAND_DISPLAY or null) == "wayland-1"
+        && (sessiondEnv.GDK_BACKEND or null) == "x11"
+      ))
+      (check "${name}: stale manual sessiond display drop-in is removed" (
+        builtins.hasAttr "korri-remove-legacy-sessiond-display-dropin" activationScripts
+        && lib.hasInfix "/home/korri/.config/systemd/user/korri-sessiond.service.d/display.conf" activationScripts."korri-remove-legacy-sessiond-display-dropin".text
       ))
       (check "${name}: sessiond does not control root-owned essway" (
         (sessiondEnv.KORRI_SESSIOND_ESSWAY_CONTROL or null) == "0"
