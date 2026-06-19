@@ -11,9 +11,14 @@ import type {
   KorriSessionLifecycleHookFactoryOptions,
 } from "@platform/plugin/session-lifecycle"
 import { fixtureAcquisitionPlugins } from "./acquisition-fixtures"
+import { box64RuntimePlugin } from "./box64-runtime"
 import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin } from "./gamescope"
 import { createGamescopeSessionLifecycleHook } from "./gamescope/src/session/lifecycle-hook"
+import {
+  threeDSenPlugin,
+  threeDSenReadableLaunchIntegration,
+} from "./3dsen"
 import { itchioPlugin } from "./itchio"
 import { levelShareSquarePlugin } from "./levelsharesquare"
 import { megaManArenaPlugin } from "./mega-man-arena"
@@ -48,6 +53,7 @@ export const firstPartyLaunchIntegrations = [
   retroarchReadableLaunchIntegration,
   ryubingReadableLaunchIntegration,
   steamReadableLaunchIntegration,
+  threeDSenReadableLaunchIntegration,
 ]
 
 export function firstPartyLaunchIntegrationsForRegistry(
@@ -109,6 +115,7 @@ export const firstPartyPlugins = [
   retroarchPlugin,
   gamescopePlugin,
   fexRuntimePlugin,
+  box64RuntimePlugin,
   protonRuntimePlugin,
   protonGeRuntimePlugin,
   neverballPlugin,
@@ -117,6 +124,7 @@ export const firstPartyPlugins = [
   midasMachinePlugin,
   levelShareSquarePlugin,
   itchioPlugin,
+  threeDSenPlugin,
   srb2Plugin,
   smbxGamePlugin,
   smwCentralPlugin,

@@ -6,6 +6,11 @@ import {
   firstPartyPlugins,
   firstPartySessionLifecycleHooksForRegistry,
 } from "."
+import {
+  KORRI_3DSEN_APP_ID,
+  KORRI_3DSEN_PLUGIN_ID,
+} from "./3dsen"
+import { KORRI_BOX64_RUNTIME_PLUGIN_ID } from "./box64-runtime"
 import { KORRI_FEX_PLUGIN_ID } from "./fex-runtime"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
 import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "./levelsharesquare"
@@ -121,6 +126,59 @@ describe("first-party plugins", () => {
     )
   })
 
+
+  it("registers Box64 and 3dSen as first-party plugin infrastructure", () => {
+    const box64 = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_BOX64_RUNTIME_PLUGIN_ID,
+    )
+    const threeDSen = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_3DSEN_PLUGIN_ID,
+    )
+
+    expect(box64?.contributes.config.modules?.["runtime-package"]).toMatchObject({
+      kind: "nix-package",
+      package: "korri-box64-runtime",
+    })
+    expect(threeDSen?.contributes.config.apps?.["3dsen"]).toMatchObject({
+      id: KORRI_3DSEN_APP_ID,
+      kind: KORRI_3DSEN_PLUGIN_ID,
+    })
+  })
+
+  it("auto-enables Box64 and Turnip when 3dSen is requested", () => {
+    const registry = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_3DSEN_PLUGIN_ID,
+    })
+
+    expect(registry.enabledPluginIds.has(KORRI_3DSEN_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_BOX64_RUNTIME_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_TURNIP_PLUGIN_ID)).toBe(true)
+    expect(registry.apps[`${KORRI_3DSEN_PLUGIN_ID}/3dsen`]).toMatchObject({
+      id: KORRI_3DSEN_APP_ID,
+    })
+  })
+
+  it("exposes the 3dSen readable launch integration only when enabled", () => {
+    const disabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_BOX64_RUNTIME_PLUGIN_ID,
+    })
+    const enabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_3DSEN_PLUGIN_ID,
+    })
+
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(disabled).some(
+        integration => integration.providerId === KORRI_3DSEN_PLUGIN_ID,
+      ),
+    ).toBe(false)
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(enabled).some(
+        integration => integration.providerId === KORRI_3DSEN_PLUGIN_ID,
+      ),
+    ).toBe(true)
+  })
+
+
   it("registers Turnip as a first-party graphics runtime plugin", () => {
     const turnip = firstPartyPlugins.find(
       plugin => plugin.id === KORRI_TURNIP_PLUGIN_ID,
@@ -132,7 +190,7 @@ describe("first-party plugins", () => {
       kind: "nix-package",
       package: KORRI_TURNIP_WRAPPER_PACKAGE,
       path: "product/plugins/turnip/packages/turnip-wrapper",
-      capabilities: ["graphics.vulkan", "package.wrap"],
+      capabilities: ["graphics.vulkan", "package.wrap", "launch.compose"],
     })
     expect(
       turnip?.contributes.config.runtimes?.["adreno-vulkan"],
