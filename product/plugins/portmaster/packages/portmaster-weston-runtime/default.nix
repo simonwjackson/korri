@@ -4,11 +4,14 @@
   fetchurl,
   squashfsTools,
   patchelf,
+  bzip2,
   expat,
   libevdev,
+  libglvnd,
   libjpeg8,
   systemdMinimal,
   util-linuxMinimal,
+  xwayland,
   zlib,
 }:
 
@@ -17,10 +20,15 @@ let
   libraryPath = lib.makeLibraryPath [
     expat
     libevdev
+    libglvnd
     libjpeg8.out
     systemdMinimal
     util-linuxMinimal.lib
     zlib
+  ];
+  xwaylandLibraryPath = lib.makeLibraryPath [
+    bzip2
+    libglvnd
   ];
   linuxInterpreter = lib.optionalString stdenv.hostPlatform.isLinux (
     lib.removeSuffix "\n" (builtins.readFile "${stdenv.cc}/nix-support/dynamic-linker")
@@ -58,6 +66,28 @@ stdenv.mkDerivation {
       done < <(find "$runtime_root" -type f -print0)
     ''}
 
+    # The upstream Xwayland binary is not patchelf-compatible on NixOS
+    # (patchelf reports `section header table out of bounds`). Westonpack
+    # invokes it by relative path as `bin/Xwayland`, so replace just that
+    # executable with a Nix-provided build while preserving the rest of the
+    # PortMaster runtime layout. Weston also supplies XWAYLAND_LD_LIBRARY_PATH,
+    # so the wrapper restores Nix-only dependencies that would otherwise be
+    # missing under that launch environment.
+    rm -f "$runtime_root/bin/Xwayland"
+    cat > "$runtime_root/bin/Xwayland" <<'EOF_XWAYLAND'
+#!${stdenv.shell}
+runtime_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+export XKB_CONFIG_ROOT="''${XKB_CONFIG_ROOT:-$runtime_root/share/xkb}"
+append_library_path="${xwaylandLibraryPath}"
+if [ -n "''${LD_LIBRARY_PATH:-}" ]; then
+  export LD_LIBRARY_PATH="''${LD_LIBRARY_PATH}:$append_library_path"
+else
+  export LD_LIBRARY_PATH="$append_library_path"
+fi
+exec '${xwayland}/bin/Xwayland' "$@"
+EOF_XWAYLAND
+    chmod +x "$runtime_root/bin/Xwayland"
+
     mkdir -p "$out/nix-support"
     printf '%s\n' '${runtimeName}' > "$out/nix-support/runtime-name"
     printf '%s\n' "$runtime_root" > "$out/nix-support/runtime-root"
@@ -65,7 +95,9 @@ stdenv.mkDerivation {
     cat > "$out/nix-support/compatibility-profile.json" <<EOF
     {
       "env": {
-        "LD_LIBRARY_PATH": "${libraryPath}"
+        "CFW_NAME": "ROCKNIX",
+        "LD_LIBRARY_PATH": "${libraryPath}",
+        "XKB_CONFIG_ROOT": "/tmp/weston/share/xkb"
       },
       "runtimeCompatibility": {
         "mode": "runtime-mounts",

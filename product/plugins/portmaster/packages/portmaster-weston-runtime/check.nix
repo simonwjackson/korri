@@ -8,6 +8,7 @@ pkgs.runCommand "portmaster-weston-runtime-check" { } ''
 
   runtime_name="$(cat ${portmasterWestonRuntimePackage}/nix-support/runtime-name)"
   runtime_root="$(cat ${portmasterWestonRuntimePackage}/nix-support/runtime-root)"
+  runtime_library_path="$(cat ${portmasterWestonRuntimePackage}/nix-support/library-path)"
 
   test "$runtime_name" = "weston_pkg_0.2"
   test -d "$runtime_root"
@@ -15,6 +16,10 @@ pkgs.runCommand "portmaster-weston-runtime-check" { } ''
   test -x "$runtime_root/westonwrap.sh"
   test -x "$runtime_root/wp_weston"
   test -x "$runtime_root/bin/Xwayland"
+  grep -q "${pkgs.xwayland}/bin/Xwayland" "$runtime_root/bin/Xwayland"
+  grep -q 'XKB_CONFIG_ROOT' "$runtime_root/bin/Xwayland"
+  grep -q 'libglvnd' "$runtime_root/bin/Xwayland"
+  LD_LIBRARY_PATH="$runtime_root/lib_aarch64/graphics/mesa_x11_stub:$runtime_root/lib_aarch64:$runtime_library_path" "$runtime_root/bin/Xwayland" -version >/dev/null
 
   ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 ''
     for binary in "$runtime_root/wp_weston" "$runtime_root/tools/findlib"; do
@@ -26,6 +31,8 @@ pkgs.runCommand "portmaster-weston-runtime-check" { } ''
     done
   ''}
 
+  grep -q '"CFW_NAME": "ROCKNIX"' ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
+  grep -q '"XKB_CONFIG_ROOT": "/tmp/weston/share/xkb"' ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
   grep -q '"mode": "runtime-mounts"' ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
   grep -q "$runtime_root" ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
 
