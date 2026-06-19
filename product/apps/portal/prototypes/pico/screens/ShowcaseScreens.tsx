@@ -62,10 +62,11 @@ export function SpotlightHomeScreen() {
           <div className="pcShow-spot-info">
             <div className="pcShow-kicker">▸ FEATURED</div>
             {hero.logoUrl ? (
-              <img
-                className="pcShow-logo"
+              <PicoArtImage
                 src={hero.logoUrl}
-                alt={hero.title}
+                fit="contain"
+                scale={2.4}
+                className="pcShow-logo"
               />
             ) : (
               <h1 className="pc-title pc-t2 pcShow-spot-title">{hero.title}</h1>

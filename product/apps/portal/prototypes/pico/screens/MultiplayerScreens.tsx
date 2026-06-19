@@ -151,7 +151,12 @@ export function LobbyArtScreen() {
         <HeroBackdrop />
         <div className="pcMp-lobbyA-head">
           {GAME?.logoUrl ? (
-            <img className="pcMp-logo" src={GAME.logoUrl} alt={GAME.title} />
+            <PicoArtImage
+              src={GAME.logoUrl}
+              fit="contain"
+              scale={2.4}
+              className="pcMp-logo"
+            />
           ) : (
             <Title size={2}>{GAME?.title ?? "LOBBY"}</Title>
           )}
