@@ -55,6 +55,9 @@ export interface WorkshopClassNames {
   readonly screens?: string
   readonly bezel?: string
   readonly screen?: string
+  /** Component-catalog scope: the theme's tokens/skin for an isolated part
+   * WITHOUT its screen chrome (background, etc.). Used by the "parts" view. */
+  readonly part?: string
   // Gallery bar.
   readonly bar?: string
   readonly label?: string

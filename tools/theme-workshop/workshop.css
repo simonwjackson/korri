@@ -281,17 +281,12 @@
 }
 .wk-parts-grid {
 	display: grid;
-	gap: var(--intrinsic-space-3);
-	/* atoms / molecules: compact cells */
-	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-}
-/* organisms get wider cells; templates a single near-full canvas — so a whole
- * page template isn't crammed into the same box as a button. */
-.wk-parts-grid[data-layer="organism"] {
-	grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
-}
-.wk-parts-grid[data-layer="template"] {
-	grid-template-columns: minmax(0, 960px);
+	gap: var(--intrinsic-space-3) var(--intrinsic-space-4);
+	/* fixed-width cells → ONE consistent scale across every component (a part is
+	 * not scaled to its cell). Each cell ≈ a typical screen width, so parts read
+	 * at their natural pico size. */
+	grid-template-columns: repeat(auto-fill, 460px);
+	justify-content: start;
 }
 .wk-parts-cell {
 	margin: 0;
@@ -299,30 +294,25 @@
 	flex-direction: column;
 	gap: var(--intrinsic-space-1);
 }
-.wk-parts-frame {
-	/* a query container, so each component's tokens scale to its OWN canvas:
-	 * a bigger cell renders a bigger component, and nothing overflows the box. */
-	container-type: size;
-	width: 100%;
-	aspect-ratio: 4 / 3;
-	overflow: hidden;
-	border: 2px solid #2a2a35;
-	border-radius: 4px;
-	background:
-		repeating-conic-gradient(#15151c 0% 25%, #11111a 0% 50%) 0 / 16px 16px;
+.wk-part-stage {
+	/* the part's tokens scale to this (uniform) width — normalized, not per-cell.
+	 * A neutral catalog surface (NOT the theme's screen skin); auto-height so the
+	 * part takes the room it needs — no fixed box, no clipping. */
+	container-type: inline-size;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 96px;
+	padding: var(--intrinsic-space-3);
+	background: #16161d;
+	border: 1px solid #2a2a35;
+	border-radius: 6px;
 }
-.wk-parts-grid[data-layer="organism"] .wk-parts-frame {
-	aspect-ratio: 16 / 10;
-}
-.wk-parts-grid[data-layer="template"] .wk-parts-frame {
-	aspect-ratio: 16 / 9;
-}
-.wk-parts-cell:hover .wk-parts-frame {
+.wk-parts-cell:hover .wk-part-stage {
 	border-color: #6af;
 }
-.wk-parts-canvas {
+.wk-part-canvas {
 	width: 100%;
-	height: 100%;
 }
 .wk-parts-label {
 	font-size: var(--intrinsic-text-dn1);

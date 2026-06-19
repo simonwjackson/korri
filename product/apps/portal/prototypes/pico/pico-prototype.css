@@ -94,16 +94,21 @@
 	color: var(--pico-ink);
 	overflow: hidden;
 	image-rendering: pixelated;
+}
 
-	/* ── Token generators — now the shared intrinsic core ──────────────────
-	 * Pico no longer hand-derives the scale. It feeds the intrinsic knobs (from
-	 * its own knob vars — which the device-lab GENERATORS / TEXT / PAD sliders
-	 * still drive) and aliases its --pico-* tokens onto the derived --intrinsic-*
-	 * scale. The `intrinsic` class on this screen (added via the theme config)
-	 * makes @korri/intrinsic-design re-derive the whole scale against THIS
-	 * screen's container; --intrinsic-snap: 1px keeps the Press Start pixel font
-	 * crisp. The recipe is loaded by the host (theme-workshop → workshop.css).
-	 * See packages/intrinsic-design + device-lab/AGENTS.md. */
+/* ── Token scope ─────────────────────────────────────────────────────────
+ * The intrinsic generator + --pico-* aliases, shared by the screen (device lab
+ * / wall) AND the component-catalog `part` scope — so a part renders with pico's
+ * scale WITHOUT the screen's background + CRT. Pico no longer hand-derives the
+ * scale: it feeds the intrinsic knobs (from its own knob vars, still driven by
+ * the device-lab GENERATORS / TEXT / PAD sliders) and aliases its tokens onto
+ * the derived --intrinsic-* scale. `intrinsic` (added via the theme config) makes
+ * @korri/intrinsic-design re-derive against the element's container;
+ * --intrinsic-snap: 1px keeps the Press Start pixel font crisp. The recipe is
+ * loaded by the host (theme-workshop → workshop.css). See packages/intrinsic-
+ * design + device-lab/AGENTS.md. */
+.pico-screen,
+.pico-part {
 	--intrinsic-base-min: var(--pico-base-min, 8px);
 	--intrinsic-base-cqi: var(--pico-base-cqi, 2.5);
 	--intrinsic-base-max: var(--pico-base-max, 200px);
@@ -126,6 +131,16 @@
 	--pico-space-2: var(--intrinsic-space-2);
 	--pico-space-3: var(--intrinsic-space-3);
 	--pico-space-4: var(--intrinsic-space-4);
+}
+
+/* Component-catalog scope: pico tokens + pixel rendering, but NO screen skin
+ * (no --pico-bg fill, no CRT, no size container) — the part renders neutrally on
+ * the workshop's catalog surface. inline-size container so component art resolves
+ * against the canvas width. */
+.pico-part {
+	container-type: inline-size;
+	color: var(--pico-ink);
+	image-rendering: pixelated;
 }
 
 /* CRT scanline + vignette overlay, non-interactive. */
