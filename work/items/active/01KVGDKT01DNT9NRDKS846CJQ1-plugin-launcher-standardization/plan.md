@@ -30,11 +30,11 @@ Korri's readable config has outgrown the current `apps[]` app-choice model: plug
 - R6. Preserve raw end-user escape hatches under `overrides.args` and `overrides.config`, with `prepend` / `append` / `replace` semantics.
 - R7. Support multi-file releases through `file-set` targets with named parts and launcher-owned `input` selection policy; targets must not declare entrypoints.
 - R8. Move provider/external identity and hash-like refs into scoped `provider-links.refs[]`, including optional `targetPart` scope, without adding new verification enforcement or duplicating hashes on targets.
-- R9. Implement no backwards compatibility: reject retired fields at decode time with migration-oriented diagnostics and update all checked-in fixtures/examples/plugins to the new shape.
+- R9. Implement no backwards compatibility: reject retired fields at decode time using strict schema failures; detailed custom migration diagnostics are not required. Update all checked-in normal fixtures/examples/plugins to the new shape, leaving old syntax only in explicit rejection tests.
 - R10. Keep first-party plugin boundaries: generic platform code must not hard-code plugin behavior; plugin-specific validation, materialization, settings schema, runtime mode, and support mappings belong to plugin descriptors/materializers.
 - R11. Phase the implementation into atomic, resumable units suitable for a multi-compact agentic session while preserving green verification between units where possible.
 - R12. Retire user-authored `kind` for launcher/app selection everywhere the new vocabulary uses `plugin`; keep `target.kind` only for target variants.
-- R13. Update live launch execution, not only dry-run: resolved launcher contexts must flow through LaunchSpec composition, sessiond-managed protocol, shell spawning, and stream runner paths.
+- R13. Update live launch execution, not only dry-run: resolved launcher contexts must flow through LaunchSpec composition, sessiond-managed protocol, shell spawning, and stream runner paths. Final proof must include Sobo deployment plus on-screen validation for at least one RetroArch launch and ZQuest Classic.
 - R14. Preserve intended cascade layers explicitly by mapping old host/user/system/app/app-choice/runtime/library/release/profile/ephemeral behavior into the new launcher/settings/target model or intentionally dropping it with tests.
 
 ---
@@ -44,8 +44,8 @@ Korri's readable config has outgrown the current `apps[]` app-choice model: plug
 - No compatibility loader for old readable YAML fields such as top-level `apps`, `release.apps[]`, `system.apps[]`, `provider-link.ref`, or `plugin.<provider>` policy bags.
 - No third-party plugin loading, marketplace, trust model, or user-installed plugin distribution changes.
 - No broad UI redesign; only API/read-model/diagnostic changes required by the new config model are in scope.
-- No deployment/device validation in this plan; runtime validation of specific games remains execution work after the schema lands.
-- No source/provider claims redesign beyond the provider-link shape required here; the existing provider-claims plan remains separate.
+- Deployment/device validation is in scope for final completion: after automated checks, deploy to Sobo and screenshot-verify at least one migrated RetroArch game and ZQuest Classic on-screen.
+- No source/provider claims redesign beyond the provider-link shape required here; the existing provider-claims plan remains separate. Steam/provider-ref must still have automated migration/dry-run coverage, but Steam live runtime validation remains skipped.
 - No storage-token portability work for absolute paths in examples; path templating remains a follow-up unless implementation touches that code directly.
 - No new package fulfillment engine or default executable discovery beyond adapting current direct-process/nixpkgs behavior behind the launcher contract.
 - No new integrity-verification policy for provider-link hashes; this plan only relocates/scopes existing identity/hash-like refs in the schema.
@@ -96,9 +96,9 @@ Korri's readable config has outgrown the current `apps[]` app-choice model: plug
 
 ## Key Technical Decisions
 
-- **Big-bang break, not compatibility migration:** Old authored fields are rejected after this lands. Checked-in fixtures/examples/plugins are migrated in the same change set; runtime compatibility shims are intentionally out of scope.
+- **Big-bang break, not compatibility migration:** Old authored fields are rejected after this lands. Checked-in fixtures/examples/plugins are migrated in the same change set; runtime compatibility shims are intentionally out of scope. Live YAML must be converted before deployment.
 - **`target` is locator-only:** It identifies what the release points at (`file`, `file-set`, `executable`, `url`, `provider-ref`) and never carries argv/env/cwd/plugin behavior.
-- **`launch` is the optional overlay:** It selects or customizes launcher behavior using the same object vocabulary as named launcher records; it can be omitted when inference produces a single launcher.
+- **`launch` is the optional overlay:** It selects or customizes launcher behavior using the same object vocabulary as named launcher records; it can be omitted when inference produces a single launcher. Legacy `release.apps` is removed immediately, not kept as an internal transition model.
 - **Launcher inference is explicit and diagnostic:** Precedence is explicit release `launch` (`use` or `plugin`) first, then target-kind/provider inference, then plugin-contributed system support. Ambiguity or absence returns typed diagnostics rather than falling back heuristically.
 - **Systems are metadata-only:** Systems describe compatibility domains and aliases. Plugins contribute launch support separately so catalog/acquisition can know a system before Korri can run it.
 - **System ownership is deterministic:** Core system definitions win over plugin system definitions for canonical fields, then explicit registry order, then lexical plugin id as a last-resort tie-breaker; conflicts still emit diagnostics listing losing contributors.
@@ -114,6 +114,15 @@ Korri's readable config has outgrown the current `apps[]` app-choice model: plug
 ## Open Questions
 
 ### Resolved During Planning
+
+- **Compatibility posture:** Keep a true big-bang break. No runtime compatibility shim for old readable YAML.
+- **ZQuest scope:** ZQuest Classic is required in this refactor. If it is absent from the checkout, merge/rebase the ZQuest plugin branch before first-party plugin migration can complete.
+- **Release app-choice posture:** Remove `release.apps` immediately and replace it with the new `release.launch` model; do not preserve release app-choice as an internal compatibility layer.
+- **Steam validation posture:** Skip live Steam runtime validation, but require automated migration/dry-run coverage for Steam/provider-ref behavior.
+- **Fixture posture:** Migrate all normal checked-in examples and fixtures in this branch. Old syntax may remain only in explicit retired-syntax rejection tests.
+- **Retired syntax diagnostics:** Strict schema failure is sufficient. Custom migration-oriented error text is optional and should not expand scope.
+- **Final device proof:** Automated checks alone are insufficient. Final completion requires Sobo deploy plus on-screen validation for at least one RetroArch path and ZQuest Classic.
+- **Branch posture:** Continue on `refactor/plugin-launcher-config-standardization`; remove the temporary app-choice compatibility introduced by early topology work in the next schema/resolver slice.
 
 - **System vs platform naming:** Keep `systems` for release-target compatibility domains and reserve platform for host/device/platform posture.
 - **Systems and launchability:** Systems do not contain launchers; plugin-contributed support mappings join systems to launchability.
@@ -341,13 +350,13 @@ Add retired-field rejection, diagnostic coverage, debug visibility, docs, and op
 - Modify: `product/platform/library/config/records/system.test.ts`
 
 **Approach:**
-- Replace current `apps[]` app-choice release/system grammar with release `launch` overlays and top-level `launchers` records.
+- Replace current `apps[]` app-choice release/system grammar with release `launch` overlays and top-level `launchers` records. Remove `release.apps` in this slice; do not keep it internally.
 - Expand release `target` into `file`, `file-set`, `executable`, `url`, and `provider-ref` variants.
 - Strip `systems` to metadata: `title`, `aliases`, and open metadata fields. Remove launch/cascade fields from system records.
 - Change provider links from a single `ref` to required non-empty `refs[]`, with optional `release` and `targetPart` scoping.
 - Introduce common launcher settings packs and `settings.plugin` as the single typed plugin-extension slot.
 - Introduce `overrides.args/config` with `prepend`, `append`, and `replace` fields.
-- Reject retired old-shape fields with migration-oriented diagnostics, not compatibility shims.
+- Reject retired old-shape fields with strict schema failures or existing explicit checks, not compatibility shims. Do not expand scope to custom migration diagnostics unless needed for an existing test seam.
 
 **Patterns to follow:**
 - Strict Effect Schema record modules in `product/platform/library/config/records/*.ts`.
@@ -362,7 +371,7 @@ Add retired-field rejection, diagnostic coverage, debug visibility, docs, and op
 - Edge case: `file-set.files[]` rejects empty arrays, duplicate part ids, and missing paths.
 - Error path: top-level systems reject old launch fields such as `apps`, `cores`, `launch`, `launcher`, and inheritable policy fields.
 - Error path: provider links reject old single `ref` and require non-empty `refs[]`.
-- Error path: release records reject old `apps[]`, `app`, and `runtime` fields.
+- Error path: release records reject old `apps[]`, `app`, and `runtime` fields through strict schema failure or explicit checks.
 - Error path: named launcher definitions reject `use` when `plugin` is required by definition context.
 - Error path: unsupported target kinds and unknown setting-pack keys fail strict decoding.
 
@@ -532,7 +541,7 @@ Add retired-field rejection, diagnostic coverage, debug visibility, docs, and op
 - Modify: `product/plugins/index.test.ts`
 
 **Approach:**
-- Start from the U0 plugin inventory checklist; mark each plugin as migrated, support-only, composition-only, provider/catalog-only, or unaffected. If `product/plugins/zquest-classic` is absent, merge/rebase the ZQuest plugin branch before starting U5 rather than treating it as optional plan scope.
+- Start from the U0 plugin inventory checklist; mark each plugin as migrated, support-only, composition-only, provider/catalog-only, or unaffected. If `product/plugins/zquest-classic` is absent, merge/rebase the ZQuest plugin branch before starting U5; ZQuest Classic is required scope, not a follow-up.
 - Split implementation internally by launcher family: generic direct process/nixpkgs adapters, RetroArch/libretro, Steam/provider-ref, standalone catalog plugins, then ZQuest Classic.
 - RetroArch contributes a named launcher, runtime mode `required`, supported settings packs, `settings.plugin` schema, and support mappings for libretro-backed systems/runtimes.
 - Steam contributes a named launcher, runtime mode `optional`, provider-ref defaults for `@korri:steam`, and Steam-specific settings under `settings.plugin`.
@@ -582,7 +591,7 @@ Add retired-field rejection, diagnostic coverage, debug visibility, docs, and op
 
 **Approach:**
 - Rewrite fixtures and internal producer outputs to use `launchers`, metadata-only `systems`, new `target` union, release `launch` overlays, provider-link `refs[]`, and common settings packs.
-- Remove every old user-facing `apps` / app-choice reference from examples unless a file is intentionally documenting retired syntax rejection.
+- Remove every old user-facing `apps` / app-choice reference from all normal examples/fixtures unless a file is intentionally documenting retired syntax rejection.
 - Convert provider links from `ref` to `refs[]` and add `targetPart` only where a link scopes to a file-set part.
 - Include representative examples for single-file ROM, file-set disc set, executable target, URL target, provider-ref nixpkgs target, provider-ref Steam target, metadata-only system, and embedded-runtime launcher.
 - Update plugin catalog releases and provider claim/import hints so they produce new `target`/`launch` records rather than old `apps` release hints.
@@ -594,9 +603,10 @@ Add retired-field rejection, diagnostic coverage, debug visibility, docs, and op
 
 **Test scenarios:**
 - Every checked-in fixture decodes with the new schema.
-- Old fixture shapes fail with targeted diagnostics and migration hints.
+- Old fixture shapes fail through strict schema rejection or existing explicit retired-field checks.
 - Provider-link migration helper converts old `ref` to `refs[]` for checked-in fixtures and internal test data.
 - Plugin catalog source and acquisition/adoption tests no longer emit old `apps` release hints.
+- Steam/provider-ref examples are migrated and covered by automated/dry-run tests, but no live Steam runtime validation is required.
 - Examples include at least one metadata-only system that is known but not launchable.
 - Examples include one file-set with provider-links scoped to a target part.
 - Examples include one no-runtime embedded launcher and one required-runtime launcher.
@@ -646,6 +656,7 @@ Add retired-field rejection, diagnostic coverage, debug visibility, docs, and op
 **Test scenarios:**
 - Happy path: dry-run for Sonic Advance reports inferred RetroArch launcher and mGBA runtime from plugin support.
 - Happy path: dry-run for Neverball reports target-provider inferred nixpkgs/process launch.
+- Happy path: Steam/provider-ref dry-run covers migration without requiring live Steam launch validation.
 - Error path: metadata-only WonderSwan release reports known-system-no-support, not no-target.
 - Error path: ambiguous support mappings list available launcher candidates.
 - Error path: invalid Steam provider ref returns provider-specific validation diagnostic.
@@ -694,7 +705,7 @@ Add retired-field rejection, diagnostic coverage, debug visibility, docs, and op
 
 **Test scenarios:**
 - Error path: old top-level `apps` map is rejected or absent from readable snapshot shape.
-- Error path: old `system.apps`, `release.apps`, user-authored launcher/app `kind`, and provider-link `ref` produce clear migration diagnostics, while `target.kind` remains allowed.
+- Error path: old `system.apps`, `release.apps`, user-authored launcher/app `kind`, and provider-link `ref` fail strict decoding or existing explicit retired-field checks, while `target.kind` remains allowed.
 - Error path: generic platform code cannot dispatch a launch through old app integration paths.
 - Integration: Nix config checks evaluate enabled first-party plugins with new launcher metadata.
 - Integration: typecheck/fallow audit finds no app-choice selection call sites.
@@ -784,10 +795,11 @@ Add retired-field rejection, diagnostic coverage, debug visibility, docs, and op
 - First-party plugins expose launcher metadata, runtime mode, support mappings, and typed plugin settings without generic platform code knowing plugin-specific semantics.
 - Release launch dry-run works for representative `file`, `file-set`, `executable`, `url`, and `provider-ref` targets.
 - Metadata-only systems can be present and listed without launchability; launch attempts against unsupported systems fail with actionable diagnostics.
-- RetroArch, Steam, ZQuest Classic, direct process, and nixpkgs-style launches are represented through the same launcher/materializer path.
+- RetroArch, Steam/provider-ref, ZQuest Classic, direct process, and nixpkgs-style launches are represented through the same launcher/materializer path; Steam is covered by automated/dry-run tests, not live runtime validation.
 - CLI/RPC/debug output no longer uses app-choice terminology and reports target/launcher/runtime/input fields.
 - Verification command is green:
   - `bun test product/platform/library product/platform/plugin product/plugins product/apps/portal/api/library tools/library product/platform/protocol/acquisition && just typecheck && just lint && nix flake check`
+- Sobo is deployed from the refactor branch and screenshot validation proves one migrated RetroArch game and ZQuest Classic are actually on-screen.
 
 ---
 
@@ -808,3 +820,4 @@ Add retired-field rejection, diagnostic coverage, debug visibility, docs, and op
 - Treat `config-sketch.korri.yaml` as the semantic source of truth for examples, but let tests and schemas become authoritative as implementation lands.
 - Prefer targeted tests after each unit, then the full verification command at phase boundaries.
 - If a choice would require keeping old syntax alive, stop and document the tradeoff; the user's explicit preference is a big-bang break with no backwards compatibility.
+- The current branch already has early topology groundwork; the next schema/resolver slice must remove temporary `release.apps`/app-choice compatibility rather than extending it.
