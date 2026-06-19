@@ -301,6 +301,9 @@
 .wk-parts-frame {
 	width: 100%;
 	aspect-ratio: 4 / 3;
+	/* A query container, so a framed screen's cqi/cqh resolve against the frame —
+	 * the screen sizes to its frame (device-like), not the viewport. */
+	container-type: size;
 	overflow: hidden;
 	border: 2px solid #2a2a35;
 	border-radius: 4px;
@@ -368,17 +371,31 @@
  * use width:100% from the base rule). */
 .wk-parts-group--organism .wk-parts-frame {
 	/* vw (not %) avoids the circular percentage of a content-sized flex item. */
-	width: min(360px, 90vw);
+	width: min(480px, 90vw);
 }
-/* Parts render at a FIXED inspection scale, not the device/viewport scale — a
- * part isn't tied to a device here, so it mustn't balloon (cqi against the
- * viewport made atoms ~35px and overflow their cells). `0 · 1cqi` collapses to
- * the clamp floor. `.wk-parts .wk-parts-canvas` = 0,2,0, beating the theme's
- * per-screen knobs (0,1,0). */
-.wk-parts .wk-parts-canvas {
+/* BARE parts render at a FIXED inspection scale (the SCALE control), not the
+ * device/viewport scale — a loose part isn't tied to a device, so it mustn't
+ * balloon (cqi against the viewport made atoms ~35px and overflow). `0 · 1cqi`
+ * collapses to the clamp floor. FRAMED parts (surfaces/templates) instead keep
+ * the theme's cqi, so the screen adapts to ITS frame (a query container, below)
+ * — like the device lab. `.wk-parts .wk-parts-bare.wk-parts-canvas` = 0,3,0,
+ * beats the theme's per-screen knobs (0,1,0). */
+.wk-parts .wk-parts-bare.wk-parts-canvas {
 	--intrinsic-base-cqi: 0;
 	--intrinsic-base-min: var(--wk-parts-base, 14px);
 	--intrinsic-base-max: var(--wk-parts-base, 14px);
+}
+/* Templates are whole screens — a generous, screen-shaped frame (one/two per
+ * row) so a screen reads as a screen; the content scales to it via cqi. */
+.wk-parts-group--template .wk-parts-grid {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: var(--intrinsic-space-3) var(--intrinsic-space-4);
+}
+.wk-parts-group--template .wk-parts-frame {
+	width: min(640px, 90vw); /* a roomy, screen-shaped frame that flows, not stretches */
+	aspect-ratio: 16 / 10;
 }
 
 /* Catalog scale control (sticky toolbar). */
