@@ -19,11 +19,15 @@ import {
   threeDSenPlugin,
   threeDSenReadableLaunchIntegration,
 } from "./3dsen"
+import { am2rLauncherPlugin } from "./am2rlauncher"
 import { communityCatalogPlugin } from "./community-catalog"
+import { domeRomantikPlugin } from "./dome-romantik"
+import { globebaPlugin } from "./globeba"
 import { itchioPlugin } from "./itchio"
 import { levelShareSquarePlugin } from "./levelsharesquare"
 import { megaManArenaPlugin } from "./mega-man-arena"
 import { megaManMakerPlugin } from "./mega-man-maker"
+import { megaManRockNRollPlugin } from "./mega-man-rock-n-roll"
 import { midasMachinePlugin } from "./midas-machine"
 import { neverballPlugin } from "./neverball"
 import { pico8Plugin } from "./pico8"
@@ -36,10 +40,16 @@ import {
   retroarchReadableLaunchIntegration,
 } from "./retroarch"
 import { ryubingPlugin, ryubingReadableLaunchIntegration } from "./ryubing"
+import { shipwrightPlugin } from "./shipwright"
 import { smbxGamePlugin } from "./smbxgame"
 import { smbWonderland1987Plugin } from "./smb-wonderland-1987"
 import { smwCentralPlugin } from "./smwcentral"
+import { sonic3AirPlugin } from "./sonic-3-air"
+import { sonicTimeTwistedPlugin } from "./sonic-time-twisted"
+import { spelunkyClassicHdPlugin } from "./spelunky-classic-hd"
 import { srb2Plugin } from "./srb2"
+import { srb2KartPlugin } from "./srb2kart"
+import { stargroveScramblePlugin } from "./stargrove-scramble"
 import {
   createSteamLogObserverDaemon,
   createSteamSessionLifecycleHook,
@@ -48,7 +58,10 @@ import {
 } from "./steam"
 import { superMario127Plugin } from "./super-mario-127"
 import { superMarioBrosRemasteredPlugin } from "./super-mario-bros-remastered"
+import { tinyCratePlugin } from "./tiny-crate"
+import { tmntRescuePaloozaPlugin } from "./tmnt-rescue-palooza"
 import { turnipPlugin } from "./turnip"
+import { xjltPlugin } from "./xjlt"
 import { yoshisFabricationStationPlugin } from "./yoshis-fabrication-station"
 
 export const firstPartyLaunchIntegrations = [
@@ -127,6 +140,19 @@ export const firstPartyPlugins = [
   levelShareSquarePlugin,
   itchioPlugin,
   communityCatalogPlugin,
+  xjltPlugin,
+  tmntRescuePaloozaPlugin,
+  am2rLauncherPlugin,
+  sonic3AirPlugin,
+  shipwrightPlugin,
+  spelunkyClassicHdPlugin,
+  srb2KartPlugin,
+  stargroveScramblePlugin,
+  domeRomantikPlugin,
+  globebaPlugin,
+  megaManRockNRollPlugin,
+  tinyCratePlugin,
+  sonicTimeTwistedPlugin,
   threeDSenPlugin,
   srb2Plugin,
   smbxGamePlugin,

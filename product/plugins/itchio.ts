@@ -3,6 +3,8 @@ import { Effect } from "effect"
 import type { AcquisitionPluginContext } from "../platform/acquisition/plugin-runtime"
 import { createItchioPluginDefinition } from "../platform/acquisition/plugins/itchio"
 
+export const KORRI_ITCHIO_PLUGIN_ID = "@korri:itchio" as const
+
 const definition = createItchioPluginDefinition()
 const noopLogger = {
   debug: () => undefined,
