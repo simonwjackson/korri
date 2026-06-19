@@ -40,6 +40,10 @@ export interface Story {
   readonly layer: StoryLayer
   readonly name: string
   readonly note?: string
+  /** Set for a full-surface component (an overlay/screen that fills its box and
+   * collapses if unsized) — the workshop gives it a sized, framed canvas instead
+   * of the default bare, content-sized one. Templates are always framed. */
+  readonly surface?: boolean
   readonly render: () => ReactNode
 }
 

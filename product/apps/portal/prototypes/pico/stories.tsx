@@ -144,6 +144,7 @@ export const PICO_STORIES: readonly Story[] = [
     id: "hudoverlay",
     layer: "organism",
     name: "HudOverlay",
+    surface: true, // absolutely-positioned corners — needs a sized framed canvas
     render: () => <HudOverlay />,
   },
   {

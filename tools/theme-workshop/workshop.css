@@ -329,16 +329,16 @@
  * canvas. They flow as content-sized items (not fixed grid tracks), so a bare
  * part can never overflow a too-narrow column into its neighbour, and never
  * strands empty space — at any viewport / scale. */
-:is(.wk-parts-group--atom, .wk-parts-group--molecule) .wk-parts-grid {
+:is(.wk-parts-group--atom, .wk-parts-group--molecule, .wk-parts-group--organism) .wk-parts-grid {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: flex-start;
 	gap: var(--intrinsic-space-3) var(--intrinsic-space-4);
 }
-:is(.wk-parts-group--atom, .wk-parts-group--molecule) .wk-parts-cell {
+:is(.wk-parts-group--atom, .wk-parts-group--molecule, .wk-parts-group--organism) .wk-parts-cell {
 	max-width: 100%;
 }
-:is(.wk-parts-group--atom, .wk-parts-group--molecule) .wk-parts-label {
+:is(.wk-parts-group--atom, .wk-parts-group--molecule, .wk-parts-group--organism) .wk-parts-label {
 	white-space: normal; /* wrap, so a long caption never forces overflow */
 }
 /* `.wk-parts-bare.wk-parts-canvas` = two classes (0,2,0), so this beats the
@@ -362,6 +362,13 @@
 }
 .wk-parts-bare.wk-parts-canvas::after {
 	display: none; /* no CRT/scanline overlay on bare atoms */
+}
+/* A surface story (e.g. HudOverlay) flowing among bare organisms keeps its
+ * framed canvas — give the frame a sized box in the flex flow (the grid groups
+ * use width:100% from the base rule). */
+.wk-parts-group--organism .wk-parts-frame {
+	/* vw (not %) avoids the circular percentage of a content-sized flex item. */
+	width: min(360px, 90vw);
 }
 /* Parts render at a FIXED inspection scale, not the device/viewport scale — a
  * part isn't tied to a device here, so it mustn't balloon (cqi against the

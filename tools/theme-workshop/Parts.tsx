@@ -66,10 +66,6 @@ export function Parts({
       {LAYER_ORDER.map(layer => {
         const inLayer = stories.filter(story => story.layer === layer)
         if (inLayer.length === 0) return null
-        // Atoms + molecules render bare (theme scope for tokens/skin, no framed
-        // canvas) — content-sized so they fit tightly, never clip or strand. The
-        // bigger organisms/templates keep a sized, framed canvas.
-        const bare = layer === "atom" || layer === "molecule"
         return (
           <section
             className={cx("wk-parts-group", `wk-parts-group--${layer}`)}
@@ -80,19 +76,24 @@ export function Parts({
               <span className="wk-parts-gcount">{inLayer.length}</span>
             </h2>
             <div className="wk-parts-grid">
-              {inLayer.map(story => (
+              {inLayer.map(story => {
+                // Bare + content-sized by default (tokens/skin, no frame); a
+                // full-surface story (overlay/screen) or a template gets a sized
+                // framed canvas so it doesn't collapse.
+                const framed = story.surface === true || layer === "template"
+                return (
                 <figure className="wk-parts-cell" key={story.id}>
-                  {bare ? (
-                    <div
-                      className={cx("wk-parts-canvas", "wk-parts-bare", cn.screen)}
-                    >
-                      {story.render()}
-                    </div>
-                  ) : (
+                  {framed ? (
                     <div className="wk-parts-frame">
                       <div className={cx("wk-parts-canvas", cn.screen)}>
                         {story.render()}
                       </div>
+                    </div>
+                  ) : (
+                    <div
+                      className={cx("wk-parts-canvas", "wk-parts-bare", cn.screen)}
+                    >
+                      {story.render()}
                     </div>
                   )}
                   <figcaption className="wk-parts-label">
@@ -102,7 +103,8 @@ export function Parts({
                     ) : null}
                   </figcaption>
                 </figure>
-              ))}
+                )
+              })}
             </div>
           </section>
         )
