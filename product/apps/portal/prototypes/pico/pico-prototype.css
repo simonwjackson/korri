@@ -35,6 +35,12 @@
 	--pico-accent: var(--p8-yellow);
 	--pico-focus: var(--p8-blue);
 
+	/* Chrome (status/button bars): a deep navy from the same family as the body,
+	 * not pure black — so the bars read as part of the design, separated from the
+	 * lighter body navy by a cool blue-tinted edge rather than a warm slate one. */
+	--pico-chrome: var(--pico-panel);
+	--pico-chrome-edge: color-mix(in srgb, var(--p8-blue) 32%, var(--pico-panel));
+
 	--font-display: "Press Start 2P", monospace;
 	--font-term: "VT323", monospace;
 
@@ -192,42 +198,64 @@
 	 * with TEXT scale and keeps a constant padding-to-text ratio. */
 	min-height: 3.5em;
 	padding: var(--pico-space-1) var(--pico-space-2);
-	background: var(--p8-black);
+	background: var(--pico-chrome);
 	color: var(--pico-ink-dim);
 	font-family: var(--font-display);
 	font-size: var(--pico-text--3);
 	letter-spacing: 0.125em;
-	border-bottom: 0.3125cqw solid var(--p8-slate);
+	/* em (not cqw) so the rule tracks TEXT scale and stays a hairline on the TV */
+	border-bottom: 0.18em solid var(--pico-chrome-edge);
+}
+.pico-statusbar-title {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* Right-side status cluster: wifi + clock + battery, em-spaced so it tracks the
+ * bar's text instead of the container width. */
+.pico-statusbar-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.9em;
+	flex: 0 0 auto;
+}
+.pico-statusbar-ico {
+	font-size: 1.15em;
+	color: var(--pico-ink-dim);
 }
 .pico-statusbar .pico-clock {
 	color: var(--pico-ink);
+	letter-spacing: 0.06em;
 }
 .pico-battery {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.625cqw;
+	gap: 0.45em;
+	color: var(--pico-ink-dim);
 }
+/* Battery glyph — em-sized so it scales with the bar text (was raw cqw, which
+ * ballooned on the wide TV). 2:1 capsule with a left-anchored charge fill. */
 .pico-battery i {
-	width: 2.8125cqw;
-	height: 1.4063cqw;
-	border: 0.3125cqw solid var(--p8-silver);
+	width: 1.9em;
+	height: 0.95em;
+	border: 0.14em solid var(--p8-silver);
 	position: relative;
 	display: inline-block;
 }
 .pico-battery i::before {
 	content: "";
 	position: absolute;
-	inset: 0.1563cqw;
-	right: 0.9375cqw;
+	inset: 0.1em;
+	right: 0.42em; /* leaves a gap at the right ~= depleted portion */
 	background: var(--p8-lime);
 }
 .pico-battery i::after {
 	content: "";
 	position: absolute;
-	right: -0.625cqw;
-	top: 0.3125cqw;
-	width: 0.3125cqw;
-	height: 0.7813cqw;
+	right: -0.26em;
+	top: 0.26em;
+	width: 0.16em;
+	height: 0.42em;
 	background: var(--p8-silver);
 }
 
@@ -239,8 +267,8 @@
 	align-items: center;
 	gap: 2em;
 	padding: var(--pico-space-1) var(--pico-space-3);
-	background: var(--p8-black);
-	border-top: 0.3125cqw solid var(--p8-slate);
+	background: var(--pico-chrome);
+	border-top: 0.18em solid var(--pico-chrome-edge);
 	font-family: var(--font-display);
 	font-size: var(--pico-text--3);
 	color: var(--pico-ink-dim);
@@ -249,15 +277,23 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 0.75em;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
 }
+/* Round face-button keys (the one intentionally-smooth element — a gamepad
+ * convention). Inset highlight + cast shadow read them as physical buttons. */
 .pico-key {
 	display: inline-grid;
 	place-items: center;
-	width: 2em;
-	height: 2em;
+	width: 2.2em;
+	height: 2.2em;
 	border-radius: 999px;
 	color: var(--p8-black);
 	font-size: var(--pico-text--3);
+	box-shadow:
+		inset 0 0.18em 0 rgba(255, 255, 255, 0.5),
+		inset 0 -0.18em 0 rgba(0, 0, 0, 0.32),
+		0 0.16em 0 rgba(0, 0, 0, 0.55);
 }
 .pico-key.a {
 	background: var(--p8-lime);
@@ -281,15 +317,19 @@
 	overflow: hidden;
 }
 
-/* SPIKE: real pixelized cover art fills the cart, under the notch/fav chrome.
- * `pixelated` keeps the small (72x96) PICO-8 raster crisp as it upscales. */
+/* Runtime-remap canvas: tiny PICO-8 bitmap upscaled crisp. */
+.pcArt {
+	display: block;
+	image-rendering: pixelated;
+}
+
+/* SPIKE: real cover art fills the cart, under the notch/fav chrome. */
 .pico-cart-art {
 	position: absolute;
 	inset: 0;
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
-	image-rendering: pixelated;
 }
 .pico-cart .pico-cart-initials {
 	position: relative;
@@ -746,6 +786,12 @@
 }
 .pico-gallerybar .pico-gallerybar-map {
 	background: var(--p8-lime);
+}
+.pico-gallerybar .pico-gallerybar-px {
+	background: var(--p8-blue);
+	color: var(--p8-white);
+	font-family: var(--font-term);
+	font-size: 14px;
 }
 .pico-gallerybar .pico-gallerybar-mute {
 	background: var(--p8-pink);

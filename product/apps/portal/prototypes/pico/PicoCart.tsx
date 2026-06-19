@@ -1,6 +1,7 @@
 /** PROTOTYPE — pico theme exploration. Throwaway. */
 
 import type { PicoGame } from "./fixtures"
+import { PicoArtImage } from "./PicoArtImage"
 import { ditherStyle, picoArt } from "./pico-art"
 
 export function PicoCart({
@@ -23,7 +24,7 @@ export function PicoCart({
       }}
     >
       {game.art ? (
-        <img className="pico-cart-art" src={game.art} alt="" />
+        <PicoArtImage src={game.art} className="pico-cart-art" />
       ) : null}
       <span className="pico-cart-notch" />
       {showFav && game.favorite ? <span className="pico-fav">★</span> : null}

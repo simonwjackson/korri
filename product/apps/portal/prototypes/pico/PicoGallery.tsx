@@ -12,6 +12,7 @@
  * gesture fires the boot chime); the ♪ button mutes.
  */
 import { useEffect, useRef, useState } from "react"
+import { cycleGranularity, useGranularity } from "./pico-settings"
 import { isMuted, sfx, toggleMuted } from "./pico-sfx"
 import type { PicoScreen } from "./screen-catalog"
 
@@ -28,6 +29,7 @@ export function PicoGallery({
 }) {
   const [open, setOpen] = useState(false)
   const [muted, setMuted] = useState(isMuted())
+  const granularity = useGranularity()
   const booted = useRef(false)
   const index = Math.max(
     0,
@@ -164,6 +166,18 @@ export function PicoGallery({
           }}
         >
           MAP
+        </button>
+        <button
+          type="button"
+          className="pico-gallerybar-px"
+          aria-label="cycle pixel granularity"
+          title="pixel granularity (runtime PICO-8 remap)"
+          onClick={() => {
+            cycleGranularity()
+            sfx.open()
+          }}
+        >
+          {granularity}px
         </button>
         <button
           type="button"

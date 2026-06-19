@@ -1,4 +1,5 @@
 /** PROTOTYPE — pico theme exploration. Throwaway. */
+import { PicoIcon } from "./PicoIcon"
 import { PicoMascot } from "./PicoMascot"
 
 export function PicoStatusBar({ label }: { readonly label: string }) {
@@ -6,13 +7,13 @@ export function PicoStatusBar({ label }: { readonly label: string }) {
     <div className="pico-statusbar">
       <span className="pico-statusbar-lead">
         <PicoMascot className="pcMascot-bar" />
-        {label}
+        <span className="pico-statusbar-title">{label}</span>
       </span>
-      <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
-        <span>WIFI</span>
+      <span className="pico-statusbar-status">
+        <PicoIcon name="wifi" className="pico-statusbar-ico" />
         <span className="pico-clock">10:24</span>
         <span className="pico-battery">
-          82%
+          <span className="pico-battery-pct">82%</span>
           <i />
         </span>
       </span>

@@ -10,6 +10,7 @@
  */
 import { useEffect, useState } from "react"
 import { picoGames, picoRecent } from "../fixtures"
+import { PicoArtImage } from "../PicoArtImage"
 import { PicoCart, PicoIcon, Screen } from "./kit"
 
 /**
@@ -43,6 +44,15 @@ export function SpotlightHomeScreen() {
       className="pad-0"
     >
       <div className="pcShow-spot">
+        {hero.heroUrl ? (
+          <PicoArtImage
+            key={`bg-${hero.id}`}
+            src={hero.heroUrl}
+            ratio={16 / 9}
+            scale={2.6}
+            className="pcShow-spot-herobg"
+          />
+        ) : null}
         <div className="pcShow-spot-bg" />
         {/* key remounts the hero each rotation so the pop-in re-fires */}
         <div className="pcShow-spot-hero" key={hero.id}>
@@ -51,7 +61,15 @@ export function SpotlightHomeScreen() {
           </div>
           <div className="pcShow-spot-info">
             <div className="pcShow-kicker">▸ FEATURED</div>
-            <h1 className="pc-title pc-t2 pcShow-spot-title">{hero.title}</h1>
+            {hero.logoUrl ? (
+              <img
+                className="pcShow-logo"
+                src={hero.logoUrl}
+                alt={hero.title}
+              />
+            ) : (
+              <h1 className="pc-title pc-t2 pcShow-spot-title">{hero.title}</h1>
+            )}
             <div className="pcShow-spot-tags">
               {hero.genre.toUpperCase()} · {hero.developer.toUpperCase()}
             </div>

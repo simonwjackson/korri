@@ -14,6 +14,14 @@ import { games } from "../../../../platform/fixtures/games/games"
 // 72x96 native so the screen's `image-rendering: pixelated` upscales it crisp.
 // Titles are overridden to the real game so labels match the art (prototype-
 // only; the shared platform fixture is untouched).
+import hero01 from "./art/hero-01.png"
+import hero02 from "./art/hero-02.png"
+import hero03 from "./art/hero-03.png"
+import hero04 from "./art/hero-04.png"
+import hero05 from "./art/hero-05.png"
+import hero06 from "./art/hero-06.png"
+import hero07 from "./art/hero-07.png"
+import hero08 from "./art/hero-08.png"
 import lib01 from "./art/lib-01.png"
 import lib02 from "./art/lib-02.png"
 import lib03 from "./art/lib-03.png"
@@ -38,6 +46,14 @@ import lib21 from "./art/lib-21.png"
 import lib22 from "./art/lib-22.png"
 import lib23 from "./art/lib-23.png"
 import lib24 from "./art/lib-24.png"
+import logo01 from "./art/logo-01.png"
+import logo02 from "./art/logo-02.png"
+import logo03 from "./art/logo-03.png"
+import logo04 from "./art/logo-04.png"
+import logo05 from "./art/logo-05.png"
+import logo06 from "./art/logo-06.png"
+import logo07 from "./art/logo-07.png"
+import logo08 from "./art/logo-08.png"
 
 export interface PicoGame {
   readonly id: string
@@ -48,23 +64,32 @@ export interface PicoGame {
   readonly lastPlayedAt: number | null
   readonly lastPlayedLabel: string | null
   readonly playtimeLabel: string | null
-  /** Pixelized cover art URL. Absent → fall back to the synthetic cart label. */
+  /** Cover art URL (remapped at runtime). Absent → synthetic cart label. */
   readonly art?: string
+  /** Wide hero/key-art URL for the Spotlight background (featured games only). */
+  readonly heroUrl?: string
+  /** Transparent logo URL for the Spotlight title (featured games only). */
+  readonly logoUrl?: string
 }
 
 // SPIKE: every game gets a real converted cover so the whole gallery fills out.
 // Order matches the platform fixture's game order; title overrides the fictional
 // fixture name so the label matches the art. (Synthetic carts still render for
 // any game beyond this list / when art is absent.)
-const SPIKE: readonly { readonly art: string; readonly title: string }[] = [
-  { art: lib01, title: "Hollow Knight" },
-  { art: lib02, title: "Hades" },
-  { art: lib03, title: "Celeste" },
-  { art: lib04, title: "Stardew Valley" },
-  { art: lib05, title: "Cuphead" },
-  { art: lib06, title: "Doom Eternal" },
-  { art: lib07, title: "Disco Elysium" },
-  { art: lib08, title: "Hyper Light Drifter" },
+const SPIKE: readonly {
+  readonly art: string
+  readonly title: string
+  readonly heroUrl?: string
+  readonly logoUrl?: string
+}[] = [
+  { art: lib01, title: "Hollow Knight", heroUrl: hero01, logoUrl: logo01 },
+  { art: lib02, title: "Hades", heroUrl: hero02, logoUrl: logo02 },
+  { art: lib03, title: "Celeste", heroUrl: hero03, logoUrl: logo03 },
+  { art: lib04, title: "Stardew Valley", heroUrl: hero04, logoUrl: logo04 },
+  { art: lib05, title: "Cuphead", heroUrl: hero05, logoUrl: logo05 },
+  { art: lib06, title: "Doom Eternal", heroUrl: hero06, logoUrl: logo06 },
+  { art: lib07, title: "Disco Elysium", heroUrl: hero07, logoUrl: logo07 },
+  { art: lib08, title: "Hyper Light Drifter", heroUrl: hero08, logoUrl: logo08 },
   { art: lib09, title: "Dead Cells" },
   { art: lib10, title: "Ori and the Will of the Wisps" },
   { art: lib11, title: "Katana Zero" },
@@ -113,6 +138,8 @@ export const picoGames: readonly PicoGame[] = games.map((game, index) => {
     lastPlayedLabel: lastPlayed ? relativeLabel(lastPlayed) : null,
     playtimeLabel: playtimeLabel(game.userData?.playtime),
     art: spike?.art,
+    heroUrl: spike?.heroUrl,
+    logoUrl: spike?.logoUrl,
   }
 })
 
