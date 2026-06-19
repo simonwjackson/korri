@@ -55,7 +55,7 @@ function context(input: {
     releaseId: "file",
     app: {
       id: "switch-runtime",
-      kind: "ryubing",
+      plugin: KORRI_RYUBING_PLUGIN_ID,
       command: "Ryujinx",
     },
     itemId: "switch-game",

@@ -368,7 +368,7 @@ function playableFor(entry: CommunityCatalogEntry, providerId: ProviderId) {
         id: entry.platform,
         providerId,
         system: entry.platform,
-        target: { kind: "url", value: entry.download?.url ?? entry.url },
+        target: { kind: "url" as const, value: entry.download?.url ?? entry.url },
       },
     ],
   }

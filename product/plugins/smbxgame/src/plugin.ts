@@ -414,7 +414,7 @@ function playableFor(providerId: ProviderId, topic: SmbxTopicSummary) {
         id: "episode",
         providerId,
         system: SMBX_EPISODE_SYSTEM,
-        target: { kind: "url", value: topic.url },
+        target: { kind: "url" as const, value: topic.url },
       },
     ],
   }

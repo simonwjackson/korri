@@ -372,7 +372,7 @@ function acquireMegaManMakerLevel(
     if (!location) {
       return yield* Effect.fail(
         new AcquisitionError({
-          reason: "provider-error",
+          reason: "defective-provider",
           providerId,
           message: `Mega Man Maker level has no downloadable file: ${id}`,
         }),
@@ -435,7 +435,7 @@ function fetchJson(
       if (response.status === 404 && "notFound" in options) return null
       if (!response.ok) {
         throw new AcquisitionError({
-          reason: response.status === 404 ? "caller" : "provider-error",
+          reason: response.status === 404 ? "caller" : "defective-provider",
           providerId: KORRI_MEGA_MAN_MAKER_PLUGIN_ID,
           message: `Mega Man Maker API returned HTTP ${response.status} for ${url}`,
         })
@@ -446,7 +446,7 @@ function fetchJson(
       error instanceof AcquisitionError
         ? error
         : new AcquisitionError({
-            reason: "provider-error",
+            reason: "defective-provider",
             providerId: KORRI_MEGA_MAN_MAKER_PLUGIN_ID,
             message: `Mega Man Maker API request failed: ${stringifyError(error)}`,
           }),
@@ -462,7 +462,7 @@ function fetchBytes(
       const response = await runtime.fetchImpl(url)
       if (!response.ok) {
         throw new AcquisitionError({
-          reason: response.status === 404 ? "caller" : "provider-error",
+          reason: response.status === 404 ? "caller" : "defective-provider",
           providerId: KORRI_MEGA_MAN_MAKER_PLUGIN_ID,
           message: `Mega Man Maker artifact returned HTTP ${response.status} for ${url}`,
         })
@@ -473,7 +473,7 @@ function fetchBytes(
       error instanceof AcquisitionError
         ? error
         : new AcquisitionError({
-            reason: "provider-error",
+            reason: "defective-provider",
             providerId: KORRI_MEGA_MAN_MAKER_PLUGIN_ID,
             message: `Mega Man Maker artifact request failed: ${stringifyError(error)}`,
           }),
@@ -540,7 +540,7 @@ function playableFor(
         id: "level",
         providerId,
         system: MEGA_MAN_MAKER_SYSTEM,
-        target: { kind: "url", value: webLevelUrl(runtime, id) },
+        target: { kind: "url" as const, value: webLevelUrl(runtime, id) },
       },
     ],
   }

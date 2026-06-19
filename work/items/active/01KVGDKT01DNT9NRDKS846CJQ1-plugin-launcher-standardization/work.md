@@ -22,3 +22,15 @@ Completed a no-backwards-compat Korri readable-config and plugin-contract big-ba
 - Live Sobo validation passed:
   - RetroArch launched `cool-spot-usa` through `genesis_plus_gx` and was observed running on-screen.
   - ZQuest Classic launched `to-the-top`, the prompt was dismissed with `ydotool`, and `/storage/cache/zquest-debug/to-the-top-after-prompt.png` shows gameplay beyond the prompt.
+- Code-review fixes applied after the first formal review:
+  - File, executable, provider-ref, and file-set targets now resolve through one validated object-target path; file-set selection honors `release.launch.input`.
+  - Launchable release semantics are consistently `target` + `launch`; target-only/known-only releases remain metadata but are not launchable.
+  - `release.launch.plugin` selects an enabled launcher by provider id and rejects ambiguous matches.
+  - Release-scoped `settings.plugin.content.path` is stripped so plugin policy cannot override the resolver's storage-validated content path.
+  - Legacy/control adapters emit object targets instead of string targets.
+  - ZQuest Classic now has a readable launch integration plus plugin/package README docs.
+- Review-fix verification passed:
+  - `bun test` review-focused regression suite: 145 pass.
+  - Schema/game-assets/config-graph regression suite: 118 pass.
+  - `nix build --impure .#checks.$system.zquest-classic-check --no-link`.
+  - Full `bun test` no longer reports standardization/schema regressions; remaining failures are unrelated existing guardrail/environment tests (`nix` boundary, naming guardrails, mDNS bootstrap, local foreground adapter).

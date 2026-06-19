@@ -147,7 +147,10 @@ async function seedGame(root: string): Promise<void> {
               {
                 id: "default",
                 system: "nix",
-                target: "store/supertuxkart/bin/supertuxkart",
+                target: {
+                  kind: "executable",
+                  path: "store/supertuxkart/bin/supertuxkart",
+                },
               },
             ],
           },
@@ -160,7 +163,10 @@ async function seedGame(root: string): Promise<void> {
               {
                 id: "default",
                 system: "nix",
-                target: "store/supertuxkart/bin/supertuxkart",
+                target: {
+                  kind: "executable",
+                  path: "store/supertuxkart/bin/supertuxkart",
+                },
               },
             ],
           },

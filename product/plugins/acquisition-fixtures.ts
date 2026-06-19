@@ -256,7 +256,7 @@ function playableFor(entry: FixtureEntry, providerId: ProviderId) {
         id: localPlayableId(entry.platform),
         providerId,
         system: entry.platform,
-        ...(entry.downloadUrl ? { target: { kind: "url", value: entry.downloadUrl } } : {}),
+        ...(entry.downloadUrl ? { target: { kind: "url" as const, value: entry.downloadUrl } } : {}),
       },
     ],
   }

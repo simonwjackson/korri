@@ -46,11 +46,11 @@ export const materializeReadableRyubingLaunch = (input: {
   readonly context: ReadableResolvedLaunchContext
 }): Effect.Effect<MaterializedReadableLaunch, ResolutionError> =>
   Effect.gen(function* () {
-    if (input.context.app.kind !== "ryubing") {
+    if (input.context.app.plugin !== KORRI_RYUBING_PLUGIN_ID) {
       return yield* Effect.fail(
         new AppMaterializationFailed({
           appId: input.context.app.id,
-          reason: "typed Ryubing materialization requires kind: ryubing",
+          reason: `typed Ryubing materialization requires plugin: ${KORRI_RYUBING_PLUGIN_ID}`,
         }),
       )
     }

@@ -23,10 +23,26 @@ export class FileTargetEscapesStorage extends Data.TaggedError(
   readonly target: string
 }> {}
 
+export class FileSetPartNotFound extends Data.TaggedError(
+  "FileSetPartNotFound",
+)<{
+  readonly storageId: string
+  readonly part?: string
+  readonly roles?: readonly string[]
+}> {}
+
+export class UnsupportedReleaseTarget extends Data.TaggedError(
+  "UnsupportedReleaseTarget",
+)<{
+  readonly kind: string
+}> {}
+
 export type TargetResolutionError =
   | StorageNotFound
   | AbsoluteFileTarget
   | FileTargetEscapesStorage
+  | FileSetPartNotFound
+  | UnsupportedReleaseTarget
 
 export interface ResolvedReleaseTarget {
   readonly target: string
@@ -38,6 +54,11 @@ export interface ResolvedReleaseTarget {
 export interface ResolveReleaseTargetInput {
   readonly target: ReleaseTargetAtom
   readonly storage: ReadonlyMap<string, StorageRecord>
+  readonly input?: LibraryReleasePayload["launch"] extends infer L
+    ? L extends { readonly input?: infer I }
+      ? I
+      : never
+    : never
 }
 
 const isFileTarget = (
@@ -74,7 +95,24 @@ export const resolveReleaseTarget = (
     }
 
     if (isExecutableTarget(input.target)) {
-      return { target: input.target.path, content: { path: input.target.path } }
+      if (path.posix.isAbsolute(input.target.path)) {
+        return yield* Effect.fail(
+          new AbsoluteFileTarget({
+            storageId: "executable",
+            target: input.target.path,
+          }),
+        )
+      }
+      const normalizedTarget = path.posix.normalize(input.target.path)
+      if (normalizedTarget === ".." || normalizedTarget.startsWith("../")) {
+        return yield* Effect.fail(
+          new FileTargetEscapesStorage({
+            storageId: "executable",
+            target: input.target.path,
+          }),
+        )
+      }
+      return { target: normalizedTarget }
     }
 
     if (isProviderRefTarget(input.target)) {
@@ -112,15 +150,49 @@ export const resolveReleaseTarget = (
     }
 
     if (isFileSetTarget(input.target)) {
-      const first = input.target.files[0]
-      if (first === undefined) return { target: input.target.storage }
+      const selected = selectFileSetPart(input.target, input.input)
+      if (selected === undefined) {
+        return yield* Effect.fail(
+          new FileSetPartNotFound({
+            storageId: input.target.storage,
+            ...(input.input?.part !== undefined
+              ? { part: input.input.part }
+              : {}),
+            ...(input.input?.roles !== undefined
+              ? { roles: input.input.roles }
+              : {}),
+          }),
+        )
+      }
       const root = input.target.root ?? ""
-      const partPath = path.posix.join(root, first.path)
+      const partPath = path.posix.join(root, selected.path)
       return yield* resolveReleaseTarget({
         target: { kind: "file", storage: input.target.storage, path: partPath },
         storage: input.storage,
       })
     }
 
-    return { target: "" }
+    const exhaustive = input.target as { readonly kind?: string }
+    return yield* Effect.fail(
+      new UnsupportedReleaseTarget({ kind: exhaustive.kind ?? "unknown" }),
+    )
   })
+
+const selectFileSetPart = (
+  target: Extract<ReleaseTargetAtom, { readonly kind: "file-set" }>,
+  input: ResolveReleaseTargetInput["input"],
+): (typeof target.files)[number] | undefined => {
+  if (input?.part !== undefined) {
+    return target.files.find(file => file.id === input.part)
+  }
+
+  if (input?.roles !== undefined && input.roles.length > 0) {
+    for (const role of input.roles) {
+      const byRole = target.files.find(file => file.role === role)
+      if (byRole !== undefined) return byRole
+    }
+    return undefined
+  }
+
+  return target.files[0]
+}

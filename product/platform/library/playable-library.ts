@@ -31,7 +31,7 @@ const FileSetReleaseTarget = Schema.Struct({
   files: Schema.Array(
     Schema.Struct({
       id: Schema.String,
-      role: Schema.String,
+      role: Schema.optional(Schema.String),
       path: Schema.String,
     }),
   ),

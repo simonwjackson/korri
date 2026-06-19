@@ -206,7 +206,7 @@ describe("artifact import CLI", () => {
           {
             id: "default",
             system: "snes",
-            launchable: true,
+            launchable: false,
           },
         ],
       })

@@ -300,12 +300,13 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                 if (!entry.downloadUrl) {
                   return Effect.fail(
                     new AcquisitionError({
-                      reason: "provider",
+                      reason: "defective-provider",
                       providerId: context.provider,
                       message: `PortMaster catalog entry has no download URL: ${id}`,
                     }),
                   )
                 }
+                const downloadUrl = entry.downloadUrl
 
                 const nativeElfRepair =
                   nativeElfRepairFromInput(input.nativeElfRepair) ??
@@ -327,7 +328,7 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                           providerId: context.provider,
                           id: entry.id,
                           title: entry.title,
-                          downloadUrl: entry.downloadUrl,
+                          downloadUrl,
                           ...(entry.md5 ? { md5: entry.md5 } : {}),
                           ...(entry.size !== undefined
                             ? { size: entry.size }
@@ -348,7 +349,7 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                         }),
                       catch: error =>
                         new AcquisitionError({
-                          reason: "provider",
+                          reason: "defective-provider",
                           providerId: context.provider,
                           message: `Failed to install PortMaster entry ${id}: ${
                             error instanceof Error
@@ -389,7 +390,7 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                 }),
               catch: error =>
                 new AcquisitionError({
-                  reason: "provider",
+                  reason: "defective-provider",
                   providerId: context.provider,
                   message: `Failed to prepare PortMaster launch envelope: ${
                     error instanceof Error ? error.message : String(error)
@@ -450,7 +451,7 @@ function loadCatalog(
     try: () => runtime.catalog as Promise<readonly PortMasterEntry[]>,
     catch: error =>
       new AcquisitionError({
-        reason: "provider",
+        reason: "defective-provider",
         providerId: KORRI_PORTMASTER_PLUGIN_ID,
         message: `Failed to load PortMaster catalog: ${
           error instanceof Error ? error.message : String(error)
@@ -735,7 +736,7 @@ function loadCompatibilityDb(
       >,
     catch: error =>
       new AcquisitionError({
-        reason: "provider",
+        reason: "defective-provider",
         providerId: KORRI_PORTMASTER_PLUGIN_ID,
         message: `Failed to load PortMaster compatibility DB: ${
           error instanceof Error ? error.message : String(error)

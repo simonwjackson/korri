@@ -524,7 +524,7 @@ function playableFor(
         id: "patch-archive",
         providerId,
         system: section.system,
-        target: { kind: "url", value: detailsUrl(runtime, id) },
+        target: { kind: "url" as const, value: detailsUrl(runtime, id) },
         display: { section: section.label },
       },
     ],
@@ -696,7 +696,7 @@ function sectionIdsForPlatforms(
       platform =>
         platform === sectionId ||
         platform === section.system ||
-        section.aliases.includes(platform),
+        (section.aliases as readonly string[]).includes(platform),
     )
   })
 }
@@ -771,8 +771,13 @@ function arrayOfStrings(input: unknown): readonly string[] {
     : []
 }
 
-function numberRecord(input: Record<string, number | undefined>) {
-  return withoutUndefined(input)
+function numberRecord(
+  input: Record<string, number | undefined>,
+): Record<string, number> | undefined {
+  const entries = Object.entries(input).filter(
+    (entry): entry is [string, number] => entry[1] !== undefined,
+  )
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
 function numberValue(input: unknown): number | undefined {

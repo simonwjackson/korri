@@ -131,7 +131,10 @@ async function runWithService<T>(
               {
                 id: "default",
                 system: "nix",
-                target: "store/supertuxkart/bin/supertuxkart",
+                target: {
+                  kind: "executable",
+                  path: "store/supertuxkart/bin/supertuxkart",
+                },
               },
             ],
           },
@@ -144,7 +147,10 @@ async function runWithService<T>(
               {
                 id: "default",
                 system: "nix",
-                target: "store/supertuxkart/bin/supertuxkart",
+                target: {
+                  kind: "executable",
+                  path: "store/supertuxkart/bin/supertuxkart",
+                },
               },
             ],
           },

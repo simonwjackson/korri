@@ -17,7 +17,8 @@ const downwell: LibraryItemRecord = {
     {
       id: "windows",
       system: "windows",
-      target: "steam://rungameid/360740",
+      target: { kind: "url", value: "steam://rungameid/360740" },
+      launch: { use: "@korri:steam/steam" },
     },
   ],
 }
@@ -29,13 +30,15 @@ const sonic: LibraryItemRecord = {
     {
       id: "genesis",
       system: "genesis",
-      target: "genesis/Sonic The Hedgehog.md",
+      target: { kind: "file", storage: "roms", path: "genesis/Sonic The Hedgehog.md" },
+      launch: { use: "@korri:retroarch/retroarch" },
     },
     { id: "windows-known", system: "windows" },
     {
       id: "steam",
       system: "windows",
-      target: "steam://rungameid/71113",
+      target: { kind: "url", value: "steam://rungameid/71113" },
+      launch: { use: "@korri:steam/steam" },
     },
   ],
 }
@@ -58,7 +61,8 @@ const superMarioAdvance2: LibraryItemRecord = {
     {
       id: "gba",
       system: "gba",
-      target: "gba/Super Mario Advance 2.gba",
+      target: { kind: "file", storage: "roms", path: "gba/Super Mario Advance 2.gba" },
+      launch: { use: "@korri:retroarch/retroarch" },
     },
   ],
 }
@@ -137,7 +141,12 @@ describe("release selection", () => {
   it("selects the only launchable release even when known-only releases exist", () => {
     const result = selectLaunchableRelease([
       { id: "known", system: "windows" },
-      { id: "genesis", system: "genesis", target: "genesis/Sonic.md" },
+      {
+        id: "genesis",
+        system: "genesis",
+        target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
+        launch: { use: "@korri:retroarch/retroarch" },
+      },
     ])
     expect(result._tag).toBe("SelectedRelease")
     if (result._tag === "SelectedRelease") {

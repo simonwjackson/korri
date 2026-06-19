@@ -203,13 +203,6 @@ const ReleaseList = Schema.Array(LibraryReleasePayload).pipe(
         }
         ids.add(release.id)
       }
-      if (!releases.some(release => release.target !== undefined)) {
-        return {
-          path: ["releases"],
-          issue:
-            "library item must declare at least one launchable release target",
-        }
-      }
       return undefined
     }),
   ),

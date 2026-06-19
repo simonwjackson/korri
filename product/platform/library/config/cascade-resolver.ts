@@ -54,7 +54,7 @@ import {
   selectLaunchableRelease,
   splitPlayableId,
 } from "./playable-id"
-import type { AppRecord } from "./records/app"
+import { appRecordKind, type AppRecord } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
@@ -528,7 +528,6 @@ const presetsOnLayer = (
   source:
     | GlobalConfigRecord
     | UserRecord
-    | SystemRecord
     | LauncherRecord
     | GameRecord
     | undefined
@@ -601,7 +600,6 @@ export const enumerateApplicablePresets = (
     for (const { name, link } of presetsOnLayer("global", snap.global))
       push(name, link)
     for (const { name, link } of presetsOnLayer("user", user)) push(name, link)
-    for (const { name, link } of presetsOnLayer("system", sys)) push(name, link)
     for (const { name, link } of presetsOnLayer("launcher", lncher))
       push(name, link)
     for (const { name, link } of presetsOnLayer("game", game)) push(name, link)
@@ -672,13 +670,6 @@ export class IncompatibleLaunchSelection extends Data.TaggedError(
   readonly reason: string
 }> {}
 
-export class MultiTargetUnsupported extends Data.TaggedError(
-  "MultiTargetUnsupported",
-)<{
-  readonly playableId: string
-  readonly releaseId: string
-}> {}
-
 interface ReadableOverride {
   readonly launch?: LaunchPolicy
   readonly moonlight?: MoonlightPolicy
@@ -728,12 +719,29 @@ const readableViewOfSystem = (_system: SystemRecord | undefined): ReadableLayerV
 const pluginPolicyFromSettings = (
   launcherPlugin: string | undefined,
   settings: LaunchSettings | undefined,
+  options: { readonly allowContentPath?: boolean } = {},
 ): PluginPolicyMap | undefined => {
   const pluginSettings = settings?.plugin
-  if (launcherPlugin === undefined || pluginSettings === undefined) {
+  if (launcherPlugin === undefined || pluginSettings == null) {
     return undefined
   }
-  return { [launcherPlugin]: pluginSettings }
+  const pluginSettingsRecord = pluginSettings as Record<string, unknown>
+  if (options.allowContentPath === false) {
+    return { [launcherPlugin]: stripContentPathOverride(pluginSettingsRecord) }
+  }
+  return { [launcherPlugin]: pluginSettingsRecord }
+}
+
+const stripContentPathOverride = (
+  pluginSettings: Record<string, unknown>,
+): Record<string, unknown> => {
+  const content = pluginSettings.content
+  if (typeof content !== "object" || content === null || Array.isArray(content)) {
+    return pluginSettings
+  }
+  if (!("path" in content)) return pluginSettings
+  const { content: _content, ...safeSettings } = pluginSettings
+  return safeSettings
 }
 
 const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
@@ -793,6 +801,60 @@ const resolveReadableLauncherRecord = (
     inherit: override?.inherit,
     presets: override?.presets ?? builtIn.presets,
   }
+}
+
+type ReadableLauncherSelection =
+  | {
+      readonly _tag: "Selected"
+      readonly appId: string
+      readonly app: AppRecord
+    }
+  | {
+      readonly _tag: "NotFound"
+      readonly appId: string
+    }
+  | {
+      readonly _tag: "Ambiguous"
+      readonly pluginId: string
+      readonly appIds: readonly string[]
+    }
+
+const resolveReadableLauncherSelection = (input: {
+  readonly explicitAppId: string | undefined
+  readonly pluginId: string | undefined
+  readonly systemId: string
+  readonly readableLaunchers: ReadonlyMap<string, AppRecord>
+}): ReadableLauncherSelection | undefined => {
+  if (input.explicitAppId !== undefined) {
+    const app = resolveReadableLauncherRecord(
+      input.explicitAppId,
+      input.readableLaunchers,
+    )
+    return app === undefined
+      ? { _tag: "NotFound", appId: input.explicitAppId }
+      : { _tag: "Selected", appId: input.explicitAppId, app }
+  }
+
+  if (input.pluginId === undefined) return undefined
+
+  const candidates = [...input.readableLaunchers.values()].filter(app => {
+    if (appRecordKind(app) !== input.pluginId) return false
+    return (
+      app.systems === undefined ||
+      app.systems.length === 0 ||
+      app.systems.includes(input.systemId)
+    )
+  })
+  if (candidates.length === 0) return { _tag: "NotFound", appId: input.pluginId }
+  if (candidates.length > 1) {
+    return {
+      _tag: "Ambiguous",
+      pluginId: input.pluginId,
+      appIds: candidates.map(app => app.id),
+    }
+  }
+  const app = candidates[0] as AppRecord
+  return { _tag: "Selected", appId: app.id, app }
 }
 
 const validateReadableLaunchCompatibility = (input: {
@@ -891,7 +953,11 @@ const readableViewOfRelease = (
 ): ReadableLayerView => ({
   launchCompanions: release.launch?.with,
   moonlight: release.moonlight,
-  plugin: pluginPolicyFromSettings(app?.plugin ?? release.launch?.plugin, release.launch?.settings),
+  plugin: pluginPolicyFromSettings(
+    app?.plugin ?? release.launch?.plugin,
+    release.launch?.settings,
+    { allowContentPath: false },
+  ),
   env: release.launch?.env ?? release.env,
   cwd: release.launch?.cwd ?? release.cwd,
   argsAppend: release.launch?.argsAppend ?? release.argsAppend,
@@ -1065,15 +1131,30 @@ export const resolveReadableLaunchContext = (
 
     const system = snapshot.systems.get(release.system)
     const explicitAppId = inputs.appId ?? release.launch?.use
-    const directPluginId = release.launch?.plugin
-    const appId = explicitAppId ?? directPluginId
-    if (appId === undefined) {
+    const selection = resolveReadableLauncherSelection({
+      explicitAppId,
+      pluginId: release.launch?.plugin,
+      systemId: release.system,
+      readableLaunchers: snapshot.readableLaunchers,
+    })
+    if (selection === undefined) {
       return yield* Effect.fail(
         new ReleaseNotLaunchable({ releaseId: release.id }),
       )
     }
-    const app = resolveReadableLauncherRecord(appId, snapshot.readableLaunchers)
-    if (app === undefined) return yield* Effect.fail(new AppNotFound({ appId }))
+    if (selection._tag === "NotFound") {
+      return yield* Effect.fail(new AppNotFound({ appId: selection.appId }))
+    }
+    if (selection._tag === "Ambiguous") {
+      return yield* Effect.fail(
+        new IncompatibleLaunchSelection({
+          appId: selection.pluginId,
+          systemId: release.system,
+          reason: `plugin ${selection.pluginId} matches multiple launchers: ${selection.appIds.join(", ")}`,
+        }),
+      )
+    }
+    const { appId, app } = selection
     const runtimeId = release.launch?.runtime ?? app.runtime
     const runtime =
       runtimeId === undefined ? undefined : snapshot.runtimes.get(runtimeId)
@@ -1110,6 +1191,7 @@ export const resolveReadableLaunchContext = (
     const resolvedTarget = yield* resolveReleaseTarget({
       target: target as ReleaseTargetAtom,
       storage: snapshot.storage,
+      input: release.launch?.input,
     })
 
     return {

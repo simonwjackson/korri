@@ -138,7 +138,7 @@ export const listPlayableEntries = (
   })
 
 export const isLaunchableRelease = (release: LibraryReleasePayload): boolean =>
-  release.target !== undefined
+  release.target !== undefined && release.launch !== undefined
 
 export const launchableReleases = (
   releases: readonly LibraryReleasePayload[],

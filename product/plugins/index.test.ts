@@ -245,6 +245,20 @@ describe("first-party plugins", () => {
     })
   })
 
+  it("exposes the ZQuest Classic readable launch integration when enabled", () => {
+    const enabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
+    })
+
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(enabled).some(
+        integration =>
+          integration.kind === KORRI_ZQUEST_CLASSIC_PLUGIN_ID &&
+          integration.integration === "zquest-classic",
+      ),
+    ).toBe(true)
+  })
+
   it("enables RetroArch-owned ZX Spectrum, GBA, Genesis, SMS, N64, NES, PC-98, PSP, PSX, SNES, TG16, and core runtimes when requested", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,

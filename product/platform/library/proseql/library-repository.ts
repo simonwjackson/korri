@@ -474,7 +474,6 @@ export function createLibraryRepository(
             release ?? {
               id: context.releaseId,
               system: context.system,
-              target: context.target,
             },
           ),
           ...(context.content ? { content: context.content } : {}),
@@ -517,7 +516,12 @@ export function createLibraryRepository(
           record.systemDelta,
           record.launcher.id,
         )
-        yield* upsertLegacyGame(db, record.game)
+        yield* upsertLegacyGame(db, {
+          ...record.game,
+          launcher: record.game.launcher ?? record.launcher.id,
+          core:
+            record.game.core ?? record.systemDelta?.cores?.[record.launcher.id],
+        })
       }),
     adoptArtifact: input =>
       adoptArtifactIntoReadableLibrary(db, input, _options.env ?? {}),
@@ -860,7 +864,7 @@ function toPlayableLibraryEntry(
   const releases = entry.releases.map(release =>
     toPlayableReleaseEntry(
       release,
-      installMetadataForRelease(release, readableLaunchers, systems),
+      installMetadataForRelease(release, readableLaunchers),
     ),
   )
   return {

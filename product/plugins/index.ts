@@ -63,13 +63,17 @@ import { tmntRescuePaloozaPlugin } from "./tmnt-rescue-palooza"
 import { turnipPlugin } from "./turnip"
 import { xjltPlugin } from "./xjlt"
 import { yoshisFabricationStationPlugin } from "./yoshis-fabrication-station"
-import { zquestClassicPlugin } from "./zquest-classic"
+import {
+  zquestClassicPlugin,
+  zquestClassicReadableLaunchIntegration,
+} from "./zquest-classic"
 
 export const firstPartyLaunchIntegrations = [
   retroarchReadableLaunchIntegration,
   ryubingReadableLaunchIntegration,
   steamReadableLaunchIntegration,
   threeDSenReadableLaunchIntegration,
+  zquestClassicReadableLaunchIntegration,
 ]
 
 export function firstPartyLaunchIntegrationsForRegistry(

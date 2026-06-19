@@ -327,7 +327,7 @@ function playableFor(providerId: ProviderId, entry: Pico8CartDetails) {
         id: entry.platform,
         providerId,
         system: entry.platform,
-        ...(entry.downloadUrl ? { target: { kind: "url", value: entry.downloadUrl } } : {}),
+        ...(entry.downloadUrl ? { target: { kind: "url" as const, value: entry.downloadUrl } } : {}),
       },
     ],
   }

@@ -609,7 +609,7 @@ describe("resolveReadableLaunchContext", () => {
         ),
       ),
     )
-    expect(notLaunchable).toMatchObject({ _tag: "ReleaseNotLaunchable" })
+    expect(notLaunchable).toMatchObject({ _tag: "NoLaunchableRelease" })
 
     const unknown = await Effect.runPromise(
       Effect.flip(
@@ -650,7 +650,7 @@ describe("resolveReadableLaunchContext", () => {
     )
 
     expect(exit._tag).toBe("Failure")
-    expect(String(exit)).toContain("ReleaseNotLaunchable")
+    expect(String(exit)).toContain("NoLaunchableRelease")
   })
 
   it("materializes built-in app overrides for readable launch composition", async () => {
@@ -831,6 +831,86 @@ describe("resolveReadableLaunchContext", () => {
     })
   })
 
+  it("resolves direct plugin launch selectors through enabled launchers", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        {
+          ...steamReadableSnapshot({ app: steamApp() }),
+          library: new Map([
+            [
+              "balatro",
+              {
+                id: "balatro",
+                title: "Balatro",
+                releases: [
+                  {
+                    id: "steam",
+                    system: "steam",
+                    target: { kind: "url", value: "steam://rungameid/2379780" },
+                    launch: { plugin: steamProvider },
+                  },
+                ],
+              },
+            ],
+          ]),
+        },
+        { playableId: "balatro" },
+      ),
+    )
+
+    expect(context.app.id).toBe(steamAppId)
+    expect(context.plugin?.[steamProvider]).toEqual({
+      state: { root: "{storage:@korri:steam/steam}/Steam" },
+    })
+  })
+
+  it("does not fold release-scoped plugin content path overrides", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        {
+          ...snapshot(),
+          library: new Map([
+            [
+              "sonic-the-hedgehog",
+              {
+                ...sonic,
+                releases: [
+                  {
+                    id: "genesis",
+                    system: "genesis",
+                    target: {
+                      kind: "file",
+                      storage: "roms",
+                      path: "genesis/Sonic.md",
+                    },
+                    launch: {
+                      use: "@korri:retroarch/retroarch",
+                      runtime: "genesis-plus-gx",
+                      settings: {
+                        plugin: {
+                          content: { path: "/outside/Sonic.md" },
+                          extraArgs: ["--safe"],
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          ]),
+        },
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    expect(context.content?.path).toBe("/games/genesis/Sonic.md")
+    const retroarchPolicy = context.plugin?.[retroarchProvider] as
+      | { readonly extraArgs?: readonly string[] }
+      | undefined
+    expect(retroarchPolicy?.extraArgs).toContain("--safe")
+    expect(context.plugin?.[retroarchProvider]).not.toHaveProperty("content")
+  })
+
   it("keeps an active Steam integration free of generic wrapper policy", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(steamReadableSnapshot({ app: steamApp() }), {
@@ -980,11 +1060,11 @@ describe("resolveReadableLaunchContext", () => {
   it("keeps app choice selection independent of profile app fields", async () => {
     const steam: AppRecord = {
       id: steamAppId,
-      kind: steamProvider,
+      plugin: steamProvider,
       command: "steam",
       args: ["{target}"],
       systems: ["windows"],
-      plugin: { [steamProvider]: { state: { root: "/steam" } } },
+      settings: { plugin: { state: { root: "/steam" } } },
     }
     const proton: RuntimeRecord = {
       id: "proton",
@@ -1045,7 +1125,7 @@ describe("resolveReadableLaunchContext", () => {
     expect(String(exit)).toContain("AmbiguousRelease")
   })
 
-  it("resolves file-set releases through their first declared part", async () => {
+  it("resolves file-set releases through explicit launch input", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         snapshot({
@@ -1059,13 +1139,14 @@ describe("resolveReadableLaunchContext", () => {
                 storage: "roms",
                 root: "genesis",
                 files: [
+                  { id: "readme", role: "manual", path: "README.txt" },
                   { id: "disc1", role: "entrypoint", path: "disc1.cue" },
-                  { id: "disc2", role: "data", path: "disc2.cue" },
                 ],
               },
               launch: {
                 use: "@korri:retroarch/retroarch",
                 runtime: "genesis-plus-gx",
+                input: { part: "disc1" },
               },
             },
           ],

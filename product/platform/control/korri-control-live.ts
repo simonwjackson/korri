@@ -233,7 +233,15 @@ function gameToPlayableEntry(game: ResolvedGameRecord): PlayableLibraryEntry {
         system: game.system,
         launchable:
           game.contentPath !== undefined || game.content !== undefined,
-        ...(game.contentPath !== undefined ? { target: game.contentPath } : {}),
+        ...(game.contentPath !== undefined
+          ? {
+              target: {
+                kind: "file" as const,
+                storage: "legacy",
+                path: game.contentPath,
+              },
+            }
+          : {}),
       },
     ],
     launchable: game.contentPath !== undefined || game.content !== undefined,

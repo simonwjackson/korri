@@ -135,7 +135,14 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             ...retired,
-            releases: [{ id: "default", system: "stream", target: { kind: "url", value: "peer" } }],
+            releases: [
+              {
+                id: "default",
+                system: "stream",
+                target: { kind: "url", value: "peer" },
+                launch: { use: "@korri:moonlight/moonlight" },
+              },
+            ],
           }),
       ],
       [
@@ -152,7 +159,14 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             contains: { child: retired },
-            releases: [{ id: "default", system: "stream", target: { kind: "url", value: "peer" } }],
+            releases: [
+              {
+                id: "default",
+                system: "stream",
+                target: { kind: "url", value: "peer" },
+                launch: { use: "@korri:moonlight/moonlight" },
+              },
+            ],
           }),
       ],
       [
@@ -211,7 +225,14 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             moonlight,
-            releases: [{ id: "default", system: "stream", target: { kind: "url", value: "peer" } }],
+            releases: [
+              {
+                id: "default",
+                system: "stream",
+                target: { kind: "url", value: "peer" },
+                launch: { use: "@korri:moonlight/moonlight" },
+              },
+            ],
           }),
       ],
       [
@@ -219,7 +240,13 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             releases: [
-              { id: "default", system: "stream", target: { kind: "url", value: "peer" }, moonlight },
+              {
+                id: "default",
+                system: "stream",
+                target: { kind: "url", value: "peer" },
+                launch: { use: "@korri:moonlight/moonlight" },
+                moonlight,
+              },
             ],
           }).releases[0] ?? {},
       ],
@@ -228,7 +255,14 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             contains: { child: { moonlight } },
-            releases: [{ id: "default", system: "stream", target: { kind: "url", value: "peer" } }],
+            releases: [
+              {
+                id: "default",
+                system: "stream",
+                target: { kind: "url", value: "peer" },
+                launch: { use: "@korri:moonlight/moonlight" },
+              },
+            ],
           }).contains?.child ?? {},
       ],
       [
@@ -423,7 +457,7 @@ describe("readable library schema records", () => {
     ).toThrow()
   })
 
-  it("allows known-only releases but requires at least one launchable target", () => {
+  it("allows known-only and target-only releases as non-launchable metadata", () => {
     const item = decodeLibraryItemPayload({
       title: "Sonic the Hedgehog",
       releases: [
@@ -431,18 +465,24 @@ describe("readable library schema records", () => {
           id: "genesis",
           system: "genesis",
           target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
+          launch: { use: "@korri:retroarch/retroarch" },
         },
         { id: "windows-known", system: "windows" },
       ],
     })
 
     expect(item.releases[1]?.target).toBeUndefined()
-    expect(() =>
-      decodeLibraryItemPayload({
-        title: "Known only",
-        releases: [{ id: "windows-known", system: "windows" }],
-      }),
-    ).toThrow()
+    const targetOnly = decodeLibraryItemPayload({
+      title: "Known only",
+      releases: [
+        {
+          id: "windows-known",
+          system: "windows",
+          target: { kind: "url", value: "steam://rungameid/360740" },
+        },
+      ],
+    })
+    expect(targetOnly.releases[0]?.launch).toBeUndefined()
   })
 
   it("rejects absolute release targets", () => {

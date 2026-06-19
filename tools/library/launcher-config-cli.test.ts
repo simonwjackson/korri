@@ -85,7 +85,7 @@ describe("validateLauncherConfig", () => {
     }
   })
 
-  it("reports ReleaseNotLaunchable when no app choice is configured", async () => {
+  it("reports NoLaunchableRelease when no launch selection is configured", async () => {
     await using library = await withTempProseqlLibrary({
       games: [
         {
@@ -104,7 +104,7 @@ describe("validateLauncherConfig", () => {
     expect(result.status).toBe("diagnostic")
     if (result.status === "diagnostic") {
       expect(result.reason).toBe("LibraryError")
-      expect(result.message).toContain("ReleaseNotLaunchable")
+      expect(result.message).toContain("NoLaunchableRelease")
     }
   })
 

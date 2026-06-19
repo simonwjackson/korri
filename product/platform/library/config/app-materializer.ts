@@ -352,8 +352,18 @@ const evictStaleArtifacts = (
 
 const iniConfig = (settings: LaunchSettings | undefined): string =>
   `${Object.entries(settings ?? {})
+    .filter((entry): entry is [string, LaunchSettingValue] =>
+      isPlainLaunchSettingValue(entry[1]),
+    )
     .map(([key, value]) => `${key} = ${serializePlainValue(value)}`)
     .join("\n")}\n`
+
+const isPlainLaunchSettingValue = (
+  value: unknown,
+): value is LaunchSettingValue =>
+  typeof value === "string" ||
+  typeof value === "number" ||
+  typeof value === "boolean"
 
 const serializePlainValue = (value: LaunchSettingValue): string => {
   if (typeof value === "boolean") return value ? "1" : "0"
