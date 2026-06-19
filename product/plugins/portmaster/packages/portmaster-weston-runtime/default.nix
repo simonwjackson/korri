@@ -9,6 +9,7 @@
   libevdev,
   libglvnd,
   libjpeg8,
+  mesa,
   systemdMinimal,
   util-linuxMinimal,
   xwayland,
@@ -22,6 +23,7 @@ let
     libevdev
     libglvnd
     libjpeg8.out
+    mesa
     systemdMinimal
     util-linuxMinimal.lib
     zlib
@@ -88,16 +90,61 @@ exec '${xwayland}/bin/Xwayland' "$@"
 EOF_XWAYLAND
     chmod +x "$runtime_root/bin/Xwayland"
 
+    # ROCKNIX mode assumes Weston Xwayland will take :1 whenever the host
+    # compositor owns :0. Under nested gamescope, :1 may already be reserved,
+    # so Weston can legitimately create :2 instead. Detect the non-host socket
+    # Weston created and use that DISPLAY instead of waiting forever on X1.
+    awk '
+      /export APP_LIBRARY_PATH="\$weston_dir\/lib_\$app_arch"/ {
+        print
+        print "export APP_LIBRARY_PATH=\"$APP_LIBRARY_PATH:${libraryPath}\""
+        next
+      }
+      /while ! \[\[ -e \$xfile \]\]; do/ {
+        print "while ! [[ -e $xfile ]]; do"
+        print "    for candidate in /tmp/.X11-unix/X*; do"
+        print "        [ -S \"$candidate\" ] || continue"
+        print "        candidate_name=\"$(basename \"$candidate\")\""
+        print "        [ \"$candidate_name\" = \"X0\" ] && continue"
+        print "        [ \"$candidate\" = \"$xfile\" ] && continue"
+        print "        xfile=\"$candidate\""
+        print "        display_number=\"$(printf %s \"$candidate_name\" | sed s/^X//)\""
+        print "        xsock=\":$display_number\""
+        print "        echo \"Detected Weston Xwayland display $xsock at $xfile\""
+        print "        for ready_attempt in $(seq 1 50); do"
+        print "            DISPLAY=\"$xsock\" \"$weston_dir/tools/xdpyinfo\" >/dev/null 2>&1 && break"
+        print "            sleep 0.1"
+        print "        done"
+        print "        echo \"Weston Xwayland display $xsock is ready\""
+        print "        break"
+        print "    done"
+        print "    if [[ -e $xfile ]]; then"
+        print "        break"
+        print "    fi"
+        print "    sleep 0.1"
+        print "done"
+        skip=1
+        next
+      }
+      skip && /^done$/ { skip=0; next }
+      !skip { print }
+    ' "$runtime_root/westonwrap.sh" > "$runtime_root/westonwrap.sh.tmp"
+    mv "$runtime_root/westonwrap.sh.tmp" "$runtime_root/westonwrap.sh"
+    chmod +x "$runtime_root/westonwrap.sh"
+
     mkdir -p "$out/nix-support"
     printf '%s\n' '${runtimeName}' > "$out/nix-support/runtime-name"
     printf '%s\n' "$runtime_root" > "$out/nix-support/runtime-root"
     printf '%s\n' '${libraryPath}' > "$out/nix-support/library-path"
+    printf '%s\n' 'dynamic-xwayland-display' > "$out/nix-support/weston-wrapper-mode"
     cat > "$out/nix-support/compatibility-profile.json" <<EOF
     {
       "env": {
         "CFW_NAME": "ROCKNIX",
         "LD_LIBRARY_PATH": "${libraryPath}",
-        "XKB_CONFIG_ROOT": "/tmp/weston/share/xkb"
+        "LIBGL_DRIVERS_PATH": "${mesa}/lib/dri",
+        "XKB_CONFIG_ROOT": "/tmp/weston/share/xkb",
+        "__EGL_VENDOR_LIBRARY_DIRS": "${mesa}/share/glvnd/egl_vendor.d"
       },
       "runtimeCompatibility": {
         "mode": "runtime-mounts",

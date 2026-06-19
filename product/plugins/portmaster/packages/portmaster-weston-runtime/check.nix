@@ -14,6 +14,12 @@ pkgs.runCommand "portmaster-weston-runtime-check" { } ''
   test -d "$runtime_root"
   test -f ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
   test -x "$runtime_root/westonwrap.sh"
+  grep -q 'Detected Weston Xwayland display' "$runtime_root/westonwrap.sh"
+  grep -q 'Weston Xwayland display.*is ready' "$runtime_root/westonwrap.sh"
+  grep -q 'xdpyinfo' "$runtime_root/westonwrap.sh"
+  grep -q 'candidate_name' "$runtime_root/westonwrap.sh"
+  test -e ${pkgs.libglvnd}/lib/libGLESv2.so
+  grep -q 'libglvnd' "$runtime_root/westonwrap.sh"
   test -x "$runtime_root/wp_weston"
   test -x "$runtime_root/bin/Xwayland"
   grep -q "${pkgs.xwayland}/bin/Xwayland" "$runtime_root/bin/Xwayland"
@@ -33,6 +39,9 @@ pkgs.runCommand "portmaster-weston-runtime-check" { } ''
 
   grep -q '"CFW_NAME": "ROCKNIX"' ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
   grep -q '"XKB_CONFIG_ROOT": "/tmp/weston/share/xkb"' ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
+  grep -q '"LIBGL_DRIVERS_PATH": "${pkgs.mesa}/lib/dri"' ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
+  grep -q '"__EGL_VENDOR_LIBRARY_DIRS": "${pkgs.mesa}/share/glvnd/egl_vendor.d"' ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
+  grep -q 'mesa' ${portmasterWestonRuntimePackage}/nix-support/library-path
   grep -q '"mode": "runtime-mounts"' ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
   grep -q "$runtime_root" ${portmasterWestonRuntimePackage}/nix-support/compatibility-profile.json
 
