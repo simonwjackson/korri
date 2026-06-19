@@ -17,9 +17,9 @@ dev-web port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}":
 dev-api port="${API_PORT:-3001}":
   PORT={{port}} NODE_ENV=development bun product/services/server/http/server.ts
 
-# PROTOTYPE — throwaway pico theme viewer (standalone, no backend). Remove with prototypes/pico/.
-dev-pico port="3110":
-  bun run vite --config product/apps/portal/prototypes/pico/vite.standalone.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
+# Dev-only theme workshop: physical-size viewer for theme prototypes (standalone, no backend).
+dev-theme-workshop port="3110":
+  bun run vite --config tools/theme-workshop/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
 
 # Start Playwright UI over ephemeral HTTPS against an existing dev stack.
 dev-playwright port="${PW_PORT:-9876}" portal_port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}" host="${APP_HOST:-localhost}":

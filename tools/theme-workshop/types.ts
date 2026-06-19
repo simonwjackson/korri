@@ -1,0 +1,95 @@
+/**
+ * theme-workshop — reusable theme-workshop kit (prototype tooling).
+ *
+ * A backend-free viewer that renders a theme's screens on the physical-size
+ * device lab, with a screen navigator, an all-screens montage, and a slot for
+ * theme-specific live controls. The harness (lab + nav + wall + view store) is
+ * generic; the skin, the screens, and any extra knobs are the theme's, supplied
+ * through a single `ThemeWorkshopConfig`.
+ *
+ * Skinning rule: every chrome element takes its class name from the config's
+ * `classNames` map, falling back to a neutral `wk-*` default. A theme that
+ * supplies its own class names keeps full control of its look, so its existing
+ * CSS applies unchanged — the kit never imposes pico (or any theme) styling.
+ */
+import type { ReactNode } from "react"
+import type { DeviceConfig, ThemeKnob } from "./device-lab"
+
+export type { DeviceConfig, ThemeKnob } from "./device-lab"
+
+/** One screen in the workshop catalog. Standalone; renders fixture data. */
+export interface Screen {
+  readonly id: string
+  readonly group: string
+  readonly name: string
+  readonly note?: string
+  readonly render: () => ReactNode
+}
+
+/**
+ * Skin hooks for the generic chrome. Each value is a class name the kit applies
+ * to that element; omit one to get the neutral `wk-*` default. State tokens
+ * (`on`, `all`, `one`) are appended literally by the kit, so a theme styles e.g.
+ * its active map item via `<itsMapItem>.on`.
+ */
+export interface WorkshopClassNames {
+  // Device lab (forwarded to DeviceLab).
+  readonly stage?: string
+  readonly screens?: string
+  readonly bezel?: string
+  readonly screen?: string
+  // Gallery bar.
+  readonly bar?: string
+  readonly label?: string
+  readonly count?: string
+  readonly view?: string
+  readonly mapToggle?: string
+  // Map jump panel.
+  readonly mapPanel?: string
+  readonly mapHead?: string
+  readonly mapBody?: string
+  readonly mapGroup?: string
+  readonly mapGroupTitle?: string
+  readonly mapItem?: string
+  // All-screens wall.
+  readonly wall?: string
+  readonly wallGroup?: string
+  readonly wallGroupTitle?: string
+  readonly wallGroupCount?: string
+  readonly wallGrid?: string
+  readonly wallCell?: string
+  readonly wallFrame?: string
+  readonly wallScreen?: string
+  readonly wallHit?: string
+  readonly wallLabel?: string
+}
+
+/** Navigation cue kinds the Gallery emits so a theme can play sound, etc. */
+export type CueKind = "move" | "open" | "back" | "confirm" | "toggle"
+
+/** Everything a theme contributes to mount the workshop. */
+export interface ThemeWorkshopConfig {
+  /** Stable id; used as the device-lab localStorage namespace and root attr. */
+  readonly id: string
+  /** Device roster for the lab. */
+  readonly devices: readonly DeviceConfig[]
+  /** Generator knobs (base size, ratio, space, …) cascaded onto the stage. */
+  readonly knobs?: readonly ThemeKnob[]
+  readonly defaultPxPerMm?: number
+  /** Prefix the lab publishes its `--<prefix>-text-scale` / `-pad-scale` under. */
+  readonly scaleVarPrefix?: string
+  /** The screen catalog + group display order. */
+  readonly screens: readonly Screen[]
+  readonly groups: readonly string[]
+  /** Per-element skin class names; omitted slots fall back to neutral `wk-*`. */
+  readonly classNames?: WorkshopClassNames
+  /** Extra attributes merged onto the root wrapper (e.g. `{ "data-pico": true }`
+   * so a theme's attribute-scoped CSS variables resolve for the chrome). */
+  readonly rootProps?: Record<string, unknown>
+  /** Theme-specific live controls rendered inside the gallery bar (after MAP). */
+  readonly workshopControls?: ReactNode
+  /** Called on each navigation cue; a theme can play SFX here (kit stays silent). */
+  readonly onCue?: (kind: CueKind) => void
+  /** Side-effect import of the theme's CSS, called once on mount. */
+  readonly loadStyles?: () => void
+}

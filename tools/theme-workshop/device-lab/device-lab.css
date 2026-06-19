@@ -267,3 +267,41 @@
 	font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
 	font-size: 11px;
 }
+
+/* Device-size focus tabs — ALL frames (original) or one size at a time. */
+.lab-focus {
+	position: fixed;
+	top: 12px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 1000;
+	display: flex;
+	gap: 4px;
+	padding: 4px;
+	border-radius: 8px;
+	background: rgba(14, 14, 18, 0.82);
+	border: 1px solid #2a2a35;
+	backdrop-filter: blur(8px);
+	max-width: calc(100vw - 24px);
+	overflow-x: auto;
+}
+.lab-focus-tab {
+	font:
+		12px / 1 ui-monospace,
+		monospace;
+	color: #9aa0aa;
+	background: transparent;
+	border: 0;
+	padding: 5px 10px;
+	border-radius: 5px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.lab-focus-tab:hover {
+	color: #e6e6ea;
+	background: #1d1d24;
+}
+.lab-focus-tab.on {
+	color: #0e0e12;
+	background: #7dd3fc;
+}

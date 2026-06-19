@@ -23,10 +23,11 @@ range of devices — handheld (Anbernic RG353M) through larger lean-back panels
 Standalone, no backend (recommended — the full portal stack is flaky here):
 
 ```bash
-just dev-pico        # serves the standalone viewer; open the printed URL
+just dev-theme-workshop   # serves the workshop viewer; open the printed URL
 ```
 
-Or inside the real portal (`just dev`): `/pico-prototype`.
+The viewer is the dev-only app at `tools/theme-workshop/`; pico is registered
+there via `themes.ts` (it just exports `picoConfig` from `config.tsx`).
 
 ### The state gallery
 
@@ -108,9 +109,10 @@ State persists per browser under `pico:lab`; **reset** restores the code seeds.
   `PICO_KNOBS` / `PICO_DEVICES` seeds.
 - **OPEN — pick the winning Home direction** (A / C, possibly steal from each).
 - **THEN — graduate**: fold the winner into a real `product/themes/pico/`
-  (Tailwind v4 `@theme`), register in `theme-registry.ts`; lift `device-lab/`
-  out of `prototypes/` to a shared dev surface; delete this dir + its hooks
-  (route, `/pico-prototype` line in `routes/__virtual.ts`, `dev-pico` recipe).
+  (Tailwind v4 `@theme`), register in `theme-registry.ts`. The device lab +
+  workshop already live at the shared dev surface `tools/theme-workshop/`; the
+  graduated theme keeps exporting a `ThemeWorkshopConfig` and stays registered in
+  `tools/theme-workshop/themes.ts`. Delete this prototype dir when done.
 
 ## Verdict (fill in after review)
 

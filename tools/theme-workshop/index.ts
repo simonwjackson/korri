@@ -1,0 +1,43 @@
+/**
+ * theme-workshop — reusable kit + dev-only viewer app (tools/theme-workshop).
+ *
+ * The harness is generic: it mounts a theme's screens on the physical-size
+ * device lab with a screen navigator, an all-screens montage, and a slot for
+ * theme-specific controls. A theme contributes a `ThemeWorkshopConfig` (data +
+ * its own skin classes), depending only on this module's *types*; the workshop
+ * app (themes.ts + standalone.tsx) imports the config and mounts it:
+ *
+ *   // in a theme (product side) — types only
+ *   import type { ThemeWorkshopConfig } from "@tools/theme-workshop"
+ *   export const myThemeConfig: ThemeWorkshopConfig = { ... }
+ *
+ *   // in the registry (tools/theme-workshop/themes.ts)
+ *   import { myThemeConfig } from "@product/.../my-theme/config"
+ *
+ * Harness CSS lives in `device-lab/device-lab.css` + `workshop.css` (neutral
+ * chrome defaults); a theme overrides via its own class names.
+ */
+export { Gallery } from "./Gallery"
+export { ThemeWorkshop } from "./ThemeWorkshop"
+export { Wall } from "./Wall"
+export { cx, resolveClassNames } from "./classnames"
+export type { ResolvedClassNames } from "./classnames"
+export {
+  DeviceFrame,
+  DeviceLab,
+  type DeviceConfig,
+  type ThemeKnob,
+} from "./device-lab"
+export type {
+  CueKind,
+  Screen,
+  ThemeWorkshopConfig,
+  WorkshopClassNames,
+} from "./types"
+export {
+  getViewMode,
+  setViewMode,
+  toggleViewMode,
+  useViewMode,
+  type ViewMode,
+} from "./view-store"

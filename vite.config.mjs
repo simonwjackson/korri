@@ -42,6 +42,7 @@ export default defineConfig({
     alias: {
       "@product": new URL("./product", import.meta.url).pathname,
       "@platform": new URL("./product/platform", import.meta.url).pathname,
+      "@tools": new URL("./tools", import.meta.url).pathname,
     },
   },
   optimizeDeps: {

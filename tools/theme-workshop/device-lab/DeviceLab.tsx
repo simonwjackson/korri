@@ -57,6 +57,9 @@ export function DeviceLab({
     saveLab(storageKey, state)
   }, [storageKey, state])
 
+  // Device-size focus: null = show all frames (original), or a single device id.
+  const [focusId, setFocusId] = useState<string | null>(null)
+
   // Oversized devices (a TV) scale down to fit the viewport height.
   const [maxHeightPx, setMaxHeightPx] = useState<number | undefined>(() =>
     typeof window === "undefined"
@@ -129,10 +132,39 @@ export function DeviceLab({
     ]),
   ) as CSSProperties
 
+  const shownDevices =
+    focusId === null
+      ? state.devices
+      : state.devices.filter(device => device.id === focusId)
+
   return (
     <div className={cx("lab-stage", stageClassName)} style={stageStyle}>
+      {state.devices.length > 1 ? (
+        <div className="lab-focus">
+          <button
+            type="button"
+            className={cx("lab-focus-tab", focusId === null ? "on" : undefined)}
+            onClick={() => setFocusId(null)}
+          >
+            ALL
+          </button>
+          {state.devices.map(device => (
+            <button
+              key={device.id}
+              type="button"
+              className={cx(
+                "lab-focus-tab",
+                focusId === device.id ? "on" : undefined,
+              )}
+              onClick={() => setFocusId(device.id)}
+            >
+              {device.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className={cx("lab-screens", screensClassName)}>
-        {state.devices.map(device => (
+        {shownDevices.map(device => (
           <DeviceFrame
             key={device.id}
             widthMm={device.widthMm}

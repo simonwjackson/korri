@@ -11,7 +11,8 @@
 		"lib": ["DOM", "DOM.Iterable", "ES2022"],
 		"paths": {
 			"@platform/*": ["./product/platform/*"],
-			"@product/*": ["./product/*"]
+			"@product/*": ["./product/*"],
+			"@tools/*": ["./tools/*"]
 		},
 		"skipLibCheck": true,
 		"types": ["react", "react-dom", "node", "bun"]
