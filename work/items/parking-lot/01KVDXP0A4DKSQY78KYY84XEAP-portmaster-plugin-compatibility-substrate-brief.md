@@ -347,3 +347,25 @@ Brief is co-located with its backlog item under `work/items/parking-lot/`.
 - Plugin composition: `product/plugins/portmaster/nix/composition.nix`
 - Gamescope plugin: `product/plugins/gamescope/src/plugin.ts`
 - FEX runtime setup: `product/plugins/fex-runtime/packages/fex-runtime/setup-env`
+
+---
+
+### Phase 12 — Godot 4 + Weston runtime packages
+
+Status: **runtime packages/checks added; Bandai smoke reached packaged Weston/Xwayland startup**.
+
+Goal: fulfill PortMaster Godot 4 ports that mount both `godot_4.2.2.squashfs` and `weston_pkg_0.2.squashfs` without baking those runtime names into Korri core.
+
+Result:
+
+- Added `portmaster-godot-4-2-runtime` for upstream `godot_4.2.2.squashfs`.
+- Added `portmaster-weston-runtime` for upstream `weston_pkg_0.2.squashfs`.
+- Both packages emit `nix-support/runtime-name`, `runtime-root`, and `compatibility-profile.json`.
+- Weston also emits `nix-support/library-path` for NixOS host libraries required by `wp_weston` on Bandai: expat, libevdev, libjpeg8, systemd/libudev, util-linux/libuuid, and zlib.
+- Wired both package/check outputs into the PortMaster Nix composition.
+- Bandai smoke with `mrplatformer.zip` generated a normal PortMaster install, mounted both Nix runtime roots through the existing `runtime-mounts` seam, launched through generated gamescope presentation, and started packaged Weston far enough to load the headless backend and expose Xwayland (`xserver listening on display :1`).
+
+Follow-up:
+
+- Repeat the smoke in a quiet Bandai session to capture final Godot render proof. The observed later session was interrupted by unrelated main-space/system restart activity before stable Godot observation.
+- Next substrate step remains automatic profile generation from fulfilled runtime resources so the manually composed Godot+Weston compatibility profile can be derived from package metadata.

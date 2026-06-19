@@ -9,6 +9,8 @@ let
   portmasterPackage = pkgs.callPackage ../packages/portmaster { };
   portmasterArmhfRuntimePackage = pkgs.callPackage ../packages/portmaster-armhf-runtime { };
   portmasterFrtRuntimePackage = pkgs.callPackage ../packages/portmaster-frt-runtime { };
+  portmasterGodot42RuntimePackage = pkgs.callPackage ../packages/portmaster-godot-4-2-runtime { };
+  portmasterWestonRuntimePackage = pkgs.callPackage ../packages/portmaster-weston-runtime { };
 in
 {
   enabledPluginIds = lib.optional enable "@korri:portmaster";
@@ -18,6 +20,8 @@ in
     portmaster = portmasterPackage;
     portmaster-armhf-runtime = portmasterArmhfRuntimePackage;
     portmaster-frt-runtime = portmasterFrtRuntimePackage;
+    portmaster-godot-4-2-runtime = portmasterGodot42RuntimePackage;
+    portmaster-weston-runtime = portmasterWestonRuntimePackage;
   };
   apps = { };
   checks = lib.optionalAttrs enable {
@@ -29,6 +33,12 @@ in
     };
     portmaster-frt-runtime-check = import ../packages/portmaster-frt-runtime/check.nix {
       inherit pkgs portmasterFrtRuntimePackage;
+    };
+    portmaster-godot-4-2-runtime-check = import ../packages/portmaster-godot-4-2-runtime/check.nix {
+      inherit pkgs portmasterGodot42RuntimePackage;
+    };
+    portmaster-weston-runtime-check = import ../packages/portmaster-weston-runtime/check.nix {
+      inherit pkgs portmasterWestonRuntimePackage;
     };
   };
 }
