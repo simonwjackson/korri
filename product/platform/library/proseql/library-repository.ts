@@ -67,6 +67,7 @@ import type {
 } from "@platform/library/playable-library"
 import type { ConfigRecordMap, PluginId } from "@platform/plugin"
 import { isProviderId } from "@platform/plugin/ids"
+import type { LaunchPrepareMap } from "@platform/plugin/launch-prepare"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type { PluginRegistry } from "@platform/plugin/registry"
 import type { ArtifactRecord } from "@platform/protocol/artifact/artifact"
@@ -174,6 +175,7 @@ export interface ReadableLaunchIntegration {
     {
       readonly spec: LaunchSpec
       readonly launchMetadata?: LaunchMetadata
+      readonly launchPrepare?: LaunchPrepareMap
       readonly artifacts?: LaunchArtifacts
       readonly diagnostics?: readonly string[]
     },
@@ -390,6 +392,7 @@ export function createLibraryRepository(
         const materialized: {
           readonly spec: LaunchSpec
           readonly launchMetadata?: LaunchMetadata
+          readonly launchPrepare?: LaunchPrepareMap
           readonly artifacts?: LaunchArtifacts
           readonly diagnostics?: readonly string[]
         } = yield* Effect.gen(function* () {
@@ -427,6 +430,9 @@ export function createLibraryRepository(
         return {
           spec,
           launchCompanions: context.launchCompanions,
+          ...(materialized.launchPrepare
+            ? { launchPrepare: materialized.launchPrepare }
+            : {}),
           ...(launchMetadata ? { launchMetadata } : {}),
           ...(context.moonlight ? { moonlight: context.moonlight } : {}),
           app: {
