@@ -281,8 +281,17 @@
 }
 .wk-parts-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 	gap: var(--intrinsic-space-3);
+	/* atoms / molecules: compact cells */
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+/* organisms get wider cells; templates a single near-full canvas — so a whole
+ * page template isn't crammed into the same box as a button. */
+.wk-parts-grid[data-layer="organism"] {
+	grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+}
+.wk-parts-grid[data-layer="template"] {
+	grid-template-columns: minmax(0, 960px);
 }
 .wk-parts-cell {
 	margin: 0;
@@ -291,6 +300,9 @@
 	gap: var(--intrinsic-space-1);
 }
 .wk-parts-frame {
+	/* a query container, so each component's tokens scale to its OWN canvas:
+	 * a bigger cell renders a bigger component, and nothing overflows the box. */
+	container-type: size;
 	width: 100%;
 	aspect-ratio: 4 / 3;
 	overflow: hidden;
@@ -298,6 +310,12 @@
 	border-radius: 4px;
 	background:
 		repeating-conic-gradient(#15151c 0% 25%, #11111a 0% 50%) 0 / 16px 16px;
+}
+.wk-parts-grid[data-layer="organism"] .wk-parts-frame {
+	aspect-ratio: 16 / 10;
+}
+.wk-parts-grid[data-layer="template"] .wk-parts-frame {
+	aspect-ratio: 16 / 9;
 }
 .wk-parts-cell:hover .wk-parts-frame {
 	border-color: #6af;
