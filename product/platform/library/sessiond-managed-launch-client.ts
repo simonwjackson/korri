@@ -55,6 +55,7 @@ export type SessiondManagedLaunchTerminateResult =
 
 export interface SessiondManagedLaunchStartInput {
   readonly spec: LaunchSpec
+  readonly launchId?: string
   readonly lifecycle?: SessiondManagedLaunchLifecycle
   readonly launchMetadata?: LaunchMetadata
   readonly wait?: LaunchSpec
@@ -90,6 +91,7 @@ export async function requestSessiondManagedLaunchStart(
   options: SessiondManagedLaunchClientOptions,
 ): Promise<SessiondManagedLaunchStartResult> {
   const body: Record<string, unknown> = { spec: input.spec }
+  if (input.launchId) body.launchId = input.launchId
   if (input.lifecycle) body.lifecycle = input.lifecycle
   if (input.launchMetadata) body.launchMetadata = input.launchMetadata
   if (input.wait) body.wait = input.wait

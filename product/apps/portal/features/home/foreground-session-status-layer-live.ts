@@ -3,11 +3,18 @@ import {
   projectForegroundSessionStatusSnapshot,
   snapshotStateFromSessiondMode,
 } from "@platform/library/sessiond-lifecycle-projections"
+import type {
+  ForegroundSessionGateState,
+  ProviderLifecycleGateSummary,
+} from "@platform/stream/foreground-session-gate-state"
 import { foregroundSessionGateStateFromSnapshot } from "@platform/stream/foreground-session-gate-state"
 import type { ForegroundSessionStatusSnapshot } from "@platform/stream/foreground-session-status"
 import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
 import { serverRpcGroup } from "@product/apps/portal/api/server/rpc-group"
-import type { SessiondLifecycleSummary } from "@product/apps/portal/api/server/status.rpc"
+import type {
+  ProviderLifecycleSummary,
+  SessiondLifecycleSummary,
+} from "@product/apps/portal/api/server/status.rpc"
 import { Effect, Layer } from "effect"
 import { RpcClient } from "effect/unstable/rpc"
 
@@ -35,11 +42,10 @@ export const ForegroundSessionStatusLayerLive = Layer.effect(
             client["app.server.status"]({}).pipe(
               Effect.matchEager({
                 onSuccess: response =>
-                  foregroundSessionGateStateFromSnapshot(
-                    snapshotFromServerStatus(
-                      response.sessiond,
-                      response.serverId,
-                    ),
+                  gateStateFromServerStatus(
+                    response.sessiond,
+                    response.serverId,
+                    response.providerLifecycle,
                   ),
                 onFailure: error =>
                   foregroundSessionGateStateFromSnapshot({
@@ -68,6 +74,21 @@ export const ForegroundSessionStatusLayerLive = Layer.effect(
  */
 export { snapshotStateFromSessiondMode }
 
+export function gateStateFromServerStatus(
+  sessiond: SessiondLifecycleSummary | undefined,
+  serverId: string,
+  providerLifecycle: ProviderLifecycleSummary | undefined,
+): ForegroundSessionGateState {
+  const gate = foregroundSessionGateStateFromSnapshot(
+    snapshotFromServerStatus(sessiond, serverId),
+  )
+  if (!providerLifecycle) return gate
+  return {
+    ...gate,
+    providerLifecycle: providerLifecycleForGate(providerLifecycle),
+  }
+}
+
 export function snapshotFromServerStatus(
   sessiond: SessiondLifecycleSummary | undefined,
   serverId: string,
@@ -76,4 +97,19 @@ export function snapshotFromServerStatus(
   // snapshot schema; retained as a parameter for future logging hooks.
   void serverId
   return projectForegroundSessionStatusSnapshot({ sessiond })
+}
+
+function providerLifecycleForGate(
+  summary: ProviderLifecycleSummary,
+): ProviderLifecycleGateSummary {
+  return {
+    providerId: summary.providerId,
+    observerHealth: summary.observerHealth,
+    lifecycleStatus: summary.lifecycleStatus,
+    providerPhase: summary.providerPhase,
+    displayMessage: summary.displayMessage,
+    nextActionHint: summary.nextActionHint,
+    ...(summary.appId ? { appId: summary.appId } : {}),
+    ...(summary.launchId ? { launchId: summary.launchId } : {}),
+  }
 }

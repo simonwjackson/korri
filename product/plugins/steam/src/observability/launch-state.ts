@@ -34,6 +34,8 @@ export interface SteamLaunchFacet {
 
 export interface SteamLaunchSnapshot {
   readonly appId: string
+  readonly launchId?: string
+  readonly playableId?: string
   readonly status: SteamLaunchStatus
   readonly confidence: SteamSignalConfidence
   readonly ownership: SteamObservationOwnership
@@ -50,8 +52,16 @@ export interface SteamLaunchObserverState {
   readonly recentEvidence: readonly SteamSignalEvidence[]
 }
 
+export interface SteamLaunchCorrelation {
+  readonly appId: string
+  readonly launchId: string
+  readonly playableId?: string
+  readonly openedAt?: string
+}
+
 export interface SteamReducerOptions {
   readonly evidenceLimit?: number
+  readonly correlations?: readonly SteamLaunchCorrelation[]
 }
 
 export interface SteamProjectionOptions {
@@ -117,11 +127,15 @@ export function reduceSteamLogSignal(
   const appId = "appId" in signal ? signal.appId : undefined
   if (!appId) return { ...state, recentEvidence }
 
+  const correlation = findCorrelation(options.correlations, appId)
   const current = pickWindow(state, appId, signal)
-  if (!current && isContextOnlySignal(signal)) {
+  if (!current && isContextOnlySignal(signal) && !correlation) {
     return { ...state, recentEvidence }
   }
-  const updated = applySignalToSnapshot(current, signal, evidenceLimit)
+  const updated = applySignalToSnapshot(current, signal, {
+    evidenceLimit,
+    correlation,
+  })
 
   if (updated.status._tag === "Stopped") {
     const active =
@@ -155,10 +169,17 @@ export function projectSteamLaunchSnapshot(
 function applySignalToSnapshot(
   snapshot: SteamLaunchSnapshot | undefined,
   signal: Exclude<SteamLogSignal, { readonly _tag: "RawEvidence" }>,
-  evidenceLimit: number,
+  options: {
+    readonly evidenceLimit: number
+    readonly correlation?: SteamLaunchCorrelation
+  },
 ): SteamLaunchSnapshot {
-  const base = snapshot ?? createSnapshot(signal)
-  const evidence = appendEvidence(base.evidence, signal.evidence, evidenceLimit)
+  const base = snapshot ?? createSnapshot(signal, options.correlation)
+  const evidence = appendEvidence(
+    base.evidence,
+    signal.evidence,
+    options.evidenceLimit,
+  )
   const observedAt = signal.evidence.observedAt
   const steam = { ...base.steam }
   let status = base.status
@@ -254,12 +275,31 @@ function applySignalToSnapshot(
       break
     }
     case "ShaderEvidence": {
+      if (!preserveStopped && status._tag !== "Running") {
+        status = { _tag: "Preparing" }
+      }
+      steam.lastTask = "CheckShaderDepotManifest"
+      steam.taskHistory = addUniqueBounded(
+        steam.taskHistory,
+        "CheckShaderDepotManifest",
+        20,
+      )
+      lastProgressAt = observedAt
       break
     }
   }
 
   return omitUndefined({
     ...base,
+    ...(options.correlation
+      ? {
+          launchId: options.correlation.launchId,
+          ...(options.correlation.playableId
+            ? { playableId: options.correlation.playableId }
+            : {}),
+          ownership: "korri-correlated" as const,
+        }
+      : {}),
     status,
     confidence,
     lastObservedAt: observedAt,
@@ -271,13 +311,16 @@ function applySignalToSnapshot(
 
 function createSnapshot(
   signal: Exclude<SteamLogSignal, { readonly _tag: "RawEvidence" }>,
+  correlation: SteamLaunchCorrelation | undefined,
 ): SteamLaunchSnapshot {
   const observedAt = signal.evidence.observedAt
   return {
     appId: "appId" in signal ? (signal.appId ?? "unknown") : "unknown",
+    ...(correlation ? { launchId: correlation.launchId } : {}),
+    ...(correlation?.playableId ? { playableId: correlation.playableId } : {}),
     status: { _tag: "Preparing" },
     confidence: signal.evidence.confidence,
-    ownership: "steam-only",
+    ownership: correlation ? "korri-correlated" : "steam-only",
     firstObservedAt: observedAt,
     lastObservedAt: observedAt,
     lastProgressAt: observedAt,
@@ -353,6 +396,13 @@ function addUniqueBounded<T>(
   return updated.length > limit
     ? updated.slice(updated.length - limit)
     : updated
+}
+
+function findCorrelation(
+  correlations: readonly SteamLaunchCorrelation[] | undefined,
+  appId: string,
+): SteamLaunchCorrelation | undefined {
+  return correlations?.find(correlation => correlation.appId === appId)
 }
 
 function addRemovedPid(

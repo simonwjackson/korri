@@ -7,6 +7,7 @@ import { UnassignGameAssetRpc as appGameAssetsUnassign } from "./game-assets/una
 import { GetHelloRpc as appHelloGet } from "./hello/rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "./library/launch.rpc"
 import { CollectPluginDiagnosticsRpc as appPluginDiagnosticsCollect } from "./plugin-diagnostics/collect.rpc"
+import { CollectPluginLifecycleRpc as appPluginLifecycleCollect } from "./plugin-lifecycle/collect.rpc"
 import { SourceStatusRpc as appSourceStatus } from "./source/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "./stream/prepare.rpc"
 import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "./stream-control/get-config.rpc"
@@ -26,6 +27,7 @@ export const appRpcGroup = RpcGroup.make(
   appCatalogSnapshot,
   appLibraryLaunch,
   appPluginDiagnosticsCollect,
+  appPluginLifecycleCollect,
   appSourceStatus,
   appStreamPrepare,
   appStreamControlConfigGet,

@@ -137,6 +137,7 @@ export interface LaunchExtras {
   readonly lifecycle?: "foreground" | "session"
   readonly launchMetadata?: LaunchMetadata
   readonly wait?: LaunchSpec
+  readonly launchId?: string
 }
 
 /**

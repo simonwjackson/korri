@@ -17,6 +17,11 @@ import { createLibraryRepository } from "@platform/library/proseql/library-repos
 import { createShellLauncher } from "@platform/library/shell-launcher"
 import type { ForegroundSessionState } from "@platform/stream/foreground-session-lifecycle"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
+import {
+  createSteamLogObserver,
+  installSteamLogObserverStatus,
+  resetSteamLogObserverStatusForTests,
+} from "@product/plugins/steam/src/observability/log-observer"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 
@@ -32,6 +37,7 @@ import {
 
 const originalLibraryRoot = process.env.KORRI_LIBRARY_ROOT
 const originalConfigRoots = process.env.KORRI_CONFIG_ROOTS
+const originalEnabledPlugins = process.env.KORRI_ENABLED_PLUGINS
 const cleanups: Array<() => Promise<void>> = []
 
 // Shared `source` payload field for tests. The launch handler does not
@@ -48,6 +54,8 @@ const wrapperProvider = "@example:wrapper"
 afterEach(async () => {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalLibraryRoot)
   setOptionalEnv("KORRI_CONFIG_ROOTS", originalConfigRoots)
+  setOptionalEnv("KORRI_ENABLED_PLUGINS", originalEnabledPlugins)
+  resetSteamLogObserverStatusForTests()
   while (cleanups.length > 0) {
     const c = cleanups.pop()
     if (c) await c()
@@ -694,7 +702,10 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     )
 
     expect(result).toEqual({ _tag: "Accepted", status: "launched" })
-    expect(capturedExtras).toEqual({ lifecycle: "session" })
+    expect(capturedExtras).toEqual({
+      lifecycle: "session",
+      launchId: expect.any(String),
+    })
   })
 
   it("forwards provider launch metadata to managed session cleanup", async () => {
@@ -744,6 +755,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
 
     expect(result).toEqual({ _tag: "Accepted", status: "launched" })
     expect(capturedExtras).toEqual({
+      launchId: expect.any(String),
       launchMetadata: {
         appProviderId: "@korri:steam",
         annotations: {
@@ -756,12 +768,78 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     })
   })
 
-  it("omits options entirely when ResolvedLaunch has no extras (default foreground semantics)", async () => {
-    // Regression guard for the additive-only contract: when a source
-    // does not supply extras, the handler must NOT synthesize a
-    // default `{}` options object. Sessiond and shell launchers both
-    // distinguish "no options" from "options with no extras" and the
-    // former matches the pre-task-014 call shape.
+  it("opens Steam lifecycle correlation before managed launch spawn", async () => {
+    process.env.KORRI_ENABLED_PLUGINS = "@korri:steam"
+    const observer = createSteamLogObserver({ logDir: "/tmp/steam/logs" })
+    installSteamLogObserverStatus(
+      Symbol("steam-correlation-test"),
+      observer.status,
+      {
+        openCorrelation: observer.openCorrelation,
+        collectLifecycle: observer.collectLifecycle,
+      },
+    )
+
+    const sourceLayer = Layer.succeed(LibrarySource)({
+      list: () =>
+        Effect.succeed([{ id: "thirty-xx", system: "steam", contentPath: "" }]),
+      launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
+      resolveLaunchForGame: () =>
+        Effect.succeed({
+          spec: { command: "/usr/bin/steam", args: ["-applaunch", "1029210"] },
+          launchMetadata: {
+            appProviderId: "@korri:steam",
+            annotations: {
+              "@korri:steam": {
+                steamSession: true,
+                foregroundCleanup: { appId: "1029210" },
+              },
+            },
+          },
+        }),
+    })
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: () => Effect.succeed({ status: "failed" as const, exitCode: 1 }),
+      spawn: (_spec, _options) =>
+        Effect.succeed({
+          status: "started" as const,
+          result: Promise.resolve({ status: "launched" as const }),
+          session: completedSessionHandle(),
+        }),
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({ id: "thirty-xx" }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            sourceLayer,
+            launcherLayer,
+            Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+            remoteStreamPrepareNeverCalledLayer,
+          ),
+        ),
+      ),
+    )
+
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
+    observer.ingestLine({
+      source: "console_log",
+      logFile: "console_log.txt",
+      line: '[2026-06-14 14:38:41] GameAction [AppID 1029210, ActionID 2] : LaunchApp changed task to WaitingGameWindow with ""',
+      observedAt: "2026-06-14T18:38:41.000Z",
+      sequence: 1,
+    })
+    const lifecycle = observer.collectLifecycle({ appId: "1029210" })
+    expect(lifecycle.events[0]).toMatchObject({
+      appId: "1029210",
+      playableId: "thirty-xx",
+      launchId: expect.any(String),
+    })
+  })
+
+  it("threads a caller-generated launch id when ResolvedLaunch has no extras", async () => {
+    // The Steam lifecycle observer opens correlation before the sessiond
+    // request, so even default foreground launches now carry a launchId.
     let capturedOptions: unknown = "not-called"
     const sourceLayer = Layer.succeed(LibrarySource)({
       list: () =>
@@ -798,7 +876,9 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     )
 
     expect(result).toEqual({ _tag: "Accepted", status: "launched" })
-    expect(capturedOptions).toBeUndefined()
+    expect(capturedOptions).toEqual({
+      extras: { launchId: expect.any(String) },
+    })
   })
 
   it("returns diagnostics for an unregistered launch companion provider", async () => {

@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import {
+  installSteamLogObserverStatus,
+  resetSteamLogObserverStatusForTests,
+} from "@product/plugins/steam/src/observability/log-observer"
 import { Effect } from "effect"
 import {
   handleServerStatus,
@@ -16,6 +20,7 @@ const originalEnv = {
   serverId: process.env.KORRI_DAEMON_ID,
   serverName: process.env.KORRI_DAEMON_NAME,
   sessiondSocket: process.env.KORRI_SESSIOND_SOCKET,
+  enabledPlugins: process.env.KORRI_ENABLED_PLUGINS,
 }
 const cleanups: Array<() => Promise<void>> = []
 
@@ -26,6 +31,8 @@ afterEach(async () => {
   setOptionalEnv("KORRI_DAEMON_ID", originalEnv.serverId)
   setOptionalEnv("KORRI_DAEMON_NAME", originalEnv.serverName)
   setOptionalEnv("KORRI_SESSIOND_SOCKET", originalEnv.sessiondSocket)
+  setOptionalEnv("KORRI_ENABLED_PLUGINS", originalEnv.enabledPlugins)
+  resetSteamLogObserverStatusForTests()
   while (cleanups.length > 0) {
     const cleanup = cleanups.pop()
     if (cleanup) await cleanup()
@@ -181,6 +188,45 @@ describe("app.server.status handler", () => {
       launchId: "launch-old",
       mode: "idle",
     })
+  })
+
+  it("adds compact provider lifecycle summary from enabled plugins", async () => {
+    process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
+    process.env.KORRI_ENABLED_PLUGINS = "@korri:steam"
+    const owner = Symbol("server-status-lifecycle")
+    installSteamLogObserverStatus(owner, () => ({
+      health: {
+        state: "running",
+        watchedFiles: ["console_log.txt"],
+        activeFiles: ["console_log.txt"],
+        missingFiles: [],
+      },
+      recentEvidence: [],
+      lifecycleEvents: [],
+      lifecycleSummary: {
+        providerId: "@korri:steam",
+        observerHealth: "running",
+        lifecycleStatus: "active",
+        providerPhase: "shader-preparing",
+        displayMessage:
+          "Steam is checking shader cache metadata at /home/korri/secret.",
+        confidence: "hint",
+        nextActionHint: "wait",
+        appId: "1029210",
+        launchId: "launch-30xx",
+      },
+    }))
+
+    const result = await Effect.runPromise(handleServerStatus({}))
+
+    expect(result.providerLifecycle).toMatchObject({
+      providerId: "@korri:steam",
+      lifecycleStatus: "active",
+      providerPhase: "shader-preparing",
+      appId: "1029210",
+      launchId: "launch-30xx",
+    })
+    expect(result.providerLifecycle?.displayMessage).not.toContain("/home/")
   })
 
   it("falls back to status.json with sessiondUnavailable=true when sessiond is unreachable", async () => {

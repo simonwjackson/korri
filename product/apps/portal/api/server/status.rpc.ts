@@ -67,6 +67,53 @@ export class SessiondLifecycleSummary extends Schema.Class<SessiondLifecycleSumm
   failureReason: Schema.optional(Schema.String),
 }) {}
 
+const ProviderLifecycleHealth = Schema.Literals([
+  "unavailable",
+  "starting",
+  "running",
+  "degraded",
+  "stopped",
+])
+
+const ProviderLifecycleStatus = Schema.Literals([
+  "active",
+  "blocked",
+  "terminal",
+  "failed",
+  "stuck",
+])
+
+const ProviderLifecycleConfidence = Schema.Literals([
+  "confirmed",
+  "hint",
+  "unknown",
+  "low",
+])
+
+const ProviderLifecycleNextActionHint = Schema.Literals([
+  "wait",
+  "interact-with-steam",
+  "retry",
+  "inspect-diagnostics",
+  "none",
+])
+
+export class ProviderLifecycleSummary extends Schema.Class<ProviderLifecycleSummary>(
+  "ProviderLifecycleSummary",
+)({
+  providerId: Schema.String,
+  observerHealth: ProviderLifecycleHealth,
+  lifecycleStatus: ProviderLifecycleStatus,
+  providerPhase: Schema.String,
+  displayMessage: Schema.String,
+  confidence: ProviderLifecycleConfidence,
+  nextActionHint: ProviderLifecycleNextActionHint,
+  appId: Schema.optional(Schema.String),
+  launchId: Schema.optional(Schema.String),
+  playableId: Schema.optional(Schema.String),
+  lastProgressAt: Schema.optional(Schema.String),
+}) {}
+
 export class ServerStatusResponse extends Schema.Class<ServerStatusResponse>(
   "ServerStatusResponse",
 )({
@@ -80,6 +127,7 @@ export class ServerStatusResponse extends Schema.Class<ServerStatusResponse>(
   runner: Schema.optional(ServerRunnerStatus),
   sessiond: Schema.optional(SessiondLifecycleSummary),
   sessiondUnavailable: Schema.optional(Schema.Boolean),
+  providerLifecycle: Schema.optional(ProviderLifecycleSummary),
   message: Schema.optional(Schema.String),
 }) {}
 

@@ -33,6 +33,7 @@ import { ForegroundSessionHostLive } from "../library/foreground-session-host-la
 import { handleLaunchLibrary } from "../library/launch.rpc-handler"
 import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
 import { handleCollectPluginDiagnostics } from "../plugin-diagnostics/collect.rpc-handler"
+import { handleCollectPluginLifecycle } from "../plugin-lifecycle/collect.rpc-handler"
 import { handleFulfillPluginResource } from "../plugins/fulfill-resource.rpc-handler"
 import { handleSessionStatus } from "../session/status.rpc-handler"
 import { handleStopSession } from "../session/stop.rpc-handler"
@@ -126,6 +127,7 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.library.launch": handleLaunchLibrary,
     "app.library.launch.dry-run": handleDryRunLaunch,
     "app.plugin.diagnostics.collect": handleCollectPluginDiagnostics,
+    "app.plugin.lifecycle.collect": handleCollectPluginLifecycle,
     "app.plugins.resource.fulfill": handleFulfillPluginResource,
     "app.source.status": handleSourceStatus,
     "app.server.status": handleServerStatus,

@@ -13,6 +13,8 @@ import {
   type ResolvedLaunch,
 } from "@platform/library/library-services"
 import { logger } from "@platform/logger/logger"
+import type { PluginHandler, ProviderId } from "@platform/plugin"
+import { runPluginHandler } from "@platform/plugin"
 import {
   composeLaunchCompanions,
   type LaunchCompanionDiagnostic,
@@ -126,6 +128,17 @@ export const handleLaunchLibrary = (
       return response
     }
     const spec = specResult.spec
+    const launchId = globalThis.crypto.randomUUID()
+    yield* openLifecycleCorrelationForLaunch({
+      launchId,
+      playableId: payload.id,
+      launchMetadata: resolvedResult.resolved.launchMetadata,
+    }).pipe(
+      Effect.matchEffect({
+        onFailure: () => Effect.void,
+        onSuccess: () => Effect.void,
+      }),
+    )
 
     const result = yield* Effect.tryPromise({
       try: () =>
@@ -133,6 +146,7 @@ export const handleLaunchLibrary = (
           id: payload.id,
           spec,
           artifacts: resolvedResult.resolved.artifacts,
+          launchId,
           spawn: async () => {
             if (!launcher.spawn) return unsupportedManagedSpawn()
             // task-014: forward launcher-anchor extras (lifecycle,
@@ -142,6 +156,7 @@ export const handleLaunchLibrary = (
             // `lifecycle` as foreground for back-compat.
             const launchExtras = launchExtrasForResolvedLaunch(
               resolvedResult.resolved,
+              launchId,
             )
             const spawnOptions = launchExtras
               ? { extras: launchExtras }
@@ -180,13 +195,68 @@ export const handleLaunchLibrary = (
   })
 
 const LAUNCH_CONFIG_ERROR_EXIT_CODE = 124
+const LIFECYCLE_CORRELATE_OPERATION = "lifecycle.correlate" as const
+const LIFECYCLE_CORRELATE_CAPABILITY = "lifecycle.correlate" as const
+
+function openLifecycleCorrelationForLaunch(input: {
+  readonly launchId: string
+  readonly playableId: string
+  readonly launchMetadata: ResolvedLaunch["launchMetadata"]
+}) {
+  return Effect.gen(function* () {
+    const providerId = input.launchMetadata?.appProviderId
+    if (!providerId) return
+    const appId = appIdFromProviderAnnotation(input.launchMetadata, providerId)
+    if (!appId) return
+    const registry = createFirstPartyPluginRegistryFromEnv(process.env)
+    const plugin = registry.get(providerId)
+    if (!plugin || !registry.enabledPluginIds.has(providerId)) return
+    const handler = plugin.handlers.find(isLifecycleCorrelateHandler) as
+      | PluginHandler<typeof LIFECYCLE_CORRELATE_OPERATION, unknown, unknown>
+      | undefined
+    if (!handler) return
+    yield* runPluginHandler(handler, {
+      operation: LIFECYCLE_CORRELATE_OPERATION,
+      provider: providerId,
+      input: {
+        appId,
+        launchId: input.launchId,
+        playableId: input.playableId,
+      },
+    })
+  })
+}
+
+function isLifecycleCorrelateHandler(handler: PluginHandler): boolean {
+  return (
+    handler.operation === LIFECYCLE_CORRELATE_OPERATION &&
+    (handler.capabilities === undefined ||
+      handler.capabilities.includes(LIFECYCLE_CORRELATE_CAPABILITY))
+  )
+}
+
+function appIdFromProviderAnnotation(
+  launchMetadata: ResolvedLaunch["launchMetadata"],
+  providerId: ProviderId,
+): string | undefined {
+  const annotation = launchMetadata?.annotations?.[providerId]
+  if (!isRecord(annotation)) return undefined
+  const cleanup = annotation.foregroundCleanup
+  if (isRecord(cleanup) && typeof cleanup.appId === "string") {
+    return cleanup.appId
+  }
+  return typeof annotation.appId === "string" ? annotation.appId : undefined
+}
 
 function launchExtrasForResolvedLaunch(
   resolved: ResolvedLaunch,
+  launchId: string,
 ): LaunchExtras | undefined {
-  if (!resolved.extras && !resolved.launchMetadata) return undefined
+  if (!resolved.extras && !resolved.launchMetadata && !launchId)
+    return undefined
   return {
     ...(resolved.extras ?? {}),
+    launchId,
     ...(resolved.launchMetadata
       ? { launchMetadata: resolved.launchMetadata }
       : {}),
@@ -238,6 +308,10 @@ function launchConfigurationFailureFromDiagnostics(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function moonlightRequiresInputPlumber(): boolean {

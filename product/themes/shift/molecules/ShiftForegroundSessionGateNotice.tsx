@@ -1,4 +1,5 @@
 import type { LaunchActionState } from "@platform/library/launch-action-state"
+import type { ProviderLifecycleGateSummary } from "@platform/stream/foreground-session-gate-state"
 
 export interface ShiftForegroundSessionGateNoticeProps {
   readonly state: Extract<
@@ -6,11 +7,13 @@ export interface ShiftForegroundSessionGateNoticeProps {
     { readonly _tag: "Blocked" | "AllowedWithUnknownStatus" | "Launching" }
   >
   readonly gameTitle?: string
+  readonly providerLifecycle?: ProviderLifecycleGateSummary
 }
 
 export function ShiftForegroundSessionGateNotice({
   state,
   gameTitle,
+  providerLifecycle,
 }: ShiftForegroundSessionGateNoticeProps) {
   return (
     <div
@@ -23,6 +26,11 @@ export function ShiftForegroundSessionGateNotice({
         <span className="text-sm opacity-80">
           {messageFor(state, gameTitle)}
         </span>
+        {providerLifecycle ? (
+          <span className="text-xs uppercase tracking-[0.18em] text-[color:var(--shift-ink-dim)]">
+            {providerLifecycle.displayMessage}
+          </span>
+        ) : null}
       </div>
     </div>
   )

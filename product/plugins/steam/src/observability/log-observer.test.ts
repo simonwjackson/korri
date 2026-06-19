@@ -74,6 +74,136 @@ describe("Steam log observer", () => {
     expect(tailer.stopped).toBe(1)
   })
 
+  it("correlates lifecycle events with Korri launch identity", () => {
+    const observer = createSteamLogObserver({
+      logDir: "/tmp/steam/logs",
+      now: () => "2026-06-14T18:39:03.000Z",
+    })
+
+    observer.openCorrelation({
+      appId: "1029210",
+      launchId: "launch-30xx",
+      playableId: "thirty-xx",
+    })
+    observer.ingestLine({
+      source: "console_log",
+      logFile: "console_log.txt",
+      line: '[2026-06-14 14:38:41] GameAction [AppID 1029210, ActionID 2] : LaunchApp changed task to WaitingGameWindow with ""',
+      observedAt: "2026-06-14T18:38:41.000Z",
+      sequence: 1,
+    })
+
+    const lifecycle = observer.collectLifecycle({ launchId: "launch-30xx" })
+    expect(lifecycle.summary).toMatchObject({
+      appId: "1029210",
+      launchId: "launch-30xx",
+      playableId: "thirty-xx",
+      providerPhase: "waiting-window",
+    })
+    expect(lifecycle.events).toHaveLength(1)
+    expect(lifecycle.events[0]).toMatchObject({
+      launchId: "launch-30xx",
+      playableId: "thirty-xx",
+      phase: "waiting-window",
+    })
+  })
+
+  it("attaches launch correlation to context-only shader evidence", () => {
+    const observer = createSteamLogObserver({
+      logDir: "/tmp/steam/logs",
+      now: () => "2026-06-14T18:39:03.000Z",
+    })
+
+    observer.openCorrelation({
+      appId: "1029210",
+      launchId: "launch-30xx",
+      playableId: "thirty-xx",
+    })
+    observer.ingestLine({
+      source: "shader_log",
+      logFile: "shader_log.txt",
+      line: "[2026-06-14 14:38:40] Setting MESA_GLSL_CACHE_DIR=/home/korri/.steam/steamapps/shadercache/1029210 MESA_DISK_CACHE_READ_ONLY_FOZ_DBS=steam_cache",
+      observedAt: "2026-06-14T18:38:40.000Z",
+      sequence: 1,
+    })
+
+    const lifecycle = observer.collectLifecycle({ launchId: "launch-30xx" })
+    expect(lifecycle.summary).toMatchObject({
+      appId: "1029210",
+      launchId: "launch-30xx",
+      providerPhase: "shader-preparing",
+    })
+    expect(lifecycle.events).toHaveLength(1)
+    expect(lifecycle.events[0]).toMatchObject({
+      launchId: "launch-30xx",
+      playableId: "thirty-xx",
+      phase: "shader-preparing",
+    })
+  })
+
+  it("bounds lifecycle replay and honors cursors", () => {
+    const observer = createSteamLogObserver({
+      logDir: "/tmp/steam/logs",
+      now: () => "2026-06-14T18:39:03.000Z",
+    })
+    observer.openCorrelation({ appId: "1029210", launchId: "launch-30xx" })
+
+    for (let index = 0; index < 205; index += 1) {
+      observer.ingestLine({
+        source: "console_log",
+        logFile: "console_log.txt",
+        line: `[2026-06-14 14:38:${String(index % 60).padStart(2, "0")}] GameAction [AppID 1029210, ActionID 2] : LaunchApp changed task to ProcessingInstallScript with "${index}"`,
+        observedAt: "2026-06-14T18:38:41.000Z",
+        sequence: index + 1,
+      })
+    }
+
+    const bounded = observer.collectLifecycle({
+      launchId: "launch-30xx",
+      limit: 200,
+    })
+    expect(bounded.events).toHaveLength(200)
+    expect(bounded.events[0]?.sequence).toBe(6)
+
+    const window = observer.collectLifecycle({
+      appId: "1029210",
+      launchId: "launch-30xx",
+      sinceSequence: 200,
+      limit: 10,
+    })
+    expect(window.events.map(event => event.sequence)).toEqual([
+      201, 202, 203, 204, 205,
+    ])
+  })
+
+  it("does not publish stopped latest snapshots as compact active summaries", () => {
+    const observer = createSteamLogObserver({
+      logDir: "/tmp/steam/logs",
+      now: () => "2026-06-14T18:39:40.000Z",
+    })
+    observer.ingestLine({
+      source: "content_log",
+      logFile: "content_log.txt",
+      line: "[2026-06-14 14:39:02] AppID 1029210 state changed : Fully Installed,App Running,",
+      observedAt: "2026-06-14T18:39:02.000Z",
+      sequence: 1,
+    })
+    observer.ingestLine({
+      source: "content_log",
+      logFile: "content_log.txt",
+      line: "[2026-06-14 14:39:35] AppID 1029210 state changed : Fully Installed,",
+      observedAt: "2026-06-14T18:39:35.000Z",
+      sequence: 2,
+    })
+
+    expect(observer.status().latest).toMatchObject({
+      appId: "1029210",
+      status: { _tag: "Stopped" },
+    })
+    expect(observer.status().active).toBeUndefined()
+    expect(observer.status().lifecycleSummary).toBeUndefined()
+  })
+
   it("records startup failures without throwing", async () => {
     const observer = createSteamLogObserver({
       logDir: "/missing",

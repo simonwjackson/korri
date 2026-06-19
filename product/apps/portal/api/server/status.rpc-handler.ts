@@ -7,9 +7,13 @@ import {
   probeSessiondManagedLaunchStatus as probeSessiondManagedLaunchClientStatus,
   type SessiondManagedLaunchClientFailure,
 } from "@platform/library/sessiond-managed-launch-client"
+import type { PluginHandler } from "@platform/plugin"
+import { runPluginHandler } from "@platform/plugin"
 import { Effect } from "effect"
+import { createFirstPartyPluginRegistryFromEnv } from "../../../../plugins"
 import { isStreamControlEnabled } from "../stream/control-mode"
 import {
+  ProviderLifecycleSummary,
   ServerRunnerStatus,
   type ServerStatusPayload,
   ServerStatusResponse,
@@ -65,6 +69,7 @@ const buildServerStatusEffect = (overrides: ServerStatusOverrides) =>
       process.env.KORRI_DAEMON_NAME ?? `Korri Daemon on ${serverId}`
 
     const sessiondProbe = yield* probeSessiondStatus(overrides.fetchImpl)
+    const providerLifecycle = yield* collectProviderLifecycleSummary()
 
     // Socket IPC failures surface as `sessiondUnavailable: true` to
     // the renderer/monitoring. The launch-path preflight distinguishes
@@ -85,9 +90,99 @@ const buildServerStatusEffect = (overrides: ServerStatusOverrides) =>
         ? { sessiond: sessiondProbe.summary }
         : {}),
       ...(sessiondUnreachable ? { sessiondUnavailable: true } : {}),
+      ...(providerLifecycle ? { providerLifecycle } : {}),
       ...(enabled ? {} : { message: "Korri stream control is not enabled" }),
     })
   })
+
+const LIFECYCLE_COLLECT_OPERATION = "lifecycle.collect" as const
+const LIFECYCLE_COLLECT_CAPABILITY = "lifecycle.collect" as const
+
+function collectProviderLifecycleSummary() {
+  return Effect.gen(function* () {
+    const registry = createFirstPartyPluginRegistryFromEnv(process.env)
+    for (const plugin of registry.enabledPlugins) {
+      const handler = plugin.handlers.find(isLifecycleCollectHandler) as
+        | PluginHandler<typeof LIFECYCLE_COLLECT_OPERATION, unknown, unknown>
+        | undefined
+      if (!handler) continue
+      const result = yield* runPluginHandler(handler, {
+        operation: LIFECYCLE_COLLECT_OPERATION,
+        provider: plugin.id,
+        input: { limit: 1 },
+      }).pipe(
+        Effect.matchEffect({
+          onFailure: () => Effect.succeed(undefined),
+          onSuccess: value => Effect.succeed(value),
+        }),
+      )
+      const summary = summaryFromLifecycleResult(result)
+      if (summary) return summary
+    }
+    return undefined
+  })
+}
+
+function isLifecycleCollectHandler(handler: PluginHandler): boolean {
+  return (
+    handler.operation === LIFECYCLE_COLLECT_OPERATION &&
+    (handler.capabilities === undefined ||
+      handler.capabilities.includes(LIFECYCLE_COLLECT_CAPABILITY))
+  )
+}
+
+function summaryFromLifecycleResult(
+  result: unknown,
+): ProviderLifecycleSummary | undefined {
+  if (typeof result !== "object" || result === null || !("summary" in result)) {
+    return undefined
+  }
+  const summary = (result as { readonly summary?: unknown }).summary
+  if (typeof summary !== "object" || summary === null) return undefined
+  const record = summary as Record<string, unknown>
+  if (
+    typeof record.providerId !== "string" ||
+    typeof record.observerHealth !== "string" ||
+    typeof record.lifecycleStatus !== "string" ||
+    typeof record.providerPhase !== "string" ||
+    typeof record.displayMessage !== "string" ||
+    typeof record.confidence !== "string" ||
+    typeof record.nextActionHint !== "string"
+  ) {
+    return undefined
+  }
+  return new ProviderLifecycleSummary({
+    providerId: record.providerId,
+    observerHealth:
+      record.observerHealth as ProviderLifecycleSummary["observerHealth"],
+    lifecycleStatus:
+      record.lifecycleStatus as ProviderLifecycleSummary["lifecycleStatus"],
+    providerPhase: record.providerPhase,
+    displayMessage: redactProviderLifecycleMessage(record.displayMessage),
+    confidence: record.confidence as ProviderLifecycleSummary["confidence"],
+    nextActionHint:
+      record.nextActionHint as ProviderLifecycleSummary["nextActionHint"],
+    ...(typeof record.appId === "string" ? { appId: record.appId } : {}),
+    ...(typeof record.launchId === "string"
+      ? { launchId: record.launchId }
+      : {}),
+    ...(typeof record.playableId === "string"
+      ? { playableId: record.playableId }
+      : {}),
+    ...(typeof record.lastProgressAt === "string"
+      ? { lastProgressAt: record.lastProgressAt }
+      : {}),
+  })
+}
+
+function redactProviderLifecycleMessage(message: string): string {
+  const pathRedacted = message
+    .replace(/file:\/\/[^\s]+/g, "<path>")
+    .replace(/\/(?:[^\s/]+\/)+[^\s]+/g, "<path>")
+  return pathRedacted.length <= 160
+    ? pathRedacted
+    : `${pathRedacted.slice(0, 159)}…`
+}
 
 function defaultGameStreamStatusPath(
   env: NodeJS.ProcessEnv,

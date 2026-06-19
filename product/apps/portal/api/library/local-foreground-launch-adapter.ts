@@ -76,6 +76,7 @@ export interface LocalForegroundLaunchRequest {
    * lifecycle slices; this adapter only preserves ownership context.
    */
   readonly artifacts?: LaunchArtifacts
+  readonly launchId?: string
   readonly createRequestId?: () => string
 }
 
@@ -108,10 +109,14 @@ export function createLocalForegroundLaunchOwner(
     Promise<LaunchLibraryResponse>,
     LaunchLibraryResponse
   >({
-    requestIdentity: request => ({
-      requestId: (request.createRequestId ?? createLaunchRequestId)(),
-      gameId: request.id,
-    }),
+    requestIdentity: request => {
+      const requestId =
+        request.launchId ?? (request.createRequestId ?? createLaunchRequestId)()
+      return {
+        requestId,
+        gameId: request.id,
+      }
+    },
     ...(consultExternalIdle ? { consultExternalIdle } : {}),
     adapter: {
       prepare: async request => ({

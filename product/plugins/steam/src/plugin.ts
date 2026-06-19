@@ -1,6 +1,10 @@
 import { plugin } from "@platform/plugin"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
 import { collectSteamDiagnostics } from "./observability/diagnostics"
+import {
+  collectSteamLifecycle,
+  openSteamLifecycleCorrelation,
+} from "./observability/lifecycle-api"
 
 export const KORRI_STEAM_PLUGIN_ID = "@korri:steam" as const
 export const KORRI_STEAM_APP_LOCAL_ID = "steam" as const
@@ -110,6 +114,24 @@ export const steamPlugin = plugin({
         operation: "diagnostics.collect",
         capabilities: ["diagnostics.collect"],
         run: context => collectSteamDiagnostics(context.input),
+      },
+      {
+        id: "steam.lifecycle.collect",
+        operation: "lifecycle.collect",
+        capabilities: ["lifecycle.collect"],
+        run: context =>
+          collectSteamLifecycle(
+            context.input as Parameters<typeof collectSteamLifecycle>[0],
+          ),
+      },
+      {
+        id: "steam.lifecycle.correlate",
+        operation: "lifecycle.correlate",
+        capabilities: ["lifecycle.correlate"],
+        run: context => {
+          openSteamLifecycleCorrelation(context.input)
+          return { status: "accepted" as const }
+        },
       },
     ],
   },

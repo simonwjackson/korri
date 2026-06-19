@@ -121,6 +121,39 @@ describe("ShiftHomeReadyBody", () => {
     expect(launched).toEqual([])
   })
 
+  it("renders Steam lifecycle detail from the existing foreground status poll", async () => {
+    renderReadyBody(
+      {
+        state: LaunchState.idle,
+        start: () => {},
+        retry: () => {},
+      },
+      {
+        foreground: {
+          _tag: "Preparing",
+          state: "Spawning",
+          requestId: "launch-30xx",
+          gameId: "resume",
+          providerLifecycle: {
+            providerId: "@korri:steam",
+            observerHealth: "running",
+            lifecycleStatus: "active",
+            providerPhase: "shader-preparing",
+            displayMessage: "Steam is checking shader cache metadata.",
+            nextActionHint: "wait",
+            appId: "1029210",
+            launchId: "launch-30xx",
+          },
+        },
+      },
+    )
+
+    expect(await screen.findByText("Preparing stream")).toBeTruthy()
+    expect(
+      screen.getByText("Steam is checking shader cache metadata."),
+    ).toBeTruthy()
+  })
+
   it("launches the focused tile once when confirm activates the tile button", async () => {
     const launched: string[] = []
 

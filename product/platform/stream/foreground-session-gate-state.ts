@@ -4,35 +4,56 @@ export type ForegroundSessionGateSnapshotInput =
   | ForegroundSessionStatusSnapshot
   | { readonly _tag: "LoadError"; readonly message: string }
 
+export interface ProviderLifecycleGateSummary {
+  readonly providerId: string
+  readonly observerHealth: string
+  readonly lifecycleStatus: string
+  readonly providerPhase: string
+  readonly displayMessage: string
+  readonly nextActionHint?: string
+  readonly appId?: string
+  readonly launchId?: string
+}
+
+type ProviderLifecycleAnnotation = {
+  readonly providerLifecycle?: ProviderLifecycleGateSummary
+}
+
 export type ForegroundSessionGateState =
-  | { readonly _tag: "Ready" }
-  | {
+  | ({ readonly _tag: "Ready" } & ProviderLifecycleAnnotation)
+  | ({
       readonly _tag: "Preparing"
       readonly state: "Preparing" | "Spawning" | "Foregrounding"
       readonly requestId?: string
       readonly gameId?: string
-    }
-  | {
+    } & ProviderLifecycleAnnotation)
+  | ({
       readonly _tag: "Running"
       readonly requestId?: string
       readonly gameId?: string
-    }
-  | {
+    } & ProviderLifecycleAnnotation)
+  | ({
       readonly _tag: "Cooling"
       readonly state: "ExitObserved" | "TearingDown" | "VerifyingReady"
       readonly requestId?: string
       readonly gameId?: string
-    }
-  | {
+    } & ProviderLifecycleAnnotation)
+  | ({
       readonly _tag: "Recovering"
       readonly state: "Failed" | "Recovering"
       readonly requestId?: string
       readonly gameId?: string
       readonly stage?: string
       readonly message?: string
-    }
-  | { readonly _tag: "Unknown"; readonly state?: string }
-  | { readonly _tag: "LoadError"; readonly message: string }
+    } & ProviderLifecycleAnnotation)
+  | ({
+      readonly _tag: "Unknown"
+      readonly state?: string
+    } & ProviderLifecycleAnnotation)
+  | ({
+      readonly _tag: "LoadError"
+      readonly message: string
+    } & ProviderLifecycleAnnotation)
 
 export function foregroundSessionGateStateFromSnapshot(
   input: ForegroundSessionGateSnapshotInput,

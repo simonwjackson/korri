@@ -126,6 +126,7 @@ function ShiftHomeLaunchSurface({
           gameTitle={
             actionGame ? getPlayableDisplayName(actionGame) : undefined
           }
+          providerLifecycle={foregroundGate.providerLifecycle}
         />
       ) : null}
       <ShiftHomeRail

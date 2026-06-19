@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { foregroundSessionGateStateFromSnapshot } from "@platform/stream/foreground-session-gate-state"
 import { SessiondLifecycleActive } from "@product/apps/portal/api/server/status.rpc"
 import {
+  gateStateFromServerStatus,
   snapshotFromServerStatus,
   snapshotStateFromSessiondMode,
 } from "@product/apps/portal/features/home/foreground-session-status-layer-live"
@@ -112,6 +113,40 @@ describe("foreground session status layer live > sessiond mode → gate _tag", (
       const gate = foregroundSessionGateStateFromSnapshot(snapshot)
       expect(gate._tag).not.toBe("Unknown")
     }
+  })
+
+  it("keeps provider lifecycle detail on the gate state", () => {
+    const gate = gateStateFromServerStatus(
+      {
+        mode: "launching",
+        restoreAttempts: 0,
+        active: new SessiondLifecycleActive({
+          launchId: "launch-30xx",
+          mode: "launching",
+        }),
+      } as Parameters<typeof gateStateFromServerStatus>[0],
+      SERVER_ID,
+      {
+        providerId: "@korri:steam",
+        observerHealth: "running",
+        lifecycleStatus: "active",
+        providerPhase: "shader-preparing",
+        displayMessage: "Steam is checking shader cache metadata.",
+        confidence: "hint",
+        nextActionHint: "wait",
+        appId: "1029210",
+        launchId: "launch-30xx",
+      } as Parameters<typeof gateStateFromServerStatus>[2],
+    )
+
+    expect(gate).toMatchObject({
+      _tag: "Preparing",
+      providerLifecycle: {
+        providerId: "@korri:steam",
+        providerPhase: "shader-preparing",
+        displayMessage: "Steam is checking shader cache metadata.",
+      },
+    })
   })
 
   it("falls back to IdleReady when sessiond is not configured (no sessiond field)", () => {

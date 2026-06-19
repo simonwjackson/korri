@@ -107,6 +107,7 @@ async function spawnViaSessiond(
   const lifecycle = extras.lifecycle
   const launchMetadata = extras.launchMetadata
   const wait = extras.wait
+  const launchId = extras.launchId
   const fetchImpl = options.fetchImpl ?? fetch
   const url =
     options.url ?? (options.socketPath ? "http://korri-sessiond" : undefined)
@@ -156,6 +157,7 @@ async function spawnViaSessiond(
   const startResult = await requestSessiondManagedLaunchStart(
     {
       spec,
+      ...(launchId ? { launchId } : {}),
       ...(lifecycle ? { lifecycle } : {}),
       ...(launchMetadata ? { launchMetadata } : {}),
       ...(wait ? { wait } : {}),
