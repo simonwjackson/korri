@@ -107,7 +107,7 @@ jobs:
       - name: Build candidate payload
         if: ${{ (github.event_name == 'push' || inputs.build_payload) && (github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product) }}
         run: |
-          nix build .#packages.aarch64-linux.korri-${{ matrix.product }}-product-payload --out-link result-product-payload
+          nix build --fallback .#packages.aarch64-linux.korri-${{ matrix.product }}-product-payload --out-link result-product-payload
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             mkdir -p out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate
             cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/
