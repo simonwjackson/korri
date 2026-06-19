@@ -1,7 +1,7 @@
 ---
 title: feat: Add remote Steam app download trigger and monitor
 type: feat
-status: active
+status: completed
 date: 2026-06-19
 origin: work/items/active/01KVF7G2HRGC2TTY3T7YJBDH9F-add-remote-steam-app-download-trigger-and-monitor/item.md
 verify_command: "bun test product/apps/portal/api/plugin-install/install-control-authorization.test.ts product/apps/portal/api/plugin-install/request.rpc-handler.test.ts product/apps/portal/api/plugin-install/status.rpc-handler.test.ts product/apps/portal/api/hono-app.test.ts product/apps/portal/api/server/rpc-server.test.ts product/platform/library/config/app-install-metadata.test.ts product/plugins/steam/src/observability/install-state.test.ts product/plugins/steam/src/observability/install-api.test.ts product/plugins/steam/src/observability/install-signals.test.ts product/plugins/steam/src/app-control/install-trigger.test.ts product/plugins/steam/src/app-control/install-request-ledger.test.ts product/plugins/steam/src/plugin.test.ts product/plugins/steam/src/boundary.test.ts product/plugins/steam/nix/nixos-module.test.ts product/apps/portal/features/home/plugin-install-rpc-layer.test.ts product/apps/portal/features/home/library-rpc-layers.test.ts product/themes/shift/pages/ShiftHomeReadyBody.test.tsx"

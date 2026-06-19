@@ -3,7 +3,7 @@ id: 01KVF7G2HRGC2TTY3T7YJBDH9F
 slug: add-remote-steam-app-download-trigger-and-monitor
 title: Add remote Steam app download trigger and monitor
 origin: parked
-status: In Progress
+status: Done
 priority: high
 labels:
   - steam
@@ -22,10 +22,10 @@ Operators should be able to install/update Steam games from Korri UI/API without
 
 ## Acceptance Criteria
 
-- [ ] Korrid exposes a typed provider API to request a Steam app install/update for an owned AppID through the logged-in local Steam client.
-- [ ] The API reports honest states such as requested, queued, downloading, installed, failed, and unknown from Steam manifests/logs without requiring Steam UI interaction.
-- [ ] Portal can trigger and monitor the download remotely using the typed API/status path.
-- [ ] Implementation avoids storing Steam credentials and documents/guards any experimental Steam console/private-protocol fallback.
+- [x] Korrid exposes a typed provider API to request a Steam app install/update for an owned AppID through the logged-in local Steam client.
+- [x] The API reports honest states such as requested, queued, downloading, installed, failed, and unknown from Steam manifests/logs without requiring Steam UI interaction.
+- [x] Portal can trigger and monitor the download remotely using the typed API/status path.
+- [x] Implementation avoids storing Steam credentials and documents/guards any experimental Steam console/private-protocol fallback.
 
 ## Related
 
@@ -35,4 +35,4 @@ Operators should be able to install/update Steam games from Korri UI/API without
 
 ## Notes
 
-Research found recommended default path: public steam://install/run request to logged-in local client plus filesystem/log observation (libraryfolders.vdf, appmanifest_*.acf, content_log.txt); avoid SteamCMD for consumer games and avoid SteamKit/DepotDownloader/private IPC unless explicitly gated/legal-reviewed.
+Research found and implementation used the proven logged-in local Steam client helper path `korri-steam-guest -console +app_install <appid>` plus filesystem/log observation (`libraryfolders.vdf`, `appmanifest_*.acf`, `content_log.txt`); avoid SteamCMD for consumer games and avoid SteamKit/DepotDownloader/private IPC unless explicitly gated/legal-reviewed.
