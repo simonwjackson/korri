@@ -19,51 +19,17 @@ import type { PicoPlayer } from "../fixtures-extra"
 import { PicoArtImage } from "../PicoArtImage"
 import { PicoIcon } from "../PicoIcon"
 import { PicoMascot } from "../PicoMascot"
-import { PicoButtonBar, PicoStatusBar } from "../PicoStatusBar"
+import { PicoButtonBar } from "../PicoStatusBar"
+import type { Hint } from "../ui/templates/ScreenShell"
 
 export { PicoArtImage } from "../PicoArtImage"
 export { PicoCart } from "../PicoCart"
 export { PicoIcon } from "../PicoIcon"
 export { PicoMascot } from "../PicoMascot"
-
-type Hint = { readonly key: "a" | "b" | "y"; readonly label: string }
-
-/**
- * Standard screen shell: optional status bar (title) + scrolling main + optional
- * button bar (hints). Omit title/hints for full-bleed overlays (boot, toast).
- */
-export function Screen({
-  title,
-  hints,
-  children,
-  className,
-  tone,
-}: {
-  readonly title?: string
-  readonly hints?: readonly Hint[]
-  readonly children: ReactNode
-  readonly className?: string
-  readonly tone?: "default" | "dim" | "alert"
-}) {
-  return (
-    <div className={`pc-root ${tone ? `tone-${tone}` : ""}`}>
-      {title !== undefined ? <PicoStatusBar label={title} /> : null}
-      <div className={`pc-main ${className ?? ""}`}>{children}</div>
-      {hints ? <PicoButtonBar hints={hints} /> : null}
-    </div>
-  )
-}
-
-/** Display-font heading. Size via `size` -> token step. */
-export function Title({
-  children,
-  size = 1,
-}: {
-  readonly children: ReactNode
-  readonly size?: -2 | -1 | 0 | 1 | 2 | 3
-}) {
-  return <h1 className={`pc-title pc-t${size}`}>{children}</h1>
-}
+// Migrated to the atomic-design layers; re-exported so the not-yet-migrated
+// screens keep importing `Screen` / `Title` from the kit unchanged.
+export { Title } from "../ui/atoms/Title"
+export { ScreenShell as Screen } from "../ui/templates/ScreenShell"
 
 export function Sub({ children }: { readonly children: ReactNode }) {
   return <div className="pc-sub">{children}</div>
