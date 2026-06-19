@@ -10,6 +10,8 @@
   libglvnd,
   libjpeg8,
   mesa,
+  SDL2,
+  sdl3,
   systemdMinimal,
   util-linuxMinimal,
   xwayland,
@@ -24,6 +26,8 @@ let
     libglvnd
     libjpeg8.out
     mesa
+    SDL2
+    sdl3
     systemdMinimal
     util-linuxMinimal.lib
     zlib
@@ -143,6 +147,7 @@ EOF_XWAYLAND
         "CFW_NAME": "ROCKNIX",
         "LD_LIBRARY_PATH": "${libraryPath}",
         "LIBGL_DRIVERS_PATH": "${mesa}/lib/dri",
+        "SDL_VIDEODRIVER": "wayland",
         "XKB_CONFIG_ROOT": "/tmp/weston/share/xkb",
         "__EGL_VENDOR_LIBRARY_DIRS": "${mesa}/share/glvnd/egl_vendor.d"
       },
