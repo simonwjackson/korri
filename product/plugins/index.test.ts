@@ -49,6 +49,7 @@ import {
 } from "./retroarch"
 import { KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
 import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
+import { KORRI_SMB_WONDERLAND_1987_PLUGIN_ID } from "./smb-wonderland-1987"
 import { KORRI_SMWCENTRAL_PLUGIN_ID } from "./smwcentral"
 import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
 import {
@@ -647,6 +648,26 @@ describe("first-party plugins", () => {
       registry.catalog[`${KORRI_PSYCHO_WALUIGI_PLUGIN_ID}/psycho-waluigi`],
     ).toMatchObject({
       title: "Psycho Waluigi",
+    })
+  })
+
+  it("enables required runtime plugins through SMB Wonderland 1987 requirements", () => {
+    const registry = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_SMB_WONDERLAND_1987_PLUGIN_ID,
+    })
+
+    expect(
+      registry.enabledPluginIds.has(KORRI_SMB_WONDERLAND_1987_PLUGIN_ID),
+    ).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_FEX_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_PROTON_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(true)
+    expect(
+      registry.catalog[
+        `${KORRI_SMB_WONDERLAND_1987_PLUGIN_ID}/smb-wonderland-1987`
+      ],
+    ).toMatchObject({
+      title: "Super Mario Bros. Wonderland 1987",
     })
   })
 

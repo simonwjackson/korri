@@ -36,6 +36,7 @@ import {
 } from "./retroarch"
 import { ryubingPlugin, ryubingReadableLaunchIntegration } from "./ryubing"
 import { smbxGamePlugin } from "./smbxgame"
+import { smbWonderland1987Plugin } from "./smb-wonderland-1987"
 import { smwCentralPlugin } from "./smwcentral"
 import { srb2Plugin } from "./srb2"
 import {
@@ -128,6 +129,7 @@ export const firstPartyPlugins = [
   srb2Plugin,
   smbxGamePlugin,
   smwCentralPlugin,
+  smbWonderland1987Plugin,
   steamPlugin,
   pico8Plugin,
   portmasterPlugin,

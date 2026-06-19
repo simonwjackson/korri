@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source_dir="${SW87_SOURCE_DIR:-@appDir@}"
+data_home="${XDG_DATA_HOME:-${HOME:-$TMPDIR}/.local/share}"
+run_dir="${SW87_RUN_DIR:-$data_home/korri/smb-wonderland-1987/@version@}"
+wine_prefix="${WINEPREFIX:-$run_dir/.wine}"
+version_marker="$run_dir/.korri-version"
+fex_bin="${SW87_FEX_BIN:-FEX}"
+fex_runtime_setup="${SW87_FEX_RUNTIME_SETUP:-@fexRuntimeSetup@}"
+proton_runtime_setup="${SW87_PROTON_RUNTIME_SETUP:-@protonRuntimeSetup@}"
+proton_ge_runtime_setup="${SW87_PROTON_GE_RUNTIME_SETUP:-@protonGeRuntimeSetup@}"
+
+if [ ! -f "$run_dir/SMBWonderland87 (rev6).exe" ] || [ ! -f "$version_marker" ] || [ "$(cat "$version_marker" 2>/dev/null || true)" != "@version@" ]; then
+  @coreutils@/mkdir -p "$run_dir"
+  @coreutils@/cp -R --no-preserve=mode,ownership "$source_dir"/. "$run_dir"/
+  @coreutils@/chmod -R u+rwX "$run_dir"
+  @coreutils@/printf '%s\n' "@version@" > "$version_marker"
+fi
+
+if [ ! -f "$fex_runtime_setup" ]; then
+  echo "smb-wonderland-1987: FEX runtime setup is missing: $fex_runtime_setup" >&2
+  echo "hint: install korri-fex-runtime or set SW87_FEX_RUNTIME_SETUP" >&2
+  exit 1
+fi
+
+export KORRI_FEX_RUNTIME_APP_ID="${KORRI_FEX_RUNTIME_APP_ID:-smb-wonderland-1987}"
+export KORRI_FEX_RUNTIME_RUN_DIR="${KORRI_FEX_RUNTIME_RUN_DIR:-$run_dir}"
+export KORRI_FEX_RUNTIME_ENABLE_THUNKS="${SW87_ENABLE_FEX_THUNKS:-${KORRI_FEX_RUNTIME_ENABLE_THUNKS:-1}}"
+# shellcheck source=/dev/null
+source "$fex_runtime_setup"
+
+cd "$run_dir"
+
+if [ "${SW87_USE_PROTON_GE:-1}" = "1" ]; then
+  if [ ! -f "$proton_ge_runtime_setup" ]; then
+    echo "smb-wonderland-1987: Proton-GE runtime setup is missing: $proton_ge_runtime_setup" >&2
+    echo "hint: install korri-proton-ge-runtime or set SW87_PROTON_GE_RUNTIME_SETUP" >&2
+    exit 1
+  fi
+
+  proton_ge_compatdata="${STEAM_COMPAT_DATA_PATH:-${SW87_PROTON_GE_COMPATDATA:-$run_dir/compatdata-ge}}"
+  export KORRI_PROTON_GE_RUNTIME_WINEPREFIX="${KORRI_PROTON_GE_RUNTIME_WINEPREFIX:-${WINEPREFIX:-$proton_ge_compatdata/pfx}}"
+  # shellcheck source=/dev/null
+  source "$proton_ge_runtime_setup"
+
+  export STEAM_COMPAT_DATA_PATH="$proton_ge_compatdata"
+  "@coreutils@/mkdir" -p "$STEAM_COMPAT_DATA_PATH"
+  export WINEPREFIX="${WINEPREFIX:-$STEAM_COMPAT_DATA_PATH/pfx}"
+  export STEAM_COMPAT_INSTALL_PATH="${STEAM_COMPAT_INSTALL_PATH:-$run_dir}"
+  export STEAM_COMPAT_CLIENT_INSTALL_PATH="${STEAM_COMPAT_CLIENT_INSTALL_PATH:-/var/lib/korri/steam}"
+  export STEAM_COMPAT_SHADER_PATH="${STEAM_COMPAT_SHADER_PATH:-$STEAM_COMPAT_DATA_PATH/shadercache}"
+  export STEAM_COMPAT_TOOL_PATHS="${STEAM_COMPAT_TOOL_PATHS:-$KORRI_PROTON_GE_RUNTIME_ROOT}"
+  export STEAM_COMPAT_LIBRARY_PATHS="${STEAM_COMPAT_LIBRARY_PATHS:-$run_dir}"
+  export STEAM_COMPAT_MOUNTS="${STEAM_COMPAT_MOUNTS:-$KORRI_PROTON_GE_RUNTIME_ROOT}"
+  export STEAM_COMPAT_APP_ID="${STEAM_COMPAT_APP_ID:-smbwonderland1987}"
+  export SteamAppId="${SteamAppId:-$STEAM_COMPAT_APP_ID}"
+  export SteamGameId="${SteamGameId:-$SteamAppId}"
+  export UMU_ID="${UMU_ID:-umu-default}"
+  export STORE="${STORE:-none}"
+  export STEAM_COMPAT_CONFIG="${STEAM_COMPAT_CONFIG:-noxalia}"
+  export PROTON_USE_XALIA="${PROTON_USE_XALIA:-0}"
+  export WINEDLLPATH="$KORRI_PROTON_GE_RUNTIME_FILES/lib/wine/i386-windows:$KORRI_PROTON_GE_RUNTIME_FILES/lib/wine/dxvk/i386-windows${WINEDLLPATH:+:$WINEDLLPATH}"
+  export WINEDLLOVERRIDES="${SW87_WINEDLLOVERRIDES:-ddraw,d3d8,d3d9,dxgi=b;d3d11=n,b}"
+  if [ "${SW87_USE_PROTON_GE_SCRIPT:-1}" = "1" ]; then
+    exec "$fex_bin" "$KORRI_PROTON_GE_RUNTIME_PYTHON" "$KORRI_PROTON_GE_RUNTIME_PROTON" waitforexitandrun "$run_dir/SMBWonderland87 (rev6).exe" "$@"
+  fi
+  exec "$fex_bin" "$KORRI_PROTON_GE_RUNTIME_FILES/bin/wine" "SMBWonderland87 (rev6).exe" "$@"
+fi
+
+if [ ! -f "$proton_runtime_setup" ]; then
+  echo "smb-wonderland-1987: Proton runtime setup is missing: $proton_runtime_setup" >&2
+  echo "hint: install korri-proton-runtime or set SW87_PROTON_RUNTIME_SETUP" >&2
+  exit 1
+fi
+
+export KORRI_PROTON_RUNTIME_ROOT="${SW87_PROTON_ROOT:-${KORRI_PROTON_RUNTIME_ROOT:-/var/lib/korri/steam/steamapps/common/Proton 10.0}}"
+export KORRI_PROTON_RUNTIME_FILES="${SW87_PROTON_FILES:-${KORRI_PROTON_RUNTIME_FILES:-$KORRI_PROTON_RUNTIME_ROOT/files}}"
+export KORRI_PROTON_RUNTIME_WINEPREFIX="${KORRI_PROTON_RUNTIME_WINEPREFIX:-$wine_prefix}"
+# shellcheck source=/dev/null
+source "$proton_runtime_setup"
+
+export WINEDLLPATH="$KORRI_PROTON_RUNTIME_FILES/lib/wine/i386-windows:$KORRI_PROTON_RUNTIME_FILES/lib/wine/dxvk/i386-windows${WINEDLLPATH:+:$WINEDLLPATH}"
+export WINEDLLOVERRIDES="${SW87_WINEDLLOVERRIDES:-ddraw,d3d8,d3d9,dxgi=b;d3d11=n,b}"
+exec "$fex_bin" "$KORRI_PROTON_RUNTIME_FILES/bin/wine" "SMBWonderland87 (rev6).exe" "$@"

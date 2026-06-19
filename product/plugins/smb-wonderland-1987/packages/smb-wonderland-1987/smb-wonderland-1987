@@ -1,0 +1,17 @@
+#!@bash@/bin/bash
+set -euo pipefail
+
+source_dir="${SW87_SOURCE_DIR:-@appDir@}"
+data_home="${XDG_DATA_HOME:-${HOME:-$TMPDIR}/.local/share}"
+run_dir="${SW87_RUN_DIR:-$data_home/korri/smb-wonderland-1987/@version@}"
+version_marker="$run_dir/.korri-version"
+
+if [ ! -f "$run_dir/SMBWonderland87 (rev6).exe" ] || [ ! -f "$version_marker" ] || [ "$(cat "$version_marker" 2>/dev/null || true)" != "@version@" ]; then
+  @coreutils@/mkdir -p "$run_dir"
+  @coreutils@/cp -R --no-preserve=mode,ownership "$source_dir"/. "$run_dir"/
+  @coreutils@/chmod -R u+rwX "$run_dir"
+  @coreutils@/printf '%s\n' "@version@" > "$version_marker"
+fi
+
+cd "$run_dir"
+exec @wine@ "SMBWonderland87 (rev6).exe" "$@"
