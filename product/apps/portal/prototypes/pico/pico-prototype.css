@@ -141,6 +141,12 @@
 	container-type: inline-size;
 	color: var(--pico-ink);
 	image-rendering: pixelated;
+	/* Catalog display: a fixed, comfortable inspection size — a part isn't tied to
+	 * a device here, so it doesn't shrink with the cell (the device lab is where
+	 * true adaptive sizing is shown). cqi 0 → base collapses to the clamp floor. */
+	--intrinsic-base-min: 16px;
+	--intrinsic-base-cqi: 0;
+	--intrinsic-base-max: 16px;
 }
 
 /* CRT scanline + vignette overlay, non-interactive. */

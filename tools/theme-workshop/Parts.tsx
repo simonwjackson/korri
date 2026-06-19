@@ -41,7 +41,7 @@ export function Parts({
               {LAYER_LABEL[layer]}
               <span className="wk-parts-gcount">{inLayer.length}</span>
             </h2>
-            <div className="wk-parts-grid">
+            <div className="wk-parts-grid" data-layer={layer}>
               {inLayer.map(story => (
                 <figure className="wk-parts-cell" key={story.id}>
                   <div className="wk-part-stage">
