@@ -1,7 +1,7 @@
 ---
 title: feat: Expose full Steam launch lifecycle observability
 type: feat
-status: active
+status: completed
 date: 2026-06-19
 origin: work/items/active/01KVEQ0Z9G09F36SSMXA1H4T1P-expose-full-steam-launch-lifecycle-observability/item.md
 verify_command: "bun test product/plugins/steam/src/observability product/plugins/steam/src/session product/apps/portal/api/server product/apps/portal/api/library product/apps/portal/api/plugin-lifecycle product/apps/portal/features/home product/themes/shift product/platform/react/library"
