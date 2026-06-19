@@ -167,16 +167,27 @@ let
         lib.hasInfix ''SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"'' cfg.services.udev.extraRules
         && lib.hasInfix "setfacl -m u:korri:rw /dev/input/%k" cfg.services.udev.extraRules
       ))
-      (check "${name}: SM8550 DRM seat + input metadata is triggered before greetd" (
+      (check "${name}: SM8550 DRM/input/tty access is prepared around greetd" (
         cfg.systemd.services ? korri-rocknix-seat-device-trigger
+        && cfg.systemd.services ? korri-rocknix-device-acl-fallback
         && builtins.elem "greetd.service" (seatDeviceTrigger.before or [ ])
+        && builtins.elem "greetd.service" (
+          (cfg.systemd.services.korri-rocknix-device-acl-fallback or { }).after or [ ]
+        )
         && (
           let
             raw = seatDeviceTrigger.serviceConfig.ExecStart or [ ];
             execLines = lib.concatStringsSep "\n" (if builtins.isList raw then raw else [ raw ]);
           in
-          lib.hasInfix "udevadm trigger --subsystem-match=drm --action=change" execLines
-          && lib.hasInfix "udevadm trigger --subsystem-match=input --action=change" execLines
+          lib.hasInfix "korri-rocknix-seat-device-setup" execLines
+        )
+        && (
+          let
+            raw =
+              (cfg.systemd.services.korri-rocknix-device-acl-fallback or { }).serviceConfig.ExecStart or [ ];
+            execLines = lib.concatStringsSep "\n" (if builtins.isList raw then raw else [ raw ]);
+          in
+          lib.hasInfix "korri-rocknix-device-acl-fallback" execLines
         )
       ))
       (check "${name}: compositor uses the greetd/logind user session bus" (
@@ -184,6 +195,10 @@ let
         && compositor.sessionBus.address == "unix:path=%t/bus"
         && ((cfg.systemd.user.services."korri-compositor" or { }).requires or [ ]) == [ ]
         && (sessiondEnv.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=%t/bus"
+      ))
+      (check "${name}: compositor uses wlroots direct session on host-bound DRM" (
+        (compositor.environment.WLR_SESSION or null) == "direct"
+        && (compositor.environment.LIBSEAT_BACKEND or null) == "builtin"
       ))
       (check "${name}: compositor does not inherit child display env" (
         builtins.all (name: builtins.elem name (compositorUnit.serviceConfig.UnsetEnvironment or [ ])) [

@@ -58,6 +58,58 @@ let
   # watcher; this is where the product drops enter/exit markers). Derived
   # from the substrate option so the two stay in sync.
   powerRequestDir = "${config.rocknix.power.runtimeDir}/requests";
+  korriRocknixSeatDeviceSetup = pkgs.writeShellScript "korri-rocknix-seat-device-setup" ''
+    set -u
+    export PATH=${
+      lib.makeBinPath (
+        with pkgs;
+        [
+          acl
+          coreutils
+          systemd
+        ]
+      )
+    }
+
+    # Host-bound ROCKNIX device nodes already exist when the guest boots, so
+    # ask udev to re-apply rules when the nspawn sysfs allows it. On Sobo the
+    # DRM sysfs uevent file is read-only from the guest; that path must be a
+    # warning, not a failed boot gate.
+    udevadm control --reload >/dev/null 2>&1 || true
+    udevadm trigger --subsystem-match=drm --action=change || true
+    udevadm trigger --subsystem-match=input --action=change || true
+
+    # The guest's numeric device groups can differ from the NixOS group ids
+    # (for example tty/input nodes inherited from the ROCKNIX host). Directly
+    # grant the runtime user access to the nodes wlroots/inputd need so the
+    # appliance can start even when guest udev cannot tag the host devices.
+    for node in /dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/tty0 /dev/tty1; do
+      [ -e "$node" ] || continue
+      setfacl -m m::rw,u:${runtime.user}:rw "$node" || true
+    done
+  '';
+  korriRocknixDeviceAclFallback = pkgs.writeShellScript "korri-rocknix-device-acl-fallback" ''
+    set -u
+    export PATH=${
+      lib.makeBinPath (
+        with pkgs;
+        [
+          acl
+          coreutils
+        ]
+      )
+    }
+
+    # greetd/logind can re-open and chmod tty1 while creating the runtime
+    # session, after the early setup unit has run. Re-apply only ACLs after
+    # greetd starts; the compositor unit has Restart=on-failure and will
+    # recover once these permissions are present.
+    sleep 2
+    for node in /dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/tty0 /dev/tty1; do
+      [ -e "$node" ] || continue
+      setfacl -m m::rw,u:${runtime.user}:rw "$node" || true
+    done
+  '';
   # korri-fakesuspend-toggle -- product fake-suspend policy. Runs as the
   # Korri runtime user (dispatched by inputd) and owns ONLY the session
   # half of suspend/resume: blank the screen via Korri's own compositor
@@ -333,14 +385,13 @@ in
 
   # The guest sees DRM and input devices that already exist in the
   # ROCKNIX-hosted device namespace. Host-bound nodes do not emit a fresh
-  # guest `add` event, so the guest udev rules above never fire for them.
-  # Reprocess both subsystems before greetd starts: DRM so logind attaches
-  # card0 to seat0 (rootless Sway can acquire DRM), and input so the
-  # `setfacl u:${runtime.user}:rw` rule lands on the bare button nodes
-  # (pmic_pwrkey/pmic_resin/gpio-keys). Without the input re-trigger, inputd
-  # retry-loops on EACCES forever and the power/lid buttons never dispatch.
-  # Running before greetd keeps the re-trigger off the live InputPlumber
-  # session.
+  # guest `add` event, so the guest udev rules above may never fire for them.
+  # Reprocess both subsystems when the guest's sysfs permits it, then apply a
+  # direct ACL fallback for DRM/input/tty nodes. Sobo exposes DRM uevent files
+  # read-only inside nspawn, so udev re-trigger failure is expected and must
+  # not block greetd or the compositor.
+  # Running before greetd keeps any successful re-trigger off the live
+  # InputPlumber session and ensures wlroots direct-session tty ACLs exist.
   systemd.services.korri-rocknix-seat-device-trigger = {
     description = "Apply Korri RockNIX seat + input udev metadata";
     wantedBy = [ "multi-user.target" ];
@@ -348,10 +399,18 @@ in
     before = [ "greetd.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = [
-        "${pkgs.systemd}/bin/udevadm trigger --subsystem-match=drm --action=change"
-        "${pkgs.systemd}/bin/udevadm trigger --subsystem-match=input --action=change"
-      ];
+      ExecStart = korriRocknixSeatDeviceSetup;
+      RemainAfterExit = true;
+    };
+  };
+
+  systemd.services.korri-rocknix-device-acl-fallback = {
+    description = "Re-apply Korri SM8550 device ACLs after greetd opens the TTY";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "greetd.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = korriRocknixDeviceAclFallback;
       RemainAfterExit = true;
     };
   };
@@ -478,6 +537,12 @@ in
         CEMU_AFFINITY_MASK = sm8550.performance.cemuAffinityMask;
         WLR_NO_HARDWARE_CURSORS = "1";
         WLR_LIBINPUT_NO_DEVICES = "1";
+        # Sobo's host-bound DRM node cannot be attached to logind's seat from
+        # inside the guest because the relevant sysfs uevent path is read-only.
+        # Use wlroots' direct session path; the setup units above grant the
+        # runtime user access to /dev/dri, /dev/input, and the active ttys.
+        WLR_SESSION = "direct";
+        LIBSEAT_BACKEND = "builtin";
         USER = runtime.user;
       };
 
