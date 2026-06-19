@@ -1,4 +1,8 @@
 {
+  nixpkgs-mesa ? null,
+}:
+
+{
   config,
   lib,
   pkgs,
@@ -14,13 +18,50 @@ let
     # nixpkgs marks libretro-ppsspp as aarch64-linux-bad even though PPSSPP is
     # the only first-party Libretro PSP core and Sobo's SM8550 target should be
     # able to build/run it. Keep the override local to this plugin-owned bundle.
-    meta = old.meta // { badPlatforms = [ ]; };
+    meta = old.meta // {
+      badPlatforms = [ ];
+    };
   });
+
+  system = pkgs.stdenv.hostPlatform.system;
+  cpuName = pkgs.stdenv.hostPlatform.parsed.cpu.name;
+  canPinTurnip = pkgs.stdenv.hostPlatform.isAarch64 && nixpkgs-mesa != null;
+  mesaTurnip = if canPinTurnip then nixpkgs-mesa.legacyPackages.${system}.mesa else null;
+  turnipIcd =
+    if canPinTurnip then "${mesaTurnip}/share/vulkan/icd.d/freedreno_icd.${cpuName}.json" else null;
+
+  retroarchBinary =
+    if canPinTurnip then
+      pkgs.symlinkJoin {
+        name = "retroarch-bare-korri-turnip-${pkgs.retroarch-bare.version or "unknown"}";
+        pname = "retroarch-bare";
+        version = pkgs.retroarch-bare.version or "unknown";
+        paths = [ pkgs.retroarch-bare ];
+        nativeBuildInputs = [ pkgs.makeWrapper ];
+        postBuild = ''
+          rm -f "$out/bin/retroarch"
+          makeWrapper ${pkgs.retroarch-bare}/bin/retroarch "$out/bin/retroarch" \
+            --set VK_DRIVER_FILES ${turnipIcd} \
+            --set VK_ICD_FILENAMES ${turnipIcd}
+        '';
+        passthru = (pkgs.retroarch-bare.passthru or { }) // {
+          inherit mesaTurnip turnipIcd;
+          turnipPinned = true;
+          unwrapped = pkgs.retroarch-bare;
+        };
+        meta = (pkgs.retroarch-bare.meta or { }) // {
+          description = "${
+            pkgs.retroarch-bare.meta.description or "RetroArch"
+          } (Korri: Turnip pinned to Mesa ${mesaTurnip.version})";
+        };
+      }
+    else
+      pkgs.retroarch-bare;
 
   retroarchKiosk = pkgs.symlinkJoin {
     name = "korri-retroarch";
     paths = [
-      pkgs.retroarch-bare
+      retroarchBinary
       pkgs.libretro.mgba
       pkgs.libretro.mupen64plus
       pkgs.libretro.genesis-plus-gx
@@ -43,7 +84,10 @@ let
         ppssppCore
         pkgs.libretro.bsnes
       ];
+      inherit mesaTurnip turnipIcd;
+      turnipPinned = canPinTurnip;
       unwrapped = pkgs.retroarch-bare;
+      wrapped = retroarchBinary;
     };
   };
 in

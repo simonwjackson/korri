@@ -266,40 +266,58 @@ let
           cfg.environment.etc."korri/cores/bsnes_libretro.so".source or ""
         )
       ))
-      (check "${name}: compositor RetroArch closure contains mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes cores" (
-        let
-          wrappers = findRetroarchWrappers compositor.path;
-          cores = retroarchCoresFor compositor.path;
-        in
-        builtins.length wrappers == 1
-        && builtins.length cores == 9
-        && hasCore "mgba" cores
-        && hasCore "mupen64plus-next" cores
-        && hasCore "genesis-plus-gx" cores
-        && hasCore "mednafen-pce-fast" cores
-        && hasCore "mesen" cores
-        && hasCore "np2kai" cores
-        && hasCore "pcsx-rearmed" cores
-        && hasCore "ppsspp" cores
-        && hasCore "bsnes" cores
-      ))
-      (check "${name}: sessiond RetroArch closure contains mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes cores" (
+      (check
+        "${name}: compositor RetroArch closure contains mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes cores"
+        (
+          let
+            wrappers = findRetroarchWrappers compositor.path;
+            cores = retroarchCoresFor compositor.path;
+          in
+          builtins.length wrappers == 1
+          && builtins.length cores == 9
+          && hasCore "mgba" cores
+          && hasCore "mupen64plus-next" cores
+          && hasCore "genesis-plus-gx" cores
+          && hasCore "mednafen-pce-fast" cores
+          && hasCore "mesen" cores
+          && hasCore "np2kai" cores
+          && hasCore "pcsx-rearmed" cores
+          && hasCore "ppsspp" cores
+          && hasCore "bsnes" cores
+        )
+      )
+      (check
+        "${name}: sessiond RetroArch closure contains mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes cores"
+        (
+          let
+            sessiondPath = sessiondUnit.path or [ ];
+            wrappers = findRetroarchWrappers sessiondPath;
+            cores = retroarchCoresFor sessiondPath;
+          in
+          builtins.length wrappers == 1
+          && builtins.length cores == 9
+          && hasCore "mgba" cores
+          && hasCore "mupen64plus-next" cores
+          && hasCore "genesis-plus-gx" cores
+          && hasCore "mednafen-pce-fast" cores
+          && hasCore "mesen" cores
+          && hasCore "np2kai" cores
+          && hasCore "pcsx-rearmed" cores
+          && hasCore "ppsspp" cores
+          && hasCore "bsnes" cores
+        )
+      )
+      (check "${name}: RetroArch is pinned to a Mesa >= 26 Turnip ICD" (
         let
           sessiondPath = sessiondUnit.path or [ ];
-          wrappers = findRetroarchWrappers sessiondPath;
-          cores = retroarchCoresFor sessiondPath;
+          wrapper = lib.findFirst (pkg: (pkg.passthru or { }) ? cores) null sessiondPath;
+          icd = wrapper.passthru.turnipIcd or "";
+          mesaVersion = (wrapper.passthru.mesaTurnip or { }).version or "0";
         in
-        builtins.length wrappers == 1
-        && builtins.length cores == 9
-        && hasCore "mgba" cores
-        && hasCore "mupen64plus-next" cores
-        && hasCore "genesis-plus-gx" cores
-        && hasCore "mednafen-pce-fast" cores
-        && hasCore "mesen" cores
-        && hasCore "np2kai" cores
-        && hasCore "pcsx-rearmed" cores
-        && hasCore "ppsspp" cores
-        && hasCore "bsnes" cores
+        wrapper != null
+        && (wrapper.passthru.turnipPinned or false)
+        && lib.hasSuffix "share/vulkan/icd.d/freedreno_icd.aarch64.json" icd
+        && lib.versionAtLeast mesaVersion "26"
       ))
       # Mesa 25.2.6 Turnip is pathologically slow for Ryujinx on Adreno
       # (validated on bandai 2026-06-11: 4-vs-60-FPS class delta, see
