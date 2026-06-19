@@ -11,9 +11,8 @@
  * Data comes from PicoLibrary via atoms (never a fixture import) — the screen
  * reads `picoGamesAtom` / `picoShowcaseAtom` through `PicoData`.
  */
-import { useEffect, useState } from "react"
 import {
-  picoGamesAtom,
+  picoHeroAtom,
   picoShowcaseAtom,
 } from "../data/pico-library-atoms"
 import type { PicoGame } from "../fixtures"
@@ -22,92 +21,78 @@ import { PicoData } from "./PicoData"
 import { PicoCart, PicoIcon, Screen } from "./kit"
 
 /**
- * Content-first home: one big featured game that auto-rotates, with a live
- * coverflow strip underneath. Art is the hero; text is a kicker + title + one
- * tag line. No list, no taxonomy.
+ * Spotlight Home was lifted to the atomic-design page layer
+ * (pages/showcase/SpotlightHome) and decomposed into template / organisms /
+ * molecules / atoms — the first vertical slice of the refactor. Re-exported here
+ * so screen-catalog's `Showcase.SpotlightHomeScreen` keeps resolving while the
+ * rest of the group still lives in this file.
  */
-export function SpotlightHomeScreen() {
+export { SpotlightHome as SpotlightHomeScreen } from "../pages/showcase/SpotlightHome"
+
+/**
+ * Single-game "jump back in" hero: the one game you last played, big and
+ * cinematic. Full-bleed pixelized key art + logo + one CONTINUE — the most
+ * content-first surface there is (no rails, no list, one decision).
+ */
+export function LastPlayedScreen() {
   return (
-    <PicoData atom={picoGamesAtom} title="PICO ▸ SPOTLIGHT">
-      {games => <SpotlightBody allGames={games} />}
+    <PicoData atom={picoHeroAtom} title="PICO ▸ CONTINUE">
+      {game => <LastPlayedBody game={game} />}
     </PicoData>
   )
 }
 
-function SpotlightBody({
-  allGames,
+function LastPlayedBody({
+  game,
 }: {
-  readonly allGames: readonly PicoGame[]
+  readonly game: PicoGame | undefined
 }) {
-  const games = allGames.slice(0, 8)
-  const [index, setIndex] = useState(0)
-  useEffect(() => {
-    if (games.length === 0) return
-    const timer = setInterval(() => {
-      setIndex(value => (value + 1) % games.length)
-    }, 2600)
-    return () => clearInterval(timer)
-  }, [games.length])
-
-  const hero = games[index] ?? allGames[0]
-  if (!hero) return null
-  const played = hero.lastPlayedLabel !== null
-
+  if (!game) {
+    return (
+      <Screen title="PICO ▸ CONTINUE" hints={[{ key: "b", label: "BACK" }]}>
+        <div className="pcLast-empty">Nothing played yet.</div>
+      </Screen>
+    )
+  }
+  const backdrop = game.heroUrl ?? game.art
+  const meta = [game.lastPlayedLabel, game.playtimeLabel]
+    .filter(Boolean)
+    .join(" · ")
   return (
     <Screen
-      title="PICO ▸ SPOTLIGHT"
+      title="PICO ▸ CONTINUE"
       hints={[
-        { key: "a", label: played ? "CONTINUE" : "PLAY" },
+        { key: "a", label: "CONTINUE" },
         { key: "y", label: "INFO" },
-        { key: "b", label: "BACK" },
+        { key: "b", label: "LIBRARY" },
       ]}
       className="pad-0"
     >
-      <div className="pcShow-spot">
-        {hero.heroUrl ? (
+      <div className="pcLast">
+        {backdrop ? (
           <PicoArtImage
-            key={`bg-${hero.id}`}
-            src={hero.heroUrl}
+            src={backdrop}
             ratio={16 / 9}
-            scale={2.6}
-            className="pcShow-spot-herobg"
+            scale={2.8}
+            className="pcLast-bg"
           />
         ) : null}
-        <div className="pcShow-spot-bg" />
-        {/* key remounts the hero each rotation so the pop-in re-fires */}
-        <div className="pcShow-spot-hero" key={hero.id}>
-          <div className="pcShow-spot-art">
-            <PicoCart game={hero} showFav={false} />
-          </div>
-          <div className="pcShow-spot-info">
-            <div className="pcShow-kicker">▸ FEATURED</div>
-            {hero.logoUrl ? (
-              <PicoArtImage
-                src={hero.logoUrl}
-                fit="contain"
-                scale={2.4}
-                className="pcShow-logo"
-              />
-            ) : (
-              <h1 className="pc-title pc-t2 pcShow-spot-title">{hero.title}</h1>
-            )}
-            <div className="pcShow-spot-tags">
-              {hero.genre.toUpperCase()} · {hero.developer.toUpperCase()}
-            </div>
-            <span className="pcShow-play">
-              <PicoIcon name="play" /> {played ? "CONTINUE" : "PLAY"}
-            </span>
-          </div>
-        </div>
-        <div className="pcShow-rail">
-          {games.map((game, idx) => (
-            <div
-              key={game.id}
-              className={`pcShow-rail-cart ${idx === index ? "on" : ""}`}
-            >
-              <PicoCart game={game} showFav={false} />
-            </div>
-          ))}
+        <div className="pcLast-inner">
+          <div className="pcLast-kicker">▸ JUMP BACK IN</div>
+          {game.logoUrl ? (
+            <PicoArtImage
+              src={game.logoUrl}
+              fit="contain"
+              scale={3}
+              className="pcLast-logo"
+            />
+          ) : (
+            <h1 className="pc-title pc-t3 pcLast-title">{game.title}</h1>
+          )}
+          {meta ? <div className="pcLast-meta">LAST PLAYED {meta}</div> : null}
+          <span className="pcLast-cta">
+            <PicoIcon name="play" /> CONTINUE
+          </span>
         </div>
       </div>
     </Screen>

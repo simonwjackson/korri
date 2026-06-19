@@ -19,8 +19,10 @@ import * as Detail from "./screens/DetailScreens"
 import * as Future from "./screens/FutureScreens"
 import * as InGame from "./screens/InGameScreens"
 import * as Library from "./screens/LibraryScreens"
+import * as Moments from "./screens/MomentsScreens"
 import * as MultiDevice from "./screens/MultiDeviceScreens"
 import * as Multiplayer from "./screens/MultiplayerScreens"
+import * as Panels from "./screens/PanelsScreens"
 import * as Personality from "./screens/PersonalityScreens"
 import * as Session from "./screens/SessionScreens"
 import * as Settings from "./screens/SettingsScreens"
@@ -37,8 +39,10 @@ import "./screens/detail.css"
 import "./screens/future.css"
 import "./screens/ingame.css"
 import "./screens/library.css"
+import "./screens/moments.css"
 import "./screens/multidevice.css"
 import "./screens/multiplayer.css"
+import "./screens/panels.css"
 import "./screens/personality.css"
 import "./screens/session.css"
 import "./screens/settings.css"
@@ -60,6 +64,7 @@ export const PICO_GROUPS: readonly string[] = [
   "Settings",
   "Multi-Device",
   "Multiplayer",
+  "Panels",
   "System",
   "Future",
   "Data",
@@ -80,6 +85,83 @@ export const PICO_SCREENS: readonly PicoScreen[] = [
     name: "For You — Shelves (animated)",
     note: "Curated contextual rows; no system picker / A–Z",
     render: () => <Showcase.ForYouShelvesScreen />,
+  },
+  {
+    id: "show-lastplayed",
+    group: "Showcase",
+    name: "Last Played (big)",
+    note: "Single-game cinematic 'jump back in' hero",
+    render: () => <Showcase.LastPlayedScreen />,
+  },
+  {
+    id: "show-resume",
+    group: "Showcase",
+    name: "Resume — Save State",
+    note: "Pick up at your exact moment: progress + save chip",
+    render: () => <Moments.ResumeScreen />,
+  },
+  {
+    id: "show-tonight",
+    group: "Showcase",
+    name: "Tonight's Pick",
+    note: "One confident recommendation with a reason + shuffle",
+    render: () => <Moments.TonightPickScreen />,
+  },
+  {
+    id: "show-quick",
+    group: "Showcase",
+    name: "Quick Session (20 min)",
+    note: "Content-first by available time, not taxonomy",
+    render: () => <Moments.QuickSessionScreen />,
+  },
+  {
+    id: "show-friend",
+    group: "Showcase",
+    name: "Friend Is Playing",
+    note: "Social hero: jump into a friend's game",
+    render: () => <Moments.FriendPlayingScreen />,
+  },
+  {
+    id: "show-victory",
+    group: "Showcase",
+    name: "Victory / Achievement",
+    note: "The payoff moment + what's next",
+    render: () => <Moments.VictoryScreen />,
+  },
+  {
+    id: "show-fresh",
+    group: "Showcase",
+    name: "Fresh Install (ready)",
+    note: "Download-just-finished payoff: NEW flash + big PLAY",
+    render: () => <Moments.FreshInstallScreen />,
+  },
+  {
+    id: "show-welcome",
+    group: "Showcase",
+    name: "Welcome Back",
+    note: "Pixl-led re-entry after time away + what you missed",
+    render: () => <Moments.WelcomeBackScreen />,
+  },
+  {
+    id: "show-finish",
+    group: "Showcase",
+    name: "Finish It (one boss left)",
+    note: "Completion nudge for a nearly-done game",
+    render: () => <Moments.FinishItScreen />,
+  },
+  {
+    id: "show-backlog",
+    group: "Showcase",
+    name: "Backlog Rescue",
+    note: "Owned but never played — gentle nudge + dismiss",
+    render: () => <Moments.BacklogScreen />,
+  },
+  {
+    id: "show-mood",
+    group: "Showcase",
+    name: "Mood Picker",
+    note: "Curate by feeling (Cozy / Intense / Weird), not genre",
+    render: () => <Moments.MoodPickerScreen />,
   },
 
   // ── Personality (character experiments — mascot, rituals, attract) ──────
@@ -576,6 +658,43 @@ export const PICO_SCREENS: readonly PicoScreen[] = [
     name: "Inline Seat Strip",
     note: "The no-hub placement: persistent seat strip on home",
     render: () => <Multiplayer.InlineStripScreen />,
+  },
+
+  // ── Panels (side panels that PUSH the UI aside, not overlay) ─────────────
+  {
+    id: "pan-quickmenu",
+    group: "Panels",
+    name: "Quick Menu (control center)",
+    note: "Right drawer pushes home left; content reflows narrower",
+    render: () => <Panels.QuickMenuPanelScreen />,
+  },
+  {
+    id: "pan-quicklook",
+    group: "Panels",
+    name: "Game Quick-Look",
+    note: "Focus a cart → detail panel; rail compresses (master-detail)",
+    render: () => <Panels.GameQuickLookPanelScreen />,
+  },
+  {
+    id: "pan-friends",
+    group: "Panels",
+    name: "Friends / Party Rail",
+    note: "Right drawer of presence; grid slides left",
+    render: () => <Panels.FriendsPanelScreen />,
+  },
+  {
+    id: "pan-filters",
+    group: "Panels",
+    name: "Filters & Collections",
+    note: "Left drawer; the library grid reflows live as you filter",
+    render: () => <Panels.FiltersPanelScreen />,
+  },
+  {
+    id: "pan-nowplaying",
+    group: "Panels",
+    name: "Now-Playing Dock",
+    note: "In-session sidebar pushes the game aside (not a full pause)",
+    render: () => <Panels.NowPlayingPanelScreen />,
   },
 
   // ── System ─────────────────────────────────────────────────────────────
