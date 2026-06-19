@@ -2,10 +2,10 @@
  * Korri's readable canonical library schema.
  *
  * Persisted YAML uses the human-curatable top-level sections
- * `host`, `storage`, `providers`, `provider-links`, `systems`, `apps`,
+ * `host`, `storage`, `providers`, `provider-links`, `systems`, `launchers`,
  * `runtimes`, `profiles`, `collections`, `users`, and `library`. This is the
- * application contract: old canonical collection names (`config`,
- * `games`, `launchers`, `modules`) are intentionally not declared.
+ * application contract: old canonical collection names (`apps`, `config`,
+ * `games`, `modules`) are intentionally not declared.
  *
  * ProseQL document sources are map-keyed internally. Korri's `host`
  * section is the one readable singleton block, so this module registers
@@ -116,7 +116,7 @@ export const collectionsSchema = {
   providers: keyedCollection(ProviderPayload),
   "provider-links": keyedCollection(ProviderLinkPayload),
   systems: keyedCollection(SystemPayload),
-  apps: keyedCollection(AppPayload),
+  launchers: keyedCollection(AppPayload),
   runtimes: keyedCollection(RuntimePayload),
   profiles: keyedCollection(ProfilePayload),
   collections: keyedCollection(CollectionPayload),
@@ -138,7 +138,7 @@ const strictMapPayloadSchemas = {
   providers: ProviderPayload,
   "provider-links": ProviderLinkPayload,
   systems: SystemPayload,
-  apps: AppPayload,
+  launchers: AppPayload,
   runtimes: RuntimePayload,
   profiles: ProfilePayload,
   collections: CollectionPayload,
@@ -319,7 +319,9 @@ export interface KorriLibraryDb {
   /** @deprecated legacy collection removed from canonical config. */
   readonly sources: CollectionApi<SourcePayload>
   readonly systems: CollectionApi<Schema.Schema.Type<typeof SystemPayload>>
+  /** @deprecated old persisted collection; not declared in canonical config. */
   readonly apps: CollectionApi<Schema.Schema.Type<typeof AppPayload>>
+  readonly launchers: CollectionApi<Schema.Schema.Type<typeof AppPayload>>
   readonly runtimes: CollectionApi<Schema.Schema.Type<typeof RuntimePayload>>
   readonly profiles: CollectionApi<Schema.Schema.Type<typeof ProfilePayload>>
   readonly collections: CollectionApi<
@@ -330,8 +332,6 @@ export interface KorriLibraryDb {
 
   /** @deprecated old persisted collection; not declared in canonical config. */
   readonly config: CollectionApi<Schema.Schema.Type<typeof GlobalConfigPayload>>
-  /** @deprecated old persisted collection; not declared in canonical config. */
-  readonly launchers: CollectionApi<Schema.Schema.Type<typeof LauncherPayload>>
   /** @deprecated old persisted collection; not declared in canonical config. */
   readonly modules: CollectionApi<Schema.Schema.Type<typeof ModulePayload>>
   /** @deprecated old persisted collection; not declared in canonical config. */
@@ -623,8 +623,8 @@ const withCanonicalCollectionGuards = (
   ...db,
   library: withValidatedLibraryCollection(db.library),
   sources: removedLegacyCollection("sources"),
+  apps: removedLegacyCollection("apps"),
   config: removedLegacyCollection("config"),
-  launchers: removedLegacyCollection("launchers"),
   modules: removedLegacyCollection("modules"),
   games: removedLegacyCollection("games"),
   artifacts: sidecars.artifacts,

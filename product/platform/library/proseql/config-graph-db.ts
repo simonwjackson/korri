@@ -77,7 +77,7 @@ export interface KorriConfigGraphRoot {
 
 /**
  * Data collections an unmarked removable config root may contribute. The
- * execution-privileged collections (`host`, `apps`, `runtimes`, `profiles`,
+ * execution-privileged collections (`host`, `launchers`, `runtimes`, `profiles`,
  * …) stay frozen to trusted static roots; full-power cards require the
  * (future) trusted-marker escalation.
  */
@@ -343,14 +343,14 @@ const withConfigGraphReadOnlyGuards = (
     ),
     sources: removedLegacyCollection("sources"),
     systems: readOnlyCollection(db.systems, "systems"),
-    apps: readOnlyCollection(db.apps, "apps"),
+    apps: removedLegacyCollection("apps"),
+    launchers: readOnlyCollection(db.launchers, "launchers"),
     runtimes: readOnlyCollection(db.runtimes, "runtimes"),
     profiles: readOnlyCollection(db.profiles, "profiles"),
     collections: readOnlyCollection(db.collections, "collections"),
     users: readOnlyCollection(db.users, "users"),
     library: readOnlyCollection(db.library, "library"),
     config: removedLegacyCollection("config"),
-    launchers: removedLegacyCollection("launchers"),
     modules: removedLegacyCollection("modules"),
     games: removedLegacyCollection("games"),
     artifacts: readOnlyRecordsCollection(

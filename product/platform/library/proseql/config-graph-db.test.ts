@@ -63,9 +63,9 @@ describe("makeKorriConfigGraphConfig", () => {
   it("declares the same canonical collections as the writable db", () => {
     const config = makeKorriConfigGraphConfig([{ root: "/x" }])
     expect(Object.keys(config.collections).sort()).toEqual([
-      "apps",
       "collections",
       "host",
+      "launchers",
       "library",
       "profiles",
       "provider-links",
@@ -85,8 +85,9 @@ describe("openKorriConfigGraph — empty graph", () => {
         Effect.gen(function* () {
           const db = yield* openKorriConfigGraph({ roots: [] })
           return {
-            apps: (yield* Effect.promise(() => db.apps.query().runPromise))
-              .length,
+            launchers: (yield* Effect.promise(
+              () => db.launchers.query().runPromise,
+            )).length,
             library: (yield* Effect.promise(
               () => db.library.query().runPromise,
             )).length,
@@ -94,7 +95,7 @@ describe("openKorriConfigGraph — empty graph", () => {
         }),
       ),
     )
-    expect(counts).toEqual({ apps: 0, library: 0 })
+    expect(counts).toEqual({ launchers: 0, library: 0 })
   })
 
   it("treats empty roots with no opt-in files as a valid empty graph", async () => {
@@ -135,7 +136,7 @@ describe("openKorriConfigGraph — ordered overlay", () => {
           "  snes9x:",
           "    kind: libretro-core",
           "    path: /cores/snes9x_libretro.so",
-          "apps:",
+          "launchers:",
           `  "${KORRI_RETROARCH_APP_ID}":`,
           `    kind: "${KORRI_RETROARCH_PLUGIN_ID}"`,
           "    command: retroarch",
@@ -179,7 +180,7 @@ describe("openKorriConfigGraph — ordered overlay", () => {
               launchIntegrations: [retroarchReadableLaunchIntegration],
             })
             return {
-              app: yield* db.apps.findById(KORRI_RETROARCH_APP_ID),
+              app: yield* db.launchers.findById(KORRI_RETROARCH_APP_ID),
               item: yield* db.library.findById("zelda"),
               launch: yield* repository.resolveLaunchForPlayable("zelda"),
             }
@@ -199,7 +200,7 @@ describe("openKorriConfigGraph — ordered overlay", () => {
       await writeFile(
         join(rootA!, "korri.yaml"),
         [
-          "apps:",
+          "launchers:",
           `  "${KORRI_RETROARCH_APP_ID}":`,
           `    kind: "${KORRI_RETROARCH_PLUGIN_ID}"`,
           "    command: retroarch",
@@ -220,7 +221,7 @@ describe("openKorriConfigGraph — ordered overlay", () => {
       await writeFile(
         join(rootB!, "overlay.korri.yaml"),
         [
-          "apps:",
+          "launchers:",
           `  "${KORRI_RETROARCH_APP_ID}":`,
           "    command: retroarch-override",
           "    launch:",
@@ -240,7 +241,7 @@ describe("openKorriConfigGraph — ordered overlay", () => {
             const db = yield* openKorriConfigGraph({
               roots: [{ root: rootA! }, { root: rootB! }],
             })
-            return yield* db.apps.findById(KORRI_RETROARCH_APP_ID)
+            return yield* db.launchers.findById(KORRI_RETROARCH_APP_ID)
           }),
         ),
       )

@@ -25,9 +25,9 @@ describe("makeKorriLibraryDbConfig", () => {
     const config = makeKorriLibraryDbConfig("/tmp/x")
     const names = Object.keys(config.collections).sort()
     expect(names).toEqual([
-      "apps",
       "collections",
       "host",
+      "launchers",
       "library",
       "profiles",
       "provider-links",
@@ -37,9 +37,9 @@ describe("makeKorriLibraryDbConfig", () => {
       "systems",
       "users",
     ])
+    expect(names).not.toContain("apps")
     expect(names).not.toContain("config")
     expect(names).not.toContain("games")
-    expect(names).not.toContain("launchers")
     expect(names).not.toContain("modules")
   })
 
@@ -83,8 +83,9 @@ describe("openKorriLibraryDb — empty root", () => {
               systems: (yield* Effect.promise(
                 () => db.systems.query().runPromise,
               )).length,
-              apps: (yield* Effect.promise(() => db.apps.query().runPromise))
-                .length,
+              launchers: (yield* Effect.promise(
+                () => db.launchers.query().runPromise,
+              )).length,
               runtimes: (yield* Effect.promise(
                 () => db.runtimes.query().runPromise,
               )).length,
@@ -109,7 +110,7 @@ describe("openKorriLibraryDb — empty root", () => {
         providers: 0,
         providerLinks: 0,
         systems: 0,
-        apps: 0,
+        launchers: 0,
         runtimes: 0,
         profiles: 0,
         collections: 0,
@@ -141,7 +142,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "systems:",
           "  genesis:",
           "    name: Sega Genesis",
-          "apps:",
+          "launchers:",
           "  retroarch:",
           "    command: retroarch",
           '    args: ["-L", "{runtime.path}", "{content.path}"]',
@@ -278,7 +279,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "  snes9x:",
           "    kind: libretro-core",
           "    path: /cores/snes9x_libretro.so",
-          "apps:",
+          "launchers:",
           "  retroarch:",
           "    command: retroarch",
           '    args: ["-L", "{runtime.path}", "{content.path}"]',
@@ -311,7 +312,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             const repository = createLibraryRepository(db)
             return {
-              app: yield* db.apps.findById("retroarch"),
+              app: yield* db.launchers.findById("retroarch"),
               launch: yield* repository.resolveLaunchForPlayable("zelda"),
               localMoonlight:
                 yield* repository.resolveLocalLauncherPolicy("moonlight"),
@@ -402,7 +403,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
       expect(outbox).toContain('providers:\n  "@korri:roms":')
       expect(outbox).toContain("library:\n  sonic-the-hedgehog:")
       expect(outbox).not.toContain("games:")
-      expect(outbox).not.toContain("launchers:")
+      expect(outbox).not.toContain("apps:")
       expect(outbox).not.toContain("modules:")
       expect(outbox).not.toContain("config:")
     })
@@ -410,12 +411,12 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
 })
 
 describe("openKorriLibraryDb — platform-default collision guard", () => {
-  it("rejects platform-default app records that duplicate user library app records", async () => {
+  it("rejects platform-default launcher records that duplicate user library launcher records", async () => {
     await withTempRoot(async root => {
       await writeFile(
         join(root, "00-korri-platform-defaults.yaml"),
         [
-          "apps:",
+          "launchers:",
           "  retroarch:",
           "    launch:",
           "      with:",
@@ -430,7 +431,7 @@ describe("openKorriLibraryDb — platform-default collision guard", () => {
       await writeFile(
         join(root, "library.yaml"),
         [
-          "apps:",
+          "launchers:",
           "  retroarch:",
           "    command: retroarch",
           '    args: ["-L", "{runtime.path}", "{content.path}"]',
@@ -448,7 +449,7 @@ describe("openKorriLibraryDb — platform-default collision guard", () => {
 
 describe("openKorriLibraryDb — strict-mode rejections", () => {
   it("rejects old persisted top-level collection keys", async () => {
-    for (const key of ["games", "launchers", "modules", "config"] as const) {
+    for (const key of ["apps", "games", "modules", "config"] as const) {
       await withTempRoot(async root => {
         await mkdir(root, { recursive: true })
         await writeFile(

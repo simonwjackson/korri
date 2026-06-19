@@ -327,7 +327,7 @@ export function createLibraryRepository(
         }),
       ),
     upsertSystem: system => upsertSystemWithCoreRuntime(db, system),
-    upsertApp: app => upsert(db.apps, app),
+    upsertApp: app => upsert(db.launchers, app),
     upsertRuntime: runtime => upsert(db.runtimes, runtime),
     upsertProfile: profile => upsert(db.profiles, profile),
     upsertUser: user => upsert(db.users, user),
@@ -655,7 +655,7 @@ function upsertLegacyLauncher(
     ...(launcher.argsAppend ? { argsAppend: launcher.argsAppend } : {}),
     ...(launcher.patches ? { patches: launcher.patches } : {}),
   }
-  return upsert(db.apps, app).pipe(Effect.as(launcher))
+  return upsert(db.launchers, app).pipe(Effect.as(launcher))
 }
 
 function upsertLegacyModule(
@@ -1031,7 +1031,7 @@ function loadReadableSnapshot(
         readCollection(db.providers),
         readCollection(db["provider-links"]),
         readCollection(db.storage),
-        readCollection(db.apps),
+        readCollection(db.launchers),
         readCollection(db.runtimes),
         readCollection(db.profiles),
         readCollection(db.library),
