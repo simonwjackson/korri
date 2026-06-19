@@ -15,6 +15,7 @@ import { resolveClassNames } from "./classnames"
 import { DeviceLab } from "./device-lab"
 import { Gallery } from "./Gallery"
 import type { ThemeWorkshopConfig } from "./types"
+import { Parts } from "./Parts"
 import { setViewMode, useViewMode } from "./view-store"
 import { Wall } from "./Wall"
 import { WorkshopControls } from "./WorkshopControls"
@@ -69,6 +70,8 @@ export function ThemeWorkshop({
           }}
           cn={cn}
         />
+      ) : view === "parts" ? (
+        <Parts stories={config.stories ?? []} cn={cn} />
       ) : (
         <DeviceLab
           storageKey={config.id}
@@ -90,6 +93,7 @@ export function ThemeWorkshop({
         onSelect={select}
         cn={cn}
         controls={controls}
+        hasStories={(config.stories?.length ?? 0) > 0}
         onCue={config.onCue}
       />
     </div>

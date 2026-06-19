@@ -12,7 +12,13 @@
 import { type ReactNode, useEffect, useState } from "react"
 import { cx, type ResolvedClassNames } from "./classnames"
 import type { CueKind, Screen } from "./types"
-import { toggleViewMode, useViewMode } from "./view-store"
+import { cycleViewMode, useViewMode, type ViewMode } from "./view-store"
+
+const VIEW_LABEL: Record<ViewMode, string> = {
+  one: "◱ ONE",
+  all: "▦ ALL",
+  parts: "⬢ PARTS",
+}
 
 export function Gallery({
   screens,
@@ -21,6 +27,7 @@ export function Gallery({
   onSelect,
   cn,
   controls,
+  hasStories,
   onCue,
 }: {
   readonly screens: readonly Screen[]
@@ -29,6 +36,7 @@ export function Gallery({
   readonly onSelect: (id: string) => void
   readonly cn: ResolvedClassNames
   readonly controls?: ReactNode
+  readonly hasStories?: boolean
   readonly onCue?: (kind: CueKind) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -39,6 +47,11 @@ export function Gallery({
   )
   const active = screens[index] ?? screens[0]
   const cue = (kind: CueKind) => onCue?.(kind)
+  const viewOrder: readonly ViewMode[] = hasStories
+    ? ["one", "all", "parts"]
+    : ["one", "all"]
+  const nextView =
+    viewOrder[(viewOrder.indexOf(view) + 1) % viewOrder.length] ?? "one"
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -151,14 +164,14 @@ export function Gallery({
         <button
           type="button"
           className={cx(cn.view, view)}
-          aria-label="toggle one / all screens"
-          title="ONE screen (device lab) vs ALL screens (montage)"
+          aria-label="cycle view"
+          title="device lab · all-screens montage · component catalog"
           onClick={() => {
-            toggleViewMode()
+            cycleViewMode(viewOrder)
             cue("toggle")
           }}
         >
-          {view === "all" ? "◱ ONE" : "▦ ALL"}
+          {VIEW_LABEL[nextView]}
         </button>
         <button
           type="button"

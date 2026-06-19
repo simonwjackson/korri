@@ -16,6 +16,7 @@ import type {
 import { picoCue } from "./pico-cue"
 import { usePicoControls } from "./pico-controls"
 import { PICO_GROUPS, PICO_SCREENS } from "./screen-catalog"
+import { PICO_STORIES } from "./stories"
 import "./pico-prototype.css"
 
 // Calibrated seed exported from the device-lab desk. SCALE (px/mm) is
@@ -122,6 +123,7 @@ export const picoConfig: ThemeWorkshopConfig = {
   scaleVarPrefix: "pico",
   screens: PICO_SCREENS,
   groups: PICO_GROUPS,
+  stories: PICO_STORIES,
   // Pico's existing CSS drives the chrome; the kit emits these exact classes
   // so pico-prototype.css applies unchanged (no neutral wk-* fallback used).
   // Pico skins only the CANVAS — the device-lab frame where its screens render

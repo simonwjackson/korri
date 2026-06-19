@@ -18,6 +18,7 @@
  * chrome defaults); a theme overrides via its own class names.
  */
 export { Gallery } from "./Gallery"
+export { Parts } from "./Parts"
 export { ThemeWorkshop } from "./ThemeWorkshop"
 export { Wall } from "./Wall"
 export { WorkshopControls } from "./WorkshopControls"
@@ -32,6 +33,8 @@ export {
 export type {
   CueKind,
   Screen,
+  Story,
+  StoryLayer,
   ThemeWorkshopConfig,
   WorkshopClassNames,
   WorkshopControl,

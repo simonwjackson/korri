@@ -26,6 +26,23 @@ export interface Screen {
   readonly render: () => ReactNode
 }
 
+/** The atomic-design layers, ordered smallest → largest for the catalog. */
+export type StoryLayer = "atom" | "molecule" | "organism" | "template"
+
+/**
+ * One component story for the "parts" catalog view — a component (optionally a
+ * row of variants) rendered in isolation, tagged with its atomic layer. The
+ * workshop renders it inside the theme's own screen scope (so its tokens/skin
+ * resolve), with neutral catalog chrome around it. Homegrown; no Storybook.
+ */
+export interface Story {
+  readonly id: string
+  readonly layer: StoryLayer
+  readonly name: string
+  readonly note?: string
+  readonly render: () => ReactNode
+}
+
 /**
  * Skin hooks for the generic chrome. Each value is a class name the kit applies
  * to that element; omit one to get the neutral `wk-*` default. State tokens
@@ -125,6 +142,9 @@ export interface ThemeWorkshopConfig {
   /** The screen catalog + group display order. */
   readonly screens: readonly Screen[]
   readonly groups: readonly string[]
+  /** Optional component catalog for the "parts" view (atoms → templates). When
+   * present, the gallery offers a third view alongside one-screen / all-screens. */
+  readonly stories?: readonly Story[]
   /** Per-element skin class names; omitted slots fall back to neutral `wk-*`. */
   readonly classNames?: WorkshopClassNames
   /** Extra attributes merged onto the root wrapper (e.g. `{ "data-pico": true }`
