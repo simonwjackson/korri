@@ -6,10 +6,12 @@
 	"type": "module",
 	"exports": {
 		".": "./intrinsic.css",
-		"./intrinsic.css": "./intrinsic.css"
+		"./intrinsic.css": "./intrinsic.css",
+		"./recipe.css": "./recipe.css"
 	},
 	"files": [
 		"intrinsic.css",
+		"recipe.css",
 		"README.md"
 	],
 	"keywords": [

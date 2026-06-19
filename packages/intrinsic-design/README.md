@@ -17,7 +17,14 @@ theme"), promoted from prose into shared, importable code.
 @import "@korri/intrinsic-design";
 ```
 
-Then a theme/app overrides the inputs on `:root` (or on any per-surface
+Tokens only, **without Tailwind** (e.g. the theme-workshop chrome — the reference
+implementation built on this core):
+
+```css
+@import "@korri/intrinsic-design/recipe.css";
+```
+
+Either way, a theme/app overrides the inputs on `:root` (or on any per-surface
 container) and consumes the scale.
 
 ## The contract

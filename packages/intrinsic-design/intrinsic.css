@@ -1,109 +1,24 @@
 /**
- * @korri/intrinsic-design — the intrinsic generator recipe, shared.
+ * @korri/intrinsic-design — the intrinsic generator recipe, shared (Tailwind v4).
  *
- * One container-adaptive token scale, DERIVED from a handful of knobs a theme
- * or app sets. Nothing re-implements the math: set the inputs, get the whole
- * scale. Container-query units (`cqi`/`cqh`) make it adapt to any *container*
- * — any size, any aspect ratio — with no breakpoints and no per-surface
- * special-casing.
+ * One container-adaptive token scale, DERIVED from a handful of knobs a theme or
+ * app sets. Nothing re-implements the math: set the inputs, get the whole scale.
+ * Container-query units (`cqi`/`cqh`) make it adapt to any *container* — any size,
+ * any aspect ratio — with no breakpoints and no per-surface special-casing.
  *
- * Consume it after Tailwind:
+ * This entry = the framework-agnostic recipe (recipe.css) + the Tailwind v4
+ * utilities. Consume it after Tailwind:
+ *
  *     @import "tailwindcss";
  *     @import "@korri/intrinsic-design";
  *
- * Then a theme/app overrides the inputs (on :root or any per-surface
- * container) and either reads the raw `--intrinsic-*` vars or uses the
- * generated utilities (`text-0`, `text-up2`, `p-i2`, `gap-i3`, …).
+ * For tokens WITHOUT Tailwind (e.g. the workshop chrome), import the recipe
+ * directly: `@import "@korri/intrinsic-design/recipe.css"`.
  *
  * The recipe is the one documented in tools/theme-workshop/device-lab/AGENTS.md
- * ("the default for every Korri theme"); this file is that recipe as code.
+ * ("the default for every Korri theme"), promoted from prose into shared code.
  */
-
-/* ── Inputs (knobs) ──────────────────────────────────────────────────────
- * Override these to re-derive the entire scale. The defaults are neutral
- * (a smooth, mid-density surface) — a theme tunes them. */
-:root {
-  --intrinsic-base-min: 12px; /* clamp floor — never smaller than this */
-  --intrinsic-base-cqi: 2.6; /* fluid anchor — × 1cqi of the container */
-  --intrinsic-base-max: 26px; /* clamp ceiling — never larger than this */
-  --intrinsic-ratio: 1.25; /* type scale ratio — step = base · ratioⁿ */
-  --intrinsic-space-unit: 0.5em; /* space step unit — em, so it tracks text */
-  --intrinsic-text-scale: 1; /* per-surface TEXT multiplier (device lab) */
-  --intrinsic-pad-scale: 1; /* per-surface PAD multiplier (device lab) */
-  --intrinsic-snap: 0.02px; /* size quantum — pixel themes set this to 1px */
-
-  /* ── The base: one fluid, clamped anchor for the whole system ──────────
-   * clamp() keeps it legible at any size; cqi binds it to the container (not
-   * the viewport), so it adapts to any surface/aspect with no breakpoints. */
-  --intrinsic-base: round(
-    clamp(
-      var(--intrinsic-base-min),
-      calc(var(--intrinsic-base-cqi) * 1cqi),
-      var(--intrinsic-base-max)
-    ),
-    var(--intrinsic-snap)
-  );
-
-  /* ── Type scale: base · ratioⁿ · text-scale (powers via nested calc) ─── */
-  --intrinsic-text-dn3: round(
-    calc(
-      var(--intrinsic-base) / var(--intrinsic-ratio) / var(--intrinsic-ratio) /
-        var(--intrinsic-ratio) * var(--intrinsic-text-scale)
-    ),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-dn2: round(
-    calc(
-      var(--intrinsic-base) / var(--intrinsic-ratio) / var(--intrinsic-ratio) *
-        var(--intrinsic-text-scale)
-    ),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-dn1: round(
-    calc(var(--intrinsic-base) / var(--intrinsic-ratio) * var(--intrinsic-text-scale)),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-0: round(
-    calc(var(--intrinsic-base) * var(--intrinsic-text-scale)),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-up1: round(
-    calc(var(--intrinsic-base) * var(--intrinsic-ratio) * var(--intrinsic-text-scale)),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-up2: round(
-    calc(
-      var(--intrinsic-base) * var(--intrinsic-ratio) * var(--intrinsic-ratio) *
-        var(--intrinsic-text-scale)
-    ),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-up3: round(
-    calc(
-      var(--intrinsic-base) * var(--intrinsic-ratio) * var(--intrinsic-ratio) *
-        var(--intrinsic-ratio) * var(--intrinsic-text-scale)
-    ),
-    var(--intrinsic-snap)
-  );
-
-  /* ── Space scale: linear steps, em-relative (tracks text), pad-scaled ── */
-  --intrinsic-space-1: calc(var(--intrinsic-space-unit) * 1 * var(--intrinsic-pad-scale));
-  --intrinsic-space-2: calc(var(--intrinsic-space-unit) * 2 * var(--intrinsic-pad-scale));
-  --intrinsic-space-3: calc(var(--intrinsic-space-unit) * 3 * var(--intrinsic-pad-scale));
-  --intrinsic-space-4: calc(var(--intrinsic-space-unit) * 4 * var(--intrinsic-pad-scale));
-  --intrinsic-space-5: calc(var(--intrinsic-space-unit) * 5 * var(--intrinsic-pad-scale));
-  --intrinsic-space-6: calc(var(--intrinsic-space-unit) * 6 * var(--intrinsic-pad-scale));
-}
-
-/* ── Bounded-media ceiling (usage rule, not a token) ─────────────────────
- * Big art/media must share the type system's ceiling or it runs away on large
- * surfaces (text is clamped; a raw cqh/cqw leaf is not, so they decouple).
- * Cap media against the base so they plateau together:
- *
- *   height: min(<fluid cqh/cqw>, calc(var(--intrinsic-base) * N));
- *
- * This is the single most common intrinsic edge case; deriving the cap from
- * --intrinsic-base is what keeps art + text locked to one ceiling. */
+@import "./recipe.css";
 
 /* ── Tailwind v4 utilities ───────────────────────────────────────────────
  * `@theme inline` + a bare var() ref to the precomputed token is the

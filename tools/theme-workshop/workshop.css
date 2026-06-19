@@ -1,11 +1,26 @@
 /*
- * theme-workshop — neutral chrome defaults.
+ * theme-workshop — neutral chrome, built on the intrinsic design core.
  *
- * Structural, theme-agnostic styling for the generic gallery bar, jump map, and
- * all-screens wall, plus a bare screen container. A theme supplies its own class
- * names via the config's `classNames` map to fully re-skin these; when it does,
- * these `wk-*` rules simply aren't matched. Dev-only chrome (plain px).
+ * Structural, theme-agnostic styling for the gallery bar, jump map, all-screens
+ * wall, and the theme-declared controls. Typography + spacing derive from
+ * @korri/intrinsic-design — the SAME generator themes use — so the workshop's
+ * own chrome is the reference implementation of the intrinsic system: it adapts
+ * with no breakpoints. A theme re-skins via the config `classNames` map; when it
+ * does, these `wk-*` rules simply aren't matched.
  */
+@import "../../packages/intrinsic-design/recipe.css";
+
+/* Chrome-tuned knobs: a tight, stable dev-tool band (the recipe's neutral
+ * defaults are larger, for content). The fixed chrome has no query-container
+ * ancestor, so `cqi` resolves against the viewport — the chrome adapts gently to
+ * window width, clamped to a sane range. */
+:root {
+	--intrinsic-base-min: 11px;
+	--intrinsic-base-cqi: 0.85;
+	--intrinsic-base-max: 14px;
+	--intrinsic-ratio: 1.2;
+	--intrinsic-space-unit: 0.5em;
+}
 
 /* Bare screen container: tokens must resolve against its own size. */
 .wk-screen {
@@ -24,15 +39,15 @@
 	z-index: 1000;
 	display: flex;
 	align-items: stretch;
-	gap: 8px;
-	padding: 6px 8px;
+	gap: var(--intrinsic-space-1);
+	padding: var(--intrinsic-space-1) var(--intrinsic-space-2);
 	border-radius: 10px;
 	background: #111;
 	border: 2px solid #444;
 	color: #eee;
-	font:
-		14px / 1 ui-monospace,
-		monospace;
+	font-family: ui-monospace, monospace;
+	font-size: var(--intrinsic-text-0);
+	line-height: 1;
 	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
 }
 .wk-bar button {
@@ -40,11 +55,11 @@
 	border: none;
 	background: #333;
 	color: #eee;
-	font:
-		12px / 1 ui-monospace,
-		monospace;
+	font-family: ui-monospace, monospace;
+	font-size: var(--intrinsic-text-dn1);
+	line-height: 1;
 	border-radius: 6px;
-	padding: 0 10px;
+	padding: 0 var(--intrinsic-space-2);
 }
 .wk-bar .wk-bar-label {
 	display: flex;
@@ -53,10 +68,10 @@
 	gap: 2px;
 	min-width: 260px;
 	background: #000;
-	padding: 4px 12px;
+	padding: var(--intrinsic-space-1) var(--intrinsic-space-2);
 }
 .wk-bar .wk-bar-count {
-	font-size: 12px;
+	font-size: var(--intrinsic-text-dn1);
 	color: #888;
 }
 
@@ -64,16 +79,16 @@
 .wk-control {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--intrinsic-space-1);
 	cursor: pointer;
 	border: none;
 	background: #333;
 	color: #eee;
-	font:
-		12px / 1 ui-monospace,
-		monospace;
+	font-family: ui-monospace, monospace;
+	font-size: var(--intrinsic-text-dn1);
+	line-height: 1;
 	border-radius: 6px;
-	padding: 0 10px;
+	padding: 0 var(--intrinsic-space-2);
 }
 .wk-control:hover {
 	background: #3d3d3d;
@@ -118,7 +133,7 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 12px 16px;
+	padding: var(--intrinsic-space-2) var(--intrinsic-space-3);
 	border-bottom: 2px solid #333;
 }
 .wk-map-head button {
@@ -126,16 +141,16 @@
 	border: none;
 	background: #a33;
 	color: #fff;
-	padding: 4px 8px;
+	padding: var(--intrinsic-space-1) var(--intrinsic-space-2);
 	border-radius: 6px;
 }
 .wk-map-body {
 	flex: 1;
 	overflow: auto;
-	padding: 16px;
+	padding: var(--intrinsic-space-3);
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-	gap: 18px 24px;
+	gap: var(--intrinsic-space-3) var(--intrinsic-space-4);
 	align-content: start;
 }
 .wk-map-gtitle {
@@ -152,7 +167,7 @@
 	border: none;
 	background: transparent;
 	color: #aaa;
-	padding: 4px 8px;
+	padding: var(--intrinsic-space-1) var(--intrinsic-space-2);
 	border-radius: 6px;
 }
 .wk-map-item:hover {
@@ -170,7 +185,7 @@
 	inset: 0;
 	z-index: 50;
 	overflow-y: auto;
-	padding: 16px 16px 86px;
+	padding: var(--intrinsic-space-3) var(--intrinsic-space-3) 86px;
 	background: #0a0a12;
 }
 .wk-wall-group {
@@ -185,6 +200,7 @@
 }
 .wk-wall-gcount {
 	color: #888;
+	font-size: var(--intrinsic-text-dn1);
 }
 .wk-wall-grid {
 	display: grid;
@@ -225,9 +241,9 @@
 	cursor: pointer;
 }
 .wk-wall-label {
-	font:
-		11px / 1.2 ui-monospace,
-		monospace;
+	font-family: ui-monospace, monospace;
+	font-size: var(--intrinsic-text-dn2);
+	line-height: 1.2;
 	color: #888;
 	white-space: nowrap;
 	overflow: hidden;
