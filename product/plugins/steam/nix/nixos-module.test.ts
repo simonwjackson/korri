@@ -26,4 +26,16 @@ describe("Steam plugin Nix module", () => {
       "systemd.user.services.korrid.environment.KORRI_STEAM_APP_INSTALL_HELPER",
     )
   })
+
+  it("keeps Steam visible only through an explicit launch-debug switch", () => {
+    expect(moduleSource).toContain("keepVisibleDuringLaunch")
+    expect(moduleSource).toContain("KORRI_STEAM_KEEP_VISIBLE")
+    expect(moduleSource).toContain('if [ "$keep_steam_visible" != "0" ]; then')
+    expect(moduleSource).toContain(
+      "korri-steam-app: leaving Steam visible for Steam launch debugging",
+    )
+    expect(moduleSource).toContain(
+      'sway \'[class="steam"] fullscreen disable, floating enable, move scratchpad\'',
+    )
+  })
 })

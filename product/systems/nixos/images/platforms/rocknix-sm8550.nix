@@ -437,6 +437,7 @@ in
     dotDir = "${runtime.home}/.steam";
     fexRootfs = "${runtime.stateRoot}/steam/fex-rootfs";
     keepWarm = true;
+    keepVisibleDuringLaunch = true;
     appAudioSinkName = "alsa_output.platform-sound.HiFi__Speaker__sink";
   };
 

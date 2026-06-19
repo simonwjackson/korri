@@ -477,6 +477,9 @@ let
     service_name="''${KORRI_STEAM_SERVICE:-korri-steam.service}"
     target_output="''${KORRI_STEAM_APP_OUTPUT:-DSI-2}"
     target_audio_sink="''${KORRI_STEAM_AUDIO_SINK:-${cfg.appAudioSinkName}}"
+    keep_steam_visible="''${KORRI_STEAM_KEEP_VISIBLE:-${
+      if cfg.keepVisibleDuringLaunch then "1" else "0"
+    }}"
     stop_service_on_exit="''${KORRI_STEAM_APP_STOP_SERVICE_ON_EXIT:-${
       if cfg.keepWarm then "0" else "1"
     }}"
@@ -507,6 +510,10 @@ let
     }
 
     hide_steam_hat() {
+      if [ "$keep_steam_visible" != "0" ]; then
+        echo "korri-steam-app: leaving Steam visible for Steam launch debugging" >&2
+        return 0
+      fi
       # Steam Big Picture can change title during startup and can leave a
       # rootless Xwayland surface behind if it remains fullscreen while the game
       # appears. Disable fullscreen first, then scratchpad every Steam client
@@ -847,6 +854,17 @@ in
         resident so app launches can forward AppIDs to an already-warm Steam
         client. The warmup waits for the kiosk Wayland and D-Bus sockets before
         using the narrow sudo helper, avoiding ad-hoc direct Steam fallback.
+      '';
+    };
+
+    keepVisibleDuringLaunch = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Keep the Steam client window visible during AppID launches instead of
+        moving it to the Sway scratchpad. This is intended for device proof and
+        debugging so prompts, Steam-owned state, and launch transitions remain
+        observable. It can be overridden per launch with KORRI_STEAM_KEEP_VISIBLE.
       '';
     };
 

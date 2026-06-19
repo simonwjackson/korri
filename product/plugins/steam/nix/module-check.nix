@@ -81,6 +81,17 @@ let
     }
   );
 
+  enabledKeepVisible = evaluateWith "aarch64-linux" (
+    { pkgs, ... }:
+    {
+      services.korri.steam = {
+        enable = true;
+        package = pkgs.steam-korri;
+        keepVisibleDuringLaunch = true;
+      };
+    }
+  );
+
   runtimeOverride = evaluateWith "aarch64-linux" (
     { pkgs, ... }:
     {
@@ -194,6 +205,10 @@ let
       && builtins.elem "korri-compositor.service" (steamWarmUnit.after or [ ])
       && (steamWarmUnit.serviceConfig.Type or null) == "oneshot"
       && lib.hasInfix "korri-steam-warm" (serviceExec steamWarmUnit)
+    ))
+    (check "Steam visibility debugging defaults off and can be enabled" (
+      enabled.services.korri.steam.keepVisibleDuringLaunch == false
+      && enabledKeepVisible.services.korri.steam.keepVisibleDuringLaunch == true
     ))
     (check "uinput service is rendered and ordered for boot convergence" (
       enabled.systemd.services ? korri-steam-uinput
