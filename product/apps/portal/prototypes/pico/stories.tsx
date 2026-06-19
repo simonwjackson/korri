@@ -76,7 +76,12 @@ export const PICO_STORIES: readonly Story[] = [
     id: "gamecart",
     layer: "molecule",
     name: "GameCart",
-    render: () => (hero ? <GameCart game={hero} /> : null),
+    render: () =>
+      hero ? (
+        <div className="pc-art sm">
+          <GameCart game={hero} />
+        </div>
+      ) : null,
   },
   {
     id: "playcta",

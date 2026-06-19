@@ -6,8 +6,15 @@
  * tokens + skin resolve, exactly like a device-lab cell) inside neutral catalog
  * chrome. Homegrown — no Storybook, no CSF, no extra deps.
  */
+import { type CSSProperties, useState } from "react"
 import { cx, type ResolvedClassNames } from "./classnames"
 import type { Story, StoryLayer } from "./types"
+
+/** Catalog inspection-size bounds (px of the pinned --intrinsic-base). */
+const MIN_BASE = 8
+const MAX_BASE = 48
+const STEP = 2
+const DEFAULT_BASE = 14
 
 const LAYER_ORDER: readonly StoryLayer[] = [
   "atom",
@@ -29,26 +36,65 @@ export function Parts({
   readonly stories: readonly Story[]
   readonly cn: ResolvedClassNames
 }) {
+  const [base, setBase] = useState(DEFAULT_BASE)
   if (import.meta.env.PROD) return null
   return (
-    <div className="wk-parts">
+    <div
+      className="wk-parts"
+      style={{ "--wk-parts-base": `${base}px` } as CSSProperties}
+    >
+      <div className="wk-parts-tools">
+        <span className="wk-parts-tools-label">SCALE</span>
+        <button
+          type="button"
+          className="wk-control"
+          aria-label="smaller"
+          onClick={() => setBase(b => Math.max(MIN_BASE, b - STEP))}
+        >
+          −
+        </button>
+        <span className="wk-parts-tools-val">{base}px</span>
+        <button
+          type="button"
+          className="wk-control"
+          aria-label="larger"
+          onClick={() => setBase(b => Math.min(MAX_BASE, b + STEP))}
+        >
+          +
+        </button>
+      </div>
       {LAYER_ORDER.map(layer => {
         const inLayer = stories.filter(story => story.layer === layer)
         if (inLayer.length === 0) return null
+        // Atoms + molecules render bare (theme scope for tokens/skin, no framed
+        // canvas) — content-sized so they fit tightly, never clip or strand. The
+        // bigger organisms/templates keep a sized, framed canvas.
+        const bare = layer === "atom" || layer === "molecule"
         return (
-          <section className="wk-parts-group" key={layer}>
+          <section
+            className={cx("wk-parts-group", `wk-parts-group--${layer}`)}
+            key={layer}
+          >
             <h2 className="wk-parts-gtitle">
               {LAYER_LABEL[layer]}
               <span className="wk-parts-gcount">{inLayer.length}</span>
             </h2>
-            <div className="wk-parts-grid" data-layer={layer}>
+            <div className="wk-parts-grid">
               {inLayer.map(story => (
                 <figure className="wk-parts-cell" key={story.id}>
-                  <div className="wk-part-stage">
-                    <div className={cx("wk-part-canvas", cn.part)}>
+                  {bare ? (
+                    <div
+                      className={cx("wk-parts-canvas", "wk-parts-bare", cn.screen)}
+                    >
                       {story.render()}
                     </div>
-                  </div>
+                  ) : (
+                    <div className="wk-parts-frame">
+                      <div className={cx("wk-parts-canvas", cn.screen)}>
+                        {story.render()}
+                      </div>
+                    </div>
+                  )}
                   <figcaption className="wk-parts-label">
                     {story.name}
                     {story.note ? (

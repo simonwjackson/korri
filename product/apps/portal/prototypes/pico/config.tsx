@@ -139,9 +139,6 @@ export const picoConfig: ThemeWorkshopConfig = {
     // this screen's own container; pico maps its knobs + aliases its --pico-*
     // tokens onto it (see pico-prototype.css). The recipe is loaded by the host.
     screen: "pico-screen intrinsic",
-    // The component-catalog scope: pico's tokens + skin WITHOUT the screen's
-    // background/CRT, so atoms/molecules/organisms render neutrally.
-    part: "pico-part intrinsic",
   },
   // pico's CSS variables + fonts are scoped under [data-pico]; the chrome is
   // fixed-position but stays a DOM descendant of the root, so they resolve.

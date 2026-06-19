@@ -258,6 +258,14 @@
 	overflow-y: auto;
 	padding: var(--intrinsic-space-3) var(--intrinsic-space-3) 86px;
 	background: #0a0a12;
+	/* NB: no font-family here — `.wk-parts` is an ancestor of the part canvases,
+	 * and setting it would override the theme's own font on the rendered
+	 * components. The neutral chrome font lives on the chrome elements below. */
+}
+/* Chrome text uses the neutral mono font; the part canvases keep the theme's. */
+.wk-parts-tools,
+.wk-parts-gtitle,
+.wk-parts-label {
 	font-family: ui-monospace, monospace;
 	color: #ddd;
 }
@@ -281,13 +289,8 @@
 }
 .wk-parts-grid {
 	display: grid;
-	gap: var(--intrinsic-space-3) var(--intrinsic-space-4);
-	grid-template-columns: repeat(auto-fill, 460px);
-	justify-content: start;
-}
-/* templates are whole screens — one wide column so they have room */
-.wk-parts-grid[data-layer="template"] {
-	grid-template-columns: minmax(0, 900px);
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	gap: var(--intrinsic-space-3);
 }
 .wk-parts-cell {
 	margin: 0;
@@ -295,34 +298,21 @@
 	flex-direction: column;
 	gap: var(--intrinsic-space-1);
 }
-.wk-part-stage {
-	/* a neutral catalog surface (NOT the theme's screen skin) with a determinate
-	 * size, so component art has a cqh context and stays bounded. The part's base
-	 * is a fixed inspection size (set by the theme), so it reads the same in every
-	 * cell — it does NOT shrink to the cell. */
-	container-type: size;
-	height: 220px;
+.wk-parts-frame {
+	width: 100%;
+	aspect-ratio: 4 / 3;
 	overflow: hidden;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: var(--intrinsic-space-3);
-	background: #16161d;
-	border: 1px solid #2a2a35;
-	border-radius: 6px;
+	border: 2px solid #2a2a35;
+	border-radius: 4px;
+	background:
+		repeating-conic-gradient(#15151c 0% 25%, #11111a 0% 50%) 0 / 16px 16px;
 }
-.wk-parts-grid[data-layer="template"] .wk-part-stage {
-	height: 500px;
-}
-.wk-parts-cell:hover .wk-part-stage {
+.wk-parts-cell:hover .wk-parts-frame {
 	border-color: #6af;
 }
-.wk-part-canvas {
+.wk-parts-canvas {
 	width: 100%;
 	height: 100%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
 }
 .wk-parts-label {
 	font-size: var(--intrinsic-text-dn1);
@@ -333,4 +323,77 @@
 }
 .wk-parts-note {
 	color: #777;
+}
+
+/* Atoms + molecules render bare — theme scope (tokens/skin) without the framed
+ * canvas. They flow as content-sized items (not fixed grid tracks), so a bare
+ * part can never overflow a too-narrow column into its neighbour, and never
+ * strands empty space — at any viewport / scale. */
+:is(.wk-parts-group--atom, .wk-parts-group--molecule) .wk-parts-grid {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: var(--intrinsic-space-3) var(--intrinsic-space-4);
+}
+:is(.wk-parts-group--atom, .wk-parts-group--molecule) .wk-parts-cell {
+	max-width: 100%;
+}
+:is(.wk-parts-group--atom, .wk-parts-group--molecule) .wk-parts-label {
+	white-space: normal; /* wrap, so a long caption never forces overflow */
+}
+/* `.wk-parts-bare.wk-parts-canvas` = two classes (0,2,0), so this beats the
+ * theme's `.screen` container-type/background (0,1,0) regardless of load order. */
+.wk-parts-bare.wk-parts-canvas {
+	/* Size to content, bounded only by the container: no fixed cap (that clipped
+	 * wider parts) and no overflow:hidden (that chopped them). Multi-variant parts
+	 * wrap to fit the container; a single part bigger than the container takes its
+	 * natural width (use SCALE to shrink it). */
+	width: fit-content;
+	max-width: 100%;
+	height: auto;
+	container-type: normal;
+	background: transparent;
+	overflow: visible;
+	padding: var(--intrinsic-space-2);
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--intrinsic-space-1);
+}
+.wk-parts-bare.wk-parts-canvas::after {
+	display: none; /* no CRT/scanline overlay on bare atoms */
+}
+/* Parts render at a FIXED inspection scale, not the device/viewport scale — a
+ * part isn't tied to a device here, so it mustn't balloon (cqi against the
+ * viewport made atoms ~35px and overflow their cells). `0 · 1cqi` collapses to
+ * the clamp floor. `.wk-parts .wk-parts-canvas` = 0,2,0, beating the theme's
+ * per-screen knobs (0,1,0). */
+.wk-parts .wk-parts-canvas {
+	--intrinsic-base-cqi: 0;
+	--intrinsic-base-min: var(--wk-parts-base, 14px);
+	--intrinsic-base-max: var(--wk-parts-base, 14px);
+}
+
+/* Catalog scale control (sticky toolbar). */
+.wk-parts-tools {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: var(--intrinsic-space-1);
+	margin-bottom: var(--intrinsic-space-3);
+	padding: var(--intrinsic-space-2) 0;
+	background: #0a0a12;
+}
+.wk-parts-tools-label {
+	font-size: var(--intrinsic-text-dn1);
+	letter-spacing: 0.08em;
+	color: #888;
+}
+.wk-parts-tools-val {
+	font-size: var(--intrinsic-text-dn1);
+	color: #ddd;
+	min-width: 4ch;
+	text-align: center;
 }
