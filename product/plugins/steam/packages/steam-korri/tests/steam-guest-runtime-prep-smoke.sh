@@ -160,8 +160,12 @@ chmod 755 "$runtime_bin/python3.11"
 STEAM_HOME="$steam_home" FEX_BIN="$fex_prefix/bin/FEX" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --apply
 
 [ -f "$pv/srt-bwrap.x86_64" ] || fail "srt-bwrap backup was not preserved"
-grep -q 'exec bwrap "$@"' "$pv/srt-bwrap" \
-  || fail "srt-bwrap should be replaced by a native bwrap trampoline"
+grep -q 'bwrap_bin="${FEX_ROOTFS%/}/usr/bin/bwrap"' "$pv/srt-bwrap" \
+  || fail "srt-bwrap should resolve bwrap from the FEX rootfs"
+grep -q 'PATH="/run/current-system/sw/bin:${PATH:-}"' "$pv/srt-bwrap" \
+  || fail "srt-bwrap should expose NixOS host tools for bwrap child sanity execs"
+grep -q 'exec /usr/bin/FEX "$bwrap_bin" "$@"' "$pv/srt-bwrap" \
+  || fail "srt-bwrap should direct-FEX the x86_64 rootfs bwrap"
 if [ "$expect_pv_wrap" = 1 ]; then
   [ -f "$pv/pressure-vessel-wrap.x86_64" ] \
     || fail "pressure-vessel x86_64 backup was not preserved"

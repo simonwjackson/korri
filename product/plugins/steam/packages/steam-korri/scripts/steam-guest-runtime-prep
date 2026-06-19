@@ -186,9 +186,18 @@ wrap_fex_tool() {
       if [ ! -e "$backup" ]; then
         mv -f "$file" "$backup"
       fi
-      cat > "$file" <<'EOF'
+      cat > "$file" <<EOF
 #!/bin/sh
-exec bwrap "$@"
+set -eu
+: "\${FEX_ROOTFS:?FEX_ROOTFS must be set by the guest adapter before running wrapped Steam Runtime helpers}"
+bwrap_bin="\${FEX_ROOTFS%/}/usr/bin/bwrap"
+if [ ! -x "\$bwrap_bin" ]; then
+  echo "srt-bwrap: missing executable x86_64 bwrap at \$bwrap_bin" >&2
+  exit 127
+fi
+PATH="/run/current-system/sw/bin:\${PATH:-}"
+export PATH FEX_ROOTFS
+exec $fex_wrapper_bin "\$bwrap_bin" "\$@"
 EOF
       chmod 755 "$file"
       return 0
