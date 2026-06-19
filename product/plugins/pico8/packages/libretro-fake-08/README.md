@@ -50,15 +50,15 @@ The package conforms to the nixpkgs `mkLibretroCore` contract that
 - `passthru.core = "fake08"` — string identifier the wrapper's
   `longDescription` reads and the kiosk closure-shape check asserts on
 
-The PICO-8 plugin's NixOS module exposes this core at the stable runtime path `/etc/korri/cores/fake08_libretro.so`. The RetroArch plugin owns the flag-free `retroarch-bare` wrapper; PICO-8 only contributes the fake-08 runtime and requires explicit RetroArch enablement. Launch YAML should model fake-08 as a runtime owned by the PICO-8 plugin and hosted by the RetroArch plugin app:
+The PICO-8 plugin's NixOS module exposes this core at the stable runtime path `/etc/korri/cores/fake08_libretro.so`. The RetroArch plugin owns the flag-free `retroarch-bare` wrapper; PICO-8 only contributes the fake-08 runtime and requires explicit RetroArch enablement. Launch YAML should model fake-08 as a runtime owned by the PICO-8 plugin and hosted by the RetroArch plugin launcher:
 
 ```yaml
-apps:
+launchers:
   "@korri:retroarch/retroarch":
-    kind: "@korri:retroarch"
+    plugin: "@korri:retroarch"
     command: retroarch
-    plugin:
-      "@korri:retroarch": {}
+    settings:
+      plugin: {}
 
 runtimes:
   "@korri:pico8/fake08":
@@ -70,9 +70,21 @@ runtimes:
 
 systems:
   pico8:
-    apps:
-      - id: "@korri:retroarch/retroarch"
-        runtime: "@korri:pico8/fake08"
+    name: PICO-8
+
+library:
+  porklike:
+    title: Porklike
+    releases:
+      - id: pico8
+        system: pico8
+        target:
+          kind: file
+          storage: roms
+          path: pico8/porklike.p8
+        launch:
+          use: "@korri:retroarch/retroarch"
+          runtime: "@korri:pico8/fake08"
 ```
 
 Every kiosk image (Sobo, Thor, x86 kiosk, live USB) inherits the RetroArch plugin's wrapper when RetroArch is enabled. fake-08 remains a plugin-owned runtime core exposed by this PICO-8 module; it is not appended to the RetroArch wrapper's default core list.

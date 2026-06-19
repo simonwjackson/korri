@@ -1,26 +1,26 @@
 ---
-title: Korri launch config apps and runtimes
+title: Korri launch config launchers and runtimes
 date: 2026-06-02
 ---
 
-# Korri launch config apps and runtimes
+# Korri launch config launchers and runtimes
 
-Korri readable launch authoring is centered on content systems, apps, runtimes, library releases, and plugin-owned launch policy.
+Korri readable launch authoring is centered on content systems, launchers, runtimes, library releases, and plugin-owned launch policy.
 
-- **Apps** are runnable programs. First-party plugin apps use plugin-qualified ids, for example `@korri:retroarch/retroarch`.
+- **Launchers** are runnable programs. First-party plugin launchers use plugin-qualified ids, for example `@korri:retroarch/retroarch`.
 - **Runtimes** are launch support artifacts such as libretro cores. Runtime records own compatibility metadata such as `app` and `supports.systems`.
-- **Plugin policy** lives under `plugin.<provider-id>`. RetroArch policy is owned by `@korri:retroarch`; generic platform records do not expose top-level `retroarch:` fields.
-- **Library releases** choose the app/runtime pair in `apps:`.
+- **Plugin policy** lives under `settings.plugin`. RetroArch policy is owned by `@korri:retroarch`; generic platform records do not expose top-level `retroarch:` fields.
+- **Library releases** choose the launcher/runtime pair in `launch:`.
 
-Alpha config is intentionally breaking: old `apps.retroarch`, `kind: retroarch`, top-level `retroarch:`, `modules.fake08`, and `app: retroarch` records are not compatibility aliases.
+Alpha config is intentionally breaking: old `apps.retroarch`, `release.apps`, `system.apps`, launcher `kind`, top-level `retroarch:`, `modules.fake08`, and `app: retroarch` records are not compatibility aliases.
 
 ```yaml
-apps:
+launchers:
   "@korri:retroarch/retroarch":
-    kind: "@korri:retroarch"
+    plugin: "@korri:retroarch"
     command: retroarch
-    plugin:
-      "@korri:retroarch":
+    settings:
+      plugin:
         configFile:
           mode: generated
         paths:
@@ -43,9 +43,6 @@ runtimes:
 systems:
   pico8:
     name: PICO-8
-    apps:
-      - id: "@korri:retroarch/retroarch"
-        runtime: "@korri:pico8/fake08"
 
 library:
   porklike:
@@ -57,6 +54,9 @@ library:
           kind: file
           storage: roms
           path: pico8/porklike.p8
+        launch:
+          use: "@korri:retroarch/retroarch"
+          runtime: "@korri:pico8/fake08"
 ```
 
 ## RetroArch soft patches
@@ -66,12 +66,12 @@ library:
 Supported formats are IPS, BPS, UPS, and XDelta. The format is inferred case-insensitively from the file extension (`.ips`, `.bps`, `.ups`, `.xdelta`).
 
 ```yaml
-apps:
+launchers:
   "@korri:retroarch/retroarch":
-    kind: "@korri:retroarch"
+    plugin: "@korri:retroarch"
     command: retroarch
-    plugin:
-      "@korri:retroarch": {}
+    settings:
+      plugin: {}
 
 # The RetroArch plugin contributes the `gba` system and the
 # `@korri:retroarch/mgba` runtime at /etc/korri/cores/mgba_libretro.so.
@@ -87,9 +87,9 @@ library:
           path: gba/Super Mario Advance 3 - Yoshis Island (USA).gba
         patches:
           - /storage/patches/yoshi/SMA3 - Yoshis Island Colour Restoration (U).ips
-        apps:
-          - id: "@korri:retroarch/retroarch"
-            runtime: "@korri:retroarch/mgba"
+        launch:
+          use: "@korri:retroarch/retroarch"
+          runtime: "@korri:retroarch/mgba"
         presets:
           color-and-voice:
             patches:
