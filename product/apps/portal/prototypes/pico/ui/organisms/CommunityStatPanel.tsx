@@ -1,0 +1,36 @@
+/**
+ * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ *
+ * Community readout for a game: a strip of stat tiles plus a difficulty meter.
+ * Renders a fragment so both blocks sit directly in the detail screen flow. Leaf
+ * atoms (Stat/Card/BlockBar) still come from the kit barrel until they migrate.
+ */
+import type { PicoCommunityStats } from "../../fixtures-extra"
+import { BlockBar, Card, Stat } from "../../screens/kit"
+
+export function CommunityStatPanel({
+  stats,
+}: {
+  readonly stats: PicoCommunityStats
+}) {
+  const liked = Math.round(
+    (stats.likes / (stats.likes + stats.dislikes)) * 100,
+  )
+  return (
+    <>
+      <div className="pcDet-stats">
+        <Stat label="PLAYS" value={stats.plays.toLocaleString()} />
+        <Stat label="LIKES" value={stats.likes.toLocaleString()} />
+        <Stat label="DISLIKES" value={stats.dislikes} />
+        <Stat label="SCORE" value={stats.score} />
+        <Stat label="LIKED" value={`${liked}%`} />
+      </div>
+      <Card title="DIFFICULTY" className="pcDet-diff">
+        <div className="pcDet-diff-row">
+          <BlockBar level={stats.difficulty} max={10} />
+          <span className="pc-dim">{stats.difficulty} / 10</span>
+        </div>
+      </Card>
+    </>
+  )
+}
