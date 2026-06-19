@@ -27,6 +27,12 @@ import {
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
 import {
+  type LaunchPrepareDiagnostic,
+  type LaunchPrepareMode,
+  launchPrepareDiagnosticSummary,
+  prepareLaunch,
+} from "@platform/plugin/launch-prepare"
+import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@platform/plugin/registry"
@@ -119,14 +125,27 @@ export function makeKorriControlLive(options: {
       Effect.gen(function* () {
         const result = yield* resolveLaunch(librarySource, request)
         if (result._tag === "failed") return result.result
-        const composed = yield* composeResolvedLaunch(
+        const prepared = yield* prepareResolvedLaunch(
           result.resolved,
+          pluginRegistry,
+          "check",
+        )
+        if (prepared._tag === "failed") {
+          return launchConfigFailedFromDiagnostics(
+            request,
+            prepared.diagnostics,
+            launchPrepareDiagnosticSummary(prepared.diagnostics),
+          )
+        }
+        const composed = yield* composeResolvedLaunch(
+          { ...result.resolved, spec: prepared.spec },
           pluginRegistry,
         )
         if (composed._tag === "failed") {
           return launchConfigFailedFromDiagnostics(
             request,
             composed.diagnostics,
+            launchCompanionDiagnosticSummary(composed.diagnostics),
           )
         }
         const readiness = yield* sessionReadiness(sessiond)
@@ -147,14 +166,27 @@ export function makeKorriControlLive(options: {
       Effect.gen(function* () {
         const resolved = yield* resolveLaunch(librarySource, request)
         if (resolved._tag === "failed") return resolved.result
-        const composed = yield* composeResolvedLaunch(
+        const prepared = yield* prepareResolvedLaunch(
           resolved.resolved,
+          pluginRegistry,
+          "commit",
+        )
+        if (prepared._tag === "failed") {
+          return launchConfigFailedFromDiagnostics(
+            request,
+            prepared.diagnostics,
+            launchPrepareDiagnosticSummary(prepared.diagnostics),
+          )
+        }
+        const composed = yield* composeResolvedLaunch(
+          { ...resolved.resolved, spec: prepared.spec },
           pluginRegistry,
         )
         if (composed._tag === "failed") {
           return launchConfigFailedFromDiagnostics(
             request,
             composed.diagnostics,
+            launchCompanionDiagnosticSummary(composed.diagnostics),
           )
         }
         const result = yield* runResolvedLaunch(launcher, {
@@ -269,14 +301,41 @@ function composeResolvedLaunch(
   )
 }
 
+function prepareResolvedLaunch(
+  resolved: ResolvedLaunch,
+  registry: PluginRegistry,
+  mode: LaunchPrepareMode,
+): Effect.Effect<
+  | { readonly _tag: "resolved"; readonly spec: ResolvedLaunch["spec"] }
+  | {
+      readonly _tag: "failed"
+      readonly diagnostics: readonly LaunchPrepareDiagnostic[]
+    },
+  never
+> {
+  return prepareLaunch({
+    spec: resolved.spec,
+    launchPrepare: resolved.launchPrepare,
+    registry,
+    options: { mode, launchMetadata: resolved.launchMetadata },
+  }).pipe(
+    Effect.map(result =>
+      result._tag === "LaunchPrepared"
+        ? { _tag: "resolved" as const, spec: result.spec }
+        : { _tag: "failed" as const, diagnostics: result.diagnostics },
+    ),
+  )
+}
+
 function launchConfigFailedFromDiagnostics(
   request: ControlDryRunLaunchRequest | ControlLaunchRequest,
-  diagnostics: readonly LaunchCompanionDiagnostic[],
+  diagnostics: readonly (LaunchCompanionDiagnostic | LaunchPrepareDiagnostic)[],
+  message: string,
 ): Extract<ControlDryRunLaunchResult, { readonly _tag: "LaunchConfigFailed" }> {
   return {
     _tag: "LaunchConfigFailed",
     selection: launchSelection(request),
-    message: launchCompanionDiagnosticSummary(diagnostics),
+    message,
     diagnostics,
   }
 }

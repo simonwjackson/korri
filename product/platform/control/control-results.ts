@@ -5,6 +5,7 @@ import type {
   SessiondManagedLaunchPhase,
 } from "@platform/library/sessiond-managed-launch-protocol"
 import type { LaunchCompanionDiagnostic } from "@platform/plugin/launch-companion"
+import type { LaunchPrepareDiagnostic } from "@platform/plugin/launch-prepare"
 
 export type ControlCliOutcomeClass =
   | "success"
@@ -80,7 +81,10 @@ export type ControlDryRunLaunchResult =
       readonly selection: ControlLaunchSelection
       readonly message: string
       readonly diagnostic?: string
-      readonly diagnostics?: readonly LaunchCompanionDiagnostic[]
+      readonly diagnostics?: readonly (
+        | LaunchCompanionDiagnostic
+        | LaunchPrepareDiagnostic
+      )[]
     }
   | { readonly _tag: "HostUnavailable"; readonly message?: string }
   | Extract<ControlFindGameResult, { readonly _tag: "GameNotFound" }>

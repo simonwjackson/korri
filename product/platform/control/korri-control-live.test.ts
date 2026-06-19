@@ -3,8 +3,11 @@ import type { LaunchResult, LaunchSpec } from "@platform/library/launcher"
 import {
   LibraryError,
   type LibrarySourceService,
+  type ResolvedLaunch,
 } from "@platform/library/library-services"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
+import { plugin } from "@platform/plugin"
+import { createPluginRegistry } from "@platform/plugin/registry"
 import { Effect } from "effect"
 import type { ControlLaunchResult } from "./control-results"
 import { makeKorriControlLive } from "./korri-control-live"
@@ -92,6 +95,112 @@ describe("KorriControl live implementation", () => {
     })
     expect(runCount).toBe(0)
   })
+
+
+  it("runs launch.prepare in check mode for dry-run without invoking the launcher", async () => {
+    const calls: unknown[] = []
+    let runCount = 0
+    const preparePlugin = plugin({
+      namespace: "@fixture",
+      name: "prepare",
+      contributes: {
+        handlers: [
+          {
+            id: "prepare.launch-prepare",
+            operation: "launch.prepare",
+            capabilities: ["launch.prepare"],
+            run: context => {
+              calls.push(context.input)
+              return undefined
+            },
+          },
+        ],
+      },
+    })
+    const control = makeKorriControlLive({
+      librarySource: librarySource({ launchPrepare: { "@fixture:prepare": { profileId: 37 } } }),
+      launcher: launcher({ onRun: () => runCount++ }),
+      pluginRegistry: createPluginRegistry([preparePlugin], {
+        enabledPluginIds: ["@fixture:prepare"],
+      }),
+    })
+
+    await expect(
+      Effect.runPromise(control.dryRunLaunch({ id: playable.id })),
+    ).resolves.toMatchObject({ _tag: "LaunchDryRunOk" })
+    expect(runCount).toBe(0)
+    expect(calls).toEqual([
+      {
+        spec,
+        policy: { profileId: 37 },
+        mode: "check",
+      },
+    ])
+  })
+
+  it("runs launch.prepare in commit mode before spawning a launch", async () => {
+    const calls: unknown[] = []
+    const launchedSpecs: LaunchSpec[] = []
+    const preparePlugin = plugin({
+      namespace: "@fixture",
+      name: "prepare",
+      contributes: {
+        handlers: [
+          {
+            id: "prepare.launch-prepare",
+            operation: "launch.prepare",
+            capabilities: ["launch.prepare"],
+            run: context => {
+              calls.push(context.input)
+              return { spec: { command: "prepared", args: [] } }
+            },
+          },
+        ],
+      },
+    })
+    const control = makeKorriControlLive({
+      librarySource: librarySource({ launchPrepare: { "@fixture:prepare": { profileId: 37 } } }),
+      launcher: {
+        run: launchSpec => {
+          launchedSpecs.push(launchSpec)
+          return Effect.succeed({ status: "launched" as const })
+        },
+      },
+      pluginRegistry: createPluginRegistry([preparePlugin], {
+        enabledPluginIds: ["@fixture:prepare"],
+      }),
+    })
+
+    await expect(
+      Effect.runPromise(control.launchGame({ id: playable.id })),
+    ).resolves.toEqual({ _tag: "Launched", selection: { id: playable.id } })
+    expect(calls).toEqual([
+      {
+        spec,
+        policy: { profileId: 37 },
+        mode: "commit",
+      },
+    ])
+    expect(launchedSpecs).toEqual([{ command: "prepared", args: [] }])
+  })
+
+  it("blocks launch when launch.prepare returns diagnostics", async () => {
+    let runCount = 0
+    const control = makeKorriControlLive({
+      librarySource: librarySource({ launchPrepare: { "@fixture:missing": {} } }),
+      launcher: launcher({ onRun: () => runCount++ }),
+      pluginRegistry: createPluginRegistry([]),
+    })
+
+    await expect(
+      Effect.runPromise(control.launchGame({ id: playable.id })),
+    ).resolves.toMatchObject({
+      _tag: "LaunchConfigFailed",
+      message: "Launch prepare provider @fixture:missing is not registered",
+    })
+    expect(runCount).toBe(0)
+  })
+
 
   it("reports session status from sessiond probes", async () => {
     const control = makeKorriControlLive({
@@ -400,14 +509,14 @@ describe("KorriControl live implementation", () => {
   })
 })
 
-function librarySource(): LibrarySourceService {
+function librarySource(options: Pick<ResolvedLaunch, "launchPrepare"> = {}): LibrarySourceService {
   return {
     list: () => Effect.succeed([]),
     listPlayableEntries: () => Effect.succeed([playable]),
     launchSpecFor: () => Effect.succeed(spec),
     resolveLaunchForGame: id =>
       id === playable.id
-        ? Effect.succeed({ spec })
+        ? Effect.succeed({ spec, ...options })
         : Effect.fail(
             new LibraryError({ reason: "config", message: "not configured" }),
           ),

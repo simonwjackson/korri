@@ -17,6 +17,7 @@ import type {
   PlayableLibraryEntry,
   PlayableReleaseEntry,
 } from "@platform/library/playable-library"
+import type { LaunchPrepareMap } from "@platform/plugin/launch-prepare"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import { Context, type Effect, Schema } from "effect"
 
@@ -70,6 +71,7 @@ export interface ResolvedLocalLauncherPolicy {
 export interface ResolvedLaunch {
   readonly spec: LaunchSpec
   readonly launchCompanions?: LaunchCompanionMap
+  readonly launchPrepare?: LaunchPrepareMap
   readonly launchMetadata?: LaunchMetadata
   readonly extras?: LaunchExtras
   readonly artifacts?: LaunchArtifacts
