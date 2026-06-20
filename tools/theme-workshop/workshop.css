@@ -332,16 +332,19 @@
  * canvas. They flow as content-sized items (not fixed grid tracks), so a bare
  * part can never overflow a too-narrow column into its neighbour, and never
  * strands empty space — at any viewport / scale. */
-:is(.wk-parts-group--atom, .wk-parts-group--molecule, .wk-parts-group--organism) .wk-parts-grid {
+:is(.wk-parts-group--atom, .wk-parts-group--molecule, .wk-parts-group--organism)
+	.wk-parts-grid {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: flex-start;
 	gap: var(--intrinsic-space-3) var(--intrinsic-space-4);
 }
-:is(.wk-parts-group--atom, .wk-parts-group--molecule, .wk-parts-group--organism) .wk-parts-cell {
+:is(.wk-parts-group--atom, .wk-parts-group--molecule, .wk-parts-group--organism)
+	.wk-parts-cell {
 	max-width: 100%;
 }
-:is(.wk-parts-group--atom, .wk-parts-group--molecule, .wk-parts-group--organism) .wk-parts-label {
+:is(.wk-parts-group--atom, .wk-parts-group--molecule, .wk-parts-group--organism)
+	.wk-parts-label {
 	white-space: normal; /* wrap, so a long caption never forces overflow */
 }
 /* `.wk-parts-bare.wk-parts-canvas` = two classes (0,2,0), so this beats the
@@ -393,7 +396,10 @@
 	gap: var(--intrinsic-space-3) var(--intrinsic-space-4);
 }
 .wk-parts-group--template .wk-parts-frame {
-	width: min(640px, 90vw); /* a roomy, screen-shaped frame that flows, not stretches */
+	width: min(
+		640px,
+		90vw
+	); /* a roomy, screen-shaped frame that flows, not stretches */
 	aspect-ratio: 16 / 10;
 }
 

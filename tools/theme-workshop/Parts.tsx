@@ -82,27 +82,31 @@ export function Parts({
                 // framed canvas so it doesn't collapse.
                 const framed = story.surface === true || layer === "template"
                 return (
-                <figure className="wk-parts-cell" key={story.id}>
-                  {framed ? (
-                    <div className="wk-parts-frame">
-                      <div className={cx("wk-parts-canvas", cn.screen)}>
+                  <figure className="wk-parts-cell" key={story.id}>
+                    {framed ? (
+                      <div className="wk-parts-frame">
+                        <div className={cx("wk-parts-canvas", cn.screen)}>
+                          {story.render()}
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className={cx(
+                          "wk-parts-canvas",
+                          "wk-parts-bare",
+                          cn.screen,
+                        )}
+                      >
                         {story.render()}
                       </div>
-                    </div>
-                  ) : (
-                    <div
-                      className={cx("wk-parts-canvas", "wk-parts-bare", cn.screen)}
-                    >
-                      {story.render()}
-                    </div>
-                  )}
-                  <figcaption className="wk-parts-label">
-                    {story.name}
-                    {story.note ? (
-                      <span className="wk-parts-note"> · {story.note}</span>
-                    ) : null}
-                  </figcaption>
-                </figure>
+                    )}
+                    <figcaption className="wk-parts-label">
+                      {story.name}
+                      {story.note ? (
+                        <span className="wk-parts-note"> · {story.note}</span>
+                      ) : null}
+                    </figcaption>
+                  </figure>
                 )
               })}
             </div>
