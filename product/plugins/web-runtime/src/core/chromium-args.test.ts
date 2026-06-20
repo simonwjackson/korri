@@ -3,7 +3,9 @@ import { composeWebChromiumArgs } from "./chromium-args"
 
 describe("composeWebChromiumArgs", () => {
   it("emits the fixed base flags with the locator substituted", () => {
-    const args = composeWebChromiumArgs({ locator: "https://example/index.html" })
+    const args = composeWebChromiumArgs({
+      locator: "https://example/index.html",
+    })
     expect(args).toEqual([
       "--ozone-platform=x11",
       "--app=https://example/index.html",

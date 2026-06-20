@@ -11,10 +11,7 @@
 //   scaling -> aspect-fit + pixel filter (sharp upscaling)
 //   window  -> fullscreen + force-windows-fullscreen (xwm fullscreens X11 clients)
 
-import {
-  type Dimensions,
-  gamescopeInternalResolution,
-} from "./native-res"
+import { type Dimensions, gamescopeInternalResolution } from "./native-res"
 
 export type GamescopeFilter = "pixel" | "linear" | "fsr"
 
@@ -66,6 +63,10 @@ export function gamescopeAnnotation(request: WebCompositorRequest): object {
       },
     },
     scaling: { scaler: "fit", filter: request.filter },
-    window: { fullscreen: true, forceWindowsFullscreen: true, exposeWayland: false },
+    window: {
+      fullscreen: true,
+      forceWindowsFullscreen: true,
+      exposeWayland: false,
+    },
   }
 }

@@ -38,7 +38,7 @@ function autoplayFlag(policy: WebAutoplayPolicy): string {
 }
 
 export function composeWebChromiumArgs(input: WebChromiumArgsInput): string[] {
-  const base = BASE_FLAGS.map((flag) => flag.replace("{locator}", input.locator))
+  const base = BASE_FLAGS.map(flag => flag.replace("{locator}", input.locator))
   return [
     ...(input.overrides?.prepend ?? []),
     ...base,

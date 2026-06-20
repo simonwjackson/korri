@@ -8,7 +8,9 @@ describe("nativeResolutionFromCanvas", () => {
   it("uses the canvas backing store as the native render target", () => {
     // backing store is independent of CSS/viewport size — that is the lesson
     expect(
-      nativeResolutionFromCanvas({ backingStore: { width: 1008, height: 720 } }),
+      nativeResolutionFromCanvas({
+        backingStore: { width: 1008, height: 720 },
+      }),
     ).toEqual({ width: 1008, height: 720 })
   })
 

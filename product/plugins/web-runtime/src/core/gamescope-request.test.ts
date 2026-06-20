@@ -50,6 +50,9 @@ describe("gamescopeAnnotation", () => {
       filter: "pixel",
       refresh: 120,
     })
-    expect((annotation as { display: { nested: { refresh: number } } }).display.nested.refresh).toBe(120)
+    expect(
+      (annotation as { display: { nested: { refresh: number } } }).display
+        .nested.refresh,
+    ).toBe(120)
   })
 })

@@ -73,22 +73,22 @@ export const ENGINE_SIGNATURES: readonly EngineSignature[] = [
 ]
 
 function matches(sig: EngineSignature, fp: PageFingerprint): boolean {
-  const hasGlobal = (sig.globals ?? []).some((g) => fp.globals.includes(g))
-  const hasTitle = (sig.titleIncludes ?? []).some((t) => fp.title.includes(t))
-  const hasCanvas = (sig.canvasIds ?? []).some((id) => fp.canvasIds.includes(id))
-  const hasScript = (sig.scriptSrc ?? []).some((rx) =>
-    fp.scriptSrcs.some((s) => rx.test(s)),
+  const hasGlobal = (sig.globals ?? []).some(g => fp.globals.includes(g))
+  const hasTitle = (sig.titleIncludes ?? []).some(t => fp.title.includes(t))
+  const hasCanvas = (sig.canvasIds ?? []).some(id => fp.canvasIds.includes(id))
+  const hasScript = (sig.scriptSrc ?? []).some(rx =>
+    fp.scriptSrcs.some(s => rx.test(s)),
   )
   return hasGlobal || hasTitle || hasCanvas || hasScript
 }
 
 export function classifyEngine(fp: PageFingerprint): EngineId {
   const high = ENGINE_SIGNATURES.find(
-    (s) => s.confidence === "high" && matches(s, fp),
+    s => s.confidence === "high" && matches(s, fp),
   )
   if (high) return high.engine
   const medium = ENGINE_SIGNATURES.find(
-    (s) => s.confidence === "medium" && matches(s, fp),
+    s => s.confidence === "medium" && matches(s, fp),
   )
   return medium?.engine ?? "generic"
 }

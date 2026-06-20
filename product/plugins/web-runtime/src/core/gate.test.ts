@@ -19,7 +19,10 @@ describe("nextGateAction", () => {
 
   it("dispatches synthetic events for a synthetic-gated engine", () => {
     expect(
-      nextGateAction("synthetic", { hasCanvas: true, userActivationHasBeen: null }),
+      nextGateAction("synthetic", {
+        hasCanvas: true,
+        userActivationHasBeen: null,
+      }),
     ).toEqual({ kind: "synthetic-events" })
   })
 
