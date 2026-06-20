@@ -1,12 +1,18 @@
 /**
  * theme-workshop — screen navigator (gallery bar + jump map).
  *
- * The generic bottom bar:  ◀  GROUP ▸ Screen  (i / N)  ▶  view-toggle  MAP  {controls}
+ * The generic bottom bar, in the single-screen view:
+ *   ◀  GROUP ▸ Screen  (i / N)  ▶  view-toggle  MAP  {controls}
+ *
+ * The screen navigator (◀ / label / ▶) and the MAP jump only make sense when a
+ * single screen is on the device lab, so they're shown ONLY in the "one" view —
+ * the all-screens montage and the component catalog have no "current screen" to
+ * step through or jump to. Those views keep just the view-toggle + {controls}.
  *
  * ←/→ step the flat list; M (or MAP) opens the grouped jump panel; Esc closes
  * it; click any screen to jump; the view toggle flips device-lab ↔ all-screens
- * montage. A theme drops its own live knobs into the `controls` slot (rendered
- * inside the bar) and plays sound via `onCue`; the kit itself stays silent.
+ * montage ↔ catalog. A theme drops its own live knobs into the `controls` slot
+ * (rendered inside the bar) and plays sound via `onCue`; the kit stays silent.
  * Dev-only chrome (plain px), hidden in PROD.
  */
 import { type ReactNode, useEffect, useState } from "react"
@@ -52,20 +58,22 @@ export function Gallery({
     : ["one", "all"]
   const nextView =
     viewOrder[(viewOrder.indexOf(view) + 1) % viewOrder.length] ?? "one"
+  // The screen navigator + MAP only apply to a single screen on the device lab.
+  const onScreen = view === "one"
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const tag = (event.target as HTMLElement | null)?.tagName
       if (tag === "INPUT" || tag === "TEXTAREA") return
-      if (event.key === "ArrowLeft") {
+      if (onScreen && event.key === "ArrowLeft") {
         cue("move")
         onSelect(
           screens[(index - 1 + screens.length) % screens.length]?.id ?? current,
         )
-      } else if (event.key === "ArrowRight") {
+      } else if (onScreen && event.key === "ArrowRight") {
         cue("move")
         onSelect(screens[(index + 1) % screens.length]?.id ?? current)
-      } else if (event.key === "m" || event.key === "M") {
+      } else if (onScreen && (event.key === "m" || event.key === "M")) {
         cue("open")
         setOpen(value => !value)
       } else if (event.key === "Escape") {
@@ -82,7 +90,7 @@ export function Gallery({
 
   return (
     <>
-      {open ? (
+      {open && onScreen ? (
         <div className={cn.mapPanel}>
           <div className={cn.mapHead}>
             <span>STATE MAP — {screens.length} SCREENS</span>
@@ -125,42 +133,46 @@ export function Gallery({
       ) : null}
 
       <div className={cn.bar}>
-        <button
-          type="button"
-          aria-label="previous screen"
-          onClick={() => {
-            cue("move")
-            onSelect(
-              screens[(index - 1 + screens.length) % screens.length]?.id ??
-                current,
-            )
-          }}
-        >
-          ◀
-        </button>
-        <button
-          type="button"
-          className={cn.label}
-          onClick={() => {
-            cue("open")
-            setOpen(value => !value)
-          }}
-        >
-          <b>{active.group}</b> ▸ {active.name}
-          <span className={cn.count}>
-            {index + 1} / {screens.length}
-          </span>
-        </button>
-        <button
-          type="button"
-          aria-label="next screen"
-          onClick={() => {
-            cue("move")
-            onSelect(screens[(index + 1) % screens.length]?.id ?? current)
-          }}
-        >
-          ▶
-        </button>
+        {onScreen ? (
+          <>
+            <button
+              type="button"
+              aria-label="previous screen"
+              onClick={() => {
+                cue("move")
+                onSelect(
+                  screens[(index - 1 + screens.length) % screens.length]?.id ??
+                    current,
+                )
+              }}
+            >
+              ◀
+            </button>
+            <button
+              type="button"
+              className={cn.label}
+              onClick={() => {
+                cue("open")
+                setOpen(value => !value)
+              }}
+            >
+              <b>{active.group}</b> ▸ {active.name}
+              <span className={cn.count}>
+                {index + 1} / {screens.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-label="next screen"
+              onClick={() => {
+                cue("move")
+                onSelect(screens[(index + 1) % screens.length]?.id ?? current)
+              }}
+            >
+              ▶
+            </button>
+          </>
+        ) : null}
         <button
           type="button"
           className={cx(cn.view, view)}
@@ -173,16 +185,18 @@ export function Gallery({
         >
           {VIEW_LABEL[nextView]}
         </button>
-        <button
-          type="button"
-          className={cn.mapToggle}
-          onClick={() => {
-            cue("open")
-            setOpen(value => !value)
-          }}
-        >
-          MAP
-        </button>
+        {onScreen ? (
+          <button
+            type="button"
+            className={cn.mapToggle}
+            onClick={() => {
+              cue("open")
+              setOpen(value => !value)
+            }}
+          >
+            MAP
+          </button>
+        ) : null}
         {controls}
       </div>
     </>
