@@ -13,7 +13,7 @@ Required environment:
   STEAM_HOME        Steam client home containing steamapps/common
 
 Modes:
-  --check          Validate required environment only
+  --check          Diagnose launch-critical runtime prerequisites without mutation
   --apply          Repair mutable runtime state (default)
   --patch-proton   Repair Proton ARM64 payloads/FEX links only
 EOF
@@ -33,13 +33,110 @@ if [ -z "${STEAM_HOME:-}" ]; then
   exit 2
 fi
 
-if [ "$mode" = check ]; then
+common="$STEAM_HOME/steamapps/common"
+
+runtime_check_failed=0
+runtime_check_report() {
+  local status="$1" name="$2" detail="$3"
+  printf 'runtime-prep-check status=%s name=%s detail=%s\n' "$status" "$name" "$detail"
+  [ "$status" != fail ] || runtime_check_failed=1
+}
+
+runtime_check_executable() {
+  local name="$1" path="$2"
+  if [ -x "$path" ]; then
+    runtime_check_report ok "$name" "$path"
+  else
+    runtime_check_report fail "$name" "missing executable: $path"
+  fi
+}
+
+runtime_check_fex_trampoline() {
+  local name="$1" path="$2" expected_wrapper="$3"
+  if [ ! -f "$path" ]; then
+    runtime_check_report fail "$name" "missing wrapper: $path"
+    return 0
+  fi
+  if [ ! -f "$path.x86_64" ]; then
+    runtime_check_report fail "$name" "missing preserved x86_64 payload: $path.x86_64"
+    return 0
+  fi
+  if grep -q "exec $expected_wrapper" "$path" 2>/dev/null && grep -q '\$0\.x86_64' "$path" 2>/dev/null; then
+    runtime_check_report ok "$name" "$path uses $expected_wrapper trampoline"
+  else
+    runtime_check_report fail "$name" "$path is not repaired to a $expected_wrapper x86_64 trampoline"
+  fi
+}
+
+runtime_check_srt_bwrap() {
+  local path="$1" expected_wrapper="$2"
+  if [ ! -f "$path" ]; then
+    runtime_check_report fail sniper-srt-bwrap "missing wrapper: $path"
+    return 0
+  fi
+  if grep -q 'bwrap_bin="${FEX_ROOTFS%/}/usr/bin/bwrap"' "$path" 2>/dev/null \
+    && grep -q 'PATH="/run/current-system/sw/bin:${PATH:-}"' "$path" 2>/dev/null \
+    && grep -q "exec $expected_wrapper" "$path" 2>/dev/null \
+    && grep -q '\$bwrap_bin' "$path" 2>/dev/null; then
+    runtime_check_report ok sniper-srt-bwrap "$path resolves bwrap from FEX_ROOTFS through $expected_wrapper"
+  else
+    runtime_check_report fail sniper-srt-bwrap "$path does not match the FEX_ROOTFS bwrap contract"
+  fi
+}
+
+runtime_check_freedreno() {
+  local rootfs="$1" freedreno machine
+  freedreno="$(find "$rootfs/usr/lib" "$rootfs/usr/lib64" -name libvulkan_freedreno.so -type f -print -quit 2>/dev/null || true)"
+  if [ -z "$freedreno" ]; then
+    runtime_check_report fail fex-rootfs-freedreno "missing libvulkan_freedreno.so under $rootfs/usr/lib*"
+    return 0
+  fi
+  machine="$(od -An -tx1 -j18 -N2 "$freedreno" 2>/dev/null | tr -d '[:space:]')"
+  case "$machine" in
+    3e00) runtime_check_report ok fex-rootfs-freedreno "$freedreno is x86_64" ;;
+    b700) runtime_check_report fail fex-rootfs-freedreno "$freedreno is aarch64, expected x86_64" ;;
+    *) runtime_check_report fail fex-rootfs-freedreno "$freedreno has unexpected ELF e_machine=$machine" ;;
+  esac
+}
+
+runtime_check() {
+  local sniper pv_wrap pv_adverb srt_bwrap expected_wrapper
   echo "steam-guest-runtime-prep mode=check"
   echo "STEAM_HOME=$STEAM_HOME"
-  exit 0
+
+  if [ -d "$common" ]; then
+    runtime_check_report ok steamapps-common "$common"
+  else
+    runtime_check_report fail steamapps-common "missing directory: $common"
+  fi
+
+  if [ -n "${FEX_ROOTFS:-}" ]; then
+    runtime_check_report ok FEX_ROOTFS "$FEX_ROOTFS"
+    runtime_check_executable fex-rootfs-bwrap "${FEX_ROOTFS%/}/usr/bin/bwrap"
+    runtime_check_freedreno "${FEX_ROOTFS%/}"
+  else
+    runtime_check_report fail FEX_ROOTFS "FEX_ROOTFS must be set for x86/x86_64 Steam Runtime helpers"
+  fi
+
+  expected_wrapper="${FEX_WRAPPER_BIN:-/usr/bin/FEX}"
+  sniper="$common/SteamLinuxRuntime_sniper/pressure-vessel"
+  pv_wrap="$sniper/bin/pressure-vessel-wrap"
+  pv_adverb="$sniper/libexec/steam-runtime-tools-0/pv-adverb"
+  srt_bwrap="$(find "$sniper" -name srt-bwrap -type f -print -quit 2>/dev/null || true)"
+  [ -n "$srt_bwrap" ] || srt_bwrap="$sniper/libexec/steam-runtime-tools-0/srt-bwrap"
+
+  runtime_check_fex_trampoline sniper-pressure-vessel-wrap "$pv_wrap" "$expected_wrapper"
+  runtime_check_fex_trampoline sniper-pv-adverb "$pv_adverb" "$expected_wrapper"
+  runtime_check_srt_bwrap "$srt_bwrap" "$expected_wrapper"
+
+  return "$runtime_check_failed"
+}
+
+if [ "$mode" = check ]; then
+  runtime_check
+  exit $?
 fi
 
-common="$STEAM_HOME/steamapps/common"
 [ -d "$common" ] || exit 0
 
 # Native ARM64 Steam starts this helper by basename. Expose the ARM64 runtime

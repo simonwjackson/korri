@@ -18,14 +18,15 @@ mkdir -p "$common"
 STEAM_HOME="$tmp/MissingSteam" bash "$SCRIPT" --apply
 
 pv="$common/SteamLinuxRuntime_sniper/pressure-vessel"
+pv_wrap="$pv/bin/pressure-vessel-wrap"
 fonts="$common/SteamLinuxRuntime_sniper/sniper_platform_0.20240101/files/share/fonts/subdir"
 runtime_bin="$common/SteamLinuxRuntime_sniper/sniper_platform_0.20240101/files/bin"
 proton_dir="$common/Proton 11.0 (ARM64)"
 proton_bin="$proton_dir/files/bin"
 fex_prefix="$tmp/fex"
 fex_share="$fex_prefix/share/fex-emu"
-mkdir -p "$pv" "$fonts" "$runtime_bin" "$proton_dir" "$proton_bin" "$proton_dir/files/share" \
-  "$steam_home/steam-runtime-steamrt-arm64/bin" "$steam_home/steamrtarm64/bin" "$fex_prefix/bin" "$fex_share/GuestThunks"
+mkdir -p "$pv/bin" "$fonts" "$runtime_bin" "$proton_dir" "$proton_bin" "$proton_dir/files/share" \
+  "$steam_home/steam-runtime-steamrt-arm64/bin" "$steam_home/steamrtarm64/bin" "$fex_prefix/bin" "$fex_prefix/usr/bin" "$fex_prefix/usr/lib" "$fex_share/GuestThunks"
 
 cat > "$pv/srt-bwrap" <<'EOS'
 #!/bin/sh
@@ -36,12 +37,22 @@ chmod 755 "$pv/srt-bwrap"
 # Use a real executable with an embedded FEX-looking string to ensure wrapper
 # detection does not grep binary payloads and skip newly downloaded runtime
 # helpers that still need FEX trampolines.
-cp "$(command -v sh)" "$pv/pressure-vessel-wrap"
-chmod u+w "$pv/pressure-vessel-wrap"
-printf '\n/FEX false-positive marker\n' >> "$pv/pressure-vessel-wrap"
-chmod 755 "$pv/pressure-vessel-wrap"
+cp "$(command -v sh)" "$pv_wrap"
+chmod u+w "$pv_wrap"
+printf '\n/FEX false-positive marker\n' >> "$pv_wrap"
+chmod 755 "$pv_wrap"
 expect_pv_wrap=0
-if command -v file >/dev/null 2>&1 && file "$pv/pressure-vessel-wrap" | grep -q 'x86-64'; then
+if command -v file >/dev/null 2>&1 && file "$pv_wrap" | grep -q 'x86-64'; then
+  expect_pv_wrap=1
+else
+  # Keep this smoke portable on aarch64 builders: exercise the same interrupted
+  # mutable-runtime repair path as pv-adverb when the host shell is not x86_64.
+  : > "$pv_wrap"
+  cat > "$pv_wrap.x86_64" <<'EOS'
+#!/bin/sh
+echo real pressure-vessel-wrap "$@"
+EOS
+  chmod 755 "$pv_wrap" "$pv_wrap.x86_64"
   expect_pv_wrap=1
 fi
 
@@ -148,7 +159,14 @@ cat > "$fex_prefix/bin/FEX" <<'EOS'
 #!/bin/sh
 exit 0
 EOS
-chmod 755 "$fex_prefix/bin/FEX"
+cat > "$fex_prefix/usr/bin/bwrap" <<'EOS'
+#!/bin/sh
+exit 0
+EOS
+chmod 755 "$fex_prefix/bin/FEX" "$fex_prefix/usr/bin/bwrap"
+printf '\177ELF' > "$fex_prefix/usr/lib/libvulkan_freedreno.so"
+dd if=/dev/zero bs=1 count=14 >> "$fex_prefix/usr/lib/libvulkan_freedreno.so" 2>/dev/null
+printf '\x3e\x00' >> "$fex_prefix/usr/lib/libvulkan_freedreno.so"
 : > "$fex_share/ThunksDB.json"
 
 cat > "$runtime_bin/python3.11" <<'EOS'
@@ -167,11 +185,11 @@ grep -q 'PATH="/run/current-system/sw/bin:${PATH:-}"' "$pv/srt-bwrap" \
 grep -q 'exec /usr/bin/FEX "$bwrap_bin" "$@"' "$pv/srt-bwrap" \
   || fail "srt-bwrap should direct-FEX the x86_64 rootfs bwrap"
 if [ "$expect_pv_wrap" = 1 ]; then
-  [ -f "$pv/pressure-vessel-wrap.x86_64" ] \
+  [ -f "$pv_wrap.x86_64" ] \
     || fail "pressure-vessel x86_64 backup was not preserved"
-  grep -q 'exec /usr/bin/FEX "$0.x86_64"' "$pv/pressure-vessel-wrap" \
+  grep -q 'exec /usr/bin/FEX "$0.x86_64"' "$pv_wrap" \
     || fail "pressure-vessel x86_64 binary should be replaced by a FHS-visible FEX trampoline"
-  grep -q 'KORRI_STEAM_OVERLAY_FILTER' "$pv/pressure-vessel-wrap" \
+  grep -q 'KORRI_STEAM_OVERLAY_FILTER' "$pv_wrap" \
     || fail "pressure-vessel wrapper should filter Steam overlay preload injection"
 fi
 grep -q 'exec /usr/bin/FEX "$0.x86_64"' "$zero_byte_pv" \
@@ -205,5 +223,25 @@ grep -q 'deepest restored wine64' "$proton_bin/wine64" \
 [ -L "$runtime_bin/python" ] || fail "python symlink missing"
 [ "$(readlink "$runtime_bin/python3")" = 'python3.11' ] \
   || fail "python3 symlink should point at versioned runtime interpreter"
+
+check_out=$(STEAM_HOME="$steam_home" FEX_ROOTFS="$fex_prefix" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --check)
+printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=fex-rootfs-bwrap' \
+  || fail "--check should validate FEX rootfs bwrap"
+printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=fex-rootfs-freedreno' \
+  || fail "--check should validate x86_64 Freedreno in the FEX rootfs"
+printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=sniper-pressure-vessel-wrap' \
+  || fail "--check should validate pressure-vessel-wrap trampoline"
+printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=sniper-pv-adverb' \
+  || fail "--check should validate pv-adverb trampoline"
+printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=sniper-srt-bwrap' \
+  || fail "--check should validate srt-bwrap rootfs contract"
+
+set +e
+missing_fex_out=$(STEAM_HOME="$steam_home" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --check 2>&1)
+missing_fex_status=$?
+set -e
+[ "$missing_fex_status" -ne 0 ] || fail "--check should fail when FEX_ROOTFS is absent"
+printf '%s\n' "$missing_fex_out" | grep -q 'runtime-prep-check status=fail name=FEX_ROOTFS' \
+  || fail "missing FEX_ROOTFS diagnostic should name FEX_ROOTFS"
 
 echo "steam-guest-runtime-prep-smoke: ok"
