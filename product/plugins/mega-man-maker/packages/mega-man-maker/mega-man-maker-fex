@@ -51,8 +51,12 @@ else
     exit 1
   fi
 
-  export KORRI_PROTON_RUNTIME_ROOT="${MMM_PROTON_ROOT:-${KORRI_PROTON_RUNTIME_ROOT:-/var/lib/korri/steam/steamapps/common/Proton 10.0}}"
-  export KORRI_PROTON_RUNTIME_FILES="${MMM_PROTON_FILES:-${KORRI_PROTON_RUNTIME_FILES:-$KORRI_PROTON_RUNTIME_ROOT/files}}"
+  if [ -n "${MMM_PROTON_ROOT:-}" ]; then
+    export KORRI_PROTON_RUNTIME_ROOT="$MMM_PROTON_ROOT"
+  fi
+  if [ -n "${MMM_PROTON_FILES:-}" ]; then
+    export KORRI_PROTON_RUNTIME_FILES="$MMM_PROTON_FILES"
+  fi
   export KORRI_PROTON_RUNTIME_WINEPREFIX="${KORRI_PROTON_RUNTIME_WINEPREFIX:-$wine_prefix}"
   # shellcheck source=/dev/null
   source "$proton_runtime_setup"

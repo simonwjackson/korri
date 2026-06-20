@@ -1,12 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import { runPluginHandler } from "@platform/plugin"
 import { Effect } from "effect"
-import {
-  KORRI_STEAM_PLUGIN_ID,
-  steamRuntimePaths,
-} from "../../steam/src/plugin"
+import { KORRI_STEAM_PLUGIN_ID } from "../../steam/src/plugin"
 import {
   type FexRuntimeResolveOutput,
+  fexRuntimePaths,
   fexRuntimePlugin,
   KORRI_FEX_PLUGIN_ID,
 } from ".."
@@ -72,10 +70,10 @@ describe("FEX runtime plugin descriptor", () => {
       runtime: "linux-user",
       status: "resolved",
       env: {
-        FEX_ROOTFS: steamRuntimePaths.fexRootfs,
+        FEX_ROOTFS: fexRuntimePaths.rootfs,
         FEX_APP_CONFIG:
           "/var/lib/korri/content/games/mega-man-arena/4.20/fex-mega-man-arena.json",
-        VK_ICD_FILENAMES: "/usr/share/vulkan/icd.d/freedreno_icd.x86_64.json",
+        VK_ICD_FILENAMES: fexRuntimePaths.vulkanIcd,
       },
       thunks: {
         GL: 1,
@@ -84,5 +82,28 @@ describe("FEX runtime plugin descriptor", () => {
         WaylandClient: 1,
       },
     })
+  })
+
+  it("respects caller-provided rootfs overrides", async () => {
+    const handler = fexRuntimePlugin.handlers.find(
+      candidate => candidate.operation === "runtime.resolve",
+    )
+    if (!handler) throw new Error("FEX runtime.resolve handler missing")
+
+    const result = (await Effect.runPromise(
+      runPluginHandler(handler, {
+        operation: "runtime.resolve",
+        provider: KORRI_FEX_PLUGIN_ID,
+        input: {
+          rootfs: "/custom/fex-rootfs",
+          enableThunks: false,
+        },
+      }),
+    )) as FexRuntimeResolveOutput
+
+    expect(result.env).toMatchObject({
+      FEX_ROOTFS: "/custom/fex-rootfs",
+    })
+    expect(result.env).not.toHaveProperty("VK_ICD_FILENAMES")
   })
 })

@@ -18,8 +18,6 @@ export const KORRI_STEAM_STORAGE_ID =
 
 export const steamRuntimePaths = {
   stateRoot: "/var/lib/korri/steam",
-  fexRootfs: "/var/lib/korri/steam/fex-rootfs",
-  proton10Root: "/var/lib/korri/steam/steamapps/common/Proton 10.0",
 } as const
 
 export interface SteamPluginPolicy {

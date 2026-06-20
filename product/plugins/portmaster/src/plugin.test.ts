@@ -19,6 +19,7 @@ import {
   executableResources,
 } from "@platform/plugin/registry"
 import { Effect } from "effect"
+import { fexRuntimePaths } from "../../fex-runtime"
 import {
   createPortMasterPlugin,
   KORRI_PORTMASTER_PLUGIN_ID,
@@ -426,7 +427,7 @@ describe("PortMaster plugin", () => {
       fexWrapper: {
         arch: "x86_64",
         fexPath: "/nix/store/fex/bin/FEX",
-        rootfs: "/var/lib/korri/steam/fex-rootfs",
+        rootfs: fexRuntimePaths.rootfs,
         setupEnvPath:
           "/nix/store/korri-fex-runtime/share/korri/fex-runtime/setup-env",
         env: {
@@ -458,7 +459,7 @@ describe("PortMaster plugin", () => {
           arch: "x86_64",
           originalPath: "digger/.korri-fex/digger.x86_64",
           fexPath: "/nix/store/fex/bin/FEX",
-          rootfs: "/var/lib/korri/steam/fex-rootfs",
+          rootfs: fexRuntimePaths.rootfs,
           setupEnvPath:
             "/nix/store/korri-fex-runtime/share/korri/fex-runtime/setup-env",
           env: {
@@ -505,7 +506,7 @@ describe("PortMaster plugin", () => {
 
       expect(envelope.env).toMatchObject({
         DEVICE_ARCH: "x86_64",
-        FEX_ROOTFS: "/var/lib/korri/steam/fex-rootfs",
+        FEX_ROOTFS: fexRuntimePaths.rootfs,
         SDL_AUDIODRIVER: "dummy",
         SDL_VIDEODRIVER: "x11",
       })
@@ -623,7 +624,7 @@ describe("PortMaster plugin", () => {
         args: [join(root, "ports", "Digger.sh")],
         env: {
           DEVICE_ARCH: "x86_64",
-          FEX_ROOTFS: "/var/lib/korri/steam/fex-rootfs",
+          FEX_ROOTFS: fexRuntimePaths.rootfs,
           SDL_VIDEODRIVER: "x11",
         },
       })

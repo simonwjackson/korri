@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 
+import { steamRuntimePaths } from "./plugin"
+
 import {
   REPO_ROOT,
   readSource,
@@ -91,5 +93,25 @@ describe("Steam plugin boundary", () => {
     )
 
     expect(directImports).toEqual([])
+  })
+
+  it("does not expose generic FEX or Proton runtime paths from Steam", () => {
+    expect(steamRuntimePaths).toEqual({
+      stateRoot: "/var/lib/korri/steam",
+    })
+    expect(steamRuntimePaths).not.toHaveProperty("fexRootfs")
+    expect(steamRuntimePaths).not.toHaveProperty("proton10Root")
+  })
+
+  it("keeps FEX and Proton runtime plugins from importing Steam path facts", () => {
+    const runtimePluginFiles = [
+      "product/plugins/fex-runtime/src/plugin.ts",
+      "product/plugins/proton-runtime/src/plugin.ts",
+    ]
+
+    expect(
+      runtimePluginFiles
+        .filter(file => readSource(join(REPO_ROOT, file)).includes("steamRuntimePaths")),
+    ).toEqual([])
   })
 })

@@ -1,8 +1,5 @@
 import { plugin } from "@platform/plugin"
-import {
-  KORRI_STEAM_PLUGIN_ID,
-  steamRuntimePaths,
-} from "../../steam/src/plugin"
+import { KORRI_STEAM_PLUGIN_ID } from "../../steam/src/plugin"
 
 export const KORRI_PROTON_PLUGIN_ID = "@korri:proton" as const
 
@@ -22,9 +19,15 @@ export interface ProtonRuntimeResolveOutput {
   readonly env: Readonly<Record<string, string>>
 }
 
-const DEFAULT_PROTON_ROOT = steamRuntimePaths.proton10Root
-const DEFAULT_WINE_DLL_OVERRIDES = "dxgi,d3d11=n,b"
-const DEFAULT_LIBGL_DRIVERS_PATH = "/run/opengl-driver/lib/dri"
+export const protonRuntimePaths = {
+  proton10Root: "/var/lib/korri/steam/steamapps/common/Proton 10.0",
+  wineDllOverrides: "dxgi,d3d11=n,b",
+  libglDriversPath: "/run/opengl-driver/lib/dri",
+} as const
+
+const DEFAULT_PROTON_ROOT = protonRuntimePaths.proton10Root
+const DEFAULT_WINE_DLL_OVERRIDES = protonRuntimePaths.wineDllOverrides
+const DEFAULT_LIBGL_DRIVERS_PATH = protonRuntimePaths.libglDriversPath
 
 export const protonRuntimePlugin = plugin({
   namespace: "@korri",

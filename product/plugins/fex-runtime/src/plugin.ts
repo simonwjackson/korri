@@ -1,8 +1,5 @@
 import { plugin } from "@platform/plugin"
-import {
-  KORRI_STEAM_PLUGIN_ID,
-  steamRuntimePaths,
-} from "../../steam/src/plugin"
+import { KORRI_STEAM_PLUGIN_ID } from "../../steam/src/plugin"
 
 export const KORRI_FEX_PLUGIN_ID = "@korri:fex" as const
 
@@ -26,8 +23,13 @@ export interface FexRuntimeResolveOutput {
   }
 }
 
-const DEFAULT_FEX_ROOTFS = steamRuntimePaths.fexRootfs
-const DEFAULT_VULKAN_ICD = "/usr/share/vulkan/icd.d/freedreno_icd.x86_64.json"
+export const fexRuntimePaths = {
+  rootfs: "/var/lib/korri/steam/fex-rootfs",
+  vulkanIcd: "/usr/share/vulkan/icd.d/freedreno_icd.x86_64.json",
+} as const
+
+const DEFAULT_FEX_ROOTFS = fexRuntimePaths.rootfs
+const DEFAULT_VULKAN_ICD = fexRuntimePaths.vulkanIcd
 
 export const fexRuntimePlugin = plugin({
   namespace: "@korri",

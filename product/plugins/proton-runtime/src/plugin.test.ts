@@ -1,13 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import { runPluginHandler } from "@platform/plugin"
 import { Effect } from "effect"
-import {
-  KORRI_STEAM_PLUGIN_ID,
-  steamRuntimePaths,
-} from "../../steam/src/plugin"
+import { KORRI_STEAM_PLUGIN_ID } from "../../steam/src/plugin"
 import {
   KORRI_PROTON_PLUGIN_ID,
   type ProtonRuntimeResolveOutput,
+  protonRuntimePaths,
   protonRuntimePlugin,
 } from ".."
 
@@ -71,14 +69,38 @@ describe("Proton runtime plugin descriptor", () => {
       provider: KORRI_PROTON_PLUGIN_ID,
       runtime: "proton-10",
       status: "resolved",
-      protonRoot: steamRuntimePaths.proton10Root,
-      protonFiles: `${steamRuntimePaths.proton10Root}/files`,
-      wine64: `${steamRuntimePaths.proton10Root}/files/bin/wine64`,
+      protonRoot: protonRuntimePaths.proton10Root,
+      protonFiles: `${protonRuntimePaths.proton10Root}/files`,
+      wine64: `${protonRuntimePaths.proton10Root}/files/bin/wine64`,
       env: {
         WINEPREFIX: "/var/lib/korri/content/games/mega-man-arena/4.20/.wine",
-        WINEDLLOVERRIDES: "dxgi,d3d11=n,b",
-        LIBGL_DRIVERS_PATH: "/run/opengl-driver/lib/dri",
+        WINEDLLOVERRIDES: protonRuntimePaths.wineDllOverrides,
+        LIBGL_DRIVERS_PATH: protonRuntimePaths.libglDriversPath,
       },
+    })
+  })
+
+  it("respects caller-provided Proton root and files overrides", async () => {
+    const handler = protonRuntimePlugin.handlers.find(
+      candidate => candidate.operation === "runtime.resolve",
+    )
+    if (!handler) throw new Error("Proton runtime.resolve handler missing")
+
+    const result = (await Effect.runPromise(
+      runPluginHandler(handler, {
+        operation: "runtime.resolve",
+        provider: KORRI_PROTON_PLUGIN_ID,
+        input: {
+          protonRoot: "/custom/proton",
+          protonFiles: "/custom/proton/files-alt",
+        },
+      }),
+    )) as ProtonRuntimeResolveOutput
+
+    expect(result).toMatchObject({
+      protonRoot: "/custom/proton",
+      protonFiles: "/custom/proton/files-alt",
+      wine64: "/custom/proton/files-alt/bin/wine64",
     })
   })
 })

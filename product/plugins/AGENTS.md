@@ -160,6 +160,12 @@ Resource/fulfillment rules:
 - Launch resolution should use already fulfilled resources and fail closed if missing.
 - Nix must be an explicit host capability/absolute command, not assumed from `PATH`.
 
+## Runtime substrate ownership
+
+- `@korri:fex` owns generic FEX substrate facts and defaults. FEX consumers should import default FEX path facts from the FEX runtime plugin or source the `korri-fex-runtime` setup helper; do not import Steam path constants for FEX rootfs defaults.
+- `@korri:proton` owns Proton runtime defaults. Windows/FEX game wrappers should source `korri-proton-runtime` and let that helper provide the default Proton root unless the app exposes an explicit override.
+- `@korri:steam` owns Steam AppID launch, install authority, service envelope, Steam Runtime / pressure-vessel repair, Proton patching for Steam launches, visibility policy, and AppID cleanup. Do not move Steam runtime-prep into `@korri:fex` just because the current FEX rootfs is physically provisioned under Steam state.
+
 ## Launch companions and wrappers
 
 For launch-environment functionality like Gamescope:
