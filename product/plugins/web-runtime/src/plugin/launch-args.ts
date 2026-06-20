@@ -7,7 +7,10 @@
 
 export interface WebLaunchArgsInput {
   readonly engine?: string
-  readonly nativeResolution?: { readonly width: number; readonly height: number }
+  readonly nativeResolution?: {
+    readonly width: number
+    readonly height: number
+  }
   readonly filter?: "pixel" | "linear"
   readonly extraFlags?: readonly string[]
   readonly shims?: readonly string[]
