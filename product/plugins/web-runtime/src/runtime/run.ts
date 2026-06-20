@@ -99,6 +99,8 @@ async function clickCanvasCenter(cdp: CdpClient): Promise<void> {
     "(() => { const c = document.querySelector('canvas'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.left + r.width/2, y: r.top + r.height/2 }; })()",
   )
   if (!rect) return
+  // Separate the down/up in time: engines debounce events fired in the same
+  // tick and will not register a same-instant press+release as a real click.
   for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) {
     await cdp.send("Input.dispatchMouseEvent", {
       type,
@@ -108,6 +110,7 @@ async function clickCanvasCenter(cdp: CdpClient): Promise<void> {
       buttons: type === "mousePressed" ? 1 : 0,
       clickCount: 1,
     })
+    await Bun.sleep(60)
   }
 }
 
