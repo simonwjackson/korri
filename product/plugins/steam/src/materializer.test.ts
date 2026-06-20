@@ -117,6 +117,16 @@ describe("steamReadableLaunchIntegration", () => {
           target: "steam://store/1029210",
         }),
       ).toBe(false)
+      expect(
+        steamReadableLaunchIntegration.canResolve({
+          ...context(root),
+          app: {
+            ...context(root).app,
+            command: "/run/current-system/sw/bin/korri-steam-app",
+          },
+          launchCompanions: {},
+        }),
+      ).toBe(true)
     })
   })
 
@@ -160,6 +170,46 @@ describe("steamReadableLaunchIntegration", () => {
         "ready",
       ])
       expect(writes.length).toBe(2)
+    })
+  })
+
+  it("renders korri-steam-app wrapper launches with AppID-only args", async () => {
+    await withRoot(async root => {
+      await mkdir(root, { recursive: true })
+      const events: string[] = []
+      const { fs } = memoryFs()
+      const command = "/run/current-system/sw/bin/korri-steam-app"
+
+      const result = await Effect.runPromise(
+        materializeReadableSteamLaunch({
+          context: {
+            ...context(root),
+            app: {
+              ...context(root).app,
+              command,
+            },
+            launchCompanions: {},
+          },
+          fs,
+          lifecycle: lifecycle(events),
+          lock: inlineLock,
+        }),
+      )
+
+      expect(result.spec).toEqual({ command, args: ["1029210"] })
+      expect(result.launchMetadata).toMatchObject({
+        annotations: {
+          [KORRI_STEAM_PLUGIN_ID]: {
+            foregroundCleanup: { appId: "1029210" },
+          },
+        },
+      })
+      expect(events).toEqual([
+        `shutdown:${command}`,
+        "wait-shutdown",
+        "start:-silent -gamepadui",
+        "ready",
+      ])
     })
   })
 

@@ -42,6 +42,9 @@ export interface RenderSteamLaunchSpecOptions {
   readonly target: string
 }
 
+export const isKorriSteamAppCommand = (command: string): boolean =>
+  command === "korri-steam-app" || command.endsWith("/korri-steam-app")
+
 export const renderSteamLaunchSpec = (
   options: RenderSteamLaunchSpecOptions,
 ): Effect.Effect<LaunchSpec, InvalidSteamTarget> =>
@@ -49,8 +52,9 @@ export const renderSteamLaunchSpec = (
     const parsed = parseSteamAppId(options.target)
     if (parsed._tag === "Left") return yield* Effect.fail(parsed.left)
     const appId = parsed.right
+    const command = options.command ?? "steam"
     return {
-      command: options.command ?? "steam",
-      args: ["-applaunch", appId],
+      command,
+      args: isKorriSteamAppCommand(command) ? [appId] : ["-applaunch", appId],
     }
   })
