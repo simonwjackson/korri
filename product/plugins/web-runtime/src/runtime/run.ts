@@ -55,7 +55,7 @@ async function probe(
       `--remote-debugging-port=${port}`,
       config.locator,
     ],
-    { env: spawnEnv(), stdout: "ignore", stderr: "ignore" },
+    { env: spawnEnv(), cwd: "/tmp", stdout: "ignore", stderr: "ignore" },
   )
   try {
     const cdp = await connectCdp(port)
@@ -172,8 +172,12 @@ export async function run(config: RunConfig): Promise<number> {
       ]
     : [CHROMIUM, ...chromiumArgs]
 
+  // Pin a world-accessible cwd: posix_spawn resolves the inherited working
+  // directory, and a private/inaccessible cwd (e.g. another user's home) makes
+  // the spawn fail with EACCES even for world-executable binaries.
   const proc = Bun.spawn(command, {
     env: spawnEnv(),
+    cwd: "/tmp",
     stdout: "inherit",
     stderr: "inherit",
   })
