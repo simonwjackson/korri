@@ -19,10 +19,11 @@ const LAYER_OF: Record<string, StoryLayer> = {
   templates: "template",
 }
 const LAYER_ORDER: Record<StoryLayer, number> = {
-  atom: 0,
-  molecule: 1,
+  page: 0,
+  template: 1,
   organism: 2,
-  template: 3,
+  molecule: 3,
+  atom: 4,
 }
 
 const modules = import.meta.glob<{ default: StorySpec }>(

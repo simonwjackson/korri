@@ -26,8 +26,10 @@ export interface Screen {
   readonly render: () => ReactNode
 }
 
-/** The atomic-design layers, ordered smallest → largest for the catalog. */
-export type StoryLayer = "atom" | "molecule" | "organism" | "template"
+/** The atomic-design layers. The catalog renders them top-down (page →
+ * template → organism → molecule → atom): the whole page first, decomposing into
+ * its parts. A `page` is a full screen (always framed). */
+export type StoryLayer = "page" | "template" | "organism" | "molecule" | "atom"
 
 /**
  * One component story for the "parts" catalog view — a component (optionally a

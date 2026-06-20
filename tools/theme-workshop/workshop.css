@@ -403,15 +403,15 @@
 	--intrinsic-base-min: var(--wk-parts-base, 14px);
 	--intrinsic-base-max: var(--wk-parts-base, 14px);
 }
-/* Templates are whole screens — a generous, screen-shaped frame (one/two per
- * row) so a screen reads as a screen; the content scales to it via cqi. */
-.wk-parts-group--template .wk-parts-grid {
+/* Templates and pages are whole screens — a generous, screen-shaped frame
+ * (one/two per row) so a screen reads as a screen; the content scales to it. */
+:is(.wk-parts-group--template, .wk-parts-group--page) .wk-parts-grid {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: flex-start;
 	gap: var(--intrinsic-space-3) var(--intrinsic-space-4);
 }
-.wk-parts-group--template .wk-parts-frame {
+:is(.wk-parts-group--template, .wk-parts-group--page) .wk-parts-frame {
 	width: min(
 		640px,
 		90vw

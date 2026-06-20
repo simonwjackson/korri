@@ -16,17 +16,20 @@ const MAX_BASE = 48
 const STEP = 2
 const DEFAULT_BASE = 14
 
+// Top-down: the whole page first, then its decomposition down to atoms.
 const LAYER_ORDER: readonly StoryLayer[] = [
-  "atom",
-  "molecule",
-  "organism",
+  "page",
   "template",
+  "organism",
+  "molecule",
+  "atom",
 ]
 const LAYER_LABEL: Record<StoryLayer, string> = {
-  atom: "ATOMS",
-  molecule: "MOLECULES",
-  organism: "ORGANISMS",
+  page: "PAGES",
   template: "TEMPLATES",
+  organism: "ORGANISMS",
+  molecule: "MOLECULES",
+  atom: "ATOMS",
 }
 
 export function Parts({
@@ -78,9 +81,12 @@ export function Parts({
             <div className="wk-parts-grid">
               {inLayer.map(story => {
                 // Bare + content-sized by default (tokens/skin, no frame); a
-                // full-surface story (overlay/screen) or a template gets a sized
-                // framed canvas so it doesn't collapse.
-                const framed = story.surface === true || layer === "template"
+                // full-surface story (overlay/screen) or a template/page gets a
+                // sized framed canvas so it reads as a screen, not collapsed.
+                const framed =
+                  story.surface === true ||
+                  layer === "template" ||
+                  layer === "page"
                 return (
                   <figure className="wk-parts-cell" key={story.id}>
                     {framed ? (

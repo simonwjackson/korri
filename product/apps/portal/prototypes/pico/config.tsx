@@ -10,6 +10,7 @@
  */
 import type {
   DeviceConfig,
+  Story,
   ThemeKnob,
   ThemeWorkshopConfig,
 } from "@tools/theme-workshop"
@@ -115,6 +116,17 @@ const PICO_KNOBS: readonly ThemeKnob[] = [
   },
 ]
 
+// The screens ARE the atomic "pages" — surface them as the catalog's top layer
+// so the parts view shows the full decomposition (page → … → atom), not just the
+// sub-page parts. Each page is framed (a full screen); its group is the caption.
+const PICO_PAGE_STORIES: readonly Story[] = PICO_SCREENS.map(screen => ({
+  id: `page-${screen.id}`,
+  layer: "page",
+  name: screen.name,
+  note: screen.group,
+  render: screen.render,
+}))
+
 export const picoConfig: ThemeWorkshopConfig = {
   id: "pico",
   devices: PICO_DEVICES,
@@ -123,7 +135,7 @@ export const picoConfig: ThemeWorkshopConfig = {
   scaleVarPrefix: "pico",
   screens: PICO_SCREENS,
   groups: PICO_GROUPS,
-  stories: PICO_STORIES,
+  stories: [...PICO_PAGE_STORIES, ...PICO_STORIES],
   // Pico's existing CSS drives the chrome; the kit emits these exact classes
   // so pico-prototype.css applies unchanged (no neutral wk-* fallback used).
   // Pico skins only the CANVAS — the device-lab frame where its screens render
