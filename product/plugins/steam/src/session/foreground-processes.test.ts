@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import {
   collectSteamForegroundProcesses,
   isSteamForegroundProcess,
+  steamAppIdFromProcess,
   type SteamForegroundProcessInfo,
 } from "./foreground-processes"
 
@@ -95,6 +96,49 @@ describe("Steam foreground process classification", () => {
         process => process.pid,
       ),
     ).toEqual([42, 43, 44, 45, 47])
+  })
+
+  it("scopes detached Proton/FEX game processes by Steam AppID environment", () => {
+    const processes: readonly SteamForegroundProcessInfo[] = [
+      steamLaunch("1029210", 42),
+      {
+        pid: 43,
+        ppid: 1,
+        uid: 1000,
+        cmdline: [
+          "/usr/bin/FEX",
+          "/var/lib/korri/steam/steamapps/common/Proton 10.0/files/bin/wine64-preloader",
+          "Z:\\var\\lib\\korri\\steam\\steamapps\\common\\30XX\\30XX.exe",
+        ],
+        environ: ["SteamGameId=1029210", "SteamAppId=1029210"],
+      },
+      {
+        pid: 44,
+        ppid: 43,
+        uid: 1000,
+        cmdline: [
+          "/usr/bin/FEX",
+          "/var/lib/korri/steam/steamapps/common/Proton 10.0/files/bin/wineserver",
+        ],
+      },
+      {
+        pid: 45,
+        ppid: 1,
+        uid: 1000,
+        cmdline: [
+          "/usr/bin/FEX",
+          "/var/lib/korri/steam/steamapps/common/Caveblazers/Caveblazers.exe",
+        ],
+        environ: ["SteamGameId=452060"],
+      },
+    ]
+
+    expect(steamAppIdFromProcess(processes[1])).toBe("1029210")
+    expect(
+      collectSteamForegroundProcesses(processes, { appId: "1029210" }).map(
+        process => process.pid,
+      ),
+    ).toEqual([42, 43, 44])
   })
 
   it("does not match warm Steam client or service processes", () => {

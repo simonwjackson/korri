@@ -5,6 +5,7 @@ export interface SteamForegroundProcessInfo {
   readonly ppid?: number
   readonly uid?: number
   readonly cmdline: readonly string[]
+  readonly environ?: readonly string[]
 }
 
 export interface SteamForegroundProcessFilter {
@@ -115,6 +116,10 @@ export async function cleanupSteamForegroundProcesses(
     signalProcessSafely(options.signalProcess, process.pid, "SIGKILL")
   }
 
+  if (afterGrace.length > 0) {
+    await cleanupDelay(Math.min(options.graceMs ?? 1500, 250))
+  }
+
   const residual =
     afterGrace.length === 0
       ? []
@@ -139,10 +144,18 @@ export async function cleanupSteamForegroundProcesses(
 export function steamAppIdFromProcess(
   process: SteamForegroundProcessInfo,
 ): string | undefined {
-  const match = commandLineForMatch(process).match(
+  const commandLineMatch = commandLineForMatch(process).match(
     /\bSteamLaunch AppId=(\d+)\b/,
   )
-  return match?.[1]
+  if (commandLineMatch?.[1]) return commandLineMatch[1]
+
+  for (const entry of process.environ ?? []) {
+    const match = entry.match(
+      /^(?:SteamAppId|SteamGameId|SteamOverlayGameId)=(\d+)$/,
+    )
+    if (match?.[1]) return match[1]
+  }
+  return undefined
 }
 
 export async function scanCurrentUserProcesses(): Promise<
@@ -161,10 +174,11 @@ export async function scanCurrentUserProcesses(): Promise<
   for (const entry of entries) {
     if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue
     const pid = Number(entry.name)
-    const [uid, ppid, cmdline] = await Promise.all([
+    const [uid, ppid, cmdline, environ] = await Promise.all([
       readProcUid(pid),
       readProcParentPid(pid),
       readProcCmdline(pid),
+      readProcEnviron(pid),
     ])
     if (cmdline.length === 0) continue
     if (currentUid !== undefined && uid !== undefined && uid !== currentUid) {
@@ -175,6 +189,7 @@ export async function scanCurrentUserProcesses(): Promise<
       ...(ppid !== undefined ? { ppid } : {}),
       ...(uid !== undefined ? { uid } : {}),
       cmdline,
+      ...(environ.length > 0 ? { environ } : {}),
     })
   }
   return processes
@@ -248,6 +263,15 @@ async function readProcParentPid(pid: number): Promise<number | undefined> {
 async function readProcCmdline(pid: number): Promise<readonly string[]> {
   try {
     const raw = await readFile(`/proc/${pid}/cmdline`, "utf8")
+    return raw.split("\0").filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+async function readProcEnviron(pid: number): Promise<readonly string[]> {
+  try {
+    const raw = await readFile(`/proc/${pid}/environ`, "utf8")
     return raw.split("\0").filter(Boolean)
   } catch {
     return []
