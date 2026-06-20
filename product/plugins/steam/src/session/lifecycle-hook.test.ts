@@ -87,13 +87,21 @@ describe("Steam session lifecycle hook", () => {
     expect(result).toEqual({ cleaned: [100, 101, 102, 103], residual: [] })
   })
 
-  it("does not parse launch commands when cleanup metadata is absent", async () => {
+  it("falls back to the provider-owned Steam AppID launcher when metadata is absent", async () => {
     const signals: Array<{ pid: number; signal: NodeJS.Signals }> = []
+    let scan = 0
     const hook = createSteamSessionLifecycleHook({
       graceMs: 0,
-      processScanner: async () => [
-        { pid: 100, cmdline: ["SteamLaunch", "AppId=1029210"] },
-      ],
+      processScanner: async () => {
+        scan += 1
+        if (scan <= 2) {
+          return [
+            { pid: 100, cmdline: ["SteamLaunch", "AppId=1029210"] },
+            { pid: 101, cmdline: ["SteamLaunch", "AppId=401710"] },
+          ]
+        }
+        return [{ pid: 101, cmdline: ["SteamLaunch", "AppId=401710"] }]
+      },
       signalProcess: (pid, signal) => signals.push({ pid, signal }),
     })
 
@@ -106,7 +114,10 @@ describe("Steam session lifecycle hook", () => {
     })
     const result = await hook.cleanup?.({ launchId: "launch-1" })
 
-    expect(signals).toEqual([])
-    expect(result).toEqual({ cleaned: [], residual: [] })
+    expect(signals).toEqual([
+      { pid: 100, signal: "SIGTERM" },
+      { pid: 100, signal: "SIGKILL" },
+    ])
+    expect(result).toEqual({ cleaned: [100], residual: [] })
   })
 })

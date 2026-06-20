@@ -41,7 +41,9 @@ export function createSteamSessionLifecycleHook(
   return {
     id: KORRI_STEAM_PLUGIN_ID,
     afterChildRunning: async request => {
-      const metadata = steamCleanupMetadataFromStartRequest(request)
+      const metadata =
+        steamCleanupMetadataFromStartRequest(request) ??
+        steamCleanupMetadataFromLaunchSpec(request.spec)
       if (metadata) launchAppIds.set(request.launchId, metadata.appId)
       return undefined
     },
@@ -74,6 +76,20 @@ function steamCleanupMetadataFromCleanupRequest(
   request: KorriSessionLifecycleHookCleanupRequest,
 ): SteamLaunchCleanupMetadata | undefined {
   return steamCleanupMetadataFromLaunchMetadata(request.launchMetadata)
+}
+
+function steamCleanupMetadataFromLaunchSpec(
+  spec: KorriSessionLifecycleHookStartRequest["spec"],
+): SteamLaunchCleanupMetadata | undefined {
+  const command = spec.command.split("/").pop() ?? spec.command
+  if (command === "korri-steam-app") {
+    const [appId] = spec.args
+    return isDecimalString(appId) ? { appId } : undefined
+  }
+
+  const appLaunchIndex = spec.args.findIndex(arg => arg === "-applaunch")
+  const appId = appLaunchIndex >= 0 ? spec.args[appLaunchIndex + 1] : undefined
+  return isDecimalString(appId) ? { appId } : undefined
 }
 
 function steamCleanupMetadataFromLaunchMetadata(
