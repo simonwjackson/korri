@@ -540,6 +540,79 @@ FREEDRENO_MACHINE=x86-64
     expect(result.ok).toBe(true)
     expect(result.failures).toEqual([])
   })
+
+  it("accepts overlay-filter Steam runtime FEX trampolines", () => {
+    const transcript = `
+###RUNTIME_PREP_UNIT
+Environment="FEX_WRAPPER_BIN=/usr/bin/FEX"
+ExecStart=/nix/store/pkg/bin/steam-guest-runtime-prep --apply
+PathChanged=/var/lib/korri/steam/steamapps/common/Proton 10.0/proton
+PathChanged=/var/lib/korri/steam/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap
+PathChanged=/var/lib/korri/steam/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb
+###WRAPPER_PRESSURE_VESSEL_WRAP
+#!/usr/bin/env bash
+set -euo pipefail
+# KORRI_STEAM_OVERLAY_FILTER
+if [ "\${KORRI_STEAM_DISABLE_OVERLAY:-1}" = 1 ]; then
+  exec /usr/bin/FEX "$0.x86_64" "\${filtered_args[@]}"
+fi
+exec /usr/bin/FEX "$0.x86_64" "$@"
+WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=yes
+###WRAPPER_PV_ADVERB
+#!/usr/bin/env bash
+set -euo pipefail
+# KORRI_STEAM_OVERLAY_FILTER
+if [ "\${KORRI_STEAM_DISABLE_OVERLAY:-1}" = 1 ]; then
+  exec /usr/bin/FEX "$0.x86_64" "\${filtered_args[@]}"
+fi
+exec /usr/bin/FEX "$0.x86_64" "$@"
+WRAPPER_PV_ADVERB_BACKUP_EXISTS=yes
+###FREEDRENO
+FREEDRENO_MACHINE=x86-64
+`
+
+    const result = classifySteamRuntimeVerifyTranscript(transcript, {
+      steamHome: "/var/lib/korri/steam",
+      expectedWrapperBin: "/usr/bin/FEX",
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.failures).toEqual([])
+  })
+
+  it("rejects runtime wrappers that lose the expected FEX exec", () => {
+    const transcript = `
+###RUNTIME_PREP_UNIT
+Environment="FEX_WRAPPER_BIN=/usr/bin/FEX"
+ExecStart=/nix/store/pkg/bin/steam-guest-runtime-prep --apply
+PathChanged=/var/lib/korri/steam/steamapps/common/Proton 10.0/proton
+PathChanged=/var/lib/korri/steam/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap
+PathChanged=/var/lib/korri/steam/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb
+###WRAPPER_PRESSURE_VESSEL_WRAP
+#!/usr/bin/env bash
+exec /bin/sh "$0.x86_64" "$@"
+WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=yes
+###WRAPPER_PV_ADVERB
+#!/usr/bin/env bash
+exec /bin/sh "$0.x86_64" "$@"
+WRAPPER_PV_ADVERB_BACKUP_EXISTS=yes
+###FREEDRENO
+FREEDRENO_MACHINE=x86-64
+`
+
+    const result = classifySteamRuntimeVerifyTranscript(transcript, {
+      steamHome: "/var/lib/korri/steam",
+      expectedWrapperBin: "/usr/bin/FEX",
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.failures.map(failure => failure.name)).toContain(
+      "pressure-vessel-wrap uses expected FEX trampoline",
+    )
+    expect(result.failures.map(failure => failure.name)).toContain(
+      "pv-adverb uses expected FEX trampoline",
+    )
+  })
 })
 
 type RegisteredTool = Parameters<

@@ -906,21 +906,34 @@ type RuntimeVerifyOptions = {
   readonly expectedWrapperBin: string
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function hasExpectedFexTrampoline(
+  wrapperSection: string,
+  expectedWrapperBin: string,
+): boolean {
+  const expected = escapeRegex(expectedWrapperBin)
+  return new RegExp(
+    `exec\\s+${expected}\\s+"\\$0\\.x86_64"\\s+(?:"\\$@"|"\\$\\{filtered_args\\[@\\]\\}")`,
+  ).test(wrapperSection)
+}
+
 export function classifySteamRuntimeVerifyTranscript(
   transcript: string,
   options: RuntimeVerifyOptions,
 ) {
-  const wrapperNeedle = `exec ${options.expectedWrapperBin} "$0.x86_64" "$@"`
+  const pressureVesselWrap = section(transcript, "WRAPPER_PRESSURE_VESSEL_WRAP")
+  const pvAdverb = section(transcript, "WRAPPER_PV_ADVERB")
   const checks = [
     checkSignal(
       "pressure-vessel-wrap uses expected FEX trampoline",
-      section(transcript, "WRAPPER_PRESSURE_VESSEL_WRAP").includes(
-        wrapperNeedle,
-      ),
+      hasExpectedFexTrampoline(pressureVesselWrap, options.expectedWrapperBin),
     ),
     checkSignal(
       "pv-adverb uses expected FEX trampoline",
-      section(transcript, "WRAPPER_PV_ADVERB").includes(wrapperNeedle),
+      hasExpectedFexTrampoline(pvAdverb, options.expectedWrapperBin),
     ),
     checkSignal(
       "pressure-vessel-wrap x86_64 backup exists",
@@ -1071,10 +1084,10 @@ systemctl cat korri-steam-runtime-prep.service korri-steam-runtime-prep.path 2>/
 echo "###RUNTIME_PREP_STATE"
 systemctl show -p ActiveState -p SubState -p Result -p ExecMainStatus korri-steam-runtime-prep.service korri-steam-runtime-prep.path 2>/dev/null || true
 echo "###WRAPPER_PRESSURE_VESSEL_WRAP"
-sed -n '1,12p' "$wrap" 2>/dev/null || true
+sed -n '1,80p' "$wrap" 2>/dev/null || true
 [ -f "$wrap.x86_64" ] && echo WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=yes || echo WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=no
 echo "###WRAPPER_PV_ADVERB"
-sed -n '1,12p' "$pv" 2>/dev/null || true
+sed -n '1,80p' "$pv" 2>/dev/null || true
 [ -f "$pv.x86_64" ] && echo WRAPPER_PV_ADVERB_BACKUP_EXISTS=yes || echo WRAPPER_PV_ADVERB_BACKUP_EXISTS=no
 echo "###FREEDRENO"
 if [ -f "$freedreno" ]; then
