@@ -44,6 +44,14 @@ export function bootstrapShim(opts: BootstrapOptions): string {
 })()`
 }
 
+// Self-contained reader expressions. Inlined (not dependent on bootstrap having
+// run) so they survive engine-driven document reloads that wipe injected globals.
+export const NATIVE_RES_EXPR = `(() => { const c = document.querySelector("canvas"); if (!c || !c.width || !c.height) return null; let gl = null; try { const ctx = c.getContext("webgl2") || c.getContext("webgl"); if (ctx && ctx.drawingBufferWidth) gl = { width: ctx.drawingBufferWidth, height: ctx.drawingBufferHeight }; } catch (e) {} return { backingStore: { width: c.width, height: c.height }, drawingBuffer: gl }; })()`
+
+export const FINGERPRINT_EXPR = `(() => ({ globals: ["GameMaker_Init","g_pBuiltIn","_GMrunner","C3","C3_GetObjectRefTable","cr_createRuntime","unityInstance","createUnityInstance","UnityLoader","Godot","Phaser","Module","pico8_buttons","_cartdat"].filter(n => { try { return typeof window[n] !== "undefined" } catch (e) { return false } }), title: document.title || "", canvasIds: [...document.querySelectorAll("canvas")].map(c => c.id), scriptSrcs: [...document.scripts].map(s => s.src || "") }))()`
+
+export const GATE_STATE_EXPR = `(() => ({ hasCanvas: !!document.querySelector("canvas"), userActivationHasBeen: navigator.userActivation ? navigator.userActivation.hasBeenActive : null }))()`
+
 // Synthetic activation for engines whose load flow accepts untrusted DOM events
 // (e.g. Construct). The trusted-click path uses real CDP Input instead.
 export function syntheticGestureShim(): string {

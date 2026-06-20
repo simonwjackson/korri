@@ -20,7 +20,13 @@ import {
 import type { RunConfig } from "./args"
 import { type CdpClient, connectCdp } from "./cdp"
 import { gamescopeCliArgs } from "./gamescope-cli"
-import { bootstrapShim, syntheticGestureShim } from "./shims"
+import {
+  bootstrapShim,
+  FINGERPRINT_EXPR,
+  GATE_STATE_EXPR,
+  NATIVE_RES_EXPR,
+  syntheticGestureShim,
+} from "./shims"
 
 const CHROMIUM = process.env.KORRI_WEB_RUNTIME_CHROMIUM ?? "chromium"
 const GAMESCOPE = process.env.KORRI_WEB_RUNTIME_GAMESCOPE ?? "gamescope"
@@ -59,11 +65,10 @@ async function probe(
   )
   try {
     const cdp = await connectCdp(port)
-    await cdp.evaluate(bootstrapShim({ killOverflow: false, gate: "none" }))
     const native = await waitForNative(cdp)
     const engine =
       config.engine === "auto"
-        ? classifyEngine(await cdp.evaluate("window.__korriFingerprint()"))
+        ? classifyEngine(await cdp.evaluate(FINGERPRINT_EXPR))
         : config.engine
     cdp.close()
     return { engine, native }
@@ -75,7 +80,7 @@ async function probe(
 async function waitForNative(cdp: CdpClient): Promise<Dimensions> {
   for (let i = 0; i < 80; i++) {
     const measurement = await cdp.evaluate<CanvasMeasurement | null>(
-      "window.__korriNativeRes()",
+      NATIVE_RES_EXPR,
     )
     if (measurement) return nativeResolutionFromCanvas(measurement)
     await Bun.sleep(250)
@@ -88,7 +93,11 @@ async function driveGate(cdp: CdpClient, strategy: string): Promise<void> {
     const state = await cdp.evaluate<{
       hasCanvas: boolean
       userActivationHasBeen: boolean | null
-    }>("window.__korriGateState()")
+    } | null>(GATE_STATE_EXPR)
+    if (!state) {
+      await Bun.sleep(250)
+      continue
+    }
     const action = nextGateAction(strategy as never, state)
     if (action.kind === "done") return
     if (action.kind === "wait") {
