@@ -1,8 +1,9 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Themes (static).
  */
-import { Card } from "../../screens/kit"
+
 import { Icon } from "../../ui/atoms/Icon"
+import { Card } from "../../ui/molecules/Card"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function ThemeSettings() {

@@ -2,8 +2,9 @@
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
  * Controller input remap (static). Modal shell + RemapList.
  */
-import { Modal } from "../../screens/kit"
+
 import { Title } from "../../ui/atoms/Title"
+import { Modal } from "../../ui/organisms/Modal"
 import { RemapList } from "../../ui/organisms/RemapList"
 
 export function InputRemap() {

@@ -1,7 +1,7 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Notification toast (static).
  */
-import { Badge } from "../../screens/kit"
+import { Badge } from "../../ui/atoms/Badge"
 import { Icon } from "../../ui/atoms/Icon"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 

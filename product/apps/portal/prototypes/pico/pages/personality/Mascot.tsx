@@ -3,7 +3,8 @@
  *
  * Meet Pixl: the mascot at rest plus its mood set. Static (no data).
  */
-import { PicoMascot, Sub } from "../../screens/kit"
+import { PicoMascot } from "../../PicoMascot"
+import { Sub } from "../../ui/atoms/Sub"
 import { Title } from "../../ui/atoms/Title"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 

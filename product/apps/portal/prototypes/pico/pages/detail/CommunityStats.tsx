@@ -6,10 +6,10 @@
  * CommunityStatPanel.
  */
 import { picoCommunityStatsAtom } from "../../data/pico-detail-atoms"
-import { Chip } from "../../screens/kit"
 import { PicoData } from "../../screens/PicoData"
-import { CommunityStatPanel } from "../../ui/organisms/CommunityStatPanel"
+import { Chip } from "../../ui/atoms/Chip"
 import { DetailHead } from "../../ui/molecules/DetailHead"
+import { CommunityStatPanel } from "../../ui/organisms/CommunityStatPanel"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function CommunityStats() {

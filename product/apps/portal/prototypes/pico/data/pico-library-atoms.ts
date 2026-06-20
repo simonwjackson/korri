@@ -8,18 +8,16 @@
  * library-atoms (layer atoms → `Atom.runtime` → `runtime.atom`).
  */
 import { Effect } from "effect"
-import * as Atom from "effect/unstable/reactivity/Atom"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import * as Atom from "effect/unstable/reactivity/Atom"
 import type { PicoGame } from "../fixtures"
-import { PicoLibrary, type PicoLaunchInput } from "./pico-library-service"
+import { type PicoLaunchInput, PicoLibrary } from "./pico-library-service"
 
 /** Swappable provided layer. Default: static fixtures (mount-without-mocking). */
 export const picoLibraryLayerAtom = Atom.make(PicoLibrary.Fixtures)
 
 /** Runtime reads the layer atom, so swapping the layer rebuilds the runtime. */
-export const picoLibraryRuntime = Atom.runtime(get =>
-  get(picoLibraryLayerAtom),
-)
+export const picoLibraryRuntime = Atom.runtime(get => get(picoLibraryLayerAtom))
 
 /** What a screen actually reads. It yields the service; the layer supplies it. */
 export const picoGamesAtom = picoLibraryRuntime.atom(

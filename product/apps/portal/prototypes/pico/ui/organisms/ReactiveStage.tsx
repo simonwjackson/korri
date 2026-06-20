@@ -7,7 +7,8 @@
  */
 import type { CSSProperties } from "react"
 import type { PicoGame } from "../../fixtures"
-import { Dim, PicoMascot } from "../../screens/kit"
+import { PicoMascot } from "../../PicoMascot"
+import { Dim } from "../atoms/Dim"
 import { GameCart } from "../molecules/GameCart"
 
 const cartReset: CSSProperties = {

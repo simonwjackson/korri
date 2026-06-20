@@ -4,13 +4,18 @@
  * Joining a session: the host's cart, a connection stepper, and progress.
  */
 import type { PicoGame } from "../../fixtures"
-import { Dim, Progress } from "../../screens/kit"
+import { Dim } from "../atoms/Dim"
+import { Progress } from "../atoms/Progress"
 import { Title } from "../atoms/Title"
 import { GameCart } from "../molecules/GameCart"
 
 const JOIN_STEPS = ["FOUND", "HANDSHAKE", "SYNC", "READY"] as const
 
-export function JoiningStage({ game }: { readonly game: PicoGame | undefined }) {
+export function JoiningStage({
+  game,
+}: {
+  readonly game: PicoGame | undefined
+}) {
   return (
     <div className="pcMp-joining">
       {game?.art ? (

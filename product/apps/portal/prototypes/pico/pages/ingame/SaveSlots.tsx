@@ -3,8 +3,8 @@
  * Save-state slots. Reads `picoSaveSlotsAtom`; Modal is the in-session shell.
  */
 import { picoSaveSlotsAtom } from "../../data/pico-ingame-atoms"
-import { Modal } from "../../screens/kit"
 import { PicoData } from "../../screens/PicoData"
+import { Modal } from "../../ui/organisms/Modal"
 import { SaveSlotGrid } from "../../ui/organisms/SaveSlotGrid"
 
 export function SaveSlots() {

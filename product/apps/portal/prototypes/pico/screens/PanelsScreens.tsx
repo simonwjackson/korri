@@ -12,20 +12,18 @@ import { picoGamesAtom } from "../data/pico-library-atoms"
 import type { PicoGame } from "../fixtures"
 import type { PicoPlayer } from "../fixtures-extra"
 import { PicoArtImage } from "../PicoArtImage"
+import { PicoCart } from "../PicoCart"
+import { PicoIcon } from "../PicoIcon"
+import { PicoMascot } from "../PicoMascot"
+import { BlockBar } from "../ui/atoms/BlockBar"
+import { Btn } from "../ui/atoms/Btn"
+import { Chip } from "../ui/atoms/Chip"
+import { Stat } from "../ui/atoms/Stat"
+import { Toggle } from "../ui/atoms/Toggle"
+import { Opt } from "../ui/molecules/Opt"
+import { Player } from "../ui/molecules/Player"
+import { ScreenShell as Screen } from "../ui/templates/ScreenShell"
 import { PicoData } from "./PicoData"
-import {
-  BlockBar,
-  Btn,
-  Chip,
-  Opt,
-  PicoCart,
-  PicoIcon,
-  PicoMascot,
-  Player,
-  Screen,
-  Stat,
-  Toggle,
-} from "./kit"
 
 type Hint = { readonly key: "a" | "b" | "y"; readonly label: string }
 
@@ -171,9 +169,7 @@ export function QuickMenuPanelScreen() {
 function QuickLook({ game }: { readonly game: PicoGame }) {
   return (
     <div className="pcQL">
-      {game.art ? (
-        <PicoArtImage src={game.art} className="pcQL-art" />
-      ) : null}
+      {game.art ? <PicoArtImage src={game.art} className="pcQL-art" /> : null}
       <div className="pcQL-title">{game.title}</div>
       <div className="pcQL-meta">
         {game.genre.toUpperCase()} · {game.developer.toUpperCase()}
@@ -241,7 +237,9 @@ function FriendsPanel() {
             </span>
           </div>
           {friend.status !== "offline" ? (
-            <span className="pcFr-cta">{friend.playing ? "JOIN" : "INVITE"}</span>
+            <span className="pcFr-cta">
+              {friend.playing ? "JOIN" : "INVITE"}
+            </span>
           ) : null}
         </div>
       ))}

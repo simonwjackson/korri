@@ -5,7 +5,7 @@
  * scan and host list.
  */
 import type { PicoHost } from "../../fixtures-extra"
-import { Badge } from "../../screens/kit"
+import { Badge } from "../atoms/Badge"
 
 export function HostBadge({ status }: { readonly status: PicoHost["status"] }) {
   if (status === "busy") return <Badge tone="accent">BUSY</Badge>

@@ -2,11 +2,16 @@
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
  * Connection negotiation stepper (static).
  */
-import { Progress } from "../../screens/kit"
+import { Progress } from "../../ui/atoms/Progress"
 import { Title } from "../../ui/atoms/Title"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
-const CONNECT_STEPS: readonly string[] = ["HANDSHAKE", "CODEC", "VIDEO", "INPUT"]
+const CONNECT_STEPS: readonly string[] = [
+  "HANDSHAKE",
+  "CODEC",
+  "VIDEO",
+  "INPUT",
+]
 
 export function Connecting() {
   return (

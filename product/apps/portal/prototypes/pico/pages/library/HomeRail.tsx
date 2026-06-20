@@ -5,8 +5,8 @@
  * `picoGamesAtom`, composes ScreenShell + LibraryRail.
  */
 import { picoGamesAtom } from "../../data/pico-library-atoms"
-import { Sub } from "../../screens/kit"
 import { PicoData } from "../../screens/PicoData"
+import { Sub } from "../../ui/atoms/Sub"
 import { Title } from "../../ui/atoms/Title"
 import { LibraryRail } from "../../ui/organisms/LibraryRail"
 import { ScreenShell } from "../../ui/templates/ScreenShell"

@@ -789,7 +789,9 @@
 	align-items: baseline;
 	gap: 10px;
 	margin: 0 0 10px;
-	font: 13px/1 "Press Start 2P", monospace;
+	font:
+		13px / 1 "Press Start 2P",
+		monospace;
 	color: var(--p8-yellow);
 	letter-spacing: 0.08em;
 }
@@ -837,7 +839,9 @@
 	cursor: pointer;
 }
 .pcWall-label {
-	font: 11px/1.2 ui-monospace, monospace;
+	font:
+		11px / 1.2 ui-monospace,
+		monospace;
 	color: var(--p8-silver);
 	white-space: nowrap;
 	overflow: hidden;

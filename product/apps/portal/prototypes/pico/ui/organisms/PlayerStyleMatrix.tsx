@@ -5,7 +5,7 @@
  * row across the current players.
  */
 import type { PicoPlayer } from "../../fixtures-extra"
-import { Player, type PlayerRep } from "../../screens/kit"
+import { Player, type PlayerRep } from "../molecules/Player"
 
 const ROWS: readonly { readonly label: string; readonly rep: PlayerRep }[] = [
   { label: "PIXL MASCOT", rep: "mascot" },

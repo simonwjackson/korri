@@ -5,7 +5,7 @@
  * spinner.
  */
 import type { PicoGame } from "../../fixtures"
-import { Spinner } from "../../screens/kit"
+import { Spinner } from "../atoms/Spinner"
 import { Title } from "../atoms/Title"
 import { GameCart } from "../molecules/GameCart"
 

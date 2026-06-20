@@ -37,7 +37,10 @@ export function PicoArtImage({
   const liveGranularity = useGranularity()
   const livePalette = usePaletteMode()
   const palette = mode ?? livePalette
-  const width = Math.max(8, Math.round((granularity ?? liveGranularity) * scale))
+  const width = Math.max(
+    8,
+    Math.round((granularity ?? liveGranularity) * scale),
+  )
 
   useEffect(() => {
     const canvas = ref.current
@@ -50,7 +53,10 @@ export function PicoArtImage({
       if (fit === "contain") {
         // Whole image, no crop; canvas takes the source's aspect so logos
         // keep their shape (transparent areas survive the quantize).
-        const height = Math.max(8, Math.round((width * image.height) / image.width))
+        const height = Math.max(
+          8,
+          Math.round((width * image.height) / image.width),
+        )
         canvas.width = width
         canvas.height = height
         ctx.clearRect(0, 0, width, height)

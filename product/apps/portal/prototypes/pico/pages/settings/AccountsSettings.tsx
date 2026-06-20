@@ -1,7 +1,7 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Accounts & profiles (static).
  */
-import { Btn } from "../../screens/kit"
+import { Btn } from "../../ui/atoms/Btn"
 import { Icon } from "../../ui/atoms/Icon"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 

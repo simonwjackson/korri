@@ -5,7 +5,11 @@
  * done/speed/eta stats.
  */
 import type { PicoGame } from "../../fixtures"
-import { Btn, Progress, Spinner, Stat, Sub } from "../../screens/kit"
+import { Btn } from "../atoms/Btn"
+import { Progress } from "../atoms/Progress"
+import { Spinner } from "../atoms/Spinner"
+import { Stat } from "../atoms/Stat"
+import { Sub } from "../atoms/Sub"
 import { Title } from "../atoms/Title"
 
 export function DownloadProgress({ target }: { readonly target: PicoGame }) {

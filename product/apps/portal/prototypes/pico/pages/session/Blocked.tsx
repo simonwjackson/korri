@@ -1,16 +1,18 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Launch blocked (static).
  */
-import { Hero } from "../../screens/kit"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
-const BLOCK_REASONS: readonly { readonly id: string; readonly label: string }[] =
-  [
-    { id: "preparing", label: "PREPARING STREAM" },
-    { id: "running", label: "GAME RUNNING" },
-    { id: "cooling", label: "COOLING DOWN" },
-    { id: "recovering", label: "RECOVERING" },
-  ]
+const BLOCK_REASONS: readonly {
+  readonly id: string
+  readonly label: string
+}[] = [
+  { id: "preparing", label: "PREPARING STREAM" },
+  { id: "running", label: "GAME RUNNING" },
+  { id: "cooling", label: "COOLING DOWN" },
+  { id: "recovering", label: "RECOVERING" },
+]
 
 export function Blocked() {
   return (

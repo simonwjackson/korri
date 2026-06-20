@@ -1,9 +1,10 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. System panel (static, modal).
  */
-import { BlockBar, Modal } from "../../screens/kit"
+import { BlockBar } from "../../ui/atoms/BlockBar"
 import { Icon } from "../../ui/atoms/Icon"
 import { SettingRow } from "../../ui/molecules/SettingRow"
+import { Modal } from "../../ui/organisms/Modal"
 
 export function SystemPanel() {
   return (

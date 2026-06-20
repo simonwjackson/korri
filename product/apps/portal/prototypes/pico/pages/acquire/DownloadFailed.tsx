@@ -2,7 +2,10 @@
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
  * Download failure (static).
  */
-import { Badge, Btn, Hero, PicoIcon } from "../../screens/kit"
+import { PicoIcon } from "../../PicoIcon"
+import { Badge } from "../../ui/atoms/Badge"
+import { Btn } from "../../ui/atoms/Btn"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function DownloadFailed() {

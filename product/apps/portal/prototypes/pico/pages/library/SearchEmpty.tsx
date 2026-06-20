@@ -4,8 +4,9 @@
  * Search with no matches: the query line over a no-results hero. Composes
  * ScreenShell + SearchQuery + Hero (Hero still from the kit barrel).
  */
-import { Hero } from "../../screens/kit"
+
 import { SearchQuery } from "../../ui/molecules/SearchQuery"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function SearchEmpty() {

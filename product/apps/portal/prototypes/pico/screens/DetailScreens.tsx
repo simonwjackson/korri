@@ -5,8 +5,9 @@
  * thin compatibility barrel so screen-catalog's `Detail.*Screen` names keep
  * resolving. The shared pcDet-head lifted into the DetailHead molecule.
  */
-export { ReleasePicker as ReleasePickerScreen } from "../pages/detail/ReleasePicker"
-export { EmulatorChooser as EmulatorChooserScreen } from "../pages/detail/EmulatorChooser"
+
 export { CommunityStats as CommunityStatsScreen } from "../pages/detail/CommunityStats"
+export { EmulatorChooser as EmulatorChooserScreen } from "../pages/detail/EmulatorChooser"
 export { MediaGallery as MediaGalleryScreen } from "../pages/detail/MediaGallery"
 export { NotInstalled as NotInstalledScreen } from "../pages/detail/NotInstalled"
+export { ReleasePicker as ReleasePickerScreen } from "../pages/detail/ReleasePicker"

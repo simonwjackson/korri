@@ -5,7 +5,11 @@
  * Renders a fragment of sections. Leaf atoms (Chip/Opt/Dim/Row/Toggle) still come
  * from the kit barrel until they migrate.
  */
-import { Chip, Dim, Opt, Row, Toggle } from "../../screens/kit"
+import { Chip } from "../atoms/Chip"
+import { Dim } from "../atoms/Dim"
+import { Toggle } from "../atoms/Toggle"
+import { Opt } from "../molecules/Opt"
+import { Row } from "../molecules/Row"
 
 export function FilterSortPanel() {
   return (

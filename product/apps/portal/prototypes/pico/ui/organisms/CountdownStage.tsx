@@ -5,9 +5,10 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoPlayer } from "../../fixtures-extra"
-import { Dim, Player } from "../../screens/kit"
+import { Dim } from "../atoms/Dim"
 import { Title } from "../atoms/Title"
 import { KeyArtBackdrop } from "../molecules/KeyArtBackdrop"
+import { Player } from "../molecules/Player"
 
 export function CountdownStage({
   game,

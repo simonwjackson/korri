@@ -5,9 +5,12 @@
  * update/skip actions.
  */
 import type { PicoGame } from "../../fixtures"
-import { Btn, Card, Stat, Sub } from "../../screens/kit"
+import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
+import { Stat } from "../atoms/Stat"
+import { Sub } from "../atoms/Sub"
 import { Title } from "../atoms/Title"
+import { Card } from "../molecules/Card"
 
 export function UpdatePanel({ target }: { readonly target: PicoGame }) {
   return (

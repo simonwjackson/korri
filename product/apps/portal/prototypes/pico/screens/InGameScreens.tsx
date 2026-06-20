@@ -5,8 +5,8 @@
  * screen-catalog's `InGame.*Screen` names keep resolving.
  */
 export { InGameHud as InGameHudScreen } from "../pages/ingame/InGameHud"
-export { SaveSlots as SaveSlotsScreen } from "../pages/ingame/SaveSlots"
-export { LoadSlots as LoadSlotsScreen } from "../pages/ingame/LoadSlots"
-export { StreamOverlay as StreamOverlayScreen } from "../pages/ingame/StreamOverlay"
-export { Reconnecting as ReconnectingScreen } from "../pages/ingame/Reconnecting"
 export { InputRemap as InputRemapScreen } from "../pages/ingame/InputRemap"
+export { LoadSlots as LoadSlotsScreen } from "../pages/ingame/LoadSlots"
+export { Reconnecting as ReconnectingScreen } from "../pages/ingame/Reconnecting"
+export { SaveSlots as SaveSlotsScreen } from "../pages/ingame/SaveSlots"
+export { StreamOverlay as StreamOverlayScreen } from "../pages/ingame/StreamOverlay"

@@ -4,7 +4,9 @@
  * A list of named collections with a count badge, first row selected. Leaf
  * atoms (List/Row/Badge) still come from the kit barrel until they migrate.
  */
-import { Badge, List, Row } from "../../screens/kit"
+import { Badge } from "../atoms/Badge"
+import { List } from "../molecules/List"
+import { Row } from "../molecules/Row"
 
 export type Collection = { readonly name: string; readonly count: number }
 

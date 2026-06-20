@@ -2,8 +2,9 @@
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
  * Controller pairing (static).
  */
-import { Glyph, Spinner } from "../../screens/kit"
+import { Glyph } from "../../ui/atoms/Glyph"
 import { Icon } from "../../ui/atoms/Icon"
+import { Spinner } from "../../ui/atoms/Spinner"
 import { Title } from "../../ui/atoms/Title"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 

@@ -2,7 +2,9 @@
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
  * Couldn't connect (static).
  */
-import { Btn, Glyph, PicoIcon } from "../../screens/kit"
+import { PicoIcon } from "../../PicoIcon"
+import { Btn } from "../../ui/atoms/Btn"
+import { Glyph } from "../../ui/atoms/Glyph"
 import { Title } from "../../ui/atoms/Title"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 

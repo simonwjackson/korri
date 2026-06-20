@@ -5,8 +5,10 @@
  * source / runtime stats, and download/cancel actions.
  */
 import type { PicoGame } from "../../fixtures"
-import { Btn, Stat, Sub } from "../../screens/kit"
+import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
+import { Stat } from "../atoms/Stat"
+import { Sub } from "../atoms/Sub"
 import { Title } from "../atoms/Title"
 import { GameCart } from "../molecules/GameCart"
 

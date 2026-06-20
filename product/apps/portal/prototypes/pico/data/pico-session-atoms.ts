@@ -9,9 +9,7 @@ import { PicoSession } from "./pico-session-service"
 
 export const picoSessionLayerAtom = Atom.make(PicoSession.Fixtures)
 
-export const picoSessionRuntime = Atom.runtime(get =>
-  get(picoSessionLayerAtom),
-)
+export const picoSessionRuntime = Atom.runtime(get => get(picoSessionLayerAtom))
 
 /** Current gate state — mirrors the real foreground-session status atom. */
 export const picoSessionStatusAtom = picoSessionRuntime.atom(

@@ -4,9 +4,13 @@
  * Install progress: a checklist of steps (fetch/verify/unpack/prepare-runtime/
  * register) with the active one marked, plus a progress bar.
  */
-import { Card, Progress, Spinner, Sub } from "../../screens/kit"
+
 import { Icon } from "../atoms/Icon"
+import { Progress } from "../atoms/Progress"
+import { Spinner } from "../atoms/Spinner"
+import { Sub } from "../atoms/Sub"
 import { Title } from "../atoms/Title"
+import { Card } from "../molecules/Card"
 
 export function InstallProgress({ runtime }: { readonly runtime: string }) {
   const steps: readonly { readonly label: string; readonly state: string }[] = [

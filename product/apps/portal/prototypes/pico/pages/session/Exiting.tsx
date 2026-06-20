@@ -1,7 +1,8 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Exiting / teardown (static).
  */
-import { Badge, Hero } from "../../screens/kit"
+import { Badge } from "../../ui/atoms/Badge"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function Exiting() {

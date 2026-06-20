@@ -1,8 +1,10 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Labs panel (static, modal).
  */
-import { BlockBar, Modal, Toggle } from "../../screens/kit"
+import { BlockBar } from "../../ui/atoms/BlockBar"
+import { Toggle } from "../../ui/atoms/Toggle"
 import { SettingRow } from "../../ui/molecules/SettingRow"
+import { Modal } from "../../ui/organisms/Modal"
 
 export function LabsPanel() {
   return (

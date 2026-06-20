@@ -5,11 +5,17 @@
  * selected, with a connect CTA.
  */
 import type { PicoHost } from "../../fixtures-extra"
-import { Btn, Card, Stat } from "../../screens/kit"
+import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
+import { Stat } from "../atoms/Stat"
+import { Card } from "../molecules/Card"
 import { HostBadge } from "../molecules/HostBadge"
 
-export function HostCardList({ hosts }: { readonly hosts: readonly PicoHost[] }) {
+export function HostCardList({
+  hosts,
+}: {
+  readonly hosts: readonly PicoHost[]
+}) {
   return (
     <>
       <div className="pcMd-hosts">

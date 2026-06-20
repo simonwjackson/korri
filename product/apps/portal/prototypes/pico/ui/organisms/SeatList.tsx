@@ -4,7 +4,8 @@
  * Connected seats/devices with kind, battery (or AC), and active/idle status.
  */
 import type { PicoSeat } from "../../fixtures-extra"
-import { List, Row } from "../../screens/kit"
+import { List } from "../molecules/List"
+import { Row } from "../molecules/Row"
 
 export function SeatList({ seats }: { readonly seats: readonly PicoSeat[] }) {
   return (

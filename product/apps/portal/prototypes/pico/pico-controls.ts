@@ -9,8 +9,9 @@
  *   VIVID/FLAT → toggle the runtime palette remap
  *   ♪ / 🔇 → mute the 8-bit SFX
  */
-import { useState } from "react"
+
 import type { WorkshopControl } from "@tools/theme-workshop"
+import { useState } from "react"
 import {
   cycleGranularity,
   cyclePaletteMode,

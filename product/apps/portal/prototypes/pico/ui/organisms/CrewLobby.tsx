@@ -5,7 +5,8 @@
  * waiting footer.
  */
 import type { PicoPlayer } from "../../fixtures-extra"
-import { Player, Spinner } from "../../screens/kit"
+import { Spinner } from "../atoms/Spinner"
+import { Player } from "../molecules/Player"
 
 export function CrewLobby({
   players,

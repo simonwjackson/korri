@@ -5,9 +5,11 @@
  * full list with rarity tags.
  */
 import type { PicoAchievement } from "../../fixtures-extra"
-import { Badge, List, Row } from "../../screens/kit"
+import { Badge } from "../atoms/Badge"
 import { Icon } from "../atoms/Icon"
 import { Title } from "../atoms/Title"
+import { List } from "../molecules/List"
+import { Row } from "../molecules/Row"
 
 export function AchievementList({
   achievements,

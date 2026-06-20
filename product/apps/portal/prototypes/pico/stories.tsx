@@ -8,7 +8,10 @@
  */
 import type { Story } from "@tools/theme-workshop"
 import { picoGames } from "./fixtures"
-import { Badge, Btn, Spinner, Stat } from "./screens/kit"
+import { Badge } from "./ui/atoms/Badge"
+import { Btn } from "./ui/atoms/Btn"
+import { Spinner } from "./ui/atoms/Spinner"
+import { Stat } from "./ui/atoms/Stat"
 import { Title } from "./ui/atoms/Title"
 import { DetailHead } from "./ui/molecules/DetailHead"
 import { GameCart } from "./ui/molecules/GameCart"
@@ -168,7 +171,10 @@ export const PICO_STORIES: readonly Story[] = [
     render: () => (
       <ScreenShell
         title="PICO ▸ SHELL"
-        hints={[{ key: "a", label: "OK" }, { key: "b", label: "BACK" }]}
+        hints={[
+          { key: "a", label: "OK" },
+          { key: "b", label: "BACK" },
+        ]}
       >
         <div className="pc-dim">page content goes here</div>
       </ScreenShell>

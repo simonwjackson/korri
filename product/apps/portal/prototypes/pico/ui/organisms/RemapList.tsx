@@ -4,7 +4,7 @@
  * Controller remap list: action → bound button, with the row currently
  * listening for input spinning.
  */
-import { Spinner } from "../../screens/kit"
+import { Spinner } from "../atoms/Spinner"
 
 const REMAP_ACTIONS: readonly {
   readonly action: string

@@ -7,7 +7,11 @@
 import type { PicoGame } from "../../fixtures"
 import { GameCart } from "../molecules/GameCart"
 
-export function AttractLoop({ games }: { readonly games: readonly PicoGame[] }) {
+export function AttractLoop({
+  games,
+}: {
+  readonly games: readonly PicoGame[]
+}) {
   const carts = games.slice(0, 6)
   return (
     <div className="pcPer-attract">

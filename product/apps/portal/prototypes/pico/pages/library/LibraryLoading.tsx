@@ -10,8 +10,8 @@ import {
   picoLibraryLayerAtom,
 } from "../../data/pico-library-atoms"
 import { makePicoLibraryLayer } from "../../data/pico-library-service"
-import { Hero } from "../../screens/kit"
 import { PicoData } from "../../screens/PicoData"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function LibraryLoading() {
@@ -21,7 +21,11 @@ export function LibraryLoading() {
       seed={[[picoLibraryLayerAtom, makePicoLibraryLayer("loading-forever")]]}
       waiting={() => (
         <ScreenShell title="PICO ▸ LIBRARY" className="center">
-          <Hero spinner title="LOADING LIBRARY…" message="waking up the carts…" />
+          <Hero
+            spinner
+            title="LOADING LIBRARY…"
+            message="waking up the carts…"
+          />
         </ScreenShell>
       )}
     >

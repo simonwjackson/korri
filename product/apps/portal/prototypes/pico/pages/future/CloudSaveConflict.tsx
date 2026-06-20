@@ -2,8 +2,10 @@
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
  * Cloud save conflict (static).
  */
-import { Badge, Btn, Card } from "../../screens/kit"
+import { Badge } from "../../ui/atoms/Badge"
+import { Btn } from "../../ui/atoms/Btn"
 import { Title } from "../../ui/atoms/Title"
+import { Card } from "../../ui/molecules/Card"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function CloudSaveConflict() {

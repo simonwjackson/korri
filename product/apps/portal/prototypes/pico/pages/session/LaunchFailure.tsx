@@ -3,8 +3,8 @@
  * `picoFailureKindsAtom`.
  */
 import { picoFailureKindsAtom } from "../../data/pico-session-atoms"
-import { Btn } from "../../screens/kit"
 import { PicoData } from "../../screens/PicoData"
+import { Btn } from "../../ui/atoms/Btn"
 import { Icon } from "../../ui/atoms/Icon"
 import { FailureList } from "../../ui/organisms/FailureList"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
@@ -27,8 +27,8 @@ export function LaunchFailure() {
             </span>
             <span className="pcSes-fail-banner-text">
               <b>STREAM FAILED</b>
-              Moonlight never picked up the line — couldn't start or connect. Give
-              it another shot, or play locally.
+              Moonlight never picked up the line — couldn't start or connect.
+              Give it another shot, or play locally.
             </span>
             <Btn kind="danger">
               <Icon name="restart" /> RETRY

@@ -1,8 +1,9 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Crash (static).
  */
-import { Btn, Hero } from "../../screens/kit"
+import { Btn } from "../../ui/atoms/Btn"
 import { Icon } from "../../ui/atoms/Icon"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function Crash() {

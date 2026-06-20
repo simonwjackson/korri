@@ -2,7 +2,8 @@
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
  * Join by code / QR (static).
  */
-import { Dim, Sub } from "../../screens/kit"
+import { Dim } from "../../ui/atoms/Dim"
+import { Sub } from "../../ui/atoms/Sub"
 import { Title } from "../../ui/atoms/Title"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 

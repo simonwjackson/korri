@@ -15,8 +15,10 @@ import {
 } from "../data/pico-library-atoms"
 import type { PicoGame } from "../fixtures"
 import { PicoArtImage } from "../PicoArtImage"
+import { PicoIcon } from "../PicoIcon"
+import { PicoMascot } from "../PicoMascot"
+import { ScreenShell as Screen } from "../ui/templates/ScreenShell"
 import { PicoData } from "./PicoData"
-import { PicoIcon, PicoMascot, Screen } from "./kit"
 
 type Hint = { readonly key: "a" | "b" | "y"; readonly label: string }
 
@@ -239,7 +241,9 @@ export function VictoryScreen() {
               <PicoIcon name="star" /> NO HIT
               <span className="pcM-rarity">EPIC</span>
             </div>
-            {next ? <div className="pcM-next">NEXT UP · {next.title}</div> : null}
+            {next ? (
+              <div className="pcM-next">NEXT UP · {next.title}</div>
+            ) : null}
             <span className="pcM-cta">
               <PicoIcon name="play" />{" "}
               {next ? `PLAY ${next.title.toUpperCase()}` : "CONTINUE"}
@@ -333,7 +337,9 @@ export function FinishItScreen() {
             game={game}
             kicker="▸ ONE BOSS LEFT"
           >
-            <div className="pcM-meta">92% COMPLETE · THE FINAL FIGHT AWAITS</div>
+            <div className="pcM-meta">
+              92% COMPLETE · THE FINAL FIGHT AWAITS
+            </div>
             <div className="pcM-progress">
               <div className="pcM-progress-fill" style={{ width: "92%" }} />
             </div>

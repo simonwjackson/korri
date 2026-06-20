@@ -5,8 +5,8 @@
  * LaunchTube.
  */
 import { picoHeroAtom } from "../../data/pico-library-atoms"
-import { Dim } from "../../screens/kit"
 import { PicoData } from "../../screens/PicoData"
+import { Dim } from "../../ui/atoms/Dim"
 import { LaunchTube } from "../../ui/organisms/LaunchTube"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 

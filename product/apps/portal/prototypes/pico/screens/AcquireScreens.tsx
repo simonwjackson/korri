@@ -5,10 +5,10 @@
  * screen-catalog's `Acquire.*Screen` names keep resolving.
  */
 export { DownloadConfirm as DownloadConfirmScreen } from "../pages/acquire/DownloadConfirm"
-export { Downloading as DownloadingScreen } from "../pages/acquire/Downloading"
-export { OpenInBrowser as OpenInBrowserScreen } from "../pages/acquire/OpenInBrowser"
 export { DownloadFailed as DownloadFailedScreen } from "../pages/acquire/DownloadFailed"
-export { Installing as InstallingScreen } from "../pages/acquire/Installing"
+export { Downloading as DownloadingScreen } from "../pages/acquire/Downloading"
 export { Installed as InstalledScreen } from "../pages/acquire/Installed"
-export { UpdateAvailable as UpdateAvailableScreen } from "../pages/acquire/UpdateAvailable"
+export { Installing as InstallingScreen } from "../pages/acquire/Installing"
+export { OpenInBrowser as OpenInBrowserScreen } from "../pages/acquire/OpenInBrowser"
 export { Repair as RepairScreen } from "../pages/acquire/Repair"
+export { UpdateAvailable as UpdateAvailableScreen } from "../pages/acquire/UpdateAvailable"

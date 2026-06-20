@@ -5,8 +5,10 @@
  * quality bar, and pause/resume/quit controls.
  */
 import type { PicoGame } from "../../fixtures"
-import { Badge, Btn, Stat } from "../../screens/kit"
+import { Badge } from "../atoms/Badge"
+import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
+import { Stat } from "../atoms/Stat"
 import { QualityBar } from "../molecules/QualityBar"
 
 export function StreamPanel({ hero }: { readonly hero: PicoGame | undefined }) {

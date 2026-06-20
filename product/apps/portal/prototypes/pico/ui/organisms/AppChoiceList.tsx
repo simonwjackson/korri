@@ -6,7 +6,9 @@
  * they migrate.
  */
 import type { PicoAppChoice } from "../../fixtures-extra"
-import { Badge, Card, Chip } from "../../screens/kit"
+import { Badge } from "../atoms/Badge"
+import { Chip } from "../atoms/Chip"
+import { Card } from "../molecules/Card"
 
 export function AppChoiceList({
   choices,

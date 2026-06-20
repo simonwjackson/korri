@@ -6,16 +6,16 @@
  * atoms (Stat/Card/BlockBar) still come from the kit barrel until they migrate.
  */
 import type { PicoCommunityStats } from "../../fixtures-extra"
-import { BlockBar, Card, Stat } from "../../screens/kit"
+import { BlockBar } from "../atoms/BlockBar"
+import { Stat } from "../atoms/Stat"
+import { Card } from "../molecules/Card"
 
 export function CommunityStatPanel({
   stats,
 }: {
   readonly stats: PicoCommunityStats
 }) {
-  const liked = Math.round(
-    (stats.likes / (stats.likes + stats.dislikes)) * 100,
-  )
+  const liked = Math.round((stats.likes / (stats.likes + stats.dislikes)) * 100)
   return (
     <>
       <div className="pcDet-stats">

@@ -6,9 +6,13 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoFriend, PicoPlayer } from "../../fixtures-extra"
-import { Btn, Card, Dim, PicoArtImage, Player } from "../../screens/kit"
+import { PicoArtImage } from "../../PicoArtImage"
+import { Btn } from "../atoms/Btn"
+import { Dim } from "../atoms/Dim"
 import { Icon } from "../atoms/Icon"
 import { Title } from "../atoms/Title"
+import { Card } from "../molecules/Card"
+import { Player } from "../molecules/Player"
 
 export function PlayersHub({
   game,

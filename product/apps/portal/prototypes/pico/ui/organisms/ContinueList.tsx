@@ -6,8 +6,10 @@
  * from the kit barrel until they migrate.
  */
 import type { PicoGame } from "../../fixtures"
-import { Dim, List, Row } from "../../screens/kit"
+import { Dim } from "../atoms/Dim"
 import { GameCart } from "../molecules/GameCart"
+import { List } from "../molecules/List"
+import { Row } from "../molecules/Row"
 
 export function ContinueList({
   games,

@@ -5,8 +5,11 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoFriend } from "../../fixtures-extra"
-import { Card, Chip, Progress, Stat } from "../../screens/kit"
+import { Chip } from "../atoms/Chip"
+import { Progress } from "../atoms/Progress"
+import { Stat } from "../atoms/Stat"
 import { Title } from "../atoms/Title"
+import { Card } from "../molecules/Card"
 
 export function ProfileCard({
   games,

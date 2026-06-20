@@ -5,8 +5,10 @@
  * Reads `picoDetailGameAtom` and composes ScreenShell + DetailHead + actions.
  */
 import { picoDetailGameAtom } from "../../data/pico-detail-atoms"
-import { Badge, Btn, Chip } from "../../screens/kit"
 import { PicoData } from "../../screens/PicoData"
+import { Badge } from "../../ui/atoms/Badge"
+import { Btn } from "../../ui/atoms/Btn"
+import { Chip } from "../../ui/atoms/Chip"
 import { Icon } from "../../ui/atoms/Icon"
 import { DetailHead } from "../../ui/molecules/DetailHead"
 import { ScreenShell } from "../../ui/templates/ScreenShell"

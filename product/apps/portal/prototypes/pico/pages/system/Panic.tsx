@@ -1,8 +1,10 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Panic / fatal error (static).
  */
-import { Btn, Card, Hero } from "../../screens/kit"
+import { Btn } from "../../ui/atoms/Btn"
 import { Icon } from "../../ui/atoms/Icon"
+import { Card } from "../../ui/molecules/Card"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function Panic() {

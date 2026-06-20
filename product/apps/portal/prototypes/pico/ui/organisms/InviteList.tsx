@@ -5,7 +5,7 @@
  * CTA (disabled when offline). First row selected.
  */
 import type { PicoFriend } from "../../fixtures-extra"
-import { Dim } from "../../screens/kit"
+import { Dim } from "../atoms/Dim"
 
 export function InviteList({
   friends,

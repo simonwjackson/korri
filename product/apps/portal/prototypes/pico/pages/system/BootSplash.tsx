@@ -1,7 +1,7 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Boot splash (static).
  */
-import { Spinner } from "../../screens/kit"
+import { Spinner } from "../../ui/atoms/Spinner"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function BootSplash() {

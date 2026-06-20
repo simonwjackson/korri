@@ -7,8 +7,8 @@
  * so each screen reads ONE atom.
  */
 import { Effect } from "effect"
-import * as Atom from "effect/unstable/reactivity/Atom"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import * as Atom from "effect/unstable/reactivity/Atom"
 import { picoGamesAtom } from "./pico-library-atoms"
 import { PicoParty } from "./pico-party-service"
 import { picoFriendsAtom } from "./pico-social-atoms"

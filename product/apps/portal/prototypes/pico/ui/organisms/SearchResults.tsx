@@ -5,8 +5,9 @@
  * kit barrel until they migrate.
  */
 import type { PicoGame } from "../../fixtures"
-import { List, Row } from "../../screens/kit"
 import { Icon } from "../atoms/Icon"
+import { List } from "../molecules/List"
+import { Row } from "../molecules/Row"
 
 export function SearchResults({
   games,

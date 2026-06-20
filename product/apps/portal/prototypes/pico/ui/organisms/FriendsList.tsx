@@ -5,7 +5,8 @@
  * avatar initial + presence dot.
  */
 import type { PicoFriend } from "../../fixtures-extra"
-import { List, Row } from "../../screens/kit"
+import { List } from "../molecules/List"
+import { Row } from "../molecules/Row"
 
 function statusClass(status: string): string {
   if (status === "playing" || status === "online") return "on"
@@ -55,7 +56,9 @@ export function FriendsList({
                         : friend.status.toUpperCase()
                   }
                   trailing={
-                    <span className={`pcFut-dot ${statusClass(friend.status)}`} />
+                    <span
+                      className={`pcFut-dot ${statusClass(friend.status)}`}
+                    />
                   }
                 />
               ))}

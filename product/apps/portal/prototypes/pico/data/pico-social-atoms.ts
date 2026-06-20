@@ -5,8 +5,8 @@
  * screens read (profile counts, game-of-the-day) via `AsyncResult.all`.
  */
 import { Effect } from "effect"
-import * as Atom from "effect/unstable/reactivity/Atom"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import * as Atom from "effect/unstable/reactivity/Atom"
 import { picoGamesAtom, picoHeroAtom } from "./pico-library-atoms"
 import { PicoSocial, PicoStore } from "./pico-social-service"
 

@@ -5,7 +5,7 @@
  * first one selected. Stat atom still comes from the kit barrel until it migrates.
  */
 import type { PicoSystem } from "../../data/pico-catalog-service"
-import { Stat } from "../../screens/kit"
+import { Stat } from "../atoms/Stat"
 
 export function SystemGrid({
   systems,

@@ -5,7 +5,7 @@
  * focused game with launch-on-TV / launch-here actions.
  */
 import type { PicoGame } from "../../fixtures"
-import { Btn } from "../../screens/kit"
+import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
 import { Title } from "../atoms/Title"
 import { GameCart } from "../molecules/GameCart"

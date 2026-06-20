@@ -5,8 +5,8 @@
  * the "you" row highlighted).
  */
 import type { PicoScoreRow } from "../../fixtures-extra"
-import { Tabs } from "../../screens/kit"
 import { Title } from "../atoms/Title"
+import { Tabs } from "../molecules/Tabs"
 
 const MEDALS = ["①", "②", "③"]
 

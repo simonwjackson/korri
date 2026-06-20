@@ -22,10 +22,12 @@ import {
   useAtomInitialValues,
   useAtomValue,
 } from "@effect/atom-react"
-import type * as Atom from "effect/unstable/reactivity/Atom"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import type * as Atom from "effect/unstable/reactivity/Atom"
 import type { ReactNode } from "react"
-import { Hero, PicoIcon, Screen } from "./kit"
+import { PicoIcon } from "../PicoIcon"
+import { Hero } from "../ui/organisms/Hero"
+import { ScreenShell as Screen } from "../ui/templates/ScreenShell"
 
 /** Initial-value pairs, e.g. `[[picoLibraryLayerAtom, PicoLibrary.FailList]]`. */
 export type LayerSeed = Iterable<readonly [Atom.Atom<unknown>, unknown]>

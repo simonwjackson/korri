@@ -8,6 +8,7 @@
  * file is now a thin compatibility barrel so screen-catalog's `Showcase.*Screen`
  * names keep resolving — the first fully-migrated gallery group.
  */
-export { SpotlightHome as SpotlightHomeScreen } from "../pages/showcase/SpotlightHome"
-export { LastPlayed as LastPlayedScreen } from "../pages/showcase/LastPlayed"
+
 export { ForYou as ForYouShelvesScreen } from "../pages/showcase/ForYou"
+export { LastPlayed as LastPlayedScreen } from "../pages/showcase/LastPlayed"
+export { SpotlightHome as SpotlightHomeScreen } from "../pages/showcase/SpotlightHome"

@@ -6,9 +6,12 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoPlayer } from "../../fixtures-extra"
-import { Badge, Dim, Player, Stat } from "../../screens/kit"
+import { Badge } from "../atoms/Badge"
+import { Dim } from "../atoms/Dim"
 import { Icon } from "../atoms/Icon"
+import { Stat } from "../atoms/Stat"
 import { KeyArtBackdrop } from "../molecules/KeyArtBackdrop"
+import { Player } from "../molecules/Player"
 
 export function SessionPlayersHud({
   game,

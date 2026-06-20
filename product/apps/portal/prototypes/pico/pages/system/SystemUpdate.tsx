@@ -1,8 +1,10 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. System update (static).
  */
-import { Btn, Hero, Progress } from "../../screens/kit"
+import { Btn } from "../../ui/atoms/Btn"
 import { Icon } from "../../ui/atoms/Icon"
+import { Progress } from "../../ui/atoms/Progress"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function SystemUpdate() {

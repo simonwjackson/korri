@@ -19,9 +19,11 @@ import {
   picoLibraryLayerAtom,
 } from "../../data/pico-library-atoms"
 import { PicoLibrary } from "../../data/pico-library-service"
-import { Dim, Hero, Spinner } from "../../screens/kit"
+import { Dim } from "../../ui/atoms/Dim"
 import { Icon } from "../../ui/atoms/Icon"
+import { Spinner } from "../../ui/atoms/Spinner"
 import { GameCart } from "../../ui/molecules/GameCart"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function DataEffect() {
@@ -98,9 +100,9 @@ function DataEffectBody() {
         })}
 
         <p className="pcData-note">
-          Same component, no mocks. <b>FIXTURES</b> resolves instantly from static
-          data; <b>LIVE</b> simulates the RPC layer (~700ms). The screen only
-          reads an atom — the layer is swapped at the boundary.
+          Same component, no mocks. <b>FIXTURES</b> resolves instantly from
+          static data; <b>LIVE</b> simulates the RPC layer (~700ms). The screen
+          only reads an atom — the layer is swapped at the boundary.
         </p>
       </div>
     </ScreenShell>

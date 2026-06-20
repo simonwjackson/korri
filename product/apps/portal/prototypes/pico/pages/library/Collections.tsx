@@ -4,7 +4,10 @@
  * Collections list (static demo data). Composes ScreenShell + CollectionList.
  */
 import { Title } from "../../ui/atoms/Title"
-import { type Collection, CollectionList } from "../../ui/organisms/CollectionList"
+import {
+  type Collection,
+  CollectionList,
+} from "../../ui/organisms/CollectionList"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 const COLLECTIONS: readonly Collection[] = [

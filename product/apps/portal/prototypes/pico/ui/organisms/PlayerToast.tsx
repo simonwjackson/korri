@@ -5,8 +5,8 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoPlayer } from "../../fixtures-extra"
-import { Player } from "../../screens/kit"
 import { KeyArtBackdrop } from "../molecules/KeyArtBackdrop"
+import { Player } from "../molecules/Player"
 
 export function PlayerToast({
   game,

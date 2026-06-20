@@ -2,8 +2,10 @@
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
  * Stream reconnecting (static). GameOverlay backdrop + a reconnecting hero.
  */
-import { Btn, Hero, PicoIcon } from "../../screens/kit"
+import { PicoIcon } from "../../PicoIcon"
+import { Btn } from "../../ui/atoms/Btn"
 import { QualityBar } from "../../ui/molecules/QualityBar"
+import { Hero } from "../../ui/organisms/Hero"
 import { GameOverlay } from "../../ui/templates/GameOverlay"
 
 export function Reconnecting() {

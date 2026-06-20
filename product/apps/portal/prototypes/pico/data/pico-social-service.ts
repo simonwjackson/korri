@@ -43,9 +43,10 @@ export interface PicoStoreService {
   readonly list: () => Effect.Effect<readonly PicoStoreItem[], PicoSocialError>
 }
 
-export class PicoSocial extends Context.Service<PicoSocial, PicoSocialService>()(
-  "PicoSocial",
-) {
+export class PicoSocial extends Context.Service<
+  PicoSocial,
+  PicoSocialService
+>()("PicoSocial") {
   static readonly Fixtures = Layer.succeed(this)({
     friends: () => Effect.succeed(picoFriends),
     achievementsFor: (_gameId: string) => Effect.succeed(picoAchievements),

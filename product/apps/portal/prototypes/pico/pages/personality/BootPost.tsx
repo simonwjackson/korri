@@ -3,7 +3,7 @@
  *
  * Voiced boot power-on self-test. Static (no data).
  */
-import { PicoMascot } from "../../screens/kit"
+import { PicoMascot } from "../../PicoMascot"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 const BOOT_LINES: readonly string[] = [

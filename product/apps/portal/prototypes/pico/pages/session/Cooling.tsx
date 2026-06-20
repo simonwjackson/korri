@@ -1,7 +1,7 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Cooling down (static).
  */
-import { Hero } from "../../screens/kit"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function Cooling() {

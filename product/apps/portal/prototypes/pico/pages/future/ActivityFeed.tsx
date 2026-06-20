@@ -11,11 +11,35 @@ const FEED: readonly {
   readonly when: string
   readonly you: boolean
 }[] = [
-  { actor: "PIXELPETE", verb: "unlocked", target: "SPEEDRUNNER", when: "2m ago", you: false },
-  { actor: "RETRORHEA", verb: "started", target: "Hollow Knight", when: "14m ago", you: false },
+  {
+    actor: "PIXELPETE",
+    verb: "unlocked",
+    target: "SPEEDRUNNER",
+    when: "2m ago",
+    you: false,
+  },
+  {
+    actor: "RETRORHEA",
+    verb: "started",
+    target: "Hollow Knight",
+    when: "14m ago",
+    you: false,
+  },
   { actor: "YOU", verb: "beat", target: "World 3", when: "1h ago", you: true },
-  { actor: "8BITBEN", verb: "topped the board on", target: "Celeste", when: "3h ago", you: false },
-  { actor: "MEGAMARA", verb: "favorited", target: "Sonic Robo Blast 2", when: "yesterday", you: false },
+  {
+    actor: "8BITBEN",
+    verb: "topped the board on",
+    target: "Celeste",
+    when: "3h ago",
+    you: false,
+  },
+  {
+    actor: "MEGAMARA",
+    verb: "favorited",
+    target: "Sonic Robo Blast 2",
+    when: "yesterday",
+    you: false,
+  },
 ]
 
 export function ActivityFeed() {

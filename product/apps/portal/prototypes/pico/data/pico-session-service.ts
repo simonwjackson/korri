@@ -14,10 +14,7 @@
  * `Preparing{state}`.
  */
 import { Context, Duration, Effect, Layer } from "effect"
-import {
-  PICO_BOOT_STEPS,
-  PICO_FAILURE_KINDS,
-} from "../fixtures-extra"
+import { PICO_BOOT_STEPS, PICO_FAILURE_KINDS } from "../fixtures-extra"
 
 /** One launch-failure kind the gate surfaces (mirrors a `Recovering` cause). */
 export interface PicoFailureKind {
@@ -35,7 +32,11 @@ export type PicoSessionGateState =
       readonly requestId?: string
       readonly gameId?: string
     }
-  | { readonly _tag: "Running"; readonly requestId?: string; readonly gameId?: string }
+  | {
+      readonly _tag: "Running"
+      readonly requestId?: string
+      readonly gameId?: string
+    }
   | {
       readonly _tag: "Cooling"
       readonly state: "ExitObserved" | "TearingDown" | "VerifyingReady"

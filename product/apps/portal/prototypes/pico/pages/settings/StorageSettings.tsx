@@ -1,7 +1,9 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Storage (static).
  */
-import { Btn, Card, Progress } from "../../screens/kit"
+import { Btn } from "../../ui/atoms/Btn"
+import { Progress } from "../../ui/atoms/Progress"
+import { Card } from "../../ui/molecules/Card"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function StorageSettings() {

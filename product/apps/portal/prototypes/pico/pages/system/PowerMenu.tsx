@@ -1,8 +1,10 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Power menu (static).
  */
-import { List, Row } from "../../screens/kit"
+
 import { Icon } from "../../ui/atoms/Icon"
+import { List } from "../../ui/molecules/List"
+import { Row } from "../../ui/molecules/Row"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function PowerMenu() {

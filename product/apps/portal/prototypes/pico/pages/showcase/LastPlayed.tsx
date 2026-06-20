@@ -23,7 +23,10 @@ export function LastPlayed() {
 function LastPlayedBody({ game }: { readonly game: PicoGame | undefined }) {
   if (!game) {
     return (
-      <ScreenShell title="PICO ▸ CONTINUE" hints={[{ key: "b", label: "BACK" }]}>
+      <ScreenShell
+        title="PICO ▸ CONTINUE"
+        hints={[{ key: "b", label: "BACK" }]}
+      >
         <div className="pcLast-empty">Nothing played yet.</div>
       </ScreenShell>
     )

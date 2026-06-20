@@ -4,8 +4,10 @@
  * Storefront: a featured-collection banner over a grid of store tiles.
  */
 import type { PicoStoreItem } from "../../fixtures-extra"
-import { Badge, Card, Chip } from "../../screens/kit"
+import { Badge } from "../atoms/Badge"
+import { Chip } from "../atoms/Chip"
 import { Title } from "../atoms/Title"
+import { Card } from "../molecules/Card"
 
 export function StoreView({
   items,
@@ -21,8 +23,8 @@ export function StoreView({
             <div className="pc-sub">FEATURED COLLECTION</div>
             <Title size={1}>{featured.title}</Title>
             <p className="pcFut-store-blurb">
-              Ports we hand-dusted to feel right in your palms. Fresh crates land
-              every week.
+              Ports we hand-dusted to feel right in your palms. Fresh crates
+              land every week.
             </p>
             <div className="pcFut-store-banner-meta">
               <Badge tone="good">{featured.price}</Badge>
@@ -38,7 +40,9 @@ export function StoreView({
             key={item.id}
             className={`pcFut-store-tile ${index === 1 ? "sel" : ""}`}
           >
-            <span className="pcFut-store-tile-art">{item.title.slice(0, 1)}</span>
+            <span className="pcFut-store-tile-art">
+              {item.title.slice(0, 1)}
+            </span>
             <div className="pcFut-store-tile-body">
               <div className="pcFut-store-tile-title">{item.title}</div>
               <div className="pcFut-store-tile-meta">

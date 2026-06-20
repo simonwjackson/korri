@@ -6,8 +6,9 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoPlayer } from "../../fixtures-extra"
-import { Dim, Player } from "../../screens/kit"
+import { Dim } from "../atoms/Dim"
 import { GameCart } from "../molecules/GameCart"
+import { Player } from "../molecules/Player"
 
 export function InlineSeatStrip({
   games,

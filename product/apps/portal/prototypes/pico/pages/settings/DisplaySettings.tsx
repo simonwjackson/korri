@@ -1,7 +1,9 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Display & video (static).
  */
-import { BlockBar, Opt, Toggle } from "../../screens/kit"
+import { BlockBar } from "../../ui/atoms/BlockBar"
+import { Toggle } from "../../ui/atoms/Toggle"
+import { Opt } from "../../ui/molecules/Opt"
 import { SettingRow } from "../../ui/molecules/SettingRow"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 

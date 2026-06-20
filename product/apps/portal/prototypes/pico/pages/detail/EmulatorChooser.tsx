@@ -6,8 +6,8 @@
  */
 import { picoEmulatorChooserAtom } from "../../data/pico-detail-atoms"
 import { PicoData } from "../../screens/PicoData"
-import { AppChoiceList } from "../../ui/organisms/AppChoiceList"
 import { DetailHead } from "../../ui/molecules/DetailHead"
+import { AppChoiceList } from "../../ui/organisms/AppChoiceList"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function EmulatorChooser() {

@@ -28,7 +28,8 @@ export function ReleasePicker() {
               tags={`${game.genre.toUpperCase()} · ${game.developer.toUpperCase()}`}
             >
               <p className="pcDet-note">
-                This cart ships in a few flavors — pick the one you want to boot.
+                This cart ships in a few flavors — pick the one you want to
+                boot.
               </p>
             </DetailHead>
             <ReleaseList releases={releases} />

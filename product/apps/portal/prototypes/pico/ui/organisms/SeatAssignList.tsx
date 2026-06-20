@@ -5,8 +5,10 @@
  * and a swap / press-start action.
  */
 import type { PicoPlayer } from "../../fixtures-extra"
-import { Card, Dim, Player } from "../../screens/kit"
+import { Dim } from "../atoms/Dim"
 import { Icon } from "../atoms/Icon"
+import { Card } from "../molecules/Card"
+import { Player } from "../molecules/Player"
 
 export function SeatAssignList({
   players,

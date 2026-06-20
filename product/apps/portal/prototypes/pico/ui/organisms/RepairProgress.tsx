@@ -5,8 +5,12 @@
  * badges.
  */
 import type { PicoGame } from "../../fixtures"
-import { Badge, Card, Progress, Spinner, Sub } from "../../screens/kit"
+import { Badge } from "../atoms/Badge"
+import { Progress } from "../atoms/Progress"
+import { Spinner } from "../atoms/Spinner"
+import { Sub } from "../atoms/Sub"
 import { Title } from "../atoms/Title"
+import { Card } from "../molecules/Card"
 
 const REPAIR_FILES: readonly {
   readonly name: string

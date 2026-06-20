@@ -5,7 +5,8 @@
  * this" thumbnail rail.
  */
 import type { PicoGame } from "../../fixtures"
-import { Badge, Btn } from "../../screens/kit"
+import { Badge } from "../atoms/Badge"
+import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
 import { Title } from "../atoms/Title"
 import { GameCart } from "../molecules/GameCart"

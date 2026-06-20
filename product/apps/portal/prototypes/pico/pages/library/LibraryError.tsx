@@ -9,8 +9,10 @@ import {
   picoLibraryLayerAtom,
 } from "../../data/pico-library-atoms"
 import { makePicoLibraryLayer } from "../../data/pico-library-service"
-import { Btn, Hero, PicoIcon } from "../../screens/kit"
+import { PicoIcon } from "../../PicoIcon"
 import { PicoData } from "../../screens/PicoData"
+import { Btn } from "../../ui/atoms/Btn"
+import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function LibraryError() {

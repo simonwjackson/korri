@@ -3,8 +3,8 @@
  * Streaming (moonlight) live overlay. Reads `picoHeroAtom`; Modal shell.
  */
 import { picoHeroAtom } from "../../data/pico-library-atoms"
-import { Modal } from "../../screens/kit"
 import { PicoData } from "../../screens/PicoData"
+import { Modal } from "../../ui/organisms/Modal"
 import { StreamPanel } from "../../ui/organisms/StreamPanel"
 
 export function StreamOverlay() {

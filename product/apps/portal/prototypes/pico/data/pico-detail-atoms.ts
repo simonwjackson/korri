@@ -8,10 +8,10 @@
  * `AsyncResult.all`, so each screen reads ONE atom.
  */
 import { Effect } from "effect"
-import * as Atom from "effect/unstable/reactivity/Atom"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
-import { picoGamesAtom } from "./pico-library-atoms"
+import * as Atom from "effect/unstable/reactivity/Atom"
 import { PicoReleases, PicoStats } from "./pico-detail-service"
+import { picoGamesAtom } from "./pico-library-atoms"
 
 export const picoReleasesLayerAtom = Atom.make(PicoReleases.Fixtures)
 export const picoReleasesRuntime = Atom.runtime(get =>

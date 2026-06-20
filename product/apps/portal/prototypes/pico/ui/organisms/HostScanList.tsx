@@ -4,11 +4,17 @@
  * LAN host discovery: a spinner + the hosts fading in as they're found.
  */
 import type { PicoHost } from "../../fixtures-extra"
-import { List, Row, Spinner } from "../../screens/kit"
+import { Spinner } from "../atoms/Spinner"
 import { Title } from "../atoms/Title"
 import { HostBadge } from "../molecules/HostBadge"
+import { List } from "../molecules/List"
+import { Row } from "../molecules/Row"
 
-export function HostScanList({ hosts }: { readonly hosts: readonly PicoHost[] }) {
+export function HostScanList({
+  hosts,
+}: {
+  readonly hosts: readonly PicoHost[]
+}) {
   return (
     <div className="pcMd-scan">
       <Spinner />
