@@ -63,13 +63,20 @@
 		transform: translateX(0);
 	}
 }
+/* Drawer head — mirrors .pico-statusbar's box metrics (min-height 3.5em, same
+ * padding / font step / border) so its height matches the page header exactly,
+ * and the top strip reads as one consistent band across the page↔drawer seam. */
 .pcPanel-head {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	min-height: 3.5em;
+	padding: var(--pico-space-1) var(--pico-space-2);
 	font-family: var(--font-display);
-	font-size: var(--pico-text--2);
+	font-size: var(--pico-text--3);
 	color: var(--pico-accent);
 	letter-spacing: 0.1em;
-	padding: var(--pico-space-2) var(--pico-space-2) var(--pico-space-1);
-	border-bottom: 0.14em solid var(--pico-chrome-edge);
+	border-bottom: 0.18em solid var(--pico-chrome-edge);
 }
 .pcPanel-body {
 	flex: 1 1 auto;
@@ -79,6 +86,16 @@
 	flex-direction: column;
 	gap: var(--pico-space-2);
 	padding: var(--pico-space-2);
+}
+/* Drawer foot — mirrors .pico-buttonbar's height so the bottom strip matches the
+ * page footer across the seam. */
+.pcPush-foot {
+	flex: 0 0 auto;
+	min-height: 3.75em;
+	padding: var(--pico-space-1) var(--pico-space-3);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	border-top: 0.18em solid var(--pico-chrome-edge);
 }
 
 /* Squeezed home (reflows inside .pcPanel-main) */

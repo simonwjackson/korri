@@ -37,6 +37,7 @@ export function PanelScreen({
       <aside className={`pcPush-aside ${side}`}>
         <div className="pcPanel-head">{panelTitle}</div>
         <div className="pcPanel-body">{panel}</div>
+        <div className="pcPush-foot" />
       </aside>
     </div>
   )

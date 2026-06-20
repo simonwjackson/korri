@@ -6,7 +6,8 @@
  * default-exports a {@link StorySpec}; this module globs them, infers the atomic
  * `layer` from the folder and the `name` from the filename, and hands the
  * workshop a flat `Story[]`. There is no registry to edit: add a component and
- * its `*.story.tsx` and it shows up in the right layer. See `story-spec.ts`.
+ * its `*.story.tsx` and it shows up in the right layer. See `story-spec.ts`
+ * for the StorySpec contract.
  */
 import type { Story, StoryLayer } from "@tools/theme-workshop"
 import type { StorySpec } from "./story-spec"
