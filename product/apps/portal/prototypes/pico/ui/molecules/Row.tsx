@@ -1,0 +1,35 @@
+/**
+ * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ *
+ * One list row: icon + label/meta + trailing. Moved from `kit.tsx`.
+ */
+import type { ReactNode } from "react"
+
+export function Row({
+  icon,
+  label,
+  meta,
+  trailing,
+  sel,
+}: {
+  readonly icon?: ReactNode
+  readonly label: ReactNode
+  readonly meta?: ReactNode
+  readonly trailing?: ReactNode
+  readonly sel?: boolean
+}) {
+  return (
+    <div className={`pc-row ${sel ? "sel" : ""}`}>
+      {icon !== undefined ? <span className="pc-row-ico">{icon}</span> : null}
+      <span className="pc-row-text">
+        <span className="pc-row-label">{label}</span>
+        {meta !== undefined ? (
+          <span className="pc-row-meta">{meta}</span>
+        ) : null}
+      </span>
+      {trailing !== undefined ? (
+        <span className="pc-row-trail">{trailing}</span>
+      ) : null}
+    </div>
+  )
+}
