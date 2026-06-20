@@ -1,10 +1,12 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: template.
  *
- * Reusable push-drawer shell for PANELS screens: a `container-type: size` main
- * pane that reflows when the drawer (docked left/right) claims a slice of width,
- * instead of being covered. Layout in screens/panels.css (pcPanel-). Moved from
- * screens/PanelsScreens.tsx.
+ * Push-drawer shell for PANELS screens. The drawer is a SIBLING of the whole
+ * page (status bar + main + button bar), and the page translates off-viewport by
+ * the drawer's width — so the entire page, header and footer included, slides
+ * aside and its far edge is clipped off the screen (it does NOT reflow narrower).
+ * The page shift and drawer width share one `--push-w` so they stay in lockstep.
+ * Layout in screens/panels.css (pcPush- / pcPanel-).
  */
 import type { ReactNode } from "react"
 import type { Hint } from "./ScreenShell"
@@ -26,14 +28,16 @@ export function PanelScreen({
   readonly panel: ReactNode
 }) {
   return (
-    <ScreenShell title={title} hints={hints} className="pad-0">
-      <div className={`pcPanel ${side}`}>
-        <div className="pcPanel-main">{main}</div>
-        <aside className={`pcPanel-aside ${side}`}>
-          <div className="pcPanel-head">{panelTitle}</div>
-          <div className="pcPanel-body">{panel}</div>
-        </aside>
+    <div className={`pcPush ${side}`}>
+      <div className="pcPush-page">
+        <ScreenShell title={title} hints={hints} className="pad-0">
+          {main}
+        </ScreenShell>
       </div>
-    </ScreenShell>
+      <aside className={`pcPush-aside ${side}`}>
+        <div className="pcPanel-head">{panelTitle}</div>
+        <div className="pcPanel-body">{panel}</div>
+      </aside>
+    </div>
   )
 }

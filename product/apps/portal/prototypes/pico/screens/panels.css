@@ -3,39 +3,51 @@
  * so when the drawer takes width the content reflows at its new size instead of
  * being overlaid. Bounded-intrinsic throughout. */
 
-.pcPanel {
-	display: flex;
-	height: 100%;
-	min-height: 0;
-}
-.pcPanel.left {
-	flex-direction: row-reverse;
-}
-/* Main pane is a query container — content authored in cqw/cqh reflows to it. */
-.pcPanel-main {
-	flex: 1 1 auto;
-	min-width: 0;
-	container-type: size;
-	position: relative;
+/* Push-off: the whole page (header + main + footer) translates by the drawer
+ * width and its far edge clips off the screen — not a reflow. `--push-w` drives
+ * both the page shift and the drawer width so they stay locked together. */
+.pcPush {
+	--push-w: 42cqw;
+	position: absolute;
+	inset: 0;
 	overflow: hidden;
 }
-.pcPanel-aside {
-	flex: 0 0 auto;
-	width: min(42cqw, calc(var(--pico-base) * 18));
+.pcPush-page {
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100%;
+	width: 100cqw;
+	transition: transform 0.3s steps(6);
+}
+.pcPush.right .pcPush-page {
+	transform: translateX(calc(-1 * var(--push-w)));
+}
+.pcPush.left .pcPush-page {
+	transform: translateX(var(--push-w));
+}
+.pcPush-aside {
+	position: absolute;
+	top: 0;
+	height: 100%;
+	width: var(--push-w);
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
 	background: var(--pico-chrome);
-	border-left: 0.18em solid var(--pico-chrome-edge);
 	overflow: hidden;
-	animation: pcPanel-in-r 0.32s steps(5) both;
 }
-.pcPanel-aside.left {
-	border-left: 0;
+.pcPush-aside.right {
+	right: 0;
+	border-left: 0.18em solid var(--pico-chrome-edge);
+	animation: pcPush-in-r 0.32s steps(5) both;
+}
+.pcPush-aside.left {
+	left: 0;
 	border-right: 0.18em solid var(--pico-chrome-edge);
-	animation: pcPanel-in-l 0.32s steps(5) both;
+	animation: pcPush-in-l 0.32s steps(5) both;
 }
-@keyframes pcPanel-in-r {
+@keyframes pcPush-in-r {
 	from {
 		transform: translateX(100%);
 	}
@@ -43,7 +55,7 @@
 		transform: translateX(0);
 	}
 }
-@keyframes pcPanel-in-l {
+@keyframes pcPush-in-l {
 	from {
 		transform: translateX(-100%);
 	}
