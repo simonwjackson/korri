@@ -109,7 +109,12 @@ async function driveGate(cdp: CdpClient, strategy: string): Promise<void> {
       await Bun.sleep(400)
       continue
     }
-    // trusted-gesture: CDP Input.* is trusted and grants user activation.
+    // trusted-gesture: a real CDP canvas click BOTH grants user activation and
+    // dismisses the engine's canvas-drawn focus overlay. Do NOT also send a
+    // keypress — a key grants activation without a click landing, which would
+    // make the gate look cleared while the overlay persists. With click-only,
+    // activation reliably reflects a click that landed, so the loop retries
+    // until one does (e.g. once the page has settled past load).
     const rect = await cdp.evaluate<{ x: number; y: number } | null>(
       "(() => { const c = document.querySelector('canvas'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.left + r.width/2, y: r.top + r.height/2 }; })()",
     )
@@ -124,18 +129,6 @@ async function driveGate(cdp: CdpClient, strategy: string): Promise<void> {
           clickCount: 1,
         })
       }
-      await cdp.send("Input.dispatchKeyEvent", {
-        type: "keyDown",
-        key: " ",
-        code: "Space",
-        windowsVirtualKeyCode: 32,
-      })
-      await cdp.send("Input.dispatchKeyEvent", {
-        type: "keyUp",
-        key: " ",
-        code: "Space",
-        windowsVirtualKeyCode: 32,
-      })
     }
     await Bun.sleep(500)
   }
