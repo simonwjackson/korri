@@ -2,7 +2,7 @@
  * theme-workshop — reusable theme-workshop kit (prototype tooling).
  *
  * A backend-free viewer that renders a theme's screens on the physical-size
- * device lab, with a screen navigator, an all-screens montage, and a slot for
+ * device lab, with a screen navigator, an atomic catalog, and a slot for
  * theme-specific live controls. The harness (lab + nav + wall + view store) is
  * generic; the skin, the screens, and any extra knobs are the theme's, supplied
  * through a single `ThemeWorkshopConfig`.
@@ -150,8 +150,8 @@ export interface ThemeWorkshopConfig {
   /** The screen catalog + group display order. */
   readonly screens: readonly Screen[]
   readonly groups: readonly string[]
-  /** Optional component catalog for the "parts" view (atoms → templates). When
-   * present, the gallery offers a third view alongside one-screen / all-screens. */
+  /** Component catalog for the "parts" view (pages → atoms — the screens are the
+   * pages). When present, the gallery offers it alongside the single-screen lab. */
   readonly stories?: readonly Story[]
   /** Per-element skin class names; omitted slots fall back to neutral `wk-*`. */
   readonly classNames?: WorkshopClassNames

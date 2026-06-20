@@ -6,12 +6,12 @@
  *
  * The screen navigator (◀ / label / ▶) and the MAP jump only make sense when a
  * single screen is on the device lab, so they're shown ONLY in the "one" view —
- * the all-screens montage and the component catalog have no "current screen" to
- * step through or jump to. Those views keep just the view-toggle + {controls}.
+ * the atomic catalog has no "current screen" to step through or jump to (the
+ * screens live there as PAGES). It keeps just the view-toggle + {controls}.
  *
  * ←/→ step the flat list; M (or MAP) opens the grouped jump panel; Esc closes
- * it; click any screen to jump; the view toggle flips device-lab ↔ all-screens
- * montage ↔ catalog. A theme drops its own live knobs into the `controls` slot
+ * it; click any screen to jump; the view toggle flips device-lab ↔ catalog. A
+ * theme drops its own live knobs into the `controls` slot
  * (rendered inside the bar) and plays sound via `onCue`; the kit stays silent.
  * Dev-only chrome (plain px), hidden in PROD.
  */
@@ -22,7 +22,6 @@ import { cycleViewMode, useViewMode, type ViewMode } from "./view-store"
 
 const VIEW_LABEL: Record<ViewMode, string> = {
   one: "◱ ONE",
-  all: "▦ ALL",
   parts: "⬢ PARTS",
 }
 
@@ -53,9 +52,7 @@ export function Gallery({
   )
   const active = screens[index] ?? screens[0]
   const cue = (kind: CueKind) => onCue?.(kind)
-  const viewOrder: readonly ViewMode[] = hasStories
-    ? ["one", "all", "parts"]
-    : ["one", "all"]
+  const viewOrder: readonly ViewMode[] = hasStories ? ["one", "parts"] : ["one"]
   const nextView =
     viewOrder[(viewOrder.indexOf(view) + 1) % viewOrder.length] ?? "one"
   // The screen navigator + MAP only apply to a single screen on the device lab.
@@ -190,7 +187,7 @@ export function Gallery({
             type="button"
             className={cx(cn.view, view)}
             aria-label="cycle view"
-            title="device lab · all-screens montage · component catalog"
+            title="device lab · atomic catalog"
             onClick={() => {
               cycleViewMode(viewOrder)
               cue("toggle")

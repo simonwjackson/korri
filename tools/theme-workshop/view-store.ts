@@ -1,16 +1,16 @@
 /**
  * theme-workshop — generic view store.
  *
- * Tracks the workshop's view axis: one screen on the device lab, or a montage of
- * all of them. Tiny shared external store so the gallery toggle and the
- * ThemeWorkshop composer stay in sync. (Theme-specific knobs like a palette or
- * pixel-granularity live in the theme, not here.)
+ * Tracks the workshop's view axis: one screen on the device lab, or the atomic
+ * catalog (the parts view, where the screens live as PAGES). Tiny shared external
+ * store so the gallery toggle and the ThemeWorkshop composer stay in sync.
+ * (Theme-specific knobs like a palette or pixel-granularity live in the theme.)
  */
 import { useSyncExternalStore } from "react"
 
-/** Workshop view: one screen on the device lab, a montage of all of them, or the
- * component catalog ("parts" — atoms/molecules/organisms/templates). */
-export type ViewMode = "one" | "all" | "parts"
+/** Workshop view: one screen on the device lab, or the atomic catalog ("parts" —
+ * pages/templates/organisms/molecules/atoms; the screens live there as PAGES). */
+export type ViewMode = "one" | "parts"
 
 let viewMode: ViewMode = "one"
 const subscribers = new Set<() => void>()
@@ -37,9 +37,9 @@ export function setViewMode(next: ViewMode): void {
   }
 }
 
-/** Toggle one ↔ all (used by the gallery control). */
+/** Toggle one ↔ parts. */
 export function toggleViewMode(): ViewMode {
-  setViewMode(viewMode === "one" ? "all" : "one")
+  setViewMode(viewMode === "one" ? "parts" : "one")
   return viewMode
 }
 

@@ -1,9 +1,10 @@
 /**
  * theme-workshop — the one component every theme mounts.
  *
- * Composes the device lab (one screen at true physical size) or the all-screens
- * wall, with the gallery navigator on top, all driven by a single
- * `ThemeWorkshopConfig`. Screen selection is uncontrolled by default; pass
+ * Composes the device lab (one screen at true physical size) or the atomic
+ * catalog (the parts view, where the screens live as PAGES), with the gallery
+ * navigator on top, all driven by a single `ThemeWorkshopConfig`. Screen
+ * selection is uncontrolled by default; pass
  * `screenId` + `onScreenChange` to drive it from the outside (e.g. the portal
  * route syncs it to `?screen=`).
  *
@@ -14,10 +15,9 @@ import { useEffect, useState } from "react"
 import { resolveClassNames } from "./classnames"
 import { DeviceLab } from "./device-lab"
 import { Gallery } from "./Gallery"
-import type { ThemeWorkshopConfig } from "./types"
 import { Parts } from "./Parts"
-import { setViewMode, useViewMode } from "./view-store"
-import { Wall } from "./Wall"
+import type { ThemeWorkshopConfig } from "./types"
+import { useViewMode } from "./view-store"
 import { WorkshopControls } from "./WorkshopControls"
 
 export function ThemeWorkshop({
@@ -59,18 +59,7 @@ export function ThemeWorkshop({
 
   return (
     <div data-theme={config.id} {...config.rootProps}>
-      {view === "all" ? (
-        <Wall
-          screens={config.screens}
-          groups={config.groups}
-          current={currentId}
-          onSelect={id => {
-            select(id)
-            setViewMode("one")
-          }}
-          cn={cn}
-        />
-      ) : view === "parts" ? (
+      {view === "parts" ? (
         <Parts stories={config.stories ?? []} cn={cn} />
       ) : (
         <DeviceLab
