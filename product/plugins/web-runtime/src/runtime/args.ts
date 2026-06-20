@@ -54,7 +54,8 @@ export function parseRunConfig(argv: readonly string[]): RunConfig {
         break
       case "--native": {
         const value = next(i, arg)
-        native = value === "detect" ? "detect" : parseDimensions(value, "--native")
+        native =
+          value === "detect" ? "detect" : parseDimensions(value, "--native")
         i++
         break
       }
@@ -87,12 +88,14 @@ export function parseRunConfig(argv: readonly string[]): RunConfig {
         break
       default:
         if (arg.startsWith("--")) throw new Error(`unknown flag: ${arg}`)
-        if (locator !== undefined) throw new Error(`unexpected argument: ${arg}`)
+        if (locator !== undefined)
+          throw new Error(`unexpected argument: ${arg}`)
         locator = arg
     }
   }
 
-  if (locator === undefined) throw new Error("a locator (url or file://) is required")
+  if (locator === undefined)
+    throw new Error("a locator (url or file://) is required")
   return {
     locator,
     engine,
