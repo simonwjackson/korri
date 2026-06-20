@@ -49,12 +49,15 @@ async function probe(
 ): Promise<{ engine: EngineId; native: Dimensions }> {
   const port = 9333
   const profileDir = tmpProfile("probe")
+  // Probe with a real (bare Wayland) Chromium, not headless: headless GL/canvas
+  // sizing can differ from the real render, which throws off the native-res /
+  // gap math and reintroduces scrollbars. A bare window renders the canvas the
+  // same way the gamescope run will, then is killed once measured.
   const proc = Bun.spawn(
     [
       CHROMIUM,
-      "--headless=new",
+      "--ozone-platform=wayland",
       "--no-sandbox",
-      "--disable-gpu",
       `--user-data-dir=${profileDir}`,
       "--remote-debugging-address=127.0.0.1",
       `--remote-debugging-port=${port}`,
@@ -77,7 +80,9 @@ async function probe(
 }
 
 async function waitForNative(cdp: CdpClient): Promise<Dimensions> {
-  for (let i = 0; i < 80; i++) {
+  // Large bundles load over the network; poll well past first paint.
+  const deadline = Date.now() + 120000
+  while (Date.now() < deadline) {
     const measurement = await cdp.evaluate<CanvasMeasurement | null>(
       NATIVE_RES_EXPR,
     )
