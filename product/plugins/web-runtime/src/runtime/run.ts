@@ -11,7 +11,6 @@ import { composeWebChromiumArgs } from "../core/chromium-args"
 import { classifyEngine, type EngineId } from "../core/engine-detect"
 import { engineProfile } from "../core/engine-profiles"
 import { webCompositorRequest } from "../core/gamescope-request"
-import { nextGateAction } from "../core/gate"
 import {
   type CanvasMeasurement,
   type Dimensions,
@@ -88,53 +87,59 @@ async function waitForNative(cdp: CdpClient): Promise<Dimensions> {
   throw new Error("native resolution probe timed out (no sized canvas)")
 }
 
+async function canvasPresent(cdp: CdpClient): Promise<boolean> {
+  const state = await cdp.evaluate<{ hasCanvas: boolean } | null>(
+    GATE_STATE_EXPR,
+  )
+  return state?.hasCanvas === true
+}
+
+async function clickCanvasCenter(cdp: CdpClient): Promise<void> {
+  const rect = await cdp.evaluate<{ x: number; y: number } | null>(
+    "(() => { const c = document.querySelector('canvas'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.left + r.width/2, y: r.top + r.height/2 }; })()",
+  )
+  if (!rect) return
+  for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) {
+    await cdp.send("Input.dispatchMouseEvent", {
+      type,
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      button: type === "mouseMoved" ? "none" : "left",
+      buttons: type === "mousePressed" ? 1 : 0,
+      clickCount: 1,
+    })
+  }
+}
+
 async function driveGate(cdp: CdpClient, strategy: string): Promise<void> {
-  // Deadline-based: large web bundles (e.g. itch GameMaker exports) can take
-  // tens of seconds to load over the network before the canvas overlay is a
-  // live click target, so keep driving the gate well past first paint.
-  const deadline = Date.now() + 120000
-  while (Date.now() < deadline) {
-    const state = await cdp.evaluate<{
-      hasCanvas: boolean
-      userActivationHasBeen: boolean | null
-    } | null>(GATE_STATE_EXPR)
-    if (!state) {
-      await Bun.sleep(250)
-      continue
-    }
-    const action = nextGateAction(strategy as never, state)
-    if (action.kind === "done") return
-    if (action.kind === "wait") {
-      await Bun.sleep(250)
-      continue
-    }
-    if (action.kind === "synthetic-events") {
-      await cdp.evaluate(syntheticGestureShim())
-      await Bun.sleep(400)
-      continue
-    }
-    // trusted-gesture: a real CDP canvas click BOTH grants user activation and
-    // dismisses the engine's canvas-drawn focus overlay. Do NOT also send a
-    // keypress — a key grants activation without a click landing, which would
-    // make the gate look cleared while the overlay persists. With click-only,
-    // activation reliably reflects a click that landed, so the loop retries
-    // until one does (e.g. once the page has settled past load).
-    const rect = await cdp.evaluate<{ x: number; y: number } | null>(
-      "(() => { const c = document.querySelector('canvas'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.left + r.width/2, y: r.top + r.height/2 }; })()",
-    )
-    if (rect) {
-      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) {
-        await cdp.send("Input.dispatchMouseEvent", {
-          type,
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          button: type === "mouseMoved" ? "none" : "left",
-          buttons: type === "mousePressed" ? 1 : 0,
-          clickCount: 1,
-        })
-      }
-    }
+  if (strategy === "none") return
+
+  // Wait for the canvas to exist (bundles load over the network).
+  const canvasDeadline = Date.now() + 120000
+  while (Date.now() < canvasDeadline && !(await canvasPresent(cdp))) {
     await Bun.sleep(500)
+  }
+  if (!(await canvasPresent(cdp))) return
+
+  if (strategy === "synthetic") {
+    for (let i = 0; i < 8; i++) {
+      await cdp.evaluate(syntheticGestureShim())
+      await Bun.sleep(500)
+    }
+    return
+  }
+
+  // trusted-click: a real CDP canvas click both grants user activation and
+  // dismisses the engine's canvas-drawn focus overlay. The overlay only becomes
+  // a live click target AFTER the engine finishes initializing (well past first
+  // canvas paint and well past first user-activation), so a single early click
+  // is not enough and userActivation is an unreliable "done" signal. Keep
+  // clicking through a bounded startup window so a click lands once the engine
+  // is ready. (A pixel-based "playing" detector could stop earlier — see backlog.)
+  const clickWindow = Date.now() + 60000
+  while (Date.now() < clickWindow) {
+    await clickCanvasCenter(cdp)
+    await Bun.sleep(2000)
   }
 }
 
