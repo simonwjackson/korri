@@ -134,7 +134,7 @@ export function Gallery({
 
       <div className={cn.bar}>
         {onScreen ? (
-          <>
+          <div className={cn.nav}>
             <button
               type="button"
               aria-label="previous screen"
@@ -171,33 +171,35 @@ export function Gallery({
             >
               ▶
             </button>
-          </>
+            <button
+              type="button"
+              className={cn.mapToggle}
+              onClick={() => {
+                cue("open")
+                setOpen(value => !value)
+              }}
+            >
+              MAP
+            </button>
+          </div>
         ) : null}
-        <button
-          type="button"
-          className={cx(cn.view, view)}
-          aria-label="cycle view"
-          title="device lab · all-screens montage · component catalog"
-          onClick={() => {
-            cycleViewMode(viewOrder)
-            cue("toggle")
-          }}
-        >
-          {VIEW_LABEL[nextView]}
-        </button>
-        {onScreen ? (
+        {/* Always-present cluster: view toggle + the theme's live controls, in
+            their own container so they stay grouped and consistent across views. */}
+        <div className={cn.tools}>
           <button
             type="button"
-            className={cn.mapToggle}
+            className={cx(cn.view, view)}
+            aria-label="cycle view"
+            title="device lab · all-screens montage · component catalog"
             onClick={() => {
-              cue("open")
-              setOpen(value => !value)
+              cycleViewMode(viewOrder)
+              cue("toggle")
             }}
           >
-            MAP
+            {VIEW_LABEL[nextView]}
           </button>
-        ) : null}
-        {controls}
+          {controls}
+        </div>
       </div>
     </>
   )

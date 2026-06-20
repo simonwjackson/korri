@@ -16,6 +16,8 @@ const NEUTRAL: ResolvedClassNames = {
   bezel: "wk-bezel",
   screen: "wk-screen",
   bar: "wk-bar",
+  nav: "wk-bar-nav",
+  tools: "wk-bar-tools",
   label: "wk-bar-label",
   count: "wk-bar-count",
   view: "wk-bar-view",

@@ -61,6 +61,8 @@ export interface WorkshopClassNames {
   readonly screen?: string
   // Gallery bar.
   readonly bar?: string
+  readonly nav?: string
+  readonly tools?: string
   readonly label?: string
   readonly count?: string
   readonly view?: string

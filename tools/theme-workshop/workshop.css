@@ -75,6 +75,22 @@
 	color: #888;
 }
 
+/* Bar groups: the screen navigator (single-screen view only) and the
+ * always-present tools cluster (view toggle + the theme's live controls), each
+ * in its own container so the tools stay grouped + consistent across views. */
+.wk-bar-nav,
+.wk-bar-tools {
+	display: flex;
+	align-items: stretch;
+	gap: var(--intrinsic-space-1);
+}
+/* A divider only when the navigator precedes the tools (the single-screen view);
+ * on the montage / catalog the tools stand alone with no stray edge. */
+.wk-bar-nav + .wk-bar-tools {
+	padding-left: var(--intrinsic-space-2);
+	border-left: 2px solid #333;
+}
+
 /* Theme-declared controls (kit renders them neutrally) -------------------- */
 .wk-control {
 	display: inline-flex;
