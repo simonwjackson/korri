@@ -89,7 +89,11 @@ async function waitForNative(cdp: CdpClient): Promise<Dimensions> {
 }
 
 async function driveGate(cdp: CdpClient, strategy: string): Promise<void> {
-  for (let i = 0; i < 40; i++) {
+  // Deadline-based: large web bundles (e.g. itch GameMaker exports) can take
+  // tens of seconds to load over the network before the canvas overlay is a
+  // live click target, so keep driving the gate well past first paint.
+  const deadline = Date.now() + 120000
+  while (Date.now() < deadline) {
     const state = await cdp.evaluate<{
       hasCanvas: boolean
       userActivationHasBeen: boolean | null
