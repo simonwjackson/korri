@@ -230,9 +230,7 @@ function allowlistDrift(
 
 const LEGACY_KORRI_ROOT = join(REPO_ROOT, "korri")
 const LEGACY_SHARED_THEME_ROOT = join(REPO_ROOT, "korri", "shared", "themes")
-const CURRENT_THEME_ROOTS = [
-  join(REPO_ROOT, "product", "surfaces", "web"),
-]
+const CURRENT_THEME_ROOTS = [join(REPO_ROOT, "product", "surfaces", "web")]
 
 const FRAMEWORK_NEUTRAL_PLATFORM_ROOTS = [
   join(REPO_ROOT, "product", "platform", "protocol"),

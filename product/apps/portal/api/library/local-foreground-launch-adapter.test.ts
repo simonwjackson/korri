@@ -351,7 +351,7 @@ describe("local foreground launch adapter", () => {
     await owner.whenIdle()
   })
 
-  it("waits for managed readiness evidence after child exit before releasing idle", async () => {
+  it("accepts managed launches while owner verifies readiness after child exit", async () => {
     const owner = createLocalForegroundLaunchOwner()
     const exited = deferred<{ readonly exitCode: number | null }>()
     const ready = deferred<{
@@ -386,14 +386,14 @@ describe("local foreground launch adapter", () => {
     await Promise.resolve()
 
     expect(owner.status().state._tag).toBe("VerifyingReady")
-    expect(settled).toBe(false)
+    expect(settled).toBe(true)
+    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
 
     ready.resolve({ status: "ok", evidence: { gate: "sessiond-home-ready" } })
-    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
     await owner.whenIdle()
   })
 
-  it("returns failed launch response when managed readiness evidence fails", async () => {
+  it("keeps managed readiness failures out of the acceptance response", async () => {
     const owner = createLocalForegroundLaunchOwner()
     const exited = deferred<{ readonly exitCode: number | null }>()
     const ready = deferred<{
@@ -437,13 +437,7 @@ describe("local foreground launch adapter", () => {
       evidence: { gate: "sessiond-home-ready" },
     })
 
-    expect(await launch).toEqual({
-      _tag: "LaunchFailed",
-      status: "failed",
-      exitCode: 1,
-      failureKind: "command-failed",
-      stderrTail: "renderer restore failed",
-    })
+    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
     await owner.whenIdle()
   })
 
