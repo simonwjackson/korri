@@ -7,7 +7,7 @@
 let
   pkg = yfsPackage;
   checks = [
-    ((pkg.meta.mainProgram or null) == "yfs")
+    ((pkg.meta.mainProgram or null) == "yfs-launch")
     (builtins.elem "enableAudio" (pkg.passthru.launchSettings or [ ]))
     (builtins.elem "VolumeBGM" (pkg.passthru.launchSettings or [ ]))
   ];
@@ -24,14 +24,23 @@ else
 
     test -x ${pkg}/bin/yfs
     test -x ${pkg}/bin/yfs.unwrapped
+    test -x ${pkg}/bin/yfs-launch
     test -f ${pkg}/share/yoshis-fabrication-station/index.html
     test -f ${pkg}/share/yoshis-fabrication-station/scripts/c3main.js
     test -f ${pkg}/share/yoshis-fabrication-station/direct-launch-pre.js
     test -f ${pkg}/share/yoshis-fabrication-station/direct-launch.js
     test -f ${pkg}/share/yoshis-fabrication-station/samplelevels.json
+    test -f ${pkg}/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts/yfs-launch-settings.js
+    test -f ${pkg}/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts/yfs-level-loader.js
+    test -f ${pkg}/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/src/launcher/yfs-launch.ts
+    test -f ${pkg}/share/yoshis-fabrication-station-launcher/plugins/web-canvas/src/canvas.ts
+    test -f ${pkg}/share/yoshis-fabrication-station-launcher/plugins/webpage/src/runtime/webpage.ts
 
     grep -q 'YFS_APP_DIR' ${pkg}/bin/yfs
     grep -q 'YFS_BROWSER' ${pkg}/bin/yfs
+    grep -q 'KORRI_YFS_WEBROOT' ${pkg}/bin/yfs-launch
+    grep -q 'KORRI_YFS_SHIM_DIR' ${pkg}/bin/yfs-launch
+    grep -q 'KORRI_WEBPAGE_CHROMIUM' ${pkg}/bin/yfs-launch
     grep -q -- '--no-audio' ${pkg}/bin/yfs.unwrapped
     grep -q -- '--gba-sounds' ${pkg}/bin/yfs.unwrapped
     grep -q -- '--quick-death' ${pkg}/bin/yfs.unwrapped
@@ -47,6 +56,9 @@ else
     grep -q 'VolumeBGM' ${pkg}/share/yoshis-fabrication-station/scripts/c3main.js
     grep -q 'code_url' ${pkg}/share/yoshis-fabrication-station/direct-launch.js
     grep -q 'samplelevels.json' ${pkg}/share/yoshis-fabrication-station/direct-launch.js
+    grep -q '__YFS_LAUNCH_SETTINGS' ${pkg}/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts/yfs-launch-settings.js
+    grep -q 'code_url' ${pkg}/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts/yfs-level-loader.js
+    ! grep -q 'preserveDrawingBuffer' ${pkg}/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts/yfs-launch-settings.js
 
     ${pkg}/bin/yfs --help | grep -q -- '--no-audio'
     ${pkg}/bin/yfs --help | grep -q -- '--bgm-volume'
@@ -64,9 +76,11 @@ else
     test -f ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
     grep -q '^engine=construct3-html5' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
     grep -q 'launch-settings=enableAudio enableGBASounds enableQuickDeath enablePlayTimer VolumeBGM VolumeSFX' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
+    grep -q 'yfs-launch=level-file code_url=level.json web-canvas' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
+    grep -q 'yfs-launch-settings=audio gbaSounds quickDeath playTimer bgmVolume sfxVolume debug metrics' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
 
     mkdir -p $out
     cat > $out/summary.txt <<EOF
-    yoshis-fabrication-station derivation passes wrapper, static app, direct-launch, and setting-hook checks.
+    yoshis-fabrication-station derivation passes wrapper, static app, direct-launch, yfs-launch, and setting-hook checks.
     EOF
   ''

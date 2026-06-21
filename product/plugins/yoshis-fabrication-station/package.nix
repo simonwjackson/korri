@@ -13,6 +13,7 @@
   nodejs,
   nodePackages,
   chromium,
+  bun,
   jq,
   python3,
   curl,
@@ -163,7 +164,7 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
 
-    install -d "$out/bin" "$out/share/yoshis-fabrication-station" "$out/nix-support/yoshis-fabrication-station"
+    install -d "$out/bin" "$out/share/yoshis-fabrication-station" "$out/share/yoshis-fabrication-station-launcher/plugins" "$out/nix-support/yoshis-fabrication-station"
     cp -R source/. "$out/share/yoshis-fabrication-station/"
 
     install -m755 ${./yfs} "$out/bin/yfs.unwrapped"
@@ -178,6 +179,22 @@ stdenvNoCC.mkDerivation {
         ]
       }
 
+    mkdir -p \
+      "$out/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station" \
+      "$out/share/yoshis-fabrication-station-launcher/plugins/web-canvas" \
+      "$out/share/yoshis-fabrication-station-launcher/plugins/webpage"
+    cp -R ${./src} "$out/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/src"
+    mkdir -p "$out/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts"
+    cp ${./scripts/yfs-launch-settings.js} "$out/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts/yfs-launch-settings.js"
+    cp ${./scripts/yfs-level-loader.js} "$out/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts/yfs-level-loader.js"
+    cp -R ${../web-canvas/src} "$out/share/yoshis-fabrication-station-launcher/plugins/web-canvas/src"
+    cp -R ${../webpage/src} "$out/share/yoshis-fabrication-station-launcher/plugins/webpage/src"
+    makeWrapper ${lib.getExe bun} "$out/bin/yfs-launch" \
+      --add-flags "$out/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/src/launcher/yfs-launch.ts" \
+      --set-default KORRI_YFS_WEBROOT "$out/share/yoshis-fabrication-station" \
+      --set-default KORRI_YFS_SHIM_DIR "$out/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts" \
+      --set-default KORRI_WEBPAGE_CHROMIUM ${lib.getExe chromium}
+
     cat > "$out/nix-support/yoshis-fabrication-station/manifest.txt" <<EOF
     pname=yoshis-fabrication-station
     version=${version}
@@ -188,7 +205,9 @@ stdenvNoCC.mkDerivation {
     engine=construct3-html5
     browser=${chromium.pname or "chromium"} ${chromium.version or "unknown"}
     direct-launch=code_url sample code_b64 code stdin lss
+    yfs-launch=level-file code_url=level.json web-canvas
     launch-settings=enableAudio enableGBASounds enableQuickDeath enablePlayTimer VolumeBGM VolumeSFX
+    yfs-launch-settings=audio gbaSounds quickDeath playTimer bgmVolume sfxVolume debug metrics
     license=unlicensed-upstream-binary-export
     EOF
 
@@ -212,7 +231,7 @@ stdenvNoCC.mkDerivation {
     description = "Yoshi's Fabrication Station web export with Unix-style direct level launch";
     homepage = "https://levelsharesquare.itch.io/yoshis-fabrication-station";
     license = lib.licenses.unfreeRedistributable;
-    mainProgram = "yfs";
+    mainProgram = "yfs-launch";
     platforms = [
       "aarch64-linux"
       "x86_64-linux"

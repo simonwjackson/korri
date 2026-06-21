@@ -78,6 +78,15 @@ async function normalizePreparedCopyExportMarker(root: string): Promise<void> {
   )
 }
 
+async function removeLegacyDirectLaunchScripts(root: string): Promise<void> {
+  const indexPath = join(root, "index.html")
+  const source = await readFile(indexPath, "utf8")
+  const cleaned = source
+    .replace(/\s*<script\s+src=["']direct-launch-pre\.js["']><\/script>/g, "")
+    .replace(/\s*<script\s+src=["']direct-launch\.js["']><\/script>/g, "")
+  if (cleaned !== source) await writeFile(indexPath, cleaned)
+}
+
 async function buildPreparedRoot(
   root: string,
   staging: string,
@@ -90,6 +99,7 @@ async function buildPreparedRoot(
   await cp(webroot, staging, { recursive: true })
   await writeFile(join(staging, "level.json"), levelContent)
   await normalizePreparedCopyExportMarker(staging)
+  await removeLegacyDirectLaunchScripts(staging)
   await writeFile(
     join(staging, ".korri-yfs-manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,

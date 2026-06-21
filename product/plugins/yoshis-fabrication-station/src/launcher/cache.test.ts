@@ -27,7 +27,7 @@ async function writeWebroot(
   await mkdir(join(root, "scripts"), { recursive: true })
   await writeFile(
     join(root, "index.html"),
-    '<script src="scripts/main.js" type="module"></script>',
+    '<script src="direct-launch-pre.js"></script><script src="scripts/main.js" type="module"></script><script src="direct-launch.js"></script>',
   )
   await writeFile(join(root, "scripts/main.js"), marker)
   await writeFile(join(root, "scripts/c3main.js"), "window.__YFSGetSetting")
@@ -58,6 +58,12 @@ describe("YFS prepared root cache", () => {
     expect(
       await readFile(join(prepared.root, "scripts/main.js"), "utf8"),
     ).toContain('exportType:"html5"')
+    const preparedIndex = await readFile(
+      join(prepared.root, "index.html"),
+      "utf8",
+    )
+    expect(preparedIndex).not.toContain("direct-launch-pre.js")
+    expect(preparedIndex).not.toContain("direct-launch.js")
     expect(
       await Bun.file(join(prepared.root, ".korri-yfs-ready")).exists(),
     ).toBe(true)
