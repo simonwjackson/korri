@@ -1,7 +1,7 @@
 ---
 title: "feat: Productize launch-owned CDP input bridge for web keyboard games"
 type: feat
-status: active
+status: completed
 date: 2026-06-21
 origin: work/items/active/01KVNDFR0QH8X92ZP7HVS70MSF-spike-private-launch-input-scope-for-gamepad-to-keyboard-map/item.md
 verify_command: "bun test product/plugins/cdp-input-bridge product/platform/input/native product/plugins/yoshis-fabrication-station product/plugins/index.test.ts product/platform/library/sessiond-managed-launch-protocol.test.ts && just typecheck && just lint"
