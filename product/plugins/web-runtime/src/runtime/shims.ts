@@ -58,22 +58,21 @@ export const GATE_STATE_EXPR = `(() => ({ hasCanvas: !!document.querySelector("c
 // surface and scaling happens in-page — so native resolution never leaves the page.
 export function fitCanvasShim(): string {
   return `(() => {
-  let mo;
   const apply = () => {
     const c = document.querySelector("canvas");
     if (!c || !c.width || !c.height) return;
     const s = Math.min(window.innerWidth / c.width, window.innerHeight / c.height);
     const t = "translate(-50%,-50%) scale(" + s + ")";
     if (c.style.transform === t && c.style.position === "fixed") return;
-    if (mo) mo.disconnect();
     c.style.position = "fixed"; c.style.left = "50%"; c.style.top = "50%";
-    c.style.margin = "0"; c.style.transformOrigin = "center center";
+    c.style.right = "auto"; c.style.bottom = "auto"; c.style.margin = "0";
+    c.style.transformOrigin = "center center";
     c.style.transform = t; c.style.imageRendering = "pixelated";
-    if (mo) mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["width", "height", "style"] });
   };
-  try { new ResizeObserver(apply).observe(document.documentElement); } catch (e) {}
-  mo = new MutationObserver(apply);
-  mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["width", "height", "style"] });
+  // Engines (e.g. GameMaker) continuously restyle their canvas to top-left, so
+  // re-assert centering on a steady interval rather than only reacting to
+  // mutations. The idempotent guard above avoids layout thrash when unchanged.
+  if (!window.__korriFitTimer) window.__korriFitTimer = setInterval(apply, 200);
   window.addEventListener("resize", apply);
   apply();
   return "fit";
