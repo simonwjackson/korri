@@ -190,10 +190,14 @@ export async function runYfsLaunch(
 }
 
 if (import.meta.main) {
-  runYfsLaunch({ argv: process.argv.slice(2) }).catch(error => {
-    console.error(
-      `yfs-launch: ${error instanceof Error ? error.message : String(error)}`,
-    )
-    process.exit(1)
-  })
+  runYfsLaunch({ argv: process.argv.slice(2) })
+    .then(code => {
+      process.exitCode = code
+    })
+    .catch(error => {
+      console.error(
+        `yfs-launch: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      process.exit(1)
+    })
 }
