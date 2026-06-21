@@ -14,6 +14,10 @@ import { threeDSenPlugin, threeDSenReadableLaunchIntegration } from "./3dsen"
 import { fixtureAcquisitionPlugins } from "./acquisition-fixtures"
 import { am2rLauncherPlugin } from "./am2rlauncher"
 import { box64RuntimePlugin } from "./box64-runtime"
+import {
+  cdpInputBridgePlugin,
+  createCdpInputBridgeSessionLifecycleHook,
+} from "./cdp-input-bridge"
 import { communityCatalogPlugin } from "./community-catalog"
 import { domeRomantikPlugin } from "./dome-romantik"
 import { fexRuntimePlugin } from "./fex-runtime"
@@ -104,6 +108,10 @@ export const firstPartySessionLifecycleHookFactories = [
     pluginId: steamPlugin.id,
     create: () => createSteamSessionLifecycleHook(),
   },
+  {
+    pluginId: cdpInputBridgePlugin.id,
+    create: createCdpInputBridgeSessionLifecycleHook,
+  },
 ] satisfies readonly KorriSessionLifecycleHookFactory[]
 
 export const firstPartyPluginDaemonFactories = [
@@ -135,6 +143,7 @@ export const firstPartyPlugins = [
   gamescopePlugin,
   webpagePlugin,
   webCanvasPlugin,
+  cdpInputBridgePlugin,
   fexRuntimePlugin,
   box64RuntimePlugin,
   protonRuntimePlugin,

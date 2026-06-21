@@ -133,6 +133,7 @@ export interface CdpInputBridgeStartRequest {
 
 export interface CdpInputBridgeProcessHandle {
   readonly pid?: number
+  readonly exited?: Promise<void>
   readonly stop: () => Promise<void>
 }
 
@@ -158,16 +159,22 @@ export function createProcessCdpInputBridge(options: {
       const args = bridgeArgs(request)
       const child = spawn(command, args)
       let stopped = false
+      const exited = new Promise<void>(resolve => {
+        child.once("exit", () => resolve())
+      })
       return {
         pid: child.pid ?? undefined,
+        exited,
         stop: async () => {
           if (stopped) return
           stopped = true
           child.kill("SIGTERM")
-          await new Promise<void>(resolve => {
-            child.once("exit", () => resolve())
-            setTimeout(resolve, 2000).unref?.()
-          })
+          await Promise.race([
+            exited,
+            new Promise<void>(resolve => {
+              setTimeout(resolve, 2000).unref?.()
+            }),
+          ])
         },
       }
     },
