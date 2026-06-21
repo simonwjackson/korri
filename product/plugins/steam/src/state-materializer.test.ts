@@ -73,6 +73,18 @@ const inlineLock: SteamStateLock = {
 }
 
 describe("materializeSteamDesiredState", () => {
+  it("uses a fail-closed default lifecycle before production VDF writes", async () => {
+    const source = await Bun.file(
+      "product/plugins/steam/src/state-materializer.ts",
+    ).text()
+
+    expect(source).toContain("/run/wrappers/bin/sudo")
+    expect(source).toContain("korri-steam-service-control")
+    expect(source).toContain(
+      "timed out waiting for Steam shutdown before VDF write",
+    )
+  })
+
   it("reasserts LaunchOptions and compat-tool mapping before returning the managed wrapper", async () => {
     const stateRoot = "/steam-home"
     const events: string[] = []

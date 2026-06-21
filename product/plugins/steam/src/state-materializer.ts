@@ -242,6 +242,11 @@ export const noopSteamLifecycle: SteamLifecycle = {
 
 export const nodeSteamLifecycle: SteamLifecycle = {
   shutdown: async input => {
+    await runBestEffort("/run/wrappers/bin/sudo", [
+      "-n",
+      "/run/current-system/sw/bin/korri-steam-service-control",
+      "stop",
+    ])
     await runBestEffort(
       "/run/current-system/sw/bin/korri-steam-service-control",
       ["stop"],
@@ -251,13 +256,22 @@ export const nodeSteamLifecycle: SteamLifecycle = {
   waitForShutdown: async input => {
     const deadline = Date.now() + 15_000
     while (Date.now() <= deadline) {
-      const stillRunning = await commandSucceeds("pgrep", [
+      const serviceActive = await commandSucceeds("systemctl", [
+        "is-active",
+        "--quiet",
+        "korri-steam-gamescope.service",
+      ])
+      const stateProcessesRunning = await commandSucceeds("pgrep", [
         "-f",
         input.stateRoot,
       ])
-      if (!stillRunning) return
+      if (!serviceActive && !stateProcessesRunning) return
       await sleep(500)
     }
+    throw new SteamStateMutationFailed({
+      path: input.stateRoot,
+      reason: "timed out waiting for Steam shutdown before VDF write",
+    })
   },
   // AppID launches are subsequently forwarded through korri-steam-app, whose
   // shell wrapper owns starting and warming gamescoped Steam Big Picture.
