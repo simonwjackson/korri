@@ -24,14 +24,14 @@ let
   panfrostEnvironment = {
     # RG353M/RK3566 exposes rockchip KMS on card0 and Mali-G52/Panfrost on the
     # render node. wlroots needs both explicitly in the current guest bring-up:
-    # KMS on card0, rendering on renderD128.
+    # KMS on card0, rendering on renderD128. Do not force Mesa's loader/Gallium
+    # driver here: the Rockchip KMS node needs Mesa's kmsro path for GBM, while
+    # the render node autodetects Panfrost.
     WLR_DRM_DEVICES = "/dev/dri/card0";
     WLR_RENDER_DRM_DEVICE = "/dev/dri/renderD128";
     WLR_RENDERER = "gles2";
     WLR_NO_HARDWARE_CURSORS = "1";
     WLR_LIBINPUT_NO_DEVICES = "1";
-    MESA_LOADER_DRIVER_OVERRIDE = "panfrost";
-    GALLIUM_DRIVER = "panfrost";
     XDG_CURRENT_DESKTOP = "sway";
     XDG_CACHE_HOME = "/home/korri/.cache";
     USER = "korri";
@@ -57,7 +57,6 @@ in
     sessionBus = {
       mode = lib.mkDefault "existing";
       address = lib.mkDefault "unix:path=%t/bus";
-      services = lib.mkDefault [ "main-space-session-dbus.service" ];
     };
 
     path = with pkgs; [
@@ -118,6 +117,11 @@ in
     null;
 
   systemd.user.services.korrid.environment.KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
+
+  systemd.user.services.korri-compositor.serviceConfig.UnsetEnvironment = [
+    "DISPLAY"
+    "WAYLAND_DISPLAY"
+  ];
 
   # Keep the nix-on-rocks boot-selected guest profile in sync after switches.
   system.activationScripts.korri-rocknix-guest-profile = {

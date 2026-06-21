@@ -21,10 +21,14 @@ let
   serverEnv = serverService.environment or { };
   inputplumberService = cfg.systemd.services.inputplumber or { };
   inputplumberEnv = inputplumberService.environment or { };
+  userCompositorService = cfg.systemd.user.services."korri-compositor" or { };
+  userCompositorEnv = userCompositorService.environment or { };
+  userCompositorServiceConfig = userCompositorService.serviceConfig or { };
+  userCompositorUnsetEnvironment = userCompositorServiceConfig.UnsetEnvironment or [ ];
+  userCompositorRequires = userCompositorService.requires or [ ];
   serverExecStartPre = serverService.serviceConfig.ExecStartPre or [ ];
   platformDefaults = server.library.platformDefaults;
-  hostAppEnvironment =
-    ((platformDefaults.host or { }).gamescope or { }).app.environment or { };
+  hostAppEnvironment = ((platformDefaults.host or { }).gamescope or { }).app.environment or { };
   renderedPlatformDefaults =
     (pkgs.formats.yaml { }).generate "00-korri-platform-defaults.yaml"
       platformDefaults;
@@ -56,6 +60,17 @@ let
     ))
     (check "RG353M platform defaults must unset WAYLAND_DISPLAY at the host Gamescope app layer" (
       hostAppEnvironment ? WAYLAND_DISPLAY && hostAppEnvironment.WAYLAND_DISPLAY == null
+    ))
+    (check "RG353M compositor must not force Mesa's loader driver" (
+      !(userCompositorEnv ? MESA_LOADER_DRIVER_OVERRIDE)
+    ))
+    (check "RG353M compositor must not force Gallium's driver" (!(userCompositorEnv ? GALLIUM_DRIVER)))
+    (check "RG353M compositor must not inherit app display sockets" (
+      builtins.elem "DISPLAY" userCompositorUnsetEnvironment
+      && builtins.elem "WAYLAND_DISPLAY" userCompositorUnsetEnvironment
+    ))
+    (check "RG353M compositor must not require the retired main-space bus unit" (
+      !(builtins.elem "main-space-session-dbus.service" userCompositorRequires)
     ))
     (check "RG353M platform-default fragment must be installed before korrid starts" (
       builtins.any (cmd: lib.hasInfix "00-korri-platform-defaults.yaml" cmd) serverExecStartPre
