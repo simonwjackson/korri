@@ -49,19 +49,27 @@ const FileSetTarget = Schema.Struct({
   root: Schema.optional(TargetString),
   files: Schema.Array(FileSetPart).pipe(
     Schema.check(
-      Schema.makeFilter((files: readonly Schema.Schema.Type<typeof FileSetPart>[]) => {
-        if (files.length === 0) {
-          return { path: ["files"], issue: "file-set targets must declare at least one file" }
-        }
-        const ids = new Set<string>()
-        for (const file of files) {
-          if (ids.has(file.id)) {
-            return { path: ["files"], issue: `file-set target file id '${file.id}' must be unique` }
+      Schema.makeFilter(
+        (files: readonly Schema.Schema.Type<typeof FileSetPart>[]) => {
+          if (files.length === 0) {
+            return {
+              path: ["files"],
+              issue: "file-set targets must declare at least one file",
+            }
           }
-          ids.add(file.id)
-        }
-        return undefined
-      }),
+          const ids = new Set<string>()
+          for (const file of files) {
+            if (ids.has(file.id)) {
+              return {
+                path: ["files"],
+                issue: `file-set target file id '${file.id}' must be unique`,
+              }
+            }
+            ids.add(file.id)
+          }
+          return undefined
+        },
+      ),
     ),
   ),
 })
@@ -127,7 +135,10 @@ const ReleaseLaunch = Schema.Struct({
   Schema.check(
     Schema.makeFilter(launch =>
       launch.use !== undefined && launch.plugin !== undefined
-        ? { path: ["launch"], issue: "release.launch cannot specify both use and plugin" }
+        ? {
+            path: ["launch"],
+            issue: "release.launch cannot specify both use and plugin",
+          }
         : undefined,
     ),
   ),

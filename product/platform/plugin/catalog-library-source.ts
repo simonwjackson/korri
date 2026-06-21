@@ -287,7 +287,7 @@ function resolvePluginLaunch(
               ...(contribution.launch.env
                 ? { env: contribution.launch.env }
                 : {}),
-              ...(executable.cwd ?? contribution.launch.cwd
+              ...((executable.cwd ?? contribution.launch.cwd)
                 ? { cwd: executable.cwd ?? contribution.launch.cwd }
                 : {}),
             }

@@ -73,8 +73,15 @@ const ClaimDisplayMetadata = Schema.Record(Schema.String, Schema.Unknown)
 const ClaimTarget = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("url"), value: Schema.NonEmptyString }),
   Schema.Struct({ kind: Schema.Literal("file"), path: Schema.NonEmptyString }),
-  Schema.Struct({ kind: Schema.Literal("executable"), command: Schema.NonEmptyString }),
-  Schema.Struct({ kind: Schema.Literal("provider-ref"), provider: ProviderId, ref: ProviderRef }),
+  Schema.Struct({
+    kind: Schema.Literal("executable"),
+    command: Schema.NonEmptyString,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("provider-ref"),
+    provider: ProviderId,
+    ref: ProviderRef,
+  }),
   Schema.Struct({
     kind: Schema.Literal("file-set"),
     files: Schema.NonEmptyArray(

@@ -164,7 +164,9 @@ describe("resolveAppDescriptor", () => {
       runErrTag(
         resolveAppDescriptor({
           appId: "my-runner",
-          readableLaunchers: readableLauncherMap([{ id: "my-runner", settings: { fullscreen: true } }]),
+          readableLaunchers: readableLauncherMap([
+            { id: "my-runner", settings: { fullscreen: true } },
+          ]),
           launchers: launcherMap(),
         }),
       ),
@@ -176,7 +178,9 @@ describe("resolveAppDescriptor", () => {
       runErrTag(
         resolveAppDescriptor({
           appId: "plugin-app",
-          readableLaunchers: readableLauncherMap([{ id: "plugin-app", plugin: "plugin-app" }]),
+          readableLaunchers: readableLauncherMap([
+            { id: "plugin-app", plugin: "plugin-app" },
+          ]),
           launchers: launcherMap(),
         }),
       ),

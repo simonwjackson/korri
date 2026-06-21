@@ -306,7 +306,11 @@ export function createLibraryRepository(
       loadReadableSnapshot(db, _options).pipe(
         Effect.map(snapshot =>
           derivePlayableEntries([...snapshot.library.values()]).map(entry =>
-            toPlayableLibraryEntry(entry, snapshot.readableLaunchers, snapshot.systems),
+            toPlayableLibraryEntry(
+              entry,
+              snapshot.readableLaunchers,
+              snapshot.systems,
+            ),
           ),
         ),
         Effect.flatMap(entries =>
@@ -807,7 +811,10 @@ function upsertLegacyGame(
         : {}),
       ...(appId
         ? {
-            launch: { use: appId, ...(runtimeId ? { runtime: runtimeId } : {}) },
+            launch: {
+              use: appId,
+              ...(runtimeId ? { runtime: runtimeId } : {}),
+            },
           }
         : {}),
     }
@@ -981,18 +988,21 @@ function toCompatGameRecord(entry: PlayableLibraryEntry): GameRecord {
   }
 }
 
-function toPlayableReleaseEntry(release: {
-  readonly id: string
-  readonly system: string
-  readonly source?: unknown
-  readonly target?: PlayableReleaseEntry["target"]
-  readonly launch?: {
-    readonly use?: string
-    readonly plugin?: string
-    readonly runtime?: string
-  }
-  readonly display?: Readonly<Record<string, unknown>>
-}, install?: PlayableReleaseEntry["install"]): PlayableReleaseEntry {
+function toPlayableReleaseEntry(
+  release: {
+    readonly id: string
+    readonly system: string
+    readonly source?: unknown
+    readonly target?: PlayableReleaseEntry["target"]
+    readonly launch?: {
+      readonly use?: string
+      readonly plugin?: string
+      readonly runtime?: string
+    }
+    readonly display?: Readonly<Record<string, unknown>>
+  },
+  install?: PlayableReleaseEntry["install"],
+): PlayableReleaseEntry {
   return {
     id: release.id,
     system: release.system,
@@ -1002,7 +1012,9 @@ function toPlayableReleaseEntry(release: {
           launch: {
             ...(release.launch.use ? { use: release.launch.use } : {}),
             ...(release.launch.plugin ? { plugin: release.launch.plugin } : {}),
-            ...(release.launch.runtime ? { runtime: release.launch.runtime } : {}),
+            ...(release.launch.runtime
+              ? { runtime: release.launch.runtime }
+              : {}),
           },
         }
       : {}),
@@ -1076,7 +1088,8 @@ interface PluginReadableRecords {
 function pluginReadableRecords(
   registry: PluginRegistry | undefined,
 ): PluginReadableRecords {
-  if (!registry) return { providers: [], systems: [], launchers: [], runtimes: [] }
+  if (!registry)
+    return { providers: [], systems: [], launchers: [], runtimes: [] }
   return {
     providers: decodePluginReadableMap(
       registry.providers,

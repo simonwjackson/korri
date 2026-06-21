@@ -30,7 +30,11 @@ const sonic: LibraryItemRecord = {
     {
       id: "genesis",
       system: "genesis",
-      target: { kind: "file", storage: "roms", path: "genesis/Sonic The Hedgehog.md" },
+      target: {
+        kind: "file",
+        storage: "roms",
+        path: "genesis/Sonic The Hedgehog.md",
+      },
       launch: { use: "@korri:retroarch/retroarch" },
     },
     { id: "windows-known", system: "windows" },
@@ -61,7 +65,11 @@ const superMarioAdvance2: LibraryItemRecord = {
     {
       id: "gba",
       system: "gba",
-      target: { kind: "file", storage: "roms", path: "gba/Super Mario Advance 2.gba" },
+      target: {
+        kind: "file",
+        storage: "roms",
+        path: "gba/Super Mario Advance 2.gba",
+      },
       launch: { use: "@korri:retroarch/retroarch" },
     },
   ],

@@ -23,7 +23,11 @@ describe("LibraryItemPayload playable/release identity", () => {
         {
           id: "gba",
           system: "gba",
-          target: { kind: "file", storage: "roms", path: "gba/Super Mario Advance 2.gba" },
+          target: {
+            kind: "file",
+            storage: "roms",
+            path: "gba/Super Mario Advance 2.gba",
+          },
         },
       ],
     })
@@ -41,7 +45,13 @@ describe("LibraryItemPayload playable/release identity", () => {
             title: "Super Mario World",
           },
         },
-        releases: [{ id: "gba", system: "gba", target: { kind: "file", storage: "roms", path: "gba/cart.gba" } }],
+        releases: [
+          {
+            id: "gba",
+            system: "gba",
+            target: { kind: "file", storage: "roms", path: "gba/cart.gba" },
+          },
+        ],
       }),
     ).toThrow()
   })
@@ -50,14 +60,26 @@ describe("LibraryItemPayload playable/release identity", () => {
     expect(() =>
       decodeLibraryItemPayload({
         collection: "handheld",
-        releases: [{ id: "windows", system: "windows", target: { kind: "url", value: "steam://x" } }],
+        releases: [
+          {
+            id: "windows",
+            system: "windows",
+            target: { kind: "url", value: "steam://x" },
+          },
+        ],
       }),
     ).toThrow()
 
     expect(() =>
       decodeLibraryItemPayload({
         "version-of": "super-mario-advance-2/super-mario-world/extra",
-        releases: [{ id: "windows", system: "windows", target: { kind: "url", value: "steam://x" } }],
+        releases: [
+          {
+            id: "windows",
+            system: "windows",
+            target: { kind: "url", value: "steam://x" },
+          },
+        ],
       }),
     ).toThrow()
   })
@@ -66,8 +88,16 @@ describe("LibraryItemPayload playable/release identity", () => {
     expect(() =>
       decodeLibraryItemPayload({
         releases: [
-          { id: "windows", system: "windows", target: { kind: "url", value: "steam://one" } },
-          { id: "windows", system: "windows", target: { kind: "url", value: "steam://two" } },
+          {
+            id: "windows",
+            system: "windows",
+            target: { kind: "url", value: "steam://one" },
+          },
+          {
+            id: "windows",
+            system: "windows",
+            target: { kind: "url", value: "steam://two" },
+          },
         ],
       }),
     ).toThrow()
@@ -137,7 +167,12 @@ describe("LibraryItemPayload playable/release identity", () => {
     expect(() =>
       decodeLibraryItemPayload({
         releases: [
-          { id: "gba", system: "gba", target: { kind: "file", storage: "roms", path: "gba/cart.gba" }, apps: [] },
+          {
+            id: "gba",
+            system: "gba",
+            target: { kind: "file", storage: "roms", path: "gba/cart.gba" },
+            apps: [],
+          },
         ],
       }),
     ).toThrow(/Unexpected key|apps/i)

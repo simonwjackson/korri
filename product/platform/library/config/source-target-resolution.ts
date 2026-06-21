@@ -84,7 +84,9 @@ const isExecutableTarget = (
 const isProviderRefTarget = (
   target: ReleaseTargetAtom,
 ): target is Extract<ReleaseTargetAtom, { readonly kind: "provider-ref" }> =>
-  typeof target === "object" && target !== null && target.kind === "provider-ref"
+  typeof target === "object" &&
+  target !== null &&
+  target.kind === "provider-ref"
 
 export const resolveReleaseTarget = (
   input: ResolveReleaseTargetInput,

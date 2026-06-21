@@ -111,7 +111,11 @@ describe("resolveReleaseTarget", () => {
   it("resolves provider-ref targets as provider-qualified locators", async () => {
     const resolved = await Effect.runPromise(
       resolveReleaseTarget({
-        target: { kind: "provider-ref", provider: "@korri:steam", ref: "1029210" },
+        target: {
+          kind: "provider-ref",
+          provider: "@korri:steam",
+          ref: "1029210",
+        },
         storage,
       }),
     )

@@ -176,7 +176,8 @@ describe("checked-in readable library example", () => {
         readonly launchers?: Record<string, Record<string, unknown>>
       }
       const retroarchLauncher =
-        parsed.launchers?.["@korri:retroarch/retroarch"] ?? parsed.launchers?.retroarch
+        parsed.launchers?.["@korri:retroarch/retroarch"] ??
+        parsed.launchers?.retroarch
 
       expect(retroarchLauncher).toBeDefined()
       if (retroarchLauncher === undefined) continue
@@ -208,7 +209,9 @@ describe("checked-in readable library example", () => {
         readonly library?: Record<string, Record<string, unknown>>
       }
 
-      const steamApp = decodeAppPayload(parsed.launchers?.["@korri:steam/steam"])
+      const steamApp = decodeAppPayload(
+        parsed.launchers?.["@korri:steam/steam"],
+      )
       expect(steamApp.plugin).toBe("@korri:steam")
       expect(steamApp.settings?.plugin).toMatchObject({
         state: { root: "{storage:@korri:steam/steam}/Steam" },

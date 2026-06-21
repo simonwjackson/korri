@@ -41,9 +41,13 @@ describe("SystemPayload", () => {
   it("rejects inherited launcher policy fields", () => {
     expect(() => decodeSystemPayload({ env: { LANG: "C" } })).toThrow()
     expect(() => decodeSystemPayload({ presets: { perf: {} } })).toThrow()
-    expect(() => decodeSystemPayload({ byLauncher: { retroarch: {} } })).toThrow()
+    expect(() =>
+      decodeSystemPayload({ byLauncher: { retroarch: {} } }),
+    ).toThrow()
     expect(() => decodeSystemPayload({ inherit: false })).toThrow()
-    expect(() => decodeSystemPayload({ plugin: { "@korri:retroarch": {} } })).toThrow()
+    expect(() =>
+      decodeSystemPayload({ plugin: { "@korri:retroarch": {} } }),
+    ).toThrow()
   })
 
   it("rejects identity-field bypass: 'contentPath' is not allowed", () => {

@@ -13,7 +13,8 @@ export function installMetadataForRelease(
 ): ProviderInstallMetadata | undefined {
   const appId = release.launch?.use ?? release.launch?.plugin
   const app = appId === undefined ? undefined : readableLaunchers.get(appId)
-  const providerId = app === undefined ? release.launch?.plugin : appRecordKind(app)
+  const providerId =
+    app === undefined ? release.launch?.plugin : appRecordKind(app)
   if (providerId !== STEAM_PROVIDER_ID) return undefined
   const steamAppId = steamAppIdFromTarget(release.target)
   if (!steamAppId) return undefined
@@ -21,7 +22,9 @@ export function installMetadataForRelease(
 }
 
 export function installMetadataAllowed(
-  entries: readonly { readonly releases: readonly { readonly install?: ProviderInstallMetadata }[] }[],
+  entries: readonly {
+    readonly releases: readonly { readonly install?: ProviderInstallMetadata }[]
+  }[],
   providerId: string,
   appId: string,
 ): boolean {
@@ -35,7 +38,9 @@ export function installMetadataAllowed(
   )
 }
 
-function steamAppIdFromTarget(target: LibraryReleasePayload["target"]): string | undefined {
+function steamAppIdFromTarget(
+  target: LibraryReleasePayload["target"],
+): string | undefined {
   const value = target?.kind === "url" ? target.value : undefined
   if (!value) return undefined
   const match = value.match(/^steam:\/\/(?:rungameid|run|install)\/([0-9]+)$/)

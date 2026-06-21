@@ -277,19 +277,28 @@ describe("itch.io acquisition plugin", () => {
               id: "windows",
               providerId: "@korri:itchio",
               system: "windows",
-              target: { kind: "url", value: "https://orangepixel.itch.io/meganoid" },
+              target: {
+                kind: "url",
+                value: "https://orangepixel.itch.io/meganoid",
+              },
             },
             {
               id: "linux",
               providerId: "@korri:itchio",
               system: "linux",
-              target: { kind: "url", value: "https://orangepixel.itch.io/meganoid" },
+              target: {
+                kind: "url",
+                value: "https://orangepixel.itch.io/meganoid",
+              },
             },
             {
               id: "macos",
               providerId: "@korri:itchio",
               system: "macos",
-              target: { kind: "url", value: "https://orangepixel.itch.io/meganoid" },
+              target: {
+                kind: "url",
+                value: "https://orangepixel.itch.io/meganoid",
+              },
             },
           ],
         },

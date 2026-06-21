@@ -89,25 +89,28 @@ describe("prepareLaunch", () => {
   })
 
   it("returns diagnostics for missing, disabled, and failing providers", async () => {
-    const registry = createPluginRegistry([
-      plugin({ namespace: "@fixture", name: "prepare" }),
-      plugin({
-        namespace: "@fixture",
-        name: "broken",
-        contributes: {
-          handlers: [
-            {
-              id: "broken.launch-prepare",
-              operation: "launch.prepare",
-              capabilities: ["launch.prepare"],
-              run: () => {
-                throw new Error("boom")
+    const registry = createPluginRegistry(
+      [
+        plugin({ namespace: "@fixture", name: "prepare" }),
+        plugin({
+          namespace: "@fixture",
+          name: "broken",
+          contributes: {
+            handlers: [
+              {
+                id: "broken.launch-prepare",
+                operation: "launch.prepare",
+                capabilities: ["launch.prepare"],
+                run: () => {
+                  throw new Error("boom")
+                },
               },
-            },
-          ],
-        },
-      }),
-    ], { enabledPluginIds: ["@fixture:broken"] })
+            ],
+          },
+        }),
+      ],
+      { enabledPluginIds: ["@fixture:broken"] },
+    )
 
     const result = await Effect.runPromise(
       prepareLaunch({

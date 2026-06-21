@@ -304,7 +304,9 @@ const steamReadableSnapshot = (
   systems: new Map([["steam", { id: "steam" }]]),
   sources: new Map([["steam", { id: "steam", kind: ["service"] }]]),
   storage: new Map([[steamAppId, { id: steamAppId, root: "/state" }]]),
-  readableLaunchers: input.app ? new Map([[input.app.id, input.app]]) : new Map(),
+  readableLaunchers: input.app
+    ? new Map([[input.app.id, input.app]])
+    : new Map(),
   runtimes: new Map(),
   profiles: new Map(),
   library: new Map([

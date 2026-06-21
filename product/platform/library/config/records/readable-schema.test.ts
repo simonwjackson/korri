@@ -150,7 +150,12 @@ describe("readable library schema records", () => {
         () =>
           decodeLibraryItemPayload({
             releases: [
-              { id: "default", system: "stream", target: { kind: "url", value: "peer" }, ...retired },
+              {
+                id: "default",
+                system: "stream",
+                target: { kind: "url", value: "peer" },
+                ...retired,
+              },
             ],
           }),
       ],
@@ -306,19 +311,31 @@ describe("readable library schema records", () => {
       decodeAppPayload({ plugin: "@korri:retroarch", retroarch: {} }),
     ).toThrow()
     expect(() =>
-      decodeAppPayload({ plugin: "@korri:retroarch", integration: "retroarch" }),
+      decodeAppPayload({
+        plugin: "@korri:retroarch",
+        integration: "retroarch",
+      }),
     ).toThrow()
     expect(() =>
       decodeHostPayload({ retroarch: { configFile: { mode: "path" } } }),
     ).toThrow()
     expect(() =>
-      decodeAppPayload({ plugin: "@korri:retroarch", achievements: { password: "x" } }),
+      decodeAppPayload({
+        plugin: "@korri:retroarch",
+        achievements: { password: "x" },
+      }),
     ).toThrow()
     expect(() =>
-      decodeAppPayload({ plugin: "@korri:retroarch", netplay: { enable: true } }),
+      decodeAppPayload({
+        plugin: "@korri:retroarch",
+        netplay: { enable: true },
+      }),
     ).toThrow()
     expect(() =>
-      decodeAppPayload({ plugin: "@korri:retroarch", remoteCommand: { enable: true } }),
+      decodeAppPayload({
+        plugin: "@korri:retroarch",
+        remoteCommand: { enable: true },
+      }),
     ).toThrow()
   })
 
@@ -412,7 +429,10 @@ describe("readable library schema records", () => {
     })
 
     expect(item.releases.map(release => release.id)).toEqual(["windows"])
-    expect(item.releases[0]?.target).toEqual({ kind: "url", value: "steam://rungameid/360740" })
+    expect(item.releases[0]?.target).toEqual({
+      kind: "url",
+      value: "steam://rungameid/360740",
+    })
     expect(item.releases[0]?.launch).toEqual({ use: "@korri:steam/steam" })
     expect(() =>
       decodeLibraryItemPayload({

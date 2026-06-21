@@ -713,8 +713,9 @@ const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
       }
     : {}
 
-const readableViewOfSystem = (_system: SystemRecord | undefined): ReadableLayerView =>
-  ({})
+const readableViewOfSystem = (
+  _system: SystemRecord | undefined,
+): ReadableLayerView => ({})
 
 const pluginPolicyFromSettings = (
   launcherPlugin: string | undefined,
@@ -736,7 +737,11 @@ const stripContentPathOverride = (
   pluginSettings: Record<string, unknown>,
 ): Record<string, unknown> => {
   const content = pluginSettings.content
-  if (typeof content !== "object" || content === null || Array.isArray(content)) {
+  if (
+    typeof content !== "object" ||
+    content === null ||
+    Array.isArray(content)
+  ) {
     return pluginSettings
   }
   if (!("path" in content)) return pluginSettings
@@ -845,7 +850,8 @@ const resolveReadableLauncherSelection = (input: {
       app.systems.includes(input.systemId)
     )
   })
-  if (candidates.length === 0) return { _tag: "NotFound", appId: input.pluginId }
+  if (candidates.length === 0)
+    return { _tag: "NotFound", appId: input.pluginId }
   if (candidates.length > 1) {
     return {
       _tag: "Ambiguous",
@@ -1069,7 +1075,10 @@ export const resolveReadableLocalLauncherPolicy = (
   snapshot: ReadableConfigSnapshot,
   inputs: ResolveReadableLocalLauncherPolicyInputs,
 ): ResolvedLocalLauncherPolicy => {
-  const app = resolveReadableLauncherRecord(inputs.launcherId, snapshot.readableLaunchers)
+  const app = resolveReadableLauncherRecord(
+    inputs.launcherId,
+    snapshot.readableLaunchers,
+  )
   const folded = mergeReadableLayers([
     snapshot.host ?? {},
     readableViewOfApp(app),
