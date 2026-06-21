@@ -62,8 +62,8 @@ describe("YFS prepared root cache", () => {
       join(prepared.root, "index.html"),
       "utf8",
     )
-    expect(preparedIndex).not.toContain("direct-launch-pre.js")
-    expect(preparedIndex).not.toContain("direct-launch.js")
+    expect(preparedIndex).toContain("direct-launch-pre.js")
+    expect(preparedIndex).toContain("direct-launch.js")
     expect(
       await Bun.file(join(prepared.root, ".korri-yfs-ready")).exists(),
     ).toBe(true)
@@ -151,9 +151,9 @@ describe("YFS prepared root cache", () => {
     expect(
       await readFile(join(prepared.root, "scripts/main.js"), "utf8"),
     ).toContain('exportType:"html5"')
-    expect(
-      await readFile(join(prepared.root, "index.html"), "utf8"),
-    ).not.toContain("direct-launch.js")
+    expect(await readFile(join(prepared.root, "index.html"), "utf8")).toContain(
+      "direct-launch.js",
+    )
   })
 
   it("keeps prepared roots and level content user-private", async () => {

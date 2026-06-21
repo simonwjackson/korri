@@ -2,7 +2,7 @@ import { plugin } from "@platform/plugin"
 import { CDP_INPUT_BRIDGE_PLUGIN_ID } from "../cdp-input-bridge"
 
 export const KORRI_YFS_PLUGIN_ID = "@korri:yoshis-fabrication-station" as const
-export const KORRI_YFS_LAUNCHER_LOCAL_ID = "level" as const
+const KORRI_YFS_LAUNCHER_LOCAL_ID = "level" as const
 export const KORRI_YFS_LAUNCHER_ID =
   `${KORRI_YFS_PLUGIN_ID}/${KORRI_YFS_LAUNCHER_LOCAL_ID}` as const
 

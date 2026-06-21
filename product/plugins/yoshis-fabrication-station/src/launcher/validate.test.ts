@@ -23,7 +23,7 @@ async function tempRoot(): Promise<string> {
 async function writeCompatibleWebroot(root: string): Promise<void> {
   await writeFile(
     join(root, "index.html"),
-    '<script src="scripts/main.js" type="module"></script>',
+    '<script src="direct-launch-pre.js"></script><script src="scripts/main.js" type="module"></script><script src="direct-launch.js"></script>',
   )
   await writeFile(join(root, "scripts/main.js"), 'exportType:"html5"')
   await writeFile(join(root, "scripts/c3main.js"), "window.__YFSGetSetting")
@@ -44,7 +44,7 @@ describe("YFS validation", () => {
     const missingHook = await tempRoot()
     await writeFile(
       join(missingHook, "index.html"),
-      '<script src="scripts/main.js" type="module"></script>',
+      '<script src="direct-launch-pre.js"></script><script src="scripts/main.js" type="module"></script><script src="direct-launch.js"></script>',
     )
     await writeFile(join(missingHook, "scripts/main.js"), 'exportType:"html5"')
     await writeFile(join(missingHook, "scripts/c3main.js"), "/* no hook */")

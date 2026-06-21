@@ -73,11 +73,8 @@ describe("yfs-launch", () => {
     expect(url).toContain("bgm_volume=5")
   })
 
-  it("uses ordered YFS shims for settings before level loading", () => {
-    expect(yfsShimPaths().map(path => path.split("/").pop())).toEqual([
-      "yfs-launch-settings.js",
-      "yfs-level-loader.js",
-    ])
+  it("uses the packaged YFS direct-launch seam instead of duplicate shims", () => {
+    expect(yfsShimPaths()).toEqual([])
   })
 
   it("terminates a launched browser when pre-ready observation fails", async () => {

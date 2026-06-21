@@ -1,11 +1,8 @@
 #!/usr/bin/env bun
 
-import { dirname, join } from "node:path"
-import { fileURLToPath, pathToFileURL } from "node:url"
-import {
-  applyCanvasConcerns,
-  prepareCanvasStartupScripts,
-} from "../../../web-canvas/src/canvas"
+import { join } from "node:path"
+import { pathToFileURL } from "node:url"
+import { prepareCanvasStartupScripts } from "../../../web-canvas/src/canvas"
 import type { CanvasSettings } from "../../../web-canvas/src/settings"
 import type { WebpageSettings } from "../../../webpage/src/core/settings"
 import { launchWebpage } from "../../../webpage/src/runtime/webpage"
@@ -18,22 +15,18 @@ import {
   yfsSettingsQuery,
 } from "./settings-runtime"
 
-const LAUNCHER_VERSION = "1"
+const LAUNCHER_VERSION = "2"
 
 export interface ParsedYfsLaunchCli {
   readonly levelFile: string
   readonly settings: YfsLauncherSettings
 }
 
-const scriptDir = dirname(fileURLToPath(import.meta.url))
-
 export function yfsShimPaths(): string[] {
-  const shimDir =
-    process.env.KORRI_YFS_SHIM_DIR ?? join(scriptDir, "../../scripts")
-  return [
-    join(shimDir, "yfs-launch-settings.js"),
-    join(shimDir, "yfs-level-loader.js"),
-  ]
+  // The packaged YFS webroot already includes direct-launch-pre.js and
+  // direct-launch.js. yfs-launch must not inject a second loader over that
+  // document; doing so races the package loader and regresses seamless launch.
+  return []
 }
 
 function usage(): string {
@@ -212,14 +205,20 @@ async function hasVisibleYfsLevelInput(
 async function openYfsLoadUi(
   cdp: Parameters<typeof waitForYfsReady>[0],
 ): Promise<void> {
-  const rect = await waitForCanvasRect(cdp)
-  const deadline = Date.now() + 18000
+  const deadline = Date.now() + 60000
   // YFS boots to its title screen. A normal launcher must still advance to the
   // built-in Play Level screen before the level-code loader can inject content.
   // The title screen becomes interactive after Construct's boot animation, so
   // retry the trusted click until the visible level-code input appears.
   while (Date.now() < deadline) {
     if (await hasVisibleYfsLevelInput(cdp)) return
+    let rect: CanvasRect
+    try {
+      rect = await waitForCanvasRect(cdp, 1000)
+    } catch {
+      await Bun.sleep(500)
+      continue
+    }
     for (const [x, y] of [
       [0.5, 0.88],
       [0.5, 0.9],
@@ -230,6 +229,7 @@ async function openYfsLoadUi(
     }
     await Bun.sleep(500)
   }
+  throw new Error("Timed out opening the YFS Play Level UI")
 }
 
 export interface RunYfsLaunchOptions {
@@ -267,7 +267,12 @@ export async function runYfsLaunch(
     ],
   })
   try {
-    await applyCanvasConcerns(cdp, canvasSettings, startupScripts)
+    for (const script of startupScripts) {
+      await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+        source: script.source,
+      })
+      await cdp.evaluate(script.source)
+    }
     await openYfsLoadUi(cdp)
     await waitForYfsReadyOrBrowserExit(cdp, proc)
     cdp.close()
