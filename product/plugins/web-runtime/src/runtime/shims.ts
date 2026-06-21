@@ -52,6 +52,34 @@ export const FINGERPRINT_EXPR = `(() => ({ globals: ["GameMaker_Init","g_pBuiltI
 
 export const GATE_STATE_EXPR = `(() => ({ hasCanvas: !!document.querySelector("canvas"), userActivationHasBeen: navigator.userActivation ? navigator.userActivation.hasBeenActive : null }))()`
 
+// CSS-fit: scale the single canvas to fill the viewport (aspect-preserving,
+// centered, pixelated) and re-apply on resize / engine canvas changes. Used on
+// the no-gamescope path, where the host compositor just gives a fullscreen
+// surface and scaling happens in-page — so native resolution never leaves the page.
+export function fitCanvasShim(): string {
+  return `(() => {
+  let mo;
+  const apply = () => {
+    const c = document.querySelector("canvas");
+    if (!c || !c.width || !c.height) return;
+    const s = Math.min(window.innerWidth / c.width, window.innerHeight / c.height);
+    const t = "translate(-50%,-50%) scale(" + s + ")";
+    if (c.style.transform === t && c.style.position === "fixed") return;
+    if (mo) mo.disconnect();
+    c.style.position = "fixed"; c.style.left = "50%"; c.style.top = "50%";
+    c.style.margin = "0"; c.style.transformOrigin = "center center";
+    c.style.transform = t; c.style.imageRendering = "pixelated";
+    if (mo) mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["width", "height", "style"] });
+  };
+  try { new ResizeObserver(apply).observe(document.documentElement); } catch (e) {}
+  mo = new MutationObserver(apply);
+  mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["width", "height", "style"] });
+  window.addEventListener("resize", apply);
+  apply();
+  return "fit";
+})()`
+}
+
 // Synthetic activation for engines whose load flow accepts untrusted DOM events
 // (e.g. Construct). The trusted-click path uses real CDP Input instead.
 export function syntheticGestureShim(): string {

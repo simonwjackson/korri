@@ -22,6 +22,7 @@ import { gamescopeCliArgs } from "./gamescope-cli"
 import {
   bootstrapShim,
   FINGERPRINT_EXPR,
+  fitCanvasShim,
   GATE_STATE_EXPR,
   NATIVE_RES_EXPR,
   syntheticGestureShim,
@@ -152,11 +153,17 @@ async function driveGate(cdp: CdpClient, strategy: string): Promise<void> {
 }
 
 export async function run(config: RunConfig): Promise<number> {
-  const needsProbe = config.engine === "auto" || config.native === "detect"
+  // Native resolution is only needed to size gamescope's scaler. On the
+  // no-gamescope path the in-page fit shim scales the canvas, so native res
+  // never needs probing. Engine still matters (gate strategy).
+  const needsProbe =
+    config.engine === "auto" || (config.gamescope && config.native === "detect")
   const probed = needsProbe ? await probe(config) : undefined
   const engine = probed?.engine ?? (config.engine as EngineId)
   const native =
-    config.native !== "detect" ? config.native : (probed?.native as Dimensions)
+    config.native !== "detect"
+      ? config.native
+      : ((probed?.native ?? config.output) as Dimensions)
   const profile = engineProfile(engine)
 
   const port = 9222
@@ -166,6 +173,7 @@ export async function run(config: RunConfig): Promise<number> {
       locator: config.locator,
       autoplay: config.autoplay,
       extraFlags: config.extraFlags,
+      ozonePlatform: config.gamescope ? "x11" : "wayland",
     }),
     "--default-background-color=ff000000",
     "--remote-debugging-address=127.0.0.1",
@@ -211,6 +219,13 @@ export async function run(config: RunConfig): Promise<number> {
     color: { r: 0, g: 0, b: 0, a: 1 },
   })
   await cdp.evaluate(boot)
+  // No gamescope: scaling happens in-page. Inject the CSS-fit shim on every
+  // document and once now, so the canvas fills the fullscreen surface.
+  if (!config.gamescope) {
+    const fit = fitCanvasShim()
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: fit })
+    await cdp.evaluate(fit)
+  }
   // Load engine-specific shim files passed via --shim <path>.
   for (const shimPath of config.shims) {
     try {

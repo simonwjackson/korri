@@ -14,6 +14,9 @@ export interface WebChromiumArgsInput {
   readonly locator: string
   readonly autoplay?: WebAutoplayPolicy
   readonly extraFlags?: readonly string[]
+  // x11 = gamescope's Xwayland (xwm can fullscreen it); wayland = bare under the
+  // host compositor (no gamescope). Defaults to x11.
+  readonly ozonePlatform?: "x11" | "wayland"
   readonly overrides?: {
     readonly prepend?: readonly string[]
     readonly append?: readonly string[]
@@ -21,7 +24,7 @@ export interface WebChromiumArgsInput {
 }
 
 const BASE_FLAGS = [
-  "--ozone-platform=x11",
+  "--ozone-platform={ozone}",
   "--app={locator}",
   "--no-sandbox",
   "--ignore-gpu-blocklist",
@@ -38,7 +41,10 @@ function autoplayFlag(policy: WebAutoplayPolicy): string {
 }
 
 export function composeWebChromiumArgs(input: WebChromiumArgsInput): string[] {
-  const base = BASE_FLAGS.map(flag => flag.replace("{locator}", input.locator))
+  const ozone = input.ozonePlatform ?? "x11"
+  const base = BASE_FLAGS.map(flag =>
+    flag.replace("{locator}", input.locator).replace("{ozone}", ozone),
+  )
   return [
     ...(input.overrides?.prepend ?? []),
     ...base,
