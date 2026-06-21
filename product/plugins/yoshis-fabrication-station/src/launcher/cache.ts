@@ -1,10 +1,18 @@
 import { createHash } from "node:crypto"
-import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
+import {
+  chmod,
+  cp,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises"
 import { join } from "node:path"
 import { stableSettingsKey, type YfsLauncherSettings } from "./settings-runtime"
 import { validateLevelFile, validateYfsWebroot } from "./validate"
 
-const DEFAULT_CACHE_ROOT = `${process.env.XDG_CACHE_HOME ?? "/tmp"}/korri/yfs-launch`
+const DEFAULT_CACHE_ROOT = `${process.env.XDG_CACHE_HOME ?? `${process.env.HOME ?? "/tmp"}/.cache`}/korri/yfs-launch`
 
 export interface PrepareYfsLaunchRootInput {
   readonly webroot: string
@@ -95,16 +103,20 @@ async function buildPreparedRoot(
   manifest: PreparedRootManifest,
 ): Promise<void> {
   await rm(staging, { recursive: true, force: true })
-  await mkdir(staging, { recursive: true })
+  await mkdir(staging, { recursive: true, mode: 0o700 })
   await cp(webroot, staging, { recursive: true })
-  await writeFile(join(staging, "level.json"), levelContent)
+  await chmod(staging, 0o700)
+  await writeFile(join(staging, "level.json"), levelContent, { mode: 0o600 })
   await normalizePreparedCopyExportMarker(staging)
   await removeLegacyDirectLaunchScripts(staging)
   await writeFile(
     join(staging, ".korri-yfs-manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
+    { mode: 0o600 },
   )
-  await writeFile(join(staging, ".korri-yfs-ready"), "ready\n")
+  await writeFile(join(staging, ".korri-yfs-ready"), "ready\n", {
+    mode: 0o600,
+  })
   await rm(root, { recursive: true, force: true })
   await rename(staging, root)
 }
@@ -134,7 +146,8 @@ export async function prepareYfsLaunchRoot(
   const cacheRoot = input.cacheRoot ?? DEFAULT_CACHE_ROOT
   const root = join(cacheRoot, cacheKey)
   const staging = join(cacheRoot, `.staging-${cacheKey}-${process.pid}`)
-  await mkdir(cacheRoot, { recursive: true })
+  await mkdir(cacheRoot, { recursive: true, mode: 0o700 })
+  await chmod(cacheRoot, 0o700)
 
   const current = await existingManifest(root)
   if (matchesManifest(current, manifest))

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { prepareYfsLaunchRoot } from "./cache"
@@ -102,6 +102,54 @@ describe("YFS prepared root cache", () => {
     expect(second.root).toBe(first.root)
     expect(second.rebuilt).toBe(false)
     expect(different.root).not.toBe(first.root)
+  })
+
+  it("changes cache keys when non-core webroot files change", async () => {
+    const webroot = await tempRoot("webroot")
+    const cacheRoot = await tempRoot("cache")
+    await writeWebroot(webroot, 'exportType:"html5"')
+    await writeFile(join(webroot, "data.json"), JSON.stringify({ version: 1 }))
+    const level = join(webroot, "source-level.json")
+    await writeFile(level, JSON.stringify({ level: "one" }))
+
+    const first = await prepareYfsLaunchRoot({
+      webroot,
+      levelFile: level,
+      cacheRoot,
+      settings: {},
+      launcherVersion: "test",
+    })
+    await writeFile(join(webroot, "data.json"), JSON.stringify({ version: 2 }))
+    const second = await prepareYfsLaunchRoot({
+      webroot,
+      levelFile: level,
+      cacheRoot,
+      settings: {},
+      launcherVersion: "test",
+    })
+
+    expect(second.root).not.toBe(first.root)
+  })
+
+  it("keeps prepared roots and level content user-private", async () => {
+    const webroot = await tempRoot("webroot")
+    const cacheRoot = await tempRoot("cache")
+    await writeWebroot(webroot, 'exportType:"html5"')
+    const level = join(webroot, "source-level.json")
+    await writeFile(level, JSON.stringify({ level: "one" }))
+
+    const prepared = await prepareYfsLaunchRoot({
+      webroot,
+      levelFile: level,
+      cacheRoot,
+      settings: {},
+      launcherVersion: "test",
+    })
+
+    expect((await stat(prepared.root)).mode & 0o777).toBe(0o700)
+    expect((await stat(join(prepared.root, "level.json"))).mode & 0o777).toBe(
+      0o600,
+    )
   })
 
   it("rebuilds an incomplete prepared root once", async () => {

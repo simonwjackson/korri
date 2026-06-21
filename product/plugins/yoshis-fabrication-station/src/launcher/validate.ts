@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
-import { readFile, stat } from "node:fs/promises"
-import { join, resolve } from "node:path"
+import { readdir, readFile, stat } from "node:fs/promises"
+import { join, relative, resolve } from "node:path"
 
 export const DEFAULT_MAX_LEVEL_BYTES = 2 * 1024 * 1024
 
@@ -19,6 +19,25 @@ export interface ValidatedYfsWebroot {
 
 function sha256(text: string | Uint8Array): string {
   return createHash("sha256").update(text).digest("hex")
+}
+
+async function recursiveFileDigests(root: string): Promise<readonly string[]> {
+  const entries: string[] = []
+  async function visit(dir: string): Promise<void> {
+    const children = await readdir(dir, { withFileTypes: true })
+    for (const child of children.sort((left, right) =>
+      left.name.localeCompare(right.name),
+    )) {
+      const path = join(dir, child.name)
+      if (child.isDirectory()) await visit(path)
+      else if (child.isFile()) {
+        const rel = relative(root, path)
+        entries.push(`${rel}:${sha256(await readFile(path))}`)
+      }
+    }
+  }
+  await visit(root)
+  return entries
 }
 
 async function readRequiredFile(path: string, label: string): Promise<string> {
@@ -65,9 +84,7 @@ export async function validateYfsWebroot(
   const exportMarker = detectExportMarker(main)
   const identity = sha256(
     JSON.stringify({
-      index: sha256(index),
-      main: sha256(main),
-      c3main: sha256(c3main),
+      files: await recursiveFileDigests(resolved),
       exportMarker,
     }),
   )
