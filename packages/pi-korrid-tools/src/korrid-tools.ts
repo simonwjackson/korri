@@ -843,6 +843,14 @@ export function classifySteamLaunchTranscript(
   const gpuFreedreno = /libvulkan_freedreno\.so/.test(transcript)
   const renderNode = /renderD128|renderD\d+/.test(transcript)
   const inputAccess = /\/dev\/input|\/dev\/uinput|uinput/.test(transcript)
+  const gamescopedSteam =
+    /GAMESCOPE_WAYLAND_DISPLAY=gamescope-0|\bgamescope-0\b|gamescope .*korri-steam-guest|\/bin\/gamescope/.test(
+      transcript,
+    )
+  const realProtonCachyos =
+    /compatibilitytools\.d\/proton-cachyos-11\.0-20260601-slr-arm64\/proton/.test(
+      transcript,
+    )
   const waitingForUser = /waiting for user response/.test(transcript)
   const firstRunSetup =
     /Upgrading prefix|Successfully registered DLL|ProcessingInstallScript/.test(
@@ -873,6 +881,10 @@ export function classifySteamLaunchTranscript(
     fexMissing,
     execFormat,
     protonFailure,
+    gamescopedSteam,
+    realProtonCachyos,
+    validGamescopedProtonProof:
+      gameRunning && gamescopedSteam && realProtonCachyos,
     appId: options.appId,
     expectedGameExe: options.expectedGameExe,
     processNeedle: options.processNeedle,
@@ -1041,7 +1053,7 @@ while [ "$(date +%s)" -le "$deadline" ]; do
   echo "===POLL $(date '+%Y-%m-%d %H:%M:%S')==="
   echo "###PROCESSES"
   ps -eo pid,stat,etime,pcpu,pmem,cmd | awk -v exe="$expected_exe" -v needle="$process_needle" '
-    /SteamLaunch AppId=|wine64-preloader|wine-preloader|wineserver|pressure-vessel|pv-adverb|proton/ {print}
+    /SteamLaunch AppId=|wine64-preloader|wine-preloader|wineserver|pressure-vessel|pv-adverb|proton|gamescope/ {print}
     index($0, "/usr/bin/FEX") {print}
     exe != "" && index($0, exe) {print}
     needle != "" && needle != exe && index($0, needle) {print}

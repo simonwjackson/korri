@@ -467,6 +467,46 @@ describe("korrid-tools Pi package", () => {
     })
   })
 
+  it("classifies gamescoped proton-cachyos Steam launch proof", () => {
+    const result = classifySteamLaunchTranscript(
+      `GAMESCOPE_WAYLAND_DISPLAY=gamescope-0
+/run/current-system/sw/bin/gamescope -e -- /run/current-system/sw/bin/korri-steam-guest -gamepadui
+SteamLaunch AppId=401710
+/var/lib/korri/steam/compatibilitytools.d/proton-cachyos-11.0-20260601-slr-arm64/proton waitforexitandrun
+S:\\common\\Flinthook\\Flinthook.exe
+GAME_PID=216880
+/run/pressure-vessel/interpreter-root/var/pressure-vessel/gfx/main/usr/lib/libvulkan_freedreno.so
+lrwx------ 47 -> /dev/dri/renderD128
+`,
+      { appId: "401710", expectedGameExe: "Flinthook.exe" },
+    )
+
+    expect(result).toMatchObject({
+      outcome: "running_gpu",
+      signals: {
+        gamescopedSteam: true,
+        realProtonCachyos: true,
+        validGamescopedProtonProof: true,
+      },
+    })
+  })
+
+  it("does not accept non-gamescoped Steam as proton-cachyos proof", () => {
+    const result = classifySteamLaunchTranscript(
+      `SteamLaunch AppId=401710
+/var/lib/korri/steam/compatibilitytools.d/proton-cachyos-11.0-20260601-slr-arm64/proton waitforexitandrun
+GAME_PID=216880
+`,
+      { appId: "401710", expectedGameExe: "Flinthook.exe" },
+    )
+
+    expect(result.signals).toMatchObject({
+      gamescopedSteam: false,
+      realProtonCachyos: true,
+      validGamescopedProtonProof: false,
+    })
+  })
+
   it("classifies Stray-style Steam launches by process needle", () => {
     const result = classifySteamLaunchTranscript(
       `APP_ID=1332010\nAPP_NAME=Stray\nPROCESS_NEEDLE=Hk_project\nGAME_PID=239999\n/run/pressure-vessel/interpreter-root/var/pressure-vessel/gfx/main/usr/lib/libvulkan_freedreno.so\nlrwx------ 43 -> /dev/dri/renderD128\n`,
