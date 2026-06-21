@@ -1,506 +1,498 @@
 # Repository Research Summary
 
-> Scoped for: Steam launch observability implementation  
-> Feature: `product/services/device/steam/` — parsers, tailer, observer, RPC surface  
-> Handoff: `docs/handoffs/steam-observability-implementation-handoff-2026-06-14.md`  
-> Backlog: `01KV3KWT98Y6W6CNXP05ZPSHH7`
+> Scope: major no-backwards-compat plugin/config schema big-bang refactor
+> Focus: systems, target vs launch, launchers replacing apps, provider-links refs,
+>         file-set targets/input selection, settings common packs + settings.plugin,
+>         plugin descriptor runtime metadata/support mappings, no backwards compatibility.
+> Source document: `work/items/active/01KVGDKT01DNT9NRDKS846CJQ1-plugin-launcher-standardization/config-sketch.korri.yaml`
 
 ---
 
 ## Technology & Infrastructure
 
-**Languages & Frameworks**
-- TypeScript 74%, TSX 10%, Nix 12%, Shell/BASH 2%
-- React 18 + TanStack Router for the portal SPA
-- Effect v4 for service contracts, schema, RPC (`effect`, `@effect/atom-react`)
-- Hono (`@hono/node-server`) for the HTTP/RPC server layer
-- Bun as the runtime and test runner
-- Storybook for visual harness
-- Biome 2.3.5 for lint/format (2-space indent, no semicolons except as needed, double quotes)
-- Vite for the web build; Nix flakes + direnv for reproducible tooling
-
-**Deployment Model**
-- Multi-service: `korrid` (main API daemon), `sessiond` (foreground session lifecycle), `inputd` (input broker), device-side systemd units
-- Device targets: SM8550/Bandai (arm64, NixOS), source-machine (LAN stream host), x86 live USB kiosk
-- Korri-owned Steam root: `/var/lib/korri/steam/`; logs at `/var/lib/korri/steam/logs/`
-
-**TypeScript Path Aliases**
-```
-@platform/*  →  product/platform/*   (shared runtime, schemas, services, protocols)
-@product/*   →  product/*            (portal apps, API, themes)
-```
-No other aliases exist. Shared modules under `@platform` must not import from `@product`.
-
-**Test runner**: `bun test` (just `test-unit`). Playwright for E2E/component.
-
-**Module structure** (relevant to Steam observability):
-```
-product/
-  platform/
-    api/rpc/         – RPC error types, serialization
-    control/         – KorriControl service + live layer
-    library/
-      launcher.ts                           – LaunchSpec schema
-      sessiond-managed-launch-protocol.ts   – SSE/HTTP wire schema (Effect Schema)
-      sessiond-lifecycle-projections.ts     – projection helpers
-    logger/                                 – pino-based shared logger
-    stream/
-      steam-launch-spec.ts                  – parseSteamAppId, renderSteamLaunchSpec
-  services/device/
-    sessiond.ts          – foreground session lifecycle HTTP server
-    sessiond-state.ts    – pure session state reducer
-    sessiond-gamescope-reaper.ts – process reaper (pattern model)
-    sessiond-status-sidecar.ts   – JSON sidecar writer
-    steam/               – (worktree only today; new home for Steam TS code)
-      steam-gamescope-launch-plan.ts
-      steam-gamescope-launch-planner-cli.ts
-  apps/portal/api/
-    server/
-      status.rpc.ts          – app.server.status (Effect Schema + Rpc.make)
-      status.rpc-handler.ts  – handler composition; sessiond probe + runner sidecar
-      rpc-group.ts           – all server RPCs registered here
-      rpc-server.ts          – Layer assembly + HTTP handler
-    session/
-      status.rpc.ts           – app.session.status
-      status.rpc-handler.ts
-    hello/
-      rpc.ts / rpc-handler.ts / rpc-handler.test.ts  – canonical minimal example
-```
+| Dimension | Detail |
+|-----------|--------|
+| Language | TypeScript (strict) + TSX, ~71 % / 12 % of LOC |
+| Runtime | Bun (test, bundling, server); Effect v4 throughout |
+| UI | React + TanStack Router + Tailwind + Vite |
+| Schemas | Effect Schema (source of truth for every wire payload, record, and policy) |
+| Config parse | YAML via `yaml` npm package; decoded through Effect Schema at load time |
+| DB | ProseQL (YAML-backed document store abstraction) |
+| Linter/formatter | Biome 2-space, double-quotes, no trailing whitespace |
+| Test runner | `bun test`; E2E via Playwright |
+| Nix | Flakes + direnv; all tooling in scope |
+| Monorepo layout | Single root `package.json`; feature modules under `product/platform/`, `product/plugins/`, `packages/`, `tools/` |
 
 ---
 
 ## Architecture & Structure
 
-### Service Layering
+### Config cascade (current seven-layer model)
+The readable cascade resolves launch context through layers in order (least → most specific):
 
 ```
-Portal SPA (React/TanStack Router)
-    ↓  Effect RPC  (app.xxx.yyy)
-korrid (Hono/Effect server — product/services/device/korrid.ts)
-    ↓  HTTP fetch to socket
-sessiond (Bun.serve — product/services/device/sessiond.ts)
-    ↓  Bun.spawn
-  Game processes / Steam
+host → user → system → app → (app-choice) → runtime → library-item → contained-playable → release → profile → ephemeral-override
 ```
 
-**Key architectural rules (inferred from codebase):**
-- `sessiond` is the sole truth for foreground lifecycle. `korrid` proxies sessiond state through `app.server.status` and `app.session.status`.
-- `korrid` RPCs live in `product/apps/portal/api/{domain}/`. Each domain has `{action}.rpc.ts` (schema + `Rpc.make`), `{action}.rpc-handler.ts` (Effect handler), and a `rpc-handler.test.ts`.
-- Shared protocol schemas live in `product/platform/library/` and are imported by both server and client.
-- New domain RPCs must be added to `product/apps/portal/api/server/rpc-group.ts` and wired in `rpc-server.ts`.
-- Effect Schema (not hand-rolled types) is the source of truth for all wire types. Generated files are read-only.
+Key files:
+- `product/platform/library/config/cascade-resolver.ts` — `ConfigSnapshot`, `ReadableConfigSnapshot`, `resolveReadableLaunchContext`, `resolveLocalLauncherPolicy`, `foldLayers`, `mergeReadableLayers`
+- `product/platform/library/config/inheritable-fields.ts` — `InheritableLayer` (the whitelist every layer-bearing record inlines), `LaunchPolicy`, `LaunchWithPolicy`, `MoonlightPolicy`, `PluginPolicyMap`, `ByLauncherPayload`
+- `product/platform/library/config/launch-block.ts` — `LaunchBlock` (`app`, `module`, `settings`, `with`, `args`, `env`, `cwd`), `LaunchSettings`
+- `product/platform/library/config/resolved-launch-context.ts` — `ResolvedLaunchContext` (seven-layer schema cascade output used by old-path materializer), `ReadableResolvedLaunchContext` (new readable cascade output)
+- `product/platform/library/config/app-materializer.ts` — `materializeAppLaunch`, `materializeReadableLaunch`; hard-coded `switch` over `app.integration` values (`mame`, `dolphin`, `solarus`, `generic-process`)
+- `product/platform/library/config/app-integrations.ts` — `AppDescriptor`, `resolveAppDescriptor`; built-in app descriptors dict; `integrationForKind`
+- `product/platform/library/config/app-choice-selection.ts` — `AppChoiceSelectionResult`, `resolveEffectiveAppChoices`, `selectAppChoice`
 
-### sessiond Architecture
+### ProseQL / library database
+- `product/platform/library/proseql/library-repository.ts` — `LibraryRepository` interface, `createLibraryRepository`, `loadReadableSnapshot`, `ReadableLaunchIntegration` interface
+- `product/platform/library/proseql/library-db.ts` — `KorriLibraryDb` (ProseQL collection wrappers)
 
-`sessiond` is a Bun HTTP server that:
-1. Maintains `KorriSessionState` (pure state machine: `stopped → starting → home → launching → game → restoring → recovering`).
-2. Accepts `POST /managed-launch` to start a session.
-3. Streams lifecycle events via `GET /managed-launch/events` (SSE).
-4. Exposes `GET /managed-launch/status` for polling.
-5. Plugs in a `role` (kiosk or source-machine), a `launcher`, and an optional `reaper`/`gamescopeControlBridge`.
+### Plugin system
+- `product/platform/plugin/index.ts` — `plugin()` factory, `KorriPlugin`, `PluginDefinitionInput`, `PluginConfigContributions`, `PluginCatalogItem/Release/Launch`, `PluginHandler`, `PluginOperation`
+- `product/platform/plugin/registry.ts` — `createPluginRegistry`, `PluginRegistry`, config-map merging, `expandRequiredPluginIds`
+- `product/plugins/index.ts` — `firstPartyPlugins` array, `createFirstPartyPluginRegistryFromEnv`
 
-All components are injected as interface dependencies — no singletons. Tests build a `createKorriSessiondCore(...)` with harness objects; production `main()` builds from env.
+### Records / schemas (all in `product/platform/library/config/records/`)
+| File | Key types |
+|------|-----------|
+| `library-item.ts` | `LibraryItemRecord`, `LibraryReleasePayload`, `ContainedPlayablePayload`; `Target` union (`TargetString | UriTarget | FileTarget | Array`); `AppChoiceList` on `release.apps[]` |
+| `system.ts` | `SystemPayload` — `name`, `manufacturer`, `cores`, `apps[]`, `inherit`, `presets`, `byLauncher`; `launcher` field rejected |
+| `app.ts` | `AppRecord`/`AppPayload` — `kind` (free string; `"@korri:steam"` etc.), `command`, `runtime`, `args`, `systems`, `policy`, `settings`, `launch`, `plugin`, inheritable fields |
+| `launcher.ts` | `LauncherRecord`/`LauncherPayload` — `command`, `args`, `systems`; inheritable fields |
+| `runtime.ts` | `RuntimeRecord`/`RuntimePayload` — `kind` (`libretro-core | tool | emulator`), `path`, `tool`, `app`, `supports.systems[]`; inheritable fields |
+| `global.ts` | `GlobalConfigPayload` — `launch`, `launcher` (alias), `presets`, `byLauncher`; inheritable fields |
+| `user.ts` | `UserPayload` — `displayName`, `favorites`, `hidden`, `launch`, `launcher`, `presets`, `byLauncher`; inheritable fields |
+| `preset.ts` | `PresetPayload` — `name`, `description`, `launch`, `launcher`, `inherit`, `byLauncher`; inheritable fields |
+| `host.ts` | `HostPayload` — plain block; no role/launch-block/nested profiles |
+| `app-choice.ts` | `AppChoice` — `id`, `inherit`, `runtime`; inheritable fields; `kind` rejected |
+| `provider-link.ts` | `ProviderLinkPayload` — `provider`, `playable`, `release?`, `ref: { kind, value }` (single-ref-per-record, `kind` in `url | provider-item-id | external-id`) |
+| `storage.ts` | `StorageRecord` — `root`, `path?: Record<string,string>` |
+| `game.ts` | `GameRecord` — legacy; `system`, `contentPath|content.artifactId`, `metadata`, `launch`, `launcher`, `core`, `collections`, `presets`, `byLauncher`; inheritable fields |
+| `module.ts` | `ModuleRecord` — `kind: "libretro-core"`, `path` |
 
-### GamescopeReaper — Pattern Model for Steam Observer
+### Source-target resolution
+`product/platform/library/config/source-target-resolution.ts` — `resolveReleaseTarget`, `ReleaseTargetAtom` (`string | UriTarget | FileTarget`). Only `string`, `{ kind: "uri" }`, and `{ kind: "file", storage, path }` are currently resolved. Array targets (`MultiTargetUnsupported`) and everything else fall through to `String(target)`.
 
-`product/services/device/sessiond-gamescope-reaper.ts` is the closest existing analogue to the Steam log observer:
-
-- Exposes a `GamescopeReaper` function type: `(request: ReapRequest) => Promise<ReapOutcome>`.
-- Implementation `createGamescopeReaper(options)` takes injected `processList`, `signaler`, `logger`, `graceMs`, `retries`.
-- Helper `createProcfsProcessList()` reads `/proc`; `POSIX_PROCESS_SIGNALER` does real signals.
-- Production wiring: `createSystemGamescopeReaper(overrides)` — accepts partial overrides so tests inject cheap fakes.
-- Tests use inline fakes (`makeProcessList(processes)`, `makeSignaler()`) — never Mock/Stub/Fake class names.
-
-**Steam observer should follow the same dependency-injection + configurable-behavior pattern.**
-
-### Steam Code Today
-
-The steam code referenced in the handoff (`steam-gamescope-launch-plan.ts`, `steam-gamescope-launch-planner-cli.ts`) lives in a worktree branch `feat/steam-ts-planner-handoff`:
-
+### Materializers (plugin-owned)
+Plugins that need config-file generation or multi-step spawn prep expose a `ReadableLaunchIntegration`:
+```ts
+interface ReadableLaunchIntegration {
+  providerId?: PluginId
+  kind: string                       // matched against appRecordKind(context.app)
+  integration: AppIntegrationKind
+  canResolve: (ctx: ReadableResolvedLaunchContext) => boolean
+  materialize: (ctx, opts?) => Effect<{ spec, artifacts?, diagnostics? }, ResolutionError>
+}
 ```
-.worktrees/feat/steam-ts-planner-handoff/product/services/device/steam/
-  steam-gamescope-launch-plan.ts
-  steam-gamescope-launch-plan.test.ts
-  steam-gamescope-launch-planner-cli.ts
-  steam-gamescope-launch-planner-cli.test.ts
-```
+Registered in `product/plugins/index.ts` as `firstPartyLaunchIntegrations`:
+- `retroarchReadableLaunchIntegration` (kind `"@korri:retroarch"`)
+- `ryubingReadableLaunchIntegration`
+- `steamReadableLaunchIntegration`
+- `threeDSenReadableLaunchIntegration`
 
-These files do **not** yet exist on `trunk`. The handoff assumes they will land before or alongside the observability work. New Steam observability code belongs in `product/services/device/steam/`.
-
-The stable Steam code that already exists on `trunk`:
-```
-product/platform/stream/steam-launch-spec.ts       – parseSteamAppId(), renderSteamLaunchSpec()
-product/platform/library/config/steam-state-materializer.ts  – VDF manipulation, lifecycle
-product/systems/nixos/modules/korri-steam.nix       – Nix module
-```
+### Existing tests (migration-sensitive)
+| File | What it gates |
+|------|---------------|
+| `product/platform/library/config/records/readable-schema.test.ts` | Decodes every record type; rejects retired vocabulary; validates fixture YAML |
+| `product/platform/library/config/cascade-resolver.test.ts` | `resolveLocalLauncherCompanionPolicy` fold rules |
+| `product/platform/library/config/readable-cascade-resolver.test.ts` | Full readable cascade integration (1000+ lines) |
+| `product/platform/library/config/compose-readable-launch-spec.test.ts` | Placeholder substitution |
+| `product/platform/library/config/authoring/examples.test.ts` | Parses `korri-catalog-display-metadata.example.yaml`; checks retired vocabulary list; validates Steam and RetroArch example YAML files |
+| `product/plugins/retroarch/src/plugin.test.ts` | Retroarch plugin descriptor |
+| `product/plugins/retroarch/src/materializer.test.ts` | Retroarch materializer |
+| `product/plugins/steam/src/plugin.test.ts` | Steam plugin descriptor |
+| `product/platform/plugin/registry.test.ts` | Registry merging and namespacing |
 
 ---
 
 ## Implementation Patterns
 
-### RPC Contract Pattern
-
-All RPCs follow this exact structure. `hello` is the canonical minimal example:
-
-**`{action}.rpc.ts`** — schema + RPC declaration:
+### Pattern 1 — Schema record anatomy (Effect Schema v4)
+Every record module follows:
 ```ts
-import { ApiError } from "@platform/api/rpc/errors"
-import { Schema } from "effect"
-import { Rpc } from "effect/unstable/rpc"
+export const FooPayload = Schema.Struct({ ... })  // no id field
+export type FooPayload = Schema.Schema.Type<typeof FooPayload>
 
-export class GetHelloPayload extends Schema.Class<GetHelloPayload>("GetHelloPayload")({
-  name: Schema.optional(Schema.String),
-}) {}
+export const FooRecord = Schema.Struct({ id: ..., ...FooPayload.fields })
+export type FooRecord = Schema.Schema.Type<typeof FooRecord>
 
-export class HelloResponse extends Schema.Class<HelloResponse>("HelloResponse")({
-  message: Schema.String,
-  timestamp: Schema.String,
-}) {}
+export const decodeFooPayload = (input: unknown): FooPayload =>
+  Schema.decodeUnknownSync(FooPayload)(input, { onExcessProperty: "error" })
+export const decodeFooRecord = ...
+```
+`onExcessProperty: "error"` is enforced everywhere — unknown keys **fail loudly at decode time**. This is the central guard against silent field typos.
 
-export const GetHelloRpc = Rpc.make("app.hello.get", {
-  payload: GetHelloPayload,
-  success: HelloResponse,
-  error: ApiError,
+### Pattern 2 — `plugin()` factory / descriptor
+```ts
+export const myPlugin = plugin({
+  namespace: "@korri",
+  name: "my-plugin",
+  title: "...",
+  description: "...",
+  requires: [...],
+  contributes: {
+    config: {
+      apps: { localId: { id: "...", kind: "@korri:my-plugin", command: "...", ... } },
+      systems: { localId: { id: "...", title: "...", apps: [...] } },
+      runtimes: { localId: { kind: "libretro-core", path: "...", app: "...", ... } },
+      modules: { localId: { id: "...", kind: "...", capabilities: [...] } },
+      catalog: { localId: { id: "...", title: "...", kind: "game", releases: [...] } },
+    },
+    handlers: [{ id: "...", operation: "...", capabilities: [...], run: ctx => ... }],
+  },
 })
 ```
+- Registry namespaces all `config.*` contributions (except `providers`) as `<plugin-id>/<local-id>`.
+- The `plugin()` helper auto-creates a `providers[<plugin-id>]` entry with `{ title, description }`.
+- Config contributions loaded by `loadReadableSnapshot` → `pluginReadableRecords` → `decodePluginReadableMap` (silent-skip on decode failure).
 
-**`{action}.rpc-handler.ts`** — pure Effect handler:
-```ts
-import { Effect } from "effect"
-import { type GetHelloPayload, HelloResponse } from "./rpc"
+### Pattern 3 — `AppRecord.kind` is the integration discriminator
+`app.kind` currently drives `ReadableLaunchIntegration` selection via `appRecordKind(context.app)`. Provider-qualified kinds (`kind.startsWith("@")`) fall through to the `findReadableLaunchIntegration` path; unqualified kinds use built-in integration names (`mame`, `dolphin`, `solarus`, `generic-process`).
 
-export const handleGetHello = (payload: typeof GetHelloPayload.Type) =>
-  Effect.succeed(new HelloResponse({ … }))
+### Pattern 4 — Plugin policy via `plugin: { "@korri:foo": { ... } }`
+Plugin-specific typed settings travel in `plugin.<provider-id>` maps at every inheritable layer. They are decoded/validated in each plugin's materializer (e.g. `decodeRetroArchPolicy` in `retroarch/src/policy.ts`, `SteamPluginPolicy` in `steam/src/plugin.ts`). The cascade merges them as deep-merge objects (arrays concat; scalars last-win).
+
+### Pattern 5 — `argsAppend`, `env`, `cwd`, `patches` as inheritable scalars
+Concat (argsAppend, patches) or last-win (env, cwd) across the cascade. `moonlight` is deep-merged with special cases for `extraArgs` and `input.devices` (concat).
+
+### Pattern 6 — `launch.with` companion map
+Provider-keyed, deep-merged. Used for Gamescope (`@korri:gamescope`), Moonlight (`launch.with.<moonlightProvider>`), and extension points. The cascade exports it as `launchCompanions` on `ReadableResolvedLaunchContext`.
+
+### Pattern 7 — Fixture YAML format
+Existing readable library fixture format (enforced by `readable-schema.test.ts` + `examples.test.ts`):
+```yaml
+storage:         # StorageRecord map
+systems:         # SystemRecord map (apps[], cores, inheritable fields)
+apps:            # AppRecord map (kind, command, args, runtime, plugin.*, launch.with.*)
+runtimes:        # RuntimeRecord map (kind, path, tool, app, supports.systems[])
+library:         # LibraryItemRecord map (releases[{ id, system, target, apps[{id, runtime}] }])
+providers:       # ProviderRecord map
+sources:         # SourceRecord map (deprecated, still parsed)
 ```
 
-**`{action}.rpc-handler.test.ts`**:
+### Pattern 8 — Retired vocabulary enforcement
+Multiple records already enforce deprecations at decode time with `Schema.check(Schema.makeFilter(...))` returning issue objects. For example:
+- `LibraryReleasePayload` rejects `source`, `app`, `runtime` at the release level.
+- `SystemPayload` rejects `launcher` field.
+- `AppPayload` rejects `kind: "steam"`, `retroarch`, `integration`, `netplay`, `remoteCommand`, `achievements.password`.
+- `ModuleRecord` still used in legacy code paths but `upsertModule` in repository is deprecated.
+
+### Pattern 9 — `ReadableLaunchIntegration` + materializer pattern
+Plugin materializers receive `ReadableResolvedLaunchContext` (the fully merged cascade output) and are responsible for:
+1. Deciding `canResolve(context)` — checks plugin policy decodable, runtime kind compatible, content path available.
+2. Generating `materialize(context, opts)` — writes config files to an artifact root, composes `LaunchSpec`.
+3. Returning `{ spec, artifacts?, diagnostics? }`.
+
+### Pattern 10 — `ProviderLinkRecord` (current shape)
 ```ts
-import { expect, it } from "bun:test"
-import { Effect } from "effect"
-import { handleGetHello } from "./rpc-handler"
-
-it("returns a starter greeting", async () => {
-  const response = await Effect.runPromise(handleGetHello({ name: "Simon" }))
-  expect(response.message).toBe("Hello, Simon. Effect RPC is ready.")
-})
+{ id, provider, playable, release?, ref: { kind: "url|provider-item-id|external-id", value } }
 ```
+One ref per record (not an array). The sketch proposes changing to `refs[]` per link.
 
-**RPC tag naming**: `app.{domain}.{action}` — e.g., `app.hello.get`, `app.server.status`, `app.session.status`, `app.library.launch.dry-run`. For the Steam status surface, the handoff suggests `app.steam.status`.
+---
 
-**Registering a new RPC**:
-1. Create `product/apps/portal/api/{domain}/status.rpc.ts` (schema + `Rpc.make`).
-2. Create `product/apps/portal/api/{domain}/status.rpc-handler.ts` (handler).
-3. Import and add to `serverRpcGroup` in `product/apps/portal/api/server/rpc-group.ts`.
-4. Add handler mapping in `serverRpcGroup.toLayer({...})` in `product/apps/portal/api/server/rpc-server.ts`.
+## Current Domain Model vs New Domain Model
 
-### Error Types
+### What exists today (migration FROM)
 
-Errors are `Data.TaggedError` or `Schema.TaggedErrorClass`:
-```ts
-export class SteamStateMutationFailed extends Data.TaggedError("SteamStateMutationFailed")<{
-  readonly path: string
-  readonly reason: string
-}> {}
-```
-- `_tag` is the discriminant.
-- API-layer errors must be in `ApiError = Schema.Union([DataError, NotFoundError, ValidationError])`.
-- Domain errors (below the API layer) use `Data.TaggedError`.
+| Concept | Current representation | Location |
+|---------|----------------------|----------|
+| Launcher | `LauncherRecord` (`command`, `args`, `systems`); also `AppRecord` with `kind: "..."` | `records/launcher.ts`, `records/app.ts` |
+| App choice | `release.apps[]: AppChoice` — `id` references a top-level `AppRecord` | `records/app-choice.ts` |
+| Runtime | `RuntimeRecord` (`kind: libretro-core|tool|emulator`, `path`, `app`, `supports.systems[]`) | `records/runtime.ts` |
+| System default launch | `system.apps[{ id, runtime }]` overrides; `system.cores` legacy | `records/system.ts` |
+| Target | `release.target`: `string | { kind: "file", storage, path } | { kind: "uri", value }` (array variant exists but `MultiTargetUnsupported`) | `records/library-item.ts`, `source-target-resolution.ts` |
+| Provider identity | `ProviderLinkRecord` — one `ref` per record | `records/provider-link.ts` |
+| Settings | Flat `LaunchSettings` on `AppRecord`; `plugin.<id>` map for plugin-specific settings | `launch-block.ts`, `inheritable-fields.ts` |
+| Systems metadata | `name`, `manufacturer` on `SystemRecord`; no concept of metadata-only vs launchable | `records/system.ts` |
+| Plugin descriptor | `contributes.config.apps`, `.runtimes`, `.systems`, `.modules`, `.catalog` | `product/platform/plugin/index.ts` |
 
-### Pure Reducer / State Machine Pattern
+### What the sketch proposes (migration TO)
 
-`sessiond-state.ts` is the canonical reducer model:
-- Pure exported functions: `startKorriSession`, `beginKorriLaunch`, `markKorriGameRunning`, etc.
-- State is a plain `interface` with `readonly` fields.
-- No classes, no mutation.
-- Tests import and call functions directly with initial/built states.
-
-**For the Steam observer**: the `SteamLaunchObservationSnapshot` reducer should follow this pattern — pure functions `applyContentLogSignal`, `applyGameProcessSignal`, etc., returning a new snapshot.
-
-### Dependency Injection / Configurable Behavior Pattern
-
-See `sessiond-gamescope-reaper.ts` for the exact idiom:
-
-```ts
-export interface GamescopeReaperOptions {
-  readonly processList: ProcessListQuery
-  readonly signaler: ProcessSignaler
-  readonly logger?: GamescopeReaperLogger
-  readonly graceMs?: number
-  readonly retries?: number
-}
-
-export function createGamescopeReaper(options: GamescopeReaperOptions): GamescopeReaper { … }
-
-// System defaults (production)
-export function createSystemGamescopeReaper(overrides = {}): GamescopeReaper {
-  return createGamescopeReaper({
-    processList: overrides.processList ?? createProcfsProcessList(),
-    signaler: overrides.signaler ?? POSIX_PROCESS_SIGNALER,
-    …
-  })
-}
-```
-
-Tests inject cheap inline fakes:
-```ts
-function makeProcessList(processes: readonly ProcessInfo[]) {
-  return { list: async () => processes }
-}
-```
-
-**The Steam tailer must follow this**: `createSteamLogTailer(options)` with injected `watchFile`, `readLine`, logger, etc. `createSystemSteamLogTailer()` provides real filesystem defaults.
-
-### Testing Pattern
-
-All test files:
-- Use `bun:test` (`describe`, `it`, `expect`, `afterEach`).
-- Live next to the source: `foo.ts` / `foo.test.ts`.
-- Use real implementations with configurable behavior — not mocks/stubs/fakes.
-- Temp directories for filesystem tests via `mkdtemp`/`mkdir` in `out/tmp/<module>/`.
-- `afterEach` cleanup via a `cleanups` array.
-- Assertions on observable behavior, not private internals.
-
-**Test double naming**: never `MockFoo`, `StubFoo`, `FakeFoo`. Use `createHarness(…)` returning real objects with recorded side-effects (see `inputd-actions.test.ts`).
-
-Example harness pattern:
-```ts
-function createHarness(options = {}) {
-  const commands: InputdActionCommand[] = []
-  const warnings: unknown[] = []
-  const dispatcher = createInputdActionDispatcher({
-    ...options,
-    runner: async command => { commands.push(command) },
-    logger: { debug: () => {}, info: () => {}, warn: input => warnings.push(input), error: () => {} },
-  })
-  return { dispatcher, commands, warnings }
-}
-```
-
-### Logger Usage
-
-Import from `@platform/logger`, not `console.log`:
-```ts
-import { logger as defaultLogger } from "@platform/logger"
-// or
-import { createLogger } from "@platform/logger"
-const log = createLogger("steam-log-tailer")
-```
-
-Pino logger interface: `{ debug, info, warn, error }` each taking `(input: unknown, message?: string)`.
+| New concept | Description |
+|-------------|-------------|
+| `target` | Vocabulary expansion: `kind: file \| file-set \| executable \| url \| provider-ref` |
+| `file-set` target | `{ kind: "file-set", storage, root, files: [{ id, role, label?, path }] }` — named parts with roles (`manifest \| media \| data \| ...`) |
+| `executable` target | `{ kind: "executable", path }` — implies `@korri:process` launcher inference |
+| `provider-ref` target | `{ kind: "provider-ref", provider, ref }` — for nixpkgs, Steam, etc. |
+| `launchers` (top-level) | Named reusable launcher instances: `plugin`, optional `runtime`, `input`, `settings`, `env`, `cwd`, `with`, `overrides` |
+| `launch` on release | Optional overlay with same vocabulary as a named launcher (minus `plugin`/`use`); can be omitted when system/provider implies a single launcher |
+| `use` in launch | References a named launcher by name |
+| `plugin` in launch | Selects a plugin-provided launcher implementation |
+| `settings` split | Common normalized packs: `display`, `audio`, `input`, `saves`, `lifecycle`; plus `settings.plugin` (typed by selected launcher plugin) |
+| `overrides` | Raw escape hatch: `overrides.args.append[]`, `overrides.config.append` |
+| `systems` metadata-only | Systems contain only `title`, `aliases[]`, `metadata {}` — no launcher config, no `apps[]`, no `cores` |
+| Plugin descriptor additions | `runtimeMode: none \| embedded \| optional \| required`; `supportedSettingPacks[]`; system support mappings (separate from `systems`) |
+| `provider-links` | Named records scoped to playable+release+targetPart; `refs[]` (array of `{ kind, value }`) |
+| `runtimes` | Survive; `kind: libretro-core`, `path`, `supports.systems[]`; still `plugin`-owned |
+| `input` on launcher | Selects which file-set part to pass (`roles: [manifest, media]` fallback policy, or `part: <id>` exact) |
 
 ---
 
 ## Issue Conventions
 
-No `.github/ISSUE_TEMPLATE/` found. Issues and backlog items use the `work/items/parking-lot/` markdown format:
-
-```yaml
----
-id: 01KV3KWT98Y6W6CNXP05ZPSHH7
-slug: capture-steam-launch-diagnostics-as-first-class-session-arti
-title: Build first-class Steam launch observability
-origin: parked
-status: To Do
-priority: high
-labels:
-  - steam
-  - observability
-  - sessiond
-created: 2026-06-14
-source: user
----
-```
+*(GitHub issues not examined — out of scope for this research.)*
 
 ---
 
 ## Documentation Insights
 
-### Contribution Guidelines
+### Contribution guidelines (`product/plugins/AGENTS.md`)
+- Every plugin: `index.ts` (thin export surface) + `src/plugin.ts` (descriptor).
+- Use `plugin()` from `@platform/plugin`.
+- Config contributions: `providers`, `providerLinks`, `storage`, `systems`, `apps`, `modules`, `runtimes`, `profiles`, `catalog`.
+- Other config maps are namespaced by registry as `<plugin-id>/<local-id>`.
+- Catalog + `modules` for plugin-contributed executables.
+- Handlers must validate `context.input` at the boundary.
+- Register in `product/plugins/index.ts` `firstPartyPlugins` array.
+- Tests required: stable plugin id, descriptor contributions, handler ops, input validation, registry exposure, launch/catalog/resource behavior.
+- **Do not** use `PATH` for host capabilities; do not add `Mock*`/`Stub*`/`Fake*`; do not mutate user Nix profiles; do not use `nix run` at launch time.
 
-No explicit CONTRIBUTING.md found. Standards are:
-1. `just typecheck` — whole-repo only (path aliases require it).
-2. `just test-unit` — unit tests.
-3. `just lint` / `just format` — Biome.
-4. `just fallow-audit` — if Fallow is configured.
-5. E2E (`just test-e2e`) when user-facing behavior changes.
+### Key authoring rules
+- Schema decodes in `{ onExcessProperty: "error" }` — unknown keys fail loudly.
+- `app.kind` = discriminator; must be a valid `AppKind` or provider-qualified string.
+- `release.apps[].kind` is rejected; `kind` lives only on top-level `AppRecord`.
+- `release.target` must not be an absolute path.
+- `release.app`, `release.runtime` (top-level on release, not inside `apps[]`) are retired and rejected.
+- `system.launcher` is rejected; use `system.apps[]`.
+- Retired: `source` records, `module` records, `GameRecord` directly, `launcher`/`core` shorthand aliases.
+- `plugin.<provider-id>` values are `unknown` at the inheritable-field level but decoded by each plugin's materializer.
 
-### Coding Standards
-
-- **Effect Schema** is source of truth for wire shapes. No hand-rolled parsers at protocol boundaries.
-- **No `any`**. Strict TypeScript throughout.
-- **No barrel exports** except documented module entrypoints (`@platform/logger`).
-- **Comments**: why, not what. Sparse doc comments.
-- **UTC methods** for ISO date strings.
-- **Additive protocol evolution**: new optional fields only. Schema updated before daemon emits.
-- **Sensitive data**: never in localStorage.
-
-### Architecture Decision Records
-
-Live in `docs/solutions/` (by category) and `docs/plans/`. Notable relevant ones:
-- `docs/solutions/architecture-patterns/steam-applaunch-with-silent-steam-and-per-app-launchoptions-gamescope-wrap-aka-x86-2026-05-27.md`
-- `docs/solutions/runtime-errors/steam-manual-launch-x86-eager-xwayland-dbus-readiness-2026-05-26.md`
+### Testing conventions
+- Test files colocated: `src/<feature>.test.ts` or `src/<feature>/<unit>.test.ts`.
+- Unit tests use `bun:test` (`describe`, `it`, `expect`).
+- Integration/e2e use Playwright.
+- No `Mock*`, `Stub*`, `Fake*` prefixes; doubles use real implementations with configurable behavior.
+- `Effect.runPromise` / `Effect.runSyncExit` / `Effect.runPromiseExit` for testing Effect pipelines.
 
 ---
 
 ## Templates Found
 
-No GitHub issue/PR templates in `.github/`.  
-Work items use the parking-lot markdown format (`work/items/parking-lot/*.md`).
+No `.github/ISSUE_TEMPLATE/` or PR template files found in scope. Config YAML fixtures serve as the primary authoring templates:
+- `product/platform/library/config/fixtures/steam-full.korri.yaml` — authoritative readable library fixture
+- `docs/brainstorms/2026-06-11-001-steam-readable-library-example.korri.yaml` — Steam readable library example
+- `docs/brainstorms/2026-06-08-004-retroarch-policy-minimal-v1.example.yaml` — RetroArch minimal policy example
+- `docs/brainstorms/2026-06-08-003-retroarch-policy-one-to-one.example.yaml` — RetroArch one-to-one policy example
+- `work/items/active/01KVGDKT01DNT9NRDKS846CJQ1-plugin-launcher-standardization/config-sketch.korri.yaml` — the new domain model sketch (source of truth for this refactor)
 
 ---
 
-## Bandai Fixture Summary
+## Recommendations for the Big-Bang Refactor
 
-The fixtures in `docs/research/steam-observability/bandai-2026-06-14/` are the ground truth for parser tests. The three confirmed AppIDs:
+### Files/modules to replace (core schema layer)
 
-| Game       | AppID  | content_log         | gameprocess_log | console_log |
-|-----------|--------|--------------------|--------------------|-------------|
-| Downwell   | 360740 | ✅ (stale stop + new launch) | ✅ (multi-PID) | ✅ (install script) |
-| Sonic Mania| 584400 | ✅ (clean start)   | ✅ (multi-PID)    | ✅ (cloud sync) |
-| Caveblazers| 452060 | ✅ (clean start)   | ✅ (multi-PID)    | available   |
+| File | Current role | New role / disposition |
+|------|-------------|----------------------|
+| `records/library-item.ts` | `LibraryReleasePayload.target`: `string\|UriTarget\|FileTarget\|Array` | Expand to `FileTarget\|FileSetTarget\|ExecutableTarget\|ProviderRefTarget\|UrlTarget`; remove `apps[]` referencing `AppRecord`; add `launch` overlay block |
+| `records/system.ts` | Carries `apps[]`, `cores`, `byLauncher`, `launch`, cascade fields | Strip to metadata-only: `title`, `aliases[]`, `metadata {}`. Remove `apps[]`, `cores`, `name`, `manufacturer`, `byLauncher`, `presets`, all inheritable fields |
+| `records/app.ts` | `AppRecord` — used as current "launcher" concept | Rename concept to `LauncherRecord` (new shape); keep existing `AppRecord` removed or archived |
+| `records/launcher.ts` | Legacy `LauncherRecord` with `command`, `args`, `systems` | Replace: new `LauncherRecord` has `plugin\|use`, `runtime?`, `input?`, `settings`, `env`, `cwd`, `with`, `overrides` |
+| `records/app-choice.ts` | `AppChoice` — `id` pointing to `AppRecord` | Remove; launch selection now lives in `launch.use` or system-level plugin support mappings |
+| `records/runtime.ts` | `RuntimeRecord` — `kind`, `path`, `app`, `supports.systems[]` | Retain; update `supports.systems[]` to work with new system IDs; remove `app` field (launcher relationship declared in plugin support records) |
+| `records/provider-link.ts` | Single `ref: { kind, value }` per record | Change to `refs: Array<{ kind, value }>` per record; add `targetPart?` scope |
+| `records/global.ts` | `launch.app` + legacy `launcher` | Replace with `launch.use\|plugin` vocabulary |
+| `launch-block.ts` | `LaunchBlock` — `app`, `module`, `settings`, `with`, `args`, `env`, `cwd` | Replace with new launcher overlay block: `plugin?`, `use?`, `runtime?`, `input?`, `settings: { display?, audio?, input?, saves?, lifecycle?, plugin? }`, `env`, `cwd`, `with`, `overrides` |
+| `inheritable-fields.ts` | `InheritableLayer` whitelist | Rebuild around new overlay vocabulary; remove `launch.app`, `launch.module`; add `launch.use`, `launch.plugin`, common settings packs |
+| `cascade-resolver.ts` | 7-layer fold; skeleton launcher resolution; `apps` lookup; `byLauncher` merging | Rewrite around launcher-resolution: `target.kind` → infer launcher → apply `launch` overlay; remove `apps` map from snapshot; remove `byLauncher` |
+| `app-integrations.ts` | `AppDescriptor`, built-in apps dict, `integrationForKind` | Replaced by plugin descriptor `runtimeMode` + `supportedSettingPacks` + support mappings; materializer dispatch moves to plugin registry lookup |
+| `app-materializer.ts` | Switch on `integration` string for mame/dolphin/solarus | Remove; every materializer is plugin-owned via `ReadableLaunchIntegration` |
+| `app-choice-selection.ts` | `selectAppChoice`, `resolveEffectiveAppChoices` | Remove; app/launcher selection logic moves to `launch.use` + plugin support record join |
+| `source-target-resolution.ts` | `resolveReleaseTarget` — `string\|UriTarget\|FileTarget` | Extend: `ExecutableTarget`, `ProviderRefTarget`, `UrlTarget`, `FileSetTarget` + `input` selection policy |
+| `resolved-launch-context.ts` | `ReadableResolvedLaunchContext` — `app: AppRecord`, `runtime?: RuntimeRecord` | Replace `app` with `launcher: { plugin, use?, resolved }`, `runtime?: RuntimeRecord`, `target: ResolvedTarget`, `input?: ResolvedInput` |
 
-**Exact observed line formats from fixtures:**
+### Plugin descriptor additions needed
 
-`content_log.txt`:
-```
-[2026-06-14 14:41:27] AppID 360740 state changed : Fully Installed,App Running,
-[2026-06-14 14:41:57] AppID 360740 state changed : Fully Installed,
-```
-
-`gameprocess_log.txt` (first PID has command; subsequent do not):
-```
-[2026-06-14 14:41:27] AppID 360740 adding PID 204611 as a tracked process "/run/current-system/sw/bin/bash /var/lib/korri/bin/korri-steam-gamescope-launch ..."
-[2026-06-14 14:41:28] AppID 360740 adding PID 204625 as a tracked process
-[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204625, exit code -1
-[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204611, exit code 0
-```
-
-`console_log.txt` (tasks and install-script evaluator):
-```
-[2026-06-14 14:41:06] ExecCommandLine: "'/var/lib/korri/steam/steamrtarm64/steam' ... '-applaunch' '360740'"
-[2026-06-14 14:41:06] GameAction [AppID 360740, ActionID 4] : LaunchApp changed task to CheckShaderDepotManifest with ""
-[2026-06-14 14:41:07] GameAction [AppID 360740, ActionID 4] : LaunchApp changed task to ProcessingInstallScript with ""
-[2026-06-14 14:41:07] Running install script evaluator for AppID 360740, 1 step(s)  ...
-[2026-06-14 14:41:27] GameAction [AppID 360740, ActionID 4] : LaunchApp changed task to CreatingProcess with ""
-[2026-06-14 14:41:27] GameAction [AppID 360740, ActionID 4] : LaunchApp changed task to WaitingGameWindow with ""
-[2026-06-14 14:41:27] GameAction [AppID 360740, ActionID 4] : LaunchApp changed task to Completed with ""
-```
-
-`shader_log.txt`:
-```
-[2026-06-14 14:38:14] AppID 360740 exited.
-[2026-06-14 14:39:02] Setting MESA_GLSL_CACHE_DIR=/var/lib/korri/steam/steamapps/shadercache/584400 ...
+Each plugin must declare new metadata fields (new schema in `product/platform/plugin/index.ts`):
+```ts
+interface PluginLauncherDescriptor {
+  // What the plugin provides as a launcher implementation
+  runtimeMode: "none" | "embedded" | "optional" | "required"
+  supportedSettingPacks?: Array<"display" | "audio" | "input" | "saves" | "lifecycle">
+  // system support mappings contributed additively to the registry
+  systemSupport?: Array<{ system: string; runtimeKind?: string }>
+}
 ```
 
-**Downwell stale-PID gotcha**: `gameprocess_log.txt` has 8 stale PID-removal lines from the *previous* Downwell run (at 14:38:14) before the new launch at 14:41:27. Parsers must use launch-window correlation (ignore pre-launch removals).
+### First-party plugin changes needed
 
-**Wrapper PID always exits 0**: child PIDs exit -1; the root/wrapper PID exits 0. Do not treat `-1` as user-facing failure.
+| Plugin | Current config contribution | Change needed |
+|--------|---------------------------|---------------|
+| `@korri:retroarch` | `apps.retroarch`: `kind: "@korri:retroarch"`, `args` template; `systems.*: { apps: [{ id, runtime }] }` | Convert to `launchers.retroarch: { plugin: "@korri:retroarch", ... }`; `runtimeMode: "required"`; system support records separate from `systems` map |
+| `@korri:steam` | `apps.steam`: `kind: "@korri:steam"`, `systems.steam: { apps: [{ id: steam }] }` | Convert to `launchers.steam: { plugin: "@korri:steam", ... }`; `runtimeMode: "optional"` (compat tool); target `provider-ref` implies launcher |
+| `@korri:zquest-classic` (new) | N/A | New plugin; `runtimeMode: "embedded"` |
+| `@korri:nixpkgs` (new or process) | `neverball` uses `catalog.neverball.releases[].launch.executable.resource` | Convert to `target: { kind: "provider-ref", provider: "@korri:nixpkgs", ref: "nixpkgs#neverball" }` |
+| `@korri:process` (implicit/new) | Generic `kind: "process"` / `generic-process` integration | Formalize as `runtimeMode: "none"`, handles `target.kind: "executable"` by default |
 
-`parser-fixtures/` directory has per-AppID combined files (`downwell-360740.txt`, `sonic-mania-584400.txt`, `caveblazers-452060.txt`) mixing sources — these need to be split into source-specific fixture files per handoff Unit 1.
+### Common settings packs schema (new)
 
----
-
-## Recommendations
-
-### File Layout for New Steam Observability Code
-
-Following handoff and existing conventions:
-
-```
-product/services/device/steam/
-  steam-log-signals.ts              # pure parsers (content_log, gameprocess, console, shader)
-  steam-log-signals.test.ts         # unit tests from fixtures
-  steam-log-tailer.ts               # tail-by-name watcher
-  steam-log-tailer.test.ts          # append/truncate/recreate/missing tests
-  steam-launch-observer.ts          # reducer + snapshot
-  steam-launch-observer.test.ts     # Bandai fixture replay sequences
-
-product/apps/portal/api/steam/
-  status.rpc.ts                     # app.steam.status schema + Rpc.make
-  status.rpc-handler.ts             # handler
-  status.rpc-handler.test.ts        # Effect.runPromise tests
-```
-
-Register `app.steam.status` in:
-- `product/apps/portal/api/server/rpc-group.ts` (add `SteamStatusRpc`)
-- `product/apps/portal/api/server/rpc-server.ts` (add `"app.steam.status": handleSteamStatus`)
-
-### Specific Implementation Notes
-
-1. **Parser functions should be pure** (no I/O, no side effects). They receive a string line and return a typed signal or `undefined` for unrecognized lines. Tested directly with fixture strings.
-
-2. **Tailer DI interface** modeled on reaper pattern:
-   ```ts
-   interface SteamLogTailerFs {
-     stat: (path: string) => Promise<{ size: number; ino: number }>
-     open: (path: string, position: number) => Promise<AsyncIterable<string>>
-     watch: (path: string) => AsyncIterable<"change" | "rename">
-   }
-   function createSteamLogTailer(options: { fs?: SteamLogTailerFs; ... }): SteamLogTailer
-   function createSystemSteamLogTailer(): SteamLogTailer   // real fs defaults
-   ```
-
-3. **Observer reducer signature** modeled on `sessiond-state.ts`:
-   ```ts
-   function applyObservationSignal(
-     snapshot: SteamLaunchObservationSnapshot,
-     signal: SteamObservationEvent,
-   ): SteamLaunchObservationSnapshot
-   ```
-   Initial state factory, pure reducer, tested with sequences from Bandai fixtures.
-
-4. **RPC response shape** must include `app.steam.status` in `ServerStatusResponse` schema as an optional field (additive-only per the protocol evolution rule in `sessiond-managed-launch-protocol.ts`), OR expose as a separate `app.steam.status` RPC. Separate RPC is simpler to test and iterate without touching the existing `app.server.status` shape. The handoff recommends the separate RPC.
-
-5. **Tailer output** is the canonical `SteamObservationEvent` stream that the observer reducer consumes. The observer is not coupled to the tailer's implementation — it accepts events from any source (replay, fixture injection in tests, live tailer in production).
-
-6. **Bounded evidence**: keep recent events bounded (≤N) in the observer snapshot as the handoff requires. 64 is the existing bound in `sessiond.ts` for lifecycle events.
-
-7. **Truncation/recreation detection**: watch for inode changes (rename signal) and restart tailing from offset 0 on recreation; track file size and restart from offset 0 on truncation (new size < previous). Node `fs.watch` emits `rename` for deletion/recreation on Linux; `change` for appends.
-
-8. **Log directory env var**: use `KORRI_STEAM_STATE_ROOT` or `KORRI_STEAM_LOG_DIR` (check existing env naming convention; current Steam code uses `KORRI_STEAM_STATE_ROOT` equivalent in the Nix module / `steam-state-materializer.ts`'s `stateRoot` pattern) defaulting to `/var/lib/korri/steam`.
-
-### Fixture Split (Unit 1 prep)
-
-Split `parser-fixtures/downwell-360740.txt` etc. into per-source fixtures:
-```
-docs/research/steam-observability/bandai-2026-06-14/parser-fixtures/
-  content-log-app-state.txt          # content_log lines only
-  gameprocess-log-tracked-pids.txt   # gameprocess_log lines only
-  console-log-launch-tasks.txt       # console_log lines only
-  shader-log-appid-evidence.txt      # shader_log lines only
+```ts
+// New in inheritable-fields.ts or new file settings-packs.ts
+const DisplaySettings = Schema.Struct({
+  fullscreen: Schema.optional(Schema.Boolean),
+  integerScale: Schema.optional(Schema.Boolean),
+  vsync: Schema.optional(Schema.Boolean),
+  throttleFps: Schema.optional(Schema.Boolean),
+})
+const AudioSettings = Schema.Struct({
+  enabled: Schema.optional(Schema.Boolean),
+})
+const InputSettings = Schema.Struct({ ... })
+const SavesSettings = Schema.Struct({
+  directory: Schema.optional(Schema.String),
+  stateDirectory: Schema.optional(Schema.String),
+})
+const LifecycleSettings = Schema.Struct({
+  gameMode: Schema.optional(Schema.Boolean),
+})
+const LauncherSettings = Schema.Struct({
+  display: Schema.optional(DisplaySettings),
+  audio: Schema.optional(AudioSettings),
+  input: Schema.optional(InputSettings),
+  saves: Schema.optional(SavesSettings),
+  lifecycle: Schema.optional(LifecycleSettings),
+  plugin: Schema.optional(Schema.Unknown), // typed by selected launcher plugin
+})
 ```
 
-The current `parser-fixtures/*.txt` files mix sources (content_log + gameprocess_log + console_log in a single file), which makes test assertions ambiguous when a parser for one source is fed lines from another.
+### `ProviderLinkRecord` changes
 
-### RPC Tag for Steam Status
+Current: `{ id, provider, playable, release?, ref: { kind, value } }`
+New: `{ id, provider, playable, release?, targetPart?, refs: Array<{ kind, value }> }`
 
-Following the existing tag pattern (`app.{domain}.{sub-domain?}.{action}`):
+`ProviderRef.kind` must be expanded: currently `"url | provider-item-id | external-id"`. The sketch uses `sha1`, `md5`, `serial` — those would be new values under `kind`.
+
+### `FileSetTarget` schema (new)
+
+```ts
+const FileSetFile = Schema.Struct({
+  id: NonEmptyString,
+  role: FileSetFileRole,  // "manifest" | "media" | "data" | "patch" | "metadata" | "document"
+  label: Schema.optional(Schema.String),
+  path: TargetRelativePath,
+})
+
+const FileSetTarget = Schema.Struct({
+  kind: Schema.Literal("file-set"),
+  storage: NonEmptyString,
+  root: TargetRelativePath,
+  files: Schema.Array(FileSetFile).check(/* at least one */),
+})
 ```
-app.steam.status
+
+### `LaunchInputPolicy` (new — maps to file-set input selection)
+
+```ts
+const LaunchInputPolicy = Schema.Struct({
+  roles: Schema.optional(Schema.Array(FileSetFileRole)),  // ordered fallback
+  part: Schema.optional(NonEmptyString),                  // exact part id override
+})
 ```
-This is consistent with `app.server.status`, `app.session.status`, `app.source.status`.
 
-### Key Files to Read Before Implementation
+### `LauncherOverlay` (new — the unified launcher object for `launchers.*`, `launch` on release, plugin support records)
 
-| File | Why |
-|------|-----|
-| `product/services/device/sessiond-gamescope-reaper.ts` | DI + configurable-behavior pattern to replicate |
-| `product/services/device/sessiond-state.ts` | Pure reducer pattern for observer snapshot |
-| `product/services/device/sessiond.ts` | Bounded event buffer (64), SSE lifecycle pattern |
-| `product/apps/portal/api/hello/rpc.ts` + `rpc-handler.ts` | Minimal RPC template |
-| `product/apps/portal/api/server/status.rpc.ts` | Complex response schema example |
-| `product/apps/portal/api/server/rpc-group.ts` | Where to register new RPC |
-| `product/apps/portal/api/server/rpc-server.ts` | Where to wire handler + layer |
-| `product/platform/library/sessiond-managed-launch-protocol.ts` | Protocol evolution rules comment |
-| `docs/handoffs/steam-observability-implementation-handoff-2026-06-14.md` | Full spec |
-| `docs/research/steam-observability/bandai-2026-06-14/` | Ground-truth fixtures |
+```ts
+const LauncherOverlay = Schema.Struct({
+  plugin: Schema.optional(PluginId),   // required in top-level launchers definitions
+  use: Schema.optional(Schema.String), // references a named launcher
+  runtime: Schema.optional(Schema.String),
+  input: Schema.optional(LaunchInputPolicy),
+  settings: Schema.optional(LauncherSettings),
+  env: Schema.optional(EnvMap),
+  cwd: Schema.optional(Schema.String),
+  with: Schema.optional(LaunchWithPolicy),
+  overrides: Schema.optional(LauncherOverrides),
+})
 
-### Areas Needing Clarification
+const LauncherOverrides = Schema.Struct({
+  args: Schema.optional(Schema.Struct({
+    append: Schema.optional(Schema.Array(Schema.String)),
+  })),
+  config: Schema.optional(Schema.Struct({
+    append: Schema.optional(Schema.String),
+  })),
+})
+```
 
-1. **Steam log dir env variable name**: The handoff says `/var/lib/korri/steam/logs`. The Nix module and `steam-state-materializer.ts` use `stateRoot`. The tailer should read an env var; confirm the canonical name (`KORRI_STEAM_STATE_ROOT` appended with `/logs`, or `KORRI_STEAM_LOG_DIR` directly).
+### Cascade / resolver rewrite
 
-2. **Observer service as Effect Service or plain function**: The tailer + observer could be a Context.Service (Effect) or a plain-object dependency like `GamescopeReaper`. Given that the status RPC handler will need to call it, an Effect Context.Service with a `LayerLive` would align with `KorriControl` and `StreamControlLayerLive` patterns. However, the tailer is long-running (file watching), which doesn't map cleanly to a request-scoped Effect. Plain async with `createSteamObserver()` returning a handle (like `startKorriSessiond` returning `KorriSessiondHandle`) is simpler for the first slice.
+The `ReadableConfigSnapshot` loses `apps`, gains `launchers` (named launcher records). System lookup for launch defaults changes from `system.apps[]` to a plugin support record join:
 
-3. **`steam/` directory on trunk**: The `product/services/device/steam/` directory does not exist on `trunk` yet (only in the `steam-ts-planner-handoff` worktree). Either merge the planner worktree first, or create the directory fresh when implementing observability.
+```ts
+// New snapshot
+interface ReadableConfigSnapshot {
+  host: HostRecord | null
+  users: Map<string, UserRecord>
+  systems: Map<string, SystemRecord>      // metadata-only
+  launchers: Map<string, LauncherRecord>  // new shape
+  runtimes: Map<string, RuntimeRecord>    // unchanged
+  storage: Map<string, StorageRecord>
+  library: Map<string, LibraryItemRecord>
+  profiles: Map<string, ProfileRecord>
+  // removed: apps, sources
+}
+```
 
-4. **Fixture README**: The `docs/research/steam-observability/bandai-2026-06-14/README.md` and `notes.md` are stubs. The handoff says to fill them as Unit 1 — should happen before or during Unit 2 implementation.
+Launch resolution algorithm:
+1. Determine `target.kind` from release.
+2. If `release.launch.use`: look up named launcher.
+3. If `release.launch.plugin`: use plugin directly.
+4. Else infer from `target.kind` + `target.provider` (provider-ref → provider implies launcher; executable → `@korri:process`; file/file-set → join plugin support records for `release.system`).
+5. Merge `launch` overlay onto resolved launcher settings.
+
+### `ReadableResolvedLaunchContext` new shape
+
+```ts
+interface ReadableResolvedLaunchContext {
+  playableId: string
+  itemId: string
+  containedId?: string
+  releaseId: string
+  system: string
+  target: ResolvedTarget          // discriminated union of target kinds
+  launcher: {
+    pluginId: PluginId
+    record?: LauncherRecord       // the named launcher if used
+    runtimeMode: "none"|"embedded"|"optional"|"required"
+  }
+  runtime?: RuntimeRecord
+  input?: ResolvedInput           // which file-set part / path was selected
+  settings?: ResolvedLauncherSettings  // common packs merged + plugin settings merged
+  launchCompanions?: LaunchCompanionMap
+  moonlight?: MoonlightPolicy
+  plugin?: PluginPolicyMap
+  env?: Record<string, string>
+  cwd?: string
+  argsAppend?: string[]
+  patches?: string[]
+  storage: Record<string, StorageRecord>
+}
+```
+
+### Test files to rewrite (migration-sensitive)
+
+| File | Reason |
+|------|--------|
+| `readable-schema.test.ts` | Every record shape changes; retired vocabulary list expands |
+| `readable-cascade-resolver.test.ts` | Cascade fold algorithm changes; `apps` map removed; `launchers` map replaces |
+| `cascade-resolver.test.ts` | `resolveLocalLauncherPolicy` still needed; `byLauncher` behaviour changes |
+| `compose-readable-launch-spec.test.ts` | Placeholder vocabulary changes; `{runtime.path}`, `{content.path}` survive; `{target}`, `{target.url}` are new |
+| `authoring/examples.test.ts` | Example YAML files need to be updated to new grammar; forbidden vocabulary list expands |
+| `product/plugins/retroarch/src/plugin.test.ts` | Plugin contributes `launchers` instead of `apps`; system support records change |
+| `product/plugins/steam/src/plugin.test.ts` | Same |
+| `product/platform/plugin/registry.test.ts` | `PluginRegistry` gains `launchers` map; loses `apps` map |
+
+### Critical API surface (no-backwards-compat breakage points)
+
+1. **`LibraryReleasePayload.target`** — type union expands; `apps[]` removed from release; `system` may become optional (inferred from target).
+2. **`SystemRecord`** — stripped to metadata; `apps[]`, `cores`, inheritable fields removed.
+3. **`LauncherRecord`** (renamed from `AppRecord`) — completely different shape.
+4. **`AppRecord`** — removed or archive-only.
+5. **`PluginConfigContributions`** — `apps` removed; `launchers` added; plugin descriptor gains `runtimeMode`, `supportedSettingPacks`.
+6. **`ReadableConfigSnapshot`** — `apps` removed; `launchers` added.
+7. **`ReadableResolvedLaunchContext`** — `app: AppRecord` replaced by `launcher: { pluginId, record?, runtimeMode }`.
+8. **`ReadableLaunchIntegration.kind`** — still matched against launcher plugin id (was matched against `appRecordKind`); API stays but plugin ids change.
+9. **`ProviderLinkRecord`** — `ref` single → `refs[]` array; `targetPart?` added.
+10. **`LaunchBlock`** — `app`, `module` fields removed; new `use`, `plugin`, `runtime`, `input`, `settings.plugin` fields added.
+11. **`InheritableLayer`** — inheritable fields restructured around new `launch` vocabulary.
+12. **`PluginCatalogRelease.launch`** — `kind: "process"`, `executable: { resource }` stays or converts to new target vocabulary.

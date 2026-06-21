@@ -1,10 +1,11 @@
 # Steam AppID Launch UX Policy
 
 Date: 2026-06-20
+Last updated: 2026-06-20 — refreshed compatibility status and proof-gate capture tool after the move to the ARM64-native proton-cachyos default (see `docs/solutions/tooling-decisions/arm64-native-proton-cachyos-steam-runtime-bandai-2026-06-20.md`).
 
 ## Status
 
-Accepted for the Bandai Steam AppID path.
+Accepted for the Bandai Steam AppID path. The compat-tool default referenced below is now ARM64-native proton-cachyos, not the x86 sniper/Proton/FEX stack.
 
 ## Context
 
@@ -65,14 +66,19 @@ A launch is not a playable proof until it has fresh visual evidence:
 2. Launch is accepted by Korrid/sessiond.
 3. A Steam-owned process tree is alive for more than 60 seconds.
 4. A visible `steam_app_<appid>` window, or equivalent title/class evidence, is present.
-5. A fresh DSI-2 screenshot is captured on Bandai:
+5. A fresh screenshot is captured on Bandai. **Prefer `gamescopectl`, not `grim`** — once the
+   DSI panel DPMS-blanks after idle, `grim -o DSI-2` returns an all-black frame even while the
+   game is rendering, producing false negatives:
 
    ```text
-   /run/current-system/sw/bin/grim -o DSI-2 <out.png>
+   GAMESCOPE_WAYLAND_DISPLAY=gamescope-0 gamescopectl screenshot <out.png>   # immune to panel blanking; async — sleep 3-4s before reading
+   # grim -o DSI-2 <out.png>   # legacy; only trust when the panel is known awake
    ```
 
 6. The screenshot is pulled locally and visually inspected.
-7. Black captures are rejected.
+7. Black captures are rejected — but first confirm it is not a `grim` blanking artifact (re-capture
+   with `gamescopectl`) or a stale last-presented gamescope surface (identical byte size across
+   captures is the tell; restart the session to clear a stuck foreground surface).
 8. `app.session.stop` returns the device to `home` with no residual AppID/game tree.
 
 If fullscreen/direct-scanout makes the screenshot black, disable fullscreen/floating once through Sway before capture. That is a proof maneuver, not a product launch-path change.
@@ -86,15 +92,20 @@ Positive Steam AppID gates completed with local screenshot proof:
 - `Caveblazers` — AppID `452060`, `SteamLinuxRuntime_4`, Proton Experimental, FEX, `game.exe`.
 - `Sonic Mania` — AppID `584400`, `SteamLinuxRuntime_4`, Proton Experimental, FEX, `SonicMania.exe`.
 
-Known failed/parked compatibility cases:
+Previously failed/parked compatibility cases — **now resolved by the ARM64-native proton-cachyos
+default** (these were x86 Proton/FEX OpenGL-wall failures; they render once the x86 stack is
+bypassed). See the validation matrix and decision doc in Related:
 
-- `Flinthook` — black/unstable with `Unhandled NullReferenceException` / `Paris.Paris.UninitLeaderboards()`.
-- `VVVVVV` — correct Steam AppID envelope, but exits before the 60s/screenshot gate.
-- `FEZ` — correct Steam AppID/Proton/FEX envelope, but exits before the 60s/screenshot gate.
+- `Flinthook` — ✅ renders title screen under ARM64 proton-cachyos (was: black/unstable on x86 FEX).
+- `VVVVVV` — ✅ renders under ARM64 proton-cachyos (was: exited before the gate on x86 FEX).
+- `FEZ` — ✅ renders under ARM64 proton-cachyos (was: exited before the gate on x86 FEX).
+- `Stray` — ✅ renders (UE4/D3D); the formerly deferred high-stress gate now passes under ARM64 proton-cachyos.
 
-Deferred high-stress gate:
+Still-open per-title regressions on the ARM64 default (not stack-level; see decision doc):
 
-- `Stray` — dry-run resolves to `korri-steam-app 1332010`; live gate intentionally deferred.
+- `30XX` (1029210) — `E5033 'Unknown target profile __fx_2_0__'` (legacy D3DX9 d3dcompiler).
+- `Vector` (248970) — renders black at ~140% CPU (likely intro-video codec).
+- `Axiom Verge 2` (946030) — Unity exits ~13 s without drawing.
 
 ## Consequences
 
@@ -112,3 +123,5 @@ Deferred high-stress gate:
 - `product/plugins/steam/src/materializer.test.ts`
 - `product/plugins/steam/packages/steam-korri/scripts/steam-guest-runtime-prep`
 - `docs/solutions/runtime-errors/steam-sniper-fex-bwrap-architecture-path-2026-06-19.md`
+- `docs/solutions/tooling-decisions/arm64-native-proton-cachyos-steam-runtime-bandai-2026-06-20.md`
+- `docs/solutions/runtime-errors/steam-arm64-proton-cachyos-default-matrix-2026-06-20.md`
