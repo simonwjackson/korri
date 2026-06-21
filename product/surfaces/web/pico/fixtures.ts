@@ -8,7 +8,7 @@
  */
 // Relative (not @platform/*) so the throwaway standalone Vite config can
 // resolve it without the repo alias plugin.
-import { games } from "../../../../platform/fixtures/games/games"
+import { games } from "@platform/fixtures/games/games"
 // SPIKE: real game cover art (SteamGridDB), pre-pixelized + remapped to the
 // PICO-8 palette (flat, no dither — the look the pixelart research landed on),
 // 72x96 native so the screen's `image-rendering: pixelated` upscales it crisp.

@@ -5,7 +5,7 @@
  * exports a config object (it never imports the workshop runtime, just its
  * types). Add a theme by importing its config and appending it to THEMES.
  */
-import { picoConfig } from "@product/apps/portal/prototypes/pico/config"
+import { picoConfig } from "@product/surfaces/web/pico/config"
 import type { ThemeWorkshopConfig } from "./types"
 
 export const THEMES: readonly ThemeWorkshopConfig[] = [picoConfig]

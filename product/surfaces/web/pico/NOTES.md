@@ -108,8 +108,8 @@ State persists per browser under `pico:lab`; **reset** restores the code seeds.
   decide the sweet spot, `export`, and bake into the CSS fallbacks +
   `PICO_KNOBS` / `PICO_DEVICES` seeds.
 - **OPEN — pick the winning Home direction** (A / C, possibly steal from each).
-- **THEN — graduate**: fold the winner into a real `product/themes/pico/`
-  (Tailwind v4 `@theme`), register in `theme-registry.ts`. The device lab +
+- **THEN — graduate**: fold the winner into a real `product/surfaces/web/pico/`
+  (Tailwind v4 `@theme`), register in `surface-host-registry.ts`. The device lab +
   workshop already live at the shared dev surface `tools/theme-workshop/`; the
   graduated theme keeps exporting a `ThemeWorkshopConfig` and stays registered in
   `tools/theme-workshop/themes.ts`. Delete this prototype dir when done.
@@ -127,4 +127,4 @@ State persists per browser under `pico:lab`; **reset** restores the code seeds.
   inline (re-hit twice: Settings rows, In-Game menu).
 - **`just typecheck` currently fails** on unrelated pre-existing repo drift
   (`sessiond` / `foreground-launch` files) — none of it is pico/device-lab.
-  Validate prototype work with `bunx biome lint product/apps/portal/prototypes/pico`.
+  Validate prototype work with `bunx biome lint product/surfaces/web/pico`.

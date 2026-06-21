@@ -12,12 +12,14 @@ describe("first-party surfaces", () => {
       "@korri:evier",
       "@korri:vigie",
       "@korri:cli",
+      "@korri:pico",
     ])
     expect(firstPartySurfaceRegistry.list().map(surface => surface.medium)).toEqual([
       "web",
       "web",
       "web",
       "terminal",
+      "web",
     ])
   })
 
