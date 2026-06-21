@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { prepareYfsLaunchRoot } from "./cache"
@@ -129,6 +129,31 @@ describe("YFS prepared root cache", () => {
     })
 
     expect(second.root).not.toBe(first.root)
+  })
+
+  it("prepares read-only packaged webroot copies", async () => {
+    const webroot = await tempRoot("webroot")
+    const cacheRoot = await tempRoot("cache")
+    await writeWebroot(webroot)
+    await chmod(join(webroot, "index.html"), 0o444)
+    await chmod(join(webroot, "scripts/main.js"), 0o444)
+    const level = join(webroot, "source-level.json")
+    await writeFile(level, JSON.stringify({ level: "one" }))
+
+    const prepared = await prepareYfsLaunchRoot({
+      webroot,
+      levelFile: level,
+      cacheRoot,
+      settings: {},
+      launcherVersion: "test",
+    })
+
+    expect(
+      await readFile(join(prepared.root, "scripts/main.js"), "utf8"),
+    ).toContain('exportType:"html5"')
+    expect(
+      await readFile(join(prepared.root, "index.html"), "utf8"),
+    ).not.toContain("direct-launch.js")
   })
 
   it("keeps prepared roots and level content user-private", async () => {

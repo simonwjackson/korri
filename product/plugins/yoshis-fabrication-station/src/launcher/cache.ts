@@ -3,6 +3,7 @@ import {
   chmod,
   cp,
   mkdir,
+  readdir,
   readFile,
   rename,
   rm,
@@ -95,6 +96,16 @@ async function removeLegacyDirectLaunchScripts(root: string): Promise<void> {
   if (cleaned !== source) await writeFile(indexPath, cleaned)
 }
 
+async function makeTreePrivateWritable(root: string): Promise<void> {
+  await chmod(root, 0o700)
+  const children = await readdir(root, { withFileTypes: true })
+  for (const child of children) {
+    const path = join(root, child.name)
+    if (child.isDirectory()) await makeTreePrivateWritable(path)
+    else if (child.isFile()) await chmod(path, 0o600)
+  }
+}
+
 async function buildPreparedRoot(
   root: string,
   staging: string,
@@ -105,7 +116,7 @@ async function buildPreparedRoot(
   await rm(staging, { recursive: true, force: true })
   await mkdir(staging, { recursive: true, mode: 0o700 })
   await cp(webroot, staging, { recursive: true })
-  await chmod(staging, 0o700)
+  await makeTreePrivateWritable(staging)
   await writeFile(join(staging, "level.json"), levelContent, { mode: 0o600 })
   await normalizePreparedCopyExportMarker(staging)
   await removeLegacyDirectLaunchScripts(staging)
