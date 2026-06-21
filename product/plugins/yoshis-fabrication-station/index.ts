@@ -31,6 +31,7 @@ export const yoshisFabricationStationPlugin = plugin({
           command: "yfs-launch",
           args: ["{target}"],
           settings: { plugin: yfsLauncherSettings },
+          env: { KORRI_YFS_SETTINGS: "{settings}" },
           policy: {
             allowedCommands: ["yfs-launch", "chromium"],
           },

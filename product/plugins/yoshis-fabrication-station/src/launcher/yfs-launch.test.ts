@@ -46,6 +46,22 @@ describe("yfs-launch", () => {
     })
   })
 
+  it("merges plugin settings from KORRI_YFS_SETTINGS with CLI flags taking precedence", () => {
+    const parsed = parseYfsLaunchCli(["--bgm-volume=9", "level.json"], {
+      KORRI_YFS_SETTINGS: JSON.stringify({
+        metrics: true,
+        bgmVolume: 3,
+        sfxVolume: 4,
+      }),
+    })
+
+    expect(parsed.settings).toEqual({
+      metrics: true,
+      bgmVolume: 9,
+      sfxVolume: 4,
+    })
+  })
+
   it("builds a prepared-root file URL with code_url=level.json and settings", async () => {
     const root = await tempRoot("prepared")
     const url = buildYfsLaunchUrl(root, { metrics: true, bgmVolume: 5 })

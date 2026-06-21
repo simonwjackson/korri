@@ -47,6 +47,7 @@ const SUPPORTED_PLACEHOLDERS = new Set([
   "configPath",
   "configDir",
   "userDir",
+  "settings",
 ])
 
 type SubstitutionContext = Readonly<Record<string, string | undefined>>
@@ -60,6 +61,10 @@ const buildContext = (context: ResolvedLaunchContext): SubstitutionContext => ({
   configPath: context.configPath,
   configDir: context.configDir,
   userDir: context.userDir,
+  settings:
+    context.settings === undefined
+      ? undefined
+      : JSON.stringify(context.settings),
 })
 
 const substitute = (
@@ -106,10 +111,15 @@ export const composeLaunchSpec = (
       return yield* Effect.fail(new DisallowedCommand({ command }))
     }
 
+    const env: Record<string, string> = {}
+    for (const [key, value] of Object.entries(context.env ?? {})) {
+      env[key] = yield* substitute(value, subCtx)
+    }
+
     const spec: LaunchSpec = {
       command,
       args,
-      ...(context.env ? { env: context.env } : {}),
+      ...(Object.keys(env).length > 0 ? { env } : {}),
       ...(context.cwd !== undefined ? { cwd: context.cwd } : {}),
     }
     return spec

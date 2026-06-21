@@ -48,6 +48,7 @@ describe("Yoshi's Fabrication Station plugin", () => {
       plugin: KORRI_YFS_PLUGIN_ID,
       command: "yfs-launch",
       args: ["{target}"],
+      env: { KORRI_YFS_SETTINGS: "{settings}" },
     })
     expect(JSON.stringify(launchers.level)).not.toContain("@korri:web-canvas")
     expect(JSON.stringify(launchers.level)).not.toContain("korri-web-canvas")

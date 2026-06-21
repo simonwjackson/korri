@@ -132,6 +132,21 @@ describe("composeLaunchSpec — argsAppend / env / cwd", () => {
     })
   })
 
+  it("substitutes resolved launch settings into env values", () => {
+    const l = launcher({ id: "yfs" })
+    const ctx = context({
+      gameId: "g",
+      launcherId: "yfs",
+      settings: { metrics: true, bgmVolume: 7 },
+      env: { KORRI_YFS_SETTINGS: "{settings}" },
+    })
+    const spec = run(composeLaunchSpec(l, ctx))
+    expect(JSON.parse(spec.env?.KORRI_YFS_SETTINGS ?? "{}")).toEqual({
+      metrics: true,
+      bgmVolume: 7,
+    })
+  })
+
   it("threads cwd through to the LaunchSpec", () => {
     const l = launcher({ id: "x" })
     const ctx = context({

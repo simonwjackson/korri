@@ -11,7 +11,12 @@ import type { WebpageSettings } from "../../../webpage/src/core/settings"
 import { launchWebpage } from "../../../webpage/src/runtime/webpage"
 import { prepareYfsLaunchRoot } from "./cache"
 import { waitForYfsReady } from "./diagnostics"
-import { type YfsLauncherSettings, yfsSettingsQuery } from "./settings-runtime"
+import {
+  normalizeYfsLauncherSettings,
+  parseYfsSettingsJson,
+  type YfsLauncherSettings,
+  yfsSettingsQuery,
+} from "./settings-runtime"
 
 const LAUNCHER_VERSION = "1"
 
@@ -47,8 +52,13 @@ function parseVolume(value: string, flag: string): number {
   return Number(value)
 }
 
-export function parseYfsLaunchCli(argv: readonly string[]): ParsedYfsLaunchCli {
-  const settings: Record<string, unknown> = {}
+export function parseYfsLaunchCli(
+  argv: readonly string[],
+  env: Record<string, string | undefined> = process.env,
+): ParsedYfsLaunchCli {
+  const settings: Record<string, unknown> = {
+    ...parseYfsSettingsJson(env.KORRI_YFS_SETTINGS),
+  }
   let levelFile: string | undefined
   const args = [...argv]
   for (let index = 0; index < args.length; index += 1) {
@@ -90,7 +100,7 @@ export function parseYfsLaunchCli(argv: readonly string[]): ParsedYfsLaunchCli {
     else throw new Error(`unexpected extra argument: ${arg}`)
   }
   if (!levelFile) throw new Error(usage())
-  return { levelFile, settings: settings as YfsLauncherSettings }
+  return { levelFile, settings: normalizeYfsLauncherSettings(settings) }
 }
 
 export function buildYfsLaunchUrl(
@@ -138,8 +148,8 @@ export interface RunYfsLaunchOptions {
 export async function runYfsLaunch(
   options: RunYfsLaunchOptions,
 ): Promise<number> {
-  const parsed = parseYfsLaunchCli(options.argv)
   const env = options.env ?? process.env
+  const parsed = parseYfsLaunchCli(options.argv, env)
   const webroot = env.KORRI_YFS_WEBROOT
   if (!webroot) throw new Error("KORRI_YFS_WEBROOT is required")
   const prepared = await prepareYfsLaunchRoot({
