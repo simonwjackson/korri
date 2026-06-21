@@ -61,6 +61,15 @@ describe("CDP input bridge policy", () => {
     expect(() =>
       decodeCdpInputBridgePolicy({ enable: true, mapping: "unknown" }),
     ).toThrow(/Unknown CDP input bridge mapping/)
+    expect(() =>
+      decodeCdpInputBridgePolicy({ enable: true, cdpHost: "192.168.1.5" }),
+    ).toThrow(/loopback/)
+    expect(() =>
+      decodeCdpInputBridgePolicy({
+        enable: true,
+        axis: { pressThreshold: 100, releaseThreshold: 100 },
+      }),
+    ).toThrow(/releaseThreshold/)
   })
 
   it("extracts only the provider-owned annotation from launch metadata", () => {

@@ -1,4 +1,5 @@
-import { type ChildProcess, spawn as nodeSpawn } from "node:child_process"
+import { spawn as nodeSpawn } from "node:child_process"
+import type { EventEmitter } from "node:events"
 import {
   type BridgeActionId,
   type BridgeMapping,
@@ -21,6 +22,17 @@ export interface CdpKeyboardClient {
 export type EvdevInputEvent =
   | { readonly kind: "key"; readonly code: string; readonly value: number }
   | { readonly kind: "absolute"; readonly code: string; readonly value: number }
+
+export function parseEvtestLine(line: string): EvdevInputEvent | undefined {
+  const match = line.match(
+    /type \d+ \((EV_KEY|EV_ABS)\), code \d+ \(([^)]+)\), value (-?\d+)/,
+  )
+  if (!match) return undefined
+  const [, type, code, value] = match
+  if (!type || !code || value === undefined) return undefined
+  if (type === "EV_KEY") return { kind: "key", code, value: Number(value) }
+  return { kind: "absolute", code, value: Number(value) }
+}
 
 export interface CdpInputTranslator {
   readonly handle: (event: EvdevInputEvent) => Promise<void>
@@ -149,7 +161,15 @@ export interface CdpInputBridgeProcessManager {
   ) => Promise<CdpInputBridgeProcessHandle>
 }
 
-type SpawnedChild = Pick<ChildProcess, "pid" | "kill" | "once">
+type SpawnedChild = {
+  readonly pid?: number
+  readonly stdout?: Pick<EventEmitter, "on">
+  readonly kill: (signal?: NodeJS.Signals | number) => boolean
+  readonly once: (
+    event: string,
+    listener: (...args: unknown[]) => void,
+  ) => unknown
+}
 type SpawnFn = (command: string, args: readonly string[]) => SpawnedChild
 
 export function createProcessCdpInputBridge(
@@ -167,6 +187,7 @@ export function createProcessCdpInputBridge(
       const exited = new Promise<void>(resolve => {
         child.once("exit", () => resolve())
       })
+      await waitForBridgeReady(child, request.attachTimeoutMs)
       return {
         pid: child.pid ?? undefined,
         exited,
@@ -184,6 +205,40 @@ export function createProcessCdpInputBridge(
       }
     },
   }
+}
+
+async function waitForBridgeReady(
+  child: SpawnedChild,
+  timeoutMs: number,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("CDP input bridge did not become ready")),
+      timeoutMs,
+    )
+    const settle = (callback: () => void) => {
+      clearTimeout(timeout)
+      callback()
+    }
+
+    child.once("error", error => {
+      settle(() => reject(error))
+    })
+    child.once("exit", (code, signal) => {
+      settle(() =>
+        reject(
+          new Error(
+            `CDP input bridge exited before ready (code=${code ?? "null"}, signal=${signal ?? "null"})`,
+          ),
+        ),
+      )
+    })
+    child.stdout?.on("data", chunk => {
+      if (String(chunk).includes("korri-cdp-input-bridge: ready")) {
+        settle(resolve)
+      }
+    })
+  })
 }
 
 function bridgeArgs(request: CdpInputBridgeStartRequest): readonly string[] {

@@ -57,7 +57,6 @@ describe("CDP input bridge session lifecycle hook", () => {
         enable: true,
         cdpPort: 9333,
         mapping: "yfs-default",
-        watchPid: 456,
         sourcePreference: { names: ["Microsoft Xbox Series S|X Controller"] },
         target: { type: "page", urlPattern: "index.html" },
       }),
@@ -71,7 +70,6 @@ describe("CDP input bridge session lifecycle hook", () => {
         cdpHost: "127.0.0.1",
         cdpPort: 9333,
         mappingName: "yfs-default",
-        watchPid: 456,
         target: { type: "page", urlPattern: "index.html" },
       }),
     ])
@@ -129,14 +127,45 @@ describe("CDP input bridge session lifecycle hook", () => {
     ).rejects.toThrow(/ambiguous InputPlumber virtual controller/)
   })
 
-  it("terminates the watched pid if the bridge exits unexpectedly", async () => {
+  it("does not terminate the launched session when bridge exits during cleanup", async () => {
     let resolveExit!: () => void
-    const killed: number[] = []
+    let terminated = 0
     const hook = createCdpInputBridgeSessionLifecycleHook({
       devices: async () => ambiguousDevices,
-      killPid: async pid => {
-        killed.push(pid)
+      processManager: {
+        start: async () => ({
+          stop: async () => undefined,
+          exited: new Promise<void>(resolve => {
+            resolveExit = resolve
+          }),
+        }),
       },
+    })
+
+    const handle = await hook.afterChildRunning?.({
+      launchId: "launch-1",
+      spec: { command: "yfs", args: [] },
+      terminateLaunch: () => {
+        terminated += 1
+      },
+      launchMetadata: metadata({
+        enable: true,
+        cdpPort: 9333,
+        sourcePreference: { names: ["Microsoft Xbox Series S|X Controller"] },
+      }),
+    })
+    await handle?.stopBeforeCleanup?.()
+    resolveExit()
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(terminated).toBe(0)
+  })
+
+  it("terminates the launched session if the bridge exits unexpectedly", async () => {
+    let resolveExit!: () => void
+    let terminated = 0
+    const hook = createCdpInputBridgeSessionLifecycleHook({
+      devices: async () => ambiguousDevices,
       processManager: {
         start: async () => ({
           stop: async () => undefined,
@@ -150,16 +179,18 @@ describe("CDP input bridge session lifecycle hook", () => {
     await hook.afterChildRunning?.({
       launchId: "launch-1",
       spec: { command: "yfs", args: [] },
+      terminateLaunch: () => {
+        terminated += 1
+      },
       launchMetadata: metadata({
         enable: true,
         cdpPort: 9333,
-        watchPid: 456,
         sourcePreference: { names: ["Microsoft Xbox Series S|X Controller"] },
       }),
     })
     resolveExit()
     await new Promise(resolve => setTimeout(resolve, 0))
 
-    expect(killed).toEqual([456])
+    expect(terminated).toBe(1)
   })
 })

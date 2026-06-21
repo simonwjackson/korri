@@ -6,6 +6,7 @@ export interface KorriSessionLifecycleHookStartRequest {
   readonly launchId: string
   readonly spec: LaunchSpec
   readonly launchMetadata?: LaunchMetadata
+  readonly terminateLaunch?: () => void
 }
 
 export interface KorriSessionLifecycleHookHandle {

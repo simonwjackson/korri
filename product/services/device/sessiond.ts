@@ -366,6 +366,7 @@ export function createKorriSessiondCore(
     active:
       | {
           readonly launchId: string
+          readonly terminate?: () => void
           sessionHookHandles?: readonly KorriSessiondLifecycleHookHandle[]
         }
       | undefined,
@@ -378,6 +379,7 @@ export function createKorriSessiondCore(
           launchId,
           spec,
           ...(launchMetadata ? { launchMetadata } : {}),
+          ...(active?.terminate ? { terminateLaunch: active.terminate } : {}),
         })
         if (handle) handles.push(handle)
       } catch (error) {

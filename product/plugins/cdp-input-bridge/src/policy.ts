@@ -68,7 +68,15 @@ const AxisPolicy = Schema.Struct({
 
 const RawPolicy = Schema.Struct({
   enable: Schema.optional(Schema.Boolean),
-  cdpHost: Schema.optional(NonEmptyString("cdpHost")),
+  cdpHost: Schema.optional(
+    NonEmptyString("cdpHost").pipe(
+      Schema.check(
+        Schema.makeFilter(value =>
+          isLoopbackHost(value) ? undefined : "cdpHost must be loopback-only",
+        ),
+      ),
+    ),
+  ),
   cdpPort: Schema.optional(integerRange("cdpPort", 1, 65535)),
   target: Schema.optional(CdpTargetSelector),
   sourcePreference: Schema.optional(SourcePreference),
@@ -76,7 +84,6 @@ const RawPolicy = Schema.Struct({
   axis: Schema.optional(AxisPolicy),
   attachTimeoutMs: Schema.optional(positiveInteger("attachTimeoutMs")),
   failClosed: Schema.optional(Schema.Boolean),
-  watchPid: Schema.optional(positiveInteger("watchPid")),
 })
 
 export type CdpInputBridgePolicy =
@@ -94,8 +101,17 @@ export type CdpInputBridgePolicy =
       }
       readonly attachTimeoutMs: number
       readonly failClosed: boolean
-      readonly watchPid?: number
     }
+
+function isLoopbackHost(value: string): boolean {
+  const normalized = value.trim().toLowerCase()
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized === "[::1]"
+  )
+}
 
 export function policyAnnotationFromMetadata(
   launchMetadata: LaunchMetadata | undefined,
@@ -133,6 +149,5 @@ export function decodeCdpInputBridgePolicy(
     axis: { pressThreshold, releaseThreshold },
     attachTimeoutMs: raw.attachTimeoutMs ?? 5000,
     failClosed: raw.failClosed ?? true,
-    ...(raw.watchPid ? { watchPid: raw.watchPid } : {}),
   }
 }

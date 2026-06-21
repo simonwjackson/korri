@@ -4,6 +4,7 @@ import { type ChildProcess, spawn } from "node:child_process"
 import {
   type CdpKeyboardEvent,
   createCdpInputTranslator,
+  parseEvtestLine,
 } from "../../src/bridge-process"
 import { resolveBridgeMapping } from "../../src/mapping"
 
@@ -83,6 +84,8 @@ try {
       if (event) await translator.handle(event)
     }
   })
+  console.log("korri-cdp-input-bridge: ready")
+
   evtestProcess.once("exit", async (code, signal) => {
     await translator.releaseAll()
     if (
@@ -171,7 +174,10 @@ async function waitForTarget(
       const matches = targets.filter(target => matchesTarget(target, options))
       if (matches.length === 1) {
         const [target] = matches
-        if (target) return target
+        if (target) {
+          assertLocalWebSocketTarget(target, options)
+          return target
+        }
       }
       if (matches.length > 1)
         throw new Error(`CDP target selector matched ${matches.length} pages`)
@@ -181,6 +187,25 @@ async function waitForTarget(
     await sleep(100, signal)
   }
   throw new Error("timed out waiting for matching CDP target")
+}
+
+function assertLocalWebSocketTarget(
+  target: CdpTarget,
+  options: CliOptions,
+): void {
+  if (!target.webSocketDebuggerUrl) return
+  const url = new URL(target.webSocketDebuggerUrl)
+  if (url.protocol !== "ws:") {
+    throw new Error("CDP websocket URL must use ws://")
+  }
+  if (
+    url.hostname !== options.cdpHost ||
+    url.port !== String(options.cdpPort)
+  ) {
+    throw new Error(
+      "CDP websocket URL must match the configured loopback endpoint",
+    )
+  }
 }
 
 function matchesTarget(target: CdpTarget, options: CliOptions): boolean {
@@ -229,18 +254,6 @@ function dispatchKeyEvent(
       params: event,
     }),
   )
-}
-
-function parseEvtestLine(line: string) {
-  const match = line.match(
-    /type \d+ \((EV_KEY|EV_ABS)\), code \d+ \(([^)]+)\), value (-?\d+)/,
-  )
-  if (!match) return undefined
-  const [, type, code, value] = match
-  if (!type || !code || value === undefined) return undefined
-  if (type === "EV_KEY")
-    return { kind: "key" as const, code, value: Number(value) }
-  return { kind: "absolute" as const, code, value: Number(value) }
 }
 
 function watchPid(pid: number, signal: AbortSignal): void {

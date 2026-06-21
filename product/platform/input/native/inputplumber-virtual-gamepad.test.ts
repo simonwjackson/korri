@@ -98,6 +98,19 @@ describe("resolveInputPlumberVirtualGamepad", () => {
     })
   })
 
+  it("selects a preferred InputPlumber event node from an otherwise ambiguous topology", async () => {
+    const result = await resolveFixture(
+      "bus-input-devices-inputplumber-ambiguous.txt",
+      { preferredEventNodes: ["event11"] },
+    )
+
+    expect(result).toMatchObject({
+      status: "found",
+      path: "/dev/input/event11",
+      device: { eventNode: "event11" },
+    })
+  })
+
   it("keeps preferred matching fail-closed when the preference is missing or still ambiguous", async () => {
     const missing = await resolveFixture(
       "bus-input-devices-inputplumber-ambiguous.txt",

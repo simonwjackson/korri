@@ -187,6 +187,49 @@ describe("KorriControl live implementation", () => {
     expect(launchedSpecs).toEqual([{ command: "prepared", args: [] }])
   })
 
+  it("forwards resolved launch metadata through managed launcher spawn", async () => {
+    const spawns: unknown[] = []
+    const control = makeKorriControlLive({
+      librarySource: librarySource({
+        launchMetadata: {
+          annotations: { "@fixture:input": { enable: true } },
+        },
+      }),
+      launcher: {
+        run: () => Effect.succeed({ status: "launched" as const }),
+        spawn: (launchSpec, options?) => {
+          spawns.push({ launchSpec, options })
+          return Effect.succeed({
+            status: "started" as const,
+            session: {
+              id: "session-1",
+              exited: Promise.resolve({ exitCode: 0 }),
+              terminate: () => undefined,
+              terminateNow: () => undefined,
+            },
+            result: Promise.resolve({ status: "launched" as const }),
+          })
+        },
+      },
+    })
+
+    await expect(
+      Effect.runPromise(control.launchGame({ id: playable.id })),
+    ).resolves.toEqual({ _tag: "Launched", selection: { id: playable.id } })
+    expect(spawns).toEqual([
+      {
+        launchSpec: spec,
+        options: {
+          extras: {
+            launchMetadata: {
+              annotations: { "@fixture:input": { enable: true } },
+            },
+          },
+        },
+      },
+    ])
+  })
+
   it("blocks launch when launch.prepare returns diagnostics", async () => {
     let runCount = 0
     const control = makeKorriControlLive({
@@ -514,7 +557,7 @@ describe("KorriControl live implementation", () => {
 })
 
 function librarySource(
-  options: Pick<ResolvedLaunch, "launchPrepare"> = {},
+  options: Pick<ResolvedLaunch, "launchPrepare" | "launchMetadata"> = {},
 ): LibrarySourceService {
   return {
     list: () => Effect.succeed([]),

@@ -579,17 +579,13 @@ function runResolvedLaunch(
   resolved: ResolvedLaunch,
 ): Effect.Effect<LaunchResult, never> {
   if (launcher.spawn) {
-    return launcher
-      .spawn(
-        resolved.spec,
-        resolved.extras ? { extras: resolved.extras } : undefined,
-      )
-      .pipe(
-        Effect.matchEffect({
-          onFailure: error => Effect.succeed(libraryErrorToLaunchResult(error)),
-          onSuccess: result => managedLaunchResult(result),
-        }),
-      )
+    const extras = launchExtrasForResolvedLaunch(resolved)
+    return launcher.spawn(resolved.spec, extras ? { extras } : undefined).pipe(
+      Effect.matchEffect({
+        onFailure: error => Effect.succeed(libraryErrorToLaunchResult(error)),
+        onSuccess: result => managedLaunchResult(result),
+      }),
+    )
   }
   return launcher.run(resolved.spec).pipe(
     Effect.match({
@@ -597,6 +593,18 @@ function runResolvedLaunch(
       onSuccess: result => result,
     }),
   )
+}
+
+function launchExtrasForResolvedLaunch(
+  resolved: ResolvedLaunch,
+): ResolvedLaunch["extras"] | undefined {
+  if (!resolved.extras && !resolved.launchMetadata) return undefined
+  return {
+    ...(resolved.extras ?? {}),
+    ...(resolved.launchMetadata
+      ? { launchMetadata: resolved.launchMetadata }
+      : {}),
+  }
 }
 
 function managedLaunchResult(

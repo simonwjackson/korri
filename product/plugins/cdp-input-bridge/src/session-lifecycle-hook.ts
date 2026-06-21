@@ -18,7 +18,6 @@ import {
 export interface CdpInputBridgeSessionLifecycleHookOptions {
   readonly devices?: () => Promise<readonly DiscoveredDevice[]>
   readonly processManager?: CdpInputBridgeProcessManager | false
-  readonly killPid?: (pid: number) => Promise<void> | void
   readonly env?: NodeJS.ProcessEnv
 }
 
@@ -32,12 +31,15 @@ export function createCdpInputBridgeSessionLifecycleHook(
       : (options.processManager ??
         createProcessCdpInputBridge({ command: bridgeCommandFromEnv(env) }))
   const devices = options.devices ?? systemInputDevices
-  const killPid = options.killPid ?? signalPid
 
   return {
     id: CDP_INPUT_BRIDGE_PLUGIN_ID,
     failurePolicy: "fail-launch",
-    afterChildRunning: async ({ launchId, launchMetadata }) => {
+    afterChildRunning: async ({
+      launchId,
+      launchMetadata,
+      terminateLaunch,
+    }) => {
       const policy = decodeCdpInputBridgePolicy(
         policyAnnotationFromMetadata(launchMetadata),
       )
@@ -68,15 +70,13 @@ export function createCdpInputBridgeSessionLifecycleHook(
         cdpPort: policy.cdpPort,
         mappingName: policy.mappingName,
         ...(policy.target ? { target: policy.target } : {}),
-        ...(policy.watchPid ? { watchPid: policy.watchPid } : {}),
         attachTimeoutMs: policy.attachTimeoutMs,
         failClosed: policy.failClosed,
       })
 
-      const watchedPid = policy.watchPid
-      if (handle.exited && policy.failClosed && watchedPid !== undefined) {
-        void handle.exited.then(async () => {
-          if (!stoppingForCleanup) await killPid(watchedPid)
+      if (handle.exited && policy.failClosed && terminateLaunch) {
+        void handle.exited.then(() => {
+          if (!stoppingForCleanup) terminateLaunch()
         })
       }
 
@@ -96,14 +96,6 @@ async function systemInputDevices(): Promise<readonly DiscoveredDevice[]> {
   return parseProcBusInputDevices(
     await readFile("/proc/bus/input/devices", "utf8"),
   )
-}
-
-async function signalPid(pid: number): Promise<void> {
-  try {
-    process.kill(pid, "SIGTERM")
-  } catch {
-    // The watched process already exited; cleanup is complete from the hook's perspective.
-  }
 }
 
 function bridgeCommandFromEnv(env: NodeJS.ProcessEnv): string {
