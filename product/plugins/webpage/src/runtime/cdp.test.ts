@@ -5,11 +5,7 @@ describe("CDP evaluate", () => {
   it("throws JavaScript exception details instead of returning undefined", () => {
     expect(() =>
       runtimeEvaluateValue({
-        result: {
-          type: "object",
-          subtype: "error",
-          description: "Error: boom",
-        },
+        result: { description: "Error: boom" },
         exceptionDetails: {
           text: "Uncaught",
           exception: { description: "Error: boom" },
