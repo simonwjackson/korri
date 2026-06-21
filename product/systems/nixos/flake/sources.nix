@@ -42,17 +42,17 @@ in
     [
       ../../../../electrobun.config.ts
       ../../../../product/apps/desktop
-      ../../../../product/apps/cli
+      ../../../../product/surfaces/terminal/korri-cli
     ]
     ++ sharedRuntime
   );
   inputd = mkSource (deviceRuntime ++ [ ../../../../tools/types ]);
   gameStream = mkSource deviceRuntime;
   sessiond = mkSource deviceRuntime;
-  cli = mkSource ([ ../../../../product/apps/cli ] ++ deviceRuntime);
+  cli = mkSource ([ ../../../../product/surfaces/terminal/korri-cli ] ++ deviceRuntime);
   server = mkSource (
     [
-      ../../../../product/apps/cli
+      ../../../../product/surfaces/terminal/korri-cli
       ../../../../product/services/server
     ]
     ++ deviceRuntime

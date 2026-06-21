@@ -25,7 +25,7 @@ async function runCli(
   options: { readonly env?: Record<string, string | undefined> } = {},
 ) {
   const proc = Bun.spawn(["bun", cliPath, ...args], {
-    cwd: new URL("../../../..", import.meta.url).pathname,
+    cwd: new URL("../../../../..", import.meta.url).pathname,
     stdout: "pipe",
     stderr: "pipe",
     env: {

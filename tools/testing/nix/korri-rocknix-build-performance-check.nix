@@ -69,7 +69,7 @@ pkgs.runCommand "korri-sm8550-build-performance-check"
 
     test -e ${runtimeSources.desktop}/electrobun.config.ts
     test -e ${runtimeSources.desktop}/product/apps/desktop
-    test -e ${runtimeSources.desktop}/product/apps/cli
+    test -e ${runtimeSources.desktop}/product/surfaces/terminal/korri-cli
     test -e ${runtimeSources.desktop}/product/platform
     test ! -e ${runtimeSources.desktop}/tools/cli
     test ! -e ${runtimeSources.desktop}/tools/testing
@@ -116,7 +116,7 @@ pkgs.runCommand "korri-sm8550-build-performance-check"
     test ! -e ${runtimeSources.server}/tools/playwright
     test ! -e ${runtimeSources.server}/tools/generators
 
-    test -e ${runtimeSources.cli}/product/apps/cli
+    test -e ${runtimeSources.cli}/product/surfaces/terminal/korri-cli
     test -e ${runtimeSources.cli}/product/services/device
     test -e ${runtimeSources.cli}/product/platform
     test ! -e ${runtimeSources.cli}/tools/cli

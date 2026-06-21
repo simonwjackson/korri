@@ -12,7 +12,7 @@ import {
   createLaunchIntent,
   type GameStreamLaunchIntent,
   type GameStreamLaunchIntentStore,
-} from "../../services/device/game-stream-launch-intent"
+} from "@product/services/device/game-stream-launch-intent"
 import type { GamePicker } from "./game-picker"
 
 export type StreamLaunchPrepareResult =

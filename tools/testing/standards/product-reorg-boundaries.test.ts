@@ -339,7 +339,7 @@ function buildReferencedToolEntrypoints(): readonly string[] {
     "product/services/device/nix/inputd.nix",
     "product/services/device/nix/game-stream.nix",
     "product/plugins/gamescope/packages/control-bridge/default.nix",
-    "product/apps/cli/package.nix",
+    "product/surfaces/terminal/korri-cli/package.nix",
   ]
   const references = new Set<string>()
   for (const file of files) {

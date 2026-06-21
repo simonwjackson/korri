@@ -179,7 +179,7 @@ flake-utils.lib.eachDefaultSystem (
       inherit bunDeps;
     };
 
-    korriCli = import ../../../../product/apps/cli/package.nix {
+    korriCli = import ../../../../product/surfaces/terminal/korri-cli/package.nix {
       inherit pkgs;
       lib = pkgs.lib;
       src = korriSources.cli;

@@ -1,3 +1,4 @@
+import { cliSurface } from "@product/surfaces/terminal/korri-cli/surface"
 import { evierSurface } from "@product/surfaces/web/evier/surface"
 import { shiftSurface } from "@product/surfaces/web/shift/surface"
 import { vigieSurface } from "@product/surfaces/web/vigie/surface"
@@ -7,6 +8,7 @@ export const firstPartySurfaceManifests = [
   shiftSurface,
   evierSurface,
   vigieSurface,
+  cliSurface,
 ] as const
 
 export const firstPartySurfaceRegistry = createSurfaceRegistry(

@@ -61,7 +61,7 @@ pkgs.stdenv.mkDerivation {
       fi
     done
 
-    bun build product/apps/cli/korri-cli.ts --target=bun --outfile=korri-cli.js
+    bun build product/surfaces/terminal/korri-cli/korri-cli.ts --target=bun --outfile=korri-cli.js
 
     runHook postBuild
   '';

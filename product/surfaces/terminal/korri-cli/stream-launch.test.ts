@@ -19,11 +19,11 @@ import {
 } from "@platform/library/library-services"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { Effect } from "effect"
-import { withTempProseqlLibrary } from "../../../tools/testing/library/with-temp-proseql-library"
+import { withTempProseqlLibrary } from "@tools/testing/library/with-temp-proseql-library"
 import {
   createFileGameStreamLaunchIntentStore,
   decodeLaunchIntent,
-} from "../../services/device/game-stream-launch-intent"
+} from "@product/services/device/game-stream-launch-intent"
 import { createStaticGamePicker } from "./game-picker"
 import {
   prepareStreamLaunch,

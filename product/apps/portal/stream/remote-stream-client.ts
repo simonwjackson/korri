@@ -12,10 +12,10 @@
  * runner (sunshine app) to pick up. Pair with `launchMoonlight()` to
  * connect locally.
  *
- * Originally lived in `product/apps/cli/`; promoted to `@product/apps/portal/stream/` (a
+ * Originally lived in `product/surfaces/terminal/korri-cli/`; promoted to `@product/apps/portal/stream/` (a
  * product-layer module, since it knows the app RPC schemas) so the
  * desktop’s launch bridge can share it without depending on CLI code.
- * The `product/apps/cli/remote-stream-control-client.ts` file is a re-export
+ * The `product/surfaces/terminal/korri-cli/remote-stream-control-client.ts` file is a re-export
  * shim during the migration window.
  */
 

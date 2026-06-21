@@ -45,7 +45,7 @@ pkgs.stdenv.mkDerivation {
 
     bun build product/plugins/gamescope/src/cli/control.ts --target=bun --outfile=gamescope-control.js
     bun build product/plugins/gamescope/src/cli/bridge.ts --target=bun --outfile=gamescope-control-bridge.js
-    bun build product/apps/cli/stream-control-bench.ts --target=bun --outfile=stream-control-bench.js
+    bun build product/surfaces/terminal/korri-cli/stream-control-bench.ts --target=bun --outfile=stream-control-bench.js
 
     runHook postBuild
   '';

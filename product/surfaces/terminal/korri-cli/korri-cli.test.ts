@@ -15,7 +15,7 @@ import { runKorriCli, runKorriCliWithLayer } from "./korri-cli"
 import { captureCliOutput } from "./test-helpers/capture-cli-output"
 
 const cliPath = new URL("./korri-cli.ts", import.meta.url).pathname
-const repoRoot = new URL("../../..", import.meta.url).pathname
+const repoRoot = new URL("../../../..", import.meta.url).pathname
 
 async function runCli(
   args: readonly string[],

@@ -14,7 +14,7 @@ import { Argument, Command, Flag } from "effect/unstable/cli"
 import {
   createFileGameStreamLaunchIntentStore,
   defaultGameStreamIntentPath,
-} from "../../services/device/game-stream-launch-intent"
+} from "@product/services/device/game-stream-launch-intent"
 import { artifactCommand } from "./artifacts/artifact-import-command"
 import { bazzarCommand } from "./bazzar/bazzar-command"
 import {
