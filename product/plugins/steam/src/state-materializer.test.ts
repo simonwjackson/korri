@@ -218,7 +218,6 @@ describe("materializeSteamDesiredState", () => {
                   config: "",
                   priority: "250",
                 },
-                "999": { name: "proton-old", config: "", priority: "250" },
                 "2379780": {
                   name: "proton-arm64",
                   config: "",
@@ -312,7 +311,7 @@ describe("materializeSteamDesiredState", () => {
     expect(writes).toEqual([])
   })
 
-  it("reconciles policy-owned compat mappings over manual Steam UI edits", async () => {
+  it("reconciles authored compat mappings over manual Steam UI edits", async () => {
     const stateRoot = "/steam-home"
     const config = steamConfigPath(stateRoot)
     const { fs, files } = memoryFs({

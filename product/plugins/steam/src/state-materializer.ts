@@ -296,36 +296,28 @@ async function materializeSteamDesiredStatePromise(
       Object.keys(desired.compatToolOverrides ?? {}).length > 0
     ) {
       const config = parseVdfOrEmpty(await fs.readText(configPath), configPath)
+      const compatToolMappingState: VdfObject = {}
       if (desired.defaultCompatTool !== undefined) {
-        setVdfPath(
-          config,
-          [
-            "InstallConfigStore",
-            "Software",
-            "Valve",
-            "Steam",
-            "CompatToolMapping",
-            "0",
-          ],
-          compatToolMapping(desired.defaultCompatTool),
+        compatToolMappingState["0"] = compatToolMapping(
+          desired.defaultCompatTool,
         )
       }
       for (const [appId, tool] of Object.entries(
         desired.compatToolOverrides ?? {},
       )) {
-        setVdfPath(
-          config,
-          [
-            "InstallConfigStore",
-            "Software",
-            "Valve",
-            "Steam",
-            "CompatToolMapping",
-            appId,
-          ],
-          compatToolMapping(tool),
-        )
+        compatToolMappingState[appId] = compatToolMapping(tool)
       }
+      setVdfPath(
+        config,
+        [
+          "InstallConfigStore",
+          "Software",
+          "Valve",
+          "Steam",
+          "CompatToolMapping",
+        ],
+        compatToolMappingState,
+      )
       await fs.writeTextAtomic(configPath, renderVdf(config))
     }
 
