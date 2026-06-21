@@ -159,11 +159,7 @@ describe("steamReadableLaunchIntegration", () => {
           },
         },
       })
-      expect(result.artifacts?.root).toBe(root)
-      expect(Object.values(result.artifacts?.paths ?? {})).toEqual([
-        join(root, "userdata", "0", "config", "localconfig.vdf"),
-        join(root, "config", "config.vdf"),
-      ])
+      expect(result.artifacts).toBeUndefined()
       expect(events).toEqual([
         "shutdown:steam",
         "wait-shutdown",

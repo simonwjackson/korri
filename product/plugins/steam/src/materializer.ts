@@ -84,7 +84,6 @@ export const materializeReadableSteamLaunch = (input: {
       spec: resources.spec,
       context: input.context,
       launchMetadata: steamLaunchMetadata(resources.appId),
-      artifacts: { root: resources.stateRoot, paths: resources.paths },
     }
   })
 

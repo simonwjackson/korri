@@ -434,7 +434,7 @@ describe("createLibraryRepository — readable playable entries", () => {
           },
         },
       })
-      expect(resolved.artifacts?.root).toBe(steamStorageRoot)
+      expect(resolved.artifacts).toBeUndefined()
     })
   })
 
