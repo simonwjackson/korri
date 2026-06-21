@@ -30,8 +30,8 @@ pkgs.stdenv.mkDerivation {
     cp -R "$src"/. .
     chmod -R u+w .
 
-    bun --config=/dev/null --no-install ${../../../tools/nix/bun-production-deps.ts} package-json > package.json.production && mv package.json.production package.json
-    bun --config=/dev/null --no-install ${../../../tools/nix/bun-production-deps.ts} bun-lock > bun.lock.production && mv bun.lock.production bun.lock
+    bun --config=/dev/null --no-install ${../../../../tools/nix/bun-production-deps.ts} package-json > package.json.production && mv package.json.production package.json
+    bun --config=/dev/null --no-install ${../../../../tools/nix/bun-production-deps.ts} bun-lock > bun.lock.production && mv bun.lock.production bun.lock
     ! grep -q '"devDependencies"' package.json
 
     runHook postUnpack
