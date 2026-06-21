@@ -210,7 +210,10 @@ function snapshotValue(options: {
 function catalogEntry(
   id: string,
   title: string,
-  options: { readonly launchable?: boolean; readonly launch?: { readonly use?: string } },
+  options: {
+    readonly launchable?: boolean
+    readonly launch?: { readonly use?: string }
+  },
 ) {
   const launchable = options.launchable ?? true
   return {

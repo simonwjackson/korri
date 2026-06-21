@@ -395,8 +395,7 @@ export function remoteSourceGamesFromCatalogSnapshot(response: {
 
 function isRemoteStreamable(entry: CatalogEntry): boolean {
   return entry.releases.some(
-    release =>
-      release.launchable && release.launch !== undefined,
+    release => release.launchable && release.launch !== undefined,
   )
 }
 

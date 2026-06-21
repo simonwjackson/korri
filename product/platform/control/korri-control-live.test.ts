@@ -96,7 +96,6 @@ describe("KorriControl live implementation", () => {
     expect(runCount).toBe(0)
   })
 
-
   it("runs launch.prepare in check mode for dry-run without invoking the launcher", async () => {
     const calls: unknown[] = []
     let runCount = 0
@@ -118,7 +117,9 @@ describe("KorriControl live implementation", () => {
       },
     })
     const control = makeKorriControlLive({
-      librarySource: librarySource({ launchPrepare: { "@fixture:prepare": { profileId: 37 } } }),
+      librarySource: librarySource({
+        launchPrepare: { "@fixture:prepare": { profileId: 37 } },
+      }),
       launcher: launcher({ onRun: () => runCount++ }),
       pluginRegistry: createPluginRegistry([preparePlugin], {
         enabledPluginIds: ["@fixture:prepare"],
@@ -159,7 +160,9 @@ describe("KorriControl live implementation", () => {
       },
     })
     const control = makeKorriControlLive({
-      librarySource: librarySource({ launchPrepare: { "@fixture:prepare": { profileId: 37 } } }),
+      librarySource: librarySource({
+        launchPrepare: { "@fixture:prepare": { profileId: 37 } },
+      }),
       launcher: {
         run: launchSpec => {
           launchedSpecs.push(launchSpec)
@@ -187,7 +190,9 @@ describe("KorriControl live implementation", () => {
   it("blocks launch when launch.prepare returns diagnostics", async () => {
     let runCount = 0
     const control = makeKorriControlLive({
-      librarySource: librarySource({ launchPrepare: { "@fixture:missing": {} } }),
+      librarySource: librarySource({
+        launchPrepare: { "@fixture:missing": {} },
+      }),
       launcher: launcher({ onRun: () => runCount++ }),
       pluginRegistry: createPluginRegistry([]),
     })
@@ -200,7 +205,6 @@ describe("KorriControl live implementation", () => {
     })
     expect(runCount).toBe(0)
   })
-
 
   it("reports session status from sessiond probes", async () => {
     const control = makeKorriControlLive({
@@ -509,7 +513,9 @@ describe("KorriControl live implementation", () => {
   })
 })
 
-function librarySource(options: Pick<ResolvedLaunch, "launchPrepare"> = {}): LibrarySourceService {
+function librarySource(
+  options: Pick<ResolvedLaunch, "launchPrepare"> = {},
+): LibrarySourceService {
   return {
     list: () => Effect.succeed([]),
     listPlayableEntries: () => Effect.succeed([playable]),
