@@ -360,7 +360,6 @@ describe("createLibraryRepository — readable playable entries", () => {
       await mkdir(
         join(
           steamStorageRoot,
-          "Steam",
           "compatibilitytools.d",
           DEFAULT_STEAM_COMPAT_TOOL,
         ),
@@ -389,7 +388,7 @@ describe("createLibraryRepository — readable playable entries", () => {
           launch: { with: { [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: true } } },
           settings: {
             plugin: {
-              state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+              state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
               extra: { args: ["-silent"] },
               "launch-options": "wrapper -- %command%",
             },
@@ -435,7 +434,7 @@ describe("createLibraryRepository — readable playable entries", () => {
           },
         },
       })
-      expect(resolved.artifacts?.root).toBe(join(steamStorageRoot, "Steam"))
+      expect(resolved.artifacts?.root).toBe(steamStorageRoot)
     })
   })
 

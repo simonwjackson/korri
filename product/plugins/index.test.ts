@@ -35,18 +35,18 @@ import {
   KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
   KORRI_RETROARCH_PC98_SYSTEM_ID,
   KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
+  KORRI_RETROARCH_PLUGIN_ID,
   KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
   KORRI_RETROARCH_PSP_SYSTEM_ID,
   KORRI_RETROARCH_PSX_SYSTEM_ID,
-  KORRI_RETROARCH_PLUGIN_ID,
   KORRI_RETROARCH_SMS_SYSTEM_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
   KORRI_RETROARCH_TG16_SYSTEM_ID,
   KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
 } from "./retroarch"
 import { KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
-import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
 import { KORRI_SMB_WONDERLAND_1987_PLUGIN_ID } from "./smb-wonderland-1987"
+import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
 import { KORRI_SMWCENTRAL_PLUGIN_ID } from "./smwcentral"
 import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
 import {
@@ -118,7 +118,7 @@ describe("first-party plugins", () => {
       command: "steam",
       settings: {
         plugin: {
-          state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+          state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
           extra: { args: ["-silent", "-gamepadui"] },
         },
       },

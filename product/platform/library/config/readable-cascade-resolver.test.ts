@@ -288,7 +288,7 @@ const steamApp = (overrides: Partial<AppRecord> = {}): AppRecord => ({
   command: "steam",
   systems: ["steam"],
   settings: {
-    plugin: { state: { root: "{storage:@korri:steam/steam}/Steam" } },
+    plugin: { state: { root: "{storage:@korri:steam/steam}" } },
   },
   ...overrides,
 })
@@ -755,7 +755,7 @@ describe("resolveReadableLaunchContext", () => {
       runtime: "proton-default",
       settings: {
         plugin: {
-          state: { root: "{storage:@korri:steam/steam}/Steam" },
+          state: { root: "{storage:@korri:steam/steam}" },
           extra: { args: ["-silent"] },
           "launch-options": "%command%",
         },
@@ -827,7 +827,7 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.runtime?.id).toBe("proton-experimental")
     expect(context).not.toHaveProperty("steam")
     expect(context.plugin?.[steamProvider]).toEqual({
-      state: { root: "{storage:@korri:steam/steam}/Steam" },
+      state: { root: "{storage:@korri:steam/steam}" },
       extra: { args: ["-silent", "-gamepadui"] },
       "launch-options": "wrapper -- %command%",
     })
@@ -862,7 +862,7 @@ describe("resolveReadableLaunchContext", () => {
 
     expect(context.app.id).toBe(steamAppId)
     expect(context.plugin?.[steamProvider]).toEqual({
-      state: { root: "{storage:@korri:steam/steam}/Steam" },
+      state: { root: "{storage:@korri:steam/steam}" },
     })
   })
 
@@ -932,7 +932,7 @@ describe("resolveReadableLaunchContext", () => {
     expect(policies.every(policy => policy.stats === undefined)).toBe(true)
     expect(context).not.toHaveProperty("steam")
     expect(context.plugin?.[steamProvider]).toEqual({
-      state: { root: "{storage:@korri:steam/steam}/Steam" },
+      state: { root: "{storage:@korri:steam/steam}" },
     })
   })
 

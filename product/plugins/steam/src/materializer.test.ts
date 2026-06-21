@@ -87,7 +87,7 @@ const context = (root: string): ReadableResolvedLaunchContext => ({
   },
   plugin: {
     [KORRI_STEAM_PLUGIN_ID]: {
-      state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+      state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
       extra: { args: ["-silent", "-gamepadui"] },
       "launch-options": "wrapper -- %command%",
     },
@@ -159,10 +159,10 @@ describe("steamReadableLaunchIntegration", () => {
           },
         },
       })
-      expect(result.artifacts?.root).toBe(join(root, "Steam"))
+      expect(result.artifacts?.root).toBe(root)
       expect(Object.values(result.artifacts?.paths ?? {})).toEqual([
-        join(root, "Steam", "userdata", "0", "config", "localconfig.vdf"),
-        join(root, "Steam", "config", "config.vdf"),
+        join(root, "userdata", "0", "config", "localconfig.vdf"),
+        join(root, "config", "config.vdf"),
       ])
       expect(events).toEqual([
         "shutdown:steam",
@@ -172,7 +172,7 @@ describe("steamReadableLaunchIntegration", () => {
       ])
       expect(writes.length).toBe(2)
       const config = parseVdf(
-        files.get(join(root, "Steam", "config", "config.vdf")) ?? "",
+        files.get(join(root, "config", "config.vdf")) ?? "",
       )
       expect(config).toMatchObject({
         InstallConfigStore: {
@@ -192,9 +192,8 @@ describe("steamReadableLaunchIntegration", () => {
         },
       })
       const localconfig = parseVdf(
-        files.get(
-          join(root, "Steam", "userdata", "0", "config", "localconfig.vdf"),
-        ) ?? "",
+        files.get(join(root, "userdata", "0", "config", "localconfig.vdf")) ??
+          "",
       )
       expect(localconfig).toMatchObject({
         UserLocalConfigStore: {
@@ -311,7 +310,7 @@ describe("steamReadableLaunchIntegration", () => {
             ...context(root),
             plugin: {
               [KORRI_STEAM_PLUGIN_ID]: {
-                state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+                state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
                 "compat-tool": "global-tool",
                 "compat-tool-overrides": { "1029210": "game-tool" },
                 "first-launch": {
@@ -328,7 +327,7 @@ describe("steamReadableLaunchIntegration", () => {
       )
 
       expect(
-        parseVdf(files.get(join(root, "Steam", "config", "config.vdf")) ?? ""),
+        parseVdf(files.get(join(root, "config", "config.vdf")) ?? ""),
       ).toMatchObject({
         InstallConfigStore: {
           Software: {
@@ -348,9 +347,7 @@ describe("steamReadableLaunchIntegration", () => {
         },
       })
       expect(
-        files.has(
-          join(root, "Steam", "userdata", "0", "config", "localconfig.vdf"),
-        ),
+        files.has(join(root, "userdata", "0", "config", "localconfig.vdf")),
       ).toBe(false)
     })
   })
@@ -367,7 +364,7 @@ describe("steamReadableLaunchIntegration", () => {
               ...context(root),
               plugin: {
                 [KORRI_STEAM_PLUGIN_ID]: {
-                  state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+                  state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
                   "compat-tool-overrides": { "400": 123 },
                 },
               },
@@ -398,7 +395,7 @@ describe("steamReadableLaunchIntegration", () => {
               ...steamContext,
               plugin: {
                 [KORRI_STEAM_PLUGIN_ID]: {
-                  state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+                  state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
                   "launch-options": "wrapper -- {content.path}",
                 },
               },

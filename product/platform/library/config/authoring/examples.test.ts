@@ -214,7 +214,7 @@ describe("checked-in readable library example", () => {
       )
       expect(steamApp.plugin).toBe("@korri:steam")
       expect(steamApp.settings?.plugin).toMatchObject({
-        state: { root: "{storage:@korri:steam/steam}/Steam" },
+        state: { root: "{storage:@korri:steam/steam}" },
       })
       expect(
         (steamApp.settings?.plugin as { readonly "launch-options"?: string })?.[

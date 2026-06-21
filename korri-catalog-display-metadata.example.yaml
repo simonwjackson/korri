@@ -128,7 +128,7 @@ launchers:
     settings:
       plugin:
         state:
-          root: "{storage:@korri:steam/steam}/Steam"
+          root: "{storage:@korri:steam/steam}"
 
   "@korri:retroarch/retroarch":
     plugin: "@korri:retroarch"

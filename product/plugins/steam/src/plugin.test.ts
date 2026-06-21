@@ -25,7 +25,7 @@ describe("Steam plugin descriptor", () => {
       command: "steam",
       settings: {
         plugin: {
-          state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+          state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
           extra: { args: ["-silent", "-gamepadui"] },
         },
       },
@@ -50,7 +50,7 @@ describe("Steam plugin descriptor", () => {
       },
       settings: {
         plugin: {
-          state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+          state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
           extra: { args: ["-silent", "-gamepadui"] },
         },
       },

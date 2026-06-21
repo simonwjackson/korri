@@ -32,7 +32,7 @@ launchers:
     settings:
       plugin:
         state:
-          root: "{storage:@korri:steam/steam}/Steam"
+          root: "{storage:@korri:steam/steam}"
         extra:
           args: [-silent, -gamepadui]
         launch-options: "gamescope --fullscreen -- %command%"

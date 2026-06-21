@@ -47,7 +47,7 @@ describe("readable library schema records", () => {
     const steam = decodeAppPayload(fixture.launchers["@korri:steam/steam"])
     expect(steam.plugin).toBe("@korri:steam")
     expect(steam.settings?.plugin).toMatchObject({
-      state: { root: "{storage:@korri:steam/steam}/Steam" },
+      state: { root: "{storage:@korri:steam/steam}" },
     })
     expect(
       (steam.settings?.plugin as { readonly "launch-options"?: string })?.[

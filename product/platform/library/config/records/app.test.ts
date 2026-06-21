@@ -5,7 +5,7 @@ import { decodeAppPayload, decodeAppRecord } from "./app"
 const steamProvider = "@korri:steam"
 
 const steamPluginPolicy = {
-  state: { root: "{storage:@korri:steam/steam}/Steam" },
+  state: { root: "{storage:@korri:steam/steam}" },
   extra: { args: ["-silent", "-gamepadui"] },
   "launch-options": "wrapper -- %command%",
 }

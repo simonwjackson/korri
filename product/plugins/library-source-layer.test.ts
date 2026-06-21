@@ -566,7 +566,7 @@ async function seedSteamLaunchConfig(
 ): Promise<void> {
   await mkdir(configRoot, { recursive: true })
   await mkdir(
-    join(steamRoot, "Steam", "compatibilitytools.d", DEFAULT_STEAM_COMPAT_TOOL),
+    join(steamRoot, "compatibilitytools.d", DEFAULT_STEAM_COMPAT_TOOL),
     { recursive: true },
   )
   const launcherBlock = options.includeApp
@@ -578,7 +578,7 @@ async function seedSteamLaunchConfig(
         "    settings:",
         "      plugin:",
         `        "${KORRI_STEAM_PLUGIN_ID}":`,
-        `          state: { root: "{storage:${KORRI_STEAM_STORAGE_ID}}/Steam" }`,
+        `          state: { root: "{storage:${KORRI_STEAM_STORAGE_ID}}" }`,
       ]
     : []
   await Bun.write(

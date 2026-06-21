@@ -40,7 +40,7 @@ export interface SteamPluginPolicy {
 }
 
 export const defaultSteamPluginPolicy = {
-  state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+  state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
   extra: { args: ["-silent", "-gamepadui"] },
   "compat-tool": DEFAULT_STEAM_COMPAT_TOOL,
   "first-launch": {
