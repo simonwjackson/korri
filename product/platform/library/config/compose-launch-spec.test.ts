@@ -46,11 +46,12 @@ const readableContext = (
   itemId: "yfs-level",
   releaseId: "level",
   system: "yfs",
-  target: "/storage/levels/level.json",
+  target: "levels/level.json",
+  content: { path: "/storage/levels/level.json" },
   app: {
     id: "@korri:yoshis-fabrication-station/level",
     command: "yfs-launch",
-    args: ["{target}"],
+    args: ["{content.path}"],
   } as AppRecord,
   ...input,
 })
@@ -188,7 +189,7 @@ describe("composeReadableLaunchSpec — args / env", () => {
       app: {
         id: "@korri:yoshis-fabrication-station/level",
         command: "yfs-launch",
-        args: ["{target}"],
+        args: ["{content.path}"],
         env: { KORRI_YFS_SETTINGS: "{settings.plugin}" },
       } as AppRecord,
       settings: { plugin: { metrics: true, bgmVolume: 7 } },

@@ -47,7 +47,7 @@ describe("Yoshi's Fabrication Station plugin", () => {
     expect(launchers.level).toMatchObject({
       id: KORRI_YFS_LAUNCHER_ID,
       command: "yfs-launch",
-      args: ["{target}"],
+      args: ["{content.path}"],
       env: { KORRI_YFS_SETTINGS: "{settings.plugin}" },
     })
     expect(launchers.level).not.toHaveProperty("plugin")

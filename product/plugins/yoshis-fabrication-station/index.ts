@@ -28,7 +28,7 @@ export const yoshisFabricationStationPlugin = plugin({
         [KORRI_YFS_LAUNCHER_LOCAL_ID]: {
           id: KORRI_YFS_LAUNCHER_ID,
           command: "yfs-launch",
-          args: ["{target}"],
+          args: ["{content.path}"],
           settings: { plugin: {} },
           env: { KORRI_YFS_SETTINGS: "{settings.plugin}" },
           policy: {
