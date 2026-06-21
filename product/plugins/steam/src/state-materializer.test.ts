@@ -80,6 +80,8 @@ describe("materializeSteamDesiredState", () => {
 
     expect(source).toContain("/run/wrappers/bin/sudo")
     expect(source).toContain("korri-steam-service-control")
+    expect(source).toContain('commandExitCode("timeout"')
+    expect(source).toContain("systemctl status probe exited")
     expect(source).toContain(
       "timed out waiting for Steam shutdown before VDF write",
     )
@@ -395,6 +397,48 @@ describe("materializeSteamDesiredState", () => {
     })
     expect(events).toEqual([])
     expect(writes).toEqual([])
+  })
+
+  it("re-reads VDF state after shutdown before writing", async () => {
+    const stateRoot = "/steam-home"
+    const localconfig = steamLocalConfigPath(stateRoot)
+    const { fs, files, writes } = memoryFs()
+    const events: string[] = []
+    const postShutdownConfig = renderVdf({
+      UserLocalConfigStore: {
+        Software: {
+          Valve: {
+            Steam: {
+              OtherSteamKey: "preserve-me",
+            },
+          },
+        },
+      },
+    })
+
+    await Effect.runPromise(
+      materializeSteamDesiredState({
+        desired: {
+          stateRoot,
+          command: "steam",
+          target: "steam://rungameid/2379780",
+          launchOptions: "wrapper -- %command%",
+        },
+        fs,
+        lifecycle: {
+          ...lifecycle(events),
+          waitForShutdown: async () => {
+            events.push("wait-shutdown")
+            files.set(localconfig, postShutdownConfig)
+          },
+        },
+        lock: inlineLock,
+      }),
+    )
+
+    expect(writes).toEqual([localconfig])
+    expect(files.get(localconfig)).toContain("preserve-me")
+    expect(files.get(localconfig)).toContain("LaunchOptions")
   })
 
   it("fails loudly before writing when the configured compat tool is absent", async () => {

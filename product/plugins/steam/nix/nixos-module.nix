@@ -622,7 +622,7 @@ let
     ${steamUinputPrep}/bin/korri-steam-ensure-uinput || true
     ${pkgs.coreutils}/bin/mkdir -p "$STEAM_HOME/logs" "$STEAM_HOME/package"
     service_was_active=0
-    if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
+    if ${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
       service_was_active=1
     fi
     if [ -f "$console_log" ]; then
@@ -633,7 +633,8 @@ let
     fi
 
     steam_service_state() {
-      ${pkgs.systemd}/bin/systemctl is-active "$service_name" 2>/dev/null || true
+      state="$(${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active "$service_name" 2>/dev/null || true)"
+      [ -n "$state" ] && printf '%s\n' "$state" || printf 'unknown\n'
     }
 
     localconfig_files() {
@@ -660,7 +661,7 @@ let
           return 0
         fi
         service_state="$(steam_service_state)"
-        if [ "$service_state" = "failed" ]; then
+        if [ "$service_state" = "failed" ] || [ "$service_state" = "unknown" ]; then
           return 1
         fi
         ${pkgs.coreutils}/bin/sleep 1

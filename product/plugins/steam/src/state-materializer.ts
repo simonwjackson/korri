@@ -206,31 +206,63 @@ async function runBestEffort(
   await runCommand(command, args).catch(() => {})
 }
 
-async function commandSucceeds(
-  command: string,
-  args: readonly string[],
-): Promise<boolean> {
-  try {
-    await runCommand(command, args)
-    return true
-  } catch {
-    return false
-  }
+async function managedSteamServiceActive(): Promise<boolean> {
+  const code = await commandExitCode("timeout", [
+    "5",
+    "systemctl",
+    "is-active",
+    "--quiet",
+    "korri-steam-gamescope.service",
+  ]).catch(error => {
+    if (isNodeErrorCode(error, "ENOENT")) return 3
+    throw error
+  })
+  if (code === 0) return true
+  if (code === 3 || code === 4) return false
+  throw new Error(`systemctl status probe exited ${code}`)
+}
+
+async function stateRootProcessRunning(stateRoot: string): Promise<boolean> {
+  const code = await commandExitCode("timeout", [
+    "5",
+    "pgrep",
+    "-f",
+    stateRoot,
+  ]).catch(error => {
+    if (isNodeErrorCode(error, "ENOENT")) return 1
+    throw error
+  })
+  if (code === 0) return true
+  if (code === 1) return false
+  throw new Error(`pgrep status probe exited ${code}`)
 }
 
 function runCommand(command: string, args: readonly string[]): Promise<void> {
+  return commandExitCode(command, args).then(code => {
+    if (code !== 0) throw new Error(`${command} exited ${code}`)
+  })
+}
+
+function commandExitCode(
+  command: string,
+  args: readonly string[],
+): Promise<number> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, [...args], { stdio: "ignore" })
     child.on("error", reject)
-    child.on("exit", code => {
-      if (code === 0) resolve()
-      else reject(new Error(`${command} exited ${code ?? "without status"}`))
-    })
+    child.on("exit", code => resolve(code ?? 1))
   })
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isManagedKorriStateRoot(stateRoot: string): boolean {
+  return (
+    stateRoot === "/var/lib/korri/steam" ||
+    stateRoot.startsWith("/var/lib/korri/steam/")
+  )
 }
 
 export const noopSteamLifecycle: SteamLifecycle = {
@@ -251,20 +283,17 @@ export const nodeSteamLifecycle: SteamLifecycle = {
       "/run/current-system/sw/bin/korri-steam-service-control",
       ["stop"],
     )
-    await runBestEffort("pkill", ["-TERM", "-f", input.stateRoot])
+    if (isManagedKorriStateRoot(input.stateRoot)) {
+      await runBestEffort("pkill", ["-TERM", "-f", input.stateRoot])
+    }
   },
   waitForShutdown: async input => {
     const deadline = Date.now() + 15_000
     while (Date.now() <= deadline) {
-      const serviceActive = await commandSucceeds("systemctl", [
-        "is-active",
-        "--quiet",
-        "korri-steam-gamescope.service",
-      ])
-      const stateProcessesRunning = await commandSucceeds("pgrep", [
-        "-f",
-        input.stateRoot,
-      ])
+      const serviceActive = await managedSteamServiceActive()
+      const stateProcessesRunning = isManagedKorriStateRoot(input.stateRoot)
+        ? await stateRootProcessRunning(input.stateRoot)
+        : false
       if (!serviceActive && !stateProcessesRunning) return
       await sleep(500)
     }
@@ -335,91 +364,102 @@ async function materializeSteamDesiredStatePromise(
       await assertCompatToolExists(fs, desired.stateRoot, tool)
     }
 
-    const writes: Array<{ path: string; content: string }> = []
+    const buildWrites = async (): Promise<
+      Array<{ path: string; content: string }>
+    > => {
+      const writes: Array<{ path: string; content: string }> = []
 
-    if (
-      desired.launchOptions !== undefined ||
-      desired.suppressInterstitials === true ||
-      desired.acceptEulas === true
-    ) {
-      for (const localconfigPath of localconfigPaths.length > 0
-        ? localconfigPaths
-        : [launchOptionsPath]) {
-        const localconfig = parseVdfOrEmpty(
-          await fs.readText(localconfigPath),
-          localconfigPath,
+      if (
+        desired.launchOptions !== undefined ||
+        desired.suppressInterstitials === true ||
+        desired.acceptEulas === true
+      ) {
+        for (const localconfigPath of localconfigPaths.length > 0
+          ? localconfigPaths
+          : [launchOptionsPath]) {
+          const localconfig = parseVdfOrEmpty(
+            await fs.readText(localconfigPath),
+            localconfigPath,
+          )
+          const before = stableVdfSnapshot(localconfig)
+          if (
+            desired.launchOptions !== undefined &&
+            localconfigPath === launchOptionsPath
+          ) {
+            setVdfPath(
+              localconfig,
+              [
+                "UserLocalConfigStore",
+                "Software",
+                "Valve",
+                "Steam",
+                "apps",
+                steamAppId,
+                "LaunchOptions",
+              ],
+              desired.launchOptions,
+            )
+          }
+          applySteamGateSeeds(localconfig, {
+            suppressInterstitials: desired.suppressInterstitials,
+            acceptEulas: desired.acceptEulas,
+            appIds: appIdsForEula,
+          })
+          if (stableVdfSnapshot(localconfig) !== before) {
+            writes.push({
+              path: localconfigPath,
+              content: renderVdf(localconfig),
+            })
+          }
+        }
+      }
+
+      if (
+        desired.defaultCompatTool !== undefined ||
+        Object.keys(desired.compatToolOverrides ?? {}).length > 0
+      ) {
+        const config = parseVdfOrEmpty(
+          await fs.readText(configPath),
+          configPath,
         )
-        const before = stableVdfSnapshot(localconfig)
-        if (
-          desired.launchOptions !== undefined &&
-          localconfigPath === launchOptionsPath
-        ) {
-          setVdfPath(
-            localconfig,
-            [
-              "UserLocalConfigStore",
-              "Software",
-              "Valve",
-              "Steam",
-              "apps",
-              steamAppId,
-              "LaunchOptions",
-            ],
-            desired.launchOptions,
+        const before = stableVdfSnapshot(config)
+        const compatToolMappingState: VdfObject = {}
+        if (desired.defaultCompatTool !== undefined) {
+          compatToolMappingState["0"] = compatToolMapping(
+            desired.defaultCompatTool,
           )
         }
-        applySteamGateSeeds(localconfig, {
-          suppressInterstitials: desired.suppressInterstitials,
-          acceptEulas: desired.acceptEulas,
-          appIds: appIdsForEula,
-        })
-        if (stableVdfSnapshot(localconfig) !== before) {
-          writes.push({
-            path: localconfigPath,
-            content: renderVdf(localconfig),
-          })
+        for (const [appId, tool] of Object.entries(
+          desired.compatToolOverrides ?? {},
+        )) {
+          compatToolMappingState[appId] = compatToolMapping(tool)
+        }
+        setVdfPath(
+          config,
+          [
+            "InstallConfigStore",
+            "Software",
+            "Valve",
+            "Steam",
+            "CompatToolMapping",
+          ],
+          compatToolMappingState,
+        )
+        if (stableVdfSnapshot(config) !== before) {
+          writes.push({ path: configPath, content: renderVdf(config) })
         }
       }
+
+      return writes
     }
 
-    if (
-      desired.defaultCompatTool !== undefined ||
-      Object.keys(desired.compatToolOverrides ?? {}).length > 0
-    ) {
-      const config = parseVdfOrEmpty(await fs.readText(configPath), configPath)
-      const before = stableVdfSnapshot(config)
-      const compatToolMappingState: VdfObject = {}
-      if (desired.defaultCompatTool !== undefined) {
-        compatToolMappingState["0"] = compatToolMapping(
-          desired.defaultCompatTool,
-        )
-      }
-      for (const [appId, tool] of Object.entries(
-        desired.compatToolOverrides ?? {},
-      )) {
-        compatToolMappingState[appId] = compatToolMapping(tool)
-      }
-      setVdfPath(
-        config,
-        [
-          "InstallConfigStore",
-          "Software",
-          "Valve",
-          "Steam",
-          "CompatToolMapping",
-        ],
-        compatToolMappingState,
-      )
-      if (stableVdfSnapshot(config) !== before) {
-        writes.push({ path: configPath, content: renderVdf(config) })
-      }
-    }
-
+    let writes = await buildWrites()
     if (writes.length === 0) return
 
     await lifecycle.shutdown({ command, stateRoot: desired.stateRoot })
     await lifecycle.waitForShutdown({ stateRoot: desired.stateRoot })
 
+    writes = await buildWrites()
     for (const write of writes) {
       await fs.mkdirp(dirname(write.path))
       await fs.writeTextAtomic(write.path, write.content)

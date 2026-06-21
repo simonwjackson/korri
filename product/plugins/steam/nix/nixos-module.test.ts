@@ -71,6 +71,9 @@ describe("Steam plugin Nix module", () => {
   it("bounds service-control waits before relying on the readiness loop", () => {
     expect(moduleSource).toContain("systemctl --no-block start")
     expect(moduleSource).toContain("KORRI_STEAM_APP_SYSTEMCTL_TIMEOUT")
+    expect(moduleSource).toContain(
+      "timeout 5 " + "$" + "{pkgs.systemd}/bin/systemctl is-active",
+    )
     expect(moduleSource).toContain("steam_service_state")
     expect(moduleSource).not.toContain(
       "gamescoped Steam service is not active after start",
