@@ -1059,7 +1059,7 @@ while [ "$(date +%s)" -le "$deadline" ]; do
     needle != "" && needle != exe && index($0, needle) {print}
   ' | sed -n '1,260p'
   echo "###JOURNAL"
-  journalctl --no-pager -u korri-steam.service --since "@$start_epoch" 2>/dev/null | grep -E "$app_id|$expected_exe|$process_needle|FEX|pressure-vessel|Exec format|No such file|Game Recording|Adding process|Removing process|ERROR|err:|wine|vulkan|freedreno|Mesa|Turnip|Assertion|Unhandled|Upgrading prefix|Successfully registered DLL|ProcessingInstallScript" | tail -160 || true
+  journalctl --no-pager -u korri-steam-gamescope.service -u korri-steam.service --since "@$start_epoch" 2>/dev/null | grep -E "$app_id|$expected_exe|$process_needle|FEX|pressure-vessel|Exec format|No such file|Game Recording|Adding process|Removing process|ERROR|err:|wine|vulkan|freedreno|Mesa|Turnip|Assertion|Unhandled|Upgrading prefix|Successfully registered DLL|ProcessingInstallScript|gamescoped Steam|korri-steam-app" | tail -180 || true
   echo "###CONSOLE"
   tail -220 "$steam_home/logs/console_log.txt" 2>/dev/null | grep -E "GameAction \\[AppID $app_id|Game process|$expected_exe|$process_needle|CreatingProcess|Completed|failed|error|FEX|pressure|Proton|continues|waiting|ProcessingInstallScript" | tail -120 || true
   live=0

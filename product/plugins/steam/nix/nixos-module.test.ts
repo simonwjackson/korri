@@ -62,6 +62,25 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
+  it("accepts existing readiness evidence for prewarmed gamescoped Steam", () => {
+    expect(moduleSource).toContain("service_was_active=0")
+    expect(moduleSource).toContain("service_was_active=1")
+    expect(moduleSource).toContain(
+      "A deliberately prewarmed gamescoped Steam session emits its",
+    )
+    expect(moduleSource).toContain('ready_log="$(${pkgs.coreutils}/bin/cat')
+  })
+
+  it("lets the gamescoped Big Picture service run first-launch bootstrap repair", () => {
+    expect(moduleSource).toContain(
+      "Apply\n      # this to explicit gamescoped Big Picture invocations too",
+    )
+    expect(moduleSource).toContain("set -- \"''${filtered[@]}\"")
+    expect(moduleSource).toContain(
+      'ExecStart = "${pkgs.gamescope}/bin/gamescope',
+    )
+  })
+
   it("forwards AppIDs into the warm Steam client without a raw applaunch fallback", () => {
     expect(moduleSource).toContain('"steam://rungameid/$appid"')
     expect(moduleSource).not.toContain('-applaunch "$appid"')

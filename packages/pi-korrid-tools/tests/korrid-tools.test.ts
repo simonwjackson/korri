@@ -8,6 +8,15 @@ import {
 } from "../extensions/korrid-tools"
 
 describe("korrid-tools Pi package", () => {
+  it("observes both gamescoped and legacy Steam service journals", async () => {
+    const source = await Bun.file(
+      "packages/pi-korrid-tools/src/korrid-tools.ts",
+    ).text()
+
+    expect(source).toContain("korri-steam-gamescope.service")
+    expect(source).toContain("korri-steam.service")
+  })
+
   it("registers read-only and mutating tools with confirmation fields", () => {
     const tools: Array<{
       readonly name: string

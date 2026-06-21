@@ -357,19 +357,22 @@ let
 
     if [ "$#" -eq 0 ]; then
       set -- ${lib.escapeShellArgs cfg.defaultArgs}
-      if ! ${pkgs.findutils}/bin/find "$STEAM_HOME/package" -maxdepth 1 -name 'steam_client_*_linuxarm64.installed' -print -quit 2>/dev/null | ${pkgs.gnugrep}/bin/grep -q .; then
-        # The seed fetches the minimal ARM64 client. A first real Steam launch
-        # must be allowed to run Valve's bootstrap/update path once, otherwise
-        # steamui can load against an incomplete libvideo/libavutil set.
-        filtered=()
-        for arg in "$@"; do
-          case "$arg" in
-            -noverifyfiles|-nobootstrapupdate|-skipinitialbootstrap|-norepairfiles) ;;
-            *) filtered+=("$arg") ;;
-          esac
-        done
-        set -- "''${filtered[@]}"
-      fi
+    fi
+
+    if ! ${pkgs.findutils}/bin/find "$STEAM_HOME/package" -maxdepth 1 -name 'steam_client_*_linuxarm64.installed' -print -quit 2>/dev/null | ${pkgs.gnugrep}/bin/grep -q .; then
+      # The seed fetches the minimal ARM64 client. A first real Steam launch
+      # must be allowed to run Valve's bootstrap/update path once, otherwise
+      # steamui can load against an incomplete libvideo/libavutil set. Apply
+      # this to explicit gamescoped Big Picture invocations too; AppID URL
+      # forwards do not contain these client bootstrap suppressors.
+      filtered=()
+      for arg in "$@"; do
+        case "$arg" in
+          -noverifyfiles|-nobootstrapupdate|-skipinitialbootstrap|-norepairfiles) ;;
+          *) filtered+=("$arg") ;;
+        esac
+      done
+      set -- "''${filtered[@]}"
     fi
 
     # buildFHSEnv/bwrap tries to enter the caller's cwd. A root shell or other
@@ -606,6 +609,10 @@ let
 
     ${steamUinputPrep}/bin/korri-steam-ensure-uinput || true
     ${pkgs.coreutils}/bin/mkdir -p "$STEAM_HOME/logs" "$STEAM_HOME/package"
+    service_was_active=0
+    if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
+      service_was_active=1
+    fi
     if [ -f "$console_log" ]; then
       mark="$(${pkgs.coreutils}/bin/wc -c < "$console_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
     else
@@ -626,7 +633,14 @@ let
       while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$ready_deadline" ]; do
         ready_log=""
         if [ -f "$console_log" ]; then
-          ready_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
+          if [ "$service_was_active" -eq 1 ]; then
+            # A deliberately prewarmed gamescoped Steam session emits its
+            # readiness lines before this AppID wrapper starts; accept the
+            # existing log evidence as long as the gamescope socket is present.
+            ready_log="$(${pkgs.coreutils}/bin/cat "$console_log" 2>/dev/null || true)"
+          else
+            ready_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
+          fi
         fi
         if [ -S "$gamescope_socket" ] \
           && printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Console Log Start|Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
