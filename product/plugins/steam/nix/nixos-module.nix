@@ -410,7 +410,7 @@ let
       *) usage ;;
     esac
 
-    exec ${pkgs.systemd}/bin/systemctl "$1" korri-steam.service
+    exec ${pkgs.systemd}/bin/systemctl "$1" korri-steam-gamescope.service
   '';
 
   steamWarmup = pkgs.writeShellScriptBin "korri-steam-warm" ''
@@ -474,7 +474,9 @@ let
     console_log="$STEAM_HOME/logs/console_log.txt"
     launch_timeout="''${KORRI_STEAM_APP_LAUNCH_TIMEOUT:-180}"
     service_ready_timeout="''${KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-90}"
-    service_name="''${KORRI_STEAM_SERVICE:-korri-steam.service}"
+    service_name="''${KORRI_STEAM_SERVICE:-korri-steam-gamescope.service}"
+    gamescope_display="''${GAMESCOPE_WAYLAND_DISPLAY:-gamescope-0}"
+    gamescope_socket="$XDG_RUNTIME_DIR/$gamescope_display"
     target_output="''${KORRI_STEAM_APP_OUTPUT:-DSI-2}"
     target_audio_sink="''${KORRI_STEAM_AUDIO_SINK:-${cfg.appAudioSinkName}}"
     keep_steam_visible="''${KORRI_STEAM_KEEP_VISIBLE:-${
@@ -568,7 +570,6 @@ let
       return 0
     }
 
-    direct_steam_pid=""
     cleanup_done=0
 
     control_steam_service() {
@@ -577,7 +578,7 @@ let
         ${pkgs.systemd}/bin/systemctl "$action" "$service_name"
         return $?
       fi
-      if [ "$service_name" != "korri-steam.service" ]; then
+      if [ "$service_name" != "korri-steam-gamescope.service" ]; then
         echo "korri-steam-app: warning: cannot $action overridden service $service_name without root" >&2
         return 1
       fi
@@ -594,14 +595,8 @@ let
       cleanup_done=1
       hide_steam_hat || true
       if [ "$stop_service_on_exit" != "0" ]; then
-        if [ -n "$direct_steam_pid" ]; then
-          ${pkgs.procps}/bin/kill "$direct_steam_pid" 2>/dev/null || true
-          ${pkgs.coreutils}/bin/sleep 1
-          ${pkgs.procps}/bin/kill -9 "$direct_steam_pid" 2>/dev/null || true
-        else
-          control_steam_service stop >/dev/null 2>&1 || \
-            echo "korri-steam-app: warning: could not stop $service_name after launch" >&2
-        fi
+        control_steam_service stop >/dev/null 2>&1 || \
+          echo "korri-steam-app: warning: could not stop $service_name after launch" >&2
       fi
     }
 
@@ -619,10 +614,6 @@ let
     fi
 
     steam_process_alive() {
-      if [ -n "$direct_steam_pid" ]; then
-        ${pkgs.procps}/bin/kill -0 "$direct_steam_pid" 2>/dev/null
-        return $?
-      fi
       ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null
     }
 
@@ -630,14 +621,15 @@ let
       ${pkgs.findutils}/bin/find "$STEAM_HOME/userdata" -mindepth 3 -maxdepth 3 -path '*/config/localconfig.vdf' -type f -print 2>/dev/null || true
     }
 
-    wait_for_steam_ready() {
+    wait_for_gamescoped_steam_ready() {
       ready_deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + service_ready_timeout ))
       while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$ready_deadline" ]; do
         ready_log=""
         if [ -f "$console_log" ]; then
           ready_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
         fi
-        if printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Console Log Start|Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
+        if [ -S "$gamescope_socket" ] \
+          && printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Console Log Start|Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
           return 0
         fi
         if ! steam_process_alive; then
@@ -648,33 +640,21 @@ let
       return 1
     }
 
-    started_steam=0
-    if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
-      :
-    else
-      if control_steam_service start; then
-        started_steam=1
-      else
-        echo "korri-steam-app: warning: could not start $service_name; starting Steam directly without sudo" >&2
-        ${steamLauncher}/bin/korri-steam-guest \
-          -steamdeck -silent -nochatui -nofriendsui -forcedesktopscaling 1.5 \
-          -noverifyfiles -nobootstrapupdate -skipinitialbootstrap -norepairfiles \
-          >>"$STEAM_HOME/logs/korri-steam-app-guest.log" 2>&1 &
-        direct_steam_pid="$!"
-        started_steam=1
+    if ! ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
+      if ! control_steam_service start; then
+        echo "korri-steam-app: could not start gamescoped Steam service $service_name" >&2
+        exit 125
       fi
     fi
 
     if ! steam_process_alive; then
-      echo "korri-steam-app: Steam is not active after start" >&2
+      echo "korri-steam-app: gamescoped Steam service is not active after start" >&2
       exit 125
     fi
 
-    if [ "$started_steam" -eq 1 ]; then
-      if ! wait_for_steam_ready; then
-        echo "korri-steam-app: timed out waiting for Steam readiness before AppID launch" >&2
-        exit 125
-      fi
+    if ! wait_for_gamescoped_steam_ready; then
+      echo "korri-steam-app: timed out waiting for gamescoped Steam readiness before AppID launch" >&2
+      exit 125
     fi
 
     # Keep Steam hidden by default. First-launch gates are pre-seeded by the
@@ -682,9 +662,7 @@ let
     # console-log prompts.
     focus_korri_output
     hide_steam_hat
-    ${steamLauncher}/bin/korri-steam-guest \
-      -steamdeck -silent -nochatui -nofriendsui -forcedesktopscaling 1.5 -applaunch "$appid" \
-      >/dev/null
+    ${steamLauncher}/bin/korri-steam-guest "steam://rungameid/$appid" >/dev/null
     hide_steam_hat
 
     log_has() {
@@ -982,6 +960,46 @@ in
           "${cfg.home}/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb"
         ];
         Unit = "korri-steam-runtime-prep.service";
+      };
+    };
+
+    systemd.services.korri-steam-gamescope = {
+      description = "Launch Korri guest-native Steam Big Picture inside gamescope";
+      after = [
+        "korri-steam-uinput.service"
+        "korri-steam-seed.service"
+        "korri-steam-prepare-fex-rootfs.service"
+        "korri-steam-runtime-prep.service"
+      ];
+      wants = [
+        "korri-steam-uinput.service"
+        "korri-steam-seed.service"
+        "korri-steam-prepare-fex-rootfs.service"
+        "korri-steam-runtime-prep.service"
+      ];
+      conflicts = [ "korri-steam.service" ];
+      environment = {
+        HOME = runtime.home;
+        USER = runtime.user;
+        XDG_RUNTIME_DIR = "/run/user/${toString runtime.uid}";
+        WAYLAND_DISPLAY = "wayland-1";
+        DISPLAY = ":0";
+        DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/${toString runtime.uid}/bus";
+        GAMESCOPE_WAYLAND_DISPLAY = "gamescope-0";
+        STEAM_HOME = cfg.home;
+        STEAM_GAMES_ROOT = cfg.gamesRoot;
+        STEAM_DOT = cfg.dotDir;
+        FEX_ROOTFS = cfg.fexRootfs;
+      };
+      serviceConfig = {
+        Type = "simple";
+        User = runtime.user;
+        Group = runtime.group;
+        WorkingDirectory = cfg.home;
+        LimitNOFILE = 524288;
+        ExecStart = "${pkgs.gamescope}/bin/gamescope -e -f -W 1920 -H 1080 -O DSI-2 -- ${steamLauncher}/bin/korri-steam-guest -gamepadui -steamos3 -steampal -steamdeck -silent -nochatui -nofriendsui -forcedesktopscaling 1.5 -noverifyfiles -nobootstrapupdate -skipinitialbootstrap -norepairfiles";
+        Restart = "on-failure";
+        RestartSec = "2s";
       };
     };
 

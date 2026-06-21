@@ -135,6 +135,7 @@ let
     needle: cfg: builtins.any (a: lib.hasInfix needle a.message) (failedAssertions cfg);
 
   steamUnit = enabled.systemd.services.korri-steam or { };
+  gamescopedSteamUnit = enabled.systemd.services.korri-steam-gamescope or { };
   steamWarmUnit = enabledKeepWarm.systemd.user.services.korri-steam-warm or { };
   uinputUnit = enabled.systemd.services.korri-steam-uinput or { };
   seedUnit = enabled.systemd.services.korri-steam-seed or { };
@@ -169,6 +170,7 @@ let
     ))
     (check "enable = false contributes no Steam package or services" (
       !(disabled.systemd.services ? korri-steam)
+      && !(disabled.systemd.services ? korri-steam-gamescope)
       && !(disabled.systemd.services ? korri-steam-uinput)
       && !(builtins.any (name: lib.hasInfix "steam" name) (systemPackageNames disabled))
     ))
@@ -228,7 +230,24 @@ let
       && (seedUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
       && lib.hasInfix "steam-arm64-seed --apply" (serviceExec seedUnit)
     ))
-    (check "launch service carries Korri identity and fd hardening" (
+    (check "gamescoped launch service carries Korri identity, gamescope, and Steam Big Picture flags" (
+      enabled.systemd.services ? korri-steam-gamescope
+      && (gamescopedSteamUnit.serviceConfig.User or null) == "korri"
+      && (gamescopedSteamUnit.serviceConfig.Group or null) == "korri"
+      && (gamescopedSteamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
+      && (gamescopedSteamUnit.serviceConfig.LimitNOFILE or null) == 524288
+      && (gamescopedSteamUnit.environment.GAMESCOPE_WAYLAND_DISPLAY or null) == "gamescope-0"
+      && lib.hasInfix "gamescope" (serviceExec gamescopedSteamUnit)
+      && lib.hasInfix "korri-steam-guest" (serviceExec gamescopedSteamUnit)
+      && lib.hasInfix "-gamepadui" (serviceExec gamescopedSteamUnit)
+      && lib.hasInfix "-steamos3" (serviceExec gamescopedSteamUnit)
+      && lib.hasInfix "-steampal" (serviceExec gamescopedSteamUnit)
+      && lib.hasInfix "-steamdeck" (serviceExec gamescopedSteamUnit)
+      && builtins.elem "korri-steam.service" (gamescopedSteamUnit.conflicts or [ ])
+      && builtins.elem "korri-steam-seed.service" (gamescopedSteamUnit.after or [ ])
+      && builtins.elem "korri-steam-runtime-prep.service" (gamescopedSteamUnit.after or [ ])
+    ))
+    (check "legacy non-gamescoped launch service remains separate from AppID launches" (
       enabled.systemd.services ? korri-steam
       && (steamUnit.serviceConfig.User or null) == "korri"
       && (steamUnit.serviceConfig.Group or null) == "korri"

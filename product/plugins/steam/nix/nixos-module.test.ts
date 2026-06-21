@@ -10,7 +10,7 @@ describe("Steam plugin Nix module", () => {
       'if /bin/systemctl is-active --quiet "$service_name"',
     )
     expect(moduleSource).toContain(
-      `if \${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name"`,
+      `\${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name"`,
     )
   })
 
@@ -37,5 +37,33 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain(
       "sway '[class=\"steam\"] fullscreen disable, floating enable, move scratchpad'",
     )
+  })
+
+  it("routes AppID launches through the gamescoped Steam Big Picture service", () => {
+    expect(moduleSource).toContain(
+      `service_name="''\${KORRI_STEAM_SERVICE:-korri-steam-gamescope.service}"`,
+    )
+    expect(moduleSource).toContain("systemd.services.korri-steam-gamescope")
+    expect(moduleSource).toContain("gamescope")
+    expect(moduleSource).toContain("-gamepadui")
+    expect(moduleSource).toContain("-steamos3")
+    expect(moduleSource).toContain("-steampal")
+    expect(moduleSource).toContain("-steamdeck")
+    expect(moduleSource).not.toContain(
+      "starting Steam directly without sudo",
+    )
+    expect(moduleSource).not.toContain("direct_steam_pid")
+  })
+
+  it("requires gamescope evidence before forwarding an AppID", () => {
+    expect(moduleSource).toContain("wait_for_gamescoped_steam_ready")
+    expect(moduleSource).toContain("GAMESCOPE_WAYLAND_DISPLAY")
+    expect(moduleSource).toContain("gamescope-0")
+    expect(moduleSource).toContain("timed out waiting for gamescoped Steam readiness before AppID launch")
+  })
+
+  it("forwards AppIDs into the warm Steam client without a raw applaunch fallback", () => {
+    expect(moduleSource).toContain('"steam://rungameid/$appid"')
+    expect(moduleSource).not.toContain('-applaunch "$appid"')
   })
 })
