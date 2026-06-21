@@ -13,12 +13,17 @@ export interface PresentationOptions {
 // restyle their canvas, so the fit is re-asserted on a steady interval.
 export function canvasPresentationShim(opts: PresentationOptions): string {
   const imageRendering = opts.scaling === "smooth" ? "auto" : "pixelated"
+  // Idempotent: safe to re-evaluate on the live document repeatedly (the driver
+  // does, since a single early inject can land before the engine commits its
+  // document). Guards are per-resource (style id, timer) so re-runs are no-ops,
+  // never an all-or-nothing flag that could strand a partial run.
   return `(() => {
-  if (window.__korriPresentation) return "already";
-  window.__korriPresentation = true;
-  const style = document.createElement("style");
-  style.textContent = "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:${opts.background}!important;width:100%!important;height:100%!important}";
-  (document.head || document.documentElement).appendChild(style);
+  if (!document.getElementById("__korriPresentationStyle")) {
+    const style = document.createElement("style");
+    style.id = "__korriPresentationStyle";
+    style.textContent = "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:${opts.background}!important;width:100%!important;height:100%!important}";
+    (document.head || document.documentElement).appendChild(style);
+  }
   const ROT = ${opts.rotate}, FIT = "${opts.fit}";
   const apply = () => {
     const c = document.querySelector("canvas");
