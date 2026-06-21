@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto"
 import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import type { YfsLauncherSettings } from "./settings"
-import { stableSettingsKey } from "./settings"
+import { stableSettingsKey, type YfsLauncherSettings } from "./settings-runtime"
 import { validateLevelFile, validateYfsWebroot } from "./validate"
 
 const DEFAULT_CACHE_ROOT = `${process.env.XDG_CACHE_HOME ?? "/tmp"}/korri/yfs-launch`

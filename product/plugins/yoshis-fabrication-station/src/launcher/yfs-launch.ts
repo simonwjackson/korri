@@ -11,11 +11,7 @@ import type { WebpageSettings } from "../../../webpage/src/core/settings"
 import { launchWebpage } from "../../../webpage/src/runtime/webpage"
 import { prepareYfsLaunchRoot } from "./cache"
 import { waitForYfsReady } from "./diagnostics"
-import {
-  decodeYfsLauncherSettings,
-  type YfsLauncherSettings,
-  yfsSettingsQuery,
-} from "./settings"
+import { type YfsLauncherSettings, yfsSettingsQuery } from "./settings-runtime"
 
 const LAUNCHER_VERSION = "1"
 
@@ -94,7 +90,7 @@ export function parseYfsLaunchCli(argv: readonly string[]): ParsedYfsLaunchCli {
     else throw new Error(`unexpected extra argument: ${arg}`)
   }
   if (!levelFile) throw new Error(usage())
-  return { levelFile, settings: decodeYfsLauncherSettings(settings) }
+  return { levelFile, settings: settings as YfsLauncherSettings }
 }
 
 export function buildYfsLaunchUrl(
