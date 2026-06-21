@@ -24,11 +24,14 @@ async function main(): Promise<void> {
   const webpageSettings = JSON.parse(
     process.env.KORRI_WEBPAGE_SETTINGS ?? "{}",
   ) as WebpageSettings
+  const privateExtraFlags = JSON.parse(
+    process.env.KORRI_WEBPAGE_EXTRA_FLAGS ?? "[]",
+  ) as string[]
   const { proc, cdp } = await launchWebpage(url, {
     settings: webpageSettings,
     saveId: process.env.KORRI_WEBPAGE_SAVE_ID,
     // prevent a white flash before the presentation shim paints the background
-    extraFlags: ["--default-background-color=ff000000"],
+    extraFlags: ["--default-background-color=ff000000", ...privateExtraFlags],
   })
   await applyCanvasConcerns(cdp, canvasSettings)
   cdp.close()
