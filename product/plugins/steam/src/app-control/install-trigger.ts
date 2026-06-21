@@ -10,7 +10,10 @@ export interface SteamInstallTriggerInput {
   readonly mode?: "install" | "update"
   readonly authorized?: boolean
   readonly helperPath?: string
-  readonly spawn?: (command: string, args: readonly string[]) => Promise<SteamInstallSpawnResult>
+  readonly spawn?: (
+    command: string,
+    args: readonly string[],
+  ) => Promise<SteamInstallSpawnResult>
 }
 
 export interface SteamInstallSpawnResult {
@@ -21,16 +24,33 @@ export interface SteamInstallSpawnResult {
 
 export async function requestSteamAppInstall(input: SteamInstallTriggerInput) {
   if (!input.authorized) {
-    return { outcome: "rejected" as const, state: "failed" as const, requestId: "unauthorized", message: "Install request was not authorized" }
+    return {
+      outcome: "rejected" as const,
+      state: "failed" as const,
+      requestId: "unauthorized",
+      message: "Install request was not authorized",
+    }
   }
   if (!/^\d+$/.test(input.appId)) {
-    return { outcome: "rejected" as const, state: "failed" as const, requestId: "invalid", message: "Steam AppID must be numeric" }
+    return {
+      outcome: "rejected" as const,
+      state: "failed" as const,
+      requestId: "invalid",
+      message: "Steam AppID must be numeric",
+    }
   }
   const current = await collectSteamInstallSnapshot({ appId: input.appId })
   if (current.state === "installed") {
-    return { outcome: "already-installed" as const, requestId: `${input.appId}:installed`, ...current }
+    return {
+      outcome: "already-installed" as const,
+      requestId: `${input.appId}:installed`,
+      ...current,
+    }
   }
-  const existing = findActiveSteamInstallRequest({ appId: input.appId, mode: input.mode })
+  const existing = findActiveSteamInstallRequest({
+    appId: input.appId,
+    mode: input.mode,
+  })
   if (existing) {
     return {
       outcome: "already-in-progress" as const,
@@ -44,7 +64,12 @@ export async function requestSteamAppInstall(input: SteamInstallTriggerInput) {
   const helper = input.helperPath ?? process.env.KORRI_STEAM_APP_INSTALL_HELPER
   const rejectedRequestId = `rejected:${input.appId}`
   if (!helper) {
-    return { outcome: "rejected" as const, state: "failed" as const, requestId: rejectedRequestId, message: "Steam install helper is not configured" }
+    return {
+      outcome: "rejected" as const,
+      state: "failed" as const,
+      requestId: rejectedRequestId,
+      message: "Steam install helper is not configured",
+    }
   }
   const spawn = input.spawn ?? spawnCommand
   const result = await spawn(helper, [input.appId])
@@ -53,10 +78,16 @@ export async function requestSteamAppInstall(input: SteamInstallTriggerInput) {
       outcome: "rejected" as const,
       state: "failed" as const,
       requestId: rejectedRequestId,
-      message: sanitizeSteamEvidenceExcerpt(result.stderr ?? result.stdout ?? "Steam install helper failed", { maxLength: 180 }),
+      message: sanitizeSteamEvidenceExcerpt(
+        result.stderr ?? result.stdout ?? "Steam install helper failed",
+        { maxLength: 180 },
+      ),
     }
   }
-  const entry = upsertSteamInstallRequest({ appId: input.appId, mode: input.mode })
+  const entry = upsertSteamInstallRequest({
+    appId: input.appId,
+    mode: input.mode,
+  })
   return {
     outcome: "accepted" as const,
     state: "requested" as const,
@@ -67,7 +98,10 @@ export async function requestSteamAppInstall(input: SteamInstallTriggerInput) {
   }
 }
 
-async function spawnCommand(command: string, args: readonly string[]): Promise<SteamInstallSpawnResult> {
+async function spawnCommand(
+  command: string,
+  args: readonly string[],
+): Promise<SteamInstallSpawnResult> {
   const proc = Bun.spawn([command, ...args], { stdout: "pipe", stderr: "pipe" })
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),

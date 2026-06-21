@@ -36,6 +36,7 @@ export function normalizeTurnipPolicy(input: TurnipPolicy): TurnipPolicy {
   return {
     ...DEFAULT_TURNIP_POLICY,
     ...input,
-    driverFiles: input.driverFiles ?? input.icdPath ?? DEFAULT_TURNIP_POLICY.icdPath,
+    driverFiles:
+      input.driverFiles ?? input.icdPath ?? DEFAULT_TURNIP_POLICY.icdPath,
   }
 }

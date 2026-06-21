@@ -27,7 +27,9 @@ describe("Steam install state projection", () => {
     const result = await collectSteamInstallSnapshot({
       appId: "1029210",
       readText: async () =>
-        manifest(`"StateFlags" "1026"\n"BytesDownloaded" "351879984"\n"BytesToDownload" "703759968"`),
+        manifest(
+          `"StateFlags" "1026"\n"BytesDownloaded" "351879984"\n"BytesToDownload" "703759968"`,
+        ),
     })
 
     expect(result.state).toBe("downloading")
@@ -39,7 +41,9 @@ describe("Steam install state projection", () => {
     const result = await collectSteamInstallSnapshot({
       appId: "1029210",
       readText: async () =>
-        manifest(`"StateFlags" "4"\n"BytesDownloaded" "703759968"\n"BytesToDownload" "703759968"\n"SizeOnDisk" "1436380182"\n"buildid" "22186364"`),
+        manifest(
+          `"StateFlags" "4"\n"BytesDownloaded" "703759968"\n"BytesToDownload" "703759968"\n"SizeOnDisk" "1436380182"\n"buildid" "22186364"`,
+        ),
     })
 
     expect(result.state).toBe("installed")

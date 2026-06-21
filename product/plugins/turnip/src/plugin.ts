@@ -1,6 +1,10 @@
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 import { plugin } from "@platform/plugin"
-import { composeTurnipLaunchSpec, decodeTurnipPolicy, type TurnipPolicy } from "./launch-companion"
+import {
+  composeTurnipLaunchSpec,
+  decodeTurnipPolicy,
+  type TurnipPolicy,
+} from "./launch-companion"
 
 export const KORRI_TURNIP_PLUGIN_ID = "@korri:turnip" as const
 export const KORRI_TURNIP_WRAPPER_PACKAGE = "korri-turnip-wrapper" as const
@@ -51,7 +55,10 @@ export const turnipPlugin = plugin({
         id: "turnip.diagnostics",
         operation: "diagnostics.collect",
         capabilities: ["graphics.vulkan"],
-        run: () => ({ provider: KORRI_TURNIP_PLUGIN_ID, status: "ok" as const }),
+        run: () => ({
+          provider: KORRI_TURNIP_PLUGIN_ID,
+          status: "ok" as const,
+        }),
       },
     ],
   },

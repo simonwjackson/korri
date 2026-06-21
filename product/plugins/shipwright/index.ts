@@ -22,5 +22,9 @@ export const shipwrightEntry = {
 export const shipwrightPlugin = createCommunitySourcePlugin({
   name: "shipwright",
   entry: shipwrightEntry,
-  parseUrl: githubRepoParser("HarbourMasters", "Shipwright", shipwrightEntry.id),
+  parseUrl: githubRepoParser(
+    "HarbourMasters",
+    "Shipwright",
+    shipwrightEntry.id,
+  ),
 })

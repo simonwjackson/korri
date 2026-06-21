@@ -14,8 +14,16 @@ export function composeTurnipLaunchSpec(
   setIfPresent(env, "VK_ICD_FILENAMES", normalized.icdPath)
   setIfPresent(env, "VK_DRIVER_FILES", normalized.driverFiles)
   setIfPresent(env, "LIBGL_DRIVERS_PATH", normalized.glDriversPath)
-  setIfPresent(env, "__EGL_VENDOR_LIBRARY_DIRS", normalized.eglVendorLibraryDirs)
-  setIfPresent(env, "LD_LIBRARY_PATH", mergePath(normalized.ldLibraryPath, spec.env?.LD_LIBRARY_PATH))
+  setIfPresent(
+    env,
+    "__EGL_VENDOR_LIBRARY_DIRS",
+    normalized.eglVendorLibraryDirs,
+  )
+  setIfPresent(
+    env,
+    "LD_LIBRARY_PATH",
+    mergePath(normalized.ldLibraryPath, spec.env?.LD_LIBRARY_PATH),
+  )
 
   return {
     ...spec,

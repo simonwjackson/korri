@@ -6,10 +6,7 @@ import {
   firstPartyPlugins,
   firstPartySessionLifecycleHooksForRegistry,
 } from "."
-import {
-  KORRI_3DSEN_APP_ID,
-  KORRI_3DSEN_PLUGIN_ID,
-} from "./3dsen"
+import { KORRI_3DSEN_APP_ID, KORRI_3DSEN_PLUGIN_ID } from "./3dsen"
 import { KORRI_BOX64_RUNTIME_PLUGIN_ID } from "./box64-runtime"
 import { KORRI_FEX_PLUGIN_ID } from "./fex-runtime"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
@@ -126,13 +123,16 @@ describe("first-party plugins", () => {
         },
       },
     })
-    expect(steam?.contributes.config.launchers?.steam).not.toHaveProperty("state")
-    expect(steam?.contributes.config.launchers?.steam).not.toHaveProperty("extra")
+    expect(steam?.contributes.config.launchers?.steam).not.toHaveProperty(
+      "state",
+    )
+    expect(steam?.contributes.config.launchers?.steam).not.toHaveProperty(
+      "extra",
+    )
     expect(steam?.contributes.config.launchers?.steam).not.toHaveProperty(
       "launch-options",
     )
   })
-
 
   it("registers Box64 and 3dSen as first-party plugin infrastructure", () => {
     const box64 = firstPartyPlugins.find(
@@ -142,7 +142,9 @@ describe("first-party plugins", () => {
       plugin => plugin.id === KORRI_3DSEN_PLUGIN_ID,
     )
 
-    expect(box64?.contributes.config.modules?.["runtime-package"]).toMatchObject({
+    expect(
+      box64?.contributes.config.modules?.["runtime-package"],
+    ).toMatchObject({
       kind: "nix-package",
       package: "korri-box64-runtime",
     })
@@ -158,7 +160,9 @@ describe("first-party plugins", () => {
     })
 
     expect(registry.enabledPluginIds.has(KORRI_3DSEN_PLUGIN_ID)).toBe(true)
-    expect(registry.enabledPluginIds.has(KORRI_BOX64_RUNTIME_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_BOX64_RUNTIME_PLUGIN_ID)).toBe(
+      true,
+    )
     expect(registry.enabledPluginIds.has(KORRI_TURNIP_PLUGIN_ID)).toBe(true)
     expect(registry.launchers[`${KORRI_3DSEN_PLUGIN_ID}/3dsen`]).toMatchObject({
       id: KORRI_3DSEN_APP_ID,
@@ -184,7 +188,6 @@ describe("first-party plugins", () => {
       ),
     ).toBe(true)
   })
-
 
   it("registers Turnip as a first-party graphics runtime plugin", () => {
     const turnip = firstPartyPlugins.find(
@@ -217,11 +220,7 @@ describe("first-party plugins", () => {
       id: KORRI_ZQUEST_CLASSIC_APP_ID,
       plugin: KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
       command: "zplayer",
-      args: [
-        "-standalone",
-        "{content.path}",
-        "{playable.id}.sav",
-      ],
+      args: ["-standalone", "{content.path}", "{playable.id}.sav"],
       cwd: "/storage/saves/zquest-classic",
       env: {
         ZQUEST_CLASSIC_SAVE_FOLDER: "/storage/saves/zquest-classic",
@@ -229,7 +228,9 @@ describe("first-party plugins", () => {
       policy: { allowedCommands: ["zplayer"] },
     })
     expect(
-      zquestClassic?.contributes.config.systems?.[KORRI_ZQUEST_CLASSIC_SYSTEM_ID],
+      zquestClassic?.contributes.config.systems?.[
+        KORRI_ZQUEST_CLASSIC_SYSTEM_ID
+      ],
     ).toMatchObject({
       id: KORRI_ZQUEST_CLASSIC_SYSTEM_ID,
       title: "Zelda Classic Quest",

@@ -80,7 +80,10 @@ export const box64RuntimePlugin = plugin({
         id: "box64-runtime.diagnostics",
         operation: "diagnostics.collect",
         capabilities: ["runtime.resolve", "launch.compose"],
-        run: () => ({ provider: KORRI_BOX64_RUNTIME_PLUGIN_ID, status: "ok" as const }),
+        run: () => ({
+          provider: KORRI_BOX64_RUNTIME_PLUGIN_ID,
+          status: "ok" as const,
+        }),
       },
     ],
   },
@@ -130,7 +133,10 @@ function decodeResolveInput(input: unknown): Box64RuntimeResolveInput {
   return {
     cwd: optionalString(input.cwd, "cwd"),
     gameLibraryPath: optionalString(input.gameLibraryPath, "gameLibraryPath"),
-    nativeLibraryPath: optionalString(input.nativeLibraryPath, "nativeLibraryPath"),
+    nativeLibraryPath: optionalString(
+      input.nativeLibraryPath,
+      "nativeLibraryPath",
+    ),
   }
 }
 

@@ -76,15 +76,9 @@ describe("community catalog plugin", () => {
       ],
       ["https://github.com/Eukaryot/sonic3air", "sonic-3-air"],
       ["https://github.com/HarbourMasters/Shipwright", "shipwright"],
-      [
-        "https://github.com/JanTrueno/SpelunkyClassicHD",
-        "spelunky-classic-hd",
-      ],
+      ["https://github.com/JanTrueno/SpelunkyClassicHD", "spelunky-classic-hd"],
       ["https://github.com/STJr/Kart-Public", "srb2kart"],
-      [
-        "https://team-bugulon.itch.io/stargrove-scramble",
-        "stargrove-scramble",
-      ],
+      ["https://team-bugulon.itch.io/stargrove-scramble", "stargrove-scramble"],
       ["https://bippinbits.itch.io/dome-romantik", "dome-romantik"],
       ["https://team-bugulon.itch.io/globeba", "globeba"],
       [
@@ -92,10 +86,7 @@ describe("community catalog plugin", () => {
         "mega-man-rock-n-roll",
       ],
       ["https://github.com/HarmonyHoney/tiny_crate", "tiny-crate"],
-      [
-        "https://github.com/overbound/SonicTimeTwisted",
-        "sonic-time-twisted",
-      ],
+      ["https://github.com/overbound/SonicTimeTwisted", "sonic-time-twisted"],
     ] as const
 
     for (const [url, id] of urls) {
@@ -155,7 +146,9 @@ describe("community catalog plugin", () => {
         runPluginHandler(resolve, {
           operation: "artifact.resolve-download",
           provider,
-          input: { candidateUrl: "https://github.com/HarbourMasters/Shipwright" },
+          input: {
+            candidateUrl: "https://github.com/HarbourMasters/Shipwright",
+          },
         }),
       ),
     ).resolves.toMatchObject({

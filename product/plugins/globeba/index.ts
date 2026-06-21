@@ -28,7 +28,8 @@ export const globebaPlugin = createCommunitySourcePlugin({
     {
       capability: "artifact.resolve-download",
       ref: { provider: KORRI_ITCHIO_PLUGIN_ID, id: "self" },
-      reason: "itch.io download resolution remains owned by the shared itch.io plugin.",
+      reason:
+        "itch.io download resolution remains owned by the shared itch.io plugin.",
     },
   ],
 })

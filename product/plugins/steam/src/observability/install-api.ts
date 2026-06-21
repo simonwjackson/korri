@@ -9,7 +9,9 @@ export interface SteamInstallStatusInput {
   readonly requestId?: string
 }
 
-export async function collectSteamInstallStatus(input: SteamInstallStatusInput) {
+export async function collectSteamInstallStatus(
+  input: SteamInstallStatusInput,
+) {
   const request = input.requestId
     ? findSteamInstallRequestById(input.requestId)
     : findActiveSteamInstallRequest({ appId: input.appId })

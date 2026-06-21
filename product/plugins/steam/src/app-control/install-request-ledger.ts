@@ -32,7 +32,10 @@ export function upsertSteamInstallRequest(input: {
   const mode = input.mode ?? "install"
   const key = `${mode}:${input.appId}`
   const existing = inMemoryLedger.get(key)
-  if (existing && Date.now() - Date.parse(existing.requestedAt) < 10 * 60 * 1000) {
+  if (
+    existing &&
+    Date.now() - Date.parse(existing.requestedAt) < 10 * 60 * 1000
+  ) {
     return existing
   }
   const entry: SteamInstallRequestEntry = {

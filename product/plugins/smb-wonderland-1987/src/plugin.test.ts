@@ -16,9 +16,7 @@ describe("Super Mario Bros. Wonderland 1987 plugin descriptor", () => {
     expect(KORRI_SMB_WONDERLAND_1987_PLUGIN_ID).toBe(
       "@korri:smb-wonderland-1987",
     )
-    expect(smbWonderland1987Plugin.id).toBe(
-      KORRI_SMB_WONDERLAND_1987_PLUGIN_ID,
-    )
+    expect(smbWonderland1987Plugin.id).toBe(KORRI_SMB_WONDERLAND_1987_PLUGIN_ID)
   })
 
   it("contributes catalog and Nix executable config", () => {

@@ -10,10 +10,7 @@ import type { ReadableLaunchIntegration } from "@platform/library/proseql/librar
 import type { LaunchPrepareMap } from "@platform/plugin/launch-prepare"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import { Effect } from "effect"
-import {
-  KORRI_3DSEN_APP_ID,
-  KORRI_3DSEN_PLUGIN_ID,
-} from "./plugin"
+import { KORRI_3DSEN_APP_ID, KORRI_3DSEN_PLUGIN_ID } from "./plugin"
 import type { ThreeDSenProfileMapping } from "./rom-registry"
 
 export interface ThreeDSenPluginPolicy {
@@ -97,7 +94,11 @@ function readThreeDSenPluginPolicy(
       reason: `3dSen app choices must configure plugin.${KORRI_3DSEN_PLUGIN_ID}`,
     })
   }
-  const profileId = requiredString(payload.profileId, context.app.id, "profileId")
+  const profileId = requiredString(
+    payload.profileId,
+    context.app.id,
+    "profileId",
+  )
   const executableRoot = requiredString(
     payload.executableRoot,
     context.app.id,

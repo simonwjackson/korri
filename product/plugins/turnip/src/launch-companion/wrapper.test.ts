@@ -22,7 +22,8 @@ describe("Turnip launch companion", () => {
         VK_ICD_FILENAMES: "/mesa/share/vulkan/icd.d/freedreno_icd.aarch64.json",
         VK_DRIVER_FILES: "/mesa/share/vulkan/icd.d/freedreno_icd.aarch64.json",
         LIBGL_DRIVERS_PATH: "/run/opengl-driver/lib/dri",
-        __EGL_VENDOR_LIBRARY_DIRS: "/run/opengl-driver/share/glvnd/egl_vendor.d",
+        __EGL_VENDOR_LIBRARY_DIRS:
+          "/run/opengl-driver/share/glvnd/egl_vendor.d",
         LD_LIBRARY_PATH: "/run/opengl-driver/lib:/native/extra",
       },
     })

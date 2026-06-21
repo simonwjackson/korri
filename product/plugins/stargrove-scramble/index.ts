@@ -24,12 +24,17 @@ export const stargroveScrambleEntry = {
 export const stargroveScramblePlugin = createCommunitySourcePlugin({
   name: "stargrove-scramble",
   entry: stargroveScrambleEntry,
-  parseUrl: itchioParser("team-bugulon", "stargrove-scramble", stargroveScrambleEntry.id),
+  parseUrl: itchioParser(
+    "team-bugulon",
+    "stargrove-scramble",
+    stargroveScrambleEntry.id,
+  ),
   requires: [
     {
       capability: "artifact.resolve-download",
       ref: { provider: KORRI_ITCHIO_PLUGIN_ID, id: "self" },
-      reason: "itch.io download resolution remains owned by the shared itch.io plugin.",
+      reason:
+        "itch.io download resolution remains owned by the shared itch.io plugin.",
     },
   ],
 })

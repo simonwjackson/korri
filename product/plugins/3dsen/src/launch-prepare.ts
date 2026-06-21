@@ -2,7 +2,10 @@ import { constants } from "node:fs"
 import { access } from "node:fs/promises"
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 import type { LaunchPrepareMode } from "@platform/plugin/launch-prepare"
-import { writeThreeDSenRomRegistry, type ThreeDSenProfileMapping } from "./rom-registry"
+import {
+  writeThreeDSenRomRegistry,
+  type ThreeDSenProfileMapping,
+} from "./rom-registry"
 
 export interface ThreeDSenLaunchPreparePolicy {
   readonly registryPath: string
@@ -53,7 +56,9 @@ export function decodeThreeDSenLaunchPreparePolicy(
     "selectedProfileId",
   )
   if (!Array.isArray(input.profiles) || input.profiles.length === 0) {
-    throw new Error("3dSen launch.prepare policy.profiles must be a non-empty array")
+    throw new Error(
+      "3dSen launch.prepare policy.profiles must be a non-empty array",
+    )
   }
   return {
     registryPath,

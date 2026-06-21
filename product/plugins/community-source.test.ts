@@ -1,10 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { runPluginHandler, type KorriPlugin } from "@platform/plugin"
 import { Effect } from "effect"
-import {
-  createFirstPartyPluginRegistryFromEnv,
-  firstPartyPlugins,
-} from "."
+import { createFirstPartyPluginRegistryFromEnv, firstPartyPlugins } from "."
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "./acquisition"
 import {
   KORRI_AM2RLAUNCHER_PLUGIN_ID,
@@ -21,10 +18,7 @@ import {
   megaManRockNRollPlugin,
 } from "./mega-man-rock-n-roll"
 import { KORRI_SHIPWRIGHT_PLUGIN_ID, shipwrightPlugin } from "./shipwright"
-import {
-  KORRI_SONIC_3_AIR_PLUGIN_ID,
-  sonic3AirPlugin,
-} from "./sonic-3-air"
+import { KORRI_SONIC_3_AIR_PLUGIN_ID, sonic3AirPlugin } from "./sonic-3-air"
 import {
   KORRI_SONIC_TIME_TWISTED_PLUGIN_ID,
   sonicTimeTwistedPlugin,
@@ -292,7 +286,10 @@ describe("requested community sources as first-party plugins", () => {
 })
 
 function handler(plugin: KorriPlugin, operation: string) {
-  const candidate = plugin.handlers.find(handler => handler.operation === operation)
-  if (!candidate) throw new Error(`missing ${operation} handler for ${plugin.id}`)
+  const candidate = plugin.handlers.find(
+    handler => handler.operation === operation,
+  )
+  if (!candidate)
+    throw new Error(`missing ${operation} handler for ${plugin.id}`)
   return candidate
 }

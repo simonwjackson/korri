@@ -74,7 +74,11 @@ export function createCommunitySourcePlugin({
                 )
               : undefined
             if (query.length === 0) return []
-            if (platforms && platforms.length > 0 && !platforms.includes(entry.platform)) {
+            if (
+              platforms &&
+              platforms.length > 0 &&
+              !platforms.includes(entry.platform)
+            ) {
               return []
             }
             return entry.searchText.toLowerCase().includes(query)
@@ -179,7 +183,9 @@ export function githubRepoParser(owner: string, repo: string, id: string) {
   return (url: URL): string | null => {
     const host = normalizedHost(url)
     if (host !== "github.com") return null
-    const [actualOwner, actualRepo] = normalizedPath(url).split("/").filter(Boolean)
+    const [actualOwner, actualRepo] = normalizedPath(url)
+      .split("/")
+      .filter(Boolean)
     return actualOwner?.toLowerCase() === owner.toLowerCase() &&
       actualRepo?.toLowerCase() === repo.toLowerCase()
       ? id
@@ -255,7 +261,10 @@ function detailsFor(
   }
 }
 
-function playableFor(entry: CommunitySourcePluginEntry, providerId: ProviderId) {
+function playableFor(
+  entry: CommunitySourcePluginEntry,
+  providerId: ProviderId,
+) {
   return {
     id: entry.id,
     title: entry.title,
@@ -266,7 +275,10 @@ function playableFor(entry: CommunitySourcePluginEntry, providerId: ProviderId) 
         id: entry.platform,
         providerId,
         system: entry.platform,
-        target: { kind: "url" as const, value: entry.download?.url ?? entry.url },
+        target: {
+          kind: "url" as const,
+          value: entry.download?.url ?? entry.url,
+        },
       },
     ],
   }

@@ -60,8 +60,18 @@ describe("Steam install trigger", () => {
       spawnCount += 1
       return { exitCode: 0 }
     }
-    const first = await requestSteamAppInstall({ appId: "1029210", authorized: true, helperPath: "/helper", spawn })
-    const second = await requestSteamAppInstall({ appId: "1029210", authorized: true, helperPath: "/helper", spawn })
+    const first = await requestSteamAppInstall({
+      appId: "1029210",
+      authorized: true,
+      helperPath: "/helper",
+      spawn,
+    })
+    const second = await requestSteamAppInstall({
+      appId: "1029210",
+      authorized: true,
+      helperPath: "/helper",
+      spawn,
+    })
 
     expect(second.requestId).toBe(first.requestId)
     expect(second.outcome).toBe("already-in-progress")

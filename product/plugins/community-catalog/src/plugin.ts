@@ -195,7 +195,9 @@ const entriesById = new Map(
 )
 const entriesByAlias = new Map(
   COMMUNITY_CATALOG_ENTRIES.flatMap(entry =>
-    [entry.id, ...entry.aliases].map(alias => [alias.toLowerCase(), entry] as const),
+    [entry.id, ...entry.aliases].map(
+      alias => [alias.toLowerCase(), entry] as const,
+    ),
   ),
 )
 
@@ -225,11 +227,17 @@ export const communityCatalogPlugin = plugin({
           const input = recordInput(context.input)
           const query = stringValue(input.query).trim().toLowerCase()
           const platforms = Array.isArray(input.platforms)
-            ? input.platforms.filter((value): value is string => typeof value === "string")
+            ? input.platforms.filter(
+                (value): value is string => typeof value === "string",
+              )
             : undefined
           if (query.length === 0) return []
           return COMMUNITY_CATALOG_ENTRIES.filter(entry => {
-            if (platforms && platforms.length > 0 && !platforms.includes(entry.platform)) {
+            if (
+              platforms &&
+              platforms.length > 0 &&
+              !platforms.includes(entry.platform)
+            ) {
               return false
             }
             return entry.searchText.toLowerCase().includes(query)
@@ -320,14 +328,19 @@ export const communityCatalogPlugin = plugin({
         run: context => ({
           provider: context.provider,
           entries: COMMUNITY_CATALOG_ENTRIES.length,
-          finalDownloads: COMMUNITY_CATALOG_ENTRIES.filter(entry => entry.download).length,
+          finalDownloads: COMMUNITY_CATALOG_ENTRIES.filter(
+            entry => entry.download,
+          ).length,
         }),
       },
     ],
   },
 })
 
-function claimFor(entry: CommunityCatalogEntry, providerId: ProviderId): ProviderClaim {
+function claimFor(
+  entry: CommunityCatalogEntry,
+  providerId: ProviderId,
+): ProviderClaim {
   return {
     _tag: "ProviderClaim",
     providerId,
@@ -368,7 +381,10 @@ function playableFor(entry: CommunityCatalogEntry, providerId: ProviderId) {
         id: entry.platform,
         providerId,
         system: entry.platform,
-        target: { kind: "url" as const, value: entry.download?.url ?? entry.url },
+        target: {
+          kind: "url" as const,
+          value: entry.download?.url ?? entry.url,
+        },
       },
     ],
   }
@@ -393,7 +409,8 @@ export function parseCommunityCatalogUrl(input: string): string | null {
 
   if (host === "github.com") {
     const parts = pathname.split("/").filter(Boolean)
-    const repo = parts.length >= 2 ? `${parts[0]}/${parts[1]}`.toLowerCase() : null
+    const repo =
+      parts.length >= 2 ? `${parts[0]}/${parts[1]}`.toLowerCase() : null
     switch (repo) {
       case "am2r-community-developers/am2rlauncher":
         return "am2rlauncher"

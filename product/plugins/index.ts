@@ -15,10 +15,7 @@ import { box64RuntimePlugin } from "./box64-runtime"
 import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin } from "./gamescope"
 import { createGamescopeSessionLifecycleHook } from "./gamescope/src/session/lifecycle-hook"
-import {
-  threeDSenPlugin,
-  threeDSenReadableLaunchIntegration,
-} from "./3dsen"
+import { threeDSenPlugin, threeDSenReadableLaunchIntegration } from "./3dsen"
 import { am2rLauncherPlugin } from "./am2rlauncher"
 import { communityCatalogPlugin } from "./community-catalog"
 import { domeRomantikPlugin } from "./dome-romantik"

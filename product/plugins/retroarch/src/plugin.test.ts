@@ -35,7 +35,9 @@ describe("RetroArch plugin", () => {
     expect(
       retroarchPlugin.contributes.config.providers[KORRI_RETROARCH_PLUGIN_ID],
     ).toMatchObject({ title: "RetroArch" })
-    expect(retroarchPlugin.contributes.config.launchers?.retroarch).toMatchObject({
+    expect(
+      retroarchPlugin.contributes.config.launchers?.retroarch,
+    ).toMatchObject({
       id: KORRI_RETROARCH_APP_ID,
       plugin: KORRI_RETROARCH_PLUGIN_ID,
       command: "retroarch",

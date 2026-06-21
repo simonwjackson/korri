@@ -14,15 +14,16 @@ export interface MaterializedReadableZQuestClassicLaunch {
   readonly spec: LaunchSpec
 }
 
-export const zquestClassicReadableLaunchIntegration: ReadableLaunchIntegration = {
-  providerId: KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
-  kind: KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
-  integration: "zquest-classic",
-  canResolve: context =>
-    appRecordKind(context.app) === KORRI_ZQUEST_CLASSIC_PLUGIN_ID &&
-    context.content?.path !== undefined,
-  materialize: context => materializeReadableZQuestClassicLaunch({ context }),
-}
+export const zquestClassicReadableLaunchIntegration: ReadableLaunchIntegration =
+  {
+    providerId: KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
+    kind: KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
+    integration: "zquest-classic",
+    canResolve: context =>
+      appRecordKind(context.app) === KORRI_ZQUEST_CLASSIC_PLUGIN_ID &&
+      context.content?.path !== undefined,
+    materialize: context => materializeReadableZQuestClassicLaunch({ context }),
+  }
 
 export const materializeReadableZQuestClassicLaunch = (input: {
   readonly context: ReadableResolvedLaunchContext

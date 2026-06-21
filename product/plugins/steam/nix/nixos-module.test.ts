@@ -35,7 +35,7 @@ describe("Steam plugin Nix module", () => {
       "korri-steam-app: leaving Steam visible for Steam launch debugging",
     )
     expect(moduleSource).toContain(
-      'sway \'[class="steam"] fullscreen disable, floating enable, move scratchpad\'',
+      "sway '[class=\"steam\"] fullscreen disable, floating enable, move scratchpad'",
     )
   })
 })

@@ -7,10 +7,7 @@ import {
   materializeReadable3dSenLaunch,
   threeDSenReadableLaunchIntegration,
 } from "./readable-launch-integration"
-import {
-  KORRI_3DSEN_APP_ID,
-  KORRI_3DSEN_PLUGIN_ID,
-} from "./plugin"
+import { KORRI_3DSEN_APP_ID, KORRI_3DSEN_PLUGIN_ID } from "./plugin"
 
 const context: ReadableResolvedLaunchContext = {
   playableId: "smb3d",

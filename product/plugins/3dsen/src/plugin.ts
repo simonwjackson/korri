@@ -29,12 +29,14 @@ export const threeDSenPlugin = plugin({
     {
       capability: "launch.compose",
       ref: { provider: KORRI_BOX64_RUNTIME_PLUGIN_ID, id: "launch-wrapper" },
-      reason: "3dSen's Linux build is an x86_64 Unity payload launched through Box64 on aarch64 devices.",
+      reason:
+        "3dSen's Linux build is an x86_64 Unity payload launched through Box64 on aarch64 devices.",
     },
     {
       capability: "graphics.vulkan",
       ref: { provider: KORRI_TURNIP_PLUGIN_ID, id: "adreno-vulkan" },
-      reason: "3dSen's validated Bandai path renders through native ARM64 Turnip/Freedreno Vulkan.",
+      reason:
+        "3dSen's validated Bandai path renders through native ARM64 Turnip/Freedreno Vulkan.",
     },
   ],
   contributes: {

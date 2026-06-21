@@ -20,11 +20,7 @@ export const zquestClassicPlugin = plugin({
           id: KORRI_ZQUEST_CLASSIC_APP_ID,
           plugin: KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
           command: "zplayer",
-          args: [
-            "-standalone",
-            "{content.path}",
-            "{playable.id}.sav",
-          ],
+          args: ["-standalone", "{content.path}", "{playable.id}.sav"],
           systems: [KORRI_ZQUEST_CLASSIC_SYSTEM_ID],
           cwd: "/storage/saves/zquest-classic",
           env: {

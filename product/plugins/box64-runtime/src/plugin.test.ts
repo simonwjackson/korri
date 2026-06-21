@@ -35,11 +35,9 @@ describe("Box64 runtime plugin descriptor", () => {
       kind: "launch-wrapper",
       capabilities: ["launch.compose", "launch.wrapper"],
     })
-    expect(box64RuntimePlugin.handlers.map(handler => handler.operation)).toEqual([
-      "runtime.resolve",
-      "launch.compose",
-      "diagnostics.collect",
-    ])
+    expect(
+      box64RuntimePlugin.handlers.map(handler => handler.operation),
+    ).toEqual(["runtime.resolve", "launch.compose", "diagnostics.collect"])
   })
 
   it("resolves reusable Box64 runtime env from cwd", async () => {
@@ -80,7 +78,11 @@ describe("Box64 runtime plugin descriptor", () => {
           operation: "launch.compose",
           provider: KORRI_BOX64_RUNTIME_PLUGIN_ID,
           input: {
-            spec: { command: "./3dSen.exe", args: ["-id=37"], cwd: "/games/3dsen" },
+            spec: {
+              command: "./3dSen.exe",
+              args: ["-id=37"],
+              cwd: "/games/3dsen",
+            },
             policy: { unityMode: true, maxCpu: 1, sdlVideoDriver: "x11" },
           },
         }),
