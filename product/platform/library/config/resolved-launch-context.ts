@@ -89,6 +89,7 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
   launchCompanions: Schema.optional(LaunchCompanionMap),
   moonlight: Schema.optional(MoonlightPolicy),
   plugin: Schema.optional(PluginPolicyMap),
+  settings: Schema.optional(LaunchSettings),
   storage: Schema.optional(Schema.Record(Schema.String, StorageRecord)),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),

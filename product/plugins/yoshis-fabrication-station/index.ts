@@ -5,7 +5,7 @@ export const KORRI_YFS_LAUNCHER_LOCAL_ID = "level" as const
 export const KORRI_YFS_LAUNCHER_ID =
   `${KORRI_YFS_PLUGIN_ID}/${KORRI_YFS_LAUNCHER_LOCAL_ID}` as const
 
-const yfsLauncherSettings = {
+export const yfsLauncherSettingDescriptors = {
   audio: { type: "enum", values: ["on", "off"] },
   gbaSounds: { type: "boolean" },
   quickDeath: { type: "boolean" },
@@ -27,11 +27,10 @@ export const yoshisFabricationStationPlugin = plugin({
       launchers: {
         [KORRI_YFS_LAUNCHER_LOCAL_ID]: {
           id: KORRI_YFS_LAUNCHER_ID,
-          plugin: KORRI_YFS_PLUGIN_ID,
           command: "yfs-launch",
           args: ["{target}"],
-          settings: { plugin: yfsLauncherSettings },
-          env: { KORRI_YFS_SETTINGS: "{settings}" },
+          settings: { plugin: {} },
+          env: { KORRI_YFS_SETTINGS: "{settings.plugin}" },
           policy: {
             allowedCommands: ["yfs-launch", "chromium"],
           },

@@ -6,6 +6,7 @@ import {
 import {
   KORRI_YFS_LAUNCHER_ID,
   KORRI_YFS_PLUGIN_ID,
+  yfsLauncherSettingDescriptors,
   yoshisFabricationStationPlugin,
 } from "."
 
@@ -45,20 +46,24 @@ describe("Yoshi's Fabrication Station plugin", () => {
 
     expect(launchers.level).toMatchObject({
       id: KORRI_YFS_LAUNCHER_ID,
-      plugin: KORRI_YFS_PLUGIN_ID,
       command: "yfs-launch",
       args: ["{target}"],
-      env: { KORRI_YFS_SETTINGS: "{settings}" },
+      env: { KORRI_YFS_SETTINGS: "{settings.plugin}" },
     })
+    expect(launchers.level).not.toHaveProperty("plugin")
     expect(JSON.stringify(launchers.level)).not.toContain("@korri:web-canvas")
     expect(JSON.stringify(launchers.level)).not.toContain("korri-web-canvas")
   })
 
-  it("documents YFS-specific launcher settings", () => {
+  it("keeps launcher settings as runtime defaults", () => {
     const launcher = yoshisFabricationStationPlugin.contributes.config.launchers
       ?.level as { settings?: { plugin?: Record<string, unknown> } }
 
-    expect(Object.keys(launcher.settings?.plugin ?? {})).toEqual([
+    expect(launcher.settings?.plugin).toEqual({})
+  })
+
+  it("documents YFS-specific launcher settings", () => {
+    expect(Object.keys(yfsLauncherSettingDescriptors)).toEqual([
       "audio",
       "gbaSounds",
       "quickDeath",

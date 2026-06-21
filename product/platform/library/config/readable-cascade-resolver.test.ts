@@ -358,6 +358,19 @@ describe("foldPluginPolicies", () => {
 })
 
 describe("resolveReadableLaunchContext", () => {
+  it("carries release launch settings for readable app env substitution", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(snapshot(), {
+        playableId: "sonic-the-hedgehog",
+      }),
+    )
+
+    expect(context.settings?.plugin).toMatchObject({
+      extraSettings: { video_font_enable: true },
+      extraArgs: ["release"],
+    })
+  })
+
   it("resolves source, app, runtime, file content, and cascade order", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(snapshot(), {

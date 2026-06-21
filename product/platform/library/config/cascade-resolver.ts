@@ -693,6 +693,7 @@ interface ReadableLayerView {
   readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
   readonly plugin?: PluginPolicyMap
+  readonly settings?: LaunchSettings
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -754,6 +755,7 @@ const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
         launchCompanions: launchCompanionsFromLaunch(app),
         moonlight: app.moonlight,
         plugin: pluginPolicyFromSettings(app.plugin, app.settings),
+        settings: app.settings,
         env: app.env,
         cwd: app.cwd,
         argsAppend: app.argsAppend,
@@ -963,6 +965,7 @@ const readableViewOfRelease = (
     release.launch?.settings,
     { allowContentPath: false },
   ),
+  settings: release.launch?.settings,
   env: release.launch?.env ?? release.env,
   cwd: release.launch?.cwd ?? release.cwd,
   argsAppend: release.launch?.argsAppend ?? release.argsAppend,
@@ -1005,6 +1008,7 @@ const mergeReadableLayers = (
   let launchCompanions: LaunchCompanionMap | undefined
   let moonlight: MoonlightPolicy | undefined
   let plugin: PluginPolicyMap | undefined
+  let settings: LaunchSettings | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
   let argsAppend: string[] | undefined
@@ -1022,6 +1026,9 @@ const mergeReadableLayers = (
     if (layer.plugin !== undefined) {
       plugin = foldPluginPolicies(plugin, layer.plugin)
     }
+    if (layer.settings !== undefined) {
+      settings = mergeLaunchSettings(settings, layer.settings)
+    }
     if (layer.env !== undefined) env = { ...(env ?? {}), ...layer.env }
     if (layer.cwd !== undefined) cwd = layer.cwd
     if (layer.argsAppend !== undefined) {
@@ -1036,6 +1043,7 @@ const mergeReadableLayers = (
     launchCompanions,
     moonlight,
     plugin,
+    settings,
     env,
     cwd,
     argsAppend,
@@ -1217,6 +1225,7 @@ export const resolveReadableLaunchContext = (
       launchCompanions: folded.launchCompanions ?? {},
       ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
       ...(folded.plugin ? { plugin: folded.plugin } : {}),
+      ...(folded.settings ? { settings: folded.settings } : {}),
       storage: Object.fromEntries(snapshot.storage),
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),

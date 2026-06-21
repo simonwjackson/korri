@@ -189,9 +189,9 @@ describe("composeReadableLaunchSpec — args / env", () => {
         id: "@korri:yoshis-fabrication-station/level",
         command: "yfs-launch",
         args: ["{target}"],
-        env: { KORRI_YFS_SETTINGS: "{settings}" },
-        settings: { metrics: true, bgmVolume: 7 },
+        env: { KORRI_YFS_SETTINGS: "{settings.plugin}" },
       } as AppRecord,
+      settings: { plugin: { metrics: true, bgmVolume: 7 } },
     })
 
     const spec = run(composeReadableLaunchSpec(ctx.app, ctx))

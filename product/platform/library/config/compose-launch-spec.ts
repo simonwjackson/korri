@@ -137,6 +137,7 @@ const READABLE_PLACEHOLDERS = new Set([
   "release.id",
   "source.id",
   "settings",
+  "settings.plugin",
 ])
 
 const readableContext = (
@@ -150,9 +151,13 @@ const readableContext = (
   "playable.id": context.playableId,
   "release.id": context.releaseId,
   settings:
-    context.app.settings === undefined
+    context.settings === undefined
       ? undefined
-      : JSON.stringify(context.app.settings),
+      : JSON.stringify(context.settings),
+  "settings.plugin":
+    context.settings?.plugin === undefined
+      ? undefined
+      : JSON.stringify(context.settings.plugin),
 })
 
 const substituteReadable = (
