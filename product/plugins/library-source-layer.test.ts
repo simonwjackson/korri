@@ -565,10 +565,13 @@ async function seedSteamLaunchConfig(
   options: { readonly includeApp?: boolean } = {},
 ): Promise<void> {
   await mkdir(configRoot, { recursive: true })
-  await mkdir(
-    join(steamRoot, "compatibilitytools.d", DEFAULT_STEAM_COMPAT_TOOL),
-    { recursive: true },
+  const compatToolRoot = join(
+    steamRoot,
+    "compatibilitytools.d",
+    DEFAULT_STEAM_COMPAT_TOOL,
   )
+  await mkdir(compatToolRoot, { recursive: true })
+  await writeFile(join(compatToolRoot, "proton"), "#!/usr/bin/env python3\n")
   const launcherBlock = options.includeApp
     ? [
         "launchers:",

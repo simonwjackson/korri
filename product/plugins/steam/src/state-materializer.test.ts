@@ -282,6 +282,88 @@ describe("materializeSteamDesiredState", () => {
     }
   })
 
+  it("preserves a warm session when desired VDF state already matches", async () => {
+    const stateRoot = "/steam-home"
+    const localconfig = steamLocalConfigPath(stateRoot)
+    const config = steamConfigPath(stateRoot)
+    const events: string[] = []
+    const { fs, writes } = memoryFs(
+      {
+        [localconfig]: `"UserLocalConfigStore"
+{
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"apps"
+				{
+					"2379780"
+					{
+						"LaunchOptions"		"wrapper -- %command%"
+					}
+				}
+			}
+		}
+	}
+}
+`,
+        [config]: `"InstallConfigStore"
+{
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"CompatToolMapping"
+				{
+					"0"
+					{
+						"name"		"proton-cachyos-arm64"
+						"config"		""
+						"priority"		"250"
+					}
+				}
+			}
+		}
+	}
+}
+`,
+      },
+      {
+        existingPaths: [
+          "/steam-home/compatibilitytools.d/proton-cachyos-arm64",
+          "/steam-home/compatibilitytools.d/proton-cachyos-arm64/proton",
+        ],
+      },
+    )
+
+    const result = await Effect.runPromise(
+      materializeSteamDesiredState({
+        desired: {
+          stateRoot,
+          command: "steam",
+          target: "steam://rungameid/2379780",
+          launchOptions: "wrapper -- %command%",
+          defaultCompatTool: "proton-cachyos-arm64",
+          extraArgs: ["-silent", "-gamepadui"],
+        },
+        fs,
+        lifecycle: lifecycle(events),
+        lock: inlineLock,
+      }),
+    )
+
+    expect(result.spec).toEqual({
+      command: "korri-steam-app",
+      args: ["2379780"],
+    })
+    expect(events).toEqual([])
+    expect(writes).toEqual([])
+  })
+
   it("fails loudly before writing when the configured compat tool is absent", async () => {
     const stateRoot = "/steam-home"
     const { fs, writes } = memoryFs(
@@ -307,6 +389,67 @@ describe("materializeSteamDesiredState", () => {
     expect(error).toMatchObject({
       _tag: "SteamCompatToolMissing",
       tool: "missing-tool",
+    })
+    expect(writes).toEqual([])
+  })
+
+  it("fails loudly before writing when the configured compat tool lacks a real proton launcher", async () => {
+    const stateRoot = "/steam-home"
+    const { fs, writes } = memoryFs(
+      {},
+      { existingPaths: ["/steam-home/compatibilitytools.d/broken-tool"] },
+    )
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        materializeSteamDesiredState({
+          desired: {
+            stateRoot,
+            target: "steam://rungameid/400",
+            defaultCompatTool: "broken-tool",
+          },
+          fs,
+          lifecycle: lifecycle([]),
+          lock: inlineLock,
+        }),
+      ),
+    )
+
+    expect(error).toMatchObject({
+      _tag: "SteamCompatToolMissing",
+      tool: "broken-tool",
+    })
+    expect(writes).toEqual([])
+  })
+
+  it("fails loudly before writing when the compat tool manifest requires an unavailable tool appid", async () => {
+    const stateRoot = "/steam-home"
+    const toolRoot = "/steam-home/compatibilitytools.d/proton-cachyos-arm64"
+    const { fs, writes } = memoryFs(
+      {
+        [`${toolRoot}/toolmanifest.vdf`]: `"manifest" { "require_tool_appid" "1628350" }`,
+      },
+      { existingPaths: [toolRoot, `${toolRoot}/proton`] },
+    )
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        materializeSteamDesiredState({
+          desired: {
+            stateRoot,
+            target: "steam://rungameid/400",
+            defaultCompatTool: "proton-cachyos-arm64",
+          },
+          fs,
+          lifecycle: lifecycle([]),
+          lock: inlineLock,
+        }),
+      ),
+    )
+
+    expect(error).toMatchObject({
+      _tag: "SteamCompatToolMissing",
+      tool: "proton-cachyos-arm64",
     })
     expect(writes).toEqual([])
   })

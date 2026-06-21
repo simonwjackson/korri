@@ -227,9 +227,6 @@ async function materializeSteamDesiredStatePromise(
   const configPath = steamConfigPath(desired.stateRoot)
 
   await lock.withLock(desired.stateRoot, async () => {
-    await lifecycle.shutdown({ command, stateRoot: desired.stateRoot })
-    await lifecycle.waitForShutdown({ stateRoot: desired.stateRoot })
-
     const localconfigPaths = await discoverSteamLocalConfigPaths(
       fs,
       desired.stateRoot,
@@ -249,8 +246,7 @@ async function materializeSteamDesiredStatePromise(
       await assertCompatToolExists(fs, desired.stateRoot, tool)
     }
 
-    await fs.mkdirp(dirname(launchOptionsPath))
-    await fs.mkdirp(dirname(configPath))
+    const writes: Array<{ path: string; content: string }> = []
 
     if (
       desired.launchOptions !== undefined ||
@@ -264,6 +260,7 @@ async function materializeSteamDesiredStatePromise(
           await fs.readText(localconfigPath),
           localconfigPath,
         )
+        const before = stableVdfSnapshot(localconfig)
         if (
           desired.launchOptions !== undefined &&
           localconfigPath === launchOptionsPath
@@ -287,7 +284,9 @@ async function materializeSteamDesiredStatePromise(
           acceptEulas: desired.acceptEulas,
           appIds: appIdsForEula,
         })
-        await fs.writeTextAtomic(localconfigPath, renderVdf(localconfig))
+        if (stableVdfSnapshot(localconfig) !== before) {
+          writes.push({ path: localconfigPath, content: renderVdf(localconfig) })
+        }
       }
     }
 
@@ -296,6 +295,7 @@ async function materializeSteamDesiredStatePromise(
       Object.keys(desired.compatToolOverrides ?? {}).length > 0
     ) {
       const config = parseVdfOrEmpty(await fs.readText(configPath), configPath)
+      const before = stableVdfSnapshot(config)
       const compatToolMappingState: VdfObject = {}
       if (desired.defaultCompatTool !== undefined) {
         compatToolMappingState["0"] = compatToolMapping(
@@ -318,7 +318,19 @@ async function materializeSteamDesiredStatePromise(
         ],
         compatToolMappingState,
       )
-      await fs.writeTextAtomic(configPath, renderVdf(config))
+      if (stableVdfSnapshot(config) !== before) {
+        writes.push({ path: configPath, content: renderVdf(config) })
+      }
+    }
+
+    if (writes.length === 0) return
+
+    await lifecycle.shutdown({ command, stateRoot: desired.stateRoot })
+    await lifecycle.waitForShutdown({ stateRoot: desired.stateRoot })
+
+    for (const write of writes) {
+      await fs.mkdirp(dirname(write.path))
+      await fs.writeTextAtomic(write.path, write.content)
     }
 
     await lifecycle.start({
@@ -360,6 +372,17 @@ async function assertCompatToolExists(
   const path = join(stateRoot, "compatibilitytools.d", tool)
   const exists = fs.pathExists ? await fs.pathExists(path) : true
   if (!exists) throw new SteamCompatToolMissing({ stateRoot, tool })
+  const protonPath = join(path, "proton")
+  const hasProton = fs.pathExists ? await fs.pathExists(protonPath) : true
+  if (!hasProton) throw new SteamCompatToolMissing({ stateRoot, tool })
+  const manifest = await fs.readText(join(path, "toolmanifest.vdf"))
+  if (manifest?.includes("require_tool_appid")) {
+    throw new SteamCompatToolMissing({ stateRoot, tool })
+  }
+}
+
+function stableVdfSnapshot(value: VdfObject): string {
+  return JSON.stringify(value)
 }
 
 function compatToolMapping(tool: string): VdfObject {

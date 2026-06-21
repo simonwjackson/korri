@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "@product/plugins/gamescope"
@@ -357,14 +357,13 @@ describe("createLibraryRepository — readable playable entries", () => {
         steamLaunchIntegration: true,
       })
       const steamStorageRoot = join(root, "steam-storage")
-      await mkdir(
-        join(
-          steamStorageRoot,
-          "compatibilitytools.d",
-          DEFAULT_STEAM_COMPAT_TOOL,
-        ),
-        { recursive: true },
+      const compatToolRoot = join(
+        steamStorageRoot,
+        "compatibilitytools.d",
+        DEFAULT_STEAM_COMPAT_TOOL,
       )
+      await mkdir(compatToolRoot, { recursive: true })
+      await writeFile(join(compatToolRoot, "proton"), "#!/usr/bin/env python3\n")
       await Effect.runPromise(
         repo.upsertStorage({
           id: KORRI_STEAM_STORAGE_ID,
