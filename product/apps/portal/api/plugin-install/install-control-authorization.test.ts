@@ -10,7 +10,9 @@ describe("install control authorization", () => {
     expect(
       await installControlAuthorized(
         { "x-korri-install-control": "long-install-secret" },
-        { KORRI_INSTALL_CONTROL_SECRET: "long-install-secret" } as NodeJS.ProcessEnv,
+        {
+          KORRI_INSTALL_CONTROL_SECRET: "long-install-secret",
+        } as NodeJS.ProcessEnv,
       ),
     ).toBe(true)
   })
@@ -21,17 +23,18 @@ describe("install control authorization", () => {
         {
           cookie: `korri_install_control=${await installControlSessionToken("long-install-secret")}`,
         },
-        { KORRI_INSTALL_CONTROL_SECRET: "long-install-secret" } as NodeJS.ProcessEnv,
+        {
+          KORRI_INSTALL_CONTROL_SECRET: "long-install-secret",
+        } as NodeJS.ProcessEnv,
       ),
     ).toBe(true)
   })
 
   it("rejects malformed cookie encoding without throwing", async () => {
     expect(
-      await installControlAuthorized(
-        { cookie: "korri_install_control=%" },
-        { KORRI_INSTALL_CONTROL_SECRET: "long-install-secret" } as NodeJS.ProcessEnv,
-      ),
+      await installControlAuthorized({ cookie: "korri_install_control=%" }, {
+        KORRI_INSTALL_CONTROL_SECRET: "long-install-secret",
+      } as NodeJS.ProcessEnv),
     ).toBe(false)
   })
 
@@ -39,13 +42,17 @@ describe("install control authorization", () => {
     expect(
       await installControlAuthorized(
         { "x-korri-install-control": "1234567890123456" },
-        { KORRI_INSTALL_CONTROL_SECRET: "1234567890123456" } as NodeJS.ProcessEnv,
+        {
+          KORRI_INSTALL_CONTROL_SECRET: "1234567890123456",
+        } as NodeJS.ProcessEnv,
       ),
     ).toBe(false)
   })
 
   it("rejects callers when no secret is configured", async () => {
-    expect(await installControlAuthorized({}, {} as NodeJS.ProcessEnv)).toBe(false)
+    expect(await installControlAuthorized({}, {} as NodeJS.ProcessEnv)).toBe(
+      false,
+    )
   })
 
   it("marks session cookies HttpOnly and SameSite strict", async () => {

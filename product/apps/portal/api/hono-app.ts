@@ -91,10 +91,14 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
 
   app.post("/api/install-control/session", async c => {
     const expected = installControlSecret(process.env)
-    if (!expected) return c.json({ ok: false, reason: "not-configured-or-weak" }, 404)
+    if (!expected)
+      return c.json({ ok: false, reason: "not-configured-or-weak" }, 404)
     let submitted: unknown
     try {
-      const body = (await c.req.json()) as { readonly pin?: unknown; readonly secret?: unknown }
+      const body = (await c.req.json()) as {
+        readonly pin?: unknown
+        readonly secret?: unknown
+      }
       submitted = body.pin ?? body.secret
     } catch {
       return c.json({ ok: false, reason: "invalid-json" }, 400)

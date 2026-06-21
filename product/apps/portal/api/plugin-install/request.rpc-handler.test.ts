@@ -20,8 +20,13 @@ afterEach(() => {
 describe("handleRequestPluginInstall", () => {
   it("rejects unauthorized callers before dispatch", async () => {
     const result = await Effect.runPromiseExit(
-      handleRequestPluginInstall({ providerId: "@korri:steam", appId: "1029210" }).pipe(
-        Effect.provide(Layer.succeed(CurrentInstallControl, { authorized: false })),
+      handleRequestPluginInstall({
+        providerId: "@korri:steam",
+        appId: "1029210",
+      }).pipe(
+        Effect.provide(
+          Layer.succeed(CurrentInstallControl, { authorized: false }),
+        ),
         Effect.provide(libraryLayer()),
       ),
     )
@@ -44,7 +49,9 @@ describe("handleRequestPluginInstall", () => {
           appId: "1029210",
           playableId: "thirty-xx",
         }).pipe(
-          Effect.provide(Layer.succeed(CurrentInstallControl, { authorized: true })),
+          Effect.provide(
+            Layer.succeed(CurrentInstallControl, { authorized: true }),
+          ),
           Effect.provide(libraryLayer()),
         ),
       )

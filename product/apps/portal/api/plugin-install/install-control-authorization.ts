@@ -22,20 +22,21 @@ export class InstallControlMiddleware extends RpcMiddleware.Service<
 
 export const InstallControlMiddlewareLive = Layer.succeed(
   InstallControlMiddleware,
-)(
-  (effect, { headers }) =>
-    Effect.flatMap(
-      Effect.promise(() => installControlAuthorized(headers, process.env)),
-      authorized =>
-        Effect.provideService(effect, CurrentInstallControl, { authorized }),
-    ),
+)((effect, { headers }) =>
+  Effect.flatMap(
+    Effect.promise(() => installControlAuthorized(headers, process.env)),
+    authorized =>
+      Effect.provideService(effect, CurrentInstallControl, { authorized }),
+  ),
 )
 
 export const requireInstallControl = Effect.gen(function* () {
   const control = yield* CurrentInstallControl
   if (!control.authorized) {
     return yield* Effect.fail(
-      new ValidationError({ message: "Install control authorization required" }),
+      new ValidationError({
+        message: "Install control authorization required",
+      }),
     )
   }
 })
@@ -49,7 +50,10 @@ export async function installControlAuthorized(
   const direct = headerValue(headers, INSTALL_CONTROL_HEADER)
   if (constantTimeEqual(direct, expected)) return true
   const auth = headerValue(headers, INSTALL_CONTROL_AUTH_HEADER)
-  if (auth?.startsWith("Bearer ") && constantTimeEqual(auth.slice(7), expected)) {
+  if (
+    auth?.startsWith("Bearer ") &&
+    constantTimeEqual(auth.slice(7), expected)
+  ) {
     return true
   }
   return constantTimeEqual(
@@ -58,8 +62,11 @@ export async function installControlAuthorized(
   )
 }
 
-export function installControlSecret(env: NodeJS.ProcessEnv): string | undefined {
-  const value = env.KORRI_INSTALL_CONTROL_SECRET ?? env.KORRI_INSTALL_CONTROL_PIN
+export function installControlSecret(
+  env: NodeJS.ProcessEnv,
+): string | undefined {
+  const value =
+    env.KORRI_INSTALL_CONTROL_SECRET ?? env.KORRI_INSTALL_CONTROL_PIN
   return value !== undefined && isStrongInstallControlSecret(value)
     ? value
     : undefined
@@ -79,7 +86,9 @@ export async function installControlCookie(secret: string): Promise<string> {
   return `${INSTALL_CONTROL_COOKIE}=${encodeURIComponent(await installControlSessionToken(secret))}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400`
 }
 
-export async function installControlSessionToken(secret: string): Promise<string> {
+export async function installControlSessionToken(
+  secret: string,
+): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -114,7 +123,10 @@ function headerValue(
   return undefined
 }
 
-function cookieValue(cookie: string | undefined, name: string): string | undefined {
+function cookieValue(
+  cookie: string | undefined,
+  name: string,
+): string | undefined {
   if (!cookie) return undefined
   for (const part of cookie.split(";")) {
     const [rawKey, ...rawValue] = part.trim().split("=")

@@ -28,23 +28,37 @@ export const handlePluginInstallStatus = (
   Effect.gen(function* () {
     yield* requireInstallControl
     if (!isProviderId(payload.providerId)) {
-      return yield* Effect.fail(new ValidationError({ message: `Invalid provider id: ${payload.providerId}` }))
+      return yield* Effect.fail(
+        new ValidationError({
+          message: `Invalid provider id: ${payload.providerId}`,
+        }),
+      )
     }
     if (payload.appId.length === 0) {
-      return yield* Effect.fail(new ValidationError({ message: "Invalid app id" }))
+      return yield* Effect.fail(
+        new ValidationError({ message: "Invalid app id" }),
+      )
     }
     yield* requireInstallMetadata(payload.providerId, payload.appId)
 
     const registry = createFirstPartyPluginRegistryFromEnv(process.env)
     const plugin = registry.get(payload.providerId)
     if (!plugin || !registry.enabledPluginIds.has(payload.providerId)) {
-      return yield* Effect.fail(new NotFoundError({ message: `Plugin provider ${payload.providerId} is not enabled or does not exist` }))
+      return yield* Effect.fail(
+        new NotFoundError({
+          message: `Plugin provider ${payload.providerId} is not enabled or does not exist`,
+        }),
+      )
     }
     const handler = plugin.handlers.find(isInstallStatusHandler) as
       | PluginHandler<typeof INSTALL_STATUS_OPERATION, unknown, unknown>
       | undefined
     if (!handler) {
-      return yield* Effect.fail(new NotFoundError({ message: `Plugin provider ${payload.providerId} does not expose install status` }))
+      return yield* Effect.fail(
+        new NotFoundError({
+          message: `Plugin provider ${payload.providerId} does not expose install status`,
+        }),
+      )
     }
 
     const result = yield* runPluginHandler(handler, {
@@ -56,24 +70,43 @@ export const handlePluginInstallStatus = (
         authorized: true,
       },
     }).pipe(
-      Effect.mapError(error => new DataError({
-        reason: "Unavailable",
-        message: `Plugin provider ${payload.providerId} install status failed: ${sanitize(String(error))}`,
-      })),
+      Effect.mapError(
+        error =>
+          new DataError({
+            reason: "Unavailable",
+            message: `Plugin provider ${payload.providerId} install status failed: ${sanitize(String(error))}`,
+          }),
+      ),
     )
     const record = isRecord(result) ? result : {}
     return new PluginInstallStatusResponse({
       providerId: payload.providerId,
       appId: payload.appId,
-      ...(typeof record.requestId === "string" ? { requestId: record.requestId } : payload.requestId ? { requestId: payload.requestId } : {}),
+      ...(typeof record.requestId === "string"
+        ? { requestId: record.requestId }
+        : payload.requestId
+          ? { requestId: payload.requestId }
+          : {}),
       state: parsePluginInstallState(record.state),
-      ...(typeof record.bytesDownloaded === "number" ? { bytesDownloaded: record.bytesDownloaded } : {}),
-      ...(typeof record.bytesToDownload === "number" ? { bytesToDownload: record.bytesToDownload } : {}),
-      ...(typeof record.percent === "number" ? { percent: record.percent } : {}),
-      ...(isRecord(record.providerEvidence) ? { providerEvidence: record.providerEvidence } : {}),
-      ...(typeof record.lastEvidenceAt === "string" ? { lastEvidenceAt: record.lastEvidenceAt } : {}),
+      ...(typeof record.bytesDownloaded === "number"
+        ? { bytesDownloaded: record.bytesDownloaded }
+        : {}),
+      ...(typeof record.bytesToDownload === "number"
+        ? { bytesToDownload: record.bytesToDownload }
+        : {}),
+      ...(typeof record.percent === "number"
+        ? { percent: record.percent }
+        : {}),
+      ...(isRecord(record.providerEvidence)
+        ? { providerEvidence: record.providerEvidence }
+        : {}),
+      ...(typeof record.lastEvidenceAt === "string"
+        ? { lastEvidenceAt: record.lastEvidenceAt }
+        : {}),
       nextActionHint: parsePluginInstallNextActionHint(record.nextActionHint),
-      ...(typeof record.message === "string" ? { message: sanitize(record.message) } : {}),
+      ...(typeof record.message === "string"
+        ? { message: sanitize(record.message) }
+        : {}),
     })
   })
 
@@ -88,21 +121,34 @@ function requireInstallMetadata(providerId: string, appId: string) {
         }),
       )
     }
-    const entries = yield* source.listPlayableEntries().pipe(
-      Effect.mapError(error =>
-        new DataError({ reason: "Unavailable", message: sanitize(String(error)) }),
-      ),
-    )
+    const entries = yield* source
+      .listPlayableEntries()
+      .pipe(
+        Effect.mapError(
+          error =>
+            new DataError({
+              reason: "Unavailable",
+              message: sanitize(String(error)),
+            }),
+        ),
+      )
     if (installMetadataAllowed(entries, providerId, appId)) return
-    return yield* Effect.fail(new NotFoundError({ message: `Install status is not allowed for ${providerId} app ${appId}` }))
+    return yield* Effect.fail(
+      new NotFoundError({
+        message: `Install status is not allowed for ${providerId} app ${appId}`,
+      }),
+    )
   })
 }
 function isProviderId(value: string): value is ProviderId {
   return value.startsWith("@") && value.includes(":")
 }
 function isInstallStatusHandler(handler: PluginHandler): boolean {
-  return handler.operation === INSTALL_STATUS_OPERATION &&
-    (handler.capabilities === undefined || handler.capabilities.includes(INSTALL_STATUS_CAPABILITY))
+  return (
+    handler.operation === INSTALL_STATUS_OPERATION &&
+    (handler.capabilities === undefined ||
+      handler.capabilities.includes(INSTALL_STATUS_CAPABILITY))
+  )
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)

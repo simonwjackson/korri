@@ -4,7 +4,8 @@ import { createHonoApp } from "./hono-app"
 const originalSecret = process.env.KORRI_INSTALL_CONTROL_SECRET
 
 afterEach(() => {
-  if (originalSecret === undefined) delete process.env.KORRI_INSTALL_CONTROL_SECRET
+  if (originalSecret === undefined)
+    delete process.env.KORRI_INSTALL_CONTROL_SECRET
   else process.env.KORRI_INSTALL_CONTROL_SECRET = originalSecret
 })
 

@@ -24,7 +24,9 @@ export class PluginInstallStatusResponse extends Schema.Class<PluginInstallStatu
   bytesDownloaded: Schema.optional(Schema.Number),
   bytesToDownload: Schema.optional(Schema.Number),
   percent: Schema.optional(Schema.Number),
-  providerEvidence: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerEvidence: Schema.optional(
+    Schema.Record(Schema.String, Schema.Unknown),
+  ),
   lastEvidenceAt: Schema.optional(Schema.String),
   nextActionHint: PluginInstallNextActionHint,
   message: Schema.optional(Schema.String),

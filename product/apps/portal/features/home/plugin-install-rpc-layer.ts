@@ -53,7 +53,8 @@ export const PluginInstallControllerLayerRpc = Layer.effect(
               credentials: "include",
               body: JSON.stringify({ pin }),
             })
-            if (!response.ok) throw new Error(`install unlock failed: ${response.status}`)
+            if (!response.ok)
+              throw new Error(`install unlock failed: ${response.status}`)
           },
           catch: error => toLibraryError(error),
         }),

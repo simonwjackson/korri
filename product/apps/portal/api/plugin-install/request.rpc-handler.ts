@@ -4,9 +4,7 @@ import {
   ValidationError,
 } from "@platform/api/rpc/errors"
 import { installMetadataAllowed } from "@platform/library/config/app-install-metadata"
-import {
-  parsePluginInstallState,
-} from "@platform/library/install-state"
+import { parsePluginInstallState } from "@platform/library/install-state"
 import { LibrarySource } from "@platform/library/library-services"
 import type { PluginHandler, ProviderId } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
@@ -28,7 +26,9 @@ export const handleRequestPluginInstall = (
     yield* requireInstallControl
     if (!isProviderId(payload.providerId)) {
       return yield* Effect.fail(
-        new ValidationError({ message: `Invalid provider id: ${payload.providerId}` }),
+        new ValidationError({
+          message: `Invalid provider id: ${payload.providerId}`,
+        }),
       )
     }
     if (payload.appId.length === 0) {
@@ -42,7 +42,9 @@ export const handleRequestPluginInstall = (
     const plugin = registry.get(payload.providerId)
     if (!plugin || !registry.enabledPluginIds.has(payload.providerId)) {
       return yield* Effect.fail(
-        new NotFoundError({ message: `Plugin provider ${payload.providerId} is not enabled or does not exist` }),
+        new NotFoundError({
+          message: `Plugin provider ${payload.providerId} is not enabled or does not exist`,
+        }),
       )
     }
     const handler = plugin.handlers.find(isInstallRequestHandler) as
@@ -50,7 +52,9 @@ export const handleRequestPluginInstall = (
       | undefined
     if (!handler) {
       return yield* Effect.fail(
-        new NotFoundError({ message: `Plugin provider ${payload.providerId} does not expose install requests` }),
+        new NotFoundError({
+          message: `Plugin provider ${payload.providerId} does not expose install requests`,
+        }),
       )
     }
 
@@ -77,12 +81,20 @@ export const handleRequestPluginInstall = (
     return new RequestPluginInstallResponse({
       providerId: payload.providerId,
       appId: payload.appId,
-      requestId: stringField(record, "requestId") ?? `${payload.providerId}:${payload.appId}`,
+      requestId:
+        stringField(record, "requestId") ??
+        `${payload.providerId}:${payload.appId}`,
       outcome: outcomeField(record.outcome),
       state: parsePluginInstallState(record.state),
-      ...(typeof record.message === "string" ? { message: sanitize(record.message) } : {}),
-      ...(typeof record.observedAt === "string" ? { observedAt: record.observedAt } : {}),
-      ...(isRecord(record.providerEvidence) ? { providerEvidence: record.providerEvidence } : {}),
+      ...(typeof record.message === "string"
+        ? { message: sanitize(record.message) }
+        : {}),
+      ...(typeof record.observedAt === "string"
+        ? { observedAt: record.observedAt }
+        : {}),
+      ...(isRecord(record.providerEvidence)
+        ? { providerEvidence: record.providerEvidence }
+        : {}),
     })
   })
 
@@ -97,14 +109,22 @@ function requireInstallMetadata(providerId: string, appId: string) {
         }),
       )
     }
-    const entries = yield* source.listPlayableEntries().pipe(
-      Effect.mapError(error =>
-        new DataError({ reason: "Unavailable", message: sanitize(String(error)) }),
-      ),
-    )
+    const entries = yield* source
+      .listPlayableEntries()
+      .pipe(
+        Effect.mapError(
+          error =>
+            new DataError({
+              reason: "Unavailable",
+              message: sanitize(String(error)),
+            }),
+        ),
+      )
     if (installMetadataAllowed(entries, providerId, appId)) return
     return yield* Effect.fail(
-      new NotFoundError({ message: `Install is not allowed for ${providerId} app ${appId}` }),
+      new NotFoundError({
+        message: `Install is not allowed for ${providerId} app ${appId}`,
+      }),
     )
   })
 }
@@ -113,8 +133,11 @@ function isProviderId(value: string): value is ProviderId {
   return value.startsWith("@") && value.includes(":")
 }
 function isInstallRequestHandler(handler: PluginHandler): boolean {
-  return handler.operation === INSTALL_REQUEST_OPERATION &&
-    (handler.capabilities === undefined || handler.capabilities.includes(INSTALL_REQUEST_CAPABILITY))
+  return (
+    handler.operation === INSTALL_REQUEST_OPERATION &&
+    (handler.capabilities === undefined ||
+      handler.capabilities.includes(INSTALL_REQUEST_CAPABILITY))
+  )
 }
 function asRecord(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {}
@@ -122,11 +145,19 @@ function asRecord(value: unknown): Record<string, unknown> {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
-function stringField(record: Record<string, unknown>, key: string): string | undefined {
+function stringField(
+  record: Record<string, unknown>,
+  key: string,
+): string | undefined {
   return typeof record[key] === "string" ? record[key] : undefined
 }
 function outcomeField(value: unknown): RequestPluginInstallResponse["outcome"] {
-  return value === "accepted" || value === "already-installed" || value === "already-in-progress" || value === "rejected" ? value : "accepted"
+  return value === "accepted" ||
+    value === "already-installed" ||
+    value === "already-in-progress" ||
+    value === "rejected"
+    ? value
+    : "accepted"
 }
 function sanitize(value: string): string {
   return value.replace(/\/(?:[^\s/]+\/)+[^\s]+/g, "<path>").slice(0, 240)

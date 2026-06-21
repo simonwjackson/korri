@@ -1292,11 +1292,7 @@ async function withTempProseqlLibrary(
             yield* repository.upsertLauncher({
               id: "rocknix-retroarch",
               command: FAKE_GAME,
-              args: [
-                "{content.path}",
-                "-P{system}",
-                "--emulator=retroarch",
-              ],
+              args: ["{content.path}", "-P{system}", "--emulator=retroarch"],
               systems: ["snes"],
             })
           }

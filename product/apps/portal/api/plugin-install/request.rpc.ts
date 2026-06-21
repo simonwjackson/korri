@@ -27,14 +27,13 @@ export class RequestPluginInstallResponse extends Schema.Class<RequestPluginInst
   state: PluginInstallState,
   message: Schema.optional(Schema.String),
   observedAt: Schema.optional(Schema.String),
-  providerEvidence: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerEvidence: Schema.optional(
+    Schema.Record(Schema.String, Schema.Unknown),
+  ),
 }) {}
 
-export const RequestPluginInstallRpc = Rpc.make(
-  "app.plugin.install.request",
-  {
-    payload: RequestPluginInstallPayload,
-    success: RequestPluginInstallResponse,
-    error: ApiError,
-  },
-)
+export const RequestPluginInstallRpc = Rpc.make("app.plugin.install.request", {
+  payload: RequestPluginInstallPayload,
+  success: RequestPluginInstallResponse,
+  error: ApiError,
+})

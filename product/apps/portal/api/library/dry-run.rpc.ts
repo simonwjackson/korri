@@ -64,7 +64,9 @@ export const DryRunLaunchResponse = Schema.Union([
     message: Schema.String,
     diagnostic: Schema.optional(Schema.String),
     diagnostics: Schema.optional(
-      Schema.Array(Schema.Union([LaunchCompanionDiagnostic, LaunchPrepareDiagnostic])),
+      Schema.Array(
+        Schema.Union([LaunchCompanionDiagnostic, LaunchPrepareDiagnostic]),
+      ),
     ),
   }),
   Schema.Struct({

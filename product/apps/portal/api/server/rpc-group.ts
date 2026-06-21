@@ -63,7 +63,9 @@ export const serverRpcGroup = RpcGroup.make(
   appStreamControlMoonlightFpsSet,
   appStreamControlMoonlightResolutionSet,
   appStreamControlActionSet,
-).middleware(FeatureGatesMiddleware).middleware(InstallControlMiddleware)
+)
+  .middleware(FeatureGatesMiddleware)
+  .middleware(InstallControlMiddleware)
 
 // fallow-ignore-next-line unused-types
 export type ServerRpcGroup = typeof serverRpcGroup
