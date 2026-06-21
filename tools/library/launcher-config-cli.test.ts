@@ -203,7 +203,10 @@ describe("validateLauncherConfig", () => {
             id: "porklike",
             system: "pico8",
             contentPath: "/storage/roms/pico8/porklike.p8",
-            launch: { app: KORRI_RETROARCH_APP_ID, module: "@korri:pico8/fake08" },
+            launch: {
+              app: KORRI_RETROARCH_APP_ID,
+              module: "@korri:pico8/fake08",
+            },
           },
         ],
       })

@@ -74,7 +74,9 @@ describe("importRocknixLibrary", () => {
               storage: yield* Effect.promise(
                 () => db.storage.query().runPromise,
               ),
-              launchers: yield* Effect.promise(() => db.launchers.query().runPromise),
+              launchers: yield* Effect.promise(
+                () => db.launchers.query().runPromise,
+              ),
               runtimes: yield* Effect.promise(
                 () => db.runtimes.query().runPromise,
               ),
@@ -174,7 +176,9 @@ describe("importRocknixLibrary", () => {
               first,
               second,
               games: yield* repository.listPlayableEntries(),
-              launchers: yield* Effect.promise(() => db.launchers.query().runPromise),
+              launchers: yield* Effect.promise(
+                () => db.launchers.query().runPromise,
+              ),
               systems: yield* Effect.promise(
                 () => db.systems.query().runPromise,
               ),
