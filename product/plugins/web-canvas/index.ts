@@ -29,10 +29,10 @@ export const webCanvasPlugin = plugin({
       launchers: {
         [KORRI_WEB_CANVAS_LAUNCHER_LOCAL_ID]: {
           id: KORRI_WEB_CANVAS_LAUNCHER_ID,
-          plugin: KORRI_WEB_CANVAS_PLUGIN_ID,
           command: "korri-web-canvas",
           args: ["{target}"],
           settings: { plugin: {} },
+          env: { KORRI_WEB_CANVAS_SETTINGS: "{settings.plugin}" },
           policy: {
             allowedCommands: ["korri-web-canvas", "korri-webpage", "chromium"],
           },

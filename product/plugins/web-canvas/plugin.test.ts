@@ -16,7 +16,9 @@ describe("@korri:web-canvas plugin", () => {
       id: KORRI_WEB_CANVAS_LAUNCHER_ID,
       command: "korri-web-canvas",
       args: ["{target}"],
+      env: { KORRI_WEB_CANVAS_SETTINGS: "{settings.plugin}" },
     })
+    expect(launchers.chromium).not.toHaveProperty("plugin")
   })
   it("requires the webpage core", () => {
     expect(

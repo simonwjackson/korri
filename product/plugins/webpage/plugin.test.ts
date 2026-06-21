@@ -16,6 +16,8 @@ describe("@korri:webpage plugin", () => {
       id: KORRI_WEBPAGE_LAUNCHER_ID,
       command: "korri-webpage",
       args: ["{target}"],
+      env: { KORRI_WEBPAGE_SETTINGS: "{settings.plugin}" },
     })
+    expect(launchers.chromium).not.toHaveProperty("plugin")
   })
 })

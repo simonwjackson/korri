@@ -22,10 +22,10 @@ export const webpagePlugin = plugin({
       launchers: {
         [KORRI_WEBPAGE_LAUNCHER_LOCAL_ID]: {
           id: KORRI_WEBPAGE_LAUNCHER_ID,
-          plugin: KORRI_WEBPAGE_PLUGIN_ID,
           command: "korri-webpage",
           args: ["{target}"],
           settings: { plugin: {} },
+          env: { KORRI_WEBPAGE_SETTINGS: "{settings.plugin}" },
           policy: { allowedCommands: ["korri-webpage", "chromium"] },
         },
       },
