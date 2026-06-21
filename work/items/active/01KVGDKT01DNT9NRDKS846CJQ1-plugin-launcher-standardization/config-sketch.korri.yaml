@@ -1,0 +1,538 @@
+# Korri launcher/plugin standardization sketch
+# Draft for design iteration, not an accepted schema.
+#
+# LLM briefing / current landing zone:
+# - The central domain split is `target` vs `launch`.
+# - `target` is a locator for what the release semantically points at. It is not
+#   launch behavior. Valid target shapes currently sketched: `file`, `file-set`,
+#   `executable`, `url`, and `provider-ref`.
+# - `launch` is an optional launcher overlay. It can be omitted when the system,
+#   target kind, or target provider implies one clear launcher. It can be added
+#   to customize launcher selection, cwd/env, companion wrappers, normalized
+#   settings, or escape-hatch args/config.
+# - Named `launchers.<name>`, plugin-contributed launcher support records,
+#   and release-level `launch` all use the same launcher object vocabulary: `plugin` or `use`,
+#   optional `runtime`, `input`, `settings`, `env`, `cwd`, `with`, and
+#   `overrides`.
+# - `settings` is split into common normalized packs plus one plugin-typed pack:
+#   `display`, `audio`, `input`, `saves`, `lifecycle`, and `plugin`. Common
+#   packs maximize cascade reuse across disparate launchers. `settings.plugin`
+#   is typed by the selected launcher plugin and is still codified/cascadeable;
+#   raw end-user escape hatches remain in `overrides`.
+# - `use` references a named launcher. `plugin` selects a plugin-provided
+#   launcher implementation. Top-level launcher definitions require `plugin` and
+#   should not use `use`; system choices commonly use `use`; release overlays
+#   may omit both when inference chooses the launcher.
+# - Launcher plugins must declare their runtime relationship: `none`,
+#   `embedded`, `optional`, or `required`. User config only names `runtime` when
+#   there is a meaningful selectable/overrideable runtime. Embedded runtime is
+#   plugin metadata, not authoring ceremony.
+# - `input` means "which part of the release target does this launcher receive?"
+#   It belongs to launch/launcher policy, not to target. This keeps `file-set`
+#   targets game-agnostic: the target lists parts; the launcher chooses input.
+# - Generic self-contained binaries do not need bespoke launcher plugins. Local
+#   binaries use `target.kind: executable` and can infer `@korri:process`.
+#   Nix-backed binaries use `target.kind: provider-ref` with
+#   `provider: "@korri:nixpkgs"`; the provider can imply package fulfillment and
+#   process launch.
+# - There is no user-authored top-level `resources` section. Korri may derive
+#   internal fulfillment/cache keys from targets.
+# - External/provider identifiers are relationship data, not the playable's
+#   canonical identity. They live in `provider-links`, can be scoped to a
+#   playable, release, or target part, and can contain many refs/hashes.
+# - Verification should not duplicate hash lists on targets. Hash refs live in
+#   scoped `provider-links.refs[]`; when a link points at a release or target
+#   part, those refs can be used both for provider matching/provenance and local
+#   integrity verification. A separate verification policy can decide whether
+#   absent/mismatched refs warn or fail.
+# - `systems` are open, plugin-contributed compatibility domains for release
+#   targets, not host/device platforms. Systems are metadata/identity records;
+#   they do not contain launchers. System existence does not imply launchability:
+#   catalog/acquisition plugins may contribute metadata-only systems, and
+#   launcher/runtime support can be added later by other plugins through
+#   plugin-contributed support records.
+# - System contributions merge additively for aliases and metadata. Canonical
+#   fields such as title should retain selected ownership and produce diagnostics
+#   when multiple plugins disagree; user config can override.
+#
+# Working model:
+# - Plugins provide reusable capabilities: launcher types, resource providers,
+#   content/catalog providers, and domain-specific settings schemas.
+# - `launchers` are named reusable launcher instances. They are useful for
+#   RetroArch, Steam, ZQuest, and shared policies, but should not be required
+#   for every self-contained executable game.
+# - Every release has the same conceptual shape: `target` describes what the
+#   release points at, while optional `launch` customizes how it starts.
+# - `launch` can be omitted when system/provider defaults imply a single best
+#   launcher. It can be supplied as an overlay when cwd/env/args/config need
+#   release-specific customization.
+# - Generic non-Nix executable games/apps use `target.kind: executable`; the
+#   process launcher can be inferred unless explicitly overridden.
+# - Nixpkgs package-backed games/apps use `target.provider: "@korri:nixpkgs"`;
+#   package materialization and default executable resolution are provider-owned.
+# - There is no user-authored top-level `resources` section in this sketch.
+#   Korri may still derive internal fulfillment/cache keys from target refs.
+# - Named launchers, plugin-contributed launcher support records, and release
+#   `launch` overlays all use the same launcher object vocabulary: `plugin` or `use`, optional
+#   `runtime`, `input`, `settings`, `env`, `cwd`, `with`, and `overrides`.
+# - Settings use common normalized packs where semantics are portable, and
+#   `settings.plugin` for launcher-specific typed settings. Do not create custom
+#   setting keys like `settings.retroarch` or `settings.zquest`; the selected
+#   `plugin` chooses the schema for `settings.plugin`.
+# - Runtime fields are only present when the launcher plugin declares runtime
+#   mode `optional` or `required`, or when user config intentionally overrides a
+#   default. ZQuest's zplayer and package/default-process launches are embedded
+#   or none; RetroArch cores are required/selectable runtimes.
+# - Multi-file releases use `target.kind: file-set` with named parts and no
+#   target-level entrypoint. Launcher `input` policy chooses which part to pass.
+#   External/provider identifiers live in provider-links and can point at a
+#   playable, release, or target part.
+# - `systems` are open registry records. Plugins can add metadata-only systems,
+#   aliases, and metadata independently. Launchability is joined separately via
+#   plugin-contributed support records, not nested under systems.
+
+storage:
+  roms:
+    root: /storage/roms
+  saves:
+    root: /storage/saves
+  app-state:
+    root: /storage/app-state
+
+# Durable external/provider relationships. These are separate from `library` so
+# a playable/release can carry many identifiers without making any one provider
+# canonical. A link can scope to the whole playable, a release, or a target part
+# inside a multi-file target. Hash refs here are also the joined source of truth
+# for optional local integrity verification; do not duplicate them under target.
+provider-links:
+  sonic-advance-no-intro:
+    provider: "@korri:no-intro"
+    playable: sonic-advance
+    release: gba
+    refs:
+      - kind: sha1
+        value: "example-sha1-for-rom"
+      - kind: serial
+        value: AGB-AXVE-USA
+
+  final-fantasy-vii-redump-disc1:
+    provider: "@korri:redump"
+    playable: final-fantasy-vii
+    release: psx
+    targetPart: disc1
+    refs:
+      - kind: serial
+        value: SLUS-00665
+      - kind: md5
+        value: "example-md5-for-disc-1"
+      - kind: sha1
+        value: "example-sha1-for-disc-1"
+
+# Plugin descriptor responsibilities (not user-authored YAML):
+# - Launcher plugins declare runtime mode: none, embedded, optional, or required.
+# - Launcher plugins declare which common setting packs they support.
+# - Launcher plugins declare the schema for typed `settings.plugin`.
+# - Launcher/runtime plugins may contribute system support mappings such as
+#   `gba -> retroarch + mgba` or `zelda-classic -> zquest`. These contributions
+#   are joined by the registry/resolver; they are not nested under `systems` and
+#   are not a top-level user config section in this sketch.
+#
+# Conceptual examples:
+# - @korri:process: runtime none, target default kind executable.
+# - @korri:nixpkgs: embedded package-default executable, target default provider
+#   @korri:nixpkgs.
+# - @korri:retroarch: runtime required (libretro-core), supports
+#   display/audio/input/saves/lifecycle, contributes support for systems via
+#   libretro runtimes such as mgba, mupen64plus-next, and pcsx-rearmed.
+# - @korri:zquest-classic: embedded zplayer runtime, supports zelda-classic.
+# - @korri:steam: optional compatibility-tool runtime, target default provider
+#   @korri:steam.
+
+# Named reusable launcher instances. These should exist when the launcher has
+# reusable policy/settings, selectable variants, or domain-specific normalized
+# config. They should not be mandatory ceremony for one-off process launches.
+# Notice there is no named `process` launcher here; one-off process launches are
+# clearer inline on the release that owns the executable.
+launchers:
+  retroarch:
+    plugin: "@korri:retroarch"
+    settings:
+      # Common normalized packs: cascadeable across launchers that support them.
+      display:
+        fullscreen: true
+        integerScale: true
+        vsync: true
+      audio:
+        enabled: true
+      saves:
+        directory: /storage/saves/retroarch
+        stateDirectory: /storage/saves/retroarch/states
+      # Plugin-specific but still typed/codified settings. The selected plugin
+      # chooses this schema; raw unmodeled config remains in overrides.config.
+      plugin:
+        configFile:
+          mode: generated
+        paths:
+          systemDirectory: /storage/bios
+        drivers:
+          video: gl
+          audio: alsathread
+        input:
+          menuToggleGamepadCombo: start-select
+    env: {}
+    cwd: /storage/app-state/retroarch
+    overrides:
+      args:
+        append: []
+      config:
+        append: |
+          # Raw retroarch.cfg fragment for settings Korri has not modeled yet.
+          video_font_enable = false
+
+  # No `runtime` here: @korri:zquest-classic declares an embedded zplayer
+  # runtime in plugin metadata. If ZQuest variants become selectable later, the
+  # plugin can change to optional/required runtime support and config can name
+  # the selected runtime then.
+  zquest:
+    plugin: "@korri:zquest-classic"
+    settings:
+      display:
+        fullscreen: true
+        integerScale: true
+        vsync: true
+        throttleFps: true
+      audio:
+        enabled: true
+      saves:
+        directory: /storage/saves/zquest-classic
+      plugin:
+        paths:
+          replayDirectory: /storage/saves/zquest-classic/replays
+        audio:
+          midiVolume: 0
+        replay:
+          upload: false
+          uploadPromptSeen: true
+        scripting:
+          jit: false
+    env:
+      ZQUEST_CLASSIC_SAVE_FOLDER: /storage/saves/zquest-classic
+    cwd: /storage/saves/zquest-classic
+    overrides:
+      args:
+        append:
+          - -v1
+      config:
+        append: |
+          [zeldadx]
+          replay_upload_prompt = 1
+
+  steam:
+    plugin: "@korri:steam"
+    settings:
+      lifecycle:
+        gameMode: true
+      plugin:
+        state:
+          root: /storage/steam
+        compatibility:
+          defaultRuntime: proton
+    env: {}
+    cwd: /storage/steam
+    overrides:
+      args:
+        append: []
+      config:
+        append: ""
+
+# Runtimes remain separate only where they are meaningfully selectable or
+# swappable. Libretro cores are true runtimes for RetroArch. ZQuest's zplayer is
+# not modeled as a runtime because @korri:zquest-classic declares it embedded;
+# package/default-process launches likewise do not require user-visible runtime
+# records.
+runtimes:
+  mgba:
+    plugin: "@korri:retroarch"
+    kind: libretro-core
+    path: /etc/korri/cores/mgba_libretro.so
+    supports:
+      systems: [gba]
+
+  mupen64plus-next:
+    plugin: "@korri:retroarch"
+    kind: libretro-core
+    path: /etc/korri/cores/mupen64plus_next_libretro.so
+    supports:
+      systems: [n64]
+
+  pcsx-rearmed:
+    plugin: "@korri:retroarch"
+    kind: libretro-core
+    path: /etc/korri/cores/pcsx_rearmed_libretro.so
+    supports:
+      systems: [psx]
+
+# Systems are compatibility domains for release targets. They are additive and
+# plugin-contributed metadata records; Korri core validates the shape, not a
+# closed list of IDs. A system can be known/catalogable while not launchable.
+systems:
+  gba:
+    title: Game Boy Advance
+    aliases:
+      - game-boy-advance
+      - gba
+    metadata:
+      family: handheld
+
+  n64:
+    title: Nintendo 64
+    aliases:
+      - nintendo-64
+    metadata:
+      family: console
+
+  psx:
+    title: Sony PlayStation
+    aliases:
+      - ps1
+      - playstation
+    metadata:
+      family: console
+
+  zelda-classic:
+    title: Zelda Classic Quest
+    aliases:
+      - zc
+    metadata:
+      family: engine
+
+  # Metadata-only system contribution. A catalog/acquisition plugin might know
+  # how to classify this system before any launcher plugin knows how to run it.
+  # Items can still be listed/matched as this system, but launch resolution must
+  # report "known system, no launcher support configured" until support is added.
+  wonderswan:
+    title: Bandai WonderSwan
+    aliases:
+      - wonderswan-color
+      - wsc
+    metadata:
+      family: handheld
+
+  # Conflict example for merger diagnostics. If another plugin contributes the
+  # same system id with a conflicting canonical title (e.g. "PlayStation 1" for
+  # `psx`), Korri should keep the selected owner/title, record the alternate,
+  # and surface a diagnostic. Additive fields like aliases and metadata still
+  # merge.
+  #
+  # system-merge-diagnostic-example:
+  #   id: psx
+  #   selected:
+  #     title: Sony PlayStation
+  #     source: "@korri:common-systems"
+  #   alternates:
+  #     - title: PlayStation 1
+  #       source: "@thirdparty:catalog"
+
+# Library/playable entries are what the user sees. Releases always describe a
+# `target`. Launch selection can be inferred from the release system or target
+# provider/kind; `launch` is an optional overlay for release-specific process
+# details such as cwd/env/args/config.
+library:
+  # Self-contained game from nixpkgs. Package identity is the release target
+  # provider-ref, not a launcher setting. @korri:nixpkgs can imply the default launch path:
+  # materialize the package, choose/run its default binary, then apply the
+  # release launch overlay.
+  neverball:
+    title: Neverball
+    kind: game
+    releases:
+      - id: nixpkgs
+        target:
+          kind: provider-ref
+          provider: "@korri:nixpkgs"
+          ref: nixpkgs#neverball
+        launch:
+          cwd: /storage/saves/neverball
+          env: {}
+          overrides:
+            args:
+              append: []
+
+  # Non-Nix process example: run an arbitrary executable that already exists on
+  # the device. `target.kind: executable` implies the generic process launcher;
+  # `launch` only customizes cwd/env/args.
+  local-sdl-game:
+    title: Local SDL Game
+    kind: game
+    releases:
+      - id: local-binary
+        target:
+          kind: executable
+          path: /storage/games/native/local-sdl-game/run
+        launch:
+          cwd: /storage/games/native/local-sdl-game
+          env:
+            SDL_VIDEODRIVER: wayland
+          overrides:
+            args:
+              append:
+                - --data-dir
+                - /storage/games/native/local-sdl-game/data
+
+  # Self-contained app from nixpkgs. Firefox may later deserve a specialized
+  # plugin if Korri models Firefox profiles/policies/extensions, but package
+  # target + launch overlay is enough for the generic case.
+  firefox:
+    title: Firefox
+    kind: app
+    releases:
+      - id: nixpkgs
+        target:
+          kind: provider-ref
+          provider: "@korri:nixpkgs"
+          ref: nixpkgs#firefox
+        launch:
+          cwd: /storage/app-state/firefox
+          env:
+            MOZ_ENABLE_WAYLAND: "1"
+          overrides:
+            args:
+              append: []
+
+  # URL-backed app/site. Here the URL is the release target; the browser package
+  # would be launcher implementation/config, not the target. This illustrates
+  # the rule: target is the thing this release semantically points at.
+  korri-homepage:
+    title: Korri Homepage
+    kind: app
+    releases:
+      - id: web
+        target:
+          kind: url
+          url: https://korri.local/
+        launch:
+          plugin: "@korri:nixpkgs"
+          settings:
+            plugin:
+              installable: nixpkgs#firefox
+          cwd: /storage/app-state/firefox
+          env:
+            MOZ_ENABLE_WAYLAND: "1"
+          overrides:
+            args:
+              append:
+                - --kiosk
+                - "{target.url}"
+
+  # Content-backed game. The target shape is the same release-level slot as the
+  # provider-ref/executable examples. The `system` supplies launcher defaults, so no
+  # explicit launch block is needed.
+  sonic-advance:
+    title: Sonic Advance
+    kind: game
+    releases:
+      - id: gba
+        system: gba
+        target:
+          kind: file
+          storage: roms
+          path: gba/Sonic Advance (USA) (En,Ja).gba
+
+  # Multi-file content-backed game. `target.kind: file-set` keeps the release
+  # shape aligned with single-file targets while giving each part a durable id.
+  # The target does not declare an entrypoint. It only describes the artifact
+  # bundle. The PSX system's launcher `input` policy chooses the manifest part
+  # if present and falls back to media.
+  final-fantasy-vii:
+    title: Final Fantasy VII
+    kind: game
+    releases:
+      - id: psx
+        system: psx
+        target:
+          kind: file-set
+          storage: roms
+          root: psx/Final Fantasy VII
+          files:
+            - id: playlist
+              role: manifest
+              path: Final Fantasy VII.m3u
+            - id: disc1
+              role: media
+              label: Disc 1
+              path: Final Fantasy VII (Disc 1).cue
+            - id: disc2
+              role: media
+              label: Disc 2
+              path: Final Fantasy VII (Disc 2).cue
+            - id: disc3
+              role: media
+              label: Disc 3
+              path: Final Fantasy VII (Disc 3).cue
+
+  # Domain-specific launcher. ZQuest earns a dedicated plugin because Korri can
+  # normalize save folders, replay prompts, zc.cfg generation, and audio quirks.
+  to-the-top:
+    title: To The Top
+    kind: game
+    releases:
+      - id: zelda-classic
+        system: zelda-classic
+        target:
+          kind: file
+          storage: roms
+          path: zelda-classic/ToTheTop.qst
+
+  # Service-backed launcher. Steam remains specialized because launch depends on
+  # Steam state, app ids, compatibility tools, and lifecycle management. The
+  # provider target can imply the Steam launcher when no explicit launcher choice
+  # is supplied.
+  thirty-xx:
+    title: 30XX
+    kind: game
+    releases:
+      - id: steam
+        target:
+          kind: provider-ref
+          provider: "@korri:steam"
+          ref: "1029210"
+
+# Open design questions captured inline for iteration:
+#
+# 1. Should named launchers, plugin-contributed launcher support records, and
+#    release `launch` overlays all share one schema with contextual constraints
+#    (`plugin` required for definitions, `use` common for support records, both
+#    optional for inferred release overlays)?
+# 2. Is `target.kind: provider-ref` the right neutral locator for nixpkgs,
+#    Steam, itch.io, and similar providers, with provider-specific semantics
+#    behind `provider` + `ref`?
+# 3. How should a nixpkgs target specify a non-default binary when the package
+#    exposes multiple runnable commands: `target.binary`, explicit
+#    `launch.plugin/settings`, or plugin-specific target metadata?
+# 4. Should plugin-contributed support records be the only system-to-launchability
+#    join, while executable/provider-ref/url targets imply launchers from target
+#    kind or provider when no explicit `launch` is supplied?
+# 5. For generic package/executable launches, should all argv customisation live
+#    in `overrides.args`, while `settings` remains reserved for common packs and
+#    typed `settings.plugin` fields?
+# 6. Should `file-set.files[].role` be a loose string or a small enum such as
+#    `manifest | media | data | patch | metadata | document`?
+# 7. Should provider-links use one record with `refs[]` as shown, or many
+#    one-ref records? The current sketch favors `refs[]` to avoid artificial
+#    one-identifier limits while keeping relationships grouped by provider and
+#    scope.
+# 8. Should `input.roles` be ordered fallback policy everywhere, and should exact
+#    release-specific selection use `launch.input.part: <file-set part id>`?
+# 9. Should canonical system-field conflicts be warnings by default and errors
+#    only in strict mode, or should conflicting title/identity claims fail closed
+#    unless a user override selects the winner?
+# 10. Should metadata-only systems be allowed in final library records even when
+#    launch support is absent? Current sketch says yes: known-but-not-launchable
+#    is a valid state and should produce an actionable launch diagnostic.
+# 11. Should plugin launcher-type/support metadata be exposed in generated docs/debug RPC
+#    so users can see why `runtime` is required for RetroArch but omitted for
+#    ZQuest, process, and nixpkgs launches, and why a system is or is not
+#    launchable?
+# 12. Which common setting packs are stable enough for v1 (`display`, `audio`,
+#    `input`, `saves`, `lifecycle`), and should unsupported packs warn, fail, or
+#    be ignored when selected launcher plugins do not declare support?

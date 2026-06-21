@@ -3,7 +3,7 @@ id: 01KVETNP21X69THAQ73QZBKRBE
 slug: solve-portmaster-godot-4-egl-initialization-on-bandai
 title: Solve PortMaster Godot 4 EGL initialization on Bandai
 origin: parked
-status: To Do
+status: In Progress
 priority: high
 labels:
   - portmaster
