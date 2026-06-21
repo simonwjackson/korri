@@ -53,13 +53,25 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).not.toContain("direct_steam_pid")
   })
 
-  it("requires gamescope evidence before forwarding an AppID", () => {
+  it("requires gamescope and Big Picture evidence before forwarding an AppID", () => {
     expect(moduleSource).toContain("wait_for_gamescoped_steam_ready")
     expect(moduleSource).toContain("GAMESCOPE_WAYLAND_DISPLAY")
     expect(moduleSource).toContain("gamescope-0")
+    expect(moduleSource).toContain("steam_big_picture_window_present")
+    expect(moduleSource).toContain("Steam Big Picture Mode")
+    expect(moduleSource).toContain("Waiting for compat in post-logon")
+    expect(moduleSource).not.toContain(
+      "Console Log Start|Waiting for compat in post-logon",
+    )
     expect(moduleSource).toContain(
       "timed out waiting for gamescoped Steam readiness before AppID launch",
     )
+  })
+
+  it("bounds service-control waits before relying on the readiness loop", () => {
+    expect(moduleSource).toContain("systemctl --no-block start")
+    expect(moduleSource).toContain("KORRI_STEAM_APP_SYSTEMCTL_TIMEOUT")
+    expect(moduleSource).toContain("/bin/timeout")
   })
 
   it("accepts existing readiness evidence for prewarmed gamescoped Steam", () => {
@@ -68,16 +80,18 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain(
       "A deliberately prewarmed gamescoped Steam session emits its",
     )
-    expect(moduleSource).toContain('ready_log="$(${pkgs.coreutils}/bin/cat')
+    expect(moduleSource).toContain(
+      'ready_log="$(' + "$" + "{pkgs.coreutils}/bin/cat",
+    )
   })
 
   it("lets the gamescoped Big Picture service run first-launch bootstrap repair", () => {
     expect(moduleSource).toContain(
       "Apply\n      # this to explicit gamescoped Big Picture invocations too",
     )
-    expect(moduleSource).toContain("set -- \"''${filtered[@]}\"")
+    expect(moduleSource).toContain("set -- \"''" + "$" + '{filtered[@]}"')
     expect(moduleSource).toContain(
-      'ExecStart = "${pkgs.gamescope}/bin/gamescope',
+      'ExecStart = "' + "$" + "{pkgs.gamescope}/bin/gamescope",
     )
   })
 

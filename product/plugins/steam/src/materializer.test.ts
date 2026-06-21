@@ -29,7 +29,9 @@ const memoryFs = () => {
   const files = new Map<string, string>()
   const writes: string[] = []
   const fs: SteamStateFileSystem = {
-    readText: async path => files.get(path),
+    readText: async path =>
+      files.get(path) ??
+      (path.endsWith("/toolmanifest.vdf") ? '"manifest" {}' : undefined),
     writeTextAtomic: async (path, content) => {
       writes.push(path)
       files.set(path, content)
@@ -143,7 +145,7 @@ describe("steamReadableLaunchIntegration", () => {
       )
 
       expect(result.spec).toEqual({
-        command: "korri-steam-app",
+        command: "/run/current-system/sw/bin/korri-steam-app",
         args: ["1029210"],
       })
       expect(result.launchMetadata).toEqual({
@@ -262,7 +264,7 @@ describe("steamReadableLaunchIntegration", () => {
       )
 
       expect(result.spec).toEqual({
-        command: "korri-steam-app",
+        command: "/run/current-system/sw/bin/korri-steam-app",
         args: ["1029210"],
       })
     })

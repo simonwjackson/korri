@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import type { Stats } from "node:fs"
 import {
   mkdir,
   readdir,
@@ -100,6 +101,7 @@ export interface SteamStateFileSystem {
   readonly mkdirp: (path: string) => Promise<void>
   readonly listDirectories?: (path: string) => Promise<readonly string[]>
   readonly pathExists?: (path: string) => Promise<boolean>
+  readonly isExecutableFile?: (path: string) => Promise<boolean>
 }
 
 export interface SteamStateLock {
@@ -181,6 +183,19 @@ export const nodeSteamStateFileSystem: SteamStateFileSystem = {
       throw error
     }
   },
+  isExecutableFile: async path => {
+    try {
+      const entry = await stat(path)
+      return isExecutableRegularFile(entry)
+    } catch (error) {
+      if (isNodeErrorCode(error, "ENOENT")) return false
+      throw error
+    }
+  },
+}
+
+function isExecutableRegularFile(entry: Stats): boolean {
+  return entry.isFile() && (entry.mode & 0o111) !== 0
 }
 
 export const noopSteamLifecycle: SteamLifecycle = {
@@ -376,10 +391,15 @@ async function assertCompatToolExists(
   const exists = fs.pathExists ? await fs.pathExists(path) : true
   if (!exists) throw new SteamCompatToolMissing({ stateRoot, tool })
   const protonPath = join(path, "proton")
-  const hasProton = fs.pathExists ? await fs.pathExists(protonPath) : true
-  if (!hasProton) throw new SteamCompatToolMissing({ stateRoot, tool })
+  const hasExecutableProton = fs.isExecutableFile
+    ? await fs.isExecutableFile(protonPath)
+    : fs.pathExists
+      ? await fs.pathExists(protonPath)
+      : true
+  if (!hasExecutableProton)
+    throw new SteamCompatToolMissing({ stateRoot, tool })
   const manifest = await fs.readText(join(path, "toolmanifest.vdf"))
-  if (manifest?.includes("require_tool_appid")) {
+  if (manifest === undefined || manifest.includes("require_tool_appid")) {
     throw new SteamCompatToolMissing({ stateRoot, tool })
   }
 }

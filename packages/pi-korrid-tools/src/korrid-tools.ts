@@ -747,9 +747,7 @@ async function executeSteamLaunchSupervise(
     })
     return toolResult(
       {
-        ok:
-          result.outcome === "running_gpu" ||
-          result.outcome === "running_unverified_gpu",
+        ok: result.signals.validGamescopedProtonProof,
         ssh: ssh.redacted,
         appId,
         appName,
@@ -844,7 +842,7 @@ export function classifySteamLaunchTranscript(
   const renderNode = /renderD128|renderD\d+/.test(transcript)
   const inputAccess = /\/dev\/input|\/dev\/uinput|uinput/.test(transcript)
   const gamescopedSteam =
-    /GAMESCOPE_WAYLAND_DISPLAY=gamescope-0|\bgamescope-0\b|gamescope .*korri-steam-guest|\/bin\/gamescope/.test(
+    /(?:^|\s)(?:\/[^\s]+\/)?gamescope(?:\s|\S)*korri-steam-guest/.test(
       transcript,
     )
   const realProtonCachyos =

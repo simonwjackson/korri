@@ -14,6 +14,8 @@ export class InvalidSteamLaunchOptions extends Data.TaggedError(
 
 const STEAM_TARGET_PATTERN = /^steam:\/\/rungameid\/(\d+)$/
 const KORRI_TOKEN_PATTERN = /\{[^}]+\}/
+const DEFAULT_KORRI_STEAM_APP_COMMAND =
+  "/run/current-system/sw/bin/korri-steam-app"
 
 export type SteamEither<E, A> =
   | { readonly _tag: "Left"; readonly left: E }
@@ -52,9 +54,9 @@ export const renderSteamLaunchSpec = (
     const parsed = parseSteamAppId(options.target)
     if (parsed._tag === "Left") return yield* Effect.fail(parsed.left)
     const appId = parsed.right
-    const requestedCommand = options.command ?? "korri-steam-app"
+    const requestedCommand = options.command ?? DEFAULT_KORRI_STEAM_APP_COMMAND
     const command = isKorriSteamAppCommand(requestedCommand)
       ? requestedCommand
-      : "korri-steam-app"
+      : DEFAULT_KORRI_STEAM_APP_COMMAND
     return { command, args: [appId] }
   })

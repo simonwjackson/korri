@@ -516,6 +516,23 @@ GAME_PID=216880
     })
   })
 
+  it("does not accept a leaked gamescope token as gamescoped proof", () => {
+    const result = classifySteamLaunchTranscript(
+      `GAMESCOPE_WAYLAND_DISPLAY=gamescope-0
+SteamLaunch AppId=401710
+/var/lib/korri/steam/compatibilitytools.d/proton-cachyos-11.0-20260601-slr-arm64/proton waitforexitandrun
+GAME_PID=216880
+`,
+      { appId: "401710", expectedGameExe: "Flinthook.exe" },
+    )
+
+    expect(result.signals).toMatchObject({
+      gamescopedSteam: false,
+      realProtonCachyos: true,
+      validGamescopedProtonProof: false,
+    })
+  })
+
   it("classifies Stray-style Steam launches by process needle", () => {
     const result = classifySteamLaunchTranscript(
       `APP_ID=1332010\nAPP_NAME=Stray\nPROCESS_NEEDLE=Hk_project\nGAME_PID=239999\n/run/pressure-vessel/interpreter-root/var/pressure-vessel/gfx/main/usr/lib/libvulkan_freedreno.so\nlrwx------ 43 -> /dev/dri/renderD128\n`,

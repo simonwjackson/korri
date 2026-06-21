@@ -328,7 +328,7 @@ describe("PluginLibrarySourceLayerLive", () => {
         integration: "steam",
       })
       expect(result.resolved.spec).toEqual({
-        command: "korri-steam-app",
+        command: "/run/current-system/sw/bin/korri-steam-app",
         args: ["1029210"],
       })
     } finally {
@@ -571,7 +571,10 @@ async function seedSteamLaunchConfig(
     DEFAULT_STEAM_COMPAT_TOOL,
   )
   await mkdir(compatToolRoot, { recursive: true })
-  await writeFile(join(compatToolRoot, "proton"), "#!/usr/bin/env python3\n")
+  const protonPath = join(compatToolRoot, "proton")
+  await writeFile(protonPath, "#!/usr/bin/env python3\n")
+  await chmod(protonPath, 0o755)
+  await writeFile(join(compatToolRoot, "toolmanifest.vdf"), '"manifest" {}')
   const launcherBlock = options.includeApp
     ? [
         "launchers:",

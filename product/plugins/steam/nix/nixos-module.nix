@@ -413,7 +413,10 @@ let
       *) usage ;;
     esac
 
-    exec ${pkgs.systemd}/bin/systemctl "$1" korri-steam-gamescope.service
+    case "$1" in
+      start) exec ${pkgs.systemd}/bin/systemctl --no-block start korri-steam-gamescope.service ;;
+      stop) exec ${pkgs.coreutils}/bin/timeout 30 ${pkgs.systemd}/bin/systemctl stop korri-steam-gamescope.service ;;
+    esac
   '';
 
   steamWarmup = pkgs.writeShellScriptBin "korri-steam-warm" ''
@@ -514,6 +517,10 @@ let
       sway '[class="ElectrobunKitchenSink-dev"] focus, fullscreen enable'
     }
 
+    steam_big_picture_window_present() {
+      sway_tree | ${pkgs.gnugrep}/bin/grep -a -E '"(name|title)": "Steam Big Picture Mode"|"class": "steam"|"app_id": "steam"' >/dev/null 2>&1
+    }
+
     hide_steam_hat() {
       if [ "$keep_steam_visible" != "0" ]; then
         echo "korri-steam-app: leaving Steam visible for Steam launch debugging" >&2
@@ -577,8 +584,12 @@ let
 
     control_steam_service() {
       action="$1"
+      control_timeout="''${KORRI_STEAM_APP_SYSTEMCTL_TIMEOUT:-$service_ready_timeout}"
       if [ "$(${pkgs.coreutils}/bin/id -u)" -eq 0 ]; then
-        ${pkgs.systemd}/bin/systemctl "$action" "$service_name"
+        case "$action" in
+          start) ${pkgs.systemd}/bin/systemctl --no-block start "$service_name" ;;
+          stop) ${pkgs.coreutils}/bin/timeout "$control_timeout" ${pkgs.systemd}/bin/systemctl stop "$service_name" ;;
+        esac
         return $?
       fi
       if [ "$service_name" != "korri-steam-gamescope.service" ]; then
@@ -586,7 +597,7 @@ let
         return 1
       fi
       if [ -x /run/wrappers/bin/sudo ]; then
-        /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control "$action"
+        ${pkgs.coreutils}/bin/timeout "$control_timeout" /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control "$action"
         return $?
       fi
       echo "korri-steam-app: warning: sudo wrapper unavailable; cannot $action $service_name" >&2
@@ -643,7 +654,8 @@ let
           fi
         fi
         if [ -S "$gamescope_socket" ] \
-          && printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Console Log Start|Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
+          && steam_big_picture_window_present \
+          && printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
           return 0
         fi
         if ! steam_process_alive; then

@@ -7,6 +7,8 @@ import {
   validateSteamLaunchOptions,
 } from "./launch-spec"
 
+const defaultWrapper = "/run/current-system/sw/bin/korri-steam-app"
+
 describe("steam launch spec", () => {
   it("parses Steam rungameid targets", () => {
     expect(parseSteamAppId("steam://rungameid/2379780")).toMatchObject({
@@ -23,11 +25,11 @@ describe("steam launch spec", () => {
       }),
     )
 
-    expect(spec).toEqual({ command: "korri-steam-app", args: ["2379780"] })
+    expect(spec).toEqual({ command: defaultWrapper, args: ["2379780"] })
   })
 
   it("preserves an absolute korri-steam-app command path", async () => {
-    const command = "/run/current-system/sw/bin/korri-steam-app"
+    const command = defaultWrapper
     const spec = await Effect.runPromise(
       renderSteamLaunchSpec({
         command,
