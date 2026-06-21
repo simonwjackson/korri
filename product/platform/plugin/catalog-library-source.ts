@@ -299,6 +299,9 @@ function resolvePluginLaunch(
               ...(contribution.launch.with
                 ? { launchCompanions: contribution.launch.with }
                 : {}),
+              ...(contribution.launch.launchMetadata
+                ? { launchMetadata: contribution.launch.launchMetadata }
+                : {}),
             }
           },
           catch: error =>
@@ -344,8 +347,24 @@ function isPluginCatalogRelease(
         launch.args.every(item => typeof item === "string"))) &&
     (launch.cwd === undefined || typeof launch.cwd === "string") &&
     (launch.env === undefined || isStringRecord(launch.env)) &&
-    (launch.with === undefined || isRecord(launch.with))
+    (launch.with === undefined || isRecord(launch.with)) &&
+    (launch.launchMetadata === undefined || isLaunchMetadata(launch.launchMetadata))
   )
+}
+
+function isLaunchMetadata(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  const appProviderId = value.appProviderId
+  const annotations = value.annotations
+  return (
+    (appProviderId === undefined || isProviderId(appProviderId)) &&
+    (annotations === undefined ||
+      (isRecord(annotations) && Object.keys(annotations).every(isProviderId)))
+  )
+}
+
+function isProviderId(value: unknown): value is ProviderId {
+  return typeof value === "string" && value.startsWith("@") && value.includes(":")
 }
 
 function isStringRecord(

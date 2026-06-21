@@ -1,4 +1,5 @@
 import { plugin } from "@platform/plugin"
+import { CDP_INPUT_BRIDGE_PLUGIN_ID } from "../cdp-input-bridge"
 
 export const KORRI_YFS_PLUGIN_ID = "@korri:yoshis-fabrication-station" as const
 export const KORRI_YFS_LAUNCHER_LOCAL_ID = "level" as const
@@ -22,6 +23,13 @@ export const yoshisFabricationStationPlugin = plugin({
   title: "Yoshi's Fabrication Station",
   description:
     "Adds Yoshi's Fabrication Station as plugin-owned browser-playable content.",
+  requires: [
+    {
+      capability: "session.lifecycle",
+      ref: { provider: CDP_INPUT_BRIDGE_PLUGIN_ID, id: "self" },
+      reason: "YFS needs launch-owned controller-to-keyboard input via Chromium CDP.",
+    },
+  ],
   contributes: {
     config: {
       launchers: {
@@ -48,6 +56,20 @@ export const yoshisFabricationStationPlugin = plugin({
               launch: {
                 kind: "process",
                 executable: { resource: "yoshis-fabrication-station" },
+                env: { KORRI_CDP_INPUT_BRIDGE_PORT: "9333" },
+                launchMetadata: {
+                  annotations: {
+                    [CDP_INPUT_BRIDGE_PLUGIN_ID]: {
+                      enable: true,
+                      cdpPort: 9333,
+                      mapping: "yfs-default",
+                      sourcePreference: {
+                        names: ["Microsoft Xbox Series S|X Controller"],
+                      },
+                      target: { type: "page", urlPattern: "index.html" },
+                    },
+                  },
+                },
               },
             },
           ],

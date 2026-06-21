@@ -1,3 +1,4 @@
+import type { LaunchMetadata } from "./launch-metadata"
 import { Effect } from "effect"
 
 export type ConfigRecord = object
@@ -235,6 +236,7 @@ export interface ProcessPluginLaunch {
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly with?: Readonly<Record<ProviderId, unknown>>
+  readonly launchMetadata?: LaunchMetadata
 }
 
 export interface NixExecutableFulfillment {

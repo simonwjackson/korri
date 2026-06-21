@@ -35,6 +35,7 @@
 #   YFS_APP_DIR                  YFS app root containing index.html
 #   YFS_BROWSER                  Chromium binary
 #   YFS_PROFILE_DIR              Chromium user-data dir
+#   KORRI_CDP_INPUT_BRIDGE_PORT  enable Chromium remote debugging on this port
 
 set -euo pipefail
 
@@ -271,6 +272,9 @@ chromium_args=(
   --no-sandbox
   --app="$target_url"
 )
+if [[ -n "${KORRI_CDP_INPUT_BRIDGE_PORT:-}" ]]; then
+  chromium_args+=(--remote-debugging-address=127.0.0.1 --remote-debugging-port="$KORRI_CDP_INPUT_BRIDGE_PORT")
+fi
 if [[ $flag_windowed -eq 0 ]]; then
   chromium_args+=(--ozone-platform=x11 --start-fullscreen --kiosk)
 fi

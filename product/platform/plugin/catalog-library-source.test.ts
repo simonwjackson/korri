@@ -114,6 +114,55 @@ describe("withPluginLibrarySource", () => {
     expect(resolved.app).toBeUndefined()
   })
 
+  it("maps plugin launch metadata to the resolved launch", async () => {
+    const stateRoot = await mktemp()
+    await seedExecutable(stateRoot)
+    const withMetadata = plugin({
+      namespace: "@korri",
+      name: "neverball",
+      title: "Policy",
+      contributes: {
+        config: {
+          catalog: {
+            policy: {
+              id: "policy",
+              title: "Policy",
+              kind: "game",
+              releases: [
+                {
+                  id: "nixpkgs",
+                  launch: {
+                    kind: "process",
+                    executable: { resource: resource.id },
+                    launchMetadata: {
+                      annotations: { "@fixture:input": { enable: true } },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+          modules: { neverball: resource },
+        },
+      },
+    })
+    const source = withPluginLibrarySource(
+      emptySource(),
+      createPluginRegistry([withMetadata], {
+        enabledPluginIds: ["@korri:neverball"],
+      }),
+      createNixOutLinkResolver({ stateRoot }),
+    )
+
+    const resolved = await Effect.runPromise(
+      source.resolveLaunchForGame("@korri:neverball/policy"),
+    )
+
+    expect(resolved.launchMetadata).toEqual({
+      annotations: { "@fixture:input": { enable: true } },
+    })
+  })
+
   it("maps provider launch options to the resolved companion map", async () => {
     const stateRoot = await mktemp()
     await seedExecutable(stateRoot)

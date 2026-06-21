@@ -3,6 +3,7 @@ import {
   createPluginRegistry,
   executableResources,
 } from "@platform/plugin/registry"
+import { CDP_INPUT_BRIDGE_PLUGIN_ID } from "../cdp-input-bridge"
 import {
   KORRI_YFS_LAUNCHER_ID,
   KORRI_YFS_PLUGIN_ID,
@@ -73,5 +74,33 @@ describe("Yoshi's Fabrication Station plugin", () => {
       "debug",
       "metrics",
     ])
+  })
+
+  it("opts its Chromium launch into the CDP input bridge with the validated mapping", () => {
+    const release = yoshisFabricationStationPlugin.contributes.config.catalog?.[
+      "yoshis-fabrication-station"
+    ]?.releases[0]
+
+    expect(yoshisFabricationStationPlugin.requires).toContainEqual(
+      expect.objectContaining({
+        ref: { provider: CDP_INPUT_BRIDGE_PLUGIN_ID, id: "self" },
+      }),
+    )
+    expect(release?.launch.env).toMatchObject({
+      KORRI_CDP_INPUT_BRIDGE_PORT: "9333",
+    })
+    expect(release?.launch.launchMetadata).toEqual({
+      annotations: {
+        [CDP_INPUT_BRIDGE_PLUGIN_ID]: {
+          enable: true,
+          cdpPort: 9333,
+          mapping: "yfs-default",
+          sourcePreference: {
+            names: ["Microsoft Xbox Series S|X Controller"],
+          },
+          target: { type: "page", urlPattern: "index.html" },
+        },
+      },
+    })
   })
 })
