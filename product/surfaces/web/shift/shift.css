@@ -684,7 +684,7 @@
  * Launch transition prototypes — Storybook-only exploration hooks
  *
  * Motion is driven by framer-motion in
- * product/themes/shift/pages/ShiftHomeLaunchTransition.stories.tsx.
+ * product/surfaces/web/shift/pages/ShiftHomeLaunchTransition.stories.tsx.
  * The class hooks below only own static layout and typography so motion
  * code stays in one place.
  * -------------------------------------------------------------------------- */

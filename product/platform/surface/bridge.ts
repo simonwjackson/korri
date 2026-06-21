@@ -23,15 +23,15 @@ export interface KorriPlatformBridge {
   }
 }
 
-export interface KorriThemeMountContext {
+export interface KorriSurfaceMountContext {
   readonly bridge: KorriPlatformBridge
 }
 
-export interface KorriThemeEntrypoint {
+export interface KorriSurfaceEntrypoint {
   readonly id: string
   mount(
     host: HTMLElement,
-    context: KorriThemeMountContext,
+    context: KorriSurfaceMountContext,
   ): undefined | (() => void)
 }
 

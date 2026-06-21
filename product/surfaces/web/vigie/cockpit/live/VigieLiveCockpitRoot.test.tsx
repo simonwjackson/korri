@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import type { KorriPlatformBridge } from "@platform/theme/bridge"
+import type { KorriPlatformBridge } from "@platform/surface/bridge"
 import { fetchVigieLiveSnapshot } from "./VigieLiveCockpitRoot"
 
 describe("Vigie live cockpit root", () => {

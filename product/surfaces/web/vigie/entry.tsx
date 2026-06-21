@@ -1,4 +1,4 @@
-import type { KorriThemeEntrypoint } from "@platform/theme/bridge"
+import type { KorriSurfaceEntrypoint } from "@platform/surface/bridge"
 import { createRoot } from "react-dom/client"
 import { vigieCockpitFixture } from "./fixtures/cockpit-fixtures"
 import { VigieCockpitPage } from "./pages/VigieCockpitPage"
@@ -8,7 +8,7 @@ import { VigieCockpitPage } from "./pages/VigieCockpitPage"
 // session, device metrics + governors, subsystem health). The entrypoint uses
 // live RPC data with fixtures as the loading/fallback shape.
 
-export const vigieTheme: KorriThemeEntrypoint = {
+export const vigieTheme: KorriSurfaceEntrypoint = {
   id: "vigie",
   mount(host, { bridge }) {
     const root = createRoot(host)

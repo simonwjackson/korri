@@ -1,4 +1,4 @@
-import { ThemeHost } from "@product/apps/portal/themes/ThemeHost"
+import { SurfaceHost } from "@platform/surface/host/SurfaceHost"
 import { createFileRoute } from "@tanstack/react-router"
 
 export const Route = createFileRoute("/vigie")({
@@ -6,5 +6,5 @@ export const Route = createFileRoute("/vigie")({
 })
 
 function VigieRoute() {
-  return <ThemeHost themeId="vigie" />
+  return <SurfaceHost surfaceId="vigie" />
 }

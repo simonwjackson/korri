@@ -11,7 +11,7 @@ import { useEffect } from "react"
 import "@fontsource-variable/geist"
 import "@fontsource-variable/nunito"
 import "@platform/react/primitives/theme/styles.css"
-import "@product/themes/shift/shift.css"
+import "@product/surfaces/web/shift/shift.css"
 
 // Spatial nav is global; initialize once per iframe load. HMR may re-evaluate
 // this module, so we stash the handle on window and dispose the prior

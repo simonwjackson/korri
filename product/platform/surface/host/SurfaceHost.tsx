@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react"
 import { usePlatformBridge } from "./platform-bridge-context"
-import { type FirstPartyThemeId, loadThemeEntrypoint } from "./theme-registry"
+import { type FirstPartySurfaceId, loadSurfaceEntrypoint } from "./surface-host-registry"
 
-export function ThemeHost({
-  themeId,
-  loadEntrypoint = loadThemeEntrypoint,
+export function SurfaceHost({
+  surfaceId,
+  loadEntrypoint = loadSurfaceEntrypoint,
 }: {
-  readonly themeId: FirstPartyThemeId
-  readonly loadEntrypoint?: typeof loadThemeEntrypoint
+  readonly surfaceId: FirstPartySurfaceId
+  readonly loadEntrypoint?: typeof loadSurfaceEntrypoint
 }) {
   const bridge = usePlatformBridge()
   const hostRef = useRef<HTMLDivElement | null>(null)
@@ -23,7 +23,7 @@ export function ThemeHost({
     let dispose: (() => void) | undefined
     host.replaceChildren()
 
-    void loadEntrypoint(themeId)
+    void loadEntrypoint(surfaceId)
       .then(entrypoint => {
         if (cancelled) return
         const mounted = entrypoint.mount(host, { bridge })
@@ -40,17 +40,17 @@ export function ThemeHost({
       dispose?.()
       host.replaceChildren()
     }
-  }, [bridge, loadEntrypoint, themeId])
+  }, [bridge, loadEntrypoint, surfaceId])
 
   return (
     <>
       {error ? (
         <div role="alert" className="p-6 text-sm text-red-600">
-          Failed to load theme {themeId}: {error.message}
+          Failed to load surface {surfaceId}: {error.message}
         </div>
       ) : null}
       <div
-        data-korri-theme-host={themeId}
+        data-korri-surface-host={surfaceId}
         hidden={Boolean(error)}
         ref={hostRef}
       />

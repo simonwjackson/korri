@@ -58,7 +58,7 @@ pkgs.runCommand "korri-sm8550-build-performance-check"
     test -e ${runtimeSources.portal}/vite.config.mjs
     test -e ${runtimeSources.portal}/product/apps/desktop/runtime-config-shape.ts
     test -e ${runtimeSources.portal}/product/apps/portal
-    test -e ${runtimeSources.portal}/product/themes
+    test -e ${runtimeSources.portal}/product/surfaces/web
     test -e ${runtimeSources.portal}/product/platform
     test ! -e ${runtimeSources.portal}/korri
     test ! -e ${runtimeSources.portal}/product/apps/desktop/runtime-config.ts

@@ -9,7 +9,7 @@ import { expect, test } from "@playwright/test"
  * focus engine as keyboard input without component coupling.
  *
  * Retargeted from
- * product/themes/shift/organisms/GameGrid.gamepad.story.e2e.ts
+ * product/surfaces/web/shift/organisms/GameGrid.gamepad.story.e2e.ts
  * during the Tilegrid consolidation.
  */
 

@@ -34,7 +34,7 @@ in
       ../../../../vite.config.mjs
       ../../../../product/apps/desktop/runtime-config-shape.ts
       ../../../../product/apps/portal
-      ../../../../product/themes
+      ../../../../product/surfaces/web
     ]
     ++ sharedRuntime
   );

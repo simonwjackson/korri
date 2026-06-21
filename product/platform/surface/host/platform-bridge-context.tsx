@@ -1,4 +1,4 @@
-import type { KorriPlatformBridge } from "@platform/theme/bridge"
+import type { KorriPlatformBridge } from "@platform/surface/bridge"
 import { createContext, type ReactNode, useContext } from "react"
 
 const PlatformBridgeContext = createContext<KorriPlatformBridge | null>(null)

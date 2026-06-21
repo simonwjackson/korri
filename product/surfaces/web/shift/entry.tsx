@@ -28,14 +28,14 @@ import {
 import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
 import type {
   KorriPlatformBridge,
-  KorriThemeEntrypoint,
-} from "@platform/theme/bridge"
+  KorriSurfaceEntrypoint,
+} from "@platform/surface/bridge"
 import { Effect, Layer } from "effect"
 import { useEffect } from "react"
 import { createRoot } from "react-dom/client"
 import { ShiftHomePage } from "./pages/ShiftHomePage"
 
-export const shiftTheme: KorriThemeEntrypoint = {
+export const shiftTheme: KorriSurfaceEntrypoint = {
   id: "shift",
   mount(host, { bridge }) {
     const root = createRoot(host)

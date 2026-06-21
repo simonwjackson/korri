@@ -12,7 +12,7 @@ import { expect, test } from "@playwright/test"
  * Storybook's preview wires startSpatialNavigation() once at module scope,
  * so every story inherits keyboard + gamepad-driven focus for free.
  *
- * Retargeted from product/themes/shift/organisms/GameGrid.story.e2e.ts
+ * Retargeted from product/surfaces/web/shift/organisms/GameGrid.story.e2e.ts
  * during the Tilegrid consolidation.
  */
 

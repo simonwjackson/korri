@@ -5,5 +5,4 @@ export const routes = rootRoute("+__root.tsx", [
   route("/screen", "+screen.tsx"),
   route("/evier", "+evier.tsx"),
   route("/vigie", "+vigie.tsx"),
-  route("/demo-theme", "+demo-theme.tsx"),
 ])

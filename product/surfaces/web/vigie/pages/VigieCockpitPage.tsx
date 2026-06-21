@@ -1,4 +1,4 @@
-import type { KorriPlatformBridge } from "@platform/theme/bridge"
+import type { KorriPlatformBridge } from "@platform/surface/bridge"
 import { VigieLiveCockpitRoot } from "../cockpit/live/VigieLiveCockpitRoot"
 import { VigieShell } from "../cockpit/shell/VigieShell"
 import type { CockpitFixture } from "../cockpit/VigieCockpit.context"

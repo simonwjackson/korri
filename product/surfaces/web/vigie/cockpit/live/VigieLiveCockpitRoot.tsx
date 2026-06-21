@@ -1,4 +1,4 @@
-import type { KorriPlatformBridge } from "@platform/theme/bridge"
+import type { KorriPlatformBridge } from "@platform/surface/bridge"
 import {
   type ReactNode,
   useCallback,

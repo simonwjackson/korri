@@ -7,13 +7,13 @@ import { useLibraryLaunchController } from "@platform/react/library/use-library-
 import {
   ShiftCatalogStateRoot,
   useShiftCatalogCase,
-} from "@product/themes/shift/catalog/ShiftCatalogStateRoot"
-import { ShiftCompanionScreen } from "@product/themes/shift/pages/ShiftCompanionScreen"
-import { ShiftHomeDefectBody } from "@product/themes/shift/pages/ShiftHomeDefectBody"
-import { ShiftHomeEmptyBody } from "@product/themes/shift/pages/ShiftHomeEmptyBody"
-import { ShiftHomeLoadErrorBody } from "@product/themes/shift/pages/ShiftHomeLoadErrorBody"
-import { ShiftHomeLoadingBody } from "@product/themes/shift/pages/ShiftHomeLoadingBody"
-import { ShiftPrimaryDualScreenSurface } from "@product/themes/shift/pages/ShiftPrimaryDualScreenSurface"
+} from "@product/surfaces/web/shift/catalog/ShiftCatalogStateRoot"
+import { ShiftCompanionScreen } from "@product/surfaces/web/shift/pages/ShiftCompanionScreen"
+import { ShiftHomeDefectBody } from "@product/surfaces/web/shift/pages/ShiftHomeDefectBody"
+import { ShiftHomeEmptyBody } from "@product/surfaces/web/shift/pages/ShiftHomeEmptyBody"
+import { ShiftHomeLoadErrorBody } from "@product/surfaces/web/shift/pages/ShiftHomeLoadErrorBody"
+import { ShiftHomeLoadingBody } from "@product/surfaces/web/shift/pages/ShiftHomeLoadingBody"
+import { ShiftPrimaryDualScreenSurface } from "@product/surfaces/web/shift/pages/ShiftPrimaryDualScreenSurface"
 import { Option } from "effect"
 import type { ReactNode } from "react"
 

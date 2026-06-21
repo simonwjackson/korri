@@ -11,7 +11,7 @@ jobs:
 ---
 
 **Source job**: `docs/jobs/safe-game-resume.md`
-**Theme**: `product/themes/shift/`
+**Theme**: `product/surfaces/web/shift/`
 **BDD spec**: `product/apps/portal/features/home/e2e/home.feature`
 
 ---

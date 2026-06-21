@@ -1,12 +1,12 @@
 import type { StreamControlClient } from "@platform/stream-control/stream-control-client"
 import type {
   KorriPlatformBridge,
-  KorriThemeEntrypoint,
-} from "@platform/theme/bridge"
+  KorriSurfaceEntrypoint,
+} from "@platform/surface/bridge"
 import { createRoot } from "react-dom/client"
 import { EvierStreamControlPage } from "./pages/EvierStreamControlPage"
 
-export const evierTheme: KorriThemeEntrypoint = {
+export const evierTheme: KorriSurfaceEntrypoint = {
   id: "evier",
   mount(host, { bridge }) {
     const root = createRoot(host)

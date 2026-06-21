@@ -89,8 +89,8 @@ pkgs.stdenv.mkDerivation {
       exit 1
     fi
 
-    # Regression guard for the product/themes refactor: Shift JSX lives outside
-    # the portal Vite root, so Tailwind must scan product/themes explicitly.
+    # Regression guard for the product/surfaces/web refactor: Shift JSX lives outside
+    # the portal Vite root, so Tailwind must scan product/surfaces/web explicitly.
     # If the @source roots in styles.css drift, the Shift theme CSS selectors
     # still ship but layout utilities disappear, collapsing the kiosk home into
     # default document flow on device.

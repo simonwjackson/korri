@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test"
 import type {
   KorriPlatformBridge,
-  KorriThemeEntrypoint,
-} from "@platform/theme/bridge"
+  KorriSurfaceEntrypoint,
+} from "@platform/surface/bridge"
 import { render, waitFor } from "@testing-library/react"
 import type { ComponentProps } from "react"
 import { PlatformBridgeProvider } from "./platform-bridge-context"
-import { ThemeHost } from "./ThemeHost"
+import { SurfaceHost } from "./SurfaceHost"
 
 const bridge: KorriPlatformBridge = {
   library: {
@@ -24,11 +24,11 @@ const bridge: KorriPlatformBridge = {
   },
 }
 
-describe("ThemeHost", () => {
-  it("mounts a selected theme entrypoint with the platform bridge", async () => {
+describe("SurfaceHost", () => {
+  it("mounts a selected surface entrypoint with the platform bridge", async () => {
     let receivedBridge: KorriPlatformBridge | undefined
-    const entrypoint: KorriThemeEntrypoint = {
-      id: "plain-demo",
+    const entrypoint: KorriSurfaceEntrypoint = {
+      id: "shift",
       mount(host, context) {
         receivedBridge = context.bridge
         host.textContent = "mounted"
@@ -45,7 +45,7 @@ describe("ThemeHost", () => {
   })
 
   it("shows load failures and clears them when a later selection loads", async () => {
-    const entrypoint: KorriThemeEntrypoint = {
+    const entrypoint: KorriSurfaceEntrypoint = {
       id: "evier",
       mount(host) {
         host.textContent = "evier mounted"
@@ -70,10 +70,10 @@ describe("ThemeHost", () => {
     })
   })
 
-  it("disposes the mounted theme on unmount", async () => {
+  it("disposes the mounted surface on unmount", async () => {
     let disposed = false
-    const entrypoint: KorriThemeEntrypoint = {
-      id: "plain-demo",
+    const entrypoint: KorriSurfaceEntrypoint = {
+      id: "shift",
       mount(host) {
         host.textContent = "mounted"
         return () => {
@@ -93,18 +93,18 @@ describe("ThemeHost", () => {
 })
 
 function renderHost(
-  loadEntrypoint: ComponentProps<typeof ThemeHost>["loadEntrypoint"],
+  loadEntrypoint: ComponentProps<typeof SurfaceHost>["loadEntrypoint"],
 ) {
   return render(hostElement(loadEntrypoint))
 }
 
 function hostElement(
-  loadEntrypoint: ComponentProps<typeof ThemeHost>["loadEntrypoint"],
-  themeId: ComponentProps<typeof ThemeHost>["themeId"] = "plain-demo",
+  loadEntrypoint: ComponentProps<typeof SurfaceHost>["loadEntrypoint"],
+  surfaceId: ComponentProps<typeof SurfaceHost>["surfaceId"] = "shift",
 ) {
   return (
     <PlatformBridgeProvider bridge={bridge}>
-      <ThemeHost themeId={themeId} loadEntrypoint={loadEntrypoint} />
+      <SurfaceHost surfaceId={surfaceId} loadEntrypoint={loadEntrypoint} />
     </PlatformBridgeProvider>
   )
 }
