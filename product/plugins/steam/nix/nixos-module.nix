@@ -669,7 +669,7 @@ let
       return 1
     }
 
-    if ! ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
+    if ! ${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
       if ! control_steam_service start; then
         echo "korri-steam-app: could not start gamescoped Steam service $service_name" >&2
         exit 125

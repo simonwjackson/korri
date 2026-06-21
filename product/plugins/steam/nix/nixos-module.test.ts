@@ -75,6 +75,9 @@ describe("Steam plugin Nix module", () => {
       "timeout 5 " + "$" + "{pkgs.systemd}/bin/systemctl is-active",
     )
     expect(moduleSource).toContain("steam_service_state")
+    expect(moduleSource).not.toMatch(
+      /\n\s+if ! \$\{pkgs\.systemd\}\/bin\/systemctl is-active --quiet/,
+    )
     expect(moduleSource).not.toContain(
       "gamescoped Steam service is not active after start",
     )
