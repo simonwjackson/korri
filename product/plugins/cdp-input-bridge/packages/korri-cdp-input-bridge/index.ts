@@ -126,7 +126,11 @@ function parseArgs(argv: readonly string[]): CliOptions {
     cdpPort: numberArg(values, "cdp-port", 9333),
     mapping: values.get("mapping") ?? "yfs-default",
     axisPressThreshold: numberArg(values, "axis-press-threshold", 12000),
-    axisReleaseThreshold: numberArg(values, "axis-release-threshold", 8000),
+    axisReleaseThreshold: nonNegativeNumberArg(
+      values,
+      "axis-release-threshold",
+      8000,
+    ),
     launchId: values.get("launch-id") ?? undefined,
     watchPid: optionalNumberArg(values, "watch-pid"),
     attachTimeoutMs: numberArg(values, "attach-timeout-ms", 5000),
@@ -156,6 +160,19 @@ function numberArg(
   const parsed = Number(raw)
   if (!Number.isInteger(parsed) || parsed <= 0)
     usage(`--${key} must be a positive integer`)
+  return parsed
+}
+
+function nonNegativeNumberArg(
+  values: ReadonlyMap<string, string>,
+  key: string,
+  fallback: number,
+): number {
+  const raw = values.get(key)
+  if (raw === undefined) return fallback
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed) || parsed < 0)
+    usage(`--${key} must be a non-negative integer`)
   return parsed
 }
 
