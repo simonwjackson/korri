@@ -5,12 +5,12 @@
  * Explicit source roots so Tailwind v4 scans the current product tree
  * regardless of which CSS file is the entry point. Paths are relative to this
  * file (`product/platform/react/primitives/theme/styles.css`). Keep these in
- * sync with the product/ layout: theme JSX lives outside the portal Vite root,
- * so relying on root-local auto-discovery drops Shift utility classes from the
- * production desktop bundle.
+ * sync with the product/ layout: web surface JSX lives outside the portal Vite
+ * root, so relying on root-local auto-discovery drops Shift utility classes
+ * from the production desktop bundle.
  */
 @source "../../../../apps/**/*.{ts,tsx,html}";
-@source "../../../../themes/**/*.{ts,tsx}";
+@source "../../../../surfaces/web/**/*.{ts,tsx}";
 @source "../../../../platform/**/*.{ts,tsx}";
 
 @custom-variant dark (&:is(.dark *));
