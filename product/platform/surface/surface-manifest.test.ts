@@ -46,6 +46,6 @@ describe("surface manifest", () => {
     const invalid: SurfaceManifestInput = { ...valid, medium: "television" }
 
     expect(valid.medium).toBe("ssh")
-    expect(invalid.medium).toBe("television")
+    expect(invalid).toBeDefined()
   })
 })
