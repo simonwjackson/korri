@@ -524,13 +524,6 @@ let
       focus_korri_output
     }
 
-    show_steam_prompt() {
-      sway "focus output $target_output"
-      sway '[class="steam"] scratchpad show, focus, fullscreen enable'
-      sway '[app_id="steam"] scratchpad show, focus, fullscreen enable'
-      sway '[title="Steam Big Picture Mode"] scratchpad show, focus, fullscreen enable'
-    }
-
     focus_game() {
       # Steam logs "Game process added" before the Xwayland window is always
       # mapped. Wait for the real game surface, then normalize it to a regular
@@ -575,8 +568,6 @@ let
       return 0
     }
 
-    ydotool_sock="$XDG_RUNTIME_DIR/korri-steam-ydotool.sock"
-    ydotoold_pid=""
     direct_steam_pid=""
     cleanup_done=0
 
@@ -602,10 +593,6 @@ let
       [ "$cleanup_done" -eq 0 ] || return 0
       cleanup_done=1
       hide_steam_hat || true
-      if [ -n "$ydotoold_pid" ]; then
-        ${pkgs.procps}/bin/kill "$ydotoold_pid" 2>/dev/null || true
-      fi
-      ${pkgs.coreutils}/bin/rm -f "$ydotool_sock" 2>/dev/null || true
       if [ "$stop_service_on_exit" != "0" ]; then
         if [ -n "$direct_steam_pid" ]; then
           ${pkgs.procps}/bin/kill "$direct_steam_pid" 2>/dev/null || true
@@ -621,35 +608,6 @@ let
     trap cleanup EXIT
     trap 'cleanup; exit 130' INT
     trap 'cleanup; exit 143' TERM
-
-    ensure_ydotoold() {
-      [ "''${KORRI_STEAM_APP_AUTO_CONFIRM:-1}" != "0" ] || return 1
-      if [ -S "$ydotool_sock" ]; then
-        return 0
-      fi
-      ${pkgs.coreutils}/bin/rm -f "$ydotool_sock"
-      ${pkgs.ydotool}/bin/ydotoold --socket-path="$ydotool_sock" --socket-perm=0600 >/dev/null 2>&1 &
-      ydotoold_pid="$!"
-      i=0
-      while [ "$i" -lt 20 ]; do
-        [ -S "$ydotool_sock" ] && return 0
-        i=$((i + 1))
-        ${pkgs.coreutils}/bin/sleep 0.1
-      done
-      return 1
-    }
-
-    confirm_steam_prompt() {
-      [ "''${KORRI_STEAM_APP_AUTO_CONFIRM:-1}" != "0" ] || return 0
-      ensure_ydotoold || {
-        echo "korri-steam-app: warning: could not start ydotoold to confirm Steam prompt" >&2
-        return 0
-      }
-      # KEY_ENTER down/up. Keep the launch handoff deterministic, but never
-      # fail the game launch solely because input injection was unavailable.
-      YDOTOOL_SOCKET="$ydotool_sock" ${pkgs.ydotool}/bin/ydotool key 28:1 28:0 >/dev/null 2>&1 || \
-        echo "korri-steam-app: warning: could not confirm Steam prompt with ydotool" >&2
-    }
 
     ${steamUinputPrep}/bin/korri-steam-ensure-uinput || true
     ${pkgs.coreutils}/bin/mkdir -p "$STEAM_HOME/logs" "$STEAM_HOME/package"
@@ -719,9 +677,9 @@ let
       fi
     fi
 
-    # Keep Steam hidden by default. Surface Big Picture only if Steam reports an
-    # interstitial that needs keyboard confirmation; otherwise the ARM64 client
-    # can remain a rootless-Xwayland "hat" over the game during loading.
+    # Keep Steam hidden by default. First-launch gates are pre-seeded by the
+    # Steam state reconciler; this wrapper no longer reacts to ShowInterstitials
+    # console-log prompts.
     focus_korri_output
     hide_steam_hat
     ${steamLauncher}/bin/korri-steam-guest \
@@ -737,7 +695,6 @@ let
 
     deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + launch_timeout ))
     saw_added=0
-    saw_prompt=0
     while true; do
       new_log=""
       if [ -f "$console_log" ]; then
@@ -748,21 +705,6 @@ let
           new_log="$(${pkgs.coreutils}/bin/cat "$console_log" 2>/dev/null || true)"
         fi
         mark="$current_mark"
-      fi
-
-      if log_has "$new_log" "LaunchApp waiting for user response to ShowInterstitials"; then
-        if [ "$saw_prompt" -eq 0 ]; then
-          saw_prompt=1
-          show_steam_prompt
-          ${pkgs.coreutils}/bin/sleep 0.5
-          confirm_steam_prompt
-          ${pkgs.coreutils}/bin/sleep 0.2
-          hide_steam_hat
-        fi
-      fi
-
-      if log_has "$new_log" "LaunchApp continues with user response \"ShowInterstitials\""; then
-        hide_steam_hat
       fi
 
       if [ "$saw_added" -eq 0 ] && log_has "$new_log" "Game process added : AppID $appid"; then
@@ -1034,7 +976,7 @@ in
       wantedBy = [ "multi-user.target" ];
       pathConfig = {
         PathChanged = [
-          "${cfg.home}/steamapps/common/Proton 11.0 (ARM64)/proton"
+          "${cfg.home}/compatibilitytools.d/proton-cachyos-11.0-20260601-slr-arm64/proton"
           "${cfg.home}/steamapps/common/Proton 10.0/proton"
           "${cfg.home}/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap"
           "${cfg.home}/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb"

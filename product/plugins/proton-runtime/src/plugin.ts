@@ -62,6 +62,13 @@ export const protonRuntimePlugin = plugin({
           path: "product/plugins/proton-runtime/packages/proton-runtime",
           capabilities: ["runtime.resolve", "windows.x86_64", "direct3d.dxvk"],
         },
+        "proton-cachyos-arm64-package": {
+          id: "proton-cachyos-arm64-package",
+          kind: "nix-package",
+          package: "proton-cachyos-arm64",
+          path: "product/plugins/proton-runtime/packages/proton-cachyos-arm64",
+          capabilities: ["steam.runtime", "windows.x86", "windows.x86_64"],
+        },
       },
     },
     handlers: [

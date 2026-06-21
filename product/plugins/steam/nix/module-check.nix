@@ -267,7 +267,7 @@ let
       enabled.systemd.paths ? korri-steam-runtime-prep
       && builtins.elem "multi-user.target" (runtimePrepPath.wantedBy or [ ])
       && (runtimePrepPath.pathConfig.Unit or null) == "korri-steam-runtime-prep.service"
-      && lib.hasInfix "Proton 11.0 (ARM64)/proton" (pathChangedText runtimePrepPath)
+      && lib.hasInfix "compatibilitytools.d/proton-cachyos-11.0-20260601-slr-arm64/proton" (pathChangedText runtimePrepPath)
       && lib.hasInfix "Proton 10.0/proton" (pathChangedText runtimePrepPath)
       && lib.hasInfix "SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap" (
         pathChangedText runtimePrepPath

@@ -3,8 +3,8 @@ import {
   AppMaterializationFailed,
   type ResolutionError,
 } from "@platform/library/config/errors"
-import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { appRecordKind } from "@platform/library/config/records/app"
+import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
@@ -12,7 +12,7 @@ import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import { Effect } from "effect"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
 import { isKorriSteamAppCommand, parseSteamAppId } from "./launch-spec"
-import { KORRI_STEAM_PLUGIN_ID } from "./plugin"
+import { defaultSteamPluginPolicy, KORRI_STEAM_PLUGIN_ID } from "./plugin"
 import { steamLaunchCleanupMetadata } from "./session/lifecycle-hook"
 import {
   materializeSteamDesiredState,
@@ -48,6 +48,12 @@ interface DecodedSteamPluginPolicy {
     args?: readonly string[]
   }
   "launch-options"?: string
+  "compat-tool"?: string
+  "compat-tool-overrides"?: Readonly<Record<string, string>>
+  "first-launch"?: {
+    "suppress-interstitials"?: boolean
+    "accept-eulas"?: boolean
+  }
 }
 
 export const steamReadableLaunchIntegration: ReadableLaunchIntegration = {
@@ -128,14 +134,19 @@ function readSteamPluginPolicy(
   context: ReadableResolvedLaunchContext,
 ): DecodedSteamPluginPolicy {
   const payload = context.plugin?.[KORRI_STEAM_PLUGIN_ID]
-  if (payload === undefined) return {}
+  if (payload === undefined) return defaultSteamPluginPolicy
   if (!isRecord(payload)) {
     throw new AppMaterializationFailed({
       appId: context.app.id,
       reason: "Steam plugin policy must be an object",
     })
   }
-  const policy: DecodedSteamPluginPolicy = {}
+  const policy: DecodedSteamPluginPolicy = {
+    state: defaultSteamPluginPolicy.state,
+    extra: defaultSteamPluginPolicy.extra,
+    "compat-tool": defaultSteamPluginPolicy["compat-tool"],
+    "first-launch": defaultSteamPluginPolicy["first-launch"],
+  }
   const state = payload.state
   if (state !== undefined) {
     if (!isRecord(state) || typeof state.root !== "string") {
@@ -174,6 +185,72 @@ function readSteamPluginPolicy(
       })
     }
     policy["launch-options"] = launchOptions
+  }
+  const compatTool = payload["compat-tool"]
+  if (compatTool !== undefined) {
+    if (typeof compatTool !== "string" || compatTool.length === 0) {
+      throw new AppMaterializationFailed({
+        appId: context.app.id,
+        reason: "Steam plugin policy compat-tool must be a non-empty string",
+      })
+    }
+    policy["compat-tool"] = compatTool
+  }
+  const compatToolOverrides = payload["compat-tool-overrides"]
+  if (compatToolOverrides !== undefined) {
+    if (!isRecord(compatToolOverrides)) {
+      throw new AppMaterializationFailed({
+        appId: context.app.id,
+        reason: "Steam plugin policy compat-tool-overrides must be an object",
+      })
+    }
+    const overrides: Record<string, string> = {}
+    for (const [appId, tool] of Object.entries(compatToolOverrides)) {
+      if (typeof tool !== "string" || tool.length === 0) {
+        throw new AppMaterializationFailed({
+          appId: context.app.id,
+          reason:
+            "Steam plugin policy compat-tool-overrides values must be non-empty strings",
+        })
+      }
+      overrides[appId] = tool
+    }
+    policy["compat-tool-overrides"] = overrides
+  }
+  const firstLaunch = payload["first-launch"]
+  if (firstLaunch !== undefined) {
+    if (!isRecord(firstLaunch)) {
+      throw new AppMaterializationFailed({
+        appId: context.app.id,
+        reason: "Steam plugin policy first-launch must be an object",
+      })
+    }
+    const suppressInterstitials = firstLaunch["suppress-interstitials"]
+    const acceptEulas = firstLaunch["accept-eulas"]
+    if (
+      suppressInterstitials !== undefined &&
+      typeof suppressInterstitials !== "boolean"
+    ) {
+      throw new AppMaterializationFailed({
+        appId: context.app.id,
+        reason:
+          "Steam plugin policy first-launch.suppress-interstitials must be a boolean",
+      })
+    }
+    if (acceptEulas !== undefined && typeof acceptEulas !== "boolean") {
+      throw new AppMaterializationFailed({
+        appId: context.app.id,
+        reason:
+          "Steam plugin policy first-launch.accept-eulas must be a boolean",
+      })
+    }
+    policy["first-launch"] = {
+      ...policy["first-launch"],
+      ...(suppressInterstitials !== undefined
+        ? { "suppress-interstitials": suppressInterstitials }
+        : {}),
+      ...(acceptEulas !== undefined ? { "accept-eulas": acceptEulas } : {}),
+    }
   }
   return policy
 }
@@ -226,13 +303,11 @@ const materializeReadableSteamResources = (input: {
         command: input.context.app.command,
         target: input.context.target,
         launchOptions: policy["launch-options"],
-        runtime: input.context.runtime
-          ? {
-              id: input.context.runtime.id,
-              path: input.context.runtime.path,
-              tool: input.context.runtime.tool,
-            }
-          : undefined,
+        defaultCompatTool: policy["compat-tool"],
+        compatToolOverrides: policy["compat-tool-overrides"],
+        suppressInterstitials:
+          policy["first-launch"]?.["suppress-interstitials"],
+        acceptEulas: policy["first-launch"]?.["accept-eulas"],
         extraArgs: policy.extra?.args,
       },
       fs: input.fs,

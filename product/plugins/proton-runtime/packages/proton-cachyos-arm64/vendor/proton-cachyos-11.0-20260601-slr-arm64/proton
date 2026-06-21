@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+echo "This repository fixture marks the vendored proton-cachyos-arm64 payload contract. Replace this directory with the validated ARM64 proton-cachyos build for production images." >&2
+exit 126

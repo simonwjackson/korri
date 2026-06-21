@@ -14,6 +14,7 @@ export {
   type SteamLogObserverHandle,
 } from "./src/observability/log-observer"
 export {
+  DEFAULT_STEAM_COMPAT_TOOL,
   defaultSteamPluginPolicy,
   KORRI_STEAM_APP_ID,
   KORRI_STEAM_APP_LOCAL_ID,

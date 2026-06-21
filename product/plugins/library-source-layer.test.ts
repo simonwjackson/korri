@@ -10,6 +10,7 @@ import {
   PluginLibrarySourceLayerLive,
 } from "./library-source-layer"
 import {
+  DEFAULT_STEAM_COMPAT_TOOL,
   KORRI_STEAM_APP_ID,
   KORRI_STEAM_PLUGIN_ID,
   KORRI_STEAM_STORAGE_ID,
@@ -564,7 +565,10 @@ async function seedSteamLaunchConfig(
   options: { readonly includeApp?: boolean } = {},
 ): Promise<void> {
   await mkdir(configRoot, { recursive: true })
-  await mkdir(steamRoot, { recursive: true })
+  await mkdir(
+    join(steamRoot, "Steam", "compatibilitytools.d", DEFAULT_STEAM_COMPAT_TOOL),
+    { recursive: true },
+  )
   const launcherBlock = options.includeApp
     ? [
         "launchers:",

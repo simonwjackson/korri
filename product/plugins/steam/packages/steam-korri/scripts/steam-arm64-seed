@@ -47,8 +47,9 @@ CLIENT_DIR="$STEAM_HOME/steamrtarm64"
 RUNTIME_TAR_URL="https://repo.steampowered.com/steamrt3c/images/latest-public-beta/steam-runtime-steamrt-arm64.tar.xz"
 STEAM_MANIFEST_URL="https://client-update.fastly.steamstatic.com/steam_client_publicbeta_linuxarm64"
 STEAM_CDN="https://client-update.steamstatic.com"
-PROTON_NAME="Proton 11.0 (ARM64)"
-PROTON_DIR="$STEAM_HOME/steamapps/common/$PROTON_NAME"
+PROTON_TOOL_NAME="proton-cachyos-11.0-20260601-slr-arm64"
+PROTON_SOURCE="@korriProtonCachyosArm64@"
+PROTON_LINK="$STEAM_HOME/compatibilitytools.d/$PROTON_TOOL_NAME"
 
 say() { printf '%s\n' "$*"; }
 run() {
@@ -162,12 +163,8 @@ install_client() {
 
 install_links_and_metadata() {
   run mkdir -p "$STEAM_GAMES_ROOT" "$STEAM_DOT" "$STEAM_HOME/compatibilitytools.d"
-  if [ "${STEAM_ENABLE_PROTON11_ARM64:-0}" = 1 ]; then
-    run mkdir -p "$PROTON_DIR"
-    run ln -sfn "$PROTON_DIR/" "$STEAM_HOME/compatibilitytools.d/Proton11ARM"
-  else
-    run rm -f "$STEAM_HOME/compatibilitytools.d/Proton11ARM" "$STEAM_HOME/compatibilitytools.d/compatibilitytool.vdf"
-  fi
+  run rm -f "$STEAM_HOME/compatibilitytools.d/Proton11ARM"
+  run ln -sfn "$PROTON_SOURCE/" "$PROTON_LINK"
   STEAM_BETA="${STEAM_BETA:-publicbeta}" "$script_dir/steam-arm64-bootstrap" "--$mode"
 }
 

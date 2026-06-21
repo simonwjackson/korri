@@ -11,16 +11,29 @@ import {
   steamLocalConfigPath,
 } from "./state-materializer"
 
-const memoryFs = (initial: Readonly<Record<string, string>> = {}) => {
+const memoryFs = (
+  initial: Readonly<Record<string, string>> = {},
+  options: {
+    readonly directories?: Readonly<Record<string, readonly string[]>>
+    readonly existingPaths?: readonly string[]
+  } = {},
+) => {
   const files = new Map(Object.entries(initial))
   const writes: string[] = []
+  const existingPaths = new Set(options.existingPaths ?? [])
+  const enforceExistingPaths = options.existingPaths !== undefined
   const fs: SteamStateFileSystem = {
     readText: async path => files.get(path),
     writeTextAtomic: async (path, content) => {
       writes.push(path)
       files.set(path, content)
     },
-    mkdirp: async () => {},
+    mkdirp: async path => {
+      existingPaths.add(path)
+    },
+    listDirectories: async path => options.directories?.[path] ?? [],
+    pathExists: async path =>
+      enforceExistingPaths ? existingPaths.has(path) || files.has(path) : true,
   }
   return { fs, files, writes }
 }
@@ -57,11 +70,7 @@ describe("materializeSteamDesiredState", () => {
           command: "steam",
           target: "steam://rungameid/2379780",
           launchOptions: "wrapper -- %command%",
-          runtime: {
-            id: "proton-arm64",
-            path: "/compat/proton-arm64",
-            tool: "proton-arm64",
-          },
+          defaultCompatTool: "proton-cachyos-arm64",
           extraArgs: ["-silent", "-gamepadui"],
         },
         fs,
@@ -106,8 +115,8 @@ describe("materializeSteamDesiredState", () => {
             Valve: {
               Steam: {
                 CompatToolMapping: {
-                  "2379780": {
-                    name: "proton-arm64",
+                  "0": {
+                    name: "proton-cachyos-arm64",
                     config: "",
                     priority: "250",
                   },
@@ -175,11 +184,8 @@ describe("materializeSteamDesiredState", () => {
           stateRoot,
           target: "steam://rungameid/2379780",
           launchOptions: "wrapper -- %command%",
-          runtime: {
-            id: "proton-arm64",
-            path: "/compat/proton-arm64",
-            tool: "proton-arm64",
-          },
+          defaultCompatTool: "proton-cachyos-arm64",
+          compatToolOverrides: { "2379780": "proton-arm64" },
         },
         fs,
         lifecycle: lifecycle([]),
@@ -207,12 +213,138 @@ describe("materializeSteamDesiredState", () => {
           Valve: {
             Steam: {
               CompatToolMapping: {
+                "0": {
+                  name: "proton-cachyos-arm64",
+                  config: "",
+                  priority: "250",
+                },
                 "999": { name: "proton-old", config: "", priority: "250" },
                 "2379780": {
                   name: "proton-arm64",
                   config: "",
                   priority: "250",
                 },
+              },
+            },
+          },
+        },
+      },
+    })
+  })
+
+  it("seeds every discovered userdata localconfig for first-launch gates", async () => {
+    const stateRoot = "/steam-home"
+    const userA = "/steam-home/userdata/80924811/config/localconfig.vdf"
+    const userB = "/steam-home/userdata/anonymous/config/localconfig.vdf"
+    const { fs, files, writes } = memoryFs(
+      {
+        [userA]: `"UserLocalConfigStore"\n{\n\t"Software"\n\t{\n\t\t"Valve"\n\t\t{\n\t\t\t"Steam"\n\t\t\t{\n\t\t\t\t"apps"\n\t\t\t\t{\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n`,
+        [userB]: "",
+      },
+      { directories: { "/steam-home/userdata": ["80924811", "anonymous"] } },
+    )
+
+    await Effect.runPromise(
+      materializeSteamDesiredState({
+        desired: {
+          stateRoot,
+          target: "steam://rungameid/400",
+          suppressInterstitials: true,
+          acceptEulas: true,
+        },
+        fs,
+        lifecycle: lifecycle([]),
+        lock: inlineLock,
+      }),
+    )
+
+    expect(writes).toEqual([userA, userB])
+    for (const path of [userA, userB]) {
+      const seeded = parseVdf(files.get(path) ?? "")
+      expect(seeded).toMatchObject({
+        UserLocalConfigStore: {
+          Software: {
+            Valve: {
+              Steam: {
+                Deck_ConfiguratorInterstitialsVersionSeen_Intro: "99",
+                Deck_ConfiguratorInterstitialsCheckbox_AppHasSmallText: "1",
+                apps: {
+                  "400": {
+                    "400_eula_0": "1",
+                    "400_eula_1": "1",
+                    "400_eula_2": "1",
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+    }
+  })
+
+  it("fails loudly before writing when the configured compat tool is absent", async () => {
+    const stateRoot = "/steam-home"
+    const { fs, writes } = memoryFs(
+      {},
+      { existingPaths: ["/steam-home/compatibilitytools.d/other-tool"] },
+    )
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        materializeSteamDesiredState({
+          desired: {
+            stateRoot,
+            target: "steam://rungameid/400",
+            defaultCompatTool: "missing-tool",
+          },
+          fs,
+          lifecycle: lifecycle([]),
+          lock: inlineLock,
+        }),
+      ),
+    )
+
+    expect(error).toMatchObject({
+      _tag: "SteamCompatToolMissing",
+      tool: "missing-tool",
+    })
+    expect(writes).toEqual([])
+  })
+
+  it("reconciles policy-owned compat mappings over manual Steam UI edits", async () => {
+    const stateRoot = "/steam-home"
+    const config = steamConfigPath(stateRoot)
+    const { fs, files } = memoryFs({
+      [config]: `"InstallConfigStore"\n{\n\t"Software"\n\t{\n\t\t"Valve"\n\t\t{\n\t\t\t"Steam"\n\t\t\t{\n\t\t\t\t"CompatToolMapping"\n\t\t\t\t{\n\t\t\t\t\t"0"\n\t\t\t\t\t{\n\t\t\t\t\t\t"name"\t\t"manual-default"\n\t\t\t\t\t}\n\t\t\t\t\t"400"\n\t\t\t\t\t{\n\t\t\t\t\t\t"name"\t\t"manual-game"\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n`,
+    })
+
+    await Effect.runPromise(
+      materializeSteamDesiredState({
+        desired: {
+          stateRoot,
+          target: "steam://rungameid/400",
+          defaultCompatTool: "proton-cachyos-arm64",
+          compatToolOverrides: { "400": "per-game-tool" },
+        },
+        fs,
+        lifecycle: lifecycle([]),
+        lock: inlineLock,
+      }),
+    )
+
+    expect(parseVdf(files.get(config) ?? "")).toMatchObject({
+      InstallConfigStore: {
+        Software: {
+          Valve: {
+            Steam: {
+              CompatToolMapping: {
+                "0": {
+                  name: "proton-cachyos-arm64",
+                  config: "",
+                  priority: "250",
+                },
+                "400": { name: "per-game-tool", config: "", priority: "250" },
               },
             },
           },

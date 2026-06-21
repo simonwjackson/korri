@@ -37,8 +37,8 @@
     runtimeTarUrl = "https://repo.steampowered.com/steamrt3c/images/latest-public-beta/steam-runtime-steamrt-arm64.tar.xz";
     clientManifestUrl = "https://client-update.fastly.steamstatic.com/steam_client_publicbeta_linuxarm64";
     cdnBaseUrl = "https://client-update.steamstatic.com";
-    protonCompatibilityToolName = "Proton 11.0 (ARM64)";
-    protonCompatibilityToolLink = "Proton11ARM";
+    protonCompatibilityToolName = "Proton CachyOS 11.0 (ARM64)";
+    protonCompatibilityToolLink = "proton-cachyos-11.0-20260601-slr-arm64";
   };
 
   resources = [
@@ -46,19 +46,13 @@
       name = "compatibilitytool.vdf";
       file = ./resources/compatibilitytool.vdf;
       upstreamPath = "projects/ROCKNIX/packages/emulators/standalone/steam/resources/compatibilitytool.vdf";
-      sha256 = "252d9af9ad94581de80af88aafd6be8323528245ddef7a95fa645897fcb1d903";
+      sha256 = "c64b93acb94ca6f3aaf915e46eb1f56d3106cc6f5aa06c8cba8ecc01d5affd84";
     }
     {
       name = "registry.vdf";
       file = ./resources/registry.vdf;
       upstreamPath = "projects/ROCKNIX/packages/emulators/standalone/steam/resources/registry.vdf";
       sha256 = "3cd5456968193f4f3fa15f291a795e6fa813e89691022dd3b94ad76e7ea029ce";
-    }
-    {
-      name = "toolmanifest.vdf";
-      file = ./resources/toolmanifest.vdf;
-      upstreamPath = "projects/ROCKNIX/packages/emulators/standalone/steam/resources/toolmanifest.vdf";
-      sha256 = "4e3179bb7bc94edee07622884ea3bd0ca9d4a911c5600eadef3979dbceafb59b";
     }
     {
       name = "fex-emu/Config.json";

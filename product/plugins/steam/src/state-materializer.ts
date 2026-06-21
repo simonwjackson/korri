@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  stat,
+  writeFile,
+} from "node:fs/promises"
 import { dirname, join } from "node:path"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { Data, Effect } from "effect"
@@ -10,6 +17,11 @@ import {
   renderSteamLaunchSpec,
   validateSteamLaunchOptions,
 } from "./launch-spec"
+import {
+  applySteamGateSeeds,
+  setVdfPath,
+  type VdfObject,
+} from "./steam-gate-seed"
 
 export class SteamStateMutationFailed extends Data.TaggedError(
   "SteamStateMutationFailed",
@@ -24,6 +36,13 @@ export class SteamRuntimeToolMissing extends Data.TaggedError(
   readonly runtimeId: string
 }> {}
 
+export class SteamCompatToolMissing extends Data.TaggedError(
+  "SteamCompatToolMissing",
+)<{
+  readonly stateRoot: string
+  readonly tool: string
+}> {}
+
 export class SteamReadinessTimeout extends Data.TaggedError(
   "SteamReadinessTimeout",
 )<{
@@ -35,6 +54,7 @@ type SteamStateError =
   | InvalidSteamTarget
   | SteamStateMutationFailed
   | SteamRuntimeToolMissing
+  | SteamCompatToolMissing
   | SteamReadinessTimeout
 
 export interface SteamRuntimeSelection {
@@ -49,6 +69,10 @@ export interface SteamDesiredState {
   readonly target: string
   readonly launchOptions?: string
   readonly runtime?: SteamRuntimeSelection
+  readonly defaultCompatTool?: string
+  readonly compatToolOverrides?: Readonly<Record<string, string>>
+  readonly suppressInterstitials?: boolean
+  readonly acceptEulas?: boolean
   readonly extraArgs?: readonly string[]
 }
 
@@ -74,6 +98,8 @@ export interface SteamStateFileSystem {
   readonly readText: (path: string) => Promise<string | undefined>
   readonly writeTextAtomic: (path: string, content: string) => Promise<void>
   readonly mkdirp: (path: string) => Promise<void>
+  readonly listDirectories?: (path: string) => Promise<readonly string[]>
+  readonly pathExists?: (path: string) => Promise<boolean>
 }
 
 export interface SteamStateLock {
@@ -94,8 +120,6 @@ export interface MaterializedSteamDesiredState {
     readonly config: string
   }
 }
-
-type VdfObject = { [key: string]: string | VdfObject }
 
 const inMemoryLocks = new Map<string, Promise<unknown>>()
 
@@ -135,6 +159,27 @@ export const nodeSteamStateFileSystem: SteamStateFileSystem = {
   },
   mkdirp: async path => {
     await mkdir(path, { recursive: true, mode: 0o750 })
+  },
+  listDirectories: async path => {
+    try {
+      const entries = await readdir(path, { withFileTypes: true })
+      return entries
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name)
+        .sort()
+    } catch (error) {
+      if (isNodeErrorCode(error, "ENOENT")) return []
+      throw error
+    }
+  },
+  pathExists: async path => {
+    try {
+      await stat(path)
+      return true
+    } catch (error) {
+      if (isNodeErrorCode(error, "ENOENT")) return false
+      throw error
+    }
   },
 }
 
@@ -179,50 +224,108 @@ async function materializeSteamDesiredStatePromise(
   const fs = options.fs ?? nodeSteamStateFileSystem
   const lifecycle = options.lifecycle ?? noopSteamLifecycle
   const lock = options.lock ?? defaultSteamStateLock
-  const localconfigPath = steamLocalConfigPath(desired.stateRoot)
   const configPath = steamConfigPath(desired.stateRoot)
 
   await lock.withLock(desired.stateRoot, async () => {
     await lifecycle.shutdown({ command, stateRoot: desired.stateRoot })
     await lifecycle.waitForShutdown({ stateRoot: desired.stateRoot })
-    await fs.mkdirp(dirname(localconfigPath))
-    await fs.mkdirp(dirname(configPath))
 
-    if (desired.launchOptions !== undefined) {
-      const localconfig = parseVdfOrEmpty(
-        await fs.readText(localconfigPath),
-        localconfigPath,
-      )
-      setVdfPath(
-        localconfig,
-        [
-          "UserLocalConfigStore",
-          "Software",
-          "Valve",
-          "Steam",
-          "apps",
-          steamAppId,
-          "LaunchOptions",
-        ],
-        desired.launchOptions,
-      )
-      await fs.writeTextAtomic(localconfigPath, renderVdf(localconfig))
+    const localconfigPaths = await discoverSteamLocalConfigPaths(
+      fs,
+      desired.stateRoot,
+    )
+    const launchOptionsPath =
+      localconfigPaths[0] ?? steamLocalConfigPath(desired.stateRoot)
+    const appIdsForEula = uniqueStrings([
+      steamAppId,
+      ...Object.keys(desired.compatToolOverrides ?? {}),
+    ])
+    const toolsToValidate = uniqueStrings([
+      desired.defaultCompatTool,
+      ...Object.values(desired.compatToolOverrides ?? {}),
+    ])
+
+    for (const tool of toolsToValidate) {
+      await assertCompatToolExists(fs, desired.stateRoot, tool)
     }
 
-    if (desired.runtime?.tool !== undefined) {
+    await fs.mkdirp(dirname(launchOptionsPath))
+    await fs.mkdirp(dirname(configPath))
+
+    if (
+      desired.launchOptions !== undefined ||
+      desired.suppressInterstitials === true ||
+      desired.acceptEulas === true
+    ) {
+      for (const localconfigPath of localconfigPaths.length > 0
+        ? localconfigPaths
+        : [launchOptionsPath]) {
+        const localconfig = parseVdfOrEmpty(
+          await fs.readText(localconfigPath),
+          localconfigPath,
+        )
+        if (
+          desired.launchOptions !== undefined &&
+          localconfigPath === launchOptionsPath
+        ) {
+          setVdfPath(
+            localconfig,
+            [
+              "UserLocalConfigStore",
+              "Software",
+              "Valve",
+              "Steam",
+              "apps",
+              steamAppId,
+              "LaunchOptions",
+            ],
+            desired.launchOptions,
+          )
+        }
+        applySteamGateSeeds(localconfig, {
+          suppressInterstitials: desired.suppressInterstitials,
+          acceptEulas: desired.acceptEulas,
+          appIds: appIdsForEula,
+        })
+        await fs.writeTextAtomic(localconfigPath, renderVdf(localconfig))
+      }
+    }
+
+    if (
+      desired.defaultCompatTool !== undefined ||
+      Object.keys(desired.compatToolOverrides ?? {}).length > 0
+    ) {
       const config = parseVdfOrEmpty(await fs.readText(configPath), configPath)
-      setVdfPath(
-        config,
-        [
-          "InstallConfigStore",
-          "Software",
-          "Valve",
-          "Steam",
-          "CompatToolMapping",
-          steamAppId,
-        ],
-        { name: desired.runtime.tool, config: "", priority: "250" },
-      )
+      if (desired.defaultCompatTool !== undefined) {
+        setVdfPath(
+          config,
+          [
+            "InstallConfigStore",
+            "Software",
+            "Valve",
+            "Steam",
+            "CompatToolMapping",
+            "0",
+          ],
+          compatToolMapping(desired.defaultCompatTool),
+        )
+      }
+      for (const [appId, tool] of Object.entries(
+        desired.compatToolOverrides ?? {},
+      )) {
+        setVdfPath(
+          config,
+          [
+            "InstallConfigStore",
+            "Software",
+            "Valve",
+            "Steam",
+            "CompatToolMapping",
+            appId,
+          ],
+          compatToolMapping(tool),
+        )
+      }
       await fs.writeTextAtomic(configPath, renderVdf(config))
     }
 
@@ -235,8 +338,48 @@ async function materializeSteamDesiredStatePromise(
   })
 
   return {
-    paths: { localconfig: localconfigPath, config: configPath },
+    paths: {
+      localconfig: steamLocalConfigPath(desired.stateRoot),
+      config: configPath,
+    },
   }
+}
+
+async function discoverSteamLocalConfigPaths(
+  fs: SteamStateFileSystem,
+  stateRoot: string,
+): Promise<readonly string[]> {
+  const userdataPath = join(stateRoot, "userdata")
+  const accountIds = fs.listDirectories
+    ? await fs.listDirectories(userdataPath)
+    : ["0"]
+  const paths = accountIds.map(accountId =>
+    join(userdataPath, accountId, "config", "localconfig.vdf"),
+  )
+  return paths.length > 0 ? paths : [steamLocalConfigPath(stateRoot)]
+}
+
+async function assertCompatToolExists(
+  fs: SteamStateFileSystem,
+  stateRoot: string,
+  tool: string | undefined,
+): Promise<void> {
+  if (tool === undefined) return
+  const path = join(stateRoot, "compatibilitytools.d", tool)
+  const exists = fs.pathExists ? await fs.pathExists(path) : true
+  if (!exists) throw new SteamCompatToolMissing({ stateRoot, tool })
+}
+
+function compatToolMapping(tool: string): VdfObject {
+  return { name: tool, config: "", priority: "250" }
+}
+
+function uniqueStrings(
+  values: readonly (string | undefined)[],
+): readonly string[] {
+  return [
+    ...new Set(values.filter((value): value is string => value !== undefined)),
+  ]
 }
 
 export const steamLocalConfigPath = (stateRoot: string): string =>
@@ -350,22 +493,6 @@ function renderVdfObject(object: VdfObject, indent: number): string {
   return output
 }
 
-function setVdfPath(
-  root: VdfObject,
-  path: readonly string[],
-  value: string | VdfObject,
-): void {
-  let current = root
-  for (const key of path.slice(0, -1)) {
-    const existing = current[key]
-    if (typeof existing !== "object" || existing === null) {
-      current[key] = {}
-    }
-    current = current[key] as VdfObject
-  }
-  current[path[path.length - 1] as string] = value
-}
-
 function escapeVdf(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 }
@@ -388,6 +515,7 @@ function isTaggedSteamStateError(error: unknown): error is SteamStateError {
       "InvalidSteamTarget",
       "SteamStateMutationFailed",
       "SteamRuntimeToolMissing",
+      "SteamCompatToolMissing",
       "SteamReadinessTimeout",
     ].includes(String(error._tag))
   )

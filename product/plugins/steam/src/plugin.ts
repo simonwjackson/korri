@@ -20,6 +20,9 @@ export const steamRuntimePaths = {
   stateRoot: "/var/lib/korri/steam",
 } as const
 
+export const DEFAULT_STEAM_COMPAT_TOOL =
+  "proton-cachyos-11.0-20260601-slr-arm64" as const
+
 export interface SteamPluginPolicy {
   readonly state: {
     readonly root: string
@@ -28,11 +31,22 @@ export interface SteamPluginPolicy {
     readonly args?: readonly string[]
   }
   readonly "launch-options"?: string
+  readonly "compat-tool"?: string
+  readonly "compat-tool-overrides"?: Readonly<Record<string, string>>
+  readonly "first-launch"?: {
+    readonly "suppress-interstitials"?: boolean
+    readonly "accept-eulas"?: boolean
+  }
 }
 
 export const defaultSteamPluginPolicy = {
   state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
   extra: { args: ["-silent", "-gamepadui"] },
+  "compat-tool": DEFAULT_STEAM_COMPAT_TOOL,
+  "first-launch": {
+    "suppress-interstitials": true,
+    "accept-eulas": true,
+  },
 } satisfies SteamPluginPolicy
 
 export const steamPlugin = plugin({

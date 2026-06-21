@@ -9,6 +9,7 @@ import {
   retroarchReadableLaunchIntegration,
 } from "@product/plugins/retroarch"
 import {
+  DEFAULT_STEAM_COMPAT_TOOL,
   KORRI_STEAM_APP_ID,
   KORRI_STEAM_PLUGIN_ID,
   KORRI_STEAM_STORAGE_ID,
@@ -356,7 +357,15 @@ describe("createLibraryRepository — readable playable entries", () => {
         steamLaunchIntegration: true,
       })
       const steamStorageRoot = join(root, "steam-storage")
-      await mkdir(steamStorageRoot, { recursive: true })
+      await mkdir(
+        join(
+          steamStorageRoot,
+          "Steam",
+          "compatibilitytools.d",
+          DEFAULT_STEAM_COMPAT_TOOL,
+        ),
+        { recursive: true },
+      )
       await Effect.runPromise(
         repo.upsertStorage({
           id: KORRI_STEAM_STORAGE_ID,

@@ -14,10 +14,11 @@ import {
   KORRI_STEAM_PLUGIN_ID,
   KORRI_STEAM_STORAGE_ID,
 } from "./plugin"
-import type {
-  SteamLifecycle,
-  SteamStateFileSystem,
-  SteamStateLock,
+import {
+  parseVdf,
+  type SteamLifecycle,
+  type SteamStateFileSystem,
+  type SteamStateLock,
 } from "./state-materializer"
 
 const inlineLock: SteamStateLock = {
@@ -134,7 +135,7 @@ describe("steamReadableLaunchIntegration", () => {
     await withRoot(async root => {
       await mkdir(root, { recursive: true })
       const events: string[] = []
-      const { fs, writes } = memoryFs()
+      const { fs, files, writes } = memoryFs()
 
       const result = await Effect.runPromise(
         materializeReadableSteamLaunch({
@@ -170,6 +171,48 @@ describe("steamReadableLaunchIntegration", () => {
         "ready",
       ])
       expect(writes.length).toBe(2)
+      const config = parseVdf(
+        files.get(join(root, "Steam", "config", "config.vdf")) ?? "",
+      )
+      expect(config).toMatchObject({
+        InstallConfigStore: {
+          Software: {
+            Valve: {
+              Steam: {
+                CompatToolMapping: {
+                  "0": {
+                    name: "proton-cachyos-11.0-20260601-slr-arm64",
+                    config: "",
+                    priority: "250",
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+      const localconfig = parseVdf(
+        files.get(
+          join(root, "Steam", "userdata", "0", "config", "localconfig.vdf"),
+        ) ?? "",
+      )
+      expect(localconfig).toMatchObject({
+        UserLocalConfigStore: {
+          Software: {
+            Valve: {
+              Steam: {
+                Deck_ConfiguratorInterstitialsVersionSeen_Intro: "99",
+                apps: {
+                  "1029210": {
+                    LaunchOptions: "wrapper -- %command%",
+                    "1029210_eula_0": "1",
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
     })
   })
 
@@ -254,6 +297,92 @@ describe("steamReadableLaunchIntegration", () => {
         appId: KORRI_STEAM_APP_ID,
       })
       expect(errorReason(error)).toContain("InvalidSteamTarget")
+    })
+  })
+
+  it("decodes the locked compat-tool and first-launch policy keys", async () => {
+    await withRoot(async root => {
+      await mkdir(root, { recursive: true })
+      const { fs, files } = memoryFs()
+
+      await Effect.runPromise(
+        materializeReadableSteamLaunch({
+          context: {
+            ...context(root),
+            plugin: {
+              [KORRI_STEAM_PLUGIN_ID]: {
+                state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+                "compat-tool": "global-tool",
+                "compat-tool-overrides": { "1029210": "game-tool" },
+                "first-launch": {
+                  "suppress-interstitials": false,
+                  "accept-eulas": false,
+                },
+              },
+            },
+          },
+          fs,
+          lifecycle: lifecycle([]),
+          lock: inlineLock,
+        }),
+      )
+
+      expect(
+        parseVdf(files.get(join(root, "Steam", "config", "config.vdf")) ?? ""),
+      ).toMatchObject({
+        InstallConfigStore: {
+          Software: {
+            Valve: {
+              Steam: {
+                CompatToolMapping: {
+                  "0": { name: "global-tool", config: "", priority: "250" },
+                  "1029210": {
+                    name: "game-tool",
+                    config: "",
+                    priority: "250",
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+      expect(
+        files.has(
+          join(root, "Steam", "userdata", "0", "config", "localconfig.vdf"),
+        ),
+      ).toBe(false)
+    })
+  })
+
+  it("rejects malformed locked policy keys before writing state", async () => {
+    await withRoot(async root => {
+      await mkdir(root, { recursive: true })
+      const { fs, writes } = memoryFs()
+
+      const error = await Effect.runPromise(
+        Effect.flip(
+          materializeReadableSteamLaunch({
+            context: {
+              ...context(root),
+              plugin: {
+                [KORRI_STEAM_PLUGIN_ID]: {
+                  state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}/Steam` },
+                  "compat-tool-overrides": { "400": 123 },
+                },
+              },
+            },
+            fs,
+            lifecycle: lifecycle([]),
+            lock: inlineLock,
+          }),
+        ),
+      )
+
+      expect(errorReason(error)).toContain(
+        "compat-tool-overrides values must be non-empty strings",
+      )
+      expect(writes).toEqual([])
     })
   })
 

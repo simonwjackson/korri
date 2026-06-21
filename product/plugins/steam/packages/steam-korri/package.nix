@@ -1,5 +1,6 @@
 { lib
 , stdenvNoCC
+, callPackage
 , symlinkJoin
 , buildFHSEnv
 , makeWrapper
@@ -63,6 +64,7 @@
 , vulkan-loader
 , wayland
 , zlib
+, korriProtonCachyosArm64 ? callPackage ../../../proton-runtime/packages/proton-cachyos-arm64 { }
 }:
 
 let
@@ -94,6 +96,9 @@ let
               "$out/bin/steam-guest-runtime-prep"
             install -Dm755 scripts/steam-guest-run \
               "$out/bin/steam-guest-run"
+
+            substituteInPlace "$out/bin/steam-arm64-seed" \
+              --replace-fail '@korriProtonCachyosArm64@' '${korriProtonCachyosArm64}/share/korri/proton-cachyos-arm64/dist'
 
             mkdir -p \
               "$out/share/steam-rocknix-bootstrap/resources" \

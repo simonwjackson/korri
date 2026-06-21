@@ -38,6 +38,17 @@ let
       lib.hasInfix "korri-normalize-backslash-zip-entries" seedScript
       && lib.hasInfix "normalize_backslash_zip_entries \"$STEAM_HOME\"" seedScript
     ))
+    (check "steam-korri seed provisions packaged proton-cachyos-arm64" (
+      lib.hasInfix "proton-cachyos-11.0-20260601-slr-arm64" seedScript
+      && lib.hasInfix "@korriProtonCachyosArm64@" seedScript
+      && lib.hasInfix "ln -sfn \"$PROTON_SOURCE/\" \"$PROTON_LINK\"" seedScript
+      && lib.hasInfix "rm -f \"$STEAM_HOME/compatibilitytools.d/Proton11ARM\"" seedScript
+    ))
+    (check "steam-korri bootstrap registers cachyos compat manifest unconditionally" (
+      lib.hasInfix "atomic_copy \"$resource_dir/compatibilitytool.vdf\" \"$STEAM_HOME/compatibilitytools.d/compatibilitytool.vdf\"" bootstrapScript
+      && lib.hasInfix "rm -f \"$STEAM_HOME/compatibilitytools.d/Proton11ARM\"" bootstrapScript
+      && lib.hasInfix "rm -rf \"$STEAM_HOME/steamapps/common/Proton 11.0 (ARM64)\"" bootstrapScript
+    ))
     (check "steam-korri seed wrapper includes xz for fresh runtime extraction" (
       lib.hasInfix "unzip xz" packageSource
     ))
@@ -126,7 +137,6 @@ else
       for resource in \
         compatibilitytool.vdf \
         registry.vdf \
-        toolmanifest.vdf \
         fex-emu/Config.json \
         fex-emu/AppConfig/steamwebhelper.json; do
         test -f "$package_out/share/steam-rocknix-bootstrap/resources/$resource" || {

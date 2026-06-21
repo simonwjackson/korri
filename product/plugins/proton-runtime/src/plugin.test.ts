@@ -43,6 +43,17 @@ describe("Proton runtime plugin descriptor", () => {
       capabilities: ["runtime.resolve", "windows.x86_64", "direct3d.dxvk"],
     })
     expect(
+      protonRuntimePlugin.contributes.config.modules?.[
+        "proton-cachyos-arm64-package"
+      ],
+    ).toMatchObject({
+      id: "proton-cachyos-arm64-package",
+      kind: "nix-package",
+      package: "proton-cachyos-arm64",
+      path: "product/plugins/proton-runtime/packages/proton-cachyos-arm64",
+      capabilities: ["steam.runtime", "windows.x86", "windows.x86_64"],
+    })
+    expect(
       protonRuntimePlugin.contributes.handlers?.map(
         handler => handler.operation,
       ),
