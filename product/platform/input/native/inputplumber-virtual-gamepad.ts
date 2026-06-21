@@ -15,29 +15,65 @@ export type InputPlumberVirtualGamepadResolution =
       readonly devices: readonly DiscoveredDevice[]
     }
 
+export interface InputPlumberVirtualGamepadResolutionOptions {
+  readonly inputRoot?: string
+  readonly preferredNames?: readonly string[]
+  readonly preferredEventNodes?: readonly string[]
+}
+
 export function resolveInputPlumberVirtualGamepad(
   devices: readonly DiscoveredDevice[],
-  options: { readonly inputRoot?: string } = {},
+  options: InputPlumberVirtualGamepadResolutionOptions = {},
 ): InputPlumberVirtualGamepadResolution {
   const candidates = devices.filter(isInputPlumberVirtualGamepad)
+  const preferredCandidates = filterPreferredCandidates(candidates, options)
+  const selection = preferredCandidates ?? candidates
 
-  if (candidates.length === 1) {
-    const [device] = candidates
-    return {
-      status: "found",
-      device,
-      path: `${options.inputRoot ?? "/dev/input"}/${device.eventNode}`,
-    }
+  if (selection.length === 1) {
+    const [device] = selection
+    return foundDevice(device, options.inputRoot)
   }
 
-  if (candidates.length > 1) {
-    return { status: "ambiguous", devices: candidates }
+  if (selection.length > 1) {
+    return { status: "ambiguous", devices: selection }
   }
 
   return {
     status: "missing",
     rawGamepads: devices.filter(device => device.class === "gamepad").length,
   }
+}
+
+function foundDevice(
+  device: DiscoveredDevice,
+  inputRoot: string | undefined,
+): InputPlumberVirtualGamepadResolution {
+  return {
+    status: "found",
+    device,
+    path: `${inputRoot ?? "/dev/input"}/${device.eventNode}`,
+  }
+}
+
+function filterPreferredCandidates(
+  candidates: readonly DiscoveredDevice[],
+  options: InputPlumberVirtualGamepadResolutionOptions,
+): readonly DiscoveredDevice[] | undefined {
+  const names = options.preferredNames ?? []
+  const eventNodes = options.preferredEventNodes ?? []
+  if (names.length === 0 && eventNodes.length === 0) return undefined
+
+  const normalizedNames = new Set(names.map(normalizePreference))
+  const normalizedEventNodes = new Set(eventNodes.map(normalizePreference))
+  return candidates.filter(
+    device =>
+      normalizedNames.has(normalizePreference(device.name)) ||
+      normalizedEventNodes.has(normalizePreference(device.eventNode)),
+  )
+}
+
+function normalizePreference(value: string): string {
+  return value.trim().toLowerCase()
 }
 
 export function isInputPlumberVirtualGamepad(

@@ -10,9 +10,12 @@ async function loadFixture(name: string): Promise<string> {
   return readFile(join(FIXTURES_DIR, name), "utf8")
 }
 
-async function resolveFixture(name: string) {
+async function resolveFixture(
+  name: string,
+  options?: Parameters<typeof resolveInputPlumberVirtualGamepad>[1],
+) {
   const devices = parseProcBusInputDevices(await loadFixture(name))
-  return resolveInputPlumberVirtualGamepad(devices)
+  return resolveInputPlumberVirtualGamepad(devices, options)
 }
 
 describe("resolveInputPlumberVirtualGamepad", () => {
@@ -77,6 +80,38 @@ describe("resolveInputPlumberVirtualGamepad", () => {
         "event11",
       ])
     }
+  })
+
+  it("selects a preferred InputPlumber virtual target from an otherwise ambiguous topology", async () => {
+    const result = await resolveFixture(
+      "bus-input-devices-inputplumber-ambiguous.txt",
+      { preferredNames: ["Microsoft Xbox Series S|X Controller"] },
+    )
+
+    expect(result).toMatchObject({
+      status: "found",
+      path: "/dev/input/event11",
+      device: {
+        name: "Microsoft Xbox Series S|X Controller",
+        eventNode: "event11",
+      },
+    })
+  })
+
+  it("keeps preferred matching fail-closed when the preference is missing or still ambiguous", async () => {
+    const missing = await resolveFixture(
+      "bus-input-devices-inputplumber-ambiguous.txt",
+      { preferredNames: ["Nintendo Switch Pro Controller"] },
+    )
+    expect(missing.status).toBe("missing")
+
+    const stillAmbiguous = await resolveFixture(
+      "bus-input-devices-inputplumber-ambiguous.txt",
+      {
+        preferredEventNodes: ["event10", "event11"],
+      },
+    )
+    expect(stillAmbiguous.status).toBe("ambiguous")
   })
 
   it("returns the current event node when event numbering changes", async () => {
