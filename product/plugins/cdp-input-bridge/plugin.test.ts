@@ -13,5 +13,8 @@ describe("CDP input bridge plugin", () => {
     expect(registry.providers[CDP_INPUT_BRIDGE_PLUGIN_ID]).toMatchObject({
       title: "CDP Input Bridge",
     })
+    expect(cdpInputBridgePlugin.handlers.map(handler => handler.operation)).toEqual([
+      "diagnostics.collect",
+    ])
   })
 })

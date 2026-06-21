@@ -1,10 +1,16 @@
 import { plugin } from "@platform/plugin"
+import { collectCdpInputBridgeDiagnostics } from "./src/diagnostics"
 import { CDP_INPUT_BRIDGE_PLUGIN_ID } from "./src/policy"
 
 export {
   createCdpInputBridgeSessionLifecycleHook,
   type CdpInputBridgeSessionLifecycleHookOptions,
 } from "./src/session-lifecycle-hook"
+export {
+  collectCdpInputBridgeDiagnostics,
+  type CdpInputBridgeDiagnostics,
+  type CdpInputBridgeDiagnosticsInput,
+} from "./src/diagnostics"
 export {
   CDP_INPUT_BRIDGE_PLUGIN_ID,
   decodeCdpInputBridgePolicy,
@@ -18,6 +24,16 @@ export const cdpInputBridgePlugin = plugin({
   title: "CDP Input Bridge",
   description:
     "Launch-owned InputPlumber controller to Chromium CDP keyboard bridge for keyboard-only web games.",
+  contributes: {
+    handlers: [
+      {
+        id: "cdp-input-bridge.diagnostics",
+        operation: "diagnostics.collect",
+        capabilities: ["diagnostics.collect", "input.cdp-bridge"],
+        run: context => collectCdpInputBridgeDiagnostics(context.input),
+      },
+    ],
+  },
 })
 
 if (cdpInputBridgePlugin.id !== CDP_INPUT_BRIDGE_PLUGIN_ID) {
