@@ -17,8 +17,9 @@ let
   targetSystem = cfg.nixpkgs.hostPlatform.system;
   sessiondService = cfg.systemd.services."korri-sessiond" or { };
   sessiondEnv = sessiondService.environment or { };
-  serverService = cfg.systemd.services."korrid" or { };
-  serverEnv = serverService.environment or { };
+  userServerService = cfg.systemd.user.services.korrid or { };
+  userServerEnv = userServerService.environment or { };
+  configRootsEnv = userServerEnv.KORRI_CONFIG_ROOTS or "";
   inputplumberService = cfg.systemd.services.inputplumber or { };
   inputplumberEnv = inputplumberService.environment or { };
   userCompositorService = cfg.systemd.user.services."korri-compositor" or { };
@@ -26,7 +27,6 @@ let
   userCompositorServiceConfig = userCompositorService.serviceConfig or { };
   userCompositorUnsetEnvironment = userCompositorServiceConfig.UnsetEnvironment or [ ];
   userCompositorRequires = userCompositorService.requires or [ ];
-  serverExecStartPre = serverService.serviceConfig.ExecStartPre or [ ];
   platformDefaults = server.library.platformDefaults;
   hostAppEnvironment = ((platformDefaults.host or { }).gamescope or { }).app.environment or { };
   renderedPlatformDefaults =
@@ -51,12 +51,12 @@ let
     ))
     (check "RG353M evaluated target system must be aarch64-linux" (targetSystem == "aarch64-linux"))
     (check "RG353M server role must be enabled" server.enable)
-    (check "RG353M server must run as a system service" (server.serviceMode == "system"))
+    (check "RG353M server must run as a user service" (server.serviceMode == "user"))
     (check "RG353M sessiond must not set retired force-Xwayland env" (
       !(sessiondEnv ? KORRI_GAMESCOPE_FORCE_XWAYLAND)
     ))
     (check "RG353M korrid must not set retired force-Xwayland env" (
-      !(serverEnv ? KORRI_GAMESCOPE_FORCE_XWAYLAND)
+      !(userServerEnv ? KORRI_GAMESCOPE_FORCE_XWAYLAND)
     ))
     (check "RG353M platform defaults must unset WAYLAND_DISPLAY at the host Gamescope app layer" (
       hostAppEnvironment ? WAYLAND_DISPLAY && hostAppEnvironment.WAYLAND_DISPLAY == null
@@ -72,8 +72,9 @@ let
     (check "RG353M compositor must not require the retired main-space bus unit" (
       !(builtins.elem "main-space-session-dbus.service" userCompositorRequires)
     ))
-    (check "RG353M platform-default fragment must be installed before korrid starts" (
-      builtins.any (cmd: lib.hasInfix "00-korri-platform-defaults.yaml" cmd) serverExecStartPre
+    (check "RG353M platform-default root must be ordered before mutable config" (
+      lib.hasInfix "korri-platform-config-root" configRootsEnv
+      && lib.hasSuffix ":/var/lib/korri/config" configRootsEnv
     ))
     (check "RG353M InputPlumber must discover product maps before package defaults" (
       lib.hasPrefix "/run/current-system/sw/share:" (inputplumberEnv.XDG_DATA_DIRS or "")
