@@ -106,6 +106,19 @@ export function cdpKeyboardEventForBinding(
   return binding
 }
 
+export function withAxisThresholds(
+  mapping: BridgeMapping,
+  thresholds: {
+    readonly pressThreshold: number
+    readonly releaseThreshold: number
+  },
+): BridgeMapping {
+  return {
+    ...mapping,
+    axes: mapping.axes.map(axis => ({ ...axis, ...thresholds })),
+  }
+}
+
 function axis(
   code: string,
   negative: BridgeActionId,

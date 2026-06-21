@@ -6,13 +6,15 @@ import {
   createCdpInputTranslator,
   parseEvtestLine,
 } from "../../src/bridge-process"
-import { resolveBridgeMapping } from "../../src/mapping"
+import { resolveBridgeMapping, withAxisThresholds } from "../../src/mapping"
 
 interface CliOptions {
   readonly device: string
   readonly cdpHost: string
   readonly cdpPort: number
   readonly mapping: string
+  readonly axisPressThreshold: number
+  readonly axisReleaseThreshold: number
   readonly launchId?: string
   readonly watchPid?: number
   readonly attachTimeoutMs: number
@@ -64,7 +66,10 @@ try {
   })
 
   const translator = createCdpInputTranslator(
-    resolveBridgeMapping(options.mapping),
+    withAxisThresholds(resolveBridgeMapping(options.mapping), {
+      pressThreshold: options.axisPressThreshold,
+      releaseThreshold: options.axisReleaseThreshold,
+    }),
     {
       dispatch: event => dispatchKeyEvent(socket, event),
     },
@@ -120,6 +125,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
     cdpHost: values.get("cdp-host") ?? "127.0.0.1",
     cdpPort: numberArg(values, "cdp-port", 9333),
     mapping: values.get("mapping") ?? "yfs-default",
+    axisPressThreshold: numberArg(values, "axis-press-threshold", 12000),
+    axisReleaseThreshold: numberArg(values, "axis-release-threshold", 8000),
     launchId: values.get("launch-id") ?? undefined,
     watchPid: optionalNumberArg(values, "watch-pid"),
     attachTimeoutMs: numberArg(values, "attach-timeout-ms", 5000),

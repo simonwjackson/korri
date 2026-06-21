@@ -139,6 +139,10 @@ export interface CdpInputBridgeStartRequest {
   readonly cdpHost: string
   readonly cdpPort: number
   readonly mappingName: string
+  readonly axis?: {
+    readonly pressThreshold: number
+    readonly releaseThreshold: number
+  }
   readonly target?: {
     readonly type?: string
     readonly urlPattern?: string
@@ -253,6 +257,10 @@ function bridgeArgs(request: CdpInputBridgeStartRequest): readonly string[] {
     request.mappingName,
     "--attach-timeout-ms",
     String(request.attachTimeoutMs),
+    "--axis-press-threshold",
+    String(request.axis?.pressThreshold ?? 12000),
+    "--axis-release-threshold",
+    String(request.axis?.releaseThreshold ?? 8000),
     "--fail-closed",
     request.failClosed ? "true" : "false",
     "--launch-id",

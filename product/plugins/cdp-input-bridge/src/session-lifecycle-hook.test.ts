@@ -70,6 +70,7 @@ describe("CDP input bridge session lifecycle hook", () => {
         cdpHost: "127.0.0.1",
         cdpPort: 9333,
         mappingName: "yfs-default",
+        axis: { pressThreshold: 12000, releaseThreshold: 8000 },
         target: { type: "page", urlPattern: "index.html" },
       }),
     ])

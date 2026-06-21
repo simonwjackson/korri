@@ -69,6 +69,7 @@ export function createCdpInputBridgeSessionLifecycleHook(
         cdpHost: policy.cdpHost,
         cdpPort: policy.cdpPort,
         mappingName: policy.mappingName,
+        axis: policy.axis,
         ...(policy.target ? { target: policy.target } : {}),
         attachTimeoutMs: policy.attachTimeoutMs,
         failClosed: policy.failClosed,
