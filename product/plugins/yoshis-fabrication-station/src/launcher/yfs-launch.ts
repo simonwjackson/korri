@@ -118,6 +118,18 @@ export async function terminateBrowserForFailedLaunch(
   }
 }
 
+async function waitForYfsReadyOrBrowserExit(
+  cdp: Parameters<typeof waitForYfsReady>[0],
+  proc: Bun.Subprocess,
+): Promise<void> {
+  await Promise.race([
+    waitForYfsReady(cdp).then(() => undefined),
+    proc.exited.then(code => {
+      throw new Error(`Chromium exited before YFS loader became ready: ${code}`)
+    }),
+  ])
+}
+
 export interface RunYfsLaunchOptions {
   readonly argv: readonly string[]
   readonly env?: Record<string, string | undefined>
@@ -154,7 +166,7 @@ export async function runYfsLaunch(
   })
   try {
     await applyCanvasConcerns(cdp, canvasSettings, startupScripts)
-    await waitForYfsReady(cdp)
+    await waitForYfsReadyOrBrowserExit(cdp, proc)
     cdp.close()
     return await proc.exited
   } catch (error) {

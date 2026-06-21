@@ -69,6 +69,13 @@ export async function connectCdp(
   const ws = new WebSocket(wsUrl)
   const pending = new Map<number, PendingResolver>()
   let nextId = 0
+  let closedError: Error | undefined
+
+  const rejectPending = (error: Error) => {
+    closedError = error
+    for (const waiter of pending.values()) waiter.reject(error)
+    pending.clear()
+  }
 
   await new Promise<void>((resolve, reject) => {
     ws.addEventListener("open", () => resolve(), { once: true })
@@ -79,6 +86,13 @@ export async function connectCdp(
         once: true,
       },
     )
+  })
+
+  ws.addEventListener("close", () => {
+    rejectPending(new Error("CDP websocket closed"))
+  })
+  ws.addEventListener("error", () => {
+    rejectPending(new Error("CDP websocket error"))
   })
 
   ws.addEventListener("message", event => {
@@ -96,10 +110,18 @@ export async function connectCdp(
   })
 
   const send = (method: string, params: Record<string, unknown> = {}) => {
+    if (closedError) return Promise.reject(closedError)
+    if (ws.readyState !== WebSocket.OPEN)
+      return Promise.reject(new Error("CDP websocket is not open"))
     const id = ++nextId
     return new Promise<unknown>((resolve, reject) => {
       pending.set(id, { resolve, reject })
-      ws.send(JSON.stringify({ id, method, params }))
+      try {
+        ws.send(JSON.stringify({ id, method, params }))
+      } catch (error) {
+        pending.delete(id)
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
     })
   }
 
