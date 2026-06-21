@@ -27,13 +27,13 @@
  * failure so a brief 502 self-heals on the next request.
  */
 
-import { Bonjour } from "bonjour-service"
 import {
   type BonjourLike,
   candidateFromMdnsService,
   KORRI_STREAM_SERVICE_PROTOCOL,
   KORRI_STREAM_SERVICE_TYPE,
-} from "../cli/lan-stream-discovery"
+} from "@platform/stream/lan-stream-discovery"
+import { Bonjour } from "bonjour-service"
 
 export interface ForwarderUpstreamOptions {
   /** Local server base URL to fast-path probe. Default `http://127.0.0.1:3001`. */

@@ -21,18 +21,18 @@
  * peer-set per server process).
  */
 
-import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect"
-import type { StreamHostCandidate } from "@product/surfaces/terminal/korri-cli/lan-stream-discovery"
+import type { StreamHostCandidate } from "@platform/stream/lan-stream-discovery"
 import {
   type BonjourLike,
   watchStreamHosts,
-} from "@product/surfaces/terminal/korri-cli/lan-stream-discovery"
+} from "@platform/stream/lan-stream-discovery"
+import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect"
 import type { PeerStore, StoredPeer } from "./peer-store"
 
 export type {
   BonjourLike,
   BrowserLike,
-} from "@product/surfaces/terminal/korri-cli/lan-stream-discovery"
+} from "@platform/stream/lan-stream-discovery"
 
 export interface PeerRecord {
   readonly hostId: string
@@ -147,7 +147,7 @@ export function makePeerDiscoveryLayer(
 
 function applyEvent(
   prev: ReadonlyMap<string, PeerRecord>,
-  event: import("@product/surfaces/terminal/korri-cli/lan-stream-discovery").StreamHostEvent,
+  event: import("@platform/stream/lan-stream-discovery").StreamHostEvent,
   localHostId: string | undefined,
 ): ReadonlyMap<string, PeerRecord> {
   if (event.kind === "disappear") {

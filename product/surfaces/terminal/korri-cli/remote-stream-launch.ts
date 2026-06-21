@@ -1,11 +1,11 @@
 import type { GameRecord } from "@platform/fixtures/games/game"
 import type { LibrarySourceService } from "@platform/library/library-services"
-import type { GamePicker } from "./game-picker"
 import {
   type DiscoverStreamHostsOptions,
   discoverStreamHosts,
   type StreamHostCandidate,
-} from "./lan-stream-discovery"
+} from "@platform/stream/lan-stream-discovery"
+import type { GamePicker } from "./game-picker"
 import { resolveCliMoonlightLaunchPolicy } from "./moonlight-launch-policy"
 import {
   launchMoonlight,

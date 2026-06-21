@@ -1,12 +1,12 @@
 import { hostname } from "node:os"
 import { logger } from "@platform/logger"
-import { Bonjour, type Service } from "bonjour-service"
 import {
   type BonjourLike,
   KORRI_STREAM_PROTOCOL_VERSION,
   KORRI_STREAM_SERVICE_PROTOCOL,
   KORRI_STREAM_SERVICE_TYPE,
-} from "@product/surfaces/terminal/korri-cli/lan-stream-discovery"
+} from "@platform/stream/lan-stream-discovery"
+import { Bonjour, type Service } from "bonjour-service"
 import {
   type AvahiAdvertisement,
   AvahiCliNotFoundError,

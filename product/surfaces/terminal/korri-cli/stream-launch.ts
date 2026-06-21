@@ -7,12 +7,12 @@ import {
   LibraryError,
   type LibrarySourceService,
 } from "@platform/library/library-services"
-import { Cause, Effect, Exit } from "effect"
 import {
   createLaunchIntent,
   type GameStreamLaunchIntent,
   type GameStreamLaunchIntentStore,
 } from "@product/services/device/game-stream-launch-intent"
+import { Cause, Effect, Exit } from "effect"
 import type { GamePicker } from "./game-picker"
 
 export type StreamLaunchPrepareResult =

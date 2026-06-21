@@ -4,8 +4,8 @@ import {
   LibraryError,
   type LibrarySourceService,
 } from "@platform/library/library-services"
+import type { StreamHostCandidate } from "@platform/stream/lan-stream-discovery"
 import { Effect } from "effect"
-import type { StreamHostCandidate } from "./lan-stream-discovery"
 import type { RemoteStreamControlClient } from "./remote-stream-control-client"
 import { loadSourceAwareGames } from "./source-aware-games"
 

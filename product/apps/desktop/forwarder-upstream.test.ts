@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test"
+import type {
+  BonjourLike,
+  BrowserLike,
+} from "@platform/stream/lan-stream-discovery"
 import type { Service } from "bonjour-service"
-import type { BonjourLike, BrowserLike } from "../cli/lan-stream-discovery"
 import { makeForwarderUpstream } from "./forwarder-upstream"
 
 describe("ForwarderUpstream", () => {
@@ -47,7 +50,7 @@ describe("ForwarderUpstream", () => {
 
     const picked = await upstream.pickUpstream()
     await upstream.shutdown()
-    expect(picked).toBe("http://192.168.1.117:3001")
+    expect(picked).toBe("http://aka:3001")
   })
 
   it("returns undefined when loopback is dead AND no mDNS peers advertise caps: source", async () => {

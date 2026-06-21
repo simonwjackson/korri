@@ -9,12 +9,12 @@ import { createKorriControlRpc } from "@product/apps/portal/control/korri-contro
 import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugins/acquisition"
 import { PluginLibrarySourceLayerLive } from "@product/plugins/library-source-layer"
-import { Effect, Layer, Option } from "effect"
-import { Argument, Command, Flag } from "effect/unstable/cli"
 import {
   createFileGameStreamLaunchIntentStore,
   defaultGameStreamIntentPath,
 } from "@product/services/device/game-stream-launch-intent"
+import { Effect, Layer, Option } from "effect"
+import { Argument, Command, Flag } from "effect/unstable/cli"
 import { artifactCommand } from "./artifacts/artifact-import-command"
 import { bazzarCommand } from "./bazzar/bazzar-command"
 import {

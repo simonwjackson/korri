@@ -18,12 +18,12 @@ import {
   type LibrarySourceService,
 } from "@platform/library/library-services"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
-import { Effect } from "effect"
-import { withTempProseqlLibrary } from "@tools/testing/library/with-temp-proseql-library"
 import {
   createFileGameStreamLaunchIntentStore,
   decodeLaunchIntent,
 } from "@product/services/device/game-stream-launch-intent"
+import { withTempProseqlLibrary } from "@tools/testing/library/with-temp-proseql-library"
+import { Effect } from "effect"
 import { createStaticGamePicker } from "./game-picker"
 import {
   prepareStreamLaunch,

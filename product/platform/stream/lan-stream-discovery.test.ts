@@ -1,6 +1,4 @@
 import { describe, expect, it } from "bun:test"
-import type { Service } from "bonjour-service"
-import { Effect, Stream } from "effect"
 import {
   type BonjourLike,
   type BrowserLike,
@@ -9,7 +7,9 @@ import {
   discoverStreamHosts,
   type StreamHostEvent,
   watchStreamHosts,
-} from "./lan-stream-discovery"
+} from "@platform/stream/lan-stream-discovery"
+import type { Service } from "bonjour-service"
+import { Effect, Stream } from "effect"
 
 describe("LAN stream discovery", () => {
   it("normalizes manual hosts into stream candidates", () => {
