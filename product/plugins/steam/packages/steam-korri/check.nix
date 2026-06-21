@@ -17,6 +17,7 @@ let
   seedScript = builtins.readFile ./scripts/steam-arm64-seed;
   bootstrapScript = builtins.readFile ./scripts/steam-arm64-bootstrap;
   runtimePrepScript = builtins.readFile ./scripts/steam-guest-runtime-prep;
+  guestRunScript = builtins.readFile ./scripts/steam-guest-run;
   packageSource = builtins.readFile ./package.nix;
 
   check = message: assertion: { inherit message assertion; };
@@ -56,6 +57,10 @@ let
       lib.hasInfix "\"$STEAM_DOT/root\"" bootstrapScript
       && lib.hasInfix "\"$STEAM_DOT/bin32\"" bootstrapScript
       && lib.hasInfix "\"$STEAM_DOT/sdkarm64\"" bootstrapScript
+    ))
+    (check "steam-korri guest runner resolves Valve video codecs first" (
+      lib.hasInfix "steamrtarm64/video:$STEAM_HOME/steamrtarm64" guestRunScript
+      && lib.hasInfix "av_malloc_tracked" guestRunScript
     ))
     (check "steam-korri runtime prep exposes FEX resources to Proton" (
       lib.hasInfix "files/share/fex-emu" runtimePrepScript

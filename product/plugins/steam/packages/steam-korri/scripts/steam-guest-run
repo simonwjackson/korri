@@ -66,10 +66,11 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 runtime_prep="${STEAM_RUNTIME_PREP:-$script_dir/steam-guest-runtime-prep}"
 
 # The FHS environment supplies the generic distro ABI and Nix-provided system
-# libraries. This LD_LIBRARY_PATH is intentionally limited to Valve's mutable
-# ARM64 payload so non-transitive dependencies such as steamrtarm64/libavcodec.so
-# -> libvpx.so.6 resolve without smearing Nix store paths globally.
-export LD_LIBRARY_PATH="$STEAM_HOME/steamrtarm64:$STEAM_HOME/steamrtarm64/video:$STEAM_HOME/lib/aarch64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# libraries. Keep Valve's video codec directory before the wider ARM64 payload:
+# steamrtarm64/libvideo.so expects the adjacent video/libavutil.so.60 carrying
+# av_malloc_tracked, while the root steamrtarm64/libavutil.so.60 does not.
+# Putting the root first makes Steam fail to load steamui.so on Bandai.
+export LD_LIBRARY_PATH="$STEAM_HOME/steamrtarm64/video:$STEAM_HOME/steamrtarm64:$STEAM_HOME/lib/aarch64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 # Some Steam helper commands are launched by basename.
 export PATH="$STEAM_HOME/steamrtarm64:$STEAM_HOME/steamrtarm64/bin:$PATH"
