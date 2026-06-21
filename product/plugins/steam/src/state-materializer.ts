@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import type { Stats } from "node:fs"
 import {
@@ -198,9 +199,68 @@ function isExecutableRegularFile(entry: Stats): boolean {
   return entry.isFile() && (entry.mode & 0o111) !== 0
 }
 
+async function runBestEffort(
+  command: string,
+  args: readonly string[],
+): Promise<void> {
+  await runCommand(command, args).catch(() => {})
+}
+
+async function commandSucceeds(
+  command: string,
+  args: readonly string[],
+): Promise<boolean> {
+  try {
+    await runCommand(command, args)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function runCommand(command: string, args: readonly string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, [...args], { stdio: "ignore" })
+    child.on("error", reject)
+    child.on("exit", code => {
+      if (code === 0) resolve()
+      else reject(new Error(`${command} exited ${code ?? "without status"}`))
+    })
+  })
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export const noopSteamLifecycle: SteamLifecycle = {
   shutdown: async () => {},
   waitForShutdown: async () => {},
+  start: async () => {},
+  waitUntilReady: async () => {},
+}
+
+export const nodeSteamLifecycle: SteamLifecycle = {
+  shutdown: async input => {
+    await runBestEffort(
+      "/run/current-system/sw/bin/korri-steam-service-control",
+      ["stop"],
+    )
+    await runBestEffort("pkill", ["-TERM", "-f", input.stateRoot])
+  },
+  waitForShutdown: async input => {
+    const deadline = Date.now() + 15_000
+    while (Date.now() <= deadline) {
+      const stillRunning = await commandSucceeds("pgrep", [
+        "-f",
+        input.stateRoot,
+      ])
+      if (!stillRunning) return
+      await sleep(500)
+    }
+  },
+  // AppID launches are subsequently forwarded through korri-steam-app, whose
+  // shell wrapper owns starting and warming gamescoped Steam Big Picture.
   start: async () => {},
   waitUntilReady: async () => {},
 }
@@ -237,7 +297,7 @@ async function materializeSteamDesiredStatePromise(
   }
 
   const fs = options.fs ?? nodeSteamStateFileSystem
-  const lifecycle = options.lifecycle ?? noopSteamLifecycle
+  const lifecycle = options.lifecycle ?? nodeSteamLifecycle
   const lock = options.lock ?? defaultSteamStateLock
   const configPath = steamConfigPath(desired.stateRoot)
 

@@ -479,6 +479,7 @@ let
 
     console_log="$STEAM_HOME/logs/console_log.txt"
     launch_timeout="''${KORRI_STEAM_APP_LAUNCH_TIMEOUT:-180}"
+    forward_timeout="''${KORRI_STEAM_APP_FORWARD_TIMEOUT:-15}"
     service_ready_timeout="''${KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-90}"
     service_name="''${KORRI_STEAM_SERVICE:-korri-steam-gamescope.service}"
     gamescope_display="''${GAMESCOPE_WAYLAND_DISPLAY:-gamescope-0}"
@@ -631,8 +632,8 @@ let
       : > "$console_log" 2>/dev/null || true
     fi
 
-    steam_process_alive() {
-      ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null
+    steam_service_state() {
+      ${pkgs.systemd}/bin/systemctl is-active "$service_name" 2>/dev/null || true
     }
 
     localconfig_files() {
@@ -658,7 +659,8 @@ let
           && printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
           return 0
         fi
-        if ! steam_process_alive; then
+        service_state="$(steam_service_state)"
+        if [ "$service_state" = "failed" ]; then
           return 1
         fi
         ${pkgs.coreutils}/bin/sleep 1
@@ -673,11 +675,6 @@ let
       fi
     fi
 
-    if ! steam_process_alive; then
-      echo "korri-steam-app: gamescoped Steam service is not active after start" >&2
-      exit 125
-    fi
-
     if ! wait_for_gamescoped_steam_ready; then
       echo "korri-steam-app: timed out waiting for gamescoped Steam readiness before AppID launch" >&2
       exit 125
@@ -688,7 +685,10 @@ let
     # console-log prompts.
     focus_korri_output
     hide_steam_hat
-    ${steamLauncher}/bin/korri-steam-guest "steam://rungameid/$appid" >/dev/null
+    if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest "steam://rungameid/$appid" >/dev/null; then
+      echo "korri-steam-app: timed out forwarding AppID $appid to gamescoped Steam" >&2
+      exit 125
+    fi
     hide_steam_hat
 
     log_has() {

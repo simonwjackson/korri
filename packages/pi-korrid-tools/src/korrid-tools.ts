@@ -841,9 +841,10 @@ export function classifySteamLaunchTranscript(
   const gpuFreedreno = /libvulkan_freedreno\.so/.test(transcript)
   const renderNode = /renderD128|renderD\d+/.test(transcript)
   const inputAccess = /\/dev\/input|\/dev\/uinput|uinput/.test(transcript)
-  const gamescopedSteam =
-    /(?:^|\s)(?:\/[^\s]+\/)?gamescope(?:\s|\S)*korri-steam-guest/.test(
-      transcript,
+  const gamescopedSteam = transcript
+    .split(/\r?\n/)
+    .some(line =>
+      /(?:^|\s)(?:\/[^\s]+\/)?gamescope\b.*\bkorri-steam-guest\b/.test(line),
     )
   const realProtonCachyos =
     /compatibilitytools\.d\/proton-cachyos-11\.0-20260601-slr-arm64\/proton/.test(

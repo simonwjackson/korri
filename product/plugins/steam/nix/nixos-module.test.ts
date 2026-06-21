@@ -71,7 +71,17 @@ describe("Steam plugin Nix module", () => {
   it("bounds service-control waits before relying on the readiness loop", () => {
     expect(moduleSource).toContain("systemctl --no-block start")
     expect(moduleSource).toContain("KORRI_STEAM_APP_SYSTEMCTL_TIMEOUT")
-    expect(moduleSource).toContain("/bin/timeout")
+    expect(moduleSource).toContain("steam_service_state")
+    expect(moduleSource).not.toContain(
+      "gamescoped Steam service is not active after start",
+    )
+  })
+
+  it("bounds AppID URL forwarding before launch observation", () => {
+    expect(moduleSource).toContain("KORRI_STEAM_APP_FORWARD_TIMEOUT")
+    expect(moduleSource).toContain(
+      "timed out forwarding AppID $appid to gamescoped Steam",
+    )
   })
 
   it("accepts existing readiness evidence for prewarmed gamescoped Steam", () => {
