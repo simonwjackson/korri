@@ -7,17 +7,17 @@
  * stage so their absolute positioning resolves against it.
  */
 import type { PicoGame } from "../../fixtures"
-import { GameCart } from "../molecules/GameCart"
 import { GameLogo } from "../molecules/GameLogo"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 import { KeyArtBackdrop } from "../molecules/KeyArtBackdrop"
 import { PlayCta } from "../molecules/PlayCta"
 
 export function SpotlightHero({
   hero,
-  played,
+  playState,
 }: {
   readonly hero: PicoGame
-  readonly played: boolean
+  readonly playState: "start" | "continue"
 }) {
   return (
     <>
@@ -30,7 +30,7 @@ export function SpotlightHero({
       {/* key remounts the hero each rotation so the pop-in re-fires */}
       <div className="pcShow-spot-hero" key={hero.id}>
         <div className="pcShow-spot-art">
-          <GameCart game={hero} showFav={false} />
+          <GameCartUnmarked game={hero} />
         </div>
         <div className="pcShow-spot-info">
           <div className="pcShow-kicker">▸ FEATURED</div>
@@ -46,7 +46,7 @@ export function SpotlightHero({
             {hero.genre.toUpperCase()} · {hero.developer.toUpperCase()}
           </div>
           <PlayCta
-            label={played ? "CONTINUE" : "PLAY"}
+            label={playState === "continue" ? "CONTINUE" : "PLAY"}
             className="pcShow-play"
           />
         </div>

@@ -5,7 +5,7 @@
  */
 export function Spinner() {
   return (
-    <span className="pc-spinner" aria-hidden>
+    <span className="pc-spinner" aria-hidden="true">
       <b />
       <b />
       <b />

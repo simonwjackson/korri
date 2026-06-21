@@ -8,7 +8,7 @@ const meta = [picoHero?.lastPlayedLabel, picoHero?.playtimeLabel]
   .join(" · ")
 
 export default {
-  surface: true, // full-bleed key-art backdrop fills the absolute `.pcLast` stage
+  presentation: "surface", // full-bleed key-art backdrop fills the absolute `.pcLast` stage
   render: () =>
     picoHero ? (
       <div className="pcLast">

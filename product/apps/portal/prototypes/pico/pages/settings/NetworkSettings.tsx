@@ -18,8 +18,8 @@ export function NetworkSettings() {
       ]}
     >
       <div className="pcSet-list">
-        <SettingRow label="Wi-Fi" sel>
-          <Toggle on />
+        <SettingRow label="Wi-Fi" state="selected">
+          <Toggle state="on" />
         </SettingRow>
         <SettingRow label="Network">
           <span className="pcSet-info">PICO-NET</span>
@@ -31,7 +31,7 @@ export function NetworkSettings() {
           <BlockBar level={7} max={10} />
         </SettingRow>
         <SettingRow label="Host Discovery">
-          <Toggle on />
+          <Toggle state="on" />
         </SettingRow>
       </div>
     </ScreenShell>

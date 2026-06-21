@@ -7,7 +7,7 @@
 import type { PicoGame } from "../../fixtures"
 import type { PicoPlayer } from "../../fixtures-extra"
 import { Dim } from "../atoms/Dim"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 import { Player } from "../molecules/Player"
 
 export function InlineSeatStrip({
@@ -25,7 +25,7 @@ export function InlineSeatStrip({
             key={game.id}
             className={`pcMp-inline-cart ${index === 1 ? "on" : ""}`}
           >
-            <GameCart game={game} showFav={false} />
+            <GameCartUnmarked game={game} />
           </div>
         ))}
       </div>

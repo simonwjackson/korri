@@ -6,6 +6,7 @@
 import { useState } from "react"
 import type { PicoGame } from "./fixtures"
 import { PicoCart } from "./PicoCart"
+import { PicoCartUnmarked } from "./PicoCartUnmarked"
 import { PicoButtonBar, PicoStatusBar } from "./PicoStatusBar"
 
 export function VariantCartridgeShelf({
@@ -30,10 +31,10 @@ export function VariantCartridgeShelf({
           ))}
         </div>
         <div className="pcA-carts">
-          <PicoCart game={prev} className="pcA-cart side" showFav={false} />
+          <PicoCartUnmarked game={prev} className="pcA-cart side" />
           <PicoCart game={hero} className="pcA-cart hero" />
-          <PicoCart game={next} className="pcA-cart side" showFav={false} />
-          <PicoCart game={next2} className="pcA-cart side" showFav={false} />
+          <PicoCartUnmarked game={next} className="pcA-cart side" />
+          <PicoCartUnmarked game={next2} className="pcA-cart side" />
         </div>
         <div className="pcA-meta">
           <h1>{hero.title}</h1>

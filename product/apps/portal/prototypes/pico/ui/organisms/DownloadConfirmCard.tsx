@@ -10,7 +10,7 @@ import { Icon } from "../atoms/Icon"
 import { Stat } from "../atoms/Stat"
 import { Sub } from "../atoms/Sub"
 import { Title } from "../atoms/Title"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function DownloadConfirmCard({
   target,
@@ -24,7 +24,7 @@ export function DownloadConfirmCard({
   return (
     <div className="pcAcq-confirm">
       <div className="pc-art">
-        <GameCart game={target} showFav={false} />
+        <GameCartUnmarked game={target} />
       </div>
       <div className="pcAcq-confirm-body">
         <Title size={1}>{target.title}</Title>
@@ -35,7 +35,7 @@ export function DownloadConfirmCard({
           <Stat label="RUNTIME" value={runtime} />
         </div>
         <div className="pc-hero-actions">
-          <Btn kind="primary" sel>
+          <Btn kind="primary" state="selected">
             <Icon name="download" /> DOWNLOAD
           </Btn>
           <Btn>CANCEL</Btn>

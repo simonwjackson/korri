@@ -9,7 +9,7 @@ export default {
       label="Continue"
       meta="68% · City of Tears"
       trailing="▸"
-      sel
+      state="selected"
     />
   ),
 } satisfies StorySpec

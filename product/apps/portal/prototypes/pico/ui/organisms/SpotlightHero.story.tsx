@@ -5,11 +5,11 @@ import { SpotlightHero } from "./SpotlightHero"
 const hero = picoGames[0]
 
 export default {
-  surface: true, // children are absolutely positioned against the .pcShow-spot stage
+  presentation: "surface", // children are absolutely positioned against the .pcShow-spot stage
   render: () =>
     hero ? (
       <div className="pcShow-spot">
-        <SpotlightHero hero={hero} played />
+        <SpotlightHero hero={hero} playState="continue" />
       </div>
     ) : null,
 } satisfies StorySpec

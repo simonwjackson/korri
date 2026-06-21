@@ -5,7 +5,7 @@
  * narrower main pane when a drawer is open. Moved from screens/PanelsScreens.tsx.
  */
 import type { PicoGame } from "../../fixtures"
-import { PicoCart } from "../../PicoCart"
+import { PicoCartUnmarked } from "../../PicoCartUnmarked"
 
 export function MiniHome({
   games,
@@ -23,7 +23,7 @@ export function MiniHome({
             key={game.id}
             className={`pcHome-cart ${index === focusIndex ? "on" : ""}`}
           >
-            <PicoCart game={game} showFav={false} />
+            <PicoCartUnmarked game={game} />
           </div>
         ))}
       </div>

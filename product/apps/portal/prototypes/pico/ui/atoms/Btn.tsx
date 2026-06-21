@@ -8,14 +8,16 @@ import type { ReactNode } from "react"
 export function Btn({
   children,
   kind,
-  sel,
+  state = "default",
 }: {
   readonly children: ReactNode
   readonly kind?: "primary" | "danger" | "ghost"
-  readonly sel?: boolean
+  readonly state?: "default" | "selected"
 }) {
   return (
-    <span className={`pc-btn ${kind ?? ""} ${sel ? "sel" : ""}`}>
+    <span
+      className={`pc-btn ${kind ?? ""} ${state === "selected" ? "sel" : ""}`}
+    >
       {children}
     </span>
   )

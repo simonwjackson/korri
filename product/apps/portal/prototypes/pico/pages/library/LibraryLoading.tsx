@@ -11,6 +11,7 @@ import {
 } from "../../data/pico-library-atoms"
 import { makePicoLibraryLayer } from "../../data/pico-library-service"
 import { PicoData } from "../../screens/PicoData"
+import { Spinner } from "../../ui/atoms/Spinner"
 import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
@@ -22,7 +23,7 @@ export function LibraryLoading() {
       waiting={() => (
         <ScreenShell title="PICO ▸ LIBRARY" className="center">
           <Hero
-            spinner
+            adornment={<Spinner />}
             title="LOADING LIBRARY…"
             message="waking up the carts…"
           />

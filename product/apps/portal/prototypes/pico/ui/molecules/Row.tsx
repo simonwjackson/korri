@@ -10,16 +10,16 @@ export function Row({
   label,
   meta,
   trailing,
-  sel,
+  state = "default",
 }: {
   readonly icon?: ReactNode
   readonly label: ReactNode
   readonly meta?: ReactNode
   readonly trailing?: ReactNode
-  readonly sel?: boolean
+  readonly state?: "default" | "selected"
 }) {
   return (
-    <div className={`pc-row ${sel ? "sel" : ""}`}>
+    <div className={`pc-row ${state === "selected" ? "sel" : ""}`}>
       {icon !== undefined ? <span className="pc-row-ico">{icon}</span> : null}
       <span className="pc-row-text">
         <span className="pc-row-label">{label}</span>

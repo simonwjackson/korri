@@ -28,7 +28,7 @@ export function OpenInBrowser() {
             message="this one won't fetch itself — the provider wants you to kick it off by hand. pop the page open, then hop back here."
           >
             <Badge tone="info">REQUIRES USER ACTION</Badge>
-            <Btn kind="primary" sel>
+            <Btn kind="primary" state="selected">
               ↗ OPEN IN BROWSER
             </Btn>
             <code className="pcAcq-url">

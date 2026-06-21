@@ -15,29 +15,35 @@ const DEVICES: readonly {
   readonly name: string
   readonly icon: "pad" | "power" | "menu"
   readonly meta: string
-  readonly near: boolean
+  readonly proximity: "near" | "far"
 }[] = [
   {
     id: "d1",
     name: "THOR-DECK",
     icon: "pad",
     meta: "this room · 7ms",
-    near: true,
+    proximity: "near",
   },
-  { id: "d2", name: "DEN-RIG", icon: "power", meta: "LAN · 4ms", near: true },
+  {
+    id: "d2",
+    name: "DEN-RIG",
+    icon: "power",
+    meta: "LAN · 4ms",
+    proximity: "near",
+  },
   {
     id: "d3",
     name: '65" 4K TV',
     icon: "menu",
     meta: "cast target",
-    near: true,
+    proximity: "near",
   },
   {
     id: "d4",
     name: "OFFICE-NUC",
     icon: "power",
     meta: "LAN · 11ms",
-    near: false,
+    proximity: "far",
   },
 ]
 
@@ -58,14 +64,16 @@ export function Nearby() {
         {DEVICES.map((device, index) => (
           <Card
             key={device.id}
-            className={`pcMp-dev ${index === 0 ? "sel" : ""} ${device.near ? "" : "far"}`}
+            className={`pcMp-dev ${index === 0 ? "sel" : ""} ${device.proximity === "far" ? "far" : ""}`}
           >
             <Glyph tone="info">
               <Icon name={device.icon} />
             </Glyph>
             <div className="pcMp-dev-name">{device.name}</div>
             <Dim>{device.meta}</Dim>
-            {device.near ? <Badge tone="good">NEAR</Badge> : null}
+            {device.proximity === "near" ? (
+              <Badge tone="good">NEAR</Badge>
+            ) : null}
           </Card>
         ))}
       </div>

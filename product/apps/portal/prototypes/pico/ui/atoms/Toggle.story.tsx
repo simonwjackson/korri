@@ -4,7 +4,7 @@ import { Toggle } from "./Toggle"
 export default {
   render: () => (
     <>
-      <Toggle on /> <Toggle on={false} />
+      <Toggle state="on" /> <Toggle state="off" />
     </>
   ),
 } satisfies StorySpec

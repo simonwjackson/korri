@@ -7,7 +7,7 @@
  */
 import type { PicoGame } from "../../fixtures"
 import { Title } from "../atoms/Title"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function ScreenshotGallery({
   game,
@@ -20,7 +20,7 @@ export function ScreenshotGallery({
     <div className="pcDet-gallery">
       <div className="pcDet-shot">
         <div className="pcDet-shot-art">
-          <GameCart game={game} showFav={false} />
+          <GameCartUnmarked game={game} />
         </div>
         <div className="pcDet-shot-cap">
           <Title size={-1}>{game.title}</Title>
@@ -33,7 +33,7 @@ export function ScreenshotGallery({
             key={shot.id}
             className={`pc-art sm pcDet-thumb ${index === 1 ? "sel" : ""}`}
           >
-            <GameCart game={shot} showFav={false} />
+            <GameCartUnmarked game={shot} />
           </div>
         ))}
       </div>

@@ -19,14 +19,14 @@ export function LabsPanel() {
         Knobs we're still messing with. Flip at your own risk.
       </p>
       <div className="pcSet-list">
-        <SettingRow label="UI Scale" sel>
+        <SettingRow label="UI Scale" state="selected">
           <BlockBar level={5} max={10} />
         </SettingRow>
         <SettingRow label="Holographic Carts">
-          <Toggle on />
+          <Toggle state="on" />
         </SettingRow>
         <SettingRow label="Predictive Preload">
-          <Toggle on={false} />
+          <Toggle state="off" />
         </SettingRow>
       </div>
     </Modal>

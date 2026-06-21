@@ -9,7 +9,7 @@ import { Badge } from "../atoms/Badge"
 import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
 import { Title } from "../atoms/Title"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function FeaturedToday({
   hero,
@@ -22,7 +22,7 @@ export function FeaturedToday({
     <div className="pcFut-feat">
       <div className="pcFut-feat-top">
         <div className="pc-art pcFut-feat-art">
-          <GameCart game={hero} showFav={false} />
+          <GameCartUnmarked game={hero} />
         </div>
         <div className="pcFut-feat-info">
           <div className="pc-sub">GAME OF THE DAY</div>
@@ -41,7 +41,7 @@ export function FeaturedToday({
             </span>
           </div>
           <div className="pcFut-feat-actions">
-            <Btn kind="primary" sel>
+            <Btn kind="primary" state="selected">
               <Icon name="play" /> PLAY
             </Btn>
             <Btn>
@@ -55,7 +55,7 @@ export function FeaturedToday({
         <div className="pcFut-feat-rail">
           {more.map(game => (
             <div key={game.id} className="pc-art sm pcFut-feat-thumb">
-              <GameCart game={game} showFav={false} />
+              <GameCartUnmarked game={game} />
             </div>
           ))}
         </div>

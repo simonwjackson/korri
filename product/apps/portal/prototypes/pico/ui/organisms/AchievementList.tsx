@@ -40,7 +40,7 @@ export function AchievementList({
         {achievements.map((ach, index) => (
           <Row
             key={ach.id}
-            sel={index === 1}
+            state={index === 1 ? "selected" : "default"}
             icon={
               <span
                 className={`pcFut-ach-ico ${ach.unlocked ? "got" : "locked"}`}

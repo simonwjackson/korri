@@ -3,11 +3,13 @@
  *
  * Two-segment ON/OFF toggle. Moved from `kit.tsx`.
  */
-export function Toggle({ on }: { readonly on: boolean }) {
+export type ToggleState = "on" | "off"
+
+export function Toggle({ state }: { readonly state: ToggleState }) {
   return (
     <span className="pc-toggle">
-      <span className={on ? "on" : ""}>ON</span>
-      <span className={on ? "" : "on"}>OFF</span>
+      <span className={state === "on" ? "on" : ""}>ON</span>
+      <span className={state === "off" ? "on" : ""}>OFF</span>
     </span>
   )
 }

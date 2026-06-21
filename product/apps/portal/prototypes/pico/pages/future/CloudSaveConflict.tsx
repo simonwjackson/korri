@@ -40,7 +40,7 @@ export function CloudSaveConflict() {
             <span className="pc-dim">SPOT</span>
             <b>WORLD 3-2</b>
           </div>
-          <Btn kind="primary" sel>
+          <Btn kind="primary" state="selected">
             KEEP LOCAL
           </Btn>
         </Card>

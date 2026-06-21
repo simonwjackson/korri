@@ -19,7 +19,7 @@ export function LeaderboardTable({
     <>
       <div className="pcFut-lb-head">
         <Title size={0}>CELESTE · TIME ATTACK</Title>
-        <Tabs items={["FRIENDS", "GLOBAL"]} sel={0} />
+        <Tabs items={["FRIENDS", "GLOBAL"]} activeIndex={0} />
       </div>
       <div className="pcFut-lb">
         <div className="pcFut-lb-row head">

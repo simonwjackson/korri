@@ -43,20 +43,20 @@ function SpotlightHomeBody({
 
   const hero = games[index] ?? allGames[0]
   if (!hero) return null
-  const played = hero.lastPlayedLabel !== null
+  const playState = hero.lastPlayedLabel !== null ? "continue" : "start"
 
   return (
     <ScreenShell
       title="PICO ▸ SPOTLIGHT"
       hints={[
-        { key: "a", label: played ? "CONTINUE" : "PLAY" },
+        { key: "a", label: playState === "continue" ? "CONTINUE" : "PLAY" },
         { key: "y", label: "INFO" },
         { key: "b", label: "BACK" },
       ]}
       className="pad-0"
     >
       <div className="pcShow-spot">
-        <SpotlightHero hero={hero} played={played} />
+        <SpotlightHero hero={hero} playState={playState} />
         <CoverflowRail games={games} activeIndex={index} />
       </div>
     </ScreenShell>

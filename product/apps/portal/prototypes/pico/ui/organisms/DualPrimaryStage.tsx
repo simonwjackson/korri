@@ -8,7 +8,7 @@ import type { PicoGame } from "../../fixtures"
 import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
 import { Title } from "../atoms/Title"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function DualPrimaryStage({ hero }: { readonly hero: PicoGame }) {
   return (
@@ -20,13 +20,13 @@ export function DualPrimaryStage({ hero }: { readonly hero: PicoGame }) {
       <div className="pcMd-primary">
         <div className="pcMd-rail">
           <div className="pc-art sm">
-            <GameCart game={hero} showFav={false} />
+            <GameCartUnmarked game={hero} />
           </div>
           <div className="pc-art sm pcMd-rail-side">
-            <GameCart game={hero} showFav={false} />
+            <GameCartUnmarked game={hero} />
           </div>
           <div className="pc-art sm pcMd-rail-side">
-            <GameCart game={hero} showFav={false} />
+            <GameCartUnmarked game={hero} />
           </div>
         </div>
         <div className="pcMd-primary-info">

@@ -6,6 +6,7 @@
 import { useState } from "react"
 import type { PicoGame } from "./fixtures"
 import { PicoCart } from "./PicoCart"
+import { PicoCartUnmarked } from "./PicoCartUnmarked"
 import { PicoStatusBar } from "./PicoStatusBar"
 
 export function VariantIconGrid({
@@ -36,7 +37,7 @@ export function VariantIconGrid({
         ))}
       </div>
       <div className="pcC-tray">
-        <PicoCart game={sel} showFav={false} />
+        <PicoCartUnmarked game={sel} />
         <div>
           <h1 className="pico-title-display">{sel.title}</h1>
           <div className="pcC-traysub">

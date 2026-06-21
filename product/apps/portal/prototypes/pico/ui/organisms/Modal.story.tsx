@@ -3,7 +3,7 @@ import { Dim } from "../atoms/Dim"
 import { Modal } from "./Modal"
 
 export default {
-  surface: true, // full overlay over a dimmed game backdrop
+  presentation: "surface", // full overlay over a dimmed game backdrop
   render: () => (
     <Modal
       title="QUIT TO LIBRARY?"

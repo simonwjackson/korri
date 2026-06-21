@@ -1,15 +1,21 @@
 /**
  * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
  *
- * The save/load state slot grid. In `load` mode the selected non-empty slot
- * gets a restore affordance.
+ * The save/load state slot grid. In `load` mode the selected filled slot gets a
+ * restore affordance.
  */
-export type SaveSlot = {
-  readonly index: number
-  readonly label: string
-  readonly stamp: string
-  readonly empty: boolean
-}
+export type SaveSlot =
+  | {
+      readonly _tag: "Filled"
+      readonly index: number
+      readonly label: string
+      readonly stamp: string
+    }
+  | {
+      readonly _tag: "Empty"
+      readonly index: number
+      readonly label: string
+    }
 
 export function SaveSlotGrid({
   slots,
@@ -23,14 +29,16 @@ export function SaveSlotGrid({
       {slots.map((slot, index) => (
         <div
           key={slot.index}
-          className={`pcIg-slot ${slot.empty ? "empty" : ""} ${index === 0 ? "sel" : ""}`}
+          className={`pcIg-slot ${slot._tag === "Empty" ? "empty" : ""} ${index === 0 ? "sel" : ""}`}
         >
           <span className="pcIg-slot-no">{slot.index}</span>
           <span className="pcIg-slot-label">{slot.label}</span>
           <span className="pcIg-slot-stamp">
-            {slot.empty ? "empty — your story goes here" : slot.stamp}
+            {slot._tag === "Empty"
+              ? "empty — your story goes here"
+              : slot.stamp}
           </span>
-          {mode === "load" && index === 0 && !slot.empty ? (
+          {mode === "load" && index === 0 && slot._tag === "Filled" ? (
             <span className="pcIg-slot-restore">↺ RESTORE</span>
           ) : null}
         </div>

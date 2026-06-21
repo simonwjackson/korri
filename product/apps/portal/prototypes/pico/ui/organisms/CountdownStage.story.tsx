@@ -6,6 +6,6 @@ import { CountdownStage } from "./CountdownStage"
 const game = picoGames[0]
 
 export default {
-  surface: true, // full key-art backdrop stage
+  presentation: "surface", // full key-art backdrop stage
   render: () => <CountdownStage game={game} players={picoPlayers} />,
 } satisfies StorySpec

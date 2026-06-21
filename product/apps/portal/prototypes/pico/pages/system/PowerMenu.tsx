@@ -16,7 +16,7 @@ export function PowerMenu() {
             icon={<Icon name="moon" />}
             label="SLEEP"
             meta="Suspend to RAM, resume instantly"
-            sel
+            state="selected"
           />
           <Row
             icon={<Icon name="restart" />}

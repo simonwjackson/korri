@@ -34,8 +34,8 @@ export function FilterSortPanel() {
       </div>
       <div className="pcLib-section">
         <div className="pc-card-title">TOGGLES</div>
-        <Row label="INSTALLED ONLY" trailing={<Toggle on={true} />} />
-        <Row label="FAVORITES ONLY" trailing={<Toggle on={false} />} />
+        <Row label="INSTALLED ONLY" trailing={<Toggle state="on" />} />
+        <Row label="FAVORITES ONLY" trailing={<Toggle state="off" />} />
       </div>
     </>
   )

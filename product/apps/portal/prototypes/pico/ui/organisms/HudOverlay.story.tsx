@@ -2,6 +2,6 @@ import type { StorySpec } from "../../story-spec"
 import { HudOverlay } from "./HudOverlay"
 
 export default {
-  surface: true, // absolutely-positioned corners — needs a sized framed canvas
+  presentation: "surface", // absolutely-positioned corners — needs a sized framed canvas
   render: () => <HudOverlay />,
 } satisfies StorySpec

@@ -1,14 +1,7 @@
 import { picoSaveSlots } from "../../fixtures-extra"
 import type { StorySpec } from "../../story-spec"
-import { type SaveSlot, SaveSlotGrid } from "./SaveSlotGrid"
-
-const slots: readonly SaveSlot[] = picoSaveSlots.map(slot => ({
-  index: slot.index,
-  label: slot.label,
-  stamp: slot.stamp ?? "",
-  empty: slot.empty,
-}))
+import { SaveSlotGrid } from "./SaveSlotGrid"
 
 export default {
-  render: () => <SaveSlotGrid slots={slots} mode="load" />,
+  render: () => <SaveSlotGrid slots={picoSaveSlots} mode="load" />,
 } satisfies StorySpec

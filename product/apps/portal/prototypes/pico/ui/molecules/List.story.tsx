@@ -6,7 +6,12 @@ export default {
   name: "List + Row",
   render: () => (
     <List>
-      <Row label="Continue" meta="68% · City of Tears" trailing="▸" sel />
+      <Row
+        label="Continue"
+        meta="68% · City of Tears"
+        trailing="▸"
+        state="selected"
+      />
       <Row label="Library" meta="142 games" />
       <Row label="Settings" />
     </List>

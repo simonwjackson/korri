@@ -39,12 +39,18 @@ export interface PicoCommunityStats {
 }
 
 /** A save-state slot. */
-export interface PicoSaveSlot {
-  readonly index: number
-  readonly label: string
-  readonly stamp: string | null
-  readonly empty: boolean
-}
+export type PicoSaveSlot =
+  | {
+      readonly _tag: "Filled"
+      readonly index: number
+      readonly label: string
+      readonly stamp: string
+    }
+  | {
+      readonly _tag: "Empty"
+      readonly index: number
+      readonly label: string
+    }
 
 /** A discovered LAN stream host (moonlight). */
 export interface PicoHost {
@@ -244,12 +250,12 @@ export const picoStats: PicoCommunityStats = {
 }
 
 export const picoSaveSlots: readonly PicoSaveSlot[] = [
-  { index: 1, label: "WORLD 3-2", stamp: "2h ago", empty: false },
-  { index: 2, label: "BOSS RUSH", stamp: "yesterday", empty: false },
-  { index: 3, label: "100% RUN", stamp: "3d ago", empty: false },
-  { index: 4, label: "EMPTY", stamp: null, empty: true },
-  { index: 5, label: "EMPTY", stamp: null, empty: true },
-  { index: 6, label: "AUTO", stamp: "1m ago", empty: false },
+  { _tag: "Filled", index: 1, label: "WORLD 3-2", stamp: "2h ago" },
+  { _tag: "Filled", index: 2, label: "BOSS RUSH", stamp: "yesterday" },
+  { _tag: "Filled", index: 3, label: "100% RUN", stamp: "3d ago" },
+  { _tag: "Empty", index: 4, label: "EMPTY" },
+  { _tag: "Empty", index: 5, label: "EMPTY" },
+  { _tag: "Filled", index: 6, label: "AUTO", stamp: "1m ago" },
 ]
 
 export const picoHosts: readonly PicoHost[] = [

@@ -5,7 +5,7 @@ import { SettingRow } from "./SettingRow"
 export default {
   render: () => (
     <div className="pcSet-list">
-      <SettingRow label="Scanlines" sel>
+      <SettingRow label="Scanlines" state="selected">
         <Badge tone="good">ON</Badge>
       </SettingRow>
       <SettingRow label="Aspect">

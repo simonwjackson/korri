@@ -5,7 +5,7 @@
  * naming the game. Presentation for the launch screen.
  */
 import type { PicoGame } from "../../fixtures"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function LaunchTube({ game }: { readonly game: PicoGame | undefined }) {
   return (
@@ -14,7 +14,7 @@ export function LaunchTube({ game }: { readonly game: PicoGame | undefined }) {
         <div className="pcPer-slot" />
         {game ? (
           <div className="pcPer-cart">
-            <GameCart game={game} showFav={false} />
+            <GameCartUnmarked game={game} />
           </div>
         ) : null}
         <div className="pcPer-power">

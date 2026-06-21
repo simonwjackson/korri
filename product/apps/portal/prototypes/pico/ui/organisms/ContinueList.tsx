@@ -7,7 +7,7 @@
  */
 import type { PicoGame } from "../../fixtures"
 import { Dim } from "../atoms/Dim"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 import { List } from "../molecules/List"
 import { Row } from "../molecules/Row"
 
@@ -21,7 +21,7 @@ export function ContinueList({
       {games.map((game, index) => (
         <Row
           key={game.id}
-          icon={<GameCart game={game} showFav={false} />}
+          icon={<GameCartUnmarked game={game} />}
           label={game.title}
           meta={
             game.lastPlayedLabel
@@ -29,7 +29,7 @@ export function ContinueList({
               : "RESUME"
           }
           trailing={<Dim>{game.playtimeLabel ?? "—"}</Dim>}
-          sel={index === 0}
+          state={index === 0 ? "selected" : "default"}
         />
       ))}
     </List>

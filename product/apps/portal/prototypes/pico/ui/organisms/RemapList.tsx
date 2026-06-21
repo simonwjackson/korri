@@ -6,21 +6,29 @@
  */
 import { Spinner } from "../atoms/Spinner"
 
-const REMAP_ACTIONS: readonly {
-  readonly action: string
-  readonly button: string
-  readonly listening?: boolean
-}[] = [
-  { action: "UP", button: "D-PAD ↑" },
-  { action: "DOWN", button: "D-PAD ↓" },
-  { action: "A", button: "SOUTH ●" },
-  { action: "B", button: "EAST ●", listening: true },
-  { action: "X", button: "WEST ●" },
-  { action: "Y", button: "NORTH ●" },
-  { action: "L", button: "L1" },
-  { action: "R", button: "R1" },
-  { action: "START", button: "START +" },
-  { action: "SELECT", button: "SELECT −" },
+type RemapRow =
+  | {
+      readonly _tag: "Bound"
+      readonly action: string
+      readonly button: string
+    }
+  | {
+      readonly _tag: "Listening"
+      readonly action: string
+      readonly button: string
+    }
+
+const REMAP_ACTIONS: readonly RemapRow[] = [
+  { _tag: "Bound", action: "UP", button: "D-PAD ↑" },
+  { _tag: "Bound", action: "DOWN", button: "D-PAD ↓" },
+  { _tag: "Bound", action: "A", button: "SOUTH ●" },
+  { _tag: "Listening", action: "B", button: "EAST ●" },
+  { _tag: "Bound", action: "X", button: "WEST ●" },
+  { _tag: "Bound", action: "Y", button: "NORTH ●" },
+  { _tag: "Bound", action: "L", button: "L1" },
+  { _tag: "Bound", action: "R", button: "R1" },
+  { _tag: "Bound", action: "START", button: "START +" },
+  { _tag: "Bound", action: "SELECT", button: "SELECT −" },
 ]
 
 export function RemapList() {
@@ -29,12 +37,12 @@ export function RemapList() {
       {REMAP_ACTIONS.map(row => (
         <div
           key={row.action}
-          className={`pcIg-remap-row ${row.listening ? "listen" : ""}`}
+          className={`pcIg-remap-row ${row._tag === "Listening" ? "listen" : ""}`}
         >
           <span className="pcIg-remap-act">{row.action}</span>
           <span className="pcIg-remap-arrow">→</span>
           <span className="pcIg-remap-btn">
-            {row.listening ? (
+            {row._tag === "Listening" ? (
               <>
                 press any button… <Spinner />
               </>

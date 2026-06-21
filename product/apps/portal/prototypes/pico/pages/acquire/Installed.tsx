@@ -29,7 +29,7 @@ export function Installed() {
             message={`${target.title} is tucked in and ready — all set, go play! nothing launches on its own.`}
           >
             <Badge tone="good">INSTALLED</Badge>
-            <Btn kind="primary" sel>
+            <Btn kind="primary" state="selected">
               <PicoIcon name="play" /> PLAY
             </Btn>
           </Hero>

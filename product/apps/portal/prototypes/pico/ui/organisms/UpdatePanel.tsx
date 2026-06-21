@@ -30,7 +30,7 @@ export function UpdatePanel({ target }: { readonly target: PicoGame }) {
         </ul>
       </Card>
       <div className="pc-hero-actions">
-        <Btn kind="primary" sel>
+        <Btn kind="primary" state="selected">
           <Icon name="download" /> UPDATE
         </Btn>
         <Btn>SKIP</Btn>

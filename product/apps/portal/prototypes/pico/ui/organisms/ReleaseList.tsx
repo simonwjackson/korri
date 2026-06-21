@@ -20,7 +20,7 @@ export function ReleaseList({
       {releases.map(release => (
         <Row
           key={release.id}
-          sel={release.recommended}
+          state={release.recommended ? "selected" : "default"}
           icon={release.recommended ? "▸" : " "}
           label={release.app}
           meta={`${release.system}${release.runtime ? ` · ${release.runtime}` : ""} · ${release.size}`}

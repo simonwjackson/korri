@@ -49,7 +49,7 @@ export const PICO_STORIES: readonly Story[] = Object.entries(modules)
         layer,
         name,
         note: spec.note,
-        surface: spec.surface,
+        surface: spec.presentation === "surface" ? true : undefined,
         render: spec.render,
       } satisfies Story,
     ]

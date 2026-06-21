@@ -6,7 +6,7 @@
  * carries the focus highlight. The caller builds the shelf list from data.
  */
 import type { PicoGame } from "../../fixtures"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export type Shelf = {
   readonly title: string
@@ -25,7 +25,7 @@ export function ShelfGrid({ shelves }: { readonly shelves: readonly Shelf[] }) {
                 key={game.id}
                 className={`pcShow-tile ${row === 0 && col === 0 ? "on" : ""}`}
               >
-                <GameCart game={game} showFav={false} />
+                <GameCartUnmarked game={game} />
               </div>
             ))}
           </div>

@@ -5,7 +5,7 @@
  * hi-score / press-start footer.
  */
 import type { PicoGame } from "../../fixtures"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function AttractLoop({
   games,
@@ -21,7 +21,7 @@ export function AttractLoop({
         <div className="pcPer-attract-rail">
           {[...carts, ...carts].map((game, index) => (
             <div className="pcPer-attract-cart" key={`${game.id}-${index}`}>
-              <GameCart game={game} showFav={false} />
+              <GameCartUnmarked game={game} />
             </div>
           ))}
         </div>

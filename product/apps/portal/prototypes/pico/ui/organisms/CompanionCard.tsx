@@ -5,14 +5,14 @@
  */
 import type { PicoGame } from "../../fixtures"
 import { Title } from "../atoms/Title"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function CompanionCard({ hero }: { readonly hero: PicoGame }) {
   return (
     <div className="pcMd-companion">
       <div className="pcMd-companion-art">
         <div className="pc-art">
-          <GameCart game={hero} showFav={false} />
+          <GameCartUnmarked game={hero} />
         </div>
       </div>
       <div className="pcMd-companion-overlay">

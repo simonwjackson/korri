@@ -8,7 +8,7 @@
  */
 import { useState } from "react"
 import type { PicoGame } from "./fixtures"
-import { PicoCart } from "./PicoCart"
+import { PicoCartUnmarked } from "./PicoCartUnmarked"
 import { PicoButtonBar, PicoStatusBar } from "./PicoStatusBar"
 
 export function VariantGameDetail({
@@ -26,7 +26,7 @@ export function VariantGameDetail({
       <PicoStatusBar label="PICO ▸ GAME" />
       <div className="pcD-body">
         <div className="pcD-art">
-          <PicoCart game={game} showFav={false} />
+          <PicoCartUnmarked game={game} />
         </div>
         <div className="pcD-info">
           <h1>{game.title}</h1>

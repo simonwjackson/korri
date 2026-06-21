@@ -6,7 +6,7 @@
  * Home variants (Library coverflow uses different classes) is a later pass.
  */
 import type { PicoGame } from "../../fixtures"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function CoverflowRail({
   games,
@@ -22,7 +22,7 @@ export function CoverflowRail({
           key={game.id}
           className={`pcShow-rail-cart ${index === activeIndex ? "on" : ""}`}
         >
-          <GameCart game={game} showFav={false} />
+          <GameCartUnmarked game={game} />
         </div>
       ))}
     </div>

@@ -9,7 +9,7 @@ import type { CSSProperties } from "react"
 import type { PicoGame } from "../../fixtures"
 import { PicoMascot } from "../../PicoMascot"
 import { Dim } from "../atoms/Dim"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 const cartReset: CSSProperties = {
   background: "transparent",
@@ -18,12 +18,15 @@ const cartReset: CSSProperties = {
   cursor: "pointer",
 }
 
+export type ReactiveStageState =
+  | { readonly _tag: "Browsing"; readonly hero?: PicoGame }
+  | { readonly _tag: "Launching"; readonly hero: PicoGame }
+
 export function ReactiveStage({
   games,
   focus,
   gaze,
-  launching,
-  hero,
+  state,
   onPick,
   onLaunch,
 }: {
@@ -31,11 +34,11 @@ export function ReactiveStage({
   readonly focus: number
   /** -1 (left) .. 1 (right) — how far Pixl leans toward the focused cart. */
   readonly gaze: number
-  readonly launching: boolean
-  readonly hero: PicoGame | undefined
+  readonly state: ReactiveStageState
   readonly onPick: (index: number) => void
   readonly onLaunch: () => void
 }) {
+  const hero = state.hero
   return (
     <div className="pcPer-react">
       <div
@@ -43,7 +46,7 @@ export function ReactiveStage({
         style={{ transform: `translateX(${gaze * 16}%)` }}
       >
         <PicoMascot
-          state={launching ? "happy" : "idle"}
+          state={state._tag === "Launching" ? "happy" : "idle"}
           className="pcMascot-lg"
         />
       </div>
@@ -58,7 +61,7 @@ export function ReactiveStage({
             onClick={onLaunch}
             style={cartReset}
           >
-            <GameCart game={game} showFav={false} />
+            <GameCartUnmarked game={game} />
           </button>
         ))}
       </div>
@@ -68,10 +71,12 @@ export function ReactiveStage({
           {hero ? `${hero.genre} · ${hero.developer}` : ""} — hover a cart
         </Dim>
       </div>
-      {launching && hero ? (
-        <div className="pcPer-react-crt" key={hero.id}>
+      {state._tag === "Launching" ? (
+        <div className="pcPer-react-crt" key={state.hero.id}>
           <div className="pcPer-react-crt-line" />
-          <div className="pcPer-react-crt-msg">LAUNCHING {hero.title}</div>
+          <div className="pcPer-react-crt-msg">
+            LAUNCHING {state.hero.title}
+          </div>
         </div>
       ) : null}
     </div>

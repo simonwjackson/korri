@@ -9,7 +9,7 @@ import { useState } from "react"
 import { PicoButtonBar, PicoStatusBar } from "./PicoStatusBar"
 
 type Control =
-  | { readonly kind: "toggle"; readonly on: boolean }
+  | { readonly kind: "toggle"; readonly state: "on" | "off" }
   | { readonly kind: "option"; readonly value: string }
   | { readonly kind: "slider"; readonly level: number; readonly max: number }
   | { readonly kind: "info"; readonly value: string }
@@ -28,8 +28,8 @@ const CATEGORIES: readonly SettingCategory[] = [
     items: [
       { label: "Brightness", control: { kind: "slider", level: 6, max: 10 } },
       { label: "Color Mode", control: { kind: "option", value: "VIVID" } },
-      { label: "Scanlines", control: { kind: "toggle", on: true } },
-      { label: "Integer Scale", control: { kind: "toggle", on: true } },
+      { label: "Scanlines", control: { kind: "toggle", state: "on" } },
+      { label: "Integer Scale", control: { kind: "toggle", state: "on" } },
     ],
   },
   {
@@ -37,15 +37,15 @@ const CATEGORIES: readonly SettingCategory[] = [
     name: "AUDIO",
     items: [
       { label: "Volume", control: { kind: "slider", level: 7, max: 10 } },
-      { label: "UI Sounds", control: { kind: "toggle", on: true } },
-      { label: "Mute on Sleep", control: { kind: "toggle", on: false } },
+      { label: "UI Sounds", control: { kind: "toggle", state: "on" } },
+      { label: "Mute on Sleep", control: { kind: "toggle", state: "off" } },
     ],
   },
   {
     id: "network",
     name: "NETWORK",
     items: [
-      { label: "Wi-Fi", control: { kind: "toggle", on: true } },
+      { label: "Wi-Fi", control: { kind: "toggle", state: "on" } },
       { label: "Network", control: { kind: "info", value: "PICO-NET" } },
       { label: "IP Address", control: { kind: "info", value: "192.168.1.42" } },
     ],
@@ -55,7 +55,7 @@ const CATEGORIES: readonly SettingCategory[] = [
     name: "CONTROLLERS",
     items: [
       { label: "Button Layout", control: { kind: "option", value: "SNES" } },
-      { label: "Vibration", control: { kind: "toggle", on: true } },
+      { label: "Vibration", control: { kind: "toggle", state: "on" } },
       {
         label: "Stick Deadzone",
         control: { kind: "slider", level: 3, max: 10 },
@@ -67,7 +67,7 @@ const CATEGORIES: readonly SettingCategory[] = [
     name: "POWER",
     items: [
       { label: "Sleep After", control: { kind: "option", value: "5 MIN" } },
-      { label: "Battery Saver", control: { kind: "toggle", on: false } },
+      { label: "Battery Saver", control: { kind: "toggle", state: "off" } },
       { label: "Battery", control: { kind: "info", value: "82%" } },
     ],
   },
@@ -77,7 +77,7 @@ const CATEGORIES: readonly SettingCategory[] = [
     items: [
       { label: "Language", control: { kind: "option", value: "ENGLISH" } },
       { label: "Time Zone", control: { kind: "option", value: "UTC-5" } },
-      { label: "Auto-Update", control: { kind: "toggle", on: true } },
+      { label: "Auto-Update", control: { kind: "toggle", state: "on" } },
     ],
   },
   {
@@ -149,8 +149,8 @@ function ControlView({ control }: { readonly control: Control }) {
   if (control.kind === "toggle") {
     return (
       <span className="pcB-toggle">
-        <span className={control.on ? "on" : ""}>ON</span>
-        <span className={control.on ? "" : "on"}>OFF</span>
+        <span className={control.state === "on" ? "on" : ""}>ON</span>
+        <span className={control.state === "off" ? "on" : ""}>OFF</span>
       </span>
     )
   }

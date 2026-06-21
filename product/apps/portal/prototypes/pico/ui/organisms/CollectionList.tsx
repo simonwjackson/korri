@@ -23,7 +23,7 @@ export function CollectionList({
           icon="▣"
           label={collection.name}
           trailing={<Badge tone="accent">{collection.count}</Badge>}
-          sel={index === 0}
+          state={index === 0 ? "selected" : "default"}
         />
       ))}
     </List>

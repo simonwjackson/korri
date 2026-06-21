@@ -28,7 +28,7 @@ export function NotInstalled() {
           >
             <DetailHead
               game={game}
-              dim
+              artTone="dim"
               tags={`${game.genre.toUpperCase()} · ${game.developer.toUpperCase()}`}
             >
               <div className="pcDet-chips">
@@ -40,7 +40,7 @@ export function NotInstalled() {
               </p>
             </DetailHead>
             <div className="pcDet-actions">
-              <Btn kind="primary" sel>
+              <Btn kind="primary" state="selected">
                 <Icon name="download" /> DOWNLOAD
               </Btn>
               <Btn>DETAILS</Btn>

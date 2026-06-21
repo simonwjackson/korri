@@ -8,15 +8,15 @@ import type { ReactNode } from "react"
 
 export function SettingRow({
   label,
-  sel,
+  state = "default",
   children,
 }: {
   readonly label: string
-  readonly sel?: boolean
+  readonly state?: "default" | "selected"
   readonly children?: ReactNode
 }) {
   return (
-    <div className={`pcSet-row ${sel ? "sel" : ""}`}>
+    <div className={`pcSet-row ${state === "selected" ? "sel" : ""}`}>
       <span className="pcSet-label">{label}</span>
       {children}
     </div>

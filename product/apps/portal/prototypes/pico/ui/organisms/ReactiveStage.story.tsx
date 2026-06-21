@@ -7,14 +7,13 @@ const focus = 2
 const hero = games[focus]
 
 export default {
-  surface: true, // full home stage with absolutely-positioned CRT overlay
+  presentation: "surface", // full home stage with absolutely-positioned CRT overlay
   render: () => (
     <ReactiveStage
       games={games}
       focus={focus}
       gaze={0}
-      launching={false}
-      hero={hero}
+      state={{ _tag: "Browsing", hero }}
       onPick={() => {}}
       onLaunch={() => {}}
     />

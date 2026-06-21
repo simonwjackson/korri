@@ -4,6 +4,7 @@
  */
 import { PicoIcon } from "../../PicoIcon"
 import { Btn } from "../../ui/atoms/Btn"
+import { Spinner } from "../../ui/atoms/Spinner"
 import { QualityBar } from "../../ui/molecules/QualityBar"
 import { Hero } from "../../ui/organisms/Hero"
 import { GameOverlay } from "../../ui/templates/GameOverlay"
@@ -17,7 +18,7 @@ export function Reconnecting() {
           glyphTone="info"
           title="RECONNECTING…"
           message="Lost the thread — reeling it back in…"
-          spinner
+          adornment={<Spinner />}
         >
           <div className="pcIg-attempt">ATTEMPT 2 OF 5</div>
           <QualityBar level={2} tone="drop" tag="DROPPING" />

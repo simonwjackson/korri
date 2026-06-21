@@ -25,7 +25,7 @@ export function DownloadFailed() {
         message="the download tripped on the way home. we tossed the half-finished bits — check your connection and retry?"
       >
         <Badge tone="bad">NETWORK</Badge>
-        <Btn kind="primary" sel>
+        <Btn kind="primary" state="selected">
           <PicoIcon name="restart" /> RETRY
         </Btn>
         <Btn>CANCEL</Btn>

@@ -29,11 +29,11 @@ export function ControlCenter() {
       </div>
       <div className="pcCC-row">
         <span>WIFI</span>
-        <Toggle on />
+        <Toggle state="on" />
       </div>
       <div className="pcCC-row">
         <span>AIRPLANE</span>
-        <Toggle on={false} />
+        <Toggle state="off" />
       </div>
       <div className="pcCC-tiles">
         <div className="pcCC-tile">

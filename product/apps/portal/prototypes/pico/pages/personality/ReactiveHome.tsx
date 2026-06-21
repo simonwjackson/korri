@@ -10,7 +10,10 @@ import { picoGamesAtom } from "../../data/pico-library-atoms"
 import type { PicoGame } from "../../fixtures"
 import { sfx } from "../../pico-sfx"
 import { PicoData } from "../../screens/PicoData"
-import { ReactiveStage } from "../../ui/organisms/ReactiveStage"
+import {
+  ReactiveStage,
+  type ReactiveStageState,
+} from "../../ui/organisms/ReactiveStage"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 export function ReactiveHome() {
@@ -28,7 +31,7 @@ function ReactiveHomeBody({
 }) {
   const games = allGames.slice(0, 5)
   const [focus, setFocus] = useState(2)
-  const [launching, setLaunching] = useState(false)
+  const [launchState, setLaunchState] = useState<"idle" | "launching">("idle")
   const hero = games[focus]
   const mid = (games.length - 1) / 2
   const gaze = mid === 0 ? 0 : (focus - mid) / mid
@@ -39,11 +42,16 @@ function ReactiveHomeBody({
     sfx.move()
   }
   function launch() {
-    if (launching) return
+    if (launchState === "launching") return
     sfx.launch()
-    setLaunching(true)
-    window.setTimeout(() => setLaunching(false), 2200)
+    setLaunchState("launching")
+    window.setTimeout(() => setLaunchState("idle"), 2200)
   }
+
+  const stageState: ReactiveStageState =
+    launchState === "launching" && hero
+      ? { _tag: "Launching", hero }
+      : { _tag: "Browsing", hero }
 
   return (
     <ScreenShell
@@ -58,8 +66,7 @@ function ReactiveHomeBody({
         games={games}
         focus={focus}
         gaze={gaze}
-        launching={launching}
-        hero={hero}
+        state={stageState}
         onPick={pick}
         onLaunch={launch}
       />

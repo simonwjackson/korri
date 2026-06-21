@@ -23,7 +23,7 @@ export function SystemPanel() {
         The dials that keep this little box happy.
       </p>
       <div className="pcSet-list">
-        <SettingRow label="Brightness" sel>
+        <SettingRow label="Brightness" state="selected">
           <BlockBar level={6} max={10} />
         </SettingRow>
         <SettingRow label="Volume">

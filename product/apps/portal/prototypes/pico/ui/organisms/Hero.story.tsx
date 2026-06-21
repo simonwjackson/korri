@@ -3,7 +3,7 @@ import { Btn } from "../atoms/Btn"
 import { Hero } from "./Hero"
 
 export default {
-  surface: true, // centered full-state column — reads best in a framed canvas
+  presentation: "surface", // centered full-state column — reads best in a framed canvas
   render: () => (
     <Hero
       glyph="✓"
@@ -11,7 +11,7 @@ export default {
       title="ALL DONE"
       message="a reusable centered state for loading / error / empty / confirm."
     >
-      <Btn kind="primary" sel>
+      <Btn kind="primary" state="selected">
         CONTINUE
       </Btn>
     </Hero>

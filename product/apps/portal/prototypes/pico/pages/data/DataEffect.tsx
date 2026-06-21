@@ -12,8 +12,13 @@ import {
   useAtomSet,
   useAtomValue,
 } from "@effect/atom-react"
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import { Option } from "effect"
 import { useState } from "react"
+import type { PicoGame } from "../../fixtures"
+import {
+  PicoDataState,
+  type PicoDataState as PicoDataStateValue,
+} from "../../screens/PicoDataState"
 import {
   picoGamesAtom,
   picoLibraryLayerAtom,
@@ -22,7 +27,7 @@ import { PicoLibrary } from "../../data/pico-library-service"
 import { Dim } from "../../ui/atoms/Dim"
 import { Icon } from "../../ui/atoms/Icon"
 import { Spinner } from "../../ui/atoms/Spinner"
-import { GameCart } from "../../ui/molecules/GameCart"
+import { GameCartUnmarked } from "../../ui/molecules/GameCartUnmarked"
 import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
@@ -35,7 +40,7 @@ export function DataEffect() {
 }
 
 function DataEffectBody() {
-  const result = useAtomValue(picoGamesAtom)
+  const state = PicoDataState.fromResult(useAtomValue(picoGamesAtom))
   const setLayer = useAtomSet(picoLibraryLayerAtom)
   const refresh = useAtomRefresh(picoGamesAtom)
   const [mode, setMode] = useState<"fixtures" | "live">("fixtures")
@@ -66,38 +71,10 @@ function DataEffectBody() {
           </button>
         </div>
 
-        {AsyncResult.matchWithWaiting(result, {
-          onWaiting: () => (
-            <div className="pcData-state">
-              <Spinner /> <Dim>running list() through the provided layer…</Dim>
-            </div>
-          ),
-          onError: error => (
-            <Hero
-              glyph={<Icon name="close" />}
-              glyphTone="bad"
-              title="LOAD FAILED"
-              message={String(error)}
-            />
-          ),
-          onDefect: defect => (
-            <Hero
-              glyph={<Icon name="close" />}
-              glyphTone="bad"
-              title="DEFECT"
-              message={String(defect)}
-            />
-          ),
-          onSuccess: success => (
-            <div className="pcData-grid">
-              {success.value.slice(0, 12).map(game => (
-                <div className="pcData-cart" key={game.id}>
-                  <GameCart game={game} showFav={false} />
-                </div>
-              ))}
-            </div>
-          ),
-        })}
+        <DataEffectLoading state={state} />
+        <DataEffectLoadError state={state} />
+        <DataEffectDefect state={state} />
+        <DataEffectReady state={state} />
 
         <p className="pcData-note">
           Same component, no mocks. <b>FIXTURES</b> resolves instantly from
@@ -106,5 +83,79 @@ function DataEffectBody() {
         </p>
       </div>
     </ScreenShell>
+  )
+}
+
+type DataEffectState = PicoDataStateValue<readonly PicoGame[], unknown>
+
+function DataEffectLoading({ state }: { readonly state: DataEffectState }) {
+  return Option.match(
+    PicoDataState.select<readonly PicoGame[], unknown, "Loading">("Loading")(
+      state,
+    ),
+    {
+      onNone: () => null,
+      onSome: () => (
+        <div className="pcData-state">
+          <Spinner /> <Dim>running list() through the provided layer…</Dim>
+        </div>
+      ),
+    },
+  )
+}
+
+function DataEffectLoadError({ state }: { readonly state: DataEffectState }) {
+  return Option.match(
+    PicoDataState.select<readonly PicoGame[], unknown, "LoadError">(
+      "LoadError",
+    )(state),
+    {
+      onNone: () => null,
+      onSome: ({ error }) => (
+        <Hero
+          glyph={<Icon name="close" />}
+          glyphTone="bad"
+          title="LOAD FAILED"
+          message={String(error)}
+        />
+      ),
+    },
+  )
+}
+
+function DataEffectDefect({ state }: { readonly state: DataEffectState }) {
+  return Option.match(
+    PicoDataState.select<readonly PicoGame[], unknown, "Defect">("Defect")(
+      state,
+    ),
+    {
+      onNone: () => null,
+      onSome: ({ defect }) => (
+        <Hero
+          glyph={<Icon name="close" />}
+          glyphTone="bad"
+          title="DEFECT"
+          message={String(defect)}
+        />
+      ),
+    },
+  )
+}
+
+function DataEffectReady({ state }: { readonly state: DataEffectState }) {
+  return Option.match(
+    PicoDataState.select<readonly PicoGame[], unknown, "Ready">("Ready")(state),
+    {
+      onNone: () => null,
+      onSome: ({ value }) => (
+        <div className="pcData-grid">
+          {value.slice(0, 12).map(game => (
+            <div className="pcData-cart" key={game.id}>
+              <GameCartUnmarked game={game} />
+            </div>
+          ))}
+        </div>
+      ),
+    },
   )
 }

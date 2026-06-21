@@ -7,7 +7,7 @@ import type { PicoGame } from "../../fixtures"
 import { Dim } from "../atoms/Dim"
 import { Progress } from "../atoms/Progress"
 import { Title } from "../atoms/Title"
-import { GameCart } from "../molecules/GameCart"
+import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 const JOIN_STEPS = ["FOUND", "HANDSHAKE", "SYNC", "READY"] as const
 
@@ -20,7 +20,7 @@ export function JoiningStage({
     <div className="pcMp-joining">
       {game?.art ? (
         <div className="pcMp-joining-art">
-          <GameCart game={game} showFav={false} />
+          <GameCartUnmarked game={game} />
         </div>
       ) : null}
       <Title size={1}>JOINING PIXELPETE’S GAME</Title>

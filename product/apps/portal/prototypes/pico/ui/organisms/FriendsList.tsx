@@ -41,7 +41,11 @@ export function FriendsList({
               {group.list.map((friend, index) => (
                 <Row
                   key={friend.id}
-                  sel={group.label === "PLAYING NOW" && index === 0}
+                  state={
+                    group.label === "PLAYING NOW" && index === 0
+                      ? "selected"
+                      : "default"
+                  }
                   icon={
                     <span className={`pcFut-ava ${statusClass(friend.status)}`}>
                       {friend.name.slice(0, 2)}

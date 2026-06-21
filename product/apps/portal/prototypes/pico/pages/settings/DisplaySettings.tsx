@@ -18,17 +18,17 @@ export function DisplaySettings() {
       ]}
     >
       <div className="pcSet-list">
-        <SettingRow label="Brightness" sel>
+        <SettingRow label="Brightness" state="selected">
           <BlockBar level={6} max={10} />
         </SettingRow>
         <SettingRow label="Color Mode">
           <Opt value="VIVID" />
         </SettingRow>
         <SettingRow label="Scanlines">
-          <Toggle on />
+          <Toggle state="on" />
         </SettingRow>
         <SettingRow label="Integer Scale">
-          <Toggle on />
+          <Toggle state="on" />
         </SettingRow>
         <SettingRow label="Aspect">
           <Opt value="4:3" />

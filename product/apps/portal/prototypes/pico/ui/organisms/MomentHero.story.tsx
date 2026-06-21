@@ -5,7 +5,7 @@ import { MomentHero } from "./MomentHero"
 const hero = picoGames[0]
 
 export default {
-  surface: true, // renders a full ScreenShell
+  presentation: "surface", // renders a full ScreenShell
   render: () =>
     hero ? (
       <MomentHero
