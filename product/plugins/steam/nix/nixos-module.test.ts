@@ -49,9 +49,7 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("-steamos3")
     expect(moduleSource).toContain("-steampal")
     expect(moduleSource).toContain("-steamdeck")
-    expect(moduleSource).not.toContain(
-      "starting Steam directly without sudo",
-    )
+    expect(moduleSource).not.toContain("starting Steam directly without sudo")
     expect(moduleSource).not.toContain("direct_steam_pid")
   })
 
@@ -59,7 +57,9 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("wait_for_gamescoped_steam_ready")
     expect(moduleSource).toContain("GAMESCOPE_WAYLAND_DISPLAY")
     expect(moduleSource).toContain("gamescope-0")
-    expect(moduleSource).toContain("timed out waiting for gamescoped Steam readiness before AppID launch")
+    expect(moduleSource).toContain(
+      "timed out waiting for gamescoped Steam readiness before AppID launch",
+    )
   })
 
   it("forwards AppIDs into the warm Steam client without a raw applaunch fallback", () => {

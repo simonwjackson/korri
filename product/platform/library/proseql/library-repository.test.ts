@@ -363,7 +363,10 @@ describe("createLibraryRepository — readable playable entries", () => {
         DEFAULT_STEAM_COMPAT_TOOL,
       )
       await mkdir(compatToolRoot, { recursive: true })
-      await writeFile(join(compatToolRoot, "proton"), "#!/usr/bin/env python3\n")
+      await writeFile(
+        join(compatToolRoot, "proton"),
+        "#!/usr/bin/env python3\n",
+      )
       await Effect.runPromise(
         repo.upsertStorage({
           id: KORRI_STEAM_STORAGE_ID,

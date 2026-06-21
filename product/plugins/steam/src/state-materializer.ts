@@ -285,7 +285,10 @@ async function materializeSteamDesiredStatePromise(
           appIds: appIdsForEula,
         })
         if (stableVdfSnapshot(localconfig) !== before) {
-          writes.push({ path: localconfigPath, content: renderVdf(localconfig) })
+          writes.push({
+            path: localconfigPath,
+            content: renderVdf(localconfig),
+          })
         }
       }
     }
