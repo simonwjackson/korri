@@ -16,6 +16,29 @@ export interface CdpClient {
   close(): void
 }
 
+interface RuntimeEvaluateResponse<T> {
+  result?: { value?: T; description?: string }
+  exceptionDetails?: {
+    text?: string
+    exception?: { description?: string; value?: unknown }
+  }
+}
+
+export function runtimeEvaluateValue<T>(
+  response: RuntimeEvaluateResponse<T>,
+): T {
+  if (response.exceptionDetails) {
+    const details = response.exceptionDetails
+    throw new Error(
+      details.exception?.description ??
+        String(
+          details.exception?.value ?? details.text ?? "CDP evaluation failed",
+        ),
+    )
+  }
+  return response.result?.value as T
+}
+
 async function fetchPageWsUrl(port: number): Promise<string> {
   const res = await fetch(`http://127.0.0.1:${port}/json`)
   const targets = (await res.json()) as Array<{
@@ -85,8 +108,8 @@ export async function connectCdp(
       expression,
       returnByValue: true,
       awaitPromise: true,
-    })) as { result?: { value?: T } }
-    return result.result?.value as T
+    })) as RuntimeEvaluateResponse<T>
+    return runtimeEvaluateValue(result)
   }
 
   await send("Page.enable")

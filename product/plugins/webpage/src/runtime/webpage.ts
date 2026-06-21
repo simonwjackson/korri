@@ -25,6 +25,10 @@ export interface LaunchWebpageOptions {
   // Composition seam: callers (e.g. web-canvas) may add launch-time chromium
   // flags such as a default background color. Bare webpage adds none.
   readonly extraFlags?: readonly string[]
+  // Scripts that must exist before the target document's own scripts execute.
+  // When provided, Chromium starts on about:blank, registers these scripts over
+  // CDP, then navigates to the requested URL.
+  readonly preNavigationScripts?: readonly string[]
   // A stable id for the persistent profile dir when settings.saves === "persist".
   readonly saveId?: string
 }
@@ -54,9 +58,14 @@ export async function launchWebpage(
   if (settings.audio === "muted") extraFlags.push("--mute-audio")
   if (settings.userAgent) extraFlags.push(`--user-agent=${settings.userAgent}`)
 
+  const launchLocator =
+    options.preNavigationScripts && options.preNavigationScripts.length > 0
+      ? "about:blank"
+      : url
+
   const args = [
     ...composeWebChromiumArgs({
-      locator: url,
+      locator: launchLocator,
       autoplay: settings.audio === "gesture" ? "default" : "no-gesture",
       extraFlags,
       ozonePlatform: "wayland",
@@ -76,5 +85,11 @@ export async function launchWebpage(
   })
 
   const cdp = await connectCdp(port)
+  if (options.preNavigationScripts && options.preNavigationScripts.length > 0) {
+    for (const source of options.preNavigationScripts) {
+      await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source })
+    }
+    await cdp.send("Page.navigate", { url })
+  }
   return { proc, cdp, port }
 }
