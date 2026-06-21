@@ -18,8 +18,14 @@ const ACQUISITION_PROTOCOL_ROOT = join(
   "acquisition",
 )
 const LIBRARY_ROOT = join(REPO_ROOT, "product", "platform", "library")
-const CLI_ROOT = join(REPO_ROOT, "product", "apps", "cli")
-const BAZZAR_CLI_ROOT = join(REPO_ROOT, "product", "apps", "cli", "bazzar")
+const CLI_ROOT = join(
+  REPO_ROOT,
+  "product",
+  "surfaces",
+  "terminal",
+  "korri-cli",
+)
+const BAZZAR_CLI_ROOT = join(CLI_ROOT, "bazzar")
 const ACQUISITION_RPC_ROOT = join(
   REPO_ROOT,
   "product",

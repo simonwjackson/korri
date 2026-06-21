@@ -6,11 +6,16 @@ const REPO_ROOT = resolve(import.meta.dir, "..", "..", "..")
 
 describe("Bun dependency Nix boundary", () => {
   it("keeps Bun cache policy behind tools/nix/bun-deps", () => {
-    const flake = readFileSync(resolve(REPO_ROOT, "flake.nix"), "utf8")
+    const rootFlake = readFileSync(resolve(REPO_ROOT, "flake.nix"), "utf8")
+    const systemFlake = readFileSync(
+      resolve(REPO_ROOT, "product", "systems", "nixos", "flake", "default.nix"),
+      "utf8",
+    )
 
-    expect(flake).toContain("import ./tools/nix/bun-deps")
-    expect(flake).not.toContain("proseqlOverrideKey")
-    expect(flake).not.toContain("forbiddenProductionPackagePatterns")
-    expect(flake).not.toContain("pkgs.bun2nix.fetchBunDeps")
+    expect(rootFlake).toContain("import ./product/systems/nixos/flake")
+    expect(systemFlake).toContain("import ../../../../tools/nix/bun-deps")
+    expect(rootFlake).not.toContain("proseqlOverrideKey")
+    expect(rootFlake).not.toContain("forbiddenProductionPackagePatterns")
+    expect(rootFlake).not.toContain("pkgs.bun2nix.fetchBunDeps")
   })
 })

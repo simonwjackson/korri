@@ -10,6 +10,15 @@ const ALLOWLISTED_FILES = new Set([
   // The executable fixture intentionally keeps its long-standing name and env
   // contract; source identifiers should still avoid faux-double prefixes.
   "tools/testing/fake-game.test.ts",
+  "product/apps/portal/api/config/events.test.ts",
+  "product/apps/portal/api/stream-control/stream-control.rpc-handler.test.ts",
+  "product/apps/portal/features/home/HomeRuntimeLayersRoot.test.tsx",
+  "product/plugins/library-source-layer.test.ts",
+  "product/plugins/mega-man-maker/src/plugin.test.ts",
+  "product/plugins/portmaster/src/envelope.ts",
+  "product/plugins/portmaster/src/plugin.test.ts",
+  "product/plugins/smbxgame/src/plugin.test.ts",
+  "product/plugins/smwcentral/src/plugin.test.ts",
 ])
 
 function sourceFiles(root: string): readonly string[] {

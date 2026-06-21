@@ -121,10 +121,6 @@ const GENERIC_STEAM_SCAN_ROOTS = [
 
 const GENERIC_STEAM_COMPOSITION_ALLOWLIST = new Map<string, string>([
   [
-    "product/platform/library/config/records/app.ts",
-    "generic config rejects the retired unqualified Steam app kind without carrying launch implementation logic",
-  ],
-  [
     "product/platform/library/config/fixtures/steam-full.korri.yaml",
     "readable-config fixture documents provider-qualified Steam plugin authoring shape",
   ],
@@ -133,8 +129,20 @@ const GENERIC_STEAM_COMPOSITION_ALLOWLIST = new Map<string, string>([
     "Nix module composition exposes the Steam plugin module as an explicit opt-in output",
   ],
   [
+    "product/platform/library/config/app-install-metadata.ts",
+    "generic install metadata preserves provider-qualified Steam examples without carrying launch implementation logic",
+  ],
+  [
+    "product/apps/portal/api/server/status.rpc.ts",
+    "status RPC reports Steam-visible feature state as product observability metadata",
+  ],
+  [
     "product/systems/nixos/images/desktop-lab.nix",
     "desktop lab image is explicit product composition for manual Steam validation",
+  ],
+  [
+    "product/systems/nixos/images/kiosk.nix",
+    "kiosk product image carries explicit Steam runtime policy for deployed product composition",
   ],
   [
     "product/systems/nixos/images/platforms/rocknix-sm8550.nix",
@@ -222,7 +230,9 @@ function allowlistDrift(
 
 const LEGACY_KORRI_ROOT = join(REPO_ROOT, "korri")
 const LEGACY_SHARED_THEME_ROOT = join(REPO_ROOT, "korri", "shared", "themes")
-const CURRENT_THEME_ROOTS = [join(REPO_ROOT, "product", "themes")]
+const CURRENT_THEME_ROOTS = [
+  join(REPO_ROOT, "product", "surfaces", "web"),
+]
 
 const FRAMEWORK_NEUTRAL_PLATFORM_ROOTS = [
   join(REPO_ROOT, "product", "platform", "protocol"),
@@ -421,10 +431,15 @@ describe("standards: product platform reorganization guardrails", () => {
     ).toBe(true)
   })
 
-  it("keeps first-party themes out of legacy shared theme ownership", () => {
+  it("keeps first-party web surfaces out of legacy shared theme ownership", () => {
     expect(existsSync(LEGACY_SHARED_THEME_ROOT)).toBe(false)
-    expect(existsSync(join(REPO_ROOT, "product", "themes", "shift"))).toBe(true)
-    expect(existsSync(join(REPO_ROOT, "product", "themes", "evier"))).toBe(true)
+    expect(existsSync(join(REPO_ROOT, "product", "themes"))).toBe(false)
+    expect(
+      existsSync(join(REPO_ROOT, "product", "surfaces", "web", "shift")),
+    ).toBe(true)
+    expect(
+      existsSync(join(REPO_ROOT, "product", "surfaces", "web", "evier")),
+    ).toBe(true)
   })
 
   it("keeps carried upstream packages under product vendor unless a plugin owns them", () => {
@@ -750,7 +765,11 @@ describe("standards: product platform reorganization guardrails", () => {
     )
 
     expect(
-      reactFiles.filter(file => !file.startsWith("product/platform/react/")),
+      reactFiles.filter(
+        file =>
+          !file.startsWith("product/platform/react/") &&
+          !file.startsWith("product/platform/surface/host/"),
+      ),
     ).toEqual([])
   })
 
