@@ -11,18 +11,20 @@
 		"product/apps/storybook/preview.tsx",
 		"product/platform/**/*.ts",
 		"product/platform/**/*.tsx",
-		"product/themes/**/*.ts",
-		"product/themes/**/*.tsx",
-		"product/themes/**/*.story.e2e.ts",
+		"product/surfaces/**/*.ts",
+		"product/surfaces/**/*.tsx",
+		"product/surfaces/**/*.story.e2e.ts",
 		"product/platform/react/primitives/**/*.story.e2e.ts",
-		"product/apps/cli/**/*.ts",
+		"product/surfaces/terminal/korri-cli/**/*.ts",
 		"product/services/**/*.ts",
 		"tools/scripts/**/*.ts",
 		"tools/generators/**/*.ts",
 		"tools/desktop/**/*.ts",
 		"tools/device/**/*.ts",
 		"tools/nix/**/*.ts",
-		"tools/playwright/**/*.ts"
+		"tools/playwright/**/*.ts",
+		"tools/theme-workshop/**/*.ts",
+		"tools/theme-workshop/**/*.tsx"
 	],
 	"ignorePatterns": [
 		"old-ui/**",
@@ -55,20 +57,65 @@
 	],
 	"ignoreExports": [
 		{
-			"file": "product/apps/portal/prototypes/pico/screens/kit.tsx",
-			"exports": ["*"]
+			"file": "product/surfaces/web/pico/screens/kit.tsx",
+			"exports": [
+				"*"
+			]
 		},
-		{ "file": "product/plugins/acquisition-fixtures.ts", "exports": ["*"] },
-		{ "file": "product/plugins/index.ts", "exports": ["*"] },
-		{ "file": "product/plugins/portmaster/index.ts", "exports": ["*"] },
-		{ "file": "product/plugins/portmaster/src/envelope.ts", "exports": ["*"] },
-		{ "file": "product/plugins/retroarch/index.ts", "exports": ["*"] },
+		{
+			"file": "product/plugins/acquisition-fixtures.ts",
+			"exports": [
+				"*"
+			]
+		},
+		{
+			"file": "product/plugins/index.ts",
+			"exports": [
+				"*"
+			]
+		},
+		{
+			"file": "product/plugins/portmaster/index.ts",
+			"exports": [
+				"*"
+			]
+		},
+		{
+			"file": "product/plugins/portmaster/src/envelope.ts",
+			"exports": [
+				"*"
+			]
+		},
+		{
+			"file": "product/plugins/retroarch/index.ts",
+			"exports": [
+				"*"
+			]
+		},
 		{
 			"file": "product/plugins/retroarch/src/materializer.ts",
-			"exports": ["*"]
+			"exports": [
+				"*"
+			]
 		},
-		{ "file": "product/plugins/retroarch/src/plugin.ts", "exports": ["*"] },
-		{ "file": "product/plugins/retroarch/src/policy.ts", "exports": ["*"] }
+		{
+			"file": "product/plugins/retroarch/src/plugin.ts",
+			"exports": [
+				"*"
+			]
+		},
+		{
+			"file": "product/plugins/retroarch/src/policy.ts",
+			"exports": [
+				"*"
+			]
+		},
+		{
+			"file": "product/apps/portal/peers/peer-discovery.ts",
+			"exports": [
+				"PeerDiscoveryService"
+			]
+		}
 	],
 	"duplicates": {
 		"enabled": false
@@ -79,8 +126,8 @@
 		"maxCrap": 350,
 		"ignore": [
 			"**/*.test.ts",
-			"product/apps/portal/prototypes/pico/**",
-			"product/apps/portal/routes/+pico-prototype.tsx"
+			"product/surfaces/web/pico/**",
+			"product/surfaces/web/pico/**"
 		]
 	},
 	"rules": {
@@ -109,23 +156,45 @@
 			},
 			{
 				"name": "product-platform",
-				"patterns": ["product/platform/**"]
+				"patterns": [
+					"product/platform/**"
+				]
 			},
 			{
-				"name": "product-themes",
-				"patterns": ["product/themes/**"]
+				"name": "product-surface-pico",
+				"patterns": [
+					"product/surfaces/web/pico/**"
+				]
+			},
+			{
+				"name": "product-surfaces-web",
+				"patterns": [
+					"product/surfaces/web/**"
+				]
+			},
+			{
+				"name": "product-surfaces-terminal",
+				"patterns": [
+					"product/surfaces/terminal/**"
+				]
 			},
 			{
 				"name": "product-apps",
-				"patterns": ["product/apps/**"]
+				"patterns": [
+					"product/apps/**"
+				]
 			},
 			{
 				"name": "product-services",
-				"patterns": ["product/services/**"]
+				"patterns": [
+					"product/services/**"
+				]
 			},
 			{
 				"name": "repo-tools",
-				"patterns": ["tools/**"]
+				"patterns": [
+					"tools/**"
+				]
 			}
 		],
 		"rules": [
@@ -136,24 +205,55 @@
 					"product-apps",
 					"product-services",
 					"product-platform",
-					"product-themes"
+					"product-surfaces-web",
+					"product-surfaces-terminal",
+					"product-surface-pico"
 				]
 			},
 			{
 				"from": "product-platform",
-				"allow": []
+				"allow": [
+					"product-surfaces-web",
+					"product-surfaces-terminal",
+					"product-surface-pico"
+				]
 			},
 			{
-				"from": "product-themes",
-				"allow": ["product-platform"]
+				"from": "product-surfaces-web",
+				"allow": [
+					"product-platform"
+				]
+			},
+			{
+				"from": "product-surface-pico",
+				"allow": [
+					"product-platform",
+					"repo-tools"
+				]
+			},
+			{
+				"from": "product-surfaces-terminal",
+				"allow": [
+					"product-platform",
+					"product-apps",
+					"product-services"
+				]
 			},
 			{
 				"from": "product-apps",
-				"allow": ["product-services", "product-platform", "product-themes"]
+				"allow": [
+					"product-services",
+					"product-platform",
+					"product-surfaces-web",
+					"product-surfaces-terminal"
+				]
 			},
 			{
 				"from": "product-services",
-				"allow": ["product-apps", "product-platform"]
+				"allow": [
+					"product-apps",
+					"product-platform"
+				]
 			},
 			{
 				"from": "repo-tools",
@@ -161,7 +261,9 @@
 					"product-apps",
 					"product-services",
 					"product-platform",
-					"product-themes"
+					"product-surfaces-web",
+					"product-surfaces-terminal",
+					"product-surface-pico"
 				]
 			}
 		]

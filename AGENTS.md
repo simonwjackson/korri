@@ -1,6 +1,6 @@
 ## Project layout
 
-- Product apps/services/platform/themes/vendor/systems: `product/*`
+- Product apps/services/platform/surfaces/vendor/systems: `product/*`
 - Shared runtime capabilities: `product/platform/*`
 - Repo tooling, generators, and test infrastructure: `tools/*`
 - Distributable workspace packages, including Pi packages consumed from `.pi/settings.json`: `packages/*`
@@ -10,7 +10,7 @@
 - `@product/*` → `product/*`
 - `@platform/*` → `product/platform/*`
 
-Autonomous themes live under `product/themes/*`. They may use public platform APIs, but must not import `product/apps/*`, `product/services/*`, `product/systems/*`, or app internals.
+Autonomous surfaces live under `product/surfaces/<medium>/*`. They may use public platform APIs, but must not import `product/apps/*`, `product/services/*`, `product/systems/*`, another surface, or app internals. Surfaces are leaves: share code through `@platform/*`, never surface-to-surface dependencies.
 
 ## RPC conventions
 
