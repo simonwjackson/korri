@@ -1,6 +1,10 @@
 #!/usr/bin/env bun
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
-import { createCdpInputTranslator, type CdpKeyboardEvent } from "../../src/bridge-process"
+// fallow-ignore-next-line unused-files
+import { type ChildProcess, spawn } from "node:child_process"
+import {
+  type CdpKeyboardEvent,
+  createCdpInputTranslator,
+} from "../../src/bridge-process"
 import { resolveBridgeMapping } from "../../src/mapping"
 
 interface CliOptions {
@@ -26,7 +30,7 @@ interface CdpTarget {
 
 const options = parseArgs(process.argv.slice(2))
 const abort = new AbortController()
-let evtest: ChildProcessWithoutNullStreams | undefined
+let evtest: ChildProcess | undefined
 let socket: WebSocket | undefined
 let nextMessageId = 1
 
@@ -51,30 +55,44 @@ try {
     throw new Error("matching CDP target did not expose webSocketDebuggerUrl")
   }
   socket = await connectWebSocket(target.webSocketDebuggerUrl, abort.signal)
-  socket.addEventListener("close", () => stop("cdp-websocket-close"), { once: true })
-  socket.addEventListener("error", () => stop("cdp-websocket-error"), { once: true })
-
-  const translator = createCdpInputTranslator(resolveBridgeMapping(options.mapping), {
-    dispatch: event => dispatchKeyEvent(socket, event),
+  socket.addEventListener("close", () => stop("cdp-websocket-close"), {
+    once: true,
   })
+  socket.addEventListener("error", () => stop("cdp-websocket-error"), {
+    once: true,
+  })
+
+  const translator = createCdpInputTranslator(
+    resolveBridgeMapping(options.mapping),
+    {
+      dispatch: event => dispatchKeyEvent(socket, event),
+    },
+  )
 
   if (options.watchPid !== undefined) watchPid(options.watchPid, abort.signal)
 
-  evtest = spawn("evtest", ["--grab", options.device], {
+  const evtestProcess = spawn("evtest", ["--grab", options.device], {
     stdio: ["ignore", "pipe", "pipe"],
   })
-  evtest.stderr.on("data", chunk => process.stderr.write(chunk))
-  evtest.stdout.setEncoding("utf8")
-  evtest.stdout.on("data", async chunk => {
+  evtest = evtestProcess
+  evtestProcess.stderr?.on("data", chunk => process.stderr.write(chunk))
+  evtestProcess.stdout?.setEncoding("utf8")
+  evtestProcess.stdout?.on("data", async chunk => {
     for (const line of chunk.split("\n")) {
       const event = parseEvtestLine(line)
       if (event) await translator.handle(event)
     }
   })
-  evtest.once("exit", async (code, signal) => {
+  evtestProcess.once("exit", async (code, signal) => {
     await translator.releaseAll()
-    if (!abort.signal.aborted && options.failClosed && options.watchPid !== undefined) {
-      try { process.kill(options.watchPid, "SIGTERM") } catch {}
+    if (
+      !abort.signal.aborted &&
+      options.failClosed &&
+      options.watchPid !== undefined
+    ) {
+      try {
+        process.kill(options.watchPid, "SIGTERM")
+      } catch {}
     }
     log(`evtest-exit code=${code ?? "null"} signal=${signal ?? "null"}`)
     process.exit(code === 0 || abort.signal.aborted ? 0 : 1)
@@ -89,7 +107,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i]
     const value = argv[i + 1]
-    if (!key?.startsWith("--") || value === undefined) usage(`invalid argument near ${key ?? "<end>"}`)
+    if (!key?.startsWith("--") || value === undefined)
+      usage(`invalid argument near ${key ?? "<end>"}`)
     values.set(key.slice(2), value)
   }
   const device = required(values, "device")
@@ -117,27 +136,45 @@ function required(values: ReadonlyMap<string, string>, key: string): string {
   return values.get(key) ?? usage(`--${key} is required`)
 }
 
-function numberArg(values: ReadonlyMap<string, string>, key: string, fallback: number): number {
+function numberArg(
+  values: ReadonlyMap<string, string>,
+  key: string,
+  fallback: number,
+): number {
   const raw = values.get(key)
   if (raw === undefined) return fallback
   const parsed = Number(raw)
-  if (!Number.isInteger(parsed) || parsed <= 0) usage(`--${key} must be a positive integer`)
+  if (!Number.isInteger(parsed) || parsed <= 0)
+    usage(`--${key} must be a positive integer`)
   return parsed
 }
 
-function optionalNumberArg(values: ReadonlyMap<string, string>, key: string): number | undefined {
+function optionalNumberArg(
+  values: ReadonlyMap<string, string>,
+  key: string,
+): number | undefined {
   return values.has(key) ? numberArg(values, key, 0) : undefined
 }
 
-async function waitForTarget(options: CliOptions, signal: AbortSignal): Promise<CdpTarget> {
+async function waitForTarget(
+  options: CliOptions,
+  signal: AbortSignal,
+): Promise<CdpTarget> {
   const deadline = Date.now() + options.attachTimeoutMs
   while (!signal.aborted && Date.now() <= deadline) {
     try {
-      const response = await fetch(`http://${options.cdpHost}:${options.cdpPort}/json/list`, { signal })
+      const response = await fetch(
+        `http://${options.cdpHost}:${options.cdpPort}/json/list`,
+        { signal },
+      )
       const targets = (await response.json()) as CdpTarget[]
       const matches = targets.filter(target => matchesTarget(target, options))
-      if (matches.length === 1) return matches[0]!
-      if (matches.length > 1) throw new Error(`CDP target selector matched ${matches.length} pages`)
+      if (matches.length === 1) {
+        const [target] = matches
+        if (target) return target
+      }
+      if (matches.length > 1)
+        throw new Error(`CDP target selector matched ${matches.length} pages`)
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") throw error
     }
@@ -148,47 +185,87 @@ async function waitForTarget(options: CliOptions, signal: AbortSignal): Promise<
 
 function matchesTarget(target: CdpTarget, options: CliOptions): boolean {
   if (options.targetType && target.type !== options.targetType) return false
-  if (options.targetUrlPattern && !target.url?.includes(options.targetUrlPattern)) return false
-  if (options.targetTitlePattern && !target.title?.includes(options.targetTitlePattern)) return false
+  if (
+    options.targetUrlPattern &&
+    !target.url?.includes(options.targetUrlPattern)
+  )
+    return false
+  if (
+    options.targetTitlePattern &&
+    !target.title?.includes(options.targetTitlePattern)
+  )
+    return false
   return true
 }
 
-async function connectWebSocket(url: string, signal: AbortSignal): Promise<WebSocket> {
+async function connectWebSocket(
+  url: string,
+  signal: AbortSignal,
+): Promise<WebSocket> {
   const ws = new WebSocket(url)
   return new Promise((resolve, reject) => {
-    signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true })
+    signal.addEventListener("abort", () => reject(new Error("aborted")), {
+      once: true,
+    })
     ws.addEventListener("open", () => resolve(ws), { once: true })
-    ws.addEventListener("error", () => reject(new Error("failed to connect CDP websocket")), { once: true })
+    ws.addEventListener(
+      "error",
+      () => reject(new Error("failed to connect CDP websocket")),
+      { once: true },
+    )
   })
 }
 
-function dispatchKeyEvent(ws: WebSocket | undefined, event: CdpKeyboardEvent): void {
-  if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error("CDP websocket is not open")
-  ws.send(JSON.stringify({ id: nextMessageId++, method: "Input.dispatchKeyEvent", params: event }))
+function dispatchKeyEvent(
+  ws: WebSocket | undefined,
+  event: CdpKeyboardEvent,
+): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN)
+    throw new Error("CDP websocket is not open")
+  ws.send(
+    JSON.stringify({
+      id: nextMessageId++,
+      method: "Input.dispatchKeyEvent",
+      params: event,
+    }),
+  )
 }
 
 function parseEvtestLine(line: string) {
-  const match = line.match(/type \d+ \((EV_KEY|EV_ABS)\), code \d+ \(([^)]+)\), value (-?\d+)/)
+  const match = line.match(
+    /type \d+ \((EV_KEY|EV_ABS)\), code \d+ \(([^)]+)\), value (-?\d+)/,
+  )
   if (!match) return undefined
   const [, type, code, value] = match
   if (!type || !code || value === undefined) return undefined
-  if (type === "EV_KEY") return { kind: "key" as const, code, value: Number(value) }
+  if (type === "EV_KEY")
+    return { kind: "key" as const, code, value: Number(value) }
   return { kind: "absolute" as const, code, value: Number(value) }
 }
 
 function watchPid(pid: number, signal: AbortSignal): void {
   const interval = setInterval(() => {
-    try { process.kill(pid, 0) } catch { stop("watch-pid-exit") }
+    try {
+      process.kill(pid, 0)
+    } catch {
+      stop("watch-pid-exit")
+    }
   }, 250)
-  signal.addEventListener("abort", () => clearInterval(interval), { once: true })
+  signal.addEventListener("abort", () => clearInterval(interval), {
+    once: true,
+  })
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, ms)
-    signal.addEventListener("abort", () => {
-      clearTimeout(timer)
-      reject(new Error("aborted"))
-    }, { once: true })
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer)
+        reject(new Error("aborted"))
+      },
+      { once: true },
+    )
   })
 }

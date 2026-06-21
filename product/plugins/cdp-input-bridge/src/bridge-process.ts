@@ -1,5 +1,9 @@
-import { spawn as nodeSpawn, type ChildProcess } from "node:child_process"
-import { resolveBridgeMapping, type BridgeActionId, type BridgeMapping } from "./mapping"
+import { type ChildProcess, spawn as nodeSpawn } from "node:child_process"
+import {
+  type BridgeActionId,
+  type BridgeMapping,
+  resolveBridgeMapping,
+} from "./mapping"
 
 export type CdpKeyboardEventType = "rawKeyDown" | "keyUp"
 
@@ -63,7 +67,9 @@ export function createCdpInputTranslator(
     }
   }
 
-  const handleKey = async (event: Extract<EvdevInputEvent, { kind: "key" }>) => {
+  const handleKey = async (
+    event: Extract<EvdevInputEvent, { kind: "key" }>,
+  ) => {
     const action = mapping.buttons[event.code]
     if (!action) return
     await setSource(action, `key:${event.code}`, event.value !== 0)
@@ -146,10 +152,9 @@ export interface CdpInputBridgeProcessManager {
 type SpawnedChild = Pick<ChildProcess, "pid" | "kill" | "once">
 type SpawnFn = (command: string, args: readonly string[]) => SpawnedChild
 
-export function createProcessCdpInputBridge(options: {
-  readonly command?: string
-  readonly spawn?: SpawnFn
-} = {}): CdpInputBridgeProcessManager {
+export function createProcessCdpInputBridge(
+  options: { readonly command?: string; readonly spawn?: SpawnFn } = {},
+): CdpInputBridgeProcessManager {
   const command = options.command ?? "korri-cdp-input-bridge"
   const spawn = options.spawn ?? ((cmd, args) => nodeSpawn(cmd, [...args]))
 

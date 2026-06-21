@@ -17,6 +17,7 @@ import type {
   PluginCatalogItem,
   PluginId,
   ProcessPluginLaunch,
+  ProviderId,
 } from "./index"
 import type { PluginRegistry } from "./registry"
 import { configRecordContributions, executableResources } from "./registry"
@@ -348,7 +349,8 @@ function isPluginCatalogRelease(
     (launch.cwd === undefined || typeof launch.cwd === "string") &&
     (launch.env === undefined || isStringRecord(launch.env)) &&
     (launch.with === undefined || isRecord(launch.with)) &&
-    (launch.launchMetadata === undefined || isLaunchMetadata(launch.launchMetadata))
+    (launch.launchMetadata === undefined ||
+      isLaunchMetadata(launch.launchMetadata))
   )
 }
 
@@ -364,7 +366,9 @@ function isLaunchMetadata(value: unknown): boolean {
 }
 
 function isProviderId(value: unknown): value is ProviderId {
-  return typeof value === "string" && value.startsWith("@") && value.includes(":")
+  return (
+    typeof value === "string" && value.startsWith("@") && value.includes(":")
+  )
 }
 
 function isStringRecord(

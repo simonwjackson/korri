@@ -2,21 +2,8 @@ import { plugin } from "@platform/plugin"
 import { collectCdpInputBridgeDiagnostics } from "./src/diagnostics"
 import { CDP_INPUT_BRIDGE_PLUGIN_ID } from "./src/policy"
 
-export {
-  createCdpInputBridgeSessionLifecycleHook,
-  type CdpInputBridgeSessionLifecycleHookOptions,
-} from "./src/session-lifecycle-hook"
-export {
-  collectCdpInputBridgeDiagnostics,
-  type CdpInputBridgeDiagnostics,
-  type CdpInputBridgeDiagnosticsInput,
-} from "./src/diagnostics"
-export {
-  CDP_INPUT_BRIDGE_PLUGIN_ID,
-  decodeCdpInputBridgePolicy,
-  policyAnnotationFromMetadata,
-  type CdpInputBridgePolicy,
-} from "./src/policy"
+export { CDP_INPUT_BRIDGE_PLUGIN_ID } from "./src/policy"
+export { createCdpInputBridgeSessionLifecycleHook } from "./src/session-lifecycle-hook"
 
 export const cdpInputBridgePlugin = plugin({
   namespace: "@korri",

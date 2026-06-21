@@ -27,7 +27,8 @@ export const yoshisFabricationStationPlugin = plugin({
     {
       capability: "session.lifecycle",
       ref: { provider: CDP_INPUT_BRIDGE_PLUGIN_ID, id: "self" },
-      reason: "YFS needs launch-owned controller-to-keyboard input via Chromium CDP.",
+      reason:
+        "YFS needs launch-owned controller-to-keyboard input via Chromium CDP.",
     },
   ],
   contributes: {

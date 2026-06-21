@@ -77,9 +77,10 @@ describe("Yoshi's Fabrication Station plugin", () => {
   })
 
   it("opts its Chromium launch into the CDP input bridge with the validated mapping", () => {
-    const release = yoshisFabricationStationPlugin.contributes.config.catalog?.[
-      "yoshis-fabrication-station"
-    ]?.releases[0]
+    const release =
+      yoshisFabricationStationPlugin.contributes.config.catalog?.[
+        "yoshis-fabrication-station"
+      ]?.releases[0]
 
     expect(yoshisFabricationStationPlugin.requires).toContainEqual(
       expect.objectContaining({

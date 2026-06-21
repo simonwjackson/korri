@@ -1,10 +1,13 @@
 import { readFile } from "node:fs/promises"
-import { parseProcBusInputDevices, type DiscoveredDevice } from "@platform/input/native/discover-devices"
+import {
+  type DiscoveredDevice,
+  parseProcBusInputDevices,
+} from "@platform/input/native/discover-devices"
 import { resolveInputPlumberVirtualGamepad } from "@platform/input/native/inputplumber-virtual-gamepad"
 import type { KorriSessionLifecycleHook } from "@platform/plugin/session-lifecycle"
 import {
-  createProcessCdpInputBridge,
   type CdpInputBridgeProcessManager,
+  createProcessCdpInputBridge,
 } from "./bridge-process"
 import {
   CDP_INPUT_BRIDGE_PLUGIN_ID,
@@ -70,9 +73,10 @@ export function createCdpInputBridgeSessionLifecycleHook(
         failClosed: policy.failClosed,
       })
 
-      if (handle.exited && policy.failClosed && policy.watchPid !== undefined) {
+      const watchedPid = policy.watchPid
+      if (handle.exited && policy.failClosed && watchedPid !== undefined) {
         void handle.exited.then(async () => {
-          if (!stoppingForCleanup) await killPid(policy.watchPid!)
+          if (!stoppingForCleanup) await killPid(watchedPid)
         })
       }
 
@@ -89,7 +93,9 @@ export function createCdpInputBridgeSessionLifecycleHook(
 }
 
 async function systemInputDevices(): Promise<readonly DiscoveredDevice[]> {
-  return parseProcBusInputDevices(await readFile("/proc/bus/input/devices", "utf8"))
+  return parseProcBusInputDevices(
+    await readFile("/proc/bus/input/devices", "utf8"),
+  )
 }
 
 async function signalPid(pid: number): Promise<void> {

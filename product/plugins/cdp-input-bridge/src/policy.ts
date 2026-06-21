@@ -2,13 +2,14 @@ import type { ProviderId } from "@platform/plugin"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import { Schema } from "effect"
 import {
+  type BridgeMappingName,
   DEFAULT_AXIS_PRESS_THRESHOLD,
   DEFAULT_AXIS_RELEASE_THRESHOLD,
   resolveBridgeMapping,
-  type BridgeMappingName,
 } from "./mapping"
 
-export const CDP_INPUT_BRIDGE_PLUGIN_ID = "@korri:cdp-input-bridge" as const satisfies ProviderId
+export const CDP_INPUT_BRIDGE_PLUGIN_ID =
+  "@korri:cdp-input-bridge" as const satisfies ProviderId
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -47,7 +48,9 @@ const CdpTargetSelector = Schema.Struct({
 export type CdpTargetSelector = Schema.Schema.Type<typeof CdpTargetSelector>
 
 const SourcePreference = Schema.Struct({
-  names: Schema.optional(Schema.Array(NonEmptyString("sourcePreference.names[]"))),
+  names: Schema.optional(
+    Schema.Array(NonEmptyString("sourcePreference.names[]")),
+  ),
   eventNodes: Schema.optional(
     Schema.Array(NonEmptyString("sourcePreference.eventNodes[]")),
   ),
@@ -55,10 +58,13 @@ const SourcePreference = Schema.Struct({
 export type SourcePreference = Schema.Schema.Type<typeof SourcePreference>
 
 const AxisPolicy = Schema.Struct({
-  pressThreshold: Schema.optional(integerRange("axis.pressThreshold", 1, 32767)),
-  releaseThreshold: Schema.optional(integerRange("axis.releaseThreshold", 0, 32766)),
+  pressThreshold: Schema.optional(
+    integerRange("axis.pressThreshold", 1, 32767),
+  ),
+  releaseThreshold: Schema.optional(
+    integerRange("axis.releaseThreshold", 0, 32766),
+  ),
 })
-export type AxisPolicy = Schema.Schema.Type<typeof AxisPolicy>
 
 const RawPolicy = Schema.Struct({
   enable: Schema.optional(Schema.Boolean),
@@ -72,7 +78,6 @@ const RawPolicy = Schema.Struct({
   failClosed: Schema.optional(Schema.Boolean),
   watchPid: Schema.optional(positiveInteger("watchPid")),
 })
-type RawPolicy = Schema.Schema.Type<typeof RawPolicy>
 
 export type CdpInputBridgePolicy =
   | { readonly enabled: false }
@@ -98,19 +103,24 @@ export function policyAnnotationFromMetadata(
   return launchMetadata?.annotations?.[CDP_INPUT_BRIDGE_PLUGIN_ID]
 }
 
-export function decodeCdpInputBridgePolicy(input: unknown): CdpInputBridgePolicy {
+export function decodeCdpInputBridgePolicy(
+  input: unknown,
+): CdpInputBridgePolicy {
   if (input === undefined) return { enabled: false }
   const raw = Schema.decodeUnknownSync(RawPolicy)(input, STRICT)
   if (raw.enable !== true) return { enabled: false }
 
-  const mappingName = raw.mapping ?? "yfs-default"
+  const mappingName = (raw.mapping ?? "yfs-default") as BridgeMappingName
   resolveBridgeMapping(mappingName)
 
-  const pressThreshold = raw.axis?.pressThreshold ?? DEFAULT_AXIS_PRESS_THRESHOLD
+  const pressThreshold =
+    raw.axis?.pressThreshold ?? DEFAULT_AXIS_PRESS_THRESHOLD
   const releaseThreshold =
     raw.axis?.releaseThreshold ?? DEFAULT_AXIS_RELEASE_THRESHOLD
   if (releaseThreshold >= pressThreshold) {
-    throw new Error("axis.releaseThreshold must be less than axis.pressThreshold")
+    throw new Error(
+      "axis.releaseThreshold must be less than axis.pressThreshold",
+    )
   }
 
   return {
@@ -124,22 +134,5 @@ export function decodeCdpInputBridgePolicy(input: unknown): CdpInputBridgePolicy
     attachTimeoutMs: raw.attachTimeoutMs ?? 5000,
     failClosed: raw.failClosed ?? true,
     ...(raw.watchPid ? { watchPid: raw.watchPid } : {}),
-  }
-}
-
-export function encodeCdpInputBridgeAnnotation(
-  policy: Extract<CdpInputBridgePolicy, { readonly enabled: true }>,
-): Readonly<Record<string, unknown>> {
-  return {
-    enable: true,
-    cdpHost: policy.cdpHost,
-    cdpPort: policy.cdpPort,
-    mapping: policy.mappingName,
-    axis: policy.axis,
-    attachTimeoutMs: policy.attachTimeoutMs,
-    failClosed: policy.failClosed,
-    ...(policy.target ? { target: policy.target } : {}),
-    ...(policy.sourcePreference ? { sourcePreference: policy.sourcePreference } : {}),
-    ...(policy.watchPid ? { watchPid: policy.watchPid } : {}),
   }
 }

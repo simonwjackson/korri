@@ -15,7 +15,10 @@ describe("CDP input bridge diagnostics", () => {
 
     expect(result).toMatchObject({
       provider: CDP_INPUT_BRIDGE_PLUGIN_ID,
-      command: { path: "/nix/store/bridge/bin/korri-cdp-input-bridge", configured: true },
+      command: {
+        path: "/nix/store/bridge/bin/korri-cdp-input-bridge",
+        configured: true,
+      },
       policy: { status: "enabled", cdpPort: 9333, mapping: "yfs-default" },
       source: { names: ["Microsoft Xbox Series S|X Controller"] },
     })
@@ -27,6 +30,8 @@ describe("CDP input bridge diagnostics", () => {
     })
 
     expect(result.policy.status).toBe("invalid")
+    if (result.policy.status !== "invalid")
+      throw new Error("expected invalid policy")
     expect(result.policy.error).toContain("cdpPort")
   })
 })

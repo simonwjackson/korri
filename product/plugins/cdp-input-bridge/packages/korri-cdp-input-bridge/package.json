@@ -1,9 +1,9 @@
 {
-  "name": "korri-cdp-input-bridge",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "bin": {
-    "korri-cdp-input-bridge": "./index.ts"
-  }
+	"name": "korri-cdp-input-bridge",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"bin": {
+		"korri-cdp-input-bridge": "./index.ts"
+	}
 }

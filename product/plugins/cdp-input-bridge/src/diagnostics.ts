@@ -1,4 +1,7 @@
-import { CDP_INPUT_BRIDGE_PLUGIN_ID, decodeCdpInputBridgePolicy } from "./policy"
+import {
+  CDP_INPUT_BRIDGE_PLUGIN_ID,
+  decodeCdpInputBridgePolicy,
+} from "./policy"
 
 export interface CdpInputBridgeDiagnosticsInput {
   readonly command?: string
@@ -22,27 +25,34 @@ export interface CdpInputBridgeDiagnostics {
       }
     | { readonly status: "invalid"; readonly error: string }
   readonly source?: {
-    readonly preferredNames?: readonly string[]
-    readonly preferredEventNodes?: readonly string[]
+    readonly names?: readonly string[]
+    readonly eventNodes?: readonly string[]
   }
 }
 
 export function collectCdpInputBridgeDiagnostics(
-  input: CdpInputBridgeDiagnosticsInput = {},
+  input: CdpInputBridgeDiagnosticsInput | unknown = {},
 ): CdpInputBridgeDiagnostics {
-  const command = input.command ?? "korri-cdp-input-bridge"
+  const diagnosticsInput = isDiagnosticsInput(input) ? input : {}
+  const command = diagnosticsInput.command ?? "korri-cdp-input-bridge"
   try {
-    const policy = decodeCdpInputBridgePolicy(input.annotation)
+    const policy = decodeCdpInputBridgePolicy(diagnosticsInput.annotation)
     if (!policy.enabled) {
       return {
         provider: CDP_INPUT_BRIDGE_PLUGIN_ID,
-        command: { path: command, configured: input.command !== undefined },
+        command: {
+          path: command,
+          configured: diagnosticsInput.command !== undefined,
+        },
         policy: { status: "disabled" },
       }
     }
     return {
       provider: CDP_INPUT_BRIDGE_PLUGIN_ID,
-      command: { path: command, configured: input.command !== undefined },
+      command: {
+        path: command,
+        configured: diagnosticsInput.command !== undefined,
+      },
       policy: {
         status: "enabled",
         cdpHost: policy.cdpHost,
@@ -50,18 +60,25 @@ export function collectCdpInputBridgeDiagnostics(
         mapping: policy.mappingName,
         ...(policy.target ? { target: policy.target } : {}),
       },
-      ...(policy.sourcePreference
-        ? { source: policy.sourcePreference }
-        : {}),
+      ...(policy.sourcePreference ? { source: policy.sourcePreference } : {}),
     }
   } catch (error) {
     return {
       provider: CDP_INPUT_BRIDGE_PLUGIN_ID,
-      command: { path: command, configured: input.command !== undefined },
+      command: {
+        path: command,
+        configured: diagnosticsInput.command !== undefined,
+      },
       policy: {
         status: "invalid",
         error: error instanceof Error ? error.message : String(error),
       },
     }
   }
+}
+
+function isDiagnosticsInput(
+  value: unknown,
+): value is CdpInputBridgeDiagnosticsInput {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

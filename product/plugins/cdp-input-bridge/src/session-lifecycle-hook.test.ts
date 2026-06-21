@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { parseProcBusInputDevices } from "@platform/input/native/discover-devices"
-import { createCdpInputBridgeSessionLifecycleHook } from "./session-lifecycle-hook"
 import { CDP_INPUT_BRIDGE_PLUGIN_ID } from "./policy"
+import { createCdpInputBridgeSessionLifecycleHook } from "./session-lifecycle-hook"
 
 const ambiguousDevices = parseProcBusInputDevices(`
 I: Bus=0003 Vendor=045e Product=028e Version=0114
@@ -40,7 +40,12 @@ describe("CDP input bridge session lifecycle hook", () => {
       processManager: {
         start: async request => {
           starts.push(request)
-          return { pid: 111, stop: async () => stops.push(request.devicePath) }
+          return {
+            pid: 111,
+            stop: async () => {
+              stops.push(request.devicePath)
+            },
+          }
         },
       },
     })
@@ -81,18 +86,38 @@ describe("CDP input bridge session lifecycle hook", () => {
     const starts: unknown[] = []
     const hook = createCdpInputBridgeSessionLifecycleHook({
       devices: async () => ambiguousDevices,
-      processManager: { start: async request => { starts.push(request); return { stop: async () => undefined } } },
+      processManager: {
+        start: async request => {
+          starts.push(request)
+          return { stop: async () => undefined }
+        },
+      },
     })
 
-    await expect(hook.afterChildRunning?.({ launchId: "launch-1", spec: { command: "yfs", args: [] } })).resolves.toBeUndefined()
-    await expect(hook.afterChildRunning?.({ launchId: "launch-2", spec: { command: "yfs", args: [] }, launchMetadata: metadata({ enable: false }) })).resolves.toBeUndefined()
+    await expect(
+      hook.afterChildRunning?.({
+        launchId: "launch-1",
+        spec: { command: "yfs", args: [] },
+      }),
+    ).resolves.toBeUndefined()
+    await expect(
+      hook.afterChildRunning?.({
+        launchId: "launch-2",
+        spec: { command: "yfs", args: [] },
+        launchMetadata: metadata({ enable: false }),
+      }),
+    ).resolves.toBeUndefined()
     expect(starts).toEqual([])
   })
 
   it("fails launch before spawning when source selection is ambiguous", async () => {
     const hook = createCdpInputBridgeSessionLifecycleHook({
       devices: async () => ambiguousDevices,
-      processManager: { start: async () => { throw new Error("should not start") } },
+      processManager: {
+        start: async () => {
+          throw new Error("should not start")
+        },
+      },
     })
 
     await expect(
@@ -109,11 +134,15 @@ describe("CDP input bridge session lifecycle hook", () => {
     const killed: number[] = []
     const hook = createCdpInputBridgeSessionLifecycleHook({
       devices: async () => ambiguousDevices,
-      killPid: async pid => killed.push(pid),
+      killPid: async pid => {
+        killed.push(pid)
+      },
       processManager: {
         start: async () => ({
           stop: async () => undefined,
-          exited: new Promise<void>(resolve => { resolveExit = resolve }),
+          exited: new Promise<void>(resolve => {
+            resolveExit = resolve
+          }),
         }),
       },
     })

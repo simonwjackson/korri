@@ -79,7 +79,7 @@ export const YFS_DEFAULT_MAPPING: BridgeMapping = {
   },
 }
 
-export const NONE_MAPPING: BridgeMapping = {
+const NONE_MAPPING: BridgeMapping = {
   name: "none",
   buttons: {},
   axes: [],
@@ -104,16 +104,6 @@ export function cdpKeyboardEventForBinding(
   const binding = mapping.keys[action]
   if (!binding) throw new Error(`No CDP key binding for action: ${action}`)
   return binding
-}
-
-export function withAxisThresholds(
-  mapping: BridgeMapping,
-  thresholds: { readonly pressThreshold: number; readonly releaseThreshold: number },
-): BridgeMapping {
-  return {
-    ...mapping,
-    axes: mapping.axes.map(axis => ({ ...axis, ...thresholds })),
-  }
 }
 
 function axis(

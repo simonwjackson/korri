@@ -1,5 +1,5 @@
-import type { LaunchMetadata } from "./launch-metadata"
 import { Effect } from "effect"
+import type { LaunchMetadata } from "./launch-metadata"
 
 export type ConfigRecord = object
 export type ConfigRecordMap = Readonly<Record<string, ConfigRecord>>

@@ -26,27 +26,41 @@ describe("CDP input bridge policy", () => {
 
   it("treats absent or disabled annotations as disabled", () => {
     expect(decodeCdpInputBridgePolicy(undefined)).toEqual({ enabled: false })
-    expect(decodeCdpInputBridgePolicy({ enable: false })).toEqual({ enabled: false })
+    expect(decodeCdpInputBridgePolicy({ enable: false })).toEqual({
+      enabled: false,
+    })
   })
 
   it("decodes source preference and target selector", () => {
     const policy = decodeCdpInputBridgePolicy({
       enable: true,
       sourcePreference: { names: ["Microsoft Xbox Series S|X Controller"] },
-      target: { urlPattern: "YoshisFabricationStation/index.html", type: "page" },
+      target: {
+        urlPattern: "YoshisFabricationStation/index.html",
+        type: "page",
+      },
     })
 
     expect(policy).toMatchObject({
       enabled: true,
       sourcePreference: { names: ["Microsoft Xbox Series S|X Controller"] },
-      target: { urlPattern: "YoshisFabricationStation/index.html", type: "page" },
+      target: {
+        urlPattern: "YoshisFabricationStation/index.html",
+        type: "page",
+      },
     })
   })
 
   it("rejects malformed policy instead of falling back to unsafe defaults", () => {
-    expect(() => decodeCdpInputBridgePolicy({ enable: true, cdpPort: 0 })).toThrow()
-    expect(() => decodeCdpInputBridgePolicy({ enable: true, extra: true })).toThrow()
-    expect(() => decodeCdpInputBridgePolicy({ enable: true, mapping: "unknown" })).toThrow(/Unknown CDP input bridge mapping/)
+    expect(() =>
+      decodeCdpInputBridgePolicy({ enable: true, cdpPort: 0 }),
+    ).toThrow()
+    expect(() =>
+      decodeCdpInputBridgePolicy({ enable: true, extra: true }),
+    ).toThrow()
+    expect(() =>
+      decodeCdpInputBridgePolicy({ enable: true, mapping: "unknown" }),
+    ).toThrow(/Unknown CDP input bridge mapping/)
   })
 
   it("extracts only the provider-owned annotation from launch metadata", () => {
@@ -54,7 +68,10 @@ describe("CDP input bridge policy", () => {
 
     expect(
       policyAnnotationFromMetadata({
-        annotations: { [CDP_INPUT_BRIDGE_PLUGIN_ID]: annotation, "@korri:other": { enable: true } },
+        annotations: {
+          [CDP_INPUT_BRIDGE_PLUGIN_ID]: annotation,
+          "@korri:other": { enable: true },
+        },
       }),
     ).toBe(annotation)
   })

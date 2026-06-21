@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { createPluginRegistry } from "@platform/plugin/registry"
-import { cdpInputBridgePlugin, CDP_INPUT_BRIDGE_PLUGIN_ID } from "."
+import { CDP_INPUT_BRIDGE_PLUGIN_ID, cdpInputBridgePlugin } from "."
 
 describe("CDP input bridge plugin", () => {
   it("registers as the provider that owns bridge annotations", () => {
@@ -13,8 +13,8 @@ describe("CDP input bridge plugin", () => {
     expect(registry.providers[CDP_INPUT_BRIDGE_PLUGIN_ID]).toMatchObject({
       title: "CDP Input Bridge",
     })
-    expect(cdpInputBridgePlugin.handlers.map(handler => handler.operation)).toEqual([
-      "diagnostics.collect",
-    ])
+    expect(
+      cdpInputBridgePlugin.handlers.map(handler => handler.operation),
+    ).toEqual(["diagnostics.collect"])
   })
 })

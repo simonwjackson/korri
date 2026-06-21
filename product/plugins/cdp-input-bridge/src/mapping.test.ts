@@ -21,10 +21,26 @@ describe("CDP input bridge mapping", () => {
       BTN_START: "key-p",
     })
     expect(mapping.axes).toEqual([
-      expect.objectContaining({ code: "ABS_X", negative: "arrow-left", positive: "arrow-right" }),
-      expect.objectContaining({ code: "ABS_Y", negative: "arrow-up", positive: "arrow-down" }),
-      expect.objectContaining({ code: "ABS_RX", negative: "arrow-left", positive: "arrow-right" }),
-      expect.objectContaining({ code: "ABS_RY", negative: "arrow-up", positive: "arrow-down" }),
+      expect.objectContaining({
+        code: "ABS_X",
+        negative: "arrow-left",
+        positive: "arrow-right",
+      }),
+      expect.objectContaining({
+        code: "ABS_Y",
+        negative: "arrow-up",
+        positive: "arrow-down",
+      }),
+      expect.objectContaining({
+        code: "ABS_RX",
+        negative: "arrow-left",
+        positive: "arrow-right",
+      }),
+      expect.objectContaining({
+        code: "ABS_RY",
+        negative: "arrow-up",
+        positive: "arrow-down",
+      }),
     ])
   })
 
@@ -34,7 +50,9 @@ describe("CDP input bridge mapping", () => {
       code: "KeyZ",
       windowsVirtualKeyCode: 90,
     })
-    expect(cdpKeyboardEventForBinding(YFS_DEFAULT_MAPPING, "arrow-left")).toEqual({
+    expect(
+      cdpKeyboardEventForBinding(YFS_DEFAULT_MAPPING, "arrow-left"),
+    ).toEqual({
       key: "ArrowLeft",
       code: "ArrowLeft",
       windowsVirtualKeyCode: 37,
@@ -42,6 +60,8 @@ describe("CDP input bridge mapping", () => {
   })
 
   it("rejects unknown mapping names", () => {
-    expect(() => resolveBridgeMapping("unknown")).toThrow(/Unknown CDP input bridge mapping/)
+    expect(() => resolveBridgeMapping("unknown")).toThrow(
+      /Unknown CDP input bridge mapping/,
+    )
   })
 })

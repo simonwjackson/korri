@@ -17,6 +17,7 @@
 		"product/platform/react/primitives/**/*.story.e2e.ts",
 		"product/surfaces/terminal/korri-cli/**/*.ts",
 		"product/services/**/*.ts",
+		"product/plugins/cdp-input-bridge/packages/korri-cdp-input-bridge/index.ts",
 		"tools/scripts/**/*.ts",
 		"tools/generators/**/*.ts",
 		"tools/desktop/**/*.ts",

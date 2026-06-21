@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import {
+  type CdpKeyboardEvent,
   createCdpInputTranslator,
   createProcessCdpInputBridge,
-  type CdpKeyboardEvent,
 } from "./bridge-process"
 import { YFS_DEFAULT_MAPPING } from "./mapping"
 
@@ -10,7 +10,9 @@ describe("CDP input bridge translation", () => {
   it("translates button press/release into CDP key events", async () => {
     const events: CdpKeyboardEvent[] = []
     const translator = createCdpInputTranslator(YFS_DEFAULT_MAPPING, {
-      dispatch: async event => events.push(event),
+      dispatch: async event => {
+        events.push(event)
+      },
     })
 
     await translator.handle({ kind: "key", code: "BTN_WEST", value: 1 })
@@ -25,7 +27,9 @@ describe("CDP input bridge translation", () => {
   it("keeps a shared action pressed until all input sources release it", async () => {
     const events: CdpKeyboardEvent[] = []
     const translator = createCdpInputTranslator(YFS_DEFAULT_MAPPING, {
-      dispatch: async event => events.push(event),
+      dispatch: async event => {
+        events.push(event)
+      },
     })
 
     await translator.handle({ kind: "key", code: "BTN_DPAD_LEFT", value: 1 })
@@ -40,7 +44,9 @@ describe("CDP input bridge translation", () => {
   it("applies analog hysteresis to avoid jitter around neutral", async () => {
     const events: CdpKeyboardEvent[] = []
     const translator = createCdpInputTranslator(YFS_DEFAULT_MAPPING, {
-      dispatch: async event => events.push(event),
+      dispatch: async event => {
+        events.push(event)
+      },
     })
 
     await translator.handle({ kind: "absolute", code: "ABS_Y", value: -11999 })
@@ -57,7 +63,9 @@ describe("CDP input bridge translation", () => {
   it("releases pressed keys during shutdown", async () => {
     const events: CdpKeyboardEvent[] = []
     const translator = createCdpInputTranslator(YFS_DEFAULT_MAPPING, {
-      dispatch: async event => events.push(event),
+      dispatch: async event => {
+        events.push(event)
+      },
     })
 
     await translator.handle({ kind: "key", code: "BTN_SOUTH", value: 1 })
@@ -86,7 +94,7 @@ describe("CDP input bridge process manager", () => {
           },
           once: (_event, callback) => {
             setTimeout(() => callback(0, null), 0)
-            return undefined
+            return undefined as never
           },
         }
       },
