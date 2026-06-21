@@ -17,7 +17,7 @@ describe("LAN stream advertisement", () => {
         backend: "bonjour",
         bonjourFactory: () => ({
           find: () => ({ stop: () => undefined }),
-          publish: options => {
+          publish: (options: unknown) => {
             published = options
             return {
               stop: (callback?: () => void) => {
@@ -26,7 +26,7 @@ describe("LAN stream advertisement", () => {
               },
             } as unknown as Service
           },
-          destroy: callback => {
+          destroy: (callback?: () => void) => {
             destroyed = true
             callback?.()
           },
@@ -60,7 +60,7 @@ describe("LAN stream advertisement", () => {
               stop: (callback?: () => void) => callback?.(),
             } as unknown as Service
           },
-          destroy: callback => callback?.(),
+          destroy: (callback?: () => void) => callback?.(),
         }),
       })
       expect(published).toBe(true)

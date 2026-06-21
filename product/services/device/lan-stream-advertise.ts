@@ -6,7 +6,7 @@ import {
   KORRI_STREAM_PROTOCOL_VERSION,
   KORRI_STREAM_SERVICE_PROTOCOL,
   KORRI_STREAM_SERVICE_TYPE,
-} from "../../apps/cli/lan-stream-discovery"
+} from "@product/surfaces/terminal/korri-cli/lan-stream-discovery"
 import {
   type AvahiAdvertisement,
   AvahiCliNotFoundError,
