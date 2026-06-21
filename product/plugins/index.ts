@@ -18,6 +18,7 @@ import { communityCatalogPlugin } from "./community-catalog"
 import { domeRomantikPlugin } from "./dome-romantik"
 import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin } from "./gamescope"
+import { webRuntimePlugin } from "./web-runtime"
 import { createGamescopeSessionLifecycleHook } from "./gamescope/src/session/lifecycle-hook"
 import { globebaPlugin } from "./globeba"
 import { itchioPlugin } from "./itchio"
@@ -131,6 +132,7 @@ export function firstPartySessionLifecycleHooksForRegistry(
 export const firstPartyPlugins = [
   retroarchPlugin,
   gamescopePlugin,
+  webRuntimePlugin,
   fexRuntimePlugin,
   box64RuntimePlugin,
   protonRuntimePlugin,

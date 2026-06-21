@@ -1,96 +1,27 @@
-// korri-web-runtime orchestrator.
+// korri-web-runtime — runs a web game in bare kiosk Chromium and drives it.
 //
-// Self-contained: optionally probes the game's native render resolution and
-// engine headlessly (no display needed — the engine sizes its canvas backing
-// store regardless), then spawns gamescope at the computed internal resolution
-// wrapping Chromium on gamescope's Xwayland, injects the in-page shims, drives
-// the start gate over CDP (trusted input grants user activation), and waits for
-// Chromium to exit.
+// Deliberately minimal and universal: the only input is the URL. There are no
+// per-game flags, no engine selection, no native-resolution handling, and NO
+// gamescope. Scaling happens in-page (the canvas fits the fullscreen surface),
+// and the start gate is cleared with one universal trusted click — which covers
+// essentially every audio web game, since the gate is a browser user-activation
+// rule, not an engine quirk. gamescope, if ever wanted, wraps this from outside.
 
 import { composeWebChromiumArgs } from "../core/chromium-args"
-import { classifyEngine, type EngineId } from "../core/engine-detect"
-import { engineProfile } from "../core/engine-profiles"
-import { webCompositorRequest } from "../core/gamescope-request"
-import {
-  type CanvasMeasurement,
-  type Dimensions,
-  nativeResolutionFromCanvas,
-} from "../core/native-res"
 import type { RunConfig } from "./args"
 import { type CdpClient, connectCdp } from "./cdp"
-import { gamescopeCliArgs } from "./gamescope-cli"
-import {
-  bootstrapShim,
-  FINGERPRINT_EXPR,
-  fitCanvasShim,
-  GATE_STATE_EXPR,
-  NATIVE_RES_EXPR,
-  syntheticGestureShim,
-} from "./shims"
+import { bootstrapShim, fitCanvasShim, GATE_STATE_EXPR } from "./shims"
 
 const CHROMIUM = process.env.KORRI_WEB_RUNTIME_CHROMIUM ?? "chromium"
-const GAMESCOPE = process.env.KORRI_WEB_RUNTIME_GAMESCOPE ?? "gamescope"
 
 function spawnEnv(): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env))
     if (v !== undefined) env[k] = v
-  // The nixpkgs chromium wrapper injects --ozone-platform=wayland when this is
-  // set; we need x11 (gamescope Xwayland), so strip it.
+  // The nixpkgs chromium wrapper forces a wayland hint when this is set; we set
+  // the platform explicitly, so strip it to avoid conflicting flags.
   delete env.NIXOS_OZONE_WL
   return env
-}
-
-function tmpProfile(tag: string): string {
-  return `/tmp/korri-web-runtime-${tag}-${process.pid}`
-}
-
-async function probe(
-  config: RunConfig,
-): Promise<{ engine: EngineId; native: Dimensions }> {
-  const port = 9333
-  const profileDir = tmpProfile("probe")
-  // Probe with a real (bare Wayland) Chromium, not headless: headless GL/canvas
-  // sizing can differ from the real render, which throws off the native-res /
-  // gap math and reintroduces scrollbars. A bare window renders the canvas the
-  // same way the gamescope run will, then is killed once measured.
-  const proc = Bun.spawn(
-    [
-      CHROMIUM,
-      "--ozone-platform=wayland",
-      "--no-sandbox",
-      `--user-data-dir=${profileDir}`,
-      "--remote-debugging-address=127.0.0.1",
-      `--remote-debugging-port=${port}`,
-      config.locator,
-    ],
-    { env: spawnEnv(), cwd: "/tmp", stdout: "ignore", stderr: "ignore" },
-  )
-  try {
-    const cdp = await connectCdp(port)
-    const native = await waitForNative(cdp)
-    const engine =
-      config.engine === "auto"
-        ? classifyEngine(await cdp.evaluate(FINGERPRINT_EXPR))
-        : config.engine
-    cdp.close()
-    return { engine, native }
-  } finally {
-    proc.kill()
-  }
-}
-
-async function waitForNative(cdp: CdpClient): Promise<Dimensions> {
-  // Large bundles load over the network; poll well past first paint.
-  const deadline = Date.now() + 120000
-  while (Date.now() < deadline) {
-    const measurement = await cdp.evaluate<CanvasMeasurement | null>(
-      NATIVE_RES_EXPR,
-    )
-    if (measurement) return nativeResolutionFromCanvas(measurement)
-    await Bun.sleep(250)
-  }
-  throw new Error("native resolution probe timed out (no sized canvas)")
 }
 
 async function canvasPresent(cdp: CdpClient): Promise<boolean> {
@@ -105,8 +36,8 @@ async function clickCanvasCenter(cdp: CdpClient): Promise<void> {
     "(() => { const c = document.querySelector('canvas'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.left + r.width/2, y: r.top + r.height/2 }; })()",
   )
   if (!rect) return
-  // Separate the down/up in time: engines debounce events fired in the same
-  // tick and will not register a same-instant press+release as a real click.
+  // Separate down/up in time: engines debounce same-tick press+release and will
+  // not register it as a real click.
   for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) {
     await cdp.send("Input.dispatchMouseEvent", {
       type,
@@ -120,31 +51,16 @@ async function clickCanvasCenter(cdp: CdpClient): Promise<void> {
   }
 }
 
-async function driveGate(cdp: CdpClient, strategy: string): Promise<void> {
-  if (strategy === "none") return
-
-  // Wait for the canvas to exist (bundles load over the network).
+// Universal gate: a trusted canvas click grants user activation (audio) AND fires
+// a real mousedown (dismisses overlay-style gates like GameMaker's). The overlay
+// only becomes a live target after the engine loads — which over the network can
+// be tens of seconds — so click through a startup window until it lands.
+async function driveGate(cdp: CdpClient): Promise<void> {
   const canvasDeadline = Date.now() + 120000
   while (Date.now() < canvasDeadline && !(await canvasPresent(cdp))) {
     await Bun.sleep(500)
   }
   if (!(await canvasPresent(cdp))) return
-
-  if (strategy === "synthetic") {
-    for (let i = 0; i < 8; i++) {
-      await cdp.evaluate(syntheticGestureShim())
-      await Bun.sleep(500)
-    }
-    return
-  }
-
-  // trusted-click: a real CDP canvas click both grants user activation and
-  // dismisses the engine's canvas-drawn focus overlay. The overlay only becomes
-  // a live click target AFTER the engine finishes initializing (well past first
-  // canvas paint and well past first user-activation), so a single early click
-  // is not enough and userActivation is an unreliable "done" signal. Keep
-  // clicking through a bounded startup window so a click lands once the engine
-  // is ready. (A pixel-based "playing" detector could stop earlier — see backlog.)
   const clickWindow = Date.now() + 60000
   while (Date.now() < clickWindow) {
     await clickCanvasCenter(cdp)
@@ -153,27 +69,14 @@ async function driveGate(cdp: CdpClient, strategy: string): Promise<void> {
 }
 
 export async function run(config: RunConfig): Promise<number> {
-  // Native resolution is only needed to size gamescope's scaler. On the
-  // no-gamescope path the in-page fit shim scales the canvas, so native res
-  // never needs probing. Engine still matters (gate strategy).
-  const needsProbe =
-    config.engine === "auto" || (config.gamescope && config.native === "detect")
-  const probed = needsProbe ? await probe(config) : undefined
-  const engine = probed?.engine ?? (config.engine as EngineId)
-  const native =
-    config.native !== "detect"
-      ? config.native
-      : ((probed?.native ?? config.output) as Dimensions)
-  const profile = engineProfile(engine)
-
   const port = 9222
-  const profileDir = tmpProfile("run")
-  const chromiumArgs = [
+  const profileDir = `/tmp/korri-web-runtime-${process.pid}`
+  const args = [
     ...composeWebChromiumArgs({
       locator: config.locator,
       autoplay: config.autoplay,
       extraFlags: config.extraFlags,
-      ozonePlatform: config.gamescope ? "x11" : "wayland",
+      ozonePlatform: "wayland",
     }),
     "--default-background-color=ff000000",
     "--remote-debugging-address=127.0.0.1",
@@ -181,28 +84,9 @@ export async function run(config: RunConfig): Promise<number> {
     `--user-data-dir=${profileDir}`,
   ]
 
-  const command = config.gamescope
-    ? [
-        GAMESCOPE,
-        ...gamescopeCliArgs(
-          webCompositorRequest({
-            native,
-            fixedCanvas: profile.fixedCanvas,
-            gap: config.gap,
-            output: config.output,
-            filter: config.filter,
-          }),
-        ),
-        "--",
-        CHROMIUM,
-        ...chromiumArgs,
-      ]
-    : [CHROMIUM, ...chromiumArgs]
-
-  // Pin a world-accessible cwd: posix_spawn resolves the inherited working
-  // directory, and a private/inaccessible cwd (e.g. another user's home) makes
-  // the spawn fail with EACCES even for world-executable binaries.
-  const proc = Bun.spawn(command, {
+  // Pin a world-accessible cwd: posix_spawn resolves the inherited cwd, and a
+  // private one (e.g. another user's home) makes the spawn fail with EACCES.
+  const proc = Bun.spawn([CHROMIUM, ...args], {
     env: spawnEnv(),
     cwd: "/tmp",
     stdout: "inherit",
@@ -210,34 +94,27 @@ export async function run(config: RunConfig): Promise<number> {
   })
 
   const cdp = await connectCdp(port)
-  const boot = bootstrapShim({
-    killOverflow: profile.killOverflow,
-    gate: profile.gate,
-  })
-  await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: boot })
+  const boot = bootstrapShim({ killOverflow: true, gate: "trusted-click" })
+  const fit = fitCanvasShim()
+  for (const source of [boot, fit]) {
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source })
+  }
   await cdp.send("Emulation.setDefaultBackgroundColorOverride", {
     color: { r: 0, g: 0, b: 0, a: 1 },
   })
   await cdp.evaluate(boot)
-  // No gamescope: scaling happens in-page. Inject the CSS-fit shim on every
-  // document and once now, so the canvas fills the fullscreen surface.
-  if (!config.gamescope) {
-    const fit = fitCanvasShim()
-    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: fit })
-    await cdp.evaluate(fit)
-  }
-  // Load engine-specific shim files passed via --shim <path>.
+  await cdp.evaluate(fit)
+  // Optional app-specific shims (e.g. a level-loader) passed via --shim <path>.
   for (const shimPath of config.shims) {
     try {
       const source = await Bun.file(shimPath).text()
       await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source })
       await cdp.evaluate(source)
     } catch {
-      // A named built-in shim (gamemaker/construct/generic) is a no-op today;
-      // a missing external shim path is non-fatal.
+      // missing/optional shim is non-fatal
     }
   }
-  await driveGate(cdp, profile.gate)
+  await driveGate(cdp)
   cdp.close()
 
   return await proc.exited
