@@ -136,6 +136,7 @@ const READABLE_PLACEHOLDERS = new Set([
   "playable.id",
   "release.id",
   "source.id",
+  "settings",
 ])
 
 const readableContext = (
@@ -148,6 +149,10 @@ const readableContext = (
   system: context.system,
   "playable.id": context.playableId,
   "release.id": context.releaseId,
+  settings:
+    context.app.settings === undefined
+      ? undefined
+      : JSON.stringify(context.app.settings),
 })
 
 const substituteReadable = (
@@ -196,10 +201,15 @@ export const composeReadableLaunchSpec = (
       return yield* Effect.fail(new DisallowedCommand({ command }))
     }
 
+    const env: Record<string, string> = {}
+    for (const [key, value] of Object.entries(context.env ?? app.env ?? {})) {
+      env[key] = yield* substituteReadable(value, subCtx)
+    }
+
     return {
       command,
       args,
-      ...(context.env ? { env: context.env } : {}),
+      ...(Object.keys(env).length > 0 ? { env } : {}),
       ...(context.cwd !== undefined ? { cwd: context.cwd } : {}),
     }
   })

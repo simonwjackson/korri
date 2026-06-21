@@ -8,9 +8,16 @@
 import { describe, expect, it } from "bun:test"
 import { Cause, Effect } from "effect"
 
-import { composeLaunchSpec } from "./compose-launch-spec"
+import {
+  composeLaunchSpec,
+  composeReadableLaunchSpec,
+} from "./compose-launch-spec"
+import type { AppRecord } from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
-import type { ResolvedLaunchContext } from "./resolved-launch-context"
+import type {
+  ReadableResolvedLaunchContext,
+  ResolvedLaunchContext,
+} from "./resolved-launch-context"
 
 const launcher = (
   input: Partial<LauncherRecord> & { id: string },
@@ -29,6 +36,22 @@ const context = (
 ): ResolvedLaunchContext => ({
   contentPath: "/storage/roms/test.smc",
   system: "snes",
+  ...input,
+})
+
+const readableContext = (
+  input: Partial<ReadableResolvedLaunchContext>,
+): ReadableResolvedLaunchContext => ({
+  playableId: "yfs-level",
+  itemId: "yfs-level",
+  releaseId: "level",
+  system: "yfs",
+  target: "/storage/levels/level.json",
+  app: {
+    id: "@korri:yoshis-fabrication-station/level",
+    command: "yfs-launch",
+    args: ["{target}"],
+  } as AppRecord,
   ...input,
 })
 
@@ -156,6 +179,28 @@ describe("composeLaunchSpec — argsAppend / env / cwd", () => {
     })
     const spec = run(composeLaunchSpec(l, ctx))
     expect(spec.cwd).toBe("/storage/roms")
+  })
+})
+
+describe("composeReadableLaunchSpec — args / env", () => {
+  it("substitutes readable app settings into env values", () => {
+    const ctx = readableContext({
+      app: {
+        id: "@korri:yoshis-fabrication-station/level",
+        command: "yfs-launch",
+        args: ["{target}"],
+        env: { KORRI_YFS_SETTINGS: "{settings}" },
+        settings: { metrics: true, bgmVolume: 7 },
+      } as AppRecord,
+    })
+
+    const spec = run(composeReadableLaunchSpec(ctx.app, ctx))
+
+    expect(spec.args).toEqual(["/storage/levels/level.json"])
+    expect(JSON.parse(spec.env?.KORRI_YFS_SETTINGS ?? "{}")).toEqual({
+      metrics: true,
+      bgmVolume: 7,
+    })
   })
 })
 
