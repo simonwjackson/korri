@@ -14,6 +14,8 @@ export interface PresentationOptions {
 export function canvasPresentationShim(opts: PresentationOptions): string {
   const imageRendering = opts.scaling === "smooth" ? "auto" : "pixelated"
   return `(() => {
+  if (window.__korriPresentation) return "already";
+  window.__korriPresentation = true;
   const style = document.createElement("style");
   style.textContent = "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:${opts.background}!important;width:100%!important;height:100%!important}";
   (document.head || document.documentElement).appendChild(style);
