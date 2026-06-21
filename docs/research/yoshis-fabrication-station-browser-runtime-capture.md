@@ -353,3 +353,52 @@ so the Bun-side log captures renderer metrics as `renderer-trace` entries.
 4. Replace DOM direct-launch automation with a proper Construct/runtime patch.
 5. Package YFS under `product/vendor/yoshis-fabrication-station/` with checks.
 6. Keep scoped input wrapper as session-owned sidecar; do not use global InputPlumber profile switching.
+
+---
+
+## Productized Chromium/web-canvas launcher update (2026-06-21)
+
+Current product direction is a first-class YFS launcher over the private
+`@korri:web-canvas` Chromium path:
+
+```bash
+yfs-launch <raw-yfs-level-json>
+```
+
+Decisions captured by implementation:
+
+- `KORRI_YFS_WEBROOT` must point to an already-compatible/patched YFS webroot.
+  Raw upstream extract support is intentionally out of scope for the launcher;
+  extraction/package owns source compatibility patches.
+- The supplied level is copied into a prepared root as `level.json` and launched
+  through `index.html?code_url=level.json`.
+- Prepared roots are cache/store-like artifacts keyed by webroot identity, level
+  digest, launcher version, and settings. They are not deleted on process exit.
+- Prepared roots may normalize the copied `scripts/main.js` export marker to
+  `exportType:"html5"`, but they do not mutate `KORRI_YFS_WEBROOT`.
+- Prepared roots remove legacy `direct-launch-pre.js`/`direct-launch.js` script
+  tags so the new web-canvas pre-navigation shim bundle is the only automation
+  path for `yfs-launch`.
+- The new `yfs-launch-settings.js` helper does not set
+  `preserveDrawingBuffer`; keeping the Chromium/WebGL 120fps-class path is more
+  important than boot-frame capture.
+- The loader remains DOM-automation based for this slice and reports host-visible
+  state through `window.__YFS_DIRECT_LAUNCH`. Direct Construct gameplay jumping
+  remains a follow-up.
+- `--allow-file-access-from-files` is private to the YFS local-file launcher and
+  must not become a generic web-canvas default.
+
+Latest manual Sobo proof before productization used a real Level Share Square
+YFS level:
+
+- Provider/API: Level Share Square, `game=1`.
+- Level id: `6a36fec33e11434283a577f1`.
+- Title: `Another Yoshi's Island 2-6: Sewer You Next Summer`.
+- Raw payload size: `111145` characters.
+- Browser URL shape: `file:///tmp/yfs-webcanvas-stage/yfs/www/index.html?code_url=lss-level.json&metrics=1`.
+- Loader state reached `ready` after three attempts.
+- WebGL renderer readback: ANGLE/Freedreno on FD740, not SwiftShader/llvmpipe.
+- rAF sample: approximately `121.98fps`, average `8.20ms`, worst `8.30ms`.
+
+Post-productization completion requires repeating this proof through the public
+`yfs-launch <level-file>` command rather than manual staging/CDP.
