@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import { dirname, join, normalize } from "node:path"
-import { REPO_ROOT, readSource, repoRelative, sourceFiles } from "./source-files"
+import {
+  REPO_ROOT,
+  readSource,
+  repoRelative,
+  sourceFiles,
+} from "./source-files"
 
 const SURFACES_ROOT = join(REPO_ROOT, "product", "surfaces")
 const WEB_SURFACES_ROOT = join(SURFACES_ROOT, "web")
@@ -32,7 +37,10 @@ function isTestOrStory(file: string): boolean {
   return /\.(?:test|story|stories|story\.e2e)\.tsx?$/.test(file)
 }
 
-function forbiddenSurfaceImport(file: string, specifier: string): string | undefined {
+function forbiddenSurfaceImport(
+  file: string,
+  specifier: string,
+): string | undefined {
   if (/^(?:@product\/|product\/)(?:apps|services|systems)\//.test(specifier)) {
     return specifier
   }

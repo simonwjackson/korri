@@ -1,7 +1,7 @@
 import {
+  type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   githubRepoParser,
-  type CommunitySourcePluginEntry,
 } from "../community-source"
 
 export const KORRI_SONIC_TIME_TWISTED_PLUGIN_ID =

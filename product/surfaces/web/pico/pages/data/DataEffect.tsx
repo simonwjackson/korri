@@ -14,16 +14,16 @@ import {
 } from "@effect/atom-react"
 import { Option } from "effect"
 import { useState } from "react"
-import type { PicoGame } from "../../fixtures"
-import {
-  PicoDataState,
-  type PicoDataState as PicoDataStateValue,
-} from "../../screens/PicoDataState"
 import {
   picoGamesAtom,
   picoLibraryLayerAtom,
 } from "../../data/pico-library-atoms"
 import { PicoLibrary } from "../../data/pico-library-service"
+import type { PicoGame } from "../../fixtures"
+import {
+  PicoDataState,
+  type PicoDataState as PicoDataStateValue,
+} from "../../screens/PicoDataState"
 import { Dim } from "../../ui/atoms/Dim"
 import { Icon } from "../../ui/atoms/Icon"
 import { Spinner } from "../../ui/atoms/Spinner"

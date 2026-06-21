@@ -17,8 +17,8 @@ import type {
   PlayableLibraryEntry,
   PlayableReleaseEntry,
 } from "@platform/library/playable-library"
-import type { LaunchPrepareMap } from "@platform/plugin/launch-prepare"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
+import type { LaunchPrepareMap } from "@platform/plugin/launch-prepare"
 import { Context, type Effect, Schema } from "effect"
 
 export class LibraryError extends Schema.TaggedErrorClass<LibraryError>()(

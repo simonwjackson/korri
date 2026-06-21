@@ -1,7 +1,12 @@
 export type SurfaceId = `@korri:${string}`
 export type PluginRef = `@korri:${string}`
 
-export type SurfaceMedium = "web" | "terminal" | "framebuffer" | "native" | "ssh"
+export type SurfaceMedium =
+  | "web"
+  | "terminal"
+  | "framebuffer"
+  | "native"
+  | "ssh"
 
 export type Capability =
   | "catalog.read"

@@ -3,7 +3,6 @@ import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plu
 import { BatchJsonSerializationLive } from "@platform/api/rpc/serialization"
 import { KorriControlLayerLiveWithPlugins } from "@platform/control/korri-control-live"
 import { FeatureGatesMiddlewareLive } from "@platform/gates/middleware"
-import { InstallControlMiddlewareLive } from "../plugin-install/install-control-authorization"
 import { GameAssetsLayerLive } from "@platform/library/game-assets/game-assets-service"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import {
@@ -34,6 +33,7 @@ import { ForegroundSessionHostLive } from "../library/foreground-session-host-la
 import { handleLaunchLibrary } from "../library/launch.rpc-handler"
 import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
 import { handleCollectPluginDiagnostics } from "../plugin-diagnostics/collect.rpc-handler"
+import { InstallControlMiddlewareLive } from "../plugin-install/install-control-authorization"
 import { handleRequestPluginInstall } from "../plugin-install/request.rpc-handler"
 import { handlePluginInstallStatus } from "../plugin-install/status.rpc-handler"
 import { handleCollectPluginLifecycle } from "../plugin-lifecycle/collect.rpc-handler"

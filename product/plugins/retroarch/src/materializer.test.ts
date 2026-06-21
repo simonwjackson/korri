@@ -9,8 +9,8 @@ import {
 } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Effect } from "effect"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
+import { Effect } from "effect"
 import {
   materializeReadableRetroArchLaunch,
   retroarchReadableLaunchIntegration,

@@ -2,12 +2,11 @@ import { describe, expect, it } from "bun:test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Cause, Effect } from "effect"
-
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_PLUGIN_ID,
 } from "@product/plugins/retroarch"
+import { Cause, Effect } from "effect"
 import { resolveAppDescriptor } from "./app-integrations"
 import { resolveModuleSelection } from "./module-resolution"
 import type { ModuleRecord } from "./records/module"

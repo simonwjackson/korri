@@ -109,17 +109,15 @@ function requireInstallMetadata(providerId: string, appId: string) {
         }),
       )
     }
-    const entries = yield* source
-      .listPlayableEntries()
-      .pipe(
-        Effect.mapError(
-          error =>
-            new DataError({
-              reason: "Unavailable",
-              message: sanitize(String(error)),
-            }),
-        ),
-      )
+    const entries = yield* source.listPlayableEntries().pipe(
+      Effect.mapError(
+        error =>
+          new DataError({
+            reason: "Unavailable",
+            message: sanitize(String(error)),
+          }),
+      ),
+    )
     if (installMetadataAllowed(entries, providerId, appId)) return
     return yield* Effect.fail(
       new NotFoundError({

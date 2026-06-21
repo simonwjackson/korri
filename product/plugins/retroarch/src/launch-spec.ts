@@ -6,13 +6,13 @@ import {
   normalize,
   relative,
 } from "node:path"
+import type { LaunchSpec } from "@platform/library/launcher"
 import type { LaunchSettingValue, RetroArchPolicy } from "./policy"
 import {
   isRetroArchConfigKey,
   isRetroArchPlaintextCredentialSettingKey,
   validateNullableRetroArchHttpsUrl,
 } from "./setting-policy"
-import type { LaunchSpec } from "@platform/library/launcher"
 
 const DEFAULT_RETROARCH_COMMAND = "retroarch"
 

@@ -54,7 +54,7 @@ import {
   selectLaunchableRelease,
   splitPlayableId,
 } from "./playable-id"
-import { appRecordKind, type AppRecord } from "./records/app"
+import { type AppRecord, appRecordKind } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
@@ -586,7 +586,6 @@ export const enumerateApplicablePresets = (
     }
 
     const user = inputs.userId ? snap.users.get(inputs.userId) : undefined
-    const sys = snap.systems.get(game.system)
     const L0 = skeletonLauncherForPresetEnum(snap, inputs, game)
     const lncher = L0 ? snap.launchers.get(L0) : undefined
 

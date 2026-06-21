@@ -1,7 +1,7 @@
 import {
+  type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   githubRepoParser,
-  type CommunitySourcePluginEntry,
 } from "../community-source"
 
 export const KORRI_TINY_CRATE_PLUGIN_ID = "@korri:tiny-crate" as const

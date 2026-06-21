@@ -3,8 +3,8 @@ import { access } from "node:fs/promises"
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 import type { LaunchPrepareMode } from "@platform/plugin/launch-prepare"
 import {
-  writeThreeDSenRomRegistry,
   type ThreeDSenProfileMapping,
+  writeThreeDSenRomRegistry,
 } from "./rom-registry"
 
 export interface ThreeDSenLaunchPreparePolicy {

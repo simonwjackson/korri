@@ -1,7 +1,7 @@
 import {
+  type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   exactUrlParser,
-  type CommunitySourcePluginEntry,
 } from "../community-source"
 
 export const KORRI_MEGA_MAN_ROCK_N_ROLL_PLUGIN_ID =

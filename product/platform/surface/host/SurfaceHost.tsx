@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { usePlatformBridge } from "./platform-bridge-context"
-import { type FirstPartySurfaceId, loadSurfaceEntrypoint } from "./surface-host-registry"
+import {
+  type FirstPartySurfaceId,
+  loadSurfaceEntrypoint,
+} from "./surface-host-registry"
 
 export function SurfaceHost({
   surfaceId,

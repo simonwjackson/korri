@@ -1,15 +1,13 @@
 import { describe, expect, it } from "bun:test"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-
-import { steamRuntimePaths } from "./plugin"
-
 import {
   REPO_ROOT,
   readSource,
   repoRelative,
   sourceFiles,
 } from "../../../../tools/testing/standards/source-files"
+import { steamRuntimePaths } from "./plugin"
 
 const RETIRED_GENERIC_STEAM_IMPLEMENTATION_FILES = [
   "product/platform/stream/steam-launch-spec.ts",
@@ -110,8 +108,9 @@ describe("Steam plugin boundary", () => {
     ]
 
     expect(
-      runtimePluginFiles
-        .filter(file => readSource(join(REPO_ROOT, file)).includes("steamRuntimePaths")),
+      runtimePluginFiles.filter(file =>
+        readSource(join(REPO_ROOT, file)).includes("steamRuntimePaths"),
+      ),
     ).toEqual([])
   })
 })

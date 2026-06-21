@@ -4,8 +4,8 @@ import { createPluginRegistry } from "@platform/plugin/registry"
 import { Effect } from "effect"
 import {
   COMMUNITY_CATALOG_ENTRIES,
-  KORRI_COMMUNITY_CATALOG_PLUGIN_ID,
   communityCatalogPlugin,
+  KORRI_COMMUNITY_CATALOG_PLUGIN_ID,
 } from "./plugin"
 
 const provider = KORRI_COMMUNITY_CATALOG_PLUGIN_ID

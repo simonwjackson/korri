@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { requestSteamAppInstall } from "./install-trigger"
 import { resetSteamInstallRequestLedgerForTests } from "./install-request-ledger"
+import { requestSteamAppInstall } from "./install-trigger"
 
 afterEach(() => resetSteamInstallRequestLedgerForTests())
 

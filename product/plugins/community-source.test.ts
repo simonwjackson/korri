@@ -1,17 +1,17 @@
 import { describe, expect, it } from "bun:test"
-import { runPluginHandler, type KorriPlugin } from "@platform/plugin"
+import { type KorriPlugin, runPluginHandler } from "@platform/plugin"
 import { Effect } from "effect"
 import { createFirstPartyPluginRegistryFromEnv, firstPartyPlugins } from "."
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "./acquisition"
 import {
-  KORRI_AM2RLAUNCHER_PLUGIN_ID,
   am2rLauncherPlugin,
+  KORRI_AM2RLAUNCHER_PLUGIN_ID,
 } from "./am2rlauncher"
 import {
-  KORRI_DOME_ROMANTIK_PLUGIN_ID,
   domeRomantikPlugin,
+  KORRI_DOME_ROMANTIK_PLUGIN_ID,
 } from "./dome-romantik"
-import { KORRI_GLOBEBA_PLUGIN_ID, globebaPlugin } from "./globeba"
+import { globebaPlugin, KORRI_GLOBEBA_PLUGIN_ID } from "./globeba"
 import { KORRI_ITCHIO_PLUGIN_ID } from "./itchio"
 import {
   KORRI_MEGA_MAN_ROCK_N_ROLL_PLUGIN_ID,

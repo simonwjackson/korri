@@ -1,9 +1,9 @@
-import { KORRI_ITCHIO_PLUGIN_ID } from "../itchio"
 import {
+  type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   itchioParser,
-  type CommunitySourcePluginEntry,
 } from "../community-source"
+import { KORRI_ITCHIO_PLUGIN_ID } from "../itchio"
 
 export const KORRI_STARGROVE_SCRAMBLE_PLUGIN_ID =
   "@korri:stargrove-scramble" as const

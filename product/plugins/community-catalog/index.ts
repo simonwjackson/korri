@@ -1,5 +1,5 @@
 export {
   COMMUNITY_CATALOG_ENTRIES,
-  KORRI_COMMUNITY_CATALOG_PLUGIN_ID,
   communityCatalogPlugin,
+  KORRI_COMMUNITY_CATALOG_PLUGIN_ID,
 } from "./src/plugin"

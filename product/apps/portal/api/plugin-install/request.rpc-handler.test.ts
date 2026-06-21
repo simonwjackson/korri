@@ -3,8 +3,8 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { LibrarySource } from "@platform/library/library-services"
-import { CurrentInstallControl } from "./install-control-authorization"
 import { Effect, Layer } from "effect"
+import { CurrentInstallControl } from "./install-control-authorization"
 import { handleRequestPluginInstall } from "./request.rpc-handler"
 
 const original = {

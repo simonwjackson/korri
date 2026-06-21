@@ -1,8 +1,8 @@
 import {
+  type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   normalizedHost,
   normalizedPath,
-  type CommunitySourcePluginEntry,
 } from "../community-source"
 
 export const KORRI_XJLT_PLUGIN_ID = "@korri:xjlt" as const

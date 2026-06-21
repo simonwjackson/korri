@@ -1,7 +1,7 @@
 import {
+  type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   githubRepoParser,
-  type CommunitySourcePluginEntry,
 } from "../community-source"
 
 export const KORRI_SPELUNKY_CLASSIC_HD_PLUGIN_ID =

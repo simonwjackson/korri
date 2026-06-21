@@ -1,14 +1,14 @@
+// biome-ignore-all lint/style/noNonNullAssertion: test cases request exact temporary root counts.
 import { describe, expect, it } from "bun:test"
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Effect } from "effect"
-
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_PLUGIN_ID,
   retroarchReadableLaunchIntegration,
 } from "@product/plugins/retroarch"
+import { Effect } from "effect"
 import {
   KORRI_CONFIG_EXTENSIONS,
   makeKorriConfigGraphConfig,

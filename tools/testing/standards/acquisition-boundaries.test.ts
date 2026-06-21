@@ -134,7 +134,9 @@ describe("standards: acquisition migration boundaries", () => {
 
   it("keeps library and source-aware CLI code independent from acquisition", () => {
     const sourceAwareCliFiles = sourceFiles(CLI_ROOT).filter(file =>
-      repoRelative(file).startsWith("product/surfaces/terminal/korri-cli/source-aware-"),
+      repoRelative(file).startsWith(
+        "product/surfaces/terminal/korri-cli/source-aware-",
+      ),
     )
     const violations = [
       ...filesImportingPlatformModule([LIBRARY_ROOT], "acquisition"),

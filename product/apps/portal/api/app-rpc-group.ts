@@ -1,5 +1,4 @@
 import { FeatureGatesMiddleware } from "@platform/gates/middleware"
-import { InstallControlMiddleware } from "./plugin-install/install-control-authorization"
 import { RpcGroup } from "effect/unstable/rpc"
 import { CatalogSnapshotRpc as appCatalogSnapshot } from "./catalog/snapshot.rpc"
 import { AssignGameAssetRpc as appGameAssetsAssign } from "./game-assets/assign.rpc"
@@ -8,6 +7,7 @@ import { UnassignGameAssetRpc as appGameAssetsUnassign } from "./game-assets/una
 import { GetHelloRpc as appHelloGet } from "./hello/rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "./library/launch.rpc"
 import { CollectPluginDiagnosticsRpc as appPluginDiagnosticsCollect } from "./plugin-diagnostics/collect.rpc"
+import { InstallControlMiddleware } from "./plugin-install/install-control-authorization"
 import { RequestPluginInstallRpc as appPluginInstallRequest } from "./plugin-install/request.rpc"
 import { PluginInstallStatusRpc as appPluginInstallStatus } from "./plugin-install/status.rpc"
 import { CollectPluginLifecycleRpc as appPluginLifecycleCollect } from "./plugin-lifecycle/collect.rpc"

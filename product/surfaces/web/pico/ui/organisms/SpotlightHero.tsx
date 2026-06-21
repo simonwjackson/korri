@@ -7,8 +7,8 @@
  * stage so their absolute positioning resolves against it.
  */
 import type { PicoGame } from "../../fixtures"
-import { GameLogo } from "../molecules/GameLogo"
 import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
+import { GameLogo } from "../molecules/GameLogo"
 import { KeyArtBackdrop } from "../molecules/KeyArtBackdrop"
 import { PlayCta } from "../molecules/PlayCta"
 

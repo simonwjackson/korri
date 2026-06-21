@@ -3,11 +3,11 @@ import type { ReadableResolvedLaunchContext } from "@platform/library/config/res
 import { Effect } from "effect"
 import { KORRI_BOX64_RUNTIME_PLUGIN_ID } from "../../box64-runtime"
 import { KORRI_TURNIP_PLUGIN_ID } from "../../turnip"
+import { KORRI_3DSEN_APP_ID, KORRI_3DSEN_PLUGIN_ID } from "./plugin"
 import {
   materializeReadable3dSenLaunch,
   threeDSenReadableLaunchIntegration,
 } from "./readable-launch-integration"
-import { KORRI_3DSEN_APP_ID, KORRI_3DSEN_PLUGIN_ID } from "./plugin"
 
 const context: ReadableResolvedLaunchContext = {
   playableId: "smb3d",

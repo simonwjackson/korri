@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 
 import { InheritableLayer, LaunchWithPolicy } from "../inheritable-fields"
-import { LocalPlayableId, PlayableId } from "../playable-id"
 import { LaunchSettings } from "../launch-block"
+import { LocalPlayableId, PlayableId } from "../playable-id"
 import { ProviderId } from "./provider"
 
 const STRICT = { onExcessProperty: "error" } as const

@@ -70,7 +70,5 @@ describe("3dSen launch.prepare", () => {
 })
 
 async function mktemp(): Promise<string> {
-  return await import("node:fs/promises").then(fs =>
-    fs.mkdtemp(join(tmpdir(), "korri-3dsen-prepare-")),
-  )
+  return mkdtemp(join(tmpdir(), "korri-3dsen-prepare-"))
 }

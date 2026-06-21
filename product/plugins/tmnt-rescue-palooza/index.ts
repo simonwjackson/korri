@@ -1,8 +1,8 @@
 import {
+  type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   normalizedHost,
   normalizedPath,
-  type CommunitySourcePluginEntry,
 } from "../community-source"
 
 export const KORRI_TMNT_RESCUE_PALOOZA_PLUGIN_ID =

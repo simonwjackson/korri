@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test"
 import {
   collectSteamForegroundProcesses,
   isSteamForegroundProcess,
-  steamAppIdFromProcess,
   type SteamForegroundProcessInfo,
+  steamAppIdFromProcess,
 } from "./foreground-processes"
 
 const steamLaunch = (

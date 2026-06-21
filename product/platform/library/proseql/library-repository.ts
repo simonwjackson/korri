@@ -6,8 +6,8 @@ import {
   createProseqlArtifactRepository,
 } from "@platform/artifacts/artifact-import-service"
 import { artifactsRoot } from "@platform/artifacts/artifact-store"
-import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import { installMetadataForRelease } from "@platform/library/config/app-install-metadata"
+import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import {
   type ReadableConfigSnapshot,
   type ResolvedLocalLauncherPolicy,
@@ -68,8 +68,8 @@ import type {
 } from "@platform/library/playable-library"
 import type { ConfigRecordMap, PluginId } from "@platform/plugin"
 import { isProviderId } from "@platform/plugin/ids"
-import type { LaunchPrepareMap } from "@platform/plugin/launch-prepare"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
+import type { LaunchPrepareMap } from "@platform/plugin/launch-prepare"
 import type { PluginRegistry } from "@platform/plugin/registry"
 import type { ArtifactRecord } from "@platform/protocol/artifact/artifact"
 import { Effect } from "effect"
@@ -306,11 +306,7 @@ export function createLibraryRepository(
       loadReadableSnapshot(db, _options).pipe(
         Effect.map(snapshot =>
           derivePlayableEntries([...snapshot.library.values()]).map(entry =>
-            toPlayableLibraryEntry(
-              entry,
-              snapshot.readableLaunchers,
-              snapshot.systems,
-            ),
+            toPlayableLibraryEntry(entry, snapshot.readableLaunchers),
           ),
         ),
         Effect.flatMap(entries =>
@@ -861,7 +857,6 @@ function legacyPlayableParts(id: string): {
 function toPlayableLibraryEntry(
   entry: PlayableEntry,
   readableLaunchers: ReadonlyMap<string, AppRecord> = new Map(),
-  systems: ReadonlyMap<string, SystemRecord> = new Map(),
 ): PlayableLibraryEntry {
   const collections = entry.contained?.collections ?? entry.item.collections
   const title = entry.title ?? entry.id

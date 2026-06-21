@@ -1,6 +1,5 @@
 import { BatchJsonSerializationLive } from "@platform/api/rpc/serialization"
 import { FeatureGatesMiddlewareLive } from "@platform/gates/middleware"
-import { InstallControlMiddlewareLive } from "./plugin-install/install-control-authorization"
 import { GameAssetsLayerLive } from "@platform/library/game-assets/game-assets-service"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import {
@@ -18,6 +17,7 @@ import { CatalogSnapshotLive } from "./catalog/catalog-snapshot"
 import { HandlersLive } from "./handlers"
 import { ForegroundSessionHostLive } from "./library/foreground-session-host-layer"
 import { RemoteStreamPrepareLive } from "./library/remote-stream-prepare"
+import { InstallControlMiddlewareLive } from "./plugin-install/install-control-authorization"
 import { StreamControlLayerLive } from "./stream-control/service"
 
 // See server/rpc-server.ts for the federation peer-discovery wiring

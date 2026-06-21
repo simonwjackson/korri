@@ -1,9 +1,9 @@
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 import { plugin } from "@platform/plugin"
 import {
+  type Box64Policy,
   composeBox64LaunchSpec,
   decodeBox64Policy,
-  type Box64Policy,
 } from "./launch-companion"
 
 export const KORRI_BOX64_RUNTIME_PLUGIN_ID = "@korri:box64-runtime" as const
