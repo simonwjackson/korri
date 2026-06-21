@@ -52,9 +52,9 @@ export const renderSteamLaunchSpec = (
     const parsed = parseSteamAppId(options.target)
     if (parsed._tag === "Left") return yield* Effect.fail(parsed.left)
     const appId = parsed.right
-    const command = options.command ?? "steam"
-    return {
-      command,
-      args: isKorriSteamAppCommand(command) ? [appId] : ["-applaunch", appId],
-    }
+    const requestedCommand = options.command ?? "korri-steam-app"
+    const command = isKorriSteamAppCommand(requestedCommand)
+      ? requestedCommand
+      : "korri-steam-app"
+    return { command, args: [appId] }
   })

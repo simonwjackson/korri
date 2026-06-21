@@ -121,17 +121,13 @@ describe("steamReadableLaunchIntegration", () => {
       expect(
         steamReadableLaunchIntegration.canResolve({
           ...context(root),
-          app: {
-            ...context(root).app,
-            command: "/run/current-system/sw/bin/korri-steam-app",
-          },
           launchCompanions: {},
         }),
       ).toBe(true)
     })
   })
 
-  it("materializes desired Steam state and returns steam -applaunch", async () => {
+  it("materializes desired Steam state and returns the managed korri-steam-app wrapper", async () => {
     await withRoot(async root => {
       await mkdir(root, { recursive: true })
       const events: string[] = []
@@ -147,8 +143,8 @@ describe("steamReadableLaunchIntegration", () => {
       )
 
       expect(result.spec).toEqual({
-        command: "steam",
-        args: ["-applaunch", "1029210"],
+        command: "korri-steam-app",
+        args: ["1029210"],
       })
       expect(result.launchMetadata).toEqual({
         appProviderId: KORRI_STEAM_PLUGIN_ID,
@@ -251,25 +247,24 @@ describe("steamReadableLaunchIntegration", () => {
     })
   })
 
-  it("fails closed when the Gamescope launch companion is unavailable", async () => {
+  it("does not require an external Gamescope companion because korri-steam-app owns the gamescoped gate", async () => {
     await withRoot(async root => {
       await mkdir(root, { recursive: true })
-      const error = await Effect.runPromise(
-        Effect.flip(
-          materializeReadableSteamLaunch({
-            context: { ...context(root), launchCompanions: {} },
-            fs: memoryFs().fs,
-            lifecycle: lifecycle([]),
-            lock: inlineLock,
-          }),
-        ),
+      const { fs } = memoryFs()
+
+      const result = await Effect.runPromise(
+        materializeReadableSteamLaunch({
+          context: { ...context(root), launchCompanions: {} },
+          fs,
+          lifecycle: lifecycle([]),
+          lock: inlineLock,
+        }),
       )
 
-      expect(error).toMatchObject({
-        _tag: "AppMaterializationFailed",
-        appId: KORRI_STEAM_APP_ID,
+      expect(result.spec).toEqual({
+        command: "korri-steam-app",
+        args: ["1029210"],
       })
-      expect(errorReason(error)).toContain("@korri:gamescope")
     })
   })
 

@@ -328,8 +328,8 @@ describe("PluginLibrarySourceLayerLive", () => {
         integration: "steam",
       })
       expect(result.resolved.spec).toEqual({
-        command: "steam",
-        args: ["-applaunch", "1029210"],
+        command: "korri-steam-app",
+        args: ["1029210"],
       })
     } finally {
       restoreEnv(previous)

@@ -422,8 +422,8 @@ describe("createLibraryRepository — readable playable entries", () => {
         integration: "steam",
       })
       expect(resolved.spec).toEqual({
-        command: "steam",
-        args: ["-applaunch", "1029210"],
+        command: "korri-steam-app",
+        args: ["1029210"],
       })
       expect(resolved.launchMetadata).toEqual({
         appProviderId: KORRI_STEAM_PLUGIN_ID,

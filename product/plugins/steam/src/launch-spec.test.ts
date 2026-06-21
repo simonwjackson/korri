@@ -15,7 +15,7 @@ describe("steam launch spec", () => {
     })
   })
 
-  it("renders steam -applaunch for the parsed appid", async () => {
+  it("renders the managed korri-steam-app wrapper for the parsed appid", async () => {
     const spec = await Effect.runPromise(
       renderSteamLaunchSpec({
         command: "steam",
@@ -23,7 +23,19 @@ describe("steam launch spec", () => {
       }),
     )
 
-    expect(spec).toEqual({ command: "steam", args: ["-applaunch", "2379780"] })
+    expect(spec).toEqual({ command: "korri-steam-app", args: ["2379780"] })
+  })
+
+  it("preserves an absolute korri-steam-app command path", async () => {
+    const command = "/run/current-system/sw/bin/korri-steam-app"
+    const spec = await Effect.runPromise(
+      renderSteamLaunchSpec({
+        command,
+        target: "steam://rungameid/2379780",
+      }),
+    )
+
+    expect(spec).toEqual({ command, args: ["2379780"] })
   })
 
   it("passes literal Steam %command% launch options but rejects Korri tokens", () => {

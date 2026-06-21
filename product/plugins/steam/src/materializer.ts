@@ -10,8 +10,7 @@ import type { LaunchSpec } from "@platform/library/launcher"
 import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import { Effect } from "effect"
-import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
-import { isKorriSteamAppCommand, parseSteamAppId } from "./launch-spec"
+import { parseSteamAppId } from "./launch-spec"
 import { defaultSteamPluginPolicy, KORRI_STEAM_PLUGIN_ID } from "./plugin"
 import { steamLaunchCleanupMetadata } from "./session/lifecycle-hook"
 import {
@@ -116,17 +115,12 @@ function steamLaunchMetadata(appId: string): LaunchMetadata {
 }
 
 function assertGamescopeCompanionEnabled(
-  context: ReadableResolvedLaunchContext,
+  _context: ReadableResolvedLaunchContext,
 ): void {
-  if (isKorriSteamAppCommand(context.app.command ?? "")) return
-  const policy = context.launchCompanions?.[KORRI_GAMESCOPE_PLUGIN_ID]
-  if (!isRecord(policy) || policy.enable === false) {
-    throw new AppMaterializationFailed({
-      appId: context.app.id,
-      reason:
-        "Steam AppID launches require the @korri:gamescope launch companion unless they use the korri-steam-app service wrapper",
-    })
-  }
+  // The Steam plugin-owned korri-steam-app wrapper is now the only AppID
+  // launch contract. It owns starting/waiting for gamescoped Steam Big
+  // Picture, so readable Steam AppID materialization must not depend on an
+  // external @korri:gamescope companion being authored on every game.
 }
 
 function readSteamPluginPolicy(

@@ -58,7 +58,7 @@ const inlineLock: SteamStateLock = {
 }
 
 describe("materializeSteamDesiredState", () => {
-  it("reasserts LaunchOptions and compat-tool mapping before returning applaunch", async () => {
+  it("reasserts LaunchOptions and compat-tool mapping before returning the managed wrapper", async () => {
     const stateRoot = "/steam-home"
     const events: string[] = []
     const { fs, files, writes } = memoryFs()
@@ -80,8 +80,8 @@ describe("materializeSteamDesiredState", () => {
     )
 
     expect(result.spec).toEqual({
-      command: "steam",
-      args: ["-applaunch", "2379780"],
+      command: "korri-steam-app",
+      args: ["2379780"],
     })
     expect(events).toEqual([
       "shutdown",
