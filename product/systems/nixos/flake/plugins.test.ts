@@ -54,6 +54,7 @@ describe("first-party Nix plugin composition", () => {
         "@korri:gamescope",
         "@korri:pico8",
         "@korri:portmaster",
+        "@korri:remap",
         "@korri:retroarch",
         "@korri:ryubing",
         "@korri:steam",
@@ -63,6 +64,7 @@ describe("first-party Nix plugin composition", () => {
       expect.arrayContaining([
         "gamescope-korri",
         "korri-gamescope-control-bridge",
+        "korri-remap-bridge",
         "libretro-fake-08",
         "portmaster",
         "ryubing-korri",
@@ -72,6 +74,7 @@ describe("first-party Nix plugin composition", () => {
     expect(enabled.apps).toEqual([
       "gamescope-control",
       "gamescope-control-bridge",
+      "korri-remap-bridge",
       "korri-stream-control-bench",
     ])
     expect(enabled.moduleCount).toBeGreaterThan(2)

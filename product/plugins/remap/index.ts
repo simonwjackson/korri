@@ -5,6 +5,17 @@ export { decodeRemapBindings } from "./src/bindings"
 export type { RemapBinding } from "./src/bindings"
 export { createRemapEngine, type RemapEngine } from "./src/bridge-process"
 export {
+  buildRemapWrapperLaunchSpec,
+  remapWrapperEnv,
+  type RemapWrapperLaunchSpecInput,
+} from "./src/launch-wrapper"
+export {
+  KORRI_REMAP_RUNNER_GROUP,
+  KORRI_REMAP_RUNNER_USER,
+  assertNativeIsolationProbe,
+  type NativeRemapIsolationProbe,
+} from "./src/native-sink"
+export {
   isControllerRef,
   parseControlRef,
   type RemapButton,

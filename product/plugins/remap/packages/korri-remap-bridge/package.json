@@ -1,0 +1,8 @@
+{
+  "name": "@korri/remap-bridge",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "korri-remap-bridge": "./index.ts"
+  }
+}
