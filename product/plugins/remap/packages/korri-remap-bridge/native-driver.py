@@ -387,7 +387,11 @@ def main() -> int:
         child_proc = subprocess.Popen(
             runner_command(args.runner_user, child),
             env=child_environment(os.environ),
-            cwd=os.getcwd(),
+            # The launcher may be invoked from a Korri-private working
+            # directory. After setpriv switches to korri-remap-runner, that cwd
+            # can make Bun/Chromium fail with EACCES before the child has a
+            # chance to pin its own cwd. Start from a world-searchable directory.
+            cwd="/tmp",
         )
         source_players = dict(zip(source_fds, controllers.keys(), strict=True))
         while child_proc.poll() is None and received_signal is None:

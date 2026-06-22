@@ -58,6 +58,7 @@ describe("korri-remap native driver contract", () => {
     expect(driverSource).toContain('"--reuid={entry.pw_uid}"')
     expect(driverSource).toContain('"--regid={entry.pw_gid}"')
     expect(driverSource).toContain('"--init-groups"')
+    expect(driverSource).toContain('cwd="/tmp"')
     expect(driverSource).toContain('if not key.startswith("KORRI_REMAP_")')
   })
 
