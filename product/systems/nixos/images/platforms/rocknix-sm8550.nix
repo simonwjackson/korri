@@ -355,6 +355,20 @@ let
         substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
           --replace-fail "  - xbox-series" "  - xb360"
       '';
+  handheldRetroArchInputPolicy = {
+    drivers = {
+      input = "udev";
+      joypad = "udev";
+    };
+    input = {
+      autodetect = true;
+      maxUsers = 4;
+      ports."1" = {
+        joypadIndex = 0;
+        analogDpadMode = 1;
+      };
+    };
+  };
   # SM8550 platform launch policy is rendered into the readable library
   # cascade. Moonlight uses host.moonlight. YFS keeps settings.plugin for
   # inspectable config, and also carries the required square viewport/zoom and
@@ -416,6 +430,8 @@ let
         };
       };
     };
+
+    host.plugin."@korri:retroarch" = handheldRetroArchInputPolicy;
 
     host.moonlight = {
       command = "${pkgs.moonlight-embedded}/bin/moonlight";
