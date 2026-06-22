@@ -21,7 +21,7 @@ let
   yfsPackage = korri.packages.${targetSystem}.yoshis-fabrication-station;
   box64RuntimePackage = korri.packages.${targetSystem}.korri-box64-runtime or pkgs.box64;
   gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
-  enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:mega-man-rock-n-roll,@korri:neverball,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:xjlt,@korri:yoshis-fabrication-station,@korri:zquest-classic";
+  enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:mega-man-rock-n-roll,@korri:neverball,@korri:remap,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:xjlt,@korri:yoshis-fabrication-station,@korri:zquest-classic";
   moonlightRuntimeSettingsEnvironment = {
     # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
     # These are intentionally enumerated and preserved as Moonlight process env
@@ -304,6 +304,27 @@ let
         "yfs-launch"
         "chromium"
       ];
+      launch."with"."@korri:remap" = {
+        bindings = {
+          "p1.dpad.up" = "key.up";
+          "p1.dpad.down" = "key.down";
+          "p1.dpad.left" = "key.left";
+          "p1.dpad.right" = "key.right";
+          "p1.stick.left.up" = "key.up";
+          "p1.stick.left.down" = "key.down";
+          "p1.stick.left.left" = "key.left";
+          "p1.stick.left.right" = "key.right";
+          "p1.stick.right.up" = "key.up";
+          "p1.stick.right.down" = "key.down";
+          "p1.stick.right.left" = "key.left";
+          "p1.stick.right.right" = "key.right";
+          "p1.button.west" = "key.z";
+          "p1.button.south" = "key.a";
+          "p1.button.east" = "key.x";
+          "p1.button.north" = "key.s";
+          "p1.button.start" = "key.p";
+        };
+      };
       settings.plugin = {
         viewport = {
           aspect = "1:1";
@@ -451,6 +472,8 @@ in
   # legacy nix-on-rocks root main-space PipeWire graph under /run/user/0.
   # The substrate still supplies the neutral SM8550 audio facts (Pulse API and
   # AYN UCM package), but the product owns where the graph lives.
+  services.korri.remap.enable = true;
+
   services.korri.runtime.extraGroups = [
     "audio"
     "input"
