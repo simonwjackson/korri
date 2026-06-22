@@ -10,6 +10,11 @@ const loaderSource = await Bun.file(
 )
   .text()
   .catch(() => "")
+const directLaunchSource = await Bun.file(
+  "product/plugins/yoshis-fabrication-station/scripts/direct-launch.js",
+)
+  .text()
+  .catch(() => "")
 
 describe("YFS browser shims", () => {
   it("provides launch settings without preserveDrawingBuffer", () => {
@@ -27,5 +32,12 @@ describe("YFS browser shims", () => {
     expect(loaderSource).not.toContain('params.has("code_b64")')
     expect(loaderSource).toContain('state.status = "failed"')
     expect(loaderSource).toContain("Gameplay did not replace the load UI")
+  })
+
+  it("opens the YFS Play Level UI from in-page JavaScript", () => {
+    expect(directLaunchSource).toContain("clickPlayLevelButton")
+    expect(directLaunchSource).toContain("openPlayLevelUi")
+    expect(directLaunchSource).toContain('state.status = "opening-play-level-ui"')
+    expect(directLaunchSource).toContain("Timed out opening the YFS Play Level UI")
   })
 })

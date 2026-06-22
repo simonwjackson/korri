@@ -219,17 +219,11 @@
     }
   }
 
-  const clickCanvasLoadButton = () => {
+  const clickCanvasFractions = points => {
     const canvas = document.querySelector("canvas")
     state.canvasFound = Boolean(canvas)
     if (!canvas) return false
     const rect = canvas.getBoundingClientRect()
-    const points = [
-      [720 / 832, 416 / 448],
-      [720 / 1664, 416 / 448],
-      [0.865, 0.929],
-      [0.5, 0.929],
-    ]
     for (const [fx, fy] of points) {
       const clientX = rect.left + rect.width * fx
       const clientY = rect.top + rect.height * fy
@@ -270,6 +264,41 @@
     return true
   }
 
+  const clickPlayLevelButton = () =>
+    clickCanvasFractions([
+      // Native 832x448 title-screen footer.
+      [720 / 832, 416 / 448],
+      [0.865, 0.929],
+      [0.5, 0.929],
+      // Expanded square/custom viewports keep the footer's world-space button
+      // near mid-screen rather than the bottom edge.
+      [0.5, 0.49],
+      [0.5, 0.47],
+      [0.5, 0.52],
+      [0.48, 0.49],
+      [0.52, 0.49],
+    ])
+
+  const openPlayLevelUi = async () => {
+    state.status = "opening-play-level-ui"
+    const deadline = Date.now() + 18000
+    while (Date.now() < deadline) {
+      const inputs = codeInputs()
+      if (inputs.length > 0) return true
+      clickPlayLevelButton()
+      await new Promise(resolve => setTimeout(resolve, 350))
+    }
+    return codeInputs().length > 0
+  }
+
+  const clickCanvasLoadButton = () =>
+    clickCanvasFractions([
+      [720 / 832, 416 / 448],
+      [720 / 1664, 416 / 448],
+      [0.865, 0.929],
+      [0.5, 0.929],
+    ])
+
   const waitForGameplayToReplaceLoadUi = async () => {
     const started = Date.now()
     while (Date.now() - started < 12000) {
@@ -301,6 +330,14 @@
     state.codeLength = code.length
     state.status = "waiting-for-load-ui"
     beginBootFrameCapture()
+
+    await waitFor(() => {
+      state.canvasFound = Boolean(document.querySelector("canvas"))
+      return state.canvasFound ? true : null
+    })
+
+    if (!(await openPlayLevelUi()))
+      throw new Error("Timed out opening the YFS Play Level UI")
 
     await waitFor(() => {
       state.canvasFound = Boolean(document.querySelector("canvas"))

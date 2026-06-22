@@ -9,6 +9,10 @@ import {
   yfsShimPaths,
 } from "./yfs-launch"
 
+const yfsLaunchSource = await Bun.file(
+  "product/plugins/yoshis-fabrication-station/src/launcher/yfs-launch.ts",
+).text()
+
 const tempRoots: string[] = []
 
 afterEach(async () => {
@@ -75,6 +79,11 @@ describe("yfs-launch", () => {
 
   it("uses the packaged YFS direct-launch seam instead of duplicate shims", () => {
     expect(yfsShimPaths()).toEqual([])
+  })
+
+  it("does not use CDP mouse clicks to open the YFS load UI", () => {
+    expect(yfsLaunchSource).not.toContain("Input.dispatchMouseEvent")
+    expect(yfsLaunchSource).not.toContain("openYfsLoadUi")
   })
 
   it("terminates a launched browser when pre-ready observation fails", async () => {
