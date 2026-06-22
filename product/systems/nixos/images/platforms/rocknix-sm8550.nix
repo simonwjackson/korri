@@ -330,9 +330,10 @@ let
           "p1.stick.right.down" = "key.down";
           "p1.stick.right.left" = "key.left";
           "p1.stick.right.right" = "key.right";
-          "p1.button.west" = "key.z";
-          "p1.button.south" = "key.a";
-          "p1.button.east" = "key.x";
+          # YFS keyboard defaults: Z=jump, X=tongue, C=throw.
+          "p1.button.south" = "key.z";
+          "p1.button.west" = "key.x";
+          "p1.button.east" = "key.c";
           "p1.button.north" = "key.s";
           "p1.button.start" = "key.p";
         };

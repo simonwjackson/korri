@@ -301,9 +301,9 @@ let
         && (yfsRemapBindings."p1.stick.right.down" or null) == "key.down"
         && (yfsRemapBindings."p1.stick.right.left" or null) == "key.left"
         && (yfsRemapBindings."p1.stick.right.right" or null) == "key.right"
-        && (yfsRemapBindings."p1.button.west" or null) == "key.z"
-        && (yfsRemapBindings."p1.button.south" or null) == "key.a"
-        && (yfsRemapBindings."p1.button.east" or null) == "key.x"
+        && (yfsRemapBindings."p1.button.south" or null) == "key.z"
+        && (yfsRemapBindings."p1.button.west" or null) == "key.x"
+        && (yfsRemapBindings."p1.button.east" or null) == "key.c"
         && (yfsRemapBindings."p1.button.north" or null) == "key.s"
         && (yfsRemapBindings."p1.button.start" or null) == "key.p"
       ))
