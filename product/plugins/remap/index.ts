@@ -3,6 +3,7 @@ import { KORRI_REMAP_PLUGIN_ID } from "./src/policy"
 
 export { decodeRemapBindings } from "./src/bindings"
 export type { RemapBinding } from "./src/bindings"
+export { createRemapEngine, type RemapEngine } from "./src/bridge-process"
 export {
   isControllerRef,
   parseControlRef,
@@ -34,6 +35,16 @@ export {
   type RemapRawPolicy,
   type RemapSourceKind,
 } from "./src/policy"
+export {
+  createMemoryRemapSink,
+  pressTarget,
+  releaseTarget,
+  validateSinkCapabilities,
+  type MemoryRemapSink,
+  type RemapSink,
+  type RemapSinkCapabilities,
+  type RemapSinkEvent,
+} from "./src/sinks"
 
 export interface RemapPluginDiagnostic {
   readonly provider: typeof KORRI_REMAP_PLUGIN_ID
