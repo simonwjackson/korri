@@ -80,7 +80,13 @@ async function spawnShellLaunch(
   const useProcessGroup = options.processGroup === true && !isSetuidRemapBridge
   const setsidCommand = options.setsidCommand ?? DEFAULT_SETSID_COMMAND
   const env = launchEnvironment(spec)
-  const envArgs = Object.entries(env).map(([key, value]) => `${key}=${value}`)
+  const bridgeEnv = {
+    PATH: env.PATH ?? "/run/current-system/sw/bin",
+    ...(spec.env ?? {}),
+  }
+  const envArgs = Object.entries(isSetuidRemapBridge ? bridgeEnv : env).map(
+    ([key, value]) => `${key}=${value}`,
+  )
   const argv = isSetuidRemapBridge
     ? ([
         SYSTEMD_RUN_COMMAND,
