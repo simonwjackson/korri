@@ -56,6 +56,12 @@ let
       removableUnmountUnit = cfg.systemd.services."korri-removable-media-unmount@" or { };
       removableColdplugUnit = cfg.systemd.services.korri-removable-media-coldplug or { };
       removableMedia = cfg.services.korri.removableMedia or { };
+      yfsLauncherSettings = lib.attrByPath [
+        "launchers"
+        "@korri:yoshis-fabrication-station/level"
+        "settings"
+        "plugin"
+      ] { } (cfg.services.korri.daemon.library.platformDefaults or { });
       steam = cfg.services.korri.steam or { };
       steamUnit = cfg.systemd.services.korri-steam or { };
       steamWarmUnit = userServices.korri-steam-warm or { };
@@ -221,7 +227,9 @@ let
       ))
       (check "${name}: stale manual sessiond display drop-in is removed" (
         builtins.hasAttr "korri-remove-legacy-sessiond-display-dropin" activationScripts
-        && lib.hasInfix "/home/korri/.config/systemd/user/korri-sessiond.service.d/display.conf" activationScripts."korri-remove-legacy-sessiond-display-dropin".text
+        &&
+          lib.hasInfix "/home/korri/.config/systemd/user/korri-sessiond.service.d/display.conf"
+            activationScripts."korri-remove-legacy-sessiond-display-dropin".text
       ))
       (check "${name}: sessiond does not control root-owned essway" (
         (sessiondEnv.KORRI_SESSIOND_ESSWAY_CONTROL or null) == "0"
@@ -249,6 +257,11 @@ let
       (check "${name}: YFS direct launcher is installed and available to sessiond" (
         hasPackagePname "yoshis-fabrication-station" cfg.environment.systemPackages
         && hasPackagePname "yoshis-fabrication-station" sessiond.path
+      ))
+      (check "${name}: YFS launcher defaults use square viewport and auto-area zoom" (
+        (yfsLauncherSettings.viewport.aspect or null) == "1:1"
+        && (yfsLauncherSettings.viewport.policy or null) == "expand-only"
+        && (yfsLauncherSettings.zoom.mode or null) == "auto-area"
       ))
       (check "${name}: PICO-8 fake-08 core is exposed at the stable launch path" (
         (cfg.environment.etc."korri/cores/fake08_libretro.so".source or null) == fake08CoreSource

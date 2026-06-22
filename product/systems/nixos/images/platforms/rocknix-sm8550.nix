@@ -56,6 +56,7 @@ let
   korriPulseServer = "unix:%t/pulse/native";
   korriRuntimeUid = toString (config.users.users.${runtime.user}.uid or 2000);
   korriRuntimeDir = "/run/user/${korriRuntimeUid}";
+  korriSafeDefaultSinkVolume = "10%";
   # Substrate power-state request channel (nix-on-rocks owns the verb +
   # watcher; this is where the product drops enter/exit markers). Derived
   # from the substrate option so the two stay in sync.
@@ -251,7 +252,7 @@ let
       # useful only when UCM did not create the declared route.
       if ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^.*[[:space:]]$preferred_sink[[:space:]]"; then
         ${pkgs.pulseaudio}/bin/pactl set-default-sink "$preferred_sink" >/dev/null 2>&1 || true
-        ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$preferred_sink" 70% >/dev/null 2>&1 || true
+        ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$preferred_sink" ${korriSafeDefaultSinkVolume} >/dev/null 2>&1 || true
         exit 0
       fi
     ''
@@ -269,6 +270,14 @@ let
 
       ${pkgs.pulseaudio}/bin/pactl set-default-sink "$fallback_sink" >/dev/null 2>&1 || true
     ''
+    + ''
+
+      # Never boot the handheld at an unsafe speaker level. The product volume
+      # buttons adjust the user-session PipeWire/Pulse sink in 5% steps; start
+      # from a quiet default so app launches cannot surprise-blast before the
+      # operator has interacted with inputd.
+      ${pkgs.pulseaudio}/bin/pactl set-sink-volume @DEFAULT_SINK@ ${korriSafeDefaultSinkVolume} >/dev/null 2>&1 || true
+    ''
   );
   inputplumberPackage =
     pkgs.runCommand "korri-rocknix-inputplumber-xb360"
@@ -281,11 +290,21 @@ let
         substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
           --replace-fail "  - xbox-series" "  - xb360"
       '';
-  # Moonlight platform launch policy is rendered into the readable library
-  # cascade as host.moonlight. The platform.name mapping is intentionally
-  # identity today because Moonlight Embedded uses the same names the substrate
-  # exposes, but deriving it here keeps this adapter from hard-coding v4l2m2m.
-  moonlightPlatformDefaults = {
+  # SM8550 platform launch policy is rendered into the readable library
+  # cascade. Moonlight uses host.moonlight, while YFS uses the plugin launcher's
+  # settings.plugin object so `yfs-launch <level-file>` receives first-class
+  # viewport/zoom config through KORRI_YFS_SETTINGS instead of ad-hoc CLI flags.
+  sm8550PlatformDefaults = {
+    launchers."@korri:yoshis-fabrication-station/level".settings.plugin = {
+      viewport = {
+        aspect = "1:1";
+        policy = "expand-only";
+      };
+      zoom = {
+        mode = "auto-area";
+      };
+    };
+
     host.moonlight = {
       command = "${pkgs.moonlight-embedded}/bin/moonlight";
       environment = moonlightRuntimeSettingsEnvironment // {
@@ -608,7 +627,7 @@ in
       };
   };
 
-  services.korri.daemon.library.platformDefaults = moonlightPlatformDefaults;
+  services.korri.daemon.library.platformDefaults = sm8550PlatformDefaults;
 
   systemd.user.services.korrid.environment = gamescopeControlEnvironment // {
     KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
