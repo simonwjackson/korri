@@ -51,9 +51,11 @@ describe("korri-remap native driver contract", () => {
     expect(driverSource).toContain("raise SystemExit(DIRTY_CLEANUP_EXIT_CODE)")
   })
 
-  it("ships the native driver behind trusted package-owned env", () => {
-    expect(packageSource).toContain("export KORRI_REMAP_NATIVE_DRIVER=enabled")
-    expect(packageSource).toContain("export KORRI_REMAP_NATIVE_DRIVER_PYTHON=${lib.getExe python3}")
-    expect(packageSource).toContain("export KORRI_REMAP_NATIVE_DRIVER_PATH=${../packages/korri-remap-bridge/native-driver.py}")
+  it("ships the native driver behind a compiled trusted launcher", () => {
+    expect(packageSource).toContain('pname = "korri-remap-bridge"')
+    expect(packageSource).toContain('set_or_die("KORRI_REMAP_NATIVE_DRIVER", "enabled")')
+    expect(packageSource).toContain('set_or_die("KORRI_REMAP_NATIVE_DRIVER_PYTHON", "${pythonExe}")')
+    expect(packageSource).toContain('set_or_die("KORRI_REMAP_NATIVE_DRIVER_PATH", "${nativeDriver}")')
+    expect(packageSource).toContain('execv(bun, child_argv)')
   })
 })
