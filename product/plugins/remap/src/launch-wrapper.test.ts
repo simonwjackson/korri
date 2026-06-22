@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import type { LaunchSpec } from "@platform/library/launcher"
-import { normalizeRemapPolicy, decodeRemapPolicy } from "./policy"
 import {
   KORRI_REMAP_RUNNER_USER,
   buildRemapWrapperLaunchSpec,
   remapWrapperEnv,
 } from "./launch-wrapper"
+import { decodeRemapPolicy, normalizeRemapPolicy } from "./policy"
 
 const child: LaunchSpec = {
   command: "/games/yfs/run",
@@ -20,7 +20,7 @@ const policy = normalizeRemapPolicy(
 )
 
 describe("Remap launch wrapper", () => {
-  it("wraps a child launch with the stable Remap runner identity", () => {
+  it("wraps a child launch with argv-carried Remap policy", () => {
     expect(
       buildRemapWrapperLaunchSpec({
         child,
@@ -30,25 +30,25 @@ describe("Remap launch wrapper", () => {
       }),
     ).toEqual({
       command: "korri-remap-bridge",
-      args: ["--launch-id", "launch-1", "--", "/games/yfs/run", "--fullscreen"],
-      cwd: "/games/yfs",
-      env: {
-        DISPLAY: ":0",
-        KORRI_REMAP_CHILD_COMMAND: "/games/yfs/run",
-        KORRI_REMAP_LAUNCH_ID: "launch-1",
-        KORRI_REMAP_POLICY_JSON: JSON.stringify(policy),
+      args: [
+        "--launch-id",
+        "launch-1",
+        "--policy-json",
+        JSON.stringify(policy),
+        "--runner-user",
         KORRI_REMAP_RUNNER_USER,
-      },
+        "--",
+        "/games/yfs/run",
+        "--fullscreen",
+      ],
+      cwd: "/games/yfs",
+      env: { DISPLAY: ":0" },
       envUnset: ["HTTP_PROXY"],
     })
   })
 
-  it("keeps wrapper-owned env separate from child argv", () => {
-    expect(remapWrapperEnv({ child, policy, launchId: "launch-2" })).toMatchObject({
-      KORRI_REMAP_CHILD_COMMAND: "/games/yfs/run",
-      KORRI_REMAP_LAUNCH_ID: "launch-2",
-      KORRI_REMAP_RUNNER_USER,
-    })
+  it("keeps wrapper-owned control data out of env for setuid wrappers", () => {
+    expect(remapWrapperEnv({ child })).toEqual({ DISPLAY: ":0" })
   })
 
   it("strips launch-controlled Remap env from wrapper env", () => {
@@ -62,17 +62,8 @@ describe("Remap launch wrapper", () => {
           KORRI_REMAP_RUNNER_USER: "korri",
         },
       },
-      policy,
-      launchId: "launch-3",
     })
 
-    expect(wrapperEnv).toMatchObject({
-      DISPLAY: ":0",
-      KORRI_REMAP_CHILD_COMMAND: "/games/yfs/run",
-      KORRI_REMAP_LAUNCH_ID: "launch-3",
-      KORRI_REMAP_POLICY_JSON: JSON.stringify(policy),
-      KORRI_REMAP_RUNNER_USER,
-    })
-    expect(wrapperEnv.KORRI_REMAP_NATIVE_DRIVER).toBeUndefined()
+    expect(wrapperEnv).toEqual({ DISPLAY: ":0" })
   })
 })

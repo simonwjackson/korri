@@ -32,25 +32,27 @@ describe("Remap launch.compose", () => {
       }),
     )
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       _tag: "LaunchCompanionsComposed",
       spec: {
         command: "/run/wrappers/bin/korri-remap-bridge",
-        args: [
-          "--launch-id",
-          "launch-remap-1",
-          "--",
-          "/games/yfs/run",
-          "--fullscreen",
-        ],
-        env: expect.objectContaining({
-          DISPLAY: ":0",
-          KORRI_REMAP_CHILD_COMMAND: "/games/yfs/run",
-          KORRI_REMAP_LAUNCH_ID: "launch-remap-1",
-          KORRI_REMAP_RUNNER_USER: "korri-remap-runner",
-        }),
+        env: { DISPLAY: ":0" },
       },
     })
+    if (result._tag !== "LaunchCompanionsComposed") throw new Error("not composed")
+    expect(result.spec.args.slice(0, 6)).toEqual([
+      "--launch-id",
+      "launch-remap-1",
+      "--policy-json",
+      expect.stringContaining('"bindings"'),
+      "--runner-user",
+      "korri-remap-runner",
+    ])
+    expect(result.spec.args.slice(-3)).toEqual([
+      "--",
+      "/games/yfs/run",
+      "--fullscreen",
+    ])
   })
 
   it("fails closed when no launch id is available", async () => {

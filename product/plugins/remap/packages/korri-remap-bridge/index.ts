@@ -2,8 +2,14 @@
 
 export {}
 
-const launchId = valueAfter("--launch-id", process.argv)
 const separator = process.argv.indexOf("--")
+const launchId = valueBeforeSeparator("--launch-id", process.argv, separator)
+const policyJson =
+  valueBeforeSeparator("--policy-json", process.argv, separator) ??
+  process.env.KORRI_REMAP_POLICY_JSON
+const runnerUser =
+  valueBeforeSeparator("--runner-user", process.argv, separator) ??
+  process.env.KORRI_REMAP_RUNNER_USER
 const childCommand = separator >= 0 ? process.argv[separator + 1] : undefined
 const childArgs = separator >= 0 ? process.argv.slice(separator + 2) : []
 const terminateGraceMs = Number(process.env.KORRI_REMAP_TERMINATE_GRACE_MS ?? "2000")
@@ -12,10 +18,10 @@ const nativeDriverPython = process.env.KORRI_REMAP_NATIVE_DRIVER_PYTHON ?? "pyth
 
 if (!launchId) fail("missing --launch-id")
 if (!childCommand) fail("missing child command after --")
-if (process.env.KORRI_REMAP_RUNNER_USER !== "korri-remap-runner") {
-  fail("KORRI_REMAP_RUNNER_USER must be korri-remap-runner")
+if (runnerUser !== "korri-remap-runner") {
+  fail("Remap runner user must be korri-remap-runner")
 }
-if (!process.env.KORRI_REMAP_POLICY_JSON) fail("missing KORRI_REMAP_POLICY_JSON")
+if (!policyJson) fail("missing Remap policy JSON")
 
 // This command is the stable product-owned boundary for native Remap. The
 // privileged uinput/ACL implementation is intentionally behind this binary so
@@ -36,9 +42,9 @@ const child = Bun.spawn(
     "--launch-id",
     launchId,
     "--policy-json",
-    process.env.KORRI_REMAP_POLICY_JSON,
+    policyJson,
     "--runner-user",
-    process.env.KORRI_REMAP_RUNNER_USER,
+    runnerUser,
     "--",
     childCommand,
     ...childArgs,
@@ -89,9 +95,16 @@ const result = await child.exited
 if (!terminating) process.exit(result)
 await new Promise(() => undefined)
 
-function valueAfter(flag: string, argv: readonly string[]): string | undefined {
-  const index = argv.indexOf(flag)
-  return index >= 0 ? argv[index + 1] : undefined
+function valueBeforeSeparator(
+  flag: string,
+  argv: readonly string[],
+  separatorIndex: number,
+): string | undefined {
+  const limit = separatorIndex >= 0 ? separatorIndex : argv.length
+  for (let index = 0; index < limit; index += 1) {
+    if (argv[index] === flag) return argv[index + 1]
+  }
+  return undefined
 }
 
 function fail(message: string): never {
