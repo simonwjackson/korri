@@ -629,7 +629,11 @@ export function createBunManagedChildSpawner(
       const proc = Bun.spawn(
         [setsidCommand, "--", spec.command, ...spec.args],
         {
-          cwd: spec.cwd,
+          // Sessiond can run from a private home/cwd. Spawn managed children
+          // from a world-searchable default so setuid wrappers retain their
+          // intended privilege transition unless a launch explicitly provides
+          // a cwd.
+          cwd: spec.cwd ?? "/tmp",
           env: env as Record<string, string>,
           stdin: "ignore",
           stdout: "inherit",
