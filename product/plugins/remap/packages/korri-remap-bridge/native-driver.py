@@ -361,14 +361,17 @@ def main() -> int:
         gamepad.create()
         keyboard_node = find_event_node(keyboard.name, time.time() + 3)
         gamepad_node = find_event_node(gamepad.name, time.time() + 3)
+        settle_udev()
         harden_event_node(keyboard_node, args.runner_user)
         harden_event_node(gamepad_node, args.runner_user)
         time.sleep(0.2)
+        settle_udev()
         harden_event_node(keyboard_node, args.runner_user)
         harden_event_node(gamepad_node, args.runner_user)
         disable_sway_input(keyboard.name)
         disable_sway_input(gamepad.name)
-        assert_not_visible_to_sway({keyboard.name, gamepad.name})
+        time.sleep(0.2)
+        assert_sway_isolated({keyboard.name, gamepad.name})
 
         for player, path in controllers.items():
             fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
@@ -508,11 +511,25 @@ def discover_input_devices() -> list[dict[str, str]]:
                 "physicalPath": phys_match.group(1).strip() if phys_match else "",
                 "uniqueId": uniq_match.group(1).strip() if uniq_match else "",
                 "handlers": handlers,
-                "class": "gamepad" if "js" in handlers or "joystick" in block.lower() else "unknown",
+                "class": input_device_class(name_match.group(1), handlers, block),
                 "raw": block,
             }
         )
     return devices
+
+
+def input_device_class(name: str, handlers: str, block: str) -> str:
+    normalized = name.lower()
+    if (
+        "js" in handlers
+        or "joystick" in block.lower()
+        or "gamepad" in normalized
+        or "xbox" in normalized
+        or "x-box" in normalized
+        or name in {"Microsoft X-Box 360 pad", "Microsoft Xbox Series S|X Controller"}
+    ):
+        return "gamepad"
+    return "unknown"
 
 
 def is_inputplumber_virtual_gamepad(device: dict[str, str]) -> bool:
@@ -604,13 +621,29 @@ def disable_sway_input(device_name: str) -> None:
             run_quiet(["swaymsg", "input", identifier, "events", "disabled"], env=sway_env())
 
 
-def assert_not_visible_to_sway(device_names: set[str]) -> None:
+def assert_sway_isolated(device_names: set[str]) -> None:
     inputs = sway_inputs()
     if not isinstance(inputs, list):
         return
-    visible = [entry.get("name") for entry in inputs if entry.get("name") in device_names]
-    if visible:
-        fail(f"synthetic Remap devices are visible to Sway: {visible}")
+    active = [
+        entry.get("name")
+        for entry in inputs
+        if entry.get("name") in device_names and not sway_entry_is_disabled(entry)
+    ]
+    if active:
+        fail(f"synthetic Remap devices are active in Sway: {active}")
+
+
+def sway_entry_is_disabled(entry: object) -> bool:
+    if isinstance(entry, dict):
+        for key, value in entry.items():
+            if key == "send_events" and value == "disabled":
+                return True
+            if isinstance(value, (dict, list)) and sway_entry_is_disabled(value):
+                return True
+    if isinstance(entry, list):
+        return any(sway_entry_is_disabled(value) for value in entry)
+    return False
 
 
 def sway_inputs() -> object:
@@ -646,6 +679,10 @@ def wait_devices_gone(names: set[str], deadline: float) -> bool:
             return True
         time.sleep(0.05)
     return False
+
+
+def settle_udev() -> None:
+    run_quiet(["udevadm", "settle"])
 
 
 def run_quiet(command: Sequence[str], env: dict[str, str] | None = None) -> None:

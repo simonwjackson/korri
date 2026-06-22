@@ -66,6 +66,7 @@ in
       # Remap-owned synthetic devices are hidden from normal libinput/Sway
       # discovery. The privileged wrapper grants per-launch ACLs only to the
       # dedicated korri-remap-runner identity after device creation.
+      ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", ATTR{name}=="Korri Remap*", ENV{LIBINPUT_IGNORE_DEVICE}="1", ENV{ID_INPUT}="0", ENV{ID_INPUT_KEY}="0", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_JOYSTICK}="0", MODE="0600", GROUP="root", TAG-="uaccess", TAG-="seat"
       ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Korri Remap*", ENV{LIBINPUT_IGNORE_DEVICE}="1", ENV{ID_INPUT}="0", ENV{ID_INPUT_KEY}="0", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_JOYSTICK}="0", MODE="0600", GROUP="root", TAG-="uaccess", TAG-="seat"
     '';
   };

@@ -9,6 +9,8 @@ const packageSource = await Bun.file(
 
 describe("korri-remap native driver contract", () => {
   it("only resolves InputPlumber-normalized virtual gamepads as sources", () => {
+    expect(driverSource).toContain("def input_device_class")
+    expect(driverSource).toContain('"Microsoft Xbox Series S|X Controller"')
     expect(driverSource).toContain("def is_inputplumber_virtual_gamepad")
     expect(driverSource).toContain("controller {player} must use inputplumber-virtual-gamepad")
     expect(driverSource).toContain("controller {player} resolution failed")
@@ -40,6 +42,9 @@ describe("korri-remap native driver contract", () => {
   })
 
   it("fails closed when cleanup cannot prove synthetic devices disappeared", () => {
+    expect(driverSource).toContain("settle_udev()")
+    expect(driverSource).toContain("assert_sway_isolated")
+    expect(driverSource).toContain('key == "send_events" and value == "disabled"')
     expect(driverSource).toContain("wait_devices_gone(synthetic_device_names")
     expect(driverSource).toContain("cleanup verification failed")
     expect(driverSource).toContain("raise SystemExit(1)")

@@ -26,6 +26,7 @@ describe("Remap plugin NixOS module", () => {
   })
 
   it("hides Remap synthetic devices from libinput, uaccess, and seats", () => {
+    expect(moduleSource).toContain('ATTR{name}=="Korri Remap*"')
     expect(moduleSource).toContain('ATTRS{name}=="Korri Remap*"')
     expect(moduleSource).toContain('ENV{LIBINPUT_IGNORE_DEVICE}="1"')
     expect(moduleSource).toContain('MODE="0600"')
