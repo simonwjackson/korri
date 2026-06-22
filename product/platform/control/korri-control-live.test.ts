@@ -247,6 +247,7 @@ describe("KorriControl live implementation", () => {
             launchCompanions: {
               "@fixture:companion": { enable: true, mode: "wrapped" },
             },
+            launchId: expect.any(String),
           },
         },
       },

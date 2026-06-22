@@ -1,5 +1,15 @@
+import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 import { plugin } from "@platform/plugin"
-import { KORRI_REMAP_PLUGIN_ID } from "./src/policy"
+import {
+  buildRemapWrapperLaunchSpec,
+  type RemapWrapperLaunchSpecInput,
+} from "./src/launch-wrapper"
+import {
+  KORRI_REMAP_PLUGIN_ID,
+  decodeRemapPolicy,
+  normalizeRemapPolicy,
+  type RemapPolicy,
+} from "./src/policy"
 
 export { decodeRemapBindings } from "./src/bindings"
 export type { RemapBinding } from "./src/bindings"
@@ -57,6 +67,13 @@ export {
   type RemapSinkEvent,
 } from "./src/sinks"
 
+export interface RemapLaunchComposeInput {
+  readonly spec: LaunchSpec
+  readonly policy: RemapPolicy
+  readonly launchId: string
+  readonly wrapperCommand: RemapWrapperLaunchSpecInput["wrapperCommand"]
+}
+
 export interface RemapPluginDiagnostic {
   readonly provider: typeof KORRI_REMAP_PLUGIN_ID
   readonly status: "ok"
@@ -81,6 +98,20 @@ export const remapPlugin = plugin({
     },
     handlers: [
       {
+        id: "remap.launch-compose",
+        operation: "launch.compose",
+        capabilities: ["launch.compose", "launch.wrapper", "input.remap"],
+        run: context => {
+          const input = decodeRemapLaunchComposeInput(context.input)
+          return buildRemapWrapperLaunchSpec({
+            child: input.spec,
+            policy: normalizeRemapPolicy(input.policy),
+            wrapperCommand: input.wrapperCommand,
+            launchId: input.launchId,
+          })
+        },
+      },
+      {
         id: "remap.diagnostics",
         operation: "diagnostics.collect",
         capabilities: ["diagnostics.collect", "input.remap"],
@@ -96,4 +127,36 @@ export const remapPlugin = plugin({
 
 if (remapPlugin.id !== KORRI_REMAP_PLUGIN_ID) {
   throw new Error("Remap plugin id mismatch")
+}
+
+function decodeRemapLaunchComposeInput(input: unknown): RemapLaunchComposeInput {
+  if (!isRecord(input)) {
+    throw new Error("Remap launch.compose input must be an object")
+  }
+  const launchId = isRecord(input.options) ? input.options.launchId : undefined
+  if (typeof launchId !== "string" || launchId.trim().length === 0) {
+    throw new Error("Remap launch.compose requires options.launchId")
+  }
+  return {
+    spec: decodeHandlerLaunchSpec(input.spec),
+    policy: decodeRemapPolicy(input.policy ?? {}),
+    launchId,
+    wrapperCommand: "korri-remap-bridge",
+  }
+}
+
+function decodeHandlerLaunchSpec(value: unknown): LaunchSpec {
+  try {
+    return decodeLaunchSpec(value)
+  } catch (error) {
+    throw new Error(
+      `Remap launch.compose input.spec must be a launch spec: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
+  }
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

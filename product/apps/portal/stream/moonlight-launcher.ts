@@ -224,6 +224,7 @@ async function composeLaunchSpecWithCompanions(
       registry:
         options.pluginRegistry ??
         createFirstPartyPluginRegistryFromEnv(process.env),
+      options: { launchId: "moonlight-compose" },
     }),
   )
   if (result._tag === "LaunchCompanionDiagnostics") {

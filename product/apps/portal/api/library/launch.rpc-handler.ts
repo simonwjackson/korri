@@ -111,11 +111,15 @@ export const handleLaunchLibrary = (
       return resolvedResult.response
     }
 
+    const launchId = globalThis.crypto.randomUUID()
     const specResult = yield* composeLaunchCompanions({
       spec: resolvedResult.resolved.spec,
       launchCompanions: resolvedResult.resolved.launchCompanions,
       registry: createFirstPartyPluginRegistryFromEnv(process.env),
-      options: { launchMetadata: resolvedResult.resolved.launchMetadata },
+      options: {
+        launchMetadata: resolvedResult.resolved.launchMetadata,
+        launchId,
+      },
     })
     if (specResult._tag === "LaunchCompanionDiagnostics") {
       const response = launchConfigurationFailureFromDiagnostics(
@@ -128,7 +132,6 @@ export const handleLaunchLibrary = (
       return response
     }
     const spec = specResult.spec
-    const launchId = globalThis.crypto.randomUUID()
     yield* openLifecycleCorrelationForLaunch({
       launchId,
       playableId: payload.id,
@@ -504,10 +507,12 @@ function handleRemoteSourceLaunch(
     if (moonlightSpecResult._tag === "failed")
       return moonlightSpecResult.response
 
+    const launchId = globalThis.crypto.randomUUID()
     const specResult = yield* composeLaunchCompanions({
       spec: moonlightSpecResult.spec,
       launchCompanions: localPolicy.launchCompanions,
       registry: createFirstPartyPluginRegistryFromEnv(process.env),
+      options: { launchId },
     })
     if (specResult._tag === "LaunchCompanionDiagnostics") {
       return launchConfigurationFailureFromDiagnostics(specResult.diagnostics)
@@ -519,6 +524,7 @@ function handleRemoteSourceLaunch(
         launchLocalForegroundSession(foregroundSessionHost.owner, {
           id: payload.id,
           spec,
+          launchId,
           spawn: async () => {
             if (!launcher.spawn) return unsupportedManagedSpawn()
             return await Effect.runPromise(

@@ -140,6 +140,7 @@ export function makeKorriControlLive(options: {
         const composed = yield* composeResolvedLaunch(
           { ...result.resolved, spec: prepared.spec },
           pluginRegistry,
+          "dry-run",
         )
         if (composed._tag === "failed") {
           return launchConfigFailedFromDiagnostics(
@@ -178,9 +179,11 @@ export function makeKorriControlLive(options: {
             launchPrepareDiagnosticSummary(prepared.diagnostics),
           )
         }
+        const launchId = crypto.randomUUID()
         const composed = yield* composeResolvedLaunch(
           { ...resolved.resolved, spec: prepared.spec },
           pluginRegistry,
+          launchId,
         )
         if (composed._tag === "failed") {
           return launchConfigFailedFromDiagnostics(
@@ -192,6 +195,7 @@ export function makeKorriControlLive(options: {
         const result = yield* runResolvedLaunch(launcher, {
           ...resolved.resolved,
           spec: composed.spec,
+          extras: { ...(resolved.resolved.extras ?? {}), launchId },
         })
         return controlLaunchResultFromLaunchResult(request, result)
       }),
@@ -287,6 +291,7 @@ function resolveLaunch(
 function composeResolvedLaunch(
   resolved: ResolvedLaunch,
   registry: PluginRegistry,
+  launchId: string,
 ): Effect.Effect<
   | { readonly _tag: "resolved"; readonly spec: ResolvedLaunch["spec"] }
   | {
@@ -299,7 +304,7 @@ function composeResolvedLaunch(
     spec: resolved.spec,
     launchCompanions: resolved.launchCompanions,
     registry,
-    options: { launchMetadata: resolved.launchMetadata },
+    options: { launchMetadata: resolved.launchMetadata, launchId },
   }).pipe(
     Effect.map(result =>
       result._tag === "LaunchCompanionsComposed"

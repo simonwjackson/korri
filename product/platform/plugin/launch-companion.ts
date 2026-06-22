@@ -32,6 +32,7 @@ export type LaunchCompanionDiagnostic = Schema.Schema.Type<
 
 export interface LaunchCompanionComposeOptions {
   readonly launchMetadata?: LaunchMetadata
+  readonly launchId?: string
 }
 
 export type LaunchCompanionCompositionResult =
