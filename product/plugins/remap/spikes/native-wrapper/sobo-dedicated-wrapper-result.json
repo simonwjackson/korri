@@ -1,0 +1,156 @@
+{
+  "attachSeat": null,
+  "disableInSway": true,
+  "gamepadNode": "/dev/input/event13",
+  "gamepadNodeStat": {
+    "gid": 0,
+    "mode": "0o640",
+    "uid": 0
+  },
+  "gamepadUdev": {
+    "CURRENT_TAGS": ":uaccess:",
+    "ID_INPUT": "0",
+    "ID_INPUT_JOYSTICK": "0",
+    "ID_INPUT_KEY": "0",
+    "ID_INPUT_KEYBOARD": "0",
+    "LIBINPUT_IGNORE_DEVICE": "1",
+    "TAGS": ":seat:uaccess:"
+  },
+  "keyboardNode": "/dev/input/event12",
+  "keyboardNodeStat": {
+    "gid": 0,
+    "mode": "0o640",
+    "uid": 0
+  },
+  "keyboardUdev": {},
+  "korriCanReadGamepadNode": true,
+  "korriCanReadKeyboardNode": false,
+  "korriUiIsolatedCandidate": true,
+  "korriUserReceived": false,
+  "outsideReaderReceived": true,
+  "privateCandidate": false,
+  "readers": {
+    "outside-gamepad": [
+      {
+        "code": 304,
+        "type": 1,
+        "value": 1
+      },
+      {
+        "code": 304,
+        "type": 1,
+        "value": 0
+      },
+      {
+        "code": 0,
+        "type": 3,
+        "value": 24000
+      },
+      {
+        "code": 0,
+        "type": 3,
+        "value": 0
+      }
+    ],
+    "outside-keyboard": [
+      {
+        "code": 30,
+        "type": 1,
+        "value": 1
+      },
+      {
+        "code": 30,
+        "type": 1,
+        "value": 0
+      }
+    ],
+    "target-gamepad": [
+      {
+        "code": 304,
+        "type": 1,
+        "value": 1
+      },
+      {
+        "code": 304,
+        "type": 1,
+        "value": 0
+      },
+      {
+        "code": 0,
+        "type": 3,
+        "value": 24000
+      },
+      {
+        "code": 0,
+        "type": 3,
+        "value": 0
+      }
+    ],
+    "target-keyboard": [
+      {
+        "code": 30,
+        "type": 1,
+        "value": 1
+      },
+      {
+        "code": 30,
+        "type": 1,
+        "value": 0
+      }
+    ]
+  },
+  "stripAcl": true,
+  "swayAfterError": null,
+  "swayBeforeError": null,
+  "swaySawDevices": false,
+  "swaySawSyntheticDevices": [],
+  "targetReceived": true,
+  "targetUser": "nobody",
+  "targetUserReceived": true,
+  "userReaders": {
+    "korri-gamepad": [
+      {
+        "open_error": 13
+      }
+    ],
+    "korri-keyboard": [
+      {
+        "open_error": 13
+      }
+    ],
+    "nobody-gamepad": [
+      {
+        "code": 304,
+        "type": 1,
+        "value": 1
+      },
+      {
+        "code": 304,
+        "type": 1,
+        "value": 0
+      },
+      {
+        "code": 0,
+        "type": 3,
+        "value": 24000
+      },
+      {
+        "code": 0,
+        "type": 3,
+        "value": 0
+      }
+    ],
+    "nobody-keyboard": [
+      {
+        "code": 30,
+        "type": 1,
+        "value": 1
+      },
+      {
+        "code": 30,
+        "type": 1,
+        "value": 0
+      }
+    ]
+  }
+}

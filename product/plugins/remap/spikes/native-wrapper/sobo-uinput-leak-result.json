@@ -1,0 +1,99 @@
+{
+  "gamepadNode": "/dev/input/event13",
+  "keyboardNode": "/dev/input/event12",
+  "outsideReaderReceived": true,
+  "privateCandidate": false,
+  "readers": {
+    "outside-gamepad": [
+      {
+        "code": 304,
+        "type": 1,
+        "value": 1
+      },
+      {
+        "code": 304,
+        "type": 1,
+        "value": 0
+      },
+      {
+        "code": 0,
+        "type": 3,
+        "value": 24000
+      },
+      {
+        "code": 0,
+        "type": 3,
+        "value": 0
+      }
+    ],
+    "outside-keyboard": [
+      {
+        "code": 30,
+        "type": 1,
+        "value": 1
+      },
+      {
+        "code": 30,
+        "type": 1,
+        "value": 0
+      }
+    ],
+    "target-gamepad": [
+      {
+        "code": 304,
+        "type": 1,
+        "value": 1
+      },
+      {
+        "code": 304,
+        "type": 1,
+        "value": 0
+      },
+      {
+        "code": 0,
+        "type": 3,
+        "value": 24000
+      },
+      {
+        "code": 0,
+        "type": 3,
+        "value": 0
+      }
+    ],
+    "target-keyboard": [
+      {
+        "code": 30,
+        "type": 1,
+        "value": 1
+      },
+      {
+        "code": 30,
+        "type": 1,
+        "value": 0
+      }
+    ]
+  },
+  "swayAfterError": null,
+  "swayBeforeError": null,
+  "swaySawDevices": true,
+  "swaySawSyntheticDevices": [
+    {
+      "identifier": "7531:49374:korri-remap-spike-keyboard",
+      "libinput": {
+        "send_events": "enabled"
+      },
+      "name": "korri-remap-spike-keyboard",
+      "product": 49374,
+      "repeat_delay": 600,
+      "repeat_rate": 25,
+      "type": "keyboard",
+      "vendor": 7531,
+      "xkb_active_layout_index": 0,
+      "xkb_active_layout_name": "English (US)",
+      "xkb_layout_names": [
+        "English (US)"
+      ]
+    }
+  ],
+  "targetReceived": true
+}
