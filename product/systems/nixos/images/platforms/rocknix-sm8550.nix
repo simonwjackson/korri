@@ -71,7 +71,6 @@ let
   korriSafeDefaultSinkVolume = "10%";
   korriRuntimeUid = toString (config.users.users.${runtime.user}.uid or 2000);
   korriRuntimeDir = "/run/user/${korriRuntimeUid}";
-  korriSafeDefaultSinkVolume = "10%";
   # Substrate power-state request channel (nix-on-rocks owns the verb +
   # watcher; this is where the product drops enter/exit markers). Derived
   # from the substrate option so the two stay in sync.
