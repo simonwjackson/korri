@@ -84,37 +84,19 @@ describe("Yoshi's Fabrication Station plugin", () => {
     ).toBe(0.001)
   })
 
-  it("opts its launch into Remap with explicit launch-scoped bindings", () => {
+  it("does not couple YFS launch config to Remap while YFS is changing", () => {
     const release =
       yoshisFabricationStationPlugin.contributes.config.catalog?.[
         "yoshis-fabrication-station"
       ]?.releases[0]
 
-    expect(yoshisFabricationStationPlugin.requires).toContainEqual(
+    expect(yoshisFabricationStationPlugin.requires ?? []).not.toContainEqual(
       expect.objectContaining({
         ref: { provider: KORRI_REMAP_PLUGIN_ID, id: "self" },
       }),
     )
-    expect(release?.launch).toMatchObject({
-      with: {
-        [KORRI_REMAP_PLUGIN_ID]: {
-          controllers: {
-            p1: {
-              source: "inputplumber",
-              names: ["Microsoft Xbox Series S|X Controller"],
-            },
-          },
-          bindings: {
-            "p1.dpad.up": "key.up",
-            "p1.dpad.down": "key.down",
-            "p1.dpad.left": "key.left",
-            "p1.dpad.right": "key.right",
-            "p1.button.south": "key.z",
-            "p1.button.start": "key.p",
-          },
-        },
-      },
-    })
+    expect(release?.launch).not.toHaveProperty("with")
+    expect(JSON.stringify(release)).not.toContain(KORRI_REMAP_PLUGIN_ID)
     expect(JSON.stringify(release)).not.toContain("cdp")
     expect(JSON.stringify(release)).not.toContain("browser")
     expect(JSON.stringify(release)).not.toContain("profile")

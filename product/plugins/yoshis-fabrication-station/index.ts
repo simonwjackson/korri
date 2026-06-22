@@ -1,5 +1,4 @@
 import { plugin } from "@platform/plugin"
-import { KORRI_REMAP_PLUGIN_ID } from "../remap"
 
 export const KORRI_YFS_PLUGIN_ID = "@korri:yoshis-fabrication-station" as const
 const KORRI_YFS_LAUNCHER_LOCAL_ID = "level" as const
@@ -40,14 +39,6 @@ export const yoshisFabricationStationPlugin = plugin({
   title: "Yoshi's Fabrication Station",
   description:
     "Adds Yoshi's Fabrication Station as plugin-owned browser-playable content.",
-  requires: [
-    {
-      capability: "input.remap",
-      ref: { provider: KORRI_REMAP_PLUGIN_ID, id: "self" },
-      reason:
-        "YFS needs launch-scoped controller-to-keyboard input via Remap.",
-    },
-  ],
   contributes: {
     config: {
       launchers: {
@@ -74,28 +65,6 @@ export const yoshisFabricationStationPlugin = plugin({
               launch: {
                 kind: "process",
                 executable: { resource: "yoshis-fabrication-station" },
-                with: {
-                  [KORRI_REMAP_PLUGIN_ID]: {
-                    controllers: {
-                      p1: {
-                        source: "inputplumber",
-                        names: ["Microsoft Xbox Series S|X Controller"],
-                      },
-                    },
-                    bindings: {
-                      "p1.dpad.up": "key.up",
-                      "p1.dpad.down": "key.down",
-                      "p1.dpad.left": "key.left",
-                      "p1.dpad.right": "key.right",
-                      "p1.button.south": "key.z",
-                      "p1.button.west": "key.a",
-                      "p1.button.east": "key.x",
-                      "p1.button.north": "key.s",
-                      "p1.button.start": "key.p",
-                      "p1.button.select": "key.q",
-                    },
-                  },
-                },
               },
             },
           ],
