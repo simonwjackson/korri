@@ -348,6 +348,7 @@ def main() -> int:
     received_signal: int | None = None
     synthetic_device_names = {keyboard.name, gamepad.name}
     display_acl_paths: list[Path] = []
+    child_acl_paths: list[Path] = []
 
     def on_signal(signum: int, _frame: object) -> None:
         nonlocal received_signal
@@ -375,6 +376,7 @@ def main() -> int:
         time.sleep(0.2)
         assert_sway_isolated({keyboard.name, gamepad.name})
         display_acl_paths = grant_runner_display_access(args.runner_user)
+        child_acl_paths = grant_runner_child_path_access(args.runner_user, child)
 
         for player, path in controllers.items():
             fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
@@ -414,6 +416,7 @@ def main() -> int:
         finally:
             gamepad.destroy()
         revoke_runner_display_access(args.runner_user, display_acl_paths)
+        revoke_runner_child_path_access(args.runner_user, child_acl_paths)
         if not wait_devices_gone(synthetic_device_names, time.time() + 3):
             print("korri-remap-native-driver: cleanup verification failed", file=sys.stderr)
             raise SystemExit(DIRTY_CLEANUP_EXIT_CODE)
@@ -692,6 +695,36 @@ def grant_runner_display_access(user: str) -> list[Path]:
 
 def revoke_runner_display_access(user: str, paths: Sequence[Path]) -> None:
     for path in paths:
+        if path.exists():
+            run_quiet(["setfacl", "-x", f"u:{user}", str(path)])
+
+
+def grant_runner_child_path_access(user: str, child: Sequence[str]) -> list[Path]:
+    """Temporarily allow the runner to read absolute launch input paths."""
+    granted: list[Path] = []
+    seen: set[Path] = set()
+    for arg in child:
+        path = Path(arg)
+        if not path.is_absolute() or not path.exists():
+            continue
+        parents = list(path.parents)
+        for parent in reversed(parents):
+            if parent == Path("/") or parent in seen or not parent.exists():
+                continue
+            run_quiet(["setfacl", "-m", f"u:{user}:x", str(parent)])
+            granted.append(parent)
+            seen.add(parent)
+        if path in seen:
+            continue
+        mode = f"u:{user}:rx" if path.is_dir() else f"u:{user}:r"
+        run_quiet(["setfacl", "-m", mode, str(path)])
+        granted.append(path)
+        seen.add(path)
+    return granted
+
+
+def revoke_runner_child_path_access(user: str, paths: Sequence[Path]) -> None:
+    for path in reversed(paths):
         if path.exists():
             run_quiet(["setfacl", "-x", f"u:{user}", str(path)])
 

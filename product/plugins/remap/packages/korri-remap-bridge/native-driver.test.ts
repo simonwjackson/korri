@@ -45,6 +45,13 @@ describe("korri-remap native driver contract", () => {
       'run_quiet(["setfacl", "-m", f"u:{user}:rw", str(wayland)])',
     )
     expect(driverSource).toContain("def revoke_runner_display_access")
+    expect(driverSource).toContain("def grant_runner_child_path_access")
+    expect(driverSource).toContain("Path(arg)")
+    expect(driverSource).toContain('parent == Path("/")')
+    expect(driverSource).toContain(
+      'mode = f"u:{user}:rx" if path.is_dir() else f"u:{user}:r"',
+    )
+    expect(driverSource).toContain("def revoke_runner_child_path_access")
   })
 
   it("launches the child as korri-remap-runner with Remap env stripped", () => {
