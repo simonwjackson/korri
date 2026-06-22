@@ -53,6 +53,7 @@ let
   substrateAudioUcmPath = "${sm8550.audio.ucmPackage}/share/alsa/ucm2";
   substrateAudioRoute = config.rocknix.device.audio.route;
   substrateAudioCard = config.rocknix.device.audio.card;
+  substrateAudioUcmCard = config.rocknix.device.audio.ucmCard;
   substrateAudioSink = sm8550.audio.defaultSink;
   substrateAudioRouteKind = substrateAudioRoute.kind;
   substrateAudioRouteIsUcm = substrateAudioRouteKind == "wireplumber-ucm";
@@ -257,19 +258,19 @@ let
 
     ''
     + lib.optionalString substrateAudioRouteHasFullUcm ''
-      ${pkgs.alsa-utils}/bin/alsaucm -c ${lib.escapeShellArg substrateAudioCard} \
+      ${pkgs.alsa-utils}/bin/alsaucm -c ${lib.escapeShellArg substrateAudioUcmCard} \
         set _verb ${lib.escapeShellArg (toString substrateAudioRoute.ucmVerb)} \
         set _enadev ${lib.escapeShellArg (toString substrateAudioRoute.ucmDevice)} \
         >/dev/null || {
-          echo "korri-sm8550-audio-bootstrap: failed to activate UCM ${toString substrateAudioRoute.ucmVerb}/${toString substrateAudioRoute.ucmDevice} on ${substrateAudioCard}" >&2
+          echo "korri-sm8550-audio-bootstrap: failed to activate UCM ${toString substrateAudioRoute.ucmVerb}/${toString substrateAudioRoute.ucmDevice} on ${substrateAudioUcmCard}" >&2
           exit 1
         }
     ''
     + lib.optionalString (substrateAudioRouteHasUcmVerb && !substrateAudioRouteHasUcmDevice) ''
-      ${pkgs.alsa-utils}/bin/alsaucm -c ${lib.escapeShellArg substrateAudioCard} \
+      ${pkgs.alsa-utils}/bin/alsaucm -c ${lib.escapeShellArg substrateAudioUcmCard} \
         set _verb ${lib.escapeShellArg (toString substrateAudioRoute.ucmVerb)} \
         >/dev/null || {
-          echo "korri-sm8550-audio-bootstrap: failed to activate UCM verb ${toString substrateAudioRoute.ucmVerb} on ${substrateAudioCard}" >&2
+          echo "korri-sm8550-audio-bootstrap: failed to activate UCM verb ${toString substrateAudioRoute.ucmVerb} on ${substrateAudioUcmCard}" >&2
           exit 1
         }
     ''
@@ -357,15 +358,14 @@ let
       '';
   # SM8550 platform launch policy is rendered into the readable library
   # cascade. Moonlight uses host.moonlight. YFS keeps settings.plugin for
-  # inspectable config, and also carries the required square viewport/zoom and
+  # inspectable config, and also carries the required viewport/aspect and
   # browser display environment on argv because the Remap runner/Bun boundary
   # cannot rely on KORRI_* process env being visible to JavaScript.
   sm8550PlatformDefaults = {
     launchers."@korri:yoshis-fabrication-station/level" = {
       command = "yfs-launch";
       args = [
-        "--viewport-aspect=1:1"
-        "--zoom=auto-area"
+        "--viewport-aspect=16:9"
         "--cache-root=/tmp/korri-remap-runner-yfs-cache"
         "--browser-env=XDG_RUNTIME_DIR=${korriRuntimeDir}"
         "--browser-env=WAYLAND_DISPLAY=wayland-1"
@@ -408,11 +408,8 @@ let
       };
       settings.plugin = {
         viewport = {
-          aspect = "1:1";
+          aspect = "16:9";
           policy = "expand-only";
-        };
-        zoom = {
-          mode = "auto-area";
         };
       };
     };

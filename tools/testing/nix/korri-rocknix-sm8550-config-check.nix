@@ -73,14 +73,18 @@ let
       yfsPlatformLauncher = lib.attrByPath [
         "launchers"
         "@korri:yoshis-fabrication-station/level"
-      ] { } (cfg.services.korri.daemon.library.platformDefaults or { });
+      ]
+        { }
+        (cfg.services.korri.daemon.library.platformDefaults or { });
       yfsLauncherSettings = lib.attrByPath [ "settings" "plugin" ] { } yfsPlatformLauncher;
       yfsRemapBindings = lib.attrByPath [
         "launch"
         "with"
         "@korri:remap"
         "bindings"
-      ] { } yfsPlatformLauncher;
+      ]
+        { }
+        yfsPlatformLauncher;
       steam = cfg.services.korri.steam or { };
       audioRoute = cfg.rocknix.device.audio.route;
       expectedAudioTargetSink =
@@ -267,8 +271,8 @@ let
       (check "${name}: stale manual sessiond display drop-in is removed" (
         builtins.hasAttr "korri-remove-legacy-sessiond-display-dropin" activationScripts
         &&
-          lib.hasInfix "/home/korri/.config/systemd/user/korri-sessiond.service.d/display.conf"
-            activationScripts."korri-remove-legacy-sessiond-display-dropin".text
+        lib.hasInfix "/home/korri/.config/systemd/user/korri-sessiond.service.d/display.conf"
+          activationScripts."korri-remove-legacy-sessiond-display-dropin".text
       ))
       (check "${name}: sessiond does not control root-owned essway" (
         (sessiondEnv.KORRI_SESSIOND_ESSWAY_CONTROL or null) == "0"
@@ -306,8 +310,7 @@ let
         !(yfsPlatformLauncher ? plugin)
         && (yfsPlatformLauncher.command or null) == "yfs-launch"
         && (yfsPlatformLauncher.args or [ ]) == [
-          "--viewport-aspect=1:1"
-          "--zoom=auto-area"
+          "--viewport-aspect=16:9"
           "--cache-root=/tmp/korri-remap-runner-yfs-cache"
           "--browser-env=XDG_RUNTIME_DIR=/run/user/2000"
           "--browser-env=WAYLAND_DISPLAY=wayland-1"
@@ -339,10 +342,10 @@ let
         && (yfsRemapBindings."p1.button.north" or null) == "key.a"
         && (yfsRemapBindings."p1.button.start" or null) == "key.p"
       ))
-      (check "${name}: YFS launcher defaults use square viewport and auto-area zoom" (
-        (yfsLauncherSettings.viewport.aspect or null) == "1:1"
+      (check "${name}: YFS launcher defaults use 16:9 viewport without explicit zoom" (
+        (yfsLauncherSettings.viewport.aspect or null) == "16:9"
         && (yfsLauncherSettings.viewport.policy or null) == "expand-only"
-        && (yfsLauncherSettings.zoom.mode or null) == "auto-area"
+        && !(yfsLauncherSettings ? zoom)
       ))
       (check "${name}: PICO-8 fake-08 core is exposed at the stable launch path" (
         (cfg.environment.etc."korri/cores/fake08_libretro.so".source or null) == fake08CoreSource
@@ -505,7 +508,10 @@ let
       ))
       (check "${name}: user audio bootstrap follows substrate route and clamps safe volume" (
         sm8550PlatformAdapterUsesSafeAudioVolume
+        && cfg.rocknix.device.audio.card == "AYNOdin2"
+        && cfg.rocknix.device.audio.ucmCard == "AYN-Odin2"
         && lib.hasInfix "alsaucm -c" sm8550PlatformAdapterSource
+        && lib.hasInfix "substrateAudioUcmCard" sm8550PlatformAdapterSource
         && lib.hasInfix "set _verb" sm8550PlatformAdapterSource
         && lib.hasInfix "set _enadev" sm8550PlatformAdapterSource
         && lib.hasInfix "substrateAudioRouteHasFullUcm" sm8550PlatformAdapterSource
@@ -630,6 +636,8 @@ let
     (check "SM8550 adapter declares the safe audio bootstrap volume" sm8550PlatformAdapterUsesSafeAudioVolume)
     (check "Sobo declares the substrate WirePlumber UCM speaker route" (
       soboAudioRoute.kind == "wireplumber-ucm"
+        && soboSystem.config.rocknix.device.audio.card == "AYNOdin2"
+        && soboSystem.config.rocknix.device.audio.ucmCard == "AYN-Odin2"
         && soboAudioRoute.expectedSink == "alsa_output.platform-sound.HiFi__Speaker__sink"
         && soboAudioRoute.pcm == null
     ))
