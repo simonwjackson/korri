@@ -34,6 +34,8 @@ const STDERR_TAIL_BYTES = 4 * 1024
 const DEFAULT_SETSID_COMMAND = "setsid"
 const DEFAULT_EXEC_TRAMPOLINE_COMMAND = "sh"
 const EXEC_TRAMPOLINE_SCRIPT = 'exec "$@"'
+const SYSTEMD_RUN_COMMAND = "systemd-run"
+const ENV_COMMAND = "/run/current-system/sw/bin/env"
 
 export interface ShellLauncherOptions {
   /**
@@ -70,17 +72,25 @@ async function spawnShellLaunch(
   const isSetuidRemapBridge =
     spec.command === "/run/wrappers/bin/korri-remap-bridge"
   // The Remap bridge is a NixOS setuid wrapper whose native driver owns and
-  // cleans up the launched child tree. On Sobo, invoking that wrapper through
-  // sessiond's process-group `setsid` path can drop the intended root
-  // transition before native-driver.py starts, while direct argv-safe spawn
-  // preserves it. Keep process groups for ordinary launches, but let this
-  // setuid bridge run directly.
+  // cleans up the launched child tree. Long-running sessiond/Bun direct spawns
+  // on Sobo can enter native-driver.py without the intended root transition,
+  // while the same command launched from a transient user unit preserves it.
+  // Route only this bridge through systemd-run and keep process groups for
+  // ordinary launches.
   const useProcessGroup = options.processGroup === true && !isSetuidRemapBridge
   const setsidCommand = options.setsidCommand ?? DEFAULT_SETSID_COMMAND
-  const argv = useProcessGroup
+  const env = launchEnvironment(spec)
+  const envArgs = Object.entries(env).map(([key, value]) => `${key}=${value}`)
+  const argv = isSetuidRemapBridge
     ? ([
-        setsidCommand,
-        "--",
+        SYSTEMD_RUN_COMMAND,
+        "--user",
+        "--wait",
+        "--collect",
+        "--pipe",
+        ENV_COMMAND,
+        "-i",
+        ...envArgs,
         DEFAULT_EXEC_TRAMPOLINE_COMMAND,
         "-c",
         EXEC_TRAMPOLINE_SCRIPT,
@@ -88,8 +98,10 @@ async function spawnShellLaunch(
         spec.command,
         ...spec.args,
       ] as const)
-    : isSetuidRemapBridge
+    : useProcessGroup
       ? ([
+          setsidCommand,
+          "--",
           DEFAULT_EXEC_TRAMPOLINE_COMMAND,
           "-c",
           EXEC_TRAMPOLINE_SCRIPT,
@@ -103,8 +115,6 @@ async function spawnShellLaunch(
     { command: spec.command, argc: spec.args.length },
     "shell-launcher: spawning",
   )
-
-  const env = launchEnvironment(spec)
 
   // Bun.spawn throws synchronously when posix_spawn fails (e.g. ENOENT
   // for the binary itself). The launcher contract is that we never
