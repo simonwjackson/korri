@@ -67,6 +67,9 @@ export interface ManagedChildSpawner {
   spawn: (spec: LaunchSpec) => Promise<ManagedChild>
 }
 
+const DEFAULT_EXEC_TRAMPOLINE_COMMAND = "sh"
+const EXEC_TRAMPOLINE_SCRIPT = 'exec "$@"'
+
 export interface GameStreamRunLock {
   release: () => Promise<void>
 }
@@ -627,7 +630,16 @@ export function createBunManagedChildSpawner(
     async spawn(spec) {
       const env = launchEnvironment(spec, options.env ?? process.env)
       const proc = Bun.spawn(
-        [setsidCommand, "--", spec.command, ...spec.args],
+        [
+          setsidCommand,
+          "--",
+          DEFAULT_EXEC_TRAMPOLINE_COMMAND,
+          "-c",
+          EXEC_TRAMPOLINE_SCRIPT,
+          DEFAULT_EXEC_TRAMPOLINE_COMMAND,
+          spec.command,
+          ...spec.args,
+        ],
         {
           // Sessiond can run from a private home/cwd. Spawn managed children
           // from a world-searchable default so setuid wrappers retain their

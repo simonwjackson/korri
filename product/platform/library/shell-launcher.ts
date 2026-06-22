@@ -32,6 +32,8 @@ import { launchEnvironment } from "./launcher"
 
 const STDERR_TAIL_BYTES = 4 * 1024
 const DEFAULT_SETSID_COMMAND = "setsid"
+const DEFAULT_EXEC_TRAMPOLINE_COMMAND = "sh"
+const EXEC_TRAMPOLINE_SCRIPT = 'exec "$@"'
 
 export interface ShellLauncherOptions {
   /**
@@ -68,7 +70,16 @@ async function spawnShellLaunch(
   const useProcessGroup = options.processGroup === true
   const setsidCommand = options.setsidCommand ?? DEFAULT_SETSID_COMMAND
   const argv = useProcessGroup
-    ? ([setsidCommand, "--", spec.command, ...spec.args] as const)
+    ? ([
+        setsidCommand,
+        "--",
+        DEFAULT_EXEC_TRAMPOLINE_COMMAND,
+        "-c",
+        EXEC_TRAMPOLINE_SCRIPT,
+        DEFAULT_EXEC_TRAMPOLINE_COMMAND,
+        spec.command,
+        ...spec.args,
+      ] as const)
     : ([spec.command, ...spec.args] as const)
 
   logger.info(
