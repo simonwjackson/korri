@@ -221,6 +221,11 @@ let
           lib.hasInfix "korri-rocknix-device-acl-fallback" execLines
         )
       ))
+      (check "${name}: SM8550 host-bound sound cards get udev database hydration" (
+        lib.hasInfix "SOUND_INITIALIZED=1" sm8550PlatformAdapterSource
+        && lib.hasInfix ''/run/udev/data/+sound:'' sm8550PlatformAdapterSource
+        && lib.hasInfix ''/sys/class/sound/card*'' sm8550PlatformAdapterSource
+      ))
       (check "${name}: compositor uses the greetd/logind user session bus" (
         compositor.sessionBus.mode == "existing"
         && compositor.sessionBus.address == "unix:path=%t/bus"

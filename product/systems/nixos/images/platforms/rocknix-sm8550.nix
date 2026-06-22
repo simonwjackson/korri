@@ -70,6 +70,7 @@ let
         [
           acl
           coreutils
+          gnugrep
           systemd
         ]
       )
@@ -82,12 +83,45 @@ let
     udevadm control --reload >/dev/null 2>&1 || true
     udevadm trigger --subsystem-match=drm --action=change || true
     udevadm trigger --subsystem-match=input --action=change || true
+    udevadm trigger --subsystem-match=sound --action=change || true
+
+    # Host-bound sound cards can enter the guest without a fresh udev change
+    # event, and Sobo exposes /sys/.../uevent read-only from the guest. Hydrate
+    # the minimal udev database fields that systemd's 78-sound-card.rules would
+    # have stored after that change event so WirePlumber's ALSA monitor sees
+    # the platform card during its coldplug scan instead of creating auto_null.
+    for card in /sys/class/sound/card*; do
+      [ -e "$card" ] || continue
+      if udevadm info -q property -p "$card" 2>/dev/null | grep -qx 'SOUND_INITIALIZED=1'; then
+        continue
+      fi
+
+      card_name="''${card##*/}"
+      db="/run/udev/data/+sound:$card_name"
+      tmp="$db.tmp.$$"
+      mkdir -p /run/udev/data
+      cat > "$tmp" <<EOF
+I:$(date +%s%6N)
+E:PATH=/run/current-system/sw/bin:/run/current-system/sw/sbin
+E:SOUND_INITIALIZED=1
+E:SOUND_FORM_FACTOR=internal
+E:ID_PATH=platform-sound
+E:ID_PATH_TAG=platform-sound
+E:ID_FOR_SEAT=sound-platform-sound
+G:seat
+Q:seat
+V:1
+EOF
+      chmod 0644 "$tmp"
+      mv "$tmp" "$db"
+    done
 
     # The guest's numeric device groups can differ from the NixOS group ids
-    # (for example tty/input nodes inherited from the ROCKNIX host). Directly
-    # grant the runtime user access to the nodes wlroots/inputd need so the
-    # appliance can start even when guest udev cannot tag the host devices.
-    for node in /dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/tty0 /dev/tty1; do
+    # (for example tty/input/sound nodes inherited from the ROCKNIX host).
+    # Directly grant the runtime user access to the nodes wlroots/inputd/audio
+    # need so the appliance can start even when guest udev cannot tag the host
+    # devices.
+    for node in /dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/snd/* /dev/tty0 /dev/tty1; do
       [ -e "$node" ] || continue
       setfacl -m m::rw,u:${runtime.user}:rw "$node" || true
     done
@@ -109,7 +143,7 @@ let
     # greetd starts; the compositor unit has Restart=on-failure and will
     # recover once these permissions are present.
     sleep 2
-    for node in /dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/tty0 /dev/tty1; do
+    for node in /dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/snd/* /dev/tty0 /dev/tty1; do
       [ -e "$node" ] || continue
       setfacl -m m::rw,u:${runtime.user}:rw "$node" || true
     done
