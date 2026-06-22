@@ -28,14 +28,26 @@ describe("korri-remap native driver contract", () => {
     expect(driverSource).toContain("axes=[ABS[")
   })
 
-  it("restricts synthetic device nodes and display access to the Remap runner", () => {
+  it("splits keyboard seat visibility from gamepad isolation", () => {
     expect(driverSource).toContain('RUNNER_USER = "korri-remap-runner"')
-    expect(driverSource).toContain('run_quiet(["setfacl", "-b", str(path)])')
+    expect(driverSource).toContain("def expose_keyboard_event_node")
+    expect(driverSource).toContain('grp.getgrnam("input").gr_gid')
+    expect(driverSource).toContain("os.chmod(path, 0o660)")
+    expect(driverSource).toContain(
+      'run_quiet(["setfacl", "-m", "u:korri:rw", str(path)])',
+    )
+    expect(driverSource).toContain("def harden_event_node")
     expect(driverSource).toContain("os.chown(path, 0, 0)")
     expect(driverSource).toContain("os.chmod(path, 0o600)")
     expect(driverSource).toContain(
       'run_quiet(["setfacl", "-m", f"u:{user}:r", str(path)])',
     )
+    expect(driverSource).toContain("disable_sway_input(gamepad.name)")
+    expect(driverSource).not.toContain("disable_sway_input(keyboard.name)")
+    expect(driverSource).toContain("assert_sway_isolated({gamepad.name})")
+  })
+
+  it("restricts display and launch input access to the Remap runner", () => {
     expect(driverSource).toContain("def grant_runner_display_access")
     expect(driverSource).toContain('wayland = runtime / "wayland-1"')
     expect(driverSource).toContain(

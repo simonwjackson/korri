@@ -2,15 +2,17 @@
 """Privileged native driver for Korri Remap.
 
 This is the product-owned launch boundary behind korri-remap-bridge. It creates
-per-launch synthetic keyboard/gamepad devices through uinput, hides them from
-libinput/Sway/normal users, grants read access only to korri-remap-runner, runs
-the child as that user, and destroys the devices before exiting.
+per-launch synthetic keyboard/gamepad devices through uinput, exposes the
+synthetic keyboard to the active seat for keyboard remaps, hides the synthetic
+gamepad from libinput/Sway/normal users, runs the child as korri-remap-runner,
+and destroys the devices before exiting.
 """
 
 from __future__ import annotations
 
 import argparse
 import fcntl
+import grp
 import json
 import os
 import pwd
@@ -365,16 +367,15 @@ def main() -> int:
         keyboard_node = find_event_node(keyboard.name, time.time() + 3)
         gamepad_node = find_event_node(gamepad.name, time.time() + 3)
         settle_udev()
-        harden_event_node(keyboard_node, args.runner_user)
+        expose_keyboard_event_node(keyboard_node, args.runner_user)
         harden_event_node(gamepad_node, args.runner_user)
         time.sleep(0.2)
         settle_udev()
-        harden_event_node(keyboard_node, args.runner_user)
+        expose_keyboard_event_node(keyboard_node, args.runner_user)
         harden_event_node(gamepad_node, args.runner_user)
-        disable_sway_input(keyboard.name)
         disable_sway_input(gamepad.name)
         time.sleep(0.2)
-        assert_sway_isolated({keyboard.name, gamepad.name})
+        assert_sway_isolated({gamepad.name})
         display_acl_paths = grant_runner_display_access(args.runner_user)
         child_acl_paths = grant_runner_child_path_access(args.runner_user, child)
 
@@ -617,6 +618,18 @@ def harden_event_node(path: Path, user: str) -> None:
     run_quiet(["setfacl", "-b", str(path)])
     os.chown(path, 0, 0)
     os.chmod(path, 0o600)
+    run_quiet(["setfacl", "-m", f"u:{user}:r", str(path)])
+
+
+def expose_keyboard_event_node(path: Path, user: str) -> None:
+    run_quiet(["setfacl", "-b", str(path)])
+    try:
+        input_gid = grp.getgrnam("input").gr_gid
+    except KeyError:
+        input_gid = 0
+    os.chown(path, 0, input_gid)
+    os.chmod(path, 0o660)
+    run_quiet(["setfacl", "-m", "u:korri:rw", str(path)])
     run_quiet(["setfacl", "-m", f"u:{user}:r", str(path)])
 
 
