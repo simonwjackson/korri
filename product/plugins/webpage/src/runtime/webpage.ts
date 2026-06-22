@@ -9,10 +9,13 @@ import { type CdpClient, connectCdp } from "./cdp"
 
 const allocatedCdpPorts = new Set<number>()
 
-const CHROMIUM =
-  process.env.KORRI_WEBPAGE_CHROMIUM ??
-  process.env.KORRI_WEB_RUNTIME_CHROMIUM ??
-  "chromium"
+function defaultChromiumPath(): string {
+  return (
+    process.env.KORRI_WEBPAGE_CHROMIUM ??
+    process.env.KORRI_WEB_RUNTIME_CHROMIUM ??
+    "chromium"
+  )
+}
 
 const PERSIST_ROOT =
   process.env.KORRI_WEBPAGE_PROFILE_ROOT ?? "/var/lib/korri/webpage"
@@ -34,6 +37,13 @@ export interface LaunchWebpageOptions {
   readonly preNavigationScripts?: readonly string[]
   // A stable id for the persistent profile dir when settings.saves === "persist".
   readonly saveId?: string
+  // Package/runtime-owned Chromium path. This is intentionally an option rather
+  // than env-only so launchers can survive setuid/user-boundary runtimes where
+  // JavaScript env access is unavailable.
+  readonly chromiumPath?: string
+  // Explicit browser process environment. When omitted, Chromium inherits the
+  // current JS process env (minus known conflicting wrapper hints).
+  readonly env?: Record<string, string | undefined>
 }
 
 export async function allocateCdpPort(): Promise<number> {
@@ -72,9 +82,13 @@ export async function terminateSpawnedChromium(
   }
 }
 
-function spawnEnv(): Record<string, string> {
+function spawnEnv(
+  explicit: Record<string, string | undefined> | undefined,
+): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env))
+    if (v !== undefined) env[k] = v
+  for (const [k, v] of Object.entries(explicit ?? {}))
     if (v !== undefined) env[k] = v
   // The nixpkgs chromium wrapper forces a wayland hint when set; we set the
   // platform explicitly, so strip it to avoid conflicting flags.
@@ -116,12 +130,15 @@ export async function launchWebpage(
 
   // Pin a world-accessible cwd: posix_spawn resolves the inherited cwd, and a
   // private one (e.g. another user's home) makes the spawn fail with EACCES.
-  const proc = Bun.spawn([CHROMIUM, ...args], {
-    env: spawnEnv(),
-    cwd: "/tmp",
-    stdout: "inherit",
-    stderr: "inherit",
-  })
+  const proc = Bun.spawn(
+    [options.chromiumPath ?? defaultChromiumPath(), ...args],
+    {
+      env: spawnEnv(options.env),
+      cwd: "/tmp",
+      stdout: "inherit",
+      stderr: "inherit",
+    },
+  )
 
   let cdp: CdpClient | undefined
   try {

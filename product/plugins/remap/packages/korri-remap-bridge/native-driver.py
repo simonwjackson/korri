@@ -347,6 +347,7 @@ def main() -> int:
     child_proc: subprocess.Popen[bytes] | None = None
     received_signal: int | None = None
     synthetic_device_names = {keyboard.name, gamepad.name}
+    display_acl_paths: list[Path] = []
 
     def on_signal(signum: int, _frame: object) -> None:
         nonlocal received_signal
@@ -373,6 +374,7 @@ def main() -> int:
         disable_sway_input(gamepad.name)
         time.sleep(0.2)
         assert_sway_isolated({keyboard.name, gamepad.name})
+        display_acl_paths = grant_runner_display_access(args.runner_user)
 
         for player, path in controllers.items():
             fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
@@ -411,6 +413,7 @@ def main() -> int:
             keyboard.destroy()
         finally:
             gamepad.destroy()
+        revoke_runner_display_access(args.runner_user, display_acl_paths)
         if not wait_devices_gone(synthetic_device_names, time.time() + 3):
             print("korri-remap-native-driver: cleanup verification failed", file=sys.stderr)
             raise SystemExit(DIRTY_CLEANUP_EXIT_CODE)
@@ -671,6 +674,26 @@ def runner_command(user: str, child: Sequence[str]) -> list[str]:
 
 def child_environment(env: os._Environ[str]) -> dict[str, str]:
     return {key: value for key, value in env.items() if not key.startswith("KORRI_REMAP_")}
+
+
+def grant_runner_display_access(user: str) -> list[Path]:
+    """Allow the isolated runner to connect to Korri's active Wayland socket."""
+    granted: list[Path] = []
+    for runtime in sorted(Path("/run/user").glob("*")):
+        wayland = runtime / "wayland-1"
+        if not wayland.exists():
+            continue
+        run_quiet(["setfacl", "-m", f"u:{user}:x", str(runtime)])
+        run_quiet(["setfacl", "-m", f"u:{user}:rw", str(wayland)])
+        granted.extend([runtime, wayland])
+        break
+    return granted
+
+
+def revoke_runner_display_access(user: str, paths: Sequence[Path]) -> None:
+    for path in paths:
+        if path.exists():
+            run_quiet(["setfacl", "-x", f"u:{user}", str(path)])
 
 
 def wait_devices_gone(names: set[str], deadline: float) -> bool:

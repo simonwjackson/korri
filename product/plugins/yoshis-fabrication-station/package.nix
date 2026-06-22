@@ -191,6 +191,8 @@ stdenvNoCC.mkDerivation {
     cp -R ${../webpage/src} "$out/share/yoshis-fabrication-station-launcher/plugins/webpage/src"
     makeWrapper ${lib.getExe bun} "$out/bin/yfs-launch" \
       --add-flags "$out/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/src/launcher/yfs-launch.ts" \
+      --add-flags "--webroot=$out/share/yoshis-fabrication-station" \
+      --add-flags "--chromium=${lib.getExe chromium}" \
       --set-default KORRI_YFS_WEBROOT "$out/share/yoshis-fabrication-station" \
       --set-default KORRI_YFS_SHIM_DIR "$out/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts" \
       --set-default KORRI_WEBPAGE_CHROMIUM ${lib.getExe chromium}

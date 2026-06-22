@@ -291,13 +291,24 @@ let
           --replace-fail "  - xbox-series" "  - xb360"
       '';
   # SM8550 platform launch policy is rendered into the readable library
-  # cascade. Moonlight uses host.moonlight, while YFS uses the plugin launcher's
-  # settings.plugin object so `yfs-launch <level-file>` receives first-class
-  # viewport/zoom config through KORRI_YFS_SETTINGS instead of ad-hoc CLI flags.
+  # cascade. Moonlight uses host.moonlight. YFS keeps settings.plugin for
+  # inspectable config, and also carries the required square viewport/zoom and
+  # browser display environment on argv because the Remap runner/Bun boundary
+  # cannot rely on KORRI_* process env being visible to JavaScript.
   sm8550PlatformDefaults = {
     launchers."@korri:yoshis-fabrication-station/level" = {
       command = "yfs-launch";
-      args = [ "{content.path}" ];
+      args = [
+        "--viewport-aspect=1:1"
+        "--zoom=auto-area"
+        "--browser-env=XDG_RUNTIME_DIR=${korriRuntimeDir}"
+        "--browser-env=WAYLAND_DISPLAY=wayland-1"
+        "--browser-env=HOME=/tmp"
+        "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"
+        "--browser-env=USER=korri-remap-runner"
+        "--browser-env=LOGNAME=korri-remap-runner"
+        "{content.path}"
+      ];
       systems = [ "yfs" ];
       env.KORRI_YFS_SETTINGS = "{settings.plugin}";
       policy.allowedCommands = [

@@ -273,7 +273,17 @@ let
       (check "${name}: YFS platform launcher override remains launchable" (
         !(yfsPlatformLauncher ? plugin)
         && (yfsPlatformLauncher.command or null) == "yfs-launch"
-        && (yfsPlatformLauncher.args or [ ]) == [ "{content.path}" ]
+        && (yfsPlatformLauncher.args or [ ]) == [
+          "--viewport-aspect=1:1"
+          "--zoom=auto-area"
+          "--browser-env=XDG_RUNTIME_DIR=/run/user/2000"
+          "--browser-env=WAYLAND_DISPLAY=wayland-1"
+          "--browser-env=HOME=/tmp"
+          "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"
+          "--browser-env=USER=korri-remap-runner"
+          "--browser-env=LOGNAME=korri-remap-runner"
+          "{content.path}"
+        ]
         && (yfsPlatformLauncher.env.KORRI_YFS_SETTINGS or null) == "{settings.plugin}"
         && builtins.elem "yfs-launch" (yfsPlatformLauncher.policy.allowedCommands or [ ])
       ))

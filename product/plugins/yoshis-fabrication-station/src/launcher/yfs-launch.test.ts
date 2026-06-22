@@ -32,6 +32,10 @@ async function tempRoot(name: string): Promise<string> {
 describe("yfs-launch", () => {
   it("parses the public command shape and YFS settings", () => {
     const parsed = parseYfsLaunchCli([
+      "--webroot=/nix/store/yfs-webroot",
+      "--chromium=/nix/store/chromium/bin/chromium",
+      "--browser-env=XDG_RUNTIME_DIR=/run/user/2000",
+      "--browser-env=WAYLAND_DISPLAY=wayland-1",
       "--audio=off",
       "--gba-sounds",
       "--quick-death",
@@ -43,6 +47,14 @@ describe("yfs-launch", () => {
     ])
 
     expect(parsed.levelFile).toBe("level.json")
+    expect(parsed.runtime).toEqual({
+      webroot: "/nix/store/yfs-webroot",
+      chromiumPath: "/nix/store/chromium/bin/chromium",
+      browserEnv: {
+        XDG_RUNTIME_DIR: "/run/user/2000",
+        WAYLAND_DISPLAY: "wayland-1",
+      },
+    })
     expect(parsed.settings).toMatchObject({
       audio: "off",
       gbaSounds: true,

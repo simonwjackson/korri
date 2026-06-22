@@ -38,6 +38,8 @@ else
 
     grep -q 'YFS_APP_DIR' ${pkg}/bin/yfs
     grep -q 'YFS_BROWSER' ${pkg}/bin/yfs
+    grep -q -- '--webroot=' ${pkg}/bin/yfs-launch
+    grep -q -- '--chromium=' ${pkg}/bin/yfs-launch
     grep -q 'KORRI_YFS_WEBROOT' ${pkg}/bin/yfs-launch
     grep -q 'KORRI_YFS_SHIM_DIR' ${pkg}/bin/yfs-launch
     grep -q 'KORRI_WEBPAGE_CHROMIUM' ${pkg}/bin/yfs-launch

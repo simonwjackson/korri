@@ -18,9 +18,16 @@ import {
 
 const LAUNCHER_VERSION = "2"
 
+export interface YfsLaunchRuntimeOptions {
+  readonly webroot?: string
+  readonly chromiumPath?: string
+  readonly browserEnv: Record<string, string>
+}
+
 export interface ParsedYfsLaunchCli {
   readonly levelFile: string
   readonly settings: YfsLauncherSettings
+  readonly runtime: YfsLaunchRuntimeOptions
 }
 
 export function yfsShimPaths(): string[] {
@@ -68,12 +75,38 @@ export function parseYfsLaunchCli(
   const settings: Record<string, unknown> = {
     ...parseYfsSettingsJson(env.KORRI_YFS_SETTINGS),
   }
+  const runtime: {
+    webroot?: string
+    chromiumPath?: string
+    browserEnv: Record<string, string>
+  } = { browserEnv: {} }
   let levelFile: string | undefined
   const args = [...argv]
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === "-h" || arg === "--help") throw new Error(usage())
-    if (arg === "--audio") settings.audio = "on"
+    if (arg === "--webroot") {
+      runtime.webroot = readValue(args, index, arg)
+      index += 1
+    } else if (arg.startsWith("--webroot=")) {
+      runtime.webroot = arg.slice("--webroot=".length)
+    } else if (arg === "--chromium") {
+      runtime.chromiumPath = readValue(args, index, arg)
+      index += 1
+    } else if (arg.startsWith("--chromium=")) {
+      runtime.chromiumPath = arg.slice("--chromium=".length)
+    } else if (arg === "--browser-env") {
+      const value = readValue(args, index, arg)
+      const separator = value.indexOf("=")
+      if (separator <= 0) throw new Error(`${arg} expects KEY=VALUE`)
+      runtime.browserEnv[value.slice(0, separator)] = value.slice(separator + 1)
+      index += 1
+    } else if (arg.startsWith("--browser-env=")) {
+      const value = arg.slice("--browser-env=".length)
+      const separator = value.indexOf("=")
+      if (separator <= 0) throw new Error("--browser-env expects KEY=VALUE")
+      runtime.browserEnv[value.slice(0, separator)] = value.slice(separator + 1)
+    } else if (arg === "--audio") settings.audio = "on"
     else if (arg === "--no-audio") settings.audio = "off"
     else if (arg.startsWith("--audio=")) {
       const value = arg.slice("--audio=".length)
@@ -144,7 +177,11 @@ export function parseYfsLaunchCli(
     else throw new Error(`unexpected extra argument: ${arg}`)
   }
   if (!levelFile) throw new Error(usage())
-  return { levelFile, settings: normalizeYfsLauncherSettings(settings) }
+  return {
+    levelFile,
+    settings: normalizeYfsLauncherSettings(settings),
+    runtime,
+  }
 }
 
 export function buildYfsLaunchUrl(
@@ -194,7 +231,7 @@ export async function runYfsLaunch(
 ): Promise<number> {
   const env = options.env ?? process.env
   const parsed = parseYfsLaunchCli(options.argv, env)
-  const webroot = env.KORRI_YFS_WEBROOT
+  const webroot = parsed.runtime.webroot ?? env.KORRI_YFS_WEBROOT
   if (!webroot) throw new Error("KORRI_YFS_WEBROOT is required")
   const prepared = await prepareYfsLaunchRoot({
     webroot,
@@ -213,6 +250,8 @@ export async function runYfsLaunch(
     settings: webpageSettings,
     preNavigationScripts: startupScripts.map(script => script.source),
     saveId: `yfs-${prepared.cacheKey}`,
+    chromiumPath: parsed.runtime.chromiumPath ?? env.KORRI_WEBPAGE_CHROMIUM,
+    env: parsed.runtime.browserEnv,
     extraFlags: [
       "--default-background-color=ff000000",
       "--allow-file-access-from-files",
