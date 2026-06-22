@@ -295,13 +295,24 @@ let
   # settings.plugin object so `yfs-launch <level-file>` receives first-class
   # viewport/zoom config through KORRI_YFS_SETTINGS instead of ad-hoc CLI flags.
   sm8550PlatformDefaults = {
-    launchers."@korri:yoshis-fabrication-station/level".settings.plugin = {
-      viewport = {
-        aspect = "1:1";
-        policy = "expand-only";
-      };
-      zoom = {
-        mode = "auto-area";
+    launchers."@korri:yoshis-fabrication-station/level" = {
+      plugin = "@korri:yoshis-fabrication-station";
+      command = "yfs-launch";
+      args = [ "{content.path}" ];
+      systems = [ "yfs" ];
+      env.KORRI_YFS_SETTINGS = "{settings.plugin}";
+      policy.allowedCommands = [
+        "yfs-launch"
+        "chromium"
+      ];
+      settings.plugin = {
+        viewport = {
+          aspect = "1:1";
+          policy = "expand-only";
+        };
+        zoom = {
+          mode = "auto-area";
+        };
       };
     };
 

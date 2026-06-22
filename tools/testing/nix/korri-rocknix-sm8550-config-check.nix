@@ -56,12 +56,11 @@ let
       removableUnmountUnit = cfg.systemd.services."korri-removable-media-unmount@" or { };
       removableColdplugUnit = cfg.systemd.services.korri-removable-media-coldplug or { };
       removableMedia = cfg.services.korri.removableMedia or { };
-      yfsLauncherSettings = lib.attrByPath [
+      yfsPlatformLauncher = lib.attrByPath [
         "launchers"
         "@korri:yoshis-fabrication-station/level"
-        "settings"
-        "plugin"
       ] { } (cfg.services.korri.daemon.library.platformDefaults or { });
+      yfsLauncherSettings = lib.attrByPath [ "settings" "plugin" ] { } yfsPlatformLauncher;
       steam = cfg.services.korri.steam or { };
       steamUnit = cfg.systemd.services.korri-steam or { };
       steamWarmUnit = userServices.korri-steam-warm or { };
@@ -257,6 +256,13 @@ let
       (check "${name}: YFS direct launcher is installed and available to sessiond" (
         hasPackagePname "yoshis-fabrication-station" cfg.environment.systemPackages
         && hasPackagePname "yoshis-fabrication-station" sessiond.path
+      ))
+      (check "${name}: YFS platform launcher override remains launchable" (
+        (yfsPlatformLauncher.plugin or null) == "@korri:yoshis-fabrication-station"
+        && (yfsPlatformLauncher.command or null) == "yfs-launch"
+        && (yfsPlatformLauncher.args or [ ]) == [ "{content.path}" ]
+        && (yfsPlatformLauncher.env.KORRI_YFS_SETTINGS or null) == "{settings.plugin}"
+        && builtins.elem "yfs-launch" (yfsPlatformLauncher.policy.allowedCommands or [ ])
       ))
       (check "${name}: YFS launcher defaults use square viewport and auto-area zoom" (
         (yfsLauncherSettings.viewport.aspect or null) == "1:1"
