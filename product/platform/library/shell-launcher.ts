@@ -127,7 +127,10 @@ async function spawnShellLaunch(
         return { status: "launched" }
       }
 
-      logger.warn({ command: spec.command, exitCode }, "shell-launcher: failed")
+      logger.warn(
+        { command: spec.command, exitCode, stderrTail },
+        "shell-launcher: failed",
+      )
 
       return stderrTail
         ? { status: "failed", exitCode, stderrTail }
