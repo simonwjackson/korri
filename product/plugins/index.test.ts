@@ -20,6 +20,7 @@ import { KORRI_PORTMASTER_PLUGIN_ID } from "./portmaster"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
 import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
+import { KORRI_REMAP_PLUGIN_ID } from "./remap"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
@@ -91,6 +92,17 @@ describe("first-party plugins", () => {
     expect(
       gamescope?.contributes.handlers?.map(handler => handler.operation),
     ).toContain("launch.compose")
+  })
+
+  it("registers Remap as a first-party launch companion plugin", () => {
+    const remap = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_REMAP_PLUGIN_ID,
+    )
+
+    expect(remap?.contributes.config.modules?.["launch-wrapper"]).toMatchObject({
+      kind: "launch-wrapper",
+      capabilities: ["launch.compose", "launch.wrapper", "input.remap"],
+    })
   })
 
   it("registers Ryubing as a first-party package plugin", () => {

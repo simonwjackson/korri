@@ -36,6 +36,7 @@ import { portmasterPlugin } from "./portmaster"
 import { protonGeRuntimePlugin } from "./proton-ge-runtime"
 import { protonRuntimePlugin } from "./proton-runtime"
 import { psychoWaluigiPlugin } from "./psycho-waluigi"
+import { remapPlugin } from "./remap"
 import {
   retroarchPlugin,
   retroarchReadableLaunchIntegration,
@@ -144,6 +145,7 @@ export const firstPartyPlugins = [
   webpagePlugin,
   webCanvasPlugin,
   cdpInputBridgePlugin,
+  remapPlugin,
   fexRuntimePlugin,
   box64RuntimePlugin,
   protonRuntimePlugin,
