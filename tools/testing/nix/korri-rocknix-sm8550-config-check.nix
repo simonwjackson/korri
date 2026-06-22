@@ -1,15 +1,15 @@
-{
-  pkgs,
-  products,
-  byCompatibleProduct,
-  thorSystem,
-  soboSystem,
-  byCompatibleSystem,
-  targetPackages,
-  hostPackages,
-  configurations,
-  hardwareFactSourceFiles,
-  sm8550PlatformAdapterSourceFile,
+{ pkgs
+, products
+, byCompatibleProduct
+, thorSystem
+, soboSystem
+, byCompatibleSystem
+, targetPackages
+, hostPackages
+, configurations
+, hardwareFactSourceFiles
+, sm8550PlatformAdapterSourceFile
+,
 }:
 
 let
@@ -42,19 +42,19 @@ let
   # a target-platform build, so keep this as an adapter-source invariant.
   sm8550PlatformAdapterUsesSafeAudioVolume =
     lib.hasInfix ''korriSafeDefaultSinkVolume = "10%"'' sm8550PlatformAdapterSource
-    && lib.hasInfix ''set-sink-volume "$preferred_sink" "$korri_safe_default_sink_volume"'' sm8550PlatformAdapterSource
     && lib.hasInfix ''set-sink-volume "$sink" "$korri_safe_default_sink_volume"'' sm8550PlatformAdapterSource
     && lib.hasInfix ''set-sink-volume "$default_sink" "$korri_safe_default_sink_volume"'' sm8550PlatformAdapterSource
     && lib.hasInfix ''auto_null*)'' sm8550PlatformAdapterSource
-    && !(lib.hasInfix ''set-sink-volume "$preferred_sink" 70%'' sm8550PlatformAdapterSource)
-    && !(lib.hasInfix ''set-sink-volume "$fallback_sink" 70%'' sm8550PlatformAdapterSource);
+    && !(lib.hasInfix ''set-sink-volume "$sink" 70%'' sm8550PlatformAdapterSource)
+    && !(lib.hasInfix ''set-sink-volume "$target_sink" 70%'' sm8550PlatformAdapterSource);
 
-  soboAudioSink = soboSystem.config.rocknix.sm8550.audio.defaultSink;
+  soboAudioRoute = soboSystem.config.rocknix.device.audio.route;
 
   checkSystem =
     name: system:
     let
       cfg = system.config;
+      systemServices = cfg.systemd.services or { };
       runtime = cfg.services.korri.runtime;
       korriUser = cfg.users.users.${runtime.user} or { };
       userServices = cfg.systemd.user.services or { };
@@ -82,6 +82,14 @@ let
         "bindings"
       ] { } yfsPlatformLauncher;
       steam = cfg.services.korri.steam or { };
+      audioRoute = cfg.rocknix.device.audio.route;
+      expectedAudioTargetSink =
+        if audioRoute.kind == "wireplumber-ucm" then
+          audioRoute.expectedSink
+        else if audioRoute.kind == "manual-pcm" then
+          audioRoute.sinkName
+        else
+          cfg.rocknix.sm8550.audio.defaultSink.name;
       steamUnit = cfg.systemd.services.korri-steam or { };
       steamGamescopeUnit = cfg.systemd.services.korri-steam-gamescope or { };
       steamWarmUnit = userServices.korri-steam-warm or { };
@@ -104,13 +112,15 @@ let
         pname: packages: builtins.any (pkg: (pkg.pname or pkg.name or "") == pname) packages;
       findRetroarchWrappers =
         path:
-        builtins.filter (
-          p:
-          let
-            pt = p.passthru or { };
-          in
-          builtins.hasAttr "cores" pt && builtins.hasAttr "unwrapped" pt
-        ) path;
+        builtins.filter
+          (
+            p:
+            let
+              pt = p.passthru or { };
+            in
+            builtins.hasAttr "cores" pt && builtins.hasAttr "unwrapped" pt
+          )
+          path;
       retroarchCoresFor =
         path: lib.concatLists (map (wrapper: wrapper.passthru.cores or [ ]) (findRetroarchWrappers path));
       fake08CoreSource = "${targetPackages.libretro-fake-08}/lib/retroarch/cores/fake08_libretro.so";
@@ -221,10 +231,12 @@ let
           lib.hasInfix "korri-rocknix-device-acl-fallback" execLines
         )
       ))
-      (check "${name}: SM8550 host-bound sound cards get udev database hydration" (
-        lib.hasInfix "SOUND_INITIALIZED=1" sm8550PlatformAdapterSource
-        && lib.hasInfix ''/run/udev/data/+sound:'' sm8550PlatformAdapterSource
-        && lib.hasInfix ''/sys/class/sound/card*'' sm8550PlatformAdapterSource
+      (check "${name}: SM8550 sound-card udev hydration is owned by substrate" (
+        systemServices ? rocknix-sound-card-udev-hydrate
+        && builtins.elem "rocknix-sound-card-udev-hydrate.service" (seatDeviceTrigger.after or [ ])
+        && builtins.elem "rocknix-sound-card-udev-hydrate.service" (seatDeviceTrigger.wants or [ ])
+        && !(lib.hasInfix "SOUND_INITIALIZED=1" sm8550PlatformAdapterSource)
+        && !(lib.hasInfix ''/run/udev/data/+sound:'' sm8550PlatformAdapterSource)
       ))
       (check "${name}: compositor uses the greetd/logind user session bus" (
         compositor.sessionBus.mode == "existing"
@@ -491,8 +503,12 @@ let
         && (audioBootstrapUnit.environment.PULSE_SERVER or null) == "unix:%t/pulse/native"
         && (audioBootstrapUnit.environment.ALSA_CONFIG_UCM2 or null) == pipewireEnv.ALSA_CONFIG_UCM2
       ))
-      (check "${name}: user audio bootstrap clamps default sink to safe volume" (
+      (check "${name}: user audio bootstrap follows substrate route and clamps safe volume" (
         sm8550PlatformAdapterUsesSafeAudioVolume
+        && lib.hasInfix "alsaucm -c" sm8550PlatformAdapterSource
+        && lib.hasInfix "set _verb" sm8550PlatformAdapterSource
+        && lib.hasInfix "set _enadev" sm8550PlatformAdapterSource
+        && lib.hasInfix "substrateAudioRouteHasFullUcm" sm8550PlatformAdapterSource
       ))
       (check "${name}: sessiond launches inherit Korri user Pulse socket" (
         sessiondEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
@@ -532,8 +548,8 @@ let
         # device must mount media at the same prefix.
         && (removableMountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri"
         &&
-          (removableMountUnit.environment.KORRI_REMOVABLE_CONTENT_ROOT or null)
-          == "/var/lib/korri/content/removable/cards"
+        (removableMountUnit.environment.KORRI_REMOVABLE_CONTENT_ROOT or null)
+        == "/var/lib/korri/content/removable/cards"
         && (removableUnmountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri"
         && builtins.elem "d /run/media/korri 0755 korri korri -" cfg.systemd.tmpfiles.rules
         && builtins.elem "L+ /var/lib/korri/content/removable/cards - - - - /run/media/korri" cfg.systemd.tmpfiles.rules
@@ -550,6 +566,7 @@ let
         && (steam.dotDir or null) == "/home/korri/.steam"
         && (steam.fexRootfs or null) == "/var/lib/korri/steam/fex-rootfs"
         && (steam.keepWarm or false)
+        && (steam.appAudioSinkName or null) == expectedAudioTargetSink
       ))
       (check "${name}: Korri Steam launch services are hardened" (
         cfg.systemd.services ? korri-steam-uinput
@@ -571,9 +588,11 @@ let
       ))
       (check "${name}: old substrate Steam launcher/service is absent" (
         !(cfg.systemd.services ? main-space-steam-uinput)
-        && !(builtins.any (
-          pkg: lib.hasInfix "rocknix-steam-guest" (pkg.name or "")
-        ) cfg.environment.systemPackages)
+        && !(builtins.any
+          (
+            pkg: lib.hasInfix "rocknix-steam-guest" (pkg.name or "")
+          )
+          cfg.environment.systemPackages)
       ))
       (check "${name}: Korri Steam tmpfiles create state under Korri roots" (
         builtins.elem "d /var/lib/korri/steam 0750 korri korri -" cfg.systemd.tmpfiles.rules
@@ -609,10 +628,10 @@ let
     (check "SM8550 adapter does not hard-code substrate literals" sm8550PlatformAdapterFreeOfHardwareLiterals)
     (check "SM8550 adapter does not explicitly install substrate Steam" sm8550PlatformAdapterFreeOfSubstrateSteam)
     (check "SM8550 adapter declares the safe audio bootstrap volume" sm8550PlatformAdapterUsesSafeAudioVolume)
-    (check "Sobo does not declare a direct ALSA speaker sink until boot UCM is reliable" (
-      soboAudioSink.pcm == null
-      && soboAudioSink.ucmVerb == null
-      && soboAudioSink.ucmDevice == null
+    (check "Sobo declares the substrate WirePlumber UCM speaker route" (
+      soboAudioRoute.kind == "wireplumber-ucm"
+        && soboAudioRoute.expectedSink == "alsa_output.platform-sound.HiFi__Speaker__sink"
+        && soboAudioRoute.pcm == null
     ))
   ]
   ++ (checkSystem "Odin 2 Portal" thorSystem)
