@@ -56,8 +56,11 @@ else
     grep -q 'VolumeBGM' ${pkg}/share/yoshis-fabrication-station/scripts/c3main.js
     grep -q 'code_url' ${pkg}/share/yoshis-fabrication-station/direct-launch.js
     grep -q 'samplelevels.json' ${pkg}/share/yoshis-fabrication-station/direct-launch.js
+    grep -q 'applyYfsLayoutScale' ${pkg}/share/yoshis-fabrication-station/direct-launch.js
+    grep -q 'c3_runtimeInterface' ${pkg}/share/yoshis-fabrication-station/direct-launch.js
     grep -q '__YFS_LAUNCH_SETTINGS' ${pkg}/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts/yfs-launch-settings.js
     grep -q 'code_url' ${pkg}/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts/yfs-level-loader.js
+    ! grep -q 'preserveDrawingBuffer' ${pkg}/share/yoshis-fabrication-station/direct-launch-pre.js
     ! grep -q 'preserveDrawingBuffer' ${pkg}/share/yoshis-fabrication-station-launcher/plugins/yoshis-fabrication-station/scripts/yfs-launch-settings.js
 
     ${pkg}/bin/yfs --help | grep -q -- '--no-audio'
@@ -77,7 +80,7 @@ else
     grep -q '^engine=construct3-html5' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
     grep -q 'launch-settings=enableAudio enableGBASounds enableQuickDeath enablePlayTimer VolumeBGM VolumeSFX' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
     grep -q 'yfs-launch=level-file code_url=level.json web-canvas' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
-    grep -q 'yfs-launch-settings=audio gbaSounds quickDeath playTimer bgmVolume sfxVolume debug metrics' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
+    grep -q 'yfs-launch-settings=audio gbaSounds quickDeath playTimer bgmVolume sfxVolume debug metrics viewport zoom' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
 
     mkdir -p $out
     cat > $out/summary.txt <<EOF

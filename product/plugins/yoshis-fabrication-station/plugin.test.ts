@@ -73,7 +73,15 @@ describe("Yoshi's Fabrication Station plugin", () => {
       "sfxVolume",
       "debug",
       "metrics",
+      "viewport",
+      "zoom",
     ])
+    expect(yfsLauncherSettingDescriptors.zoom.properties.scale.minimum).toBe(
+      0.001,
+    )
+    expect(
+      yfsLauncherSettingDescriptors.zoom.properties.multiplier.minimum,
+    ).toBe(0.001)
   })
 
   it("opts its Chromium launch into the CDP input bridge with the validated mapping", () => {

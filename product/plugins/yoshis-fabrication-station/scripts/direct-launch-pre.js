@@ -43,27 +43,6 @@
     return dictionary.ExpObject(key, defaultValue)
   }
 
-  const hasLaunchPayload =
-    ["sample", "code_url", "code_b64", "code"].some(hasParam) ||
-    sessionStorage.getItem("yfsDirectLaunchCode")
-  if (!hasLaunchPayload) return
-
-  const originalGetContext = HTMLCanvasElement.prototype.getContext
-  HTMLCanvasElement.prototype.getContext = function patchedGetContext(
-    type,
-    options,
-  ) {
-    const contextType = String(type || "").toLowerCase()
-    if (
-      contextType === "webgl" ||
-      contextType === "webgl2" ||
-      contextType === "experimental-webgl"
-    ) {
-      return originalGetContext.call(this, type, {
-        ...(options || {}),
-        preserveDrawingBuffer: true,
-      })
-    }
-    return originalGetContext.call(this, type, options)
-  }
+  // Do not force retained WebGL buffers for packaged launches. The launcher
+  // observes readiness through __YFS_DIRECT_LAUNCH and keeps the fast WebGL path.
 })()

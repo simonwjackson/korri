@@ -45,6 +45,21 @@ function parseVolume(value: string, flag: string): number {
   return Number(value)
 }
 
+function parseViewport(value: string, flag: string): Record<string, number> {
+  const match = value.match(/^(\d{1,5})x(\d{1,5})$/i)
+  if (!match) throw new Error(`${flag} expects WIDTHxHEIGHT, got: ${value}`)
+  return { width: Number(match[1]), height: Number(match[2]) }
+}
+
+function parseZoom(value: string, flag: string): Record<string, unknown> {
+  if (value === "auto-area") return { mode: "auto-area" }
+  const fixed = value.match(/^fixed:(.+)$/)
+  if (fixed) return { mode: "fixed", scale: Number(fixed[1]) }
+  const numeric = Number(value)
+  if (Number.isFinite(numeric)) return { mode: "fixed", scale: numeric }
+  throw new Error(`${flag} expects auto-area|fixed:SCALE|SCALE, got: ${value}`)
+}
+
 export function parseYfsLaunchCli(
   argv: readonly string[],
   env: Record<string, string | undefined> = process.env,
@@ -88,6 +103,41 @@ export function parseYfsLaunchCli(
         arg.slice("--sfx-volume=".length),
         "--sfx-volume",
       )
+    } else if (arg === "--viewport") {
+      settings.viewport = parseViewport(readValue(args, index, arg), arg)
+      index += 1
+    } else if (arg.startsWith("--viewport=")) {
+      settings.viewport = parseViewport(
+        arg.slice("--viewport=".length),
+        "--viewport",
+      )
+    } else if (arg === "--viewport-aspect") {
+      settings.viewport = {
+        aspect: readValue(args, index, arg),
+        policy: "expand-only",
+      }
+      index += 1
+    } else if (arg.startsWith("--viewport-aspect=")) {
+      settings.viewport = {
+        aspect: arg.slice("--viewport-aspect=".length),
+        policy: "expand-only",
+      }
+    } else if (arg === "--zoom") {
+      settings.zoom = parseZoom(readValue(args, index, arg), arg)
+      index += 1
+    } else if (arg.startsWith("--zoom=")) {
+      settings.zoom = parseZoom(arg.slice("--zoom=".length), "--zoom")
+    } else if (arg === "--zoom-multiplier") {
+      settings.zoom = {
+        mode: "auto-area",
+        multiplier: Number(readValue(args, index, arg)),
+      }
+      index += 1
+    } else if (arg.startsWith("--zoom-multiplier=")) {
+      settings.zoom = {
+        mode: "auto-area",
+        multiplier: Number(arg.slice("--zoom-multiplier=".length)),
+      }
     } else if (arg.startsWith("-")) throw new Error(`unknown flag: ${arg}`)
     else if (!levelFile) levelFile = arg
     else throw new Error(`unexpected extra argument: ${arg}`)

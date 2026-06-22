@@ -37,6 +37,8 @@ describe("yfs-launch", () => {
       "--quick-death",
       "--bgm-volume=7",
       "--metrics",
+      "--viewport=832x832",
+      "--zoom=fixed:1.5",
       "level.json",
     ])
 
@@ -47,6 +49,8 @@ describe("yfs-launch", () => {
       quickDeath: true,
       bgmVolume: 7,
       metrics: true,
+      viewport: { width: 832, height: 832 },
+      zoom: { mode: "fixed", scale: 1.5 },
     })
   })
 
@@ -56,6 +60,8 @@ describe("yfs-launch", () => {
         metrics: true,
         bgmVolume: 3,
         sfxVolume: 4,
+        viewport: { aspect: "1:1", policy: "expand-only" },
+        zoom: { mode: "auto-area", multiplier: 1.1 },
       }),
     })
 
@@ -63,18 +69,30 @@ describe("yfs-launch", () => {
       metrics: true,
       bgmVolume: 9,
       sfxVolume: 4,
+      viewport: { aspect: "1:1", policy: "expand-only" },
+      zoom: { mode: "auto-area", multiplier: 1.1 },
     })
   })
 
   it("builds a prepared-root file URL with code_url=level.json and settings", async () => {
     const root = await tempRoot("prepared")
-    const url = buildYfsLaunchUrl(root, { metrics: true, bgmVolume: 5 })
+    const url = buildYfsLaunchUrl(root, {
+      metrics: true,
+      bgmVolume: 5,
+      viewport: { aspect: "1:1", policy: "expand-only" },
+      zoom: { mode: "auto-area", multiplier: 1 },
+    })
 
     expect(url).toContain("file://")
     expect(url).toContain("/index.html?")
     expect(url).toContain("code_url=level.json")
     expect(url).toContain("metrics=1")
     expect(url).toContain("bgm_volume=5")
+    expect(url).toContain("viewport_width=832")
+    expect(url).toContain("viewport_height=832")
+    expect(url).toContain("zoom_mode=auto_area")
+    expect(url).toContain("zoom_scale=1.363")
+    expect(url).toContain("zoom_multiplier=1")
   })
 
   it("uses the packaged YFS direct-launch seam instead of duplicate shims", () => {

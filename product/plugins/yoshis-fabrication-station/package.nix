@@ -207,7 +207,7 @@ stdenvNoCC.mkDerivation {
     direct-launch=code_url sample code_b64 code stdin lss
     yfs-launch=level-file code_url=level.json web-canvas
     launch-settings=enableAudio enableGBASounds enableQuickDeath enablePlayTimer VolumeBGM VolumeSFX
-    yfs-launch-settings=audio gbaSounds quickDeath playTimer bgmVolume sfxVolume debug metrics
+    yfs-launch-settings=audio gbaSounds quickDeath playTimer bgmVolume sfxVolume debug metrics viewport zoom
     license=unlicensed-upstream-binary-export
     EOF
 

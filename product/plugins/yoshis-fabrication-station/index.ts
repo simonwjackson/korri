@@ -15,6 +15,23 @@ export const yfsLauncherSettingDescriptors = {
   sfxVolume: { type: "integer", minimum: 0, maximum: 10 },
   debug: { type: "boolean" },
   metrics: { type: "boolean" },
+  viewport: {
+    type: "object",
+    properties: {
+      width: { type: "integer", minimum: 1, maximum: 8192 },
+      height: { type: "integer", minimum: 1, maximum: 8192 },
+      aspect: { type: "string" },
+      policy: { type: "enum", values: ["expand-only"] },
+    },
+  },
+  zoom: {
+    type: "object",
+    properties: {
+      mode: { type: "enum", values: ["auto-area", "fixed"] },
+      scale: { type: "number", minimum: 0.001, maximum: 16 },
+      multiplier: { type: "number", minimum: 0.001, maximum: 16 },
+    },
+  },
 } as const
 
 export const yoshisFabricationStationPlugin = plugin({

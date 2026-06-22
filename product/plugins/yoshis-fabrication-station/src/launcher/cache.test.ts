@@ -31,6 +31,11 @@ async function writeWebroot(
   )
   await writeFile(join(root, "scripts/main.js"), marker)
   await writeFile(join(root, "scripts/c3main.js"), "window.__YFSGetSetting")
+  const project: unknown[] = Array.from({ length: 13 }, () => null)
+  project[10] = 832
+  project[11] = 448
+  project[12] = 4
+  await writeFile(join(root, "data.json"), JSON.stringify({ project }))
 }
 
 describe("YFS prepared root cache", () => {
@@ -104,11 +109,101 @@ describe("YFS prepared root cache", () => {
     expect(different.root).not.toBe(first.root)
   })
 
+  it("patches prepared-root viewport metadata from settings", async () => {
+    const webroot = await tempRoot("webroot")
+    const cacheRoot = await tempRoot("cache")
+    await writeWebroot(webroot, 'exportType:"html5"')
+    const level = join(webroot, "source-level.json")
+    await writeFile(level, JSON.stringify({ level: "one" }))
+
+    const prepared = await prepareYfsLaunchRoot({
+      webroot,
+      levelFile: level,
+      cacheRoot,
+      settings: { viewport: { aspect: "1:1", policy: "expand-only" } },
+      launcherVersion: "test",
+    })
+
+    const patched = JSON.parse(
+      await readFile(join(prepared.root, "data.json"), "utf8"),
+    )
+    const source = JSON.parse(
+      await readFile(join(webroot, "data.json"), "utf8"),
+    )
+    expect(patched.project[10]).toBe(832)
+    expect(patched.project[11]).toBe(832)
+    expect(patched.project[12]).toBe(4)
+    expect(source.project[11]).toBe(448)
+  })
+
+  it("rejects malformed or drifted viewport metadata", async () => {
+    const webroot = await tempRoot("webroot")
+    const cacheRoot = await tempRoot("cache")
+    await writeWebroot(webroot, 'exportType:"html5"')
+    const level = join(webroot, "source-level.json")
+    await writeFile(level, JSON.stringify({ level: "one" }))
+
+    await writeFile(join(webroot, "data.json"), JSON.stringify({ nope: true }))
+    await expect(
+      prepareYfsLaunchRoot({
+        webroot,
+        levelFile: level,
+        cacheRoot,
+        settings: { viewport: { aspect: "1:1", policy: "expand-only" } },
+        launcherVersion: "test",
+      }),
+    ).rejects.toThrow("missing project array")
+
+    await writeWebroot(webroot, 'exportType:"html5"')
+    const driftedProject: unknown[] = Array.from({ length: 13 }, () => null)
+    driftedProject[10] = 1024
+    driftedProject[11] = 448
+    driftedProject[12] = 4
+    await writeFile(
+      join(webroot, "data.json"),
+      JSON.stringify({ project: driftedProject }),
+    )
+    await expect(
+      prepareYfsLaunchRoot({
+        webroot,
+        levelFile: level,
+        cacheRoot,
+        settings: { viewport: { aspect: "1:1", policy: "expand-only" } },
+        launcherVersion: "test-drifted",
+      }),
+    ).rejects.toThrow("unsupported YFS data.json viewport shape")
+  })
+
+  it("separates cache keys for different viewport settings", async () => {
+    const webroot = await tempRoot("webroot")
+    const cacheRoot = await tempRoot("cache")
+    await writeWebroot(webroot, 'exportType:"html5"')
+    const level = join(webroot, "source-level.json")
+    await writeFile(level, JSON.stringify({ level: "one" }))
+
+    const native = await prepareYfsLaunchRoot({
+      webroot,
+      levelFile: level,
+      cacheRoot,
+      settings: {},
+      launcherVersion: "test",
+    })
+    const square = await prepareYfsLaunchRoot({
+      webroot,
+      levelFile: level,
+      cacheRoot,
+      settings: { viewport: { aspect: "1:1", policy: "expand-only" } },
+      launcherVersion: "test",
+    })
+
+    expect(square.root).not.toBe(native.root)
+  })
+
   it("changes cache keys when non-core webroot files change", async () => {
     const webroot = await tempRoot("webroot")
     const cacheRoot = await tempRoot("cache")
     await writeWebroot(webroot, 'exportType:"html5"')
-    await writeFile(join(webroot, "data.json"), JSON.stringify({ version: 1 }))
+    await writeFile(join(webroot, "extra.txt"), "version 1")
     const level = join(webroot, "source-level.json")
     await writeFile(level, JSON.stringify({ level: "one" }))
 
@@ -119,7 +214,7 @@ describe("YFS prepared root cache", () => {
       settings: {},
       launcherVersion: "test",
     })
-    await writeFile(join(webroot, "data.json"), JSON.stringify({ version: 2 }))
+    await writeFile(join(webroot, "extra.txt"), "version 2")
     const second = await prepareYfsLaunchRoot({
       webroot,
       levelFile: level,

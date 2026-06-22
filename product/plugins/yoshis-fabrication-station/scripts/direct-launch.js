@@ -17,6 +17,10 @@
     inputCount: 0,
     canvasFound: false,
     codeLength: 0,
+    zoomMode: null,
+    zoomResolvedScale: null,
+    zoomApplied: false,
+    zoomError: null,
   }
   const state = window.__YFS_DIRECT_LAUNCH
 
@@ -71,9 +75,51 @@
 
   const renderDebug = () => {
     debug.style.display = debugEnabled ? "block" : "none"
-    debug.textContent = `YFS direct launch\nstatus: ${state.status}\ntransport: ${state.transport || "none"}\nattempts: ${state.attempts}\ninputs: ${state.inputCount} found=${state.inputFound}\ncanvas: ${state.canvasFound}\ncode: ${state.codeLength} chars${state.lastError ? `\nerror: ${state.lastError}` : ""}`
+    debug.textContent = `YFS direct launch\nstatus: ${state.status}\ntransport: ${state.transport || "none"}\nattempts: ${state.attempts}\ninputs: ${state.inputCount} found=${state.inputFound}\ncanvas: ${state.canvasFound}\ncode: ${state.codeLength} chars\nzoom: ${state.zoomApplied ? state.zoomResolvedScale : "not-applied"}${state.zoomError ? ` (${state.zoomError})` : ""}${state.lastError ? `\nerror: ${state.lastError}` : ""}`
   }
   setInterval(renderDebug, 250)
+
+  const numericParam = name => {
+    const raw = params.get(name)
+    if (raw === null || raw === undefined || raw === "") return null
+    const value = Number(raw)
+    return Number.isFinite(value) ? value : null
+  }
+
+  const desiredYfsLayoutScale = () => {
+    state.zoomMode = (params.get("zoom_mode") || "none").replace(/-/g, "_")
+    return numericParam("zoom_scale")
+  }
+
+  const yfsRuntime = () => {
+    const runtimeInterface = globalThis.c3_runtimeInterface
+    return (
+      runtimeInterface?._GetLocalRuntime?.() ||
+      runtimeInterface?._localRuntime ||
+      null
+    )
+  }
+
+  const applyYfsLayoutScale = () => {
+    const scale = desiredYfsLayoutScale()
+    if (scale === null) return false
+    const runtime = yfsRuntime()
+    if (!runtime) throw new Error("Construct runtime is not available")
+    const layout =
+      runtime.GetCurrentLayout?.() || runtime.GetMainRunningLayout?.() || null
+    if (!layout) throw new Error("Construct layout is not available")
+    const layoutName = layout.GetName?.()
+    if (layoutName && layoutName !== "Level")
+      throw new Error(`Expected Level layout, got ${layoutName}`)
+    const iLayout = layout.GetILayout?.()
+    if (iLayout) iLayout.scale = scale
+    else if (layout.SetScale) layout.SetScale(scale)
+    else throw new Error("Construct layout scale API is not available")
+    state.zoomResolvedScale = scale
+    state.zoomApplied = true
+    state.zoomError = null
+    return true
+  }
 
   const decodeBase64Url = value => {
     const padded = value
@@ -360,6 +406,13 @@
     state.status = "waiting-for-gameplay"
     await waitForGameplayToReplaceLoadUi()
     await new Promise(resolve => setTimeout(resolve, 650))
+    state.status = "applying-layout-zoom"
+    try {
+      applyYfsLayoutScale()
+    } catch (error) {
+      state.zoomError = String(error?.message || error)
+      throw error
+    }
     state.status = "ready"
     setOverlay(false)
     if (bootFrameCaptureTimer) clearInterval(bootFrameCaptureTimer)

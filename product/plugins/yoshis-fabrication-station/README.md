@@ -34,6 +34,8 @@ Pinned upstream zip SHA256:
 ```bash
 yfs-launch another-yoshis-island-2-6.json
 yfs-launch --metrics --bgm-volume=7 --sfx-volume=7 level.json
+yfs-launch --viewport=832x832 --zoom=auto-area level.json
+yfs-launch --viewport=832x832 --zoom=fixed:1.35 level.json
 ```
 
 Contract:
@@ -47,9 +49,10 @@ Contract:
   `level.json`, then launches `index.html?code_url=level.json`.
 - Prepared roots are keyed by webroot identity, level digest, launcher version,
   and settings. Corrupt/incomplete roots are rebuilt once.
-- Prepared roots strip the legacy `direct-launch-pre.js`/`direct-launch.js`
-  tags so the new web-canvas pre-navigation shims are the only launch
-  automation path.
+- Prepared roots preserve the packaged `direct-launch-pre.js` and
+  `direct-launch.js` seam. `yfs-launch` does not inject a second loader over the
+  page; the owned page scripts open the YFS Play Level UI, load `level.json`,
+  and apply Construct runtime presentation settings.
 - `--allow-file-access-from-files` is private to this local-file launcher; it is
   not a generic web-canvas default.
 
@@ -64,11 +67,24 @@ YFS launcher settings:
 --sfx-volume 0..10
 --metrics
 --debug
+--viewport WIDTHxHEIGHT
+--viewport-aspect W:H
+--zoom auto-area
+--zoom fixed:SCALE
+--zoom-multiplier SCALE
 ```
 
-The settings helper intentionally does **not** patch WebGL with
-`preserveDrawingBuffer`. That patch was useful for old boot-frame capture, but it
-risks the 120fps-class Chromium/WebGL path.
+The settings helper and packaged direct-launch prelude intentionally do **not**
+patch WebGL with `preserveDrawingBuffer`. That patch was useful for old
+boot-frame capture, but it risks the 120fps-class Chromium/WebGL path.
+
+Viewport settings patch only prepared-root `data.json` copies so Construct boots
+with the requested viewport metadata while the source webroot remains immutable.
+Zoom settings are runtime behavior: `direct-launch.js` applies Construct layout
+scale through the observed `ILayout.scale` API after the supplied level reaches
+gameplay. The default `auto-area` zoom uses native YFS `832x448` as the reference
+and can be tuned with `--zoom-multiplier`; `fixed:SCALE` bypasses the automatic
+formula.
 
 ## Legacy `yfs` CLI
 
@@ -96,9 +112,13 @@ The Construct export's `scripts/c3main.js` is minified. The derivation:
 1. copies the upstream web export,
 2. beautifies `scripts/c3main.js` with pinned nixpkgs `prettier`,
 3. applies `tools/patch-c3main.mjs` to wrap selected setting reads,
-4. injects the legacy direct-launch scripts for the `yfs` wrapper,
-5. packages separate `yfs-launch-*` shims for the productized launcher,
+4. injects the owned direct-launch scripts used by packaged YFS launches,
+5. packages separate launcher TypeScript and helper scripts for `yfs-launch`,
 6. ships the readable patched `c3main.js`.
 
 This avoids fragile one-line patches against the minified blob while keeping the
-actual changes small and auditable.
+actual changes small and auditable. Viewport and zoom must not be added to
+`tools/patch-c3main.mjs`: viewport is prepared-root JSON metadata, and zoom is
+owned runtime behavior in `direct-launch.js`. Runtime replacement for the
+remaining generated-code settings hook is tracked separately in backlog
+`01KVR43FHRSBD0WQAV0BY51CQC`.
