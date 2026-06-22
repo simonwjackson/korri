@@ -1,193 +1,274 @@
-# Institutional Learnings Search Results
+# Institutional Learnings — `@korri:remap` Refactor Planning
 
 ## Search Context
-
-- **Feature/Task**: No-backwards-compat Korri plugin/config schema big-bang refactor — standardizing plugin-contributed launcher definitions, `target`/`launch` split, common normalized settings packs, provider-linked identity, and system registry, as drafted in `work/items/active/01KVGDKT01DNT9NRDKS846CJQ1-plugin-launcher-standardization/config-sketch.korri.yaml`.
-- **Keywords Used**: plugin, launcher, cascade, schema, first-party, provider, retroarch, steam, gamescope, registry, boundary, settings, migration, big-bang, explicit-policy, YAML, library, systems, runtime, contract
-- **Files Scanned**: 54 total files across `docs/solutions/`
-- **Relevant Matches**: 12 files (5 strong, 5 moderate, 2 active parking-lot items)
+- **Feature/Task**: Refactor the just-landed CDP input bridge API into a general launch-scoped `@korri:remap` launch companion. Preserve strong isolation, adopt the `launch.with` provider-map convention used by gamescope, hide CDP/Chrome implementation details, and support multi-controller bindings + gamepad-to-keyboard / gamepad-to-gamepad outputs.
+- **Keywords Used**: plugin composition, launch lifecycle, launch.with, provider-map, launch companion, session-lifecycle-hook, input bridge, gamescope, browser runtime, CDP, isolation, uinput, controller, gamepad, sessiond, cascade policy, explicit intent
+- **Files Scanned**: 47 files across `docs/solutions/{architecture-patterns,design-patterns,best-practices,integration-issues,runtime-errors,tooling-decisions,workflow-issues}` plus live plugin source
+- **Relevant Matches**: 9 files
 
 ---
 
 ## Critical Patterns
 
-No `docs/solutions/patterns/critical-patterns.md` exists in this repo.
+`docs/solutions/patterns/critical-patterns.md` does not exist in this repo.
 
 ---
 
 ## Relevant Learnings
 
-### 1. Korri Plugin Architecture — Taxonomy, Namespace, and First-Party Layout
-
-- **File**: `docs/solutions/architecture-patterns/korri-plugin-architecture-2026-06-02.md`
-- **Module**: Plugin system / korri/plugins
-- **Problem Type**: `architecture_pattern`
-- **Relevance**: Directly defines the vocabulary and rules for the plugin contribution model the config-sketch is instantiating. Every decision in the sketch — `@korri:retroarch`, `@korri:zquest-classic`, `@korri:steam`, `@korri:nixpkgs`, `@korri:process` — lives inside this contract.
-- **Key Insight**:
-  - Use the Playnite-shaped taxonomy: `ContentSource`, `MetadataProvider`, `GenericPlugin`. This is the established language; do not invent synonyms.
-  - Plugin RPCs use `plugin.<id>.<action>`. Handler files live under the owning plugin directory.
-  - First-party plugin code lives under `product/plugins/<id>/*`; reusable host contracts stay in shared/platform code.
-  - `@plugins/*` is the alias for the plugin layer, separate from `@app/*` and `@shared/*`.
-  - **Plugins contribute data and actions, not DOM, styling, or home-grid slots.** The theme stays in control of rendering.
-  - **Intent extensibility starts closed.** The host routes only known intent tags; unknown tags fail at the seam until a registry is deliberately extended.
-  - Input contract enforcement: every plugin manifest declares `inputContract: "gamepad-first"`.
-  - User-installed plugins live outside the Nix closure under `~/.config/korri/plugins/<id>`. In-tree first-party plugins may have Nix modules; user plugins must not require a system rebuild.
-  - The first implementation slice introduces `ContentItem`, `ContentSourceService`, and `ContentSources` alongside `LibrarySource`; existing call sites stay stable until later slices migrate layers behind the generalized contract.
-- **Severity**: Not stated (active guidance, dated 2026-06-02 — current)
-
----
-
-### 2. Gamescope as Plugin-Owned Composition — The Generic Platform Boundary Rule
-
+### 1. Gamescope as Plugin-Owned Composition (`launch.with` is the canonical companion convention)
 - **File**: `docs/solutions/architecture-patterns/gamescope-as-plugin-owned-composition-2026-06-17.md`
 - **Module**: plugins + launch-composition + nix-composition
 - **Problem Type**: `architecture_boundary`
-- **Relevance**: Establishes the authoritative rule for what the platform owns vs what a first-party plugin owns. Gamescope is the canonical worked example; the same rule applies verbatim to `@korri:retroarch`, `@korri:zquest-classic`, `@korri:steam`, and any new plugin the big-bang introduces.
+- **Relevance**: `@korri:remap` must use exactly this convention. This is the team's documented and landed pattern for launch companions — the gamescope plugin is the reference implementation.
 - **Key Insight**:
-  - **Generic Korri code (platform, services, apps, themes, reusable Nix modules) does not name specific plugins.** The platform owns: generic provider maps, plugin registries, launch-companion dispatch, stream-control metadata/action transport, session lifecycle hook points, and structured diagnostics.
-  - Each plugin owns: its provider id, policy payload shape, launch wrapping, runtime-control protocol, stream-control definitions, and plugin-owned Nix artifacts.
-  - Config authors compose launch companions through `launch.with` entries keyed by provider id. The platform decodes the map generically; provider-specific validation and folding belong to the enabled plugin.
-  - When an authored launch references a provider that is absent, disabled, or rejects its payload, **dry-run and actual launch return structured plugin diagnostics before process spawn**. Library listing and unrelated launches must not require the missing plugin.
-  - Products/images opt into a plugin by enabling it in composition; a no-plugin composition must still evaluate cleanly.
-  - The sketched `launch.with."@korri:gamescope"` shape in config examples is the correct form; a retired top-level `gamescope:` field is wrong.
-  - Open backlog: generic plugin composition diagnostics for cross-plugin launch constraints (`01KVBNK266WD0D4GX2DSABA9QG`) and generic authored coordination for multi-plugin stream controls (`01KVBPNPXZ3X49XSCFXPY6CVW8`) are still deferred.
+
+  The platform owns: generic provider maps, plugin registries, launch companion dispatch, session lifecycle hook points, and structured diagnostics.
+
+  The plugin owns: the provider id, the policy payload shape, the launch-wrapping behaviour, the runtime-control protocol, and its Nix artifacts.
+
+  Config authors compose through `launch.with` entries keyed by provider id:
+
+  ```yaml
+  launch:
+    with:
+      "@korri:gamescope":
+        enable: true
+        backend:
+          type: wayland
+  ```
+
+  The platform decodes that map generically. Provider-specific validation and folding belong to the enabled plugin. **Generic Korri code (platform, services, apps, themes, Nix modules) must not name the plugin.**
+
+  When an authored launch references a provider that is absent, disabled, or rejects its payload, dry-run and actual launch return structured `LaunchCompanionDiagnostic` before process spawn. The `composeLaunchCompanions` function in `product/platform/plugin/launch-companion.ts` is the dispatch surface — it already handles `PluginMissing`, `PluginDisabled`, `CapabilityMissing`, `OperationFailed`, and `InvalidOperationResult` with typed diagnostics.
+
+  **The current CDP bridge uses `launchMetadata.annotations["@korri:cdp-input-bridge"]`** — not `launch.with`. The refactor to `@korri:remap` is specifically about migrating from the annotations-at-runtime pattern to the `launch.with` config-layer pattern. This is a meaningful seam change: `launch.with` entries are evaluated at compose time (preflight, dry-run) while annotations are only read at `afterChildRunning`.
+
+  Keep multi-plugin control coordination out of examples until Korri has a generic authored-control model; authors express desired plugin composition directly.
+
 - **Severity**: high
 
 ---
 
-### 3. Explicit Cascade-Folded Policy Over Incidental Signal Heuristics
-
+### 2. Explicit Cascade-Folded Policy Over Wrapper-Side Env/Argv Heuristics
 - **File**: `docs/solutions/design-patterns/explicit-cascade-folded-policy-over-incidental-signal-heuristics-2026-05-27.md`
-- **Module**: korri/shared/library/config + tools/device/game-stream-fullscreen
+- **Module**: korri/shared/library/config + launch composition
 - **Problem Type**: `design_pattern`
-- **Relevance**: The config-sketch's common normalized settings packs (`display`, `audio`, `input`, `saves`, `lifecycle`) and the `settings.plugin` typed pack are exactly the layered, cascade-merged policy fields this pattern describes. The refactor introduces a cascade (global → named launchers → system → release `launch` overlay → release `overrides`); this pattern governs how fields in that cascade must be authored.
+- **Relevance**: The `@korri:remap` policy schema should make all binding intent explicit — no inferring controller type from device names at compose time, no sniffing argv/env to decide which target to use. This pattern has bitten three separate subsystems (gamescope flags, input-bus source inference, focus-style inference).
 - **Key Insight**:
-  - **Make intent explicit in named, cascade-folded fields.** When a wrapper or composer needs to know something the child owns, add that as a documented policy field — not inferred from argv, environment, or on-disk config the composer cannot read.
-  - **The component that knows a fact records it in policy at construction time.** The composer emits from policy strictly, with no env-sniffing or argv-inspection.
-  - **Delete the old heuristic when you ship the field.** A heuristic left alongside an explicit field creates a silent parallel universe where both can disagree.
-  - **Provide a correct-for-typical-deployment default** at the floor of the cascade. Atypical deployments override in YAML; the common case needs no authoring ceremony.
-  - This exact pattern bitten three times before this doc was written: (1) gamescope `--expose-wayland` flag inferred from child argv — wrong for RetroArch's on-disk `retroarch.cfg`; (2) input-bus action source inferred from timing windows; (3) spatial focus attribute inferred from browser's `:focus-visible`. All three were fixed the same way: explicit named field, emitter sets it, consumer reads it.
-  - Direct application: `settings.display.fullscreen`, `settings.display.integerScale`, `settings.display.vsync`, etc. must be modeled as cascade-folded named fields, never guessed from launcher argv or environment at runtime.
+
+  **Make intent explicit in cascade policy fields.** When a wrapper or companion needs to know something about the child it launches, add that knowledge as a named, cascade-folded field on the policy. The component that knows a fact records it in the policy at construction time; the companion emits strictly from resolved policy.
+
+  ```
+  Caller knows fact → sets field in policy → companion emits from policy
+  (never: composer infers fact from argv/env/device name at compose time)
+  ```
+
+  For `@korri:remap`, this means:
+  - Each binding explicitly names its `source` (device selector) and `target` (output type + parameters).
+  - The output type (`cdp-key`, `uinput-gamepad`, future types) is a declared field, not an inference from the game's launch argv.
+  - The "mapping preset" is a named string in policy, resolved by the plugin. The cascade can override it per-game, per-launcher, or globally via inheritable fields.
+  - Provide a correct-for-typical-deployment default at the floor of the cascade. Callers in the common case need not specify anything beyond `enable: true`.
+
+  **Delete the old heuristic when you ship the new field.** Leaving an inference path alongside a new explicit policy field creates a parallel universe where both can disagree and the loser is silent.
+
 - **Severity**: medium
 
 ---
 
-### 4. RetroArch — nixpkgs Wrapper Silently Injects `-L coredir`, Breaking Explicit Core Launches
-
-- **File**: `docs/solutions/runtime-errors/retroarch-bare-passthru-wrapper-injects-l-coredir-2026-05-27.md`
-- **Module**: nix/images/kiosk.nix
-- **Problem Type**: `runtime_error`
-- **Relevance**: The config-sketch models `@korri:retroarch` as a named launcher with `plugin: "@korri:retroarch"` and per-runtime core `.so` paths. The Nix packaging of RetroArch must avoid the wrapper trap to honor explicit `-L <core.so>` from the launcher — or the entire runtime selection model silently breaks.
+### 3. Session Lifecycle Hook Contract — `afterChildRunning` + `stopBeforeCleanup`
+- **File**: `product/platform/plugin/session-lifecycle.ts` (live source) + `docs/solutions/architecture-patterns/sessiond-operator-model-2026-05-29.md`
+- **Module**: product/platform/plugin + tools/device/sessiond
+- **Problem Type**: `architecture_pattern`
+- **Relevance**: The `@korri:remap` bridge process (whether CDP or uinput) must integrate via `KorriSessionLifecycleHook`. The existing CDP bridge's integration shape is the reference — the refactor should keep this integration point and extend it, not replace it.
 - **Key Insight**:
-  - **Do NOT use `pkgs.retroarch-bare.passthru.wrapper { cores = ...; }`** when the launcher passes an explicit `-L <core.so>`. The wrapper unconditionally prepends `-L <coredir> --appendconfig=<cfg>` to every invocation. With two `-L` flags, RetroArch falls back to extension-based content routing, picking the wrong core.
-  - **Use `pkgs.symlinkJoin`** to compose `retroarch-bare` + individual core `.so` files. This exposes the binary and cores without injecting any flags. Propagate `passthru.cores` and `passthru.unwrapped` so closure-shape NixOS assertions stay valid.
-  - **Expose core paths via `environment.etc."korri/cores/<name>.so".source`** to give the launcher a stable, rebuild-stable absolute path that avoids baking per-build Nix store hashes into user-facing library YAML.
-  - The closure-shape test (`nix/tests/korri-rocknix-sm8550-config-check.nix`) matches on `passthru.cores` + `passthru.unwrapped` attrs, not pname (pname drifts with version bumps). Keep it.
-  - **Reviewer rule**: when nixpkgs exposes both `<pkg>` and `<pkg>.passthru.wrapper { ... }`, default to `<pkg>` + explicit `symlinkJoin`. Reach for the upstream wrapper only when you want its injected flags.
-  - This is one instance of a recurring pattern: _helpers that inject implicit defaults are fine for opaque callers and wrong for explicit ones._
+
+  The `KorriSessionLifecycleHook` interface provides:
+  - `afterChildRunning({ launchId, spec, launchMetadata, terminateLaunch })` — start the bridge after the game process is running. Returns a handle with `label`, `resource`, and `stopBeforeCleanup`.
+  - `cleanup({ launchId, processGroupId, launchMetadata })` — post-exit cleanup.
+  - `failurePolicy: "fail-launch" | "warn"` — the current CDP bridge uses `"fail-launch"` (fail closed). Keep this for `@korri:remap`.
+
+  The sessiond foreground event sequence is:
+  ```
+  child-running → (game runs) → child-exited → restoring → home-ready|idle-ready
+  ```
+  The bridge process must be stopped in `stopBeforeCleanup` so it does not outlive the session and does not convert input events after the game has exited (critical for returning to the Korri UI without phantom key events).
+
+  **Important distinction**: the `launch.with` compose operation happens at preflight/dry-run time (wraps the LaunchSpec); the session lifecycle hook fires at `afterChildRunning` time. `@korri:remap` with uinput output needs **both**: compose-time validation (does uinput access exist? is the mapping name known?) and runtime hook (start the bridge process when the game is running).
+
+  The protocol evolution rule (from sessiond operator model): capability flags over schema versioning. When `@korri:remap` adds a new output type (e.g. `uinput-gamepad`), encode daemon support as a capability flag, not a schema version bump.
+
 - **Severity**: high
 
 ---
 
-### 5. Architectural Posture Belongs in the Image-Level Default — Zero-Back-Compat Nix Migration Pattern
-
-- **File**: `docs/solutions/architecture-patterns/architectural-posture-as-nix-image-default-2026-05-27.md`
-- **Module**: nix/images + nix/modules
-- **Problem Type**: `architecture_pattern`
-- **Relevance**: The plugin/config big-bang is explicitly no-backwards-compat. Any Nix module options that are being deleted or semantically repurposed follow this pattern — the new posture belongs in the image-base composition layer, not in the module's `lib.mkDefault`, so that all image variants that opt into the new shape inherit it structurally.
+### 4. Steam Input Needs `/dev/uinput` Group Access — Handle Both Device States
+- **File**: `docs/solutions/integration-issues/steam-uinput-permissions-block-virtual-xinput-2026-06-13.md`
+- **Module**: korri-steam / product/systems/nixos/modules/korri-steam.nix
+- **Problem Type**: `integration_issue`
+- **Relevance**: `@korri:remap` with `gamepad-to-gamepad` output must create virtual input devices via uinput. This is a privilege-escalation relative to the current CDP-only bridge (which deliberately avoids uinput). The permission pattern has an established form in this repo.
 - **Key Insight**:
-  - **When a capability flips from opt-in to always-on (zero-back-compat), push the new posture to the lowest layer that universally implies it — the image base, not the module.**
-  - The module's `lib.mkDefault` stays conservative so a bare one-off NixOS host importing the module doesn't get the fleet posture. The image-base sets the posture for everyone that builds an image.
-  - A multi-option capability (e.g., `host`, `openFirewall`, `services.avahi.enable` all needed for federation) must be bundled at the image layer to prevent drift. If any single option is forgotten on the module, the compose silently regressions.
-  - **The corresponding NixOS evaluation-time assertion flips at the same layer:** the check lives in `korri-image-outputs-check.nix` at the image level, not buried in the module test.
-  - Applies when: a capability was originally opt-in and the deletion of its knob is the zero-back-compat signal; when out-of-band host configs have been silently providing what the image base should provide; when the module is shared between fleet images and one-off single-machine consumers.
+
+  Virtual input device creation is a two-part path: (1) physical input visible → (2) permission to open `/dev/uinput` and issue ioctls. A plugin that can enumerate the physical device but cannot create the virtual one will fail silently from the game's perspective.
+
+  The durable fix shape from the Steam case:
+  ```sh
+  # Ensure uinput is accessible to the korri group
+  chgrp input /dev/uinput 2>/dev/null || true
+  chmod 0660 /dev/uinput 2>/dev/null || true
+  ```
+
+  Handle both device states: the character device may already exist (normal boot) or may need to be created from the kernel-reported major/minor pair (stale/missing node). Both paths must end with the same ownership/mode policy.
+
+  The NixOS module approach: use `services.udev.extraRules` or `boot.extraModprobeConfig` to set uinput group membership at boot. Do not rely on a pre-exec shell script alone.
+
+  **For `@korri:remap`**: the `@korri:remap` Nix module should declare a `capabilities.uinput` flag (or similar) that enables the uinput permission wiring. Image compositions that do not need gamepad-to-gamepad output should evaluate cleanly without it. The platform generic code should not know which capability gates uinput — the plugin's Nix module declares it.
+
+  **Validation checklist**:
+  1. Build the module check: `nix build .#checks.x86_64-linux.korri-remap-module`
+  2. Verify node ownership: `ls -l /dev/uinput` (expect `crw-rw---- root input`)
+  3. Confirm no new virtual devices persist after session ends
+  4. Confirm the selected source is the InputPlumber virtual controller, not a raw source device
+
+- **Severity**: high
+
+---
+
+### 5. Input Isolation at Compositor/Session Boundaries — Per-Game Gamescope Wrapping Breaks Input
+- **File**: `docs/solutions/architecture-patterns/steam-inside-gamescope-preserves-steam-input-2026-06-15.md`
+- **Module**: Bandai Steam launches
+- **Problem Type**: `architecture_pattern`
+- **Relevance**: `@korri:remap` runs as a sidecar that dispatches synthesized input to a specific process. The bridge must remain in the same session scope as the game. Compositor/session boundaries that move the game to a different input domain will silently break the bridge. This is the same failure topology as Steam Input + per-game Gamescope.
+- **Key Insight**:
+
+  Steam Input is part of the Steam session architecture — not just an input device visible to the game. Per-game nested Gamescope moves the game across a focus/input boundary that Steam Input does not bridge reliably. The A/B isolation was definitive:
+
+  - normal Steam/no Korri wrapper: controls worked
+  - Korri wrapper with inline Gamescope (per-game): **controls failed**
+  - Steam inside Gamescope (session-level): controls worked
+
+  **For `@korri:remap`**: the CDP keyboard dispatch sends events to a specific page via the Chrome DevTools Protocol over localhost — this is session-agnostic as long as the Chromium process is alive and addressable. But the evdev source path (reading `/dev/input/event*` via evtest) and the uinput sink path (writing `/dev/uinput`) are kernel-seat-scoped. If `@korri:gamescope` and `@korri:remap` are composed together (game inside Gamescope, remap bridge as sidecar), verify that the uinput device created by the remap bridge lands in the seat the game reads from. A uinput device created outside a Gamescope session may not appear inside it.
+
+  **Prevention**: When `launch.with` composes both `@korri:gamescope` and `@korri:remap`, document which output types are safe across the Gamescope boundary (`cdp-key` over localhost TCP — safe; `uinput-gamepad` seat injection — verify per-target).
+
+- **Severity**: high
+
+---
+
+### 6. Boot-Scoped Isolation Contract — Plugin Processes Must Not Escape Session Scope
+- **File**: `docs/solutions/architecture-patterns/boot-scoped-control-plane-with-session-scoped-runner-2026-05-19.md`
+- **Module**: nix/modules/korri-server
+- **Problem Type**: `architecture_pattern`
+- **Relevance**: The `@korri:remap` bridge process is a session-scoped sidecar. The lessons about fail-closed trust contracts, private runtime dirs, and explicit ownership are directly applicable to designing the bridge's lifecycle boundaries.
+- **Key Insight**:
+
+  When a sidecar process must share private runtime state with a session runner, model the lifecycle as an explicit option and derive paths/ownership from a single authoritative source. Fail closed at **evaluation** (Nix assertions), not at **runtime** (service startup errors).
+
+  Key patterns for `@korri:remap`:
+
+  1. **Explicit process ownership**: the bridge process is owned by the session lifecycle hook. The hook starts it in `afterChildRunning` and stops it in `stopBeforeCleanup`. The hook holds the only reference; no orphan processes can linger.
+
+  2. **Conservative hardening for long-lived bridge processes**: if `@korri:remap` runs as a separate binary (like `korri-cdp-input-bridge` does today), apply systemd-level sandboxing to it: `NoNewPrivileges = true`, `PrivateNetwork = true` (for CDP-only; uinput targets need network off), `RestrictSUIDSGID = true`, `LockPersonality = true`. The bridge runs for the full game session — it has a larger attack surface than a one-shot command.
+
+  3. **Fail closed on missing preconditions**: If the mapping name is unknown, the source device is missing, or the CDP target doesn't respond within `attachTimeoutMs`, fail the launch (if `failClosed: true`) rather than letting the game start without input. The current CDP bridge already does this; preserve it in `@korri:remap`.
+
+  4. **The env injection seam**: if the bridge command is configurable via env var (`KORRI_CDP_INPUT_BRIDGE_COMMAND` in the current implementation), keep that seam for `@korri:remap`'s binary — it allows the NixOS module to inject the store path without hardcoding it in the plugin source.
+
 - **Severity**: medium
 
 ---
 
-## Additional Matches (Moderate Relevance)
-
-### 6. SessionD Protocol Evolution Rule — Additive Schema, Capability Flags Over Versioning
-
-- **File**: `docs/solutions/architecture-patterns/sessiond-operator-model-2026-05-29.md` (§ "Protocol evolution rule")
-- **Problem Type**: `architecture_pattern`
-- **Relevance**: Directly applicable to how the new plugin/config schema evolves after the big-bang ships. The same five rules should govern the config schema wire format.
-- **Key Insight** (five rules from `sessiond-managed-launch-protocol.ts`, preserved verbatim):
-  1. Schemas update before the daemon emits — add the optional field to client schemas first, deploy the daemon second.
-  2. Additive only — required fields are forever; deprecate by marking optional and leaving in the union.
-  3. Optional by default for new fields, even when the daemon always emits them.
-  4. Mixed-version deployments are supported during incident response and rollback windows.
-  5. **Capability flags over schema versioning** — when a daemon-side change is gated, encode the daemon's support as a capability flag. The capability is the contract; the schema is just the wire shape.
-  - `onExcessProperty: "error"` is the consumer-side default; relaxing requires a parallel decoder at the specific call site, never flipping the global flag.
-
-### 7. RetroArch Routes `.png` Content to Built-In Image-Display Core
-
-- **File**: `docs/solutions/runtime-errors/retroarch-png-extension-routes-to-image-display-core-2026-05-27.md`
-- **Problem Type**: `runtime_error`
-- **Relevance**: The config-sketch models PICO-8 content via `target.kind: file` with a `.p8` or `.p8.png` extension. The wrong extension silently routes to the wrong core regardless of an explicit `-L`.
+### 7. Gamescope Runtime Control Contract — Socket Protocol Shape for Sidecar Bridges
+- **File**: `docs/solutions/architecture-patterns/gamescope-runtime-control-contract-2026-06-02.md`
+- **Module**: korri/shared/gamescope-control
+- **Problem Type**: `architecture_pattern` (inferred — no explicit `problem_type` in frontmatter)
+- **Relevance**: If `@korri:remap` eventually needs a live-control protocol (pause, remap swap, diagnostics) analogous to Gamescope's control bridge, this is the established shape. Also relevant because a remap companion co-composed with Gamescope must not race writes to compositor state.
 - **Key Insight**:
-  - RetroArch's built-in `image display` core claims `.png`, `.jpg`, `.bmp`. When CLI is ambiguous (duplicate `-L`, directory-as-core), `.png` content routes to image-display, ignoring the explicit core.
-  - **Fix 1 (primary)**: eliminate CLI ambiguity by using `symlinkJoin` (see Finding 4 above) so the launcher's `-L` arrives unambiguous.
-  - **Fix 2 (belt-and-braces)**: store or symlink PICO-8 `.p8.png` carts to `.p8` in library YAML. The launcher references `.p8`; the underlying file remains a PNG-wrapped cart.
-  - Library import normalization rule: when ingesting PICO-8 carts, prefer `.p8` (raw) over `.p8.png`.
-  - The new schema's `target.kind: file` / `path` field must either carry an extension RA won't claim, or the launcher layer must normalize the extension before invoking RetroArch.
 
-### 8. Korri Product/Platform/Theme Architecture — First-Party Plugin File Layout
+  The Gamescope control contract rules that apply to any sidecar bridge:
 
-- **File**: `docs/solutions/architecture-patterns/korri-product-platform-theme-architecture-2026-06-03.md`
-- **Problem Type**: `architecture_direction` (status: proposed)
-- **Relevance**: Defines the target monorepo shape that the plugin/config refactor should align to, including exactly where first-party plugin code, Nix packages, and vendor lanes live.
-- **Key Insight** (status is `proposed`, not yet `active` — verify current layout before assuming it has landed):
-  - Target: `product/plugins/<id>/` for first-party plugin implementations. Plugin-owned Nix packages colocate under `product/plugins/<id>/packages/`.
-  - `product/platform/protocol/` is the stable framework-neutral surface (schemas, wire types, RPC contracts, typed errors). This is the right place for plugin contribution point contracts.
-  - `tools/` is developer-only automation — never delivered. Anything that ships to a device or user belongs in `product/apps/`, `product/services/`, or `product/systems/`.
-  - Vendor/upstream code for a plugin lives with the plugin: `product/plugins/gamescope/packages/gamescope-korri/`.
-  - Themes are autonomous and must not import `product/apps/*`, `product/services/*`, or plugin internals.
-  - **Conflict check**: current tree uses `product/plugins/` already (as visible in the directory structure). Verify whether `korri/plugins/` alias still applies or whether `product/plugins/` is now canonical.
+  - The socket (or channel) is **local-only and owner-only by default**.
+  - **Mutations serialize through a FIFO queue** — no concurrent writes from multiple clients.
+  - A command reports `applied` only after required readback matches (not just after send).
+  - Explicit non-success states: `unsupported`, `unimplemented`, readback mismatch, timeout, backend absence.
+  - Events are first-class server pushes with monotonic sequence numbers.
+  - Sessiond remains the lifecycle truth. The bridge reports control-plane readiness and state; it does not decide foreground session ownership.
 
-### 9. ProseQL Library YAML — Separate Payload Schema from Runtime Contract, Key-Derived IDs
+  For `@korri:remap` v1, a runtime control protocol is likely out of scope. But when it arrives, model it as a local Unix socket or loopback TCP (not a shared bus), and serialize binding changes through a single queue to prevent input state corruption.
 
-- **File**: `docs/solutions/best-practices/proseql-canonical-library-with-derived-yaml-ids-2026-05-06.md`
-- **Problem Type**: `best_practice`
-- **Relevance**: The config-sketch's `library:` section persists as YAML. The lesson applies directly: the persisted shape should separate the payload from the runtime contract, and the YAML key is the ID — not duplicated inside the record.
-- **Key Insight**:
-  - Object-keyed YAML collections: the YAML key is the record ID. The payload schema should NOT duplicate `id:` inside the record body (noisy, error-prone).
-  - `id: { kind: "derivedFromKey", field: "id" }` in ProseQL hydrates the ID at read time from the key.
-  - Keep a distinct persistence payload schema separate from the runtime contract. The repository boundary is where payload records get decoded into domain contracts.
-  - Snapshot import semantics for external sources (ROCKNIX, Steam catalog): import once, then Korri-owned storage is canonical. External sources are not a live read path.
+  **Current bridge diagnostic shape** (from `diagnostics.ts` in the CDP bridge): structured diagnostics with typed reasons, not log lines. Extend this for `@korri:remap` — the policy violation, device selection, and bridge attachment diagnostics should all be typed and reportable through `LaunchCompanionDiagnostic`.
 
----
-
-## Active Parking-Lot Items Directly Touching This Refactor
-
-Three deferred items are adjacent to the plugin/config schema work and should be consulted or parked against the big-bang plan:
-
-| ID | Title | Why It Matters Here |
-|----|-------|---------------------|
-| `01KTRYCK5XYMCSVYD55P7XWBDY` | Define Korri config authoring write-target semantics | CLI/import/editor flows need a safe, explicit destination for creating or updating config. The new multi-root config model leaves this undefined. |
-| `01KTTHJ7SPYEB5M1RTAT20RZ05` | Surface config-graph diagnostics and provenance in portal UI | Broken fragments now silently skip; diagnostics are the only signal. Record provenance is unexposed for slice D write-target routing. Absolute server paths currently leak in serialized events. |
-| `01KTVX0FH3M3CVCQ8CCG53GV8S` | Sweep config paths for storage-template tokens | Config schema has repeated absolute mount paths. `{storage:<id>}`-style tokens would improve portability and avoid hardcoded paths across the config sketch's `storage:`, `launchers:`, and `runtimes:` sections. |
+- **Severity**: medium
 
 ---
 
 ## Recommendations
 
-### Plugin boundary
-1. **Platform code must not name specific plugins by id** (`@korri:retroarch`, `@korri:gamescope`, etc.). The platform holds open maps (provider maps, `launch.with`, plugin registries) and decodes them generically. Plugin-specific validation, schema folding, and runtime protocol handling belong to the enabled plugin. Verify every generic platform file being touched in the big-bang for any hardcoded plugin ids.
-2. **Each first-party plugin owns its contribution to the systems registry**, not the platform. System support mappings like `gba → retroarch + mgba` are plugin-contributed; the platform joins them. The config-sketch's `systems:` top-level is a user-facing additive registry — confirm the platform only validates shape, not the closed list of ids.
+### 1. Adopt `launch.with` but preserve the session lifecycle hook
 
-### Settings cascade
-3. **Common normalized packs (`display`, `audio`, `saves`, `lifecycle`, `input`) are the right design** — they are cascade-mergeable across disparate launchers. However, every field in those packs must be a named, documented, explicitly-set field. No pack field should be inferred at compose time by inspecting argv, env, or on-disk launcher config files. Lean on `DEFAULT_*` floor values in the cascade and let authors override in YAML.
-4. **`settings.plugin` is the correct seam for plugin-specific typed settings.** Do not add `settings.retroarch`, `settings.zquest`, etc. as first-class common pack names. The selected `plugin:` selects the schema for `settings.plugin`; only `overrides.config.append` remains as an escape hatch for unmodeled raw config.
+The refactor has two independent seams to move:
 
-### RetroArch Nix packaging
-5. **Use `pkgs.symlinkJoin` + `environment.etc."korri/cores/<name>.so".source` for the `@korri:retroarch` plugin's Nix packaging.** Do not use `retroarch-bare.passthru.wrapper`. Keep `passthru.cores` and `passthru.unwrapped` on the composed package to preserve closure-shape assertions.
-6. **Avoid passing `.p8.png` content directly to RetroArch.** The library import path for PICO-8 should normalize `.p8.png` carts to a `.p8` symlink or copy. Consider adding a schema-level warning (or validation rule) when a fake-08 launcher targets a `.png`-extension file.
+- **Config seam**: migrate from `launchMetadata.annotations["@korri:cdp-input-bridge"]` to `launch.with."@korri:remap"` with an Effect Schema-decoded policy. This makes `@korri:remap` visible at preflight and dry-run time (the `launch.compose` operation validates the policy and checks capability before any process spawns).
+- **Runtime seam**: keep `KorriSessionLifecycleHook.afterChildRunning` as the process launch point. This is correct — the bridge process needs a live game process before it can attach to a CDP page or open a source device.
 
-### Zero-back-compat Nix migration
-7. **New postures introduced by the big-bang (e.g., "launcher plugins declare runtime mode") belong as image-base defaults**, not as NixOS module defaults. The module's `lib.mkDefault` stays conservative for one-off consumers. Add or update image-level NixOS evaluation-time assertions at the same layer the option is deleted/replaced.
-8. **Schema evolution after the big-bang ships must follow the additive-only rule**: required fields are forever, new fields default to optional, capability flags gate gated changes, mixed-version deployments must be tolerated during rollback windows.
+Do not collapse these into one. The compose operation validates; the lifecycle hook runs.
 
-### Config authoring gaps (from parking lot)
-9. **The write-target semantics for the new multi-root config model are undefined** (`01KTRYCK5XYMCSVYD55P7XWBDY`). Before shipping authoring tools (CLI import, portal editor) that create or update config, define which root is written to and how the system refuses or warns when no writable target exists.
-10. **Absolute storage paths in the config sketch's `launchers:` and `runtimes:` sections** (`/storage/saves/retroarch`, `/storage/bios`, `/etc/korri/cores/...`) are candidates for `{storage:<id>}`-style tokens (`01KTVX0FH3M3CVCQ8CCG53GV8S`). Surface this as a design question before the schema is locked: are these paths intentionally absolute, or should they resolve through the storage root registry?
+### 2. Define the `@korri:remap` policy schema in abstract terms — hide transport details
+
+The policy schema should not expose CDP vocabulary. Instead:
+
+```yaml
+launch:
+  with:
+    "@korri:remap":
+      enable: true
+      bindings:
+        - source:
+            preference:
+              names: ["Microsoft Xbox Series S|X Controller"]
+          mapping: "yfs-default"
+          target:
+            type: cdp-key        # ← abstract output type, not "CDP"
+            urlPattern: "index.html"
+            port: 9333
+        - source:
+            preference:
+              names: ["Player 2 Controller"]
+          mapping: "gamepad-mirror"
+          target:
+            type: uinput-gamepad  # ← second output type
+```
+
+The plugin schema owns what `type: "cdp-key"` means internally. Generic platform code, Nix modules, and docs only see the `@korri:remap` provider id and `enable: true/false`.
+
+### 3. For `uinput-gamepad` output, declare uinput capability in the plugin's Nix module
+
+Follow the pattern from `korri-steam.nix`. The `@korri:remap` Nix module should:
+
+1. Declare a `capabilities.uinput` opt-in option (or derive it from the presence of any `uinput-gamepad` target in the default config).
+2. Add a udev rule that sets `/dev/uinput` to `crw-rw---- root:input` at boot.
+3. Ensure the bridge process runs as a user in the `input` group.
+4. Add Nix assertions that `capabilities.uinput = true` is required when any enabled launch config uses `type: "uinput-gamepad"`.
+
+Fail at Nix evaluation, not at runtime.
+
+### 4. Apply the explicit cascade policy rule to multi-controller bindings
+
+Each binding in the `bindings` array is a fully-specified intent: source selector + mapping name + output type. No component downstream of the policy resolver infers any of these from device names, argv, or environment variables. The plugin is the only component that reads the evdev device characteristic file — it reads it to *select* among candidates, not to *infer* the output type.
+
+### 5. Verify the seat boundary when composing with `@korri:gamescope`
+
+Before shipping multi-plugin composition of `@korri:remap` + `@korri:gamescope`:
+
+- For `cdp-key` output: safe — CDP is loopback TCP, not seat-scoped. The Chromium process is inside Gamescope and still reachable on localhost.
+- For `uinput-gamepad` output: **verify**. A uinput device created by a process outside the Gamescope session may not be visible inside it. This may require creating the uinput device before Gamescope starts (i.e., in `launch.compose` not `afterChildRunning`) or finding a Gamescope-aware injection path.
+
+Capture this as a validation gate in the acceptance criteria before multi-binding + gamescope ships.
+
+### 6. Keep `failClosed: true` and `stopBeforeCleanup` as defaults
+
+The current CDP bridge fails launch on bridge startup failure (`failurePolicy: "fail-launch"`) and stops cleanly before session cleanup. Both must survive the rename. The remap bridge must not leave synthetic input events firing after the game exits — the first input event on the Korri UI after a session ends would otherwise produce phantom key presses.
+
+### 7. Preserve the `KORRI_REMAP_BRIDGE_COMMAND` env seam
+
+The NixOS module will inject the store path of the remap bridge binary via env. Keep this seam for test doubles — the session lifecycle hook tests can inject `false` (the `processManager === false` branch) to exercise the hook logic without spawning a real process.

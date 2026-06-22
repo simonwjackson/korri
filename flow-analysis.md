@@ -1,564 +1,373 @@
-# Steam Observability Flow Analysis
+# Flow Analysis: `@korri:cdp-input-bridge` → `@korri:remap`
 
-**Date:** 2026-06-14  
-**Inputs analysed:**
-- `docs/handoffs/steam-observability-implementation-handoff-2026-06-14.md`
-- `work/items/parking-lot/01KV3KWT98Y6W6CNXP05ZPSHH7-capture-steam-launch-diagnostics-as-first-class-session-arti.md`
-- `docs/research/steam-observability/bandai-2026-06-14/` (full fixture directory)
-- `product/services/device/sessiond-state.ts`, `korrid.ts`, `product/apps/portal/api/server/status.rpc-handler.ts`
+_Generated against trunk @ 2f27d32d. Reviewer role: UX / architecture gap analysis._
+
+---
+
+## Codebase Context
+
+Before mapping flows, key constraints surfaced from Phase 1:
+
+| Component | Location | What it does |
+|---|---|---|
+| `cdp-input-bridge` session hook | `product/plugins/cdp-input-bridge/src/session-lifecycle-hook.ts` | Spawns `korri-cdp-input-bridge` sidecar in `afterChildRunning` |
+| Policy / annotation source | `launchMetadata.annotations["@korri:cdp-input-bridge"]` | Not in `launch.with` |
+| Named mapping table | `product/plugins/cdp-input-bridge/src/mapping.ts` | `"yfs-default"` and `"none"` presets |
+| Launch companion seam | `product/platform/plugin/launch-companion.ts` | `launch.compose` operation; returns a mutated `LaunchSpec` |
+| Gamescope companion | `product/plugins/gamescope/src/launch-companion/` | Wraps command; does spec-transformation, not sidecar spawning |
+| Session hook registry | `product/plugins/index.ts → firstPartySessionLifecycleHookFactories` | Hooks are registered by plugin id; enabled via env |
+| Hook start contract | `product/platform/plugin/session-lifecycle.ts → KorriSessionLifecycleHookStartRequest` | Receives `spec`, `launchMetadata` — **not `launch.with`** |
+| `composeLaunchCompanions` call site | `product/platform/control/korri-control-live.ts:298` | Runs at launch-config time; receives `resolved.launchCompanions` (= `launch.with` map) |
+| Safety contract | `product/plugins/cdp-input-bridge/README.md` | Forbids `ydotoold`, `/dev/uinput`, raw source gamepads, profile switching |
+
+**The single most load-bearing architectural fact:** `KorriSessionLifecycleHookStartRequest` receives `launchMetadata` but _not_ `launch.with` / `launchCompanions`. There is **no existing seam** that delivers `launch.with` config to a session lifecycle hook. This is the central gap the plan must resolve before any other design decision is meaningful.
 
 ---
 
 ## User Flows
 
-### Flow 1 — Happy-path game launch observed end-to-end
+### Flow 1: Current CDP Bridge (authoritative baseline)
 
 ```
-Korri requests -applaunch <appId>
-        │
-        ▼
-console_log: ExecCommandLine … -applaunch <appId>      ← launch window opens
-        │
-        ├─ console_log: GameAction LaunchApp changed task → CheckShaderDepotManifest
-        ├─ console_log: GameAction LaunchApp changed task → ProcessingInstallScript (or RunningInstallScript)
-        ├─ console_log: Running install script evaluator for AppID …
-        └─ [20+ seconds of Preparing]
-                │
-                ▼
-        console_log: GameAction LaunchApp changed task → SynchronizingCloud
-        console_log: GameAction LaunchApp changed task → SynchronizingStats
-        console_log: GameAction LaunchApp changed task → ShowInterstitials
-        console_log: LaunchApp waiting for user response to ShowInterstitials
-        console_log: LaunchApp continues with user response "ShowInterstitials"
-        console_log: GameAction LaunchApp changed task → SynchronizingControllerConfig
-        console_log: GameAction LaunchApp changed task → SiteLicenseSeatCheckout
-        console_log: GameAction LaunchApp changed task → DelayLaunch
-        console_log: GameAction LaunchApp changed task → CreatingProcess
-        console_log: LaunchApp waiting for user response to CreatingProcess
-        console_log: LaunchApp continues with user response "CreatingProcess"
-        console_log: [NUL-delimited exec line — /bin/sh\0-c\0…]
-        console_log: Game process added : AppID <id> "…", ProcID <p1>, IP 0.0.0.0:0
-        console_log: GameAction LaunchApp changed task → WaitingGameWindow
-        console_log: GameAction LaunchApp changed task → Completed
-                │
-                ▼ (same second as Completed on Sonic/Caveblazers; ~0s after on Downwell)
-        gameprocess_log: AppID <id> adding PID <p1> as a tracked process "…"
-        gameprocess_log: AppID <id> adding PID <p2..pN> as a tracked process   ← no command
-        gameprocess_log: SSGL: InternalUpdateClientGame …
-        gameprocess_log: SSGL: change [<id>] LCT <old>->0
-        content_log:    AppID <id> state changed : Fully Installed,App Running,  ← Running confirmed
-        shader_log:     Setting MESA_GLSL_CACHE_DIR=…/shadercache/<id>            ← same second as Running
-                │
-                ▼  [game runs; may see additional PID adds (wine process, etc.)]
-        gameprocess_log: AppID <id> adding PID <pN+1> as a tracked process
-        console_log:    Game process updated : AppID <id> "…", ProcID <pN+1>
-        console_log:    Game process updated : AppID <id> "…", ProcID <pN+2>     ← may repeat
-                │
-                ▼  [user or Korri stops game — all events in the same second]
-        gameprocess_log: AppID <id> no longer tracking PID <pN+2>, exit code -1  ← burst
-        gameprocess_log: AppID <id> no longer tracking PID <pN+1>, exit code -1
-        [... all inner PIDs exit -1 ...]
-        gameprocess_log: AppID <id> no longer tracking PID <p1>, exit code 0     ← wrapper exits 0
-        gameprocess_log: Remove <id> from running list                            ← unmentioned in handoff
-        console_log:    Game process removed: AppID <id> "…", ProcID <last>       ← only last PID
-        console_log:    ThreadGetProcessExitCode: no such process <pN+2>          ← burst
-        content_log:    AppID <id> state changed : Fully Installed,               ← Stopped confirmed
-        shader_log:     AppID <id> exited.                                        ← same second as Stopped
-        shader_log:     Finding Mesa SF caches … [shader flush lines follow]
-                │
-                ▼
-        State: Stopped (launch window closes)
+Author config ──► launchMetadata.annotations["@korri:cdp-input-bridge"]
+                   │ { enable: true, cdpPort: 9333, mapping: "yfs-default", … }
+                   │
+                   ▼
+korri-control-live: composeLaunchCompanions
+   (skips CDP bridge — it has no launch.compose handler)
+                   │
+                   ▼
+sessiond: runManagedLaunch → spawn game child
+                   │
+                   ▼ afterChildRunning
+CDP bridge lifecycle hook reads launchMetadata.annotations
+   → resolveInputPlumberVirtualGamepad (single device)
+   → spawn korri-cdp-input-bridge
+       ├─ waitForBridgeReady (stdout "korri-cdp-input-bridge: ready")
+       ├─ evtest --grab /dev/input/eventN  ← grabs InputPlumber virtual controller
+       └─ WebSocket → Chromium CDP → Input.dispatchKeyEvent
+                   │
+                   ▼ stopBeforeCleanup
+   bridge.stop() → SIGTERM → evtest exits → releaseAll keys
 ```
 
-### Flow 2 — Same AppID relaunched after previous session's stale lines
+**Terminal states:** bridge ready (nominal), bridge exits unexpectedly → `terminateLaunch()` (fail-closed), bridge never becomes ready → timeout → fail-launch.
 
-Entry: tailer was running before game launch, so it captures preexisting lines already in the log file.
+---
 
-```
-[tailer starts at EOF — pre-existing history is not replayed]
-        │
-        ▼  [observer has no active window for AppID 360740]
-gameprocess_log: AppID 360740 no longer tracking PID 114897, exit code -1  ← stale
-gameprocess_log: AppID 360740 no longer tracking PID … (×8)
-gameprocess_log: Remove 360740 from running list
-content_log:    AppID 360740 state changed : Fully Installed,               ← stale stop
-console_log:    Game process removed: AppID 360740 "…", ProcID 114897
-        │
-        ▼  [3+ minutes of silence for AppID 360740]
-        ▼  [new launch arrives — see Flow 1]
-```
-
-**Critical:** without a preceding `App Running` in the active window, stale PID-removal and stale "stopped" lines must be ignored or classified as `Observed/hint` only. If the tailer starts cold (after a Korri restart) while the game is already running, the observer will see the PID adds and App Running in the live tail — those are the anchors.
-
-### Flow 3 — Korri/korrid restarts while game is already running
-
-Entry: korrid process was restarted; tailer starts at EOF of all log files.
+### Flow 2: Proposed `@korri:remap` — Happy Path (as described)
 
 ```
-        │
-        ▼  [tailer sees live activity only from this point]
-        [no ExecCommandLine, no GameAction tasks, no PID adds seen]
-        [no App Running transition — it already happened]
-                │
-                ▼  [game stops normally]
-        gameprocess_log: AppID <id> no longer tracking PID …
-        gameprocess_log: Remove <id> from running list
-        content_log:    AppID <id> state changed : Fully Installed,
+Author config ──► launch.with["@korri:remap"]
+                   │ { enable: true,
+                   │   p1: { dpad: { down: "key.down" },
+                   │         stick: { left: "key.left" } } }
+                   │
+                   ▼
+composeLaunchCompanions
+   → @korri:remap launch.compose handler
+   → ???  (what does the spec mutation look like?)
+                   │
+                   ▼
+sessiond: spawn game
+                   │
+                   ▼ (if remap is a session lifecycle hook)
+How does the hook read launch.with config?
+   (current contract: no seam for this)
 ```
 
-**Gap:** The observer never sees the launch start. `Stopped` arrives without a prior `Running`. The plan's acceptance criteria don't address this; the observer's snapshot will be empty or stale. Without supplemental proc-corroboration (`/proc/*/cmdline` scan for active `SteamLaunch AppId=`) the observer would report no known state even while the game is live.
+This flow has **no defined terminal state** for the runtime side — the plan must specify whether the remap process is:
+- (A) A launch-compose wrapper injected into the `LaunchSpec` command
+- (B) A session lifecycle sidecar that reads config from a new seam
+- (C) Both (like gamescope: compose + session hook)
 
-### Flow 4 — Observer sees only `Stopped` without prior `Running` (launch failed mid-stream)
+---
 
-Example: `CheckShaderDepotManifest` times out, Steam drops the launch, and content_log never emits `App Running`.
+### Flow 3: Multiple Controllers
 
 ```
-console_log: GameAction LaunchApp changed task → CheckShaderDepotManifest
-        [silence — no further progress for N seconds]
-                │
-        Stuck state inferred
-                │
-        ▼  [Steam eventually cancels]
-content_log: AppID <id> state changed : Fully Installed,   ← appears WITHOUT prior App Running
-gameprocess_log: (possibly no PID lines at all)
+launch.with["@korri:remap"]:
+   p1: { dpad: { down: "key.down" } }
+   p2: { dpad: { down: "key.x" } }
+                   │
+                   ▼
+resolveInputPlumberVirtualGamepad() ← currently returns ONE device
+How are two device slots resolved?
+   - By index among all InputPlumber virtual gamepads?
+   - By named preference per slot?
+   - By stable slot assignment from InputPlumber?
 ```
 
-**Gap:** The `Stopped` signal from `content_log` without a prior `App Running` in the current window is ambiguous between a launch failure and a stale/preexisting stop line. The handoff says "use active AppID state" but does not specify how the reducer distinguishes "stopped before it started" from "stale preexisting stop."
+---
+
+### Flow 4: Gamepad-to-Gamepad Binding
+
+```
+launch.with["@korri:remap"]:
+   p1: { btn: { south: "p1.btn.east" } }  ← remap A → B
+                   │
+                   ▼
+Output target is a virtual gamepad, not a keyboard key.
+Current mechanism to emit to a gamepad device: uinput (FORBIDDEN)
+                   │
+                   ▼
+???
+```
+
+No existing mechanism in this codebase produces virtual gamepad output without uinput or InputPlumber profile switching, both of which are banned by the current safety contract.
+
+---
+
+### Flow 5: Kebab-Case Dot-Path Binding Parsing
+
+```
+"p1.dpad.down: key.down"
+             │
+             ▼
+Parse source: player slot (p1) → input type (dpad) → direction (down)
+  → resolve to evdev code: BTN_DPAD_DOWN? ABS_HAT0Y negative? Both?
+
+Parse target: key → direction (down)
+  → resolve to output: ArrowDown? KEY_DOWN? CDP event? uinput?
+```
+
+The current bridge has a pre-built mapping table (BTN_DPAD_DOWN → action-id → CDP key binding). The new dot-path syntax must define a canonical vocabulary and a resolution algorithm that doesn't fall back to the named-preset model.
 
 ---
 
 ## Gaps
 
-### Critical
+### Critical — Blocks Implementation or Creates Architectural Incoherence
 
-#### C1 — `console_log.txt` contains a third undocumented signal set: `Game process added/updated/removed`
+**Gap C-1: Missing seam between `launch.with` and session lifecycle hooks.**
 
-The handoff assigns `gameprocess_log.txt` as the source for PID tracking. But `console_log.txt` **also** emits PID-related lines with a different format and different semantics:
+`KorriSessionLifecycleHookStartRequest` carries `launchMetadata` but not `launchCompanions` (i.e., `launch.with`). If `@korri:remap` stores its policy in `launch.with`, the lifecycle hook cannot read it without a new field in the start request. The plan must specify one of:
+- Extend `KorriSessionLifecycleHookStartRequest` with `launchCompanions?: LaunchCompanionMap`
+- Have the launch.compose handler inject the policy into `launchMetadata.annotations` (a compile-time-to-runtime bridge)
+- Make `@korri:remap` purely a `launch.compose` wrapper (no sidecar lifecycle hook), which changes the runtime model fundamentally
 
-```
-# gameprocess_log.txt (tracks ALL child PIDs)
-AppID 584400 adding PID 196491 as a tracked process "…"
-AppID 584400 adding PID 196550 as a tracked process
-AppID 584400 no longer tracking PID 197135, exit code -1
-
-# console_log.txt (tracks only the "representative" game process)
-Game process added : AppID 584400 "…", ProcID 196491, IP 0.0.0.0:0
-Game process updated : AppID 584400 "…", ProcID 197021, IP 0.0.0.0:0
-Game process updated : AppID 584400 "…", ProcID 197135, IP 0.0.0.0:0   ← same PID emitted twice
-Game process removed: AppID 584400 "…", ProcID 197135                   ← only last PID, no exit code
-```
-
-Differences:
-- `console_log.txt`'s `Game process removed` only fires **once per stop** (the last updated ProcID), with no exit code. It is not the full set.
-- `console_log.txt`'s `Game process updated` fires for mid-session PID transitions (wine wrapper → game exe) and can repeat the same PID.
-- `gameprocess_log.txt`'s `no longer tracking` fires for every individual PID with an exit code, including all inner -1 exits.
-
-The handoff's parser and reducer treat these as the same signal. They are not. The parser unit tests and parser-fixtures must cover each format separately, and the reducer must not double-count the same PID removal from both sources.
-
-**Why it matters:** If the reducer uses both `console_log`'s `Game process removed` and `gameprocess_log`'s `no longer tracking PID <wrapper>, exit code 0` as independent "Stopped" triggers, the state machine will race between them. Worse, `Game process removed` only carries the last ProcID, not the wrapper PID, so the exit-code information is missing from the console_log signal.
-
-#### C2 — `LaunchApp waiting for user response` and `LaunchApp continues with user response` lines are not handled by the `launchTask` regex
-
-Every game in the Bandai fixtures emits these interleaved with task changes:
-
-```
-GameAction [AppID 360740, ActionID 4] : LaunchApp waiting for user response to ShowInterstitials ""
-GameAction [AppID 360740, ActionID 4] : LaunchApp continues with user response "ShowInterstitials"
-GameAction [AppID 360740, ActionID 4] : LaunchApp waiting for user response to CreatingProcess ""
-GameAction [AppID 360740, ActionID 4] : LaunchApp continues with user response "CreatingProcess"
-```
-
-The handoff's `launchTask` regex matches only `LaunchApp changed task to <task>`. These `waiting`/`continues` lines will fall through as unrecognized. If the parser throws on unrecognized lines instead of returning `raw-log-line`, these lines will crash the parser.
-
-More importantly, `LaunchApp waiting for user response to CreatingProcess` and no subsequent `continues` is a plausible stuck vector — Steam may be blocked waiting for OS process creation. The handoff's Stuck detection doesn't flag this case.
-
-**Default assumption if unaddressed:** Parser treats them as raw lines and skips. But the Stuck detection threshold misses a meaningful signal.
-
-#### C3 — `gameprocess_log.txt` contains non-PID lines the parser regexes will not match
-
-The full `gameprocess_log.txt.tail` shows interleaved lines that neither parser regex covers:
-
-```
-AppID 360740 no longer tracking PID 114424, exit code 0
-Remove 360740 from running list        ← authoritative terminal signal; not in handoff
-SSGL: InternalUpdateClientGame indicates change to games list
-SSGL: persona state flags
-SSGL: change [584400] LCT 744828976->0
-```
-
-The `Remove <appId> from running list` line is a **definitive terminal signal** that appears after all PIDs untrack. It is more authoritative than waiting for all individual PID removals to accumulate. The handoff doesn't define it as a signal at all, so the reducer has no way to use it. If the parser emits `raw-log-line` and the reducer ignores it, the observer misses the cleanest stop confirmation in `gameprocess_log.txt`.
-
-**Why it matters:** If the wrapper PID (exit code 0) fails to produce its `no longer tracking` line due to a parsing edge case, the observer may wait indefinitely for a clean "all PIDs removed" confirmation. `Remove <id> from running list` would catch it regardless.
-
-#### C4 — `RunningInstallScript` task is a real preparation state but is absent from the handoff's task classification table
-
-Caveblazers (452060) in `console_log.txt`:
-
-```
-GameAction [AppID 452060, ActionID 3] : LaunchApp changed task to RunningInstallScript with ""
-```
-
-The handoff lists `ProcessingInstallScript` (used by Downwell and Sonic Mania) as a `Preparing` hint, but does NOT list `RunningInstallScript`. A parser following the handoff exactly would emit this as `raw-log-line` / unrecognized, losing a preparation signal. These are not the same task name; both appear in the Bandai fixtures.
-
-#### C5 — `parser-fixtures/*.txt` files mix log sources and cannot be used as source-specific test inputs
-
-`parser-fixtures/downwell-360740.txt` concatenates lines from three different log files:
-- `content_log.txt` state-change lines
-- `gameprocess_log.txt` PID add/remove lines  
-- `console_log.txt` task lines, `Game process added/removed` lines
-
-The handoff proposes per-source parsers (`steam-log-signals.ts`) that each receive lines from a single file. Tests of those parsers using the mixed fixture will either silently skip most lines (if the parser is source-gated) or produce spurious matches (if the parser tries to match all formats on every line).
-
-The handoff notes these should be split but Unit 1 is listed as "optional prep." If Unit 2 begins without splitting the fixtures, the test inputs will be wrong and tests will pass for the wrong reasons.
+Without resolving this, the config location and the activation model cannot both be changed at once without a new contract on the hook start request.
 
 ---
 
-### Important
+**Gap C-2: Gamepad-to-gamepad output has no permitted mechanism.**
 
-#### I1 — "Stopping" state is sub-second and likely unobservable at second-resolution timestamps
+The spec requires `gamepad-to-gamepad bindings`. The only mechanisms for emitting gamepad events are:
+- `uinput` virtual device — explicitly forbidden by the existing safety contract
+- InputPlumber profile switching — explicitly forbidden
+- Forwarding to an already-running virtual device that InputPlumber owns — not a defined API
 
-In all three Bandai games, all PID removal events and the `content_log` "no longer App Running" transition happen within the **same logged second**:
+The plan must either:
+1. Define a specific permitted mechanism (e.g. InputPlumber's emit-event IPC, if it exists)
+2. Narrow the scope: gamepad-to-gamepad only works if the target is the InputPlumber virtual gamepad the game already reads (i.e. "passthrough with remap")
+3. Explicitly relax the safety contract for this case and document why it is still isolated
 
-```
-[14:41:57] AppID 360740 no longer tracking PID 205203, exit code -1   ← burst starts
-[14:41:57] AppID 360740 no longer tracking PID 204611, exit code 0    ← burst ends
-[14:41:57] Remove 360740 from running list
-[14:41:57] AppID 360740 state changed : Fully Installed,              ← same second
-```
-
-With second-level log timestamps, there is no observable window where "PIDs are exiting AND App Running is still true." The plan's `Stopping` state exists in the model but has no observably distinct evidence in the fixture data. 
-
-**Why it matters:** The reducer will transition `Running → Stopped` atomically when it processes that second's burst. If the reducer waits for "all PIDs removed then check app state," it will work. But if it uses a "PID started removing → Stopping" trigger, it fires and clears within the same log-flush window with no UI-visible duration.
-
-**Recommendation:** Document that `Stopping` is an implementer-convenience intermediate used only to confirm the stop is in progress during the burst-processing loop, not a user-visible state with meaningful dwell time. Or eliminate it and go directly `Running → Stopped`.
-
-#### I2 — `App Running` and first PID add coincide in the same logged second for Sonic Mania and Caveblazers
-
-```
-[14:39:02] AppID 584400 state changed : Fully Installed,App Running,  (content_log)
-[14:39:02] AppID 584400 adding PID 196491 as a tracked process "…"    (gameprocess_log)
-```
-
-When the reducer processes these events (arriving in file-tail order, interleaved across two log files), it may process them in either order depending on which file's inotify event fires first. The plan's correlation rules say `content_log` `App Running` is authoritative for `Running`, but does not specify the ordering rule for same-second events across files.
-
-**Why it matters:** If `gameprocess_log` fires first, the reducer transitions `Launching → Launching` (or `Launching → Running` via PID-add heuristic). Then `content_log` confirms `Running`. The snapshot is correct. But if the reducer checks "PID first → infer Running" before `content_log` confirms, it emits `Running` with `confidence: inferred` and then re-emits with `confidence: confirmed`. Consumers may see two rapid state changes.
-
-**Default assumption:** Process all events within a time window before advancing state. The handoff doesn't address flush/batch semantics for same-second interleaving.
-
-#### I3 — Shader log signals fire at the same second as `App Running`, not before it
-
-The handoff says: *"shader cache setup → Preparing hint if active launch not running yet"*
-
-But in the Bandai fixtures:
-```
-# shader_log
-[14:39:02] Setting MESA_GLSL_CACHE_DIR=…/shadercache/584400   ← Sonic Mania
-# content_log
-[14:39:02] AppID 584400 state changed : Fully Installed,App Running,
-```
-
-Both fire at 14:39:02. The shader cache setup is **concurrent with** `App Running`, not a pre-cursor to it. Using the shader `MESA_GLSL_CACHE_DIR` line as a `Preparing` hint will produce a momentary flicker from `Launching → Preparing → Running` rather than the clean `Launching → Running`.
-
-Additionally, `shader_log` emits `AppID 360740 exited.` at 14:38:14 — which is the **previous** Downwell session terminating, 3 minutes before the new launch. If the reducer uses `AppID <id> exited.` as a "Stopped" signal for the active window, it would erroneously mark a non-existent session as Stopped.
-
-#### I4 — `ExecCommandLine` is the best launch window anchor, but it fires ~21 seconds before `App Running` for Downwell
-
-```
-[14:41:06] ExecCommandLine: "… -applaunch 360740"    ← launch window opens
-[14:41:27] AppID 360740 state changed : Fully Installed,App Running,
-```
-
-21 seconds of preparation. The Stuck threshold must be set well above 21 seconds or Downwell will falsely enter Stuck state on every normal launch. The handoff says "no progress for a threshold" but doesn't specify the value or whether it's configurable.
-
-**Stakes:** Set too low → false Stuck on install-script-heavy launches. Set too high → real hangs are invisible for too long.
-
-**Default assumption:** 60 seconds is a reasonable starting point based on the fixtures (21s is the longest observed preparation). Must be configurable.
-
-#### I5 — `ExecCommandLine` anchor is unreliable when the tailer starts mid-launch or after a korrid restart
-
-The tailer starts at EOF. If a game was already launching when korrid starts (or restarts), `ExecCommandLine` has already been written. The observer will miss the launch window anchor.
-
-The handoff lists three possible launch window anchors:
-1. Korri requests launch
-2. `ExecCommandLine … -applaunch <appid>` in console_log
-3. First `GameAction [AppID] LaunchApp` in console_log
-
-If the tailer starts after all three, `App Running` alone is the first signal seen. The observer would see `App Running` without any prior `Launching` phase, which is valid data but means the `Preparing → Launching → Running` progression is lost.
-
-**Gap:** No recovery path is specified. Should a cold-start observer check running processes via `/proc/*/cmdline` (mentioned in brief but not in handoff) to bootstrap state?
-
-#### I6 — ActionID is a monotonically increasing per-Steam-client counter, not stable across Korri restarts
-
-Bandai fixtures: Sonic Mania = ActionID 2, Caveblazers = ActionID 3, Downwell second launch = ActionID 4. After a Steam restart, ActionID resets. After a Korri restart with Steam already running, the next ActionID continues wherever Steam left off.
-
-The reducer snapshot uses `appId` as the correlation key. But if Steam launches AppID 360740 twice in a row (rapid re-launch), the second launch gets a new ActionID. The reducer's `evidence[]` would accumulate events from both ActionIDs under the same `appId` key unless a launch window boundary (or ActionID change) is detected.
-
-**Gap:** The plan does not specify what triggers a launch window close beyond "all PIDs removed + app state not running." If the game crashes and is immediately relaunched by Steam, does the observer correctly reset the window?
-
-#### I7 — `console_log.txt` is significantly noisier than the handoff implies; raw noise lines must not contaminate bounded evidence
-
-The real `console_log.txt` during a single launch (Sonic Mania) contains:
-- ~30 `Binding "CHANGE_PRESET" referenced invalid set #2/#3` warnings
-- `Controller slots reset`, `Created virtual controller`, `Destroyed virtual controller`
-- `Warning: failed to set thread priority`
-- `Loaded Config for Local Selection Path for App ID 584400, Controller…`
-- `ThreadGetProcessExitCode: no such process <pid>` (×8 on stop)
-- A NUL-delimited raw exec line: `[timestamp] /bin/sh\0-c\0/run/current-system/sw/bin/bash…`
-
-The handoff's `evidence: readonly SteamObservationEvent[]` in the snapshot does not specify a maximum cardinality. If `evidence` accumulates all `raw-log-line` noise from `console_log`, a 30-second game session generates hundreds of noise entries. The "bounded recent evidence" mentioned in the tailer requirements has no specified limit.
-
-**Stakes:** Memory growth; UI payload bloat if evidence is serialized in `app.steam.status` responses.
-
-#### I8 — `SynchronizingCloud` task is present in two games but absent from the handoff's Preparing task list
-
-Sonic Mania console_log:
-```
-GameAction [AppID 584400, ActionID 2] : LaunchApp changed task to SynchronizingCloud with ""
-```
-
-Caveblazers console_log:
-```
-GameAction [AppID 452060, ActionID 3] : LaunchApp changed task to SynchronizingCloud with ""
-```
-
-The handoff's preparation task list (`CheckShaderDepotManifest`, `ProcessingInstallScript`, `SynchronizingStats`, `ShowInterstitials`, `SynchronizingControllerConfig`, `SiteLicenseSeatCheckout`, `DelayLaunch`) omits `SynchronizingCloud` and `RunningInstallScript`. Both are present in the Bandai fixtures. A parser written to the handoff's list will emit these as `raw-log-line` rather than `Preparing` state signals.
-
-#### I9 — `app.steam.status` integration with existing `app.server.status` is unspecified
-
-The codebase already has a fully defined `app.server.status` RPC tag handled by `status.rpc-handler.ts` and consumed by `platform-bridge.ts`, `korri-control-rpc.ts`, and `remote-stream-client.ts`. Multiple consumers poll it for foreground session state.
-
-The handoff proposes a new `app.steam.status` tag but does not specify:
-- Which RPC group it belongs to (the server group already in `rpc-server.ts`?)
-- Whether it's a new first-class tag or a sub-field added to the existing `app.server.status` response
-- How it's registered, typed via Effect Schema, and version-gated for clients that don't know about it
-
-**Stakes:** If `app.steam.status` is a new separate tag, consumers must be updated. If it's a field added to `app.server.status`, the schema change may break existing consumers that validate the response shape. The handoff leaves this as "status/RPC surface" without anchoring it to the existing pattern.
-
-#### I10 — The NUL-delimited exec line in `console_log.txt` embeds `\0` characters as literal text
-
-Every game launch emits this in `console_log.txt`:
-```
-[timestamp] /bin/sh\0-c\0/run/current-system/sw/bin/bash /var/lib/korri/bin/korri-steam-gamescope-launch --appid 584400 …
-```
-
-The `\0` sequences are encoded as the two-character string `\0` in the log file (the log escapes the actual NUL). This line is multi-sentence — it contains the entire launch command. If the parser tries to extract an AppID or a task name from it, it needs to know this line exists and has a different structure. If the parser matches it by line format, it will not match any current regex and should fall through as raw.
-
-**Gap:** This line is not mentioned in the handoff at all. If the parser throws on unrecognized lines instead of gracefully returning `raw-log-line`, this line will crash the parser for every launch.
+Leaving this unspecified means the implementation team will either violate the safety contract or discover the feature is impossible and revert it late.
 
 ---
 
-### Minor
+**Gap C-3: Non-browser keyboard injection mechanism is undefined.**
 
-#### M1 — `Game process updated` in `console_log.txt` fires for the same ProcID twice for Sonic Mania
+The current CDP bridge sends keyboard events only to a Chromium page via WebSocket — it is browser-scoped by design. If `@korri:remap` targets non-browser games (native emulators, native PC games), `key.down` must reach the X11/Wayland focus window or the application's input event node. The only known mechanisms are:
+- `ydotool` / `xdotool` (host-seat virtual keyboard) — explicitly **forbidden**
+- `uinput` virtual keyboard — explicitly **forbidden**
+- CDP (browser-only, and the spec bans CDP terms in authored config)
 
-```
-[14:39:22] Game process updated : AppID 584400 "…", ProcID 197135, IP 0.0.0.0:0
-[14:39:22] Game process updated : AppID 584400 "…", ProcID 197135, IP 0.0.0.0:0  ← duplicate
-```
+If `@korri:remap` is genuinely general-purpose (not browser-only), the plan must name a permitted keyboard injection path for native targets. If it is still browser-only under the hood, that constraint must be stated so authors know `key.*` targets only work for Chromium-launched games.
 
-A de-duplication check is needed if `Game process updated` drives any state transition or populates `trackedPids`.
+---
 
-#### M2 — Tailer outer timestamp vs. Steam inner log timestamp differ by up to 1 second
+### Important — Significantly Affects UX or Implementation Consistency
 
-The `*.tail` fixture files show that the tailer adds a wall-clock prefix:
-```
-2026-06-14T14:38:42-04:00 [console_log.txt] [2026-06-14 14:38:41] GameAction …
-```
+**Gap I-1: Execution model of `@korri:remap` as a launch.compose companion.**
 
-Outer: `14:38:42`, inner: `14:38:41`. When correlating events across `content_log`, `gameprocess_log`, and `console_log` using timestamps, the 1-second skew between tailer-read-time and Steam-log-time means events that Steam considers same-second may appear as different seconds in the tailer output. 
+Gamescope as a `launch.compose` companion returns a mutated `LaunchSpec` (wraps the command). Input remapping is a runtime side-process that must start _after_ the game child launches. These two requirements are incompatible if `@korri:remap` is purely a `launch.compose` companion.
 
-The `observedAt` field in `SteamObservationEvent` should be defined to use the **inner Steam timestamp** for correlation, with the tailer's wall-clock time available only as metadata.
+Likely resolution: `@korri:remap` uses a wrapper-binary model — the compose step injects `korri-remap <binding-args> -- <game-command>` so the remap binary is the top-level process, which forks the game. But this has implications:
+- The game's PID is a child of `korri-remap`, not a direct child of sessiond. Does sessiond's process-group-id tracking and cleanup still work correctly?
+- `korri-remap` must survive the game exiting long enough to release all keys (the current bridge does `releaseAll` in `evtestProcess.once("exit")`). Is that guaranteed?
+- If `korri-remap` crashes before the game, does the game also exit? Under what conditions?
 
-#### M3 — `shader_log.txt` post-session flush is lengthy and may persist for seconds after `Stopped`
+The plan must specify which execution model is chosen (wrapper vs sidecar), because they have different contracts with sessiond.
 
-After each game stops, `shader_log.txt` emits many lines about shader cache processing, FOZ cache crawling, and upload (varying from ~5 to ~25 lines depending on game). These arrive in the same second as `Stopped`. If `evidence` accumulates these, the "last signal at" timestamp stays current while the game is already stopped, which could make the Stuck detector fire incorrectly for a brief window after stop.
+---
 
-#### M4 — The `sequence` field in `SteamObservationEvent` is not specified
+**Gap I-2: Multi-controller source resolution.**
 
-The proposed event shape includes `sequence: number` but there is no specification for how it is assigned. Options include:
-- Global monotonically increasing counter (reset on korrid restart)
-- Per-file line counter
-- Wall-clock ordered sequence across all files
+`resolveInputPlumberVirtualGamepad` returns a single device. The spec says "support multiple controllers" with `p1`, `p2` slots. The plan must specify:
+- How many InputPlumber virtual gamepads can exist simultaneously on the target hardware (Sobo/SM8550)
+- How `p1` vs `p2` is assigned — by index among virtual gamepads? by explicit preference per slot in config? by a stable InputPlumber slot ID?
+- Whether the "ambiguous" error state changes meaning (two gamepads found is now expected for p2 support, not an error)
 
-Without a defined sequencing rule, the reducer cannot deterministically order same-timestamp events across files for playback or diagnostics.
+Without this, multi-controller config cannot be authored correctly.
 
-#### M5 — `notes.md` in the fixture directory is empty
+---
 
-`docs/research/steam-observability/bandai-2026-06-14/notes.md` contains only blank table cells. The handoff says "fill the README summary" as Unit 1, but the `notes.md` has the same empty-table problem. If a future implementer reads the spike directory without the handoff, they will find no synthesized findings.
+**Gap I-3: Dot-path vocabulary is not defined.**
 
-#### M6 — Proton log and Steam Linux Runtime log fixtures do not exist
+The binding syntax `p1.dpad.down: key.down` requires a canonical vocabulary for both the source (input) side and the target (output) side. Missing:
+- **Source paths:** Does `p1.dpad.down` map to `BTN_DPAD_DOWN`? To `ABS_HAT0Y < 0`? To both simultaneously (current bridge does both for "arrow-down")?
+- **Axis paths:** What is `p1.stick.left`? Does it mean the left analog stick leftward direction? What is the threshold model (press/release hysteresis)?
+- **Target keyboard paths:** Does `key.down` mean `ArrowDown`? Does `key.z` mean the Z key? Is the vocabulary the DOM key names (`ArrowDown`, `KeyZ`) or the Korri-defined action IDs?
+- **Target gamepad paths:** What is `p1.btn.south`? The Xbox A button? The evdev `BTN_SOUTH`?
 
-The backlog acceptance criterion includes: *"Optionally detect Steam Linux Runtime / pressure-vessel logs … and attach discovered `slr-app<appid>-*.log` paths."* The Bandai fixture directory has no `slr-app*` or `steam-<appid>.log` samples. The parser and tailer for these sources have no evidence base for first-slice implementation.
+Without this vocabulary, authors cannot write correct bindings and validators cannot check them at decode time. The plan must produce a schema-checkable enum or pattern for both sides.
 
-**Recommendation:** Explicitly defer these to a future slice; do not include them in Unit 2–4 acceptance criteria without first capturing fixtures.
+---
+
+**Gap I-4: YFS authored-config migration is not addressed.**
+
+YFS currently uses `launchMetadata.annotations["@korri:cdp-input-bridge"]` with `mapping: "yfs-default"`. The plan says "no profiles/presets" — meaning `yfs-default` must be expanded into explicit dot-path bindings in the new format. But:
+- Who updates the YFS plugin config?
+- Does `@korri:cdp-input-bridge` remain registered alongside `@korri:remap` during a transition period?
+- What is the cutover plan if both exist? Does `@korri:remap` take precedence?
+- If `@korri:cdp-input-bridge` is deleted, `KORRI_ENABLED_PLUGINS` env vars on deployed devices that include it will fail (unknown plugin id). Is there a graceful fallback?
+
+---
+
+**Gap I-5: Fail-closed contract for new execution models.**
+
+The current bridge's fail-closed behavior is well-specified: if the bridge exits while `failClosed: true` and the game is still running, `terminateLaunch()` is called. For a wrapper-binary model, the remap process _is_ the parent — if it exits, the child game exits automatically. But:
+- For gamepad-to-gamepad: if the remap side-process exits while the game continues, the gamepad state may be stuck (button held, axis deflected). The plan must specify what "fail-closed" means when the output target is a virtual gamepad rather than a browser keyboard.
+- The `releaseAll()` path (release all held keys on shutdown) — does this concept extend to releasing held gamepad buttons on a virtual device?
+
+---
+
+**Gap I-6: Diagnostics capability for `@korri:remap`.**
+
+The current plugin exposes `diagnostics.collect` with CDP-specific fields (host, port, mapping name). The new plugin's diagnostics surface must be defined. At minimum:
+- What policy fields are surfaced (bound slots, binding count, mechanism)?
+- What does "enabled" look like in the new format?
+- Does the diagnostics handler read from `launch.with` config or from something else?
+
+---
+
+### Minor — Has a Reasonable Default but Worth Confirming
+
+**Gap M-1: Binary name and env override convention.**
+
+The current bridge binary is `korri-cdp-input-bridge`, overridable via `KORRI_CDP_INPUT_BRIDGE_COMMAND`. The new plugin needs a binary name (`korri-remap`?) and env override key (`KORRI_REMAP_COMMAND`?). This is a naming decision but must be made before Nix packaging.
+
+**Gap M-2: `enable: false` short-circuit placement.**
+
+The current bridge checks `policy.enabled` in the lifecycle hook body before spawning. If `@korri:remap` is a `launch.compose` companion, the `enable: false` check must happen inside the handler so the `LaunchSpec` is returned unchanged. The `isDisabledLaunchCompanionPolicy` helper in `launch-companion.ts` already handles this at the `composeLaunchCompanions` loop level — confirm whether that's sufficient or whether the handler also needs its own guard.
+
+**Gap M-3: Axis thresholds in dot-path syntax.**
+
+The current bridge exposes `axis.pressThreshold` and `axis.releaseThreshold` as top-level policy fields. In the new format, per-binding or per-axis threshold control must either be dropped (always default), exposed as optional fields per binding, or surfaced as top-level policy knobs. The hysteresis model (press ≠ release threshold) is important for jitter suppression and must not silently disappear.
+
+**Gap M-4: `attachTimeoutMs` equivalent.**
+
+The current bridge has an `attachTimeoutMs` for waiting for the CDP WebSocket. If the new execution model is a wrapper binary, there may be no "attach" — the binary starts before the game. But if there is still an "attach" step (e.g., waiting for an InputPlumber virtual gamepad to appear), the timeout policy must be preserved or explicitly removed.
+
+**Gap M-5: Strict excess-property policy.**
+
+The current bridge policy decoder uses `{ onExcessProperty: "error" }`. The new schema must carry this forward — authors should get loud failures on typos, not silent strips.
 
 ---
 
 ## Questions
 
-**Q1 (Critical — blocks parser implementation):**  
-Should the `console_log.txt` parser handle `Game process added / Game process updated / Game process removed` as explicit signals (separate from `gameprocess_log.txt` equivalents), or should `console_log.txt` parsing be limited to `GameAction / ExecCommandLine / Running install script` lines and leave all PID lifecycle to `gameprocess_log.txt`?
+**Q1 (blocks all other work): What is the execution model?**
+Is `@korri:remap` a `launch.compose` command-wrapper, a session lifecycle hook that reads `launch.with` via a new seam, or both? The answer determines the entire module structure, the sessiond contract extension, and the Nix package shape.
 
-*Stakes:* If both sources are parsed for PID lifecycle, the reducer double-counts PID events and the "Stopped" trigger races. If `console_log.txt` PID lines are skipped, the `Game process updated` transition (which tracks which PID represents the live game) is lost entirely.
+_Stakes:_ Without this, two teams can independently implement two incompatible models. The `KorriSessionLifecycleHookStartRequest` contract extension (or absence) is a merge conflict waiting to happen.
 
-*Default assumption:* Parse `console_log.txt` PID lines only for `Game process added` (to get the initial ProcID with command) and `Game process removed` (to cross-confirm stop, without exit code). Let `gameprocess_log.txt` own the full PID lifecycle. Emit both as distinct signals with different `signal` values so the reducer can weight them correctly.
-
----
-
-**Q2 (Critical — blocks reducer design):**  
-What is the Stuck detection threshold in seconds, and is it configurable via the service interface?
-
-*Stakes:* Downwell's install-script preparation takes 21 seconds between `ExecCommandLine` and `App Running`. A threshold ≤20s would falsely mark every Downwell launch as Stuck. A threshold too high (e.g. 300s) makes real freezes invisible for 5 minutes.
-
-*Default assumption:* 60 seconds, configurable. Reset the clock on every recognized signal (task change, PID add, app state change). Stuck fires only if no signal arrives within the threshold after the launch window opened.
+_Default assumption:_ Hybrid (launch.compose wrapper + session lifecycle hook cleanup), mirroring the Gamescope pattern, but this needs explicit sign-off.
 
 ---
 
-**Q3 (Critical — blocks Unit 4 reducer):**  
-When the tailer starts (or restarts) while a game is already running, and the first signal seen is PID removals + `Stopped` without a prior `App Running`, what should the observer report?
+**Q2 (blocks gamepad-to-gamepad): What mechanism produces virtual gamepad output?**
+The existing safety contract forbids `uinput` and InputPlumber profile switching. What is the permitted path for emitting gamepad button/axis events to a virtual device?
 
-*Stakes:* If the observer reports `Stopped` from a cold start, it transitions `undefined → Stopped` with no prior `Running`. Is that a valid terminal state? Does it trigger any sessiond or UI behavior that expects a preceding `Running` transition?
+_Stakes:_ If no answer exists, the feature is unimplementable without relaxing the safety contract, which has security/isolation implications.
 
-*Default assumption:* Emit `Stopped` with `confidence: inferred` (no prior `Running` in this session) and include the raw stop evidence. Do not infer that a game had been running.
-
----
-
-**Q4 (Critical — blocks Unit 5 RPC surface):**  
-Should `app.steam.status` be a new independent RPC tag registered alongside the existing server group, or a new field (`steam?: SteamObservationSnapshot`) added to the existing `app.server.status` response?
-
-*Stakes:* A separate tag requires all clients to learn a new RPC endpoint, adds schema registration, and separates polling. A new optional field on `app.server.status` reaches existing pollers without changes, but adds payload to a high-frequency status response and may break clients with strict schema validation.
-
-*Default assumption:* Add as an optional `steam?` field in `app.server.status` for the first slice. Promotes to its own tag only if polling frequency or payload size becomes a problem.
+_Default assumption:_ Gamepad-to-gamepad is deferred to a follow-on iteration; the v1 `@korri:remap` only supports keyboard output.
 
 ---
 
-**Q5 (Important — blocks parser tests):**  
-Should the parser-fixtures be split by log source before Unit 2 begins, or should the parser tests load from the existing mixed-source `parser-fixtures/downwell-360740.txt` files?
+**Q3 (blocks non-browser keyboard output): What mechanism emits keyboard events to non-browser targets?**
+For native games that are not Chromium-backed, `key.down` needs a host-level injection path. All known mechanisms are currently forbidden.
 
-*Stakes:* Mixed-source fixtures test a format that doesn't exist in production (a single stream of all log types). Per-source fixtures correctly test each parser against only the lines it will actually receive.
+_Stakes:_ If unresolved, `@korri:remap` silently works only for Chromium-launched games, and authors of native-game entries will write configs that do nothing.
 
-*Default assumption:* Split by source as part of Unit 1 before writing any Unit 2 parsers.
-
----
-
-**Q6 (Important — blocks reducer correctness):**  
-What is the authoritative ordering rule when `content_log` `App Running` and `gameprocess_log` first PID add arrive in the same logged second across different files?
-
-*Stakes:* Without ordering, the reducer is non-deterministic when replaying fixtures, and the `sequence` field in events has no defined meaning across files.
-
-*Default assumption:* Use the Steam-embedded log timestamp (`[YYYY-MM-DD HH:MM:SS]`) as the primary sort key. For same-timestamp events across files, process in fixed source priority order: `content_log` → `gameprocess_log` → `console_log` → `shader_log`. Document this as the reducer's tie-breaking rule.
+_Default assumption:_ `@korri:remap` v1 retains CDP as the keyboard injection mechanism (under the hood) for browser-backed games; the CDP terms are hidden from authored config but still required for the target selector (URL pattern, page type). If this is the answer, the `target:` field must re-appear in the schema under a non-CDP name.
 
 ---
 
-**Q7 (Important — blocks Stuck implementation):**  
-Should `LaunchApp waiting for user response to CreatingProcess` with no subsequent `continues` be treated as a distinct Stuck signal, or should it fall through to the general silence-based Stuck detection?
+**Q4 (blocks multi-controller): How is `p1` vs `p2` mapped to physical devices?**
+Does the `p<N>` slot correspond to the N-th InputPlumber virtual gamepad in `/proc/bus/input/devices` order? Or is each slot explicitly configured with a device preference (name, event node)?
 
-*Stakes:* `CreatingProcess` is the last task before the game process spawns. A hang here (OS-level fork failure, resource exhaustion) is meaningfully different from a shader cache hang. If the parser emits it as a recognized `steam-launch-task` signal, the Stuck detector sees activity until the hang starts. If it's emitted as `raw-log-line`, the detector sees silence from the last task change.
+_Stakes:_ Authors cannot write correct multi-controller configs without knowing the slot-to-device mapping rule. A wrong assumption leads to reversed inputs or ambiguous device errors.
 
-*Default assumption:* Parse `LaunchApp waiting for user response` as a recognized signal (`steam-launch-task` or a new `steam-launch-task-waiting` signal type). This keeps the Stuck clock alive during the wait phase and produces a more specific Stuck message ("waiting for CreatingProcess" vs "no progress since CheckShaderDepotManifest").
-
----
-
-**Q8 (Important — affects memory and API payload):**  
-What is the maximum cardinality of `evidence[]` in the snapshot, and which event types are eligible for inclusion?
-
-*Stakes:* `console_log.txt` emits 30+ noise lines per launch (controller warnings, thread priority failures). Keeping all of them in `evidence[]` inflates the snapshot with zero-diagnostic-value data.
-
-*Default assumption:* Keep at most 50 events per snapshot, biased toward lifecycle signals. Exclude `raw-log-line` events with known noise patterns (e.g., `Binding "CHANGE_PRESET"`, `ThreadGetProcessExitCode`) from `evidence[]`. They can increment a `noiseLinesSkipped` counter instead.
+_Default assumption:_ Each slot has an optional `source` sub-key (like the current `sourcePreference`) — `p1.source.names: ["Microsoft Xbox Series S|X Controller"]`. If absent, slots are assigned in device enumeration order.
 
 ---
 
-**Q9 (Minor — affects test design):**  
-Should `Remove <appId> from running list` in `gameprocess_log.txt` be promoted to a first-class signal (`steam-running-list-removed`), or treated as raw evidence?
+**Q5 (blocks schema work): What is the canonical dot-path vocabulary?**
+Specifically: what are the valid source paths (buttons, axes, dpad directions, stick directions) and valid target paths for keyboard and gamepad outputs? Are axis bindings expressed as directional paths (`p1.stick.left`) or as axis-plus-sign (`p1.axis.left-x.negative`)?
 
-*Stakes:* This is the cleanest terminal signal from `gameprocess_log`. If treated as raw, the reducer must infer stop from "all PIDs removed." If it's first-class, the reducer has an explicit stop confirmation even if some PID removal lines are missed.
+_Stakes:_ Without a spec'd vocabulary, two implementers will produce incompatible schemas. Schema validation at decode time (which is the safety guarantee) cannot be implemented without the vocabulary.
 
-*Default assumption:* Promote to `steam-tracked-pid-list-removed` signal, confidence `confirmed`. It should be in the parser fixture split.
+_Default assumption:_ Source vocabulary mirrors the DOM Gamepad API (dpad, buttons a/b/x/y/l1/r1/l2/r2/etc., stick left/right with directional suffixes). Target keyboard vocabulary mirrors DOM key names (kebab-cased: `arrow-down`, `key-z`). Axis thresholds remain top-level `axis` policy knobs, not per-binding.
 
 ---
 
-**Q10 (Minor — affects future generalization):**  
-Should the tailer watch the parent log directory (`/var/lib/korri/steam/logs`) and discover new files matching `korri-steam-gamescope-launch-*.log` automatically, or only watch a fixed named-file list?
+**Q6 (blocks YFS migration): Does `@korri:cdp-input-bridge` remain registered while `@korri:remap` is being built?**
+Is this a rename-in-place (old id removed, new id added, YFS config updated atomically) or a parallel existence period?
 
-*Stakes:* AppID-specific wrapper logs appear only after a launch. The log directory already has 50+ files of varying relevance. A fixed list misses new AppID logs; a directory watch must filter by pattern.
+_Stakes:_ Deployed Sobo devices have `KORRI_ENABLED_PLUGINS` referencing `@korri:cdp-input-bridge`. A hard cutover without device reflash will leave those devices with an unknown plugin id in the env var (currently a no-op via `parseEnabledPluginIds`, but worth confirming).
 
-*Default assumption:* Use the fixed named-file list for the first slice. Add directory-pattern watching for `korri-steam-gamescope-launch-*.log` as a subsequent enhancement.
+_Default assumption:_ Parallel existence: `@korri:cdp-input-bridge` stays registered but is deprecated. YFS config is updated in the same PR that ships `@korri:remap`. The old plugin is removed in a follow-on after device images are updated.
+
+---
+
+**Q7 (important for safety): Does the `releaseAll` / stuck-input guarantee extend to gamepad output?**
+For keyboard output, the bridge releases all held keys on shutdown. For gamepad output, an equivalent must be defined — otherwise a held virtual button survives across sessions.
+
+_Stakes:_ If a session exits abnormally without cleanup, a stuck virtual gamepad button in the InputPlumber layer would affect the next launched game.
+
+_Default assumption:_ The plan should specify that `stopBeforeCleanup` on the remap sidecar must ensure all held inputs are released, regardless of output type, before returning.
+
+---
+
+## Test Scenarios the Plan Must Cover
+
+These are scenarios the existing test suite does not cover and that the plan should explicitly commission:
+
+| # | Scenario | Why it matters |
+|---|---|---|
+| T-1 | Single controller, keyboard output (happy path migration from `yfs-default`) | Core regression test for existing YFS behavior |
+| T-2 | `enable: false` in `launch.with` → game launches without remap | Smoke-test for disabled policy short-circuit at the compose step |
+| T-3 | Malformed dot-path (typo, unknown slot name, unknown key) → policy decode error at launch time, not runtime | Fail-loud at the correct phase |
+| T-4 | Excess property in `launch.with` config → schema error | Strict whitelist mode |
+| T-5 | `p1` source device missing (no InputPlumber virtual gamepad) → fail-launch | Existing behavior must be preserved |
+| T-6 | `p1` source device ambiguous without preference → fail-launch | Existing behavior |
+| T-7 | `p1` source ambiguous, preference resolves it → succeed | Existing behavior |
+| T-8 | Remap sidecar exits unexpectedly, `fail-closed: true` → `terminateLaunch()` called | Fail-closed isolation contract |
+| T-9 | Remap sidecar stops during cleanup → no `terminateLaunch()` | The `stoppingForCleanup` guard must carry over |
+| T-10 | Axis direction switch with hysteresis (both negative and positive triggered in sequence) → correct release/press order | Core input correctness |
+| T-11 | Multiple bindings share the same output key → only one `rawKeyDown` until all sources release | Source-set deduplication |
+| T-12 | `@korri:remap` composes alongside `@korri:gamescope` → `composeLaunchCompanions` applies both in order | Companion composition ordering |
+| T-13 | `p2` slot configured, two InputPlumber virtual gamepads present → each maps to correct device | Multi-controller happy path |
+| T-14 | `p2` slot configured but only one InputPlumber virtual gamepad → defined error (fail-launch or warn) | Multi-controller degraded mode |
+| T-15 | Wrapper binary (if execution model A) forks game child → game exit causes wrapper exit → sessiond observes clean exit | Process-group accounting with wrapper model |
+| T-16 | Wrapper binary crashes before game starts → sessiond observes failed launch | Fail-closed at wrapper startup |
+| T-17 | Diagnostics collect with enabled config → correct fields reported (no CDP terms) | Diagnostics surface correctness |
+| T-18 | Diagnostics collect with invalid config → surfaced as `"invalid"` without throwing | Diagnostics fault tolerance |
 
 ---
 
 ## Recommended Next Steps
 
-These are ordered by the dependencies they unblock. Do not begin Unit 2 parsers without completing items 1 and 2.
+**Before any code is written:**
 
-**Before coding:**
+1. **Resolve Q1 (execution model)** in a single design document with the sessiond and plugin owners. The answer propagates to the `KorriSessionLifecycleHookStartRequest` contract (needs `launchCompanions` field or not), the Nix package shape (wrapper binary or sidecar binary), and the process-group contract with sessiond. This is the load-bearing decision.
 
-1. **Answer Q4 (RPC surface)** before writing any type signatures. If `app.steam.status` is a separate tag, the Effect Schema must be registered in `rpc-server.ts` from the start. If it's a field on `app.server.status`, the schema and handler change must coordinate with existing consumers.
+2. **Resolve Q2 and Q3 (output mechanisms)** as a paired decision. If the answer to Q2 is "defer gamepad-to-gamepad," say so in the plan so the schema can omit gamepad targets from the first schema version. If the answer to Q3 is "CDP stays under the hood," the `target:` selector must reappear in the schema under a renamed key (e.g., `window.url-pattern`) and that must be spec'd before the schema is written.
 
-2. **Split the mixed parser-fixtures into per-source files** (Unit 1). The current `parser-fixtures/downwell-360740.txt` mixes three log sources. Run splits now:
-   - `parser-fixtures/content-log-downwell.txt` (state changed lines)
-   - `parser-fixtures/gameprocess-log-downwell.txt` (adding PID / no longer tracking / Remove from running list)
-   - `parser-fixtures/console-log-downwell.txt` (GameAction, ExecCommandLine, Game process added/updated/removed)
-   Similarly for Sonic Mania and Caveblazers.
+3. **Write the dot-path vocabulary** (Q5) as a formal table before implementing the schema decoder. The vocabulary is the contract between authors and the runtime — it cannot be discovered experimentally after the feature ships.
 
-3. **Answer Q1 (console_log PID signal scope)** before writing the `console_log` parser. This determines whether the parser must handle `Game process added/updated/removed` or skip them.
+4. **Plan the YFS migration** (Q6) atomically with the new schema. The YFS plugin config update and the `@korri:remap` plugin registration should ship in the same commit so there is no window where YFS config points to a non-existent annotation key.
 
-4. **Answer Q2 (Stuck threshold)** before Unit 4. The reducer cannot be complete without a defined timeout.
-
-**During Unit 2 (parsers):**
-
-5. Add these patterns to the `console_log` parser in addition to the handoff's `launchTask` and `installScript` regexes:
-   - `LaunchApp waiting for user response to <context>` — new signal `steam-launch-task-waiting`
-   - `LaunchApp continues with user response "<context>"` — new signal `steam-launch-task-continued`
-   - `Game process added : AppID <id> "…", ProcID <p>, IP <ip>` — if Q1 answer includes it
-   - `Game process updated : AppID <id> "…", ProcID <p>, IP <ip>` — if Q1 answer includes it
-   - `Game process removed: AppID <id> "…", ProcID <p>` — if Q1 answer includes it
-   - NUL-delimited exec line (`/bin/sh\0-c\0…`) — fall through as raw without throw
-
-6. Add these to the `gameprocess_log` parser:
-   - `Remove <appId> from running list` → `steam-tracked-pid-list-removed` (addresses Q9)
-   - `SSGL: …` lines → fall through as raw without throw
-   - `SSGL: change [<id>] LCT <old>-><new>` → fall through as raw without throw
-
-7. Extend the task classification list to include `RunningInstallScript` and `SynchronizingCloud` as `Preparing` signals (addresses C4, I8).
-
-**During Unit 4 (reducer):**
-
-8. Define the cross-source ordering rule for same-second events (addresses Q6). Codify it as a named constant or policy in the reducer module.
-
-9. Define what `Stopping` means given sub-second observability (addresses I1). If it maps to "PID burst started but `App Running` not yet cleared," it should be emitted only if the reducer processes `gameprocess_log` PID removals before processing `content_log` state change in the same second. Document this explicitly.
-
-10. Define the `evidence[]` cardinality cap and filtering policy before writing the snapshot reducer (addresses Q8/I7).
-
-**During Unit 5 (RPC surface):**
-
-11. If `app.steam.status` is its own tag, add a test that verifies the handler returns a well-formed response when no game is running (empty/idle state) and when a game is running (active snapshot). Mirror the pattern in `status.rpc-handler.test.ts` for consistency with existing test coverage.
-
-12. Explicitly document that `shader_log` `MESA_GLSL_CACHE_DIR` fires simultaneously with `App Running`, not before it (corrects the handoff's "Preparing hint" framing). Update the reducer projection rules comment.
-
----
-
-## Summary Table
-
-| # | Severity | Description | Blocks |
-|---|---|---|---|
-| C1 | Critical | `console_log` has `Game process added/updated/removed` — different format from `gameprocess_log`; plan treats them as same | Unit 2 parser + Unit 4 reducer |
-| C2 | Critical | `LaunchApp waiting/continues` lines unhandled; plausible Stuck vector at `CreatingProcess` | Unit 2 parser + Stuck detection |
-| C3 | Critical | `Remove <appId> from running list` in `gameprocess_log` is the cleanest stop signal but absent from handoff | Unit 4 reducer |
-| C4 | Critical | `RunningInstallScript` task present in Caveblazers fixtures but not in handoff's task list | Unit 2 parser correctness |
-| C5 | Critical | Mixed-source `parser-fixtures/*.txt` cannot correctly drive per-source parser unit tests | Unit 2 tests |
-| I1 | Important | `Stopping` state is sub-second; no observably distinct window in fixtures | Reducer state machine |
-| I2 | Important | `App Running` and first PID add are same-second across files; ordering undefined | Reducer cross-source ordering |
-| I3 | Important | `MESA_GLSL_CACHE_DIR` fires at same time as `App Running`, not before; handoff projection is wrong | Reducer projection rules |
-| I4 | Important | Stuck threshold unspecified; Downwell needs >21s | Unit 4 acceptance criteria |
-| I5 | Important | `ExecCommandLine` anchor missed if tailer starts mid-launch (Korri restart scenario) | Cold-start recovery |
-| I6 | Important | Same-AppID rapid relaunch reuses appId key without ActionID-boundary reset | Reducer window management |
-| I7 | Important | `console_log` noise volume not bounded in `evidence[]` | API payload size |
-| I8 | Important | `SynchronizingCloud` task missing from Preparing classification | Unit 2 parser |
-| I9 | Important | `app.steam.status` RPC surface not anchored to existing `rpc-server.ts` patterns | Unit 5 design |
-| I10 | Important | NUL-delimited exec line in `console_log` unmentioned; must not throw | Unit 2 parser robustness |
-| M1 | Minor | `Game process updated` emits duplicate ProcID for same PID in Sonic Mania | Dedup in reducer |
-| M2 | Minor | Tailer outer timestamp vs. Steam inner timestamp differ by 1s; `observedAt` source undefined | Correlation accuracy |
-| M3 | Minor | Shader flush lines after stop extend "last signal at" past actual stop | Stuck false-positive after stop |
-| M4 | Minor | `sequence` field assignment strategy not defined | Event ordering across files |
-| M5 | Minor | `notes.md` is empty; spike findings not synthesized | Future reference |
-| M6 | Minor | No Proton/SLR log fixtures captured; acceptance criteria include them | Should be deferred |
+5. **Gate T-5 through T-9** (source resolution, fail-closed, cleanup guard) as first-class acceptance criteria before marking the session lifecycle hook work done. These are the scenarios where the existing CDP bridge has been most carefully tested, and they are the hardest to recover from if broken silently.

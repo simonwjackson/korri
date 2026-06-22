@@ -1,498 +1,591 @@
-# Repository Research Summary
+# Repo Research: `@korri:remap` Plugin Refactor
 
-> Scope: major no-backwards-compat plugin/config schema big-bang refactor
-> Focus: systems, target vs launch, launchers replacing apps, provider-links refs,
->         file-set targets/input selection, settings common packs + settings.plugin,
->         plugin descriptor runtime metadata/support mappings, no backwards compatibility.
-> Source document: `work/items/active/01KVGDKT01DNT9NRDKS846CJQ1-plugin-launcher-standardization/config-sketch.korri.yaml`
+> Planning context: refactor the just-landed launch-owned CDP input bridge into a
+> general launch-scoped remapping plugin/config shape. Product-facing `@korri:remap`
+> under `launch.with`, no CDP/Chrome terminology in authored config, compact dot-path
+> bindings, multi-controller support, gamepad-to-keyboard and gamepad-to-gamepad
+> bindings, fail-closed isolation, InputPlumber-normalized sources.
 
 ---
 
 ## Technology & Infrastructure
 
-| Dimension | Detail |
-|-----------|--------|
-| Language | TypeScript (strict) + TSX, ~71 % / 12 % of LOC |
-| Runtime | Bun (test, bundling, server); Effect v4 throughout |
-| UI | React + TanStack Router + Tailwind + Vite |
-| Schemas | Effect Schema (source of truth for every wire payload, record, and policy) |
-| Config parse | YAML via `yaml` npm package; decoded through Effect Schema at load time |
-| DB | ProseQL (YAML-backed document store abstraction) |
-| Linter/formatter | Biome 2-space, double-quotes, no trailing whitespace |
-| Test runner | `bun test`; E2E via Playwright |
-| Nix | Flakes + direnv; all tooling in scope |
-| Monorepo layout | Single root `package.json`; feature modules under `product/platform/`, `product/plugins/`, `packages/`, `tools/` |
+- **Language**: TypeScript (strict), ~71%; TSX ~12%; Nix ~10%
+- **Runtime / bundler**: Bun (primary), tsx for certain scripts
+- **Test runner**: `bun test` (`just test-unit`)
+- **Formatter / linter**: Biome (`just lint`, `just format`)
+- **Build**: Vite (portal), Nix flakes for system packages
+- **Effect version**: v4 (`effect`, `@effect/atom-react`)
+- **Dev environment**: Nix flakes + direnv; `just` for task automation
 
 ---
 
 ## Architecture & Structure
 
-### Config cascade (current seven-layer model)
-The readable cascade resolves launch context through layers in order (least → most specific):
+### Plugin model
+
+Every first-party capability is a **`KorriPlugin`** declared via `plugin({ namespace, name, ... })` in `product/platform/plugin/index.ts`. Plugins:
+
+- Get a stable `ProviderId`: `"@{namespace}:{name}"` (e.g. `"@korri:gamescope"`).
+- Declare handlers (operations they handle), config contributions (catalog entries, modules, launchers), and capabilities.
+- Are registered in `product/plugins/index.ts` → `firstPartyPlugins`, `firstPartySessionLifecycleHookFactories`, `firstPartyPluginDaemonFactories`.
+
+### `launch.with` — the authored companion map
+
+`InheritableLayer.launch.with` is a `Record<ProviderId, unknown>` where each value is opaque at the schema level and decoded by the owning plugin. Defined in:
 
 ```
-host → user → system → app → (app-choice) → runtime → library-item → contained-playable → release → profile → ephemeral-override
+product/platform/library/config/inheritable-fields.ts
+  LaunchWithPolicy = LaunchCompanionMap = Record<ProviderIdKey, unknown>
+  LaunchPolicy = { with?: LaunchWithPolicy }
+  InheritableLayer = { launch?: LaunchPolicy, ... }
 ```
 
-Key files:
-- `product/platform/library/config/cascade-resolver.ts` — `ConfigSnapshot`, `ReadableConfigSnapshot`, `resolveReadableLaunchContext`, `resolveLocalLauncherPolicy`, `foldLayers`, `mergeReadableLayers`
-- `product/platform/library/config/inheritable-fields.ts` — `InheritableLayer` (the whitelist every layer-bearing record inlines), `LaunchPolicy`, `LaunchWithPolicy`, `MoonlightPolicy`, `PluginPolicyMap`, `ByLauncherPayload`
-- `product/platform/library/config/launch-block.ts` — `LaunchBlock` (`app`, `module`, `settings`, `with`, `args`, `env`, `cwd`), `LaunchSettings`
-- `product/platform/library/config/resolved-launch-context.ts` — `ResolvedLaunchContext` (seven-layer schema cascade output used by old-path materializer), `ReadableResolvedLaunchContext` (new readable cascade output)
-- `product/platform/library/config/app-materializer.ts` — `materializeAppLaunch`, `materializeReadableLaunch`; hard-coded `switch` over `app.integration` values (`mame`, `dolphin`, `solarus`, `generic-process`)
-- `product/platform/library/config/app-integrations.ts` — `AppDescriptor`, `resolveAppDescriptor`; built-in app descriptors dict; `integrationForKind`
-- `product/platform/library/config/app-choice-selection.ts` — `AppChoiceSelectionResult`, `resolveEffectiveAppChoices`, `selectAppChoice`
+Cascade fold rules (from `cascade-resolver.ts` JSDoc):
+- Object values **deep-merge** across inheritance layers.
+- Arrays **concatenate** in inheritance order.
+- Scalars **last-win** (more specific wins).
 
-### ProseQL / library database
-- `product/platform/library/proseql/library-repository.ts` — `LibraryRepository` interface, `createLibraryRepository`, `loadReadableSnapshot`, `ReadableLaunchIntegration` interface
-- `product/platform/library/proseql/library-db.ts` — `KorriLibraryDb` (ProseQL collection wrappers)
+`launchCompanionsFromLaunch(layer)` extracts `layer.launch?.with` as `LaunchCompanionMap`.
 
-### Plugin system
-- `product/platform/plugin/index.ts` — `plugin()` factory, `KorriPlugin`, `PluginDefinitionInput`, `PluginConfigContributions`, `PluginCatalogItem/Release/Launch`, `PluginHandler`, `PluginOperation`
-- `product/platform/plugin/registry.ts` — `createPluginRegistry`, `PluginRegistry`, config-map merging, `expandRequiredPluginIds`
-- `product/plugins/index.ts` — `firstPartyPlugins` array, `createFirstPartyPluginRegistryFromEnv`
+### Launch companion composition (launch.with → spec wrapping)
 
-### Records / schemas (all in `product/platform/library/config/records/`)
-| File | Key types |
-|------|-----------|
-| `library-item.ts` | `LibraryItemRecord`, `LibraryReleasePayload`, `ContainedPlayablePayload`; `Target` union (`TargetString | UriTarget | FileTarget | Array`); `AppChoiceList` on `release.apps[]` |
-| `system.ts` | `SystemPayload` — `name`, `manufacturer`, `cores`, `apps[]`, `inherit`, `presets`, `byLauncher`; `launcher` field rejected |
-| `app.ts` | `AppRecord`/`AppPayload` — `kind` (free string; `"@korri:steam"` etc.), `command`, `runtime`, `args`, `systems`, `policy`, `settings`, `launch`, `plugin`, inheritable fields |
-| `launcher.ts` | `LauncherRecord`/`LauncherPayload` — `command`, `args`, `systems`; inheritable fields |
-| `runtime.ts` | `RuntimeRecord`/`RuntimePayload` — `kind` (`libretro-core | tool | emulator`), `path`, `tool`, `app`, `supports.systems[]`; inheritable fields |
-| `global.ts` | `GlobalConfigPayload` — `launch`, `launcher` (alias), `presets`, `byLauncher`; inheritable fields |
-| `user.ts` | `UserPayload` — `displayName`, `favorites`, `hidden`, `launch`, `launcher`, `presets`, `byLauncher`; inheritable fields |
-| `preset.ts` | `PresetPayload` — `name`, `description`, `launch`, `launcher`, `inherit`, `byLauncher`; inheritable fields |
-| `host.ts` | `HostPayload` — plain block; no role/launch-block/nested profiles |
-| `app-choice.ts` | `AppChoice` — `id`, `inherit`, `runtime`; inheritable fields; `kind` rejected |
-| `provider-link.ts` | `ProviderLinkPayload` — `provider`, `playable`, `release?`, `ref: { kind, value }` (single-ref-per-record, `kind` in `url | provider-item-id | external-id`) |
-| `storage.ts` | `StorageRecord` — `root`, `path?: Record<string,string>` |
-| `game.ts` | `GameRecord` — legacy; `system`, `contentPath|content.artifactId`, `metadata`, `launch`, `launcher`, `core`, `collections`, `presets`, `byLauncher`; inheritable fields |
-| `module.ts` | `ModuleRecord` — `kind: "libretro-core"`, `path` |
+`composeLaunchCompanions()` in `product/platform/plugin/launch-companion.ts` iterates the `launchCompanions` map and calls each registered plugin's `launch.compose` handler to wrap the `LaunchSpec`. This is for **launch-time spec mutation** (e.g. wrapping in `gamescope ...`). It runs in the Portal API RPC handler **before** the spec is handed to sessiond.
 
-### Source-target resolution
-`product/platform/library/config/source-target-resolution.ts` — `resolveReleaseTarget`, `ReleaseTargetAtom` (`string | UriTarget | FileTarget`). Only `string`, `{ kind: "uri" }`, and `{ kind: "file", storage, path }` are currently resolved. Array targets (`MultiTargetUnsupported`) and everything else fall through to `String(target)`.
+**Important**: `launch.with` companions are consumed for spec composition. They are NOT automatically forwarded to sessiond or to session lifecycle hooks. The `ResolvedLaunch` struct has both `launchCompanions?: LaunchCompanionMap` and `launchMetadata?: LaunchMetadata` as separate fields.
 
-### Materializers (plugin-owned)
-Plugins that need config-file generation or multi-step spawn prep expose a `ReadableLaunchIntegration`:
+### Session lifecycle hooks
+
+Defined in `product/platform/plugin/session-lifecycle.ts`:
+
 ```ts
-interface ReadableLaunchIntegration {
-  providerId?: PluginId
-  kind: string                       // matched against appRecordKind(context.app)
-  integration: AppIntegrationKind
-  canResolve: (ctx: ReadableResolvedLaunchContext) => boolean
-  materialize: (ctx, opts?) => Effect<{ spec, artifacts?, diagnostics? }, ResolutionError>
+export interface KorriSessionLifecycleHookStartRequest {
+  readonly launchId: string
+  readonly spec: LaunchSpec
+  readonly launchMetadata?: LaunchMetadata     // ← how policy reaches hooks today
+  readonly terminateLaunch?: () => void
+}
+
+export interface KorriSessionLifecycleHook {
+  readonly id: PluginId | (string & {})
+  readonly failurePolicy?: "fail-launch" | "warn"
+  readonly afterChildRunning?: (req) => Promise<KorriSessionLifecycleHookHandle | undefined>
+  readonly cleanup?: (req) => Promise<...>
 }
 ```
-Registered in `product/plugins/index.ts` as `firstPartyLaunchIntegrations`:
-- `retroarchReadableLaunchIntegration` (kind `"@korri:retroarch"`)
-- `ryubingReadableLaunchIntegration`
-- `steamReadableLaunchIntegration`
-- `threeDSenReadableLaunchIntegration`
 
-### Existing tests (migration-sensitive)
-| File | What it gates |
-|------|---------------|
-| `product/platform/library/config/records/readable-schema.test.ts` | Decodes every record type; rejects retired vocabulary; validates fixture YAML |
-| `product/platform/library/config/cascade-resolver.test.ts` | `resolveLocalLauncherCompanionPolicy` fold rules |
-| `product/platform/library/config/readable-cascade-resolver.test.ts` | Full readable cascade integration (1000+ lines) |
-| `product/platform/library/config/compose-readable-launch-spec.test.ts` | Placeholder substitution |
-| `product/platform/library/config/authoring/examples.test.ts` | Parses `korri-catalog-display-metadata.example.yaml`; checks retired vocabulary list; validates Steam and RetroArch example YAML files |
-| `product/plugins/retroarch/src/plugin.test.ts` | Retroarch plugin descriptor |
-| `product/plugins/retroarch/src/materializer.test.ts` | Retroarch materializer |
-| `product/plugins/steam/src/plugin.test.ts` | Steam plugin descriptor |
-| `product/platform/plugin/registry.test.ts` | Registry merging and namespacing |
+Sessiond calls `afterChildRunning` for each registered hook after the child process starts. Hooks registered in `product/plugins/index.ts → firstPartySessionLifecycleHookFactories`.
+
+The `launchMetadata.annotations[pluginId]` is the **current** mechanism for per-launch policy reaching a hook. The new `@korri:remap` plugin needs its policy to be visible here from `launch.with["@korri:remap"]`.
+
+### The annotation vs. companion gap (critical for this refactor)
+
+| Surface | Reaches lifecycle hook via | Used for |
+|---------|---------------------------|----------|
+| `launchMetadata.annotations[id]` | `afterChildRunning({ launchMetadata })` | CDP bridge (current, to retire) |
+| `launch.with[id]` | `composeLaunchCompanions()` → spec wrapping | Gamescope (wrapper pattern) |
+
+`@korri:remap` is a **session lifecycle hook**, not a launch wrapper. Its policy must reach `afterChildRunning`. Options:
+
+**Option A — Recommended**: Extend `KorriSessionLifecycleHookStartRequest` with `launchCompanions?: LaunchCompanionMap`. Thread it through `LaunchExtras` (or a new extras field) from the RPC handler → sessiond → lifecycle hooks. The hook then reads `request.launchCompanions?.["@korri:remap"]`.
+
+**Option B** (messier): In the cascade resolver, translate `launch.with["@korri:remap"]` into `launchMetadata.annotations["@korri:remap"]` so the existing hook interface works unchanged. Avoids interface changes but couples the resolver to plugin knowledge.
+
+**Option C**: Add `launchCompanions` to `LaunchExtras` so sessiond already receives them without a separate interface change to the hook request.
+
+Option A is cleanest: lifecycle hooks are already the right seam; adding `launchCompanions` to the request is additive and consistent with how `launchMetadata` was added before.
+
+---
+
+## Current CDP Input Bridge — Files & Patterns to Refactor
+
+### Core files
+
+| File | Role |
+|------|------|
+| `product/plugins/cdp-input-bridge/index.ts` | Plugin declaration, re-exports |
+| `product/plugins/cdp-input-bridge/src/policy.ts` | Policy schema + decode; reads `launchMetadata.annotations` |
+| `product/plugins/cdp-input-bridge/src/mapping.ts` | Hard-coded named mapping presets (`yfs-default`, `none`) with CDP types |
+| `product/plugins/cdp-input-bridge/src/bridge-process.ts` | Process lifecycle, evtest line parsing, CDP keyboard translator |
+| `product/plugins/cdp-input-bridge/src/session-lifecycle-hook.ts` | Wires policy → process manager → lifecycle hook |
+| `product/plugins/cdp-input-bridge/src/diagnostics.ts` | Diagnostics collection handler |
+| `product/plugins/cdp-input-bridge/packages/korri-cdp-input-bridge/index.ts` | Bun entry script: CLI arg parsing, evtest, CDP WebSocket |
+| `product/plugins/cdp-input-bridge/nix/cdp-input-bridge.nix` | Nix derivation for the binary |
+| Tests: `*.test.ts` per src file | Comprehensive unit coverage |
+
+### Current policy annotation shape (in YFS catalog entry)
+
+```ts
+// product/plugins/yoshis-fabrication-station/index.ts
+launchMetadata: {
+  annotations: {
+    [CDP_INPUT_BRIDGE_PLUGIN_ID]: {  // "@korri:cdp-input-bridge"
+      enable: true,
+      cdpPort: 9333,
+      mapping: "yfs-default",
+      sourcePreference: { names: ["Microsoft Xbox Series S|X Controller"] },
+      target: { type: "page", urlPattern: "index.html" },
+    },
+  },
+},
+```
+
+### Current policy fields (to rename/restructure)
+
+| Current field | CDP-specific | New shape |
+|---|---|---|
+| `enable: true` | No | Keep as opt-in gate |
+| `cdpHost`, `cdpPort` | YES — implementation detail | Remove from authored config; keep as internal defaults |
+| `mapping: "yfs-default"` | YES — named preset | Replace with inline `bindings` |
+| `sourcePreference.names` | No | Keep as `source.names` |
+| `sourcePreference.eventNodes` | No | Keep as `source.event-nodes` |
+| `target.type`, `target.urlPattern`, `target.titlePattern` | YES — CDP-specific | Remove from authored remap config |
+| `axis.pressThreshold`, `axis.releaseThreshold` | No | Keep as `axis.press-threshold`, `axis.release-threshold` |
+| `attachTimeoutMs` | Partially | Keep as `attach-timeout-ms` |
+| `failClosed` | No | Keep as `fail-closed` |
+
+### InputPlumber-normalized evdev codes in current mapping
+
+The `YFS_DEFAULT_MAPPING` uses raw evdev button codes that must be remapped to InputPlumber-normalized logical names in the new dot-path scheme:
+
+| Evdev code | Logical name (proposed) |
+|---|---|
+| `BTN_DPAD_UP` | `dpad.up` |
+| `BTN_DPAD_DOWN` | `dpad.down` |
+| `BTN_DPAD_LEFT` | `dpad.left` |
+| `BTN_DPAD_RIGHT` | `dpad.right` |
+| `BTN_WEST` | `btn.west` |
+| `BTN_SOUTH` | `btn.south` |
+| `BTN_EAST` | `btn.east` |
+| `BTN_NORTH` | `btn.north` |
+| `BTN_START` | `btn.start` |
+| `ABS_X` (axis) | `stick.left.x` |
+| `ABS_Y` (axis) | `stick.left.y` |
+| `ABS_RX` (axis) | `stick.right.x` |
+| `ABS_RY` (axis) | `stick.right.y` |
+
+Button code constants are in `product/platform/input/native/button-codes.ts`. InputPlumber virtual gamepad resolution is in `product/platform/input/native/inputplumber-virtual-gamepad.ts`.
+
+---
+
+## `@korri:gamescope` — the Target Pattern
+
+```
+product/plugins/gamescope/
+  index.ts                    — re-exports plugin and id
+  src/plugin.ts               — plugin declaration with handlers
+  src/launch-companion/
+    policy.ts                 — GamescopePolicy Schema, decode, fold, normalize
+    wrapper.ts                — composeGamescopeLaunchSpec() wraps LaunchSpec
+    index.ts                  — exports
+  src/session/
+    lifecycle-hook.ts         — createGamescopeSessionLifecycleHook() (control bridge sidecar)
+```
+
+**Key reference**: `gamescopePolicyFromLaunch()` in `src/launch-companion/policy.ts`:
+
+```ts
+export const gamescopePolicyFromLaunch = (layer: {
+  readonly launch?: {
+    readonly with?: Partial<Record<string, GamescopePolicy | undefined>>
+  }
+}): GamescopePolicy | undefined =>
+  layer.launch?.with?.[KORRI_GAMESCOPE_PLUGIN_ID]
+```
+
+This is how a plugin reads **its own** policy from a `launch.with` layer. For `@korri:remap`, create an equivalent `remapPolicyFromLaunch()` that reads `layer.launch?.with?.["@korri:remap"]`.
+
+**Key difference from cdp-input-bridge**: Gamescope's `plugin.ts` registers a `launch.compose` handler that wraps the spec. The session lifecycle hook for gamescope is **separate** and manages only the runtime control bridge sidecar. Gamescope does **not** need `launchMetadata` in its lifecycle hook.
+
+`@korri:remap` is different: it needs its config at **session runtime** (in `afterChildRunning`), not at launch composition time. This means either the `launch.with` value must reach the lifecycle hook (via `launchCompanions` in the request) or through the `launchMetadata.annotations` channel.
+
+---
+
+## New `@korri:remap` Config Shape
+
+### Authored format (`launch.with["@korri:remap"]`)
+
+```yaml
+launch:
+  with:
+    "@korri:remap":
+      enable: true
+      controllers:
+        - source: p1                # slot identifier, not a device path
+          bindings:
+            dpad.down: key.down
+            dpad.up: key.up
+            dpad.left: key.left
+            dpad.right: key.right
+            btn.west: key.z
+            btn.south: key.a
+            btn.east: key.x
+            btn.north: key.s
+            btn.start: key.p
+            stick.left.x: stick.left.x  # gamepad-to-gamepad example
+        - source: p2
+          bindings:
+            dpad.down: key.s
+            dpad.up: key.w
+```
+
+Alternatively the user's preferred compact form uses flat dot-path keys:
+```yaml
+"@korri:remap":
+  "p1.dpad.down": "key.down"
+  "p1.dpad.up": "key.up"
+  "p1.btn.west": "key.z"
+  "p2.dpad.down": "key.s"
+```
+
+Clarify with user: nested `controllers[]` array vs flat `p1.*` key prefix. Both convey the intent; the flat form is more compact but harder to validate with strict schemas.
+
+### Design decisions per user requirements
+
+| Requirement | Decision |
+|---|---|
+| No CDP/Chrome terminology | Remove `cdpHost`, `cdpPort`, `target.*`, `mapping` named presets entirely from authored config |
+| Single-word plugin name `remap` | `@korri:remap`, plugin dir `product/plugins/remap/` |
+| Under `launch.with` | Not `launchMetadata.annotations` |
+| Compact dot-path bindings | `p1.dpad.down: key.down` (source: `{slot}.{input}`, target: `{kind}.{name}`) |
+| Kebab-case names | `fail-closed`, `press-threshold`, `release-threshold`, `event-nodes`, etc. |
+| No profiles/presets | Inline bindings only; no `mapping: "yfs-default"` |
+| Multiple controllers | `p1`, `p2`, … slot identifiers |
+| Gamepad-to-keyboard | Target: `key.{dom-key-name}` |
+| Gamepad-to-gamepad | Target: `btn.{name}` or `stick.{side}.{axis}` |
+| Fail-closed isolation | `fail-closed` defaults to `true`; hook `failurePolicy: "fail-launch"` |
+| InputPlumber-normalized sources | Use `resolveInputPlumberVirtualGamepad()` unchanged |
 
 ---
 
 ## Implementation Patterns
 
-### Pattern 1 — Schema record anatomy (Effect Schema v4)
-Every record module follows:
+### Plugin declaration pattern (from `gamescope/src/plugin.ts`)
+
 ```ts
-export const FooPayload = Schema.Struct({ ... })  // no id field
-export type FooPayload = Schema.Schema.Type<typeof FooPayload>
-
-export const FooRecord = Schema.Struct({ id: ..., ...FooPayload.fields })
-export type FooRecord = Schema.Schema.Type<typeof FooRecord>
-
-export const decodeFooPayload = (input: unknown): FooPayload =>
-  Schema.decodeUnknownSync(FooPayload)(input, { onExcessProperty: "error" })
-export const decodeFooRecord = ...
-```
-`onExcessProperty: "error"` is enforced everywhere — unknown keys **fail loudly at decode time**. This is the central guard against silent field typos.
-
-### Pattern 2 — `plugin()` factory / descriptor
-```ts
-export const myPlugin = plugin({
+export const remapPlugin = plugin({
   namespace: "@korri",
-  name: "my-plugin",
-  title: "...",
-  description: "...",
-  requires: [...],
+  name: "remap",
+  title: "Input Remap",
+  description: "Launch-scoped controller-to-keyboard and controller-to-controller remapping.",
   contributes: {
-    config: {
-      apps: { localId: { id: "...", kind: "@korri:my-plugin", command: "...", ... } },
-      systems: { localId: { id: "...", title: "...", apps: [...] } },
-      runtimes: { localId: { kind: "libretro-core", path: "...", app: "...", ... } },
-      modules: { localId: { id: "...", kind: "...", capabilities: [...] } },
-      catalog: { localId: { id: "...", title: "...", kind: "game", releases: [...] } },
-    },
-    handlers: [{ id: "...", operation: "...", capabilities: [...], run: ctx => ... }],
+    handlers: [
+      {
+        id: "remap.diagnostics",
+        operation: "diagnostics.collect",
+        capabilities: ["diagnostics.collect", "input.remap"],
+        run: context => collectRemapDiagnostics(context.input),
+      },
+    ],
   },
 })
 ```
-- Registry namespaces all `config.*` contributions (except `providers`) as `<plugin-id>/<local-id>`.
-- The `plugin()` helper auto-creates a `providers[<plugin-id>]` entry with `{ title, description }`.
-- Config contributions loaded by `loadReadableSnapshot` → `pluginReadableRecords` → `decodePluginReadableMap` (silent-skip on decode failure).
 
-### Pattern 3 — `AppRecord.kind` is the integration discriminator
-`app.kind` currently drives `ReadableLaunchIntegration` selection via `appRecordKind(context.app)`. Provider-qualified kinds (`kind.startsWith("@")`) fall through to the `findReadableLaunchIntegration` path; unqualified kinds use built-in integration names (`mame`, `dolphin`, `solarus`, `generic-process`).
+Note: `@korri:remap` does NOT need a `launch.compose` handler (it doesn't wrap the spec). It is purely a session sidecar.
 
-### Pattern 4 — Plugin policy via `plugin: { "@korri:foo": { ... } }`
-Plugin-specific typed settings travel in `plugin.<provider-id>` maps at every inheritable layer. They are decoded/validated in each plugin's materializer (e.g. `decodeRetroArchPolicy` in `retroarch/src/policy.ts`, `SteamPluginPolicy` in `steam/src/plugin.ts`). The cascade merges them as deep-merge objects (arrays concat; scalars last-win).
+### Session lifecycle hook factory pattern (from `cdp-input-bridge/src/session-lifecycle-hook.ts`)
 
-### Pattern 5 — `argsAppend`, `env`, `cwd`, `patches` as inheritable scalars
-Concat (argsAppend, patches) or last-win (env, cwd) across the cascade. `moonlight` is deep-merged with special cases for `extraArgs` and `input.devices` (concat).
-
-### Pattern 6 — `launch.with` companion map
-Provider-keyed, deep-merged. Used for Gamescope (`@korri:gamescope`), Moonlight (`launch.with.<moonlightProvider>`), and extension points. The cascade exports it as `launchCompanions` on `ReadableResolvedLaunchContext`.
-
-### Pattern 7 — Fixture YAML format
-Existing readable library fixture format (enforced by `readable-schema.test.ts` + `examples.test.ts`):
-```yaml
-storage:         # StorageRecord map
-systems:         # SystemRecord map (apps[], cores, inheritable fields)
-apps:            # AppRecord map (kind, command, args, runtime, plugin.*, launch.with.*)
-runtimes:        # RuntimeRecord map (kind, path, tool, app, supports.systems[])
-library:         # LibraryItemRecord map (releases[{ id, system, target, apps[{id, runtime}] }])
-providers:       # ProviderRecord map
-sources:         # SourceRecord map (deprecated, still parsed)
-```
-
-### Pattern 8 — Retired vocabulary enforcement
-Multiple records already enforce deprecations at decode time with `Schema.check(Schema.makeFilter(...))` returning issue objects. For example:
-- `LibraryReleasePayload` rejects `source`, `app`, `runtime` at the release level.
-- `SystemPayload` rejects `launcher` field.
-- `AppPayload` rejects `kind: "steam"`, `retroarch`, `integration`, `netplay`, `remoteCommand`, `achievements.password`.
-- `ModuleRecord` still used in legacy code paths but `upsertModule` in repository is deprecated.
-
-### Pattern 9 — `ReadableLaunchIntegration` + materializer pattern
-Plugin materializers receive `ReadableResolvedLaunchContext` (the fully merged cascade output) and are responsible for:
-1. Deciding `canResolve(context)` — checks plugin policy decodable, runtime kind compatible, content path available.
-2. Generating `materialize(context, opts)` — writes config files to an artifact root, composes `LaunchSpec`.
-3. Returning `{ spec, artifacts?, diagnostics? }`.
-
-### Pattern 10 — `ProviderLinkRecord` (current shape)
 ```ts
-{ id, provider, playable, release?, ref: { kind: "url|provider-item-id|external-id", value } }
+export function createRemapSessionLifecycleHook(
+  options: RemapSessionLifecycleHookOptions = {},
+): KorriSessionLifecycleHook {
+  return {
+    id: KORRI_REMAP_PLUGIN_ID,
+    failurePolicy: "fail-launch",
+    afterChildRunning: async ({ launchId, launchCompanions, terminateLaunch }) => {
+      // reads policy from launchCompanions["@korri:remap"] once interface is extended
+      const policy = decodeRemapPolicy(launchCompanions?.[KORRI_REMAP_PLUGIN_ID])
+      if (!policy.enabled) return undefined
+      // ... start bridge process per controller slot
+    },
+  }
+}
 ```
-One ref per record (not an array). The sketch proposes changing to `refs[]` per link.
 
----
+### Effect Schema policy decode pattern (from `cdp-input-bridge/src/policy.ts`)
 
-## Current Domain Model vs New Domain Model
+```ts
+const STRICT = { onExcessProperty: "error" } as const
 
-### What exists today (migration FROM)
+const RawPolicy = Schema.Struct({
+  enable: Schema.optional(Schema.Boolean),
+  "fail-closed": Schema.optional(Schema.Boolean),
+  // ...
+})
 
-| Concept | Current representation | Location |
-|---------|----------------------|----------|
-| Launcher | `LauncherRecord` (`command`, `args`, `systems`); also `AppRecord` with `kind: "..."` | `records/launcher.ts`, `records/app.ts` |
-| App choice | `release.apps[]: AppChoice` — `id` references a top-level `AppRecord` | `records/app-choice.ts` |
-| Runtime | `RuntimeRecord` (`kind: libretro-core|tool|emulator`, `path`, `app`, `supports.systems[]`) | `records/runtime.ts` |
-| System default launch | `system.apps[{ id, runtime }]` overrides; `system.cores` legacy | `records/system.ts` |
-| Target | `release.target`: `string | { kind: "file", storage, path } | { kind: "uri", value }` (array variant exists but `MultiTargetUnsupported`) | `records/library-item.ts`, `source-target-resolution.ts` |
-| Provider identity | `ProviderLinkRecord` — one `ref` per record | `records/provider-link.ts` |
-| Settings | Flat `LaunchSettings` on `AppRecord`; `plugin.<id>` map for plugin-specific settings | `launch-block.ts`, `inheritable-fields.ts` |
-| Systems metadata | `name`, `manufacturer` on `SystemRecord`; no concept of metadata-only vs launchable | `records/system.ts` |
-| Plugin descriptor | `contributes.config.apps`, `.runtimes`, `.systems`, `.modules`, `.catalog` | `product/platform/plugin/index.ts` |
+export function decodeRemapPolicy(input: unknown): RemapPolicy {
+  if (input === undefined) return { enabled: false }
+  const raw = Schema.decodeUnknownSync(RawPolicy)(input, STRICT)
+  if (raw.enable !== true) return { enabled: false }
+  return { enabled: true, /* ... */ }
+}
+```
 
-### What the sketch proposes (migration TO)
+### Process manager pattern (from `cdp-input-bridge/src/bridge-process.ts`)
 
-| New concept | Description |
-|-------------|-------------|
-| `target` | Vocabulary expansion: `kind: file \| file-set \| executable \| url \| provider-ref` |
-| `file-set` target | `{ kind: "file-set", storage, root, files: [{ id, role, label?, path }] }` — named parts with roles (`manifest \| media \| data \| ...`) |
-| `executable` target | `{ kind: "executable", path }` — implies `@korri:process` launcher inference |
-| `provider-ref` target | `{ kind: "provider-ref", provider, ref }` — for nixpkgs, Steam, etc. |
-| `launchers` (top-level) | Named reusable launcher instances: `plugin`, optional `runtime`, `input`, `settings`, `env`, `cwd`, `with`, `overrides` |
-| `launch` on release | Optional overlay with same vocabulary as a named launcher (minus `plugin`/`use`); can be omitted when system/provider implies a single launcher |
-| `use` in launch | References a named launcher by name |
-| `plugin` in launch | Selects a plugin-provided launcher implementation |
-| `settings` split | Common normalized packs: `display`, `audio`, `input`, `saves`, `lifecycle`; plus `settings.plugin` (typed by selected launcher plugin) |
-| `overrides` | Raw escape hatch: `overrides.args.append[]`, `overrides.config.append` |
-| `systems` metadata-only | Systems contain only `title`, `aliases[]`, `metadata {}` — no launcher config, no `apps[]`, no `cores` |
-| Plugin descriptor additions | `runtimeMode: none \| embedded \| optional \| required`; `supportedSettingPacks[]`; system support mappings (separate from `systems`) |
-| `provider-links` | Named records scoped to playable+release+targetPart; `refs[]` (array of `{ kind, value }`) |
-| `runtimes` | Survive; `kind: libretro-core`, `path`, `supports.systems[]`; still `plugin`-owned |
-| `input` on launcher | Selects which file-set part to pass (`roles: [manifest, media]` fallback policy, or `part: <id>` exact) |
+The `createProcessCdpInputBridge()` factory returns a `CdpInputBridgeProcessManager` that:
+1. Validates arguments (`resolveBridgeMapping`)
+2. Spawns a child process (injectable `spawn` parameter for testing)
+3. Waits for a readiness signal on stdout (`"korri-cdp-input-bridge: ready"`)
+4. Returns a `handle` with `pid`, `exited` promise, and `stop()`
+
+For `@korri:remap`, this becomes `createRemapBridgeProcessManager()`. The process name changes to `korri-remap` (or `korri-input-remap`); the args change to pass binding config instead of CDP args.
+
+### Nix binary derivation pattern (from `cdp-input-bridge/nix/cdp-input-bridge.nix`)
+
+```nix
+{ lib, writeShellApplication, bun, evtest }:
+writeShellApplication {
+  name = "korri-remap";
+  runtimeInputs = [ bun evtest ];
+  text = ''
+    exec ${lib.getExe bun} run ${../.}/packages/korri-remap/index.ts "$@"
+  '';
+}
+```
+
+### Test double pattern (from existing tests)
+
+```ts
+// Inject a fake process manager
+const hook = createRemapSessionLifecycleHook({
+  devices: async () => singleDevice,
+  processManager: {
+    start: async request => {
+      starts.push(request)
+      return { pid: 111, stop: async () => {} }
+    },
+  },
+})
+```
+
+Tests are in `*.test.ts` colocated with each source file. No `__mocks__` or `Mock*` prefixes.
+
+### Plugin registration pattern (from `product/plugins/index.ts`)
+
+```ts
+// Add to firstPartyPlugins array
+export const firstPartyPlugins = [
+  // ...existing...
+  remapPlugin,
+  // Keep cdp-input-bridge for migration period or remove
+] as const
+
+// Add to firstPartySessionLifecycleHookFactories
+export const firstPartySessionLifecycleHookFactories = [
+  // ...existing...
+  {
+    pluginId: remapPlugin.id,
+    create: createRemapSessionLifecycleHook,
+  },
+] satisfies readonly KorriSessionLifecycleHookFactory[]
+```
+
+### YFS catalog entry update pattern
+
+After the refactor, `yoshis-fabrication-station/index.ts` changes from:
+```ts
+launchMetadata: {
+  annotations: { [CDP_INPUT_BRIDGE_PLUGIN_ID]: { enable: true, cdpPort: 9333, mapping: "yfs-default", ... } },
+},
+```
+To (`ProcessPluginLaunch.with` field, or via the game's `launch.with` in inherited config):
+```ts
+with: {
+  [KORRI_REMAP_PLUGIN_ID]: {
+    enable: true,
+    controllers: [
+      {
+        source: "p1",
+        bindings: {
+          "dpad.down": "key.down",
+          "dpad.up": "key.up",
+          "dpad.left": "key.left",
+          "dpad.right": "key.right",
+          "btn.west": "key.z",
+          "btn.south": "key.a",
+          "btn.east": "key.x",
+          "btn.north": "key.s",
+          "btn.start": "key.p",
+        },
+        source: { names: ["Microsoft Xbox Series S|X Controller"] },
+      },
+    ],
+  },
+},
+```
 
 ---
 
 ## Issue Conventions
 
-*(GitHub issues not examined — out of scope for this research.)*
+This is a single-author project with no GitHub Issue templates or external contribution guidelines found. The `AGENTS.md` and `CLAUDE.md` at root are the primary agent-facing convention docs.
 
 ---
 
 ## Documentation Insights
 
-### Contribution guidelines (`product/plugins/AGENTS.md`)
-- Every plugin: `index.ts` (thin export surface) + `src/plugin.ts` (descriptor).
-- Use `plugin()` from `@platform/plugin`.
-- Config contributions: `providers`, `providerLinks`, `storage`, `systems`, `apps`, `modules`, `runtimes`, `profiles`, `catalog`.
-- Other config maps are namespaced by registry as `<plugin-id>/<local-id>`.
-- Catalog + `modules` for plugin-contributed executables.
-- Handlers must validate `context.input` at the boundary.
-- Register in `product/plugins/index.ts` `firstPartyPlugins` array.
-- Tests required: stable plugin id, descriptor contributions, handler ops, input validation, registry exposure, launch/catalog/resource behavior.
-- **Do not** use `PATH` for host capabilities; do not add `Mock*`/`Stub*`/`Fake*`; do not mutate user Nix profiles; do not use `nix run` at launch time.
+### AGENTS.md / CLAUDE.md
 
-### Key authoring rules
-- Schema decodes in `{ onExcessProperty: "error" }` — unknown keys fail loudly.
-- `app.kind` = discriminator; must be a valid `AppKind` or provider-qualified string.
-- `release.apps[].kind` is rejected; `kind` lives only on top-level `AppRecord`.
-- `release.target` must not be an absolute path.
-- `release.app`, `release.runtime` (top-level on release, not inside `apps[]`) are retired and rejected.
-- `system.launcher` is rejected; use `system.apps[]`.
-- Retired: `source` records, `module` records, `GameRecord` directly, `launcher`/`core` shorthand aliases.
-- `plugin.<provider-id>` values are `unknown` at the inheritable-field level but decoded by each plugin's materializer.
+- Present at root. Must be read before any coding work.
+- `AGENTS.local.md` for machine-local overrides.
 
-### Testing conventions
-- Test files colocated: `src/<feature>.test.ts` or `src/<feature>/<unit>.test.ts`.
-- Unit tests use `bun:test` (`describe`, `it`, `expect`).
-- Integration/e2e use Playwright.
-- No `Mock*`, `Stub*`, `Fake*` prefixes; doubles use real implementations with configurable behavior.
-- `Effect.runPromise` / `Effect.runSyncExit` / `Effect.runPromiseExit` for testing Effect pipelines.
+### Naming conventions (kebab-case in authored config; confirmed by `launch-composition-config-sketch.yaml`)
+
+> "Author-facing structural keys use kebab-case only: no camel-case and no snake-case."
+
+All new authored policy fields must be kebab-case:
+- `fail-closed` (not `failClosed`)
+- `press-threshold`, `release-threshold`
+- `event-nodes` (not `eventNodes`)
+- `attach-timeout-ms`
+
+TypeScript internal field names may stay camelCase (decoded from kebab schema).
+
+### Plan/design files
+
+- `out/config-sketches/launch-composition-config-sketch.yaml` — canonical example of `launch.with` authored shape
+- `out/config-sketches/plugin-produced-vs-authored.yaml` — documents produced vs authored separation
+- `docs/handoffs/2026-06-17-gamescope-plugin-launch-companion-temporary-handoff.md` — how gamescope was migrated; directly relevant
+- `work/items/parking-lot/01KVNHQKSVADKGYYNTD6G699R9-productize-scoped-controller-to-keyboard-input-for-yfs-style.md` — the backlog item this refactor addresses
 
 ---
 
 ## Templates Found
 
-No `.github/ISSUE_TEMPLATE/` or PR template files found in scope. Config YAML fixtures serve as the primary authoring templates:
-- `product/platform/library/config/fixtures/steam-full.korri.yaml` — authoritative readable library fixture
-- `docs/brainstorms/2026-06-11-001-steam-readable-library-example.korri.yaml` — Steam readable library example
-- `docs/brainstorms/2026-06-08-004-retroarch-policy-minimal-v1.example.yaml` — RetroArch minimal policy example
-- `docs/brainstorms/2026-06-08-003-retroarch-policy-one-to-one.example.yaml` — RetroArch one-to-one policy example
-- `work/items/active/01KVGDKT01DNT9NRDKS846CJQ1-plugin-launcher-standardization/config-sketch.korri.yaml` — the new domain model sketch (source of truth for this refactor)
+No GitHub Issue/PR templates found (no `.github/ISSUE_TEMPLATE/` or `.github/pull_request_template.md`). This is a solo project.
 
 ---
 
-## Recommendations for the Big-Bang Refactor
+## Implementation Patterns Summary
 
-### Files/modules to replace (core schema layer)
+### Files to create (new `@korri:remap` plugin)
 
-| File | Current role | New role / disposition |
-|------|-------------|----------------------|
-| `records/library-item.ts` | `LibraryReleasePayload.target`: `string\|UriTarget\|FileTarget\|Array` | Expand to `FileTarget\|FileSetTarget\|ExecutableTarget\|ProviderRefTarget\|UrlTarget`; remove `apps[]` referencing `AppRecord`; add `launch` overlay block |
-| `records/system.ts` | Carries `apps[]`, `cores`, `byLauncher`, `launch`, cascade fields | Strip to metadata-only: `title`, `aliases[]`, `metadata {}`. Remove `apps[]`, `cores`, `name`, `manufacturer`, `byLauncher`, `presets`, all inheritable fields |
-| `records/app.ts` | `AppRecord` — used as current "launcher" concept | Rename concept to `LauncherRecord` (new shape); keep existing `AppRecord` removed or archived |
-| `records/launcher.ts` | Legacy `LauncherRecord` with `command`, `args`, `systems` | Replace: new `LauncherRecord` has `plugin\|use`, `runtime?`, `input?`, `settings`, `env`, `cwd`, `with`, `overrides` |
-| `records/app-choice.ts` | `AppChoice` — `id` pointing to `AppRecord` | Remove; launch selection now lives in `launch.use` or system-level plugin support mappings |
-| `records/runtime.ts` | `RuntimeRecord` — `kind`, `path`, `app`, `supports.systems[]` | Retain; update `supports.systems[]` to work with new system IDs; remove `app` field (launcher relationship declared in plugin support records) |
-| `records/provider-link.ts` | Single `ref: { kind, value }` per record | Change to `refs: Array<{ kind, value }>` per record; add `targetPart?` scope |
-| `records/global.ts` | `launch.app` + legacy `launcher` | Replace with `launch.use\|plugin` vocabulary |
-| `launch-block.ts` | `LaunchBlock` — `app`, `module`, `settings`, `with`, `args`, `env`, `cwd` | Replace with new launcher overlay block: `plugin?`, `use?`, `runtime?`, `input?`, `settings: { display?, audio?, input?, saves?, lifecycle?, plugin? }`, `env`, `cwd`, `with`, `overrides` |
-| `inheritable-fields.ts` | `InheritableLayer` whitelist | Rebuild around new overlay vocabulary; remove `launch.app`, `launch.module`; add `launch.use`, `launch.plugin`, common settings packs |
-| `cascade-resolver.ts` | 7-layer fold; skeleton launcher resolution; `apps` lookup; `byLauncher` merging | Rewrite around launcher-resolution: `target.kind` → infer launcher → apply `launch` overlay; remove `apps` map from snapshot; remove `byLauncher` |
-| `app-integrations.ts` | `AppDescriptor`, built-in apps dict, `integrationForKind` | Replaced by plugin descriptor `runtimeMode` + `supportedSettingPacks` + support mappings; materializer dispatch moves to plugin registry lookup |
-| `app-materializer.ts` | Switch on `integration` string for mame/dolphin/solarus | Remove; every materializer is plugin-owned via `ReadableLaunchIntegration` |
-| `app-choice-selection.ts` | `selectAppChoice`, `resolveEffectiveAppChoices` | Remove; app/launcher selection logic moves to `launch.use` + plugin support record join |
-| `source-target-resolution.ts` | `resolveReleaseTarget` — `string\|UriTarget\|FileTarget` | Extend: `ExecutableTarget`, `ProviderRefTarget`, `UrlTarget`, `FileSetTarget` + `input` selection policy |
-| `resolved-launch-context.ts` | `ReadableResolvedLaunchContext` — `app: AppRecord`, `runtime?: RuntimeRecord` | Replace `app` with `launcher: { plugin, use?, resolved }`, `runtime?: RuntimeRecord`, `target: ResolvedTarget`, `input?: ResolvedInput` |
+```
+product/plugins/remap/
+  index.ts                          — plugin declaration + re-exports
+  src/
+    policy.ts                       — RemapPolicy schema; reads from launch.with companion map
+    binding-resolver.ts             — dot-path binding → evdev code + target action resolver
+    session-lifecycle-hook.ts       — createRemapSessionLifecycleHook()
+    bridge-process.ts               — createRemapBridgeProcessManager()
+    diagnostics.ts                  — collectRemapDiagnostics()
+    policy.test.ts
+    binding-resolver.test.ts
+    session-lifecycle-hook.test.ts
+    bridge-process.test.ts
+    diagnostics.test.ts
+  packages/
+    korri-remap/
+      index.ts                      — Bun entry: CLI args, evtest, output dispatch (keyboard or gamepad)
+      package.json
+      README.md
+  nix/
+    remap.nix                       — writeShellApplication for korri-remap binary
+  plugin.test.ts
+  README.md
+```
 
-### Plugin descriptor additions needed
+### Files to modify
 
-Each plugin must declare new metadata fields (new schema in `product/platform/plugin/index.ts`):
+| File | Change |
+|---|---|
+| `product/platform/plugin/session-lifecycle.ts` | Add `launchCompanions?: LaunchCompanionMap` to `KorriSessionLifecycleHookStartRequest` |
+| `product/services/device/sessiond.ts` | Thread `launchCompanions` through to `afterChildRunning` call |
+| `product/plugins/index.ts` | Register `remapPlugin` in `firstPartyPlugins` and `firstPartySessionLifecycleHookFactories` |
+| `product/plugins/yoshis-fabrication-station/index.ts` | Replace `launchMetadata.annotations[CDP_INPUT_BRIDGE_PLUGIN_ID]` with `with[KORRI_REMAP_PLUGIN_ID]` |
+| `product/plugins/cdp-input-bridge/index.ts` | Mark as deprecated or remove; keep binary for any remaining consumers |
+
+### Interface change needed in platform (session-lifecycle.ts)
+
 ```ts
-interface PluginLauncherDescriptor {
-  // What the plugin provides as a launcher implementation
-  runtimeMode: "none" | "embedded" | "optional" | "required"
-  supportedSettingPacks?: Array<"display" | "audio" | "input" | "saves" | "lifecycle">
-  // system support mappings contributed additively to the registry
-  systemSupport?: Array<{ system: string; runtimeKind?: string }>
+import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
+
+export interface KorriSessionLifecycleHookStartRequest {
+  readonly launchId: string
+  readonly spec: LaunchSpec
+  readonly launchMetadata?: LaunchMetadata
+  readonly launchCompanions?: LaunchCompanionMap  // ← ADD THIS
+  readonly terminateLaunch?: () => void
 }
 ```
 
-### First-party plugin changes needed
-
-| Plugin | Current config contribution | Change needed |
-|--------|---------------------------|---------------|
-| `@korri:retroarch` | `apps.retroarch`: `kind: "@korri:retroarch"`, `args` template; `systems.*: { apps: [{ id, runtime }] }` | Convert to `launchers.retroarch: { plugin: "@korri:retroarch", ... }`; `runtimeMode: "required"`; system support records separate from `systems` map |
-| `@korri:steam` | `apps.steam`: `kind: "@korri:steam"`, `systems.steam: { apps: [{ id: steam }] }` | Convert to `launchers.steam: { plugin: "@korri:steam", ... }`; `runtimeMode: "optional"` (compat tool); target `provider-ref` implies launcher |
-| `@korri:zquest-classic` (new) | N/A | New plugin; `runtimeMode: "embedded"` |
-| `@korri:nixpkgs` (new or process) | `neverball` uses `catalog.neverball.releases[].launch.executable.resource` | Convert to `target: { kind: "provider-ref", provider: "@korri:nixpkgs", ref: "nixpkgs#neverball" }` |
-| `@korri:process` (implicit/new) | Generic `kind: "process"` / `generic-process` integration | Formalize as `runtimeMode: "none"`, handles `target.kind: "executable"` by default |
-
-### Common settings packs schema (new)
-
+Then in `sessiond.ts`, the call becomes:
 ```ts
-// New in inheritable-fields.ts or new file settings-packs.ts
-const DisplaySettings = Schema.Struct({
-  fullscreen: Schema.optional(Schema.Boolean),
-  integerScale: Schema.optional(Schema.Boolean),
-  vsync: Schema.optional(Schema.Boolean),
-  throttleFps: Schema.optional(Schema.Boolean),
-})
-const AudioSettings = Schema.Struct({
-  enabled: Schema.optional(Schema.Boolean),
-})
-const InputSettings = Schema.Struct({ ... })
-const SavesSettings = Schema.Struct({
-  directory: Schema.optional(Schema.String),
-  stateDirectory: Schema.optional(Schema.String),
-})
-const LifecycleSettings = Schema.Struct({
-  gameMode: Schema.optional(Schema.Boolean),
-})
-const LauncherSettings = Schema.Struct({
-  display: Schema.optional(DisplaySettings),
-  audio: Schema.optional(AudioSettings),
-  input: Schema.optional(InputSettings),
-  saves: Schema.optional(SavesSettings),
-  lifecycle: Schema.optional(LifecycleSettings),
-  plugin: Schema.optional(Schema.Unknown), // typed by selected launcher plugin
+await hook.afterChildRunning({
+  launchId,
+  spec,
+  ...(launchMetadata ? { launchMetadata } : {}),
+  ...(launchCompanions ? { launchCompanions } : {}),  // ← thread through
+  ...(active?.terminate ? { terminateLaunch: active.terminate } : {}),
 })
 ```
 
-### `ProviderLinkRecord` changes
+The `launchCompanions` must be threaded from the resolved launch through `LaunchExtras` to sessiond. Check `game-stream-launch-intent.ts` and `sessiond.ts` receive/store paths for the right injection point.
 
-Current: `{ id, provider, playable, release?, ref: { kind, value } }`
-New: `{ id, provider, playable, release?, targetPart?, refs: Array<{ kind, value }> }`
+---
 
-`ProviderRef.kind` must be expanded: currently `"url | provider-item-id | external-id"`. The sketch uses `sha1`, `md5`, `serial` — those would be new values under `kind`.
+## Recommendations
 
-### `FileSetTarget` schema (new)
+### 1. Extend the lifecycle hook request first (lowest risk)
 
-```ts
-const FileSetFile = Schema.Struct({
-  id: NonEmptyString,
-  role: FileSetFileRole,  // "manifest" | "media" | "data" | "patch" | "metadata" | "document"
-  label: Schema.optional(Schema.String),
-  path: TargetRelativePath,
-})
+Before creating the `@korri:remap` plugin, add `launchCompanions?: LaunchCompanionMap` to `KorriSessionLifecycleHookStartRequest` and thread it from the Portal RPC handler → `LaunchExtras` → sessiond → hook calls. This is a non-breaking additive change. Existing hooks (`@korri:gamescope`, `@korri:steam`, `@korri:cdp-input-bridge`) already ignore unknown fields.
 
-const FileSetTarget = Schema.Struct({
-  kind: Schema.Literal("file-set"),
-  storage: NonEmptyString,
-  root: TargetRelativePath,
-  files: Schema.Array(FileSetFile).check(/* at least one */),
-})
+### 2. Keep `@korri:cdp-input-bridge` binary intact during migration
+
+The `korri-cdp-input-bridge` binary is a Bun + evtest script. The new `korri-remap` binary can share its CDP dispatch logic if needed. Start fresh for the new plugin, but don't delete `cdp-input-bridge` until YFS is migrated and tested on Sobo.
+
+### 3. Confirm the flat vs. nested binding config shape with user
+
+The user said "compact dot-path bindings like `p1.dpad.down: key.down`". This could mean:
+- **Flat record**: `{ "p1.dpad.down": "key.down" }` — simpler schema, flat map
+- **Nested**: `{ controllers: [{ source: "p1", bindings: { "dpad.down": "key.down" } }] }` — more structured, better for multi-source disambiguation
+
+The flat form is more compact as the user requested. The nested form is more robust for per-controller `source.names` hints. Clarify before designing the `RemapPolicy` schema.
+
+### 4. Gamepad-to-gamepad binding implementation gap
+
+The current CDP bridge only dispatches **keyboard events via CDP**. A gamepad-to-gamepad binding requires a different output mechanism (e.g. uinput virtual device or InputPlumber profile). This is a non-trivial addition. The fail-closed safety contract must still hold. Recommend implementing keyboard targets first and flagging gamepad output as a future extension.
+
+### 5. Check `product/platform/library/config/cascade-resolver.ts` for companion threading
+
+The resolver already calls `composeLaunchCompanions()`. Whether the resolved `launchCompanions` map is included in the `LaunchExtras` payload sent to sessiond is a key gap to verify. Look at lines 509+ in `cascade-resolver.ts` and the `launchLocalForegroundSession()` call path in `launch.rpc-handler.ts`.
+
+### 6. Verification commands for this refactor
+
+```sh
+just typecheck
+bun test product/plugins/remap/
+bun test product/platform/plugin/session-lifecycle.test.ts
+bun test product/services/device/sessiond-plugin-composition.test.ts
+bun test product/plugins/yoshis-fabrication-station/
+just lint
 ```
 
-### `LaunchInputPolicy` (new — maps to file-set input selection)
+---
 
-```ts
-const LaunchInputPolicy = Schema.Struct({
-  roles: Schema.optional(Schema.Array(FileSetFileRole)),  // ordered fallback
-  part: Schema.optional(NonEmptyString),                  // exact part id override
-})
-```
+## Key Files Reference
 
-### `LauncherOverlay` (new — the unified launcher object for `launchers.*`, `launch` on release, plugin support records)
-
-```ts
-const LauncherOverlay = Schema.Struct({
-  plugin: Schema.optional(PluginId),   // required in top-level launchers definitions
-  use: Schema.optional(Schema.String), // references a named launcher
-  runtime: Schema.optional(Schema.String),
-  input: Schema.optional(LaunchInputPolicy),
-  settings: Schema.optional(LauncherSettings),
-  env: Schema.optional(EnvMap),
-  cwd: Schema.optional(Schema.String),
-  with: Schema.optional(LaunchWithPolicy),
-  overrides: Schema.optional(LauncherOverrides),
-})
-
-const LauncherOverrides = Schema.Struct({
-  args: Schema.optional(Schema.Struct({
-    append: Schema.optional(Schema.Array(Schema.String)),
-  })),
-  config: Schema.optional(Schema.Struct({
-    append: Schema.optional(Schema.String),
-  })),
-})
-```
-
-### Cascade / resolver rewrite
-
-The `ReadableConfigSnapshot` loses `apps`, gains `launchers` (named launcher records). System lookup for launch defaults changes from `system.apps[]` to a plugin support record join:
-
-```ts
-// New snapshot
-interface ReadableConfigSnapshot {
-  host: HostRecord | null
-  users: Map<string, UserRecord>
-  systems: Map<string, SystemRecord>      // metadata-only
-  launchers: Map<string, LauncherRecord>  // new shape
-  runtimes: Map<string, RuntimeRecord>    // unchanged
-  storage: Map<string, StorageRecord>
-  library: Map<string, LibraryItemRecord>
-  profiles: Map<string, ProfileRecord>
-  // removed: apps, sources
-}
-```
-
-Launch resolution algorithm:
-1. Determine `target.kind` from release.
-2. If `release.launch.use`: look up named launcher.
-3. If `release.launch.plugin`: use plugin directly.
-4. Else infer from `target.kind` + `target.provider` (provider-ref → provider implies launcher; executable → `@korri:process`; file/file-set → join plugin support records for `release.system`).
-5. Merge `launch` overlay onto resolved launcher settings.
-
-### `ReadableResolvedLaunchContext` new shape
-
-```ts
-interface ReadableResolvedLaunchContext {
-  playableId: string
-  itemId: string
-  containedId?: string
-  releaseId: string
-  system: string
-  target: ResolvedTarget          // discriminated union of target kinds
-  launcher: {
-    pluginId: PluginId
-    record?: LauncherRecord       // the named launcher if used
-    runtimeMode: "none"|"embedded"|"optional"|"required"
-  }
-  runtime?: RuntimeRecord
-  input?: ResolvedInput           // which file-set part / path was selected
-  settings?: ResolvedLauncherSettings  // common packs merged + plugin settings merged
-  launchCompanions?: LaunchCompanionMap
-  moonlight?: MoonlightPolicy
-  plugin?: PluginPolicyMap
-  env?: Record<string, string>
-  cwd?: string
-  argsAppend?: string[]
-  patches?: string[]
-  storage: Record<string, StorageRecord>
-}
-```
-
-### Test files to rewrite (migration-sensitive)
-
-| File | Reason |
-|------|--------|
-| `readable-schema.test.ts` | Every record shape changes; retired vocabulary list expands |
-| `readable-cascade-resolver.test.ts` | Cascade fold algorithm changes; `apps` map removed; `launchers` map replaces |
-| `cascade-resolver.test.ts` | `resolveLocalLauncherPolicy` still needed; `byLauncher` behaviour changes |
-| `compose-readable-launch-spec.test.ts` | Placeholder vocabulary changes; `{runtime.path}`, `{content.path}` survive; `{target}`, `{target.url}` are new |
-| `authoring/examples.test.ts` | Example YAML files need to be updated to new grammar; forbidden vocabulary list expands |
-| `product/plugins/retroarch/src/plugin.test.ts` | Plugin contributes `launchers` instead of `apps`; system support records change |
-| `product/plugins/steam/src/plugin.test.ts` | Same |
-| `product/platform/plugin/registry.test.ts` | `PluginRegistry` gains `launchers` map; loses `apps` map |
-
-### Critical API surface (no-backwards-compat breakage points)
-
-1. **`LibraryReleasePayload.target`** — type union expands; `apps[]` removed from release; `system` may become optional (inferred from target).
-2. **`SystemRecord`** — stripped to metadata; `apps[]`, `cores`, inheritable fields removed.
-3. **`LauncherRecord`** (renamed from `AppRecord`) — completely different shape.
-4. **`AppRecord`** — removed or archive-only.
-5. **`PluginConfigContributions`** — `apps` removed; `launchers` added; plugin descriptor gains `runtimeMode`, `supportedSettingPacks`.
-6. **`ReadableConfigSnapshot`** — `apps` removed; `launchers` added.
-7. **`ReadableResolvedLaunchContext`** — `app: AppRecord` replaced by `launcher: { pluginId, record?, runtimeMode }`.
-8. **`ReadableLaunchIntegration.kind`** — still matched against launcher plugin id (was matched against `appRecordKind`); API stays but plugin ids change.
-9. **`ProviderLinkRecord`** — `ref` single → `refs[]` array; `targetPart?` added.
-10. **`LaunchBlock`** — `app`, `module` fields removed; new `use`, `plugin`, `runtime`, `input`, `settings.plugin` fields added.
-11. **`InheritableLayer`** — inheritable fields restructured around new `launch` vocabulary.
-12. **`PluginCatalogRelease.launch`** — `kind: "process"`, `executable: { resource }` stays or converts to new target vocabulary.
+| Path | What it is |
+|---|---|
+| `product/platform/plugin/index.ts` | `plugin()`, `KorriPlugin`, `PluginHandler`, `ProcessPluginLaunch` (has `with?: Record<ProviderId, unknown>`) |
+| `product/platform/plugin/session-lifecycle.ts` | `KorriSessionLifecycleHook`, `KorriSessionLifecycleHookStartRequest` |
+| `product/platform/plugin/launch-companion.ts` | `composeLaunchCompanions()` — how `launch.with` values run `launch.compose` handlers |
+| `product/platform/plugin/launch-metadata.ts` | `LaunchMetadata`, `decodeLaunchMetadata` |
+| `product/platform/library/config/inheritable-fields.ts` | `LaunchWithPolicy`, `LaunchCompanionMap`, `InheritableLayer`, `launchCompanionsFromLaunch()` |
+| `product/platform/library/config/cascade-resolver.ts` | Config cascade fold logic for `launch.with` |
+| `product/platform/library/library-services.ts` | `ResolvedLaunch` — has both `launchCompanions?` and `launchMetadata?` |
+| `product/platform/input/native/inputplumber-virtual-gamepad.ts` | `resolveInputPlumberVirtualGamepad()` — keep unchanged |
+| `product/platform/input/native/button-codes.ts` | InputPlumber-normalized evdev button constants |
+| `product/plugins/gamescope/src/launch-companion/policy.ts` | Reference for `gamescopePolicyFromLaunch()`, `decodeGamescopePolicy()`, `foldGamescopePolicy()` |
+| `product/plugins/gamescope/src/session/lifecycle-hook.ts` | Reference session lifecycle hook factory pattern |
+| `product/plugins/cdp-input-bridge/src/policy.ts` | Current CDP policy (to restructure) |
+| `product/plugins/cdp-input-bridge/src/mapping.ts` | Current named-preset mapping (to replace with inline bindings) |
+| `product/plugins/cdp-input-bridge/src/session-lifecycle-hook.ts` | Current lifecycle hook (to refactor) |
+| `product/plugins/cdp-input-bridge/src/bridge-process.ts` | Current process manager + evtest translator (to generalize) |
+| `product/plugins/cdp-input-bridge/packages/korri-cdp-input-bridge/index.ts` | Current Bun CLI entry (to refactor) |
+| `product/plugins/yoshis-fabrication-station/index.ts` | YFS plugin — the primary consumer to migrate |
+| `product/plugins/index.ts` | Registration of all first-party plugins and lifecycle hook factories |
+| `product/services/device/sessiond.ts` | Calls `afterChildRunning`; needs `launchCompanions` threading |
+| `product/services/device/sessiond-plugin-composition.ts` | `sessionLifecycleHooksFromEnv()` |
+| `out/config-sketches/launch-composition-config-sketch.yaml` | Canonical authored `launch.with` examples |
