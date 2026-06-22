@@ -86,7 +86,10 @@ async function spawnShellLaunch(
   try {
     proc = Bun.spawn(argv as unknown as string[], {
       env: env as Record<string, string>,
-      cwd: spec.cwd,
+      // Pin a world-searchable default cwd. User services can run from
+      // private directories; setuid wrappers and grandchildren may fail or lose
+      // their intended privilege transition if spawned from an inaccessible cwd.
+      cwd: spec.cwd ?? "/tmp",
       stderr: "pipe",
       stdout: "ignore",
     })
