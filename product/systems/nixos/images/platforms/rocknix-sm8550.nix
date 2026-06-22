@@ -330,11 +330,14 @@ let
           "p1.stick.right.down" = "key.down";
           "p1.stick.right.left" = "key.left";
           "p1.stick.right.right" = "key.right";
-          # YFS keyboard defaults: Z=jump, X=tongue, C=throw.
+          # YFS keyboard defaults: Z=jump, A=tongue, X=throw. On the
+          # InputPlumber-normalized Sobo controller observed during smoke,
+          # the physical west face button arrives as BTN_NORTH, so keep both
+          # north and west on tongue instead of leaving west inert.
           "p1.button.south" = "key.z";
-          "p1.button.west" = "key.x";
-          "p1.button.east" = "key.c";
-          "p1.button.north" = "key.s";
+          "p1.button.west" = "key.a";
+          "p1.button.east" = "key.x";
+          "p1.button.north" = "key.a";
           "p1.button.start" = "key.p";
         };
       };
