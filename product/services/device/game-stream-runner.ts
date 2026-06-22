@@ -632,7 +632,14 @@ export function createBunManagedChildSpawner(
       const isSetuidRemapBridge =
         spec.command === "/run/wrappers/bin/korri-remap-bridge"
       const argv = isSetuidRemapBridge
-        ? [spec.command, ...spec.args]
+        ? [
+            DEFAULT_EXEC_TRAMPOLINE_COMMAND,
+            "-c",
+            EXEC_TRAMPOLINE_SCRIPT,
+            DEFAULT_EXEC_TRAMPOLINE_COMMAND,
+            spec.command,
+            ...spec.args,
+          ]
         : [
             setsidCommand,
             "--",

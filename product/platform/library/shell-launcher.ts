@@ -88,7 +88,16 @@ async function spawnShellLaunch(
         spec.command,
         ...spec.args,
       ] as const)
-    : ([spec.command, ...spec.args] as const)
+    : isSetuidRemapBridge
+      ? ([
+          DEFAULT_EXEC_TRAMPOLINE_COMMAND,
+          "-c",
+          EXEC_TRAMPOLINE_SCRIPT,
+          DEFAULT_EXEC_TRAMPOLINE_COMMAND,
+          spec.command,
+          ...spec.args,
+        ] as const)
+      : ([spec.command, ...spec.args] as const)
 
   logger.info(
     { command: spec.command, argc: spec.args.length },
