@@ -67,7 +67,15 @@ async function spawnShellLaunch(
   spec: LaunchSpec,
   options: ShellLauncherOptions = {},
 ): Promise<ManagedLaunchResult> {
-  const useProcessGroup = options.processGroup === true
+  const isSetuidRemapBridge =
+    spec.command === "/run/wrappers/bin/korri-remap-bridge"
+  // The Remap bridge is a NixOS setuid wrapper whose native driver owns and
+  // cleans up the launched child tree. On Sobo, invoking that wrapper through
+  // sessiond's process-group `setsid` path can drop the intended root
+  // transition before native-driver.py starts, while direct argv-safe spawn
+  // preserves it. Keep process groups for ordinary launches, but let this
+  // setuid bridge run directly.
+  const useProcessGroup = options.processGroup === true && !isSetuidRemapBridge
   const setsidCommand = options.setsidCommand ?? DEFAULT_SETSID_COMMAND
   const argv = useProcessGroup
     ? ([

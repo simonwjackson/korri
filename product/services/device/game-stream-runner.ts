@@ -629,29 +629,31 @@ export function createBunManagedChildSpawner(
   return {
     async spawn(spec) {
       const env = launchEnvironment(spec, options.env ?? process.env)
-      const proc = Bun.spawn(
-        [
-          setsidCommand,
-          "--",
-          DEFAULT_EXEC_TRAMPOLINE_COMMAND,
-          "-c",
-          EXEC_TRAMPOLINE_SCRIPT,
-          DEFAULT_EXEC_TRAMPOLINE_COMMAND,
-          spec.command,
-          ...spec.args,
-        ],
-        {
-          // Sessiond can run from a private home/cwd. Spawn managed children
-          // from a world-searchable default so setuid wrappers retain their
-          // intended privilege transition unless a launch explicitly provides
-          // a cwd.
-          cwd: spec.cwd ?? "/tmp",
-          env: env as Record<string, string>,
-          stdin: "ignore",
-          stdout: "inherit",
-          stderr: "inherit",
-        },
-      )
+      const isSetuidRemapBridge =
+        spec.command === "/run/wrappers/bin/korri-remap-bridge"
+      const argv = isSetuidRemapBridge
+        ? [spec.command, ...spec.args]
+        : [
+            setsidCommand,
+            "--",
+            DEFAULT_EXEC_TRAMPOLINE_COMMAND,
+            "-c",
+            EXEC_TRAMPOLINE_SCRIPT,
+            DEFAULT_EXEC_TRAMPOLINE_COMMAND,
+            spec.command,
+            ...spec.args,
+          ]
+      const proc = Bun.spawn(argv, {
+        // Sessiond can run from a private home/cwd. Spawn managed children
+        // from a world-searchable default so setuid wrappers retain their
+        // intended privilege transition unless a launch explicitly provides
+        // a cwd.
+        cwd: spec.cwd ?? "/tmp",
+        env: env as Record<string, string>,
+        stdin: "ignore",
+        stdout: "inherit",
+        stderr: "inherit",
+      })
 
       return {
         pid: proc.pid,
