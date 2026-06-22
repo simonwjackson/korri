@@ -1,5 +1,5 @@
 import { plugin } from "@platform/plugin"
-import { CDP_INPUT_BRIDGE_PLUGIN_ID } from "../cdp-input-bridge"
+import { KORRI_REMAP_PLUGIN_ID } from "../remap"
 
 export const KORRI_YFS_PLUGIN_ID = "@korri:yoshis-fabrication-station" as const
 const KORRI_YFS_LAUNCHER_LOCAL_ID = "level" as const
@@ -42,10 +42,10 @@ export const yoshisFabricationStationPlugin = plugin({
     "Adds Yoshi's Fabrication Station as plugin-owned browser-playable content.",
   requires: [
     {
-      capability: "session.lifecycle",
-      ref: { provider: CDP_INPUT_BRIDGE_PLUGIN_ID, id: "self" },
+      capability: "input.remap",
+      ref: { provider: KORRI_REMAP_PLUGIN_ID, id: "self" },
       reason:
-        "YFS needs launch-owned controller-to-keyboard input via Chromium CDP.",
+        "YFS needs launch-scoped controller-to-keyboard input via Remap.",
     },
   ],
   contributes: {
@@ -74,17 +74,25 @@ export const yoshisFabricationStationPlugin = plugin({
               launch: {
                 kind: "process",
                 executable: { resource: "yoshis-fabrication-station" },
-                env: { KORRI_CDP_INPUT_BRIDGE_PORT: "9333" },
-                launchMetadata: {
-                  annotations: {
-                    [CDP_INPUT_BRIDGE_PLUGIN_ID]: {
-                      enable: true,
-                      cdpPort: 9333,
-                      mapping: "yfs-default",
-                      sourcePreference: {
+                with: {
+                  [KORRI_REMAP_PLUGIN_ID]: {
+                    controllers: {
+                      p1: {
+                        source: "inputplumber",
                         names: ["Microsoft Xbox Series S|X Controller"],
                       },
-                      target: { type: "page", urlPattern: "index.html" },
+                    },
+                    bindings: {
+                      "p1.dpad.up": "key.up",
+                      "p1.dpad.down": "key.down",
+                      "p1.dpad.left": "key.left",
+                      "p1.dpad.right": "key.right",
+                      "p1.button.south": "key.z",
+                      "p1.button.west": "key.a",
+                      "p1.button.east": "key.x",
+                      "p1.button.north": "key.s",
+                      "p1.button.start": "key.p",
+                      "p1.button.select": "key.q",
                     },
                   },
                 },

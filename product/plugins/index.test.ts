@@ -8,7 +8,6 @@ import {
 } from "."
 import { KORRI_3DSEN_APP_ID, KORRI_3DSEN_PLUGIN_ID } from "./3dsen"
 import { KORRI_BOX64_RUNTIME_PLUGIN_ID } from "./box64-runtime"
-import { CDP_INPUT_BRIDGE_PLUGIN_ID } from "./cdp-input-bridge"
 import { KORRI_FEX_PLUGIN_ID } from "./fex-runtime"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
 import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "./levelsharesquare"
@@ -414,7 +413,7 @@ describe("first-party plugins", () => {
       KORRI_ENABLED_PLUGINS: undefined,
     })
     const enabled = createFirstPartyPluginRegistryFromEnv({
-      KORRI_ENABLED_PLUGINS: `${KORRI_GAMESCOPE_PLUGIN_ID},${KORRI_STEAM_PLUGIN_ID},${CDP_INPUT_BRIDGE_PLUGIN_ID}`,
+      KORRI_ENABLED_PLUGINS: `${KORRI_GAMESCOPE_PLUGIN_ID},${KORRI_STEAM_PLUGIN_ID}`,
     })
 
     expect(firstPartySessionLifecycleHooksForRegistry(disabled)).toEqual([])
@@ -423,7 +422,6 @@ describe("first-party plugins", () => {
     ).toEqual([
       KORRI_GAMESCOPE_PLUGIN_ID,
       KORRI_STEAM_PLUGIN_ID,
-      CDP_INPUT_BRIDGE_PLUGIN_ID,
     ])
   })
 

@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+export {}
+
 const launchId = valueAfter("--launch-id", process.argv)
 const separator = process.argv.indexOf("--")
 const childCommand = separator >= 0 ? process.argv[separator + 1] : undefined
@@ -28,11 +30,11 @@ const child = Bun.spawn([childCommand, ...childArgs], {
   env: process.env,
 })
 
-const stop = () => {
+const stopChild = () => {
   child.kill("SIGTERM")
 }
-process.on("SIGTERM", stop)
-process.on("SIGINT", stop)
+process.on("SIGTERM", stopChild)
+process.on("SIGINT", stopChild)
 
 const result = await child.exited
 process.exit(result)

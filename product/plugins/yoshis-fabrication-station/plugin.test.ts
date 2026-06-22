@@ -3,7 +3,7 @@ import {
   createPluginRegistry,
   executableResources,
 } from "@platform/plugin/registry"
-import { CDP_INPUT_BRIDGE_PLUGIN_ID } from "../cdp-input-bridge"
+import { KORRI_REMAP_PLUGIN_ID } from "../remap"
 import {
   KORRI_YFS_LAUNCHER_ID,
   KORRI_YFS_PLUGIN_ID,
@@ -84,7 +84,7 @@ describe("Yoshi's Fabrication Station plugin", () => {
     ).toBe(0.001)
   })
 
-  it("opts its Chromium launch into the CDP input bridge with the validated mapping", () => {
+  it("opts its launch into Remap with explicit launch-scoped bindings", () => {
     const release =
       yoshisFabricationStationPlugin.contributes.config.catalog?.[
         "yoshis-fabrication-station"
@@ -92,24 +92,32 @@ describe("Yoshi's Fabrication Station plugin", () => {
 
     expect(yoshisFabricationStationPlugin.requires).toContainEqual(
       expect.objectContaining({
-        ref: { provider: CDP_INPUT_BRIDGE_PLUGIN_ID, id: "self" },
+        ref: { provider: KORRI_REMAP_PLUGIN_ID, id: "self" },
       }),
     )
-    expect(release?.launch.env).toMatchObject({
-      KORRI_CDP_INPUT_BRIDGE_PORT: "9333",
-    })
-    expect(release?.launch.launchMetadata).toEqual({
-      annotations: {
-        [CDP_INPUT_BRIDGE_PLUGIN_ID]: {
-          enable: true,
-          cdpPort: 9333,
-          mapping: "yfs-default",
-          sourcePreference: {
-            names: ["Microsoft Xbox Series S|X Controller"],
+    expect(release?.launch).toMatchObject({
+      with: {
+        [KORRI_REMAP_PLUGIN_ID]: {
+          controllers: {
+            p1: {
+              source: "inputplumber",
+              names: ["Microsoft Xbox Series S|X Controller"],
+            },
           },
-          target: { type: "page", urlPattern: "index.html" },
+          bindings: {
+            "p1.dpad.up": "key.up",
+            "p1.dpad.down": "key.down",
+            "p1.dpad.left": "key.left",
+            "p1.dpad.right": "key.right",
+            "p1.button.south": "key.z",
+            "p1.button.start": "key.p",
+          },
         },
       },
     })
+    expect(JSON.stringify(release)).not.toContain("cdp")
+    expect(JSON.stringify(release)).not.toContain("browser")
+    expect(JSON.stringify(release)).not.toContain("profile")
+    expect(JSON.stringify(release)).not.toContain("preset")
   })
 })
