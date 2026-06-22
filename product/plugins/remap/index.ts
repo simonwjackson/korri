@@ -16,6 +16,13 @@ export {
   type RemapStick,
 } from "./src/control-ref"
 export {
+  type RemapControllerSourceResolution,
+  type RemapResolvedControllerSource,
+  type ResolveRemapControllerSourcesOptions,
+  resolveRemapControllerSources,
+  slugify,
+} from "./src/sources"
+export {
   KORRI_REMAP_PLUGIN_ID,
   decodeRemapPolicy,
   normalizeRemapPolicy,
