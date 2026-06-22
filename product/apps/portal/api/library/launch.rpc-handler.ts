@@ -255,13 +255,21 @@ function launchExtrasForResolvedLaunch(
   resolved: ResolvedLaunch,
   launchId: string,
 ): LaunchExtras | undefined {
-  if (!resolved.extras && !resolved.launchMetadata && !launchId)
+  if (
+    !resolved.extras &&
+    !resolved.launchMetadata &&
+    !resolved.launchCompanions &&
+    !launchId
+  )
     return undefined
   return {
     ...(resolved.extras ?? {}),
     launchId,
     ...(resolved.launchMetadata
       ? { launchMetadata: resolved.launchMetadata }
+      : {}),
+    ...(resolved.launchCompanions
+      ? { launchCompanions: resolved.launchCompanions }
       : {}),
   }
 }
@@ -528,7 +536,14 @@ function handleRemoteSourceLaunch(
           spawn: async () => {
             if (!launcher.spawn) return unsupportedManagedSpawn()
             return await Effect.runPromise(
-              launcher.spawn(spec).pipe(Effect.mapError(toDataError)),
+              launcher
+                .spawn(spec, {
+                  launchId,
+                  ...(Object.keys(localPolicy.launchCompanions).length > 0
+                    ? { launchCompanions: localPolicy.launchCompanions }
+                    : {}),
+                })
+                .pipe(Effect.mapError(toDataError)),
             )
           },
         }),

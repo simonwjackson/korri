@@ -23,6 +23,7 @@ export function buildRemapWrapperLaunchSpec(
       policy: input.policy,
       launchId: input.launchId,
     }),
+    ...(input.child.envUnset ? { envUnset: [...input.child.envUnset] } : {}),
   }
 }
 
@@ -32,10 +33,21 @@ export function remapWrapperEnv(input: {
   readonly launchId: string
 }): Record<string, string> {
   return {
-    ...(input.child.env ?? {}),
+    ...stripRemapReservedEnv(input.child.env ?? {}),
     KORRI_REMAP_CHILD_COMMAND: input.child.command,
     KORRI_REMAP_LAUNCH_ID: input.launchId,
     KORRI_REMAP_POLICY_JSON: JSON.stringify(input.policy),
     KORRI_REMAP_RUNNER_USER,
   }
+}
+
+function stripRemapReservedEnv(
+  env: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const safe: Record<string, string> = {}
+  for (const [key, value] of Object.entries(env)) {
+    if (key.startsWith("KORRI_REMAP_")) continue
+    safe[key] = value
+  }
+  return safe
 }

@@ -274,11 +274,15 @@ export function createGameStreamRunner(
     const extras: {
       lifecycle: "foreground" | "session"
       launchMetadata?: ClaimedGameStreamLaunchIntent["intent"]["launchMetadata"]
+      launchCompanions?: ClaimedGameStreamLaunchIntent["intent"]["launchCompanions"]
       wait?: LaunchSpec
     } = {
       lifecycle: launchClaim.intent.lifecycle,
       ...(launchClaim.intent.launchMetadata
         ? { launchMetadata: launchClaim.intent.launchMetadata }
+        : {}),
+      ...(launchClaim.intent.launchCompanions
+        ? { launchCompanions: launchClaim.intent.launchCompanions }
         : {}),
       ...(launchClaim.intent.wait ? { wait: launchClaim.intent.wait } : {}),
     }

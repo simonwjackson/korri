@@ -11,6 +11,7 @@ const child: LaunchSpec = {
   command: "/games/yfs/run",
   args: ["--fullscreen"],
   env: { DISPLAY: ":0" },
+  envUnset: ["HTTP_PROXY"],
   cwd: "/games/yfs",
 }
 
@@ -38,6 +39,7 @@ describe("Remap launch wrapper", () => {
         KORRI_REMAP_POLICY_JSON: JSON.stringify(policy),
         KORRI_REMAP_RUNNER_USER,
       },
+      envUnset: ["HTTP_PROXY"],
     })
   })
 
@@ -47,5 +49,30 @@ describe("Remap launch wrapper", () => {
       KORRI_REMAP_LAUNCH_ID: "launch-2",
       KORRI_REMAP_RUNNER_USER,
     })
+  })
+
+  it("strips launch-controlled Remap env from wrapper env", () => {
+    const wrapperEnv = remapWrapperEnv({
+      child: {
+        ...child,
+        env: {
+          DISPLAY: ":0",
+          KORRI_REMAP_NATIVE_DRIVER: "enabled",
+          KORRI_REMAP_POLICY_JSON: "attacker",
+          KORRI_REMAP_RUNNER_USER: "korri",
+        },
+      },
+      policy,
+      launchId: "launch-3",
+    })
+
+    expect(wrapperEnv).toMatchObject({
+      DISPLAY: ":0",
+      KORRI_REMAP_CHILD_COMMAND: "/games/yfs/run",
+      KORRI_REMAP_LAUNCH_ID: "launch-3",
+      KORRI_REMAP_POLICY_JSON: JSON.stringify(policy),
+      KORRI_REMAP_RUNNER_USER,
+    })
+    expect(wrapperEnv.KORRI_REMAP_NATIVE_DRIVER).toBeUndefined()
   })
 })

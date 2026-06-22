@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path"
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 import { plugin } from "@platform/plugin"
 import {
@@ -74,11 +75,18 @@ export interface RemapLaunchComposeInput {
   readonly wrapperCommand: RemapWrapperLaunchSpecInput["wrapperCommand"]
 }
 
-export interface RemapPluginDiagnostic {
-  readonly provider: typeof KORRI_REMAP_PLUGIN_ID
-  readonly status: "ok"
-  readonly isolation: "wrapper-scoped"
-}
+export type RemapPluginDiagnostic =
+  | {
+      readonly provider: typeof KORRI_REMAP_PLUGIN_ID
+      readonly status: "ok"
+      readonly isolation: "wrapper-scoped"
+    }
+  | {
+      readonly provider: typeof KORRI_REMAP_PLUGIN_ID
+      readonly status: "unavailable"
+      readonly isolation: "wrapper-scoped"
+      readonly reason: string
+    }
 
 export const remapPlugin = plugin({
   namespace: "@korri",
@@ -115,11 +123,7 @@ export const remapPlugin = plugin({
         id: "remap.diagnostics",
         operation: "diagnostics.collect",
         capabilities: ["diagnostics.collect", "input.remap"],
-        run: (): RemapPluginDiagnostic => ({
-          provider: KORRI_REMAP_PLUGIN_ID,
-          status: "ok",
-          isolation: "wrapper-scoped",
-        }),
+        run: (): RemapPluginDiagnostic => remapDiagnosticsFromEnv(process.env),
       },
     ],
   },
@@ -127,6 +131,22 @@ export const remapPlugin = plugin({
 
 if (remapPlugin.id !== KORRI_REMAP_PLUGIN_ID) {
   throw new Error("Remap plugin id mismatch")
+}
+
+function remapDiagnosticsFromEnv(env: NodeJS.ProcessEnv): RemapPluginDiagnostic {
+  if (env.KORRI_REMAP_NATIVE_DRIVER === "enabled") {
+    return {
+      provider: KORRI_REMAP_PLUGIN_ID,
+      status: "ok",
+      isolation: "wrapper-scoped",
+    }
+  }
+  return {
+    provider: KORRI_REMAP_PLUGIN_ID,
+    status: "unavailable",
+    isolation: "wrapper-scoped",
+    reason: "native Remap driver is not enabled",
+  }
 }
 
 function decodeRemapLaunchComposeInput(input: unknown): RemapLaunchComposeInput {
@@ -141,8 +161,16 @@ function decodeRemapLaunchComposeInput(input: unknown): RemapLaunchComposeInput 
     spec: decodeHandlerLaunchSpec(input.spec),
     policy: decodeRemapPolicy(input.policy ?? {}),
     launchId,
-    wrapperCommand: "korri-remap-bridge",
+    wrapperCommand: remapBridgeCommandFromEnv(process.env),
   }
+}
+
+function remapBridgeCommandFromEnv(env: NodeJS.ProcessEnv): string {
+  const command = env.KORRI_REMAP_BRIDGE_COMMAND?.trim() || "/run/current-system/sw/bin/korri-remap-bridge"
+  if (!isAbsolute(command)) {
+    throw new Error("Remap bridge command must be an absolute path")
+  }
+  return command
 }
 
 function decodeHandlerLaunchSpec(value: unknown): LaunchSpec {

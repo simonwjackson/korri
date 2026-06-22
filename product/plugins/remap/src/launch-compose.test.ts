@@ -35,7 +35,7 @@ describe("Remap launch.compose", () => {
     expect(result).toEqual({
       _tag: "LaunchCompanionsComposed",
       spec: {
-        command: "korri-remap-bridge",
+        command: "/run/current-system/sw/bin/korri-remap-bridge",
         args: [
           "--launch-id",
           "launch-remap-1",
