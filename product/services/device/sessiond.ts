@@ -162,6 +162,8 @@ const DEFAULT_PORT = 3003
 const DEFAULT_HOSTNAME = "127.0.0.1"
 const RESTORE_RETRY_DELAY_MS = 250
 const DEFAULT_MANAGED_STOP_GRACE_MS = 1500
+const KORRI_REMAP_PLUGIN_ID = "@korri:remap"
+const KORRI_REMAP_DIRTY_CLEANUP_EXIT_CODE = 120
 
 export function createKorriSessiondCore(
   options: Omit<KorriSessiondOptions, "port" | "hostname">,
@@ -570,6 +572,20 @@ export function createKorriSessiondCore(
     const pgid = activeForRestore?.processGroupId
     await stopLifecycleHookHandles(activeForRestore?.sessionHookHandles ?? [])
     await cleanupLifecycleHooks(launchId, pgid, launchMetadata, launchCompanions)
+
+    if (isRemapDirtyCleanupResult(result, launchCompanions)) {
+      const message =
+        "Remap cleanup verification failed; refusing to restore idle UI"
+      state = failKorriRestore(state, message)
+      emitStatusSidecar()
+      pushLifecycleEvent(launchId, {
+        type: "recovering",
+        message,
+        readiness: { status: "failed", message },
+      })
+      await leaveKorri()
+      return result
+    }
 
     while (true) {
       try {
@@ -1141,6 +1157,17 @@ function failedLaunchResult(
     failureKind: response.failureKind,
     stderrTail: response.message,
   }
+}
+
+function isRemapDirtyCleanupResult(
+  result: LaunchResult,
+  launchCompanions: LaunchCompanionMap | undefined,
+): boolean {
+  return (
+    result.status === "failed" &&
+    result.exitCode === KORRI_REMAP_DIRTY_CLEANUP_EXIT_CODE &&
+    launchCompanions?.[KORRI_REMAP_PLUGIN_ID] !== undefined
+  )
 }
 
 function terminalFromLaunchResult(

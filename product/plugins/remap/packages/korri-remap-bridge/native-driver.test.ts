@@ -46,8 +46,9 @@ describe("korri-remap native driver contract", () => {
     expect(driverSource).toContain("assert_sway_isolated")
     expect(driverSource).toContain('key == "send_events" and value == "disabled"')
     expect(driverSource).toContain("wait_devices_gone(synthetic_device_names")
+    expect(driverSource).toContain("DIRTY_CLEANUP_EXIT_CODE = 120")
     expect(driverSource).toContain("cleanup verification failed")
-    expect(driverSource).toContain("raise SystemExit(1)")
+    expect(driverSource).toContain("raise SystemExit(DIRTY_CLEANUP_EXIT_CODE)")
   })
 
   it("ships the native driver behind trusted package-owned env", () => {

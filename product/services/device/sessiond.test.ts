@@ -1261,6 +1261,52 @@ describe("korri sessiond", () => {
     expect(restoring).toBeLessThan(homeReady)
   })
 
+  it("blocks idle restore when Remap reports dirty cleanup", async () => {
+    const control = deferred<LaunchResult>()
+    const launchCompanions = {
+      "@korri:remap": { bindings: { "p1.button.south": "key.a" } },
+    }
+    const { core, events } = startHarness({
+      spawnLaunch: async () => ({
+        result: control.promise,
+        terminate: () => control.resolve({ status: "launched" }),
+        terminateNow: () => control.resolve({ status: "launched" }),
+        processGroupId: 120120,
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "remap-dirty-cleanup",
+          spec,
+          launchCompanions,
+        }),
+      }),
+    )
+    const stream = await request(
+      core,
+      "/managed-launch/events?launchId=remap-dirty-cleanup",
+      authorized(),
+    )
+    const streamText = stream.text()
+
+    control.resolve({
+      status: "failed",
+      exitCode: 120,
+      stderrTail: "korri-remap-native-driver: cleanup verification failed",
+    })
+    const lifecycle = parseSseEvents(await streamText)
+
+    expect(lifecycle.map(event => event.type)).toContain("recovering")
+    expect(lifecycle.map(event => event.type)).not.toContain("home-ready")
+    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(1)
+  })
+
   it("passes launch companions into lifecycle hook start and cleanup", async () => {
     const startCalls: KorriSessiondLifecycleHookStartRequest[] = []
     const cleanupCalls: KorriSessiondLifecycleHookCleanupRequest[] = []

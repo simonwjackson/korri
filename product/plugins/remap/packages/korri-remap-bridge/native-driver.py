@@ -42,6 +42,7 @@ UINPUT_USER_DEV = struct.Struct("80sHHHHI" + "i" * 64 * 4)
 RUNNER_USER = "korri-remap-runner"
 DEVICE_PREFIX = "Korri Remap"
 STICK_THRESHOLD = 16000
+DIRTY_CLEANUP_EXIT_CODE = 120
 
 KEY_CODES = {
     "a": 30,
@@ -412,7 +413,7 @@ def main() -> int:
             gamepad.destroy()
         if not wait_devices_gone(synthetic_device_names, time.time() + 3):
             print("korri-remap-native-driver: cleanup verification failed", file=sys.stderr)
-            raise SystemExit(1)
+            raise SystemExit(DIRTY_CLEANUP_EXIT_CODE)
 
     if received_signal is not None:
         return 128 + received_signal
