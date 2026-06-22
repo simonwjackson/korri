@@ -296,7 +296,6 @@ let
   # viewport/zoom config through KORRI_YFS_SETTINGS instead of ad-hoc CLI flags.
   sm8550PlatformDefaults = {
     launchers."@korri:yoshis-fabrication-station/level" = {
-      plugin = "@korri:yoshis-fabrication-station";
       command = "yfs-launch";
       args = [ "{content.path}" ];
       systems = [ "yfs" ];

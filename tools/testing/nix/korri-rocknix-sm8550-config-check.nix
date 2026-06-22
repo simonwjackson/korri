@@ -258,7 +258,7 @@ let
         && hasPackagePname "yoshis-fabrication-station" sessiond.path
       ))
       (check "${name}: YFS platform launcher override remains launchable" (
-        (yfsPlatformLauncher.plugin or null) == "@korri:yoshis-fabrication-station"
+        !(yfsPlatformLauncher ? plugin)
         && (yfsPlatformLauncher.command or null) == "yfs-launch"
         && (yfsPlatformLauncher.args or [ ]) == [ "{content.path}" ]
         && (yfsPlatformLauncher.env.KORRI_YFS_SETTINGS or null) == "{settings.plugin}"
