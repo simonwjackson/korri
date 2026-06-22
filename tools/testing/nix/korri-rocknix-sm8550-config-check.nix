@@ -61,6 +61,12 @@ let
         "@korri:yoshis-fabrication-station/level"
       ] { } (cfg.services.korri.daemon.library.platformDefaults or { });
       yfsLauncherSettings = lib.attrByPath [ "settings" "plugin" ] { } yfsPlatformLauncher;
+      yfsRemapBindings = lib.attrByPath [
+        "launch"
+        "with"
+        "@korri:remap"
+        "bindings"
+      ] { } yfsPlatformLauncher;
       steam = cfg.services.korri.steam or { };
       steamUnit = cfg.systemd.services.korri-steam or { };
       steamWarmUnit = userServices.korri-steam-warm or { };
@@ -79,7 +85,8 @@ let
       compositorUnit = userServices.korri-compositor or { };
       kioskEnvUnit = userServices."korri-kiosk-session-environment" or { };
       compositor = cfg.services.korri.compositor;
-      hasPackagePname = pname: packages: builtins.any (pkg: (pkg.pname or "") == pname) packages;
+      hasPackagePname =
+        pname: packages: builtins.any (pkg: (pkg.pname or pkg.name or "") == pname) packages;
       findRetroarchWrappers =
         path:
         builtins.filter (
@@ -135,6 +142,7 @@ let
       ))
       (check "${name}: korrid enables first-party plugin resources" (
         lib.hasInfix "@korri:neverball" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
+        && lib.hasInfix "@korri:remap" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "@korri:turnip" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "@korri:yoshis-fabrication-station" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasPrefix "/" (daemonEnv.KORRI_NIX_COMMAND or "")
@@ -257,12 +265,36 @@ let
         hasPackagePname "yoshis-fabrication-station" cfg.environment.systemPackages
         && hasPackagePname "yoshis-fabrication-station" sessiond.path
       ))
+      (check "${name}: Remap native wrapper is enabled for launch-scoped controls" (
+        (cfg.services.korri.remap.enable or false)
+        && cfg.security.wrappers ? korri-remap-bridge
+        && hasPackagePname "korri-remap-bridge" cfg.environment.systemPackages
+      ))
       (check "${name}: YFS platform launcher override remains launchable" (
         !(yfsPlatformLauncher ? plugin)
         && (yfsPlatformLauncher.command or null) == "yfs-launch"
         && (yfsPlatformLauncher.args or [ ]) == [ "{content.path}" ]
         && (yfsPlatformLauncher.env.KORRI_YFS_SETTINGS or null) == "{settings.plugin}"
         && builtins.elem "yfs-launch" (yfsPlatformLauncher.policy.allowedCommands or [ ])
+      ))
+      (check "${name}: YFS launcher uses explicit Remap controls" (
+        (yfsRemapBindings."p1.dpad.up" or null) == "key.up"
+        && (yfsRemapBindings."p1.dpad.down" or null) == "key.down"
+        && (yfsRemapBindings."p1.dpad.left" or null) == "key.left"
+        && (yfsRemapBindings."p1.dpad.right" or null) == "key.right"
+        && (yfsRemapBindings."p1.stick.left.up" or null) == "key.up"
+        && (yfsRemapBindings."p1.stick.left.down" or null) == "key.down"
+        && (yfsRemapBindings."p1.stick.left.left" or null) == "key.left"
+        && (yfsRemapBindings."p1.stick.left.right" or null) == "key.right"
+        && (yfsRemapBindings."p1.stick.right.up" or null) == "key.up"
+        && (yfsRemapBindings."p1.stick.right.down" or null) == "key.down"
+        && (yfsRemapBindings."p1.stick.right.left" or null) == "key.left"
+        && (yfsRemapBindings."p1.stick.right.right" or null) == "key.right"
+        && (yfsRemapBindings."p1.button.west" or null) == "key.z"
+        && (yfsRemapBindings."p1.button.south" or null) == "key.a"
+        && (yfsRemapBindings."p1.button.east" or null) == "key.x"
+        && (yfsRemapBindings."p1.button.north" or null) == "key.s"
+        && (yfsRemapBindings."p1.button.start" or null) == "key.p"
       ))
       (check "${name}: YFS launcher defaults use square viewport and auto-area zoom" (
         (yfsLauncherSettings.viewport.aspect or null) == "1:1"
