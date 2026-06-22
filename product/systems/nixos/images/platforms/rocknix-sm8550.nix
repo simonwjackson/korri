@@ -815,10 +815,10 @@ in
     deps = [ "users" ];
   };
 
-  systemd.services.inputplumber.environment.XDG_DATA_DIRS = lib.mkForce (
+  systemd.services.inputplumber.environment.XDG_DATA_DIRS = lib.mkOverride 40 (
     lib.concatStringsSep ":" [
-      "/run/current-system/sw/share"
       "${config.services.inputplumber.package}/share"
+      "/run/current-system/sw/share"
     ]
   );
 

@@ -68,6 +68,8 @@ let
       inputdPath = inputdUnit.path or [ ];
       inputdWants = inputdUnit.wants or [ ];
       inputdAfter = inputdUnit.after or [ ];
+      inputplumberService = systemServices.inputplumber or { };
+      inputplumberEnv = inputplumberService.environment or { };
       inputplumberPackage = cfg.services.inputplumber.package or { };
       removableMountUnit = cfg.systemd.services."korri-removable-media-mount@" or { };
       removableUnmountUnit = cfg.systemd.services."korri-removable-media-unmount@" or { };
@@ -299,6 +301,9 @@ let
       ))
       (check "${name}: InputPlumber package must carry the handheld xb360 posture" (
         lib.hasInfix "xb360" (inputplumberPackage.name or "")
+      ))
+      (check "${name}: InputPlumber must read the xb360 package before system defaults" (
+        lib.hasPrefix "${inputplumberPackage}/share:" (inputplumberEnv.XDG_DATA_DIRS or "")
       ))
       (check "${name}: Moonlight product launches require InputPlumber" (
         (sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null) == "1"
