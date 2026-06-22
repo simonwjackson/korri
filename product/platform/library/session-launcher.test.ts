@@ -155,6 +155,58 @@ describe("session launcher", () => {
     ])
   })
 
+  it("forwards launch companions in managed sessiond start requests", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    const launcher = createSessionLauncher({
+      socketPath: "/run/user/1000/korri/sessiond.sock",
+      fetchImpl: async (input, init) => {
+        requests.push({ input, init })
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "home" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({ sequence: 1, launchId: "launch-1", type: "child-running" }),
+            event({
+              sequence: 2,
+              launchId: "launch-1",
+              type: "child-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 3,
+              launchId: "launch-1",
+              type: "home-ready",
+              readiness: { status: "ok", evidence: "home-invariant-satisfied" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    await spawn(spec, {
+      launchCompanions: {
+        "@fixture:companion": { enable: true, mode: "wrapped" },
+      },
+    })
+
+    const startRequest = requests.find(
+      request => new URL(request.input).pathname === "/managed-launch",
+    )
+    expect(JSON.parse(String(startRequest?.init?.body))).toMatchObject({
+      launchCompanions: {
+        "@fixture:companion": { enable: true, mode: "wrapped" },
+      },
+    })
+  })
+
   it("reconnects when the lifecycle event stream closes before a terminal event", async () => {
     // A healthy long-running launch can close the events SSE stream
     // mid-flight if the upstream Bun.serve idleTimeout fires before

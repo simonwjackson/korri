@@ -1,3 +1,4 @@
+import { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import { Schema } from "effect"
 import { LaunchFailureKind, LaunchSpec } from "./launcher"
 
@@ -166,6 +167,7 @@ export const SessiondManagedLaunchStartRequest = Schema.Struct({
   launchId: Schema.optional(Schema.String),
   spec: LaunchSpec,
   launchMetadata: Schema.optional(SessiondLaunchMetadata),
+  launchCompanions: Schema.optional(LaunchCompanionMap),
   /**
    * Phase 4D / Track A. Defaults to `"foreground"` when omitted; the
    * daemon treats absence as foreground for Phase 4B back-compat.

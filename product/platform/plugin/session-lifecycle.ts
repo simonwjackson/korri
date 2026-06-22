@@ -1,3 +1,4 @@
+import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { PluginId } from "./index"
 import type { LaunchMetadata } from "./launch-metadata"
@@ -6,6 +7,7 @@ export interface KorriSessionLifecycleHookStartRequest {
   readonly launchId: string
   readonly spec: LaunchSpec
   readonly launchMetadata?: LaunchMetadata
+  readonly launchCompanions?: LaunchCompanionMap
   readonly terminateLaunch?: () => void
 }
 
@@ -19,6 +21,7 @@ export interface KorriSessionLifecycleHookCleanupRequest {
   readonly launchId: string
   readonly processGroupId?: number
   readonly launchMetadata?: LaunchMetadata
+  readonly launchCompanions?: LaunchCompanionMap
 }
 
 export interface KorriSessionLifecycleHookCleanupResult {

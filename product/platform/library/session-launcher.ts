@@ -106,6 +106,7 @@ async function spawnViaSessiond(
 ): Promise<ManagedLaunchResult> {
   const lifecycle = extras.lifecycle
   const launchMetadata = extras.launchMetadata
+  const launchCompanions = extras.launchCompanions
   const wait = extras.wait
   const launchId = extras.launchId
   const fetchImpl = options.fetchImpl ?? fetch
@@ -160,6 +161,7 @@ async function spawnViaSessiond(
       ...(launchId ? { launchId } : {}),
       ...(lifecycle ? { lifecycle } : {}),
       ...(launchMetadata ? { launchMetadata } : {}),
+      ...(launchCompanions ? { launchCompanions } : {}),
       ...(wait ? { wait } : {}),
     },
     {

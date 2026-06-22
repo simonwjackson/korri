@@ -598,11 +598,15 @@ function runResolvedLaunch(
 function launchExtrasForResolvedLaunch(
   resolved: ResolvedLaunch,
 ): ResolvedLaunch["extras"] | undefined {
-  if (!resolved.extras && !resolved.launchMetadata) return undefined
+  if (!resolved.extras && !resolved.launchMetadata && !resolved.launchCompanions)
+    return undefined
   return {
     ...(resolved.extras ?? {}),
     ...(resolved.launchMetadata
       ? { launchMetadata: resolved.launchMetadata }
+      : {}),
+    ...(resolved.launchCompanions
+      ? { launchCompanions: resolved.launchCompanions }
       : {}),
   }
 }

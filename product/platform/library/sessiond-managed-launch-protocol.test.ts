@@ -19,12 +19,18 @@ describe("sessiond managed launch protocol", () => {
         launchId: "launch-1",
         spec: { command: "/bin/game", args: ["rom.smc"] },
         launchMetadata: { appProviderId: "@korri:steam" },
+        launchCompanions: {
+          "@fixture:companion": { enable: true, mode: "wrapped" },
+        },
       },
     )
     expect(request).toEqual({
       launchId: "launch-1",
       spec: { command: "/bin/game", args: ["rom.smc"] },
       launchMetadata: { appProviderId: "@korri:steam" },
+      launchCompanions: {
+        "@fixture:companion": { enable: true, mode: "wrapped" },
+      },
     })
 
     expect(

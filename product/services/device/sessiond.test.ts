@@ -16,6 +16,7 @@ import {
   type KorriSessiondLifecycleHook,
   type KorriSessiondLifecycleHookCleanupRequest,
   type KorriSessiondLifecycleHookCleanupResult,
+  type KorriSessiondLifecycleHookStartRequest,
   startKorriSessiond,
 } from "./sessiond"
 import type { SessionRole } from "./sessiond-role"
@@ -1258,6 +1259,61 @@ describe("korri sessiond", () => {
     const homeReady = types.indexOf("home-ready")
     expect(childExited).toBeLessThan(restoring)
     expect(restoring).toBeLessThan(homeReady)
+  })
+
+  it("passes launch companions into lifecycle hook start and cleanup", async () => {
+    const startCalls: KorriSessiondLifecycleHookStartRequest[] = []
+    const cleanupCalls: KorriSessiondLifecycleHookCleanupRequest[] = []
+    const control = deferred<LaunchResult>()
+    const launchCompanions = {
+      "@fixture:companion": { enable: true, mode: "wrapped" },
+    }
+    const { core } = startHarness({
+      sessionHooks: [
+        afterChildHook(async request => {
+          startCalls.push(request)
+          return { label: "fixture" }
+        }),
+        cleanupHook(async request => {
+          cleanupCalls.push(request)
+          return { cleaned: [], residual: [] }
+        }),
+      ],
+      spawnLaunch: async () => ({
+        result: control.promise,
+        terminate: () => control.resolve({ status: "launched" }),
+        terminateNow: () => control.resolve({ status: "launched" }),
+        processGroupId: 99002,
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "launch-companions",
+          spec,
+          launchCompanions,
+        }),
+      }),
+    )
+
+    control.resolve({ status: "launched" })
+    await waitForSessionMode(core, "home")
+
+    expect(startCalls).toMatchObject([
+      { launchId: "launch-companions", spec, launchCompanions },
+    ])
+    expect(cleanupCalls).toMatchObject([
+      {
+        launchId: "launch-companions",
+        processGroupId: 99002,
+        launchCompanions,
+      },
+    ])
   })
 
   it("logs residual pids reported by the cleanup without blocking restore", async () => {

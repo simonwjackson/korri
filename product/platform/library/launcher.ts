@@ -14,6 +14,7 @@
  * See docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md (Unit 1).
  */
 
+import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type { ForegroundManagedSessionHandle } from "@platform/stream/foreground-session-owner"
 import { Schema } from "effect"
@@ -136,6 +137,7 @@ export type ManagedLaunchResult =
 export interface LaunchExtras {
   readonly lifecycle?: "foreground" | "session"
   readonly launchMetadata?: LaunchMetadata
+  readonly launchCompanions?: LaunchCompanionMap
   readonly wait?: LaunchSpec
   readonly launchId?: string
 }

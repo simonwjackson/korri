@@ -1,6 +1,7 @@
 import { readdirSync } from "node:fs"
 import { unlink } from "node:fs/promises"
 import { join } from "node:path"
+import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import {
   type LaunchResult,
   type LaunchSpec,
@@ -323,6 +324,7 @@ export function createKorriSessiondCore(
     lifecycleOptions: {
       readonly lifecycle?: "foreground" | "session"
       readonly launchMetadata?: LaunchMetadata
+      readonly launchCompanions?: LaunchCompanionMap
       readonly wait?: LaunchSpec
     } = {},
   ): Promise<{
@@ -363,6 +365,7 @@ export function createKorriSessiondCore(
     launchId: string,
     spec: LaunchSpec,
     launchMetadata: LaunchMetadata | undefined,
+    launchCompanions: LaunchCompanionMap | undefined,
     active:
       | {
           readonly launchId: string
@@ -379,6 +382,7 @@ export function createKorriSessiondCore(
           launchId,
           spec,
           ...(launchMetadata ? { launchMetadata } : {}),
+          ...(launchCompanions ? { launchCompanions } : {}),
           ...(active?.terminate ? { terminateLaunch: active.terminate } : {}),
         })
         if (handle) handles.push(handle)
@@ -411,12 +415,14 @@ export function createKorriSessiondCore(
     lifecycleOptions: {
       readonly lifecycle?: "foreground" | "session"
       readonly launchMetadata?: LaunchMetadata
+      readonly launchCompanions?: LaunchCompanionMap
       readonly wait?: LaunchSpec
     } = {},
   ): Promise<LaunchResult> {
     const lifecycle = lifecycleOptions.lifecycle ?? "foreground"
     const wait = lifecycleOptions.wait
     const launchMetadata = lifecycleOptions.launchMetadata
+    const launchCompanions = lifecycleOptions.launchCompanions
     let result: LaunchResult | undefined
 
     try {
@@ -452,6 +458,7 @@ export function createKorriSessiondCore(
               launchId,
               spec,
               launchMetadata,
+              launchCompanions,
               active,
             )
             if (result) {
@@ -562,7 +569,7 @@ export function createKorriSessiondCore(
         : undefined
     const pgid = activeForRestore?.processGroupId
     await stopLifecycleHookHandles(activeForRestore?.sessionHookHandles ?? [])
-    await cleanupLifecycleHooks(launchId, pgid, launchMetadata)
+    await cleanupLifecycleHooks(launchId, pgid, launchMetadata, launchCompanions)
 
     while (true) {
       try {
@@ -641,6 +648,7 @@ export function createKorriSessiondCore(
     launchId: string,
     processGroupId: number | undefined,
     launchMetadata: LaunchMetadata | undefined,
+    launchCompanions: LaunchCompanionMap | undefined,
   ): Promise<void> {
     for (const hook of sessionHooks) {
       if (!hook.cleanup) continue
@@ -649,6 +657,7 @@ export function createKorriSessiondCore(
           launchId,
           processGroupId,
           ...(launchMetadata ? { launchMetadata } : {}),
+          ...(launchCompanions ? { launchCompanions } : {}),
         })
         if (outcome?.residual && outcome.residual.length > 0) {
           logger.warn(
@@ -1004,6 +1013,9 @@ export function createKorriSessiondCore(
                       body.value.launchMetadata,
                     ),
                   }
+                : {}),
+              ...(body.value.launchCompanions
+                ? { launchCompanions: body.value.launchCompanions }
                 : {}),
               ...(body.value.wait ? { wait: body.value.wait } : {}),
             },

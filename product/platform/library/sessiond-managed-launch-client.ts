@@ -1,3 +1,4 @@
+import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type { LaunchSpec } from "./launcher"
 import {
@@ -58,6 +59,7 @@ export interface SessiondManagedLaunchStartInput {
   readonly launchId?: string
   readonly lifecycle?: SessiondManagedLaunchLifecycle
   readonly launchMetadata?: LaunchMetadata
+  readonly launchCompanions?: LaunchCompanionMap
   readonly wait?: LaunchSpec
 }
 
@@ -94,6 +96,7 @@ export async function requestSessiondManagedLaunchStart(
   if (input.launchId) body.launchId = input.launchId
   if (input.lifecycle) body.lifecycle = input.lifecycle
   if (input.launchMetadata) body.launchMetadata = input.launchMetadata
+  if (input.launchCompanions) body.launchCompanions = input.launchCompanions
   if (input.wait) body.wait = input.wait
 
   const response = await requestSessiondManagedLaunchJson(

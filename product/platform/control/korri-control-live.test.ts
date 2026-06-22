@@ -187,12 +187,29 @@ describe("KorriControl live implementation", () => {
     expect(launchedSpecs).toEqual([{ command: "prepared", args: [] }])
   })
 
-  it("forwards resolved launch metadata through managed launcher spawn", async () => {
+  it("forwards resolved launch metadata and companions through managed launcher spawn", async () => {
     const spawns: unknown[] = []
+    const companionPlugin = plugin({
+      namespace: "@fixture",
+      name: "companion",
+      contributes: {
+        handlers: [
+          {
+            id: "companion.launch-compose",
+            operation: "launch.compose",
+            capabilities: ["launch.compose"],
+            run: context => (context.input as { readonly spec: LaunchSpec }).spec,
+          },
+        ],
+      },
+    })
     const control = makeKorriControlLive({
       librarySource: librarySource({
         launchMetadata: {
           annotations: { "@fixture:input": { enable: true } },
+        },
+        launchCompanions: {
+          "@fixture:companion": { enable: true, mode: "wrapped" },
         },
       }),
       launcher: {
@@ -211,6 +228,9 @@ describe("KorriControl live implementation", () => {
           })
         },
       },
+      pluginRegistry: createPluginRegistry([companionPlugin], {
+        enabledPluginIds: ["@fixture:companion"],
+      }),
     })
 
     await expect(
@@ -223,6 +243,9 @@ describe("KorriControl live implementation", () => {
           extras: {
             launchMetadata: {
               annotations: { "@fixture:input": { enable: true } },
+            },
+            launchCompanions: {
+              "@fixture:companion": { enable: true, mode: "wrapped" },
             },
           },
         },
@@ -557,7 +580,10 @@ describe("KorriControl live implementation", () => {
 })
 
 function librarySource(
-  options: Pick<ResolvedLaunch, "launchPrepare" | "launchMetadata"> = {},
+  options: Pick<
+    ResolvedLaunch,
+    "launchPrepare" | "launchMetadata" | "launchCompanions"
+  > = {},
 ): LibrarySourceService {
   return {
     list: () => Effect.succeed([]),

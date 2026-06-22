@@ -63,6 +63,9 @@ describe("sessiond managed-launch client", () => {
         launchId: "launch-1",
         lifecycle: "session",
         launchMetadata: { appProviderId: "@korri:steam" },
+        launchCompanions: {
+          "@fixture:companion": { enable: true, mode: "wrapped" },
+        },
         wait: { command: "/bin/wait", args: [] },
       },
       {
@@ -87,6 +90,9 @@ describe("sessiond managed-launch client", () => {
       launchId: "launch-1",
       lifecycle: "session",
       launchMetadata: { appProviderId: "@korri:steam" },
+      launchCompanions: {
+        "@fixture:companion": { enable: true, mode: "wrapped" },
+      },
       wait: { command: "/bin/wait", args: [] },
     })
   })
