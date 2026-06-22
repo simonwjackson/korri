@@ -4,6 +4,7 @@ import { join } from "node:path"
 const bridge = join(import.meta.dir, "index.ts")
 const sentinel = join(import.meta.dir, "test-child.ts")
 const ignoreTermChild = join(import.meta.dir, "ignore-term-child.ts")
+const fakeNativeDriver = join(import.meta.dir, "fake-native-driver.ts")
 
 const baseEnv = {
   PATH: process.env.PATH ?? "",
@@ -21,6 +22,11 @@ afterEach(() => {
       // already exited
     }
   }
+  try {
+    Bun.spawnSync(["pkill", "-f", ignoreTermChild])
+  } catch {
+    // best-effort cleanup for orphaned signal-test children
+  }
 })
 
 describe("korri-remap-bridge CLI", () => {
@@ -37,9 +43,9 @@ describe("korri-remap-bridge CLI", () => {
     expect(await new Response(proc.stdout).text()).not.toContain("child-ran")
   })
 
-  it("runs the child and propagates exit code when native driver is trusted enabled", async () => {
+  it("runs through the native driver and propagates child exit code", async () => {
     const proc = spawnBridge({
-      env: { ...baseEnv, KORRI_REMAP_NATIVE_DRIVER: "enabled" },
+      env: nativeDriverEnv(),
       args: ["--launch-id", "launch-2", "--", "bun", sentinel, "7"],
     })
 
@@ -47,11 +53,22 @@ describe("korri-remap-bridge CLI", () => {
     expect(await new Response(proc.stdout).text()).toContain("child-ran")
   })
 
+  it("fails closed when enabled without an absolute trusted native driver", async () => {
+    const proc = spawnBridge({
+      env: { ...baseEnv, KORRI_REMAP_NATIVE_DRIVER: "enabled" },
+      args: ["--launch-id", "launch-2b", "--", "bun", sentinel],
+    })
+
+    expect(await proc.exited).toBe(1)
+    expect(await new Response(proc.stderr).text()).toContain(
+      "native Remap driver path must be an absolute trusted path",
+    )
+  })
+
   it("escalates termination when the child ignores SIGTERM", async () => {
     const proc = spawnBridge({
       env: {
-        ...baseEnv,
-        KORRI_REMAP_NATIVE_DRIVER: "enabled",
+        ...nativeDriverEnv(),
         KORRI_REMAP_TERMINATE_GRACE_MS: "20",
       },
       args: ["--launch-id", "launch-3", "--", "bun", ignoreTermChild],
@@ -76,6 +93,15 @@ async function waitForStdout(
     buffered += decoder.decode(next.value)
   }
   reader.releaseLock()
+}
+
+function nativeDriverEnv(): Record<string, string> {
+  return {
+    ...baseEnv,
+    KORRI_REMAP_NATIVE_DRIVER: "enabled",
+    KORRI_REMAP_NATIVE_DRIVER_PYTHON: "bun",
+    KORRI_REMAP_NATIVE_DRIVER_PATH: fakeNativeDriver,
+  }
 }
 
 function spawnBridge(input: { env: Record<string, string>; args: string[] }) {

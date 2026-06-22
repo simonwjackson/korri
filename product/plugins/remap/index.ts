@@ -166,7 +166,7 @@ function decodeRemapLaunchComposeInput(input: unknown): RemapLaunchComposeInput 
 }
 
 function remapBridgeCommandFromEnv(env: NodeJS.ProcessEnv): string {
-  const command = env.KORRI_REMAP_BRIDGE_COMMAND?.trim() || "/run/current-system/sw/bin/korri-remap-bridge"
+  const command = env.KORRI_REMAP_BRIDGE_COMMAND?.trim() || "/run/wrappers/bin/korri-remap-bridge"
   if (!isAbsolute(command)) {
     throw new Error("Remap bridge command must be an absolute path")
   }
