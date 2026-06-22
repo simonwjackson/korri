@@ -20,6 +20,7 @@ let
 
   runtime = config.services.korri.runtime;
   cfg = config.services.korri.steam;
+  korriPulseServer = "unix:/run/user/${toString runtime.uid}/pulse/native";
 
   defaultSteamArgs = [
     # Keep Steam in Deck-compatible mode for ARM64 AppID forwarding, but do not
@@ -338,6 +339,7 @@ let
     export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
     export DISPLAY="''${DISPLAY:-:0}"
     export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/${toString runtime.uid}/bus}"
+    export PULSE_SERVER="''${PULSE_SERVER:-${korriPulseServer}}"
     export LANG="''${LANG:-C.UTF-8}"
     if [ -z "''${STEAM_HOME:-}" ]; then export STEAM_HOME=${lib.escapeShellArg cfg.home}; fi
     if [ -z "''${STEAM_GAMES_ROOT:-}" ]; then export STEAM_GAMES_ROOT=${lib.escapeShellArg cfg.gamesRoot}; fi
@@ -471,6 +473,7 @@ let
     export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
     export DISPLAY="''${DISPLAY:-:0}"
     export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/${toString runtime.uid}/bus}"
+    export PULSE_SERVER="''${PULSE_SERVER:-${korriPulseServer}}"
     export LANG="''${LANG:-C.UTF-8}"
     export STEAM_HOME="''${STEAM_HOME:-${cfg.home}}"
     export STEAM_GAMES_ROOT="''${STEAM_GAMES_ROOT:-${cfg.gamesRoot}}"
@@ -1012,6 +1015,7 @@ in
         WAYLAND_DISPLAY = "wayland-1";
         DISPLAY = ":0";
         DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/${toString runtime.uid}/bus";
+        PULSE_SERVER = korriPulseServer;
         GAMESCOPE_WAYLAND_DISPLAY = "gamescope-0";
         STEAM_HOME = cfg.home;
         STEAM_GAMES_ROOT = cfg.gamesRoot;
@@ -1049,6 +1053,7 @@ in
         WAYLAND_DISPLAY = "wayland-1";
         DISPLAY = ":0";
         DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/${toString runtime.uid}/bus";
+        PULSE_SERVER = korriPulseServer;
         STEAM_HOME = cfg.home;
         STEAM_GAMES_ROOT = cfg.gamesRoot;
         STEAM_DOT = cfg.dotDir;

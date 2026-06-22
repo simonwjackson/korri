@@ -31,11 +31,25 @@ let
   containsQuotedAssignment =
     value: file:
     builtins.any (line: lineSetsLiteral value line) (lib.splitString "\n" (builtins.readFile file));
+  sm8550PlatformAdapterSource = builtins.readFile sm8550PlatformAdapterSourceFile;
   sm8550PlatformAdapterFreeOfHardwareLiterals =
     !(containsQuotedAssignment "v4l2m2m" sm8550PlatformAdapterSourceFile)
     && !(containsQuotedAssignment "pulseaudio" sm8550PlatformAdapterSourceFile);
   sm8550PlatformAdapterFreeOfSubstrateSteam =
-    !(lib.hasInfix "substratePackages.steam" (builtins.readFile sm8550PlatformAdapterSourceFile));
+    !(lib.hasInfix "substratePackages.steam" sm8550PlatformAdapterSource);
+  # The evaluated bootstrap ExecStart points at an aarch64 shell-script
+  # derivation. Grepping that artifact from this x86_64 host check would force
+  # a target-platform build, so keep this as an adapter-source invariant.
+  sm8550PlatformAdapterUsesSafeAudioVolume =
+    lib.hasInfix ''korriSafeDefaultSinkVolume = "10%"'' sm8550PlatformAdapterSource
+    && lib.hasInfix ''set-sink-volume "$preferred_sink" "$korri_safe_default_sink_volume"'' sm8550PlatformAdapterSource
+    && lib.hasInfix ''set-sink-volume "$sink" "$korri_safe_default_sink_volume"'' sm8550PlatformAdapterSource
+    && lib.hasInfix ''set-sink-volume "$default_sink" "$korri_safe_default_sink_volume"'' sm8550PlatformAdapterSource
+    && lib.hasInfix ''auto_null*)'' sm8550PlatformAdapterSource
+    && !(lib.hasInfix ''set-sink-volume "$preferred_sink" 70%'' sm8550PlatformAdapterSource)
+    && !(lib.hasInfix ''set-sink-volume "$fallback_sink" 70%'' sm8550PlatformAdapterSource);
+
+  soboAudioSink = soboSystem.config.rocknix.sm8550.audio.defaultSink;
 
   checkSystem =
     name: system:
@@ -69,6 +83,7 @@ let
       ] { } yfsPlatformLauncher;
       steam = cfg.services.korri.steam or { };
       steamUnit = cfg.systemd.services.korri-steam or { };
+      steamGamescopeUnit = cfg.systemd.services.korri-steam-gamescope or { };
       steamWarmUnit = userServices.korri-steam-warm or { };
       steamUinputUnit = cfg.systemd.services.korri-steam-uinput or { };
       pipewireEnv = (userServices.pipewire or { }).environment or { };
@@ -209,7 +224,7 @@ let
       (check "${name}: compositor uses the greetd/logind user session bus" (
         compositor.sessionBus.mode == "existing"
         && compositor.sessionBus.address == "unix:path=%t/bus"
-        && ((cfg.systemd.user.services."korri-compositor" or { }).requires or [ ]) == [ ]
+        && !(builtins.elem "main-space-session-dbus.service" ((cfg.systemd.user.services."korri-compositor" or { }).requires or [ ]))
         && (sessiondEnv.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=%t/bus"
       ))
       (check "${name}: compositor uses wlroots direct session on host-bound DRM" (
@@ -462,8 +477,17 @@ let
         && builtins.elem "wireplumber.service" (audioBootstrapUnit.after or [ ])
         && builtins.elem "korri-sessiond.service" (audioBootstrapUnit.before or [ ])
         && builtins.elem "korri-inputd.service" (audioBootstrapUnit.before or [ ])
+        && builtins.elem "korri-sm8550-audio-bootstrap.service" (compositorUnit.requires or [ ])
+        && builtins.elem "korri-sm8550-audio-bootstrap.service" (sessiondUnit.requires or [ ])
+        && builtins.elem "korri-sm8550-audio-bootstrap.service" (inputdUnit.requires or [ ])
+        && builtins.elem "korri-sm8550-audio-bootstrap.service" (compositorUnit.after or [ ])
+        && builtins.elem "korri-sm8550-audio-bootstrap.service" (sessiondUnit.after or [ ])
+        && builtins.elem "korri-sm8550-audio-bootstrap.service" (inputdUnit.after or [ ])
         && (audioBootstrapUnit.environment.PULSE_SERVER or null) == "unix:%t/pulse/native"
         && (audioBootstrapUnit.environment.ALSA_CONFIG_UCM2 or null) == pipewireEnv.ALSA_CONFIG_UCM2
+      ))
+      (check "${name}: user audio bootstrap clamps default sink to safe volume" (
+        sm8550PlatformAdapterUsesSafeAudioVolume
       ))
       (check "${name}: sessiond launches inherit Korri user Pulse socket" (
         sessiondEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
@@ -530,6 +554,8 @@ let
         && (steamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
         && (steamUnit.serviceConfig.LimitNOFILE or null) == 524288
         && (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
+        && (steamUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
+        && (steamGamescopeUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
       ))
       (check "${name}: Korri Steam is warmed from the real user session" (
         userServices ? korri-steam-warm
@@ -577,6 +603,12 @@ let
   checks = [
     (check "SM8550 adapter does not hard-code substrate literals" sm8550PlatformAdapterFreeOfHardwareLiterals)
     (check "SM8550 adapter does not explicitly install substrate Steam" sm8550PlatformAdapterFreeOfSubstrateSteam)
+    (check "SM8550 adapter declares the safe audio bootstrap volume" sm8550PlatformAdapterUsesSafeAudioVolume)
+    (check "Sobo does not declare a direct ALSA speaker sink until boot UCM is reliable" (
+      soboAudioSink.pcm == null
+      && soboAudioSink.ucmVerb == null
+      && soboAudioSink.ucmDevice == null
+    ))
   ]
   ++ (checkSystem "Odin 2 Portal" thorSystem)
   ++ (checkSystem "Sobo" soboSystem);

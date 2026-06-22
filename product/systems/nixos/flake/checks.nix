@@ -98,6 +98,10 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     korriDaemonModule = self.nixosModules.korri-daemon;
   };
+  korri-steam-module = import ../../../../product/plugins/steam/nix/module-check.nix {
+    inherit pkgs;
+    korriSteamModule = self.nixosModules.korri-steam;
+  };
   korri-removable-media = import ../../../../tools/testing/nix/korri-removable-media-check.nix {
     inherit pkgs;
     korriRemovableMediaModule = self.nixosModules.korri-removable-media;
@@ -202,6 +206,7 @@ pkgs.lib.optionalAttrs isX86Linux {
         inherit pkgs;
         products = explicitProducts;
         rg353mSystem = self.nixosConfigurations.${explicitProducts.rg353m.configName};
+        rk3566PlatformAdapterSourceFile = ../../../../product/systems/nixos/images/platforms/rocknix-rk3566.nix;
         targetPackages = self.packages.aarch64-linux;
         hostPackages = self.packages.${system};
         configurations = self.nixosConfigurations;

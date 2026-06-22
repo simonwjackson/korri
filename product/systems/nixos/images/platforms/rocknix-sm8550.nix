@@ -54,6 +54,7 @@ let
   substrateAudioUcmPath = "${sm8550.audio.ucmPackage}/share/alsa/ucm2";
   substrateAudioSink = sm8550.audio.defaultSink;
   korriPulseServer = "unix:%t/pulse/native";
+  korriSafeDefaultSinkVolume = "10%";
   korriRuntimeUid = toString (config.users.users.${runtime.user}.uid or 2000);
   korriRuntimeDir = "/run/user/${korriRuntimeUid}";
   korriSafeDefaultSinkVolume = "10%";
@@ -213,9 +214,10 @@ let
   # (e.g. Odin 2 Portal) where WirePlumber owns default-sink selection. Guard
   # every sink-derived interpolation so the bootstrap renders for any substrate
   # contract: the UCM-profile preference only runs when both verb and device are
-  # declared, and the manual `module-alsa-sink` fallback only runs when a PCM is
-  # declared. With neither, the unit becomes an ordering-only no-op and audio
-  # relies on WirePlumber, matching the substrate's own conditional bootstrap.
+  # declared, and the manual `module-alsa-sink` path only runs for PCM-only
+  # routes. When a UCM route is declared we wait for WirePlumber's graph-owned
+  # sink instead: direct module-alsa-sink fallbacks bypass the graph volume
+  # controls on handhelds where hardware mixers do not track Pulse volume.
   substrateAudioSinkHasUcm =
     substrateAudioSink.ucmVerb != null && substrateAudioSink.ucmDevice != null;
   substrateAudioSinkHasPcm = substrateAudioSink.pcm != null;
@@ -224,6 +226,7 @@ let
       set -u
 
       fallback_sink=${lib.escapeShellArg substrateAudioSink.name}
+      korri_safe_default_sink_volume=${lib.escapeShellArg korriSafeDefaultSinkVolume}
 
       for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
         if ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
@@ -234,8 +237,38 @@ let
 
       if ! ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
         echo "korri-sm8550-audio-bootstrap: PulseAudio socket unavailable at $PULSE_SERVER" >&2
-        exit 0
+        exit 1
       fi
+
+      clamp_named_sink() {
+        sink="$1"
+        for _ in $(${pkgs.coreutils}/bin/seq 1 40); do
+          if ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^[0-9][0-9]*[[:space:]]$sink[[:space:]]"; then
+            if ${pkgs.pulseaudio}/bin/pactl set-default-sink "$sink" >/dev/null 2>&1 \
+              && ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$sink" "$korri_safe_default_sink_volume" >/dev/null 2>&1; then
+              return 0
+            fi
+          fi
+          ${pkgs.coreutils}/bin/sleep 0.25
+        done
+        echo "korri-sm8550-audio-bootstrap: target sink $sink unavailable for safe volume clamp" >&2
+        return 1
+      }
+
+      clamp_default_sink() {
+        for _ in $(${pkgs.coreutils}/bin/seq 1 40); do
+          default_sink="$(${pkgs.pulseaudio}/bin/pactl get-default-sink 2>/dev/null || true)"
+          case "$default_sink" in
+            ""|auto_null*) ${pkgs.coreutils}/bin/sleep 0.25; continue ;;
+          esac
+          if ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$default_sink" "$korri_safe_default_sink_volume" >/dev/null 2>&1; then
+            return 0
+          fi
+          ${pkgs.coreutils}/bin/sleep 0.25
+        done
+        echo "korri-sm8550-audio-bootstrap: non-null default sink unavailable for safe volume clamp" >&2
+        return 1
+      }
     ''
     + lib.optionalString substrateAudioSinkHasUcm ''
 
@@ -243,20 +276,25 @@ let
       preferred_profile=${lib.escapeShellArg "${toString substrateAudioSink.ucmVerb} (Headphones, ${toString substrateAudioSink.ucmDevice})"}
       preferred_sink="alsa_output.platform-sound.${toString substrateAudioSink.ucmVerb}__${toString substrateAudioSink.ucmDevice}__sink"
 
-      if ${pkgs.pulseaudio}/bin/pactl list cards | ${pkgs.gnugrep}/bin/grep -Fq "$preferred_profile"; then
-        ${pkgs.pulseaudio}/bin/pactl set-card-profile "$preferred_card" "$preferred_profile" >/dev/null 2>&1 || true
-      fi
-
       # Prefer the substrate-declared UCM sink whenever WirePlumber exposes it.
       # On Thor this is the real speaker sink; the manual PCM fallback below is
       # useful only when UCM did not create the declared route.
-      if ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^.*[[:space:]]$preferred_sink[[:space:]]"; then
-        ${pkgs.pulseaudio}/bin/pactl set-default-sink "$preferred_sink" >/dev/null 2>&1 || true
-        ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$preferred_sink" ${korriSafeDefaultSinkVolume} >/dev/null 2>&1 || true
-        exit 0
-      fi
+      for _ in $(${pkgs.coreutils}/bin/seq 1 40); do
+        if ${pkgs.pulseaudio}/bin/pactl list cards | ${pkgs.gnugrep}/bin/grep -Fq "$preferred_profile"; then
+          ${pkgs.pulseaudio}/bin/pactl set-card-profile "$preferred_card" "$preferred_profile" >/dev/null 2>&1 || true
+        fi
+        if ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^[0-9][0-9]*[[:space:]]$preferred_sink[[:space:]]"; then
+          if ${pkgs.pulseaudio}/bin/pactl set-default-sink "$preferred_sink" >/dev/null 2>&1 \
+            && ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$preferred_sink" "$korri_safe_default_sink_volume" >/dev/null 2>&1; then
+            exit 0
+          fi
+        fi
+        ${pkgs.coreutils}/bin/sleep 0.25
+      done
+      echo "korri-sm8550-audio-bootstrap: preferred UCM sink $preferred_sink unavailable" >&2
+      exit 1
     ''
-    + lib.optionalString substrateAudioSinkHasPcm ''
+    + lib.optionalString (!substrateAudioSinkHasUcm && substrateAudioSinkHasPcm) ''
 
       # Fallback for kernels/profiles where WirePlumber exposes only Pro Audio:
       # create the substrate-declared PCM sink directly and make it default.
@@ -268,7 +306,16 @@ let
           >/dev/null 2>&1 || true
       fi
 
-      ${pkgs.pulseaudio}/bin/pactl set-default-sink "$fallback_sink" >/dev/null 2>&1 || true
+      clamp_named_sink "$fallback_sink"
+    ''
+    + lib.optionalString (!substrateAudioSinkHasUcm && !substrateAudioSinkHasPcm) ''
+
+      # Devices without a declared substrate route (for example Sobo until its
+      # audio route is reliable immediately after boot) get a best-effort clamp
+      # against the current non-null default sink. If only auto_null exists,
+      # allow the session to start silent rather than falling back to a direct
+      # ALSA sink or blocking the kiosk.
+      clamp_default_sink || exit 0
     ''
     + ''
 
@@ -564,10 +611,24 @@ in
     };
   };
 
-  systemd.user.services.korri-compositor.serviceConfig.UnsetEnvironment = [
-    "DISPLAY"
-    "WAYLAND_DISPLAY"
-  ];
+  systemd.user.services.korri-compositor = {
+    requires = [ "korri-sm8550-audio-bootstrap.service" ];
+    after = [ "korri-sm8550-audio-bootstrap.service" ];
+    serviceConfig.UnsetEnvironment = [
+      "DISPLAY"
+      "WAYLAND_DISPLAY"
+    ];
+  };
+
+  systemd.user.services.korri-sessiond = {
+    requires = [ "korri-sm8550-audio-bootstrap.service" ];
+    after = [ "korri-sm8550-audio-bootstrap.service" ];
+  };
+
+  systemd.user.services.korri-inputd = {
+    requires = [ "korri-sm8550-audio-bootstrap.service" ];
+    after = [ "korri-sm8550-audio-bootstrap.service" ];
+  };
 
   services.korri.compositor = {
     user = lib.mkDefault runtime.user;

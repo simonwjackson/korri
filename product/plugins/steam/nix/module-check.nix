@@ -237,6 +237,7 @@ let
       && (gamescopedSteamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
       && (gamescopedSteamUnit.serviceConfig.LimitNOFILE or null) == 524288
       && (gamescopedSteamUnit.environment.GAMESCOPE_WAYLAND_DISPLAY or null) == "gamescope-0"
+      && (gamescopedSteamUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
       && lib.hasInfix "gamescope" (serviceExec gamescopedSteamUnit)
       && lib.hasInfix "korri-steam-guest" (serviceExec gamescopedSteamUnit)
       && lib.hasInfix "-gamepadui" (serviceExec gamescopedSteamUnit)
@@ -260,6 +261,7 @@ let
     (check "launch service exports the Korri user session environment" (
       (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
       && (steamUnit.environment.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=/run/user/2000/bus"
+      && (steamUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
       && (steamUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
       && (steamUnit.environment.STEAM_GAMES_ROOT or null) == "/var/lib/korri/content/games/steam"
       && (steamUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"

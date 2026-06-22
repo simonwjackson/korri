@@ -32,6 +32,19 @@ describe("typed RetroArch launch spec rendering", () => {
     expect(renderRetroArchConfig()).toContain('auto_shaders_enable = "false"')
   })
 
+  it("omits audio backend and hardware device settings by default", () => {
+    const config = renderRetroArchConfig({
+      audio: { enable: true, outputRate: 48000, latencyMs: 64 },
+    })
+
+    expect(config).toContain('audio_enable = "true"')
+    expect(config).toContain("audio_out_rate = 48000")
+    expect(config).toContain("audio_latency = 64")
+    expect(config).not.toContain("audio_driver")
+    expect(config).not.toContain("audio_device")
+    expect(config).not.toContain("sysdefault:CARD")
+  })
+
   it("renders typed settings before extraSettings so escape hatches win", () => {
     const config = renderRetroArchConfig({
       lifecycle: {

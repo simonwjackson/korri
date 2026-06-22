@@ -2,6 +2,7 @@
   pkgs,
   products,
   rg353mSystem,
+  rk3566PlatformAdapterSourceFile,
   targetPackages,
   hostPackages,
   configurations,
@@ -15,20 +16,44 @@ let
   cfg = rg353mSystem.config;
   server = cfg.services.korri.daemon;
   targetSystem = cfg.nixpkgs.hostPlatform.system;
-  sessiondService = cfg.systemd.services."korri-sessiond" or { };
+  systemServices = cfg.systemd.services or { };
+  userServices = cfg.systemd.user.services or { };
+  userSockets = cfg.systemd.user.sockets or { };
+  sessiondService = userServices."korri-sessiond" or { };
   sessiondEnv = sessiondService.environment or { };
-  userServerService = cfg.systemd.user.services.korrid or { };
+  userServerService = userServices.korrid or { };
   userServerEnv = userServerService.environment or { };
   configRootsEnv = userServerEnv.KORRI_CONFIG_ROOTS or "";
-  inputplumberService = cfg.systemd.services.inputplumber or { };
+  greetdService = systemServices.greetd or { };
+  inputplumberService = systemServices.inputplumber or { };
   inputplumberEnv = inputplumberService.environment or { };
-  userCompositorService = cfg.systemd.user.services."korri-compositor" or { };
+  inputdService = userServices."korri-inputd" or { };
+  inputdEnv = inputdService.environment or { };
+  rkAudioBootstrap = systemServices.korri-rk3566-audio-bootstrap or { };
+  userCompositorService = userServices."korri-compositor" or { };
   userCompositorEnv = userCompositorService.environment or { };
   userCompositorServiceConfig = userCompositorService.serviceConfig or { };
   userCompositorUnsetEnvironment = userCompositorServiceConfig.UnsetEnvironment or [ ];
   userCompositorRequires = userCompositorService.requires or [ ];
   platformDefaults = server.library.platformDefaults;
   hostAppEnvironment = ((platformDefaults.host or { }).gamescope or { }).app.environment or { };
+  rkPulseServer = "unix:/run/user/2000/pulse/native";
+  rkAudioBootstrapScript = rkAudioBootstrap.serviceConfig.ExecStart or "";
+  # The evaluated bootstrap ExecStart points at an aarch64 shell-script
+  # derivation. Grepping that artifact from this x86_64 host check would force
+  # a target-platform build, so keep this as an adapter-source invariant.
+  rk3566PlatformAdapterSource = builtins.readFile rk3566PlatformAdapterSourceFile;
+  rk3566PlatformAdapterUsesSafeAudioVolume =
+    lib.hasInfix ''rk3566SafeDefaultSinkVolume = "10%"'' rk3566PlatformAdapterSource
+    && lib.hasInfix ''rk3566TargetSink = config.rocknix.device.audio.defaultSink.name'' rk3566PlatformAdapterSource
+    && lib.hasInfix ''set-sink-volume "$target_sink" "$safe_default_sink_volume"'' rk3566PlatformAdapterSource
+    && lib.hasInfix ''systemd.user.services.pipewire.enable = lib.mkForce false'' rk3566PlatformAdapterSource;
+  systemServiceEnabled =
+    serviceName:
+    let
+      service = systemServices.${serviceName} or { enable = false; };
+    in
+    (service.enable or true) != false;
   renderedPlatformDefaults =
     (pkgs.formats.yaml { }).generate "00-korri-platform-defaults.yaml"
       platformDefaults;
@@ -79,6 +104,40 @@ let
     (check "RG353M InputPlumber must discover product maps before package defaults" (
       lib.hasPrefix "/run/current-system/sw/share:" (inputplumberEnv.XDG_DATA_DIRS or "")
     ))
+    (check "RG353M keeps only the substrate main-space audio graph enabled" (
+      systemServiceEnabled "main-space-pipewire"
+      && systemServiceEnabled "main-space-pipewire-pulse"
+      && systemServiceEnabled "main-space-wireplumber"
+      && (cfg.rocknix.session.runtimeDir.uid or null) == 2000
+      && ((userServices.pipewire or { }).enable or true) == false
+      && ((userServices.pipewire-pulse or { }).enable or true) == false
+      && ((userServices.wireplumber or { }).enable or true) == false
+      && ((userSockets.pipewire or { }).enable or true) == false
+      && ((userSockets.pipewire-pulse or { }).enable or true) == false
+    ))
+    (check "RG353M safe audio bootstrap targets the main-space Pulse socket" (
+      systemServices ? korri-rk3566-audio-bootstrap
+      && builtins.elem "multi-user.target" (rkAudioBootstrap.wantedBy or [ ])
+      && builtins.elem "main-space-pipewire-pulse.service" (rkAudioBootstrap.after or [ ])
+      && builtins.elem "main-space-wireplumber.service" (rkAudioBootstrap.after or [ ])
+      && builtins.elem "main-space-audio-sink-bootstrap.service" (rkAudioBootstrap.after or [ ])
+      && builtins.elem "main-space-audio-sink-bootstrap.service" (rkAudioBootstrap.requires or [ ])
+      && builtins.elem "greetd.service" (rkAudioBootstrap.before or [ ])
+      && builtins.elem "korri-rk3566-audio-bootstrap.service" (greetdService.requires or [ ])
+      && builtins.elem "korri-rk3566-audio-bootstrap.service" (greetdService.after or [ ])
+      && (rkAudioBootstrap.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
+      && (rkAudioBootstrap.environment.PULSE_SERVER or null) == rkPulseServer
+      && lib.hasInfix "korri-rk3566-audio-bootstrap" rkAudioBootstrapScript
+      && rk3566PlatformAdapterUsesSafeAudioVolume
+    ))
+    (check "RG353M sessiond inherits the main-space Pulse socket" (
+      sessiondEnv.PULSE_SERVER or null == rkPulseServer
+    ))
+    (check "RG353M inputd controls the main-space Pulse default sink" (
+      inputdEnv.PULSE_SERVER or null == rkPulseServer
+      && !(inputdEnv ? KORRI_INPUTD_VOLUME_UP)
+      && !(inputdEnv ? KORRI_INPUTD_VOLUME_DOWN)
+    ))
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in
@@ -95,6 +154,10 @@ else
     grep -q 'WAYLAND_DISPLAY: null' ${renderedPlatformDefaults}
     if grep -q 'retroarch:' ${renderedPlatformDefaults}; then
       echo "platform defaults must not define an apps.retroarch record" >&2
+      exit 1
+    fi
+    if grep -q 'audio_device\|sysdefault:CARD' ${renderedPlatformDefaults}; then
+      echo "platform defaults must not hard-code RetroArch hardware audio devices" >&2
       exit 1
     fi
     if grep -q 'KORRI_GAMESCOPE_FORCE_XWAYLAND' ${renderedPlatformDefaults}; then
