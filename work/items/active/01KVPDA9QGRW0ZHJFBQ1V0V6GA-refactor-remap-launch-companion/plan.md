@@ -36,6 +36,8 @@ The CDP bridge direction was the wrong abstraction: it coupled Remap to Chromium
 - R12. Treat native v1 as wrapper-only: Remap supports arbitrary native processes only when they are launched through the Remap-owned wrapper.
 - R13. Require Sobo validation before Remap support is considered complete.
 - R14. Run a native wrapper sink spike first; do not proceed to product implementation until it proves keyboard and gamepad output isolation.
+- R15. Guarantee remapping is scoped to the wrapped app by granting synthetic input access only to the dedicated launch identity that runs the child process, while Korri UI/Sway remain unable to read or consume those devices.
+- R16. Guarantee natural cleanup by tying synthetic device lifetime and mapper lifetime to the wrapper/session lifecycle: when the child exits, cleanup begins, or the wrapper dies, held outputs are released and virtual devices are closed/removed before Korri UI resumes.
 
 ---
 
@@ -97,6 +99,8 @@ The CDP bridge direction was the wrong abstraction: it coupled Remap to Chromium
 - Split remap into source, binding graph, and private wrapper sink adapters; all delivery must be process-scoped and non-global.
 - Make Sobo validation a completion gate: keyboard and gamepad delivery to the wrapped process, no delivery to Korri UI, and cleanup after child exit must be proven before the plan is done.
 - Use the validated native wrapper candidate from the spike: hidden uinput devices marked ignored for libinput, ACLs stripped, access granted only to a dedicated launch identity, and child processes run under that identity/private context.
+- Treat the isolation guarantee as a three-part invariant, not a best-effort convention: only the wrapper creates the synthetic devices, only the dedicated launch identity can read them, and only the wrapper holds the device handles that keep them alive.
+- Treat lifecycle cleanup as part of launch correctness: sessiond must not restore Korri UI until the wrapper has released held outputs and closed/removed synthetic devices, or the launch must fail/terminate closed.
 - Keep YFS-authored bindings explicit: no `yfs-default` preset in public config, even if tests use shared fixtures internally.
 
 ---
@@ -196,6 +200,33 @@ flowchart LR
 
 The same binding graph should drive keyboard and gamepad target events through the Remap wrapper. If the wrapper cannot prove a private launch-scoped sink for the requested target type before exec, `@korri:remap` returns diagnostics or fails launch.
 
+### Isolation and lifecycle guarantee
+
+The product guarantee is intentionally mechanical rather than policy-only:
+
+```mermaid
+sequenceDiagram
+  participant Sessiond as sessiond
+  participant Wrapper as Remap wrapper
+  participant Udev as udev/logind/Sway
+  participant Child as wrapped app identity
+  participant Korri as Korri UI identity
+
+  Sessiond->>Wrapper: start remap-wrapped launch
+  Wrapper->>Udev: create hidden synthetic keyboard/gamepad devices
+  Wrapper->>Udev: strip ambient ACLs and compositor handling
+  Wrapper->>Child: grant device read access only to launch identity
+  Wrapper->>Child: start wrapped app under launch identity
+  Wrapper-->>Korri: no synthetic device ACLs / no Sway device
+  Wrapper->>Wrapper: map InputPlumber source events into synthetic devices
+  Child-->>Wrapper: exits or is killed
+  Wrapper->>Wrapper: release all held outputs
+  Wrapper->>Udev: close/remove synthetic devices
+  Wrapper-->>Sessiond: cleanup complete before Korri UI resumes
+```
+
+In plain terms: Remap does not install a global mapper. It creates temporary input devices inside the wrapper, hides them from the desktop/Korri path, grants them only to the child app's launch identity, and keeps them alive only while the wrapper/session is alive. If the child exits normally, is killed, or the wrapper crashes, the handles close and the virtual devices disappear. Product code must still explicitly release held outputs and confirm cleanup before returning to Korri UI.
+
 ---
 
 ## Implementation Units
@@ -204,21 +235,27 @@ The same binding graph should drive keyboard and gamepad target events through t
 
 **Goal:** Prove the native wrapper can deliver keyboard and gamepad output only to the wrapped process, with cleanup on exit, before productizing the Remap implementation.
 
-**Requirements:** R7, R8, R10, R12, R13, R14
+**Requirements:** R7, R8, R10, R12, R13, R14, R15, R16
 
 **Dependencies:** None
 
 **Files:**
 - Create: `product/plugins/remap/spikes/native-wrapper/README.md`
-- Create: `product/plugins/remap/spikes/native-wrapper/wrapper.ts`
-- Create: `product/plugins/remap/spikes/native-wrapper/input-probe.ts`
+- Create: `product/plugins/remap/spikes/native-wrapper/uinput-leak-probe.py`
 - Create: `product/plugins/remap/spikes/native-wrapper/validate-sobo.sh`
+- Create: `product/plugins/remap/spikes/native-wrapper/validate-seat-sobo.sh`
+- Create: `product/plugins/remap/spikes/native-wrapper/validate-sway-disable-sobo.sh`
+- Create: `product/plugins/remap/spikes/native-wrapper/validate-udev-ignore-sobo.sh`
+- Create: `product/plugins/remap/spikes/native-wrapper/validate-dedicated-wrapper-sobo.sh`
+- Create: `product/plugins/remap/spikes/native-wrapper/sobo-dedicated-wrapper-result.json`
 
 **Approach:**
 - Build a minimal wrapper-shaped spike, not the final product plugin.
 - The wrapper must create/probe the private keyboard and gamepad sink before launching the probe process.
 - The probe process must log which keyboard and gamepad events it receives at startup and during runtime.
 - The validation must also observe Korri UI or an equivalent sentinel and prove remapped output does not leak there.
+- Model the wrapped process with a dedicated launch identity; the spike uses `nobody` as a stand-in, but product implementation must use a Remap-owned identity.
+- Prove ordinary Korri UI identity readers cannot read the synthetic devices while the dedicated launch identity receives keyboard and gamepad events.
 - If the spike cannot prove private delivery and cleanup, stop and revise the product plan rather than implementing a global mapper.
 
 **Patterns to follow:**
@@ -229,7 +266,8 @@ The same binding graph should drive keyboard and gamepad target events through t
 **Test scenarios:**
 - Happy path: wrapped probe receives keyboard target events generated from controller input.
 - Happy path: wrapped probe receives gamepad target events generated from controller input.
-- Isolation: Korri UI or a sentinel process outside the wrapper does not receive remapped keyboard or gamepad output.
+- Isolation: Korri UI identity readers receive access denied/no input while the dedicated launch identity receives remapped keyboard and gamepad output.
+- Isolation: Sway does not list or consume the synthetic keyboard/gamepad as normal desktop input.
 - Cleanup: after child exit or forced kill, remap output stops and target devices/handles are released.
 - Error path: if private sink setup fails, the child process is not launched.
 
@@ -421,7 +459,7 @@ The same binding graph should drive keyboard and gamepad target events through t
 
 **Goal:** Add shippable native process support for both gamepad-to-gamepad and gamepad-to-keyboard remaps through a Remap-owned wrapper that proves isolation before child startup.
 
-**Requirements:** R7, R8, R10, R12, R13
+**Requirements:** R7, R8, R10, R12, R13, R15, R16
 
 **Dependencies:** U1, U4
 
@@ -439,6 +477,9 @@ The same binding graph should drive keyboard and gamepad target events through t
 - Treat `/dev/uinput` access as necessary but not sufficient: tests and validation must prove the host Korri UI cannot observe remap output after launch cleanup begins or after the child exits.
 - Preserve sessiond process-group ownership: the wrapper must `exec` or supervise the child in a way that keeps termination and cleanup behavior compatible with managed launches.
 - Productize the spike-proven mechanism: install a Remap-owned udev rule for Remap synthetic devices, create uinput devices, strip ambient ACLs after creation, grant access only to the dedicated launch identity, disable any matching Sway input as a safety belt, then launch the child under that identity/private context.
+- Make access control the core guarantee: the child process runs as the same launch identity that receives the synthetic device ACLs; Korri UI runs as a different identity with no synthetic device ACLs and no compositor-facing device.
+- Make lifetime ownership explicit: the wrapper owns the file descriptors that keep uinput devices alive, the mapper loop runs as a child/session sidecar of the wrapper, and cleanup closes those handles after releasing every held target.
+- Fail closed on lifecycle uncertainty: if cleanup cannot verify release/closure, sessiond must treat the launch as failed/dirty rather than returning to Korri UI with remap devices still active.
 - If private device setup or runtime routing cannot be proven for either keyboard or gamepad target output, native Remap v1 is incomplete and the adapter must refuse the target type with diagnostics.
 - Keep any raw uinput or private-seat mechanism behind plugin-owned package/Nix code; generic platform code should see only provider diagnostics and lifecycle handles.
 
@@ -454,11 +495,11 @@ The same binding graph should drive keyboard and gamepad target events through t
 - Happy path: a native sink capability reports support for keyboard and gamepad targets and accepts both gamepad-to-keyboard and gamepad-to-gamepad bindings.
 - Happy path: native wrapper creates/probes the private sink before child startup and then launches the child under the same managed process group.
 - Integration: a native fixture child that enumerates input at process start sees only the private remap sink expected for the launch.
-- Cleanup: wrapper/bridge teardown releases targets before sessiond restores Korri UI.
+- Cleanup: wrapper/bridge teardown releases all held keyboard and gamepad targets, closes synthetic device handles, and reports cleanup complete before sessiond restores Korri UI.
 - Error path: missing private sink capability fails in the wrapper before child input is exposed.
 - Error path: `/dev/uinput` present but not isolated fails closed for keyboard targets.
-- Error path: sink isolation probe failure produces structured diagnostics and no launched-game input sidecar remains.
-- On-device validation: physical controller input affects the launched native test process through both keyboard and gamepad target outputs and not Korri home; after killing the child, no remap output reaches Korri UI.
+- Error path: sink isolation probe failure produces structured diagnostics, does not exec the child, and leaves no launched-game input sidecar or synthetic device behind.
+- On-device validation: physical controller input affects the launched native test process through both keyboard and gamepad target outputs and not Korri home; after killing the child, no remap output reaches Korri UI and the synthetic devices are gone or unreadable.
 
 **Verification:**
 - Native Remap support only succeeds through the Remap wrapper with explicit private launch input context evidence for keyboard and gamepad outputs; otherwise launches fail closed.
@@ -586,12 +627,12 @@ The same binding graph should drive keyboard and gamepad target events through t
 
 ## System-Wide Impact
 
-- **Interaction graph:** Library resolution carries `launch.with` to launch companion composition; control live/sessiond forwards it to lifecycle hooks; Remap sidecar consumes InputPlumber sources and emits only through selected launch-scoped sinks.
+- **Interaction graph:** Library resolution carries `launch.with` to launch companion composition; control live/sessiond forwards it to lifecycle hooks; Remap wrapper consumes InputPlumber sources and emits only through synthetic devices granted to the dedicated launch identity.
 - **Error propagation:** Bad policy, missing plugin, unsupported sink, source ambiguity, readiness timeout, and isolation failure should return structured launch diagnostics or fail launch before Korri UI is exposed to leaked mappings.
-- **State lifecycle risks:** Held target inputs must release on normal cleanup, child death, bridge death, attach failure, and timeout; failure to release is a launch-fatal condition.
+- **State lifecycle risks:** Held target inputs must release on normal cleanup, child death, wrapper death, attach failure, and timeout; failure to release/close synthetic devices is a launch-fatal condition.
 - **API surface parity:** Dry-run and actual launch must both validate `@korri:remap`; local and managed sessiond paths must carry the same companion policy.
 - **Integration coverage:** Unit tests prove schema/engine behavior; lifecycle tests prove fail-closed sidecar behavior; Sobo validation proves non-global delivery.
-- **Unchanged invariants:** Gamescope stays authored under `launch.with."@korri:gamescope"`; generic platform code remains provider-keyed and must not special-case Remap; existing InputPlumber raw-device rejection remains intact.
+- **Unchanged invariants:** Gamescope stays authored under `launch.with."@korri:gamescope"`; generic platform code remains provider-keyed and must not special-case Remap; existing InputPlumber raw-device rejection remains intact; Remap must not introduce a global input profile or ambient virtual keyboard visible to Korri UI.
 
 ---
 
@@ -601,6 +642,8 @@ The same binding graph should drive keyboard and gamepad target events through t
 |------|------------|
 | Native sink isolation cannot be proven safely | Keep the contract but fail closed; do not call native v1 complete and do not ship a host-seat mapper as success. |
 | uinput permissions are mistaken for isolation | Require explicit non-global delivery validation; treat `/dev/uinput` access as only one prerequisite. |
+| Dedicated launch identity drifts toward a reusable/global game user | Keep the identity wrapper-scoped and grant synthetic device ACLs per launch; no long-lived global mapper service may reuse the devices. |
+| Cleanup races return focus to Korri UI before device teardown finishes | Make cleanup acknowledgement part of session restoration and treat uncertain cleanup as failed/dirty launch state. |
 | The compact binding map cannot express multi-target mappings | Allow binding values to be a string or array of strings. |
 | Replacing the CDP path breaks existing YFS launch | Migrate YFS tests first and route YFS through the Remap wrapper; do not keep a CDP adapter as fallback. |
 | Platform code becomes Remap-aware | Add tests and review guidance that platform/sessiond only carry provider-keyed maps generically. |
@@ -612,6 +655,7 @@ The same binding graph should drive keyboard and gamepad target events through t
 
 - Document `@korri:remap` as a launch companion, not as a global input feature.
 - Document that wrapper sink setup is internal and may fail closed when it cannot provide an isolated sink.
+- Document the guarantee in plain language: synthetic devices are temporary wrapper-owned launch state, readable only by the wrapped app identity, and removed when the wrapper/session dies.
 - Require Sobo validation notes and evidence before declaring arbitrary native wrapper process support complete.
 - Mention that the old `@korri:cdp-input-bridge` direction was replaced by `@korri:remap`; do not document it as supported compatibility.
 
