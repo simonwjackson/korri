@@ -301,6 +301,7 @@ let
       args = [
         "--viewport-aspect=1:1"
         "--zoom=auto-area"
+        "--cache-root=/tmp/korri-remap-runner-yfs-cache"
         "--browser-env=XDG_RUNTIME_DIR=${korriRuntimeDir}"
         "--browser-env=WAYLAND_DISPLAY=wayland-1"
         "--browser-env=HOME=/tmp"

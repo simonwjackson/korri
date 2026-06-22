@@ -21,6 +21,7 @@ const LAUNCHER_VERSION = "2"
 export interface YfsLaunchRuntimeOptions {
   readonly webroot?: string
   readonly chromiumPath?: string
+  readonly cacheRoot?: string
   readonly browserEnv: Record<string, string>
 }
 
@@ -95,6 +96,11 @@ export function parseYfsLaunchCli(
       index += 1
     } else if (arg.startsWith("--chromium=")) {
       runtime.chromiumPath = arg.slice("--chromium=".length)
+    } else if (arg === "--cache-root") {
+      runtime.cacheRoot = readValue(args, index, arg)
+      index += 1
+    } else if (arg.startsWith("--cache-root=")) {
+      runtime.cacheRoot = arg.slice("--cache-root=".length)
     } else if (arg === "--browser-env") {
       const value = readValue(args, index, arg)
       const separator = value.indexOf("=")
@@ -238,6 +244,7 @@ export async function runYfsLaunch(
     levelFile: parsed.levelFile,
     settings: parsed.settings,
     launcherVersion: LAUNCHER_VERSION,
+    cacheRoot: parsed.runtime.cacheRoot,
   })
   const targetUrl = buildYfsLaunchUrl(prepared.root, parsed.settings)
   const canvasSettings: CanvasSettings = {

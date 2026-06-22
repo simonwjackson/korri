@@ -276,6 +276,7 @@ let
         && (yfsPlatformLauncher.args or [ ]) == [
           "--viewport-aspect=1:1"
           "--zoom=auto-area"
+          "--cache-root=/tmp/korri-remap-runner-yfs-cache"
           "--browser-env=XDG_RUNTIME_DIR=/run/user/2000"
           "--browser-env=WAYLAND_DISPLAY=wayland-1"
           "--browser-env=HOME=/tmp"
