@@ -72,7 +72,9 @@ describe("korri-remap native driver contract", () => {
     expect(driverSource).toContain('"--init-groups"')
     expect(driverSource).toContain('cwd="/tmp"')
     expect(driverSource).toContain("CHILD_TERMINATE_TIMEOUT_SECONDS = 5")
-    expect(driverSource).toContain("child_proc.wait(timeout=CHILD_TERMINATE_TIMEOUT_SECONDS)")
+    expect(driverSource).toContain(
+      "child_proc.wait(timeout=CHILD_TERMINATE_TIMEOUT_SECONDS)",
+    )
     expect(driverSource).toContain('if not key.startswith("KORRI_REMAP_")')
   })
 

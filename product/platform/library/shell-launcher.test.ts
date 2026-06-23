@@ -248,7 +248,7 @@ describe("createShellLauncher (real Bun.spawn)", () => {
   })
 
   it("routes Remap bridge termination through the named transient user unit", async () => {
-    const fixture = createFakeSystemdFixture()
+    const fixture = createRecordingSystemdFixture()
     const launcher = createShellLauncher({
       processGroup: true,
       remapBridgeCommand: fixture.remapBridgeCommand,
@@ -271,20 +271,52 @@ describe("createShellLauncher (real Bun.spawn)", () => {
       const result = await managed.result
       expect(result.status).toBe("failed")
       if (result.status === "failed") expect(result.exitCode).toBe(143)
-      expect(readFileSync(fixture.runLog, "utf8")).toContain(
-        "--unit=korri-remap-test.service",
-      )
-      expect(readFileSync(fixture.runLog, "utf8")).toContain(
-        "--property=KillMode=control-group",
-      )
+      const runLog = readFileSync(fixture.runLog, "utf8")
+      expect(runLog).toContain("--unit=korri-remap-test.service")
+      expect(runLog).toContain("--property=KillMode=control-group")
+      expect(runLog).toContain("--property=TimeoutStopSec=15s")
+      expect(runLog).toContain("/run/current-system/sw/bin/env -i")
+      expect(runLog).toContain("/bin/sh -c")
+      expect(runLog).toContain(fixture.remapBridgeCommand)
+      expect(runLog).toContain("/bin/true")
       expect(readFileSync(fixture.ctlLog, "utf8")).toContain(
         "--user stop korri-remap-test.service",
       )
     }
   })
 
+  it("retries Remap bridge unit termination when systemctl fails", async () => {
+    const fixture = createRecordingSystemdFixture({ systemctlFailures: 1 })
+    const launcher = createShellLauncher({
+      processGroup: true,
+      remapBridgeCommand: fixture.remapBridgeCommand,
+      remapUnitNameFactory: () => "korri-remap-retry-test.service",
+      systemdRunCommand: fixture.systemdRunCommand,
+      systemctlCommand: fixture.systemctlCommand,
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("shell launcher missing managed spawn")
+    const managed = await spawn({
+      command: fixture.remapBridgeCommand,
+      args: ["--", "/bin/true"],
+      env: { KORRI_TEST_UNIT_DIR: fixture.unitDir },
+    })
+
+    expect(managed.status).toBe("started")
+    if (managed.status === "started") {
+      managed.session.terminate()
+      const result = await managed.result
+      expect(result.status).toBe("failed")
+      if (result.status === "failed") expect(result.exitCode).toBe(143)
+      const ctlLog = readFileSync(fixture.ctlLog, "utf8")
+      expect(
+        countOccurrences(ctlLog, "--user stop korri-remap-retry-test.service"),
+      ).toBe(2)
+    }
+  })
+
   it("force terminates Remap bridge units with SIGKILL before stop", async () => {
-    const fixture = createFakeSystemdFixture()
+    const fixture = createRecordingSystemdFixture()
     const launcher = createShellLauncher({
       processGroup: true,
       remapBridgeCommand: fixture.remapBridgeCommand,
@@ -306,16 +338,24 @@ describe("createShellLauncher (real Bun.spawn)", () => {
       const result = await managed.result
       expect(result.status).toBe("failed")
       if (result.status === "failed") expect(result.exitCode).toBe(137)
-      const ctlLog = readFileSync(fixture.ctlLog, "utf8")
-      expect(ctlLog).toContain(
+      const ctlLog = await waitForFileText(fixture.ctlLog, text =>
+        text.includes("--user stop korri-remap-force-test.service"),
+      )
+      const killIndex = ctlLog.indexOf(
         "--user kill --kill-whom=all --signal=SIGKILL korri-remap-force-test.service",
       )
-      expect(ctlLog).toContain("--user stop korri-remap-force-test.service")
+      const stopIndex = ctlLog.indexOf(
+        "--user stop korri-remap-force-test.service",
+      )
+      expect(killIndex).toBeGreaterThanOrEqual(0)
+      expect(stopIndex).toBeGreaterThan(killIndex)
     }
   })
 })
 
-function createFakeSystemdFixture(): {
+function createRecordingSystemdFixture(
+  options: { readonly systemctlFailures?: number } = {},
+): {
   readonly unitDir: string
   readonly runLog: string
   readonly ctlLog: string
@@ -331,6 +371,7 @@ function createFakeSystemdFixture(): {
   const systemdRunCommand = join(root, "systemd-run")
   const systemctlCommand = join(root, "systemctl")
   const remapBridgeCommand = join(root, "korri-remap-bridge")
+  const systemctlFailures = options.systemctlFailures ?? 0
 
   writeFileSync(
     systemdRunCommand,
@@ -361,6 +402,17 @@ exit 143
     `#!/bin/sh
 set -eu
 printf '%s\n' "$*" >> "$KORRI_TEST_UNIT_DIR/../systemctl.log"
+attempt_file="$KORRI_TEST_UNIT_DIR/../systemctl-attempts"
+attempt=0
+if [ -f "$attempt_file" ]; then
+  attempt=$(cat "$attempt_file")
+fi
+attempt=$((attempt + 1))
+printf '%s\n' "$attempt" > "$attempt_file"
+if [ "$attempt" -le "${systemctlFailures}" ]; then
+  echo transient unit not loaded yet >&2
+  exit 1
+fi
 unit=""
 for arg in "$@"; do
   unit="$arg"
@@ -385,4 +437,26 @@ exit 0
     systemctlCommand,
     remapBridgeCommand,
   }
+}
+
+async function waitForFileText(
+  path: string,
+  predicate: (text: string) => boolean,
+): Promise<string> {
+  const deadline = Date.now() + 1000
+  let last = ""
+  while (Date.now() < deadline) {
+    try {
+      last = readFileSync(path, "utf8")
+      if (predicate(last)) return last
+    } catch {
+      // File may not exist until the first supervisor command runs.
+    }
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  return last
+}
+
+function countOccurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1
 }

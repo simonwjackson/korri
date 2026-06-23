@@ -32,12 +32,14 @@ import { launchEnvironment } from "./launcher"
 
 const STDERR_TAIL_BYTES = 4 * 1024
 const DEFAULT_SETSID_COMMAND = "setsid"
-const DEFAULT_EXEC_TRAMPOLINE_COMMAND = "sh"
+const DEFAULT_EXEC_TRAMPOLINE_COMMAND = "/bin/sh"
 const EXEC_TRAMPOLINE_SCRIPT = 'exec "$@"'
-const SYSTEMD_RUN_COMMAND = "systemd-run"
-const SYSTEMCTL_COMMAND = "systemctl"
+const SYSTEMD_RUN_COMMAND = "/run/current-system/sw/bin/systemd-run"
+const SYSTEMCTL_COMMAND = "/run/current-system/sw/bin/systemctl"
 const ENV_COMMAND = "/run/current-system/sw/bin/env"
 const SETUID_REMAP_BRIDGE_COMMAND = "/run/wrappers/bin/korri-remap-bridge"
+const REMAP_TRANSIENT_UNIT_TIMEOUT = "TimeoutStopSec=15s"
+const REMAP_SYSTEMCTL_RETRY_DELAYS_MS = [0, 100, 250, 500] as const
 
 export interface ShellLauncherOptions {
   /**
@@ -113,7 +115,7 @@ async function spawnShellLaunch(
         "--pipe",
         `--unit=${remapUnitName}`,
         "--property=KillMode=control-group",
-        "--property=TimeoutStopSec=8s",
+        `--property=${REMAP_TRANSIENT_UNIT_TIMEOUT}`,
         ENV_COMMAND,
         "-i",
         ...envArgs,
@@ -213,39 +215,82 @@ async function spawnShellLaunch(
     }
   }
 
-  const systemctlUser = (...args: readonly string[]) => {
-    if (!remapUnitName) return
-    try {
-      const ctl = Bun.spawn([systemctlCommand, "--user", ...args], {
-        env: env as Record<string, string>,
-        cwd: "/tmp",
-        stdout: "ignore",
-        stderr: "ignore",
-      })
-      void ctl.exited.catch(error => {
+  const sleep = (milliseconds: number) =>
+    new Promise(resolve => setTimeout(resolve, milliseconds))
+
+  const systemctlUser = async (
+    ...args: readonly string[]
+  ): Promise<boolean> => {
+    if (!remapUnitName) return false
+
+    for (const [attempt, delay] of REMAP_SYSTEMCTL_RETRY_DELAYS_MS.entries()) {
+      if (delay > 0) await sleep(delay)
+      try {
+        const ctl = Bun.spawn([systemctlCommand, "--user", ...args], {
+          env: env as Record<string, string>,
+          cwd: "/tmp",
+          stdout: "ignore",
+          stderr: "pipe",
+        })
+        const stderrStream =
+          typeof ctl.stderr === "object" && ctl.stderr !== null
+            ? (ctl.stderr as ReadableStream<Uint8Array>)
+            : null
+        const [exitCode, stderrTail] = await Promise.all([
+          ctl.exited,
+          readTail(stderrStream, STDERR_TAIL_BYTES),
+        ])
+        if (exitCode === 0) return true
         logger.warn(
-          { err: error, unit: remapUnitName },
+          { args, attempt, exitCode, stderrTail, unit: remapUnitName },
           "shell-launcher: systemctl failed for Remap bridge unit",
         )
-      })
-    } catch (error) {
-      logger.warn(
-        { err: error, unit: remapUnitName },
-        "shell-launcher: failed to spawn systemctl for Remap bridge unit",
-      )
+      } catch (error) {
+        logger.warn(
+          { args, attempt, err: error, unit: remapUnitName },
+          "shell-launcher: failed to spawn systemctl for Remap bridge unit",
+        )
+      }
     }
+
+    return false
   }
 
   const terminateRemapBridgeUnit = () => {
     if (!remapUnitName) return false
-    systemctlUser("stop", remapUnitName)
+    void (async () => {
+      const stopped = await systemctlUser("stop", remapUnitName)
+      if (!stopped) {
+        logger.warn(
+          { unit: remapUnitName },
+          "shell-launcher: falling back after Remap bridge unit stop failed",
+        )
+        proc.kill("SIGTERM")
+      }
+    })()
     return true
   }
 
   const killRemapBridgeUnit = () => {
     if (!remapUnitName) return false
-    systemctlUser("kill", "--kill-whom=all", "--signal=SIGKILL", remapUnitName)
-    systemctlUser("stop", remapUnitName)
+    void (async () => {
+      const killed = await systemctlUser(
+        "kill",
+        "--kill-whom=all",
+        "--signal=SIGKILL",
+        remapUnitName,
+      )
+      if (killed) {
+        await systemctlUser("stop", remapUnitName)
+        return
+      }
+
+      logger.warn(
+        { unit: remapUnitName },
+        "shell-launcher: falling back after Remap bridge unit kill failed",
+      )
+      proc.kill("SIGKILL")
+    })()
     return true
   }
 
