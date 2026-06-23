@@ -45,6 +45,25 @@ describe("typed RetroArch launch spec rendering", () => {
     expect(config).not.toContain("sysdefault:CARD")
   })
 
+  it("renders the handheld InputPlumber controller baseline", () => {
+    const config = renderRetroArchConfig({
+      drivers: { input: "udev", joypad: "udev" },
+      input: {
+        autodetect: true,
+        maxUsers: 4,
+        ports: { "1": { joypadIndex: 0, analogDpadMode: 1 } },
+      },
+    })
+
+    expect(config).toContain('input_driver = "udev"')
+    expect(config).toContain('input_joypad_driver = "udev"')
+    expect(config).toContain('input_autodetect_enable = "true"')
+    expect(config).toContain("input_max_users = 4")
+    expect(config).toContain("input_player1_joypad_index = 0")
+    expect(config).toContain("input_player1_analog_dpad_mode = 1")
+    expect(config).not.toContain("input_player1_b_btn")
+  })
+
   it("renders typed settings before extraSettings so escape hatches win", () => {
     const config = renderRetroArchConfig({
       lifecycle: {

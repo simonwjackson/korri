@@ -27,8 +27,17 @@ let
   greetdService = systemServices.greetd or { };
   inputplumberService = systemServices.inputplumber or { };
   inputplumberEnv = inputplumberService.environment or { };
-  inputdService = userServices."korri-inputd" or { };
-  inputdEnv = inputdService.environment or { };
+  inputplumberPackage = cfg.services.inputplumber.package or { };
+  inputplumberDataPackage = lib.findFirst
+    (package: lib.hasInfix "inputplumber-data-xb360" (package.name or ""))
+    null
+    cfg.environment.systemPackages;
+  inputdUnit = userServices.korri-inputd or { };
+  inputdEnv = inputdUnit.environment or { };
+  inputdWants = inputdUnit.wants or [ ];
+  inputdAfter = inputdUnit.after or [ ];
+  rawGamepadHideService = systemServices.korri-rk3566-hide-raw-gamepad-devices or { };
+  udevRules = cfg.services.udev.extraRules or "";
   rkAudioBootstrap = systemServices.korri-rk3566-audio-bootstrap or { };
   userCompositorService = userServices."korri-compositor" or { };
   userCompositorEnv = userCompositorService.environment or { };
@@ -36,7 +45,15 @@ let
   userCompositorUnsetEnvironment = userCompositorServiceConfig.UnsetEnvironment or [ ];
   userCompositorRequires = userCompositorService.requires or [ ];
   platformDefaults = server.library.platformDefaults;
-  hostAppEnvironment = ((platformDefaults.host or { }).gamescope or { }).app.environment or { };
+  hostDefaults = platformDefaults.host or { };
+  hostAppEnvironment = lib.attrByPath [
+    "launch"
+    "with"
+    "@korri:gamescope"
+    "app"
+    "environment"
+  ] { } hostDefaults;
+  retroarchPolicy = (hostDefaults.plugin or { })."@korri:retroarch" or { };
   rkPulseServer = "unix:/run/user/2000/pulse/native";
   rkAudioBootstrapScript = rkAudioBootstrap.serviceConfig.ExecStart or "";
   # The evaluated bootstrap ExecStart points at an aarch64 shell-script
@@ -101,8 +118,45 @@ let
       lib.hasInfix "korri-platform-config-root" configRootsEnv
       && lib.hasSuffix ":/var/lib/korri/config" configRootsEnv
     ))
+    (check "RG353M InputPlumber provider must be enabled" (
+      cfg.services.korri.input.provider.enable
+      && (cfg.services.korri.input.provider.name or null) == "inputplumber"
+    ))
+    (check "RG353M inputd must start after InputPlumber and raw-node hiding" (
+      builtins.elem "inputplumber.service" inputdWants
+      && builtins.elem "inputplumber.service" inputdAfter
+      && builtins.elem "korri-rk3566-hide-raw-gamepad-devices.service" inputdWants
+      && builtins.elem "korri-rk3566-hide-raw-gamepad-devices.service" inputdAfter
+    ))
+    (check "RG353M raw gamepad hide service must run after InputPlumber" (
+      builtins.elem "inputplumber.service" (rawGamepadHideService.after or [ ])
+      && builtins.elem "inputplumber.service" (rawGamepadHideService.requires or [ ])
+    ))
+    (check "RG353M InputPlumber package must be present" (
+      (inputplumberPackage.name or "") != ""
+    ))
+    (check "RG353M InputPlumber data root must carry the handheld xb360 posture" (
+      inputplumberDataPackage != null
+    ))
     (check "RG353M InputPlumber must discover product maps before package defaults" (
-      lib.hasPrefix "/run/current-system/sw/share:" (inputplumberEnv.XDG_DATA_DIRS or "")
+      inputplumberDataPackage != null
+      && lib.hasPrefix "${inputplumberDataPackage}/share:" (inputplumberEnv.XDG_DATA_DIRS or "")
+    ))
+    (check "RG353M raw physical gamepad event nodes must be hidden from apps" (
+      lib.hasInfix ''KERNEL=="event*", ATTRS{name}=="retrogame_joypad"'' udevRules
+      && lib.hasInfix ''MODE="0000"'' udevRules
+    ))
+    (check "RG353M raw physical gamepad joydev nodes must be hidden from apps" (
+      lib.hasInfix ''KERNEL=="js*"'' udevRules
+      && lib.hasInfix ''MODE="0000"'' udevRules
+    ))
+    (check "RG353M RetroArch must use the handheld input baseline" (
+      (retroarchPolicy.drivers.input or null) == "udev"
+      && (retroarchPolicy.drivers.joypad or null) == "udev"
+      && (retroarchPolicy.input.autodetect or false) == true
+      && (retroarchPolicy.input.maxUsers or 0) == 4
+      && (retroarchPolicy.input.ports."1".joypadIndex or null) == 0
+      && (retroarchPolicy.input.ports."1".analogDpadMode or null) == 1
     ))
     (check "RG353M keeps only the substrate main-space audio graph enabled" (
       systemServiceEnabled "main-space-pipewire"
@@ -150,9 +204,16 @@ else
     set -eu
     mkdir -p "$out"
     grep -q 'host:' ${renderedPlatformDefaults}
-    grep -q 'gamescope:' ${renderedPlatformDefaults}
+    grep -q 'launch:' ${renderedPlatformDefaults}
+    grep -q '@korri:gamescope' ${renderedPlatformDefaults}
     grep -q 'WAYLAND_DISPLAY: null' ${renderedPlatformDefaults}
-    if grep -q 'retroarch:' ${renderedPlatformDefaults}; then
+    grep -q 'input_driver\|input:' ${renderedPlatformDefaults}
+    grep -q '@korri:retroarch' ${renderedPlatformDefaults}
+    if grep -q '^  gamescope:' ${renderedPlatformDefaults}; then
+      echo "platform defaults must not use retired host.gamescope" >&2
+      exit 1
+    fi
+    if grep -q 'apps:' ${renderedPlatformDefaults} && grep -q 'retroarch:' ${renderedPlatformDefaults}; then
       echo "platform defaults must not define an apps.retroarch record" >&2
       exit 1
     fi

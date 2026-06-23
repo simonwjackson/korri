@@ -66,16 +66,22 @@ let
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
+      inputdWants = inputdUnit.wants or [ ];
+      inputdAfter = inputdUnit.after or [ ];
+      inputplumberService = systemServices.inputplumber or { };
+      inputplumberEnv = inputplumberService.environment or { };
+      inputplumberPackage = cfg.services.inputplumber.package or { };
       removableMountUnit = cfg.systemd.services."korri-removable-media-mount@" or { };
       removableUnmountUnit = cfg.systemd.services."korri-removable-media-unmount@" or { };
       removableColdplugUnit = cfg.systemd.services.korri-removable-media-coldplug or { };
       removableMedia = cfg.services.korri.removableMedia or { };
+      platformDefaults = cfg.services.korri.daemon.library.platformDefaults or { };
+      hostDefaults = platformDefaults.host or { };
+      retroarchPolicy = (hostDefaults.plugin or { })."@korri:retroarch" or { };
       yfsPlatformLauncher = lib.attrByPath [
         "launchers"
         "@korri:yoshis-fabrication-station/level"
-      ]
-        { }
-        (cfg.services.korri.daemon.library.platformDefaults or { });
+      ] { } platformDefaults;
       yfsLauncherSettings = lib.attrByPath [ "settings" "plugin" ] { } yfsPlatformLauncher;
       yfsRemapBindings = lib.attrByPath [
         "launch"
@@ -289,9 +295,29 @@ let
         && !(daemonEnv ? KORRI_SESSIOND_URL)
         && !(daemonEnv ? KORRI_SESSIOND_TOKEN_FILE)
       ))
+      (check "${name}: InputPlumber provider must be enabled" (
+        cfg.services.korri.input.provider.enable
+        && (cfg.services.korri.input.provider.name or null) == "inputplumber"
+        && builtins.elem "inputplumber.service" inputdWants
+        && builtins.elem "inputplumber.service" inputdAfter
+      ))
+      (check "${name}: InputPlumber package must carry the handheld xb360 posture" (
+        lib.hasInfix "xb360" (inputplumberPackage.name or "")
+      ))
+      (check "${name}: InputPlumber must read the xb360 package before system defaults" (
+        lib.hasPrefix "${inputplumberPackage}/share:" (inputplumberEnv.XDG_DATA_DIRS or "")
+      ))
       (check "${name}: Moonlight product launches require InputPlumber" (
         (sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null) == "1"
         && (daemonEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null) == "1"
+      ))
+      (check "${name}: RetroArch must use the handheld input baseline" (
+        (retroarchPolicy.drivers.input or null) == "udev"
+        && (retroarchPolicy.drivers.joypad or null) == "udev"
+        && (retroarchPolicy.input.autodetect or false) == true
+        && (retroarchPolicy.input.maxUsers or 0) == 4
+        && (retroarchPolicy.input.ports."1".joypadIndex or null) == 0
+        && (retroarchPolicy.input.ports."1".analogDpadMode or null) == 1
       ))
       (check "${name}: Switch emulator is installed and available to the compositor" (
         hasPackagePname "ryubing" cfg.environment.systemPackages
