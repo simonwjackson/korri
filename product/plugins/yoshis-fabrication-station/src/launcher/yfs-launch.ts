@@ -39,7 +39,7 @@ export function yfsShimPaths(): string[] {
 }
 
 function usage(): string {
-  return "usage: yfs-launch <level-file>"
+  return "usage: yfs-launch [--settings-json JSON] <level-file>"
 }
 
 function readValue(argv: string[], index: number, flag: string): string {
@@ -112,6 +112,11 @@ export function parseYfsLaunchCli(
       const separator = value.indexOf("=")
       if (separator <= 0) throw new Error("--browser-env expects KEY=VALUE")
       runtime.browserEnv[value.slice(0, separator)] = value.slice(separator + 1)
+    } else if (arg === "--settings-json") {
+      Object.assign(settings, parseYfsSettingsJson(readValue(args, index, arg)))
+      index += 1
+    } else if (arg.startsWith("--settings-json=")) {
+      Object.assign(settings, parseYfsSettingsJson(arg.slice("--settings-json=".length)))
     } else if (arg === "--audio") settings.audio = "on"
     else if (arg === "--no-audio") settings.audio = "off"
     else if (arg.startsWith("--audio=")) {

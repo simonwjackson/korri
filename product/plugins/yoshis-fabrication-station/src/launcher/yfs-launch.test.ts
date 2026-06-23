@@ -88,6 +88,24 @@ describe("yfs-launch", () => {
     })
   })
 
+  it("merges plugin settings from argv JSON for Remap-safe transport", () => {
+    const parsed = parseYfsLaunchCli([
+      `--settings-json=${JSON.stringify({
+        metrics: true,
+        bgmVolume: 3,
+        viewport: { aspect: "16:9", policy: "expand-only" },
+      })}`,
+      "--bgm-volume=9",
+      "level.json",
+    ])
+
+    expect(parsed.settings).toEqual({
+      metrics: true,
+      bgmVolume: 9,
+      viewport: { aspect: "16:9", policy: "expand-only" },
+    })
+  })
+
   it("builds a prepared-root file URL with code_url=level.json and settings", async () => {
     const root = await tempRoot("prepared")
     const url = buildYfsLaunchUrl(root, {
@@ -134,7 +152,7 @@ describe("yfs-launch", () => {
 
   it("rejects missing level argument", () => {
     expect(() => parseYfsLaunchCli([])).toThrow(
-      "usage: yfs-launch <level-file>",
+      "usage: yfs-launch [--settings-json JSON] <level-file>",
     )
   })
 })

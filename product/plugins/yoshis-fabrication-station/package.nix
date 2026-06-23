@@ -143,11 +143,11 @@ stdenvNoCC.mkDerivation {
 
     if ! grep -q 'direct-launch-pre.js' index.html; then
       substituteInPlace index.html \
-        --replace '<script src="scripts/main.js" type="module"></script>' '<script src="direct-launch-pre.js"></script>\n\t<script src="scripts/main.js" type="module"></script>'
+        --replace '<script src="scripts/main.js" type="module"></script>' $'<script src="direct-launch-pre.js"></script>\n\t<script src="scripts/main.js" type="module"></script>'
     fi
     if ! grep -q 'direct-launch.js' index.html; then
       substituteInPlace index.html \
-        --replace '</body>' '\t<script src="direct-launch.js"></script>\n</body>'
+        --replace '</body>' $'\t<script src="direct-launch.js"></script>\n</body>'
     fi
 
     # Guard the important launch hooks.

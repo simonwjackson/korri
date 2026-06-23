@@ -53,6 +53,8 @@ else
 
     grep -q 'direct-launch-pre.js' ${pkg}/share/yoshis-fabrication-station/index.html
     grep -q 'direct-launch.js' ${pkg}/share/yoshis-fabrication-station/index.html
+    ! grep -q '\\\\n' ${pkg}/share/yoshis-fabrication-station/index.html
+    ! grep -q '\\\\t' ${pkg}/share/yoshis-fabrication-station/index.html
     grep -q '__YFSGetSetting' ${pkg}/share/yoshis-fabrication-station/scripts/c3main.js
     grep -q 'enableGBASounds' ${pkg}/share/yoshis-fabrication-station/scripts/c3main.js
     grep -q 'VolumeBGM' ${pkg}/share/yoshis-fabrication-station/scripts/c3main.js

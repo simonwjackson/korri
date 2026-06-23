@@ -336,7 +336,7 @@ let
         !(yfsPlatformLauncher ? plugin)
         && (yfsPlatformLauncher.command or null) == "yfs-launch"
         && (yfsPlatformLauncher.args or [ ]) == [
-          "--viewport-aspect=16:9"
+          "--settings-json={settings.plugin}"
           "--cache-root=/tmp/korri-remap-runner-yfs-cache"
           "--browser-env=XDG_RUNTIME_DIR=/run/user/2000"
           "--browser-env=WAYLAND_DISPLAY=wayland-1"
@@ -368,10 +368,8 @@ let
         && (yfsRemapBindings."p1.button.north" or null) == "key.a"
         && (yfsRemapBindings."p1.button.start" or null) == "key.p"
       ))
-      (check "${name}: YFS launcher defaults use 16:9 viewport without explicit zoom" (
-        (yfsLauncherSettings.viewport.aspect or null) == "16:9"
-        && (yfsLauncherSettings.viewport.policy or null) == "expand-only"
-        && !(yfsLauncherSettings ? zoom)
+      (check "${name}: YFS platform defaults do not bake presentation settings" (
+        yfsLauncherSettings == { }
       ))
       (check "${name}: PICO-8 fake-08 core is exposed at the stable launch path" (
         (cfg.environment.etc."korri/cores/fake08_libretro.so".source or null) == fake08CoreSource

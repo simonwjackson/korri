@@ -371,15 +371,16 @@ let
     };
   };
   # SM8550 platform launch policy is rendered into the readable library
-  # cascade. Moonlight uses host.moonlight. YFS keeps settings.plugin for
-  # inspectable config, and also carries the required viewport/aspect and
-  # browser display environment on argv because the Remap runner/Bun boundary
-  # cannot rely on KORRI_* process env being visible to JavaScript.
+  # cascade. Moonlight uses host.moonlight. YFS carries authored plugin
+  # settings and browser display environment on argv because the Remap
+  # runner/Bun boundary cannot rely on KORRI_* process env being visible to
+  # JavaScript. Device-specific YFS presentation settings belong in device
+  # YAML, not in this platform adapter.
   sm8550PlatformDefaults = {
     launchers."@korri:yoshis-fabrication-station/level" = {
       command = "yfs-launch";
       args = [
-        "--viewport-aspect=16:9"
+        "--settings-json={settings.plugin}"
         "--cache-root=/tmp/korri-remap-runner-yfs-cache"
         "--browser-env=XDG_RUNTIME_DIR=${korriRuntimeDir}"
         "--browser-env=WAYLAND_DISPLAY=wayland-1"
@@ -420,12 +421,7 @@ let
           "p1.button.start" = "key.p";
         };
       };
-      settings.plugin = {
-        viewport = {
-          aspect = "16:9";
-          policy = "expand-only";
-        };
-      };
+      settings.plugin = { };
     };
 
     host.plugin."@korri:retroarch" = handheldRetroArchInputPolicy;
