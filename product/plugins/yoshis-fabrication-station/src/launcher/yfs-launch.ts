@@ -258,7 +258,7 @@ export async function runYfsLaunch(
   }
   const webpageSettings: WebpageSettings = { audio: "on", saves: "ephemeral" }
   const startupScripts = await prepareCanvasStartupScripts(canvasSettings)
-  const { proc, cdp } = await launchWebpage(targetUrl, {
+  const { proc, cdp, disposeSignalHandlers } = await launchWebpage(targetUrl, {
     settings: webpageSettings,
     preNavigationScripts: startupScripts.map(script => script.source),
     saveId: `yfs-${prepared.cacheKey}`,
@@ -278,8 +278,11 @@ export async function runYfsLaunch(
     }
     await waitForYfsReadyOrBrowserExit(cdp, proc)
     cdp.close()
-    return await proc.exited
+    const exitCode = await proc.exited
+    disposeSignalHandlers()
+    return exitCode
   } catch (error) {
+    disposeSignalHandlers()
     cdp.close()
     await terminateBrowserForFailedLaunch(proc)
     const message = error instanceof Error ? error.message : String(error)

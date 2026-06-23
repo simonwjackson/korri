@@ -18,12 +18,14 @@ async function main(): Promise<void> {
   const settings = JSON.parse(
     process.env.KORRI_WEBPAGE_SETTINGS ?? "{}",
   ) as WebpageSettings
-  const { proc, cdp } = await launchWebpage(url, {
+  const { proc, cdp, disposeSignalHandlers } = await launchWebpage(url, {
     settings,
     saveId: process.env.KORRI_WEBPAGE_SAVE_ID,
   })
   cdp.close() // webpage core has nothing to drive after launch
-  process.exit(await proc.exited)
+  const exitCode = await proc.exited
+  disposeSignalHandlers()
+  process.exit(exitCode)
 }
 
 main().catch(error => {

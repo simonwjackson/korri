@@ -35,7 +35,9 @@ const DEFAULT_SETSID_COMMAND = "setsid"
 const DEFAULT_EXEC_TRAMPOLINE_COMMAND = "sh"
 const EXEC_TRAMPOLINE_SCRIPT = 'exec "$@"'
 const SYSTEMD_RUN_COMMAND = "systemd-run"
+const SYSTEMCTL_COMMAND = "systemctl"
 const ENV_COMMAND = "/run/current-system/sw/bin/env"
+const SETUID_REMAP_BRIDGE_COMMAND = "/run/wrappers/bin/korri-remap-bridge"
 
 export interface ShellLauncherOptions {
   /**
@@ -50,6 +52,14 @@ export interface ShellLauncherOptions {
   readonly processGroup?: boolean
   /** Override the setsid binary path. Default `"setsid"`. */
   readonly setsidCommand?: string
+  /** Override the systemd-run binary path used for the setuid Remap bridge. */
+  readonly systemdRunCommand?: string
+  /** Override the systemctl binary path used to stop setuid Remap bridge units. */
+  readonly systemctlCommand?: string
+  /** Override the path that is recognized as the setuid Remap bridge. */
+  readonly remapBridgeCommand?: string
+  /** Override transient Remap bridge unit names in tests. */
+  readonly remapUnitNameFactory?: () => string
 }
 
 export function createShellLauncher(
@@ -69,8 +79,9 @@ async function spawnShellLaunch(
   spec: LaunchSpec,
   options: ShellLauncherOptions = {},
 ): Promise<ManagedLaunchResult> {
-  const isSetuidRemapBridge =
-    spec.command === "/run/wrappers/bin/korri-remap-bridge"
+  const remapBridgeCommand =
+    options.remapBridgeCommand ?? SETUID_REMAP_BRIDGE_COMMAND
+  const isSetuidRemapBridge = spec.command === remapBridgeCommand
   // The Remap bridge is a NixOS setuid wrapper whose native driver owns and
   // cleans up the launched child tree. Long-running sessiond/Bun direct spawns
   // on Sobo can enter native-driver.py without the intended root transition,
@@ -79,6 +90,12 @@ async function spawnShellLaunch(
   // ordinary launches.
   const useProcessGroup = options.processGroup === true && !isSetuidRemapBridge
   const setsidCommand = options.setsidCommand ?? DEFAULT_SETSID_COMMAND
+  const systemdRunCommand = options.systemdRunCommand ?? SYSTEMD_RUN_COMMAND
+  const systemctlCommand = options.systemctlCommand ?? SYSTEMCTL_COMMAND
+  const remapUnitName = isSetuidRemapBridge
+    ? (options.remapUnitNameFactory?.() ??
+      `korri-remap-bridge-${crypto.randomUUID()}.service`)
+    : undefined
   const env = launchEnvironment(spec)
   const bridgeEnv = {
     PATH: env.PATH ?? "/run/current-system/sw/bin",
@@ -89,11 +106,14 @@ async function spawnShellLaunch(
   )
   const argv = isSetuidRemapBridge
     ? ([
-        SYSTEMD_RUN_COMMAND,
+        systemdRunCommand,
         "--user",
         "--wait",
         "--collect",
         "--pipe",
+        `--unit=${remapUnitName}`,
+        "--property=KillMode=control-group",
+        "--property=TimeoutStopSec=8s",
         ENV_COMMAND,
         "-i",
         ...envArgs,
@@ -193,6 +213,42 @@ async function spawnShellLaunch(
     }
   }
 
+  const systemctlUser = (...args: readonly string[]) => {
+    if (!remapUnitName) return
+    try {
+      const ctl = Bun.spawn([systemctlCommand, "--user", ...args], {
+        env: env as Record<string, string>,
+        cwd: "/tmp",
+        stdout: "ignore",
+        stderr: "ignore",
+      })
+      void ctl.exited.catch(error => {
+        logger.warn(
+          { err: error, unit: remapUnitName },
+          "shell-launcher: systemctl failed for Remap bridge unit",
+        )
+      })
+    } catch (error) {
+      logger.warn(
+        { err: error, unit: remapUnitName },
+        "shell-launcher: failed to spawn systemctl for Remap bridge unit",
+      )
+    }
+  }
+
+  const terminateRemapBridgeUnit = () => {
+    if (!remapUnitName) return false
+    systemctlUser("stop", remapUnitName)
+    return true
+  }
+
+  const killRemapBridgeUnit = () => {
+    if (!remapUnitName) return false
+    systemctlUser("kill", "--kill-whom=all", "--signal=SIGKILL", remapUnitName)
+    systemctlUser("stop", remapUnitName)
+    return true
+  }
+
   return {
     status: "started",
     result,
@@ -201,10 +257,14 @@ async function spawnShellLaunch(
       processId: proc.pid,
       ...(useProcessGroup ? { processGroupId: proc.pid } : {}),
       exited,
-      terminate: () =>
-        useProcessGroup ? killGroup("SIGTERM") : proc.kill("SIGTERM"),
-      terminateNow: () =>
-        useProcessGroup ? killGroup("SIGKILL") : proc.kill("SIGKILL"),
+      terminate: () => {
+        if (terminateRemapBridgeUnit()) return
+        return useProcessGroup ? killGroup("SIGTERM") : proc.kill("SIGTERM")
+      },
+      terminateNow: () => {
+        if (killRemapBridgeUnit()) return
+        return useProcessGroup ? killGroup("SIGKILL") : proc.kill("SIGKILL")
+      },
     },
   }
 }

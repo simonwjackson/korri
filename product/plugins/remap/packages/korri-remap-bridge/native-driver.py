@@ -45,6 +45,7 @@ RUNNER_USER = "korri-remap-runner"
 DEVICE_PREFIX = "Korri Remap"
 STICK_THRESHOLD = 16000
 DIRTY_CLEANUP_EXIT_CODE = 120
+CHILD_TERMINATE_TIMEOUT_SECONDS = 5
 
 KEY_CODES = {
     "a": 30,
@@ -405,7 +406,7 @@ def main() -> int:
         if child_proc.poll() is None:
             child_proc.terminate()
             try:
-                child_proc.wait(timeout=2)
+                child_proc.wait(timeout=CHILD_TERMINATE_TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired:
                 child_proc.kill()
                 child_proc.wait(timeout=1)

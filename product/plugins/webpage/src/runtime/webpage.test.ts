@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import { createServer } from "node:net"
-import { allocateCdpPort, terminateSpawnedChromium } from "./webpage"
+import {
+  allocateCdpPort,
+  installWebpageTerminationHandlers,
+  terminateSpawnedChromium,
+} from "./webpage"
 
 describe("webpage launch plumbing", () => {
   it("allocates a CDP port that is not a fixed global port", async () => {
@@ -30,5 +34,33 @@ describe("webpage launch plumbing", () => {
     await Bun.sleep(50)
     await terminateSpawnedChromium(proc, 1000)
     expect(await proc.exited).not.toBeNull()
+  })
+
+  it("forwards runtime termination signals to spawned Chromium", async () => {
+    const proc = Bun.spawn(["sh", "-c", "while true; do sleep 1; done"])
+    const listeners = new Map<string, () => void>()
+    let exitCode: number | undefined
+    const dispose = installWebpageTerminationHandlers(proc, {
+      signalHost: {
+        on: (signal, handler) => listeners.set(signal, handler),
+        off: (signal, handler) => {
+          if (listeners.get(signal) === handler) listeners.delete(signal)
+        },
+      },
+      exit: code => {
+        exitCode = code
+      },
+      timeoutMs: 100,
+    })
+
+    listeners.get("SIGTERM")?.()
+
+    expect(await proc.exited).not.toBeNull()
+    for (let attempt = 0; attempt < 20 && exitCode === undefined; attempt += 1) {
+      await Bun.sleep(10)
+    }
+    expect(exitCode).toBe(143)
+    expect(listeners.has("SIGTERM")).toBe(false)
+    dispose()
   })
 })

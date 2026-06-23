@@ -1,6 +1,13 @@
 import { describe, expect, it } from "bun:test"
-import { mkdirSync } from "node:fs"
-import { resolve } from "node:path"
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
 
 import { createShellLauncher } from "./shell-launcher"
 
@@ -239,4 +246,143 @@ describe("createShellLauncher (real Bun.spawn)", () => {
       expect(result.stderrTail).toContain("boom")
     }
   })
+
+  it("routes Remap bridge termination through the named transient user unit", async () => {
+    const fixture = createFakeSystemdFixture()
+    const launcher = createShellLauncher({
+      processGroup: true,
+      remapBridgeCommand: fixture.remapBridgeCommand,
+      remapUnitNameFactory: () => "korri-remap-test.service",
+      systemdRunCommand: fixture.systemdRunCommand,
+      systemctlCommand: fixture.systemctlCommand,
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("shell launcher missing managed spawn")
+    const managed = await spawn({
+      command: fixture.remapBridgeCommand,
+      args: ["--", "/bin/true"],
+      env: { KORRI_TEST_UNIT_DIR: fixture.unitDir },
+    })
+
+    expect(managed.status).toBe("started")
+    if (managed.status === "started") {
+      expect(managed.session.processGroupId).toBeUndefined()
+      managed.session.terminate()
+      const result = await managed.result
+      expect(result.status).toBe("failed")
+      if (result.status === "failed") expect(result.exitCode).toBe(143)
+      expect(readFileSync(fixture.runLog, "utf8")).toContain(
+        "--unit=korri-remap-test.service",
+      )
+      expect(readFileSync(fixture.runLog, "utf8")).toContain(
+        "--property=KillMode=control-group",
+      )
+      expect(readFileSync(fixture.ctlLog, "utf8")).toContain(
+        "--user stop korri-remap-test.service",
+      )
+    }
+  })
+
+  it("force terminates Remap bridge units with SIGKILL before stop", async () => {
+    const fixture = createFakeSystemdFixture()
+    const launcher = createShellLauncher({
+      processGroup: true,
+      remapBridgeCommand: fixture.remapBridgeCommand,
+      remapUnitNameFactory: () => "korri-remap-force-test.service",
+      systemdRunCommand: fixture.systemdRunCommand,
+      systemctlCommand: fixture.systemctlCommand,
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("shell launcher missing managed spawn")
+    const managed = await spawn({
+      command: fixture.remapBridgeCommand,
+      args: ["--", "/bin/true"],
+      env: { KORRI_TEST_UNIT_DIR: fixture.unitDir },
+    })
+
+    expect(managed.status).toBe("started")
+    if (managed.status === "started") {
+      managed.session.terminateNow()
+      const result = await managed.result
+      expect(result.status).toBe("failed")
+      if (result.status === "failed") expect(result.exitCode).toBe(137)
+      const ctlLog = readFileSync(fixture.ctlLog, "utf8")
+      expect(ctlLog).toContain(
+        "--user kill --kill-whom=all --signal=SIGKILL korri-remap-force-test.service",
+      )
+      expect(ctlLog).toContain("--user stop korri-remap-force-test.service")
+    }
+  })
 })
+
+function createFakeSystemdFixture(): {
+  readonly unitDir: string
+  readonly runLog: string
+  readonly ctlLog: string
+  readonly systemdRunCommand: string
+  readonly systemctlCommand: string
+  readonly remapBridgeCommand: string
+} {
+  const root = mkdtempSync(join(tmpdir(), "korri-shell-launcher-"))
+  const unitDir = join(root, "units")
+  mkdirSync(unitDir)
+  const runLog = join(root, "systemd-run.log")
+  const ctlLog = join(root, "systemctl.log")
+  const systemdRunCommand = join(root, "systemd-run")
+  const systemctlCommand = join(root, "systemctl")
+  const remapBridgeCommand = join(root, "korri-remap-bridge")
+
+  writeFileSync(
+    systemdRunCommand,
+    `#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$KORRI_TEST_UNIT_DIR/../systemd-run.log"
+unit=""
+for arg in "$@"; do
+  case "$arg" in
+    --unit=*) unit="\${arg#--unit=}" ;;
+  esac
+done
+if [ -z "$unit" ]; then
+  echo missing unit >&2
+  exit 64
+fi
+while [ ! -e "$KORRI_TEST_UNIT_DIR/$unit.stop" ] && [ ! -e "$KORRI_TEST_UNIT_DIR/$unit.kill" ]; do
+  sleep 0.05
+done
+if [ -e "$KORRI_TEST_UNIT_DIR/$unit.kill" ]; then
+  exit 137
+fi
+exit 143
+`,
+  )
+  writeFileSync(
+    systemctlCommand,
+    `#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$KORRI_TEST_UNIT_DIR/../systemctl.log"
+unit=""
+for arg in "$@"; do
+  unit="$arg"
+done
+case "$*" in
+  *" kill "*) touch "$KORRI_TEST_UNIT_DIR/$unit.kill" ;;
+  *" stop "*) touch "$KORRI_TEST_UNIT_DIR/$unit.stop" ;;
+esac
+exit 0
+`,
+  )
+  writeFileSync(remapBridgeCommand, "#!/bin/sh\nexit 0\n")
+  chmodSync(systemdRunCommand, 0o755)
+  chmodSync(systemctlCommand, 0o755)
+  chmodSync(remapBridgeCommand, 0o755)
+
+  return {
+    unitDir,
+    runLog,
+    ctlLog,
+    systemdRunCommand,
+    systemctlCommand,
+    remapBridgeCommand,
+  }
+}

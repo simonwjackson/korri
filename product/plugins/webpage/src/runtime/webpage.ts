@@ -24,6 +24,7 @@ export interface WebpageLaunch {
   readonly proc: Bun.Subprocess
   readonly cdp: CdpClient
   readonly port: number
+  readonly disposeSignalHandlers: () => void
 }
 
 export interface LaunchWebpageOptions {
@@ -80,6 +81,66 @@ export async function terminateSpawnedChromium(
     proc.kill("SIGKILL")
     await proc.exited
   }
+}
+
+type TerminationSignal = "SIGINT" | "SIGTERM"
+
+interface SignalHost {
+  on: (signal: TerminationSignal, handler: () => void) => unknown
+  off?: (signal: TerminationSignal, handler: () => void) => unknown
+  removeListener?: (signal: TerminationSignal, handler: () => void) => unknown
+}
+
+const TERMINATION_EXIT_CODES: Record<TerminationSignal, number> = {
+  SIGINT: 130,
+  SIGTERM: 143,
+}
+
+export function installWebpageTerminationHandlers(
+  proc: Bun.Subprocess,
+  options: {
+    readonly beforeTerminate?: () => void
+    readonly exit?: (code: number) => void
+    readonly signalHost?: SignalHost
+    readonly timeoutMs?: number
+  } = {},
+): () => void {
+  const signalHost = options.signalHost ?? process
+  const exit = options.exit ?? process.exit
+  const timeoutMs = options.timeoutMs ?? 1000
+  let disposed = false
+  let terminating = false
+  const handlers = new Map<TerminationSignal, () => void>()
+
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    for (const [signal, handler] of handlers) {
+      if (signalHost.off) signalHost.off(signal, handler)
+      else signalHost.removeListener?.(signal, handler)
+    }
+    handlers.clear()
+  }
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    const handler = () => {
+      if (terminating) return
+      terminating = true
+      void (async () => {
+        try {
+          options.beforeTerminate?.()
+          await terminateSpawnedChromium(proc, timeoutMs)
+        } finally {
+          dispose()
+          exit(TERMINATION_EXIT_CODES[signal])
+        }
+      })()
+    }
+    handlers.set(signal, handler)
+    signalHost.on(signal, handler)
+  }
+
+  return dispose
 }
 
 function spawnEnv(
@@ -141,6 +202,9 @@ export async function launchWebpage(
   )
 
   let cdp: CdpClient | undefined
+  const disposeSignalHandlers = installWebpageTerminationHandlers(proc, {
+    beforeTerminate: () => cdp?.close(),
+  })
   try {
     cdp = await connectCdp(port)
     if (
@@ -152,8 +216,9 @@ export async function launchWebpage(
       }
       await cdp.send("Page.navigate", { url })
     }
-    return { proc, cdp, port }
+    return { proc, cdp, port, disposeSignalHandlers }
   } catch (error) {
+    disposeSignalHandlers()
     cdp?.close()
     await terminateSpawnedChromium(proc)
     throw error
