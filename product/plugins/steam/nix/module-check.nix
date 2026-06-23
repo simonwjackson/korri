@@ -142,6 +142,7 @@ let
   fexRootfsUnit = enabled.systemd.services.korri-steam-prepare-fex-rootfs or { };
   runtimePrepUnit = enabled.systemd.services.korri-steam-runtime-prep or { };
   runtimePrepPath = enabled.systemd.paths.korri-steam-runtime-prep or { };
+  udevRules = enabled.services.udev.extraRules or "";
   systemPackageNames = cfg: map (pkg: pkg.name or "") cfg.environment.systemPackages;
   sudoCommands = lib.flatten (
     map (rule: map (command: command.command or "") (rule.commands or [ ])) (
@@ -217,6 +218,15 @@ let
       && builtins.elem "multi-user.target" (uinputUnit.wantedBy or [ ])
       && lib.hasInfix "korri-steam-ensure-uinput" (serviceExec uinputUnit)
     ))
+    (check "Steam Input devices are isolated behind a Steam-only group" (
+      builtins.hasAttr "korri-steam-input" enabled.users.groups
+      && lib.hasInfix "KERNEL==\"uinput\"" udevRules
+      && lib.hasInfix "GROUP=\"korri-steam-input\"" udevRules
+      && lib.hasInfix "ATTRS{id/vendor}==\"28de\"" udevRules
+      && lib.hasInfix "ATTRS{id/product}==\"11ff\"" udevRules
+      && lib.hasInfix "TAG-=\"uaccess\"" udevRules
+      && lib.hasInfix "setfacl -b $env{DEVNAME}" udevRules
+    ))
     (check "seed service downloads ARM64 Steam payloads before launch" (
       enabled.systemd.services ? korri-steam-seed
       && builtins.elem "multi-user.target" (seedUnit.wantedBy or [ ])
@@ -230,33 +240,38 @@ let
       && (seedUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
       && lib.hasInfix "steam-arm64-seed --apply" (serviceExec seedUnit)
     ))
-    (check "gamescoped launch service carries Korri identity, gamescope, and Steam Big Picture flags" (
+    (check "gamescoped launch service carries Korri identity, gamescope, and SteamOS flags" (
       enabled.systemd.services ? korri-steam-gamescope
       && (gamescopedSteamUnit.serviceConfig.User or null) == "korri"
       && (gamescopedSteamUnit.serviceConfig.Group or null) == "korri"
+      && builtins.elem "korri-steam-input" (gamescopedSteamUnit.serviceConfig.SupplementaryGroups or [ ])
       && (gamescopedSteamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
       && (gamescopedSteamUnit.serviceConfig.LimitNOFILE or null) == 524288
       && (gamescopedSteamUnit.environment.GAMESCOPE_WAYLAND_DISPLAY or null) == "gamescope-0"
       && (gamescopedSteamUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
       && lib.hasInfix "gamescope" (serviceExec gamescopedSteamUnit)
       && lib.hasInfix "korri-steam-guest" (serviceExec gamescopedSteamUnit)
-      && lib.hasInfix "-gamepadui" (serviceExec gamescopedSteamUnit)
+      && !(lib.hasInfix "-gamepadui" (serviceExec gamescopedSteamUnit))
       && lib.hasInfix "-steamos3" (serviceExec gamescopedSteamUnit)
       && lib.hasInfix "-steampal" (serviceExec gamescopedSteamUnit)
       && lib.hasInfix "-steamdeck" (serviceExec gamescopedSteamUnit)
+      && !(lib.hasInfix " -O DSI-" (serviceExec gamescopedSteamUnit))
       && builtins.elem "korri-steam.service" (gamescopedSteamUnit.conflicts or [ ])
       && builtins.elem "korri-steam-seed.service" (gamescopedSteamUnit.after or [ ])
       && builtins.elem "korri-steam-runtime-prep.service" (gamescopedSteamUnit.after or [ ])
     ))
-    (check "legacy non-gamescoped launch service remains separate from AppID launches" (
+    (check "non-gamescoped Steam service carries launch identity and prep dependencies" (
       enabled.systemd.services ? korri-steam
       && (steamUnit.serviceConfig.User or null) == "korri"
       && (steamUnit.serviceConfig.Group or null) == "korri"
+      && builtins.elem "korri-steam-input" (steamUnit.serviceConfig.SupplementaryGroups or [ ])
       && (steamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
       && (steamUnit.serviceConfig.LimitNOFILE or null) == 524288
       && lib.hasInfix "korri-steam-guest" (serviceExec steamUnit)
       && builtins.elem "korri-steam-seed.service" (steamUnit.after or [ ])
       && builtins.elem "korri-steam-seed.service" (steamUnit.wants or [ ])
+      && builtins.elem "korri-steam-runtime-prep.service" (steamUnit.after or [ ])
+      && builtins.elem "korri-steam-runtime-prep.service" (steamUnit.wants or [ ])
     ))
     (check "launch service exports the Korri user session environment" (
       (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"

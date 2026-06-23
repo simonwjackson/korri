@@ -21,11 +21,14 @@ let
   runtime = config.services.korri.runtime;
   cfg = config.services.korri.steam;
   korriPulseServer = "unix:/run/user/${toString runtime.uid}/pulse/native";
+  steamInputGroup = "korri-steam-input";
 
   defaultSteamArgs = [
-    # Keep Steam in Deck-compatible mode for ARM64 AppID forwarding, but do not
-    # enable Big Picture/gamepad UI: its rootless Xwayland surface can bleed
-    # through over foreground Proton games on the Thor kiosk display.
+    # Keep Steam in SteamOS/Deck-compatible mode for ARM64 AppID forwarding and
+    # Steam Input, but do not enable Big Picture/gamepad UI: it consumes
+    # controller input globally even when hidden or unfocused.
+    "-steamos3"
+    "-steampal"
     "-steamdeck"
     "-silent"
     "-nochatui"
@@ -46,8 +49,9 @@ let
     }
 
     make_accessible() {
-      ${pkgs.coreutils}/bin/chgrp input /dev/uinput 2>/dev/null || true
+      ${pkgs.coreutils}/bin/chgrp ${steamInputGroup} /dev/uinput 2>/dev/null || true
       ${pkgs.coreutils}/bin/chmod 0660 /dev/uinput 2>/dev/null || true
+      ${pkgs.acl}/bin/setfacl -b /dev/uinput 2>/dev/null || true
     }
 
     if [ -c /dev/uinput ]; then
@@ -365,8 +369,8 @@ let
       # The seed fetches the minimal ARM64 client. A first real Steam launch
       # must be allowed to run Valve's bootstrap/update path once, otherwise
       # steamui can load against an incomplete libvideo/libavutil set. Apply
-      # this to explicit gamescoped Big Picture invocations too; AppID URL
-      # forwards do not contain these client bootstrap suppressors.
+      # this to explicit Steam client invocations too; AppID URL forwards do
+      # not contain these client bootstrap suppressors.
       filtered=()
       for arg in "$@"; do
         case "$arg" in
@@ -416,8 +420,8 @@ let
     esac
 
     case "$1" in
-      start) exec ${pkgs.systemd}/bin/systemctl --no-block start korri-steam-gamescope.service ;;
-      stop) exec ${pkgs.coreutils}/bin/timeout 30 ${pkgs.systemd}/bin/systemctl stop korri-steam-gamescope.service ;;
+      start) exec ${pkgs.systemd}/bin/systemctl --no-block start korri-steam.service ;;
+      stop) exec ${pkgs.coreutils}/bin/timeout 30 ${pkgs.systemd}/bin/systemctl stop korri-steam.service ;;
     esac
   '';
 
@@ -484,10 +488,9 @@ let
     launch_timeout="''${KORRI_STEAM_APP_LAUNCH_TIMEOUT:-180}"
     forward_timeout="''${KORRI_STEAM_APP_FORWARD_TIMEOUT:-15}"
     service_ready_timeout="''${KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-90}"
-    service_name="''${KORRI_STEAM_SERVICE:-korri-steam-gamescope.service}"
+    service_name="''${KORRI_STEAM_SERVICE:-korri-steam.service}"
     gamescope_display="''${GAMESCOPE_WAYLAND_DISPLAY:-gamescope-0}"
     gamescope_socket="$XDG_RUNTIME_DIR/$gamescope_display"
-    target_output="''${KORRI_STEAM_APP_OUTPUT:-DSI-2}"
     target_audio_sink="''${KORRI_STEAM_AUDIO_SINK:-${cfg.appAudioSinkName}}"
     keep_steam_visible="''${KORRI_STEAM_KEEP_VISIBLE:-${
       if cfg.keepVisibleDuringLaunch then "1" else "0"
@@ -517,12 +520,7 @@ let
     }
 
     focus_korri_output() {
-      sway "focus output $target_output"
       sway '[class="ElectrobunKitchenSink-dev"] focus, fullscreen enable'
-    }
-
-    steam_big_picture_window_present() {
-      sway_tree | ${pkgs.gnugrep}/bin/grep -a -E '"(name|title)": "Steam Big Picture Mode"|"class": "steam"|"app_id": "steam"' >/dev/null 2>&1
     }
 
     hide_steam_hat() {
@@ -530,13 +528,12 @@ let
         echo "korri-steam-app: leaving Steam visible for Steam launch debugging" >&2
         return 0
       fi
-      # Steam Big Picture can change title during startup and can leave a
-      # rootless Xwayland surface behind if it remains fullscreen while the game
-      # appears. Disable fullscreen first, then scratchpad every Steam client
-      # window class we can address through Sway.
+      # Steam can change title during startup and can leave a rootless Xwayland
+      # surface behind if it remains fullscreen while the game appears. Disable
+      # fullscreen first, then scratchpad every Steam client window class we can
+      # address through Sway.
       sway '[class="steam"] fullscreen disable, floating enable, move scratchpad'
       sway '[app_id="steam"] fullscreen disable, floating enable, move scratchpad'
-      sway '[title="Steam Big Picture Mode"] fullscreen disable, floating enable, move scratchpad'
       focus_korri_output
     }
 
@@ -550,7 +547,7 @@ let
       while [ "$i" -lt 30 ]; do
         if sway_tree | ${pkgs.gnugrep}/bin/grep -a -F "\"class\": \"steam_app_$appid\"" >/dev/null 2>&1; then
           sway "[class=\"steam_app_$appid\"] scratchpad show"
-          sway "[class=\"steam_app_$appid\"] floating disable, move to workspace 1, move to output $target_output, fullscreen enable, focus"
+          sway "[class=\"steam_app_$appid\"] floating disable, move to workspace 1, fullscreen enable, focus"
           return 0
         fi
         i=$((i + 1))
@@ -596,7 +593,7 @@ let
         esac
         return $?
       fi
-      if [ "$service_name" != "korri-steam-gamescope.service" ]; then
+      if [ "$service_name" != "korri-steam.service" ]; then
         echo "korri-steam-app: warning: cannot $action overridden service $service_name without root" >&2
         return 1
       fi
@@ -644,23 +641,20 @@ let
       ${pkgs.findutils}/bin/find "$STEAM_HOME/userdata" -mindepth 3 -maxdepth 3 -path '*/config/localconfig.vdf' -type f -print 2>/dev/null || true
     }
 
-    wait_for_gamescoped_steam_ready() {
+    wait_for_steam_ready() {
       ready_deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + service_ready_timeout ))
       while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$ready_deadline" ]; do
         ready_log=""
         if [ -f "$console_log" ]; then
           if [ "$service_was_active" -eq 1 ]; then
-            # A deliberately prewarmed gamescoped Steam session emits its
-            # readiness lines before this AppID wrapper starts; accept the
-            # existing log evidence as long as the gamescope socket is present.
+            # A deliberately prewarmed Steam session emits its readiness lines
+            # before this AppID wrapper starts; accept the existing evidence.
             ready_log="$(${pkgs.coreutils}/bin/cat "$console_log" 2>/dev/null || true)"
           else
             ready_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
           fi
         fi
-        if [ -S "$gamescope_socket" ] \
-          && steam_big_picture_window_present \
-          && printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
+        if printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
           return 0
         fi
         service_state="$(steam_service_state)"
@@ -674,13 +668,13 @@ let
 
     if ! ${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
       if ! control_steam_service start; then
-        echo "korri-steam-app: could not start gamescoped Steam service $service_name" >&2
+        echo "korri-steam-app: could not start Steam service $service_name" >&2
         exit 125
       fi
     fi
 
-    if ! wait_for_gamescoped_steam_ready; then
-      echo "korri-steam-app: timed out waiting for gamescoped Steam readiness before AppID launch" >&2
+    if ! wait_for_steam_ready; then
+      echo "korri-steam-app: timed out waiting for Steam readiness before AppID launch" >&2
       exit 125
     fi
 
@@ -690,7 +684,7 @@ let
     focus_korri_output
     hide_steam_hat
     if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest "steam://rungameid/$appid" >/dev/null; then
-      echo "korri-steam-app: timed out forwarding AppID $appid to gamescoped Steam" >&2
+      echo "korri-steam-app: timed out forwarding AppID $appid to Steam" >&2
       exit 125
     fi
     hide_steam_hat
@@ -868,6 +862,16 @@ in
       fexRootfsPreparer
     ];
 
+    users.groups.${steamInputGroup} = { };
+
+    services.udev.extraRules = lib.mkAfter ''
+      # Steam Input's virtual Xbox pads are only for Steam and Steam-launched
+      # games. Keep them out of the generic Korri/user input ACL so a warm Steam
+      # client cannot leak a dead 28de:11ff pad into non-Steam apps.
+      KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="${steamInputGroup}", MODE="0660", TAG-="uaccess", TAG-="seat"
+      SUBSYSTEM=="input", KERNEL=="event*", ATTRS{id/vendor}=="28de", ATTRS{id/product}=="11ff", GROUP="${steamInputGroup}", MODE="0660", TAG-="uaccess", TAG-="seat", RUN+="${pkgs.acl}/bin/setfacl -b $env{DEVNAME}"
+    '';
+
     environment.sessionVariables.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
     systemd.user.services.korrid.environment.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
 
@@ -994,7 +998,7 @@ in
     };
 
     systemd.services.korri-steam-gamescope = {
-      description = "Launch Korri guest-native Steam Big Picture inside gamescope";
+      description = "Launch Korri guest-native Steam inside gamescope";
       after = [
         "korri-steam-uinput.service"
         "korri-steam-seed.service"
@@ -1026,9 +1030,10 @@ in
         Type = "simple";
         User = runtime.user;
         Group = runtime.group;
+        SupplementaryGroups = [ steamInputGroup ];
         WorkingDirectory = cfg.home;
         LimitNOFILE = 524288;
-        ExecStart = "${pkgs.gamescope}/bin/gamescope -e -f -W 1920 -H 1080 -O DSI-2 -- ${steamLauncher}/bin/korri-steam-guest -gamepadui -steamos3 -steampal -steamdeck -silent -nochatui -nofriendsui -forcedesktopscaling 1.5 -noverifyfiles -nobootstrapupdate -skipinitialbootstrap -norepairfiles";
+        ExecStart = "${pkgs.gamescope}/bin/gamescope -e -f -W 1920 -H 1080 -- ${steamLauncher}/bin/korri-steam-guest -steamos3 -steampal -steamdeck -silent -nochatui -nofriendsui -forcedesktopscaling 1.5 -noverifyfiles -nobootstrapupdate -skipinitialbootstrap -norepairfiles";
         Restart = "on-failure";
         RestartSec = "2s";
       };
@@ -1040,11 +1045,13 @@ in
         "korri-steam-uinput.service"
         "korri-steam-seed.service"
         "korri-steam-prepare-fex-rootfs.service"
+        "korri-steam-runtime-prep.service"
       ];
       wants = [
         "korri-steam-uinput.service"
         "korri-steam-seed.service"
         "korri-steam-prepare-fex-rootfs.service"
+        "korri-steam-runtime-prep.service"
       ];
       environment = {
         HOME = runtime.home;
@@ -1063,6 +1070,7 @@ in
         Type = "simple";
         User = runtime.user;
         Group = runtime.group;
+        SupplementaryGroups = [ steamInputGroup ];
         WorkingDirectory = cfg.home;
         LimitNOFILE = 524288;
         ExecStart = "${steamLauncher}/bin/korri-steam-guest";

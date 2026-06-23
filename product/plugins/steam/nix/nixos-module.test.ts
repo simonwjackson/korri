@@ -39,32 +39,50 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
-  it("routes AppID launches through the gamescoped Steam Big Picture service", () => {
+  it("routes AppID launches through a warm SteamOS desktop client", () => {
     expect(moduleSource).toContain(
-      `service_name="''\${KORRI_STEAM_SERVICE:-korri-steam-gamescope.service}"`,
+      `service_name="''\${KORRI_STEAM_SERVICE:-korri-steam.service}"`,
     )
-    expect(moduleSource).toContain("systemd.services.korri-steam-gamescope")
-    expect(moduleSource).toContain("gamescope")
-    expect(moduleSource).toContain("-gamepadui")
+    expect(moduleSource).toContain("systemd.services.korri-steam")
     expect(moduleSource).toContain("-steamos3")
     expect(moduleSource).toContain("-steampal")
     expect(moduleSource).toContain("-steamdeck")
+    expect(moduleSource).toContain("-silent")
+    expect(moduleSource).not.toContain("-gamepadui")
     expect(moduleSource).not.toContain("starting Steam directly without sudo")
     expect(moduleSource).not.toContain("direct_steam_pid")
   })
 
-  it("requires gamescope and Big Picture evidence before forwarding an AppID", () => {
-    expect(moduleSource).toContain("wait_for_gamescoped_steam_ready")
-    expect(moduleSource).toContain("GAMESCOPE_WAYLAND_DISPLAY")
-    expect(moduleSource).toContain("gamescope-0")
-    expect(moduleSource).toContain("steam_big_picture_window_present")
-    expect(moduleSource).toContain("Steam Big Picture Mode")
+  it("does not pin Steam or game windows to a physical display output", () => {
+    expect(moduleSource).not.toContain("KORRI_STEAM_APP_OUTPUT")
+    expect(moduleSource).not.toContain("-O DSI-")
+    expect(moduleSource).not.toContain("focus output")
+    expect(moduleSource).not.toContain("move to output")
+  })
+
+  it("scopes Steam Input devices away from generic app input", () => {
+    expect(moduleSource).toContain('steamInputGroup = "korri-steam-input"')
+    expect(moduleSource).toContain("users.groups.${steamInputGroup}")
+    expect(moduleSource).toContain("services.udev.extraRules = lib.mkAfter")
+    expect(moduleSource).toContain('KERNEL=="uinput"')
+    expect(moduleSource).toContain('ATTRS{id/vendor}=="28de"')
+    expect(moduleSource).toContain('ATTRS{id/product}=="11ff"')
+    expect(moduleSource).toContain('TAG-="uaccess"')
+    expect(moduleSource).toContain("setfacl -b $env{DEVNAME}")
+    expect(moduleSource).toContain("SupplementaryGroups = [ steamInputGroup ]")
+  })
+
+  it("requires warm Steam readiness before forwarding an AppID", () => {
+    expect(moduleSource).toContain("wait_for_steam_ready")
     expect(moduleSource).toContain("Waiting for compat in post-logon")
+    expect(moduleSource).toContain("Loaded Config for Local Selection Path")
+    expect(moduleSource).not.toContain("steam_big_picture_window_present")
+    expect(moduleSource).not.toContain("Steam Big Picture Mode")
     expect(moduleSource).not.toContain(
       "Console Log Start|Waiting for compat in post-logon",
     )
     expect(moduleSource).toContain(
-      "timed out waiting for gamescoped Steam readiness before AppID launch",
+      "timed out waiting for Steam readiness before AppID launch",
     )
   })
 
@@ -79,31 +97,31 @@ describe("Steam plugin Nix module", () => {
       /\n\s+if ! \$\{pkgs\.systemd\}\/bin\/systemctl is-active --quiet/,
     )
     expect(moduleSource).not.toContain(
-      "gamescoped Steam service is not active after start",
+      "Steam service is not active after start",
     )
   })
 
   it("bounds AppID URL forwarding before launch observation", () => {
     expect(moduleSource).toContain("KORRI_STEAM_APP_FORWARD_TIMEOUT")
     expect(moduleSource).toContain(
-      "timed out forwarding AppID $appid to gamescoped Steam",
+      "timed out forwarding AppID $appid to Steam",
     )
   })
 
-  it("accepts existing readiness evidence for prewarmed gamescoped Steam", () => {
+  it("accepts existing readiness evidence for prewarmed Steam", () => {
     expect(moduleSource).toContain("service_was_active=0")
     expect(moduleSource).toContain("service_was_active=1")
     expect(moduleSource).toContain(
-      "A deliberately prewarmed gamescoped Steam session emits its",
+      "A deliberately prewarmed Steam session emits its",
     )
     expect(moduleSource).toContain(
       'ready_log="$(' + "$" + "{pkgs.coreutils}/bin/cat",
     )
   })
 
-  it("lets the gamescoped Big Picture service run first-launch bootstrap repair", () => {
+  it("lets managed Steam services run first-launch bootstrap repair", () => {
     expect(moduleSource).toContain(
-      "Apply\n      # this to explicit gamescoped Big Picture invocations too",
+      "Apply\n      # this to explicit Steam client invocations too",
     )
     expect(moduleSource).toContain("set -- \"''" + "$" + '{filtered[@]}"')
     expect(moduleSource).toContain(
