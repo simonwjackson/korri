@@ -15,7 +15,7 @@ describe("@korri:web-canvas plugin", () => {
     expect(launchers.chromium).toMatchObject({
       id: KORRI_WEB_CANVAS_LAUNCHER_ID,
       command: "korri-web-canvas",
-      args: ["{target}"],
+      args: ["--settings-json={settings.plugin}", "{target}"],
       env: { KORRI_WEB_CANVAS_SETTINGS: "{settings.plugin}" },
     })
     expect(launchers.chromium).not.toHaveProperty("plugin")

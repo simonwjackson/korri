@@ -35,6 +35,7 @@ stdenvNoCC.mkDerivation {
     cp -R plugins "$out/share/korri-web-canvas/plugins"
     makeWrapper ${lib.getExe bun} "$out/bin/korri-web-canvas" \
       --add-flags "$out/share/korri-web-canvas/plugins/web-canvas/src/runtime/korri-web-canvas.ts" \
+      --add-flags "--chromium=${lib.getExe chromium}" \
       --set-default KORRI_WEBPAGE_CHROMIUM ${lib.getExe chromium}
     runHook postInstall
   '';

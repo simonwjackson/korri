@@ -30,7 +30,7 @@ export const webCanvasPlugin = plugin({
         [KORRI_WEB_CANVAS_LAUNCHER_LOCAL_ID]: {
           id: KORRI_WEB_CANVAS_LAUNCHER_ID,
           command: "korri-web-canvas",
-          args: ["{target}"],
+          args: ["--settings-json={settings.plugin}", "{target}"],
           settings: { plugin: {} },
           env: { KORRI_WEB_CANVAS_SETTINGS: "{settings.plugin}" },
           policy: {
