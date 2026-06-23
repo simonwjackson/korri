@@ -217,6 +217,9 @@ let
       (check "${name}: compositor uses logind runtime" (
         compositor.runtimeDir == "%t" && compositor.home == "/home/korri"
       ))
+      (check "${name}: Bandai DSI panel keeps the known-good rotation" (
+        lib.hasInfix "output DSI-1 transform 270" compositor.sway.extraConfig
+      ))
       (check "${name}: SM8550 DRM is tagged for logind seats" (
         lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' cfg.services.udev.extraRules
       ))
