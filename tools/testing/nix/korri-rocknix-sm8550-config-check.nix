@@ -78,6 +78,10 @@ let
       platformDefaults = cfg.services.korri.daemon.library.platformDefaults or { };
       hostDefaults = platformDefaults.host or { };
       retroarchPolicy = (hostDefaults.plugin or { })."@korri:retroarch" or { };
+      webCanvasPlatformLauncher = lib.attrByPath [
+        "launchers"
+        "@korri:web-canvas/chromium"
+      ] { } platformDefaults;
       yfsPlatformLauncher = lib.attrByPath [
         "launchers"
         "@korri:yoshis-fabrication-station/level"
@@ -179,6 +183,8 @@ let
         lib.hasInfix "@korri:neverball" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "@korri:remap" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "@korri:turnip" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
+        && lib.hasInfix "@korri:webpage" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
+        && lib.hasInfix "@korri:web-canvas" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "@korri:yoshis-fabrication-station" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasPrefix "/" (daemonEnv.KORRI_NIX_COMMAND or "")
         && lib.hasSuffix "/bin/nix" (daemonEnv.KORRI_NIX_COMMAND or "")
@@ -327,10 +333,33 @@ let
         hasPackagePname "yoshis-fabrication-station" cfg.environment.systemPackages
         && hasPackagePname "yoshis-fabrication-station" sessiond.path
       ))
+      (check "${name}: web-canvas launcher is installed and available to sessiond" (
+        hasPackagePname "korri-web-canvas" cfg.environment.systemPackages
+        && hasPackagePname "korri-web-canvas" sessiond.path
+      ))
       (check "${name}: Remap native wrapper is enabled for launch-scoped controls" (
         (cfg.services.korri.remap.enable or false)
         && cfg.security.wrappers ? korri-remap-bridge
         && hasPackagePname "korri-remap-bridge" cfg.environment.systemPackages
+      ))
+      (check "${name}: web-canvas launcher carries SM8550 browser env through argv" (
+        !(webCanvasPlatformLauncher ? plugin)
+        && (webCanvasPlatformLauncher.command or null) == "korri-web-canvas"
+        && (webCanvasPlatformLauncher.args or [ ]) == [
+          "--settings-json={settings.plugin}"
+          "--browser-env=XDG_RUNTIME_DIR=/run/user/2000"
+          "--browser-env=PULSE_SERVER=unix:/run/user/2000/pulse/native"
+          "--browser-env=WAYLAND_DISPLAY=wayland-1"
+          "--browser-env=HOME=/tmp"
+          "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"
+          "--browser-env=USER=korri-remap-runner"
+          "--browser-env=LOGNAME=korri-remap-runner"
+          "{target}"
+        ]
+        && (webCanvasPlatformLauncher.env.KORRI_WEB_CANVAS_SETTINGS or null) == "{settings.plugin}"
+        && builtins.elem "korri-web-canvas" (webCanvasPlatformLauncher.policy.allowedCommands or [ ])
+        && builtins.elem "chromium" (webCanvasPlatformLauncher.policy.allowedCommands or [ ])
+        && (webCanvasPlatformLauncher.settings.plugin or null) == { }
       ))
       (check "${name}: YFS platform launcher override remains launchable" (
         !(yfsPlatformLauncher ? plugin)
@@ -339,6 +368,7 @@ let
           "--settings-json={settings.plugin}"
           "--cache-root=/tmp/korri-remap-runner-yfs-cache"
           "--browser-env=XDG_RUNTIME_DIR=/run/user/2000"
+          "--browser-env=PULSE_SERVER=unix:/run/user/2000/pulse/native"
           "--browser-env=WAYLAND_DISPLAY=wayland-1"
           "--browser-env=HOME=/tmp"
           "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"

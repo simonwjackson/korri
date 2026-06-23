@@ -18,9 +18,10 @@ let
   gamescopePackage = korri.packages.${targetSystem}.gamescope-korri;
   ryubingPackage = korri.packages.${targetSystem}.ryubing-korri;
   yfsPackage = korri.packages.${targetSystem}.yoshis-fabrication-station;
+  webCanvasPackage = korri.packages.${targetSystem}.korri-web-canvas;
   box64RuntimePackage = korri.packages.${targetSystem}.korri-box64-runtime or pkgs.box64;
   gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
-  enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:mega-man-rock-n-roll,@korri:neverball,@korri:remap,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:xjlt,@korri:yoshis-fabrication-station,@korri:zquest-classic";
+  enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:mega-man-rock-n-roll,@korri:neverball,@korri:remap,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:webpage,@korri:web-canvas,@korri:xjlt,@korri:yoshis-fabrication-station,@korri:zquest-classic";
   moonlightRuntimeSettingsEnvironment = {
     # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
     # These are intentionally enumerated and preserved as Moonlight process env
@@ -377,12 +378,36 @@ let
   # JavaScript. Device-specific YFS presentation settings belong in device
   # YAML, not in this platform adapter.
   sm8550PlatformDefaults = {
+    launchers."@korri:web-canvas/chromium" = {
+      command = "korri-web-canvas";
+      args = [
+        "--settings-json={settings.plugin}"
+        "--browser-env=XDG_RUNTIME_DIR=${korriRuntimeDir}"
+        "--browser-env=PULSE_SERVER=unix:${korriRuntimeDir}/pulse/native"
+        "--browser-env=WAYLAND_DISPLAY=wayland-1"
+        "--browser-env=HOME=/tmp"
+        "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"
+        "--browser-env=USER=korri-remap-runner"
+        "--browser-env=LOGNAME=korri-remap-runner"
+        "{target}"
+      ];
+      systems = [ "web" ];
+      env.KORRI_WEB_CANVAS_SETTINGS = "{settings.plugin}";
+      policy.allowedCommands = [
+        "korri-web-canvas"
+        "korri-webpage"
+        "chromium"
+      ];
+      settings.plugin = { };
+    };
+
     launchers."@korri:yoshis-fabrication-station/level" = {
       command = "yfs-launch";
       args = [
         "--settings-json={settings.plugin}"
         "--cache-root=/tmp/korri-remap-runner-yfs-cache"
         "--browser-env=XDG_RUNTIME_DIR=${korriRuntimeDir}"
+        "--browser-env=PULSE_SERVER=unix:${korriRuntimeDir}/pulse/native"
         "--browser-env=WAYLAND_DISPLAY=wayland-1"
         "--browser-env=HOME=/tmp"
         "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"
@@ -712,6 +737,7 @@ in
       default_border none
 
       ${sm8550.display.swayDeviceConfig}
+
     '';
   };
 
@@ -748,6 +774,7 @@ in
       box64RuntimePackage
       pkgs.moonlight-embedded
       yfsPackage
+      webCanvasPackage
     ];
     extraEnvironment =
       moonlightSessiondEnvironment
@@ -824,5 +851,6 @@ in
     substratePackages.cemu
     ryubingPackage
     yfsPackage
+    webCanvasPackage
   ];
 }
