@@ -42,7 +42,9 @@ export function createLabRouter(options: CreateLabRouterOptions = {}) {
 function LabIndexRedirect() {
   const router = useRouter()
   useEffect(() => {
-    router.history.replace(buildLabPath("all", defaultLabSurfaceAdapterId(), "/"))
+    router.history.replace(
+      buildLabPath("all", defaultLabSurfaceAdapterId(), "/"),
+    )
   }, [router])
   return null
 }
@@ -66,7 +68,9 @@ function LabRoute() {
         setDevicesSegment: nextDevices =>
           router.history.push(buildLabPath(nextDevices, themeId, surfacePath)),
         setThemeId: nextTheme =>
-          router.history.push(buildLabPath(devicesSegment, nextTheme, surfacePath)),
+          router.history.push(
+            buildLabPath(devicesSegment, nextTheme, surfacePath),
+          ),
         setSurfacePath: nextSurfacePath =>
           router.history.push(
             buildLabPath(devicesSegment, themeId, nextSurfacePath),

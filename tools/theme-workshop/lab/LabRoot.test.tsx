@@ -38,9 +38,9 @@ function makeAdapter() {
     makeSeedInitialValues: async () => ({ seed: true }),
     mountSurface: (host, { history }) => {
       if (!history) throw new Error("expected controlled history")
-      const deviceId = host.closest("[data-lab-device-id]")?.getAttribute(
-        "data-lab-device-id",
-      )
+      const deviceId = host
+        .closest("[data-lab-device-id]")
+        ?.getAttribute("data-lab-device-id")
       if (!deviceId) throw new Error("expected device wrapper")
       histories.set(deviceId, history)
       mountCounts.set(deviceId, (mountCounts.get(deviceId) ?? 0) + 1)

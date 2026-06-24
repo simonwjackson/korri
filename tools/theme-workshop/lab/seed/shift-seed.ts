@@ -35,4 +35,6 @@ export async function makeSeedInitialValues() {
   ] as const
 }
 
-export type SeedInitialValues = Awaited<ReturnType<typeof makeSeedInitialValues>>
+export type SeedInitialValues = Awaited<
+  ReturnType<typeof makeSeedInitialValues>
+>

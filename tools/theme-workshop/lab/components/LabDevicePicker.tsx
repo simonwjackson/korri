@@ -1,10 +1,15 @@
-import { deviceSegmentForSelection, type DeviceSelection } from "../lab-route-state"
+import {
+  deviceSegmentForSelection,
+  type DeviceSelection,
+} from "../lab-route-state"
 import { useLab } from "../Lab.context"
 
 export function LabDevicePicker() {
   const { devices, selection, setDevicesSegment } = useLab()
   const selected =
-    selection.kind === "all" ? new Set(devices.map(device => device.id)) : new Set(selection.ids)
+    selection.kind === "all"
+      ? new Set(devices.map(device => device.id))
+      : new Set(selection.ids)
 
   const toggleDevice = (id: string) => {
     if (selection.kind === "all") {
@@ -20,15 +25,25 @@ export function LabDevicePicker() {
       .map(device => device.id)
       .filter(deviceId => next.has(deviceId))
     const nextSelection: DeviceSelection =
-      orderedIds.length === 0 ? { kind: "all" } : { kind: "set", ids: orderedIds }
-    setDevicesSegment(deviceSegmentForSelection(nextSelection, devices.map(device => device.id)))
+      orderedIds.length === 0
+        ? { kind: "all" }
+        : { kind: "set", ids: orderedIds }
+    setDevicesSegment(
+      deviceSegmentForSelection(
+        nextSelection,
+        devices.map(device => device.id),
+      ),
+    )
   }
 
   return (
     <div className="lab-focus" aria-label="Device selection">
       <button
         type="button"
-        className={cx("lab-focus-tab", selection.kind === "all" ? "on" : undefined)}
+        className={cx(
+          "lab-focus-tab",
+          selection.kind === "all" ? "on" : undefined,
+        )}
         aria-pressed={selection.kind === "all"}
         onClick={() => setDevicesSegment("all")}
       >
@@ -38,7 +53,10 @@ export function LabDevicePicker() {
         <button
           key={device.id}
           type="button"
-          className={cx("lab-focus-tab", selected.has(device.id) ? "on" : undefined)}
+          className={cx(
+            "lab-focus-tab",
+            selected.has(device.id) ? "on" : undefined,
+          )}
           aria-pressed={selected.has(device.id)}
           onClick={() => toggleDevice(device.id)}
         >

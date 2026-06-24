@@ -12,7 +12,10 @@ export function LabThemePicker({
   return (
     <label className="lab-route-control">
       <span>Theme</span>
-      <select value={themeId} onChange={event => setThemeId(event.target.value)}>
+      <select
+        value={themeId}
+        onChange={event => setThemeId(event.target.value)}
+      >
         {adapters.map(adapter => (
           <option key={adapter.id} value={adapter.id}>
             {adapter.id}

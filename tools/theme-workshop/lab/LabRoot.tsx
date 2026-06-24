@@ -9,10 +9,7 @@ import { LabDevicePicker } from "./components/LabDevicePicker"
 import { LabRouteBar } from "./components/LabRouteBar"
 import { LabStage } from "./components/LabStage"
 import { LabThemePicker } from "./components/LabThemePicker"
-import {
-  labSurfaceAdapters,
-  type LabSurfaceAdapter,
-} from "./surface-registry"
+import { labSurfaceAdapters, type LabSurfaceAdapter } from "./surface-registry"
 
 export interface LabRouteState {
   readonly devicesSegment: string
@@ -35,7 +32,9 @@ export function LabRoot({
   readonly navigation: LabNavigation
   readonly adapters?: readonly LabSurfaceAdapter[]
 }) {
-  const adapter = adapters.find(candidate => candidate.id === routeState.themeId)
+  const adapter = adapters.find(
+    candidate => candidate.id === routeState.themeId,
+  )
   const [initialValues, setInitialValues] = useState<unknown>(null)
   const [error, setError] = useState<Error | null>(null)
 

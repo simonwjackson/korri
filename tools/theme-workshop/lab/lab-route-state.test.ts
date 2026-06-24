@@ -19,10 +19,9 @@ describe("lab route state", () => {
     const parsed = parseDeviceSegment("rg353m,odin2portal", knownDevices)
 
     expect(parsed).toEqual({ kind: "set", ids: ["rg353m", "odin2portal"] })
-    expect(selectedDevicesForSegment("rg353m,odin2portal", knownDevices)).toEqual([
-      "rg353m",
-      "odin2portal",
-    ])
+    expect(
+      selectedDevicesForSegment("rg353m,odin2portal", knownDevices),
+    ).toEqual(["rg353m", "odin2portal"])
     expect(deviceSegmentForSelection(parsed, knownDevices)).toBe(
       "rg353m,odin2portal",
     )
