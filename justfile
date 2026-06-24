@@ -21,6 +21,10 @@ dev-api port="${API_PORT:-3001}":
 dev-theme-workshop port="3110":
   bun run vite --config tools/theme-workshop/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
 
+# Dev-only seed proof: render the REAL Shift home from an in-memory seed (no API/device).
+dev-seed-proof port="3120":
+  bun run vite --config tools/seed-proof/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
+
 # Start Playwright UI over ephemeral HTTPS against an existing dev stack.
 dev-playwright port="${PW_PORT:-9876}" portal_port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}" host="${APP_HOST:-localhost}":
   PW_PORT={{port}} PORTAL_PORT={{portal_port}} API_PORT={{api_port}} APP_HOST={{host}} PLAYWRIGHT_TEST_BASE_URL=http://{{host}}:{{portal_port}} tools/scripts/serve-playwright-ui.sh
