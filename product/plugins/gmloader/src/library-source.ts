@@ -182,6 +182,7 @@ function playableEntryFromGame(game: ResolvedGameRecord): PlayableLibraryEntry {
     system: game.system,
     metadata: { name: title },
     media: game.media,
+    releases: [{ id: game.system, system: game.system, launchable: true }],
   }
 }
 
@@ -189,7 +190,9 @@ function resolveInstalledLaunch(
   options: GmloaderInstalledLibrarySourceOptions,
   entry: InstalledEntry,
 ): Effect.Effect<ResolvedLaunch, LibraryError> {
-  const runtime = options.resolveRuntime ? options.resolveRuntime() : Effect.succeed(undefined)
+  const runtime: Effect.Effect<ResolvedExecutableResource | undefined, LibraryError> = options.resolveRuntime
+    ? options.resolveRuntime()
+    : Effect.succeed(undefined)
   return runtime.pipe(
     Effect.flatMap(resolvedRuntime =>
       Effect.tryPromise({

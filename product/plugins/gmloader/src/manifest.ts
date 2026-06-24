@@ -66,7 +66,7 @@ export function decodeGmloaderInstalledManifest(
   if (!Array.isArray(input.run.libraryPaths)) return null
   if (!isRecord(input.compatibility)) return null
   if (!Array.isArray(input.compatibility.transformsApplied)) return null
-  return input as GmloaderInstalledManifest
+  return input as unknown as GmloaderInstalledManifest
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

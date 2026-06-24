@@ -34,9 +34,12 @@ describe("GMLoader launch envelope", () => {
 
   it("reports missing installed files as config errors", async () => {
     const manifest = await createManifest()
-    manifest.run.configPath = join(manifest.gameRoot, "missing.json")
+    const missingConfigManifest = {
+      ...manifest,
+      run: { ...manifest.run, configPath: join(manifest.gameRoot, "missing.json") },
+    }
 
-    await expect(prepareGmloaderLaunchEnvelope({ manifest, command: "gmloader-next" })).rejects.toMatchObject({ reason: "config" })
+    await expect(prepareGmloaderLaunchEnvelope({ manifest: missingConfigManifest, command: "gmloader-next" })).rejects.toMatchObject({ reason: "config" })
   })
 })
 
