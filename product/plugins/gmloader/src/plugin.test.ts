@@ -4,9 +4,29 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { deflateRawSync } from "node:zlib"
 import { ZIP_STORED } from "@platform/archive/zip"
-import { runPluginHandler } from "@platform/plugin"
+import { runPluginHandler, type ExecutablePluginResource } from "@platform/plugin"
+import {
+  type PluginExecutableResourceResolver,
+  type ResolvedExecutableResource,
+} from "@platform/plugin/resources"
 import { Effect } from "effect"
 import { createGmloaderPlugin, KORRI_GMLOADER_PLUGIN_ID } from "./plugin"
+
+const runtimeResource: ExecutablePluginResource = {
+  id: "gmloader-next",
+  kind: "executable",
+  fulfill: {
+    provider: "nix",
+    installable: ".#gmloader-next",
+    binary: "gmloader-next",
+  },
+}
+
+const runtime: ResolvedExecutableResource = {
+  pluginId: KORRI_GMLOADER_PLUGIN_ID,
+  resourceId: "gmloader-next",
+  command: "/store/gmloader/bin/gmloader-next",
+}
 
 describe("GMLoader plugin", () => {
   it("declares a disabled-by-default provider and Nix runtime resource", () => {
@@ -48,6 +68,36 @@ describe("GMLoader plugin", () => {
     expect((result as { readonly _tag: string })._tag).toBe("Supported")
   })
 
+  it("prepares a local payload launch through the handler", async () => {
+    const sourcePath = await writeArchive("Launch.apk")
+    const installRoot = await mktemp()
+    const plugin = createGmloaderPlugin({
+      installRoot,
+      runtimeResource,
+      runtimeResolver: resolverSucceeding(runtime),
+    })
+    const handler = plugin.handlers.find(
+      handler => handler.operation === "gmloader.launch.path.prepare",
+    )
+    if (!handler) throw new Error("missing launch handler")
+
+    const result = await Effect.runPromise(
+      runPluginHandler(handler, {
+        operation: "gmloader.launch.path.prepare",
+        provider: KORRI_GMLOADER_PLUGIN_ID,
+        input: { sourcePath },
+      }),
+    )
+
+    expect(
+      (result as { readonly envelope: { readonly spec: { command: string } } })
+        .envelope.spec.command,
+    ).toBe(runtime.command)
+    expect((result as { readonly diagnostics: readonly string[] }).diagnostics).toContain(
+      "payload-materialized",
+    )
+  })
+
   it("installs local payloads through the handler", async () => {
     const sourcePath = await writeArchive("Game.apk")
     const installRoot = await mktemp()
@@ -70,6 +120,12 @@ describe("GMLoader plugin", () => {
     )
   })
 })
+
+function resolverSucceeding(
+  resolved: ResolvedExecutableResource,
+): PluginExecutableResourceResolver {
+  return { resolveExecutable: () => Effect.succeed(resolved) }
+}
 
 async function writeArchive(name: string): Promise<string> {
   const path = join(await mktemp(), name)

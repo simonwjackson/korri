@@ -7,10 +7,8 @@ import type {
   ResolvedExecutableResource,
 } from "@platform/plugin/resources"
 import { Effect } from "effect"
-import {
-  KORRI_GMLOADER_PLUGIN_ID,
-  KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
-} from "./plugin"
+const KORRI_GMLOADER_PLUGIN_ID = "@korri:gmloader" as const
+const KORRI_GMLOADER_RUNTIME_RESOURCE_ID = "gmloader-next" as const
 
 export interface ResolveOrFulfillGmloaderRuntimeInput {
   readonly resource: ExecutablePluginResource

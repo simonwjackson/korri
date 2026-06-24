@@ -1,15 +1,24 @@
 import { AcquisitionError } from "@platform/acquisition/errors"
-import { plugin } from "@platform/plugin"
+import { plugin, type ExecutablePluginResource } from "@platform/plugin"
+import type {
+  PluginExecutableResourceFulfiller,
+  PluginExecutableResourceResolver,
+} from "@platform/plugin/resources"
 import { Effect } from "effect"
 import { prepareGmloaderLaunchEnvelope } from "./envelope"
 import { GmloaderInstallRejected, installGmloaderPayload } from "./installer"
 import { inspectGmloaderPayload } from "./payload"
+import { prepareGmloaderPathLaunch } from "./path-launch"
 
 export const KORRI_GMLOADER_PLUGIN_ID = "@korri:gmloader" as const
 export const KORRI_GMLOADER_RUNTIME_RESOURCE_ID = "gmloader-next" as const
 
 export interface GmloaderPluginOptions {
   readonly installRoot?: string
+  readonly runtimeResource?: ExecutablePluginResource
+  readonly runtimeResolver?: PluginExecutableResourceResolver
+  readonly runtimeFulfiller?: PluginExecutableResourceFulfiller
+  readonly allowRuntimeFulfill?: boolean
 }
 
 export function createGmloaderPlugin(options: GmloaderPluginOptions = {}) {
@@ -101,6 +110,65 @@ export function createGmloaderPlugin(options: GmloaderPluginOptions = {}) {
                       message: `Failed to install GMLoader payload: ${stringifyError(error)}`,
                     }),
             })
+          },
+        },
+        {
+          id: "gmloader.launch-path-prepare",
+          operation: "gmloader.launch.path.prepare",
+          capabilities: ["gmloader.launch.path.prepare", "gmloader"],
+          run: context => {
+            const input = readRecord(context.input)
+            const sourcePath = stringField(input, "sourcePath")
+            const installRoot =
+              stringValue(input.installRoot) ?? options.installRoot
+            if (!installRoot) {
+              return Effect.fail(
+                new AcquisitionError({
+                  reason: "configuration",
+                  providerId: context.provider,
+                  message: "GMLoader install root is not configured",
+                }),
+              )
+            }
+            if (!options.runtimeResource || !options.runtimeResolver) {
+              return Effect.fail(
+                new AcquisitionError({
+                  reason: "configuration",
+                  providerId: context.provider,
+                  message: "GMLoader runtime resource resolver is not configured",
+                }),
+              )
+            }
+            return prepareGmloaderPathLaunch({
+              providerId: context.provider,
+              sourcePath,
+              installRoot,
+              runtimeResource: options.runtimeResource,
+              runtimeResolver: options.runtimeResolver,
+              runtimeFulfiller: options.runtimeFulfiller,
+              allowRuntimeFulfill:
+                booleanValue(input.allowRuntimeFulfill) ??
+                options.allowRuntimeFulfill,
+              title: stringValue(input.title),
+              installedAt: stringValue(input.installedAt),
+              overwrite: booleanValue(input.overwrite),
+              compatibility: compatibilityFromInput(input.compatibility),
+              sdlGameControllerConfig: stringValue(
+                input.sdlGameControllerConfig,
+              ),
+            }).pipe(
+              Effect.mapError(
+                error =>
+                  new AcquisitionError({
+                    reason:
+                      error.reason === "unavailable"
+                        ? "configuration"
+                        : "defective-provider",
+                    providerId: context.provider,
+                    message: error.message,
+                  }),
+              ),
+            )
           },
         },
         {
