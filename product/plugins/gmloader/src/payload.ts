@@ -90,7 +90,10 @@ export async function inspectGmloaderPayload(
   }
 
   if (metadata.isDirectory()) {
-    return inspectDirectory(sourcePath)
+    return inspectDirectory(sourcePath, {
+      maxEntries: options.limits?.maxEntries ?? DEFAULT_MAX_ENTRIES,
+      maxExpandedBytes: options.limits?.maxExpandedBytes ?? DEFAULT_MAX_EXPANDED_BYTES,
+    })
   }
 
   if (!metadata.isFile()) {
@@ -134,12 +137,20 @@ interface PayloadFile {
   readonly readBytes: () => Promise<Buffer>
 }
 
-async function inspectDirectory(sourcePath: string): Promise<GmloaderPayloadInspection> {
+async function inspectDirectory(
+  sourcePath: string,
+  limits: { readonly maxEntries: number; readonly maxExpandedBytes: number },
+): Promise<GmloaderPayloadInspection> {
   const rootRealPath = await realpath(sourcePath)
   const files: PayloadFile[] = []
   const unsafe: string[] = []
+  const visitedDirectories = new Set<string>()
+  let expandedBytes = 0
 
   async function visit(dir: string): Promise<void> {
+    const dirRealPath = await realpath(dir)
+    if (visitedDirectories.has(dirRealPath)) return
+    visitedDirectories.add(dirRealPath)
     for (const name of await readdir(dir)) {
       const absolute = join(dir, name)
       const linkMetadata = await lstat(absolute)
@@ -149,6 +160,11 @@ async function inspectDirectory(sourcePath: string): Promise<GmloaderPayloadInsp
           unsafe.push(relative(sourcePath, absolute))
           continue
         }
+        const targetMetadata = await stat(absolute)
+        if (targetMetadata.isDirectory()) {
+          unsafe.push(`${relative(sourcePath, absolute)} -> directory symlink`)
+          continue
+        }
       }
       const metadata = await stat(absolute)
       if (metadata.isDirectory()) {
@@ -156,6 +172,15 @@ async function inspectDirectory(sourcePath: string): Promise<GmloaderPayloadInsp
         continue
       }
       if (!metadata.isFile()) continue
+      if (files.length + 1 > limits.maxEntries) {
+        unsafe.push(`directory entry count exceeds limit: ${limits.maxEntries}`)
+        return
+      }
+      expandedBytes += metadata.size
+      if (expandedBytes > limits.maxExpandedBytes) {
+        unsafe.push(`directory expanded size exceeds limit: ${limits.maxExpandedBytes}`)
+        return
+      }
       const path = relative(sourcePath, absolute).replaceAll("\\", "/")
       files.push({
         path,
@@ -167,7 +192,13 @@ async function inspectDirectory(sourcePath: string): Promise<GmloaderPayloadInsp
 
   await visit(sourcePath)
   if (unsafe.length > 0) {
-    return rejected("unsafe-source", sourcePath, unsafe.map(path => `symlink escapes source: ${path}`), "Directory payload contains unsafe symlinks")
+    const limitFailure = unsafe.find(item => item.includes("exceeds limit"))
+    return rejected(
+      limitFailure ? "limit-exceeded" : "unsafe-source",
+      sourcePath,
+      unsafe,
+      limitFailure ?? "Directory payload contains unsafe symlinks",
+    )
   }
 
   return classifyEntries({

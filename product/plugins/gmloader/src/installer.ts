@@ -49,8 +49,8 @@ export async function installGmloaderPayload(
   if (inspection._tag === "Rejected") throw new GmloaderInstallRejected(inspection.rejection)
 
   const profile = inspection.profile
-  const sourceBytes = await sourceDigestBytes(profile.sourcePath)
-  const sha256 = digest("sha256", sourceBytes)
+  const sourceDigest = await digestPayloadSource(profile)
+  const sha256 = sourceDigest.sha256
   const id = `${profile.idHint}-${sha256.slice(0, 12)}`
   const installRoot = resolve(input.installRoot)
   const gameRoot = join(installRoot, "games", id)
@@ -100,7 +100,7 @@ export async function installGmloaderPayload(
     manifestPath,
     source: {
       path: profile.sourcePath,
-      sizeBytes: sourceBytes.length,
+      sizeBytes: sourceDigest.sizeBytes,
       sha256,
       idStrategy: "content-hash",
     },
@@ -150,16 +150,31 @@ async function writeManifestAtomic(
   await rename(tmp, manifestPath)
 }
 
-async function sourceDigestBytes(sourcePath: string): Promise<Buffer> {
-  const metadata = await stat(sourcePath)
-  if (metadata.isFile()) return readFile(sourcePath)
-  const inspection = await inspectGmloaderPayload({ sourcePath })
-  if (inspection._tag === "Rejected") return Buffer.from(sourcePath)
+async function digestPayloadSource(
+  profile: GmloaderPayloadProfile,
+): Promise<{ readonly sha256: string; readonly sizeBytes: number }> {
+  const metadata = await stat(profile.sourcePath)
+  if (metadata.isFile()) {
+    const bytes = await readFile(profile.sourcePath)
+    return { sha256: digest("sha256", bytes), sizeBytes: bytes.length }
+  }
+
   const hash = createHash("sha256")
-  hash.update(inspection.profile.title)
-  hash.update(JSON.stringify(inspection.profile.gameDroid))
-  hash.update(JSON.stringify(inspection.profile.libyoyo))
-  return hash.digest()
+  let sizeBytes = 0
+  const paths = [
+    "assets/game.droid",
+    "lib/arm64-v8a/libyoyo.so",
+    ...profile.supportLibraries.map(file => file.path),
+  ].sort((left, right) => left.localeCompare(right))
+  for (const path of paths) {
+    const bytes = await readPayloadFile(profile, path)
+    hash.update(path)
+    hash.update("\0")
+    hash.update(bytes)
+    hash.update("\0")
+    sizeBytes += bytes.length
+  }
+  return { sha256: hash.digest("hex"), sizeBytes }
 }
 
 function digest(algorithm: "sha256", bytes: Buffer): string {

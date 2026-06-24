@@ -50,6 +50,25 @@ describe("GMLoader installer", () => {
     expect(manifest.compatibility.transformsApplied).toContain("store-game-droid")
   })
 
+  it("uses real file contents when deriving directory payload IDs", async () => {
+    const left = await writeDirectoryPayload("left")
+    const right = await writeDirectoryPayload("right")
+
+    const leftManifest = await installGmloaderPayload({
+      providerId: "@korri:gmloader",
+      sourcePath: left,
+      installRoot: await mktemp(),
+    })
+    const rightManifest = await installGmloaderPayload({
+      providerId: "@korri:gmloader",
+      sourcePath: right,
+      installRoot: await mktemp(),
+    })
+
+    expect(leftManifest.id).not.toBe(rightManifest.id)
+    expect(leftManifest.source.sha256).not.toBe(rightManifest.source.sha256)
+  })
+
   it("refuses to clobber an existing install without overwrite", async () => {
     const sourcePath = await writeArchive("Same.apk", [
       { path: "assets/game.droid", bytes: Buffer.from("game"), method: ZIP_STORED },
@@ -79,6 +98,15 @@ interface TestZipEntry {
   readonly path: string
   readonly bytes: Buffer
   readonly method: number
+}
+
+async function writeDirectoryPayload(gameContents: string): Promise<string> {
+  const root = await mktemp()
+  await mkdir(join(root, "assets"), { recursive: true })
+  await mkdir(join(root, "lib", "arm64-v8a"), { recursive: true })
+  await writeFile(join(root, "assets", "game.droid"), gameContents)
+  await writeFile(join(root, "lib", "arm64-v8a", "libyoyo.so"), "runner")
+  return root
 }
 
 async function writeArchive(name: string, entries: readonly TestZipEntry[]): Promise<string> {

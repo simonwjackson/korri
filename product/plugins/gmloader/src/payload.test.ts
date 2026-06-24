@@ -85,6 +85,34 @@ describe("GMLoader payload inspection", () => {
     expect(corruptResult.rejection.reason).toBe("corrupt-archive")
   })
 
+  it("enforces directory intake limits", async () => {
+    const root = await mktemp()
+    await mkdir(join(root, "assets"), { recursive: true })
+    await mkdir(join(root, "lib", "arm64-v8a"), { recursive: true })
+    await writeFile(join(root, "assets", "game.droid"), "game")
+    await writeFile(join(root, "lib", "arm64-v8a", "libyoyo.so"), "runner")
+
+    const result = await inspectGmloaderPayload({
+      sourcePath: root,
+      limits: { maxEntries: 1 },
+    })
+
+    expect(result._tag).toBe("Rejected")
+    if (result._tag !== "Rejected") throw new Error("expected rejected")
+    expect(result.rejection.reason).toBe("limit-exceeded")
+  })
+
+  it("rejects in-tree directory symlink loops", async () => {
+    const root = await mktemp()
+    await symlink(root, join(root, "loop"))
+
+    const result = await inspectGmloaderPayload({ sourcePath: root })
+
+    expect(result._tag).toBe("Rejected")
+    if (result._tag !== "Rejected") throw new Error("expected rejected")
+    expect(result.rejection.reason).toBe("unsafe-source")
+  })
+
   it("rejects directory symlinks that escape the selected source tree", async () => {
     const root = await mktemp()
     const outside = join(await mktemp(), "outside")

@@ -110,7 +110,7 @@ function loadInstalledEntries(
         names
           .filter(name => name.endsWith(".json"))
           .sort((left, right) => left.localeCompare(right))
-          .map(async name => readInstalledEntry(join(manifestsRoot, name)).catch(() => null)),
+          .map(async name => readInstalledEntry(join(manifestsRoot, name), options).catch(() => null)),
       )
       return entries.filter((entry): entry is InstalledEntry => entry !== null)
     },
@@ -129,19 +129,28 @@ function findInstalledEntry(
   return loadInstalledEntries(options).pipe(Effect.map(entries => entries.find(entry => entry.playable.id === id)))
 }
 
-async function readInstalledEntry(path: string): Promise<InstalledEntry | null> {
+async function readInstalledEntry(
+  path: string,
+  options: GmloaderInstalledLibrarySourceOptions,
+): Promise<InstalledEntry | null> {
   const manifest = decodeGmloaderInstalledManifest(JSON.parse(await readFile(path, "utf8")), KORRI_GMLOADER_PLUGIN_ID)
   if (!manifest) return null
-  return { manifest, playable: playableEntryFromManifest(manifest) }
+  return {
+    manifest,
+    playable: playableEntryFromManifest(manifest, runtimeConfigured(options)),
+  }
 }
 
-function playableEntryFromManifest(manifest: GmloaderInstalledManifest): PlayableLibraryEntry {
+function playableEntryFromManifest(
+  manifest: GmloaderInstalledManifest,
+  launchable: boolean,
+): PlayableLibraryEntry {
   const id = playableIdForManifest(manifest)
   return {
     id,
     itemId: id,
     title: manifest.title,
-    launchable: true,
+    launchable,
     system: GMLOADER_SYSTEM_ID,
     metadata: { name: manifest.title },
     userData: {
@@ -153,7 +162,7 @@ function playableEntryFromManifest(manifest: GmloaderInstalledManifest): Playabl
       {
         id: GMLOADER_RELEASE_ID,
         system: GMLOADER_SYSTEM_ID,
-        launchable: true,
+        launchable,
         display: { title: "Installed GMLoader payload" },
       },
     ],
@@ -184,6 +193,10 @@ function playableEntryFromGame(game: ResolvedGameRecord): PlayableLibraryEntry {
     media: game.media,
     releases: [{ id: game.system, system: game.system, launchable: true }],
   }
+}
+
+function runtimeConfigured(options: GmloaderInstalledLibrarySourceOptions): boolean {
+  return Boolean(options.command || options.resolveRuntime)
 }
 
 function resolveInstalledLaunch(

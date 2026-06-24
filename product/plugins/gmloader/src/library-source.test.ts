@@ -23,6 +23,19 @@ describe("GMLoader installed library source", () => {
     expect(resolved.spec.args).toEqual(["-c", join(installRoot, "games", "sample", "gmloader.json")])
   })
 
+  it("marks installed entries unavailable when no runtime command is configured", async () => {
+    const installRoot = await createInstalledManifest()
+    const source = withGmloaderInstalledLibrarySource(baseSource(), { installRoot })
+
+    const entries = await Effect.runPromise(source.listPlayableEntries?.() ?? Effect.succeed([]))
+    const canResolve = await Effect.runPromise(
+      source.canResolveLaunchForGame?.("@korri:gmloader/sample") ?? Effect.succeed(true),
+    )
+
+    expect(entries.find(entry => entry.id === "@korri:gmloader/sample")?.launchable).toBe(false)
+    expect(canResolve).toBe(false)
+  })
+
   it("delegates unknown games to the base source", async () => {
     const source = withGmloaderInstalledLibrarySource(baseSource(), {
       installRoot: await mktemp(),
