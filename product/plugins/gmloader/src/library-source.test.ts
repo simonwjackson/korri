@@ -85,6 +85,7 @@ async function createInstalledManifest(): Promise<string> {
   await mkdir(join(installRoot, "manifests"), { recursive: true })
   await mkdir(join(gameRoot, "assets"), { recursive: true })
   await mkdir(join(gameRoot, "lib", "arm64-v8a"), { recursive: true })
+  await writeFile(join(gameRoot, "game.apk"), "apk")
   await writeFile(join(gameRoot, "assets", "game.droid"), "game")
   await writeFile(join(gameRoot, "lib", "arm64-v8a", "libyoyo.so"), "runner")
   await writeFile(join(gameRoot, "gmloader.json"), "{}")

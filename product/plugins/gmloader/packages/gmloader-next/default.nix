@@ -3,6 +3,9 @@
   stdenv,
   fetchurl,
   pkgsCross,
+  SDL2,
+  zlib,
+  bzip2,
   unzip,
   patchelf,
   makeWrapper,
@@ -28,7 +31,12 @@ let
     lib.removeSuffix "\n" (builtins.readFile "${target.stdenv.cc}/nix-support/dynamic-linker")
   );
   bundledLibraryPath = "$out/lib/gmloader-next:$out/lib/gmloader-next/arm64-v8a";
-  hostLibraryPath = lib.makeLibraryPath [ target.stdenv.cc.cc.lib ];
+  hostLibraryPath = lib.makeLibraryPath [
+    target.stdenv.cc.cc.lib
+    SDL2
+    zlib
+    bzip2
+  ];
   runtimeLibraryPath = "${bundledLibraryPath}:${hostLibraryPath}";
 in
 stdenv.mkDerivation {

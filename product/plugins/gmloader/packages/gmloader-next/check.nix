@@ -24,6 +24,9 @@ pkgs.runCommand "gmloader-next-check" { nativeBuildInputs = [ pkgs.file pkgs.bin
   grep -Fq "$runner" "$wrapper"
   grep -Fq "LD_LIBRARY_PATH" "$wrapper"
   grep -Fq ${gmloaderNextPackage}/lib/gmloader-next "$library_path"
+  grep -Eq 'SDL2|sdl2' "$library_path"
+  grep -Fq 'zlib' "$library_path"
+  grep -Fq 'bzip2' "$library_path"
 
   echo checking elf identity
   file "$runner" > elf.txt

@@ -1,3 +1,4 @@
+import { dirname, join } from "node:path"
 import { LibraryError } from "@platform/library/library-services"
 import type { ExecutablePluginResource, ProviderId } from "@platform/plugin"
 import type {
@@ -5,7 +6,10 @@ import type {
   PluginExecutableResourceResolver,
 } from "@platform/plugin/resources"
 import { Effect } from "effect"
-import { prepareGmloaderLaunchEnvelope, type GmloaderLaunchEnvelope } from "./envelope"
+import {
+  prepareGmloaderLaunchEnvelope,
+  type GmloaderLaunchEnvelope,
+} from "./envelope"
 import {
   ensureGmloaderPayloadInstalled,
   GmloaderInstallRejected,
@@ -42,24 +46,16 @@ export function prepareGmloaderPathLaunch(
   input: PrepareGmloaderPathLaunchInput,
 ): Effect.Effect<GmloaderPathLaunchResult, LibraryError> {
   return Effect.gen(function* () {
-    const installed = yield* Effect.tryPromise({
-      try: () =>
-        ensureGmloaderPayloadInstalled({
-          providerId: input.providerId,
-          sourcePath: input.sourcePath,
-          installRoot: input.installRoot,
-          title: input.title,
-          installedAt: input.installedAt,
-          overwrite: input.overwrite,
-          compatibility: input.compatibility,
-        }),
-      catch: error => installError(error),
-    })
+    const initialInstalled = yield* ensureInstalled(input)
     const runtime = yield* resolveOrFulfillGmloaderRuntime({
       resource: input.runtimeResource,
       resolver: input.runtimeResolver,
       fulfiller: input.runtimeFulfiller,
       allowFulfill: input.allowRuntimeFulfill,
+    })
+    const installed = yield* ensureInstalled(input, {
+      shimLibraryRoot: gmloaderRuntimeShimLibraryRoot(runtime.runtime.command),
+      overwrite: false,
     })
     const envelope = yield* Effect.tryPromise({
       try: () =>
@@ -77,19 +73,61 @@ export function prepareGmloaderPathLaunch(
               message: error instanceof Error ? error.message : String(error),
             }),
     })
+    const finalPayloadStatus = payloadStatus(
+      initialInstalled.status,
+      installed.status,
+    )
     return {
       manifest: installed.manifest,
       envelope,
-      payloadStatus: installed.status,
+      payloadStatus: finalPayloadStatus,
       runtimeStatus: runtime.status,
       diagnostics: [
-        installed.status === "cache-hit"
+        finalPayloadStatus === "cache-hit"
           ? "payload-cache-hit"
           : "payload-materialized",
-        runtime.status === "cache-hit" ? "runtime-cache-hit" : "runtime-fulfilled",
+        runtime.status === "cache-hit"
+          ? "runtime-cache-hit"
+          : "runtime-fulfilled",
       ],
     }
   })
+}
+
+function ensureInstalled(
+  input: PrepareGmloaderPathLaunchInput,
+  options: {
+    readonly shimLibraryRoot?: string
+    readonly overwrite?: boolean
+  } = {},
+) {
+  return Effect.tryPromise({
+    try: () =>
+      ensureGmloaderPayloadInstalled({
+        providerId: input.providerId,
+        sourcePath: input.sourcePath,
+        installRoot: input.installRoot,
+        title: input.title,
+        installedAt: input.installedAt,
+        overwrite: options.overwrite ?? input.overwrite,
+        compatibility: input.compatibility,
+        shimLibraryRoot: options.shimLibraryRoot,
+      }),
+    catch: error => installError(error),
+  })
+}
+
+function payloadStatus(
+  left: "cache-hit" | "materialized",
+  right: "cache-hit" | "materialized",
+): "cache-hit" | "materialized" {
+  return left === "materialized" || right === "materialized"
+    ? "materialized"
+    : "cache-hit"
+}
+
+function gmloaderRuntimeShimLibraryRoot(command: string): string {
+  return join(dirname(dirname(command)), "lib", "gmloader-next", "arm64-v8a")
 }
 
 function installError(error: unknown): LibraryError {

@@ -1,5 +1,13 @@
 import { createHash, randomUUID } from "node:crypto"
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises"
 import { setTimeout as sleep } from "node:timers/promises"
 import { dirname, join, resolve } from "node:path"
 import {
@@ -22,6 +30,12 @@ import {
 } from "./payload"
 
 export const GMLOADER_READY_MARKER = ".korri-gmloader-ready" as const
+const GMLOADER_RUNTIME_APK_PATH = "game.apk" as const
+const GMLOADER_REQUIRED_SHIM_LIBRARIES = [
+  "libm.so",
+  "libcompiler_rt.so",
+  "libc++_shared.so",
+] as const
 
 export class GmloaderInstallRejected extends Error {
   readonly rejection: GmloaderPayloadRejection
@@ -44,6 +58,7 @@ export interface InstallGmloaderPayloadInput {
     readonly env?: Readonly<Record<string, string>>
     readonly limitations?: readonly string[]
   }
+  readonly shimLibraryRoot?: string
 }
 
 export interface EnsureGmloaderPayloadInstalledResult {
@@ -101,7 +116,8 @@ export async function ensureGmloaderPayloadInstalled(
     return withFileInstallLock(prepared, async () => {
       if (!input.overwrite) {
         const existing = await readCompleteInstalledManifest(prepared)
-        if (existing) return { manifest: existing, status: "cache-hit" as const }
+        if (existing)
+          return { manifest: existing, status: "cache-hit" as const }
       }
       const manifest = await materializePreparedGmloaderInstall(prepared, {
         replaceExisting: true,
@@ -126,7 +142,15 @@ async function prepareGmloaderInstall(
   const installRoot = resolve(input.installRoot)
   const gameRoot = join(installRoot, "games", id)
   const manifestPath = join(installRoot, "manifests", `${id}.json`)
-  return { input, profile, sourceDigest, id, installRoot, gameRoot, manifestPath }
+  return {
+    input,
+    profile,
+    sourceDigest,
+    id,
+    installRoot,
+    gameRoot,
+    manifestPath,
+  }
 }
 
 async function materializePreparedGmloaderInstall(
@@ -141,6 +165,11 @@ async function materializePreparedGmloaderInstall(
 
   try {
     const installedFiles: GmloaderInstalledFile[] = []
+    await copyPayloadAsApk(
+      prepared.profile,
+      join(tmpRoot, GMLOADER_RUNTIME_APK_PATH),
+      installedFiles,
+    )
     await copyPayloadFile(
       prepared.profile,
       "assets/game.droid",
@@ -153,6 +182,7 @@ async function materializePreparedGmloaderInstall(
       join(tmpRoot, "lib", "arm64-v8a", "libyoyo.so"),
       installedFiles,
     )
+    const installedSupportPaths = new Set<string>()
     for (const support of prepared.profile.supportLibraries) {
       await copyPayloadFile(
         prepared.profile,
@@ -160,9 +190,18 @@ async function materializePreparedGmloaderInstall(
         join(tmpRoot, support.path),
         installedFiles,
       )
+      installedSupportPaths.add(support.path)
     }
+    await seedShimLibraries({
+      shimLibraryRoot: prepared.input.shimLibraryRoot,
+      targetRoot: tmpRoot,
+      installed: installedFiles,
+      existingPaths: installedSupportPaths,
+    })
     const configPath = join(tmpRoot, "gmloader.json")
-    const gmloaderJson = createGmloaderJson()
+    const gmloaderJson = createGmloaderJson({
+      apkPath: GMLOADER_RUNTIME_APK_PATH,
+    })
     await writeFile(configPath, gmloaderJson)
     installedFiles.push({
       path: "gmloader.json",
@@ -179,7 +218,10 @@ async function materializePreparedGmloaderInstall(
         : {}),
     }
     const compatibilityJson = `${JSON.stringify(compatibility, null, 2)}\n`
-    await writeFile(join(tmpRoot, "compatibility-profile.json"), compatibilityJson)
+    await writeFile(
+      join(tmpRoot, "compatibility-profile.json"),
+      compatibilityJson,
+    )
     installedFiles.push({
       path: "compatibility-profile.json",
       sizeBytes: Buffer.byteLength(compatibilityJson),
@@ -232,8 +274,13 @@ async function materializePreparedGmloaderInstall(
     return manifest
   } catch (error) {
     await rm(tmpRoot, { recursive: true, force: true })
-    if (publishedRoot) await rm(prepared.gameRoot, { recursive: true, force: true })
-    if (staleRoot && (await exists(staleRoot)) && !(await exists(prepared.gameRoot))) {
+    if (publishedRoot)
+      await rm(prepared.gameRoot, { recursive: true, force: true })
+    if (
+      staleRoot &&
+      (await exists(staleRoot)) &&
+      !(await exists(prepared.gameRoot))
+    ) {
       await rename(staleRoot, prepared.gameRoot)
     }
     throw error
@@ -255,12 +302,61 @@ async function readCompleteInstalledManifest(
     }
     if (manifest.gameRoot !== prepared.gameRoot) return undefined
     await stat(join(manifest.gameRoot, GMLOADER_READY_MARKER))
+    await stat(join(manifest.gameRoot, GMLOADER_RUNTIME_APK_PATH))
     await stat(join(manifest.gameRoot, "assets", "game.droid"))
     await stat(join(manifest.gameRoot, "lib", "arm64-v8a", "libyoyo.so"))
+    if (prepared.input.shimLibraryRoot) {
+      for (const library of GMLOADER_REQUIRED_SHIM_LIBRARIES) {
+        if (await exists(join(prepared.input.shimLibraryRoot, library))) {
+          await stat(join(manifest.gameRoot, "lib", "arm64-v8a", library))
+        }
+      }
+    }
     await stat(manifest.run.configPath)
     return manifest
   } catch {
     return undefined
+  }
+}
+
+async function copyPayloadAsApk(
+  profile: GmloaderPayloadProfile,
+  target: string,
+  installed: GmloaderInstalledFile[],
+): Promise<void> {
+  await mkdir(dirname(target), { recursive: true })
+  if (profile.kind === "archive") {
+    await copyFile(profile.sourcePath, target)
+    const metadata = await stat(target)
+    installed.push({
+      path: GMLOADER_RUNTIME_APK_PATH,
+      sizeBytes: metadata.size,
+    })
+    return
+  }
+
+  const archive = await createStoredPayloadArchive(profile)
+  await writeFile(target, archive)
+  installed.push({ path: GMLOADER_RUNTIME_APK_PATH, sizeBytes: archive.length })
+}
+
+async function seedShimLibraries(input: {
+  readonly shimLibraryRoot?: string
+  readonly targetRoot: string
+  readonly installed: GmloaderInstalledFile[]
+  readonly existingPaths: ReadonlySet<string>
+}): Promise<void> {
+  if (!input.shimLibraryRoot) return
+  for (const library of GMLOADER_REQUIRED_SHIM_LIBRARIES) {
+    const path = `lib/arm64-v8a/${library}`
+    if (input.existingPaths.has(path)) continue
+    const source = join(input.shimLibraryRoot, library)
+    if (!(await exists(source))) continue
+    const target = join(input.targetRoot, path)
+    await mkdir(dirname(target), { recursive: true })
+    await copyFile(source, target)
+    const metadata = await stat(target)
+    input.installed.push({ path, sizeBytes: metadata.size })
   }
 }
 
@@ -274,6 +370,59 @@ async function copyPayloadFile(
   await mkdir(dirname(target), { recursive: true })
   await writeFile(target, bytes)
   installed.push({ path, sizeBytes: bytes.length })
+}
+
+async function createStoredPayloadArchive(
+  profile: GmloaderPayloadProfile,
+): Promise<Buffer> {
+  const entries = await Promise.all(
+    [
+      "assets/game.droid",
+      "lib/arm64-v8a/libyoyo.so",
+      ...profile.supportLibraries.map(file => file.path),
+    ].map(async path => ({
+      path,
+      bytes: await readPayloadFile(profile, path),
+    })),
+  )
+  const fileRecords: Buffer[] = []
+  const centralRecords: Buffer[] = []
+  let offset = 0
+
+  for (const entry of entries) {
+    const name = Buffer.from(entry.path)
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(20, 4)
+    local.writeUInt16LE(0, 8)
+    local.writeUInt32LE(0, 14)
+    local.writeUInt32LE(entry.bytes.length, 18)
+    local.writeUInt32LE(entry.bytes.length, 22)
+    local.writeUInt16LE(name.length, 26)
+    fileRecords.push(local, name, entry.bytes)
+
+    const central = Buffer.alloc(46)
+    central.writeUInt32LE(0x02014b50, 0)
+    central.writeUInt16LE(20, 6)
+    central.writeUInt16LE(0, 10)
+    central.writeUInt32LE(0, 16)
+    central.writeUInt32LE(entry.bytes.length, 20)
+    central.writeUInt32LE(entry.bytes.length, 24)
+    central.writeUInt16LE(name.length, 28)
+    central.writeUInt32LE(offset, 42)
+    centralRecords.push(central, name)
+    offset += local.length + name.length + entry.bytes.length
+  }
+
+  const centralOffset = offset
+  const central = Buffer.concat(centralRecords)
+  const eocd = Buffer.alloc(22)
+  eocd.writeUInt32LE(0x06054b50, 0)
+  eocd.writeUInt16LE(entries.length, 8)
+  eocd.writeUInt16LE(entries.length, 10)
+  eocd.writeUInt32LE(central.length, 12)
+  eocd.writeUInt32LE(centralOffset, 16)
+  return Buffer.concat([...fileRecords, central, eocd])
 }
 
 async function readPayloadFile(
@@ -355,7 +504,9 @@ async function acquireLockDir(lockDir: string): Promise<void> {
     } catch (error) {
       if (!isErrno(error, "EEXIST")) throw error
       if (Date.now() - startedAt > 30_000) {
-        throw new Error(`Timed out waiting for GMLoader install lock: ${lockDir}`)
+        throw new Error(
+          `Timed out waiting for GMLoader install lock: ${lockDir}`,
+        )
       }
       await sleep(50)
     }
@@ -365,9 +516,11 @@ async function acquireLockDir(lockDir: string): Promise<void> {
 function withInstallLock<T>(key: string, run: () => Promise<T>): Promise<T> {
   const previous = installLocks.get(key) ?? Promise.resolve()
   const current = previous.catch(() => undefined).then(run)
-  const cleanup = current.catch(() => undefined).finally(() => {
-    if (installLocks.get(key) === cleanup) installLocks.delete(key)
-  })
+  const cleanup = current
+    .catch(() => undefined)
+    .finally(() => {
+      if (installLocks.get(key) === cleanup) installLocks.delete(key)
+    })
   installLocks.set(key, cleanup)
   return current
 }

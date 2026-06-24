@@ -44,12 +44,16 @@ describe("GMLoader installer", () => {
         "utf8",
       ),
     ).toBe("runner")
+    expect(await readFile(join(manifest.gameRoot, "game.apk"))).toEqual(
+      await readFile(sourcePath),
+    )
     expect(
       JSON.parse(
         await readFile(join(manifest.gameRoot, "gmloader.json"), "utf8"),
       ),
     ).toMatchObject({
       apk_directory: ".",
+      apk_path: "game.apk",
       main_apk: "assets/game.droid",
       force_platform: "os_linux",
     })
@@ -58,6 +62,47 @@ describe("GMLoader installer", () => {
       "@korri:gmloader",
     )
     expect(decoded?.id).toBe(manifest.id)
+  })
+
+  it("seeds runtime shim libraries when the payload omits them", async () => {
+    const sourcePath = await writeArchive("Needs Shims.apk", [
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
+    ])
+    const shimRoot = await mktemp()
+    await writeFile(join(shimRoot, "libm.so"), "shim-m")
+    await writeFile(join(shimRoot, "libcompiler_rt.so"), "shim-rt")
+    await writeFile(join(shimRoot, "libc++_shared.so"), "shim-cpp")
+
+    const manifest = await installGmloaderPayload({
+      providerId: "@korri:gmloader",
+      sourcePath,
+      installRoot: await mktemp(),
+      shimLibraryRoot: shimRoot,
+    })
+
+    expect(
+      await readFile(
+        join(manifest.gameRoot, "lib", "arm64-v8a", "libm.so"),
+        "utf8",
+      ),
+    ).toBe("shim-m")
+    expect(manifest.run.files.map(file => file.path)).toEqual(
+      expect.arrayContaining([
+        "game.apk",
+        "lib/arm64-v8a/libm.so",
+        "lib/arm64-v8a/libcompiler_rt.so",
+        "lib/arm64-v8a/libc++_shared.so",
+      ]),
+    )
   })
 
   it("records stored normalization for deflated game.droid", async () => {
@@ -164,7 +209,10 @@ describe("GMLoader installer", () => {
       installRoot,
     })
     await rm(join(first.manifest.gameRoot, GMLOADER_READY_MARKER))
-    await writeFile(join(first.manifest.gameRoot, "assets", "game.droid"), "broken")
+    await writeFile(
+      join(first.manifest.gameRoot, "assets", "game.droid"),
+      "broken",
+    )
 
     const repaired = await ensureGmloaderPayloadInstalled({
       providerId: "@korri:gmloader",
@@ -208,12 +256,12 @@ describe("GMLoader installer", () => {
     )
 
     expect(new Set(results.map(result => result.manifest.id)).size).toBe(1)
-    expect(results.filter(result => result.status === "materialized")).toHaveLength(
-      1,
-    )
-    expect(results.filter(result => result.status === "cache-hit")).toHaveLength(
-      3,
-    )
+    expect(
+      results.filter(result => result.status === "materialized"),
+    ).toHaveLength(1)
+    expect(
+      results.filter(result => result.status === "cache-hit"),
+    ).toHaveLength(3)
   })
 
   it("refuses to clobber an existing install without overwrite", async () => {

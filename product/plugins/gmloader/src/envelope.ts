@@ -27,6 +27,7 @@ export async function prepareGmloaderLaunchEnvelope(
   input: PrepareGmloaderLaunchEnvelopeInput,
 ): Promise<GmloaderLaunchEnvelope> {
   const manifest = input.manifest ?? (await readManifest(input.manifestPath))
+  await requireReadable(join(manifest.gameRoot, "game.apk"), "game.apk")
   await requireReadable(
     join(manifest.gameRoot, "assets", "game.droid"),
     "assets/game.droid",
