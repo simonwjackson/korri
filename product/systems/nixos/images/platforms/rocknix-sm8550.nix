@@ -1,14 +1,15 @@
-{ korri
-, nixpkgs
-, nix-on-rocks
-, deviceProfile
-,
+{
+  korri,
+  nixpkgs,
+  nix-on-rocks,
+  deviceProfile,
 }:
 
-{ config
-, lib
-, pkgs
-, ...
+{
+  config,
+  lib,
+  pkgs,
+  ...
 }:
 
 let
@@ -109,6 +110,15 @@ let
       [ -e "$node" ] || continue
       setfacl -m m::rw,u:${runtime.user}:rw "$node" || true
     done
+
+    # Sysfs backlight brightness files do not support POSIX ACLs on Sobo.
+    # Make the standard video-group path writable so Korri inputd can drive
+    # brightnessctl from Home+Volume chords without running as root.
+    for node in /sys/class/backlight/*/brightness; do
+      [ -e "$node" ] || continue
+      chgrp video "$node" || true
+      chmod g+w "$node" || true
+    done
   '';
   korriRocknixDeviceAclFallback = pkgs.writeShellScript "korri-rocknix-device-acl-fallback" ''
     set -u
@@ -130,6 +140,11 @@ let
     for node in /dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/snd/* /dev/tty0 /dev/tty1; do
       [ -e "$node" ] || continue
       setfacl -m m::rw,u:${runtime.user}:rw "$node" || true
+    done
+    for node in /sys/class/backlight/*/brightness; do
+      [ -e "$node" ] || continue
+      chgrp video "$node" || true
+      chmod g+w "$node" || true
     done
   '';
   # korri-fakesuspend-toggle -- product fake-suspend policy. Runs as the
@@ -562,7 +577,10 @@ in
   systemd.services.korri-rocknix-seat-device-trigger = {
     description = "Apply Korri RockNIX seat + input udev metadata";
     wantedBy = [ "multi-user.target" ];
-    after = [ "systemd-udevd.service" "rocknix-sound-card-udev-hydrate.service" ];
+    after = [
+      "systemd-udevd.service"
+      "rocknix-sound-card-udev-hydrate.service"
+    ];
     wants = [ "rocknix-sound-card-udev-hydrate.service" ];
     before = [ "greetd.service" ];
     serviceConfig = {
