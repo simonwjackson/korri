@@ -1,26 +1,21 @@
-/**
- * Seed-proof — Home route. The REAL Shift home composition, but the rail's
- * onItemClick navigates to the Game Detail route instead of launching. Reads
- * the seeded catalog atom (same path production uses).
- */
 import { useAtomValue } from "@effect/atom-react"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
+import { useNavigate } from "@tanstack/react-router"
+import { Option } from "effect"
 import {
   ShiftCatalogStateRoot,
   useShiftCatalogCase,
-} from "@product/surfaces/web/shift/catalog/ShiftCatalogStateRoot"
-import { ShiftHomeCaption } from "@product/surfaces/web/shift/molecules/ShiftHomeCaption"
-import { ShiftHomeBottomBar } from "@product/surfaces/web/shift/organisms/ShiftHomeBottomBar"
-import { ShiftHomeRail } from "@product/surfaces/web/shift/organisms/ShiftHomeRail"
-import { ShiftHomeTopBar } from "@product/surfaces/web/shift/organisms/ShiftHomeTopBar"
-import { ShiftHomeLoadingBody } from "@product/surfaces/web/shift/pages/ShiftHomeLoadingBody"
-import { ShiftHomeRoot } from "@product/surfaces/web/shift/templates/ShiftHomeRoot"
-import { useNavigate } from "@tanstack/react-router"
-import { Option } from "effect"
+} from "../catalog/ShiftCatalogStateRoot"
+import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
+import { ShiftHomeBottomBar } from "../organisms/ShiftHomeBottomBar"
+import { ShiftHomeRail } from "../organisms/ShiftHomeRail"
+import { ShiftHomeTopBar } from "../organisms/ShiftHomeTopBar"
+import { ShiftHomeLoadingBody } from "../pages/ShiftHomeLoadingBody"
+import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
 
 const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
 
-export function Home() {
+export function ShiftHomeRoute() {
   const snapshot = useAtomValue(catalogSnapshotAtom)
   return (
     <div data-shift-home-frame>

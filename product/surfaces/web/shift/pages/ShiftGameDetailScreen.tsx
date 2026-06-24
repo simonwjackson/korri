@@ -31,11 +31,13 @@ export interface ShiftGameDetailScreenProps {
   readonly games: readonly ShiftGameDetailView[]
   /** Which entry to open on first render. Defaults to the first game. */
   readonly initialIndex?: number
+  readonly onPlay?: (game: ShiftGameDetailView) => void
 }
 
 export function ShiftGameDetailScreen({
   games,
   initialIndex = 0,
+  onPlay,
 }: ShiftGameDetailScreenProps) {
   const [index, setIndex] = useState(initialIndex)
   const game = games[index]
@@ -71,7 +73,11 @@ export function ShiftGameDetailScreen({
             ) : null}
           </div>
           <div className="shift-detail-actions">
-            <button type="button" className="shift-detail-btn primary">
+            <button
+              type="button"
+              className="shift-detail-btn primary"
+              onClick={() => onPlay?.(game)}
+            >
               ▶ {played ? "Continue" : "Play"}
             </button>
             {played ? (
