@@ -14,13 +14,14 @@
  * the scaleVarPrefix ("shift") so the lab publishes --shift-text-scale /
  * --shift-pad-scale, which shift.css reads with a default of 1.
  */
-import { games } from "@platform/fixtures/games/games"
+import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type {
   DeviceConfig,
   Screen,
   ThemeKnob,
   ThemeWorkshopConfig,
 } from "@tools/theme-workshop"
+import { DEV_GAME_MEDIA } from "./dev-game-media"
 import { ShiftHomeCaption } from "./molecules/ShiftHomeCaption"
 import { ShiftHomeBottomBar } from "./organisms/ShiftHomeBottomBar"
 import { ShiftHomeRail } from "./organisms/ShiftHomeRail"
@@ -139,7 +140,7 @@ const PLACEHOLDER_AVATAR_SRC = "https://i.pravatar.cc/96?u=korri-shift-user"
 // no-ops when no spatial-navigation bus is running.
 function ShiftHomeLabScreen() {
   return (
-    <ShiftHomeRoot items={games}>
+    <ShiftHomeRoot items={SHIFT_HOME_ITEMS}>
       <ShiftHomeTopBar
         time={PLACEHOLDER_TIME}
         avatarSrc={PLACEHOLDER_AVATAR_SRC}
@@ -153,13 +154,24 @@ function ShiftHomeLabScreen() {
   )
 }
 
-// ── Game Detail fixtures ──────────────────────────────────────────────────
-// The detail page takes a flat view model (decoupled from library wiring); the
-// lab maps the shared game fixtures into it. Art reuses Shift's deterministic
-// fixture-art seed (the home feature tile builds wide art the same way), here
-// in a 3:4 poster crop for the portrait art card.
-function detailArtUrl(id: string): string {
-  return `https://picsum.photos/seed/${encodeURIComponent(`shift-${id}-poster`)}/900/1200`
+// ── Real-media prototype catalog ──────────────────────────────────────────
+// Every Shift lab screen renders real games with SteamGridDB art (see
+// dev-game-media). Play state is synthesised per entry so the chips/stats vary
+// across the rail without a backend.
+const minutesAgo = (n: number): Date => new Date(Date.now() - n * 60_000)
+
+function syntheticUserData(index: number): {
+  lastPlayed?: Date
+  playtime?: number
+  favorite?: boolean
+} {
+  const recentMinutes = [12, 95, 300, 1560, 3000, 60 * 24 * 3]
+  const recent = recentMinutes[index]
+  return {
+    lastPlayed: recent === undefined ? undefined : minutesAgo(recent),
+    playtime: index < 9 ? (index + 1) * 180 + 40 : undefined,
+    favorite: index % 4 === 0,
+  }
 }
 
 function relativeLastPlayed(date: Date | undefined): string | undefined {
@@ -177,35 +189,72 @@ function playtimeLabel(minutes: number | undefined): string | undefined {
   return `${(minutes / 60).toFixed(1)}h`
 }
 
-const cineTileUrl = (id: string): string =>
-  `https://picsum.photos/seed/${encodeURIComponent(`shift-${id}`)}/600/600`
-const cineWideUrl = (id: string): string =>
-  `https://picsum.photos/seed/${encodeURIComponent(`shift-${id}-wide`)}/1600/900`
+const DEV_GAMES = DEV_GAME_MEDIA.map((media, index) => ({
+  media,
+  userData: syntheticUserData(index),
+}))
 
-const SHIFT_CINEMATIC_GAMES: readonly ShiftCinematicGame[] = games.map(
-  game => ({
-    id: game.id,
-    title: game.metadata?.name ?? game.id,
-    tileArtUrl: cineTileUrl(game.id),
-    wideArtUrl: cineWideUrl(game.id),
-    genre: game.metadata?.genre?.[0],
-    developer: game.metadata?.developer,
-    lastPlayedLabel: relativeLastPlayed(game.userData?.lastPlayed),
-    playtimeLabel: playtimeLabel(game.userData?.playtime),
-    favorite: game.userData?.favorite,
+// Home rail consumes platform playable records; attach the real cover (tile) +
+// background (hero) so the poster and feature tiles resolve SteamGridDB art via
+// getPlayableImageUrl / getPlayableWideImageUrl.
+const SHIFT_HOME_ITEMS: readonly ResolvedGameRecord[] = DEV_GAMES.map(
+  ({ media, userData }) => ({
+    id: media.id,
+    system: "steam",
+    contentPath: `/library/${media.id}`,
+    metadata: {
+      name: media.title,
+      developer: media.developer,
+      genre: [media.genre],
+    },
+    userData,
+    media: [
+      {
+        role: "tile",
+        type: "image",
+        width: 600,
+        height: 900,
+        assetId: `${media.id}-tile`,
+        url: media.gridUrl,
+      },
+      {
+        role: "hero",
+        type: "image",
+        width: 1920,
+        height: 620,
+        assetId: `${media.id}-hero`,
+        url: media.heroUrl,
+      },
+    ],
   }),
 )
 
-const SHIFT_DETAIL_GAMES: readonly ShiftGameDetailView[] = games.map(game => ({
-  id: game.id,
-  title: game.metadata?.name ?? game.id,
-  artUrl: detailArtUrl(game.id),
-  genre: game.metadata?.genre?.[0],
-  developer: game.metadata?.developer,
-  lastPlayedLabel: relativeLastPlayed(game.userData?.lastPlayed),
-  playtimeLabel: playtimeLabel(game.userData?.playtime),
-  favorite: game.userData?.favorite,
-}))
+const SHIFT_CINEMATIC_GAMES: readonly ShiftCinematicGame[] = DEV_GAMES.map(
+  ({ media, userData }) => ({
+    id: media.id,
+    title: media.title,
+    tileArtUrl: media.gridUrl,
+    wideArtUrl: media.heroUrl,
+    genre: media.genre,
+    developer: media.developer,
+    lastPlayedLabel: relativeLastPlayed(userData.lastPlayed),
+    playtimeLabel: playtimeLabel(userData.playtime),
+    favorite: userData.favorite,
+  }),
+)
+
+const SHIFT_DETAIL_GAMES: readonly ShiftGameDetailView[] = DEV_GAMES.map(
+  ({ media, userData }) => ({
+    id: media.id,
+    title: media.title,
+    artUrl: media.gridUrl,
+    genre: media.genre,
+    developer: media.developer,
+    lastPlayedLabel: relativeLastPlayed(userData.lastPlayed),
+    playtimeLabel: playtimeLabel(userData.playtime),
+    favorite: userData.favorite,
+  }),
+)
 
 const SHIFT_SCREENS: readonly Screen[] = [
   {

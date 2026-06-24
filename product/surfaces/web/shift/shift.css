@@ -1283,8 +1283,9 @@
 	color: var(--shift-on-media-ink);
 	font-family: "Geist Variable", system-ui, sans-serif;
 	/* Bounded-media: tracks frame height but plateaus against the base ceiling so
-	 * tiles don't dominate a short landscape frame or vanish on a 4K panel. */
-	--cine-tile: min(24cqh, calc(var(--intrinsic-base) * 6));
+	 * tiles don't dominate a short landscape frame or vanish on a 4K panel. This
+	 * is the tile HEIGHT; tiles are portrait (real capsule art is 600x900). */
+	--cine-tile: min(28cqh, calc(var(--intrinsic-base) * 6.5));
 }
 
 [data-shift-home] .shift-cine-bg {
@@ -1493,8 +1494,8 @@
 [data-shift-home] .shift-cine-tile {
 	position: relative;
 	flex: 0 0 auto;
-	width: var(--cine-tile);
 	height: var(--cine-tile);
+	width: calc(var(--cine-tile) * 0.667);
 	border: 0;
 	padding: 0;
 	border-radius: calc(var(--intrinsic-base) * 0.5);
