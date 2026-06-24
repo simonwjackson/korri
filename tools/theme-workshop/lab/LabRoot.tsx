@@ -14,7 +14,6 @@ import { LabContext } from "./Lab.context"
 import { LabDevicePicker } from "./components/LabDevicePicker"
 import { LabRouteBar } from "./components/LabRouteBar"
 import { LabStage } from "./components/LabStage"
-import { LabThemePicker } from "./components/LabThemePicker"
 import { labSurfaceAdapters, type LabSurfaceAdapter } from "./surface-registry"
 
 const DEFAULT_PX_PER_MM = 3.7795275591
@@ -214,7 +213,6 @@ export function LabRoot({
     <LabContext.Provider value={context}>
       <LabDevicePicker />
       <LabRouteBar />
-      <LabThemePicker adapters={adapters} />
       <LabStage />
       <Calibrator
         pxPerMm={calibration.pxPerMm}

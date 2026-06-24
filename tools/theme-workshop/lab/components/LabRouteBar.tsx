@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react"
 import { useLab } from "../Lab.context"
+import { labSurfaceAdapters } from "../surface-registry"
 
 export function LabRouteBar() {
-  const { screens, surfacePath, setSurfacePath } = useLab()
+  const { screens, surfacePath, setSurfacePath, themeId, setThemeId } = useLab()
+  const adapters = labSurfaceAdapters()
   const [copied, setCopied] = useState(false)
   const href = useMemo(
     () => (typeof window === "undefined" ? surfacePath : window.location.href),
@@ -21,6 +23,26 @@ export function LabRouteBar() {
 
   return (
     <div className="lab-controlbar" aria-label="Surface controls">
+      {adapters.length > 1 ? (
+        <>
+          <label className="lab-theme">
+            <span className="lab-route-label">Surface</span>
+            <select
+              className="lab-theme-select"
+              aria-label="Surface"
+              value={themeId}
+              onChange={event => setThemeId(event.target.value)}
+            >
+              {adapters.map(adapter => (
+                <option key={adapter.id} value={adapter.id}>
+                  {adapter.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="lab-sep" />
+        </>
+      ) : null}
       {screens.length > 0 ? (
         <div
           className="lab-switch"

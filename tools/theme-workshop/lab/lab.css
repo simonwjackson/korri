@@ -46,6 +46,21 @@
 	max-width: calc(100vw - 24px);
 	overflow-x: auto;
 }
+.lab-theme {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.lab-theme-select {
+	font: inherit;
+	color: #e6e6ea;
+	background: #1d1d24;
+	border: 1px solid #2a2a35;
+	border-radius: 6px;
+	padding: 4px 6px;
+	cursor: pointer;
+	text-transform: uppercase;
+}
 .lab-switch {
 	display: flex;
 	align-items: center;
