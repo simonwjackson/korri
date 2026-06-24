@@ -1,5 +1,6 @@
 import type { RouterHistory } from "@tanstack/history"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
+import { picoLabSurfaceAdapter } from "./adapters/pico"
 import { shiftLabSurfaceAdapter } from "./adapters/shift"
 
 export interface LabMountedSurface {
@@ -31,6 +32,7 @@ export interface LabSurfaceAdapter {
 
 const LAB_SURFACE_ADAPTERS: readonly LabSurfaceAdapter[] = [
   shiftLabSurfaceAdapter,
+  picoLabSurfaceAdapter,
 ]
 
 export function labSurfaceAdapters(): readonly LabSurfaceAdapter[] {
