@@ -15,6 +15,10 @@ import { labSurfaceAdapters, type LabSurfaceAdapter } from "./surface-registry"
 
 const DEFAULT_PX_PER_MM = 3.7795275591
 
+/** Distinct from the legacy theme-workshop namespace so the real-app lab never
+ * inherits the old workshop's persisted collapsed/closed calibrator state. */
+const labStorageKey = (adapterId: string) => `lab-${adapterId}`
+
 type LabCalibrationState = {
   readonly pxPerMm: number
   readonly devices: readonly DeviceConfig[]
@@ -58,7 +62,7 @@ export function LabRoot({
     }
     setCalibration(
       loadLab(
-        adapter.id,
+        labStorageKey(adapter.id),
         adapter.devices,
         adapter.knobs ?? [],
         adapter.defaultPxPerMm ?? DEFAULT_PX_PER_MM,
@@ -68,7 +72,7 @@ export function LabRoot({
 
   useEffect(() => {
     if (!adapter || !calibration) return
-    saveLab(adapter.id, calibration)
+    saveLab(labStorageKey(adapter.id), calibration)
   }, [adapter, calibration])
 
   useEffect(() => {
@@ -212,7 +216,7 @@ export function LabRoot({
         knobs={knobCals}
         onAdd={addDevice}
         onReset={reset}
-        storageKey={adapter.id}
+        storageKey={labStorageKey(adapter.id)}
       />
     </LabContext.Provider>
   )
