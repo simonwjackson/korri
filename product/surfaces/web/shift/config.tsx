@@ -199,13 +199,28 @@ const SHIFT_SCREENS: readonly Screen[] = [
   },
 ]
 
-export const shiftConfig: ThemeWorkshopConfig = {
-  id: "shift",
-  devices: SHIFT_DEVICES,
-  knobs: SHIFT_KNOBS,
-  defaultPxPerMm: SHIFT_DEFAULT_PX_PER_MM,
-  // Lab publishes --shift-text-scale / --shift-pad-scale; shift.css reads them.
-  scaleVarPrefix: "shift",
-  screens: SHIFT_SCREENS,
-  groups: ["Home", "Detail"],
+// Identity prototypes. Each is the SAME devices/knobs/screens re-skinned by a
+// token-set selected via [data-shift-identity] (set here through rootProps; the
+// overrides live in shift.css). Switch between them in the lab's theme switcher.
+// Production ships the base identity (no attribute), so these are lab-only.
+function makeShiftConfig(
+  identity: "cozy" | "premium" | "art" | "bold",
+): ThemeWorkshopConfig {
+  return {
+    id: `shift · ${identity}`,
+    devices: SHIFT_DEVICES,
+    knobs: SHIFT_KNOBS,
+    defaultPxPerMm: SHIFT_DEFAULT_PX_PER_MM,
+    // Lab publishes --shift-text-scale / --shift-pad-scale; shift.css reads them.
+    scaleVarPrefix: "shift",
+    screens: SHIFT_SCREENS,
+    groups: ["Home", "Detail"],
+    // Cascades into the surface so [data-shift-identity="…"] token overrides win.
+    rootProps: { "data-shift-identity": identity },
+  }
 }
+
+export const shiftCozyConfig = makeShiftConfig("cozy")
+export const shiftPremiumConfig = makeShiftConfig("premium")
+export const shiftArtConfig = makeShiftConfig("art")
+export const shiftBoldConfig = makeShiftConfig("bold")

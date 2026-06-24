@@ -248,6 +248,169 @@
 	--shift-labs-track: #2a2d38;
 }
 
+/* ========================================================================== *
+ * IDENTITY PROTOTYPES (device-lab only)
+ *
+ * Four candidate identities re-skinning the SAME Shift bones (rail, bars,
+ * detail, focus glow). Each is selected by [data-shift-identity="…"] on a
+ * surface ancestor (the theme-workshop sets it via rootProps), so it overrides
+ * the base tokens by specificity without touching the home/portal default.
+ * Identity lives entirely in tokens: surface temperature, ink, accent, type,
+ * and corner radius. Iterate values here; the components never change.
+ *
+ * Pinned to [data-shift-home]/[data-shift-detail] via :is() so the overrides
+ * out-specify the base token blocks. Production ships the base identity (no
+ * attribute), so none of this affects the device.
+ * ========================================================================== */
+
+/* ── 1 · Cozy / warm — Switch calm, homier; rounded type, warm paper ─────── */
+[data-shift-identity="cozy"] :is([data-shift-home], [data-shift-detail]) {
+	--shift-surface: #ece7df;
+	--shift-surface-raised: #f5f1ea;
+	--shift-surface-sunk: #e0d8cd;
+	--shift-ink: #241e18;
+	--shift-ink-dim: #5c5248;
+	--shift-ink-faint: #8c8175;
+	--shift-rule: #dad2c6;
+	--shift-focus-glow: #e0a33e;
+	--shift-accent: #d98a3c;
+	--shift-on-accent: #2a1c08;
+	--shift-pill-bg: #ffffff;
+	--shift-pill-fg: #241e18;
+	--shift-hud-glyph-bg: #5c5248;
+	--shift-hud-glyph-fg: #f5f1ea;
+	--shift-radius-tile: 10px;
+	--shift-radius-panel: calc(var(--intrinsic-base) * 0.75);
+	font-family:
+		"Nunito Variable", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+}
+:root.dark
+	[data-shift-identity="cozy"]
+	:is([data-shift-home], [data-shift-detail]) {
+	--shift-surface: #17120d;
+	--shift-surface-raised: #1f1812;
+	--shift-surface-sunk: #120e0a;
+	--shift-ink: #ede3d5;
+	--shift-ink-dim: #9a8e7e;
+	--shift-ink-faint: #6b6155;
+	--shift-rule: #2c2419;
+	--shift-focus-glow: #e8b45a;
+	--shift-accent: #e8b45a;
+	--shift-on-accent: #2a1c08;
+	--shift-pill-bg: #261d14;
+	--shift-pill-fg: #ede3d5;
+	--shift-hud-glyph-bg: #241c14;
+	--shift-hud-glyph-fg: #9a8e7e;
+}
+
+/* ── 2 · Premium / crisp — Switch 2 energy; cool neutral, sharp type ─────── */
+[data-shift-identity="premium"] :is([data-shift-home], [data-shift-detail]) {
+	--shift-surface: #eceef1;
+	--shift-surface-raised: #f7f8fa;
+	--shift-surface-sunk: #dbdfe4;
+	--shift-ink: #14171c;
+	--shift-ink-dim: #565e68;
+	--shift-ink-faint: #8a929c;
+	--shift-rule: #d2d7de;
+	--shift-focus-glow: #0fb5c9;
+	--shift-accent: #0fb5c9;
+	--shift-on-accent: #04222a;
+	--shift-pill-bg: #ffffff;
+	--shift-pill-fg: #14171c;
+	--shift-hud-glyph-bg: #565e68;
+	--shift-hud-glyph-fg: #f7f8fa;
+	--shift-radius-tile: 4px;
+	--shift-radius-panel: calc(var(--intrinsic-base) * 0.45);
+	font-family: "Geist Variable", system-ui, sans-serif;
+}
+:root.dark
+	[data-shift-identity="premium"]
+	:is([data-shift-home], [data-shift-detail]) {
+	--shift-surface: #0e1115;
+	--shift-surface-raised: #161a20;
+	--shift-surface-sunk: #0a0d10;
+	--shift-ink: #eaeef3;
+	--shift-ink-dim: #7e8893;
+	--shift-ink-faint: #545d66;
+	--shift-rule: #232a33;
+	--shift-focus-glow: #2bc9dc;
+	--shift-accent: #2bc9dc;
+	--shift-on-accent: #04222a;
+	--shift-pill-bg: #1a1f26;
+	--shift-pill-fg: #eaeef3;
+	--shift-hud-glyph-bg: #1a1f26;
+	--shift-hud-glyph-fg: #7e8893;
+}
+
+/* ── 3 · Art-forward / dynamic — chrome recedes; color comes from the art ── */
+/* (Accent here is a stand-in; the dynamic version samples the focused box art.) */
+[data-shift-identity="art"] :is([data-shift-home], [data-shift-detail]) {
+	--shift-surface: #0b0b0c;
+	--shift-surface-raised: #141416;
+	--shift-surface-sunk: #060607;
+	--shift-ink: #ffffff;
+	--shift-ink-dim: rgba(255, 255, 255, 0.62);
+	--shift-ink-faint: rgba(255, 255, 255, 0.4);
+	--shift-rule: rgba(255, 255, 255, 0.1);
+	--shift-focus-glow: #5bd0ff;
+	--shift-accent: #5bd0ff;
+	--shift-on-accent: #04222a;
+	--shift-pill-bg: rgba(255, 255, 255, 0.1);
+	--shift-pill-fg: #ffffff;
+	--shift-hud-glyph-bg: rgba(255, 255, 255, 0.12);
+	--shift-hud-glyph-fg: rgba(255, 255, 255, 0.78);
+	--shift-radius-tile: 8px;
+	--shift-radius-panel: calc(var(--intrinsic-base) * 0.55);
+	font-family: "Geist Variable", system-ui, sans-serif;
+}
+/* Art-forward is dark-primary; its light mode is a quiet gallery white. */
+:root.dark
+	[data-shift-identity="art"]
+	:is([data-shift-home], [data-shift-detail]) {
+	--shift-surface: #060607;
+	--shift-surface-raised: #111113;
+	--shift-surface-sunk: #000000;
+}
+
+/* ── 4 · Bold / expressive — loud brand accent, graphic confidence ───────── */
+[data-shift-identity="bold"] :is([data-shift-home], [data-shift-detail]) {
+	--shift-surface: #fbf7ff;
+	--shift-surface-raised: #ffffff;
+	--shift-surface-sunk: #f0eaf7;
+	--shift-ink: #100c16;
+	--shift-ink-dim: #4a4453;
+	--shift-ink-faint: #857e90;
+	--shift-rule: #e4dcef;
+	--shift-focus-glow: #f5277a;
+	--shift-accent: #f5277a;
+	--shift-on-accent: #ffffff;
+	--shift-pill-bg: #100c16;
+	--shift-pill-fg: #ffffff;
+	--shift-hud-glyph-bg: #100c16;
+	--shift-hud-glyph-fg: #fbf7ff;
+	--shift-radius-tile: 6px;
+	--shift-radius-panel: calc(var(--intrinsic-base) * 0.5);
+	font-family: "Geist Variable", system-ui, sans-serif;
+}
+:root.dark
+	[data-shift-identity="bold"]
+	:is([data-shift-home], [data-shift-detail]) {
+	--shift-surface: #0c0a0e;
+	--shift-surface-raised: #16121b;
+	--shift-surface-sunk: #080609;
+	--shift-ink: #f4eefb;
+	--shift-ink-dim: #9a93a6;
+	--shift-ink-faint: #645c6f;
+	--shift-rule: #241d2c;
+	--shift-focus-glow: #ff5c9e;
+	--shift-accent: #ff5c9e;
+	--shift-on-accent: #1a0410;
+	--shift-pill-bg: #ff5c9e;
+	--shift-pill-fg: #1a0410;
+	--shift-hud-glyph-bg: #16121b;
+	--shift-hud-glyph-fg: #9a93a6;
+}
+
 /* -------------------------------------------------------------------------- *
  * Surface scaffolding
  *
@@ -933,7 +1096,9 @@
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	justify-content: center;
+	/* `safe` centers when content fits but anchors to the start when the column
+	 * is taller than the body, so the title is never clipped on short frames. */
+	justify-content: safe center;
 	gap: var(--shift-space-3);
 	padding: var(--shift-space-3) 6cqw;
 	overflow: hidden;
@@ -1075,12 +1240,15 @@
 @container (min-aspect-ratio: 16 / 10) {
 	[data-shift-detail] .shift-detail-body {
 		flex-direction: row;
-		align-items: center;
+		/* `safe`: center the row vertically, but fall back to top-align when the
+		 * info column is taller than the body so the title stays visible. */
+		align-items: safe center;
 		justify-content: flex-start;
 		gap: 6cqw;
 	}
 
 	[data-shift-detail] .shift-detail-art {
+		align-self: center;
 		height: min(78cqh, calc(var(--intrinsic-base) * 13));
 	}
 
