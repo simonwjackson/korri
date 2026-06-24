@@ -10,6 +10,10 @@ import {
   PluginLibrarySourceLayerLive,
 } from "./library-source-layer"
 import {
+  KORRI_GMLOADER_PLUGIN_ID,
+  KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
+} from "./gmloader"
+import {
   DEFAULT_STEAM_COMPAT_TOOL,
   KORRI_STEAM_APP_ID,
   KORRI_STEAM_PLUGIN_ID,
@@ -256,6 +260,49 @@ describe("PluginLibrarySourceLayerLive", () => {
     }
   })
 
+  it("exposes installed GMLoader entries when the GMLoader plugin is enabled", async () => {
+    const previous = snapshotEnv()
+    const stateRoot = await mktemp()
+    const installRoot = await mktemp()
+    await seedGmloaderExecutable(stateRoot)
+    await seedGmloaderManifest(installRoot)
+    process.env.KORRI_CONFIG_ROOTS = ""
+    process.env.KORRI_ENABLED_PLUGINS = KORRI_GMLOADER_PLUGIN_ID
+    process.env.KORRI_PLUGIN_RESOURCE_ROOT = stateRoot
+    process.env.KORRI_GMLOADER_INSTALL_ROOT = installRoot
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const source = yield* LibrarySource
+          const listPlayableEntries = source.listPlayableEntries
+          if (!listPlayableEntries)
+            throw new Error("expected playable list support")
+          const entries = yield* listPlayableEntries()
+          const resolved = yield* source.resolveLaunchForGame(
+            `${KORRI_GMLOADER_PLUGIN_ID}/sample`,
+          )
+          return { entries, resolved }
+        }).pipe(Effect.provide(PluginLibrarySourceLayerLive)),
+      )
+
+      expect(result.entries.map(entry => entry.id)).toContain(
+        `${KORRI_GMLOADER_PLUGIN_ID}/sample`,
+      )
+      expect(result.resolved.spec.command).toBe(
+        join(
+          stateRoot,
+          "x406b6f7272693a676d6c6f61646572",
+          "x676d6c6f616465722d6e657874",
+          "result",
+          "bin",
+          "gmloader-next",
+        ),
+      )
+    } finally {
+      restoreEnv(previous)
+    }
+  })
+
   it("exposes installed PortMaster entries when the PortMaster plugin is enabled", async () => {
     const previous = snapshotEnv()
     const installRoot = await mktemp()
@@ -427,6 +474,7 @@ function snapshotEnv() {
     KORRI_ENABLED_PLUGINS: process.env.KORRI_ENABLED_PLUGINS,
     KORRI_PLUGIN_RESOURCE_ROOT: process.env.KORRI_PLUGIN_RESOURCE_ROOT,
     KORRI_NIX_COMMAND: process.env.KORRI_NIX_COMMAND,
+    KORRI_GMLOADER_INSTALL_ROOT: process.env.KORRI_GMLOADER_INSTALL_ROOT,
     KORRI_PORTMASTER_INSTALL_ROOT: process.env.KORRI_PORTMASTER_INSTALL_ROOT,
     KORRI_PORTMASTER_USE_BUBBLEWRAP:
       process.env.KORRI_PORTMASTER_USE_BUBBLEWRAP,
@@ -444,6 +492,55 @@ function restoreEnv(previous: ReturnType<typeof snapshotEnv>): void {
 async function mktemp(): Promise<string> {
   return await import("node:fs/promises").then(fs =>
     fs.mkdtemp(join(tmpdir(), "korri-plugin-live-")),
+  )
+}
+
+async function seedGmloaderManifest(installRoot: string): Promise<void> {
+  const gameRoot = join(installRoot, "games", "sample")
+  const manifest = {
+    schemaVersion: 1,
+    providerId: KORRI_GMLOADER_PLUGIN_ID,
+    id: "sample",
+    title: "Sample",
+    installedAt: "2026-06-24T00:00:00.000Z",
+    installRoot,
+    gameRoot,
+    manifestPath: join(installRoot, "manifests", "sample.json"),
+    source: {
+      path: "/tmp/sample.apk",
+      sizeBytes: 1,
+      sha256: "fixture",
+      idStrategy: "content-hash",
+    },
+    payload: {
+      _tag: "GmloaderPayloadProfile",
+      sourcePath: "/tmp/sample.apk",
+      kind: "archive",
+      title: "Sample",
+      idHint: "sample",
+      gameDroid: { path: "assets/game.droid", sizeBytes: 4, stored: true },
+      libyoyo: { path: "lib/arm64-v8a/libyoyo.so", sizeBytes: 6, abi: "arm64-v8a" },
+      abis: ["arm64-v8a"],
+      supportLibraries: [],
+      transformsRequired: ["extract-arm64-runner"],
+      evidence: [],
+    },
+    run: {
+      configPath: join(gameRoot, "gmloader.json"),
+      files: [],
+      libraryPaths: [join(gameRoot, "lib", "arm64-v8a"), join(gameRoot, "lib")],
+    },
+    compatibility: { transformsApplied: ["extract-arm64-runner"] },
+  }
+  await mkdir(join(installRoot, "manifests"), { recursive: true })
+  await mkdir(join(gameRoot, "assets"), { recursive: true })
+  await mkdir(join(gameRoot, "lib", "arm64-v8a"), { recursive: true })
+  await writeFile(join(gameRoot, "assets", "game.droid"), "game")
+  await writeFile(join(gameRoot, "lib", "arm64-v8a", "libyoyo.so"), "runner")
+  await writeFile(join(gameRoot, "gmloader.json"), "{}")
+  await writeFile(
+    manifest.manifestPath,
+    `${JSON.stringify(manifest, null, 2)}\n`,
   )
 }
 
@@ -497,6 +594,16 @@ async function seedPortMasterManifest(installRoot: string): Promise<void> {
     manifest.manifestPath,
     `${JSON.stringify(manifest, null, 2)}\n`,
   )
+}
+
+async function seedGmloaderExecutable(stateRoot: string): Promise<void> {
+  await seedExecutableResource({
+    stateRoot,
+    pluginId: KORRI_GMLOADER_PLUGIN_ID,
+    resourceId: KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
+    binary: "gmloader-next",
+    storeName: "store-gmloader-next",
+  })
 }
 
 async function seedNeverballExecutable(stateRoot: string): Promise<void> {
