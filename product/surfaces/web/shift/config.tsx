@@ -14,7 +14,6 @@
  * the scaleVarPrefix ("shift") so the lab publishes --shift-text-scale /
  * --shift-pad-scale, which shift.css reads with a default of 1.
  */
-import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type {
   DeviceConfig,
   Screen,
@@ -22,10 +21,6 @@ import type {
   ThemeWorkshopConfig,
 } from "@tools/theme-workshop"
 import { DEV_GAME_MEDIA } from "./dev-game-media"
-import { ShiftHomeCaption } from "./molecules/ShiftHomeCaption"
-import { ShiftHomeBottomBar } from "./organisms/ShiftHomeBottomBar"
-import { ShiftHomeRail } from "./organisms/ShiftHomeRail"
-import { ShiftHomeTopBar } from "./organisms/ShiftHomeTopBar"
 import {
   type ShiftCinematicGame,
   ShiftCinematicHome,
@@ -34,7 +29,6 @@ import {
   ShiftGameDetailScreen,
   type ShiftGameDetailView,
 } from "./pages/ShiftGameDetailScreen"
-import { ShiftHomeRoot } from "./templates/ShiftHomeRoot"
 import "./shift.css"
 
 const SHIFT_DEFAULT_PX_PER_MM = 6.78
@@ -134,26 +128,6 @@ const SHIFT_KNOBS: readonly ThemeKnob[] = [
 const PLACEHOLDER_TIME = "4:24 PM"
 const PLACEHOLDER_AVATAR_SRC = "https://i.pravatar.cc/96?u=korri-shift-user"
 
-// Fixture-backed home composition. Mirrors ShiftHomeReadyBody's layout without
-// the catalog/launch atom machinery — the device-lab is backend-free. The home
-// organisms read state from ShiftHomeRoot's context; useInputAction safely
-// no-ops when no spatial-navigation bus is running.
-function ShiftHomeLabScreen() {
-  return (
-    <ShiftHomeRoot items={SHIFT_HOME_ITEMS}>
-      <ShiftHomeTopBar
-        time={PLACEHOLDER_TIME}
-        avatarSrc={PLACEHOLDER_AVATAR_SRC}
-      />
-      <div className="flex min-h-0 flex-1 flex-col justify-center gap-[var(--shift-space-1)]">
-        <ShiftHomeRail />
-        <ShiftHomeCaption />
-      </div>
-      <ShiftHomeBottomBar />
-    </ShiftHomeRoot>
-  )
-}
-
 // ── Real-media prototype catalog ──────────────────────────────────────────
 // Every Shift lab screen renders real games with SteamGridDB art (see
 // dev-game-media). Play state is synthesised per entry so the chips/stats vary
@@ -194,41 +168,6 @@ const DEV_GAMES = DEV_GAME_MEDIA.map((media, index) => ({
   userData: syntheticUserData(index),
 }))
 
-// Home rail consumes platform playable records; attach the real cover (tile) +
-// background (hero) so the poster and feature tiles resolve SteamGridDB art via
-// getPlayableImageUrl / getPlayableWideImageUrl.
-const SHIFT_HOME_ITEMS: readonly ResolvedGameRecord[] = DEV_GAMES.map(
-  ({ media, userData }) => ({
-    id: media.id,
-    system: "steam",
-    contentPath: `/library/${media.id}`,
-    metadata: {
-      name: media.title,
-      developer: media.developer,
-      genre: [media.genre],
-    },
-    userData,
-    media: [
-      {
-        role: "tile",
-        type: "image",
-        width: 600,
-        height: 900,
-        assetId: `${media.id}-tile`,
-        url: media.gridUrl,
-      },
-      {
-        role: "hero",
-        type: "image",
-        width: 1920,
-        height: 620,
-        assetId: `${media.id}-hero`,
-        url: media.heroUrl,
-      },
-    ],
-  }),
-)
-
 const SHIFT_CINEMATIC_GAMES: readonly ShiftCinematicGame[] = DEV_GAMES.map(
   ({ media, userData }) => ({
     id: media.id,
@@ -258,9 +197,9 @@ const SHIFT_DETAIL_GAMES: readonly ShiftGameDetailView[] = DEV_GAMES.map(
 
 const SHIFT_SCREENS: readonly Screen[] = [
   {
-    id: "home-cinematic",
+    id: "home",
     group: "Home",
-    name: "Home · Cinematic",
+    name: "Home",
     render: () => (
       <ShiftCinematicHome
         games={SHIFT_CINEMATIC_GAMES}
@@ -268,12 +207,6 @@ const SHIFT_SCREENS: readonly Screen[] = [
         avatarSrc={PLACEHOLDER_AVATAR_SRC}
       />
     ),
-  },
-  {
-    id: "home",
-    group: "Home",
-    name: "Home",
-    render: () => <ShiftHomeLabScreen />,
   },
   {
     id: "game-detail",
