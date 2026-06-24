@@ -26,6 +26,10 @@ import { ShiftHomeBottomBar } from "./organisms/ShiftHomeBottomBar"
 import { ShiftHomeRail } from "./organisms/ShiftHomeRail"
 import { ShiftHomeTopBar } from "./organisms/ShiftHomeTopBar"
 import {
+  type ShiftCinematicGame,
+  ShiftCinematicHome,
+} from "./pages/ShiftCinematicHome"
+import {
   ShiftGameDetailScreen,
   type ShiftGameDetailView,
 } from "./pages/ShiftGameDetailScreen"
@@ -173,6 +177,25 @@ function playtimeLabel(minutes: number | undefined): string | undefined {
   return `${(minutes / 60).toFixed(1)}h`
 }
 
+const cineTileUrl = (id: string): string =>
+  `https://picsum.photos/seed/${encodeURIComponent(`shift-${id}`)}/600/600`
+const cineWideUrl = (id: string): string =>
+  `https://picsum.photos/seed/${encodeURIComponent(`shift-${id}-wide`)}/1600/900`
+
+const SHIFT_CINEMATIC_GAMES: readonly ShiftCinematicGame[] = games.map(
+  game => ({
+    id: game.id,
+    title: game.metadata?.name ?? game.id,
+    tileArtUrl: cineTileUrl(game.id),
+    wideArtUrl: cineWideUrl(game.id),
+    genre: game.metadata?.genre?.[0],
+    developer: game.metadata?.developer,
+    lastPlayedLabel: relativeLastPlayed(game.userData?.lastPlayed),
+    playtimeLabel: playtimeLabel(game.userData?.playtime),
+    favorite: game.userData?.favorite,
+  }),
+)
+
 const SHIFT_DETAIL_GAMES: readonly ShiftGameDetailView[] = games.map(game => ({
   id: game.id,
   title: game.metadata?.name ?? game.id,
@@ -185,6 +208,18 @@ const SHIFT_DETAIL_GAMES: readonly ShiftGameDetailView[] = games.map(game => ({
 }))
 
 const SHIFT_SCREENS: readonly Screen[] = [
+  {
+    id: "home-cinematic",
+    group: "Home",
+    name: "Home · Cinematic",
+    render: () => (
+      <ShiftCinematicHome
+        games={SHIFT_CINEMATIC_GAMES}
+        time={PLACEHOLDER_TIME}
+        avatarSrc={PLACEHOLDER_AVATAR_SRC}
+      />
+    ),
+  },
   {
     id: "home",
     group: "Home",

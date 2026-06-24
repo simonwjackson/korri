@@ -15,11 +15,11 @@ import {
 import type { ThemeWorkshopConfig } from "./types"
 
 export const THEMES: readonly ThemeWorkshopConfig[] = [
-  picoConfig,
-  shiftCozyConfig,
   shiftPremiumConfig,
+  shiftCozyConfig,
   shiftArtConfig,
   shiftBoldConfig,
+  picoConfig,
 ]
 
 export const DEFAULT_THEME_ID: string = THEMES[0]?.id ?? "pico"

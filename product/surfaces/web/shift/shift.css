@@ -1267,3 +1267,271 @@
 		justify-content: flex-start;
 	}
 }
+
+/* ========================================================================== *
+ * CINEMATIC RAIL (home prototype)
+ *
+ * A device-first scene, not a page: the focused game's art is the full-bleed
+ * environment; a spring-driven track keeps the focused tile centered (the rail
+ * moves under a fixed cursor); copy is glanceable chips over a scrim. All ink
+ * is on-media (white) regardless of light/dark, since art is the backdrop; the
+ * per-identity --shift-accent still tints the kicker, focus ring, and A button.
+ * ========================================================================== */
+
+[data-shift-home].shift-cine {
+	background-color: #07070a;
+	color: var(--shift-on-media-ink);
+	font-family: "Geist Variable", system-ui, sans-serif;
+	/* Bounded-media: tracks frame height but plateaus against the base ceiling so
+	 * tiles don't dominate a short landscape frame or vanish on a 4K panel. */
+	--cine-tile: min(24cqh, calc(var(--intrinsic-base) * 6));
+}
+
+[data-shift-home] .shift-cine-bg {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	background-size: cover;
+	background-position: center;
+	will-change: transform, opacity;
+}
+
+[data-shift-home] .shift-cine-scrim {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	pointer-events: none;
+	background:
+		linear-gradient(
+			to top,
+			rgba(4, 4, 8, 0.94) 0%,
+			rgba(4, 4, 8, 0.58) 28%,
+			rgba(4, 4, 8, 0.12) 54%,
+			transparent 78%
+		),
+		linear-gradient(
+			to right,
+			rgba(4, 4, 8, 0.72) 0%,
+			rgba(4, 4, 8, 0.18) 52%,
+			transparent 74%
+		);
+}
+
+[data-shift-home] .shift-cine-top {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--shift-space-4) var(--shift-space-6);
+	font-size: var(--shift-text-body);
+}
+
+[data-shift-home] .shift-cine-clock {
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	opacity: 0.92;
+	text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
+}
+
+[data-shift-home] .shift-cine-status {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-3);
+	opacity: 0.92;
+}
+
+[data-shift-home] .shift-cine-status-icon {
+	width: 1.3em;
+	height: 1.3em;
+}
+
+[data-shift-home] .shift-cine-avatar {
+	width: 2.1em;
+	height: 2.1em;
+	border-radius: 9999px;
+	object-fit: cover;
+	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+[data-shift-home] .shift-cine-stage {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-3);
+	padding: var(--shift-space-5);
+}
+
+[data-shift-home] .shift-cine-midrow {
+	/* Take the space above the rail and bottom-align the hero, so the rail is
+	 * always fully visible (flex:0 below) no matter how tall the hero grows.
+	 * overflow:hidden keeps an oversized hero from spilling onto the top bar. */
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: var(--shift-space-4);
+	width: 100%;
+}
+
+[data-shift-home] .shift-cine-hero {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-2);
+	max-width: min(70cqi, 48rem);
+}
+
+[data-shift-home] .shift-cine-kicker {
+	font-size: var(--shift-text-fine);
+	font-weight: 800;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--shift-accent);
+	text-shadow: 0 1px 12px rgba(0, 0, 0, 0.55);
+}
+
+[data-shift-home] .shift-cine-title {
+	margin: 0;
+	font-size: var(--shift-text-display);
+	font-weight: 800;
+	line-height: 1.02;
+	letter-spacing: -0.02em;
+	color: #ffffff;
+	text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6);
+	/* Clamp to two lines so a long title can't shove the rail off-screen. */
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+}
+
+[data-shift-home] .shift-cine-chips {
+	display: flex;
+	flex-wrap: nowrap;
+	gap: var(--shift-space-2);
+	margin-top: var(--shift-space-1);
+}
+
+[data-shift-home] .shift-cine-chip {
+	display: inline-flex;
+	align-items: center;
+	white-space: nowrap;
+	padding: var(--shift-space-1) var(--shift-space-3);
+	border-radius: 9999px;
+	background: rgba(255, 255, 255, 0.14);
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	backdrop-filter: blur(8px);
+	font-size: var(--shift-text-fine);
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.92);
+}
+
+[data-shift-home] .shift-cine-chip.is-fav {
+	color: var(--shift-accent);
+	border-color: color-mix(in srgb, var(--shift-accent) 50%, transparent);
+}
+
+[data-shift-home] .shift-cine-legend {
+	display: flex;
+	align-items: center;
+	gap: var(--shift-space-4);
+	flex-shrink: 0;
+}
+
+[data-shift-home] .shift-cine-hint {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-2);
+	font-size: var(--shift-text-body);
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.85);
+}
+
+[data-shift-home] .shift-cine-hint-glyph {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2em;
+	height: 2em;
+	border-radius: 9999px;
+	background: rgba(255, 255, 255, 0.16);
+	backdrop-filter: blur(8px);
+	color: #ffffff;
+	font-size: var(--shift-text-fine);
+	font-weight: 800;
+	line-height: 1;
+}
+
+[data-shift-home] .shift-cine-hint[data-primary] .shift-cine-hint-glyph {
+	background: var(--shift-accent);
+	color: var(--shift-on-accent);
+}
+
+[data-shift-home] .shift-cine-rail {
+	position: relative;
+	flex: 0 0 auto;
+	width: 100%;
+	overflow: hidden;
+}
+
+[data-shift-home] .shift-cine-track {
+	position: relative;
+	display: flex;
+	align-items: flex-end;
+	gap: var(--shift-space-3);
+	padding: var(--shift-space-4) 0;
+	will-change: transform;
+}
+
+[data-shift-home] .shift-cine-tile {
+	position: relative;
+	flex: 0 0 auto;
+	width: var(--cine-tile);
+	height: var(--cine-tile);
+	border: 0;
+	padding: 0;
+	border-radius: calc(var(--intrinsic-base) * 0.5);
+	overflow: hidden;
+	background: rgba(255, 255, 255, 0.06);
+	cursor: pointer;
+	outline: none;
+	opacity: 0.5;
+	filter: saturate(0.85);
+	transform: scale(0.9);
+	transform-origin: center bottom;
+	transition:
+		transform 220ms ease,
+		opacity 220ms ease,
+		box-shadow 220ms ease,
+		filter 220ms ease;
+}
+
+[data-shift-home] .shift-cine-tile img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+[data-shift-home] .shift-cine-tile[data-focused] {
+	z-index: 2;
+	opacity: 1;
+	filter: none;
+	transform: scale(1.12) translateY(-6%);
+	box-shadow:
+		0 18px 50px rgba(0, 0, 0, 0.6),
+		0 0 0 3px var(--shift-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	[data-shift-home] .shift-cine-tile {
+		transition: none;
+	}
+}
