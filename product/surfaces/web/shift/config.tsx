@@ -25,6 +25,10 @@ import { ShiftHomeCaption } from "./molecules/ShiftHomeCaption"
 import { ShiftHomeBottomBar } from "./organisms/ShiftHomeBottomBar"
 import { ShiftHomeRail } from "./organisms/ShiftHomeRail"
 import { ShiftHomeTopBar } from "./organisms/ShiftHomeTopBar"
+import {
+  ShiftGameDetailScreen,
+  type ShiftGameDetailView,
+} from "./pages/ShiftGameDetailScreen"
 import { ShiftHomeRoot } from "./templates/ShiftHomeRoot"
 import "./shift.css"
 
@@ -145,12 +149,53 @@ function ShiftHomeLabScreen() {
   )
 }
 
+// ── Game Detail fixtures ──────────────────────────────────────────────────
+// The detail page takes a flat view model (decoupled from library wiring); the
+// lab maps the shared game fixtures into it. Art reuses Shift's deterministic
+// fixture-art seed (the home feature tile builds wide art the same way), here
+// in a 3:4 poster crop for the portrait art card.
+function detailArtUrl(id: string): string {
+  return `https://picsum.photos/seed/${encodeURIComponent(`shift-${id}-poster`)}/900/1200`
+}
+
+function relativeLastPlayed(date: Date | undefined): string | undefined {
+  if (!date) return undefined
+  const minutes = Math.round((Date.now() - date.getTime()) / 60_000)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.round(hours / 24)}d ago`
+}
+
+function playtimeLabel(minutes: number | undefined): string | undefined {
+  if (!minutes) return undefined
+  if (minutes < 60) return `${minutes}m`
+  return `${(minutes / 60).toFixed(1)}h`
+}
+
+const SHIFT_DETAIL_GAMES: readonly ShiftGameDetailView[] = games.map(game => ({
+  id: game.id,
+  title: game.metadata?.name ?? game.id,
+  artUrl: detailArtUrl(game.id),
+  genre: game.metadata?.genre?.[0],
+  developer: game.metadata?.developer,
+  lastPlayedLabel: relativeLastPlayed(game.userData?.lastPlayed),
+  playtimeLabel: playtimeLabel(game.userData?.playtime),
+  favorite: game.userData?.favorite,
+}))
+
 const SHIFT_SCREENS: readonly Screen[] = [
   {
     id: "home",
     group: "Home",
     name: "Home",
     render: () => <ShiftHomeLabScreen />,
+  },
+  {
+    id: "game-detail",
+    group: "Detail",
+    name: "Game Detail",
+    render: () => <ShiftGameDetailScreen games={SHIFT_DETAIL_GAMES} />,
   },
 ]
 
@@ -162,5 +207,5 @@ export const shiftConfig: ThemeWorkshopConfig = {
   // Lab publishes --shift-text-scale / --shift-pad-scale; shift.css reads them.
   scaleVarPrefix: "shift",
   screens: SHIFT_SCREENS,
-  groups: ["Home"],
+  groups: ["Home", "Detail"],
 }

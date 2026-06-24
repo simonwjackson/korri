@@ -46,7 +46,8 @@
  * Hex values are stable starting points; iterate during visual review.
  * -------------------------------------------------------------------------- */
 
-[data-shift-home] {
+[data-shift-home],
+[data-shift-detail] {
 	/* ── Intrinsic generator knobs ─────────────────────────────────────────
 	 * Shift instantiates @korri/intrinsic-design against its OWN container.
 	 * The surface element carries the `intrinsic` class so the recipe computes
@@ -203,7 +204,8 @@
  * Tokens — dark mode (Switch night blue / OLED black)
  * -------------------------------------------------------------------------- */
 
-:root.dark [data-shift-home] {
+:root.dark [data-shift-home],
+:root.dark [data-shift-detail] {
 	/*
    * Pitch-black surface stack — OLED-style. Raised and sunk collapse to
    * the same value as --shift-surface; --shift-rule, --shift-ink-dim,
@@ -255,7 +257,8 @@
  * baseline.
  * -------------------------------------------------------------------------- */
 
-[data-shift-home] {
+[data-shift-home],
+[data-shift-detail] {
 	/* container-type: size (not inline-size) so BOTH cqi and cqh resolve
 	 * against the surface — the rail's bounded-media cqh cap and the launch
 	 * art measure this box, not the viewport. The surface fills its parent
@@ -284,7 +287,9 @@
  * the menu button).
  */
 [data-shift-home] :focus,
-[data-shift-home] :focus-visible {
+[data-shift-home] :focus-visible,
+[data-shift-detail] :focus,
+[data-shift-detail] :focus-visible {
 	outline: none;
 }
 
@@ -886,5 +891,211 @@
 	[data-shift-home] .shift-pill,
 	[data-shift-home] .shift-hud-glyph {
 		transition: none;
+	}
+
+	[data-shift-detail] .shift-detail-btn {
+		transition: none;
+	}
+}
+
+/* -------------------------------------------------------------------------- *
+ * Game Detail (screen) — art + info, with a form-factor seam
+ *
+ * Port of pico's Variant D into Shift. The body is a flex column that becomes
+ * a hero | info row on a wide (lean-back) device; the seam is keyed off the
+ * surface's TRUE aspect ratio (a container query against [data-shift-detail],
+ * which is container-type:size), so it is monitor-calibration independent — a
+ * squarish handheld stays stacked, a 16:9 panel splits. Art is bounded by the
+ * type scale (min(<cqh>, base·N)) so it shares the base's ceiling and tracks
+ * the text instead of running away on big screens.
+ * -------------------------------------------------------------------------- */
+
+[data-shift-detail] {
+	position: relative;
+	height: 100%;
+	display: grid;
+	grid-template-rows: auto 1fr auto;
+}
+
+[data-shift-detail] .shift-detail-statusbar {
+	display: flex;
+	align-items: center;
+	padding: var(--shift-space-3) var(--shift-space-6);
+	font-size: var(--shift-text-fine);
+	font-weight: 700;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--shift-ink-dim);
+}
+
+[data-shift-detail] .shift-detail-body {
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--shift-space-3);
+	padding: var(--shift-space-3) 6cqw;
+	overflow: hidden;
+}
+
+[data-shift-detail] .shift-detail-art {
+	container-type: size;
+	flex: 0 0 auto;
+	aspect-ratio: 3 / 4;
+	height: min(46cqh, calc(var(--intrinsic-base) * 12));
+	border-radius: var(--shift-radius-panel);
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+	box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+[data-shift-detail] .shift-detail-art img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+[data-shift-detail] .shift-detail-info {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	gap: var(--shift-space-2);
+	min-width: 0;
+}
+
+[data-shift-detail] .shift-detail-title {
+	margin: 0;
+	font-size: var(--shift-text-display);
+	font-weight: 800;
+	line-height: 1.08;
+	letter-spacing: -0.02em;
+	color: var(--shift-ink);
+}
+
+[data-shift-detail] .shift-detail-tags {
+	font-size: var(--shift-text-fine);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--shift-accent);
+}
+
+[data-shift-detail] .shift-detail-synopsis {
+	margin: 0;
+	max-width: var(--shift-measure-prose);
+	font-size: var(--shift-text-body);
+	line-height: 1.5;
+	color: var(--shift-ink-dim);
+}
+
+[data-shift-detail] .shift-detail-stats {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--shift-space-2) var(--shift-space-4);
+	font-size: var(--shift-text-fine);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-detail] .shift-detail-fav {
+	color: var(--shift-accent);
+}
+
+[data-shift-detail] .shift-detail-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--shift-space-2);
+	margin-top: var(--shift-space-1);
+}
+
+[data-shift-detail] .shift-detail-btn {
+	cursor: pointer;
+	padding: var(--shift-space-2) var(--shift-space-4);
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	color: var(--shift-pill-fg);
+	background: var(--shift-pill-bg);
+	border: 0;
+	border-radius: 9999px;
+	outline: none;
+	transition:
+		box-shadow 160ms ease,
+		transform 160ms ease;
+}
+
+[data-shift-detail] .shift-detail-btn.primary {
+	color: var(--shift-on-accent);
+	background: var(--shift-accent);
+}
+
+[data-shift-detail] .shift-detail-btn:is(:focus, [data-korri-active-focus]) {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+	transform: translateY(-1px);
+}
+
+[data-shift-detail] .shift-detail-buttonbar {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+	gap: var(--shift-space-4);
+	padding: var(--shift-space-3) var(--shift-space-6);
+}
+
+[data-shift-detail] .shift-detail-hint {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-2);
+	font-size: var(--shift-text-body);
+	font-weight: 600;
+	color: var(--shift-ink-dim);
+}
+
+[data-shift-detail] .shift-detail-hint-glyph {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2em;
+	height: 2em;
+	border-radius: 9999px;
+	background: var(--shift-hud-glyph-bg);
+	color: var(--shift-hud-glyph-fg);
+	font-size: var(--shift-text-fine);
+	font-weight: 800;
+	line-height: 1;
+}
+
+/* Art-direction seam: a wide (lean-back) screen splits hero | info. */
+@container (min-aspect-ratio: 16 / 10) {
+	[data-shift-detail] .shift-detail-body {
+		flex-direction: row;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 6cqw;
+	}
+
+	[data-shift-detail] .shift-detail-art {
+		height: min(78cqh, calc(var(--intrinsic-base) * 13));
+	}
+
+	[data-shift-detail] .shift-detail-info {
+		flex: 1;
+		align-items: flex-start;
+		text-align: left;
+	}
+
+	[data-shift-detail] .shift-detail-synopsis {
+		max-width: 46cqw;
+	}
+
+	[data-shift-detail] .shift-detail-stats,
+	[data-shift-detail] .shift-detail-actions {
+		justify-content: flex-start;
 	}
 }
