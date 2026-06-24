@@ -86,10 +86,12 @@ import { UserPayload, UserRecord } from "@platform/library/config/records/user"
 import {
   createPersistentEffectDatabase,
   type FormatCodec,
+  makeInMemoryStorageLayer,
+  makeSerializerLayer,
   yamlCodec,
 } from "@proseql/core"
 import { makeNodePersistenceLayer } from "@proseql/node"
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 
 export interface KorriLibraryDbOptions {
   readonly root: string
@@ -431,32 +433,43 @@ type SidecarCollections = Pick<
   readonly restore: (snapshot: SidecarSnapshot) => void
 }
 
+// Sidecars persist to a directory (fs) for the real daemon, or hold records
+// only in memory (no disk) for the in-memory opener used by the design tool /
+// e2e. The record store + API are identical; only load + flush differ.
+type SidecarLocation =
+  | { readonly mode: "fs"; readonly root: string }
+  | { readonly mode: "memory" }
+
 async function makeJsonSidecarCollection<TPayload>(
-  root: string,
+  location: SidecarLocation,
   fileName: string,
   collection: string,
   schema: Schema.Decoder<unknown>,
 ): Promise<SidecarCollectionApi<TPayload>> {
-  const filePath = join(root, fileName)
+  const filePath =
+    location.mode === "fs" ? join(location.root, fileName) : undefined
   const records = new Map<string, SidecarRecord & TPayload>()
   const decode = (input: unknown): SidecarRecord & TPayload =>
     Schema.decodeUnknownSync(schema)(input, STRICT) as SidecarRecord & TPayload
 
-  try {
-    const raw = await readFile(filePath, "utf8")
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) {
-      throw new Error(`${collection} sidecar must contain a JSON array`)
+  if (filePath !== undefined) {
+    try {
+      const raw = await readFile(filePath, "utf8")
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) {
+        throw new Error(`${collection} sidecar must contain a JSON array`)
+      }
+      const decoded = parsed.map(decode)
+      for (const record of decoded) {
+        records.set(record.id, record)
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
     }
-    const decoded = parsed.map(decode)
-    for (const record of decoded) {
-      records.set(record.id, record)
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
   }
 
   const flush = async () => {
+    if (filePath === undefined) return
     const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
     await writeFile(
       tempPath,
@@ -534,22 +547,22 @@ async function makeJsonSidecarCollection<TPayload>(
 }
 
 async function makeSidecarCollections(
-  root: string,
+  location: SidecarLocation,
 ): Promise<SidecarCollections> {
   const artifacts = await makeJsonSidecarCollection(
-    root,
+    location,
     ".korri-artifacts.json",
     "artifacts",
     ArtifactRecord,
   )
   const gameAssets = await makeJsonSidecarCollection(
-    root,
+    location,
     ".korri-game-assets.json",
     "game-assets",
     GameAssetRecord,
   )
   const gameAssetAssignments = await makeJsonSidecarCollection(
-    root,
+    location,
     ".korri-game-asset-assignments.json",
     "game-asset-assignments",
     GameAssetAssignmentRecord,
@@ -670,7 +683,7 @@ export class InvalidSingletonConfigError extends Error {
 export async function loadSidecarSnapshot(
   root: string,
 ): Promise<SidecarSnapshot> {
-  const sidecars = await makeSidecarCollections(root)
+  const sidecars = await makeSidecarCollections({ mode: "fs", root })
   return sidecars.snapshot()
 }
 
@@ -691,12 +704,57 @@ export function openKorriLibraryDb(options: KorriLibraryDbOptions) {
           writeDebounce: options.writeDebounce ?? 10,
         }).pipe(Effect.provide(persistenceLayer)),
         sidecars: Effect.tryPromise({
-          try: () => makeSidecarCollections(options.root),
+          try: () => makeSidecarCollections({ mode: "fs", root: options.root }),
           catch: error =>
             new Error(error instanceof Error ? error.message : String(error)),
         }),
       }),
     ),
+    Effect.map(({ db, sidecars }) =>
+      withCanonicalCollectionGuards(db as unknown as KorriLibraryDb, sidecars),
+    ),
+    Effect.tap(db =>
+      Effect.tryPromise({
+        try: async () => {
+          const records = await db.host.query().runPromise
+          const bad = records.map(r => r.id).filter(id => id !== LOCAL_HOST_KEY)
+          if (bad.length > 0) throw new InvalidSingletonHostError(bad)
+        },
+        catch: error =>
+          error instanceof InvalidSingletonHostError
+            ? error
+            : new Error(error instanceof Error ? error.message : String(error)),
+      }),
+    ),
+  )
+}
+
+/**
+ * In-memory korri library DB: the SAME config / collections / canonical guards
+ * / singleton-host check as openKorriLibraryDb, but backed by ProseQL core's
+ * Map storage adapter and sidecars with no file system. This is the seam for
+ * the design tool + e2e -- the real ProseQL engine and repository, no server,
+ * no disk. (Keeping node:fs out of a browser bundle is a follow-up module
+ * split; this opener is engine-correct first and is exercised in Node tests.)
+ */
+export function openInMemoryKorriLibraryDb() {
+  const config = makeKorriLibraryDbConfig("mem")
+  // Prime the Map so the document-source root "mem" exists (the in-memory
+  // adapter treats a key under "mem/" as the root existing) and the outbox
+  // ("library.yaml") starts as an empty mapping -- the in-memory equivalent of
+  // an empty seed directory the fs opener gets via mkdir.
+  const store = new Map<string, string>([["mem/library.yaml", "{}\n"]])
+  const persistenceLayer = Layer.merge(
+    makeInMemoryStorageLayer(store),
+    makeSerializerLayer([korriReadableYamlCodec]),
+  )
+
+  return Effect.all({
+    db: createPersistentEffectDatabase(config, undefined, {
+      writeDebounce: 10,
+    }).pipe(Effect.provide(persistenceLayer)),
+    sidecars: Effect.promise(() => makeSidecarCollections({ mode: "memory" })),
+  }).pipe(
     Effect.map(({ db, sidecars }) =>
       withCanonicalCollectionGuards(db as unknown as KorriLibraryDb, sidecars),
     ),
