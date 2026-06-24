@@ -14,7 +14,11 @@ describe("shift lab surface adapter", () => {
     expect(adapter.devices.length).toBeGreaterThan(0)
     expect(adapter.devices.map(device => device.id)).toContain("rg353m")
 
-    const initialValues = await adapter.makeSeedInitialValues()
+    const initialValues =
+      (await adapter.makeSeedInitialValues()) as readonly (readonly [
+        unknown,
+        unknown,
+      ])[]
     const atoms = initialValues.map(([atom]) => atom)
 
     expect(atoms).toContain(catalogFactsSourceLayerAtom)

@@ -32,7 +32,7 @@ function makeAdapter() {
   const histories = new Map<string, RouterHistory>()
   const mountCounts = new Map<string, number>()
 
-  const adapter: LabSurfaceAdapter<{ readonly seed: true }> = {
+  const adapter: LabSurfaceAdapter = {
     id: "test",
     devices,
     makeSeedInitialValues: async () => ({ seed: true }),

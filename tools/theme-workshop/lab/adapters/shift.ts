@@ -7,7 +7,7 @@ import {
   type SeedInitialValues,
 } from "../seed/shift-seed"
 
-export const shiftLabSurfaceAdapter: LabSurfaceAdapter<SeedInitialValues> = {
+export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   id: "shift",
   devices: shiftConfig.devices,
   knobs: shiftConfig.knobs,
@@ -16,7 +16,7 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter<SeedInitialValues> = {
   makeSeedInitialValues,
   mountSurface: (host, { initialValues, history }) =>
     mountShift(host, {
-      data: { initialValues },
+      data: { initialValues: initialValues as SeedInitialValues },
       navigation: history ? { history: history as RouterHistory } : undefined,
     }),
 }

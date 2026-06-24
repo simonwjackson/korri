@@ -13,7 +13,7 @@ describe("LabSurfaceMount", () => {
     const histories: RouterHistory[] = []
     const hosts: HTMLElement[] = []
 
-    const adapter: LabSurfaceAdapter<{ readonly seed: true }> = {
+    const adapter: LabSurfaceAdapter = {
       id: "test",
       devices: [],
       makeSeedInitialValues: async () => ({ seed: true }),

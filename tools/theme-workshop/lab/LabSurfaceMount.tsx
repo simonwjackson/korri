@@ -3,14 +3,14 @@ import { useEffect, useRef } from "react"
 import { normalizeSurfacePath } from "./lab-route-state"
 import type { LabSurfaceAdapter, LabMountedSurface } from "./surface-registry"
 
-export function LabSurfaceMount<InitialValues>({
+export function LabSurfaceMount({
   adapter,
   initialValues,
   surfacePath,
   onNavigate,
 }: {
-  readonly adapter: LabSurfaceAdapter<InitialValues>
-  readonly initialValues: InitialValues
+  readonly adapter: LabSurfaceAdapter
+  readonly initialValues: unknown
   readonly surfacePath: string
   readonly onNavigate: (surfacePath: string) => void
 }) {

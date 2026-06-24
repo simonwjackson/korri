@@ -3,9 +3,9 @@ import type { DeviceConfig } from "../device-lab"
 import type { DeviceSelection } from "./lab-route-state"
 import type { LabSurfaceAdapter } from "./surface-registry"
 
-export interface LabContextValue<InitialValues = unknown> {
-  readonly adapter: LabSurfaceAdapter<InitialValues>
-  readonly initialValues: InitialValues
+export interface LabContextValue {
+  readonly adapter: LabSurfaceAdapter
+  readonly initialValues: unknown
   readonly themeId: string
   readonly surfacePath: string
   readonly selection: DeviceSelection

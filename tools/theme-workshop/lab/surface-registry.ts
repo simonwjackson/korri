@@ -1,30 +1,31 @@
 import type { RouterHistory } from "@tanstack/history"
-import type { Router } from "@tanstack/react-router"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
 import { shiftLabSurfaceAdapter } from "./adapters/shift"
 
 export interface LabMountedSurface {
-  readonly router: Router
+  readonly router: unknown
   readonly dispose: () => void
 }
 
-export interface LabSurfaceAdapter<InitialValues = unknown> {
+export interface LabSurfaceAdapter {
   readonly id: string
   readonly devices: readonly DeviceConfig[]
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
   readonly scaleVarPrefix?: string
-  readonly makeSeedInitialValues: () => Promise<InitialValues>
+  readonly makeSeedInitialValues: () => Promise<unknown>
   readonly mountSurface: (
     host: HTMLElement,
     options: {
-      readonly initialValues: InitialValues
+      readonly initialValues: unknown
       readonly history?: RouterHistory
     },
   ) => LabMountedSurface
 }
 
-const LAB_SURFACE_ADAPTERS = [shiftLabSurfaceAdapter] as const
+const LAB_SURFACE_ADAPTERS: readonly LabSurfaceAdapter[] = [
+  shiftLabSurfaceAdapter,
+]
 
 export function labSurfaceAdapters(): readonly LabSurfaceAdapter[] {
   return LAB_SURFACE_ADAPTERS
