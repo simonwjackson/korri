@@ -1,8 +1,4 @@
-import {
-  RegistryProvider,
-  useAtomInitialValues,
-  useAtomRefresh,
-} from "@effect/atom-react"
+import { useAtomRefresh } from "@effect/atom-react"
 import {
   CatalogFactsError,
   CatalogFactsSource,
@@ -30,15 +26,15 @@ import type {
   KorriPlatformBridge,
   KorriSurfaceEntrypoint,
 } from "@platform/surface/bridge"
+import { createHashHistory } from "@tanstack/history"
 import { Effect, Layer } from "effect"
 import { useEffect } from "react"
-import { createRoot } from "react-dom/client"
-import { ShiftHomePage } from "./pages/ShiftHomePage"
+import { mountShift } from "./mount-shift"
 
 export const shiftTheme: KorriSurfaceEntrypoint = {
   id: "shift",
   mount(host, { bridge }) {
-    const root = createRoot(host)
+    const runtimeConfig = readRuntimeConfig(window)
     const initialValues = [
       [
         catalogFactsSourceLayerAtom,
@@ -52,31 +48,55 @@ export const shiftTheme: KorriSurfaceEntrypoint = {
       ],
     ] as const
 
-    root.render(
-      <RegistryProvider>
-        <ShiftThemeRuntimeRoot initialValues={initialValues} />
-      </RegistryProvider>,
-    )
+    const mounted = mountShift(host, {
+      data: { initialValues },
+      ...(runtimeConfig.desktopInput
+        ? { navigation: { history: createHashHistory() } }
+        : {}),
+      beforeRouter: (
+        <ShiftBridgeRuntimeChrome
+          liveUsbArtifact={runtimeConfig.liveUsbArtifact}
+        />
+      ),
+    })
 
-    return () => root.unmount()
+    return () => mounted.dispose()
   },
 }
 
 export default shiftTheme
 
-function ShiftThemeRuntimeRoot({
-  initialValues,
+type LiveUsbArtifact = "product" | "developer"
+
+function ShiftBridgeRuntimeChrome({
+  liveUsbArtifact,
 }: {
-  readonly initialValues: Parameters<typeof useAtomInitialValues>[0]
+  readonly liveUsbArtifact?: LiveUsbArtifact
 }) {
-  useAtomInitialValues(initialValues)
   useLibraryRefreshOnConfigChanged()
-  return (
-    <>
-      <LiveUsbArtifactNotice />
-      <ShiftHomePage />
-    </>
-  )
+  return <LiveUsbArtifactNotice artifact={liveUsbArtifact} />
+}
+
+function readRuntimeConfig(target: Window): {
+  readonly desktopInput: boolean
+  readonly liveUsbArtifact?: LiveUsbArtifact
+} {
+  const runtime = (
+    target as {
+      readonly __korriRuntimeConfig?: {
+        readonly desktopInput?: unknown
+        readonly liveUsbArtifact?: unknown
+      }
+    }
+  ).__korriRuntimeConfig
+
+  return {
+    desktopInput: runtime?.desktopInput === true,
+    ...(runtime?.liveUsbArtifact === "product" ||
+    runtime?.liveUsbArtifact === "developer"
+      ? { liveUsbArtifact: runtime.liveUsbArtifact }
+      : {}),
+  }
 }
 
 function useLibraryRefreshOnConfigChanged() {
@@ -185,12 +205,11 @@ function opaqueLaunchSpecFor(id: string): LaunchSpec {
   return { command: id, args: [] }
 }
 
-function LiveUsbArtifactNotice() {
-  const artifact = (
-    window as Window & {
-      readonly __korriRuntimeConfig?: { readonly liveUsbArtifact?: unknown }
-    }
-  ).__korriRuntimeConfig?.liveUsbArtifact
+function LiveUsbArtifactNotice({
+  artifact,
+}: {
+  readonly artifact?: LiveUsbArtifact
+}) {
   if (artifact !== "developer") return null
 
   return (

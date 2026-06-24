@@ -1,4 +1,4 @@
-import { EntrySource } from "@platform/api/rpc/entry-source"
+import { EntrySource } from "@platform/api/rpc/entry-source-core"
 import { ApiError } from "@platform/api/rpc/errors"
 import { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import { LaunchSpec } from "@platform/library/launcher"

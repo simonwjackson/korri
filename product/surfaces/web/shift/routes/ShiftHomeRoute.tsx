@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react"
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
 import { useNavigate } from "@tanstack/react-router"
 import { Option } from "effect"
@@ -10,6 +10,9 @@ import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
 import { ShiftHomeBottomBar } from "../organisms/ShiftHomeBottomBar"
 import { ShiftHomeRail } from "../organisms/ShiftHomeRail"
 import { ShiftHomeTopBar } from "../organisms/ShiftHomeTopBar"
+import { ShiftHomeDefectBody } from "../pages/ShiftHomeDefectBody"
+import { ShiftHomeEmptyBody } from "../pages/ShiftHomeEmptyBody"
+import { ShiftHomeLoadErrorBody } from "../pages/ShiftHomeLoadErrorBody"
 import { ShiftHomeLoadingBody } from "../pages/ShiftHomeLoadingBody"
 import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
 
@@ -17,10 +20,14 @@ const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
 
 export function ShiftHomeRoute() {
   const snapshot = useAtomValue(catalogSnapshotAtom)
+  const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
   return (
     <div data-shift-home-frame>
       <ShiftCatalogStateRoot result={snapshot}>
         <ShiftHomeLoadingBody />
+        <ShiftHomeLoadErrorBody onRetry={refreshSnapshot} />
+        <ShiftHomeDefectBody />
+        <ShiftHomeEmptyBody />
         <NavigatingReadyBody />
       </ShiftCatalogStateRoot>
     </div>

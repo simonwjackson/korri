@@ -1,6 +1,7 @@
 import { RegistryProvider, useAtomInitialValues } from "@effect/atom-react"
 import type { RouterHistory } from "@tanstack/history"
 import { RouterProvider } from "@tanstack/react-router"
+import type { ReactNode } from "react"
 import { createRoot } from "react-dom/client"
 import { createShiftRouter } from "./routes/route-tree"
 
@@ -24,6 +25,7 @@ export interface MountShiftOptions {
   readonly data: ShiftDataAdapter
   readonly navigation?: ShiftNavigationAdapter
   readonly input?: ShiftInputAdapter
+  readonly beforeRouter?: ReactNode
 }
 
 export interface MountedShiftSurface {
@@ -34,12 +36,19 @@ export interface MountedShiftSurface {
 export function ShiftSurfaceApp({
   initialValues,
   router,
+  beforeRouter,
 }: {
   readonly initialValues: AtomInitialValues
   readonly router: ShiftRouter
+  readonly beforeRouter?: ReactNode
 }) {
   useAtomInitialValues(initialValues)
-  return <RouterProvider router={router} />
+  return (
+    <>
+      {beforeRouter}
+      <RouterProvider router={router} />
+    </>
+  )
 }
 
 export function mountShift(
@@ -56,6 +65,7 @@ export function mountShift(
       <ShiftSurfaceApp
         initialValues={options.data.initialValues}
         router={router}
+        beforeRouter={options.beforeRouter}
       />
     </RegistryProvider>,
   )

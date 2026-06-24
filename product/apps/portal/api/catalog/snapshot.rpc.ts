@@ -1,4 +1,4 @@
-import { EntrySource } from "@platform/api/rpc/entry-source"
+import { EntrySource } from "@platform/api/rpc/entry-source-core"
 import { ApiError } from "@platform/api/rpc/errors"
 import { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { Schema } from "effect"
