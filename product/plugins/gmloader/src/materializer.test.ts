@@ -1,14 +1,15 @@
 import { describe, expect, it } from "bun:test"
-import { writeFile } from "node:fs/promises"
+import { chmod, mkdir, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { deflateRawSync } from "node:zlib"
 import { ZIP_STORED } from "@platform/archive/zip"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { ExecutablePluginResource } from "@platform/plugin"
-import type {
-  PluginExecutableResourceResolver,
-  ResolvedExecutableResource,
+import {
+  executablePath,
+  type PluginExecutableResourceResolver,
+  type ResolvedExecutableResource,
 } from "@platform/plugin/resources"
 import { Effect } from "effect"
 import {
@@ -77,6 +78,33 @@ describe("GMLoader readable launch materializer", () => {
     )
 
     expect(second.diagnostics).toContain("payload-cache-hit")
+  })
+
+  it("uses the default plugin resource root to resolve packaged runtime", async () => {
+    const sourcePath = await writeArchive("Default Runtime.apk")
+    const installRoot = await mktemp()
+    const stateHome = await mktemp()
+    const resourceRoot = join(stateHome, "korri", "plugins", "resources")
+    const command = executablePath(
+      resourceRoot,
+      KORRI_GMLOADER_PLUGIN_ID,
+      "gmloader-next",
+      "gmloader-next",
+    )
+    await mkdir(join(command, ".."), { recursive: true })
+    await writeFile(command, "#!/bin/sh\nexit 0\n")
+    await chmod(command, 0o755)
+
+    const result = await Effect.runPromise(
+      materializeReadableGmloaderLaunch({
+        context: context({ sourcePath }),
+        installRoot,
+        env: { XDG_STATE_HOME: stateHome },
+      }),
+    )
+
+    expect(result.spec.command).toBe(command)
+    expect(result.diagnostics).toContain("runtime-cache-hit")
   })
 
   it("propagates diagnostics through the readable integration", async () => {

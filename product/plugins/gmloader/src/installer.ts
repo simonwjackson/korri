@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
+import { setTimeout as sleep } from "node:timers/promises"
 import { dirname, join, resolve } from "node:path"
 import {
   readZipCentralDirectory,
@@ -75,8 +76,15 @@ export async function installGmloaderPayload(
         `GMLoader install already exists for ${prepared.id}; pass overwrite to replace it`,
       )
     }
-    return materializePreparedGmloaderInstall(prepared, {
-      replaceExisting: input.overwrite === true,
+    return withFileInstallLock(prepared, async () => {
+      if (!input.overwrite && (await exists(prepared.gameRoot))) {
+        throw new Error(
+          `GMLoader install already exists for ${prepared.id}; pass overwrite to replace it`,
+        )
+      }
+      return materializePreparedGmloaderInstall(prepared, {
+        replaceExisting: input.overwrite === true,
+      })
     })
   })
 }
@@ -90,10 +98,16 @@ export async function ensureGmloaderPayloadInstalled(
       const existing = await readCompleteInstalledManifest(prepared)
       if (existing) return { manifest: existing, status: "cache-hit" as const }
     }
-    const manifest = await materializePreparedGmloaderInstall(prepared, {
-      replaceExisting: true,
+    return withFileInstallLock(prepared, async () => {
+      if (!input.overwrite) {
+        const existing = await readCompleteInstalledManifest(prepared)
+        if (existing) return { manifest: existing, status: "cache-hit" as const }
+      }
+      const manifest = await materializePreparedGmloaderInstall(prepared, {
+        replaceExisting: true,
+      })
+      return { manifest, status: "materialized" as const }
     })
-    return { manifest, status: "materialized" as const }
   })
 }
 
@@ -120,6 +134,8 @@ async function materializePreparedGmloaderInstall(
   options: { readonly replaceExisting: boolean },
 ): Promise<GmloaderInstalledManifest> {
   const tmpRoot = `${prepared.gameRoot}.tmp-${process.pid}-${randomUUID()}`
+  let staleRoot: string | undefined
+  let publishedRoot = false
   await rm(tmpRoot, { recursive: true, force: true })
   await mkdir(tmpRoot, { recursive: true })
 
@@ -174,10 +190,13 @@ async function materializePreparedGmloaderInstall(
     )
 
     await mkdir(dirname(prepared.gameRoot), { recursive: true })
-    if (options.replaceExisting) {
-      await rm(prepared.gameRoot, { recursive: true, force: true })
+    if (options.replaceExisting && (await exists(prepared.gameRoot))) {
+      staleRoot = `${prepared.gameRoot}.stale-${process.pid}-${randomUUID()}`
+      await rm(staleRoot, { recursive: true, force: true })
+      await rename(prepared.gameRoot, staleRoot)
     }
     await rename(tmpRoot, prepared.gameRoot)
+    publishedRoot = true
 
     const manifest: GmloaderInstalledManifest = {
       schemaVersion: 1,
@@ -209,9 +228,14 @@ async function materializePreparedGmloaderInstall(
     }
 
     await writeManifestAtomic(prepared.manifestPath, manifest)
+    if (staleRoot) await rm(staleRoot, { recursive: true, force: true })
     return manifest
   } catch (error) {
     await rm(tmpRoot, { recursive: true, force: true })
+    if (publishedRoot) await rm(prepared.gameRoot, { recursive: true, force: true })
+    if (staleRoot && (await exists(staleRoot)) && !(await exists(prepared.gameRoot))) {
+      await rename(staleRoot, prepared.gameRoot)
+    }
     throw error
   }
 }
@@ -307,6 +331,37 @@ function digest(algorithm: "sha256", bytes: Buffer): string {
   return createHash(algorithm).update(bytes).digest("hex")
 }
 
+async function withFileInstallLock<T>(
+  prepared: PreparedGmloaderInstall,
+  run: () => Promise<T>,
+): Promise<T> {
+  const lockRoot = join(prepared.installRoot, "locks")
+  const lockDir = join(lockRoot, `${prepared.id}.lock`)
+  await mkdir(lockRoot, { recursive: true })
+  await acquireLockDir(lockDir)
+  try {
+    return await run()
+  } finally {
+    await rm(lockDir, { recursive: true, force: true })
+  }
+}
+
+async function acquireLockDir(lockDir: string): Promise<void> {
+  const startedAt = Date.now()
+  while (true) {
+    try {
+      await mkdir(lockDir)
+      return
+    } catch (error) {
+      if (!isErrno(error, "EEXIST")) throw error
+      if (Date.now() - startedAt > 30_000) {
+        throw new Error(`Timed out waiting for GMLoader install lock: ${lockDir}`)
+      }
+      await sleep(50)
+    }
+  }
+}
+
 function withInstallLock<T>(key: string, run: () => Promise<T>): Promise<T> {
   const previous = installLocks.get(key) ?? Promise.resolve()
   const current = previous.catch(() => undefined).then(run)
@@ -315,6 +370,14 @@ function withInstallLock<T>(key: string, run: () => Promise<T>): Promise<T> {
   })
   installLocks.set(key, cleanup)
   return current
+}
+
+function isErrno(error: unknown, code: string): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === code
+  )
 }
 
 async function exists(path: string): Promise<boolean> {

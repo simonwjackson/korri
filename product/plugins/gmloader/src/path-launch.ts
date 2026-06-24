@@ -94,7 +94,11 @@ export function prepareGmloaderPathLaunch(
 
 function installError(error: unknown): LibraryError {
   if (error instanceof GmloaderInstallRejected) {
-    return new LibraryError({ reason: "config", message: error.message })
+    return new LibraryError({
+      reason: "config",
+      diagnostic: "gmloader-payload-unsupported",
+      message: error.message,
+    })
   }
   return new LibraryError({
     reason: "config",

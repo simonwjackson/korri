@@ -6,12 +6,20 @@ import type {
 } from "@platform/plugin/resources"
 import { Effect } from "effect"
 import { prepareGmloaderLaunchEnvelope } from "./envelope"
+import {
+  KORRI_GMLOADER_PLUGIN_ID,
+  KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
+} from "./ids"
 import { GmloaderInstallRejected, installGmloaderPayload } from "./installer"
 import { inspectGmloaderPayload } from "./payload"
 import { prepareGmloaderPathLaunch } from "./path-launch"
+import {
+  createDefaultGmloaderRuntimeFulfiller,
+  createDefaultGmloaderRuntimeResolver,
+  defaultGmloaderRuntimeResource,
+} from "./runtime-defaults"
 
-export const KORRI_GMLOADER_PLUGIN_ID = "@korri:gmloader" as const
-export const KORRI_GMLOADER_RUNTIME_RESOURCE_ID = "gmloader-next" as const
+export { KORRI_GMLOADER_PLUGIN_ID, KORRI_GMLOADER_RUNTIME_RESOURCE_ID } from "./ids"
 
 export interface GmloaderPluginOptions {
   readonly installRoot?: string
@@ -130,25 +138,23 @@ export function createGmloaderPlugin(options: GmloaderPluginOptions = {}) {
                 }),
               )
             }
-            if (!options.runtimeResource || !options.runtimeResolver) {
-              return Effect.fail(
-                new AcquisitionError({
-                  reason: "configuration",
-                  providerId: context.provider,
-                  message: "GMLoader runtime resource resolver is not configured",
-                }),
-              )
-            }
+            const runtimeFulfiller =
+              options.runtimeFulfiller ??
+              createDefaultGmloaderRuntimeFulfiller(process.env)
             return prepareGmloaderPathLaunch({
               providerId: context.provider,
               sourcePath,
               installRoot,
-              runtimeResource: options.runtimeResource,
-              runtimeResolver: options.runtimeResolver,
-              runtimeFulfiller: options.runtimeFulfiller,
+              runtimeResource:
+                options.runtimeResource ?? defaultGmloaderRuntimeResource,
+              runtimeResolver:
+                options.runtimeResolver ??
+                createDefaultGmloaderRuntimeResolver(process.env),
+              runtimeFulfiller,
               allowRuntimeFulfill:
                 booleanValue(input.allowRuntimeFulfill) ??
-                options.allowRuntimeFulfill,
+                options.allowRuntimeFulfill ??
+                runtimeFulfiller !== undefined,
               title: stringValue(input.title),
               installedAt: stringValue(input.installedAt),
               overwrite: booleanValue(input.overwrite),
@@ -161,9 +167,11 @@ export function createGmloaderPlugin(options: GmloaderPluginOptions = {}) {
                 error =>
                   new AcquisitionError({
                     reason:
-                      error.reason === "unavailable"
-                        ? "configuration"
-                        : "defective-provider",
+                      error.diagnostic === "gmloader-payload-unsupported"
+                        ? "caller"
+                        : error.reason === "unavailable"
+                          ? "configuration"
+                          : "defective-provider",
                     providerId: context.provider,
                     message: error.message,
                   }),

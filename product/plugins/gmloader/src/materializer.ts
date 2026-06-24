@@ -1,4 +1,4 @@
-import { korriStatePath, type XdgPathEnv } from "@platform/config/xdg-paths"
+import type { XdgPathEnv } from "@platform/config/xdg-paths"
 import {
   AppMaterializationFailed,
   type ResolutionError,
@@ -7,33 +7,20 @@ import { appRecordKind } from "@platform/library/config/records/app"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { MaterializedReadableLaunch } from "@platform/library/config/app-materializer"
 import type { ExecutablePluginResource } from "@platform/plugin"
-import {
-  bunProcessRunner,
-  createNixOutLinkFulfiller,
-  createNixOutLinkResolver,
-  type PluginExecutableResourceFulfiller,
-  type PluginExecutableResourceResolver,
+import type {
+  PluginExecutableResourceFulfiller,
+  PluginExecutableResourceResolver,
 } from "@platform/plugin/resources"
 import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
 import { Effect } from "effect"
 import { defaultGmloaderInstallRoot } from "./library-source"
 import { prepareGmloaderPathLaunch } from "./path-launch"
+import { KORRI_GMLOADER_PLUGIN_ID } from "./ids"
 import {
-  KORRI_GMLOADER_PLUGIN_ID,
-  KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
-} from "./plugin"
-
-const DEFAULT_PLUGIN_RESOURCE_ROOT = "/var/lib/korri/plugins/resources"
-
-const defaultRuntimeResource: ExecutablePluginResource = {
-  id: KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
-  kind: "executable",
-  fulfill: {
-    provider: "nix",
-    installable: ".#gmloader-next",
-    binary: "gmloader-next",
-  },
-}
+  createDefaultGmloaderRuntimeFulfiller,
+  createDefaultGmloaderRuntimeResolver,
+  defaultGmloaderRuntimeResource,
+} from "./runtime-defaults"
 
 export interface GmloaderReadableLaunchIntegrationOptions {
   readonly installRoot?: string
@@ -100,13 +87,15 @@ export function materializeReadableGmloaderLaunch(input: {
       )
     }
     const env = input.env ?? process.env
-    const runtimeFulfiller = input.runtimeFulfiller ?? defaultRuntimeFulfiller(env)
+    const runtimeFulfiller =
+      input.runtimeFulfiller ?? createDefaultGmloaderRuntimeFulfiller(env)
     const prepared = yield* prepareGmloaderPathLaunch({
       providerId: KORRI_GMLOADER_PLUGIN_ID,
       sourcePath,
       installRoot: input.installRoot ?? defaultGmloaderInstallRoot(env),
-      runtimeResource: input.runtimeResource ?? defaultRuntimeResource,
-      runtimeResolver: input.runtimeResolver ?? defaultRuntimeResolver(env),
+      runtimeResource: input.runtimeResource ?? defaultGmloaderRuntimeResource,
+      runtimeResolver:
+        input.runtimeResolver ?? createDefaultGmloaderRuntimeResolver(env),
       runtimeFulfiller,
       allowRuntimeFulfill:
         input.allowRuntimeFulfill ?? runtimeFulfiller !== undefined,
@@ -149,31 +138,6 @@ function sourcePathFromContext(
   if (contentPath) return contentPath
   const policy = readRecord(context.plugin?.[KORRI_GMLOADER_PLUGIN_ID])
   return stringValue(policy.sourcePath) ?? stringValue(policy.path)
-}
-
-function defaultRuntimeResolver(
-  env: XdgPathEnv,
-): PluginExecutableResourceResolver {
-  return createNixOutLinkResolver({ stateRoot: pluginResourceRoot(env) })
-}
-
-function defaultRuntimeFulfiller(
-  env: XdgPathEnv,
-): PluginExecutableResourceFulfiller | undefined {
-  const nixCommand = env.KORRI_NIX_COMMAND?.trim()
-  if (!nixCommand) return undefined
-  return createNixOutLinkFulfiller({
-    stateRoot: pluginResourceRoot(env),
-    processRunner: bunProcessRunner,
-    nixCommand,
-  })
-}
-
-function pluginResourceRoot(env: XdgPathEnv): string {
-  return (
-    env.KORRI_PLUGIN_RESOURCE_ROOT?.trim() ||
-    korriStatePath(env, "plugins/resources", DEFAULT_PLUGIN_RESOURCE_ROOT)
-  )
 }
 
 function readRecord(value: unknown): Record<string, unknown> {

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "bun:test"
-import { writeFile } from "node:fs/promises"
+import { chmod, mkdir, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { deflateRawSync } from "node:zlib"
 import { ZIP_STORED } from "@platform/archive/zip"
 import { runPluginHandler, type ExecutablePluginResource } from "@platform/plugin"
 import {
+  executablePath,
   type PluginExecutableResourceResolver,
   type ResolvedExecutableResource,
 } from "@platform/plugin/resources"
@@ -96,6 +97,72 @@ describe("GMLoader plugin", () => {
     expect((result as { readonly diagnostics: readonly string[] }).diagnostics).toContain(
       "payload-materialized",
     )
+  })
+
+  it("prepares local payload launches through default runtime resource wiring", async () => {
+    const sourcePath = await writeArchive("Default Handler.apk")
+    const installRoot = await mktemp()
+    const resourceRoot = await mktemp()
+    const command = executablePath(
+      resourceRoot,
+      KORRI_GMLOADER_PLUGIN_ID,
+      "gmloader-next",
+      "gmloader-next",
+    )
+    await mkdir(join(command, ".."), { recursive: true })
+    await writeFile(command, "#!/bin/sh\nexit 0\n")
+    await chmod(command, 0o755)
+    const plugin = createGmloaderPlugin({ installRoot })
+    const handler = plugin.handlers.find(
+      handler => handler.operation === "gmloader.launch.path.prepare",
+    )
+    if (!handler) throw new Error("missing launch handler")
+    const previous = process.env.KORRI_PLUGIN_RESOURCE_ROOT
+    process.env.KORRI_PLUGIN_RESOURCE_ROOT = resourceRoot
+    try {
+      const result = await Effect.runPromise(
+        runPluginHandler(handler, {
+          operation: "gmloader.launch.path.prepare",
+          provider: KORRI_GMLOADER_PLUGIN_ID,
+          input: { sourcePath },
+        }),
+      )
+
+      expect(
+        (result as { readonly envelope: { readonly spec: { command: string } } })
+          .envelope.spec.command,
+      ).toBe(command)
+      expect((result as { readonly diagnostics: readonly string[] }).diagnostics).toContain(
+        "runtime-cache-hit",
+      )
+    } finally {
+      if (previous === undefined) delete process.env.KORRI_PLUGIN_RESOURCE_ROOT
+      else process.env.KORRI_PLUGIN_RESOURCE_ROOT = previous
+    }
+  })
+
+  it("reports unsupported path-launch payloads as caller errors", async () => {
+    const sourcePath = join(await mktemp(), "not-a-game.apk")
+    await writeFile(sourcePath, Buffer.from("not a zip"))
+    const plugin = createGmloaderPlugin({
+      installRoot: await mktemp(),
+      runtimeResource,
+      runtimeResolver: resolverSucceeding(runtime),
+    })
+    const handler = plugin.handlers.find(
+      handler => handler.operation === "gmloader.launch.path.prepare",
+    )
+    if (!handler) throw new Error("missing launch handler")
+
+    await expect(
+      Effect.runPromise(
+        runPluginHandler(handler, {
+          operation: "gmloader.launch.path.prepare",
+          provider: KORRI_GMLOADER_PLUGIN_ID,
+          input: { sourcePath },
+        }),
+      ),
+    ).rejects.toMatchObject({ reason: "caller" })
   })
 
   it("installs local payloads through the handler", async () => {
