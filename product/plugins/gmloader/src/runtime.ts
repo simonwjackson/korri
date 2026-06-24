@@ -79,6 +79,6 @@ function runtimeUnavailable(error: PluginResourceError): LibraryError {
         : String(error)
   return new LibraryError({
     reason: "unavailable",
-    message: `GMLoader runtime is not available: ${detail}`,
+    message: `runtime-unavailable: GMLoader runtime is not available: ${detail}`,
   })
 }

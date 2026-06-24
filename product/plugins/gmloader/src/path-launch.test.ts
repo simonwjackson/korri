@@ -89,6 +89,48 @@ describe("GMLoader path launch", () => {
     expect(second.diagnostics).toContain("payload-cache-hit")
   })
 
+  it("does not resolve the runtime when the payload is unsupported", async () => {
+    const sourcePath = join(await mktemp(), "not-a-game.apk")
+    await writeFile(sourcePath, Buffer.from("not a zip"))
+    const installRoot = await mktemp()
+    let resolveCalls = 0
+
+    await expect(
+      Effect.runPromise(
+        prepareGmloaderPathLaunch({
+          providerId: "@korri:gmloader",
+          sourcePath,
+          installRoot,
+          runtimeResource: resource,
+          runtimeResolver: {
+            resolveExecutable: () => {
+              resolveCalls++
+              return Effect.succeed(runtime)
+            },
+          },
+        }),
+      ),
+    ).rejects.toThrow()
+    expect(resolveCalls).toBe(0)
+  })
+
+  it("reports runtime-unavailable when runtime resolution fails", async () => {
+    const sourcePath = await writeArchive("Runtime Missing.apk")
+    const installRoot = await mktemp()
+
+    await expect(
+      Effect.runPromise(
+        prepareGmloaderPathLaunch({
+          providerId: "@korri:gmloader",
+          sourcePath,
+          installRoot,
+          runtimeResource: resource,
+          runtimeResolver: resolverMissing(),
+        }),
+      ),
+    ).rejects.toThrow("runtime-unavailable")
+  })
+
   it("keeps a materialized payload when runtime resolution fails", async () => {
     const sourcePath = await writeArchive("Runtime Missing.apk")
     const installRoot = await mktemp()

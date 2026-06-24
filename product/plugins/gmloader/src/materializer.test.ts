@@ -79,6 +79,25 @@ describe("GMLoader readable launch materializer", () => {
     expect(second.diagnostics).toContain("payload-cache-hit")
   })
 
+  it("propagates diagnostics through the readable integration", async () => {
+    const sourcePath = await writeArchive("Readable.apk")
+    const installRoot = await mktemp()
+    const integration = createGmloaderReadableLaunchIntegration({
+      installRoot,
+      runtimeResource: resource,
+      runtimeResolver: resolverSucceeding(runtime),
+    })
+
+    const result = await Effect.runPromise(
+      integration.materialize(context({ sourcePath }), {}),
+    )
+
+    expect(result.diagnostics).toEqual([
+      "payload-materialized",
+      "runtime-cache-hit",
+    ])
+  })
+
   it("only resolves contexts with GMLoader kind and source path", () => {
     const integration = createGmloaderReadableLaunchIntegration({
       installRoot: "/tmp/gmloader",
