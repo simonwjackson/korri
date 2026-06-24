@@ -35,6 +35,7 @@ in
       ../../../../product/apps/desktop/runtime-config-shape.ts
       ../../../../product/apps/portal
       ../../../../product/surfaces/web
+      ../../../../packages/intrinsic-design
     ]
     ++ sharedRuntime
   );
