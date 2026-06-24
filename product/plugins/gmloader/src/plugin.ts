@@ -66,7 +66,8 @@ export function createGmloaderPlugin(options: GmloaderPluginOptions = {}) {
           run: context => {
             const input = readRecord(context.input)
             const sourcePath = stringField(input, "sourcePath")
-            const installRoot = stringValue(input.installRoot) ?? options.installRoot
+            const installRoot =
+              stringValue(input.installRoot) ?? options.installRoot
             if (!installRoot) {
               return Effect.fail(
                 new AcquisitionError({
@@ -113,7 +114,9 @@ export function createGmloaderPlugin(options: GmloaderPluginOptions = {}) {
                 prepareGmloaderLaunchEnvelope({
                   manifestPath: stringValue(input.manifestPath),
                   command: stringValue(input.command),
-                  sdlGameControllerConfig: stringValue(input.sdlGameControllerConfig),
+                  sdlGameControllerConfig: stringValue(
+                    input.sdlGameControllerConfig,
+                  ),
                 }),
               catch: error =>
                 new AcquisitionError({
@@ -131,13 +134,24 @@ export function createGmloaderPlugin(options: GmloaderPluginOptions = {}) {
 
 export const gmloaderPlugin = createGmloaderPlugin()
 
-function compatibilityFromInput(input: unknown): { readonly env?: Readonly<Record<string, string>>; readonly limitations?: readonly string[] } | undefined {
+function compatibilityFromInput(input: unknown):
+  | {
+      readonly env?: Readonly<Record<string, string>>
+      readonly limitations?: readonly string[]
+    }
+  | undefined {
   if (!isRecord(input)) return undefined
   const env = isRecord(input.env)
-    ? Object.fromEntries(Object.entries(input.env).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+    ? Object.fromEntries(
+        Object.entries(input.env).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      )
     : undefined
   const limitations = Array.isArray(input.limitations)
-    ? input.limitations.filter((item): item is string => typeof item === "string")
+    ? input.limitations.filter(
+        (item): item is string => typeof item === "string",
+      )
     : undefined
   return {
     ...(env && Object.keys(env).length > 0 ? { env } : {}),
@@ -152,7 +166,10 @@ function readRecord(input: unknown): Record<string, unknown> {
 function stringField(input: Record<string, unknown>, key: string): string {
   const value = input[key]
   if (typeof value === "string" && value.length > 0) return value
-  throw new AcquisitionError({ reason: "caller", message: `Missing required field: ${key}` })
+  throw new AcquisitionError({
+    reason: "caller",
+    message: `Missing required field: ${key}`,
+  })
 }
 
 function stringValue(input: unknown): string | undefined {

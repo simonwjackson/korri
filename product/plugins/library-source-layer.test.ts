@@ -6,13 +6,13 @@ import { LibrarySource } from "@platform/library/library-services"
 import { outLinkPath } from "@platform/plugin/resources"
 import { Effect } from "effect"
 import {
-  createPluginResourceFulfillerFromEnv,
-  PluginLibrarySourceLayerLive,
-} from "./library-source-layer"
-import {
   KORRI_GMLOADER_PLUGIN_ID,
   KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
 } from "./gmloader"
+import {
+  createPluginResourceFulfillerFromEnv,
+  PluginLibrarySourceLayerLive,
+} from "./library-source-layer"
 import {
   DEFAULT_STEAM_COMPAT_TOOL,
   KORRI_STEAM_APP_ID,
@@ -521,7 +521,11 @@ async function seedGmloaderManifest(installRoot: string): Promise<void> {
       title: "Sample",
       idHint: "sample",
       gameDroid: { path: "assets/game.droid", sizeBytes: 4, stored: true },
-      libyoyo: { path: "lib/arm64-v8a/libyoyo.so", sizeBytes: 6, abi: "arm64-v8a" },
+      libyoyo: {
+        path: "lib/arm64-v8a/libyoyo.so",
+        sizeBytes: 6,
+        abi: "arm64-v8a",
+      },
       abis: ["arm64-v8a"],
       supportLibraries: [],
       transformsRequired: ["extract-arm64-runner"],

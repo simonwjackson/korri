@@ -12,19 +12,37 @@ import {
 describe("zip archive reader", () => {
   it("reports stored and deflated entries with compression methods", () => {
     const archive = createZip([
-      { path: "assets/game.droid", bytes: Buffer.from("game"), method: ZIP_STORED },
-      { path: "lib/arm64-v8a/libyoyo.so", bytes: Buffer.from("runner"), method: ZIP_DEFLATED },
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_DEFLATED,
+      },
     ])
 
     const directory = readZipCentralDirectory(archive)
-    expect(directory.map(entry => [entry.path, entry.compressionMethod])).toEqual([
+    expect(
+      directory.map(entry => [entry.path, entry.compressionMethod]),
+    ).toEqual([
       ["assets/game.droid", ZIP_STORED],
       ["lib/arm64-v8a/libyoyo.so", ZIP_DEFLATED],
     ])
 
     const entries = readZipEntries(archive)
-    expect(entries.find(entry => entry.path === "assets/game.droid")?.bytes.toString()).toBe("game")
-    expect(entries.find(entry => entry.path === "lib/arm64-v8a/libyoyo.so")?.bytes.toString()).toBe("runner")
+    expect(
+      entries
+        .find(entry => entry.path === "assets/game.droid")
+        ?.bytes.toString(),
+    ).toBe("game")
+    expect(
+      entries
+        .find(entry => entry.path === "lib/arm64-v8a/libyoyo.so")
+        ?.bytes.toString(),
+    ).toBe("runner")
   })
 
   it("marks unsafe member paths without returning them as safe", () => {
@@ -35,7 +53,9 @@ describe("zip archive reader", () => {
   })
 
   it("rejects corrupt archives distinctly", () => {
-    expect(() => readZipCentralDirectory(Buffer.from("not a zip"))).toThrow(ZipArchiveError)
+    expect(() => readZipCentralDirectory(Buffer.from("not a zip"))).toThrow(
+      ZipArchiveError,
+    )
   })
 
   it("enforces archive intake limits before extraction", () => {
@@ -44,8 +64,12 @@ describe("zip archive reader", () => {
       { path: "b", bytes: Buffer.alloc(10), method: ZIP_STORED },
     ])
 
-    expect(() => readZipCentralDirectory(archive, { maxEntries: 1 })).toThrow(/entry count/)
-    expect(() => readZipCentralDirectory(archive, { maxUncompressedBytes: 10 })).toThrow(/expanded size/)
+    expect(() => readZipCentralDirectory(archive, { maxEntries: 1 })).toThrow(
+      /entry count/,
+    )
+    expect(() =>
+      readZipCentralDirectory(archive, { maxUncompressedBytes: 10 }),
+    ).toThrow(/expanded size/)
   })
 })
 
@@ -62,7 +86,8 @@ function createZip(entries: readonly TestZipEntry[]): Buffer {
 
   for (const entry of entries) {
     const name = Buffer.from(entry.path)
-    const compressed = entry.method === ZIP_DEFLATED ? deflateRawSync(entry.bytes) : entry.bytes
+    const compressed =
+      entry.method === ZIP_DEFLATED ? deflateRawSync(entry.bytes) : entry.bytes
     const local = Buffer.alloc(30)
     local.writeUInt32LE(0x04034b50, 0)
     local.writeUInt16LE(20, 4)

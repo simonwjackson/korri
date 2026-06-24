@@ -1,20 +1,31 @@
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
-import type { LaunchSpec } from "@platform/library/launcher"
-import { LibraryError, type LibrarySourceService, type ResolvedLaunch } from "@platform/library/library-services"
+import {
+  LibraryError,
+  type LibrarySourceService,
+  type ResolvedLaunch,
+} from "@platform/library/library-services"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import type { ResolvedExecutableResource } from "@platform/plugin/resources"
 import { Effect } from "effect"
 import { prepareGmloaderLaunchEnvelope } from "./envelope"
-import { decodeGmloaderInstalledManifest, GMLOADER_RELEASE_ID, GMLOADER_SYSTEM_ID, type GmloaderInstalledManifest } from "./manifest"
+import {
+  decodeGmloaderInstalledManifest,
+  GMLOADER_RELEASE_ID,
+  GMLOADER_SYSTEM_ID,
+  type GmloaderInstalledManifest,
+} from "./manifest"
 import { KORRI_GMLOADER_PLUGIN_ID } from "./plugin"
 
 export interface GmloaderInstalledLibrarySourceOptions {
   readonly installRoot: string
   readonly env?: Readonly<Record<string, string | undefined>>
   readonly command?: string
-  readonly resolveRuntime?: () => Effect.Effect<ResolvedExecutableResource, LibraryError>
+  readonly resolveRuntime?: () => Effect.Effect<
+    ResolvedExecutableResource,
+    LibraryError
+  >
 }
 
 interface InstalledEntry {
@@ -30,12 +41,16 @@ export function withGmloaderInstalledLibrarySource(
   return {
     ...base,
     list: () =>
-      base.list().pipe(
-        Effect.zipWith(readEntries().pipe(Effect.map(entries => entries.map(gameFromEntry))), (baseGames, gmloaderGames) => [
-          ...baseGames,
-          ...gmloaderGames,
-        ]),
-      ),
+      base
+        .list()
+        .pipe(
+          Effect.zipWith(
+            readEntries().pipe(
+              Effect.map(entries => entries.map(gameFromEntry)),
+            ),
+            (baseGames, gmloaderGames) => [...baseGames, ...gmloaderGames],
+          ),
+        ),
     listPlayableEntries: () =>
       listBasePlayableEntries(base).pipe(
         Effect.zipWith(readEntries(), (baseEntries, gmloaderEntries) => [
@@ -47,12 +62,16 @@ export function withGmloaderInstalledLibrarySource(
       findInstalledEntry(options, id).pipe(
         Effect.flatMap(entry => {
           if (!entry) return base.launchSpecFor(id, releaseId)
-          if (releaseId && releaseId !== GMLOADER_RELEASE_ID) return Effect.succeed(undefined)
+          if (releaseId && releaseId !== GMLOADER_RELEASE_ID)
+            return Effect.succeed(undefined)
           return resolveInstalledLaunch(options, entry).pipe(
             Effect.map(resolved => resolved.spec),
             Effect.matchEffect({
               onSuccess: spec => Effect.succeed(spec),
-              onFailure: error => (error.reason === "config" ? Effect.succeed(undefined) : Effect.fail(error)),
+              onFailure: error =>
+                error.reason === "config"
+                  ? Effect.succeed(undefined)
+                  : Effect.fail(error),
             }),
           )
         }),
@@ -63,9 +82,12 @@ export function withGmloaderInstalledLibrarySource(
           if (!entry) {
             return base.canResolveLaunchForGame
               ? base.canResolveLaunchForGame(id, inputs)
-              : base.launchSpecFor(id, inputs?.releaseId).pipe(Effect.map(Boolean))
+              : base
+                  .launchSpecFor(id, inputs?.releaseId)
+                  .pipe(Effect.map(Boolean))
           }
-          if (inputs?.releaseId && inputs.releaseId !== GMLOADER_RELEASE_ID) return Effect.succeed(false)
+          if (inputs?.releaseId && inputs.releaseId !== GMLOADER_RELEASE_ID)
+            return Effect.succeed(false)
           return Effect.succeed(entry.playable.launchable)
         }),
       ),
@@ -74,7 +96,12 @@ export function withGmloaderInstalledLibrarySource(
         Effect.flatMap(entry => {
           if (!entry) return base.resolveLaunchForGame(id, inputs)
           if (inputs?.releaseId && inputs.releaseId !== GMLOADER_RELEASE_ID) {
-            return Effect.fail(new LibraryError({ reason: "config", message: `GMLoader release ${inputs.releaseId} was not found for ${id}` }))
+            return Effect.fail(
+              new LibraryError({
+                reason: "config",
+                message: `GMLoader release ${inputs.releaseId} was not found for ${id}`,
+              }),
+            )
           }
           return resolveInstalledLaunch(options, entry)
         }),
@@ -87,7 +114,8 @@ export function defaultGmloaderInstallRoot(
 ): string {
   const explicit = env.KORRI_GMLOADER_INSTALL_ROOT?.trim()
   if (explicit) return explicit
-  const dataHome = env.XDG_DATA_HOME ?? (env.HOME ? join(env.HOME, ".local", "share") : "/tmp")
+  const dataHome =
+    env.XDG_DATA_HOME ?? (env.HOME ? join(env.HOME, ".local", "share") : "/tmp")
   return join(dataHome, "korri", "gmloader")
 }
 
@@ -110,7 +138,11 @@ function loadInstalledEntries(
         names
           .filter(name => name.endsWith(".json"))
           .sort((left, right) => left.localeCompare(right))
-          .map(async name => readInstalledEntry(join(manifestsRoot, name), options).catch(() => null)),
+          .map(async name =>
+            readInstalledEntry(join(manifestsRoot, name), options).catch(
+              () => null,
+            ),
+          ),
       )
       return entries.filter((entry): entry is InstalledEntry => entry !== null)
     },
@@ -126,14 +158,19 @@ function findInstalledEntry(
   options: GmloaderInstalledLibrarySourceOptions,
   id: string,
 ): Effect.Effect<InstalledEntry | undefined, LibraryError> {
-  return loadInstalledEntries(options).pipe(Effect.map(entries => entries.find(entry => entry.playable.id === id)))
+  return loadInstalledEntries(options).pipe(
+    Effect.map(entries => entries.find(entry => entry.playable.id === id)),
+  )
 }
 
 async function readInstalledEntry(
   path: string,
   options: GmloaderInstalledLibrarySourceOptions,
 ): Promise<InstalledEntry | null> {
-  const manifest = decodeGmloaderInstalledManifest(JSON.parse(await readFile(path, "utf8")), KORRI_GMLOADER_PLUGIN_ID)
+  const manifest = decodeGmloaderInstalledManifest(
+    JSON.parse(await readFile(path, "utf8")),
+    KORRI_GMLOADER_PLUGIN_ID,
+  )
   if (!manifest) return null
   return {
     manifest,
@@ -195,7 +232,9 @@ function playableEntryFromGame(game: ResolvedGameRecord): PlayableLibraryEntry {
   }
 }
 
-function runtimeConfigured(options: GmloaderInstalledLibrarySourceOptions): boolean {
+function runtimeConfigured(
+  options: GmloaderInstalledLibrarySourceOptions,
+): boolean {
   return Boolean(options.command || options.resolveRuntime)
 }
 
@@ -203,7 +242,10 @@ function resolveInstalledLaunch(
   options: GmloaderInstalledLibrarySourceOptions,
   entry: InstalledEntry,
 ): Effect.Effect<ResolvedLaunch, LibraryError> {
-  const runtime: Effect.Effect<ResolvedExecutableResource | undefined, LibraryError> = options.resolveRuntime
+  const runtime: Effect.Effect<
+    ResolvedExecutableResource | undefined,
+    LibraryError
+  > = options.resolveRuntime
     ? options.resolveRuntime()
     : Effect.succeed(undefined)
   return runtime.pipe(
@@ -219,7 +261,10 @@ function resolveInstalledLaunch(
         catch: error =>
           error instanceof LibraryError
             ? error
-            : new LibraryError({ reason: "config", message: error instanceof Error ? error.message : String(error) }),
+            : new LibraryError({
+                reason: "config",
+                message: error instanceof Error ? error.message : String(error),
+              }),
       }),
     ),
     Effect.map(envelope => ({
@@ -235,5 +280,10 @@ function resolveInstalledLaunch(
 }
 
 function isMissingPath(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && (error as { readonly code?: unknown }).code === "ENOENT"
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { readonly code?: unknown }).code === "ENOENT"
+  )
 }

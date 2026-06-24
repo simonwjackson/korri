@@ -1,7 +1,18 @@
-export type { GmloaderLaunchEnvelope, PrepareGmloaderLaunchEnvelopeInput } from "./src/envelope"
+export type {
+  GmloaderLaunchEnvelope,
+  PrepareGmloaderLaunchEnvelopeInput,
+} from "./src/envelope"
 export { prepareGmloaderLaunchEnvelope } from "./src/envelope"
 export type { InstallGmloaderPayloadInput } from "./src/installer"
-export { GmloaderInstallRejected, installGmloaderPayload } from "./src/installer"
+export {
+  GmloaderInstallRejected,
+  installGmloaderPayload,
+} from "./src/installer"
+export type { GmloaderInstalledLibrarySourceOptions } from "./src/library-source"
+export {
+  defaultGmloaderInstallRoot,
+  withGmloaderInstalledLibrarySource,
+} from "./src/library-source"
 export type {
   GmloaderCompatibilityProfile,
   GmloaderInstalledFile,
@@ -19,8 +30,6 @@ export type {
   GmloaderPayloadRejection,
 } from "./src/payload"
 export { inspectGmloaderPayload } from "./src/payload"
-export type { GmloaderInstalledLibrarySourceOptions } from "./src/library-source"
-export { defaultGmloaderInstallRoot, withGmloaderInstalledLibrarySource } from "./src/library-source"
 export {
   createGmloaderPlugin,
   gmloaderPlugin,

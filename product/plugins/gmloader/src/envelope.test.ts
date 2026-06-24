@@ -11,7 +11,11 @@ describe("GMLoader launch envelope", () => {
 
     const envelope = await prepareGmloaderLaunchEnvelope({
       manifest,
-      runtime: { pluginId: "@korri:gmloader", resourceId: "gmloader-next", command: "/nix/store/gmloader/bin/gmloader-next" },
+      runtime: {
+        pluginId: "@korri:gmloader",
+        resourceId: "gmloader-next",
+        command: "/nix/store/gmloader/bin/gmloader-next",
+      },
       env: { LD_LIBRARY_PATH: "/existing" },
       sdlGameControllerConfig: "controller-map",
     })
@@ -21,7 +25,9 @@ describe("GMLoader launch envelope", () => {
       args: ["-c", manifest.run.configPath],
       cwd: manifest.gameRoot,
     })
-    expect(envelope.spec.env?.LD_LIBRARY_PATH).toBe(`${manifest.gameRoot}/lib/arm64-v8a:${manifest.gameRoot}/lib:/existing`)
+    expect(envelope.spec.env?.LD_LIBRARY_PATH).toBe(
+      `${manifest.gameRoot}/lib/arm64-v8a:${manifest.gameRoot}/lib:/existing`,
+    )
     expect(envelope.spec.env?.SDL_AUDIODRIVER).toBe("dummy")
     expect(envelope.spec.env?.SDL_GAMECONTROLLERCONFIG).toBe("controller-map")
   })
@@ -29,22 +35,36 @@ describe("GMLoader launch envelope", () => {
   it("reports missing runtime as unavailable", async () => {
     const manifest = await createManifest()
 
-    await expect(prepareGmloaderLaunchEnvelope({ manifest })).rejects.toMatchObject({ reason: "unavailable" })
+    await expect(
+      prepareGmloaderLaunchEnvelope({ manifest }),
+    ).rejects.toMatchObject({ reason: "unavailable" })
   })
 
   it("reports missing installed files as config errors", async () => {
     const manifest = await createManifest()
     const missingConfigManifest = {
       ...manifest,
-      run: { ...manifest.run, configPath: join(manifest.gameRoot, "missing.json") },
+      run: {
+        ...manifest.run,
+        configPath: join(manifest.gameRoot, "missing.json"),
+      },
     }
 
-    await expect(prepareGmloaderLaunchEnvelope({ manifest: missingConfigManifest, command: "gmloader-next" })).rejects.toMatchObject({ reason: "config" })
+    await expect(
+      prepareGmloaderLaunchEnvelope({
+        manifest: missingConfigManifest,
+        command: "gmloader-next",
+      }),
+    ).rejects.toMatchObject({ reason: "config" })
   })
 })
 
-async function createManifest(input: { readonly env?: Readonly<Record<string, string>> } = {}): Promise<GmloaderInstalledManifest> {
-  const installRoot = await import("node:fs/promises").then(fs => fs.mkdtemp(join(tmpdir(), "korri-gmloader-")))
+async function createManifest(
+  input: { readonly env?: Readonly<Record<string, string>> } = {},
+): Promise<GmloaderInstalledManifest> {
+  const installRoot = await import("node:fs/promises").then(fs =>
+    fs.mkdtemp(join(tmpdir(), "korri-gmloader-")),
+  )
   const gameRoot = join(installRoot, "games", "sample")
   await mkdir(join(gameRoot, "assets"), { recursive: true })
   await mkdir(join(gameRoot, "lib", "arm64-v8a"), { recursive: true })
@@ -60,15 +80,30 @@ async function createManifest(input: { readonly env?: Readonly<Record<string, st
     installRoot,
     gameRoot,
     manifestPath: join(installRoot, "manifests", "sample.json"),
-    source: { path: "/tmp/sample.apk", sizeBytes: 10, sha256: "abc", idStrategy: "content-hash" },
+    source: {
+      path: "/tmp/sample.apk",
+      sizeBytes: 10,
+      sha256: "abc",
+      idStrategy: "content-hash",
+    },
     payload: {
       _tag: "GmloaderPayloadProfile",
       sourcePath: "/tmp/sample.apk",
       kind: "archive",
       title: "Sample",
       idHint: "sample",
-      gameDroid: { path: "assets/game.droid", sizeBytes: 4, compressionMethod: 0, stored: true },
-      libyoyo: { path: "lib/arm64-v8a/libyoyo.so", sizeBytes: 6, compressionMethod: 0, abi: "arm64-v8a" },
+      gameDroid: {
+        path: "assets/game.droid",
+        sizeBytes: 4,
+        compressionMethod: 0,
+        stored: true,
+      },
+      libyoyo: {
+        path: "lib/arm64-v8a/libyoyo.so",
+        sizeBytes: 6,
+        compressionMethod: 0,
+        abi: "arm64-v8a",
+      },
       abis: ["arm64-v8a"],
       supportLibraries: [],
       transformsRequired: ["extract-arm64-runner"],

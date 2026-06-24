@@ -44,7 +44,9 @@ export const PluginLibrarySourceLayerLive = Layer.effect(
     const resourceResolver = createNixOutLinkResolver({
       stateRoot: pluginResourceRoot(process.env),
     })
-    const withPortMaster = registry.enabledPluginIds.has(KORRI_PORTMASTER_PLUGIN_ID)
+    const withPortMaster = registry.enabledPluginIds.has(
+      KORRI_PORTMASTER_PLUGIN_ID,
+    )
       ? withPortMasterInstalledLibrarySource(source, {
           installRoot: defaultPortMasterInstallRoot(process.env),
           env: process.env,
@@ -60,7 +62,8 @@ export const PluginLibrarySourceLayerLive = Layer.effect(
                   const resource = executableResources(registry).find(
                     candidate =>
                       candidate.pluginId === KORRI_GMLOADER_PLUGIN_ID &&
-                      candidate.resource.id === KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
+                      candidate.resource.id ===
+                        KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
                   )?.resource
                   if (!resource) {
                     return Effect.fail(

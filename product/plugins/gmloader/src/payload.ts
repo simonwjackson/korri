@@ -4,12 +4,17 @@ import {
   readZipCentralDirectory,
   readZipEntryBytes,
   ZIP_STORED,
-  type ZipCentralDirectoryEntry,
   ZipArchiveError,
+  type ZipCentralDirectoryEntry,
 } from "@platform/archive/zip"
 
 export type GmloaderPayloadKind = "archive" | "directory"
-export type GmloaderAbi = "arm64-v8a" | "armeabi-v7a" | "armeabi" | "x86" | "x86_64"
+export type GmloaderAbi =
+  | "arm64-v8a"
+  | "armeabi-v7a"
+  | "armeabi"
+  | "x86"
+  | "x86_64"
 
 export type GmloaderPayloadRejectionKind =
   | "missing-source"
@@ -74,47 +79,83 @@ const DEFAULT_MAX_SOURCE_BYTES = 2_000_000_000
 const DEFAULT_MAX_EXPANDED_BYTES = 4_000_000_000
 const GAME_DROID_PATH = "assets/game.droid"
 const LIBYOYO_RE = /^lib\/([^/]+)\/libyoyo\.so$/
-const ABI_ORDER: readonly GmloaderAbi[] = ["arm64-v8a", "armeabi-v7a", "armeabi", "x86_64", "x86"]
+const ABI_ORDER: readonly GmloaderAbi[] = [
+  "arm64-v8a",
+  "armeabi-v7a",
+  "armeabi",
+  "x86_64",
+  "x86",
+]
 
 export async function inspectGmloaderPayload(
   options: InspectGmloaderPayloadOptions,
 ): Promise<GmloaderPayloadInspection> {
   const sourcePath = resolve(options.sourcePath)
   if (sourcePath.includes("\0")) {
-    return rejected("unsafe-source", sourcePath, ["source path contains NUL"], "Source path is not safe")
+    return rejected(
+      "unsafe-source",
+      sourcePath,
+      ["source path contains NUL"],
+      "Source path is not safe",
+    )
   }
 
   const metadata = await stat(sourcePath).catch(() => null)
   if (!metadata) {
-    return rejected("missing-source", sourcePath, ["source path does not exist"], "Source path does not exist")
+    return rejected(
+      "missing-source",
+      sourcePath,
+      ["source path does not exist"],
+      "Source path does not exist",
+    )
   }
 
   if (metadata.isDirectory()) {
     return inspectDirectory(sourcePath, {
       maxEntries: options.limits?.maxEntries ?? DEFAULT_MAX_ENTRIES,
-      maxExpandedBytes: options.limits?.maxExpandedBytes ?? DEFAULT_MAX_EXPANDED_BYTES,
+      maxExpandedBytes:
+        options.limits?.maxExpandedBytes ?? DEFAULT_MAX_EXPANDED_BYTES,
     })
   }
 
   if (!metadata.isFile()) {
-    return rejected("unsupported-source", sourcePath, ["source is not a regular file or directory"], "Source path must be a file or directory")
+    return rejected(
+      "unsupported-source",
+      sourcePath,
+      ["source is not a regular file or directory"],
+      "Source path must be a file or directory",
+    )
   }
 
-  if (metadata.size > (options.limits?.maxSourceBytes ?? DEFAULT_MAX_SOURCE_BYTES)) {
-    return rejected("limit-exceeded", sourcePath, [`source size ${metadata.size} exceeds limit`], "Source file is too large")
+  if (
+    metadata.size > (options.limits?.maxSourceBytes ?? DEFAULT_MAX_SOURCE_BYTES)
+  ) {
+    return rejected(
+      "limit-exceeded",
+      sourcePath,
+      [`source size ${metadata.size} exceeds limit`],
+      "Source file is too large",
+    )
   }
 
   const extension = extname(sourcePath).toLowerCase()
   if (![".apk", ".zip", ".port"].includes(extension)) {
-    return rejected("unsupported-source", sourcePath, [`unsupported extension ${extension || "<none>"}`], "Source file must be an APK, ZIP, or .port archive")
+    return rejected(
+      "unsupported-source",
+      sourcePath,
+      [`unsupported extension ${extension || "<none>"}`],
+      "Source file must be an APK, ZIP, or .port archive",
+    )
   }
 
   const archive = await readFile(sourcePath)
   try {
     const entries = readZipCentralDirectory(archive, {
       maxEntries: options.limits?.maxEntries ?? DEFAULT_MAX_ENTRIES,
-      maxCompressedBytes: options.limits?.maxSourceBytes ?? DEFAULT_MAX_SOURCE_BYTES,
-      maxUncompressedBytes: options.limits?.maxExpandedBytes ?? DEFAULT_MAX_EXPANDED_BYTES,
+      maxCompressedBytes:
+        options.limits?.maxSourceBytes ?? DEFAULT_MAX_SOURCE_BYTES,
+      maxUncompressedBytes:
+        options.limits?.maxExpandedBytes ?? DEFAULT_MAX_EXPANDED_BYTES,
     }).filter(entry => !entry.directory && entry.safePath)
     return classifyEntries({
       sourcePath,
@@ -124,9 +165,19 @@ export async function inspectGmloaderPayload(
     })
   } catch (error) {
     if (error instanceof ZipArchiveError && error.reason === "limit-exceeded") {
-      return rejected("limit-exceeded", sourcePath, [error.message], error.message)
+      return rejected(
+        "limit-exceeded",
+        sourcePath,
+        [error.message],
+        error.message,
+      )
     }
-    return rejected("corrupt-archive", sourcePath, [error instanceof Error ? error.message : String(error)], "Archive is corrupt or unsupported")
+    return rejected(
+      "corrupt-archive",
+      sourcePath,
+      [error instanceof Error ? error.message : String(error)],
+      "Archive is corrupt or unsupported",
+    )
   }
 }
 
@@ -178,7 +229,9 @@ async function inspectDirectory(
       }
       expandedBytes += metadata.size
       if (expandedBytes > limits.maxExpandedBytes) {
-        unsafe.push(`directory expanded size exceeds limit: ${limits.maxExpandedBytes}`)
+        unsafe.push(
+          `directory expanded size exceeds limit: ${limits.maxExpandedBytes}`,
+        )
         return
       }
       const path = relative(sourcePath, absolute).replaceAll("\\", "/")
@@ -231,39 +284,70 @@ async function classifyEntries(input: {
   const evidence: string[] = [`inspected ${input.entries.length} payload files`]
   const gameDroid = byPath.get(GAME_DROID_PATH)
   if (!gameDroid) {
-    const hasGameMakerHints = input.entries.some(entry => LIBYOYO_RE.test(entry.path))
+    const hasGameMakerHints = input.entries.some(entry =>
+      LIBYOYO_RE.test(entry.path),
+    )
     return rejected(
       hasGameMakerHints ? "missing-game-droid" : "not-gamemaker",
       input.sourcePath,
       evidence,
-      hasGameMakerHints ? "GameMaker runner found but assets/game.droid is missing" : "Payload does not look like a GameMaker Android export",
+      hasGameMakerHints
+        ? "GameMaker runner found but assets/game.droid is missing"
+        : "Payload does not look like a GameMaker Android export",
     )
   }
   evidence.push(`found ${GAME_DROID_PATH}`)
 
   const libyoyos = input.entries
     .map(entry => ({ entry, match: entry.path.match(LIBYOYO_RE) }))
-    .filter((candidate): candidate is { readonly entry: PayloadFile; readonly match: RegExpMatchArray } => Boolean(candidate.match))
+    .filter(
+      (
+        candidate,
+      ): candidate is {
+        readonly entry: PayloadFile
+        readonly match: RegExpMatchArray
+      } => Boolean(candidate.match),
+    )
   if (libyoyos.length === 0) {
-    return rejected("missing-libyoyo", input.sourcePath, evidence, "GameMaker payload is missing lib/<abi>/libyoyo.so")
-  }
-  const abis = ABI_ORDER.filter(abi => libyoyos.some(candidate => candidate.match[1] === abi))
-  evidence.push(`found libyoyo ABIs: ${abis.join(", ")}`)
-  const selected = libyoyos.find(candidate => candidate.match[1] === "arm64-v8a")
-  if (!selected) {
     return rejected(
-      abis.some(abi => abi === "armeabi-v7a" || abi === "armeabi") ? "arm32-only" : "no-supported-abi",
+      "missing-libyoyo",
       input.sourcePath,
       evidence,
-      abis.some(abi => abi === "armeabi-v7a" || abi === "armeabi") ? "Payload is GameMaker but only includes 32-bit ARM runner libraries" : "Payload does not include an arm64 GameMaker runner",
+      "GameMaker payload is missing lib/<abi>/libyoyo.so",
+    )
+  }
+  const abis = ABI_ORDER.filter(abi =>
+    libyoyos.some(candidate => candidate.match[1] === abi),
+  )
+  evidence.push(`found libyoyo ABIs: ${abis.join(", ")}`)
+  const selected = libyoyos.find(
+    candidate => candidate.match[1] === "arm64-v8a",
+  )
+  if (!selected) {
+    return rejected(
+      abis.some(abi => abi === "armeabi-v7a" || abi === "armeabi")
+        ? "arm32-only"
+        : "no-supported-abi",
+      input.sourcePath,
+      evidence,
+      abis.some(abi => abi === "armeabi-v7a" || abi === "armeabi")
+        ? "Payload is GameMaker but only includes 32-bit ARM runner libraries"
+        : "Payload does not include an arm64 GameMaker runner",
     )
   }
 
   const supportLibraries = input.entries
-    .filter(entry => entry.path.startsWith("lib/arm64-v8a/") && entry.path !== selected.entry.path)
+    .filter(
+      entry =>
+        entry.path.startsWith("lib/arm64-v8a/") &&
+        entry.path !== selected.entry.path,
+    )
     .map(toDetectedFile)
-  const transformsRequired: GmloaderPayloadTransform[] = ["extract-arm64-runner"]
-  const stored = input.kind === "directory" || gameDroid.compressionMethod === ZIP_STORED
+  const transformsRequired: GmloaderPayloadTransform[] = [
+    "extract-arm64-runner",
+  ]
+  const stored =
+    input.kind === "directory" || gameDroid.compressionMethod === ZIP_STORED
   if (!stored) transformsRequired.push("store-game-droid")
   if (!supportLibraries.some(file => file.path.endsWith("libc++_shared.so"))) {
     transformsRequired.push("seed-android-shim-libs")
@@ -291,7 +375,9 @@ function toDetectedFile(entry: PayloadFile): GmloaderDetectedFile {
   return {
     path: entry.path,
     sizeBytes: entry.sizeBytes,
-    ...(entry.compressionMethod !== undefined ? { compressionMethod: entry.compressionMethod } : {}),
+    ...(entry.compressionMethod !== undefined
+      ? { compressionMethod: entry.compressionMethod }
+      : {}),
   }
 }
 
@@ -314,11 +400,21 @@ function rejected(
 }
 
 function titleFromPath(path: string): string {
-  return basename(path, extname(path)).replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim() || "GameMaker Game"
+  return (
+    basename(path, extname(path))
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || "GameMaker Game"
+  )
 }
 
 function idHintFromTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "gamemaker-game"
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "gamemaker-game"
+  )
 }
 
 function isContained(root: string, child: string): boolean {

@@ -1,22 +1,22 @@
 import { createHash } from "node:crypto"
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
-import type { ProviderId } from "@platform/plugin"
 import {
   readZipCentralDirectory,
   readZipEntryBytes,
   type ZipCentralDirectoryEntry,
 } from "@platform/archive/zip"
+import type { ProviderId } from "@platform/plugin"
 import { createGmloaderJson } from "./gmloader-json"
-import {
-  type GmloaderCompatibilityProfile,
-  type GmloaderInstalledFile,
-  type GmloaderInstalledManifest,
+import type {
+  GmloaderCompatibilityProfile,
+  GmloaderInstalledFile,
+  GmloaderInstalledManifest,
 } from "./manifest"
 import {
-  inspectGmloaderPayload,
   type GmloaderPayloadProfile,
   type GmloaderPayloadRejection,
+  inspectGmloaderPayload,
 } from "./payload"
 
 export class GmloaderInstallRejected extends Error {
@@ -45,8 +45,11 @@ export interface InstallGmloaderPayloadInput {
 export async function installGmloaderPayload(
   input: InstallGmloaderPayloadInput,
 ): Promise<GmloaderInstalledManifest> {
-  const inspection = await inspectGmloaderPayload({ sourcePath: input.sourcePath })
-  if (inspection._tag === "Rejected") throw new GmloaderInstallRejected(inspection.rejection)
+  const inspection = await inspectGmloaderPayload({
+    sourcePath: input.sourcePath,
+  })
+  if (inspection._tag === "Rejected")
+    throw new GmloaderInstallRejected(inspection.rejection)
 
   const profile = inspection.profile
   const sourceDigest = await digestPayloadSource(profile)
@@ -57,7 +60,9 @@ export async function installGmloaderPayload(
   const manifestPath = join(installRoot, "manifests", `${id}.json`)
 
   if (!input.overwrite && (await exists(gameRoot))) {
-    throw new Error(`GMLoader install already exists for ${id}; pass overwrite to replace it`)
+    throw new Error(
+      `GMLoader install already exists for ${id}; pass overwrite to replace it`,
+    )
   }
 
   const tmpRoot = `${gameRoot}.tmp-${process.pid}-${Date.now()}`
@@ -65,21 +70,44 @@ export async function installGmloaderPayload(
   await mkdir(tmpRoot, { recursive: true })
 
   const installedFiles: GmloaderInstalledFile[] = []
-  await copyPayloadFile(profile, "assets/game.droid", join(tmpRoot, "assets", "game.droid"), installedFiles)
-  await copyPayloadFile(profile, "lib/arm64-v8a/libyoyo.so", join(tmpRoot, "lib", "arm64-v8a", "libyoyo.so"), installedFiles)
+  await copyPayloadFile(
+    profile,
+    "assets/game.droid",
+    join(tmpRoot, "assets", "game.droid"),
+    installedFiles,
+  )
+  await copyPayloadFile(
+    profile,
+    "lib/arm64-v8a/libyoyo.so",
+    join(tmpRoot, "lib", "arm64-v8a", "libyoyo.so"),
+    installedFiles,
+  )
   for (const support of profile.supportLibraries) {
-    await copyPayloadFile(profile, support.path, join(tmpRoot, support.path), installedFiles)
+    await copyPayloadFile(
+      profile,
+      support.path,
+      join(tmpRoot, support.path),
+      installedFiles,
+    )
   }
   const configPath = join(tmpRoot, "gmloader.json")
   await writeFile(configPath, createGmloaderJson())
-  installedFiles.push({ path: "gmloader.json", sizeBytes: Buffer.byteLength(createGmloaderJson()) })
+  installedFiles.push({
+    path: "gmloader.json",
+    sizeBytes: Buffer.byteLength(createGmloaderJson()),
+  })
 
   const compatibility: GmloaderCompatibilityProfile = {
     transformsApplied: profile.transformsRequired,
     ...(input.compatibility?.env ? { env: input.compatibility.env } : {}),
-    ...(input.compatibility?.limitations ? { limitations: input.compatibility.limitations } : {}),
+    ...(input.compatibility?.limitations
+      ? { limitations: input.compatibility.limitations }
+      : {}),
   }
-  await writeFile(join(tmpRoot, "compatibility-profile.json"), `${JSON.stringify(compatibility, null, 2)}\n`)
+  await writeFile(
+    join(tmpRoot, "compatibility-profile.json"),
+    `${JSON.stringify(compatibility, null, 2)}\n`,
+  )
   installedFiles.push({
     path: "compatibility-profile.json",
     sizeBytes: Buffer.byteLength(`${JSON.stringify(compatibility, null, 2)}\n`),
@@ -107,7 +135,9 @@ export async function installGmloaderPayload(
     payload: profile,
     run: {
       configPath: join(gameRoot, "gmloader.json"),
-      files: installedFiles.sort((left, right) => left.path.localeCompare(right.path)),
+      files: installedFiles.sort((left, right) =>
+        left.path.localeCompare(right.path),
+      ),
       libraryPaths: [join(gameRoot, "lib", "arm64-v8a"), join(gameRoot, "lib")],
     },
     compatibility,
@@ -133,9 +163,12 @@ async function readPayloadFile(
   profile: GmloaderPayloadProfile,
   path: string,
 ): Promise<Buffer> {
-  if (profile.kind === "directory") return readFile(join(profile.sourcePath, path))
+  if (profile.kind === "directory")
+    return readFile(join(profile.sourcePath, path))
   const archive = await readFile(profile.sourcePath)
-  const entry = readZipCentralDirectory(archive).find(candidate => candidate.safePath === path)
+  const entry = readZipCentralDirectory(archive).find(
+    candidate => candidate.safePath === path,
+  )
   if (!entry) throw new Error(`Payload file missing after detection: ${path}`)
   return readZipEntryBytes(archive, entry as ZipCentralDirectoryEntry)
 }
@@ -182,5 +215,8 @@ function digest(algorithm: "sha256", bytes: Buffer): string {
 }
 
 async function exists(path: string): Promise<boolean> {
-  return stat(path).then(() => true, () => false)
+  return stat(path).then(
+    () => true,
+    () => false,
+  )
 }

@@ -9,9 +9,21 @@ import { inspectGmloaderPayload } from "./payload"
 describe("GMLoader payload inspection", () => {
   it("classifies arm64 GameMaker APKs by payload shape", async () => {
     const apk = await writeArchive("game.apk", [
-      { path: "assets/game.droid", bytes: Buffer.from("game"), method: ZIP_STORED },
-      { path: "lib/arm64-v8a/libyoyo.so", bytes: Buffer.from("runner"), method: ZIP_STORED },
-      { path: "lib/arm64-v8a/libc++_shared.so", bytes: Buffer.from("cxx"), method: ZIP_STORED },
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/arm64-v8a/libc++_shared.so",
+        bytes: Buffer.from("cxx"),
+        method: ZIP_STORED,
+      },
     ])
 
     const result = await inspectGmloaderPayload({ sourcePath: apk })
@@ -26,8 +38,16 @@ describe("GMLoader payload inspection", () => {
 
   it("marks deflated game.droid as requiring stored normalization", async () => {
     const apk = await writeArchive("compressed.apk", [
-      { path: "assets/game.droid", bytes: Buffer.from("game"), method: ZIP_DEFLATED },
-      { path: "lib/arm64-v8a/libyoyo.so", bytes: Buffer.from("runner"), method: ZIP_STORED },
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_DEFLATED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
     ])
 
     const result = await inspectGmloaderPayload({ sourcePath: apk })
@@ -36,13 +56,23 @@ describe("GMLoader payload inspection", () => {
     if (result._tag !== "Supported") throw new Error("expected supported")
     expect(result.profile.gameDroid.stored).toBe(false)
     expect(result.profile.transformsRequired).toContain("store-game-droid")
-    expect(result.profile.transformsRequired).toContain("seed-android-shim-libs")
+    expect(result.profile.transformsRequired).toContain(
+      "seed-android-shim-libs",
+    )
   })
 
   it("rejects 32-bit-only GameMaker payloads before launch", async () => {
     const apk = await writeArchive("arm32.apk", [
-      { path: "assets/game.droid", bytes: Buffer.from("game"), method: ZIP_STORED },
-      { path: "lib/armeabi-v7a/libyoyo.so", bytes: Buffer.from("runner"), method: ZIP_STORED },
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/armeabi-v7a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
     ])
 
     const result = await inspectGmloaderPayload({ sourcePath: apk })
@@ -133,14 +163,19 @@ interface TestZipEntry {
   readonly method: number
 }
 
-async function writeArchive(name: string, entries: readonly TestZipEntry[]): Promise<string> {
+async function writeArchive(
+  name: string,
+  entries: readonly TestZipEntry[],
+): Promise<string> {
   const path = join(await mktemp(), name)
   await writeFile(path, createZip(entries))
   return path
 }
 
 async function mktemp(): Promise<string> {
-  return await import("node:fs/promises").then(fs => fs.mkdtemp(join(tmpdir(), "korri-gmloader-")))
+  return await import("node:fs/promises").then(fs =>
+    fs.mkdtemp(join(tmpdir(), "korri-gmloader-")),
+  )
 }
 
 function createZip(entries: readonly TestZipEntry[]): Buffer {
@@ -150,7 +185,8 @@ function createZip(entries: readonly TestZipEntry[]): Buffer {
 
   for (const entry of entries) {
     const name = Buffer.from(entry.path)
-    const compressed = entry.method === ZIP_DEFLATED ? deflateRawSync(entry.bytes) : entry.bytes
+    const compressed =
+      entry.method === ZIP_DEFLATED ? deflateRawSync(entry.bytes) : entry.bytes
     const local = Buffer.alloc(30)
     local.writeUInt32LE(0x04034b50, 0)
     local.writeUInt16LE(20, 4)

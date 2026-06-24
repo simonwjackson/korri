@@ -1,10 +1,13 @@
-import { access, readFile } from "node:fs/promises"
 import { constants } from "node:fs"
+import { access, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { LibraryError } from "@platform/library/library-services"
 import type { ResolvedExecutableResource } from "@platform/plugin/resources"
-import { decodeGmloaderInstalledManifest, type GmloaderInstalledManifest } from "./manifest"
+import {
+  decodeGmloaderInstalledManifest,
+  type GmloaderInstalledManifest,
+} from "./manifest"
 
 export interface PrepareGmloaderLaunchEnvelopeInput {
   readonly manifest?: GmloaderInstalledManifest
@@ -24,8 +27,14 @@ export async function prepareGmloaderLaunchEnvelope(
   input: PrepareGmloaderLaunchEnvelopeInput,
 ): Promise<GmloaderLaunchEnvelope> {
   const manifest = input.manifest ?? (await readManifest(input.manifestPath))
-  await requireReadable(join(manifest.gameRoot, "assets", "game.droid"), "assets/game.droid")
-  await requireReadable(join(manifest.gameRoot, "lib", "arm64-v8a", "libyoyo.so"), "lib/arm64-v8a/libyoyo.so")
+  await requireReadable(
+    join(manifest.gameRoot, "assets", "game.droid"),
+    "assets/game.droid",
+  )
+  await requireReadable(
+    join(manifest.gameRoot, "lib", "arm64-v8a", "libyoyo.so"),
+    "lib/arm64-v8a/libyoyo.so",
+  )
   await requireReadable(manifest.run.configPath, "gmloader.json")
 
   const command = input.runtime?.command ?? input.command
@@ -39,7 +48,9 @@ export async function prepareGmloaderLaunchEnvelope(
   const inheritedLibraryPath = input.env?.LD_LIBRARY_PATH
   const libraryPaths = manifest.run.libraryPaths.join(":")
   const env: Record<string, string> = {
-    LD_LIBRARY_PATH: inheritedLibraryPath ? `${libraryPaths}:${inheritedLibraryPath}` : libraryPaths,
+    LD_LIBRARY_PATH: inheritedLibraryPath
+      ? `${libraryPaths}:${inheritedLibraryPath}`
+      : libraryPaths,
     KORRI_GMLOADER_HOME: manifest.installRoot,
     KORRI_GMLOADER_GAME_ROOT: manifest.gameRoot,
     ...(manifest.compatibility.env ?? {}),
@@ -59,12 +70,19 @@ export async function prepareGmloaderLaunchEnvelope(
   }
 }
 
-async function readManifest(path: string | undefined): Promise<GmloaderInstalledManifest> {
+async function readManifest(
+  path: string | undefined,
+): Promise<GmloaderInstalledManifest> {
   if (!path) {
-    throw new LibraryError({ reason: "config", message: "Missing GMLoader manifest path" })
+    throw new LibraryError({
+      reason: "config",
+      message: "Missing GMLoader manifest path",
+    })
   }
   try {
-    const manifest = decodeGmloaderInstalledManifest(JSON.parse(await readFile(path, "utf8")))
+    const manifest = decodeGmloaderInstalledManifest(
+      JSON.parse(await readFile(path, "utf8")),
+    )
     if (!manifest) throw new Error("invalid manifest")
     return manifest
   } catch (error) {

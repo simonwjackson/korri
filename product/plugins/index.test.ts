@@ -99,10 +99,12 @@ describe("first-party plugins", () => {
       plugin => plugin.id === KORRI_REMAP_PLUGIN_ID,
     )
 
-    expect(remap?.contributes.config.modules?.["launch-wrapper"]).toMatchObject({
-      kind: "launch-wrapper",
-      capabilities: ["launch.compose", "launch.wrapper", "input.remap"],
-    })
+    expect(remap?.contributes.config.modules?.["launch-wrapper"]).toMatchObject(
+      {
+        kind: "launch-wrapper",
+        capabilities: ["launch.compose", "launch.wrapper", "input.remap"],
+      },
+    )
   })
 
   it("registers Ryubing as a first-party package plugin", () => {
@@ -207,7 +209,9 @@ describe("first-party plugins", () => {
       plugin => plugin.id === KORRI_GMLOADER_PLUGIN_ID,
     )
 
-    expect(gmloader?.contributes.config.modules?.["gmloader-next"]).toMatchObject({
+    expect(
+      gmloader?.contributes.config.modules?.["gmloader-next"],
+    ).toMatchObject({
       kind: "executable",
       fulfill: {
         provider: "nix",
@@ -435,10 +439,7 @@ describe("first-party plugins", () => {
     expect(firstPartySessionLifecycleHooksForRegistry(disabled)).toEqual([])
     expect(
       firstPartySessionLifecycleHooksForRegistry(enabled).map(hook => hook.id),
-    ).toEqual([
-      KORRI_GAMESCOPE_PLUGIN_ID,
-      KORRI_STEAM_PLUGIN_ID,
-    ])
+    ).toEqual([KORRI_GAMESCOPE_PLUGIN_ID, KORRI_STEAM_PLUGIN_ID])
   })
 
   it("filters plugin-owned launch integrations by enabled provider", () => {

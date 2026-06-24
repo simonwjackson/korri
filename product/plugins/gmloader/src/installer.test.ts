@@ -10,8 +10,16 @@ import { decodeGmloaderInstalledManifest } from "./manifest"
 describe("GMLoader installer", () => {
   it("normalizes a supported APK into a canonical run directory and manifest", async () => {
     const sourcePath = await writeArchive("Sample Game.apk", [
-      { path: "assets/game.droid", bytes: Buffer.from("game"), method: ZIP_STORED },
-      { path: "lib/arm64-v8a/libyoyo.so", bytes: Buffer.from("runner"), method: ZIP_STORED },
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
     ])
     const installRoot = await mktemp()
 
@@ -23,21 +31,43 @@ describe("GMLoader installer", () => {
     })
 
     expect(manifest.id).toStartWith("sample-game-")
-    expect(await readFile(join(manifest.gameRoot, "assets", "game.droid"), "utf8")).toBe("game")
-    expect(await readFile(join(manifest.gameRoot, "lib", "arm64-v8a", "libyoyo.so"), "utf8")).toBe("runner")
-    expect(JSON.parse(await readFile(join(manifest.gameRoot, "gmloader.json"), "utf8"))).toMatchObject({
+    expect(
+      await readFile(join(manifest.gameRoot, "assets", "game.droid"), "utf8"),
+    ).toBe("game")
+    expect(
+      await readFile(
+        join(manifest.gameRoot, "lib", "arm64-v8a", "libyoyo.so"),
+        "utf8",
+      ),
+    ).toBe("runner")
+    expect(
+      JSON.parse(
+        await readFile(join(manifest.gameRoot, "gmloader.json"), "utf8"),
+      ),
+    ).toMatchObject({
       apk_directory: ".",
       main_apk: "assets/game.droid",
       force_platform: "os_linux",
     })
-    const decoded = decodeGmloaderInstalledManifest(JSON.parse(await readFile(manifest.manifestPath, "utf8")), "@korri:gmloader")
+    const decoded = decodeGmloaderInstalledManifest(
+      JSON.parse(await readFile(manifest.manifestPath, "utf8")),
+      "@korri:gmloader",
+    )
     expect(decoded?.id).toBe(manifest.id)
   })
 
   it("records stored normalization for deflated game.droid", async () => {
     const sourcePath = await writeArchive("Compressed.apk", [
-      { path: "assets/game.droid", bytes: Buffer.from("game"), method: ZIP_DEFLATED },
-      { path: "lib/arm64-v8a/libyoyo.so", bytes: Buffer.from("runner"), method: ZIP_STORED },
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_DEFLATED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
     ])
 
     const manifest = await installGmloaderPayload({
@@ -46,8 +76,12 @@ describe("GMLoader installer", () => {
       installRoot: await mktemp(),
     })
 
-    expect(await readFile(join(manifest.gameRoot, "assets", "game.droid"), "utf8")).toBe("game")
-    expect(manifest.compatibility.transformsApplied).toContain("store-game-droid")
+    expect(
+      await readFile(join(manifest.gameRoot, "assets", "game.droid"), "utf8"),
+    ).toBe("game")
+    expect(manifest.compatibility.transformsApplied).toContain(
+      "store-game-droid",
+    )
   })
 
   it("uses real file contents when deriving directory payload IDs", async () => {
@@ -71,24 +105,54 @@ describe("GMLoader installer", () => {
 
   it("refuses to clobber an existing install without overwrite", async () => {
     const sourcePath = await writeArchive("Same.apk", [
-      { path: "assets/game.droid", bytes: Buffer.from("game"), method: ZIP_STORED },
-      { path: "lib/arm64-v8a/libyoyo.so", bytes: Buffer.from("runner"), method: ZIP_STORED },
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
     ])
     const installRoot = await mktemp()
-    await installGmloaderPayload({ providerId: "@korri:gmloader", sourcePath, installRoot })
+    await installGmloaderPayload({
+      providerId: "@korri:gmloader",
+      sourcePath,
+      installRoot,
+    })
 
-    await expect(installGmloaderPayload({ providerId: "@korri:gmloader", sourcePath, installRoot })).rejects.toThrow(/already exists/)
+    await expect(
+      installGmloaderPayload({
+        providerId: "@korri:gmloader",
+        sourcePath,
+        installRoot,
+      }),
+    ).rejects.toThrow(/already exists/)
   })
 
   it("preserves write confinement when archive members try to escape", async () => {
     const sourcePath = await writeArchive("Safe.apk", [
       { path: "../escape", bytes: Buffer.from("bad"), method: ZIP_STORED },
-      { path: "assets/game.droid", bytes: Buffer.from("game"), method: ZIP_STORED },
-      { path: "lib/arm64-v8a/libyoyo.so", bytes: Buffer.from("runner"), method: ZIP_STORED },
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
     ])
     const installRoot = await mktemp()
 
-    const manifest = await installGmloaderPayload({ providerId: "@korri:gmloader", sourcePath, installRoot })
+    const manifest = await installGmloaderPayload({
+      providerId: "@korri:gmloader",
+      sourcePath,
+      installRoot,
+    })
 
     expect(manifest.run.files.map(file => file.path)).not.toContain("../escape")
   })
@@ -109,14 +173,19 @@ async function writeDirectoryPayload(gameContents: string): Promise<string> {
   return root
 }
 
-async function writeArchive(name: string, entries: readonly TestZipEntry[]): Promise<string> {
+async function writeArchive(
+  name: string,
+  entries: readonly TestZipEntry[],
+): Promise<string> {
   const path = join(await mktemp(), name)
   await writeFile(path, createZip(entries))
   return path
 }
 
 async function mktemp(): Promise<string> {
-  return import("node:fs/promises").then(fs => fs.mkdtemp(join(tmpdir(), "korri-gmloader-")))
+  return import("node:fs/promises").then(fs =>
+    fs.mkdtemp(join(tmpdir(), "korri-gmloader-")),
+  )
 }
 
 function createZip(entries: readonly TestZipEntry[]): Buffer {
@@ -126,7 +195,8 @@ function createZip(entries: readonly TestZipEntry[]): Buffer {
 
   for (const entry of entries) {
     const name = Buffer.from(entry.path)
-    const compressed = entry.method === ZIP_DEFLATED ? deflateRawSync(entry.bytes) : entry.bytes
+    const compressed =
+      entry.method === ZIP_DEFLATED ? deflateRawSync(entry.bytes) : entry.bytes
     const local = Buffer.alloc(30)
     local.writeUInt32LE(0x04034b50, 0)
     local.writeUInt16LE(20, 4)

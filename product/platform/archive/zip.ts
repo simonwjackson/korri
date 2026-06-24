@@ -1,5 +1,5 @@
-import { inflateRawSync } from "node:zlib"
 import { normalize, sep } from "node:path"
+import { inflateRawSync } from "node:zlib"
 
 export const ZIP_STORED = 0
 export const ZIP_DEFLATED = 8
@@ -11,10 +11,7 @@ const ZIP_END_OF_CENTRAL_DIRECTORY = 0x06054b50
 export class ZipArchiveError extends Error {
   readonly reason: "corrupt" | "unsupported-compression" | "limit-exceeded"
 
-  constructor(
-    reason: ZipArchiveError["reason"],
-    message: string,
-  ) {
+  constructor(reason: ZipArchiveError["reason"], message: string) {
     super(message)
     this.name = "ZipArchiveError"
     this.reason = reason
@@ -148,13 +145,19 @@ export function readZipEntryBytes(
     entry.compressedSize,
     `truncated zip entry data: ${entry.path}`,
   )
-  const compressed = archive.subarray(dataStart, dataStart + entry.compressedSize)
+  const compressed = archive.subarray(
+    dataStart,
+    dataStart + entry.compressedSize,
+  )
 
   if (entry.compressionMethod === ZIP_STORED) return Buffer.from(compressed)
   if (entry.compressionMethod === ZIP_DEFLATED) {
     const inflated = inflateRawSync(compressed)
     if (inflated.length !== entry.uncompressedSize) {
-      throw new ZipArchiveError("corrupt", `Zip entry size mismatch: ${entry.path}`)
+      throw new ZipArchiveError(
+        "corrupt",
+        `Zip entry size mismatch: ${entry.path}`,
+      )
     }
     return inflated
   }
@@ -183,7 +186,10 @@ export function safeZipPath(path: string): string | null {
 function findEndOfCentralDirectory(archive: Buffer): number {
   const minOffset = Math.max(0, archive.length - 65557)
   for (let offset = archive.length - 22; offset >= minOffset; offset -= 1) {
-    if (offset >= 0 && archive.readUInt32LE(offset) === ZIP_END_OF_CENTRAL_DIRECTORY) {
+    if (
+      offset >= 0 &&
+      archive.readUInt32LE(offset) === ZIP_END_OF_CENTRAL_DIRECTORY
+    ) {
       return offset
     }
   }
