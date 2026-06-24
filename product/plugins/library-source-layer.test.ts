@@ -260,7 +260,7 @@ describe("PluginLibrarySourceLayerLive", () => {
     }
   })
 
-  it("exposes installed GMLoader entries when the GMLoader plugin is enabled", async () => {
+  it("exposes installed GMLoader entries via packaged runtime when the GMLoader plugin is enabled", async () => {
     const previous = snapshotEnv()
     const stateRoot = await mktemp()
     const installRoot = await mktemp()
@@ -270,7 +270,6 @@ describe("PluginLibrarySourceLayerLive", () => {
     process.env.KORRI_ENABLED_PLUGINS = KORRI_GMLOADER_PLUGIN_ID
     process.env.KORRI_PLUGIN_RESOURCE_ROOT = stateRoot
     process.env.KORRI_GMLOADER_INSTALL_ROOT = installRoot
-    process.env.KORRI_GMLOADER_NEXT_BIN = "/configured/gmloader-next"
     try {
       const result = await Effect.runPromise(
         Effect.gen(function* () {
@@ -476,7 +475,6 @@ function snapshotEnv() {
     KORRI_PLUGIN_RESOURCE_ROOT: process.env.KORRI_PLUGIN_RESOURCE_ROOT,
     KORRI_NIX_COMMAND: process.env.KORRI_NIX_COMMAND,
     KORRI_GMLOADER_INSTALL_ROOT: process.env.KORRI_GMLOADER_INSTALL_ROOT,
-    KORRI_GMLOADER_NEXT_BIN: process.env.KORRI_GMLOADER_NEXT_BIN,
     KORRI_PORTMASTER_INSTALL_ROOT: process.env.KORRI_PORTMASTER_INSTALL_ROOT,
     KORRI_PORTMASTER_USE_BUBBLEWRAP:
       process.env.KORRI_PORTMASTER_USE_BUBBLEWRAP,

@@ -56,43 +56,36 @@ export const PluginLibrarySourceLayerLive = Layer.effect(
       ? withGmloaderInstalledLibrarySource(withPortMaster, {
           installRoot: defaultGmloaderInstallRoot(process.env),
           env: process.env,
-          ...(process.env.KORRI_GMLOADER_NEXT_BIN
-            ? {
-                resolveRuntime: () => {
-                  const resource = executableResources(registry).find(
-                    candidate =>
-                      candidate.pluginId === KORRI_GMLOADER_PLUGIN_ID &&
-                      candidate.resource.id ===
-                        KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
-                  )?.resource
-                  if (!resource) {
-                    return Effect.fail(
-                      new LibraryError({
-                        reason: "unavailable",
-                        message: "GMLoader runtime resource is not registered",
-                      }),
-                    )
-                  }
-                  return resourceResolver
-                    .resolveExecutable({
-                      pluginId: KORRI_GMLOADER_PLUGIN_ID,
-                      resource,
-                    })
-                    .pipe(
-                      Effect.mapError(
-                        error =>
-                          new LibraryError({
-                            reason: "unavailable",
-                            message:
-                              error instanceof Error
-                                ? error.message
-                                : String(error),
-                          }),
-                      ),
-                    )
-                },
-              }
-            : {}),
+          resolveRuntime: () => {
+            const resource = executableResources(registry).find(
+              candidate =>
+                candidate.pluginId === KORRI_GMLOADER_PLUGIN_ID &&
+                candidate.resource.id === KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
+            )?.resource
+            if (!resource) {
+              return Effect.fail(
+                new LibraryError({
+                  reason: "unavailable",
+                  message: "GMLoader runtime resource is not registered",
+                }),
+              )
+            }
+            return resourceResolver
+              .resolveExecutable({
+                pluginId: KORRI_GMLOADER_PLUGIN_ID,
+                resource,
+              })
+              .pipe(
+                Effect.mapError(
+                  error =>
+                    new LibraryError({
+                      reason: "unavailable",
+                      message:
+                        error instanceof Error ? error.message : String(error),
+                    }),
+                ),
+              )
+          },
         })
       : withPortMaster
   }),
