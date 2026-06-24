@@ -1,7 +1,7 @@
 ---
 title: "feat: Add a source-agnostic GMLoader plugin"
 type: feat
-status: active
+status: completed
 date: 2026-06-24
 origin: work/items/active/01KVVAD3QZ3H7YCKPBA2ANY4Y8-build-a-nixified-generic-gamemaker-apk-compatibility-layer/item.md
 risk: medium
