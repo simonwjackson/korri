@@ -19,7 +19,7 @@ import { domeRomantikPlugin } from "./dome-romantik"
 import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin } from "./gamescope"
 import { createGamescopeSessionLifecycleHook } from "./gamescope/src/session/lifecycle-hook"
-import { gmloaderPlugin } from "./gmloader"
+import { gmloaderPlugin, gmloaderReadableLaunchIntegration } from "./gmloader"
 import { globebaPlugin } from "./globeba"
 import { itchioPlugin } from "./itchio"
 import { levelShareSquarePlugin } from "./levelsharesquare"
@@ -75,6 +75,7 @@ export const firstPartyLaunchIntegrations = [
   steamReadableLaunchIntegration,
   threeDSenReadableLaunchIntegration,
   zquestClassicReadableLaunchIntegration,
+  gmloaderReadableLaunchIntegration,
 ]
 
 export function firstPartyLaunchIntegrationsForRegistry(

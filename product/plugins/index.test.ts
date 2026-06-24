@@ -478,6 +478,22 @@ describe("first-party plugins", () => {
           integration.integration === "steam",
       ),
     ).toBe(true)
+
+    const gmloaderEnabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_GMLOADER_PLUGIN_ID,
+    })
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(disabled).some(
+        integration => integration.kind === KORRI_GMLOADER_PLUGIN_ID,
+      ),
+    ).toBe(false)
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(gmloaderEnabled).some(
+        integration =>
+          integration.kind === KORRI_GMLOADER_PLUGIN_ID &&
+          integration.integration === "gmloader",
+      ),
+    ).toBe(true)
   })
 
   it("does not enable plugin capabilities unless composition opts in", () => {

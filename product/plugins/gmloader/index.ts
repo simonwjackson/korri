@@ -14,6 +14,15 @@ export {
   withGmloaderInstalledLibrarySource,
 } from "./src/library-source"
 export type {
+  GmloaderReadableLaunchIntegrationOptions,
+  MaterializedGmloaderReadableLaunch,
+} from "./src/materializer"
+export {
+  createGmloaderReadableLaunchIntegration,
+  gmloaderReadableLaunchIntegration,
+  materializeReadableGmloaderLaunch,
+} from "./src/materializer"
+export type {
   GmloaderCompatibilityProfile,
   GmloaderInstalledFile,
   GmloaderInstalledManifest,
