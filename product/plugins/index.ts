@@ -19,6 +19,7 @@ import { domeRomantikPlugin } from "./dome-romantik"
 import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin } from "./gamescope"
 import { createGamescopeSessionLifecycleHook } from "./gamescope/src/session/lifecycle-hook"
+import { gmloaderPlugin } from "./gmloader"
 import { globebaPlugin } from "./globeba"
 import { itchioPlugin } from "./itchio"
 import { levelShareSquarePlugin } from "./levelsharesquare"
@@ -169,6 +170,7 @@ export const firstPartyPlugins = [
   steamPlugin,
   pico8Plugin,
   portmasterPlugin,
+  gmloaderPlugin,
   psychoWaluigiPlugin,
   ryubingPlugin,
   superMarioBrosRemasteredPlugin,

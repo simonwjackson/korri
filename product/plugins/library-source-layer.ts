@@ -1,7 +1,8 @@
 import { korriStatePath } from "@platform/config/xdg-paths"
-import { LibrarySource } from "@platform/library/library-services"
+import { LibraryError, LibrarySource } from "@platform/library/library-services"
 import { createLiveLibrarySourceService } from "@platform/library/library-source-layer-live"
 import { withPluginLibrarySource } from "@platform/plugin/catalog-library-source"
+import { executableResources } from "@platform/plugin/registry"
 import {
   bunProcessRunner,
   createNixOutLinkFulfiller,
@@ -12,6 +13,12 @@ import {
   createFirstPartyPluginRegistryFromEnv,
   firstPartyLaunchIntegrationsForRegistry,
 } from "."
+import {
+  defaultGmloaderInstallRoot,
+  KORRI_GMLOADER_PLUGIN_ID,
+  KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
+  withGmloaderInstalledLibrarySource,
+} from "./gmloader"
 import {
   defaultPortMasterInstallRoot,
   KORRI_PORTMASTER_PLUGIN_ID,
@@ -34,12 +41,51 @@ export const PluginLibrarySourceLayerLive = Layer.effect(
       registry,
       createNixOutLinkResolver({ stateRoot: pluginResourceRoot(process.env) }),
     )
-    return registry.enabledPluginIds.has(KORRI_PORTMASTER_PLUGIN_ID)
+    const resourceResolver = createNixOutLinkResolver({
+      stateRoot: pluginResourceRoot(process.env),
+    })
+    const withPortMaster = registry.enabledPluginIds.has(KORRI_PORTMASTER_PLUGIN_ID)
       ? withPortMasterInstalledLibrarySource(source, {
           installRoot: defaultPortMasterInstallRoot(process.env),
           env: process.env,
         })
       : source
+    return registry.enabledPluginIds.has(KORRI_GMLOADER_PLUGIN_ID)
+      ? withGmloaderInstalledLibrarySource(withPortMaster, {
+          installRoot: defaultGmloaderInstallRoot(process.env),
+          env: process.env,
+          resolveRuntime: () => {
+            const resource = executableResources(registry).find(
+              candidate =>
+                candidate.pluginId === KORRI_GMLOADER_PLUGIN_ID &&
+                candidate.resource.id === KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
+            )?.resource
+            if (!resource) {
+              return Effect.fail(
+                new LibraryError({
+                  reason: "unavailable",
+                  message: "GMLoader runtime resource is not registered",
+                }),
+              )
+            }
+            return resourceResolver
+              .resolveExecutable({
+                pluginId: KORRI_GMLOADER_PLUGIN_ID,
+                resource,
+              })
+              .pipe(
+                Effect.mapError(
+                  error =>
+                    new LibraryError({
+                      reason: "unavailable",
+                      message:
+                        error instanceof Error ? error.message : String(error),
+                    }),
+                ),
+              )
+          },
+        })
+      : withPortMaster
   }),
 )
 

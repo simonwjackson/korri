@@ -10,6 +10,7 @@ import { KORRI_3DSEN_APP_ID, KORRI_3DSEN_PLUGIN_ID } from "./3dsen"
 import { KORRI_BOX64_RUNTIME_PLUGIN_ID } from "./box64-runtime"
 import { KORRI_FEX_PLUGIN_ID } from "./fex-runtime"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
+import { KORRI_GMLOADER_PLUGIN_ID } from "./gmloader"
 import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "./levelsharesquare"
 import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "./mega-man-arena"
 import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "./mega-man-maker"
@@ -199,6 +200,21 @@ describe("first-party plugins", () => {
         integration => integration.providerId === KORRI_3DSEN_PLUGIN_ID,
       ),
     ).toBe(true)
+  })
+
+  it("registers GMLoader as a first-party local payload plugin", () => {
+    const gmloader = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_GMLOADER_PLUGIN_ID,
+    )
+
+    expect(gmloader?.contributes.config.modules?.["gmloader-next"]).toMatchObject({
+      kind: "executable",
+      fulfill: {
+        provider: "nix",
+        installable: ".#gmloader-next",
+        binary: "gmloader-next",
+      },
+    })
   })
 
   it("registers Turnip as a first-party graphics runtime plugin", () => {

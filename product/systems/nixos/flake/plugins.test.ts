@@ -52,6 +52,7 @@ describe("first-party Nix plugin composition", () => {
     expect(enabled.ids).toEqual(
       expect.arrayContaining([
         "@korri:gamescope",
+        "@korri:gmloader",
         "@korri:pico8",
         "@korri:portmaster",
         "@korri:remap",
@@ -63,6 +64,7 @@ describe("first-party Nix plugin composition", () => {
     expect(enabled.packages).toEqual(
       expect.arrayContaining([
         "gamescope-korri",
+        "gmloader-next",
         "korri-gamescope-control-bridge",
         "korri-remap-bridge",
         "libretro-fake-08",
@@ -71,17 +73,20 @@ describe("first-party Nix plugin composition", () => {
         "steam-korri",
       ]),
     )
-    expect(enabled.apps).toEqual([
-      "gamescope-control",
-      "gamescope-control-bridge",
-      "korri-remap-bridge",
-      "korri-stream-control-bench",
-    ])
+    expect(enabled.apps).toEqual(
+      expect.arrayContaining([
+        "gamescope-control",
+        "gamescope-control-bridge",
+        "korri-remap-bridge",
+        "korri-stream-control-bench",
+      ]),
+    )
     expect(enabled.moduleCount).toBeGreaterThan(2)
     expect(enabled.ids.length).toBeGreaterThan(1)
     expect(enabled.packages.length).toBeGreaterThan(2)
     expect(enabled.checks).toEqual(
       expect.arrayContaining([
+        "gmloader-next-check",
         "korri-steam-module",
         "libretro-fake-08-check",
         "portmaster-check",
