@@ -10,6 +10,9 @@ import {
 export const shiftLabSurfaceAdapter: LabSurfaceAdapter<SeedInitialValues> = {
   id: "shift",
   devices: shiftConfig.devices,
+  knobs: shiftConfig.knobs,
+  defaultPxPerMm: shiftConfig.defaultPxPerMm,
+  scaleVarPrefix: shiftConfig.scaleVarPrefix,
   makeSeedInitialValues,
   mountSurface: (host, { initialValues, history }) =>
     mountShift(host, {

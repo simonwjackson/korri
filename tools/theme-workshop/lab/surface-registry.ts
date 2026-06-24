@@ -1,6 +1,6 @@
 import type { RouterHistory } from "@tanstack/history"
 import type { Router } from "@tanstack/react-router"
-import type { DeviceConfig } from "../device-lab"
+import type { DeviceConfig, ThemeKnob } from "../device-lab"
 import { shiftLabSurfaceAdapter } from "./adapters/shift"
 
 export interface LabMountedSurface {
@@ -11,6 +11,9 @@ export interface LabMountedSurface {
 export interface LabSurfaceAdapter<InitialValues = unknown> {
   readonly id: string
   readonly devices: readonly DeviceConfig[]
+  readonly knobs?: readonly ThemeKnob[]
+  readonly defaultPxPerMm?: number
+  readonly scaleVarPrefix?: string
   readonly makeSeedInitialValues: () => Promise<InitialValues>
   readonly mountSurface: (
     host: HTMLElement,
