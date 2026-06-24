@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
-import { Calibrator, type DeviceCal, type KnobCal } from "../device-lab/Calibrator"
+import {
+  Calibrator,
+  type DeviceCal,
+  type KnobCal,
+} from "../device-lab/Calibrator"
 import {
   normalizeSurfacePath,
   parseDeviceSegment,
@@ -118,6 +122,7 @@ export function LabRoot({
       initialValues,
       themeId: routeState.themeId,
       surfacePath: normalizeSurfacePath(routeState.surfacePath),
+      screens: adapter.screens ?? [],
       selection,
       devices: calibration.devices,
       selectedDevices,
@@ -145,7 +150,9 @@ export function LabRoot({
     )
   const addDevice = () =>
     setCalibration(prev =>
-      prev ? { ...prev, devices: [...prev.devices, makeDevice(prev.devices)] } : prev,
+      prev
+        ? { ...prev, devices: [...prev.devices, makeDevice(prev.devices)] }
+        : prev,
     )
   const removeDevice = (id: string) =>
     setCalibration(prev =>
@@ -222,7 +229,9 @@ export function LabRoot({
   )
 }
 
-function knobDefaults(themeKnobs: readonly ThemeKnob[]): Record<string, number> {
+function knobDefaults(
+  themeKnobs: readonly ThemeKnob[],
+): Record<string, number> {
   const out: Record<string, number> = {}
   for (const knob of themeKnobs) out[knob.cssVar] = knob.default
   return out

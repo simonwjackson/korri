@@ -1,0 +1,98 @@
+/*
+ * Multi-device lab chrome + embedded-surface sizing.
+ *
+ * The lab mounts the REAL surface inside each physical device frame. Two things
+ * the neutral device-lab chrome does not provide:
+ *   1. The mounted surface must fill its device box (not the viewport).
+ *   2. A fixed, visible surface control bar above the stage.
+ */
+
+/* Each mounted surface fills its physical device container. */
+.lab-screen > [data-lab-surface-mount] {
+	width: 100%;
+	height: 100%;
+}
+
+/*
+ * Surfaces self-size to the viewport (100vh) in production so they fill the
+ * screen. Inside a device frame that viewport height is wrong: a panel taller
+ * than the browser viewport (e.g. the 65" TV) would only paint its top
+ * viewport-height slice. Pin embedded surface frames to their device box.
+ */
+.lab-screen [data-shift-home-frame],
+.lab-screen [data-shift-detail] {
+	height: 100%;
+}
+
+/* Surface control bar — fixed, above the fixed stage. */
+.lab-controlbar {
+	position: fixed;
+	left: 50%;
+	bottom: 16px;
+	transform: translateX(-50%);
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 10px;
+	border-radius: 10px;
+	background: rgba(14, 14, 18, 0.86);
+	border: 1px solid #2a2a35;
+	backdrop-filter: blur(8px);
+	font:
+		12px / 1 ui-monospace,
+		monospace;
+	color: #9aa0aa;
+	max-width: calc(100vw - 24px);
+	overflow-x: auto;
+}
+.lab-switch {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+.lab-switch-tab {
+	font: inherit;
+	color: #9aa0aa;
+	background: transparent;
+	border: 0;
+	padding: 5px 10px;
+	border-radius: 5px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.lab-switch-tab:hover {
+	color: #e6e6ea;
+	background: #1d1d24;
+}
+.lab-switch-tab.on {
+	color: #0e0e12;
+	background: #7dd3fc;
+}
+.lab-sep {
+	width: 1px;
+	align-self: stretch;
+	background: #2a2a35;
+	margin: 0 2px;
+}
+.lab-route-label {
+	color: #6b7280;
+}
+.lab-controlbar code {
+	color: #e6e6ea;
+	white-space: nowrap;
+}
+.lab-copy {
+	font: inherit;
+	color: #9aa0aa;
+	background: transparent;
+	border: 1px solid #2a2a35;
+	padding: 4px 8px;
+	border-radius: 6px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.lab-copy:hover {
+	color: #e6e6ea;
+	border-color: #3a3a45;
+}

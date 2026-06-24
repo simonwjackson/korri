@@ -7,9 +7,15 @@ export interface LabMountedSurface {
   readonly dispose: () => void
 }
 
+export interface LabSurfaceScreen {
+  readonly label: string
+  readonly path: string
+}
+
 export interface LabSurfaceAdapter {
   readonly id: string
   readonly devices: readonly DeviceConfig[]
+  readonly screens?: readonly LabSurfaceScreen[]
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
   readonly scaleVarPrefix?: string

@@ -5,6 +5,7 @@ import { RouterProvider } from "@tanstack/react-router"
 import { createRoot } from "react-dom/client"
 import "../device-lab/device-lab.css"
 import "../workshop.css"
+import "./lab.css"
 import { createLabRouter } from "./lab-router"
 
 const host = document.getElementById("root")

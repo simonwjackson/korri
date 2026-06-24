@@ -10,6 +10,10 @@ import {
 export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   id: "shift",
   devices: shiftConfig.devices,
+  screens: [
+    { label: "Home", path: "/" },
+    { label: "Game Detail", path: "/game/hollow-knight" },
+  ],
   knobs: shiftConfig.knobs,
   defaultPxPerMm: shiftConfig.defaultPxPerMm,
   scaleVarPrefix: shiftConfig.scaleVarPrefix,

@@ -40,6 +40,7 @@ function renderPicker(
     initialValues: {},
     themeId: "test",
     surfacePath: "/",
+    screens: [],
     devices,
     selectedDevices: devices,
     pxPerMm: 3.7795275591,

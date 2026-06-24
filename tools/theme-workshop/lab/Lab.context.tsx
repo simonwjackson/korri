@@ -1,13 +1,14 @@
 import { createContext, useContext } from "react"
 import type { DeviceConfig } from "../device-lab"
 import type { DeviceSelection } from "./lab-route-state"
-import type { LabSurfaceAdapter } from "./surface-registry"
+import type { LabSurfaceAdapter, LabSurfaceScreen } from "./surface-registry"
 
 export interface LabContextValue {
   readonly adapter: LabSurfaceAdapter
   readonly initialValues: unknown
   readonly themeId: string
   readonly surfacePath: string
+  readonly screens: readonly LabSurfaceScreen[]
   readonly selection: DeviceSelection
   readonly devices: readonly DeviceConfig[]
   readonly selectedDevices: readonly DeviceConfig[]
