@@ -7,6 +7,10 @@ import { defineConfig } from "vite"
 
 const repoRoot = new URL("../../", import.meta.url).pathname
 
+// Same server-side key injection as the portal, so the boxbuster surface's
+// cover art loads when previewed in the workshop. Override via local.env.
+const sgdbKey = process.env.SGDB_KEY ?? "889b260d509badc58844dd8c9b2e4eff"
+
 export default defineConfig({
   root: new URL(".", import.meta.url).pathname,
   publicDir: false,
@@ -20,6 +24,35 @@ export default defineConfig({
   server: {
     host: true,
     allowedHosts: true,
+    // boxbuster surface — proxy external cover-art / screenshot APIs so images
+    // stay same-origin (WebGL canvas untainted) and the SGDB key stays server-side.
+    proxy: {
+      "/sgdb/api": {
+        target: "https://www.steamgriddb.com",
+        changeOrigin: true,
+        rewrite: p => p.replace(/^\/sgdb\/api/, "/api/v2"),
+        configure: proxy => {
+          proxy.on("proxyReq", proxyReq => {
+            proxyReq.setHeader("Authorization", `Bearer ${sgdbKey}`)
+          })
+        },
+      },
+      "/sgdb/cdn": {
+        target: "https://cdn2.steamgriddb.com",
+        changeOrigin: true,
+        rewrite: p => p.replace(/^\/sgdb\/cdn/, ""),
+      },
+      "/steam/api": {
+        target: "https://store.steampowered.com",
+        changeOrigin: true,
+        rewrite: p => p.replace(/^\/steam\/api/, "/api"),
+      },
+      "/steam/cdn": {
+        target: "https://shared.akamai.steamstatic.com",
+        changeOrigin: true,
+        rewrite: p => p.replace(/^\/steam\/cdn/, ""),
+      },
+    },
   },
   preview: {
     host: true,

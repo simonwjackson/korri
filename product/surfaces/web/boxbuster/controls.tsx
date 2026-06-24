@@ -1,0 +1,215 @@
+import { PointerLockControls } from "@react-three/drei"
+import { useFrame, useThree } from "@react-three/fiber"
+import { useEffect, useMemo, useRef } from "react"
+import * as THREE from "three"
+import { BACK_ROOM, DOOR_HALF, GONDOLA_X, GONDOLA_Z, ROOM } from "./scene"
+import { getTopple, setStress, startTopple } from "./topple"
+
+const EYE = 1.55
+const SPEED = 4.2
+const PLAYER_R = 0.4
+const M = 0.6 // wall margin
+const MIN_PUSH = 0.5 // how head-on you must be (0..~1.4) for a shove to count
+const SHOVE_TO_TOPPLE = 1.4 // seconds of solid head-on shoving before it goes over
+const SHOVE_DECAY = 2.5 // how fast the charge bleeds off once you ease up
+
+// gondola AABBs (x-band, full z-length) we shouldn't walk through
+const BLOCKERS = GONDOLA_X.map(cx => ({
+  minX: cx - 0.5 - PLAYER_R,
+  maxX: cx + 0.5 + PLAYER_R,
+  minZ: -GONDOLA_Z - 0.5 - PLAYER_R,
+  maxZ: GONDOLA_Z + 0.5 + PLAYER_R,
+}))
+
+// which gondola (index) covers point (x,z), or -1
+function gondolaAt(x: number, z: number): number {
+  for (let i = 0; i < BLOCKERS.length; i++) {
+    const b = BLOCKERS[i]
+    if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) return i
+  }
+  return -1
+}
+
+function blocked(x: number, z: number): boolean {
+  const i = gondolaAt(x, z)
+  return i >= 0 && !getTopple(i) // a toppled shelf no longer blocks the floor
+}
+
+// Walkable = store ∪ doorway ∪ viewing room. The doorway is the only opening in
+// the shared wall at z = -ROOM.d/2.
+function walkable(x: number, z: number): boolean {
+  const hw = ROOM.w / 2 - M
+  const hd = ROOM.d / 2 - M
+  const inStore = x > -hw && x < hw && z > -hd && z < hd
+  const inDoor =
+    Math.abs(x) < DOOR_HALF - 0.2 &&
+    z < BACK_ROOM.zNear + M &&
+    z > BACK_ROOM.zNear - M
+  const inBack =
+    Math.abs(x) < BACK_ROOM.halfX - M &&
+    z < BACK_ROOM.zNear - M &&
+    z > BACK_ROOM.zFar + M
+  return inStore || inDoor || inBack
+}
+
+const allowed = (x: number, z: number) => walkable(x, z) && !blocked(x, z)
+
+export function FirstPerson({
+  focus,
+  embedded = false,
+}: {
+  focus?: THREE.Vector3 | null
+  embedded?: boolean
+}) {
+  const { camera, gl } = useThree()
+  const keys = useRef<Record<string, boolean>>({})
+  const fwd = useRef(new THREE.Vector3())
+  const right = useRef(new THREE.Vector3())
+  const aim = useRef<THREE.Vector3 | null>(null) // active "sit down to watch" target
+  const mat = useMemo(() => new THREE.Matrix4(), [])
+  const desired = useMemo(() => new THREE.Quaternion(), [])
+  const shove = useRef(0) // accumulated shove against shoveGi
+  const shoveGi = useRef(-1) // which shelf we're currently leaning on
+
+  // begin a brief auto-aim whenever a new focus target arrives (a game loads)
+  useEffect(() => {
+    if (focus) aim.current = focus
+  }, [focus])
+
+  useEffect(() => {
+    camera.position.set(0, EYE, 16)
+    ;(window as unknown as { __cam?: THREE.Camera }).__cam = camera // dev hook
+
+    const down = (e: KeyboardEvent) => {
+      keys.current[e.code] = true
+    }
+    const up = (e: KeyboardEvent) => {
+      keys.current[e.code] = false
+    }
+    window.addEventListener("keydown", down)
+    window.addEventListener("keyup", up)
+    return () => {
+      window.removeEventListener("keydown", down)
+      window.removeEventListener("keyup", up)
+    }
+  }, [camera])
+
+  // Embedded mode (e.g. theme-workshop): no global pointer-lock — it would
+  // hijack the whole window and block surrounding widgets. Drag-to-look instead,
+  // captured to the canvas, so clicks outside it still reach the host chrome.
+  useEffect(() => {
+    if (!embedded) return
+    const el = gl.domElement
+    const euler = new THREE.Euler(0, 0, 0, "YXZ")
+    let dragging = false
+    let px = 0
+    let py = 0
+    // pointerdown starts a drag on the canvas; move/up live on window so the
+    // look keeps tracking even if the cursor leaves the canvas mid-drag. When
+    // not dragging, the window handlers early-out, so host clicks are untouched.
+    const onDown = (e: PointerEvent) => {
+      dragging = true
+      px = e.clientX
+      py = e.clientY
+    }
+    const onMove = (e: PointerEvent) => {
+      if (!dragging) return
+      const dx = e.clientX - px
+      const dy = e.clientY - py
+      px = e.clientX
+      py = e.clientY
+      euler.setFromQuaternion(camera.quaternion)
+      euler.y -= dx * 0.0028
+      euler.x -= dy * 0.0028
+      euler.x = Math.max(
+        -Math.PI / 2 + 0.01,
+        Math.min(Math.PI / 2 - 0.01, euler.x),
+      )
+      camera.quaternion.setFromEuler(euler)
+    }
+    const onUp = () => {
+      dragging = false
+    }
+    el.addEventListener("pointerdown", onDown)
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+    return () => {
+      el.removeEventListener("pointerdown", onDown)
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+    }
+  }, [embedded, gl, camera])
+
+  useFrame((_, dt) => {
+    // "sit down to watch": ease the look toward the TV, release once aligned
+    if (aim.current) {
+      mat.lookAt(camera.position, aim.current, camera.up)
+      desired.setFromRotationMatrix(mat)
+      camera.quaternion.slerp(desired, 1 - 0.0008 ** dt)
+      if (camera.quaternion.angleTo(desired) < 0.02) aim.current = null
+    }
+
+    const k = keys.current
+    const f = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0)
+    const s = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0)
+    if (f === 0 && s === 0) {
+      // standing still: bleed off any shove charge so the shelf settles back
+      if (shoveGi.current >= 0) {
+        shove.current = Math.max(0, shove.current - dt * SHOVE_DECAY)
+        setStress(shoveGi.current, shove.current / SHOVE_TO_TOPPLE)
+        if (shove.current === 0) shoveGi.current = -1
+      }
+      return
+    }
+
+    camera.getWorldDirection(fwd.current)
+    fwd.current.y = 0
+    fwd.current.normalize()
+    right.current.crossVectors(fwd.current, camera.up).normalize()
+
+    const step = Math.min(dt, 0.05) * SPEED
+    const moveX = fwd.current.x * f + right.current.x * s
+    let nx = camera.position.x + moveX * step
+    let nz =
+      camera.position.z + (fwd.current.z * f + right.current.z * s) * step
+
+    // A shelf only topples under a *sustained* head-on shove — a brief bump
+    // bounces off, and it visibly wobbles first as a warning. Tapes react to
+    // the topple in vhs.tsx.
+    const giHit = gondolaAt(nx, camera.position.z)
+    const shoving =
+      giHit >= 0 &&
+      !getTopple(giHit) &&
+      Math.abs(moveX) > MIN_PUSH &&
+      !allowed(nx, camera.position.z) // pressed up against it, not sliding by
+    if (shoving) {
+      if (shoveGi.current !== giHit) {
+        if (shoveGi.current >= 0) setStress(shoveGi.current, 0)
+        shoveGi.current = giHit
+        shove.current = 0
+      }
+      shove.current += Math.abs(moveX) * dt
+      setStress(giHit, shove.current / SHOVE_TO_TOPPLE)
+      if (shove.current >= SHOVE_TO_TOPPLE) {
+        startTopple(giHit, Math.sign(moveX))
+        shove.current = 0
+        shoveGi.current = -1
+      }
+    } else if (shoveGi.current >= 0) {
+      // moving, but no longer into that shelf: bleed the charge back down
+      shove.current = Math.max(0, shove.current - dt * SHOVE_DECAY)
+      setStress(shoveGi.current, shove.current / SHOVE_TO_TOPPLE)
+      if (shove.current === 0) shoveGi.current = -1
+    }
+
+    // per-axis resolve against walls/gondolas so you slide along surfaces
+    if (!allowed(nx, camera.position.z)) nx = camera.position.x
+    if (!allowed(nx, nz)) nz = camera.position.z
+
+    camera.position.x = nx
+    camera.position.z = nz
+    camera.position.y = EYE
+  })
+
+  return embedded ? null : <PointerLockControls />
+}

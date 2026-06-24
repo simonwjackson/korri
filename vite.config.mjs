@@ -7,6 +7,10 @@ import appRouterConfig from "./product/apps/portal/tsr.config.ts"
 const apiProxyTarget =
   process.env.KORRI_API_PROXY_TARGET ?? "http://localhost:3001"
 
+// SteamGridDB dev key for the boxbuster surface's cover-art proxy. Injected
+// server-side below so it never reaches client code; override via local.env.
+const sgdbKey = process.env.SGDB_KEY ?? "889b260d509badc58844dd8c9b2e4eff"
+
 export default defineConfig({
   root: new URL("./product/apps/portal", import.meta.url).pathname,
   publicDir: false,
@@ -28,6 +32,34 @@ export default defineConfig({
             ? req.url
             : undefined,
       },
+      // boxbuster surface — external cover-art / screenshot APIs proxied so
+      // images stay same-origin (WebGL canvas untainted) and the SGDB key is
+      // injected server-side, never shipped to the client.
+      "/sgdb/api": {
+        target: "https://www.steamgriddb.com",
+        changeOrigin: true,
+        rewrite: p => p.replace(/^\/sgdb\/api/, "/api/v2"),
+        configure: proxy => {
+          proxy.on("proxyReq", proxyReq => {
+            proxyReq.setHeader("Authorization", `Bearer ${sgdbKey}`)
+          })
+        },
+      },
+      "/sgdb/cdn": {
+        target: "https://cdn2.steamgriddb.com",
+        changeOrigin: true,
+        rewrite: p => p.replace(/^\/sgdb\/cdn/, ""),
+      },
+      "/steam/api": {
+        target: "https://store.steampowered.com",
+        changeOrigin: true,
+        rewrite: p => p.replace(/^\/steam\/api/, "/api"),
+      },
+      "/steam/cdn": {
+        target: "https://shared.akamai.steamstatic.com",
+        changeOrigin: true,
+        rewrite: p => p.replace(/^\/steam\/cdn/, ""),
+      },
     },
     watch: {
       ignored: ["**/out/**", "**/node_modules/**", "**/.git/**"],
@@ -46,6 +78,17 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ["effect", "@tanstack/react-router", "react", "react-dom"],
+    include: [
+      "effect",
+      "@tanstack/react-router",
+      "react",
+      "react-dom",
+      // boxbuster surface (product/surfaces/web/boxbuster) — pre-bundle the R3F
+      // stack so the /boxbuster route doesn't trigger a mid-session
+      // re-optimization (which 504s in-flight chunks) when first loaded.
+      "three",
+      "@react-three/fiber",
+      "@react-three/drei",
+    ],
   },
 })

@@ -1,0 +1,33 @@
+/*
+ * Scoped to the surface so the chunky nearest-neighbour upscale and full-bleed
+ * layout never leak onto portal chrome or other canvases. (The standalone
+ * prototype set these globally on `html, body, #root, canvas`.)
+ */
+.boxbuster-surface {
+	/* `absolute` (not `fixed`) so the surface fills the viewport via the initial
+	 * containing block in the portal, yet stays contained by a positioned/scaled
+	 * frame (e.g. the theme-workshop DeviceLab) when embedded. */
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	background: #05060c;
+	color-scheme: dark;
+
+	/* Make the surface a query container so the 2D HUD below scales with the
+	 * surface's own size (handheld → TV), not the viewport. This is the DOM/CSS
+	 * half of the intrinsic-design contract; the 3D scene interior adapts via the
+	 * camera instead. Fluid HUD type tokens mirror @korri/intrinsic-design's
+	 * `clamp(min, base + N·cqi, max)` recipe — container-relative, never raw px. */
+	container-type: size;
+	--bb-text-hud: clamp(11px, calc(8px + 0.55cqi), 17px);
+	--bb-text-prompt: clamp(13px, calc(9px + 0.75cqi), 22px);
+	--bb-text-title: clamp(15px, calc(10px + 0.9cqi), 26px);
+	--bb-text-enter: clamp(20px, calc(12px + 2cqi), 44px);
+}
+
+/* Nearest-neighbour upscale of the low-res WebGL framebuffer. */
+.boxbuster-surface canvas {
+	image-rendering: pixelated;
+	/* biome-ignore lint/suspicious/noDuplicateProperties: cross-browser fallback — crisp-edges for engines without `pixelated` */
+	image-rendering: crisp-edges;
+}
