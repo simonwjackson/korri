@@ -11,6 +11,8 @@ export interface LabContextValue {
   readonly selection: DeviceSelection
   readonly devices: readonly DeviceConfig[]
   readonly selectedDevices: readonly DeviceConfig[]
+  readonly pxPerMm: number
+  readonly knobValues: Readonly<Record<string, number>>
   readonly setDevicesSegment: (devicesSegment: string) => void
   readonly setThemeId: (themeId: string) => void
   readonly setSurfacePath: (surfacePath: string) => void

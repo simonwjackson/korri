@@ -3,7 +3,6 @@ import { DeviceFrame } from "../../device-lab"
 import { LabSurfaceMount } from "../LabSurfaceMount"
 import { useLab } from "../Lab.context"
 
-const DEFAULT_PX_PER_MM = 3.7795275591
 const VIEWPORT_INSET = 48
 
 export function LabStage() {
@@ -13,6 +12,8 @@ export function LabStage() {
     selectedDevices,
     surfacePath,
     setSurfacePath,
+    pxPerMm,
+    knobValues,
   } = useLab()
   const [maxHeightPx, setMaxHeightPx] = useState<number | undefined>(() =>
     typeof window === "undefined"
@@ -31,7 +32,7 @@ export function LabStage() {
   const stageStyle = Object.fromEntries(
     (adapter.knobs ?? []).map(knob => [
       knob.cssVar,
-      `${knob.default}${knob.unit ?? ""}`,
+      `${knobValues[knob.cssVar] ?? knob.default}${knob.unit ?? ""}`,
     ]),
   ) as CSSProperties
 
@@ -43,7 +44,7 @@ export function LabStage() {
             <DeviceFrame
               widthMm={device.widthMm}
               heightMm={device.heightMm}
-              pxPerMm={adapter.defaultPxPerMm ?? DEFAULT_PX_PER_MM}
+              pxPerMm={pxPerMm}
               textScale={device.textPct / 100}
               padScale={device.padPct / 100}
               scaleVarPrefix={adapter.scaleVarPrefix ?? "lab"}

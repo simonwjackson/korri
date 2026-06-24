@@ -42,6 +42,8 @@ function renderPicker(
     surfacePath: "/",
     devices,
     selectedDevices: devices,
+    pxPerMm: 3.7795275591,
+    knobValues: {},
     setDevicesSegment,
     setThemeId: mock(() => undefined),
     setSurfacePath: mock(() => undefined),

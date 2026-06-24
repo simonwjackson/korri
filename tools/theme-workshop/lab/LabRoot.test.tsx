@@ -6,7 +6,10 @@ import type { DeviceConfig } from "../device-lab"
 import { LabRoot, type LabRouteState } from "./LabRoot"
 import type { LabSurfaceAdapter } from "./surface-registry"
 
-afterEach(() => cleanup())
+afterEach(() => {
+  window.localStorage.clear()
+  cleanup()
+})
 
 const devices: readonly DeviceConfig[] = [
   {
@@ -67,6 +70,29 @@ function makeAdapter() {
 }
 
 describe("LabRoot", () => {
+  it("keeps the device-lab calibration controls in the real surface lab", async () => {
+    const { adapter } = makeAdapter()
+
+    const view = render(
+      <LabRoot
+        adapters={[adapter]}
+        routeState={{ devicesSegment: "all", themeId: "test", surfacePath: "/" }}
+        navigation={{
+          setDevicesSegment: mock(() => undefined),
+          setThemeId: mock(() => undefined),
+          setSurfacePath: mock(() => undefined),
+        }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(view.getByRole("dialog", { name: "Calibration desk" })).toBeTruthy()
+    })
+    expect(view.getByRole("tab", { name: "Devices" })).toBeTruthy()
+    expect(view.getByRole("tab", { name: "Scale" })).toBeTruthy()
+    expect(view.getByRole("button", { name: "+ add device" })).toBeTruthy()
+  })
+
   it("renders selected real-surface frames and mirrors navigation from one frame to all frames", async () => {
     const { adapter, histories, mountCounts } = makeAdapter()
     const surfaceWrites: string[] = []
