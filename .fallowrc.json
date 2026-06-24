@@ -168,6 +168,12 @@
 				]
 			},
 			{
+				"name": "product-surface-shift",
+				"patterns": [
+					"product/surfaces/web/shift/**"
+				]
+			},
+			{
 				"name": "product-surfaces-web",
 				"patterns": [
 					"product/surfaces/web/**"
@@ -208,7 +214,8 @@
 					"product-platform",
 					"product-surfaces-web",
 					"product-surfaces-terminal",
-					"product-surface-pico"
+					"product-surface-pico",
+					"product-surface-shift"
 				]
 			},
 			{
@@ -216,7 +223,8 @@
 				"allow": [
 					"product-surfaces-web",
 					"product-surfaces-terminal",
-					"product-surface-pico"
+					"product-surface-pico",
+					"product-surface-shift"
 				]
 			},
 			{
@@ -227,6 +235,13 @@
 			},
 			{
 				"from": "product-surface-pico",
+				"allow": [
+					"product-platform",
+					"repo-tools"
+				]
+			},
+			{
+				"from": "product-surface-shift",
 				"allow": [
 					"product-platform",
 					"repo-tools"
@@ -264,7 +279,8 @@
 					"product-platform",
 					"product-surfaces-web",
 					"product-surfaces-terminal",
-					"product-surface-pico"
+					"product-surface-pico",
+					"product-surface-shift"
 				]
 			}
 		]
