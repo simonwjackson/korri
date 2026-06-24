@@ -9,7 +9,7 @@ export function ShiftHomeEmptyBody() {
     onSome: () => (
       <main
         data-shift-home
-        className="relative flex h-screen w-full flex-col items-center justify-center text-[color:var(--shift-ink)]"
+        className="intrinsic relative flex h-full w-full flex-col items-center justify-center text-[color:var(--shift-ink)]"
       >
         <p className="opacity-70">No games found.</p>
       </main>

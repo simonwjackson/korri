@@ -6,8 +6,14 @@
  *
  * Boundary contract (see commit 85ce4f5 "drop the shift theme"):
  *   - This file is identity-bearing only. It must not contain generic
- *     project infra (focus ring, cursor-none, fluid scale tokens, font
- *     family default). Those live in primitives/theme/styles.css.
+ *     project infra (focus ring, cursor-none, font family default).
+ *     Those live in primitives/theme/styles.css.
+ *   - Shift owns its OWN size/space/radius system: it instantiates the
+ *     shared @korri/intrinsic-design generator (imported below) against
+ *     its own container and derives named --shift-text-, --shift-space-,
+ *     and --shift-radius- tokens from one base. It does NOT consume the
+ *     platform fluid type/spacing ramp. The package stays values-free;
+ *     every knob value lives here.
  *   - This file imports nothing from products/app/ or fixtures/. Themes
  *     are independent of product wiring.
  *
@@ -26,6 +32,12 @@
  * templates terminate the template literal early (TS1381). See
  * docs/solutions/build-errors/backticks-in-scoped-css-template-literals-2026-05-01.md.
  */
+/* Relative import (not by-name): bun2nix bases local file: package paths on
+ * the repo root, but bun.nix lives at tools/nix/generated/, so a by-name file:
+ * dep resolves to a non-existent tools/nix/generated/packages/... path and
+ * breaks the hermetic portal/device build. The theme-workshop ships the same
+ * relative import; the Nix build copies the whole tree (packages/ included). */
+@import "../../../../packages/intrinsic-design/recipe.css";
 
 /* -------------------------------------------------------------------------- *
  * Tokens — light mode (primary intent)
@@ -35,6 +47,56 @@
  * -------------------------------------------------------------------------- */
 
 [data-shift-home] {
+	/* ── Intrinsic generator knobs ─────────────────────────────────────────
+	 * Shift instantiates @korri/intrinsic-design against its OWN container.
+	 * The surface element carries the `intrinsic` class so the recipe computes
+	 * --intrinsic-base / --intrinsic-text-* / --intrinsic-space-* here from
+	 * these knobs. Calibrated to Shift's Switch-like handheld → panel → TV
+	 * range; tune live in the device-lab (the GEN sliders write these same
+	 * vars). Snap stays the recipe default (0.02px) — Shift has a smooth
+	 * font, not pico's 1px pixel snap. */
+	--intrinsic-base-min: var(--shift-base-min, 13px);
+	--intrinsic-base-cqi: var(--shift-base-cqi, 2.4);
+	--intrinsic-base-max: var(--shift-base-max, 22px);
+	--intrinsic-ratio: var(--shift-type-ratio, 1.25);
+	--intrinsic-space-unit: var(--shift-space-unit, 0.5em);
+	/* TEXT / PAD multipliers: the device-lab publishes --shift-text-scale /
+	 * --shift-pad-scale on the stage (cascade); the runtime Labs slider writes
+	 * --intrinsic-text-scale / --intrinsic-pad-scale inline on this element
+	 * (overriding). Both paths drive the same derived families. */
+	--intrinsic-text-scale: var(--shift-text-scale, 1);
+	--intrinsic-pad-scale: var(--shift-pad-scale, 1);
+
+	/* ── Native semantic type scale (derived off the one base) ─────────────
+	 * Body sits AT the base (text-0), not at the floor. `fine` is one step
+	 * down for timestamps / HUD labels; display + hero extend past the
+	 * recipe's 7 steps for the launch hero, computed straight off the base so
+	 * art and type still share one ceiling. */
+	--shift-text-fine: var(--intrinsic-text-dn1);
+	--shift-text-body: var(--intrinsic-text-0);
+	--shift-text-title: var(--intrinsic-text-up1);
+	--shift-text-heading: var(--intrinsic-text-up2);
+	--shift-text-display: var(--intrinsic-text-up3);
+	--shift-text-hero: round(
+		calc(var(--intrinsic-text-up3) * var(--intrinsic-ratio)),
+		var(--intrinsic-snap)
+	);
+
+	/* ── Native space scale (linear em steps; tracks text + pad-scale) ─────
+	 * Aliased onto the recipe's derived space family. */
+	--shift-space-1: var(--intrinsic-space-1);
+	--shift-space-2: var(--intrinsic-space-2);
+	--shift-space-3: var(--intrinsic-space-3);
+	--shift-space-4: var(--intrinsic-space-4);
+	--shift-space-5: var(--intrinsic-space-5);
+	--shift-space-6: var(--intrinsic-space-6);
+
+	/* ── Fluid measures (replace static max-w-* caps) ──────────────────────
+	 * ch tracks the font; cqi bounds against the surface — both stay fluid. */
+	--shift-measure-notice: min(42rem, 88cqi);
+	--shift-measure-prose: min(60ch, 88cqi);
+	--shift-measure-display: 14ch;
+
 	--shift-surface: #e8e6e1;
 	--shift-surface-raised: #f2f0eb;
 	--shift-surface-sunk: #ddd5d4;
@@ -56,6 +118,18 @@
 	--shift-rule: #d4d2cd;
 
 	--shift-focus-glow: hsl(252, 75%, 70%);
+
+	/* Accent for primary actions (e.g. the launch-failure retry button). */
+	--shift-accent: var(--shift-focus-glow);
+	--shift-on-accent: #ffffff;
+
+	/* On-media ink + scrim, for text laid over cover art (companion screen).
+	 * These are deliberately light/dark regardless of mode — art is the
+	 * backdrop, not a Shift surface. */
+	--shift-on-media-ink: #ffffff;
+	--shift-on-media-ink-dim: rgba(255, 255, 255, 0.72);
+	--shift-scrim-strong: rgba(0, 0, 0, 0.82);
+	--shift-scrim-mid: rgba(0, 0, 0, 0.24);
 
 	--shift-pill-bg: #ffffff;
 	--shift-pill-fg: #1b1814;
@@ -82,13 +156,21 @@
    */
 	--shift-radius-tile: 4px;
 
+	/* Panel / notice radius — derived so corners track the scale. */
+	--shift-radius-panel: calc(var(--intrinsic-base) * 0.6);
+
 	/*
-   * Rail geometry tokens. The values preserve the measured Switch-like
-   * tile ratio, but are expressed in rem so the kiosk-wide --ui-scale can
-   * resize the home composition without component-local scaling hooks.
+   * Rail geometry tokens. KEEP the names; TilegridRailRoot (which resolves
+   * calc()/var() cell sizes live) consumes them. The defs now derive from
+   * --intrinsic-base so the fixed-cell rail shares ONE scaling law with the
+   * type scale. The cell size is bounded-media — min(<fluid cqh>,
+   * calc(base · N)) — so art and text plateau together instead of drifting.
+   * Row-to-row height matching stays structural (one cell-height unit; spans
+   * are integer multiples). A future 2-row (2×Infinite / Metro) rail is a
+   * clean multiple of this same unit.
    */
-	--shift-home-rail-cell-size: 16.125rem;
-	--shift-home-rail-gap: 1.125rem;
+	--shift-home-rail-cell-size: min(46cqh, calc(var(--intrinsic-base) * 12));
+	--shift-home-rail-gap: calc(var(--intrinsic-base) * 0.8);
 
 	/*
    * Home bar content height. Drives both the top bar (search pill
@@ -97,7 +179,12 @@
    * any future bar-internal sizing in terms of this token, not
    * 3.4em, so a single edit here keeps both bars aligned.
    */
-	--shift-home-bar-content-h: calc(3.4 * var(--text-lg));
+	--shift-home-bar-content-h: calc(3.4 * var(--shift-text-title));
+
+	/* Base font-size = body step, so every em (spacing, icon sizes, the
+	 * bar-content height) and any default text track the one cqi-anchored
+	 * scale instead of the browser's 16px root. */
+	font-size: var(--shift-text-body);
 
 	/*
    * Type voice. Shift overrides the project default (Geist, sharp /
@@ -169,8 +256,25 @@
  * -------------------------------------------------------------------------- */
 
 [data-shift-home] {
-	container-type: inline-size;
+	/* container-type: size (not inline-size) so BOTH cqi and cqh resolve
+	 * against the surface — the rail's bounded-media cqh cap and the launch
+	 * art measure this box, not the viewport. The surface fills its parent
+	 * (h-full); the 100vh "fill the screen" decision lives on the wrapper
+	 * (.shift-surface-frame), so fullscreen looks identical while the surface
+	 * stays a well-behaved tenant of any container (device-lab, dual-screen). */
+	container-type: size;
 	background-color: var(--shift-surface);
+}
+
+/*
+ * Surface frame — owns the "fill the screen" height so [data-shift-home]
+ * can be a self-measuring size container. In production this is the full
+ * viewport; embedded (device-lab .lab-screen, dual-screen) it fills its
+ * given box. The surface main inside is h-full.
+ */
+[data-shift-home-frame] {
+	width: 100%;
+	height: 100vh;
 }
 
 /*
@@ -375,8 +479,8 @@
 	justify-content: flex-start;
 	width: 40cqi;
 	height: auto;
-	padding: calc(4 * var(--spacing)) calc(6 * var(--spacing));
-	gap: calc(4 * var(--spacing));
+	padding: var(--shift-space-2) var(--shift-space-3);
+	gap: var(--shift-space-2);
 	background: var(--shift-pill-bg);
 }
 
@@ -420,13 +524,13 @@
 [data-shift-home] .shift-hud {
 	display: inline-flex;
 	align-items: center;
-	gap: calc(5 * var(--spacing));
+	gap: var(--shift-space-3);
 }
 
 [data-shift-home] .shift-hud-hint {
 	display: inline-flex;
 	align-items: center;
-	gap: calc(3 * var(--spacing));
+	gap: var(--shift-space-2);
 }
 
 [data-shift-home] .shift-hud-glyph {
@@ -438,7 +542,7 @@
 	border-radius: 9999px;
 	background: var(--shift-hud-glyph-bg);
 	color: var(--shift-hud-glyph-fg);
-	font-size: var(--text-sm);
+	font-size: var(--shift-text-fine);
 	font-weight: 800;
 	line-height: 1;
 	transition:
@@ -454,7 +558,7 @@
 }
 
 [data-shift-home] .shift-hud-label {
-	font-size: var(--text-base);
+	font-size: var(--shift-text-body);
 	font-weight: 600;
 	letter-spacing: 0;
 	color: var(--shift-ink-dim);
@@ -476,7 +580,7 @@
 [data-shift-home] .shift-menu-button {
 	display: inline-flex;
 	align-items: center;
-	gap: calc(3 * var(--spacing));
+	gap: var(--shift-space-2);
 	outline: none;
 	border: 0;
 	background: transparent;
@@ -526,10 +630,10 @@
 	width: min(42rem, calc(100vw - 6rem));
 	max-height: calc(100vh - 6rem);
 	transform: translate(-50%, -50%);
-	gap: calc(7 * var(--spacing));
-	padding: calc(8 * var(--spacing));
+	gap: var(--shift-space-4);
+	padding: var(--shift-space-4);
 	border: 1px solid var(--shift-rule);
-	border-radius: calc(var(--radius-xl) * 1.5);
+	border-radius: var(--shift-radius-panel);
 	background: var(--shift-labs-panel-bg);
 	box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
 	color: var(--shift-ink);
@@ -545,16 +649,16 @@
 
 [data-shift-home] .shift-labs-header {
 	justify-content: space-between;
-	gap: calc(6 * var(--spacing));
+	gap: var(--shift-space-3);
 }
 
 [data-shift-home] .shift-labs-title-group {
-	gap: calc(4 * var(--spacing));
+	gap: var(--shift-space-2);
 }
 
 [data-shift-home] .shift-labs-title {
 	margin: 0;
-	font-size: var(--text-2xl);
+	font-size: var(--shift-text-heading);
 	font-weight: 800;
 	letter-spacing: -0.03em;
 }
@@ -563,7 +667,7 @@
 [data-shift-home] .shift-labs-control-description {
 	margin: 0;
 	color: var(--shift-ink-dim);
-	font-size: var(--text-base);
+	font-size: var(--shift-text-body);
 }
 
 [data-shift-home] .shift-labs-close-button,
@@ -581,13 +685,13 @@
 }
 
 [data-shift-home] .shift-labs-close-button {
-	padding: calc(3 * var(--spacing)) calc(5 * var(--spacing));
-	font-size: var(--text-base);
+	padding: var(--shift-space-2) var(--shift-space-3);
+	font-size: var(--shift-text-body);
 }
 
 [data-shift-home] .shift-labs-reset-button {
-	padding: calc(2 * var(--spacing)) calc(4 * var(--spacing));
-	font-size: var(--text-sm);
+	padding: var(--shift-space-1) var(--shift-space-2);
+	font-size: var(--shift-text-fine);
 }
 
 [data-shift-home] .shift-labs-reset-button:disabled {
@@ -607,33 +711,33 @@
 
 [data-shift-home] .shift-labs-content {
 	display: grid;
-	gap: calc(5 * var(--spacing));
+	gap: var(--shift-space-3);
 }
 
 [data-shift-home] .shift-labs-control-row {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.9fr);
 	align-items: center;
-	gap: calc(6 * var(--spacing));
-	padding: calc(5 * var(--spacing));
-	border-radius: var(--radius-xl);
+	gap: var(--shift-space-3);
+	padding: var(--shift-space-3);
+	border-radius: var(--shift-radius-panel);
 	background: var(--shift-surface-raised);
 }
 
 [data-shift-home] .shift-labs-control-copy {
 	display: grid;
-	gap: calc(2 * var(--spacing));
+	gap: var(--shift-space-1);
 }
 
 [data-shift-home] .shift-labs-control-title {
 	margin: 0;
-	font-size: var(--text-lg);
+	font-size: var(--shift-text-title);
 	font-weight: 800;
 }
 
 [data-shift-home] .shift-labs-scale-control {
 	justify-content: flex-end;
-	gap: calc(4 * var(--spacing));
+	gap: var(--shift-space-2);
 }
 
 [data-shift-home] .shift-labs-slider {
@@ -644,7 +748,7 @@
 
 [data-shift-home] .shift-labs-scale-value {
 	min-width: 4ch;
-	font-size: var(--text-lg);
+	font-size: var(--shift-text-title);
 	font-weight: 900;
 	font-variant-numeric: tabular-nums;
 	text-align: right;
@@ -701,16 +805,16 @@
 
 [data-shift-home] .shift-launch-replay {
 	position: absolute;
-	top: calc(5 * var(--spacing));
-	right: calc(12 * var(--spacing));
+	top: var(--shift-space-3);
+	right: var(--shift-space-6);
 	z-index: 8;
-	padding: calc(3 * var(--spacing)) calc(5 * var(--spacing));
+	padding: var(--shift-space-2) var(--shift-space-3);
 	pointer-events: auto;
 }
 
 [data-shift-home] .shift-launch-kicker {
 	display: block;
-	font-size: var(--text-xs);
+	font-size: var(--shift-text-fine);
 	font-weight: 900;
 	letter-spacing: 0.18em;
 	text-transform: uppercase;
@@ -719,7 +823,7 @@
 
 [data-shift-home] .shift-launch-title {
 	display: block;
-	font-size: var(--text-2xl);
+	font-size: var(--shift-text-heading);
 	font-weight: 900;
 	line-height: 1.02;
 	color: #ffffff;
@@ -727,7 +831,7 @@
 }
 
 [data-shift-home] .shift-launch-title-large {
-	font-size: clamp(2.5rem, 6cqi, 5.25rem);
+	font-size: var(--shift-text-hero);
 }
 
 [data-shift-home] .shift-launch-card {
@@ -737,31 +841,31 @@
 
 [data-shift-home] .shift-launch-curtain {
 	position: relative;
-	width: min(86cqi, 76rem);
-	height: min(74cqh, 62rem);
-	border-radius: clamp(1.25rem, 2cqi, 2.25rem);
+	width: min(86cqi, calc(var(--intrinsic-base) * 50));
+	height: min(74cqh, calc(var(--intrinsic-base) * 42));
+	border-radius: calc(var(--intrinsic-base) * 1.4);
 	overflow: hidden;
 	box-shadow: 0 30px 120px rgba(0, 0, 0, 0.55);
 	display: flex;
 	flex-direction: column;
 	justify-content: flex-end;
 	color: white;
-	margin-bottom: calc(8 * var(--spacing));
+	margin-bottom: var(--shift-space-4);
 }
 
 [data-shift-home] .shift-launch-depth-card {
 	position: relative;
-	width: min(68cqi, 60rem);
-	height: min(64cqh, 52rem);
-	border-radius: clamp(1.25rem, 2cqi, 2.25rem);
+	width: min(68cqi, calc(var(--intrinsic-base) * 44));
+	height: min(64cqh, calc(var(--intrinsic-base) * 38));
+	border-radius: calc(var(--intrinsic-base) * 1.4);
 	overflow: hidden;
 	box-shadow: 0 40px 140px rgba(0, 0, 0, 0.6);
 	transform-style: preserve-3d;
 }
 
 [data-shift-home] .shift-launch-progress {
-	height: 0.36rem;
-	width: min(36cqi, 28rem);
+	height: calc(var(--intrinsic-base) * 0.26);
+	width: min(36cqi, calc(var(--intrinsic-base) * 20));
 	border-radius: 9999px;
 	background: rgba(255, 255, 255, 0.18);
 	overflow: hidden;

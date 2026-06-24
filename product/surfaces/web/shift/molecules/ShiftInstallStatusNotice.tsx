@@ -7,7 +7,7 @@ export function ShiftInstallStatusNotice({
 }) {
   if (!install?.canRequestInstall) return null
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white/80">
+    <div className="rounded-[var(--shift-radius-panel)] border border-[color:var(--shift-rule)] bg-[color:var(--shift-surface-raised)] px-[var(--shift-space-2)] py-[var(--shift-space-1)] text-[length:var(--shift-text-fine)] text-[color:var(--shift-ink-dim)]">
       Remote install available for provider app {install.appId}
     </div>
   )

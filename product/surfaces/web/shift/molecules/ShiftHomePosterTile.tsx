@@ -20,7 +20,7 @@ export function ShiftHomePosterTile({ game }: ShiftHomePosterTileProps) {
   const url = getPlayableImageUrl(game)
   if (!url) {
     return (
-      <div className="flex h-full w-full items-center justify-center p-3 text-center text-sm uppercase tracking-widest text-[color:var(--shift-ink-faint)]">
+      <div className="flex h-full w-full items-center justify-center p-[var(--shift-space-2)] text-center text-[length:var(--shift-text-fine)] uppercase tracking-widest text-[color:var(--shift-ink-faint)]">
         {getPlayableDisplayName(game)}
       </div>
     )

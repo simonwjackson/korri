@@ -17,7 +17,7 @@ import { ShiftHudChip } from "../molecules/ShiftHudChip"
 
 export function ShiftHomeHudCluster() {
   return (
-    <div className="flex items-center gap-10">
+    <div className="flex flex-wrap items-center gap-[var(--shift-space-5)]">
       <ShiftHudButton action="options" glyph="+" label="Options" />
       <ShiftHudChip glyph="X" label="Close" />
       <ShiftHudButton action="confirm" glyph="A" label="Continue" />

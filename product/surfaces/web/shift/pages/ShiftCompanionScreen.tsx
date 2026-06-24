@@ -25,7 +25,7 @@ export function ShiftCompanionScreen({ items }: ShiftCompanionScreenProps) {
   const title = getPlayableDisplayName(selectedGame)
 
   return (
-    <div data-shift-home className="relative h-full overflow-hidden">
+    <div data-shift-home className="intrinsic relative h-full overflow-hidden">
       {imageUrl ? (
         <img
           src={imageUrl}
@@ -35,12 +35,14 @@ export function ShiftCompanionScreen({ items }: ShiftCompanionScreenProps) {
       ) : (
         <div className="absolute inset-0 bg-[color:var(--shift-surface-sunk)]" />
       )}
-      <div className="absolute inset-0 bg-linear-to-t from-black/82 via-black/24 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 p-10 text-white">
-        <h2 className="max-w-[14ch] text-6xl font-black leading-[0.95] tracking-tight">
+      <div className="absolute inset-0 bg-linear-to-t from-[color:var(--shift-scrim-strong)] via-[color:var(--shift-scrim-mid)] to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 p-[var(--shift-space-5)] text-[color:var(--shift-on-media-ink)]">
+        <h2 className="max-w-[var(--shift-measure-display)] text-[length:var(--shift-text-hero)] font-black leading-[0.95] tracking-tight">
           {title}
         </h2>
-        <p className="mt-4 text-2xl font-bold text-white/72">{studio}</p>
+        <p className="mt-[var(--shift-space-2)] text-[length:var(--shift-text-heading)] font-bold text-[color:var(--shift-on-media-ink-dim)]">
+          {studio}
+        </p>
       </div>
     </div>
   )

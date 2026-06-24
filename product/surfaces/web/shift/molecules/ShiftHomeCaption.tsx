@@ -32,15 +32,15 @@ export function ShiftHomeCaption() {
 
   return (
     <div
-      className="shift-home-caption shrink-0 px-12 pt-2 pb-3"
+      className="shift-home-caption shrink-0 px-[var(--shift-space-6)] pt-[var(--shift-space-1)] pb-[var(--shift-space-2)]"
       style={{ transform: `translateX(${captionAnchorX}px)` }}
     >
-      <div className="flex items-baseline gap-4">
-        <span className="text-3xl font-semibold text-[color:var(--shift-ink)]">
+      <div className="flex flex-wrap items-baseline gap-[var(--shift-space-2)]">
+        <span className="text-[length:var(--shift-text-heading)] font-semibold text-[color:var(--shift-ink)]">
           {getPlayableDisplayName(focused)}
         </span>
         {relativeLabel ? (
-          <span className="text-sm font-medium tracking-widest text-[color:var(--shift-ink-faint)] uppercase">
+          <span className="text-[length:var(--shift-text-fine)] font-medium tracking-widest text-[color:var(--shift-ink-faint)] uppercase">
             {relativeLabel}
           </span>
         ) : null}

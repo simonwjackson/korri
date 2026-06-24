@@ -56,7 +56,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   handle.dispose()
-  document.documentElement.style.removeProperty("--ui-scale")
 })
 
 describe("ShiftHomeReadyBody", () => {

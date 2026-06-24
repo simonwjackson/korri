@@ -75,7 +75,10 @@ export function ShiftHomeRail({ onItemClick }: ShiftHomeRailProps = {}) {
   }, [railRef, focusTile])
 
   return (
-    <div ref={railRef} className="shift-home-rail-region px-12">
+    <div
+      ref={railRef}
+      className="shift-home-rail-region px-[var(--shift-space-6)]"
+    >
       <TilegridRailRoot<ShiftHomeRailItem>
         items={items as ReadonlyArray<ShiftHomeRailItem>}
         cellSize={{ width: RAIL_CELL_SIZE, height: RAIL_CELL_SIZE }}

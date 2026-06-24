@@ -36,7 +36,6 @@ import {
   clampUiScale,
   DEFAULT_UI_SCALE,
   serializeUiScale,
-  UI_SCALE_CSS_VARIABLE,
 } from "@platform/react/primitives/theme/ui-scale"
 import {
   type ReactNode,
@@ -105,6 +104,7 @@ export function ShiftHomeRoot({
   const [isSystemPanelOpen, setIsSystemPanelOpen] = useState(false)
   const [uiScale, setUiScale] = useState(DEFAULT_UI_SCALE)
   const railRef = useRef<HTMLDivElement | null>(null)
+  const hostRef = useRef<HTMLElement | null>(null)
 
   // Place initial focus on the resume target so spatial navigation has
   // a visible anchor on mount. Runs once per resume-target identity
@@ -192,14 +192,21 @@ export function ShiftHomeRoot({
     setUiScale(DEFAULT_UI_SCALE)
   }, [])
 
+  // One slider drives the whole intrinsic scale: write BOTH the text and the
+  // pad multiplier on the Shift surface element (not a documentElement
+  // root-font zoom). text-scale multiplies the derived type family; pad-scale
+  // multiplies the em space family. Scoping to the surface keeps the knob a
+  // per-surface concern and lets art/media plateau against --intrinsic-base.
   useEffect(() => {
-    document.documentElement.style.setProperty(
-      UI_SCALE_CSS_VARIABLE,
-      serializeUiScale(uiScale),
-    )
+    const host = hostRef.current
+    if (!host) return
+    const scale = serializeUiScale(uiScale)
+    host.style.setProperty("--intrinsic-text-scale", scale)
+    host.style.setProperty("--intrinsic-pad-scale", scale)
 
     return () => {
-      document.documentElement.style.removeProperty(UI_SCALE_CSS_VARIABLE)
+      host.style.removeProperty("--intrinsic-text-scale")
+      host.style.removeProperty("--intrinsic-pad-scale")
     }
   }, [uiScale])
 
@@ -244,8 +251,9 @@ export function ShiftHomeRoot({
   return (
     <ShiftHomeCtx.Provider value={value}>
       <main
+        ref={hostRef}
         data-shift-home
-        className="relative flex h-screen w-full flex-col overflow-hidden text-[color:var(--shift-ink)]"
+        className="intrinsic relative flex h-full w-full flex-col overflow-hidden text-[color:var(--shift-ink)]"
       >
         {children}
       </main>

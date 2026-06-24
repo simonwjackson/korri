@@ -31,11 +31,14 @@ export function ShiftStatusCluster({
   iconActions,
 }: ShiftStatusClusterProps) {
   return (
-    <div className="flex shrink-0 items-center gap-6 text-lg text-[color:var(--shift-ink-dim)]">
-      <span aria-hidden className="text-xl font-bold tabular-nums">
+    <div className="flex shrink-0 flex-wrap items-center gap-[var(--shift-space-3)] text-[length:var(--shift-text-title)] text-[color:var(--shift-ink-dim)]">
+      <span
+        aria-hidden
+        className="text-[length:var(--shift-text-title)] font-bold tabular-nums"
+      >
         {time}
       </span>
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-[var(--shift-space-3)]">
         <ShiftStatusIcon icon={Sun} />
         {iconActions}
         <ShiftStatusIcon icon={Wifi} />

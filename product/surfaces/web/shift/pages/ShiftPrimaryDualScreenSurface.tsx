@@ -61,7 +61,7 @@ function ShiftPrimaryLaunchSurface({
   const failedGame = failedGameFor(items, launch.state)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
+    <div className="flex min-h-0 flex-1 flex-col justify-center gap-[var(--shift-space-1)]">
       {shouldShowLaunchFailure(launch.state) && failedGame ? (
         <ShiftLaunchFailureBanner
           gameTitle={getPlayableDisplayName(failedGame)}

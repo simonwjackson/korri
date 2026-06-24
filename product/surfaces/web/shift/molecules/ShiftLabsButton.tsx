@@ -15,7 +15,7 @@ export function ShiftLabsButton({
       onClick={onActivate}
       aria-label={label}
       data-shift-labs-trigger=""
-      className="shift-labs-button text-lg"
+      className="shift-labs-button text-[length:var(--shift-text-title)]"
     >
       <FlaskConical className="shift-pill-icon" strokeWidth={2.25} />
     </ShiftPill>

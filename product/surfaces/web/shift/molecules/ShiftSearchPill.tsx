@@ -35,7 +35,7 @@ export function ShiftSearchPill({
     <ShiftPill
       onClick={onActivate}
       aria-label={ariaLabel}
-      className="shift-search-pill text-lg"
+      className="shift-search-pill text-[length:var(--shift-text-title)]"
     >
       <Search className="shift-pill-icon shrink-0" strokeWidth={2.25} />
       <span className="shift-search-placeholder">{placeholder}</span>

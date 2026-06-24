@@ -54,20 +54,22 @@ export function ShiftLaunchFailureBanner({
     <div
       role="alert"
       data-shift-launch-failure
-      className="mx-auto flex max-w-2xl items-center justify-between gap-6 rounded-lg border border-[color:var(--shift-ink-faint)] bg-[color:var(--shift-surface-raised)] px-6 py-3 text-[color:var(--shift-ink)]"
+      className="mx-auto flex max-w-[var(--shift-measure-notice)] flex-wrap items-center justify-between gap-[var(--shift-space-3)] rounded-[var(--shift-radius-panel)] border border-[color:var(--shift-ink-faint)] bg-[color:var(--shift-surface-raised)] px-[var(--shift-space-3)] py-[var(--shift-space-2)] text-[color:var(--shift-ink)]"
     >
-      <div className="flex flex-col gap-1">
-        <span className="text-base font-semibold">
+      <div className="flex flex-col gap-[var(--shift-space-1)]">
+        <span className="text-[length:var(--shift-text-body)] font-semibold">
           Could not launch {gameTitle}
         </span>
-        <span className="text-sm opacity-80">{failureMessage}</span>
+        <span className="text-[length:var(--shift-text-fine)] opacity-80">
+          {failureMessage}
+        </span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-[var(--shift-space-1)]">
         {onDismiss ? (
           <button
             type="button"
             onClick={onDismiss}
-            className="rounded px-3 py-1 text-sm opacity-80 hover:opacity-100"
+            className="rounded-[var(--shift-radius-panel)] px-[var(--shift-space-2)] py-[var(--shift-space-1)] text-[length:var(--shift-text-fine)] opacity-80 hover:opacity-100"
           >
             Dismiss
           </button>
@@ -76,7 +78,7 @@ export function ShiftLaunchFailureBanner({
           ref={retryRef}
           type="button"
           onClick={onRetry}
-          className="rounded bg-[color:var(--shift-accent)] px-4 py-2 text-sm font-semibold text-[color:var(--shift-on-accent)]"
+          className="rounded-[var(--shift-radius-panel)] bg-[color:var(--shift-accent)] px-[var(--shift-space-2)] py-[var(--shift-space-1)] text-[length:var(--shift-text-fine)] font-semibold text-[color:var(--shift-on-accent)]"
         >
           Retry
         </button>

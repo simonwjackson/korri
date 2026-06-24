@@ -13,7 +13,7 @@ test.describe("Shift Home Labs panel", () => {
     await page.getByRole("button", { name: "Labs" }).waitFor()
   })
 
-  test("opens Labs and changes root ui scale in realtime", async ({ page }) => {
+  test("opens Labs and scales the surface in realtime", async ({ page }) => {
     await page.getByRole("button", { name: "Labs" }).click()
 
     await expect(page.getByRole("dialog", { name: "Labs" })).toBeVisible()
@@ -29,9 +29,10 @@ test.describe("Shift Home Labs panel", () => {
     await expect(page.getByText("115%")).toBeVisible()
     await expect
       .poll(() =>
-        page.evaluate(() =>
-          document.documentElement.style.getPropertyValue("--ui-scale"),
-        ),
+        page.evaluate(() => {
+          const host = document.querySelector<HTMLElement>("[data-shift-home]")
+          return host?.style.getPropertyValue("--intrinsic-text-scale") ?? ""
+        }),
       )
       .toBe("1.15")
   })

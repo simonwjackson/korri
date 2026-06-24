@@ -19,15 +19,17 @@ export function ShiftForegroundSessionGateNotice({
     <div
       role={state._tag === "AllowedWithUnknownStatus" ? "status" : "alert"}
       data-shift-foreground-session-gate
-      className="mx-auto flex max-w-2xl items-center justify-between gap-6 rounded-lg border border-[color:var(--shift-ink-faint)] bg-[color:var(--shift-surface-raised)] px-6 py-3 text-[color:var(--shift-ink)]"
+      className="mx-auto flex max-w-[var(--shift-measure-notice)] flex-wrap items-center justify-between gap-[var(--shift-space-3)] rounded-[var(--shift-radius-panel)] border border-[color:var(--shift-ink-faint)] bg-[color:var(--shift-surface-raised)] px-[var(--shift-space-3)] py-[var(--shift-space-2)] text-[color:var(--shift-ink)]"
     >
-      <div className="flex flex-col gap-1">
-        <span className="text-base font-semibold">{titleFor(state)}</span>
-        <span className="text-sm opacity-80">
+      <div className="flex flex-col gap-[var(--shift-space-1)]">
+        <span className="text-[length:var(--shift-text-body)] font-semibold">
+          {titleFor(state)}
+        </span>
+        <span className="text-[length:var(--shift-text-fine)] opacity-80">
           {messageFor(state, gameTitle)}
         </span>
         {providerLifecycle ? (
-          <span className="text-xs uppercase tracking-[0.18em] text-[color:var(--shift-ink-dim)]">
+          <span className="text-[length:var(--shift-text-fine)] uppercase tracking-[0.18em] text-[color:var(--shift-ink-dim)]">
             {providerLifecycle.displayMessage}
           </span>
         ) : null}

@@ -13,13 +13,19 @@ export function ShiftHomePage() {
   const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
   const launch = useLibraryLaunchController()
 
+  // Surface frame: owns the "fill the screen" height (100vh in production)
+  // so the [data-shift-home] surface inside can be a self-measuring
+  // container-type:size box (h-full). Embedded contexts (device-lab,
+  // dual-screen) supply their own box and the surface fills that instead.
   return (
-    <ShiftCatalogStateRoot result={snapshot}>
-      <ShiftHomeLoadingBody />
-      <ShiftHomeLoadErrorBody onRetry={refreshSnapshot} />
-      <ShiftHomeDefectBody />
-      <ShiftHomeEmptyBody />
-      <ShiftHomeReadyBody launch={launch} />
-    </ShiftCatalogStateRoot>
+    <div data-shift-home-frame>
+      <ShiftCatalogStateRoot result={snapshot}>
+        <ShiftHomeLoadingBody />
+        <ShiftHomeLoadErrorBody onRetry={refreshSnapshot} />
+        <ShiftHomeDefectBody />
+        <ShiftHomeEmptyBody />
+        <ShiftHomeReadyBody launch={launch} />
+      </ShiftCatalogStateRoot>
+    </div>
   )
 }

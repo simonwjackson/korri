@@ -39,8 +39,8 @@ export function ShiftHomeTopBar({
   trailingActions,
 }: ShiftHomeTopBarProps) {
   return (
-    <div className="flex shrink-0 flex-col px-12 py-5">
-      <div className="flex min-h-[var(--shift-home-bar-content-h)] items-center justify-between gap-6">
+    <div className="flex shrink-0 flex-col px-[var(--shift-space-6)] py-[var(--shift-space-3)]">
+      <div className="flex min-h-[var(--shift-home-bar-content-h)] flex-wrap items-center justify-between gap-[var(--shift-space-3)]">
         <ShiftSearchPill
           placeholder={searchPlaceholder}
           ariaLabel={searchAriaLabel}

@@ -9,10 +9,12 @@ export function ShiftHomeDefectBody() {
     onSome: () => (
       <main
         data-shift-home
-        className="relative flex h-screen w-full flex-col items-center justify-center gap-2 text-[color:var(--shift-ink)]"
+        className="intrinsic relative flex h-full w-full flex-col items-center justify-center gap-[var(--shift-space-1)] text-[color:var(--shift-ink)]"
       >
         <p className="opacity-90">Could not load library.</p>
-        <p className="max-w-prose text-sm opacity-60">Unexpected defect.</p>
+        <p className="max-w-[var(--shift-measure-prose)] text-[length:var(--shift-text-fine)] opacity-60">
+          Unexpected defect.
+        </p>
       </main>
     ),
   })

@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { UI_SCALE_CSS_VARIABLE } from "@platform/react/primitives/theme/ui-scale"
 import {
   cleanup,
   fireEvent,
@@ -21,7 +20,6 @@ const games = [
 
 afterEach(() => {
   cleanup()
-  document.documentElement.style.removeProperty(UI_SCALE_CSS_VARIABLE)
 })
 
 describe("ShiftHomeRoot", () => {
@@ -41,7 +39,7 @@ describe("ShiftHomeRoot", () => {
     expect(screen.getByText("closed")).toBeTruthy()
   })
 
-  it("clamps ui scale updates and writes the root CSS variable", async () => {
+  it("clamps ui scale updates and writes both intrinsic multipliers on the surface", async () => {
     render(
       <ShiftHomeRoot items={games}>
         <ScaleProbe />
@@ -54,9 +52,11 @@ describe("ShiftHomeRoot", () => {
 
     expect(screen.getByText("1.15")).toBeTruthy()
     await waitFor(() => {
-      expect(
-        document.documentElement.style.getPropertyValue(UI_SCALE_CSS_VARIABLE),
-      ).toBe("1.15")
+      const host = document.querySelector<HTMLElement>("[data-shift-home]")
+      expect(host?.style.getPropertyValue("--intrinsic-text-scale")).toBe(
+        "1.15",
+      )
+      expect(host?.style.getPropertyValue("--intrinsic-pad-scale")).toBe("1.15")
     })
 
     fireEvent.click(screen.getByRole("button", { name: "Too large" }))

@@ -34,7 +34,6 @@ beforeEach(() => {
 afterEach(() => {
   handle.dispose()
   cleanup()
-  document.documentElement.style.removeProperty("--ui-scale")
 })
 
 describe("ShiftLabsPanel", () => {
@@ -86,7 +85,7 @@ describe("ShiftLabsPanel", () => {
     })
   })
 
-  it("updates the root ui-scale variable from the composed slider", async () => {
+  it("writes both intrinsic multipliers on the surface from the composed slider", async () => {
     renderLabsHarness()
 
     await clickButton("Open Labs")
@@ -97,9 +96,11 @@ describe("ShiftLabsPanel", () => {
     })
 
     await waitFor(() => {
-      expect(
-        document.documentElement.style.getPropertyValue("--ui-scale"),
-      ).toBe("1.15")
+      const host = document.querySelector<HTMLElement>("[data-shift-home]")
+      expect(host?.style.getPropertyValue("--intrinsic-text-scale")).toBe(
+        "1.15",
+      )
+      expect(host?.style.getPropertyValue("--intrinsic-pad-scale")).toBe("1.15")
     })
   })
 })
