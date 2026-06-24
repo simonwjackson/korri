@@ -2,6 +2,7 @@ import {
   ABS_HAT0X,
   ABS_HAT0Y,
   BTN_BACK,
+  BTN_MODE,
   BTN_SELECT,
   BTN_START,
   BTN_THUMBL,
@@ -239,7 +240,7 @@ function dpadVertical(value: number): SystemShortcutControl | undefined {
 }
 
 function controlForKeyCode(code: number): SystemShortcutControl | null {
-  if (code === KEY_SYSTEM) return "home"
+  if (code === KEY_SYSTEM || code === BTN_MODE) return "home"
   if (code === BTN_TL) return "l1"
   if (code === BTN_TR) return "r1"
   if (code === BTN_START) return "start"

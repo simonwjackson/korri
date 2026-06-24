@@ -137,11 +137,16 @@ describe("system shortcut engine", () => {
     )
   })
 
-  it("does not treat Home/Guide as the physical Home key", () => {
+  it("treats gamepad Home/Guide as the Home shortcut control", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
     engine.handleEvent(input(BTN_MODE, 1))
-    expect(engine.handleEvent(abs(ABS_HAT0X, -1))).toEqual([])
+    expect(engine.handleEvent(abs(ABS_HAT0X, -1))).toEqual([
+      { id: "workspace-prev" },
+    ])
+    expect(engine.handleEvent(input(KEY_VOLUMEUP, 1, "gpio-keys"))).toEqual([
+      { id: "brightness-up" },
+    ])
   })
 
   it("ignores held repeats for one-shot chords", () => {

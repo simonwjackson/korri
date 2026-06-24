@@ -5,6 +5,7 @@ import {
   ABS_HAT0X,
   ABS_HAT0Y,
   BTN_BACK,
+  BTN_MODE,
   BTN_SELECT,
   BTN_START,
   BTN_THUMBL,
@@ -596,7 +597,7 @@ function policyControlForEvent(
   event: EvdevEvent,
 ): SystemShortcutControl | null {
   if (event.type === EV_KEY) {
-    if (event.code === KEY_SYSTEM) return "home"
+    if (event.code === KEY_SYSTEM || event.code === BTN_MODE) return "home"
     if (event.code === BTN_TL) return "l1"
     if (event.code === BTN_TR) return "r1"
     if (event.code === BTN_START) return "start"
