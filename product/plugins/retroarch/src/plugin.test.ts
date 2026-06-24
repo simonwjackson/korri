@@ -21,6 +21,7 @@ import {
   KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
   KORRI_RETROARCH_PSP_SYSTEM_ID,
   KORRI_RETROARCH_PSX_SYSTEM_ID,
+  KORRI_RETROARCH_SLANG_SHADER_DIRECTORY,
   KORRI_RETROARCH_SMS_SYSTEM_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
   KORRI_RETROARCH_TG16_SYSTEM_ID,
@@ -41,7 +42,13 @@ describe("RetroArch plugin", () => {
       id: KORRI_RETROARCH_APP_ID,
       plugin: KORRI_RETROARCH_PLUGIN_ID,
       command: "retroarch",
-      settings: { plugin: {} },
+      settings: {
+        plugin: {
+          paths: {
+            videoShaderDirectory: KORRI_RETROARCH_SLANG_SHADER_DIRECTORY,
+          },
+        },
+      },
     })
   })
 

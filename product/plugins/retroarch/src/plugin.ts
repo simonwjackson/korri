@@ -49,6 +49,8 @@ export const KORRI_RETROARCH_PPSSPP_RUNTIME_ID =
 export const KORRI_RETROARCH_BSNES_RUNTIME_LOCAL_ID = "bsnes" as const
 export const KORRI_RETROARCH_BSNES_RUNTIME_ID =
   `${KORRI_RETROARCH_PLUGIN_ID}/${KORRI_RETROARCH_BSNES_RUNTIME_LOCAL_ID}` as const
+export const KORRI_RETROARCH_SLANG_SHADER_DIRECTORY =
+  "/etc/korri/shaders/slang" as const
 
 export const retroarchPlugin = plugin({
   namespace: "@korri",
@@ -70,7 +72,13 @@ export const retroarchPlugin = plugin({
             "{runtime.path}",
             "{content.path}",
           ],
-          settings: { plugin: {} },
+          settings: {
+            plugin: {
+              paths: {
+                videoShaderDirectory: KORRI_RETROARCH_SLANG_SHADER_DIRECTORY,
+              },
+            },
+          },
           policy: { allowedCommands: ["retroarch"] },
         },
       },

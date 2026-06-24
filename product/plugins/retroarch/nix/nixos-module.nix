@@ -35,6 +35,9 @@ let
     else
       pkgs.retroarch-bare;
 
+  shaderPresetPackage = pkgs.libretro-shaders-slang;
+  shaderPresetDirectory = "${shaderPresetPackage}/share/libretro/shaders/shaders_slang";
+
   retroarchKiosk = pkgs.symlinkJoin {
     name = "korri-retroarch";
     paths = [
@@ -49,6 +52,7 @@ let
       pkgs.libretro.pcsx-rearmed
       ppssppCore
       pkgs.libretro.bsnes
+      shaderPresetPackage
     ];
     passthru = {
       cores = [
@@ -63,6 +67,8 @@ let
         ppssppCore
         pkgs.libretro.bsnes
       ];
+      shaderPresets = shaderPresetPackage;
+      shaderPresetDirectory = shaderPresetDirectory;
       mesaTurnip = retroarchBinary.passthru.mesaTurnip or null;
       turnipIcd = retroarchBinary.passthru.vulkanIcd or null;
       turnipPinned = retroarchBinary.passthru.turnipPinned or false;
@@ -98,6 +104,7 @@ in
       "${ppssppCore}/lib/retroarch/cores/ppsspp_libretro.so";
     environment.etc."korri/cores/bsnes_libretro.so".source =
       "${pkgs.libretro.bsnes}/lib/retroarch/cores/bsnes_libretro.so";
+    environment.etc."korri/shaders/slang".source = shaderPresetDirectory;
 
     services.korri.compositor.path = lib.mkAfter [ retroarchKiosk ];
     systemd.user.services.korri-sessiond.path = lib.mkAfter [ retroarchKiosk ];
