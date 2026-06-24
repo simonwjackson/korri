@@ -147,6 +147,7 @@ in
   services.korri.input.inputd.path = [
     compositorCfg.sway.package
     pkgs.pulseaudio
+    pkgs.brightnessctl
   ];
 
   # User-manager-activated services (notably xdg-desktop-portal backends) do
