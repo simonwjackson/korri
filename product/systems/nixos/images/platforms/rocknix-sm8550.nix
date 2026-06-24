@@ -22,7 +22,7 @@ let
   webCanvasPackage = korri.packages.${targetSystem}.korri-web-canvas;
   box64RuntimePackage = korri.packages.${targetSystem}.korri-box64-runtime or pkgs.box64;
   gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
-  enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:mega-man-rock-n-roll,@korri:neverball,@korri:remap,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:webpage,@korri:web-canvas,@korri:xjlt,@korri:yoshis-fabrication-station,@korri:zquest-classic";
+  enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:gmloader,@korri:mega-man-rock-n-roll,@korri:neverball,@korri:remap,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:webpage,@korri:web-canvas,@korri:xjlt,@korri:yoshis-fabrication-station,@korri:zquest-classic";
   moonlightRuntimeSettingsEnvironment = {
     # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
     # These are intentionally enumerated and preserved as Moonlight process env
