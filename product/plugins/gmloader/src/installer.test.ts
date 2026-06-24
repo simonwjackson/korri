@@ -1,10 +1,14 @@
 import { describe, expect, it } from "bun:test"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { deflateRawSync } from "node:zlib"
 import { ZIP_DEFLATED, ZIP_STORED } from "@platform/archive/zip"
-import { installGmloaderPayload } from "./installer"
+import {
+  GMLOADER_READY_MARKER,
+  ensureGmloaderPayloadInstalled,
+  installGmloaderPayload,
+} from "./installer"
 import { decodeGmloaderInstalledManifest } from "./manifest"
 
 describe("GMLoader installer", () => {
@@ -101,6 +105,115 @@ describe("GMLoader installer", () => {
 
     expect(leftManifest.id).not.toBe(rightManifest.id)
     expect(leftManifest.source.sha256).not.toBe(rightManifest.source.sha256)
+  })
+
+  it("reuses a complete cached install when ensuring the same payload twice", async () => {
+    const sourcePath = await writeArchive("Cache Hit.apk", [
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
+    ])
+    const installRoot = await mktemp()
+
+    const first = await ensureGmloaderPayloadInstalled({
+      providerId: "@korri:gmloader",
+      sourcePath,
+      installRoot,
+      installedAt: "2026-06-24T00:00:00.000Z",
+    })
+    const before = await stat(first.manifest.gameRoot)
+    const second = await ensureGmloaderPayloadInstalled({
+      providerId: "@korri:gmloader",
+      sourcePath,
+      installRoot,
+      installedAt: "2026-06-25T00:00:00.000Z",
+    })
+    const after = await stat(second.manifest.gameRoot)
+
+    expect(first.status).toBe("materialized")
+    expect(second.status).toBe("cache-hit")
+    expect(second.manifest.id).toBe(first.manifest.id)
+    expect(second.manifest.installedAt).toBe(first.manifest.installedAt)
+    expect(after.mtimeMs).toBe(before.mtimeMs)
+  })
+
+  it("repairs an incomplete cached install instead of launching it", async () => {
+    const sourcePath = await writeArchive("Repair.apk", [
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game-v1"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
+    ])
+    const installRoot = await mktemp()
+    const first = await ensureGmloaderPayloadInstalled({
+      providerId: "@korri:gmloader",
+      sourcePath,
+      installRoot,
+    })
+    await rm(join(first.manifest.gameRoot, GMLOADER_READY_MARKER))
+    await writeFile(join(first.manifest.gameRoot, "assets", "game.droid"), "broken")
+
+    const repaired = await ensureGmloaderPayloadInstalled({
+      providerId: "@korri:gmloader",
+      sourcePath,
+      installRoot,
+    })
+
+    expect(repaired.status).toBe("materialized")
+    expect(repaired.manifest.id).toBe(first.manifest.id)
+    expect(
+      await readFile(
+        join(repaired.manifest.gameRoot, "assets", "game.droid"),
+        "utf8",
+      ),
+    ).toBe("game-v1")
+  })
+
+  it("serializes concurrent ensure calls for the same payload", async () => {
+    const sourcePath = await writeArchive("Concurrent.apk", [
+      {
+        path: "assets/game.droid",
+        bytes: Buffer.from("game"),
+        method: ZIP_STORED,
+      },
+      {
+        path: "lib/arm64-v8a/libyoyo.so",
+        bytes: Buffer.from("runner"),
+        method: ZIP_STORED,
+      },
+    ])
+    const installRoot = await mktemp()
+
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        ensureGmloaderPayloadInstalled({
+          providerId: "@korri:gmloader",
+          sourcePath,
+          installRoot,
+        }),
+      ),
+    )
+
+    expect(new Set(results.map(result => result.manifest.id)).size).toBe(1)
+    expect(results.filter(result => result.status === "materialized")).toHaveLength(
+      1,
+    )
+    expect(results.filter(result => result.status === "cache-hit")).toHaveLength(
+      3,
+    )
   })
 
   it("refuses to clobber an existing install without overwrite", async () => {
