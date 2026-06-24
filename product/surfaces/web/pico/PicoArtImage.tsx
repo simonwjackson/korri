@@ -61,9 +61,10 @@ export function PicoArtImage({
         canvas.height = height
         ctx.clearRect(0, 0, width, height)
         ctx.drawImage(image, 0, 0, width, height)
-        const buffer = ctx.getImageData(0, 0, width, height)
-        quantizePico8(buffer.data, palette)
-        ctx.putImageData(buffer, 0, 0)
+        // Cross-origin art (e.g. live catalog URLs) taints the canvas, so the
+        // PICO-8 palette remap can't read pixels. Degrade to the pixelated draw
+        // rather than throwing; true remap is the media-pipeline follow-up.
+        quantizeInPlace(ctx, width, height, palette)
         return
       }
       const height = Math.max(8, Math.round(width / ratio))
@@ -84,12 +85,31 @@ export function PicoArtImage({
       }
       ctx.clearRect(0, 0, width, height)
       ctx.drawImage(image, sx, sy, sw, sh, 0, 0, width, height)
-      const buffer = ctx.getImageData(0, 0, width, height)
-      quantizePico8(buffer.data, palette)
-      ctx.putImageData(buffer, 0, 0)
+      quantizeInPlace(ctx, width, height, palette)
     }
     image.src = src
   }, [src, ratio, width, fit, palette])
 
   return <canvas ref={ref} className={`pcArt ${className ?? ""}`} />
+}
+
+/**
+ * Read the canvas, PICO-8-quantize, and write back. If the canvas is tainted by
+ * cross-origin source art, getImageData throws — degrade to the already-drawn
+ * pixelated image instead of surfacing an uncaught error.
+ */
+function quantizeInPlace(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  palette: PaletteMode,
+): void {
+  let buffer: ImageData
+  try {
+    buffer = ctx.getImageData(0, 0, width, height)
+  } catch {
+    return
+  }
+  quantizePico8(buffer.data, palette)
+  ctx.putImageData(buffer, 0, 0)
 }

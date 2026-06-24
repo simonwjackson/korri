@@ -13,11 +13,19 @@ import { PicoButtonBar, PicoStatusBar } from "./PicoStatusBar"
 
 export function VariantGameDetail({
   games,
+  onPlay,
+  onBack,
 }: {
   readonly games: readonly PicoGame[]
+  /** Launch the focused game (real host wires this to the launcher). */
+  readonly onPlay?: () => void
+  /** Leave the detail screen (real host wires this to navigation). */
+  readonly onBack?: () => void
 }) {
   const [index, setIndex] = useState(1)
-  const game = games[index]
+  // Fixture browsing starts at index 1; a real host passes a single game, so
+  // fall back to the first entry when the index is out of range.
+  const game = games[index] ?? games[0]
   if (!game) return null
   const played = game.lastPlayedLabel !== null
 
@@ -51,7 +59,7 @@ export function VariantGameDetail({
             ) : null}
           </div>
           <div className="pcD-actions">
-            <button type="button" className="pcD-btn primary">
+            <button type="button" className="pcD-btn primary" onClick={onPlay}>
               ▶ {played ? "CONTINUE" : "PLAY"}
             </button>
             {played ? (

@@ -11,8 +11,11 @@ import { PicoButtonBar, PicoStatusBar } from "./PicoStatusBar"
 
 export function VariantCartridgeShelf({
   games,
+  onSelect,
 }: {
   readonly games: readonly PicoGame[]
+  /** Activate the focused hero (real host wires this to navigation). */
+  readonly onSelect?: (game: PicoGame) => void
 }) {
   const [index, setIndex] = useState(2)
   const hero = games[index]
@@ -58,6 +61,14 @@ export function VariantCartridgeShelf({
           onClick={() => setIndex((index + 1) % games.length)}
           style={hiddenStep("right")}
         />
+        {onSelect ? (
+          <button
+            type="button"
+            aria-label={`open ${hero.title}`}
+            onClick={() => onSelect(hero)}
+            style={heroHit()}
+          />
+        ) : null}
       </div>
       <PicoButtonBar
         hints={[
@@ -81,5 +92,20 @@ function hiddenStep(side: "left" | "right"): React.CSSProperties {
     border: "none",
     cursor: "pointer",
     zIndex: 30,
+  }
+}
+
+/** Centered activation target over the focused hero cart. */
+function heroHit(): React.CSSProperties {
+  return {
+    position: "absolute",
+    top: 0,
+    bottom: 30,
+    left: 80,
+    right: 80,
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    zIndex: 20,
   }
 }
