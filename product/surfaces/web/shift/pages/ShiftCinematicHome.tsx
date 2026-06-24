@@ -12,6 +12,7 @@
  * intentionally not used here so the prototype is self-contained; the shipping
  * version would subscribe to semantic `direction`/`confirm` actions instead.
  */
+import { useInputAction } from "@platform/react/input/use-input-action"
 import { AnimatePresence, motion } from "framer-motion"
 import { BatteryMedium, Wifi } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -32,6 +33,9 @@ export interface ShiftCinematicHomeProps {
   readonly games: readonly ShiftCinematicGame[]
   readonly time?: string
   readonly avatarSrc?: string
+  /** Launch the focused game. The real host wires this to navigation; the
+   * standalone prototype omits it (focus-only). */
+  readonly onLaunch?: (gameId: string) => void
 }
 
 const SPRING = { type: "spring", stiffness: 260, damping: 32 } as const
@@ -40,6 +44,7 @@ export function ShiftCinematicHome({
   games,
   time = "4:24 PM",
   avatarSrc,
+  onLaunch,
 }: ShiftCinematicHomeProps) {
   const [index, setIndex] = useState(0)
   const [trackX, setTrackX] = useState(0)
@@ -53,6 +58,25 @@ export function ShiftCinematicHome({
     },
     [games.length],
   )
+
+  const launchFocused = useCallback(() => {
+    const focused = games[index]
+    if (focused) onLaunch?.(focused.id)
+  }, [games, index, onLaunch])
+
+  // Activating a tile: launch it when it's already the focused (centered) one,
+  // otherwise bring it to focus. Mirrors the legend's "A = Play".
+  const activate = useCallback(
+    (target: number) => {
+      if (target === index) launchFocused()
+      else setIndex(target)
+    },
+    [index, launchFocused],
+  )
+
+  // Semantic confirm (gamepad A / Enter via the input bus) launches the focused
+  // game. No-op when no input system is running (standalone prototype/fixture).
+  useInputAction("confirm", launchFocused)
 
   // Keep the focused tile centered: shift the whole track so the active tile's
   // center lands at the stage center (the cursor is fixed, the rail moves).
@@ -82,11 +106,14 @@ export function ShiftCinematicHome({
       } else if (event.key === "ArrowLeft") {
         event.preventDefault()
         move(-1)
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault()
+        launchFocused()
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [move])
+  }, [move, launchFocused])
 
   if (!game) return null
   const resuming = Boolean(game.lastPlayedLabel)
@@ -179,7 +206,7 @@ export function ShiftCinematicHome({
                 data-focused={i === index || undefined}
                 className="shift-cine-tile"
                 aria-label={entry.title}
-                onClick={() => setIndex(i)}
+                onClick={() => activate(i)}
               >
                 <img src={entry.tileArtUrl} alt="" loading="lazy" />
               </button>
