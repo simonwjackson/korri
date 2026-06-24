@@ -1,6 +1,7 @@
 // theme-workshop — minimal Vite config for the standalone dev viewer.
 // No router, no proxy, no API; just React + the @product/@platform/@tools
 // aliases the theme configs need to reach shared fixtures and the kit.
+import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
@@ -9,7 +10,9 @@ const repoRoot = new URL("../../", import.meta.url).pathname
 export default defineConfig({
   root: new URL(".", import.meta.url).pathname,
   publicDir: false,
-  plugins: [react()],
+  // Tailwind is required so Tailwind-utility surfaces (e.g. Shift) render in the
+  // lab exactly as they do in the portal; plain-CSS themes (pico) are unaffected.
+  plugins: [react(), tailwindcss()],
   // Dev-only tool: bind all interfaces and accept any Host header so the viewer
   // is reachable from any remote machine via any hostname (Vite 6 otherwise
   // rejects unknown Host headers). The `just dev-theme-workshop` recipe also
