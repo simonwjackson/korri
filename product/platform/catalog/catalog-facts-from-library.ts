@@ -1,4 +1,4 @@
-import { EntrySource } from "@platform/api/rpc/entry-source"
+import { EntrySource } from "@platform/api/rpc/entry-source-core"
 import type {
   LibraryError,
   LibrarySourceService,

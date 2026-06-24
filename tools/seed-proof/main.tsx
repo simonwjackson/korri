@@ -25,7 +25,7 @@ import {
 import { createRoot } from "react-dom/client"
 import { Detail } from "./Detail"
 import { Home } from "./Home"
-import { seedInitialValues } from "./seed"
+import { makeSeedInitialValues } from "./seed"
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> })
 const homeRoute = createRoute({
@@ -42,17 +42,25 @@ const router = createRouter({
   routeTree: rootRoute.addChildren([homeRoute, detailRoute]),
 })
 
-function App() {
+function App({
+  seedInitialValues,
+}: {
+  readonly seedInitialValues: Awaited<ReturnType<typeof makeSeedInitialValues>>
+}) {
   // Same injection point production uses, but seeded in memory.
   useAtomInitialValues(seedInitialValues)
   return <RouterProvider router={router} />
 }
 
-const host = document.getElementById("root")
-if (host) {
+async function boot() {
+  const host = document.getElementById("root")
+  if (!host) return
+  const seedInitialValues = await makeSeedInitialValues()
   createRoot(host).render(
     <RegistryProvider>
-      <App />
+      <App seedInitialValues={seedInitialValues} />
     </RegistryProvider>,
   )
 }
+
+void boot()

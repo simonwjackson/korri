@@ -23,13 +23,9 @@
  */
 
 import * as os from "node:os"
-import { Schema } from "effect"
+import { EntrySource } from "./entry-source-core"
 
-export class EntrySource extends Schema.Class<EntrySource>("EntrySource")({
-  hostId: Schema.String,
-  controlUrl: Schema.String,
-  isLocal: Schema.Boolean,
-}) {}
+export { EntrySource }
 
 export interface LocalIdentityEnv {
   readonly KORRI_STREAM_ADVERTISE_HOST_ID?: string

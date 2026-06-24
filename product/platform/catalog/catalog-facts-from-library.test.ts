@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { EntrySource } from "@platform/api/rpc/entry-source"
+import { EntrySource } from "@platform/api/rpc/entry-source-core"
 import {
   LibraryError,
   type LibrarySourceService,
