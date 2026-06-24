@@ -86,6 +86,7 @@ just generate-feature-map
 
 ## Rules of engagement
 
+- Do not create or switch traditional branches in the primary checkout. Use the established git worktree workflow for isolated work; branch-backed worktrees are OK only as part of that workflow.
 - Android is not a current target platform for Korri implementation work. Prototype client/device flows on Linux first unless the user explicitly reopens Android targeting.
 - Do not hard-code ARM builder hosts in committed Korri tooling; builder selection belongs in local Nix configuration or ignored local env overrides.
 - Never create documentation, report, or summary Markdown files unless explicitly requested.
