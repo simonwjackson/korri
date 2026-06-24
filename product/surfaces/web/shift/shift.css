@@ -98,31 +98,24 @@
 	--shift-measure-prose: min(60ch, 88cqi);
 	--shift-measure-display: 14ch;
 
-	--shift-surface: #e8e6e1;
-	--shift-surface-raised: #f2f0eb;
-	--shift-surface-sunk: #ddd5d4;
+	/* Art-forward identity: near-black chrome so cover/hero art is the only
+	 * color in the room; raised/sunk are quiet elevation steps. */
+	--shift-surface: #0b0b0c;
+	--shift-surface-raised: #141416;
+	--shift-surface-sunk: #060607;
 
-	/*
-   * Ink palette — fully opaque, no alpha.
-   *   --shift-ink (#1B1814) is deep warm black, used for primary text
-   *     (game titles, captions, pill text).
-   *   --shift-ink-dim (#44403C, stone-700) is the closest theme value to
-   *     #444. Used for header/footer secondary text (status cluster,
-   *     time, day, HUD labels) and as the HUD glyph badge background.
-   *   --shift-ink-faint (#827F7B) is one step lighter than --shift-ink-dim
-   *     so the dim < faint contrast holds for placeholder text.
-   *   --shift-rule (#D4D2CD) is the hairline dividing tone.
-   */
-	--shift-ink: #1b1814;
-	--shift-ink-dim: #44403c;
-	--shift-ink-faint: #827f7b;
-	--shift-rule: #d4d2cd;
+	/* Ink is white-on-dark; dim/faint are alpha steps so they sit naturally
+	 * over both the chrome and any art that shows through. */
+	--shift-ink: #ffffff;
+	--shift-ink-dim: rgba(255, 255, 255, 0.62);
+	--shift-ink-faint: rgba(255, 255, 255, 0.4);
+	--shift-rule: rgba(255, 255, 255, 0.1);
 
-	--shift-focus-glow: hsl(252, 75%, 70%);
-
-	/* Accent for primary actions (e.g. the launch-failure retry button). */
+	/* Signature accent — a cool sky that reads against dark chrome and art.
+	 * Next step: sample this from the focused cover so it tints per-game. */
+	--shift-focus-glow: #5bd0ff;
 	--shift-accent: var(--shift-focus-glow);
-	--shift-on-accent: #ffffff;
+	--shift-on-accent: #04222a;
 
 	/* On-media ink + scrim, for text laid over cover art (companion screen).
 	 * These are deliberately light/dark regardless of mode — art is the
@@ -132,33 +125,25 @@
 	--shift-scrim-strong: rgba(0, 0, 0, 0.82);
 	--shift-scrim-mid: rgba(0, 0, 0, 0.24);
 
-	--shift-pill-bg: #ffffff;
-	--shift-pill-fg: #1b1814;
+	/* Translucent "glass" chrome over the dark surface / art. */
+	--shift-pill-bg: rgba(255, 255, 255, 0.1);
+	--shift-pill-fg: #ffffff;
 
-	/*
-   * Glyph background tracks --shift-ink-dim so the chip badge sits at
-   * the same visual weight as its label, instead of reading as a heavier
-   * dark blob next to muted text.
-   */
-	--shift-hud-glyph-bg: var(--shift-ink-dim);
-	--shift-hud-glyph-fg: #f2f0eb;
+	--shift-hud-glyph-bg: rgba(255, 255, 255, 0.12);
+	--shift-hud-glyph-fg: rgba(255, 255, 255, 0.78);
 	--shift-hud-glyph-active-bg: var(--shift-focus-glow);
-	--shift-hud-glyph-active-fg: #ffffff;
+	--shift-hud-glyph-active-fg: #04222a;
 
-	--shift-labs-overlay: rgba(27, 24, 20, 0.32);
-	--shift-labs-panel-bg: rgba(242, 240, 235, 0.96);
-	--shift-labs-track: #d4d2cd;
+	--shift-labs-overlay: rgba(0, 0, 0, 0.62);
+	--shift-labs-panel-bg: rgba(18, 18, 22, 0.96);
+	--shift-labs-track: rgba(255, 255, 255, 0.14);
 
-	/*
-   * Static-by-design tile radius. 4px doesn't scale because it's a
-   * hairline-class decoration (Tailwind's rounded-sm would be ~6px).
-   * Used via the rounded-[var(--shift-radius-tile)] arbitrary value on
-   * tiles so consumers stay in the Tailwind utility system.
-   */
-	--shift-radius-tile: 4px;
+	/* Static-by-design tile radius (art identity uses a softer 8px). Used via
+	 * rounded-[var(--shift-radius-tile)] so consumers stay in Tailwind. */
+	--shift-radius-tile: 8px;
 
 	/* Panel / notice radius — derived so corners track the scale. */
-	--shift-radius-panel: calc(var(--intrinsic-base) * 0.6);
+	--shift-radius-panel: calc(var(--intrinsic-base) * 0.55);
 
 	/*
    * Rail geometry tokens. KEEP the names; TilegridRailRoot (which resolves
@@ -187,228 +172,21 @@
 	 * scale instead of the browser's 16px root. */
 	font-size: var(--shift-text-body);
 
-	/*
-   * Type voice. Shift overrides the project default (Geist, sharp /
-   * technical) with Nunito, a rounded friendly sans that matches the
-   * Switch tone. Falls back to the platform's rounded sans (SF Pro
-   * Rounded on Apple, ui-rounded generic) before defaulting to system
-   * sans. Scoped to [data-shift-home] so it does not affect non-Shift
-   * surfaces during the transition.
-   */
-	font-family:
-		"Nunito Variable", ui-rounded, "SF Pro Rounded", "Segoe UI Variable",
-		system-ui, sans-serif;
+	/* Type voice — Geist: a clean, neutral sans that stays out of the art's
+	 * way and reads crisply at a distance. Scoped to the Shift surface. */
+	font-family: "Geist Variable", system-ui, sans-serif;
 }
 
 /* -------------------------------------------------------------------------- *
- * Tokens — dark mode (Switch night blue / OLED black)
+ * Dark mode — Shift's chrome is already dark (art-forward); deepen the surface
+ * to true black (OLED) and let the rest of the palette ride.
  * -------------------------------------------------------------------------- */
 
 :root.dark [data-shift-home],
 :root.dark [data-shift-detail] {
-	/*
-   * Pitch-black surface stack — OLED-style. Raised and sunk collapse to
-   * the same value as --shift-surface; --shift-rule, --shift-ink-dim,
-   * and --shift-pill-bg carry the elevation/edge cues that surface
-   * contrast used to provide.
-   */
 	--shift-surface: #000000;
-	--shift-surface-raised: #000000;
+	--shift-surface-raised: #0c0c0e;
 	--shift-surface-sunk: #000000;
-
-	/*
-   * Dark-mode ink palette — fully opaque, no alpha. --shift-ink-dim is
-   * the flattened equivalent of #ffffff8a over pitch black: header /
-   * footer text in the top and bottom bars lands on #8A8A8A.
-   */
-	--shift-ink: #ece7de;
-	--shift-ink-dim: #8a8a8a;
-	--shift-ink-faint: #5a5c62;
-	--shift-rule: #2a2d38;
-
-	--shift-focus-glow: hsl(252, 80%, 75%);
-
-	--shift-pill-bg: #1a2238;
-	--shift-pill-fg: #ece7de;
-
-	/*
-   * Dark-mode HUD glyph: badge background is the flattened equivalent of
-   * #ffffff17 over pitch black (#171717), a quiet elevation tone. The
-   * glyph character matches the label color (--shift-ink-dim, #8A8A8A)
-   * so each chip reads as one cohesive tone with a subtle darker badge
-   * behind it.
-   */
-	--shift-hud-glyph-bg: #171717;
-	--shift-hud-glyph-fg: #8a8a8a;
-	--shift-hud-glyph-active-bg: var(--shift-focus-glow);
-	--shift-hud-glyph-active-fg: #0f1422;
-
-	--shift-labs-overlay: rgba(0, 0, 0, 0.58);
-	--shift-labs-panel-bg: rgba(26, 34, 56, 0.96);
-	--shift-labs-track: #2a2d38;
-}
-
-/* ========================================================================== *
- * IDENTITY PROTOTYPES (device-lab only)
- *
- * Four candidate identities re-skinning the SAME Shift bones (rail, bars,
- * detail, focus glow). Each is selected by [data-shift-identity="…"] on a
- * surface ancestor (the theme-workshop sets it via rootProps), so it overrides
- * the base tokens by specificity without touching the home/portal default.
- * Identity lives entirely in tokens: surface temperature, ink, accent, type,
- * and corner radius. Iterate values here; the components never change.
- *
- * Pinned to [data-shift-home]/[data-shift-detail] via :is() so the overrides
- * out-specify the base token blocks. Production ships the base identity (no
- * attribute), so none of this affects the device.
- * ========================================================================== */
-
-/* ── 1 · Cozy / warm — Switch calm, homier; rounded type, warm paper ─────── */
-[data-shift-identity="cozy"] :is([data-shift-home], [data-shift-detail]) {
-	--shift-surface: #ece7df;
-	--shift-surface-raised: #f5f1ea;
-	--shift-surface-sunk: #e0d8cd;
-	--shift-ink: #241e18;
-	--shift-ink-dim: #5c5248;
-	--shift-ink-faint: #8c8175;
-	--shift-rule: #dad2c6;
-	--shift-focus-glow: #e0a33e;
-	--shift-accent: #d98a3c;
-	--shift-on-accent: #2a1c08;
-	--shift-pill-bg: #ffffff;
-	--shift-pill-fg: #241e18;
-	--shift-hud-glyph-bg: #5c5248;
-	--shift-hud-glyph-fg: #f5f1ea;
-	--shift-radius-tile: 10px;
-	--shift-radius-panel: calc(var(--intrinsic-base) * 0.75);
-	font-family:
-		"Nunito Variable", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
-}
-:root.dark
-	[data-shift-identity="cozy"]
-	:is([data-shift-home], [data-shift-detail]) {
-	--shift-surface: #17120d;
-	--shift-surface-raised: #1f1812;
-	--shift-surface-sunk: #120e0a;
-	--shift-ink: #ede3d5;
-	--shift-ink-dim: #9a8e7e;
-	--shift-ink-faint: #6b6155;
-	--shift-rule: #2c2419;
-	--shift-focus-glow: #e8b45a;
-	--shift-accent: #e8b45a;
-	--shift-on-accent: #2a1c08;
-	--shift-pill-bg: #261d14;
-	--shift-pill-fg: #ede3d5;
-	--shift-hud-glyph-bg: #241c14;
-	--shift-hud-glyph-fg: #9a8e7e;
-}
-
-/* ── 2 · Premium / crisp — Switch 2 energy; cool neutral, sharp type ─────── */
-[data-shift-identity="premium"] :is([data-shift-home], [data-shift-detail]) {
-	--shift-surface: #eceef1;
-	--shift-surface-raised: #f7f8fa;
-	--shift-surface-sunk: #dbdfe4;
-	--shift-ink: #14171c;
-	--shift-ink-dim: #565e68;
-	--shift-ink-faint: #8a929c;
-	--shift-rule: #d2d7de;
-	--shift-focus-glow: #0fb5c9;
-	--shift-accent: #0fb5c9;
-	--shift-on-accent: #04222a;
-	--shift-pill-bg: #ffffff;
-	--shift-pill-fg: #14171c;
-	--shift-hud-glyph-bg: #565e68;
-	--shift-hud-glyph-fg: #f7f8fa;
-	--shift-radius-tile: 4px;
-	--shift-radius-panel: calc(var(--intrinsic-base) * 0.45);
-	font-family: "Geist Variable", system-ui, sans-serif;
-}
-:root.dark
-	[data-shift-identity="premium"]
-	:is([data-shift-home], [data-shift-detail]) {
-	--shift-surface: #0e1115;
-	--shift-surface-raised: #161a20;
-	--shift-surface-sunk: #0a0d10;
-	--shift-ink: #eaeef3;
-	--shift-ink-dim: #7e8893;
-	--shift-ink-faint: #545d66;
-	--shift-rule: #232a33;
-	--shift-focus-glow: #2bc9dc;
-	--shift-accent: #2bc9dc;
-	--shift-on-accent: #04222a;
-	--shift-pill-bg: #1a1f26;
-	--shift-pill-fg: #eaeef3;
-	--shift-hud-glyph-bg: #1a1f26;
-	--shift-hud-glyph-fg: #7e8893;
-}
-
-/* ── 3 · Art-forward / dynamic — chrome recedes; color comes from the art ── */
-/* (Accent here is a stand-in; the dynamic version samples the focused box art.) */
-[data-shift-identity="art"] :is([data-shift-home], [data-shift-detail]) {
-	--shift-surface: #0b0b0c;
-	--shift-surface-raised: #141416;
-	--shift-surface-sunk: #060607;
-	--shift-ink: #ffffff;
-	--shift-ink-dim: rgba(255, 255, 255, 0.62);
-	--shift-ink-faint: rgba(255, 255, 255, 0.4);
-	--shift-rule: rgba(255, 255, 255, 0.1);
-	--shift-focus-glow: #5bd0ff;
-	--shift-accent: #5bd0ff;
-	--shift-on-accent: #04222a;
-	--shift-pill-bg: rgba(255, 255, 255, 0.1);
-	--shift-pill-fg: #ffffff;
-	--shift-hud-glyph-bg: rgba(255, 255, 255, 0.12);
-	--shift-hud-glyph-fg: rgba(255, 255, 255, 0.78);
-	--shift-radius-tile: 8px;
-	--shift-radius-panel: calc(var(--intrinsic-base) * 0.55);
-	font-family: "Geist Variable", system-ui, sans-serif;
-}
-/* Art-forward is dark-primary; its light mode is a quiet gallery white. */
-:root.dark
-	[data-shift-identity="art"]
-	:is([data-shift-home], [data-shift-detail]) {
-	--shift-surface: #060607;
-	--shift-surface-raised: #111113;
-	--shift-surface-sunk: #000000;
-}
-
-/* ── 4 · Bold / expressive — loud brand accent, graphic confidence ───────── */
-[data-shift-identity="bold"] :is([data-shift-home], [data-shift-detail]) {
-	--shift-surface: #fbf7ff;
-	--shift-surface-raised: #ffffff;
-	--shift-surface-sunk: #f0eaf7;
-	--shift-ink: #100c16;
-	--shift-ink-dim: #4a4453;
-	--shift-ink-faint: #857e90;
-	--shift-rule: #e4dcef;
-	--shift-focus-glow: #f5277a;
-	--shift-accent: #f5277a;
-	--shift-on-accent: #ffffff;
-	--shift-pill-bg: #100c16;
-	--shift-pill-fg: #ffffff;
-	--shift-hud-glyph-bg: #100c16;
-	--shift-hud-glyph-fg: #fbf7ff;
-	--shift-radius-tile: 6px;
-	--shift-radius-panel: calc(var(--intrinsic-base) * 0.5);
-	font-family: "Geist Variable", system-ui, sans-serif;
-}
-:root.dark
-	[data-shift-identity="bold"]
-	:is([data-shift-home], [data-shift-detail]) {
-	--shift-surface: #0c0a0e;
-	--shift-surface-raised: #16121b;
-	--shift-surface-sunk: #080609;
-	--shift-ink: #f4eefb;
-	--shift-ink-dim: #9a93a6;
-	--shift-ink-faint: #645c6f;
-	--shift-rule: #241d2c;
-	--shift-focus-glow: #ff5c9e;
-	--shift-accent: #ff5c9e;
-	--shift-on-accent: #1a0410;
-	--shift-pill-bg: #ff5c9e;
-	--shift-pill-fg: #1a0410;
-	--shift-hud-glyph-bg: #16121b;
-	--shift-hud-glyph-fg: #9a93a6;
 }
 
 /* -------------------------------------------------------------------------- *

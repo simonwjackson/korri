@@ -6,20 +6,9 @@
  * types). Add a theme by importing its config and appending it to THEMES.
  */
 import { picoConfig } from "@product/surfaces/web/pico/config"
-import {
-  shiftArtConfig,
-  shiftBoldConfig,
-  shiftCozyConfig,
-  shiftPremiumConfig,
-} from "@product/surfaces/web/shift/config"
+import { shiftConfig } from "@product/surfaces/web/shift/config"
 import type { ThemeWorkshopConfig } from "./types"
 
-export const THEMES: readonly ThemeWorkshopConfig[] = [
-  shiftPremiumConfig,
-  shiftCozyConfig,
-  shiftArtConfig,
-  shiftBoldConfig,
-  picoConfig,
-]
+export const THEMES: readonly ThemeWorkshopConfig[] = [shiftConfig, picoConfig]
 
 export const DEFAULT_THEME_ID: string = THEMES[0]?.id ?? "pico"
