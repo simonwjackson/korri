@@ -1,5 +1,6 @@
 import type { RouterHistory } from "@tanstack/history"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
+import type { WorkshopControl } from "../types"
 import { picoLabSurfaceAdapter } from "./adapters/pico"
 import { shiftLabSurfaceAdapter } from "./adapters/shift"
 
@@ -17,6 +18,9 @@ export interface LabSurfaceAdapter {
   readonly id: string
   readonly devices: readonly DeviceConfig[]
   readonly screens?: readonly LabSurfaceScreen[]
+  /** Surface-owned live controls (e.g. pico's palette/granularity), rendered
+   * neutrally by the lab. A hook so control values track surface state. */
+  readonly useControls?: () => readonly WorkshopControl[]
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
   readonly scaleVarPrefix?: string

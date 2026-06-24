@@ -46,6 +46,24 @@
 	max-width: calc(100vw - 24px);
 	overflow-x: auto;
 }
+/* Surface-owned controls cluster (e.g. pico palette/granularity/sound). */
+.lab-surface-controls {
+	position: fixed;
+	top: 16px;
+	right: 16px;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 8px;
+	border-radius: 10px;
+	background: rgba(14, 14, 18, 0.86);
+	border: 1px solid #2a2a35;
+	backdrop-filter: blur(8px);
+	max-width: calc(100vw - 24px);
+	overflow-x: auto;
+}
+
 .lab-theme {
 	display: flex;
 	align-items: center;

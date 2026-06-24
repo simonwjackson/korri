@@ -25,6 +25,7 @@ describe("pico lab surface adapter", () => {
       "/",
       "/game/hollow-knight",
     ])
+    expect(adapter.useControls).toBeDefined()
 
     const initialValues =
       (await adapter.makeSeedInitialValues()) as readonly (readonly [
