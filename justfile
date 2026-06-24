@@ -21,6 +21,10 @@ dev-api port="${API_PORT:-3001}":
 dev-theme-workshop port="3110":
   bun run vite --config tools/theme-workshop/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
 
+# Dev-only multi-device Shift lab: real app surface mirrored across physical frames.
+dev-lab port="3130":
+  bun run vite --config tools/theme-workshop/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
+
 # Dev-only seed proof: render the REAL Shift home from an in-memory seed (no API/device).
 dev-seed-proof port="3120":
   bun run vite --config tools/seed-proof/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
