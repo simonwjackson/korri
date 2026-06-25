@@ -538,10 +538,12 @@ function handleRemoteSourceLaunch(
             return await Effect.runPromise(
               launcher
                 .spawn(spec, {
-                  launchId,
-                  ...(Object.keys(localPolicy.launchCompanions).length > 0
-                    ? { launchCompanions: localPolicy.launchCompanions }
-                    : {}),
+                  extras: {
+                    launchId,
+                    ...(Object.keys(localPolicy.launchCompanions).length > 0
+                      ? { launchCompanions: localPolicy.launchCompanions }
+                      : {}),
+                  },
                 })
                 .pipe(Effect.mapError(toDataError)),
             )
