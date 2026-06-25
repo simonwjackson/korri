@@ -30,6 +30,32 @@ describe("ShiftCinematicHome onLaunch", () => {
     expect(onLaunch).toHaveBeenCalledWith("b")
   })
 
+  it("renders available metadata and play-state chips", () => {
+    render(
+      <ShiftCinematicHome
+        games={[
+          {
+            id: "a",
+            title: "Game A",
+            tileArtUrl: "a.png",
+            wideArtUrl: "aw.png",
+            genre: "Metroidvania",
+            developer: "Team Cherry",
+            lastPlayedLabel: "3h ago",
+            playtimeLabel: "4.5h",
+            favorite: true,
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText("Metroidvania")).toBeTruthy()
+    expect(screen.getByText("Team Cherry")).toBeTruthy()
+    expect(screen.getByText("3h ago")).toBeTruthy()
+    expect(screen.getByText("4.5h")).toBeTruthy()
+    expect(screen.getByText("★ Favorite")).toBeTruthy()
+  })
+
   it("does not require a launch handler (prototype/fixture usage)", () => {
     render(<ShiftCinematicHome games={games} />)
     fireEvent.click(screen.getByRole("button", { name: "Game A" }))

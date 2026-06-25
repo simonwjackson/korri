@@ -2,6 +2,7 @@ import {
   ResolvedGameMedia,
   type ResolvedGameRecord,
 } from "@platform/fixtures/games/game"
+import { GameMetadata } from "@platform/library/config/records/game"
 import { ProviderInstallMetadataSchema } from "@platform/library/install-state"
 import { Schema } from "effect"
 
@@ -78,13 +79,9 @@ export const PlayableLibraryEntry = Schema.Struct({
 
   /**
    * Temporary display compatibility while UI callers are realigned to title.
-   * This is derived from the readable playable entry, not persisted old schema.
+   * Readable entries forward persisted metadata when present.
    */
-  metadata: Schema.optional(
-    Schema.Struct({
-      name: Schema.optional(Schema.String),
-    }),
-  ),
+  metadata: Schema.optional(GameMetadata),
   media: Schema.optional(Schema.Array(ResolvedGameMedia)),
 })
 export type PlayableLibraryEntry = Schema.Schema.Type<
@@ -110,7 +107,8 @@ export function playableEntryFromResolvedGame(
       },
     ],
     system: game.system,
-    metadata: { name: title },
+    ...(game.metadata ? { metadata: game.metadata } : {}),
+    ...(game.userData ? { userData: game.userData } : {}),
     media: game.media,
   }
 }

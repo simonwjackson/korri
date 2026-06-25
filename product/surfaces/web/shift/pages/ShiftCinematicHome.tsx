@@ -168,10 +168,16 @@ export function ShiftCinematicHome({
                 {game.genre ? (
                   <span className="shift-cine-chip">{game.genre}</span>
                 ) : null}
+                {game.developer ? (
+                  <span className="shift-cine-chip">{game.developer}</span>
+                ) : null}
                 {game.lastPlayedLabel ? (
                   <span className="shift-cine-chip">
                     {game.lastPlayedLabel}
                   </span>
+                ) : null}
+                {game.playtimeLabel ? (
+                  <span className="shift-cine-chip">{game.playtimeLabel}</span>
                 ) : null}
                 {game.favorite ? (
                   <span className="shift-cine-chip is-fav">★ Favorite</span>

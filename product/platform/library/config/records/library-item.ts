@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { InheritableLayer, LaunchWithPolicy } from "../inheritable-fields"
 import { LaunchSettings } from "../launch-block"
 import { LocalPlayableId, PlayableId } from "../playable-id"
+import { GameMetadata, GameUserData } from "./game"
 import { ProviderId } from "./provider"
 
 const STRICT = { onExcessProperty: "error" } as const
@@ -262,6 +263,8 @@ export const LibraryItemPayload = Schema.Struct({
   relation: Schema.optional(NonEmptyString),
   collections: Schema.optional(Schema.Array(NonEmptyString)),
   display: Schema.optional(DisplayMetadata),
+  metadata: Schema.optional(GameMetadata),
+  userData: Schema.optional(GameUserData),
   contains: Schema.optional(ContainsMap),
   releases: ReleaseList,
 

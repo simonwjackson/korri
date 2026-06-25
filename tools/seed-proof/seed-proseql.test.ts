@@ -24,5 +24,15 @@ describe("makeSeededProseqlLibrarySource", () => {
       "tile",
       "banner",
     ])
+    expect(entries[0]?.metadata).toMatchObject({
+      name: "Hollow Knight",
+      developer: DEV_GAME_MEDIA[0]?.developer,
+      genre: [DEV_GAME_MEDIA[0]?.genre],
+    })
+    expect(entries[0]?.userData).toMatchObject({
+      favorite: true,
+      playtime: 220,
+    })
+    expect(entries[0]?.userData?.lastPlayed).toBeInstanceOf(Date)
   })
 })

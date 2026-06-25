@@ -246,6 +246,75 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
+  it("forwards readable metadata and user data onto playable entries", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      const lastPlayed = new Date("2026-06-20T12:00:00.000Z")
+
+      await Effect.runPromise(
+        repo.upsertGame({
+          id: "f-zero",
+          system: "snes",
+          contentPath: "/roms/snes/F-Zero.sfc",
+          metadata: {
+            name: "F-Zero",
+            developer: "Nintendo",
+            genre: ["Racing"],
+          },
+          userData: {
+            lastPlayed,
+            playtime: 270,
+            favorite: true,
+          },
+        }),
+      )
+
+      const entries = await Effect.runPromise(repo.listPlayableEntries())
+      const entry = entries.find(candidate => candidate.id === "f-zero")
+
+      expect(entry?.title).toBe("F-Zero")
+      expect(entry?.metadata).toEqual({
+        name: "F-Zero",
+        developer: "Nintendo",
+        genre: ["Racing"],
+      })
+      expect(entry?.userData).toEqual({
+        lastPlayed,
+        playtime: 270,
+        favorite: true,
+      })
+    })
+  })
+
+  it("omits metadata and user data when a readable item has none", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "bare-game",
+          releases: [
+            {
+              id: "genesis",
+              system: "genesis",
+              target: { kind: "file", storage: "roms", path: "bare.md" },
+              launch: {
+                use: KORRI_RETROARCH_APP_ID,
+                runtime: "genesis-plus-gx",
+              },
+            },
+          ],
+        }),
+      )
+
+      const entries = await Effect.runPromise(repo.listPlayableEntries())
+      const entry = entries.find(candidate => candidate.id === "bare-game")
+
+      expect(entry?.title).toBe("bare-game")
+      expect(entry?.metadata).toBeUndefined()
+      expect(entry?.userData).toBeUndefined()
+    })
+  })
+
   it("lists release launcher selections on readable release entries", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)

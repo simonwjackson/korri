@@ -34,7 +34,23 @@ export function mediaForSeedGame(game: DevGameMedia) {
   ]
 }
 
-export function gameRecordForSeedGame(game: DevGameMedia): GameRecord {
+const SEED_NOW = Date.UTC(2026, 5, 24, 12, 0, 0)
+const recentMinutes = [12, 95, 300, 1560, 3000, 60 * 24 * 3] as const
+
+function seededUserData(index: number): GameRecord["userData"] {
+  const recent = recentMinutes[index]
+  return {
+    lastPlayed:
+      recent === undefined ? undefined : new Date(SEED_NOW - recent * 60_000),
+    playtime: index < 9 ? (index + 1) * 180 + 40 : undefined,
+    favorite: index % 4 === 0,
+  }
+}
+
+export function gameRecordForSeedGame(
+  game: DevGameMedia,
+  index = 0,
+): GameRecord {
   return {
     id: game.id,
     system: "steam",
@@ -44,6 +60,7 @@ export function gameRecordForSeedGame(game: DevGameMedia): GameRecord {
       developer: game.developer,
       genre: [game.genre],
     },
+    userData: seededUserData(index),
   }
 }
 
@@ -54,8 +71,8 @@ export async function makeSeededProseqlLibrarySource(
     Effect.scoped(
       Effect.gen(function* () {
         const opened = yield* openInMemoryKorriLibraryDb()
-        for (const game of games) {
-          yield* seedGame(opened, gameRecordForSeedGame(game))
+        for (const [index, game] of games.entries()) {
+          yield* seedGame(opened, gameRecordForSeedGame(game, index))
         }
         yield* Effect.promise(() => opened.flush())
         return opened
@@ -148,11 +165,15 @@ function seedGame(db: KorriLibraryDb, game: GameRecord) {
       create: {
         id: game.id,
         title: game.metadata?.name ?? game.id,
+        ...(game.metadata ? { metadata: game.metadata } : {}),
+        ...(game.userData ? { userData: game.userData } : {}),
         releases: [release],
       },
       update: {
         id: game.id,
         title: game.metadata?.name ?? game.id,
+        ...(game.metadata ? { metadata: game.metadata } : {}),
+        ...(game.userData ? { userData: game.userData } : {}),
         releases: [release],
       },
     }),
@@ -178,7 +199,8 @@ function readSeededEntries(db: KorriLibraryDb) {
           releases: [playableRelease],
           launchable: true,
           system: playableRelease.system,
-          metadata: { name: item.title ?? item.id },
+          ...(item.metadata ? { metadata: item.metadata } : {}),
+          ...(item.userData ? { userData: item.userData } : {}),
         } satisfies PlayableLibraryEntry
       })
     },
@@ -199,7 +221,8 @@ function toResolvedGameRecord(entry: PlayableLibraryEntry): ResolvedGameRecord {
     system: release?.system ?? entry.system ?? "unknown",
     contentPath:
       release?.target?.kind === "file" ? release.target.path : undefined,
-    metadata: { name: entry.title ?? entry.id },
+    ...(entry.metadata ? { metadata: entry.metadata } : {}),
+    ...(entry.userData ? { userData: entry.userData } : {}),
     media: entry.media,
   }
 }

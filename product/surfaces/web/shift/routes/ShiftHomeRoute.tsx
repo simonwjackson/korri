@@ -20,6 +20,7 @@ import { ShiftHomeDefectBody } from "../pages/ShiftHomeDefectBody"
 import { ShiftHomeEmptyBody } from "../pages/ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "../pages/ShiftHomeLoadErrorBody"
 import { ShiftHomeLoadingBody } from "../pages/ShiftHomeLoadingBody"
+import { playtimeLabel, relativeLastPlayed } from "./cinematic-play-labels"
 
 const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
 
@@ -58,10 +59,30 @@ function NavigatingReadyBody() {
 
 function toCinematicGame(game: CatalogEntry): ShiftCinematicGame {
   const tile = getPlayableImageUrl(game)
+  const lastPlayed = dateValue(game.userData?.lastPlayed)
+  const playtime = numberValue(game.userData?.playtime)
+  const favorite = game.userData?.favorite === true
+
   return {
     id: game.id,
     title: getPlayableDisplayName(game),
     tileArtUrl: tile ?? "",
     wideArtUrl: getPlayableWideImageUrl(game) ?? tile ?? "",
+    ...(game.metadata?.genre?.[0] ? { genre: game.metadata.genre[0] } : {}),
+    ...(game.metadata?.developer ? { developer: game.metadata.developer } : {}),
+    ...(lastPlayed ? { lastPlayedLabel: relativeLastPlayed(lastPlayed) } : {}),
+    ...(playtime ? { playtimeLabel: playtimeLabel(playtime) } : {}),
+    ...(favorite ? { favorite: true } : {}),
   }
+}
+
+function dateValue(value: unknown): Date | undefined {
+  if (value instanceof Date) return value
+  if (typeof value !== "string") return undefined
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined
 }

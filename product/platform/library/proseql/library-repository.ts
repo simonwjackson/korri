@@ -822,11 +822,15 @@ function upsertLegacyGame(
               ...(game.metadata?.name ? { title: game.metadata.name } : {}),
             },
           },
+          ...(game.metadata ? { metadata: game.metadata } : {}),
+          ...(game.userData ? { userData: game.userData } : {}),
           releases: [release],
         }
       : {
           id: parsed.itemId,
           ...(game.metadata?.name ? { title: game.metadata.name } : {}),
+          ...(game.metadata ? { metadata: game.metadata } : {}),
+          ...(game.userData ? { userData: game.userData } : {}),
           releases: [release],
         }
     yield* upsert(db.library, item)
@@ -881,7 +885,8 @@ function toPlayableLibraryEntry(
     releases,
     launchable: releases.some(release => release.launchable),
     ...(releases[0]?.system ? { system: releases[0].system } : {}),
-    metadata: { name: title },
+    ...(entry.item.metadata ? { metadata: entry.item.metadata } : {}),
+    ...(entry.item.userData ? { userData: entry.item.userData } : {}),
   }
 }
 
