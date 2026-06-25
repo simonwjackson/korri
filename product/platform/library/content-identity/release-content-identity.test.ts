@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test"
 import { createHash } from "node:crypto"
-import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises"
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -77,6 +85,83 @@ describe("release content identity", () => {
       await resolver.resolveFileHash(file)
       await resolver.resolveFileHash(file)
 
+      expect(hashStarts).toBe(1)
+    })
+  })
+
+  it("persists cached file hashes across resolver instances", async () => {
+    await withTempRoot(async root => {
+      const file = join(root, "persistent.gba")
+      const cachePath = join(root, "cache", "release-content-identity.json")
+      await writeFile(file, "persistent bytes")
+
+      const first = createReleaseContentIdentityResolver({ cachePath })
+      await expect(first.resolveFileHash(file)).resolves.toEqual({
+        kind: "hash",
+        value: sha256ArtifactId("persistent bytes"),
+      })
+      await eventually(async () => {
+        try {
+          const text = await readFile(cachePath, "utf8")
+          return text.includes(sha256ArtifactId("persistent bytes"))
+            ? true
+            : undefined
+        } catch {
+          return undefined
+        }
+      })
+
+      let hashStarts = 0
+      const second = createReleaseContentIdentityResolver({
+        cachePath,
+        onHashStart: () => {
+          hashStarts += 1
+        },
+      })
+
+      await expect(second.cachedFileHashOrQueue(file)).resolves.toEqual({
+        kind: "hash",
+        value: sha256ArtifactId("persistent bytes"),
+      })
+      expect(hashStarts).toBe(0)
+    })
+  })
+
+  it("ignores persisted entries when the file stat key changes", async () => {
+    await withTempRoot(async root => {
+      const file = join(root, "persistent-changed.gba")
+      const cachePath = join(root, "cache", "release-content-identity.json")
+      await writeFile(file, "before")
+
+      const first = createReleaseContentIdentityResolver({ cachePath })
+      await first.resolveFileHash(file)
+      await eventually(async () => {
+        try {
+          return (await readFile(cachePath, "utf8")).includes(
+            sha256ArtifactId("before"),
+          )
+            ? true
+            : undefined
+        } catch {
+          return undefined
+        }
+      })
+
+      await writeFile(file, "after!")
+      const current = await stat(file)
+      await utimes(file, current.atime, new Date(current.mtimeMs + 2000))
+
+      let hashStarts = 0
+      const second = createReleaseContentIdentityResolver({
+        cachePath,
+        onHashStart: () => {
+          hashStarts += 1
+        },
+      })
+      await expect(second.resolveFileHash(file)).resolves.toEqual({
+        kind: "hash",
+        value: sha256ArtifactId("after!"),
+      })
       expect(hashStarts).toBe(1)
     })
   })

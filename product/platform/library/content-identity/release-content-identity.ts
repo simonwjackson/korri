@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { createReadStream } from "node:fs"
-import { stat } from "node:fs/promises"
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises"
+import { dirname, join } from "node:path"
 import type { ArtifactId } from "@platform/protocol/artifact/artifact"
 
 export interface ReleaseHashIdentityTag {
@@ -30,6 +31,11 @@ export interface ReleaseContentIdentityResolverOptions {
   readonly onHashStart?: (path: string) => void
   /** Defaults to 2 to keep handheld storage responsive during first scans. */
   readonly maxConcurrentHashes?: number
+  /**
+   * JSON cache path. Defaults to Korri's XDG cache directory; pass false to
+   * disable persistence in tests or diagnostics.
+   */
+  readonly cachePath?: string | false
 }
 
 export interface ReleaseContentIdentityResolver {
@@ -45,6 +51,12 @@ export function createReleaseContentIdentityResolver(
   options: ReleaseContentIdentityResolverOptions = {},
 ): ReleaseContentIdentityResolver {
   const cache = new Map<string, CacheEntry>()
+  const persistentCachePath =
+    options.cachePath === false
+      ? undefined
+      : (options.cachePath ?? defaultPersistentCachePath(process.env))
+  let persistentCacheLoad: Promise<void> | undefined
+  let persistTail: Promise<void> = Promise.resolve()
   const inFlight = new Map<
     string,
     Promise<ReleaseHashIdentityTag | undefined>
@@ -62,6 +74,7 @@ export function createReleaseContentIdentityResolver(
         .then(identity => {
           if (identity !== undefined) {
             cache.set(item.path, { statKey: item.statKey, identity })
+            schedulePersistentCacheWrite()
           }
           item.resolve(identity)
         })
@@ -90,6 +103,26 @@ export function createReleaseContentIdentityResolver(
     return pending
   }
 
+  const loadPersistentCacheOnce = async () => {
+    if (persistentCacheLoad === undefined) {
+      persistentCacheLoad = (async () => {
+        if (persistentCachePath === undefined) return
+        for (const entry of await readPersistentCache(persistentCachePath)) {
+          cache.set(entry.statKey.path, entry)
+        }
+      })()
+    }
+    await persistentCacheLoad
+  }
+
+  const schedulePersistentCacheWrite = () => {
+    if (persistentCachePath === undefined) return
+    const entries = Array.from(cache.values())
+    persistTail = persistTail
+      .then(() => writePersistentCache(persistentCachePath, entries))
+      .catch(() => undefined)
+  }
+
   const cachedIdentityFor = async (
     path: string,
   ): Promise<
@@ -99,6 +132,7 @@ export function createReleaseContentIdentityResolver(
       }
     | undefined
   > => {
+    await loadPersistentCacheOnce()
     const statKey = await statKeyForFile(path)
     if (statKey === undefined) return undefined
 
@@ -129,6 +163,98 @@ export function createReleaseContentIdentityResolver(
 
 export const defaultReleaseContentIdentityResolver =
   createReleaseContentIdentityResolver()
+
+const PERSISTENT_CACHE_VERSION = 1
+
+interface PersistentCacheFile {
+  readonly version: 1
+  readonly entries: readonly CacheEntry[]
+}
+
+async function readPersistentCache(
+  path: string,
+): Promise<readonly CacheEntry[]> {
+  try {
+    const parsed = JSON.parse(await readFile(path, "utf8")) as unknown
+    if (!isPersistentCacheFile(parsed)) return []
+    return parsed.entries
+  } catch {
+    return []
+  }
+}
+
+async function writePersistentCache(
+  path: string,
+  entries: readonly CacheEntry[],
+): Promise<void> {
+  const payload: PersistentCacheFile = {
+    version: PERSISTENT_CACHE_VERSION,
+    entries,
+  }
+  const directory = dirname(path)
+  const tempPath = `${path}.${process.pid}.tmp`
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  await writeFile(tempPath, `${JSON.stringify(payload)}\n`, { mode: 0o600 })
+  await rename(tempPath, path)
+}
+
+function isPersistentCacheFile(value: unknown): value is PersistentCacheFile {
+  if (typeof value !== "object" || value === null) return false
+  const record = value as {
+    readonly version?: unknown
+    readonly entries?: unknown
+  }
+  return (
+    record.version === PERSISTENT_CACHE_VERSION &&
+    Array.isArray(record.entries) &&
+    record.entries.every(isCacheEntry)
+  )
+}
+
+function isCacheEntry(value: unknown): value is CacheEntry {
+  if (typeof value !== "object" || value === null) return false
+  const record = value as {
+    readonly statKey?: unknown
+    readonly identity?: unknown
+  }
+  return (
+    isFileStatKey(record.statKey) && isReleaseHashIdentityTag(record.identity)
+  )
+}
+
+function isFileStatKey(value: unknown): value is FileStatKey {
+  if (typeof value !== "object" || value === null) return false
+  const record = value as {
+    readonly path?: unknown
+    readonly size?: unknown
+    readonly mtimeMs?: unknown
+  }
+  return (
+    typeof record.path === "string" &&
+    typeof record.size === "number" &&
+    typeof record.mtimeMs === "number"
+  )
+}
+
+function isReleaseHashIdentityTag(
+  value: unknown,
+): value is ReleaseHashIdentityTag {
+  if (typeof value !== "object" || value === null) return false
+  const record = value as { readonly kind?: unknown; readonly value?: unknown }
+  return (
+    record.kind === "hash" &&
+    typeof record.value === "string" &&
+    /^sha256:[a-f0-9]{64}$/.test(record.value)
+  )
+}
+
+function defaultPersistentCachePath(env: NodeJS.ProcessEnv): string {
+  const cacheRoot =
+    env.KORRI_RELEASE_IDENTITY_CACHE_DIR ??
+    env.XDG_CACHE_HOME ??
+    (env.HOME ? join(env.HOME, ".cache") : "/tmp")
+  return join(cacheRoot, "korri", "release-content-identity-v1.json")
+}
 
 async function statKeyForFile(path: string): Promise<FileStatKey | undefined> {
   try {
