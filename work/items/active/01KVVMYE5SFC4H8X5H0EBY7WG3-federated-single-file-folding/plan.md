@@ -492,7 +492,7 @@ The new critical path is `R -> T -> P` (a release knowing and publishing its tag
 
 **Files:**
 - Create: `product/apps/portal/api/catalog/federated-fold.integration.test.ts` *(name/location finalized against existing integration-test layout)*
-- Modify: `work/items/active/01KVVMYE5SFC4H8X5H0EBY7WG3-federated-single-file-folding/plan.md` *(append the manual smoke checklist if not kept here)*
+- Create: `work/items/active/01KVVMYE5SFC4H8X5H0EBY7WG3-federated-single-file-folding/smoke-checklist.md` *(manual two-device steps; lives beside the work item, not in the plan body)*
 
 **Approach:**
 - Stand up two in-process catalog servers on loopback; have one discover/fetch the other through the real peer/RPC path; assert the same game folds end to end and launch routing picks the right `source`.
