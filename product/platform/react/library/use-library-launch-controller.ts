@@ -56,6 +56,7 @@ export function useLibraryLaunchController(): LaunchController {
         id: game.id,
         releaseId: releaseChoice.releaseId,
         source: game.source,
+        launchAlternatives: game.launchAlternatives,
       }).then(exit => {
         const next = LaunchStateModel.fromExit(game.id, exit)
         if (next._tag === "Failed" || next._tag === "Defect") {

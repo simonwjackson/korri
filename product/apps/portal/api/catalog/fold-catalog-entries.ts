@@ -1,3 +1,4 @@
+import type { LaunchAlternative } from "@platform/library/launch-alternative"
 import type { CatalogEntry } from "./snapshot.rpc"
 
 export type CatalogEntryAvailability =
@@ -72,6 +73,7 @@ function foldGroup(
   const launch = chooseLaunchRepresentative(group)
   const display = group.find(entry => entry.source.isLocal) ?? launch
   const availability = availabilityFor(group, launch, presentPeerControlUrls)
+  const launchAlternatives = launchAlternativesForGroup(group, launch)
 
   return {
     ...display,
@@ -82,6 +84,7 @@ function foldGroup(
     launchable: launch.launchable,
     source: launch.source,
     availability,
+    ...(launchAlternatives.length > 1 ? { launchAlternatives } : {}),
   }
 }
 
@@ -95,6 +98,39 @@ function chooseLaunchRepresentative(
     .filter(entry => !entry.source.isLocal && entry.launchable)
     .sort(compareLaunchCandidates)[0]
   return remote ?? group[0]
+}
+
+function launchAlternativesForGroup(
+  group: readonly CatalogEntry[],
+  launch: CatalogEntry,
+): readonly LaunchAlternative[] {
+  const candidates = group
+    .filter(entry => entry.launchable)
+    .sort(compareLaunchCandidates)
+  const ordered = [
+    launch,
+    ...candidates.filter(candidate => !sameLaunchCandidate(candidate, launch)),
+  ]
+  return ordered.map(entry => ({
+    id: entry.id,
+    source: entry.source,
+    ...(firstLaunchableReleaseId(entry) !== undefined
+      ? { releaseId: firstLaunchableReleaseId(entry) }
+      : {}),
+  }))
+}
+
+function firstLaunchableReleaseId(entry: CatalogEntry): string | undefined {
+  return entry.releases.find(release => release.launchable)?.id
+}
+
+function sameLaunchCandidate(left: CatalogEntry, right: CatalogEntry): boolean {
+  return (
+    left.id === right.id &&
+    left.source.hostId === right.source.hostId &&
+    left.source.controlUrl === right.source.controlUrl &&
+    left.source.isLocal === right.source.isLocal
+  )
 }
 
 function compareLaunchCandidates(

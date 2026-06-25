@@ -1,4 +1,5 @@
 import type { EntrySource } from "@platform/api/rpc/entry-source"
+import type { LaunchAlternative } from "@platform/library/launch-alternative"
 import type {
   LaunchFailureKind,
   LaunchResult,
@@ -46,6 +47,7 @@ export const releaseChoiceForLaunch = (
 export type LaunchStartInput = PlayableLibraryEntry & {
   readonly releaseId?: string
   readonly source?: EntrySource
+  readonly launchAlternatives?: readonly LaunchAlternative[]
 }
 
 export type LaunchState =

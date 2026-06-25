@@ -187,6 +187,7 @@ function createBridgeLauncherLayer(bridge: KorriPlatformBridge) {
           await bridge.library.launch({
             id: spec.command,
             source: options?.source,
+            launchAlternatives: options?.launchAlternatives,
           })
           return { status: "launched" as const }
         },

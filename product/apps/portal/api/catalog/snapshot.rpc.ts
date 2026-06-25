@@ -1,5 +1,6 @@
 import { EntrySource } from "@platform/api/rpc/entry-source-core"
 import { ApiError } from "@platform/api/rpc/errors"
+import { LaunchAlternative } from "@platform/library/launch-alternative"
 import { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { Schema } from "effect"
 import { Rpc } from "effect/unstable/rpc"
@@ -20,6 +21,7 @@ const CatalogEntrySchema = Schema.Struct({
   ...PlayableLibraryEntry.fields,
   source: EntrySource,
   availability: Schema.optional(CatalogEntryAvailabilitySchema),
+  launchAlternatives: Schema.optional(Schema.Array(LaunchAlternative)),
 })
 export type CatalogEntry = Schema.Schema.Type<typeof CatalogEntrySchema>
 

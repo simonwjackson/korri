@@ -1,4 +1,5 @@
 import type { EntrySource } from "@platform/api/rpc/entry-source"
+import type { LaunchAlternative } from "@platform/library/launch-alternative"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { Context, Effect, Layer, Schema } from "effect"
 
@@ -21,6 +22,7 @@ export type CatalogEntryAvailability =
 export type CatalogEntry = PlayableLibraryEntry & {
   readonly source: EntrySource
   readonly availability?: CatalogEntryAvailability
+  readonly launchAlternatives?: readonly LaunchAlternative[]
 }
 
 export interface CatalogPeerSnapshot {

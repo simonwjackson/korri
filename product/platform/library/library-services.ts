@@ -6,6 +6,7 @@ import type {
   LaunchCompanionMap,
   MoonlightPolicy,
 } from "@platform/library/config/inheritable-fields"
+import type { LaunchAlternative } from "@platform/library/launch-alternative"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type {
   LaunchExtras,
@@ -125,6 +126,7 @@ export interface LibrarySourceService {
 export interface LaunchOptions {
   readonly source?: EntrySource
   readonly extras?: LaunchExtras
+  readonly launchAlternatives?: readonly LaunchAlternative[]
 }
 
 export interface LauncherService {

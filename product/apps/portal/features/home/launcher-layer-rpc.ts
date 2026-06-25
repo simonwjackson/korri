@@ -24,9 +24,14 @@ export const LauncherLayerRpc = Layer.effect(Launcher)(
     Effect.map(client => ({
       run: (spec: { readonly command: string }, options?: LaunchOptions) => {
         const source = options?.source
-        return client["app.library.launch"](
-          source ? { id: spec.command, source } : { id: spec.command },
-        ).pipe(Effect.mapError(toLibraryError))
+        const launchAlternatives = options?.launchAlternatives
+        return client["app.library.launch"]({
+          id: spec.command,
+          ...(source ? { source } : {}),
+          ...(launchAlternatives !== undefined
+            ? { launchAlternatives: [...launchAlternatives] }
+            : {}),
+        }).pipe(Effect.mapError(toLibraryError))
       },
     })),
   ),

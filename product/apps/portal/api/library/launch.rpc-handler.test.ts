@@ -418,6 +418,64 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     }
   })
 
+  it("falls back to the next folded remote copy when peer prepare fails", async () => {
+    const firstSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+    const secondSource = new EntrySource({
+      hostId: "zu",
+      controlUrl: "http://zu.local:3001",
+      isLocal: false,
+    })
+    const preparedFor: Array<{ controlUrl: string; gameId: string }> = []
+    let dispatchedSpec:
+      | { command: string; args: ReadonlyArray<string> }
+      | undefined
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "aka/game",
+        source: firstSource,
+        launchAlternatives: [
+          { id: "aka/game", releaseId: "default", source: firstSource },
+          { id: "zu/game", releaseId: "default", source: secondSource },
+        ],
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: (controlUrl, gameId) => {
+              preparedFor.push({ controlUrl, gameId })
+              if (controlUrl.includes("aka.local")) {
+                return Effect.succeed({
+                  status: "failed" as const,
+                  category: "host-unavailable" as const,
+                  message: "peer is down",
+                })
+              }
+              return Effect.succeed({
+                status: "prepared" as const,
+                gameId,
+                sessionId: "sess-fallback",
+              })
+            },
+            launchedSpec: spec => {
+              dispatchedSpec = spec
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
+    expect(preparedFor).toEqual([
+      { controlUrl: "http://aka.local:3001", gameId: "aka/game" },
+      { controlUrl: "http://zu.local:3001", gameId: "zu/game" },
+    ])
+    expect(dispatchedSpec?.args).toContain("zu.local")
+  })
+
   it("returns failed/host-control-disabled when peer prepare reports stream control off", async () => {
     const remoteSource = new EntrySource({
       hostId: "aka",

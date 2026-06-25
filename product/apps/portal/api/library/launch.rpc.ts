@@ -1,6 +1,7 @@
 import { EntrySource } from "@platform/api/rpc/entry-source-core"
 import { ApiError } from "@platform/api/rpc/errors"
 import { EphemeralOverride } from "@platform/library/config/ephemeral-override"
+import { LaunchAlternative } from "@platform/library/launch-alternative"
 import { LaunchFailureKind } from "@platform/library/launcher"
 import { LaunchCompanionDiagnostic } from "@platform/plugin/launch-companion"
 import { Schema } from "effect"
@@ -24,6 +25,7 @@ export class LaunchLibraryPayload extends Schema.Class<LaunchLibraryPayload>(
   /** @deprecated use profileId. */
   presetId: Schema.optional(Schema.Union([Schema.String, Schema.Null])),
   override: Schema.optional(EphemeralOverride),
+  launchAlternatives: Schema.optional(Schema.Array(LaunchAlternative)),
 }) {}
 
 /**

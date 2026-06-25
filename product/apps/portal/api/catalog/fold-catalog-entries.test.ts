@@ -77,6 +77,38 @@ describe("foldCatalogEntries", () => {
     })
   })
 
+  it("emits folded launch alternatives in retry order", () => {
+    const folded = foldCatalogEntries({
+      entries: [
+        catalogEntryFixture({
+          id: "aka/game",
+          source: remoteSourceFixture("aka"),
+          identity: hashIdentityFixture("retry"),
+        }),
+        catalogEntryFixture({
+          id: "zu/game",
+          source: remoteSourceFixture("zu"),
+          identity: hashIdentityFixture("retry"),
+        }),
+      ],
+      presentPeerControlUrls: new Set(["http://aka:3001", "http://zu:3001"]),
+    })
+
+    expect(folded[0]?.id).toBe("aka/game")
+    expect(folded[0]?.launchAlternatives).toEqual([
+      {
+        id: "aka/game",
+        releaseId: "default",
+        source: remoteSourceFixture("aka"),
+      },
+      {
+        id: "zu/game",
+        releaseId: "default",
+        source: remoteSourceFixture("zu"),
+      },
+    ])
+  })
+
   it("marks remote-only folds unreachable when their peer is absent", () => {
     const folded = foldCatalogEntries({
       entries: [

@@ -1,3 +1,4 @@
+import type { EntrySource } from "@platform/api/rpc/entry-source"
 import { DataError, NotFoundError } from "@platform/api/rpc/errors"
 import {
   type LaunchExtras,
@@ -43,13 +44,13 @@ type FailedLaunchLibraryResponse = Extract<
   { readonly status: "failed" }
 >
 
+type LaunchPayload = typeof LaunchLibraryPayload.Type
+
 type LaunchResolutionResult =
   | { readonly _tag: "resolved"; readonly resolved: ResolvedLaunch }
   | { readonly _tag: "failed"; readonly response: FailedLaunchLibraryResponse }
 
-export const handleLaunchLibrary = (
-  payload: typeof LaunchLibraryPayload.Type,
-) =>
+export const handleLaunchLibrary = (payload: LaunchPayload) =>
   Effect.gen(function* () {
     // Federation routing: remote-source entries dispatch a Moonlight
     // launch through the same `Launcher` / `ForegroundSessionHost` seam
@@ -364,8 +365,8 @@ function toDataError(error: LibraryError): DataError {
  * local library list.
  */
 function handleRemoteSourceLaunch(
-  payload: typeof LaunchLibraryPayload.Type,
-  source: NonNullable<(typeof LaunchLibraryPayload.Type)["source"]>,
+  payload: LaunchPayload,
+  source: NonNullable<LaunchPayload["source"]>,
 ) {
   return Effect.gen(function* () {
     if (!source.controlUrl || source.controlUrl.trim().length === 0) {
@@ -414,6 +415,19 @@ function handleRemoteSourceLaunch(
         },
         "app.library.launch: peer prepare failed",
       )
+      const fallbackPayload = nextLaunchFallbackPayload(payload, source)
+      if (fallbackPayload !== undefined) {
+        logger.info(
+          {
+            id: payload.id,
+            peerHostId: source.hostId,
+            fallbackId: fallbackPayload.id,
+            fallbackPeerHostId: fallbackPayload.source?.hostId,
+          },
+          "app.library.launch: trying folded launch fallback",
+        )
+        return yield* handleLaunchLibrary(fallbackPayload)
+      }
       return launchFailedFromKind(
         remotePrepareCategoryToFailureKind(prepareResult.category),
         `peer ${source.hostId} failed to prepare launch: ${prepareResult.message}`,
@@ -579,6 +593,44 @@ function handleRemoteSourceLaunch(
     )
     return result
   })
+}
+
+function nextLaunchFallbackPayload(
+  payload: LaunchPayload,
+  source: NonNullable<LaunchPayload["source"]>,
+): LaunchPayload | undefined {
+  const alternatives = payload.launchAlternatives ?? []
+  const remaining = alternatives.filter(
+    alternative =>
+      !sameLaunchSource(alternative.id, alternative.source, payload.id, source),
+  )
+  const next = remaining[0]
+  if (next === undefined) return undefined
+  return {
+    id: next.id,
+    source: next.source,
+    releaseId: next.releaseId,
+    appId: next.appId,
+    userId: next.userId,
+    profileId: next.profileId,
+    presetId: next.presetId,
+    override: payload.override,
+    launchAlternatives: remaining.slice(1),
+  }
+}
+
+function sameLaunchSource(
+  leftId: string,
+  leftSource: EntrySource,
+  rightId: string,
+  rightSource: EntrySource,
+): boolean {
+  return (
+    leftId === rightId &&
+    leftSource.hostId === rightSource.hostId &&
+    leftSource.controlUrl === rightSource.controlUrl &&
+    leftSource.isLocal === rightSource.isLocal
+  )
 }
 
 function launchFailedFromKind(

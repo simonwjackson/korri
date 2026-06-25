@@ -77,8 +77,14 @@ export const launchAtom = libraryRuntime.fn<LaunchInput | string>()(input =>
       id,
       releaseId,
       source: entrySource,
+      launchAlternatives,
     } = typeof input === "string"
-      ? { id: input, releaseId: undefined, source: undefined }
+      ? {
+          id: input,
+          releaseId: undefined,
+          source: undefined,
+          launchAlternatives: undefined,
+        }
       : input
     const source = yield* LibrarySource
     const launcher = yield* Launcher
@@ -93,6 +99,9 @@ export const launchAtom = libraryRuntime.fn<LaunchInput | string>()(input =>
       )
     }
 
-    return yield* launcher.run(spec, { source: entrySource })
+    return yield* launcher.run(spec, {
+      source: entrySource,
+      launchAlternatives,
+    })
   }),
 )
