@@ -1,3 +1,4 @@
+import { ArtifactId } from "@platform/protocol/artifact/artifact"
 import { Schema } from "effect"
 
 import { InheritableLayer, LaunchWithPolicy } from "../inheritable-fields"
@@ -99,6 +100,11 @@ const Target = Schema.Union([
   ProviderRefTarget,
 ])
 
+const ReleaseIdentityTag = Schema.Struct({
+  kind: Schema.Literal("hash"),
+  value: ArtifactId,
+})
+
 const LaunchInput = Schema.Struct({
   part: Schema.optional(NonEmptyString),
   roles: Schema.optional(Schema.Array(NonEmptyString)),
@@ -150,6 +156,7 @@ export const LibraryReleasePayload = Schema.Struct({
   source: Schema.optional(Schema.Unknown),
   system: NonEmptyString,
   target: Schema.optional(Target),
+  identity: Schema.optional(ReleaseIdentityTag),
   app: Schema.optional(Schema.Unknown),
   runtime: Schema.optional(Schema.Unknown),
   apps: Schema.optional(Schema.Unknown),
@@ -186,6 +193,13 @@ export const LibraryReleasePayload = Schema.Struct({
         return {
           path: ["apps"],
           issue: "release.apps was removed; use release.launch",
+        }
+      }
+      if (release.identity !== undefined && release.target?.kind !== "file") {
+        return {
+          path: ["identity"],
+          issue:
+            "release identity hash tags may only be declared for file targets",
         }
       }
       return undefined

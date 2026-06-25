@@ -243,6 +243,115 @@ describe("createLibraryRepository — readable playable entries", () => {
           .find(entry => entry.id === "sonic-the-hedgehog")
           ?.releases.map(release => release.launchable),
       ).toEqual([true, false, true])
+      expect(
+        entries
+          .find(entry => entry.id === "sonic-the-hedgehog")
+          ?.releases.find(release => release.id === "genesis")?.identity,
+      ).toBeUndefined()
+    })
+  })
+
+  it("projects provider-ref release targets as provider identity tags", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "celeste-classic",
+          title: "Celeste Classic",
+          releases: [
+            {
+              id: "itch",
+              system: "pico-8",
+              target: {
+                kind: "provider-ref",
+                provider: "@korri:itch",
+                ref: "celeste-classic",
+              },
+            },
+          ],
+        }),
+      )
+
+      const entries = await Effect.runPromise(repo.listPlayableEntries())
+      expect(
+        entries.find(entry => entry.id === "celeste-classic")?.releases[0]
+          ?.identity,
+      ).toEqual({
+        kind: "provider",
+        value: { provider: "@korri:itch", ref: "celeste-classic" },
+      })
+    })
+  })
+
+  it("projects declared file hash identity tags", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      const artifactId =
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "f-zero-hash",
+          title: "F-Zero Hash",
+          releases: [
+            {
+              id: "snes",
+              system: "snes",
+              target: {
+                kind: "file",
+                storage: "roms",
+                path: "snes/F-Zero.sfc",
+              },
+              identity: { kind: "hash", value: artifactId },
+            },
+          ],
+        }),
+      )
+
+      const entries = await Effect.runPromise(repo.listPlayableEntries())
+      expect(
+        entries.find(entry => entry.id === "f-zero-hash")?.releases[0]
+          ?.identity,
+      ).toEqual({ kind: "hash", value: artifactId })
+    })
+  })
+
+  it("keeps file-set, executable, and url release targets tagless", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "tagless-targets",
+          title: "Tagless Targets",
+          releases: [
+            {
+              id: "file-set",
+              system: "pc98",
+              target: {
+                kind: "file-set",
+                storage: "roms",
+                files: [{ id: "disk-a", path: "pc98/disk-a.hdi" }],
+              },
+            },
+            {
+              id: "executable",
+              system: "linux",
+              target: { kind: "executable", path: "bin/game" },
+            },
+            {
+              id: "url",
+              system: "windows",
+              target: { kind: "url", value: "steam://rungameid/360740" },
+            },
+          ],
+        }),
+      )
+
+      const entries = await Effect.runPromise(repo.listPlayableEntries())
+      expect(
+        entries
+          .find(entry => entry.id === "tagless-targets")
+          ?.releases.map(release => release.identity),
+      ).toEqual([undefined, undefined, undefined])
     })
   })
 

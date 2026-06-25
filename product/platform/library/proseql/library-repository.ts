@@ -996,6 +996,7 @@ function toPlayableReleaseEntry(
     readonly system: string
     readonly source?: unknown
     readonly target?: PlayableReleaseEntry["target"]
+    readonly identity?: PlayableReleaseEntry["identity"]
     readonly launch?: {
       readonly use?: string
       readonly plugin?: string
@@ -1005,10 +1006,12 @@ function toPlayableReleaseEntry(
   },
   install?: PlayableReleaseEntry["install"],
 ): PlayableReleaseEntry {
+  const identity = releaseIdentityTagFor(release)
   return {
     id: release.id,
     system: release.system,
     ...(release.target !== undefined ? { target: release.target } : {}),
+    ...(identity !== undefined ? { identity } : {}),
     ...(release.launch
       ? {
           launch: {
@@ -1024,6 +1027,22 @@ function toPlayableReleaseEntry(
     ...(install ? { install } : {}),
     launchable: release.target !== undefined && release.launch !== undefined,
   }
+}
+
+function releaseIdentityTagFor(release: {
+  readonly target?: PlayableReleaseEntry["target"]
+  readonly identity?: PlayableReleaseEntry["identity"]
+}): PlayableReleaseEntry["identity"] | undefined {
+  if (release.target?.kind === "provider-ref") {
+    return {
+      kind: "provider",
+      value: {
+        provider: release.target.provider,
+        ref: release.target.ref,
+      },
+    }
+  }
+  return release.identity
 }
 
 function loadReadableSnapshot(

@@ -4,6 +4,7 @@ import {
 } from "@platform/fixtures/games/game"
 import { GameMetadata } from "@platform/library/config/records/game"
 import { ProviderInstallMetadataSchema } from "@platform/library/install-state"
+import { ArtifactId } from "@platform/protocol/artifact/artifact"
 import { Schema } from "effect"
 
 const DisplayMetadata = Schema.Record(Schema.String, Schema.Unknown)
@@ -49,11 +50,25 @@ const ReleaseLaunchSummary = Schema.Struct({
   plugin: Schema.optional(Schema.String),
   runtime: Schema.optional(Schema.String),
 })
+const ReleaseIdentityTag = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("hash"),
+    value: ArtifactId,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("provider"),
+    value: Schema.Struct({
+      provider: Schema.String,
+      ref: Schema.String,
+    }),
+  }),
+])
 
 export const PlayableReleaseEntry = Schema.Struct({
   id: Schema.String,
   system: Schema.String,
   target: Schema.optional(ReleaseTarget),
+  identity: Schema.optional(ReleaseIdentityTag),
   launch: Schema.optional(ReleaseLaunchSummary),
   display: Schema.optional(DisplayMetadata),
   install: Schema.optional(ProviderInstallMetadataSchema),

@@ -145,6 +145,79 @@ describe("LibraryItemPayload playable/release identity", () => {
     ).toThrow(/apps|release\.runtime/i)
   })
 
+  it("decodes path-only file releases without identity metadata", () => {
+    const item = decodeLibraryItemPayload({
+      releases: [
+        {
+          id: "gba",
+          system: "gba",
+          target: { kind: "file", storage: "roms", path: "gba/cart.gba" },
+        },
+      ],
+    })
+
+    expect(item.releases[0]?.target).toEqual({
+      kind: "file",
+      storage: "roms",
+      path: "gba/cart.gba",
+    })
+    expect(item.releases[0]?.identity).toBeUndefined()
+  })
+
+  it("decodes declared hash identity for file releases", () => {
+    const artifactId =
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    const item = decodeLibraryItemPayload({
+      releases: [
+        {
+          id: "gba",
+          system: "gba",
+          target: { kind: "file", storage: "roms", path: "gba/cart.gba" },
+          identity: { kind: "hash", value: artifactId },
+        },
+      ],
+    })
+
+    expect(item.releases[0]?.identity).toEqual({
+      kind: "hash",
+      value: artifactId,
+    })
+  })
+
+  it("rejects malformed declared hash identity", () => {
+    expect(() =>
+      decodeLibraryItemPayload({
+        releases: [
+          {
+            id: "gba",
+            system: "gba",
+            target: { kind: "file", storage: "roms", path: "gba/cart.gba" },
+            identity: { kind: "hash", value: "not-a-sha256-artifact-id" },
+          },
+        ],
+      }),
+    ).toThrow(/sha256/i)
+  })
+
+  it("rejects declared hash identity on non-file targets", () => {
+    expect(() =>
+      decodeLibraryItemPayload({
+        releases: [
+          {
+            id: "steam",
+            system: "windows",
+            target: { kind: "url", value: "steam://rungameid/360740" },
+            identity: {
+              kind: "hash",
+              value:
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            },
+          },
+        ],
+      }),
+    ).toThrow(/file targets/i)
+  })
+
   it("decodes release launch overlays", () => {
     const item = decodeLibraryItemPayload({
       releases: [
