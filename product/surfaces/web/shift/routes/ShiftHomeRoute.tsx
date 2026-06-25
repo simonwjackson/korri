@@ -5,9 +5,15 @@ import {
   getPlayableImageUrl,
   getPlayableWideImageUrl,
 } from "@platform/library/playable-library-ui"
+import { LaunchState } from "@platform/library/launch-state"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import { Option } from "effect"
+import { useEffect, useState } from "react"
+import {
+  setShiftLaunchPreview,
+  useShiftLaunchPreview,
+} from "../shift-launch-preview"
 import {
   ShiftCatalogStateRoot,
   useShiftCatalogCase,
@@ -43,6 +49,16 @@ export function ShiftHomeRoute() {
 function NavigatingReadyBody() {
   const ready = useShiftCatalogCase("Ready")
   const launch = useLibraryLaunchController()
+  const preview = useShiftLaunchPreview()
+  const [acked, setAcked] = useState(false)
+
+  // The design-tool preview override wins over the live controller when set.
+  const raw = preview ?? launch.state
+  // A fresh launch (idle/launching) re-arms the dismissable feedback.
+  useEffect(() => {
+    if (raw._tag === "Idle" || raw._tag === "Launching") setAcked(false)
+  }, [raw._tag])
+  const launchState = acked ? LaunchState.idle : raw
 
   return Option.match(ready, {
     onNone: () => null,
@@ -51,7 +67,16 @@ function NavigatingReadyBody() {
         <ShiftCinematicHome
           games={games.map(toCinematicGame)}
           avatarSrc={AVATAR}
+          launchState={launchState}
           onLaunch={makeLaunchHandler(games, launch.start)}
+          onRetry={() => {
+            if (preview) setShiftLaunchPreview(null)
+            else launch.retry()
+          }}
+          onDismiss={() => {
+            if (preview) setShiftLaunchPreview(null)
+            else setAcked(true)
+          }}
         />
       ) : null,
   })

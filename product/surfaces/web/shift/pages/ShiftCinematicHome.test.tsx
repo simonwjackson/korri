@@ -63,3 +63,70 @@ describe("ShiftCinematicHome onLaunch", () => {
     expect(screen.getByRole("button", { name: "Game A" })).toBeTruthy()
   })
 })
+
+describe("ShiftCinematicHome launch feedback", () => {
+  it("shows a failure with a calm reason and retries instead of launching", () => {
+    const onRetry = mock(() => undefined)
+    const onLaunch = mock(() => undefined)
+    render(
+      <ShiftCinematicHome
+        games={games}
+        onLaunch={onLaunch}
+        onRetry={onRetry}
+        launchState={{
+          _tag: "Failed",
+          gameId: "a",
+          exitCode: 121,
+          failureKind: "session-busy",
+        }}
+      />,
+    )
+
+    expect(screen.getByText("Couldn't start")).toBeTruthy()
+    expect(screen.getByText("Another game is running")).toBeTruthy()
+    expect(screen.getByText("Retry")).toBeTruthy()
+
+    // A (the focused tile) retries while a failure is shown — it does not launch.
+    fireEvent.click(screen.getByRole("button", { name: "Game A" }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+    expect(onLaunch).not.toHaveBeenCalled()
+  })
+
+  it("hides Retry for non-retryable failures and keeps Back", () => {
+    render(
+      <ShiftCinematicHome
+        games={games}
+        launchState={{
+          _tag: "Failed",
+          gameId: "a",
+          exitCode: 127,
+          failureKind: "no-such-game",
+        }}
+      />,
+    )
+
+    expect(screen.getByText("We can't find this game")).toBeTruthy()
+    expect(screen.queryByText("Retry")).toBeNull()
+    expect(screen.getByText("Back")).toBeTruthy()
+  })
+
+  it("shows a Starting state without the normal hero chips", () => {
+    render(
+      <ShiftCinematicHome
+        games={[
+          {
+            id: "a",
+            title: "Game A",
+            tileArtUrl: "a.png",
+            wideArtUrl: "aw.png",
+            genre: "Metroidvania",
+          },
+        ]}
+        launchState={{ _tag: "Launching", gameId: "a" }}
+      />,
+    )
+
+    expect(screen.getByText("Starting\u2026")).toBeTruthy()
+    expect(screen.queryByText("Metroidvania")).toBeNull()
+  })
+})

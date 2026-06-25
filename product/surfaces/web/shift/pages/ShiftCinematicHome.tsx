@@ -12,10 +12,12 @@
  * intentionally not used here so the prototype is self-contained; the shipping
  * version would subscribe to semantic `direction`/`confirm` actions instead.
  */
+import type { LaunchState } from "@platform/library/launch-state"
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { AnimatePresence, motion } from "framer-motion"
 import { BatteryMedium, Wifi } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { launchStatusView } from "../launch-failure-copy"
 
 export interface ShiftCinematicGame {
   readonly id: string
@@ -33,9 +35,15 @@ export interface ShiftCinematicHomeProps {
   readonly games: readonly ShiftCinematicGame[]
   readonly time?: string
   readonly avatarSrc?: string
-  /** Launch the focused game. The real host wires this to navigation; the
-   * standalone prototype omits it (focus-only). */
+  /** Launch the focused game. The real host wires this to the launch
+   * controller; the standalone prototype omits it (focus-only). */
   readonly onLaunch?: (gameId: string) => void
+  /** Live launch lifecycle for the in-scene feedback. Omit/Idle = normal hero. */
+  readonly launchState?: LaunchState
+  /** Retry the failed launch (A while a failure is shown). */
+  readonly onRetry?: () => void
+  /** Dismiss the launch feedback and return to browsing (B). */
+  readonly onDismiss?: () => void
 }
 
 const SPRING = { type: "spring", stiffness: 260, damping: 32 } as const
@@ -45,6 +53,9 @@ export function ShiftCinematicHome({
   time = "4:24 PM",
   avatarSrc,
   onLaunch,
+  launchState,
+  onRetry,
+  onDismiss,
 }: ShiftCinematicHomeProps) {
   const [index, setIndex] = useState(0)
   const [trackX, setTrackX] = useState(0)
@@ -59,24 +70,44 @@ export function ShiftCinematicHome({
     [games.length],
   )
 
-  const launchFocused = useCallback(() => {
+  // The scene reacts to the launch lifecycle in place — no modal. When a status
+  // is showing, the hero + legend morph and the buttons remap (A = Retry / B =
+  // Back); otherwise A launches the focused game.
+  const status = useMemo(() => launchStatusView(launchState), [launchState])
+  const showActions =
+    status?.tone === "failed" || status?.tone === "unavailable"
+
+  const confirm = useCallback(() => {
+    if (status) {
+      if (status.canRetry) onRetry?.()
+      return
+    }
     const focused = games[index]
     if (focused) onLaunch?.(focused.id)
-  }, [games, index, onLaunch])
+  }, [status, onRetry, games, index, onLaunch])
 
-  // Activating a tile: launch it when it's already the focused (centered) one,
-  // otherwise bring it to focus. Mirrors the legend's "A = Play".
+  const dismiss = useCallback(() => {
+    if (showActions) onDismiss?.()
+  }, [showActions, onDismiss])
+
+  // Activating a tile: confirm it when it's already the focused (centered) one,
+  // otherwise bring it to focus. Mirrors the legend's "A".
   const activate = useCallback(
     (target: number) => {
-      if (target === index) launchFocused()
+      if (status) {
+        confirm()
+        return
+      }
+      if (target === index) confirm()
       else setIndex(target)
     },
-    [index, launchFocused],
+    [status, index, confirm],
   )
 
-  // Semantic confirm (gamepad A / Enter via the input bus) launches the focused
-  // game. No-op when no input system is running (standalone prototype/fixture).
-  useInputAction("confirm", launchFocused)
+  // Semantic confirm / back via the input bus. No-op when no input system is
+  // running (standalone prototype/fixture).
+  useInputAction("confirm", confirm)
+  useInputAction("back", dismiss)
 
   // Keep the focused tile centered: shift the whole track so the active tile's
   // center lands at the stage center (the cursor is fixed, the rail moves).
@@ -108,12 +139,15 @@ export function ShiftCinematicHome({
         move(-1)
       } else if (event.key === "Enter" || event.key === " ") {
         event.preventDefault()
-        launchFocused()
+        confirm()
+      } else if (event.key === "Escape") {
+        event.preventDefault()
+        dismiss()
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [move, launchFocused])
+  }, [move, confirm, dismiss])
 
   if (!game) return null
   const resuming = Boolean(game.lastPlayedLabel)
@@ -128,6 +162,7 @@ export function ShiftCinematicHome({
         <motion.div
           key={game.id}
           className="shift-cine-bg"
+          data-cooled={status?.tone === "failed" || undefined}
           style={{ backgroundImage: `url(${game.wideArtUrl})` }}
           initial={{ opacity: 0, scale: 1.1 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -152,49 +187,90 @@ export function ShiftCinematicHome({
         <div className="shift-cine-midrow">
           <AnimatePresence mode="wait">
             <motion.div
-              key={game.id}
+              key={`${game.id}:${status?.tone ?? "live"}`}
               className="shift-cine-hero"
+              role={status ? "status" : undefined}
+              aria-live={
+                status?.tone === "failed"
+                  ? "assertive"
+                  : status
+                    ? "polite"
+                    : undefined
+              }
               initial={{ opacity: 0, y: 22 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -14 }}
               transition={{ duration: 0.32, ease: "easeOut" }}
             >
-              <span className="shift-cine-kicker">
-                {resuming ? "Continue playing" : "Ready to play"}
-              </span>
-              <h1 className="shift-cine-title">{game.title}</h1>
-              {/* Glanceable single row — full metadata lives on Game Detail. */}
-              <div className="shift-cine-chips">
-                {game.genre ? (
-                  <span className="shift-cine-chip">{game.genre}</span>
-                ) : null}
-                {game.developer ? (
-                  <span className="shift-cine-chip">{game.developer}</span>
-                ) : null}
-                {game.lastPlayedLabel ? (
-                  <span className="shift-cine-chip">
-                    {game.lastPlayedLabel}
+              {status ? (
+                <>
+                  <span className="shift-cine-kicker" data-tone={status.tone}>
+                    {status.kicker}
                   </span>
-                ) : null}
-                {game.playtimeLabel ? (
-                  <span className="shift-cine-chip">{game.playtimeLabel}</span>
-                ) : null}
-                {game.favorite ? (
-                  <span className="shift-cine-chip is-fav">★ Favorite</span>
-                ) : null}
-              </div>
+                  <h1 className="shift-cine-title">{game.title}</h1>
+                  {status.tone === "launching" ? (
+                    <div className="shift-cine-loading" aria-hidden />
+                  ) : status.reason ? (
+                    <div className="shift-cine-chips">
+                      <span className="shift-cine-chip is-reason">
+                        {status.reason}
+                      </span>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <span className="shift-cine-kicker">
+                    {resuming ? "Continue playing" : "Ready to play"}
+                  </span>
+                  <h1 className="shift-cine-title">{game.title}</h1>
+                  {/* Glanceable single row — full metadata lives on Game Detail. */}
+                  <div className="shift-cine-chips">
+                    {game.genre ? (
+                      <span className="shift-cine-chip">{game.genre}</span>
+                    ) : null}
+                    {game.developer ? (
+                      <span className="shift-cine-chip">{game.developer}</span>
+                    ) : null}
+                    {game.lastPlayedLabel ? (
+                      <span className="shift-cine-chip">
+                        {game.lastPlayedLabel}
+                      </span>
+                    ) : null}
+                    {game.playtimeLabel ? (
+                      <span className="shift-cine-chip">
+                        {game.playtimeLabel}
+                      </span>
+                    ) : null}
+                    {game.favorite ? (
+                      <span className="shift-cine-chip is-fav">★ Favorite</span>
+                    ) : null}
+                  </div>
+                </>
+              )}
             </motion.div>
           </AnimatePresence>
 
-          <div className="shift-cine-legend">
-            <CineHint
-              glyph="A"
-              label={resuming ? "Continue" : "Play"}
-              primary
-            />
-            <CineHint glyph="X" label="Options" />
-            <CineHint glyph="Y" label="Favorite" />
-          </div>
+          {status ? (
+            showActions ? (
+              <div className="shift-cine-legend">
+                {status.canRetry ? (
+                  <CineHint glyph="A" label="Retry" primary />
+                ) : null}
+                <CineHint glyph="B" label="Back" primary={!status.canRetry} />
+              </div>
+            ) : null
+          ) : (
+            <div className="shift-cine-legend">
+              <CineHint
+                glyph="A"
+                label={resuming ? "Continue" : "Play"}
+                primary
+              />
+              <CineHint glyph="X" label="Options" />
+              <CineHint glyph="Y" label="Favorite" />
+            </div>
+          )}
         </div>
 
         <div className="shift-cine-rail">

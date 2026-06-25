@@ -1314,3 +1314,54 @@
 		transition: none;
 	}
 }
+
+/* ----- Cinematic launch feedback (in-scene; see launch-failure-copy.ts) ----- */
+[data-shift-home] {
+	--shift-danger: #ff7a78;
+}
+
+/* The world cools when a launch fails — the game didn't come up. */
+[data-shift-home] .shift-cine-bg[data-cooled] {
+	filter: saturate(0.32) brightness(0.5);
+	transition: filter 0.5s ease-out;
+}
+
+[data-shift-home] .shift-cine-kicker[data-tone="failed"] {
+	color: var(--shift-danger);
+}
+
+[data-shift-home] .shift-cine-kicker[data-tone="launching"],
+[data-shift-home] .shift-cine-kicker[data-tone="launched"] {
+	opacity: 0.92;
+}
+
+[data-shift-home] .shift-cine-chip.is-reason {
+	border-color: color-mix(in srgb, var(--shift-danger) 55%, transparent);
+	color: var(--shift-danger);
+	background: color-mix(in srgb, var(--shift-danger) 12%, transparent);
+}
+
+/* Indeterminate "powering on" shimmer while launching. */
+[data-shift-home] .shift-cine-loading {
+	margin-top: var(--shift-space-2);
+	width: min(40cqi, 18rem);
+	height: 0.35em;
+	border-radius: 9999px;
+	background: linear-gradient(
+		90deg,
+		rgba(255, 255, 255, 0.12) 0%,
+		rgba(255, 255, 255, 0.6) 50%,
+		rgba(255, 255, 255, 0.12) 100%
+	);
+	background-size: 200% 100%;
+	animation: shift-cine-shimmer 1.1s ease-in-out infinite;
+}
+
+@keyframes shift-cine-shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
+}
