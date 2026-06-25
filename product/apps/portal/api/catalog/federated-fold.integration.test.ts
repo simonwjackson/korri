@@ -50,6 +50,7 @@ describe("federated catalog folding integration", () => {
           if (
             latest.peers.find(item => item.hostId === "aka")?.status === "ready"
           ) {
+            yield* Effect.sleep("50 millis")
             return latest
           }
           yield* Effect.sleep("25 millis")
