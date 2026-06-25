@@ -112,7 +112,7 @@ function partModules(): Record<string, PartLoader> {
   if (injectedModules) return injectedModules
   const glob = (import.meta as unknown as { glob?: GlobFn }).glob
   if (typeof glob !== "function") return {}
-  return glob("../../../product/surfaces/web/**/*.part.tsx")
+  return glob("./../../../product/surfaces/web/**/*.part.tsx")
 }
 
 function storiesFromModule(
