@@ -226,6 +226,8 @@ export const ContainedPlayablePayload = Schema.Struct({
   relation: Schema.optional(NonEmptyString),
   collections: Schema.optional(Schema.Array(NonEmptyString)),
   display: Schema.optional(DisplayMetadata),
+  metadata: Schema.optional(GameMetadata),
+  userData: Schema.optional(GameUserData),
 
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,

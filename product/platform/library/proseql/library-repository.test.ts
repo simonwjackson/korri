@@ -356,6 +356,64 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
+  it("keeps metadata and user data distinct for contained readable entries", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      const sonicPlayed = new Date("2026-06-20T12:00:00.000Z")
+      const knucklesPlayed = new Date("2026-06-22T12:00:00.000Z")
+
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "sonic-collection",
+          contains: {
+            sonic: {
+              title: "Sonic",
+              metadata: { name: "Sonic", developer: "Sega" },
+              userData: { lastPlayed: sonicPlayed, playtime: 120 },
+            },
+            knuckles: {
+              title: "Knuckles",
+              metadata: {
+                name: "Knuckles",
+                developer: "Sega Technical Institute",
+              },
+              userData: { lastPlayed: knucklesPlayed, playtime: 240 },
+            },
+          },
+          releases: [
+            {
+              id: "genesis",
+              system: "genesis",
+              target: { kind: "file", storage: "roms", path: "sonic.md" },
+              launch: {
+                use: KORRI_RETROARCH_APP_ID,
+                runtime: "genesis-plus-gx",
+              },
+            },
+          ],
+        }),
+      )
+
+      const entries = await Effect.runPromise(repo.listPlayableEntries())
+      expect(
+        entries.find(candidate => candidate.id === "sonic-collection/sonic")
+          ?.metadata,
+      ).toEqual({ name: "Sonic", developer: "Sega" })
+      expect(
+        entries.find(candidate => candidate.id === "sonic-collection/knuckles")
+          ?.metadata,
+      ).toEqual({ name: "Knuckles", developer: "Sega Technical Institute" })
+      expect(
+        entries.find(candidate => candidate.id === "sonic-collection/sonic")
+          ?.userData,
+      ).toEqual({ lastPlayed: sonicPlayed, playtime: 120 })
+      expect(
+        entries.find(candidate => candidate.id === "sonic-collection/knuckles")
+          ?.userData,
+      ).toEqual({ lastPlayed: knucklesPlayed, playtime: 240 })
+    })
+  })
+
   it("lists release launcher selections on readable release entries", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)

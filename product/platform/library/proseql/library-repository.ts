@@ -820,10 +820,10 @@ function upsertLegacyGame(
           contains: {
             [parsed.containedId]: {
               ...(game.metadata?.name ? { title: game.metadata.name } : {}),
+              ...(game.metadata ? { metadata: game.metadata } : {}),
+              ...(game.userData ? { userData: game.userData } : {}),
             },
           },
-          ...(game.metadata ? { metadata: game.metadata } : {}),
-          ...(game.userData ? { userData: game.userData } : {}),
           releases: [release],
         }
       : {
@@ -867,6 +867,8 @@ function toPlayableLibraryEntry(
   const versionOf = entry.contained?.["version-of"] ?? entry.item["version-of"]
   const relation = entry.contained?.relation ?? entry.item.relation
   const display = entry.contained?.display ?? entry.item.display
+  const metadata = entry.contained?.metadata ?? entry.item.metadata
+  const userData = entry.contained?.userData ?? entry.item.userData
   const releases = entry.releases.map(release =>
     toPlayableReleaseEntry(
       release,
@@ -885,8 +887,8 @@ function toPlayableLibraryEntry(
     releases,
     launchable: releases.some(release => release.launchable),
     ...(releases[0]?.system ? { system: releases[0].system } : {}),
-    metadata: { name: title, ...entry.item.metadata },
-    ...(entry.item.userData ? { userData: entry.item.userData } : {}),
+    metadata: { name: title, ...metadata },
+    ...(userData ? { userData } : {}),
   }
 }
 
