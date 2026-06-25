@@ -19,6 +19,11 @@ describe("lab parts discovery", () => {
         "/product/surfaces/web/pico/pages/PicoHome.page.part.tsx",
       ),
     ).toEqual({ surfaceId: "pico", layer: "page", baseName: "PicoHome" })
+    expect(parsePartPath("./pico/ui/Badge.atom.part.tsx")).toEqual({
+      surfaceId: "pico",
+      layer: "atom",
+      baseName: "Badge",
+    })
   })
 
   it("ignores part files that do not carry an atomic layer suffix", () => {

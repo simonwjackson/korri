@@ -1,3 +1,4 @@
+import { surfacePartModules } from "@product/surfaces/web/parts-glob"
 import { createElement, type ReactNode } from "react"
 import type { Story, StoryLayer, WorkshopClassNames } from "../types"
 
@@ -24,11 +25,6 @@ export interface PartPathInfo {
 
 type PartLoader = () => Promise<PartModule>
 
-type GlobFn = (
-  pattern: string,
-  options?: { eager?: false },
-) => Record<string, PartLoader>
-
 const LAYER_ORDER: Record<StoryLayer, number> = {
   page: 0,
   template: 1,
@@ -38,7 +34,7 @@ const LAYER_ORDER: Record<StoryLayer, number> = {
 }
 
 const PART_PATH =
-  /(?:^|\/)product\/surfaces\/web\/([^/]+)\/(.+)\.(atom|molecule|organism|template|page)\.part\.tsx$/
+  /(?:^|\/)(?:product\/surfaces\/web\/|\.\/)([^/]+)\/(.+)\.(atom|molecule|organism|template|page)\.part\.tsx$/
 
 let injectedModules: Record<string, PartLoader> | null = null
 
@@ -110,9 +106,7 @@ export function __setPartModulesForTest(
 
 function partModules(): Record<string, PartLoader> {
   if (injectedModules) return injectedModules
-  const glob = (import.meta as unknown as { glob?: GlobFn }).glob
-  if (typeof glob !== "function") return {}
-  return glob("./../../../product/surfaces/web/**/*.part.tsx")
+  return surfacePartModules() as Record<string, PartLoader>
 }
 
 function storiesFromModule(
