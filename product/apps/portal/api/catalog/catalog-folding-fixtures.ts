@@ -73,15 +73,15 @@ export function sameHashAcrossStoragesFixture(): readonly CatalogEntry[] {
 }
 
 export function sameProviderAcrossStoragesFixture(): readonly CatalogEntry[] {
-  const identity = providerIdentityFixture("@korri:steam", "1029210")
+  const identity = providerIdentityFixture("@korri:store", "1029210")
   return [
     catalogEntryFixture({
-      id: "local/steam",
+      id: "local/store-game",
       source: localSourceFixture(),
       identity,
     }),
     catalogEntryFixture({
-      id: "aka/steam",
+      id: "aka/store-game",
       source: remoteSourceFixture("aka"),
       identity,
     }),

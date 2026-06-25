@@ -42,7 +42,7 @@ describe("foldCatalogEntries", () => {
 
     expect(folded.map(item => item.id).sort()).toEqual([
       "itch/same-ref",
-      "local/steam",
+      "local/store-game",
     ])
   })
 
@@ -53,14 +53,14 @@ describe("foldCatalogEntries", () => {
           id: "local/store",
           title: "Local Store Name",
           source: localSourceFixture(),
-          identity: providerIdentityFixture("@korri:steam", "123"),
+          identity: providerIdentityFixture("@korri:store", "123"),
           launchable: false,
         }),
         catalogEntryFixture({
           id: "aka/store",
           title: "Remote Store Name",
           source: remoteSourceFixture("aka"),
-          identity: providerIdentityFixture("@korri:steam", "123"),
+          identity: providerIdentityFixture("@korri:store", "123"),
           launchable: true,
         }),
       ],
