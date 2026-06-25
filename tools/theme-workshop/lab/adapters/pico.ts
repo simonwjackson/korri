@@ -107,16 +107,7 @@ export const picoLabSurfaceAdapter: LabSurfaceAdapter = {
   screens: [
     { label: "Home", path: "/" },
     { label: "Game Detail", path: "/game/hollow-knight" },
-    { label: "Parts", path: "/parts" },
   ],
-  loadAtomicCatalog: async () => {
-    const { picoConfig } = await import("@product/surfaces/web/pico/config")
-    return {
-      stories: picoConfig.stories ?? [],
-      classNames: picoConfig.classNames,
-      rootProps: picoConfig.rootProps,
-    }
-  },
   useControls: usePicoControls,
   makeSeedInitialValues,
   mountSurface: (host, { initialValues, history }) =>

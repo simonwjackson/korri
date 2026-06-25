@@ -24,10 +24,9 @@ describe("pico lab surface adapter", () => {
     expect(adapter.screens?.map(screen => screen.path)).toEqual([
       "/",
       "/game/hollow-knight",
-      "/parts",
     ])
     expect(adapter.useControls).toBeDefined()
-    expect(adapter.loadAtomicCatalog).toBeDefined()
+    expect("loadAtomicCatalog" in adapter).toBe(false)
 
     const initialValues =
       (await adapter.makeSeedInitialValues()) as readonly (readonly [

@@ -4,7 +4,7 @@ import { DeviceFrame } from "../../device-lab"
 import { Parts } from "../../Parts"
 import { useLab } from "../Lab.context"
 import { LabSurfaceMount } from "../LabSurfaceMount"
-import type { LabSurfaceAtomicCatalog } from "../surface-registry"
+import { loadSurfaceParts, type LabPartsCatalog } from "../parts-discovery"
 
 const VIEWPORT_INSET = 48
 
@@ -23,8 +23,7 @@ export function LabStage() {
       ? undefined
       : window.innerHeight - VIEWPORT_INSET,
   )
-  const [atomicCatalog, setAtomicCatalog] =
-    useState<LabSurfaceAtomicCatalog | null>(null)
+  const [partsCatalog, setPartsCatalog] = useState<LabPartsCatalog | null>(null)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -36,17 +35,17 @@ export function LabStage() {
 
   useEffect(() => {
     let cancelled = false
-    setAtomicCatalog(null)
-    if (surfacePath !== "/parts" || !adapter.loadAtomicCatalog) return
+    setPartsCatalog(null)
+    if (surfacePath !== "/parts") return
 
-    void adapter.loadAtomicCatalog().then(catalog => {
-      if (!cancelled) setAtomicCatalog(catalog)
+    void loadSurfaceParts(adapter.id).then(catalog => {
+      if (!cancelled) setPartsCatalog(catalog)
     })
 
     return () => {
       cancelled = true
     }
-  }, [adapter, surfacePath])
+  }, [adapter.id, surfacePath])
 
   const stageStyle = Object.fromEntries(
     (adapter.knobs ?? []).map(knob => [
@@ -55,16 +54,26 @@ export function LabStage() {
     ]),
   ) as CSSProperties
 
-  if (surfacePath === "/parts" && adapter.loadAtomicCatalog) {
+  if (surfacePath === "/parts") {
     return (
       <div className="lab-stage" style={stageStyle}>
-        {atomicCatalog ? (
-          <div {...atomicCatalog.rootProps}>
-            <Parts
-              stories={atomicCatalog.stories}
-              cn={resolveClassNames(atomicCatalog.classNames)}
-            />
-          </div>
+        {partsCatalog ? (
+          partsCatalog.stories.length > 0 ? (
+            <div {...partsCatalog.rootProps}>
+              <Parts
+                stories={partsCatalog.stories}
+                cn={resolveClassNames(partsCatalog.classNames)}
+              />
+            </div>
+          ) : (
+            <div className="lab-screens">
+              <div className="lab-empty-state">
+                No parts discovered for <code>{adapter.id}</code>. Add files like{" "}
+                <code>Component.atom.part.tsx</code> under{" "}
+                <code>product/surfaces/web/{adapter.id}/</code>.
+              </div>
+            </div>
+          )
         ) : (
           <div className="lab-screens">Loading parts…</div>
         )}

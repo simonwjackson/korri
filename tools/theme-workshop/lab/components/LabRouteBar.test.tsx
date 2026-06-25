@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, mock } from "bun:test"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { LabContext, type LabContextValue } from "../Lab.context"
+import { __setPartModulesForTest } from "../parts-discovery"
 import type { LabSurfaceAdapter } from "../surface-registry"
 import { LabRouteBar } from "./LabRouteBar"
 
-afterEach(() => cleanup())
+afterEach(() => {
+  __setPartModulesForTest(null)
+  cleanup()
+})
 
 const adapter: LabSurfaceAdapter = {
   id: "test",
@@ -62,5 +66,18 @@ describe("LabRouteBar surface switcher", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Game Detail" }))
 
     expect(setSurfacePath).toHaveBeenCalledWith("/game/hollow-knight")
+  })
+
+  it("adds Parts when the current surface has discovered parts", () => {
+    __setPartModulesForTest({
+      "/product/surfaces/web/test/ui/Test.atom.part.tsx": {
+        default: () => "test part",
+      },
+    })
+    const { setSurfacePath } = renderBar("/")
+
+    fireEvent.click(screen.getByRole("tab", { name: "Parts" }))
+
+    expect(setSurfacePath).toHaveBeenCalledWith("/parts")
   })
 })

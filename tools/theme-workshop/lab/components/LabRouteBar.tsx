@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { useLab } from "../Lab.context"
+import { hasSurfaceParts } from "../parts-discovery"
 import { labSurfaceAdapters } from "../surface-registry"
 
 export function LabRouteBar() {
@@ -9,6 +10,13 @@ export function LabRouteBar() {
   const href = useMemo(
     () => (typeof window === "undefined" ? surfacePath : window.location.href),
     [surfacePath],
+  )
+  const switcherScreens = useMemo(
+    () =>
+      hasSurfaceParts(themeId) && !screens.some(screen => screen.path === "/parts")
+        ? [...screens, { label: "Parts", path: "/parts" }]
+        : screens,
+    [screens, themeId],
   )
 
   const copy = async () => {
@@ -43,13 +51,13 @@ export function LabRouteBar() {
           <span className="lab-sep" />
         </>
       ) : null}
-      {screens.length > 0 ? (
+      {switcherScreens.length > 0 ? (
         <div
           className="lab-switch"
           role="tablist"
           aria-label="Surface switcher"
         >
-          {screens.map(screen => (
+          {switcherScreens.map(screen => (
             <button
               key={screen.path}
               type="button"
