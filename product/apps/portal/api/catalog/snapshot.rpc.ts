@@ -10,10 +10,16 @@ export type CatalogSnapshotScope = Schema.Schema.Type<
 >
 
 const CatalogPeerStatusSchema = Schema.Literals(["loading", "ready", "failed"])
+const CatalogEntryAvailabilitySchema = Schema.Literals([
+  "local-launchable",
+  "remote-available",
+  "remote-unreachable",
+])
 
 const CatalogEntrySchema = Schema.Struct({
   ...PlayableLibraryEntry.fields,
   source: EntrySource,
+  availability: Schema.optional(CatalogEntryAvailabilitySchema),
 })
 export type CatalogEntry = Schema.Schema.Type<typeof CatalogEntrySchema>
 

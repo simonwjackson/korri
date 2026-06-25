@@ -63,6 +63,30 @@ describe("CatalogSnapshot RPC schema", () => {
     ])
   })
 
+  it("decodes optional catalog availability facts", () => {
+    const decoded = Schema.decodeUnknownSync(CatalogSnapshotResponse)({
+      entries: [
+        {
+          ...entry("local/available"),
+          availability: "local-launchable",
+        },
+      ],
+      peers: [peer("self", true, "ready")],
+      generation: 42,
+      updatedAt: "2026-06-13T00:00:00.000Z",
+      health: {
+        coordinatorReachable: true,
+        self: "ready",
+        loadingPeers: 0,
+        readyPeers: 0,
+        failedPeers: 0,
+        generation: 42,
+      },
+    })
+
+    expect(decoded.entries[0]?.availability).toBe("local-launchable")
+  })
+
   it("decodes self-only payloads", () => {
     expect(
       Schema.decodeUnknownSync(CatalogSnapshotPayload)({ scope: "self" }),

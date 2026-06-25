@@ -27,6 +27,7 @@ import {
   Scope,
   SubscriptionRef,
 } from "effect"
+import { foldCatalogEntries } from "./fold-catalog-entries"
 import {
   type CatalogEntry,
   CatalogHealthSummary,
@@ -187,8 +188,13 @@ export const CatalogSnapshotLive: Layer.Layer<
             ),
           ]
 
-          return new CatalogSnapshotResponse({
+          const foldedEntries = foldCatalogEntries({
             entries: [...localTagged, ...remoteTagged],
+            presentPeerControlUrls: peerKeys,
+          })
+
+          return new CatalogSnapshotResponse({
+            entries: foldedEntries,
             peers: peerStates.map(toPeerSnapshot),
             generation: currentGeneration,
             updatedAt: now,

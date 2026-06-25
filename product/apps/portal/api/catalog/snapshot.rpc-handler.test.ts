@@ -208,6 +208,98 @@ describe("app.catalog.snapshot", () => {
     expect(snapshot.health.readyPeers).toBe(1)
   })
 
+  it("folds fabric entries by release identity while keeping peer counts raw", async () => {
+    const aka: PeerRecord = {
+      hostId: "aka",
+      displayName: "aka",
+      controlUrl: "http://aka:3001",
+      caps: ["source"],
+    }
+    const sameHash = {
+      kind: "hash" as const,
+      value:
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    }
+    const layer = snapshotLayerWith({
+      peers: [aka],
+      peerCatalogs: {
+        [aka.controlUrl]: [
+          peerEntry("remote/f-zero", "Remote F-Zero", sameHash),
+        ],
+      },
+      sourceLayer: makeInMemoryLibrarySourceLayer({
+        playableEntries: [
+          {
+            id: "local/f-zero",
+            itemId: "local/f-zero",
+            title: "Local F-Zero",
+            releases: [
+              {
+                id: "snes",
+                system: "snes",
+                identity: sameHash,
+                launchable: true,
+              },
+            ],
+            launchable: true,
+            metadata: { name: "Local F-Zero" },
+          },
+        ],
+      }),
+    })
+
+    const snapshot = await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* handleCatalogSnapshot({ scope: "fabric" })
+        yield* Effect.sleep("10 millis")
+        return yield* handleCatalogSnapshot({ scope: "fabric" })
+      }).pipe(Effect.provide(layer)),
+    )
+
+    expect(snapshot.entries).toHaveLength(1)
+    expect(snapshot.entries[0]).toMatchObject({
+      id: "local/f-zero",
+      title: "Local F-Zero",
+      source: { isLocal: true },
+      availability: "local-launchable",
+    })
+    expect(snapshot.peers.find(peer => peer.isLocal)?.entryCount).toBe(1)
+    expect(snapshot.peers.find(peer => peer.hostId === "aka")?.entryCount).toBe(
+      1,
+    )
+  })
+
+  it("keeps self snapshots unfolded even when local entries share an identity", async () => {
+    const sameHash = {
+      kind: "hash" as const,
+      value:
+        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    }
+    const layer = snapshotLayerWith({
+      peers: [],
+      peerCatalogs: {},
+      sourceLayer: makeInMemoryLibrarySourceLayer({
+        playableEntries: [
+          localPlayableEntry("local/one", "Local One", sameHash),
+          localPlayableEntry("local/two", "Local Two", sameHash),
+        ],
+      }),
+    })
+
+    const snapshot = await Effect.runPromise(
+      handleCatalogSnapshot({ scope: "self" }).pipe(Effect.provide(layer)),
+    )
+
+    expect(snapshot.entries.map(entry => entry.id)).toEqual([
+      "local/one",
+      "local/two",
+    ])
+    expect(snapshot.entries.map(entry => entry.releases[0]?.identity)).toEqual([
+      sameHash,
+      sameHash,
+    ])
+  })
+
   it("keeps self entries and reports failed peer health", async () => {
     const dead: PeerRecord = {
       hostId: "dead",
@@ -234,6 +326,28 @@ describe("app.catalog.snapshot", () => {
     expect(snapshot.health.lastFailure).toContain("unreachable peer")
   })
 })
+
+function localPlayableEntry(
+  id: string,
+  title: string,
+  identity?: PeerSourceCatalogEntry["releases"][number]["identity"],
+) {
+  return {
+    id,
+    itemId: id,
+    title,
+    releases: [
+      {
+        id: "default",
+        system: "snes",
+        launchable: true,
+        ...(identity ? { identity } : {}),
+      },
+    ],
+    launchable: true,
+    metadata: { name: title },
+  }
+}
 
 function peerEntry(
   id: string,
