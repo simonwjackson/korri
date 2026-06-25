@@ -11,7 +11,7 @@ import {
   LEVELS,
   ROOM,
 } from "./scene"
-import { GAMES, type Game } from "./steamgriddb"
+import type { Game } from "./steamgriddb"
 import { COVER_RATIO, gameBackAtlas } from "./textures"
 import { getTopple, TOPPLE_SECS, toppledGondolas } from "./topple"
 
@@ -64,6 +64,8 @@ export function VhsBoxes({
   onFlip,
   onPlay,
   onNear,
+  games,
+  playing,
 }: {
   atlas: THREE.Texture
   onHover?: (g: Game | null) => void
@@ -71,6 +73,8 @@ export function VhsBoxes({
   onFlip?: (flipped: boolean) => void
   onPlay?: (g: Game | null) => void
   onNear?: (near: boolean) => void
+  games: readonly Game[]
+  playing: Game | null
 }) {
   const { camera, raycaster } = useThree()
   // [+X front cover, -X back details, +Y, -Y, +Z, -Z edges] — matches BoxGeometry groups
@@ -88,6 +92,7 @@ export function VhsBoxes({
   // see a front cover whichever side of the gondola you're on.
   const tapes = useMemo<Tape[]>(() => {
     const list: Tape[] = []
+    if (games.length === 0) return list
     GONDOLA_X.forEach((gx, gi) => {
       LEVELS.forEach((ly, li) => {
         const r = rng(gi * 100 + li * 7 + 3)
@@ -101,7 +106,7 @@ export function VhsBoxes({
             if (r() < 0.08) continue // independent gap per side
             const rx = (r() * ATLAS_COLS) | 0
             const ry = (r() * ATLAS_ROWS) | 0
-            const game = GAMES[ry * ATLAS_COLS + rx]
+            const game = games[(ry * ATLAS_COLS + rx) % games.length]
             if (!game) continue
             const geo = new THREE.BoxGeometry(0.15, h, w)
             remapFace(geo, 0, rx, ry) // front cover (+X)
@@ -126,7 +131,7 @@ export function VhsBoxes({
       })
     })
     return list
-  }, [])
+  }, [games])
 
   const meshes = useRef<THREE.Mesh[]>([])
   const hovered = useRef(-1)
@@ -202,6 +207,8 @@ export function VhsBoxes({
         onHeld?.(tapes[idx].game)
         hovered.current = -1
         onHover?.(null)
+      } else if (playing && nearConsole()) {
+        onPlay?.(null)
       } else if (hovered.current >= 0) {
         held.current = hovered.current
         onHeld?.(tapes[held.current].game)
@@ -268,7 +275,7 @@ export function VhsBoxes({
       window.removeEventListener("mousedown", onDown)
       window.removeEventListener("contextmenu", onCtx)
     }
-  }, [tapes, onHeld, onHover, onFlip, onPlay])
+  }, [tapes, onHeld, onHover, onFlip, onPlay, playing])
 
   useFrame((state, dt) => {
     const t = state.clock.elapsedTime

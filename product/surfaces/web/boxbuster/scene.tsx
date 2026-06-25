@@ -2,7 +2,7 @@ import { useFrame } from "@react-three/fiber"
 import { useEffect, useMemo, useRef } from "react"
 import * as THREE from "three"
 import { createPS1Material } from "./ps1-material"
-import { fetchCoverImage, type Game } from "./steamgriddb"
+import { fetchCoverImage, type Game, loadCoverImage } from "./steamgriddb"
 import {
   bannerTexture,
   carpetTexture,
@@ -102,6 +102,7 @@ export function Scene({
   onPlay,
   onNear,
   playing,
+  games,
 }: {
   onHover?: (g: Game | null) => void
   onHeld?: (g: Game | null) => void
@@ -109,6 +110,7 @@ export function Scene({
   onPlay?: (g: Game | null) => void
   onNear?: (near: boolean) => void
   playing?: Game | null
+  games: readonly Game[]
 }) {
   const built = useMemo(() => {
     const carpet = carpetTexture()
@@ -233,6 +235,8 @@ export function Scene({
         onFlip={onFlip}
         onPlay={onPlay}
         onNear={onNear}
+        games={games}
+        playing={playing ?? null}
       />
 
       {/* signage: door sign over the doorway + store name on the front wall */}
@@ -572,7 +576,11 @@ function TvScreen({ playing }: { playing: Game | null }) {
     ctx.fillText("▶ LOADING…", 12, 26)
     texture.needsUpdate = true
     let alive = true
-    fetchCoverImage(playing.title).then(img => {
+    const imagePromise = playing.coverUrl
+      ? loadCoverImage(playing.coverUrl).catch(() => null)
+      : fetchCoverImage(playing.title)
+
+    imagePromise.then(img => {
       if (!alive || !img) return
       ctx.imageSmoothingEnabled = false
       // cover-crop the cover to the 4:3 screen

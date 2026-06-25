@@ -5,25 +5,41 @@ import * as THREE from "three"
 import { FirstPerson } from "./controls"
 import { FOG_COLOR } from "./ps1-material"
 import { Scene, TV_FOCUS } from "./scene"
-import type { Game } from "./steamgriddb"
+import { GAMES, type Game } from "./steamgriddb"
 
 // `embedded` = hosted inside other chrome (e.g. the theme-workshop device lab),
 // where the immersive pointer-lock would hijack the whole window. In that mode
 // the surface uses drag-to-look instead, so surrounding widgets stay clickable.
-export function App({ embedded = false }: { embedded?: boolean } = {}) {
+export function App({
+  embedded = false,
+  games = GAMES,
+  playing: routedPlaying,
+  onPlay,
+}: {
+  embedded?: boolean
+  games?: readonly Game[]
+  playing?: Game | null
+  onPlay?: (game: Game | null) => void
+} = {}) {
   const [locked, setLocked] = useState(false)
   const [hoverGame, setHoverGame] = useState<Game | null>(null)
   const [heldGame, setHeldGame] = useState<Game | null>(null)
   const [flipped, setFlipped] = useState(false)
-  const [playing, setPlaying] = useState<Game | null>(null)
+  const [localPlaying, setLocalPlaying] = useState<Game | null>(null)
   const [nearConsole, setNearConsole] = useState(false)
   const [focus, setFocus] = useState<THREE.Vector3 | null>(null)
 
   // loading a game turns the TV on and aims the camera at the screen
+  const playing = routedPlaying === undefined ? localPlaying : routedPlaying
+
   const handlePlay = (g: Game | null) => {
-    setPlaying(g)
-    setFocus(g ? TV_FOCUS.clone() : null)
+    if (routedPlaying === undefined) setLocalPlaying(g)
+    onPlay?.(g)
   }
+
+  useEffect(() => {
+    setFocus(playing ? TV_FOCUS.clone() : null)
+  }, [playing])
 
   useEffect(() => {
     const onChange = () => setLocked(document.pointerLockElement != null)
@@ -51,6 +67,7 @@ export function App({ embedded = false }: { embedded?: boolean } = {}) {
           onPlay={handlePlay}
           onNear={setNearConsole}
           playing={playing}
+          games={games}
         />
         <FirstPerson focus={focus} embedded={embedded} />
       </Canvas>

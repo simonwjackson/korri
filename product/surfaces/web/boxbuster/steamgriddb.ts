@@ -32,9 +32,10 @@ async function gridUrl(id: number): Promise<string | null> {
   return null
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+export function loadCoverImage(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
     const im = new Image()
+    im.crossOrigin = "anonymous"
     im.onload = () => res(im)
     im.onerror = rej
     im.src = src
@@ -50,24 +51,35 @@ export async function fetchCoverImage(
     if (id == null) return null
     const url = await gridUrl(id)
     if (!url) return null
-    return await loadImage(url)
+    return await loadCoverImage(url)
   } catch {
     return null
   }
 }
 
 export interface Game {
+  readonly id: string
   readonly title: string
   readonly year: number
   readonly platform: string
   readonly genre: string
   readonly players: string
   readonly blurb: string
+  readonly coverUrl?: string
+}
+
+export type StaticGame = Omit<Game, "id" | "coverUrl">
+
+function staticGameId(game: StaticGame): string {
+  return game.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
 }
 
 // A spread across the whole history of games — NES through modern Steam — so
 // the store's shelves show every era. SteamGridDB indexes all these platforms.
-export const GAMES: readonly Game[] = [
+const RAW_GAMES: readonly StaticGame[] = [
   // NES
   {
     title: "Super Mario Bros.",
@@ -634,3 +646,8 @@ export const GAMES: readonly Game[] = [
       "Dig, fight, explore, and build across a vast 2D world of bosses, biomes, and loot.",
   },
 ]
+
+export const GAMES: readonly Game[] = RAW_GAMES.map(game => ({
+  ...game,
+  id: staticGameId(game),
+}))
