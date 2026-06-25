@@ -105,6 +105,76 @@ describe("app.catalog.snapshot", () => {
     expect(snapshot.peers[0]).toMatchObject({ isLocal: true, status: "ready" })
   })
 
+  it("publishes release identity tags through self and remote catalog paths", async () => {
+    const aka: PeerRecord = {
+      hostId: "aka",
+      displayName: "aka",
+      controlUrl: "http://aka:3001",
+      caps: ["source"],
+    }
+    const localHash = {
+      kind: "hash" as const,
+      value:
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    }
+    const remoteProvider = {
+      kind: "provider" as const,
+      value: { provider: "@korri:steam", ref: "1029210" },
+    }
+    const layer = snapshotLayerWith({
+      peers: [aka],
+      peerCatalogs: {
+        [aka.controlUrl]: [
+          peerEntry("remote/store-game", "Remote Store Game", remoteProvider),
+        ],
+      },
+      sourceLayer: makeInMemoryLibrarySourceLayer({
+        playableEntries: [
+          {
+            id: "local/rom",
+            itemId: "local/rom",
+            title: "Local ROM",
+            releases: [
+              {
+                id: "snes",
+                system: "snes",
+                identity: localHash,
+                launchable: true,
+              },
+            ],
+            launchable: true,
+            metadata: { name: "Local ROM" },
+          },
+        ],
+      }),
+    })
+
+    const self = await Effect.runPromise(
+      handleCatalogSnapshot({ scope: "self" }).pipe(Effect.provide(layer)),
+    )
+    expect(self.entries[0]?.releases[0]?.identity).toEqual(localHash)
+
+    const fabric = await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* handleCatalogSnapshot({ scope: "fabric" })
+        yield* Effect.sleep("10 millis")
+        return yield* handleCatalogSnapshot({ scope: "fabric" })
+      }).pipe(Effect.provide(layer)),
+    )
+
+    expect(
+      fabric.entries.find(entry => entry.id === "local/rom")?.releases[0]
+        ?.identity,
+    ).toEqual(localHash)
+    expect(
+      fabric.entries.find(entry => entry.id === "remote/store-game")
+        ?.releases[0]?.identity,
+    ).toEqual(remoteProvider)
+    expect(
+      fabric.entries.find(entry => entry.id === "remote/store-game")?.source,
+    ).toMatchObject({ hostId: "aka", isLocal: false })
+  })
+
   it("adds remote entries and health after peer refresh completes", async () => {
     const aka: PeerRecord = {
       hostId: "aka",
@@ -165,7 +235,11 @@ describe("app.catalog.snapshot", () => {
   })
 })
 
-function peerEntry(id: string, title: string): PeerSourceCatalogEntry {
+function peerEntry(
+  id: string,
+  title: string,
+  identity?: PeerSourceCatalogEntry["releases"][number]["identity"],
+): PeerSourceCatalogEntry {
   return {
     id,
     itemId: id,
@@ -179,6 +253,7 @@ function peerEntry(id: string, title: string): PeerSourceCatalogEntry {
         system: "remote",
         launchable: true,
         launch: { use: "moonlight" },
+        ...(identity ? { identity } : {}),
       },
     ],
     launchable: true,

@@ -24,6 +24,45 @@ describe("CatalogSnapshot RPC schema", () => {
     expect(decoded.peers.map(peer => peer.status)).toEqual(["ready", "failed"])
   })
 
+  it("decodes release identity tags on catalog entries", () => {
+    const decoded = Schema.decodeUnknownSync(CatalogSnapshotResponse)({
+      entries: [
+        entry("local/rom", {
+          kind: "hash",
+          value:
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        }),
+        entry("local/store", {
+          kind: "provider",
+          value: { provider: "@korri:steam", ref: "1029210" },
+        }),
+      ],
+      peers: [peer("self", true, "ready")],
+      generation: 42,
+      updatedAt: "2026-06-13T00:00:00.000Z",
+      health: {
+        coordinatorReachable: true,
+        self: "ready",
+        loadingPeers: 0,
+        readyPeers: 0,
+        failedPeers: 0,
+        generation: 42,
+      },
+    })
+
+    expect(decoded.entries.map(item => item.releases[0]?.identity)).toEqual([
+      {
+        kind: "hash",
+        value:
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+      {
+        kind: "provider",
+        value: { provider: "@korri:steam", ref: "1029210" },
+      },
+    ])
+  })
+
   it("decodes self-only payloads", () => {
     expect(
       Schema.decodeUnknownSync(CatalogSnapshotPayload)({ scope: "self" }),
@@ -76,12 +115,30 @@ describe("CatalogSnapshot RPC schema", () => {
   })
 })
 
-function entry(id: string) {
+function entry(
+  id: string,
+  identity?:
+    | {
+        readonly kind: "hash"
+        readonly value: string
+      }
+    | {
+        readonly kind: "provider"
+        readonly value: { readonly provider: string; readonly ref: string }
+      },
+) {
   return {
     id,
     itemId: id,
     title: "Stray",
-    releases: [{ id: "default", system: "steam", launchable: true }],
+    releases: [
+      {
+        id: "default",
+        system: "steam",
+        launchable: true,
+        ...(identity ? { identity } : {}),
+      },
+    ],
     launchable: true,
     metadata: { name: "Stray" },
     source: {
