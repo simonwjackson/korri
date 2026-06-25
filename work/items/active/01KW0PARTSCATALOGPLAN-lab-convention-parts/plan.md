@@ -1,7 +1,7 @@
 ---
 title: "feat: make dev-lab parts catalogs convention-discovered"
 type: feat
-status: active
+status: completed
 date: 2026-06-25
 verify_command: "bun test ./tools/theme-workshop/lab/parts-discovery.test.ts ./tools/theme-workshop/lab/adapters/pico.test.ts ./tools/theme-workshop/lab/LabRoot.test.tsx && bunx vite build --config tools/theme-workshop/lab/vite.config.mjs"
 ---
