@@ -1,5 +1,18 @@
-import { EntrySource } from "@platform/api/rpc/entry-source-core"
+import type { EntrySource } from "@platform/api/rpc/entry-source"
 import { Schema } from "effect"
+
+/**
+ * Structural schema for launch-routing source tags.
+ *
+ * Catalog snapshots often carry plain JSON objects after peer fetches and fold
+ * composition, so launch alternatives must decode structurally instead of
+ * requiring an `EntrySource` class instance.
+ */
+const LaunchAlternativeSource = Schema.Struct({
+  hostId: Schema.String,
+  controlUrl: Schema.String,
+  isLocal: Schema.Boolean,
+})
 
 /**
  * One concrete copy that can satisfy a folded catalog launch.
@@ -10,7 +23,7 @@ import { Schema } from "effect"
  */
 export const LaunchAlternative = Schema.Struct({
   id: Schema.String,
-  source: EntrySource,
+  source: LaunchAlternativeSource,
   releaseId: Schema.optional(Schema.String),
   appId: Schema.optional(Schema.String),
   userId: Schema.optional(Schema.String),
@@ -18,4 +31,9 @@ export const LaunchAlternative = Schema.Struct({
   presetId: Schema.optional(Schema.Union([Schema.String, Schema.Null])),
 })
 
-export type LaunchAlternative = Schema.Schema.Type<typeof LaunchAlternative>
+export type LaunchAlternative = Omit<
+  Schema.Schema.Type<typeof LaunchAlternative>,
+  "source"
+> & {
+  readonly source: EntrySource
+}

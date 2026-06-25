@@ -44,16 +44,13 @@ export function createPortalPlatformBridge({
         }
       },
       launch: async input => {
-        await appRpc(
-          "app.library.launch",
-          {
-            id: input.id,
-            ...(input.source ? { source: input.source } : {}),
-            ...(input.launchAlternatives !== undefined
-              ? { launchAlternatives: [...input.launchAlternatives] }
-              : {}),
-          },
-        )
+        await appRpc("app.library.launch", {
+          id: input.id,
+          ...(input.source ? { source: input.source } : {}),
+          ...(input.launchAlternatives !== undefined
+            ? { launchAlternatives: [...input.launchAlternatives] }
+            : {}),
+        })
       },
     },
     input: {
