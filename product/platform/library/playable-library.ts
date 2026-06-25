@@ -107,7 +107,7 @@ export function playableEntryFromResolvedGame(
       },
     ],
     system: game.system,
-    ...(game.metadata ? { metadata: game.metadata } : {}),
+    metadata: { name: title, ...game.metadata },
     ...(game.userData ? { userData: game.userData } : {}),
     media: game.media,
   }

@@ -57,7 +57,7 @@ function NavigatingReadyBody() {
   })
 }
 
-function toCinematicGame(game: CatalogEntry): ShiftCinematicGame {
+export function toCinematicGame(game: CatalogEntry): ShiftCinematicGame {
   const tile = getPlayableImageUrl(game)
   const lastPlayed = dateValue(game.userData?.lastPlayed)
   const playtime = numberValue(game.userData?.playtime)

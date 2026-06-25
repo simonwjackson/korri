@@ -286,7 +286,7 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
-  it("omits metadata and user data when a readable item has none", async () => {
+  it("keeps title metadata and omits user data when a readable item has no extras", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
       await Effect.runPromise(
@@ -310,8 +310,49 @@ describe("createLibraryRepository — readable playable entries", () => {
       const entry = entries.find(candidate => candidate.id === "bare-game")
 
       expect(entry?.title).toBe("bare-game")
-      expect(entry?.metadata).toBeUndefined()
+      expect(entry?.metadata).toEqual({ name: "bare-game" })
       expect(entry?.userData).toBeUndefined()
+    })
+  })
+
+  it("forwards readable metadata and user data for contained legacy games", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      const lastPlayed = new Date("2026-06-21T12:00:00.000Z")
+
+      await Effect.runPromise(
+        repo.upsertGame({
+          id: "mario-collection/super-mario-world",
+          system: "snes",
+          contentPath: "/roms/snes/Super Mario World.sfc",
+          metadata: {
+            name: "Super Mario World",
+            developer: "Nintendo",
+            genre: ["Platformer"],
+          },
+          userData: {
+            lastPlayed,
+            playtime: 540,
+            favorite: true,
+          },
+        }),
+      )
+
+      const entries = await Effect.runPromise(repo.listPlayableEntries())
+      const entry = entries.find(
+        candidate => candidate.id === "mario-collection/super-mario-world",
+      )
+
+      expect(entry?.metadata).toEqual({
+        name: "Super Mario World",
+        developer: "Nintendo",
+        genre: ["Platformer"],
+      })
+      expect(entry?.userData).toEqual({
+        lastPlayed,
+        playtime: 540,
+        favorite: true,
+      })
     })
   })
 

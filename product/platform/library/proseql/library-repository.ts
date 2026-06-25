@@ -885,7 +885,7 @@ function toPlayableLibraryEntry(
     releases,
     launchable: releases.some(release => release.launchable),
     ...(releases[0]?.system ? { system: releases[0].system } : {}),
-    ...(entry.item.metadata ? { metadata: entry.item.metadata } : {}),
+    metadata: { name: title, ...entry.item.metadata },
     ...(entry.item.userData ? { userData: entry.item.userData } : {}),
   }
 }
