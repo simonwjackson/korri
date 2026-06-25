@@ -1,6 +1,6 @@
 import type { RouterHistory } from "@tanstack/history"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
-import type { WorkshopControl } from "../types"
+import type { Story, WorkshopClassNames, WorkshopControl } from "../types"
 import { boxbusterLabSurfaceAdapter } from "./adapters/boxbuster"
 import { picoLabSurfaceAdapter } from "./adapters/pico"
 import { shiftLabSurfaceAdapter } from "./adapters/shift"
@@ -15,10 +15,17 @@ export interface LabSurfaceScreen {
   readonly path: string
 }
 
+export interface LabSurfaceAtomicCatalog {
+  readonly stories: readonly Story[]
+  readonly classNames?: WorkshopClassNames
+  readonly rootProps?: Record<string, unknown>
+}
+
 export interface LabSurfaceAdapter {
   readonly id: string
   readonly devices: readonly DeviceConfig[]
   readonly screens?: readonly LabSurfaceScreen[]
+  readonly loadAtomicCatalog?: () => Promise<LabSurfaceAtomicCatalog>
   /** Surface-owned live controls (e.g. pico's palette/granularity), rendered
    * neutrally by the lab. A hook so control values track surface state. */
   readonly useControls?: () => readonly WorkshopControl[]
