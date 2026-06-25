@@ -1,6 +1,39 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it, mock } from "bun:test"
 import type { CatalogEntry } from "@platform/catalog/catalog-facts-source"
-import { toCinematicGame } from "./ShiftHomeRoute"
+import { makeLaunchHandler, toCinematicGame } from "./ShiftHomeRoute"
+
+function entry(id: string): CatalogEntry {
+  return {
+    id,
+    itemId: id,
+    title: id,
+    releases: [{ id: "default", system: "steam", launchable: true }],
+    launchable: true,
+    source: {
+      hostId: "local",
+      controlUrl: "http://127.0.0.1:3001",
+      isLocal: true,
+    },
+  } satisfies CatalogEntry
+}
+
+describe("makeLaunchHandler", () => {
+  it("launches the catalog entry matching the focused id", () => {
+    const start = mock((_: CatalogEntry) => undefined)
+    const hollow = entry("hollow-knight")
+    makeLaunchHandler([entry("celeste"), hollow], start)("hollow-knight")
+
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(start.mock.calls[0]?.[0]).toBe(hollow)
+  })
+
+  it("ignores ids with no matching catalog entry", () => {
+    const start = mock((_: CatalogEntry) => undefined)
+    makeLaunchHandler([entry("celeste")], start)("missing")
+
+    expect(start).not.toHaveBeenCalled()
+  })
+})
 
 describe("toCinematicGame", () => {
   it("maps catalog metadata and user data into cinematic chip fields", () => {

@@ -6,7 +6,7 @@ import {
   getPlayableWideImageUrl,
 } from "@platform/library/playable-library-ui"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
-import { useNavigate } from "@tanstack/react-router"
+import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import { Option } from "effect"
 import {
   ShiftCatalogStateRoot,
@@ -42,7 +42,7 @@ export function ShiftHomeRoute() {
 
 function NavigatingReadyBody() {
   const ready = useShiftCatalogCase("Ready")
-  const navigate = useNavigate()
+  const launch = useLibraryLaunchController()
 
   return Option.match(ready, {
     onNone: () => null,
@@ -51,10 +51,25 @@ function NavigatingReadyBody() {
         <ShiftCinematicHome
           games={games.map(toCinematicGame)}
           avatarSrc={AVATAR}
-          onLaunch={id => navigate({ to: "/game/$id", params: { id } })}
+          onLaunch={makeLaunchHandler(games, launch.start)}
         />
       ) : null,
   })
+}
+
+/**
+ * Wire the cinematic home's "A = Play" confirm to the real launch controller:
+ * resolve the focused tile's id back to its catalog entry and start it (same
+ * entry-driven launch the detail screen uses). Unknown ids are ignored.
+ */
+export function makeLaunchHandler(
+  games: readonly CatalogEntry[],
+  start: (entry: CatalogEntry) => void,
+): (id: string) => void {
+  return id => {
+    const entry = games.find(game => game.id === id)
+    if (entry) start(entry)
+  }
 }
 
 export function toCinematicGame(game: CatalogEntry): ShiftCinematicGame {
