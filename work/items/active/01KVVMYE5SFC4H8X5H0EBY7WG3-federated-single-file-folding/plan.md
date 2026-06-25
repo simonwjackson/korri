@@ -1,7 +1,7 @@
 ---
 title: Federated release folding by exact identifier
 type: feat
-status: active
+status: completed
 date: 2026-06-23
 deepened: 2026-06-23
 verify_command: "just test-unit && just typecheck && just lint"
