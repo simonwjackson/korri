@@ -21,14 +21,6 @@ const SHELF_SPAN = 3.5 // how far a toppled shelf lies along the floor (≈ its 
 const AXIS_Y = new THREE.Vector3(0, 1, 0)
 const AXIS_Z = new THREE.Vector3(0, 0, 1)
 
-function rng(seed: number) {
-  let s = seed >>> 0
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0
-    return s / 0xffffffff
-  }
-}
-
 // Remap one face's UVs onto atlas cell (rx,ry). BoxGeometry builds faces in
 // order px,nx,py,ny,pz,nz (4 verts each): +X (front) = verts 0..3, -X (back) =
 // verts 4..7. The (1 - (ry+1)/rows) accounts for THREE's flipY.
@@ -90,46 +82,70 @@ export function VhsBoxes({
   // Individual boxes (not merged) so each tape is its own pickable object.
   // Each shelf slot holds a tape facing EACH aisle (back-to-back), so you always
   // see a front cover whichever side of the gondola you're on.
+  // Each game appears AT MOST ONCE. We enumerate every shelf position, then
+  // spread the distinct games EVENLY across all of them (with a deterministic
+  // per-game jitter so the gaps look natural, not gridded). Unfilled positions
+  // stay empty — "rented", on theme — and because the spread is even, every
+  // gondola is lightly-but-evenly stocked rather than one packed and the rest
+  // bare. Pure function of `games`, so the layout stays deterministic/stable.
   const tapes = useMemo<Tape[]>(() => {
     const list: Tape[] = []
     if (games.length === 0) return list
+    const ATLAS_N = ATLAS_COLS * ATLAS_ROWS // games past this have no cover cell
+    const distinct = Math.min(games.length, ATLAS_N)
+    const spacing = 0.46
+
+    // every shelf position, in a stable gondola → level → length → side order
+    type Slot = { gx: number; gi: number; ly: number; z: number; side: 1 | -1 }
+    const slots: Slot[] = []
     GONDOLA_X.forEach((gx, gi) => {
-      LEVELS.forEach((ly, li) => {
-        const r = rng(gi * 100 + li * 7 + 3)
-        const spacing = 0.46
+      for (const ly of LEVELS) {
         const count = Math.floor((GONDOLA_Z * 2) / spacing)
         for (let i = 0; i < count; i++) {
           const z = -GONDOLA_Z + 0.4 + i * spacing
-          const h = 0.6 + r() * 0.08
-          const w = h * COVER_RATIO // 2:3 cover face (matches SteamGridDB art)
-          for (const side of [1, -1] as const) {
-            if (r() < 0.08) continue // independent gap per side
-            const rx = (r() * ATLAS_COLS) | 0
-            const ry = (r() * ATLAS_ROWS) | 0
-            const game = games[(ry * ATLAS_COLS + rx) % games.length]
-            if (!game) continue
-            const geo = new THREE.BoxGeometry(0.15, h, w)
-            remapFace(geo, 0, rx, ry) // front cover (+X)
-            remapFace(geo, 1, rx, ry) // back details (-X)
-            const base = new THREE.Vector3(
-              gx + side * 0.095,
-              ly + h / 2,
-              z + (r() - 0.5) * 0.04,
-            )
-            // the -X-side tape is turned 180° so its front cover faces that aisle
-            const quat = new THREE.Quaternion()
-            if (side < 0) quat.setFromAxisAngle(AXIS_Y, Math.PI)
-            list.push({
-              geo,
-              base,
-              game,
-              gi,
-              home: { pos: base.clone(), quat, dropped: false },
-            })
-          }
+          for (const side of [1, -1] as const)
+            slots.push({ gx, gi, ly, z, side })
         }
-      })
+      }
     })
+
+    const P = slots.length
+    if (P === 0) return list
+    const stride = P / distinct // one game per window of this many positions
+    const window = Math.max(1, Math.floor(stride))
+    for (let k = 0; k < distinct; k++) {
+      // place game k in its own window, jittered within it for natural-looking
+      // gaps. Windows don't overlap, so two games never land on one position.
+      const jitter = ((k * 2654435761) >>> 0) % window
+      const slot = slots[(Math.floor(k * stride) + jitter) % P]
+      const game = games[k]
+      if (!slot || !game) continue
+      // atlas cell for this game — cover (+X) and back (-X) share the cell, so
+      // the art always matches the game object
+      const rx = k % ATLAS_COLS
+      const ry = (k / ATLAS_COLS) | 0
+      // a game's box is always the same height ("the tall one" stays tall)
+      const h = 0.6 + ((k * 37) % 9) / 100
+      const w = h * COVER_RATIO // 2:3 cover face (matches SteamGridDB art)
+      const geo = new THREE.BoxGeometry(0.15, h, w)
+      remapFace(geo, 0, rx, ry) // front cover (+X)
+      remapFace(geo, 1, rx, ry) // back details (-X)
+      const base = new THREE.Vector3(
+        slot.gx + slot.side * 0.095,
+        slot.ly + h / 2,
+        slot.z,
+      )
+      // the -X-side tape is turned 180° so its front cover faces that aisle
+      const quat = new THREE.Quaternion()
+      if (slot.side < 0) quat.setFromAxisAngle(AXIS_Y, Math.PI)
+      list.push({
+        geo,
+        base,
+        game,
+        gi: slot.gi,
+        home: { pos: base.clone(), quat, dropped: false },
+      })
+    }
     return list
   }, [games])
 
