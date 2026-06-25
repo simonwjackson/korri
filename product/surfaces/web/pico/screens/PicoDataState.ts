@@ -8,6 +8,10 @@ export type PicoDataState<A, E = unknown> =
   | { readonly _tag: "Defect"; readonly defect: unknown }
 
 export const PicoDataState = {
+  // Generic model: keeps its own narrowing `select` (call sites pass explicit
+  // type args), but exposes the same `.tags` enumeration as the shared helper.
+  tags: ["Loading", "Ready", "LoadError", "Defect"] as const,
+
   fromResult: <A, E>(
     result: AsyncResult.AsyncResult<A, E>,
   ): PicoDataState<A, E> =>

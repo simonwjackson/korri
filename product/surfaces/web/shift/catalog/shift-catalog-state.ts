@@ -3,7 +3,7 @@ import {
   CatalogFactsError,
   type CatalogSnapshotFacts,
 } from "@platform/catalog/catalog-facts-source"
-import { Option } from "effect"
+import { stateMachine } from "@platform/state/state-machine"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 
 export type ShiftCatalogState =
@@ -22,7 +22,18 @@ export type ShiftCatalogState =
   | { readonly _tag: "LoadError"; readonly error: CatalogFactsError }
   | { readonly _tag: "Defect"; readonly defect: unknown }
 
+const machine = stateMachine<ShiftCatalogState>([
+  "Loading",
+  "Ready",
+  "Empty",
+  "LoadError",
+  "Defect",
+])
+
 export const ShiftCatalogState = {
+  tags: machine.tags,
+  select: machine.select,
+
   fromResult: (
     result: AsyncResult.AsyncResult<CatalogSnapshotFacts, CatalogFactsError>,
   ): ShiftCatalogState =>
@@ -32,17 +43,6 @@ export const ShiftCatalogState = {
       onDefect: defect => ({ _tag: "Defect", defect }),
       onSuccess: success => fromSnapshot(success.value),
     }),
-
-  select:
-    <Tag extends ShiftCatalogState["_tag"]>(tag: Tag) =>
-    (
-      state: ShiftCatalogState,
-    ): Option.Option<Extract<ShiftCatalogState, { readonly _tag: Tag }>> =>
-      state._tag === tag
-        ? Option.some(
-            state as Extract<ShiftCatalogState, { readonly _tag: Tag }>,
-          )
-        : Option.none(),
 }
 
 function fromSnapshot(snapshot: CatalogSnapshotFacts): ShiftCatalogState {

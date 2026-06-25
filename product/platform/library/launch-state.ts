@@ -4,7 +4,8 @@ import type {
   LaunchResult,
 } from "@platform/library/launcher"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
-import { Cause, Exit, Option } from "effect"
+import { stateMachine } from "@platform/state/state-machine"
+import { Cause, Exit } from "effect"
 
 export type ReleaseChoiceForLaunch =
   | { readonly _tag: "Launchable"; readonly releaseId: string }
@@ -74,7 +75,20 @@ export type LaunchState =
       readonly defect: unknown
     }
 
+const machine = stateMachine<LaunchState>([
+  "Idle",
+  "ReleaseSelectionRequired",
+  "Unavailable",
+  "Launching",
+  "Launched",
+  "Failed",
+  "Defect",
+])
+
 export const LaunchState = {
+  tags: machine.tags,
+  select: machine.select,
+
   idle: { _tag: "Idle" } satisfies LaunchState,
 
   launching: (gameId: string): LaunchState => ({ _tag: "Launching", gameId }),
@@ -122,15 +136,6 @@ export const LaunchState = {
   },
 
   isLaunching: (state: LaunchState): boolean => state._tag === "Launching",
-
-  select:
-    <Tag extends LaunchState["_tag"]>(tag: Tag) =>
-    (
-      state: LaunchState,
-    ): Option.Option<Extract<LaunchState, { readonly _tag: Tag }>> =>
-      state._tag === tag
-        ? Option.some(state as Extract<LaunchState, { readonly _tag: Tag }>)
-        : Option.none(),
 }
 
 export interface LaunchController {
