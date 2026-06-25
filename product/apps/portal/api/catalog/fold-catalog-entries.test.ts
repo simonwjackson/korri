@@ -118,6 +118,52 @@ describe("foldCatalogEntries", () => {
     ])
   })
 
+  it("does not let one entry with multiple identities bridge unrelated groups", () => {
+    const multiIdentity = {
+      ...catalogEntryFixture({
+        id: "local/bundle",
+        source: localSourceFixture(),
+      }),
+      releases: [
+        {
+          id: "a",
+          system: "snes",
+          launchable: true,
+          identity: hashIdentityFixture("a"),
+        },
+        {
+          id: "b",
+          system: "snes",
+          launchable: true,
+          identity: hashIdentityFixture("b"),
+        },
+      ],
+    }
+
+    const folded = foldCatalogEntries({
+      entries: [
+        multiIdentity,
+        catalogEntryFixture({
+          id: "remote/a",
+          source: remoteSourceFixture("aka"),
+          identity: hashIdentityFixture("a"),
+        }),
+        catalogEntryFixture({
+          id: "remote/b",
+          source: remoteSourceFixture("sobo"),
+          identity: hashIdentityFixture("b"),
+        }),
+      ],
+      presentPeerControlUrls: new Set(["http://aka:3001", "http://sobo:3001"]),
+    })
+
+    expect(folded.map(item => item.id).sort()).toEqual([
+      "local/bundle",
+      "remote/a",
+      "remote/b",
+    ])
+  })
+
   it("returns empty output for empty input", () => {
     expect(foldCatalogEntries({ entries: [] })).toEqual([])
   })

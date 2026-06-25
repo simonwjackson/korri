@@ -300,7 +300,7 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
-  it("projects declared file hash identity tags", async () => {
+  it("does not publish declared file hash identities until local bytes are verified", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
       const artifactId =
@@ -328,7 +328,7 @@ describe("createLibraryRepository — readable playable entries", () => {
       expect(
         entries.find(entry => entry.id === "f-zero-hash")?.releases[0]
           ?.identity,
-      ).toEqual({ kind: "hash", value: artifactId })
+      ).toBeUndefined()
     })
   })
 

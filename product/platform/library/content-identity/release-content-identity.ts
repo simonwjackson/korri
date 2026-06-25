@@ -19,9 +19,17 @@ interface CacheEntry {
   readonly identity: ReleaseHashIdentityTag
 }
 
+interface HashQueueItem {
+  readonly path: string
+  readonly statKey: FileStatKey
+  readonly resolve: (identity: ReleaseHashIdentityTag | undefined) => void
+}
+
 export interface ReleaseContentIdentityResolverOptions {
   /** Test/diagnostic hook; production callers should not rely on it. */
   readonly onHashStart?: (path: string) => void
+  /** Defaults to 2 to keep handheld storage responsive during first scans. */
+  readonly maxConcurrentHashes?: number
 }
 
 export interface ReleaseContentIdentityResolver {
@@ -41,6 +49,30 @@ export function createReleaseContentIdentityResolver(
     string,
     Promise<ReleaseHashIdentityTag | undefined>
   >()
+  const queue: HashQueueItem[] = []
+  let activeHashes = 0
+  const maxConcurrentHashes = Math.max(1, options.maxConcurrentHashes ?? 2)
+
+  const drainQueue = () => {
+    while (activeHashes < maxConcurrentHashes) {
+      const item = queue.shift()
+      if (item === undefined) return
+      activeHashes += 1
+      void hashFile(item.path, options)
+        .then(identity => {
+          if (identity !== undefined) {
+            cache.set(item.path, { statKey: item.statKey, identity })
+          }
+          item.resolve(identity)
+        })
+        .catch(() => item.resolve(undefined))
+        .finally(() => {
+          activeHashes -= 1
+          inFlight.delete(serializeStatKey(item.statKey))
+          drainQueue()
+        })
+    }
+  }
 
   const startHash = (
     path: string,
@@ -50,16 +82,11 @@ export function createReleaseContentIdentityResolver(
     const existing = inFlight.get(inFlightKey)
     if (existing !== undefined) return existing
 
-    const pending = hashFile(path, options).then(identity => {
-      if (identity !== undefined) {
-        cache.set(path, { statKey, identity })
-      }
-      return identity
+    const pending = new Promise<ReleaseHashIdentityTag | undefined>(resolve => {
+      queue.push({ path, statKey, resolve })
+      drainQueue()
     })
     inFlight.set(inFlightKey, pending)
-    pending.finally(() => {
-      inFlight.delete(inFlightKey)
-    })
     return pending
   }
 

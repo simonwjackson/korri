@@ -30,13 +30,14 @@ function groupEntriesByIdentity(
   const tagOwner = new Map<string, number>()
 
   entries.forEach((entry, index) => {
-    for (const tag of identityKeys(entry)) {
-      const owner = tagOwner.get(tag)
-      if (owner === undefined) {
-        tagOwner.set(tag, index)
-      } else {
-        union(parent, owner, index)
-      }
+    const keys = identityKeys(entry)
+    if (keys.length !== 1) return
+    const tag = keys[0]
+    const owner = tagOwner.get(tag)
+    if (owner === undefined) {
+      tagOwner.set(tag, index)
+    } else {
+      union(parent, owner, index)
     }
   })
 

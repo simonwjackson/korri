@@ -925,7 +925,7 @@ async function hydrateReleaseIdentityTag(
   release: PlayableReleaseEntry,
   storage: ReadonlyMap<string, StorageRecord>,
 ): Promise<PlayableReleaseEntry> {
-  if (release.identity !== undefined || release.target?.kind !== "file") {
+  if (release.target?.kind !== "file") {
     return release
   }
 
@@ -937,13 +937,21 @@ async function hydrateReleaseIdentityTag(
       }),
     ),
   )
-  if (contentPath === undefined) return release
+  if (contentPath === undefined) return withoutIdentity(release)
 
   const identity =
     await defaultReleaseContentIdentityResolver.cachedFileHashOrQueue(
       contentPath,
     )
-  return identity === undefined ? release : { ...release, identity }
+  return identity === undefined
+    ? withoutIdentity(release)
+    : { ...release, identity }
+}
+
+function withoutIdentity(release: PlayableReleaseEntry): PlayableReleaseEntry {
+  if (release.identity === undefined) return release
+  const { identity: _identity, ...rest } = release
+  return rest
 }
 
 function hydratePlayableMedia(
