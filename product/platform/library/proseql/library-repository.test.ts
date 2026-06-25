@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { createHash } from "node:crypto"
 import {
   chmod,
   mkdir,
@@ -9,6 +10,7 @@ import {
 } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { setTimeout as sleep } from "node:timers/promises"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "@product/plugins/gamescope"
 import {
   KORRI_RETROARCH_APP_ID,
@@ -27,6 +29,21 @@ import type { LibraryItemRecord } from "../config/records/library-item"
 import { LibraryError } from "../library-services"
 import { openKorriLibraryDb } from "./library-db"
 import { createLibraryRepository } from "./library-repository"
+
+function sha256ArtifactId(bytes: string): string {
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`
+}
+
+async function eventually<T>(fn: () => Promise<T | undefined>): Promise<T> {
+  const deadline = Date.now() + 1000
+  let last: T | undefined
+  while (Date.now() < deadline) {
+    last = await fn()
+    if (last !== undefined) return last
+    await sleep(10)
+  }
+  throw new Error(`condition did not settle; last=${String(last)}`)
+}
 
 async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), "korri-readable-repository-"))
@@ -312,6 +329,37 @@ describe("createLibraryRepository — readable playable entries", () => {
         entries.find(entry => entry.id === "f-zero-hash")?.releases[0]
           ?.identity,
       ).toEqual({ kind: "hash", value: artifactId })
+    })
+  })
+
+  it("queues hash identity tags for local path-only file releases and publishes them after the cache fills", async () => {
+    await withTempRoot(async root => {
+      const storageRoot = join(root, "roms")
+      await mkdir(join(storageRoot, "genesis"), { recursive: true })
+      await writeFile(join(storageRoot, "genesis", "Sonic.md"), "sonic bytes")
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertStorage({ id: "roms", root: storageRoot }),
+      )
+
+      const firstEntries = await Effect.runPromise(repo.listPlayableEntries())
+      expect(
+        firstEntries
+          .find(entry => entry.id === "sonic-the-hedgehog")
+          ?.releases.find(release => release.id === "genesis")?.identity,
+      ).toBeUndefined()
+
+      await expect(
+        eventually(async () => {
+          const entries = await Effect.runPromise(repo.listPlayableEntries())
+          return entries
+            .find(entry => entry.id === "sonic-the-hedgehog")
+            ?.releases.find(release => release.id === "genesis")?.identity
+        }),
+      ).resolves.toEqual({
+        kind: "hash",
+        value: sha256ArtifactId("sonic bytes"),
+      })
     })
   })
 

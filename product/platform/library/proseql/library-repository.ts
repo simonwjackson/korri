@@ -58,6 +58,8 @@ import {
 } from "@platform/library/config/records/system"
 import type { UserRecord } from "@platform/library/config/records/user"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
+import { resolveReleaseTarget } from "@platform/library/config/source-target-resolution"
+import { defaultReleaseContentIdentityResolver } from "@platform/library/content-identity/release-content-identity"
 import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
@@ -304,9 +306,12 @@ export function createLibraryRepository(
   const repository: LibraryRepository = {
     listPlayableEntries: () =>
       loadReadableSnapshot(db, _options).pipe(
-        Effect.map(snapshot =>
-          derivePlayableEntries([...snapshot.library.values()]).map(entry =>
-            toPlayableLibraryEntry(entry, snapshot.readableLaunchers),
+        Effect.flatMap(snapshot =>
+          hydrateReleaseIdentityTags(
+            derivePlayableEntries([...snapshot.library.values()]).map(entry =>
+              toPlayableLibraryEntry(entry, snapshot.readableLaunchers),
+            ),
+            snapshot.storage,
           ),
         ),
         Effect.flatMap(entries =>
@@ -890,6 +895,55 @@ function toPlayableLibraryEntry(
     metadata: { name: title, ...metadata },
     ...(userData ? { userData } : {}),
   }
+}
+
+function hydrateReleaseIdentityTags(
+  entries: readonly PlayableLibraryEntry[],
+  storage: ReadonlyMap<string, StorageRecord>,
+): Effect.Effect<readonly PlayableLibraryEntry[], LibraryError> {
+  return Effect.tryPromise({
+    try: async () =>
+      await Promise.all(
+        entries.map(async entry => {
+          const releases = await Promise.all(
+            entry.releases.map(release =>
+              hydrateReleaseIdentityTag(release, storage),
+            ),
+          )
+          return releases.some(
+            (release, index) => release !== entry.releases[index],
+          )
+            ? { ...entry, releases }
+            : entry
+        }),
+      ),
+    catch: toLibraryIoError,
+  })
+}
+
+async function hydrateReleaseIdentityTag(
+  release: PlayableReleaseEntry,
+  storage: ReadonlyMap<string, StorageRecord>,
+): Promise<PlayableReleaseEntry> {
+  if (release.identity !== undefined || release.target?.kind !== "file") {
+    return release
+  }
+
+  const contentPath = await Effect.runPromise(
+    resolveReleaseTarget({ target: release.target, storage }).pipe(
+      Effect.match({
+        onFailure: () => undefined,
+        onSuccess: resolved => resolved.content?.path,
+      }),
+    ),
+  )
+  if (contentPath === undefined) return release
+
+  const identity =
+    await defaultReleaseContentIdentityResolver.cachedFileHashOrQueue(
+      contentPath,
+    )
+  return identity === undefined ? release : { ...release, identity }
 }
 
 function hydratePlayableMedia(
