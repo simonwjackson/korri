@@ -1,7 +1,7 @@
 ---
 title: "feat: bring Boxbuster into the lab as a catalog-driven, route-addressable surface"
 type: feat
-status: active
+status: completed
 date: 2026-06-24
 verify_command: "just typecheck && just test-unit"
 ---
