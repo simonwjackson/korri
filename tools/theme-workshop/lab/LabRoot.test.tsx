@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, mock } from "bun:test"
 import type { RouterHistory } from "@tanstack/history"
-import { act, cleanup, render, waitFor } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react"
 import type { DeviceConfig } from "../device-lab"
 import { LabRoot, type LabRouteState } from "./LabRoot"
+import { __setPartModulesForTest } from "./parts-discovery"
 import type { LabSurfaceAdapter } from "./surface-registry"
 
 afterEach(() => {
+  __setPartModulesForTest(null)
   window.localStorage.clear()
   cleanup()
 })
@@ -210,6 +212,65 @@ describe("LabRoot", () => {
     await waitFor(() => {
       expect(view.getByTestId("surface-rg353m")).toBeTruthy()
       expect(view.getByTestId("surface-odin2portal")).toBeTruthy()
+    })
+  })
+
+  it("renders discovered parts at /parts without mounting device frames", async () => {
+    const { adapter, mountCounts } = makeAdapter()
+    __setPartModulesForTest({
+      "/product/surfaces/web/test/ui/Test.atom.part.tsx": {
+        default: {
+          name: "Test Atom",
+          render: () => <div>discovered test atom</div>,
+        },
+      },
+    })
+
+    const view = render(
+      <LabRoot
+        adapters={[adapter]}
+        routeState={{
+          devicesSegment: "all",
+          themeId: "test",
+          surfacePath: "/parts",
+        }}
+        navigation={{
+          setDevicesSegment: mock(() => undefined),
+          setThemeId: mock(() => undefined),
+          setSurfacePath: mock(() => undefined),
+        }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("discovered test atom")).toBeTruthy()
+    })
+    expect(view.queryByTestId("surface-rg353m")).toBeNull()
+    expect(mountCounts.size).toBe(0)
+  })
+
+  it("shows a direct /parts empty state when a surface has no discovered parts", async () => {
+    const { adapter } = makeAdapter()
+
+    render(
+      <LabRoot
+        adapters={[adapter]}
+        routeState={{
+          devicesSegment: "all",
+          themeId: "test",
+          surfacePath: "/parts",
+        }}
+        navigation={{
+          setDevicesSegment: mock(() => undefined),
+          setThemeId: mock(() => undefined),
+          setSurfacePath: mock(() => undefined),
+        }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/No parts discovered for/)).toBeTruthy()
+      expect(screen.getByText("Component.atom.part.tsx")).toBeTruthy()
     })
   })
 })
