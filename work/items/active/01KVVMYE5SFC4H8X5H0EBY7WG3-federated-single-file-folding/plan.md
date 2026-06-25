@@ -1,5 +1,5 @@
 ---
-title: Federated single-file release folding
+title: Federated release folding by exact identifier
 type: feat
 status: active
 date: 2026-06-23
@@ -7,64 +7,69 @@ deepened: 2026-06-23
 verify_command: "just test-unit && just typecheck && just lint"
 ---
 
-# Federated single-file release folding
+# Federated release folding by exact identifier
 
 ## Summary
 
-Give releases a way to resolve to a content-addressed fingerprint (reusing the existing `sha256:<hex64>` artifact model), compute that fingerprint in place for a device's own single-file files without copying them, publish it in the federated catalog, and then fold same-fingerprint releases across storages into one user-facing item that prefers a locally launchable copy, falls back to remote streaming, and carries an availability signal each surface can render in its own way.
+Give a release an exact, trustworthy "tag" — a single-file content hash or a `provider-ref` native id (Steam/itch/etc.) — carried as identity metadata alongside its existing location, publish that tag in the federated catalog, and fold releases that share a tag into one user-facing item that prefers a locally launchable copy, falls back to remote streaming, and exposes an availability signal each surface can render its own way.
 
 ---
 
 ## Problem Frame
 
-Federation v1 lets a device see games from peers, but every peer copy is emitted as a separate `CatalogEntry`, so the same game shows as multiple tiles. The desired model is `Game -> Release -> Storage`: a game is metadata, a release is the concrete playable thing, and storages are the places a release exists.
+Federation v1 lets a device see games from peers, but every peer copy is emitted as a separate `CatalogEntry`, so the same game shows as multiple tiles. The desired model is `Game -> Release -> Storage`: a game is metadata (zero or more releases), a release is the concrete playable thing, and storages are the places a release exists.
 
-Folding requires a trustworthy cross-device identity. Slugs are explicitly untrusted across storages. The codebase already has the right identity primitive — content-addressed artifacts keyed by `sha256:<hex64>` with a `digests`/`expectedDigests` shape (`product/platform/library/config/records/artifact.ts`, established by the native artifact import work). However, that identity is **not wired through releases**: a release `file` target is `{ kind, storage, path }` with no artifact reference, the artifact link exists only on the legacy game record, and hand-added config games have no artifact at all. So today a federated release cannot tell another device its content hash, and folding has nothing to compare.
+Folding needs an exact, cross-device identity on the **release**, because that is the unit that can carry one. Two truths shape the design:
 
-This plan builds the missing foundation narrowly (single-file releases only, additive, no big-bang migration) but in the exact shape the future broader `contentPath -> artifact` migration will use, so nothing here is throwaway.
+- **Internal ids are never a match key.** The slug/playable id we assign to a release (or a game) is arbitrary and cannot be guaranteed identical host-to-host, so it never participates in folding.
+- **An exact identity ("tag") comes in kinds.** A single-file ROM has a content hash. A store game has a native id — and the schema already models this: a `provider-ref` target carries `{ provider, ref }` (Steam app ids are even pre-extracted onto the runtime entry today via `app-install-metadata.ts`). The hash is the strongest case for raw files but only matches byte-identical files; native ids are format-immune and already present.
+
+The codebase already has the right hash primitive — content-addressed artifacts keyed by `sha256:<hex64>` (`product/platform/library/config/records/artifact.ts`) — but it is **not wired through releases**: a release `file` target is `{ kind, storage, path }` with no identity, the artifact link exists only on the legacy game record, and hand-added config games have no artifact at all. So today a federated release cannot tell another device its content identity, and folding has nothing to compare.
+
+This plan adds release-level identity narrowly (two tag sources) and additively, in a shape forward-compatible with the broader `contentPath -> artifact` location migration, so nothing here is throwaway.
 
 ---
 
 ## Requirements
 
-- R1. A release can resolve to a content-addressed identity (a "fingerprint") using the existing artifact model, not a new parallel hash field. The fingerprint is identifier-kind-agnostic: a content hash today, with native identifiers (e.g. Steam/itch) using the same mechanism later.
-- R2. A device computes the fingerprint only for its own local single-file files, reading them in place and never copying the file. Remote copies arrive already carrying the owning host's published fingerprint.
-- R3. A release's resolved fingerprint is published in the federated catalog (`PlayableReleaseEntry`) so other devices can compare it without fetching or re-hashing remote files.
-- R4. Releases with the same fingerprint across storages fold into one user-facing catalog item. The fingerprint alone is the identity; the system label is not part of the match and never blocks a fold.
-- R5. Slug/playable IDs are never a folding key; same-slug entries without a matching fingerprint stay distinct.
-- R6. The folded item prefers a locally launchable copy; if local exists but cannot launch, it prefers a launchable remote and uses existing Moonlight/Sunshine federation routing.
-- R7. When a local candidate exists, its display metadata stays authoritative even when the launch target is a remote copy; launch identity/source come from the launch target.
-- R8. The release fingerprint reference is additive and forward-compatible with the planned broader `contentPath -> artifact` migration; path-based releases keep working unchanged.
-- R9. Folding and its availability signal are computed by the daemon/catalog layer; surfaces consume ready-folded catalog truth.
-- R10. The folded item exposes structured availability signal — which copies exist, which are local vs remote, which are launchable now, and whether the preferred copy's host is currently reachable — so each surface can choose its own state treatment.
-- R11. Pressing launch on a folded item falls back to another launchable copy in the same fold when the preferred target is unreachable, and otherwise fails with a specific message naming the host; it never surfaces a generic error.
+- R1. A release can carry an exact content identity ("tag") of a kind: a single-file content hash (reusing the existing `sha256:<hex64>` artifact model) or a `provider-ref` native id `{ provider, ref }`. No new parallel hash field; no reliance on internal ids.
+- R2. Tags are compared like-for-like (kind-namespaced): a hash only matches a hash, and a provider id only matches the same provider's id. A hash can never collide with a native id.
+- R3. Identity is additive metadata orthogonal to a release's location/target. It does not replace the file path and does not impose an "exactly one content source" rule; a release keeps its location and *also* may carry a tag.
+- R4. A device computes the hash-kind tag only for its own local single-file files, reading them in place and never copying. Provider-ref tags are read from existing release data with no computation. Remote copies arrive already carrying the owning host's published tags.
+- R5. A release's resolved tag is published in the federated catalog (`PlayableReleaseEntry`) so other devices compare it without fetching or re-hashing remote files.
+- R6. Releases that share a tag fold into one user-facing catalog item. Grouping is transitive (connected components) and kind-namespaced; in v1 each release has at most one tag, so grouping reduces to simple same-tag classes, implemented in a shape that allows future multi-tag chaining without rework.
+- R7. Internal/arbitrary release and game ids are never a fold key.
+- R8. The folded item prefers a locally launchable copy; if local exists but cannot launch, it prefers a launchable remote via existing Moonlight/Sunshine routing. On launch, it falls back to another launchable copy in the fold when the preferred target is unreachable, and otherwise fails with a message naming the host — never a generic error.
+- R9. When a local candidate exists, its display metadata stays authoritative even when the launch target is remote; launch identity/source come from the launch target.
+- R10. Folding and its availability signal are computed by the daemon/catalog layer; surfaces consume ready-folded catalog truth.
+- R11. The folded item exposes a structured availability signal (local-launchable / remote-available / remote-unreachable) derived from fold state plus peer presence, so each surface can choose its own treatment.
 - R12. While the user is actively navigating a rail, folds do not reflow it; pending merges settle on the next navigation/screen change/idle moment, and if a merge touches the focused tile, focus moves to the surviving tile.
-- R13. v1 excludes multi-file/manifest hashing, wiring native identifiers (Steam/itch) into the catalog, fuzzy/title scoring, durable cluster persistence, copy-over launching, full per-surface presence UI, and a source-picker UI. The fold mechanism is identifier-agnostic, but v1 only populates content-hash fingerprints.
+- R13. v1's tag sources are exactly two: a single-file `file` target (computed content hash) and a `provider-ref` target (native id). `file-set`, `executable`, and `url` targets carry no tag and never fold in v1 (a safe miss).
+- R14. The release identity is forward-compatible with the planned broader `contentPath -> artifact` location migration; path-based releases keep working unchanged.
+- R15. v1 excludes: format-normalized and multi-file hashing, durable cluster persistence, manual merge/split overrides, the signaling-assisted (tier 2) and manual-curation (tier 3) folding tiers, copy-over launching, full per-surface presence UI, a source-picker UI, and config write-back of computed tags.
 
 ---
 
 ## Scope Boundaries
 
-- Only single-file `file`-target releases get fingerprint resolution and folding in v1.
+- v1 folds only releases that have one of the two exact tags (single-file hash or provider-ref native id). Everything else is tagless and never folds.
+- Identity is additive and orthogonal to location: a release keeps its target/path and may also carry a tag. No "exactly one content source" rule for the tag, and no big-bang `contentPath -> artifact` conversion.
+- Hash-kind tags fold only byte-identical single files; differently-stored copies (zip vs raw, `.cue/.bin` vs `.chd`, header variants) do not fold in v1. Format-normalized identity is deferred.
 - Fingerprinting never copies a file: a device hashes its own files in place. Byte adoption into the artifact blob store stays the import/acquisition path's job.
-- The release fingerprint reference is additive: a release may resolve to one, but path-only releases remain valid and unchanged. No big-bang `contentPath -> artifact` conversion.
-- v1 ships the availability signal on folded entries; full per-surface presence treatments (home fade/pop, library disabled-but-favoritable) are phased follow-ups, not v1.
-- v1 does not rewrite user config YAML to persist computed fingerprints; computation is resolved/cached at runtime. Config write-back belongs to the future scanner/importer.
-- `file-set`, executable, URL, and provider-ref targets are out of scope for v1 artifact resolution and folding.
-- No multi-file manifest hashing, Steam/native-ID folding, fuzzy/title matching, or non-intrusive "similar games" suggestions.
-- No durable `GameCluster` records, stable cluster IDs, or user merge/split/reject overrides in v1.
-- No source-picker UI (North/Y menu); Shift simply shows fewer, folded tiles.
-- No copy-over/download-to-local launch path.
+- Native-id tags are read from existing `provider-ref` data; v1 does not build new provider integrations or new id extraction beyond what already exists.
+- v1 ships the availability signal; full per-surface presence treatments (home fade/pop, library disabled-but-favoritable) are phased follow-ups.
+- v1 does not rewrite user config YAML to persist computed tags; computation is resolved/cached at runtime. Config write-back is scanner-owned.
 - Peer trust posture stays federation v1 trusted-LAN/no-auth; no pairing/authorization added.
 
 ### Deferred to Follow-Up Work
 
-- Broader `contentPath -> artifact` migration for all targets (owned by the native artifact import effort, `docs/plans/2026-06-04-002-feat-native-artifact-import-plan.md`).
-- Multi-file release identity via sorted manifest-of-hashes / DAT / CHD header SHA1.
-- Steam appid and other native-ID folding once `externalIds` are surfaced into the catalog wire shape.
-- Durable cluster persistence with stable IDs, and manual merge/split/reject overrides.
+- Format-normalized / multi-file identity (decompress + strip headers; sorted manifest-of-hashes; DAT/CHD header SHA1).
+- Tier 2 (automated folding assisted by signaling) and tier 3 (assisted manual curation) — captured in backlog `01KVXQJ1TPKPMPVSJW30GQ3MSE`.
+- Surfacing additional identity kinds (e.g. external-id lists) that would let one release carry multiple tags and activate transitive chaining.
+- Broader `contentPath -> artifact` *location* migration for all target kinds (owned by `docs/plans/2026-06-04-002-feat-native-artifact-import-plan.md`).
+- Durable cluster persistence with stable ids and manual merge/split/reject overrides.
 - Source-picker UI exposing all storages for a folded release.
-- Config write-back of computed artifact references (scanner-owned).
+- Config write-back of computed tags (scanner-owned).
 - Copy-over/download-to-local launch path.
 - Remote-source SSRF/`controlUrl` trust hardening, parked at `work/parking-lot/01KTPAJV8ZF1N4WCXSZ9XVZ2KE-constrain-remote-source-controlurl-to-discovered-trusted-peers.md`.
 
@@ -74,53 +79,53 @@ This plan builds the missing foundation narrowly (single-file releases only, add
 
 ### Relevant Code and Patterns
 
-- `product/platform/library/config/records/artifact.ts` — settled artifact shape: `ArtifactRecord.id = sha256:<hex64>`, `digests` (`DigestSet`, sha256 required), `expectedDigests` (claimed-but-unverified), plus `externalIds`. This is the one hash home.
-- `product/platform/protocol/artifact/artifact.ts` — `ArtifactId` (`sha256:<hex64>`), `DigestSet`, `ExpectedDigestSet` definitions.
-- `product/platform/library/config/records/game.ts` — already enforces "exactly one of `contentPath` or `content.artifactId`" on the legacy game record; this is the established reference shape to mirror at the release level.
-- `product/platform/library/config/records/library-item.ts` — strict `LibraryReleasePayload`; `file` target is `{ kind, storage, path }` with no artifact link. New optional fields must be explicitly declared (strict `onExcessProperty: "error"`).
-- `product/platform/library/playable-library.ts` — runtime `PlayableReleaseEntry` / `PlayableLibraryEntry`; no content identity field today.
-- `product/platform/library/proseql/library-repository.ts` — `toPlayableReleaseEntry` projection; artifact import already writes `ArtifactRecord` + a `file`-target release and a legacy `content: { artifactId }` (lines ~695-766), and resolves artifact blob paths for launch.
-- `product/platform/artifacts/artifact-import-service.ts` / `artifact-store.ts` — existing SHA-256 compute and content-addressed identity; reuse the hashing for in-place fingerprinting, not the byte-copy/adoption side effect.
-- `product/platform/library/proseql/config-graph-db.ts` / `library-db-core.ts` — the `artifacts` sidecar collection where artifact records live and are looked up.
-- `product/apps/portal/api/catalog/catalog-snapshot.ts` — assembles `entries: [...localTagged, ...remoteTagged]`; the fold seam and the place self-scope publishes release identity.
+- `product/platform/library/config/records/artifact.ts` — `ArtifactRecord.id = sha256:<hex64>`, `digests`/`expectedDigests` (claimed vs verified), `externalIds`. The hash home.
+- `product/platform/protocol/artifact/artifact.ts` — `ArtifactId`, `DigestSet`, `ExpectedDigestSet`.
+- `product/platform/library/config/records/library-item.ts` — strict `LibraryReleasePayload`; `file` target `{ kind, storage, path }`; `provider-ref` target `{ kind, provider, ref }` (already a kind-namespaced native id). New optional fields must be declared (strict `onExcessProperty: "error"`).
+- `product/platform/library/config/app-install-metadata.ts` — already extracts the Steam app id from `steam://rungameid/<appid>` and surfaces it on the runtime entry's `install`; precedent for reading a native id with no new wiring.
+- `product/platform/library/playable-library.ts` — runtime `PlayableReleaseEntry` / `PlayableLibraryEntry`; no identity tag today.
+- `product/platform/library/config/records/game.ts` — legacy game record's `content: { artifactId }` and "exactly one of contentPath/artifactId" rule; informs the artifact id *shape* but is a *location* rule, not the identity model used here.
+- `product/platform/library/proseql/library-repository.ts` — `toPlayableReleaseEntry` projection; artifact import already writes `ArtifactRecord` + a `file`-target release.
+- `product/platform/artifacts/artifact-import-service.ts` / `artifact-store.ts` — SHA-256 compute and content-addressed identity; reuse the *hashing*, not the byte-copy/adoption side effect.
+- `product/apps/portal/api/catalog/catalog-snapshot.ts` — assembles `entries: [...localTagged, ...remoteTagged]`; fold seam and self-scope publish point.
 - `product/apps/portal/api/catalog/snapshot.rpc.ts` — `CatalogEntry = PlayableLibraryEntry + EntrySource`.
-- `product/apps/portal/peers/peer-source-fetcher.ts` — retags only `source`; release content identity round-trips once it exists on `PlayableReleaseEntry`.
-- `product/apps/portal/api/library/launch.rpc-handler.ts` — routes `source.isLocal === false` to remote Moonlight prepare/launch; local/absent source launches locally.
+- `product/apps/portal/peers/peer-source-fetcher.ts` — retags only `source`; release tags round-trip once on `PlayableReleaseEntry`.
+- `product/apps/portal/api/library/launch.rpc-handler.ts` — `source.isLocal === false` routes to remote Moonlight prepare/launch.
 - `product/apps/portal/features/home/launcher-layer-rpc.ts` — forwards `LaunchOptions.source` through `app.library.launch`.
-- `product/surfaces/web/shift/catalog/shift-catalog-state.ts`, `product/surfaces/web/shift/templates/ShiftHomeRoot.tsx` — consume catalog entries as provided.
+- `product/surfaces/web/shift/catalog/shift-catalog-state.ts`, `product/surfaces/web/shift/organisms/ShiftHomeRail.tsx` — catalog consumption and focus/`data-tile-id` handling.
 
 ### Institutional Learnings
 
-- `docs/research/game-library-entity-resolution-deduplication.md` — identity cascade + false-positive warning: only auto-fold on high-confidence identity (hash/exact id); never on title in v1.
-- `docs/plans/2026-06-04-002-feat-native-artifact-import-plan.md` (U5) — the blessed `content: { artifactId }` + "exactly one of path/artifact" pattern this plan mirrors at the release level; this plan is a dependency-aligned forward slice, not a competing design.
+- `docs/research/game-library-entity-resolution-deduplication.md` — tiered identity + false-positive warning: auto-fold only on high-confidence exact identity; fuzzy/title is a later, curated tier.
+- `docs/plans/2026-06-04-002-feat-native-artifact-import-plan.md` — the artifact id shape and the deferred `contentPath -> artifact` location migration this plan stays compatible with.
 - `docs/solutions/runtime-errors/effect-rpc-server-headers-concat-undefined-crash-2026-05-27.md` — keep the RPC envelope guard on the LAN-exposed federation path.
-- `docs/solutions/runtime-errors/kiosk-renderer-local-launch-rpc-decode-failure-2026-05-27.md` — local-source launches must go through `app.library.launch`, never a renderer-to-bun bridge.
-- `docs/solutions/design-patterns/explicit-cascade-folded-policy-over-incidental-signal-heuristics-2026-05-27.md` — stamp preference facts in the daemon; do not infer source priority in the UI.
+- `docs/solutions/runtime-errors/kiosk-renderer-local-launch-rpc-decode-failure-2026-05-27.md` — local-source launches go through `app.library.launch`, never a renderer-to-bun bridge.
+- `docs/solutions/design-patterns/explicit-cascade-folded-policy-over-incidental-signal-heuristics-2026-05-27.md` — stamp preference/availability facts in the daemon; do not infer them in the UI.
 
 ### External References
 
-- Plex/Jellyfin: one logical item with multiple versions/sources; auto-prefer local/direct-play, manual version choice as progressive disclosure.
+- Plex/Jellyfin: one logical item, multiple versions/sources; auto-prefer local, manual choice as progressive disclosure.
 - RomM / Playmatch / Hasheous: hash-first ROM identity; name only as low-confidence fallback.
-- Nix substituters / IPFS providers: content-addressed identity with multiple providers and local/nearest preference — the direct analogy for "same hash, prefer local copy."
+- Nix substituters / IPFS providers: content-addressed identity with multiple providers and local/nearest preference.
 
 ---
 
 ## Key Technical Decisions
 
-- One fingerprint home: folding identity is the existing content-addressed artifact (`sha256:<hex64>`), reached via a release artifact reference. No new parallel hash field on releases.
-- Identity is the fingerprint alone, not `(system, fingerprint)`: an exact fingerprint match proves the files are identical, so the system label must not gate folding. Differing system labels across hosts (e.g. `gb` vs `gameboy`) must never block a valid fold; use the local label for display. System/title/metadata are reserved for the future fuzzy scoring tier (backlogged, `01KVXQJ1TPKPMPVSJW30GQ3MSE`).
-- Identifier-kind-agnostic mechanism: model the fold key as a typed content identity so a content hash is one kind and a native identifier (Steam/itch) is another, sharing one fold path. v1 only populates content-hash fingerprints.
-- Mirror the blessed reference shape: add `content: { artifactId }` to releases with the same "exactly one of `contentPath`/path-target or `artifactId`" spirit already enforced on the legacy game record, so the future broader migration applies the identical shape.
-- Fingerprinting is local-only and in place: a device computes fingerprints solely for files it physically holds, reading them where they sit and never copying bytes into the artifact blob store. Byte adoption/copying stays the import/acquisition path's job. Hybrid claimed-vs-verified maps onto the existing `expectedDigests` (claimed) vs `digests` (verified) contract.
-- Compute lazily in the background and cache locally: never hash on the hot path uncached. A device fingerprints its un-fingerprinted local files in the background after boot; games appear immediately and folds settle in. Use a cheap stat-keyed (path + size + mtime) local cache purely to avoid re-reading files; this cache never crosses devices and plays no part in matching.
-- Publish identity, resolve privately for launch: the resolved fingerprint rides on the federated `PlayableReleaseEntry`; blob-path resolution for launch stays local.
-- Fold in the daemon catalog path on the fingerprint; surfaces consume folded output.
-- Expose availability signal on the folded entry: derive local-launchable / remote-available / remote-unreachable from fold state plus peer presence (the snapshot already tracks peer status), so surfaces can fade, disable, pop, or favorite as fits their context. v1 provides the signal; per-surface treatments are phased.
-- Separate display from launch without breaking launch RPC: local non-identity display fields (title, media, collections, display) stay authoritative when a local candidate exists, but `id`, release-selection context, and `source` come from the launch target so a remote launch addresses the remote peer's own playable id.
-- Prefer local launchable, then deterministic launchable remote (order by `source.controlUrl`, then `source.hostId`, then entry id); existing `source.isLocal === false` routing handles streaming. On launch, fall back to another launchable copy in the fold before failing, and fail with a host-named message.
-- Keep additive fold metadata topology-blind (count/boolean only, no per-peer host/controlUrl lists on each entry).
-- Keep peer `entryCount` diagnostics raw (pre-fold) so federation health stays debuggable.
-- Do not mutate user config YAML in v1; resolve/compute at runtime and cache. Config write-back is scanner-owned.
+- Fold on an exact release **tag**, never on internal ids. A tag is `(kind, value)`: `hash` of a single-file, or a `provider-ref` native id `(provider, ref)`. Internal release/game ids are arbitrary and excluded.
+- Identity is orthogonal to location: a tag is additive metadata that rides alongside the release's existing target. No "exactly one content source" rule for the tag; the future `contentPath -> artifact` change is a separate *location* migration.
+- Tags are kind-namespaced and compared like-for-like, so a hash and a native id can never collide.
+- Two tag sources in v1: single-file `file` target → computed content hash; `provider-ref` target → its existing `(provider, ref)`. `file-set`/`executable`/`url` are tagless and never fold.
+- Hash tags are computed locally and in place: a device hashes only files it physically holds, where they sit, never copying bytes into the blob store. Background compute after boot; stat-keyed (path+size+mtime) local cache to avoid re-reads; the cache never crosses devices and plays no part in matching.
+- Provider-ref tags need no computation: read `(provider, ref)` (and the already-extracted Steam app id where present) from existing release data.
+- Each host publishes its own releases' tags in `self` scope; other devices compare published tags and never fetch or re-hash remote files.
+- Grouping is transitive connected-components, kind-namespaced — but v1 has at most one tag per release, so it reduces to simple same-tag classes. Implement simple grouping shaped to allow future chaining; do not build heavy graph machinery now.
+- Fold in the daemon catalog path; surfaces consume folded output.
+- Expose an availability signal on each folded entry (local-launchable / remote-available / remote-unreachable) from fold state plus peer presence; surfaces own presentation; per-surface treatments are phased.
+- Separate display from launch: local non-identity display fields stay authoritative when a local candidate exists, but `id`, release-selection context, and `source` come from the launch target so a remote launch addresses the remote peer's own playable id.
+- Prefer local launchable, then deterministic launchable remote (order by `source.controlUrl`, then `source.hostId`, then entry id); on launch, fall back to another launchable copy in the fold before failing, and fail with a host-named message.
+- Keep additive fold/availability metadata topology-blind (no per-peer host lists on each entry). Keep peer `entryCount` diagnostics raw (pre-fold).
+- Do not mutate user config YAML in v1; resolve/compute at runtime and cache.
 
 ---
 
@@ -128,25 +133,23 @@ This plan builds the missing foundation narrowly (single-file releases only, add
 
 ### Resolved During Planning
 
-- Where do hashes live? In the existing content-addressed artifact model (`digests`/`expectedDigests`, id `sha256:<hex64>`); releases reference an artifact, not a new field.
-- Declared vs computed? Hybrid: declared/expected wins, else compute in place — the existing claimed-vs-verified split.
-- Is the system label part of the match? No. The fingerprint alone is the identity; differing system labels never block a fold.
-- Does fingerprinting copy files? No. Local files are hashed in place; only the import path copies bytes.
-- When does fingerprinting run? In the background after boot; games appear immediately and folds settle in; results are cached.
-- Unreachable remote target at launch? Fall back to another copy in the fold, else fail naming the host; surfaces also get an availability signal to pre-empt it.
-- Who fingerprints a remote game? The host that holds it; other devices compare its published fingerprint and never re-hash it.
-- Does the release->artifact link exist today? No. It exists on the legacy game record only; releases use path targets. v1 adds it at the release level, single-file only.
-- Is the stat cache part of matching? No. It is a local re-hash-avoidance cache only; cross-device identity is the SHA-256.
-- How wide is v1? Single-file `file` targets only, additive, no migration, but in the migration's eventual shape.
-- Default launch behavior? Prefer local launchable; else launchable remote via existing routing.
-- Does v1 write computed hashes back to config? No; runtime-resolved + cached. Write-back is deferred to the scanner.
+- What do we fold on? An exact release tag — a single-file content hash or a provider-ref native id. Never internal/arbitrary ids (release or game).
+- Are native ids in v1? Yes. `provider-ref` already carries `(provider, ref)`; Steam app id is already extracted. Folding on them is cheap and format-immune.
+- Is identity the same as location? No. Identity (the tag) is additive metadata alongside the existing location; no "exactly one" rule for it.
+- Does fingerprinting copy files? No. Local single-file hashing happens in place; only the import path copies bytes.
+- When does hashing run? In the background after boot; games appear immediately, folds settle in; results cached. Stat cache avoids re-reads and is not part of matching.
+- Who computes a remote game's tag? The host that holds it; other devices compare its published tag and never re-hash it.
+- How do groups form? Transitive connected-components, kind-namespaced — but v1 has one tag per release, so it is simple same-tag grouping; build it to allow chaining later without a heavy algorithm now.
+- Different storage formats of the same game? Hash tags fold only byte-identical files; format-normalized identity is deferred. Native-id games fold regardless of file shape.
+- Unreachable remote target at launch? Fall back to another copy in the fold, else fail naming the host; surfaces also get the availability signal.
+- System label in the match? No. Tags alone are the identity; system labels never gate or block a fold.
 
 ### Deferred to Implementation
 
-- Exact placement of the release artifact reference (on the `file` target vs a release-level `content: { artifactId }`) — pick the option that most cleanly mirrors `game.ts` and the planned migration; keep the "exactly one content source" invariant.
-- Exact local cache location/format for computed digests (reuse artifact-store/library sidecar conventions vs a small dedicated cache) — decide against current artifact-store helpers.
-- Whether the first uncached snapshot returns unfolded entries while background hashing fills in, or blocks briefly — decide based on observed library sizes and the existing peer-refresh background pattern.
-- Mixed-version old-coordinator/new-peer decode tolerance for the added release field — characterize on the peer client path while implementing; capture a rollout note rather than expanding scope.
+- Exact shape of the additive tag field on the release/runtime entry (a normalized `(kind, value)` carried on `PlayableReleaseEntry`) — decide against the existing `install`/`provider-ref` projection so both kinds land uniformly.
+- Exact local cache location/format for computed hashes — decide against current artifact-store helpers; ensure single-flight so concurrent snapshots don't double-hash one file.
+- Whether the first uncached snapshot returns unfolded while background hashing fills in, or briefly blocks — decide against observed library sizes and the existing peer-refresh background pattern.
+- Mixed-version old-coordinator/new-peer decode tolerance for the added tag field — characterize on the peer client path; capture a rollout note rather than expanding scope.
 
 ---
 
@@ -156,33 +159,34 @@ This plan builds the missing foundation narrowly (single-file releases only, add
 
 ```mermaid
 flowchart TD
-  R[Single-file release] --> Q{Has artifact identity?}
-  Q -->|declared/expected| ID[Resolved sha256 identity]
-  Q -->|only a file path| H[Stat-cache lookup]
-  H -->|hit| ID
-  H -->|miss| C[Compute SHA-256 in place, no copy] --> ID
-  ID --> P[Publish identity on PlayableReleaseEntry]
+  R[Release] --> K{Target kind}
+  K -->|single-file file| H[Resolve hash tag: cache, else compute in place]
+  K -->|provider-ref| N[Read native id tag provider+ref]
+  K -->|file-set / exe / url| X[No tag: never folds]
+  H --> T[Tag = kind + value on PlayableReleaseEntry]
+  N --> T
+  T --> P[Publish tag in self scope]
   P --> S[CatalogSnapshot fabric assembly]
-  S --> F[Fold by fingerprint alone]
-  F --> G[Display rep = local; launch rep = preferred]
-  G --> E[One CatalogEntry per folded group]
+  S --> F[Group by tag, kind-namespaced]
+  F --> G[Display rep = local; launch rep = preferred; derive availability]
+  G --> E[One CatalogEntry per group]
   E --> L[app.library.launch with launch-rep id + source]
   L --> M{source.isLocal?}
   M -->|true/absent| LOC[Local foreground launch]
-  M -->|false| REM[Remote stream prepare + Moonlight]
+  M -->|false| REM[Remote prepare + Moonlight, or fall back / host-named failure]
 ```
 
-The new critical path is `R -> ID -> P` (a release knowing and publishing its content identity). Folding (`F`) is the small final step on top.
+The new critical path is `R -> T -> P` (a release knowing and publishing its tag). Grouping (`F`) is a simple same-tag step in v1.
 
 ---
 
 ## Implementation Units
 
-### U1. Add a release-level artifact reference (additive, single-file)
+### U1. Define and project a release identity tag (additive, two kinds)
 
-**Goal:** Let a release reference a content-addressed artifact in the same shape as the legacy game record, preserving path-based releases.
+**Goal:** Give a release an optional normalized identity tag `(kind, value)` as metadata alongside its location, derived from a `provider-ref` target today and carrying a single-file content hash when resolved.
 
-**Requirements:** R1, R8
+**Requirements:** R1, R2, R3, R13, R14
 
 **Dependencies:** None
 
@@ -194,114 +198,109 @@ The new critical path is `R -> ID -> P` (a release knowing and publishing its co
 - Test: `product/platform/library/proseql/library-repository.test.ts`
 
 **Approach:**
-- Add an optional artifact reference to a release (mirroring `content: { artifactId }` on `game.ts`), validated with `ArtifactId`.
-- Keep path targets valid; enforce a "release declares at most one concrete content source" rule consistent with the game-level "exactly one" invariant, scoped so existing path-only releases stay valid.
-- Project the reference through `toPlayableReleaseEntry` onto `PlayableReleaseEntry` so it can ride in the catalog later.
-- Restrict the new reference's v1 meaning to single-file `file` content; do not add it to `file-set`/executable/url/provider-ref semantics.
+- Add an optional, kind-namespaced identity tag to the runtime `PlayableReleaseEntry` (e.g. `{ kind: "hash" | "provider", value }`), additive and orthogonal to `target`. Do not impose an "exactly one content source" rule.
+- Derive the provider-kind tag from an existing `provider-ref` target's `(provider, ref)` (and reuse the already-extracted Steam app id where present) during projection — no new declared field needed for that kind.
+- Allow an optional declared content-hash tag for `file` targets (validated as `ArtifactId` shape) so an importer/scanner can pre-populate it; the computed value (U2) fills it otherwise.
+- Leave `file-set`/`executable`/`url` targets tagless.
 
-**Execution note:** Add characterization tests for current path-only release decode before adding the artifact reference.
+**Execution note:** Add characterization tests for current path-only release projection before adding the tag.
 
 **Patterns to follow:**
-- `content: { artifactId }` + "exactly one" rule in `product/platform/library/config/records/game.ts`.
-- `toPlayableReleaseEntry` projection in `product/platform/library/proseql/library-repository.ts`.
+- `provider-ref` target and `install` projection in `product/platform/library/config/app-install-metadata.ts`.
+- `toPlayableReleaseEntry` in `product/platform/library/proseql/library-repository.ts`.
 
 **Test scenarios:**
-- Happy path: a release with a valid `artifactId` decodes and projects the reference onto `PlayableReleaseEntry`.
-- Happy path: an existing path-only release still decodes and launches unchanged.
-- Error path: a release declaring both a file target and an `artifactId` is rejected by the "exactly one content source" rule.
-- Error path: a malformed `artifactId` is rejected.
-- Edge case: a non-file target with an `artifactId` is rejected or ignored per the chosen v1 restriction.
+- Happy path: a `provider-ref` release projects a `(provider, ref)` tag onto `PlayableReleaseEntry`.
+- Happy path: a single-file `file` release with a declared hash projects a `hash` tag; a path-only `file` release projects no tag yet (filled by U2).
+- Happy path: an existing path-only release still decodes/launches unchanged (tag is additive, not required).
+- Edge case: a `file-set`/`executable`/`url` release projects no tag.
+- Error path: a malformed declared hash is rejected.
 
 **Verification:**
-- Releases can carry an optional artifact reference; path-only releases are unaffected.
+- Releases optionally carry a kind-namespaced tag; existing releases are unaffected.
 
 ---
 
-### U2. Resolve and compute fingerprint in place for single-file releases
+### U2. Compute the hash tag in place for single-file releases
 
-**Goal:** Produce a resolved fingerprint for a device's own single-file releases — from a declared reference when present, otherwise by computing it in place — with a local cache that avoids re-reading files and without ever copying the file.
+**Goal:** Resolve the `hash` tag for a device's own single-file releases — declared when present, else computed in place — with a single-flight, stat-keyed cache and no file copying.
 
-**Requirements:** R2, R8
+**Requirements:** R4, R14
 
 **Dependencies:** U1
 
 **Files:**
-- Create: `product/platform/library/content-identity/release-content-identity.ts` *(name/location finalized against existing artifact-store layout)*
+- Create: `product/platform/library/content-identity/release-content-identity.ts` *(name/location finalized against artifact-store layout)*
 - Modify: `product/platform/library/proseql/library-repository.ts`
 - Test: `product/platform/library/content-identity/release-content-identity.test.ts`
 - Test: `product/platform/library/proseql/library-repository.test.ts`
 
 **Approach:**
-- Resolve identity only for local files. Remote entries already carry the owning host's published fingerprint and are never read or re-hashed here.
-- For a local single-file release: if it already references an artifact (declared) or a verified digest exists, use that identity.
-- Otherwise resolve the file via its storage/path, check the stat-keyed cache (`path + size + mtime -> sha256`), and on miss compute the SHA-256 once **reading the file in place — never copying it into the artifact blob store** — record the content-addressed identity (an artifact record/digest entry that can reference the existing location), and cache the result.
-- Treat declared-but-unverified identities as `expectedDigests` until computed/verified, consistent with the artifact model.
-- Do not write the computed reference back into user config YAML in v1.
-- Keep computation off the catalog hot path: callers get a fast cached answer; uncached files resolve in the background and folds settle in on later refreshes.
+- Resolve hash tags only for local files; remote entries carry published tags and are never read/re-hashed here.
+- If a declared/verified hash exists, use it; else read the file in place, check the stat-keyed cache (`path+size+mtime -> sha256`), and on miss compute SHA-256 once **without copying the file into the blob store**, then cache. Single-flight so concurrent snapshots don't double-hash one file.
+- Treat declared-but-unverified hashes as claimed (expected) until computed/verified.
+- Do not write computed tags back to config YAML.
+- Keep computation off the catalog hot path: callers get a fast cached answer; uncached files resolve in the background and folds settle in.
 
-**Execution note:** Implement compute/cache test-first using real temp files and real hashing (no mock hashers).
+**Execution note:** Test-first with real temp files and real hashing (no mock hashers).
 
 **Patterns to follow:**
-- SHA-256 compute in `product/platform/artifacts/artifact-import-service.ts` (reuse the hashing, not the byte-copy/adoption side effect) and `artifact-store.ts`.
-- Stat/cache discipline like `product/platform/library/game-assets/candidate-cache.ts`.
+- SHA-256 compute in `product/platform/artifacts/artifact-import-service.ts` (reuse hashing, not adoption); stat/cache discipline like `product/platform/library/game-assets/candidate-cache.ts`.
 
 **Test scenarios:**
-- Happy path: a release referencing an existing artifact resolves to that fingerprint without recomputation.
-- Happy path: a local single-file release with only a path computes its fingerprint in place and returns the identity.
-- Edge case: computing identity does not create a second copy of the file in the artifact blob store (assert no blob write/duplication).
-- Edge case: a second resolution of an unchanged file uses the cache and does not re-read the file (assert via a recording filesystem/real temp file).
+- Happy path: a single-file release with only a path computes its hash in place and returns the tag.
+- Edge case: computing the hash does not create a second copy in the blob store (assert no blob write).
+- Edge case: a second resolution of an unchanged file uses the cache and does not re-read it.
 - Edge case: a changed file (different size/mtime) recomputes and updates the cache.
-- Edge case: a missing/unreadable file yields no identity and does not throw the caller.
-- Edge case: a remote entry is never read/hashed locally; its published fingerprint is used as-is.
-- Error path: a declared-but-mismatched digest is surfaced as unverified/expected, not silently trusted as verified.
+- Edge case: concurrent resolutions of the same uncached file hash it once (single-flight).
+- Edge case: a missing/unreadable file yields no tag and does not throw.
+- Edge case: a remote entry is never read/hashed locally.
 
 **Verification:**
-- Local single-file releases obtain a fingerprint with no file copying; repeated resolution is cheap; remote fingerprints are consumed, not recomputed.
+- Local single-file releases get a hash tag with no copying; repeated/concurrent resolution is cheap; remote tags are consumed, not recomputed.
 
 ---
 
-### U3. Publish resolved content identity in the catalog snapshot
+### U3. Publish release tags in the catalog snapshot
 
-**Goal:** Surface each single-file release's resolved content identity on the federated `PlayableReleaseEntry` so peers can compare it.
+**Goal:** Surface each release's resolved tag on the federated `PlayableReleaseEntry` so peers can compare.
 
-**Requirements:** R3, R9
+**Requirements:** R5, R10
 
-**Dependencies:** U2
+**Dependencies:** U1, U2
 
 **Files:**
 - Modify: `product/platform/library/playable-library.ts`
 - Modify: `product/apps/portal/api/catalog/catalog-snapshot.ts`
-- Modify: `product/apps/portal/api/catalog/snapshot.rpc.ts` *(only if a wire field beyond the projected reference is needed)*
+- Modify: `product/apps/portal/api/catalog/snapshot.rpc.ts` *(only if a wire field beyond the projected tag is needed)*
 - Test: `product/apps/portal/api/catalog/snapshot.rpc-handler.test.ts`
 - Test: `product/apps/portal/api/catalog/snapshot.rpc.test.ts`
 
 **Approach:**
-- Ensure the resolved identity (the artifact `sha256`, i.e. `ArtifactId`) is present on the runtime/wire `PlayableReleaseEntry` for single-file releases, populated for both `self` and `fabric` scopes.
-- Keep `self` scope a complete source-of-truth feed (identity present, no folding) so peers can fetch and compare.
-- Resolve identity using U2 with the cache; the snapshot must stay responsive (return what is cached, fill in over refreshes).
-- Keep the field additive and optional so peers without it remain decodable.
+- Ensure both tag kinds ride on the runtime/wire `PlayableReleaseEntry` for `self` and `fabric` scopes; keep `self` a complete, unfolded source feed.
+- Provider-ref tags are available immediately; hash tags use U2 with the cache, so the snapshot stays responsive and fills in over refreshes.
+- Keep the tag field additive/optional so peers without it remain decodable.
 
 **Patterns to follow:**
-- `CatalogSnapshotLive.getSnapshot` assembly in `product/apps/portal/api/catalog/catalog-snapshot.ts`.
-- Additive optional schema fields per the native-artifact additive approach.
+- `CatalogSnapshotLive.getSnapshot` assembly; additive optional schema fields.
 
 **Test scenarios:**
-- Happy path: a `self` snapshot exposes the resolved `sha256` identity on a single-file release.
-- Integration: identity resolved from a config/library record is observable on the corresponding `PlayableReleaseEntry` in the snapshot, end to end.
-- Edge case: a release whose identity is not yet cached returns without the identity rather than blocking the snapshot.
-- Edge case: path-only releases without resolvable identity simply carry no identity and never fold.
-- Integration: RPC response decodes successfully with the additive field; characterize old-coordinator tolerance on the peer client path.
+- Happy path: a `self` snapshot exposes a provider-ref tag and a resolved hash tag on the relevant releases.
+- Integration: a tag derived from a config/library record is observable on the corresponding `PlayableReleaseEntry` end to end.
+- Edge case: a release whose hash is not yet cached returns without a tag rather than blocking the snapshot.
+- Edge case: tagless target kinds carry no tag and never fold.
+- Integration: RPC response decodes with the additive field; characterize old-coordinator tolerance on the peer client path.
 
 **Verification:**
-- Single-file releases publish their content identity in `self` and `fabric` snapshots.
+- Releases publish their tags in `self` and `fabric` snapshots.
 
 ---
 
-### U4. Build a pure catalog folding adapter
+### U4. Build a pure fold adapter (group by tag, choose reps, derive availability)
 
-**Goal:** Deterministically fold catalog entries sharing the same fingerprint, choose display and launch representatives, and derive the availability signal.
+**Goal:** Deterministically group catalog entries sharing a tag, choose display and launch representatives, and derive the availability signal.
 
-**Requirements:** R4, R5, R6, R7, R10, R13
+**Requirements:** R6, R7, R8, R9, R11
 
 **Dependencies:** U3
 
@@ -310,48 +309,43 @@ The new critical path is `R -> ID -> P` (a release knowing and publishing its co
 - Test: `product/apps/portal/api/catalog/fold-catalog-entries.test.ts`
 
 **Approach:**
-- Group foldable candidates by the resolved fingerprint alone. The system label is never part of the key; identical fingerprints fold even when hosts label the system differently. Entries without a resolved fingerprint are not foldable and pass through unchanged even if slugs match.
-- Fold across different slugs when the fingerprint matches; slug equality is never part of the positive match path.
-- Restrict v1 folding to unambiguous single-release entries (or entries where every emitted release shares the same single-file fingerprint); do not partially merge one release inside a multi-release entry.
+- Group foldable candidates by tag `(kind, value)`, compared like-for-like. Entries without a tag are not foldable and pass through unchanged even if internal ids match.
+- Implement grouping as connected-components shaped, but rely on the v1 invariant (one tag per release → simple same-tag classes); do not build heavy graph machinery.
 - Launch representative order: local launchable, then deterministic launchable remote (`source.controlUrl`, then `source.hostId`, then entry id), else deterministic first candidate.
-- Display representative: when any local candidate exists, keep its non-identity display fields (title, media, collections, display) and use the local system label; take `id`, release-selection context, and `source` from the launch representative.
-- Carry the launch representative's whole `source`; a remote-preferred fold must carry `source.isLocal === false` and the remote peer's playable id.
-- Derive an availability signal per folded entry from the copies and peer presence: `local-launchable`, `remote-available` (preferred target is a currently-present peer), or `remote-unreachable` (only remote copies, none on a present peer). Keep it topology-blind (no per-peer host lists on the entry).
-- Keep any fold metadata additive and topology-blind.
+- Display representative: when any local candidate exists, keep its non-identity display fields and local system label; take `id`, release-selection context, and `source` from the launch representative.
+- Carry the launch representative's whole `source`; a remote-preferred fold carries `source.isLocal === false` and the remote peer's playable id.
+- Derive availability per group from copies + peer presence: `local-launchable`, `remote-available` (preferred target is a present peer), `remote-unreachable` (only remote, none present). Topology-blind.
 
-**Execution note:** Pure adapter, test-first, no Effect runtime. Take peer-presence as an input argument so the adapter stays pure.
+**Execution note:** Pure adapter, test-first, no Effect runtime; take peer presence as an input argument.
 
 **Technical design:** *(directional guidance, not implementation specification)*
 
-| Candidates (same fingerprint) | Display rep | Launch rep | Availability | Visible count |
+| Candidates (same tag) | Display rep | Launch rep | Availability | Visible |
 |---|---|---|---|---|
 | local launchable + remote launchable | local | local | local-launchable | 1 |
-| local not launchable + remote launchable (present peer) | local non-identity display | remote id/release/source | remote-available | 1 |
-| remote launchable only (present peer) | first deterministic remote | first deterministic remote | remote-available | 1 |
-| remote only, no present peer | first deterministic remote | first deterministic remote | remote-unreachable | 1 |
-| different slug, same fingerprint | preferred display candidate | preferred launch candidate | derived | 1 |
-| same slug, no/different fingerprint | no fold | no fold | n/a | unchanged |
-| different system label, same fingerprint | local display + local label | preferred launch | derived | 1 (folds) |
-| partial match in a multi-release entry | no fold in v1 | no fold in v1 | n/a | unchanged |
+| local not launchable + remote launchable (present) | local non-identity | remote id/release/source | remote-available | 1 |
+| remote launchable only (present) | first remote | first remote | remote-available | 1 |
+| remote only, no present peer | first remote | first remote | remote-unreachable | 1 |
+| same tag, hash kind, different internal ids | preferred display | preferred launch | derived | 1 |
+| same tag, provider kind (Steam/itch) | preferred display | preferred launch | derived | 1 |
+| no tag / different tag value | no fold | no fold | n/a | unchanged |
 
 **Patterns to follow:**
-- Pure ADT/adapter style in `product/surfaces/web/shift/catalog/shift-catalog-state.ts`.
-- `EntrySource` identity in `product/platform/api/rpc/entry-source.ts`.
+- Pure ADT/adapter style in `product/surfaces/web/shift/catalog/shift-catalog-state.ts`; `EntrySource` in `product/platform/api/rpc/entry-source.ts`.
 
 **Test scenarios:**
-- Happy path: local + remote, different slugs, same fingerprint fold to one entry.
-- Happy path: local launchable + remote, same fingerprint -> display and source local, availability `local-launchable`.
-- Happy path: local not launchable + remote launchable on a present peer -> local non-identity display, remote launch id + `source.isLocal === false`, availability `remote-available`.
-- Happy path: same fingerprint but different system labels across hosts -> still folds into one entry; display uses the local label.
-- Happy path: two launchable remotes, no local -> one deterministic remote by documented order.
-- Edge case: remote-only fold with no present peer -> availability `remote-unreachable`.
-- Edge case: same slug, different fingerprint -> separate.
-- Edge case: same slug, no fingerprint -> separate.
-- Edge case: multi-release partial match -> no fold in v1.
+- Happy path: local + remote with the same hash tag (different internal ids) fold to one entry.
+- Happy path: local + remote with the same provider-ref tag fold to one entry.
+- Happy path: local launchable + remote, same tag -> display/source local, availability `local-launchable`.
+- Happy path: local not launchable + remote launchable (present) -> local non-identity display, remote launch id + `source.isLocal === false`, availability `remote-available`.
+- Edge case: remote-only with no present peer -> availability `remote-unreachable`.
+- Edge case: two entries with different tag values stay separate.
+- Edge case: tagless entries never fold even with identical internal ids.
+- Edge case: a hash tag and a provider tag with the same string value never collide (kind-namespaced).
 - Edge case: empty input -> empty output.
 
 **Verification:**
-- One visible entry per same-fingerprint group regardless of system label; never folds on slug; availability derived deterministically.
+- One visible entry per tag group; never folds on internal id; availability derived deterministically.
 
 ---
 
@@ -359,7 +353,7 @@ The new critical path is `R -> ID -> P` (a release knowing and publishing its co
 
 **Goal:** Insert the fold adapter into the daemon catalog assembly so all surfaces receive folded `fabric` entries.
 
-**Requirements:** R4, R9
+**Requirements:** R6, R10
 
 **Dependencies:** U4
 
@@ -369,30 +363,30 @@ The new critical path is `R -> ID -> P` (a release knowing and publishing its co
 
 **Approach:**
 - Fold only `scope: "fabric"` after local + remote entries are assembled; leave `scope: "self"` unfolded.
-- Pass current peer presence (already tracked in the snapshot's peer states) into the pure fold adapter so each folded entry's availability signal is derived consistently.
-- Keep peer health and `entryCount` based on raw results; document the expected post-fold mismatch where visible `entries.length` can be smaller than summed peer counts.
-- Keep folding a pure projection over the current snapshot; no new background refresh or stateful cluster cache.
+- Pass current peer presence (already in the snapshot's peer states) into the pure adapter for availability.
+- Keep peer health and `entryCount` raw; document the expected post-fold mismatch where visible `entries.length` can be smaller than summed peer counts.
+- Keep folding a pure projection; no new background refresh or stateful cluster cache.
 
 **Patterns to follow:**
-- `CatalogSnapshotLive.getSnapshot` flow and peer-failure degradation in `product/apps/portal/peers/peer-source-fetcher.ts`.
+- `CatalogSnapshotLive.getSnapshot` flow; peer-failure degradation in `product/apps/portal/peers/peer-source-fetcher.ts`.
 
 **Test scenarios:**
-- Happy path: `fabric` with local + remote same-identity entries returns one folded entry.
-- Happy path: `self` returns unfolded entries with identity intact.
+- Happy path: `fabric` with local + remote same-tag entries returns one folded entry.
+- Happy path: `self` returns unfolded entries with tags intact.
 - Integration: peer `entryCount` stays raw while visible `entries` are folded; test asserts the mismatch is expected.
 - Edge case: remote refresh failure still returns local folded candidates and does not fail the snapshot.
-- Edge case: old peer entries without identity remain visible as separate entries.
+- Edge case: old peer entries without tags remain visible as separate entries.
 
 **Verification:**
-- `fabric` folds same-identity candidates; `self` stays a complete source feed.
+- `fabric` folds same-tag candidates; `self` stays a complete source feed.
 
 ---
 
-### U6. Verify launch routing for folded entries
+### U6. Launch routing, in-fold fallback, and host-named failure
 
-**Goal:** Prove the folded entry's launch representative `source` drives existing local/remote routing, falls back to another copy in the fold when the preferred target is unreachable, and fails with a host-named message — without a new launch path.
+**Goal:** Prove the folded entry's launch representative `source` drives existing routing, falls back to another copy in the fold when the preferred target is unreachable, and fails with a host-named message — no new launch path.
 
-**Requirements:** R6, R7, R11
+**Requirements:** R8, R9
 
 **Dependencies:** U4, U5
 
@@ -403,32 +397,32 @@ The new critical path is `R -> ID -> P` (a release knowing and publishing its co
 - Test: `product/apps/portal/api/library/launch.rpc-handler.test.ts`
 
 **Approach:**
-- Cover both branches: local-preferred folded entry launches locally; remote-preferred folded entry calls `RemoteStreamPrepare` then Moonlight.
-- Assert the routing invariant explicitly: a remote-preferred folded entry carries the remote `source` with `source.isLocal === false` and the remote peer's playable id.
-- When the preferred remote target is unreachable, fall back to another launchable copy in the same fold; if none remains, fail with a specific message naming the host, not a generic error.
+- Local-preferred folded entry launches locally; remote-preferred calls `RemoteStreamPrepare` then Moonlight.
+- Assert the routing invariant: a remote-preferred folded entry carries the remote `source` with `source.isLocal === false` and the remote peer's playable id.
+- When the preferred remote target is unreachable, fall back to another launchable copy in the same fold; if none remains, fail with a host-named message, not a generic error.
 - Add no UI-side fallback logic and no new launcher bridge.
 
 **Patterns to follow:**
-- Federation routing in `product/apps/portal/api/library/launch.rpc-handler.ts`; source forwarding in `product/apps/portal/features/home/launcher-layer-rpc.ts`.
+- Federation routing in `launch.rpc-handler.ts`; source forwarding in `launcher-layer-rpc.ts`.
 
 **Test scenarios:**
-- Happy path: folded entry with `source.isLocal === true` launches via the local path.
-- Happy path: folded entry with `source.isLocal === false` calls remote prepare before Moonlight.
+- Happy path: `source.isLocal === true` launches via the local path.
+- Happy path: `source.isLocal === false` calls remote prepare before Moonlight.
 - Edge case: local present but not launchable -> remote launch id/source used, local display retained.
-- Edge case: preferred remote unreachable but another launchable copy exists in the fold -> launch falls back to that copy.
-- Error path: preferred remote unreachable and no fallback copy -> failure message names the host; not a generic error.
+- Edge case: preferred remote unreachable but another launchable copy exists -> falls back to it.
+- Error path: preferred remote unreachable, no fallback -> failure names the host.
 - Error path: remote prepare failure returns the existing failed launch response shape.
 
 **Verification:**
-- No new launch transport; preferred-source routing, in-fold fallback, and host-named failure observable in tests.
+- No new launch transport; routing, in-fold fallback, and host-named failure observable in tests.
 
 ---
 
-### U7. Shift consumption: render folded output, consume availability, keep focus stable
+### U7. Shift: render folded output, consume availability, keep focus stable
 
-**Goal:** Ensure Shift renders folded catalog output as ordinary entries with no UI-side dedupe, can read the availability signal, and keeps focus stable when folds settle live.
+**Goal:** Render folded output as ordinary entries with no UI-side dedupe, read the availability signal, and keep focus stable during live merges.
 
-**Requirements:** R9, R10, R12, R13
+**Requirements:** R10, R11, R12, R15
 
 **Dependencies:** U5
 
@@ -439,34 +433,33 @@ The new critical path is `R -> ID -> P` (a release knowing and publishing its co
 - Test: `product/surfaces/web/shift/catalog/shift-catalog-state.test.ts`
 
 **Approach:**
-- Keep `ShiftCatalogState.fromResult` a pure adapter over `CatalogSnapshotResponse.entries`; it must not fold or infer source preference, but it should carry the availability signal through to the view.
-- Focus stability: do not reflow a rail the user is actively navigating. Settle pending merges on the next navigation/screen change/idle moment; if a merge touches the focused tile, move focus to the surviving tile rather than dropping it.
-- v1 consumes the availability signal minimally (enough to prove it is present and usable); full per-surface treatments (fade/pop on the home stack, disabled-but-favoritable in the library) are phased follow-ups.
+- Keep `ShiftCatalogState.fromResult` a pure adapter over `CatalogSnapshotResponse.entries`; it must not fold or infer source preference, but it carries the availability signal through.
+- Focus stability: do not reflow a rail the user is actively navigating; settle pending merges on the next navigation/screen change/idle; if a merge touches the focused tile, move focus to the surviving tile.
+- v1 consumes the availability signal minimally (enough to prove it is present and usable); full per-surface treatments are phased.
 - No source badges, picker, North/Y menu, or launch-option UI in v1.
 
 **Patterns to follow:**
-- Shift state ADT in `product/surfaces/web/shift/catalog/shift-catalog-state.ts`; functional state-component pattern.
-- Focus/`data-tile-id` handling in `product/surfaces/web/shift/organisms/ShiftHomeRail.tsx`.
+- Shift state ADT; focus/`data-tile-id` handling in `ShiftHomeRail.tsx`.
 
 **Test scenarios:**
 - Happy path: a snapshot with one folded entry produces `Ready` with one game.
 - Happy path: the availability signal is preserved through `fromResult` to the view model.
-- Edge case: a live merge while the user is on the rail does not reflow it; the merge settles on next navigation/idle.
-- Edge case: a merge that touches the focused tile moves focus to the surviving tile (no dead cursor).
-- Edge case: old non-identity duplicate entries still produce multiple games (daemon did not fold them).
+- Edge case: a live merge while the user is on the rail does not reflow it; it settles on next navigation/idle.
+- Edge case: a merge touching the focused tile moves focus to the survivor (no dead cursor).
+- Edge case: old tagless duplicate entries still produce multiple games.
 - Edge case: empty folded snapshot produces `Empty`.
 - Error path: load error / defect handling unchanged.
 
 **Verification:**
-- No UI-side folding required; availability signal is consumable; focus never jumps under the user during a live merge.
+- No UI-side folding; availability consumable; focus never jumps under the user during a live merge.
 
 ---
 
-### U8. Add federated single-file fixtures
+### U8. Fixtures for both tag kinds across storages
 
-**Goal:** Provide realistic same-identity-across-storage fixtures for federation tests.
+**Goal:** Provide realistic same-tag-across-storage fixtures for federation tests, covering both tag kinds.
 
-**Requirements:** R4, R5
+**Requirements:** R6, R7, R13
 
 **Dependencies:** U3, U5
 
@@ -476,29 +469,56 @@ The new critical path is `R -> ID -> P` (a release knowing and publishing its co
 - Test: `product/apps/portal/api/catalog/snapshot.rpc-handler.test.ts`
 
 **Approach:**
-- Add minimal fixtures for two storages sharing an identity and for a same-slug/different-identity negative case.
-- Prefer existing fixture factories; do not create new global fixture directories.
+- Add minimal fixtures: two storages sharing a hash tag (different internal ids); two storages sharing a provider-ref tag; and a tagless/different-tag negative case.
+- Prefer existing fixture factories; no new global fixture directories.
 
 **Test scenarios:**
-- Integration: fixture-fed snapshot folds same identity into one entry.
-- Integration: fixture-fed snapshot keeps same-slug/different-identity entries separate.
-- Edge case: fixture with old peer data lacking identity remains compatible.
+- Integration: same hash tag folds into one entry.
+- Integration: same provider-ref tag folds into one entry.
+- Integration: different/absent tags stay separate.
 
 **Verification:**
-- Federation folding is exercised with realistic fixtures.
+- Both tag kinds are exercised with realistic fixtures.
+
+---
+
+### U9. Cross-instance folding proof + manual two-device smoke checklist
+
+**Goal:** Prove the publish -> fetch -> compare -> fold chain across a process boundary, and give a manual real-hardware check.
+
+**Requirements:** R5, R6, R10
+
+**Dependencies:** U3, U5, U6
+
+**Files:**
+- Create: `product/apps/portal/api/catalog/federated-fold.integration.test.ts` *(name/location finalized against existing integration-test layout)*
+- Modify: `work/items/active/01KVVMYE5SFC4H8X5H0EBY7WG3-federated-single-file-folding/plan.md` *(append the manual smoke checklist if not kept here)*
+
+**Approach:**
+- Stand up two in-process catalog servers on loopback; have one discover/fetch the other through the real peer/RPC path; assert the same game folds end to end and launch routing picks the right `source`.
+- Use real in-process servers (no mocks), matching the project's testing posture.
+- Document a short manual two-device smoke checklist: same ROM on two devices folds to one tile; a Steam game on two devices folds; launching prefers local; a remote-only game falls back / fails by name when its host sleeps.
+
+**Test scenarios:**
+- Integration: device-A-published tag is fetched by device B and folds into one entry over the real wire path.
+- Integration: a tag that resolves locally also survives serialization and compares equal across the boundary.
+- Integration: launch on the folded entry routes to the correct (local or remote) source across instances.
+
+**Verification:**
+- The cross-device chain is proven in an automated two-instance test; the manual checklist exists for real hardware.
 
 ---
 
 ## System-Wide Impact
 
-- **Interaction graph:** release artifact reference -> resolved identity (U2) -> `PlayableReleaseEntry` (U3) -> `CatalogSnapshotLive` fold (U5) -> Shift atoms -> `app.library.launch`. The behavior change concentrates in identity resolution and the daemon projection.
-- **Error propagation:** schema errors for malformed references surface as readable-library config errors; unresolved/missing identity yields no fold (never a snapshot failure); peer fetch failures stay partial.
-- **State lifecycle risks:** the stat-keyed cache must invalidate on file change; folding is stateless (no durable clusters in v1). The compute path must not re-hash whole libraries every boot — persist/reuse cached identities.
-- **Performance:** first-time hashing of a large single-file library is the main cost; mitigate with persistent cache + off-hot-path resolution. Snapshots must remain responsive.
-- **Trust boundary risks:** peer-provided identity is trusted under federation v1 trusted-LAN/no-auth; folding can make a remote launch target less visually obvious, so local display stays authoritative and the parked `controlUrl` hardening remains relevant.
-- **API surface parity:** `self` scope stays a complete identity-bearing source feed; `fabric` becomes the folded user-facing view.
-- **Migration alignment:** the release artifact reference is the forward slice of the native-artifact `contentPath -> artifact` migration; it must not diverge from that intended shape.
-- **Unchanged invariants:** `EntrySource` stays the structural source-routing tag; path-based releases keep working; peer discovery and trust posture unchanged; old peers without identity stay visible rather than guessed into folds.
+- **Interaction graph:** release tag (U1/U2) -> `PlayableReleaseEntry` (U3) -> `CatalogSnapshotLive` fold (U5) -> Shift atoms -> `app.library.launch` (U6). Behavior change concentrates in tag resolution and the daemon projection.
+- **Error propagation:** malformed declared tags surface as readable-library config errors; unresolved/missing tags yield no fold (never a snapshot failure); peer fetch failures stay partial.
+- **State lifecycle risks:** the stat-keyed hash cache must invalidate on file change and single-flight concurrent reads; folding is stateless (no durable clusters in v1); do not re-hash whole libraries every boot.
+- **Performance:** first-time hashing of a large single-file library is the main cost; provider-ref tags are free; mitigate hashing with persistent cache + background, off-hot-path resolution.
+- **Trust boundary risks:** peer-provided tags are trusted under federation v1 trusted-LAN/no-auth; folding can make a remote launch target less obvious, so local display stays authoritative and the parked `controlUrl` hardening remains relevant.
+- **API surface parity:** `self` stays a complete tag-bearing source feed; `fabric` becomes the folded user-facing view.
+- **Migration alignment:** the tag is identity metadata, orthogonal to the deferred `contentPath -> artifact` *location* migration; it must not be conflated with that change.
+- **Unchanged invariants:** `EntrySource` stays the structural source-routing tag; path-based releases keep working; peer discovery and trust posture unchanged; tagless/old entries stay visible rather than guessed into folds.
 
 ---
 
@@ -506,66 +526,70 @@ The new critical path is `R -> ID -> P` (a release knowing and publishing its co
 
 | Risk | Mitigation |
 |------|------------|
-| Release fingerprint reference diverges from the planned migration shape and becomes throwaway | Mirror `game.ts` `content: { artifactId }` + "exactly one" rule; coordinate with `docs/plans/2026-06-04-002`. |
-| Fingerprinting doubles disk by copying files into the blob store | Hash in place; never copy a file to fingerprint it; reserve blob adoption for the import path. |
-| Hashing large libraries stalls the catalog/handheld | Background fingerprinting after boot; persistent stat-keyed cache; resolve off the hot path; first snapshot may be unfolded and fill in. |
-| System labels differ across hosts and block valid folds | Fold on the fingerprint alone; never gate on system; use the local label for display. |
-| False-positive merge collapses different games | Fold only on an exact fingerprint match; never on slug/title in v1 (fuzzy scoring is a backlogged later tier). |
-| Live merge moves a tile under the user's cursor | Don't reflow an actively-navigated rail; settle on next navigation/idle; pin focus to the surviving tile. |
-| Remote-only game's host is unreachable at launch | Fall back to another launchable copy in the fold; else fail with a host-named message; expose availability signal so surfaces can pre-empt. |
-| Peer-crafted identity makes a remote source win a fold under trusted-LAN assumptions | Accept under v1 trusted-LAN posture; keep local display authoritative; topology-blind fold metadata. |
-| Folding hides that a remote `controlUrl` is the launch target | Keep parked SSRF/controlUrl hardening visible; test that remote-preferred entries carry `source.isLocal === false`. |
-| Additive release field breaks strict readable-library decode if declared in the wrong layer | Declare on `LibraryReleasePayload`; cover strict decode tests. |
-| Mixed-version old coordinator rejects the new peer field | Characterize peer-client decode tolerance; document software-before-config rollout if needed. |
-| v1 quietly swallows the broader migration | Hard scope to single-file `file` targets, additive, no config write-back, no other target kinds. |
+| Real-world hash folds rarely fire because copies are stored differently | Provider-ref native ids fold format-independently; document hash-kind limit; defer format-normalized identity. |
+| Fingerprinting doubles disk by copying files | Hash in place; never copy to fingerprint; reserve blob adoption for the import path. |
+| Hashing large libraries stalls the catalog/handheld | Background, single-flight, off-hot-path; persistent stat cache; first snapshot may be unfolded and fill in. |
+| Identity conflated with location and over-constrained | Tag is additive metadata; no "exactly one content source" rule; location migration stays separate. |
+| Tag kinds collide (a hash equals a native id string) | Tags are kind-namespaced; only same-kind same-value matches. |
+| Over-building grouping for a one-tag-per-release v1 | Implement simple same-tag grouping shaped for future chaining; no heavy graph algorithm. |
+| Internal ids leak into matching | Fold only on exact tags; never on release/game internal ids. |
+| False-positive merge collapses different games | Fold only on exact tags; fuzzy/title is the deferred curated tier. |
+| Live merge moves a tile under the user's cursor | Don't reflow an active rail; settle on navigation/idle; pin focus to survivor. |
+| Remote-only game's host unreachable at launch | Fall back to another copy in the fold; else fail naming the host; expose availability signal. |
+| Additive tag field breaks strict readable-library decode | Declare on `LibraryReleasePayload`/runtime entry; cover strict decode tests. |
+| Mixed-version old coordinator rejects the new tag field | Characterize peer-client decode tolerance; document software-before-config rollout. |
+| Cross-device wire bug passes single-process tests | U9 two-instance integration test + manual smoke checklist. |
+| v1 quietly swallows the broader location migration | Tag is identity only; hard scope to two tag sources; no config write-back. |
 
 ---
 
 ## Documentation / Operational Notes
 
-- Coordinate with `docs/plans/2026-06-04-002-feat-native-artifact-import-plan.md` (U5) so the release artifact reference matches the migration's intended shape; note this plan as the first release-level slice.
-- Roll out daemon software that understands the additive release reference before any config starts declaring it (strict decode rejects unknown fields on older software).
+- Coordinate with `docs/plans/2026-06-04-002-feat-native-artifact-import-plan.md` so the tag/identity work stays compatible with the deferred `contentPath -> artifact` location migration.
+- Broaden backlog `01KVXQJ1TPKPMPVSJW30GQ3MSE` to name tier 2 (signaling-assisted automated folding) and tier 3 (assisted manual curation/split) as the future folding tiers.
+- Roll out daemon software that understands the additive tag field before any config declares it (strict decode rejects unknown fields on older software).
 - No Nix module/image default changes expected for v1; folding runs inside existing `korrid` catalog handling. If a future durable cluster service or LAN-visible endpoint is added, apply image-level federation posture checks from `docs/solutions/architecture-patterns/architectural-posture-as-nix-image-default-2026-05-27.md`.
 
 ---
 
 ## Alternative Approaches Considered
 
-- New `contentDigest` field on releases (original draft): rejected — it reinvents the artifact model and creates a second hash home that would be ripped out.
-- Side cache of file hashes separate from artifacts: rejected — two hash homes to reconcile later; conflicts with the one-home decision.
-- Full `contentPath -> artifact` migration now: rejected for v1 — balloons scope into the native-artifact plan's deferred epic; v1 takes the narrow forward slice instead.
-- Client-side Shift folding: rejected — duplicates matching across surfaces and desyncs diagnostics from what users see.
-- Slug-based folding: rejected — slugs are untrusted across storages; false positives are worse than missed folds.
+- New `contentDigest` field on releases (first draft): rejected — reinvents the artifact model and conflates identity with location.
+- "Exactly one of path or artifact" for the tag: rejected — a tag is identity *about* an in-place file, not an alternative location for its bytes.
+- Hash-only v1 (no native ids): rejected — `provider-ref` already carries a clean native id; excluding it leaves easy, format-immune wins on the table.
+- Direct-only (non-transitive) grouping: rejected as the model — transitive connected-components is the right forward design; v1 degenerates to simple grouping anyway.
+- Full `contentPath -> artifact` migration now: rejected for v1 — that is a separate location migration; v1 takes the additive identity slice.
+- Client-side Shift folding: rejected — duplicates matching across surfaces and desyncs diagnostics.
 
 ---
 
 ## Phased Delivery
 
-### Phase 1 — v1 single-file folding (this plan)
+### Phase 1 — v1 exact-identifier folding (this plan)
 
-- Release fingerprint reference (single-file, additive) + in-place compute + cache.
-- Publish the fingerprint in the catalog; fold `fabric` on the fingerprint alone; prefer local launchable; expose availability signal.
-- Keep Shift simple; verify one visible item.
+- Release identity tag (hash for single files, provider-ref native id) as additive metadata.
+- Publish tags; fold `fabric` by tag; prefer local launchable; expose availability; cross-instance proof.
 
-### Phase 2 — stronger identity inputs
+### Phase 2 — broader and stronger identity
 
-- Surface `externalIds` (Steam appid and friends) into catalog releases; add exact-ID folding tiers.
+- Format-normalized / multi-file hashing; additional identity kinds (external-id lists) that activate transitive chaining.
 
-### Phase 3 — durable and fuzzy grouping + broader migration
+### Phase 3 — assisted folding tiers + location migration
 
-- Multi-file manifest/DAT/CHD identity; durable clusters with overrides; non-intrusive similar-game suggestions; broader `contentPath -> artifact` migration.
+- Tier 2 signaling-assisted automation and tier 3 manual curation/split; durable clusters with overrides; broader `contentPath -> artifact` location migration.
 
 ---
 
 ## Sources & References
 
 - Work item: `work/items/active/01KVVMYE5SFC4H8X5H0EBY7WG3-federated-single-file-folding/work.md`
-- Related plan (dependency-aligned): `docs/plans/2026-06-04-002-feat-native-artifact-import-plan.md`
+- Backlog (future tiers): `01KVXQJ1TPKPMPVSJW30GQ3MSE`
+- Related plan (location migration): `docs/plans/2026-06-04-002-feat-native-artifact-import-plan.md`
 - Research: `docs/research/game-library-entity-resolution-deduplication.md`
 - Artifact model: `product/platform/library/config/records/artifact.ts`, `product/platform/protocol/artifact/artifact.ts`
-- Game-level reference shape: `product/platform/library/config/records/game.ts`
-- Release schema: `product/platform/library/config/records/library-item.ts`, `product/platform/library/playable-library.ts`
-- Repository projection + artifact import: `product/platform/library/proseql/library-repository.ts`, `product/platform/artifacts/artifact-import-service.ts`
+- Native id sourcing: `product/platform/library/config/app-install-metadata.ts`, `product/platform/library/config/records/library-item.ts` (`provider-ref`)
+- Release schema/projection: `product/platform/library/playable-library.ts`, `product/platform/library/proseql/library-repository.ts`
+- Hash compute: `product/platform/artifacts/artifact-import-service.ts`
 - Catalog assembly: `product/apps/portal/api/catalog/catalog-snapshot.ts`, `product/apps/portal/api/catalog/snapshot.rpc.ts`
 - Launch router: `product/apps/portal/api/library/launch.rpc-handler.ts`
 - Shift catalog state: `product/surfaces/web/shift/catalog/shift-catalog-state.ts`
