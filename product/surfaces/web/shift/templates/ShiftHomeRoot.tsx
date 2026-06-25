@@ -119,6 +119,22 @@ export function ShiftHomeRoot({
     target?.focus()
   }, [resumeKey])
 
+  // Live catalog folds can remove the currently focused tile. Keep the
+  // logical cursor on a visible tile instead of leaving it anchored to
+  // a dead data-tile-id; the daemon already chose the folded survivor,
+  // so Shift treats the current resume/first item as the safe visible anchor.
+  useEffect(() => {
+    if (normalizedItems.some(item => composeEntryKey(item) === focusedId)) {
+      return
+    }
+    setFocusedId(resumeKey)
+    const node = railRef.current
+    const target = node?.querySelector<HTMLElement>(
+      `[data-tile-id="${CSS.escape(resumeKey)}"]`,
+    )
+    target?.focus()
+  }, [normalizedItems, focusedId, resumeKey])
+
   // Caption x-anchor measurement. Recomputed on focused-id change, on
   // rail scroll (capture-phase: scroll does not bubble), and on window
   // resize. Rounded to whole pixels so the snap-positioned caption

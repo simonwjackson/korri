@@ -45,6 +45,22 @@ describe("ShiftCatalogState", () => {
     expect(Option.isNone(ShiftCatalogState.select("Empty")(ready))).toBe(true)
   })
 
+  it("preserves folded availability facts on ready games", () => {
+    const state = ShiftCatalogState.fromResult(
+      AsyncResult.success({
+        ...snapshotBase(),
+        entries: [entry("remote/stray", "remote-available")],
+        peers: [peer("self", true, "ready")],
+        health: { ...snapshotBase().health, self: "ready" },
+      }),
+    )
+
+    expect(state._tag).toBe("Ready")
+    if (state._tag === "Ready") {
+      expect(state.games[0]?.availability).toBe("remote-available")
+    }
+  })
+
   it("renders ready when self has entries even if a peer failed", () => {
     const state = ShiftCatalogState.fromResult(
       AsyncResult.success({
@@ -133,11 +149,15 @@ function snapshotBase() {
   }
 }
 
-function entry(id: string) {
+function entry(
+  id: string,
+  availability?: "local-launchable" | "remote-available" | "remote-unreachable",
+) {
   return {
     id,
     itemId: id,
     title: "Stray",
+    ...(availability ? { availability } : {}),
     releases: [{ id: "default", system: "steam", launchable: true }],
     launchable: true,
     source: {

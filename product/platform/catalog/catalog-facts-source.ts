@@ -13,8 +13,14 @@ export class CatalogFactsError extends Schema.TaggedErrorClass<CatalogFactsError
 export type CatalogPeerStatus = "loading" | "ready" | "failed"
 export type CatalogSnapshotScope = "fabric" | "self"
 
+export type CatalogEntryAvailability =
+  | "local-launchable"
+  | "remote-available"
+  | "remote-unreachable"
+
 export type CatalogEntry = PlayableLibraryEntry & {
   readonly source: EntrySource
+  readonly availability?: CatalogEntryAvailability
 }
 
 export interface CatalogPeerSnapshot {
