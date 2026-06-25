@@ -7,7 +7,7 @@
  * catalog. The workshop app imports `shiftConfig` and mounts it; Shift depends
  * on the workshop's *types* alone, never its runtime (mirrors pico/config.tsx).
  *
- * Shift's CSS is scoped under [data-shift-home] (created by ShiftHomeRoot), and
+ * Shift's CSS is scoped under [data-shift-home] (created by ShiftCinematicHome), and
  * that element carries the `intrinsic` class, so the recipe re-derives the whole
  * scale against the device frame the lab renders it inside. The knob sliders
  * drive --shift-base-* / --shift-type-ratio / --shift-space-unit; TEXT / PAD use
