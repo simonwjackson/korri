@@ -46,11 +46,19 @@ type FailedLaunchLibraryResponse = Extract<
 
 type LaunchPayload = typeof LaunchLibraryPayload.Type
 
+type LaunchHandlerEffect = Effect.Effect<
+  LaunchLibraryResponse,
+  DataError | NotFoundError,
+  LibrarySource | Launcher | ForegroundSessionHost | RemoteStreamPrepare
+>
+
 type LaunchResolutionResult =
   | { readonly _tag: "resolved"; readonly resolved: ResolvedLaunch }
   | { readonly _tag: "failed"; readonly response: FailedLaunchLibraryResponse }
 
-export const handleLaunchLibrary = (payload: LaunchPayload) =>
+export const handleLaunchLibrary = (
+  payload: LaunchPayload,
+): LaunchHandlerEffect =>
   Effect.gen(function* () {
     // Federation routing: remote-source entries dispatch a Moonlight
     // launch through the same `Launcher` / `ForegroundSessionHost` seam
@@ -367,7 +375,7 @@ function toDataError(error: LibraryError): DataError {
 function handleRemoteSourceLaunch(
   payload: LaunchPayload,
   source: NonNullable<LaunchPayload["source"]>,
-) {
+): LaunchHandlerEffect {
   return Effect.gen(function* () {
     if (!source.controlUrl || source.controlUrl.trim().length === 0) {
       logger.warn(

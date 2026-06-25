@@ -1,4 +1,5 @@
 import type { EntrySource } from "@platform/api/rpc/entry-source"
+import type { LaunchAlternative } from "@platform/library/launch-alternative"
 import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
 import {
   Launcher,
@@ -69,6 +70,7 @@ export interface LaunchInput {
   readonly id: string
   readonly releaseId?: string
   readonly source?: EntrySource
+  readonly launchAlternatives?: readonly LaunchAlternative[]
 }
 
 export const launchAtom = libraryRuntime.fn<LaunchInput | string>()(input =>
