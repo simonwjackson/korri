@@ -16,7 +16,11 @@ export function LabSurfaceControls() {
       className="lab-surface-controls"
       aria-label="Surface-specific controls"
     >
-      <WorkshopControls useControls={adapter.useControls} />
+      {/* Key by surface id so the renderer REMOUNTS on a surface switch. Each
+       * surface's useControls hook calls a different number of hooks (shift: 1,
+       * pico: 3); reusing one instance across surfaces trips React's "rendered
+       * more hooks than during the previous render". */}
+      <WorkshopControls key={adapter.id} useControls={adapter.useControls} />
     </div>
   )
 }
