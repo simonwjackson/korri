@@ -413,6 +413,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(result.status).toBe("failed")
     if (result.status === "failed") {
       expect(result.failureKind).toBe("host-unavailable")
+      expect(result.stderrTail).toContain("aka")
       expect(result.stderrTail).toContain("peer is down")
     }
   })

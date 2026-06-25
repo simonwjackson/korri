@@ -416,7 +416,7 @@ function handleRemoteSourceLaunch(
       )
       return launchFailedFromKind(
         remotePrepareCategoryToFailureKind(prepareResult.category),
-        prepareResult.message,
+        `peer ${source.hostId} failed to prepare launch: ${prepareResult.message}`,
       )
     }
 
