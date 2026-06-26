@@ -56,6 +56,10 @@ let
 
   inputdUnit = cfg: cfg.systemd.user.services.korri-inputd or { };
   inputplumberUnit = cfg: cfg.systemd.services.inputplumber or { };
+  inputdPathPackageNames = cfg: map (pkg: pkg.pname or pkg.name or "") ((inputdUnit cfg).path or [ ]);
+  inputdPathPackageByName = cfg: name: lib.findFirst (pkg: (pkg.pname or pkg.name or "") == name) null ((inputdUnit cfg).path or [ ]);
+
+  inputdOnlyBacklightStepPackage = inputdPathPackageByName inputdOnly "korri-backlight-step";
 
   # ---------------------------------------------------------------- scenarios
   baseline = evaluateWith { };
@@ -201,6 +205,11 @@ let
       (inputdUnit inputdOnly).environment.KORRI_INPUT_BRIDGE_HOSTNAME or null == "127.0.0.1"
       && (inputdUnit inputdOnly).environment.KORRI_INPUT_BRIDGE_PORT or null == "3002"
     ))
+    (check "inputd-only: brightness shortcuts adjust all backlights through Korri helper" (
+      (inputdUnit inputdOnly).environment.KORRI_INPUTD_BRIGHTNESS_UP or null == "korri-backlight-step +5"
+      && (inputdUnit inputdOnly).environment.KORRI_INPUTD_BRIGHTNESS_DOWN or null == "korri-backlight-step -5"
+      && builtins.elem "korri-backlight-step" (inputdPathPackageNames inputdOnly)
+    ))
     (check "inputd-only: wantedBy korri-session.target" (
       (inputdUnit inputdOnly).wantedBy or [ ] == [ "korri-session.target" ]
     ))
@@ -238,7 +247,31 @@ if failures != [ ] then
     lib.concatMapStringsSep "\n" (f: "- ${f.message}") failures
   }"
 else
-  pkgs.runCommand "korri-input-module-check" { } ''
+  pkgs.runCommand "korri-input-module-check" {
+    nativeBuildInputs = [ inputdOnlyBacklightStepPackage ];
+  } ''
     echo "All ${toString (builtins.length checks)} korri-input module checks passed."
+
+    backlight_root="$TMPDIR/backlight"
+    mkdir -p "$backlight_root/panel-a" "$backlight_root/panel-b"
+    printf '50\n' > "$backlight_root/panel-a/brightness"
+    printf '100\n' > "$backlight_root/panel-a/max_brightness"
+    printf '410\n' > "$backlight_root/panel-b/brightness"
+    printf '4096\n' > "$backlight_root/panel-b/max_brightness"
+
+    KORRI_BACKLIGHT_ROOT="$backlight_root" korri-backlight-step +5
+    test "$(cat "$backlight_root/panel-a/brightness")" = 55
+    test "$(cat "$backlight_root/panel-b/brightness")" = 615
+
+    KORRI_BACKLIGHT_ROOT="$backlight_root" korri-backlight-step -5
+    test "$(cat "$backlight_root/panel-a/brightness")" = 50
+    test "$(cat "$backlight_root/panel-b/brightness")" = 410
+
+    printf '3\n' > "$backlight_root/panel-a/brightness"
+    printf '1\n' > "$backlight_root/panel-b/brightness"
+    KORRI_BACKLIGHT_ROOT="$backlight_root" korri-backlight-step -5
+    test "$(cat "$backlight_root/panel-a/brightness")" = 1
+    test "$(cat "$backlight_root/panel-b/brightness")" = 1
+
     touch $out
   ''

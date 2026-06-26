@@ -66,6 +66,7 @@ let
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
+      inputdPathPackageNames = map (pkg: pkg.pname or pkg.name or "") inputdPath;
       inputdWants = inputdUnit.wants or [ ];
       inputdAfter = inputdUnit.after or [ ];
       inputplumberService = systemServices.inputplumber or { };
@@ -596,6 +597,11 @@ let
       ))
       (check "${name}: inputd PATH includes pactl for volume shortcuts" (
         builtins.any (pkg: (pkg.pname or "") == "pulseaudio") inputdPath
+      ))
+      (check "${name}: inputd brightness shortcuts adjust all writable backlights" (
+        (inputdEnv.KORRI_INPUTD_BRIGHTNESS_UP or null) == "korri-backlight-step +5"
+        && (inputdEnv.KORRI_INPUTD_BRIGHTNESS_DOWN or null) == "korri-backlight-step -5"
+        && builtins.elem "korri-backlight-step" inputdPathPackageNames
       ))
       (check "${name}: removable SD cards mount under runtime media and Korri content" (
         cfg.systemd.services ? "korri-removable-media-mount@"
