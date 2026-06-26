@@ -146,6 +146,11 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
+  it("recognizes Steam process removal log lines", () => {
+    expect(moduleSource).toContain("Game process removed: AppID $appid")
+    expect(moduleSource).toContain("Game process removed : AppID $appid")
+  })
+
   it("forwards AppIDs into the warm Steam client without a raw applaunch fallback", () => {
     expect(moduleSource).toContain('"steam://rungameid/$appid"')
     expect(moduleSource).not.toContain('-applaunch "$appid"')

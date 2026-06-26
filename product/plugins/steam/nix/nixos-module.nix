@@ -724,7 +724,9 @@ let
         repair_game_audio
       fi
 
-      if [ "$saw_added" -eq 1 ] && log_has "$new_log" "Game process removed : AppID $appid"; then
+      if [ "$saw_added" -eq 1 ] \
+        && { log_has "$new_log" "Game process removed: AppID $appid" \
+          || log_has "$new_log" "Game process removed : AppID $appid"; }; then
         hide_steam_hat
         exit 0
       fi
