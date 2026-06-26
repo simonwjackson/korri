@@ -4,43 +4,40 @@ import type { LabStoryGroup } from "../model/lab-part-model"
 export function LabPartsPanel({
   groups,
   selectedIds,
-  multi,
-  onMultiChange,
   onSelect,
   onSelectLayer,
 }: {
   readonly groups: readonly LabStoryGroup[]
   readonly selectedIds: readonly string[]
-  readonly multi: boolean
-  readonly onMultiChange: (multi: boolean) => void
   readonly onSelect: (story: Story, additive: boolean) => void
   readonly onSelectLayer: (stories: readonly Story[]) => void
 }) {
   return (
-    <div className="lab-panel-stack">
-      <div className="lab-panel-hint">Auto-discovered parts. Multi keeps parts real-size on the canvas.</div>
-      <label className="lab-inline-toggle">
-        <input type="checkbox" checked={multi} onChange={event => onMultiChange(event.target.checked)} />
-        Multi
-      </label>
+    <div className="pt-tree">
+      <div className="pt-tree-hint">
+        Tap to open · use <b>Multi</b> (or ⌘/Ctrl-click) to stack several
+      </div>
       {groups.map(group => (
-        <section key={group.layer} className="lab-part-group">
-          <header>
-            <strong>{group.layer}</strong>
-            <button type="button" onClick={() => onSelectLayer(group.stories)}>all</button>
-          </header>
-          {group.stories.map(story => (
-            <button
-              key={story.id}
-              type="button"
-              className={selectedIds.includes(story.id) ? "is-on" : ""}
-              onClick={event => onSelect(story, multi || event.metaKey || event.ctrlKey)}
-            >
-              <span>{story.name}</span>
-              {story.state ? <em>{story.state}</em> : null}
-            </button>
-          ))}
-        </section>
+        <div key={group.layer} className="pt-tree-group">
+          <button type="button" className="pt-tree-layer" onClick={() => onSelectLayer(group.stories)}>
+            {group.layer}
+            <span className="pt-tree-layer-all">all</span>
+          </button>
+          {group.stories.map(story => {
+            const on = selectedIds.includes(story.id)
+            return (
+              <button
+                key={story.id}
+                type="button"
+                className={`pt-tree-item${on ? " is-sel" : ""}`}
+                onClick={event => onSelect(story, event.metaKey || event.ctrlKey || event.shiftKey)}
+              >
+                <span className="pt-tree-check" aria-hidden>{on ? "◉" : "○"}</span>
+                {story.name}
+              </button>
+            )
+          })}
+        </div>
       ))}
     </div>
   )

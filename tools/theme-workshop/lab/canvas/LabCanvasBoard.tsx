@@ -25,13 +25,13 @@ export function LabCanvasBoard({
   const move = (id: string, x: number, y: number) =>
     onInstancesChange(bindObjectInstance(instances, id, { x, y }))
   const remove = (id: string) => onInstancesChange(instances.filter(instance => instance.id !== id))
-  const tidy = () => onInstancesChange(instances.map((instance, index) => ({ ...instance, x: 24 + (index % 3) * 340, y: 24 + Math.floor(index / 3) * 260 })))
+  const tidy = () => onInstancesChange(instances.map((instance, index) => ({ ...instance, x: 24 + (index % 3) * 360, y: 24 + Math.floor(index / 3) * 300 })))
 
-  if (instances.length === 0) return <div className="lab-empty-state">Select multiple parts or add parts to the canvas.</div>
+  if (instances.length === 0) return <div className="lab-empty-state">Turn on Multi and pick parts, or select several parts to lay them out here.</div>
 
   return (
     <div
-      className="lab-board"
+      className="pt-board-free"
       onWheel={event => {
         event.preventDefault()
         setCamera(cam => ({ ...cam, scale: clampScale(cam.scale * Math.exp(-event.deltaY * 0.0015)) }))
@@ -50,18 +50,19 @@ export function LabCanvasBoard({
         panRef.current = null
       }}
     >
-      <div className="lab-board-cam" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})` }}>
+      <div className="pt-cam" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})` }}>
         {instances.map((instance, index) => {
           const story = stories.get(instance.storyId)
           if (!story) return null
-          const positioned = instance.x === undefined ? { ...instance, x: 24 + (index % 3) * 340, y: 24 + Math.floor(index / 3) * 260 } : instance
+          const positioned = instance.x === undefined ? { ...instance, x: 24 + (index % 3) * 360, y: 24 + Math.floor(index / 3) * 300 } : instance
           return <LabDraggablePart key={instance.id} instance={positioned} story={story} byId={stories} sources={sources} states={states} scale={camera.scale} onBind={bind} onMove={move} onRemove={remove} />
         })}
       </div>
-      <div className="lab-board-tools">
-        <button type="button" onClick={() => setCamera(cam => ({ ...cam, scale: clampScale(cam.scale / 1.2) }))}>−</button>
-        <span>{Math.round(camera.scale * 100)}%</span>
-        <button type="button" onClick={() => setCamera(cam => ({ ...cam, scale: clampScale(cam.scale * 1.2) }))}>+</button>
+      <div className="pt-board-tools">
+        <button type="button" aria-label="Zoom out" onClick={() => setCamera(cam => ({ ...cam, scale: clampScale(cam.scale / 1.2) }))}>−</button>
+        <span className="pt-board-zoom">{Math.round(camera.scale * 100)}%</span>
+        <button type="button" aria-label="Zoom in" onClick={() => setCamera(cam => ({ ...cam, scale: clampScale(cam.scale * 1.2) }))}>+</button>
+        <span className="pt-board-tools-sep" />
         <button type="button" onClick={() => setCamera(DEFAULT_CAMERA)}>100%</button>
         <button type="button" onClick={tidy}>Tidy</button>
       </div>

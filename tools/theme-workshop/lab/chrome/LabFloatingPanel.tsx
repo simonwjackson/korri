@@ -1,58 +1,68 @@
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react"
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from "react"
+
+type Pos = { readonly x: number; readonly y: number }
 
 export function LabFloatingPanel({
   title,
   children,
   initial,
-  accent = "#8bd3ff",
+  width = 248,
+  accent = "#7dd3fc",
 }: {
   readonly title: string
   readonly children: ReactNode
-  readonly initial: { readonly x: number; readonly y: number; readonly width?: number }
+  readonly initial: Pos
+  readonly width?: number
   readonly accent?: string
 }) {
-  const [pos, setPos] = useState(initial)
+  const [pos, setPos] = useState<Pos>(initial)
   const [collapsed, setCollapsed] = useState(false)
-  const drag = useRef<{ readonly dx: number; readonly dy: number } | null>(null)
+  const posRef = useRef(initial)
+  posRef.current = pos
+  const lastInitial = useRef(initial)
 
-  useEffect(() => setPos(initial), [initial.x, initial.y, initial.width])
+  useEffect(() => {
+    if (lastInitial.current.x !== initial.x || lastInitial.current.y !== initial.y) {
+      lastInitial.current = initial
+      setPos(initial)
+    }
+  }, [initial])
+
+  const onPointerDown = useCallback((event: React.PointerEvent) => {
+    if (event.button !== 0) return
+    const startX = event.clientX
+    const startY = event.clientY
+    const base = posRef.current
+    ;(event.target as Element).setPointerCapture?.(event.pointerId)
+    const move = (next: PointerEvent) => {
+      const x = Math.max(0, Math.min(window.innerWidth - 60, base.x + next.clientX - startX))
+      const y = Math.max(0, Math.min(window.innerHeight - 30, base.y + next.clientY - startY))
+      setPos({ x, y })
+    }
+    const up = () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+  }, [])
 
   return (
-    <section
-      className="lab-float-panel"
-      style={{ left: pos.x, top: pos.y, width: initial.width ?? 280, "--lab-panel-accent": accent } as CSSProperties}
-      aria-label={title}
-    >
-      <header
-        className="lab-float-head"
-        onPointerDown={event => {
-          const target = event.currentTarget
-          target.setPointerCapture(event.pointerId)
-          drag.current = { dx: event.clientX - pos.x, dy: event.clientY - pos.y }
-        }}
-        onPointerMove={event => {
-          if (!drag.current) return
-          setPos({
-            ...pos,
-            x: Math.max(8, Math.min(window.innerWidth - 96, event.clientX - drag.current.dx)),
-            y: Math.max(8, Math.min(window.innerHeight - 48, event.clientY - drag.current.dy)),
-          })
-        }}
-        onPointerUp={event => {
-          event.currentTarget.releasePointerCapture(event.pointerId)
-          drag.current = null
-        }}
-      >
-        <span>{title}</span>
+    <section className="pt-panel" style={{ left: pos.x, top: pos.y, width } as CSSProperties} aria-label={title}>
+      <header className="pt-panel-bar" onPointerDown={onPointerDown}>
+        <span className="pt-panel-dot" style={{ background: accent }} />
+        <span className="pt-panel-title">{title}</span>
         <button
           type="button"
-          aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+          className="pt-panel-collapse"
+          onPointerDown={event => event.stopPropagation()}
           onClick={() => setCollapsed(value => !value)}
+          aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
         >
           {collapsed ? "+" : "–"}
         </button>
       </header>
-      {!collapsed ? <div className="lab-float-body">{children}</div> : null}
+      {collapsed ? null : <div className="pt-panel-body">{children}</div>}
     </section>
   )
 }

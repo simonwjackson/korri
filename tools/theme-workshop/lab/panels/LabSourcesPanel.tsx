@@ -2,6 +2,14 @@ import type { LabSourceOption } from "../model/lab-source-state"
 
 export const LAB_BIND_MIME = "application/x-korri-lab-bind"
 
+/** Display "kind" badge: the first/default source is local fixture data; any
+ * source whose id or label references a live daemon (korrid) reads as live. */
+function sourceKind(source: LabSourceOption, index: number): "fixture" | "live" {
+  const text = `${source.id} ${source.label}`.toLowerCase()
+  if (text.includes("korri") || text.includes("live") || text.includes("daemon")) return "live"
+  return index === 0 ? "fixture" : "live"
+}
+
 export function LabSourcesPanel({
   sources,
   activeId,
@@ -12,12 +20,14 @@ export function LabSourcesPanel({
   readonly onSelect: (id: string) => void
 }) {
   return (
-    <div className="lab-panel-stack">
-      <div className="lab-panel-hint">Where data comes from. Drag onto a preview, or use its menu.</div>
-      {sources.map(source => (
+    <div className="pt-sources">
+      <div className="pt-sources-hint">
+        Where data comes from. <b>Drag</b> onto an object or tap to make it active.
+      </div>
+      {sources.map((source, index) => (
         <div
           key={source.id}
-          className={`lab-bind-row${activeId === source.id ? " is-on" : ""}`}
+          className={`pt-source-row${activeId === source.id ? " is-on" : ""}`}
           draggable
           onClick={() => onSelect(source.id)}
           onDragStart={event => {
@@ -25,9 +35,9 @@ export function LabSourcesPanel({
             event.dataTransfer.effectAllowed = "copy"
           }}
         >
-          <span aria-hidden>⠇</span>
-          <strong>{source.label}</strong>
-          {source.description ? <small>{source.description}</small> : null}
+          <span className="pt-source-grip" aria-hidden>⠇</span>
+          <span className={`pt-source-kind is-${sourceKind(source, index)}`}>{sourceKind(source, index)}</span>
+          <span className="pt-source-label">{source.label}</span>
         </div>
       ))}
     </div>

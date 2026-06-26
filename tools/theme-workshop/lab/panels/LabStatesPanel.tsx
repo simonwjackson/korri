@@ -11,12 +11,14 @@ export function LabStatesPanel({
   readonly onSelect: (id: LabStateOption["id"]) => void
 }) {
   return (
-    <div className="lab-panel-stack">
-      <div className="lab-panel-hint">What the loader is doing. Drag onto a preview, or use its menu.</div>
+    <div className="pt-sources">
+      <div className="pt-sources-hint">
+        What the loader is doing. <b>Drag</b> onto an object or tap to make it active.
+      </div>
       {states.map(state => (
         <div
           key={state.id}
-          className={`lab-bind-row${activeId === state.id ? " is-on" : ""}`}
+          className={`pt-source-row${activeId === state.id ? " is-on" : ""}`}
           draggable
           onClick={() => onSelect(state.id)}
           onDragStart={event => {
@@ -24,9 +26,9 @@ export function LabStatesPanel({
             event.dataTransfer.effectAllowed = "copy"
           }}
         >
-          <span className={`lab-state-dot is-${state.id}`} aria-hidden />
-          <strong>{state.label}</strong>
-          {state.description ? <small>{state.description}</small> : null}
+          <span className="pt-source-grip" aria-hidden>⠇</span>
+          <span className={`pt-state-dot is-${state.id}`} aria-hidden />
+          <span className="pt-source-label">{state.label}</span>
         </div>
       ))}
     </div>

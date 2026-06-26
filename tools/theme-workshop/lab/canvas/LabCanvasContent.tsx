@@ -20,6 +20,7 @@ export function LabCanvasContent({
   states,
   activeSourceId,
   activeStateId,
+  zoom,
   onSelectStory,
   onInstancesChange,
 }: {
@@ -32,6 +33,7 @@ export function LabCanvasContent({
   readonly states: readonly LabStateOption[]
   readonly activeSourceId: string
   readonly activeStateId: SourceStatus
+  readonly zoom: number
   readonly onSelectStory: (storyId: string) => void
   readonly onInstancesChange: (instances: readonly LabObjectInstance[]) => void
 }) {
@@ -40,9 +42,9 @@ export function LabCanvasContent({
   const primaryStory = selectedStories[0] ?? null
   const primaryInstance = primaryStory ? instances.find(instance => instance.storyId === primaryStory.id) ?? null : null
   if (view === "surface") return <LabSurfaceView sourceId={activeSourceId} stateId={activeStateId} />
-  if (view === "gallery") return <LabGalleryView catalog={catalog} index={index} onSelect={onSelectStory} />
+  if (view === "gallery") return <LabGalleryView catalog={catalog} index={index} selectedIds={selectedIds} onSelect={onSelectStory} />
   if (view === "selection") {
-    return <LabSelectionView story={primaryStory} byId={index.byId} instance={primaryInstance} sources={sources} states={states} onBind={(id, patch) => onInstancesChange(instances.map(instance => instance.id === id ? { ...instance, ...patch } : instance))} />
+    return <LabSelectionView story={primaryStory} byId={index.byId} instance={primaryInstance} sources={sources} states={states} zoom={zoom} onBind={(id, patch) => onInstancesChange(instances.map(instance => instance.id === id ? { ...instance, ...patch } : instance))} />
   }
   if (view === "matrix") return <LabMatrixView selectedStories={selectedStories} stories={index.byId} sources={sources} states={states} devices={selectedDevices} />
   return <LabCanvasBoard instances={instances} stories={index.byId} sources={sources} states={states} onInstancesChange={onInstancesChange} />

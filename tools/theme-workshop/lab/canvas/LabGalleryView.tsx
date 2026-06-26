@@ -1,14 +1,17 @@
 import type { LabPartsCatalog } from "../parts-discovery"
 import type { LabStoryIndex } from "../model/lab-part-model"
 import { LabPreviewBoundary } from "../model/lab-preview-boundary"
+import { LabScaledPreview } from "./LabScaledPreview"
 
 export function LabGalleryView({
   catalog,
   index,
+  selectedIds,
   onSelect,
 }: {
   readonly catalog: LabPartsCatalog | null
   readonly index: LabStoryIndex
+  readonly selectedIds: readonly string[]
   readonly onSelect: (storyId: string) => void
 }) {
   if (!catalog) return <div className="lab-empty-state">Discovering parts…</div>
@@ -20,25 +23,44 @@ export function LabGalleryView({
     )
   }
   return (
-    <div className="lab-gallery" {...catalog.rootProps}>
+    <div className="pt-gallery" {...catalog.rootProps}>
       {catalog.errors?.map(error => (
         <div key={error.path} role="alert" className="lab-catalog-error">
           Failed to load {error.path}: {error.message}
         </div>
       ))}
       {index.groups.map(group => (
-        <section key={group.layer} className="lab-gallery-group">
-          <h2>{group.layer}</h2>
-          <div className="lab-gallery-grid">
+        <section key={group.layer} className="pt-gallery-group">
+          <header className="pt-gallery-head">
+            <span className={`pt-layer-tag layer-${group.layer}`}>{group.layer}</span>
+            <span className="pt-gallery-count">{group.stories.length}</span>
+          </header>
+          <div className="pt-grid">
             {group.stories.map(story => (
-              <button key={story.id} type="button" className="lab-gallery-card" onClick={() => onSelect(story.id)}>
-                <span className={`lab-layer-tag is-${story.layer}`}>{story.layer}</span>
-                <strong>{story.name}</strong>
-                {story.note ? <small>{story.note}</small> : null}
-                <div className="lab-preview-frame">
-                  <LabPreviewBoundary label={story.name}>{story.render()}</LabPreviewBoundary>
+              <div
+                key={story.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${story.name}`}
+                className={`pt-card${selectedIds.includes(story.id) ? " is-sel" : ""}`}
+                onClick={() => onSelect(story.id)}
+                onKeyDown={event => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    onSelect(story.id)
+                  }
+                }}
+              >
+                <div className="pt-card-stage">
+                  <LabScaledPreview>
+                    <LabPreviewBoundary label={story.name}>{story.render()}</LabPreviewBoundary>
+                  </LabScaledPreview>
                 </div>
-              </button>
+                <div className="pt-card-foot">
+                  <span className={`pt-layer-tag layer-${story.layer}`}>{story.layer}</span>
+                  <span className="pt-card-name">{story.name}</span>
+                </div>
+              </div>
             ))}
           </div>
         </section>

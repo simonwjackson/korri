@@ -4,6 +4,7 @@ import { type LabObjectInstance } from "../model/lab-canvas-state"
 import { isSourceStatus, type LabSourceOption, type LabStateOption, type SourceStatus } from "../model/lab-source-state"
 import { stateVariantFor } from "../model/lab-part-model"
 import { LabPreviewBoundary } from "../model/lab-preview-boundary"
+import { LabScaledPreview } from "./LabScaledPreview"
 
 function parseBind(value: string): { axis: "sourceId" | "stateId"; value: string } | null {
   const [axis, id] = value.split(":")
@@ -38,8 +39,8 @@ export function LabDraggablePart({
   const variant = stateVariantFor(story, instance.stateId, byId)
   return (
     <section
-      className="lab-object"
-      style={{ left: x, top: y }}
+      className="pt-object"
+      style={{ left: x, top: y, width: 360 }}
       onDragOver={event => {
         if (event.dataTransfer.types.includes(LAB_BIND_MIME)) event.preventDefault()
       }}
@@ -49,6 +50,7 @@ export function LabDraggablePart({
       }}
     >
       <header
+        className="pt-object-bar"
         onPointerDown={event => {
           const start = { x: event.clientX, y: event.clientY, ox: x, oy: y }
           const target = event.currentTarget
@@ -67,16 +69,24 @@ export function LabDraggablePart({
           target.addEventListener("pointerup", up)
         }}
       >
-        <span className={`lab-layer-tag is-${story.layer}`}>{story.layer}</span>
-        <strong>{story.name}</strong>
-        <button type="button" aria-label={`Remove ${story.name}`} onClick={() => onRemove(instance.id)}>×</button>
+        <span className={`pt-layer-tag layer-${story.layer}`}>{story.layer}</span>
+        <span className="pt-object-title">{story.name}</span>
+        <label className="pt-object-source" onPointerDown={event => event.stopPropagation()}>
+          <span className="pt-object-source-icon" aria-hidden>◈</span>
+          <select value={instance.sourceId} aria-label={`Data source for ${story.name}`} onChange={event => onBind(instance.id, { sourceId: event.target.value })}>
+            {sources.map(source => <option key={source.id} value={source.id}>{source.label}</option>)}
+          </select>
+        </label>
+        <label className="pt-object-source" onPointerDown={event => event.stopPropagation()}>
+          <span className="pt-object-source-icon pt-icon-state" aria-hidden>◆</span>
+          <select value={instance.stateId} aria-label={`State for ${story.name}`} onChange={event => onBind(instance.id, { stateId: event.target.value as SourceStatus })}>
+            {states.map(state => <option key={state.id} value={state.id}>{state.label}</option>)}
+          </select>
+        </label>
+        <button type="button" className="pt-object-remove" aria-label={`Remove ${story.name}`} onPointerDown={event => event.stopPropagation()} onClick={() => onRemove(instance.id)}>×</button>
       </header>
-      <div className="lab-object-controls">
-        <label>Source <select value={instance.sourceId} onChange={event => onBind(instance.id, { sourceId: event.target.value })}>{sources.map(source => <option key={source.id} value={source.id}>{source.label}</option>)}</select></label>
-        <label>State <select value={instance.stateId} onChange={event => onBind(instance.id, { stateId: event.target.value as SourceStatus })}>{states.map(state => <option key={state.id} value={state.id}>{state.label}</option>)}</select></label>
-      </div>
-      <div className="lab-object-body">
-        {variant ? <LabPreviewBoundary label={variant.name}>{variant.render()}</LabPreviewBoundary> : <div className="lab-empty-state">No {instance.stateId} variant.</div>}
+      <div className="pt-object-body">
+        {variant ? <LabScaledPreview><LabPreviewBoundary label={variant.name}>{variant.render()}</LabPreviewBoundary></LabScaledPreview> : <div className="lab-empty-state">No {instance.stateId} variant.</div>}
       </div>
     </section>
   )

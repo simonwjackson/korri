@@ -10,24 +10,23 @@ export function LabDevicesPanel() {
     setDevicesSegment(next.size === devices.length || next.size === 0 ? "all" : [...next].join(","))
   }
   return (
-    <div className="lab-panel-stack">
-      <div className="lab-panel-hint">Physical-size device previews. Current selection: {selection.kind}</div>
+    <div className="pt-devices">
+      <div className="pt-sources-hint">Physical-size device previews. Current selection: {selection.kind}</div>
       {devices.map(device => (
-        <section key={device.id} className="lab-device-row">
-          <label>
-            <input type="checkbox" checked={selected.has(device.id)} onChange={() => toggle(device.id)} />
+        <div key={device.id} className="lab-device-card">
+          <button type="button" className={`pt-device${selected.has(device.id) ? " is-on" : ""}`} onClick={() => toggle(device.id)}>
+            <span className="pt-device-check" aria-hidden>{selected.has(device.id) ? "●" : "○"}</span>
             {device.name}
-          </label>
+          </button>
           <div className="lab-mm-fields">
             <label>W <input type="number" value={device.widthMm} onChange={event => calibration.patchDevice(device.id, { widthMm: Number(event.target.value) })} /></label>
             <label>H <input type="number" value={device.heightMm} onChange={event => calibration.patchDevice(device.id, { heightMm: Number(event.target.value) })} /></label>
           </div>
-        </section>
+        </div>
       ))}
-      <label className="lab-slider-row">
-        <span>Scale</span>
+      <label className="pt-knob">
+        <div className="pt-knob-row"><span>Scale</span><span className="pt-knob-val">{Math.round(pxPerMm * 25.4)}dpi</span></div>
         <input type="range" min={2.5} max={9} step={0.01} value={pxPerMm} onChange={event => calibration.setPxPerMm(Number(event.target.value))} />
-        <output>{Math.round(pxPerMm * 25.4)}dpi</output>
       </label>
       <div className="lab-panel-actions">
         <button type="button" onClick={calibration.addDevice}>+ add device</button>
