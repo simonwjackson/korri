@@ -49,10 +49,11 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
-  it("routes AppID launches through a warm SteamOS desktop client", () => {
+  it("routes AppID launches through the gamescoped SteamOS desktop client", () => {
     expect(moduleSource).toContain(
-      `service_name="''\${KORRI_STEAM_SERVICE:-korri-steam.service}"`,
+      `service_name="''\${KORRI_STEAM_SERVICE:-korri-steam-gamescope.service}"`,
     )
+    expect(moduleSource).toContain("systemd.services.korri-steam-gamescope")
     expect(moduleSource).toContain("systemd.services.korri-steam")
     expect(moduleSource).toContain("-steamos3")
     expect(moduleSource).toContain("-steampal")
@@ -82,8 +83,11 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("SupplementaryGroups = [ steamInputGroup ]")
   })
 
-  it("requires warm Steam readiness before forwarding an AppID", () => {
+  it("requires gamescoped Steam readiness before forwarding an AppID", () => {
     expect(moduleSource).toContain("wait_for_steam_ready")
+    expect(moduleSource).toContain("GAMESCOPE_WAYLAND_DISPLAY")
+    expect(moduleSource).toContain("gamescope-0")
+    expect(moduleSource).toContain('[ -S "$gamescope_socket" ]')
     expect(moduleSource).toContain("Waiting for compat in post-logon")
     expect(moduleSource).toContain("Loaded Config for Local Selection Path")
     expect(moduleSource).not.toContain("steam_big_picture_window_present")
@@ -92,7 +96,7 @@ describe("Steam plugin Nix module", () => {
       "Console Log Start|Waiting for compat in post-logon",
     )
     expect(moduleSource).toContain(
-      "timed out waiting for Steam readiness before AppID launch",
+      "timed out waiting for gamescoped Steam readiness before AppID launch",
     )
   })
 
@@ -118,11 +122,14 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
-  it("accepts existing readiness evidence for prewarmed Steam", () => {
+  it("accepts existing readiness evidence for prewarmed gamescoped Steam", () => {
     expect(moduleSource).toContain("service_was_active=0")
     expect(moduleSource).toContain("service_was_active=1")
     expect(moduleSource).toContain(
-      "A deliberately prewarmed Steam session emits its",
+      "A deliberately prewarmed gamescoped Steam session emits its",
+    )
+    expect(moduleSource).toContain(
+      "existing evidence as long as the gamescope socket is present",
     )
     expect(moduleSource).toContain(
       'ready_log="$(' + "$" + "{pkgs.coreutils}/bin/cat",

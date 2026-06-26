@@ -425,8 +425,8 @@ let
     esac
 
     case "$1" in
-      start) exec ${pkgs.systemd}/bin/systemctl --no-block start korri-steam.service ;;
-      stop) exec ${pkgs.coreutils}/bin/timeout 30 ${pkgs.systemd}/bin/systemctl stop korri-steam.service ;;
+      start) exec ${pkgs.systemd}/bin/systemctl --no-block start korri-steam-gamescope.service ;;
+      stop) exec ${pkgs.coreutils}/bin/timeout 30 ${pkgs.systemd}/bin/systemctl stop korri-steam-gamescope.service ;;
     esac
   '';
 
@@ -438,9 +438,10 @@ let
     wayland_socket="$runtime_dir/$wayland_display"
     bus_socket="$runtime_dir/bus"
 
-    # The Steam system service consumes the real kiosk user's Wayland and D-Bus
-    # session. Start it from korri-session.target, but wait for the compositor
-    # and bus sockets so boot/session ordering never falls back to direct Steam.
+    # The gamescoped Steam system service consumes the real kiosk user's Wayland
+    # and D-Bus session. Start it from korri-session.target, but wait for the
+    # compositor and bus sockets so boot/session ordering never falls back to
+    # direct Steam.
     i=0
     while [ "$i" -lt 120 ]; do
       if [ -S "$wayland_socket" ] && [ -S "$bus_socket" ]; then
@@ -493,7 +494,7 @@ let
     launch_timeout="''${KORRI_STEAM_APP_LAUNCH_TIMEOUT:-180}"
     forward_timeout="''${KORRI_STEAM_APP_FORWARD_TIMEOUT:-15}"
     service_ready_timeout="''${KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-90}"
-    service_name="''${KORRI_STEAM_SERVICE:-korri-steam.service}"
+    service_name="''${KORRI_STEAM_SERVICE:-korri-steam-gamescope.service}"
     gamescope_display="''${GAMESCOPE_WAYLAND_DISPLAY:-gamescope-0}"
     gamescope_socket="$XDG_RUNTIME_DIR/$gamescope_display"
     target_audio_sink="''${KORRI_STEAM_AUDIO_SINK:-${cfg.appAudioSinkName}}"
@@ -598,7 +599,7 @@ let
         esac
         return $?
       fi
-      if [ "$service_name" != "korri-steam.service" ]; then
+      if [ "$service_name" != "korri-steam-gamescope.service" ]; then
         echo "korri-steam-app: warning: cannot $action overridden service $service_name without root" >&2
         return 1
       fi
@@ -652,14 +653,16 @@ let
         ready_log=""
         if [ -f "$console_log" ]; then
           if [ "$service_was_active" -eq 1 ]; then
-            # A deliberately prewarmed Steam session emits its readiness lines
-            # before this AppID wrapper starts; accept the existing evidence.
+            # A deliberately prewarmed gamescoped Steam session emits its
+            # readiness lines before this AppID wrapper starts; accept the
+            # existing evidence as long as the gamescope socket is present.
             ready_log="$(${pkgs.coreutils}/bin/cat "$console_log" 2>/dev/null || true)"
           else
             ready_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
           fi
         fi
-        if printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
+        if [ -S "$gamescope_socket" ] \
+          && printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
           return 0
         fi
         service_state="$(steam_service_state)"
@@ -673,13 +676,13 @@ let
 
     if ! ${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
       if ! control_steam_service start; then
-        echo "korri-steam-app: could not start Steam service $service_name" >&2
+        echo "korri-steam-app: could not start gamescoped Steam service $service_name" >&2
         exit 125
       fi
     fi
 
     if ! wait_for_steam_ready; then
-      echo "korri-steam-app: timed out waiting for Steam readiness before AppID launch" >&2
+      echo "korri-steam-app: timed out waiting for gamescoped Steam readiness before AppID launch" >&2
       exit 125
     fi
 
