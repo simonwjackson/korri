@@ -90,7 +90,7 @@ const SHIFT_KNOBS: readonly ThemeKnob[] = [
     label: "MAX",
     cssVar: "--shift-base-max",
     min: 14,
-    max: 240,
+    max: 960,
     step: 1,
     default: 18,
     unit: "px",
