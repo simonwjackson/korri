@@ -33,6 +33,7 @@ import {
 } from "./model/lab-source-state"
 import {
   isAxisLive,
+  LAB_AXIS_LIVE,
   type LabAxisActiveMap,
   liveActiveMap,
   pinAxisActive,
@@ -166,6 +167,24 @@ export function LabShell() {
     setActiveByAxis(prev => releaseAxisActive(prev, axisId))
   }
 
+  // Capture-back: read the running surface's current coordinate and map it onto
+  // the axis pins (Live → Inspect), so a live exploration becomes addressable.
+  const pinCurrent = () => {
+    const captured = adapter.captureCoordinate?.(activeScreenPath)
+    if (!captured) return
+    for (const axis of screenAxes) {
+      const tag = captured[axis.id]
+      if (tag && !isAxisLive(tag)) axis.pin(tag)
+      else axis.release()
+    }
+    setActiveByAxis(prev => {
+      const next = { ...prev }
+      for (const axis of screenAxes)
+        next[axis.id] = captured[axis.id] ?? LAB_AXIS_LIVE
+      return next
+    })
+  }
+
   // The global headline: Live releases every axis (hands the running app the
   // wheel from the current coordinate, route preserved) and remembers the pins;
   // Inspect re-applies them. "Go live from here" falls out for free.
@@ -297,6 +316,7 @@ export function LabShell() {
       activeByAxis={activeByAxis}
       onPin={pinAxis}
       onLive={liveAxis}
+      onPinCurrent={adapter.captureCoordinate ? pinCurrent : undefined}
       states={states}
       activeId={activeStateId}
       onSelect={selectState}

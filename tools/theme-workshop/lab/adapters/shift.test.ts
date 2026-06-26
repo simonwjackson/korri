@@ -10,11 +10,13 @@ import {
   getShiftCatalogPreview,
   setShiftCatalogPreview,
 } from "@product/surfaces/web/shift/shift-catalog-preview"
+import { shiftCatalogStateSamples } from "@product/surfaces/web/shift/shift-catalog-state-samples"
 import {
   getShiftLaunchPreview,
+  launchStateSamples,
   setShiftLaunchPreview,
 } from "@product/surfaces/web/shift/shift-launch-preview"
-import { axisEnabled } from "../model/lab-state-axis"
+import { axisEnabled, LAB_AXIS_LIVE } from "../model/lab-state-axis"
 import { resolveLabSurfaceAdapter } from "../surface-registry"
 
 describe("shift lab surface adapter", () => {
@@ -50,7 +52,8 @@ describe("shift home state axes", () => {
     setShiftLaunchPreview(null)
   })
 
-  const home = () => resolveLabSurfaceAdapter("shift").axesForScreen?.("/") ?? []
+  const home = () =>
+    resolveLabSurfaceAdapter("shift").axesForScreen?.("/") ?? []
 
   it("exposes Data and Launch axes derived from their machine tags", () => {
     const axes = home()
@@ -58,7 +61,9 @@ describe("shift home state axes", () => {
 
     const data = axes.find(axis => axis.id === "data")!
     const launch = axes.find(axis => axis.id === "launch")!
-    expect(data.states.map(state => state.id)).toEqual([...ShiftCatalogState.tags])
+    expect(data.states.map(state => state.id)).toEqual([
+      ...ShiftCatalogState.tags,
+    ])
     expect(launch.states.map(state => state.id)).toEqual([...LaunchState.tags])
   })
 
@@ -95,5 +100,30 @@ describe("shift home state axes", () => {
     expect(
       resolveLabSurfaceAdapter("shift").axesForScreen?.("/game/hollow-knight"),
     ).toEqual([])
+  })
+})
+
+describe("shift capture-back coordinate", () => {
+  afterEach(() => {
+    setShiftCatalogPreview(null)
+    setShiftLaunchPreview(null)
+  })
+
+  const capture = () =>
+    resolveLabSurfaceAdapter("shift").captureCoordinate?.("/")
+
+  it("captures the seed's resting coordinate when nothing is pinned", () => {
+    expect(capture()).toEqual({ data: "Ready", launch: "Idle" })
+  })
+
+  it("captures a pinned Ready + Launching coordinate", () => {
+    setShiftCatalogPreview(shiftCatalogStateSamples.Ready())
+    setShiftLaunchPreview(launchStateSamples.Launching())
+    expect(capture()).toEqual({ data: "Ready", launch: "Launching" })
+  })
+
+  it("maps Launch to Live when Data is not Ready (nesting round-trips)", () => {
+    setShiftCatalogPreview(shiftCatalogStateSamples.Empty())
+    expect(capture()).toEqual({ data: "Empty", launch: LAB_AXIS_LIVE })
   })
 })

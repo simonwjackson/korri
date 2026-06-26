@@ -10,7 +10,7 @@ import type {
   LabStateOption,
   SourceStatus,
 } from "./model/lab-source-state"
-import type { LabStateAxis } from "./model/lab-state-axis"
+import type { LabAxisActiveMap, LabStateAxis } from "./model/lab-state-axis"
 
 export interface LabMountedSurface {
   readonly router: unknown
@@ -31,6 +31,10 @@ export interface LabSurfaceAdapter {
    * machine (or surfaces with none at all) return an empty list. Derived from
    * the machine tags, never hand-authored. */
   readonly axesForScreen?: (screenPath: string) => readonly LabStateAxis[]
+  /** Read the surface's current coordinate as per-axis state tags (Live → the
+   * live sentinel), so a design tool can capture a running exploration back into
+   * an Inspect pin. Honors axis nesting (an inactive nested axis maps to Live). */
+  readonly captureCoordinate?: (screenPath: string) => LabAxisActiveMap
   /** Surface-owned live controls (e.g. pico's palette/granularity), rendered
    * neutrally by the lab. A hook so control values track surface state. */
   readonly useControls?: () => readonly WorkshopControl[]

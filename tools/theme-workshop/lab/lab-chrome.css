@@ -1125,7 +1125,9 @@ body {
 	width: 1px;
 	transform: translateX(-50%);
 	background: var(--pt-line);
-	transition: background 0.12s ease, width 0.12s ease;
+	transition:
+		background 0.12s ease,
+		width 0.12s ease;
 }
 .pt-dock-resize:hover::before,
 .pt-dock-resize.is-resizing::before {
@@ -1350,6 +1352,21 @@ body {
 }
 
 /* state axes */
+.pt-axis-pincurrent {
+	margin: 0 0 12px;
+	padding: 5px 10px;
+	border: 1px solid var(--pt-line-soft);
+	border-radius: 7px;
+	background: transparent;
+	color: var(--pt-ink-dim);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+.pt-axis-pincurrent:hover {
+	border-color: var(--pt-line);
+	background: #16171d;
+}
 .pt-axis-group {
 	margin-bottom: 12px;
 }

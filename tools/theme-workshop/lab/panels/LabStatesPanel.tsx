@@ -12,6 +12,7 @@ export function LabStatesPanel({
   activeByAxis,
   onPin,
   onLive,
+  onPinCurrent,
   states,
   activeId,
   onSelect,
@@ -23,6 +24,8 @@ export function LabStatesPanel({
   readonly activeByAxis?: LabAxisActiveMap
   readonly onPin?: (axisId: string, stateId: string) => void
   readonly onLive?: (axisId: string) => void
+  /** Capture the running surface's current coordinate as Inspect pins. */
+  readonly onPinCurrent?: () => void
   readonly states: readonly LabStateOption[]
   readonly activeId: string
   readonly onSelect: (id: LabStateOption["id"]) => void
@@ -35,6 +38,15 @@ export function LabStatesPanel({
           Each axis is one of this screen's state machines. <b>Live</b> hands it
           to the running app; pick a state to pin it.
         </div>
+        {onPinCurrent ? (
+          <button
+            type="button"
+            className="pt-axis-pincurrent"
+            onClick={onPinCurrent}
+          >
+            Pin current
+          </button>
+        ) : null}
         {axes.map(axis => (
           <LabStatesAxisGroup
             key={axis.id}

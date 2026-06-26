@@ -126,6 +126,36 @@ describe("LabStatesPanel axis groups", () => {
     expect(screen.queryByText("Only while Data = Ready")).toBeNull()
   })
 
+  it("captures the current coordinate when Pin current is clicked", () => {
+    const onPinCurrent = mock(() => undefined)
+    render(
+      <LabStatesPanel
+        axes={axes()}
+        activeByAxis={{ data: LAB_AXIS_LIVE, launch: LAB_AXIS_LIVE }}
+        onPinCurrent={onPinCurrent}
+        states={[]}
+        activeId=""
+        onSelect={noop}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Pin current" }))
+    expect(onPinCurrent).toHaveBeenCalledTimes(1)
+  })
+
+  it("omits Pin current when the surface cannot capture a coordinate", () => {
+    render(
+      <LabStatesPanel
+        axes={axes()}
+        activeByAxis={{ data: LAB_AXIS_LIVE, launch: LAB_AXIS_LIVE }}
+        states={[]}
+        activeId=""
+        onSelect={noop}
+      />,
+    )
+    expect(screen.queryByRole("button", { name: "Pin current" })).toBeNull()
+  })
+
   it("falls back to flat states when the surface has no axes", () => {
     render(
       <LabStatesPanel

@@ -6,11 +6,17 @@ import { ShiftCinematicHome } from "@product/surfaces/web/shift/pages/ShiftCinem
 import { ShiftHomeStateView } from "@product/surfaces/web/shift/routes/ShiftHomeRoute"
 import { setShiftCatalogPreview } from "@product/surfaces/web/shift/shift-catalog-preview"
 import { shiftCatalogStateSamples } from "@product/surfaces/web/shift/shift-catalog-state-samples"
+import { readShiftCurrentCoordinate } from "@product/surfaces/web/shift/shift-current-coordinate"
 import {
   launchStateSamples,
   setShiftLaunchPreview,
 } from "@product/surfaces/web/shift/shift-launch-preview"
-import { axisOptionsFromTags, type LabStateAxis } from "../model/lab-state-axis"
+import {
+  axisOptionsFromTags,
+  LAB_AXIS_LIVE,
+  type LabAxisActiveMap,
+  type LabStateAxis,
+} from "../model/lab-state-axis"
 
 // Shift Home's two orthogonal-but-nested state machines, surfaced as axes wired
 // to the production-inert preview singletons the live routes consult. The
@@ -59,4 +65,14 @@ export function shiftAxesForScreen(
   screenPath: string,
 ): readonly LabStateAxis[] {
   return screenPath === "/" ? [shiftDataAxis, shiftLaunchAxis] : []
+}
+
+/** Capture the running surface's coordinate as per-axis pins. Launch maps to
+ * Live unless Data is Ready (its nesting), so the captured pin round-trips. */
+export function shiftCaptureCoordinate(screenPath: string): LabAxisActiveMap {
+  const coordinate = readShiftCurrentCoordinate(screenPath)
+  return {
+    data: coordinate.data,
+    launch: coordinate.data === "Ready" ? coordinate.launch : LAB_AXIS_LIVE,
+  }
 }

@@ -6,7 +6,7 @@ import {
   type SeedInitialValues,
 } from "../seed/shift-seed"
 import type { LabSurfaceAdapter } from "../surface-registry"
-import { shiftAxesForScreen } from "./shift-axes"
+import { shiftAxesForScreen, shiftCaptureCoordinate } from "./shift-axes"
 
 export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   id: "shift",
@@ -18,6 +18,7 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   knobs: shiftConfig.knobs,
   defaultPxPerMm: shiftConfig.defaultPxPerMm,
   axesForScreen: shiftAxesForScreen,
+  captureCoordinate: shiftCaptureCoordinate,
   // Shift's Data + Launch state machines are surfaced as the Home screen's axes
   // (see shift-axes.tsx) — not duplicated here as a control.
   makeSeedInitialValues,
