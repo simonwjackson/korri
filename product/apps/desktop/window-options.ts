@@ -77,13 +77,14 @@ export function createDesktopWindowOptions(
 
 export function createDesktopDualScreenWindowOptions(
   address: DesktopServerAddress,
-  options: { readonly preload?: string } = {},
+  options: { readonly preload?: string; readonly sessionId?: string } = {},
 ): DesktopDualScreenWindowOptions {
   const preload = options.preload
+  const session = encodeURIComponent(options.sessionId ?? "desktop-dual-screen")
   return {
     primary: {
       title: "Korri Primary",
-      url: buildDesktopUrl(address, "/screen?role=primary"),
+      url: buildDesktopUrl(address, `/screen?role=primary&session=${session}#/`),
       frame: {
         x: 120,
         y: 80,
@@ -95,7 +96,10 @@ export function createDesktopDualScreenWindowOptions(
     },
     companion: {
       title: "Korri Companion",
-      url: buildDesktopUrl(address, "/screen?role=companion"),
+      url: buildDesktopUrl(
+        address,
+        `/screen?role=companion&session=${session}#/companion`,
+      ),
       frame: {
         x: 160,
         y: 840,

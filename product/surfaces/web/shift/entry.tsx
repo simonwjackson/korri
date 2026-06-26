@@ -22,6 +22,7 @@ import {
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
 import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
+import type { DualScreenRole } from "@platform/react/display/dual-screen/dual-screen-events"
 import type {
   KorriPlatformBridge,
   KorriSurfaceEntrypoint,
@@ -35,6 +36,7 @@ export const shiftTheme: KorriSurfaceEntrypoint = {
   id: "shift",
   mount(host, { bridge }) {
     const runtimeConfig = readRuntimeConfig(window)
+    const dualScreen = readDualScreenConfig(window)
     const initialValues = [
       [
         catalogFactsSourceLayerAtom,
@@ -50,9 +52,10 @@ export const shiftTheme: KorriSurfaceEntrypoint = {
 
     const mounted = mountShift(host, {
       data: { initialValues },
-      ...(runtimeConfig.desktopInput
+      ...(runtimeConfig.desktopInput || dualScreen
         ? { navigation: { history: createHashHistory() } }
         : {}),
+      ...(dualScreen ? { dualScreen } : {}),
       beforeRouter: (
         <ShiftBridgeRuntimeChrome
           liveUsbArtifact={runtimeConfig.liveUsbArtifact}
@@ -75,6 +78,22 @@ function ShiftBridgeRuntimeChrome({
 }) {
   useLibraryRefreshOnConfigChanged()
   return <LiveUsbArtifactNotice artifact={liveUsbArtifact} />
+}
+
+function readDualScreenConfig(target: Window):
+  | {
+      readonly role: DualScreenRole
+      readonly channelName: string
+    }
+  | undefined {
+  const url = new URL(target.location.href)
+  const role = url.searchParams.get("role")
+  if (role !== "primary" && role !== "companion") return undefined
+  const session = url.searchParams.get("session") || "desktop-dual-screen"
+  return {
+    role,
+    channelName: `korri-dual-screen-session:${session}`,
+  }
 }
 
 function readRuntimeConfig(target: Window): {

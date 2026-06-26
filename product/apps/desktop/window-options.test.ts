@@ -79,12 +79,18 @@ describe("desktop window options", () => {
       port: 4321,
     })
 
-    expect(options.primary.url).toBe(
-      "http://127.0.0.1:4321/screen?role=primary",
+    const primary = new URL(options.primary.url)
+    const companion = new URL(options.companion.url)
+    expect(primary.pathname).toBe("/screen")
+    expect(companion.pathname).toBe("/screen")
+    expect(primary.searchParams.get("role")).toBe("primary")
+    expect(companion.searchParams.get("role")).toBe("companion")
+    expect(primary.searchParams.get("session")).toBeTruthy()
+    expect(companion.searchParams.get("session")).toBe(
+      primary.searchParams.get("session"),
     )
-    expect(options.companion.url).toBe(
-      "http://127.0.0.1:4321/screen?role=companion",
-    )
+    expect(primary.hash).toBe("#/")
+    expect(companion.hash).toBe("#/companion")
     expect(
       options.primary.frame.width / options.primary.frame.height,
     ).toBeCloseTo(16 / 9)
