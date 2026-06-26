@@ -670,7 +670,11 @@
 	position: relative;
 	flex: 0 0 auto;
 	width: 100%;
-	overflow: hidden;
+	/* Clip the off-screen tiles horizontally, but let the focused tile's
+	 * scale-up/lift (and its shadow) spill upward instead of being cut off.
+	 * `clip` (not `hidden`) keeps overflow-y: visible from coercing to auto. */
+	overflow-x: clip;
+	overflow-y: visible;
 }
 
 [data-shift-home] .shift-cine-track {
