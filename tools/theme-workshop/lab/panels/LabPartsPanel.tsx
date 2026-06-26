@@ -1,5 +1,5 @@
 import type { Story } from "../../types"
-import type { LabStoryGroup } from "../model/lab-part-model"
+import { partLabel, type LabStoryGroup } from "../model/lab-part-model"
 
 export function LabPartsPanel({
   groups,
@@ -33,7 +33,7 @@ export function LabPartsPanel({
                 onClick={event => onSelect(story, event.metaKey || event.ctrlKey || event.shiftKey)}
               >
                 <span className="pt-tree-check" aria-hidden>{on ? "◉" : "○"}</span>
-                {story.name}
+                {partLabel(story)}
               </button>
             )
           })}

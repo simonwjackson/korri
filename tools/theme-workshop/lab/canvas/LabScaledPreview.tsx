@@ -1,26 +1,34 @@
-import { type ReactNode, useEffect, useRef, useState } from "react"
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react"
 
 /**
- * Fits an arbitrarily-sized part preview into a fixed stage. Real discovered
- * parts range from tiny atoms to full-bleed pages; we measure the rendered
- * width and scale to fit the stage (never up past maxScale), anchoring to the
- * top. Small parts render at natural size; full screens read as a clean
- * "screenshot" thumbnail instead of blowing out of their card.
+ * Fits an arbitrarily-sized part preview into its stage. Real discovered parts
+ * range from tiny atoms to full-screen pages; we measure the rendered content
+ * and scale it to fit the stage width (never up past maxScale), anchored to the
+ * top, so a full screen reads as a clean "screenshot" thumbnail.
  *
- * Width-fit + top-anchor is deliberate: full-bleed parts use absolute/fixed
- * layout that under-reports height, so fitting height would crop unpredictably.
- * Fitting width keeps the whole layout width visible and consistent.
+ * Crucially, `transform: scale()` does NOT shrink an element's layout box, so
+ * the stage is given an explicit height equal to the SCALED content height.
+ * Otherwise the unscaled (e.g. 650px) content would stretch the surrounding
+ * artboard/card while the visible content only fills a fraction of it, leaving
+ * dead space below.
  */
 export function LabScaledPreview({
   children,
   maxScale = 1,
+  fill = false,
 }: {
   readonly children: ReactNode
   readonly maxScale?: number
+  /** When true the stage fills its (fixed-size) container instead of shrinking
+   * to the scaled content height — used by uniform gallery cards / matrix
+   * cells. Default false: the stage sizes to the scaled content so artboards
+   * and canvas objects have no dead space below the preview. */
+  readonly fill?: boolean
 }) {
   const stageRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
+  const [scaledHeight, setScaledHeight] = useState<number | undefined>(undefined)
 
   useEffect(() => {
     const stage = stageRef.current
@@ -29,9 +37,12 @@ export function LabScaledPreview({
     const measure = () => {
       const sw = stage.clientWidth
       const cw = content.scrollWidth
+      const ch = content.scrollHeight
       if (!sw || !cw) return
       const next = Math.min(sw / cw, maxScale)
-      setScale(Number.isFinite(next) && next > 0 ? next : maxScale)
+      const resolved = Number.isFinite(next) && next > 0 ? next : maxScale
+      setScale(resolved)
+      setScaledHeight(ch > 0 ? Math.ceil(ch * resolved) : undefined)
     }
     measure()
     const observer = new ResizeObserver(measure)
@@ -40,8 +51,9 @@ export function LabScaledPreview({
     return () => observer.disconnect()
   }, [maxScale])
 
+  const stageStyle: CSSProperties = fill || scaledHeight === undefined ? {} : { height: scaledHeight }
   return (
-    <div ref={stageRef} className="lab-scale-stage">
+    <div ref={stageRef} className="lab-scale-stage" style={stageStyle}>
       <div ref={contentRef} className="lab-scale-content" style={{ transform: `scale(${scale})` }}>
         {children}
       </div>

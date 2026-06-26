@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react"
 import type { Story } from "../../types"
 import { LabPartPreview } from "./LabPartPreview"
-import { stateVariantFor } from "../model/lab-part-model"
+import { partLabel, stateVariantFor } from "../model/lab-part-model"
 import { type LabObjectInstance } from "../model/lab-canvas-state"
 import { type SourceStatus, type LabSourceOption, type LabStateOption } from "../model/lab-source-state"
 import { useLab } from "../Lab.context"
@@ -39,7 +39,7 @@ export function LabSelectionView({
       <div className="pt-artboard-meta">
         <div className="pt-artboard-label">
           <span className={`pt-layer-tag layer-${story.layer}`}>{story.layer}</span>
-          {adapter.id} · {story.name}
+          {adapter.id} · {partLabel(story)}
         </div>
         {story.note ? <div className="pt-artboard-note">{story.note}</div> : null}
         {instance ? (

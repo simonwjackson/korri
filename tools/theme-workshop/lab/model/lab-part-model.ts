@@ -90,6 +90,19 @@ export function statesForStory(
   return out
 }
 
+/** Label for a part in the tree/gallery. A collapsed state-variant family is
+ * named by its STATE AXIS (the part's note, e.g. "Data states") rather than the
+ * single representative state, so "Home · Ready" reads as "Home · Data states" —
+ * making clear it's a state set you switch in the States panel, not a distinct
+ * page. Non-family parts keep their authored name. */
+export function partLabel(story: Story): string {
+  if (story.variants?.length && story.note) {
+    const base = story.name.split(" · ")[0]
+    return `${base} · ${story.note}`
+  }
+  return story.name
+}
+
 /** The first discovered part (in tree order) that exposes multiple states. Used
  * to populate the States panel by default so a surface's states are visible
  * without first hunting for the right part. */

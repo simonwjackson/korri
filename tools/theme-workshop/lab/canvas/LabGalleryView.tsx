@@ -1,5 +1,5 @@
 import type { LabPartsCatalog } from "../parts-discovery"
-import type { LabStoryIndex } from "../model/lab-part-model"
+import { partLabel, type LabStoryIndex } from "../model/lab-part-model"
 import { LabPartPreview } from "./LabPartPreview"
 
 export function LabGalleryView({
@@ -51,11 +51,11 @@ export function LabGalleryView({
                 }}
               >
                 <div className="pt-card-stage">
-                  <LabPartPreview story={story} />
+                  <LabPartPreview story={story} fill />
                 </div>
                 <div className="pt-card-foot">
                   <span className={`pt-layer-tag layer-${story.layer}`}>{story.layer}</span>
-                  <span className="pt-card-name">{story.name}</span>
+                  <span className="pt-card-name">{partLabel(story)}</span>
                 </div>
               </div>
             ))}

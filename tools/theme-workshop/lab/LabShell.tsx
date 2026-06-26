@@ -96,10 +96,12 @@ export function LabShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stateStory?.id])
 
-  // Tapping a state with nothing selected previews that state on the fallback
-  // family part (selecting it and switching to the Selection view).
+  // Tapping a state in the dock is the active state for the current selection:
+  // bind every placed object to it (so Selection/Canvas re-render), and when
+  // nothing is selected, preview it on the fallback family part.
   const selectState = (stateId: SourceStatus) => {
     setActiveStateId(stateId)
+    setInstances(prev => prev.map(instance => ({ ...instance, stateId })))
     if (!primaryStory && fallbackStateStory) {
       setSelectedIds([fallbackStateStory.id])
       setView("selection")

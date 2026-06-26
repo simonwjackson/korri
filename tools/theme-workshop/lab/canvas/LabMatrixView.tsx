@@ -61,7 +61,7 @@ export function LabMatrixView({
                     {unsupportedSource ? (
                       <div className="lab-empty-state">Source bindings affect Surface view, not this isolated part.</div>
                     ) : variant ? (
-                      <div className="pt-matrix-stage"><LabPartPreview story={variant} /></div>
+                      <div className="pt-matrix-stage"><LabPartPreview story={variant} fill /></div>
                     ) : (
                       <div className="lab-empty-state">No {state} variant</div>
                     )}
