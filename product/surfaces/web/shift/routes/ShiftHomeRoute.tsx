@@ -1,34 +1,37 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { CatalogEntry } from "@platform/catalog/catalog-facts-source"
+import { LaunchState } from "@platform/library/launch-state"
 import {
   getPlayableDisplayName,
   getPlayableImageUrl,
   getPlayableWideImageUrl,
 } from "@platform/library/playable-library-ui"
-import { LaunchState } from "@platform/library/launch-state"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import { Option } from "effect"
 import { type ComponentProps, useEffect, useState } from "react"
 
 const noop = () => {}
-import { useShiftCatalogPreview } from "../shift-catalog-preview"
-import {
-  setShiftLaunchPreview,
-  useShiftLaunchPreview,
-} from "../shift-launch-preview"
+
 import {
   ShiftCatalogStateRoot,
   useShiftCatalogCase,
 } from "../catalog/ShiftCatalogStateRoot"
+import { ShiftCatalogState } from "../catalog/shift-catalog-state"
 import {
-  ShiftCinematicHome,
   type ShiftCinematicGame,
+  ShiftCinematicHome,
 } from "../pages/ShiftCinematicHome"
 import { ShiftHomeDefectBody } from "../pages/ShiftHomeDefectBody"
 import { ShiftHomeEmptyBody } from "../pages/ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "../pages/ShiftHomeLoadErrorBody"
 import { ShiftHomeLoadingBody } from "../pages/ShiftHomeLoadingBody"
+import { useShiftCatalogPreview } from "../shift-catalog-preview"
+import {
+  setShiftLaunchPreview,
+  useShiftLaunchPreview,
+} from "../shift-launch-preview"
+import { setShiftLiveData, setShiftLiveLaunch } from "../shift-live-coordinate"
 import { playtimeLabel, relativeLastPlayed } from "./cinematic-play-labels"
 
 const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
@@ -64,6 +67,12 @@ export function ShiftHomeRoute() {
   // The design-tool data pin wins over the live loader when set; releasing it
   // (preview = null) falls straight back to the real catalog snapshot.
   const snapshot = useShiftCatalogPreview() ?? live
+  // Publish the resolved data state for the design-tool capture seam (inert in
+  // production — nothing reads it there).
+  const dataTag = ShiftCatalogState.fromResult(snapshot)._tag
+  useEffect(() => {
+    setShiftLiveData(dataTag)
+  }, [dataTag])
   return <ShiftHomeStateView result={snapshot} onRetry={refreshSnapshot} />
 }
 
@@ -80,6 +89,11 @@ function NavigatingReadyBody() {
     if (raw._tag === "Idle" || raw._tag === "Launching") setAcked(false)
   }, [raw._tag])
   const launchState = acked ? LaunchState.idle : raw
+
+  // Publish the on-screen launch state for the design-tool capture seam.
+  useEffect(() => {
+    setShiftLiveLaunch(launchState._tag)
+  }, [launchState._tag])
 
   return Option.match(ready, {
     onNone: () => null,

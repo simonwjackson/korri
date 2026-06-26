@@ -6,10 +6,14 @@ import {
   launchStateSamples,
   setShiftLaunchPreview,
 } from "./shift-launch-preview"
+import { setShiftLiveData, setShiftLiveLaunch } from "./shift-live-coordinate"
 
 afterEach(() => {
   setShiftCatalogPreview(null)
   setShiftLaunchPreview(null)
+  // Reset the live-coordinate store to the seed resting state between tests.
+  setShiftLiveData("Ready")
+  setShiftLiveLaunch("Idle")
 })
 
 describe("readShiftCurrentCoordinate", () => {
@@ -19,6 +23,17 @@ describe("readShiftCurrentCoordinate", () => {
       data: "Ready",
       launch: "Idle",
     })
+  })
+
+  it("captures a live launch state the route published (no pin)", () => {
+    setShiftLiveLaunch("Launching")
+    expect(readShiftCurrentCoordinate("/").launch).toBe("Launching")
+  })
+
+  it("prefers the launch pin over the live store", () => {
+    setShiftLiveLaunch("Launching")
+    setShiftLaunchPreview(launchStateSamples.Failed())
+    expect(readShiftCurrentCoordinate("/").launch).toBe("Failed")
   })
 
   it("captures a pinned Ready + Launching coordinate", () => {

@@ -12,6 +12,7 @@ import type { LaunchState } from "@platform/library/launch-state"
 import { ShiftCatalogState } from "./catalog/shift-catalog-state"
 import { getShiftCatalogPreview } from "./shift-catalog-preview"
 import { getShiftLaunchPreview } from "./shift-launch-preview"
+import { getShiftLiveData, getShiftLiveLaunch } from "./shift-live-coordinate"
 
 export interface ShiftCoordinate {
   readonly route: string
@@ -20,10 +21,13 @@ export interface ShiftCoordinate {
 }
 
 export function readShiftCurrentCoordinate(route: string): ShiftCoordinate {
+  // A pin wins; otherwise read what the mounted route actually resolved (so a
+  // live, un-pinned launch state is captured), falling back to the seed resting
+  // state when nothing has been published yet.
   const pinnedData = getShiftCatalogPreview()
   const data = pinnedData
     ? ShiftCatalogState.fromResult(pinnedData)._tag
-    : "Ready"
-  const launch = getShiftLaunchPreview()?._tag ?? "Idle"
+    : (getShiftLiveData() ?? "Ready")
+  const launch = getShiftLaunchPreview()?._tag ?? getShiftLiveLaunch() ?? "Idle"
   return { route, data, launch }
 }
