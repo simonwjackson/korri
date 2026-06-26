@@ -119,6 +119,23 @@ describe("LabMatrixView axis fan-out", () => {
     ).toBeGreaterThan(0)
   })
 
+  it("collapses to a single axis when rows would duplicate the column", () => {
+    renderMatrix([dataAxis, launchAxis])
+    // Cross with Launch rows first.
+    fireEvent.change(screen.getByDisplayValue("—"), {
+      target: { value: "launch" },
+    })
+    expect(screen.getAllByTestId("launch-Launching").length).toBe(1)
+
+    // Now set Columns to Launch too: must not produce a Launch×Launch grid that
+    // greys every cell — it falls back to a single Launch fan.
+    const colSelect = screen.getByDisplayValue("Data") as HTMLSelectElement
+    fireEvent.change(colSelect, { target: { value: "launch" } })
+    expect(screen.getByTestId("launch-Idle")).toBeTruthy()
+    expect(screen.getByTestId("launch-Launching")).toBeTruthy()
+    expect(screen.queryByText("Only while Data = Ready")).toBeNull()
+  })
+
   it("offers no second axis to cross with when the screen has one axis", () => {
     renderMatrix([dataAxis])
     expect(screen.getByTestId("data-Ready")).toBeTruthy()

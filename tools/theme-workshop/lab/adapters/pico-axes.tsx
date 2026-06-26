@@ -34,14 +34,22 @@ const picoDataAxis: LabStateAxis = {
       seed={[[previewAtom, picoDataStateSamples[tag as Tag]()]] as LayerSeed}
       title="LIBRARY"
     >
-      {(facts: CatalogSnapshotFacts) => (
-        <Screen title="LIBRARY" className="center">
-          <Hero
-            title={`${facts.entries.length} GAMES`}
-            message="library ready"
-          />
-        </Screen>
-      )}
+      {(facts: CatalogSnapshotFacts) =>
+        facts.entries.length === 0 ? (
+          // Match the live PicoHomeRoute, which maps a successful empty catalog
+          // to the EMPTY fallback rather than a "0 GAMES" ready hero.
+          <Screen title="LIBRARY" className="center">
+            <Hero title="EMPTY" message="no games in library" />
+          </Screen>
+        ) : (
+          <Screen title="LIBRARY" className="center">
+            <Hero
+              title={`${facts.entries.length} GAMES`}
+              message="library ready"
+            />
+          </Screen>
+        )
+      }
     </PicoData>
   ),
 }

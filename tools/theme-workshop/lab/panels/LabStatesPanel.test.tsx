@@ -37,12 +37,17 @@ function axes(): readonly LabStateAxis[] {
 
 const noop = () => {}
 
+const noopPin = (_: string, __: string) => {}
+const noopLive = (_: string) => {}
+
 describe("LabStatesPanel axis groups", () => {
   it("renders one group per axis with its machine states", () => {
     render(
       <LabStatesPanel
         axes={axes()}
         activeByAxis={{ data: LAB_AXIS_LIVE, launch: LAB_AXIS_LIVE }}
+        onPin={noopPin}
+        onLive={noopLive}
         states={[]}
         activeId=""
         onSelect={noop}
@@ -62,6 +67,7 @@ describe("LabStatesPanel axis groups", () => {
         axes={axes()}
         activeByAxis={{ data: "Ready", launch: LAB_AXIS_LIVE }}
         onPin={onPin}
+        onLive={noopLive}
         states={[]}
         activeId=""
         onSelect={noop}
@@ -78,6 +84,7 @@ describe("LabStatesPanel axis groups", () => {
       <LabStatesPanel
         axes={axes()}
         activeByAxis={{ data: "Empty", launch: LAB_AXIS_LIVE }}
+        onPin={noopPin}
         onLive={onLive}
         states={[]}
         activeId=""
@@ -95,6 +102,8 @@ describe("LabStatesPanel axis groups", () => {
       <LabStatesPanel
         axes={axes()}
         activeByAxis={{ data: "Empty", launch: LAB_AXIS_LIVE }}
+        onPin={noopPin}
+        onLive={noopLive}
         states={[]}
         activeId=""
         onSelect={noop}
@@ -113,6 +122,8 @@ describe("LabStatesPanel axis groups", () => {
       <LabStatesPanel
         axes={axes()}
         activeByAxis={{ data: "Ready", launch: LAB_AXIS_LIVE }}
+        onPin={noopPin}
+        onLive={noopLive}
         states={[]}
         activeId=""
         onSelect={noop}
@@ -132,6 +143,8 @@ describe("LabStatesPanel axis groups", () => {
       <LabStatesPanel
         axes={axes()}
         activeByAxis={{ data: LAB_AXIS_LIVE, launch: LAB_AXIS_LIVE }}
+        onPin={noopPin}
+        onLive={noopLive}
         onPinCurrent={onPinCurrent}
         states={[]}
         activeId=""
@@ -148,6 +161,8 @@ describe("LabStatesPanel axis groups", () => {
       <LabStatesPanel
         axes={axes()}
         activeByAxis={{ data: LAB_AXIS_LIVE, launch: LAB_AXIS_LIVE }}
+        onPin={noopPin}
+        onLive={noopLive}
         states={[]}
         activeId=""
         onSelect={noop}
@@ -160,6 +175,9 @@ describe("LabStatesPanel axis groups", () => {
     render(
       <LabStatesPanel
         axes={[]}
+        activeByAxis={{}}
+        onPin={noopPin}
+        onLive={noopLive}
         states={[{ id: "Ready", label: "Ready" }]}
         activeId="Ready"
         onSelect={noop}

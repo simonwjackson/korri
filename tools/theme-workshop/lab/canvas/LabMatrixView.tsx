@@ -54,8 +54,18 @@ function LabAxisMatrix({ axes }: { axes: readonly LabStateAxis[] }) {
   // second axis to add the cross-product.
   const [rowId, setRowId] = useState<string>(ROW_NONE)
   const colAxis = axes.find(axis => axis.id === colId) ?? axes[0]!
+  // Guard against a stale/duplicate row selection (e.g. after switching columns
+  // to the current row axis, or switching to a surface with fewer axes): a row
+  // equal to the column would drop the cross coordinate and grey every cell.
   const rowAxis =
-    rowId === ROW_NONE ? null : (axes.find(a => a.id === rowId) ?? null)
+    rowId === ROW_NONE || rowId === colAxis.id
+      ? null
+      : (axes.find(a => a.id === rowId) ?? null)
+
+  const selectColumn = (next: string) => {
+    setColId(next)
+    if (rowId === next) setRowId(ROW_NONE)
+  }
 
   const colVals = colAxis.states
   const rowVals = rowAxis ? rowAxis.states : [{ id: "__single__", label: "" }]
@@ -85,7 +95,7 @@ function LabAxisMatrix({ axes }: { axes: readonly LabStateAxis[] }) {
           Columns
           <select
             value={colId}
-            onChange={event => setColId(event.target.value)}
+            onChange={event => selectColumn(event.target.value)}
           >
             {axes.map(axis => (
               <option key={axis.id} value={axis.id}>

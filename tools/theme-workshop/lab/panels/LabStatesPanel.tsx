@@ -19,11 +19,13 @@ export function LabStatesPanel({
   hasSelection = false,
 }: {
   /** The active screen's state-machine axes. When present, the panel shows
-   * grouped axis controls; otherwise it falls back to a part's flat states. */
+   * grouped axis controls; otherwise it falls back to a part's flat states.
+   * The axis handlers are required so axis controls can never render enabled but
+   * inert; flat-only callers still pass them (the panel may render either mode). */
   readonly axes?: readonly LabStateAxis[]
-  readonly activeByAxis?: LabAxisActiveMap
-  readonly onPin?: (axisId: string, stateId: string) => void
-  readonly onLive?: (axisId: string) => void
+  readonly activeByAxis: LabAxisActiveMap
+  readonly onPin: (axisId: string, stateId: string) => void
+  readonly onLive: (axisId: string) => void
   /** Capture the running surface's current coordinate as Inspect pins. */
   readonly onPinCurrent?: () => void
   readonly states: readonly LabStateOption[]
@@ -51,7 +53,7 @@ export function LabStatesPanel({
           <LabStatesAxisGroup
             key={axis.id}
             axis={axis}
-            active={activeByAxis ?? {}}
+            active={activeByAxis}
             onPin={onPin}
             onLive={onLive}
           />
@@ -110,8 +112,8 @@ function LabStatesAxisGroup({
 }: {
   readonly axis: LabStateAxis
   readonly active: LabAxisActiveMap
-  readonly onPin?: (axisId: string, stateId: string) => void
-  readonly onLive?: (axisId: string) => void
+  readonly onPin: (axisId: string, stateId: string) => void
+  readonly onLive: (axisId: string) => void
 }) {
   const enabled = axisEnabled(axis, active)
   const value = active[axis.id]
@@ -129,7 +131,7 @@ function LabStatesAxisGroup({
           className={`pt-axis-chip is-live${isAxisLive(value) ? " is-on" : ""}`}
           disabled={!enabled}
           aria-pressed={isAxisLive(value)}
-          onClick={() => onLive?.(axis.id)}
+          onClick={() => onLive(axis.id)}
         >
           {axis.liveLabel}
         </button>
@@ -140,7 +142,7 @@ function LabStatesAxisGroup({
             className={`pt-axis-chip${value === state.id ? " is-on" : ""}`}
             disabled={!enabled}
             aria-pressed={value === state.id}
-            onClick={() => onPin?.(axis.id, state.id)}
+            onClick={() => onPin(axis.id, state.id)}
           >
             <span
               className={`pt-state-dot is-${state.id.toLowerCase()}`}
