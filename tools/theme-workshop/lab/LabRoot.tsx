@@ -251,9 +251,18 @@ function loadLab(
     if (!raw) return seeded
     const parsed = JSON.parse(raw) as Partial<LabCalibrationState>
     if (!parsed || !Array.isArray(parsed.devices)) return seeded
+    const codeById = new Map(fallback.map(device => [device.id, device]))
     const devices = parsed.devices
       .map(normalizeDevice)
       .filter((device): device is DeviceConfig => device !== null)
+      .map(device => {
+        // Saved calibration only carries user-tunable values (sizes, bezel).
+        // Structural fields like `screens` live in code, so a persisted device
+        // inherits them from its code counterpart by id — otherwise adding
+        // screens in config would be shadowed by an older saved state.
+        const code = codeById.get(device.id)
+        return code ? { ...device, screens: code.screens } : device
+      })
     if (devices.length === 0) return seeded
     const pxPerMm = Number(parsed.pxPerMm)
     const knobs = knobDefaults(themeKnobs)
