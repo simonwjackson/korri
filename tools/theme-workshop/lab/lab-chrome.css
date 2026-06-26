@@ -1087,8 +1087,40 @@ body {
 
 .pt-dock-right {
 	position: fixed;
-	top: 0;
+	top: var(--pt-bar-h);
 	right: 0;
+	bottom: 0;
+	width: 280px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	z-index: 45;
+	overscroll-behavior: contain;
+}
+
+/* Docked panels snap into the rail: full width, in normal flow, no free drag. */
+.pt-dock-right .pt-panel.is-docked {
+	position: static;
+	left: auto;
+	top: auto;
+	width: 100% !important;
+	flex: 0 0 auto;
+	box-shadow: none;
+}
+.pt-dock-right .pt-panel.is-docked .pt-panel-bar {
+	cursor: grab;
+	touch-action: none;
+}
+.pt-dock-right .pt-panel.is-docked .pt-panel-bar:active {
+	cursor: grabbing;
+}
+.pt-dock-right .pt-panel.is-docked.is-dragging {
+	opacity: 0.92;
+	outline: 1px solid var(--pt-accent);
+	box-shadow: 0 18px 44px -16px rgba(0, 0, 0, 0.75);
 }
 
 .pt-panel {

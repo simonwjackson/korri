@@ -8,12 +8,20 @@ export function LabFloatingPanel({
   initial,
   width = 248,
   accent = "#7dd3fc",
+  docked = false,
+  dockId,
+  dragging = false,
+  onHeaderPointerDown,
 }: {
   readonly title: string
   readonly children: ReactNode
   readonly initial: Pos
   readonly width?: number
   readonly accent?: string
+  readonly docked?: boolean
+  readonly dockId?: string
+  readonly dragging?: boolean
+  readonly onHeaderPointerDown?: (event: React.PointerEvent) => void
 }) {
   const [pos, setPos] = useState<Pos>(initial)
   const [collapsed, setCollapsed] = useState(false)
@@ -29,7 +37,7 @@ export function LabFloatingPanel({
   }, [initial])
 
   const onPointerDown = useCallback((event: React.PointerEvent) => {
-    if (event.button !== 0) return
+    if (docked || event.button !== 0) return
     const startX = event.clientX
     const startY = event.clientY
     const base = posRef.current
@@ -45,11 +53,17 @@ export function LabFloatingPanel({
     }
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", up)
-  }, [])
+  }, [docked])
 
+  const style = (docked ? { width } : { left: pos.x, top: pos.y, width }) as CSSProperties
   return (
-    <section className="pt-panel" style={{ left: pos.x, top: pos.y, width } as CSSProperties} aria-label={title}>
-      <header className="pt-panel-bar" onPointerDown={onPointerDown}>
+    <section
+      className={`pt-panel${docked ? " is-docked" : ""}${dragging ? " is-dragging" : ""}`}
+      style={style}
+      aria-label={title}
+      data-dock-id={docked ? dockId : undefined}
+    >
+      <header className="pt-panel-bar" onPointerDown={docked ? onHeaderPointerDown : onPointerDown}>
         <span className="pt-panel-dot" style={{ background: accent }} />
         <span className="pt-panel-title">{title}</span>
         <button

@@ -17,6 +17,7 @@ import {
 import { knobStyle } from "./model/lab-calibration-state"
 import { loadSurfacePartsResult, type LabPartsCatalog } from "./parts-discovery"
 import { useLab } from "./Lab.context"
+import { LabDockRail } from "./chrome/LabDockRail"
 import { LabFloatingPanel } from "./chrome/LabFloatingPanel"
 import { LabFocusRail } from "./chrome/LabFocusRail"
 import { LabToolRail } from "./chrome/LabToolRail"
@@ -132,6 +133,14 @@ export function LabShell() {
     { id: "devices", label: "Devices", render: devicesPanel },
     ...(hasControls ? [{ id: "controls", label: "Controls", render: controlsPanel }] : []),
   ]
+  const dockPanels = [
+    { id: "parts", title: "Parts", accent: "#7dd3fc", render: partsPanel },
+    { id: "sources", title: "Sources", accent: "#f0abfc", render: sourcesPanel },
+    { id: "states", title: "States", accent: "#86efac", render: statesPanel },
+    { id: "devices", title: "Devices", accent: "#fcd34d", render: devicesPanel },
+    { id: "inspector", title: "Inspector", accent: "#c4b5fd", render: inspectorPanel },
+    ...(hasControls ? [{ id: "controls", title: "Controls", accent: "#fca5a5", render: controlsPanel }] : []),
+  ]
 
   const compact = typeof window !== "undefined" && Boolean(window.matchMedia?.("(max-width: 760px), (pointer: coarse)")?.matches)
   const w = typeof window === "undefined" ? 1440 : window.innerWidth
@@ -203,14 +212,7 @@ export function LabShell() {
           {!compact && chromeMode === "dock" ? (
             <>
               <LabToolRail docked open={openPanel} onOpen={setOpenPanel} />
-              <aside className="pt-dock-right">
-                <LabFloatingPanel title="Parts" initial={{ x: w - 264, y: 64 }} width={248} accent="#7dd3fc">{partsPanel()}</LabFloatingPanel>
-                <LabFloatingPanel title="Inspector" initial={{ x: w - 264, y: 470 }} width={248} accent="#c4b5fd">{inspectorPanel()}</LabFloatingPanel>
-                <LabFloatingPanel title="Sources" initial={{ x: w - 532, y: 64 }} width={248} accent="#f0abfc">{sourcesPanel()}</LabFloatingPanel>
-                <LabFloatingPanel title="States" initial={{ x: w - 532, y: 252 }} width={248} accent="#86efac">{statesPanel()}</LabFloatingPanel>
-                <LabFloatingPanel title="Devices" initial={{ x: w - 532, y: 470 }} width={248} accent="#fcd34d">{devicesPanel()}</LabFloatingPanel>
-                {hasControls ? <LabFloatingPanel title="Controls" initial={{ x: 72, y: 470 }} width={248} accent="#fca5a5">{controlsPanel()}</LabFloatingPanel> : null}
-              </aside>
+              <LabDockRail panels={dockPanels} />
             </>
           ) : null}
 
