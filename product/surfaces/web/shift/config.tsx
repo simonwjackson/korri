@@ -60,8 +60,8 @@ const SHIFT_DEVICES: readonly DeviceConfig[] = [
       {
         id: "thor-bottom",
         label: "Bottom",
-        widthMm: 110,
-        heightMm: 62,
+        widthMm: 75,
+        heightMm: 65,
         role: "secondary",
         placement: "below",
       },
