@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { DEFAULT_SOURCE_ID, DEFAULT_STATES, initialValuesForBinding, isSourceStatus, sourcesForAdapter, statesForAdapter } from "./lab-source-state"
+import { DEFAULT_SOURCE_ID, initialValuesForBinding, isSourceStatus, sourcesForAdapter } from "./lab-source-state"
 import type { LabSurfaceAdapter } from "../surface-registry"
 
 const adapter: LabSurfaceAdapter = {
@@ -10,9 +10,8 @@ const adapter: LabSurfaceAdapter = {
 }
 
 describe("lab source/state model", () => {
-  it("defaults to fixture-only local source and common loader states", async () => {
+  it("defaults to a single fixture-only local source", async () => {
     expect(sourcesForAdapter(adapter)).toEqual([{ id: DEFAULT_SOURCE_ID, label: "test fixture", description: "Default local fixture data." }])
-    expect(statesForAdapter(adapter)).toEqual(DEFAULT_STATES)
     await expect(initialValuesForBinding(adapter, { sourceId: "default", stateId: "ready" })).resolves.toEqual({ source: "default" })
   })
 
@@ -20,17 +19,16 @@ describe("lab source/state model", () => {
     const custom: LabSurfaceAdapter = {
       ...adapter,
       sources: [{ id: "sparse", label: "Sparse" }],
-      states: [{ id: "empty", label: "Empty" }],
       makeSeedInitialValuesForBinding: async binding => binding,
     }
 
     expect(sourcesForAdapter(custom).map(source => source.id)).toEqual(["sparse"])
-    expect(statesForAdapter(custom).map(state => state.id)).toEqual(["empty"])
-    await expect(initialValuesForBinding(custom, { sourceId: "sparse", stateId: "empty" })).resolves.toEqual({ sourceId: "sparse", stateId: "empty" })
+    await expect(initialValuesForBinding(custom, { sourceId: "sparse", stateId: "Empty" })).resolves.toEqual({ sourceId: "sparse", stateId: "Empty" })
   })
 
-  it("validates source status ids", () => {
-    expect(isSourceStatus("ready")).toBe(true)
-    expect(isSourceStatus("offline")).toBe(false)
+  it("treats any non-empty tag as a valid dynamic state", () => {
+    expect(isSourceStatus("Ready")).toBe(true)
+    expect(isSourceStatus("LoadError")).toBe(true)
+    expect(isSourceStatus("")).toBe(false)
   })
 })

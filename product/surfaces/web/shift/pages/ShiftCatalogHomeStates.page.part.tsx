@@ -24,6 +24,7 @@ export const ShiftCatalogHomeStates = dataStates.map(variant => ({
   name: `Home · ${variant.label}`,
   note: "Data states",
   surface: true,
+  state: variant.tag,
   render: () => (
     <RegistryProvider>
       <ShiftHomeStateView result={variant.value} />

@@ -231,7 +231,7 @@ function isStorySpec(value: unknown): value is {
   readonly name?: string
   readonly note?: string
   readonly presentation?: "part" | "surface"
-  readonly state?: "ready" | "loading" | "empty" | "error"
+  readonly state?: string
   readonly variants?: readonly string[]
   readonly render: () => ReactNode
 } {

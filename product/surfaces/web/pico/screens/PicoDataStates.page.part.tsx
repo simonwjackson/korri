@@ -37,6 +37,7 @@ export const PicoDataStates = stateVariants(PicoDataState, picoDataSamples).map(
     name: `Library · ${variant.label}`,
     note: "Data states",
     surface: true,
+    state: variant.tag,
     render: () => (
       <PicoData
         atom={previewAtom}

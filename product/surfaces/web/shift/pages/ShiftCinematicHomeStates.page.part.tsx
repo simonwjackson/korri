@@ -19,6 +19,7 @@ export const ShiftCinematicHomeStates = LAUNCH_STATE_VARIANTS.map(variant => ({
   name: `Home · ${variant.label}`,
   note: "Launch states",
   surface: true,
+  state: variant.tag,
   render: () => (
     <ShiftCinematicHome
       games={SHIFT_CINEMATIC_GAMES}

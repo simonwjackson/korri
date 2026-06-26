@@ -10,10 +10,19 @@ export function LabStatesPanel({
   readonly activeId: string
   readonly onSelect: (id: LabStateOption["id"]) => void
 }) {
+  if (states.length === 0) {
+    return (
+      <div className="pt-sources">
+        <div className="pt-sources-hint">
+          Select a part with multiple states (e.g. a data-states screen) to switch between them. States come from the part's own state machine — there is no fixed list.
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="pt-sources">
       <div className="pt-sources-hint">
-        What the loader is doing. <b>Drag</b> onto an object or tap to make it active.
+        This part's states, from its own state machine. <b>Drag</b> onto an object or tap to make it active.
       </div>
       {states.map(state => (
         <div
@@ -27,7 +36,7 @@ export function LabStatesPanel({
           }}
         >
           <span className="pt-source-grip" aria-hidden>⠇</span>
-          <span className={`pt-state-dot is-${state.id}`} aria-hidden />
+          <span className={`pt-state-dot is-${state.id.toLowerCase()}`} aria-hidden />
           <span className="pt-source-label">{state.label}</span>
         </div>
       ))}

@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react"
-import { buildStoryIndex } from "./model/lab-part-model"
+import { buildStoryIndex, statesForStory } from "./model/lab-part-model"
 import {
   DEFAULT_CHROME_MODE,
   reconcileInstancesWithSelection,
@@ -11,7 +11,6 @@ import {
   DEFAULT_SOURCE_ID,
   DEFAULT_STATE_ID,
   sourcesForAdapter,
-  statesForAdapter,
   type SourceStatus,
 } from "./model/lab-source-state"
 import { knobStyle } from "./model/lab-calibration-state"
@@ -61,11 +60,21 @@ export function LabShell() {
   const [accent, setAccent] = useState("#7dd3fc")
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const sources = useMemo(() => sourcesForAdapter(adapter), [adapter])
-  const states = useMemo(() => statesForAdapter(adapter), [adapter])
   const [activeSourceId, setActiveSourceId] = useState(sources[0]?.id ?? DEFAULT_SOURCE_ID)
-  const [activeStateId, setActiveStateId] = useState<SourceStatus>(states[0]?.id ?? DEFAULT_STATE_ID)
   const [instances, setInstances] = useState<readonly LabObjectInstance[]>([])
   const index = useMemo(() => buildStoryIndex(catalog), [catalog])
+  // States are dynamic: derived from the selected part's discovered variant
+  // family (its real state-machine tags), not a fixed vocabulary.
+  const primaryStory = useMemo(() => {
+    for (const id of selectedIds) {
+      const story = index.byId.get(id)
+      if (story) return story
+    }
+    return null
+  }, [selectedIds, index])
+  const states = useMemo(() => statesForStory(primaryStory, index.byId), [primaryStory, index])
+  const defaultStateId = states.find(state => state.id.toLowerCase() === "ready")?.id ?? states[0]?.id ?? DEFAULT_STATE_ID
+  const [activeStateId, setActiveStateId] = useState<SourceStatus>(defaultStateId)
 
   useEffect(() => {
     setView(initialCanvasView)
@@ -75,9 +84,12 @@ export function LabShell() {
     setActiveSourceId(sources[0]?.id ?? DEFAULT_SOURCE_ID)
   }, [sources])
 
+  // When the selected part changes, snap the active state to that part's
+  // default (its "ready" tag if present, else its first state).
   useEffect(() => {
-    setActiveStateId(states[0]?.id ?? DEFAULT_STATE_ID)
-  }, [states])
+    setActiveStateId(defaultStateId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryStory?.id])
 
   useEffect(() => {
     let cancelled = false

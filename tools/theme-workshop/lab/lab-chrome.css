@@ -1771,6 +1771,8 @@ body {
 	height: 9px;
 	border-radius: 50%;
 	flex: 0 0 auto;
+	/* Dynamic state tags fall back to the accent; known semantic tags below. */
+	background: var(--pt-accent);
 }
 .pt-state-dot.is-ready {
 	background: #86efac;
@@ -1781,7 +1783,9 @@ body {
 .pt-state-dot.is-empty {
 	background: #6b7280;
 }
-.pt-state-dot.is-error {
+.pt-state-dot.is-error,
+.pt-state-dot.is-loaderror,
+.pt-state-dot.is-defect {
 	background: #fca5a5;
 }
 .pt-icon-state {

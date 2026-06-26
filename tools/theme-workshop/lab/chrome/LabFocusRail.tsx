@@ -34,8 +34,6 @@ export function LabFocusRail({
         ))}
         <span className="pt-command-sep" />
         <code>{adapter.id} · {surfacePath}</code>
-        <span className="pt-command-sep" />
-        <button type="button" onClick={() => void navigator.clipboard?.writeText?.(window.location.href)}>Copy link</button>
       </nav>
     </>
   )

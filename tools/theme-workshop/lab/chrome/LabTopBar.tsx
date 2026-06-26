@@ -62,9 +62,6 @@ export function LabTopBar({
             </label>
           ) : null}
         </div>
-        <button type="button" className="pt-eye" onClick={() => void navigator.clipboard?.writeText?.(window.location.href)}>
-          Copy link
-        </button>
         <button type="button" className="pt-eye" onClick={onHideChrome}>
           Hide UI
         </button>
