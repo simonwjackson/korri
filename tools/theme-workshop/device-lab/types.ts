@@ -8,6 +8,29 @@
  * sizes the screen and exposes the generator knobs.
  */
 
+/**
+ * One physical screen on a device. A device has one or more, stacked top to
+ * bottom by declaration order. Each screen renders as its own independent
+ * surface mount (own route, own local focus); the screens of one device share
+ * that device's single state source.
+ */
+export type ScreenConfig = {
+  /** Stable id, unique within the device. */
+  readonly id: string
+  /** Physical screen width in millimetres. */
+  readonly widthMm: number
+  /** Physical screen height in millimetres. */
+  readonly heightMm: number
+  /** Render the device bezel around this screen. Default true; false for a
+   * near-bezel-less panel like a TV. */
+  readonly bezel?: boolean
+  /** Short label shown on the screen (e.g. "Top", "Bottom"). */
+  readonly label?: string
+  /** Lab slot: "primary" mounts the surface under design; a "secondary" screen
+   * renders a placeholder until a real surface is assigned to it. */
+  readonly role?: "primary" | "secondary"
+}
+
 /** One screen in the device matrix, with its default physical + tuning values. */
 export type DeviceConfig = {
   /** Stable id, used as the localStorage namespace for this device. */
@@ -21,6 +44,11 @@ export type DeviceConfig = {
   /** Render the device bezel/frame around the screen. Default true; set false
    * for a near-bezel-less panel like a TV. */
   readonly bezel?: boolean
+  /** Physical screens, top to bottom. Omit for a single-screen device (the
+   * widthMm/heightMm above describe its one screen). A dual-screen device like
+   * Thor lists its main panel plus the smaller one beneath it; each screen
+   * mounts independently while sharing the device's state. */
+  readonly screens?: readonly ScreenConfig[]
 }
 
 /**

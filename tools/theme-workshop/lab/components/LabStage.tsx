@@ -1,12 +1,19 @@
 import { type CSSProperties, useEffect, useState } from "react"
 import { resolveClassNames } from "../../classnames"
-import { DeviceFrame } from "../../device-lab"
+import {
+  clusterOuterHeightPx,
+  DeviceFrame,
+  deviceScreens,
+} from "../../device-lab"
 import { Parts } from "../../Parts"
 import { useLab } from "../Lab.context"
 import { LabSurfaceMount } from "../LabSurfaceMount"
 import { loadSurfaceParts, type LabPartsCatalog } from "../parts-discovery"
+import { LabScreenPlaceholder } from "./LabScreenPlaceholder"
 
 const VIEWPORT_INSET = 48
+/** Painted gap between the stacked screens of a multi-screen device (px). */
+const SCREEN_GAP_PX = 10
 
 export function LabStage() {
   const {
@@ -89,24 +96,80 @@ export function LabStage() {
   return (
     <div className="lab-stage" style={stageStyle}>
       <div className="lab-screens">
-        {selectedDevices.map(device => (
-          <div key={device.id} data-lab-device-id={device.id}>
-            <DeviceFrame
-              widthMm={device.widthMm}
-              heightMm={device.heightMm}
-              pxPerMm={pxPerMm}
-              maxHeightPx={maxHeightPx}
-              bezel={device.bezel}
+        {selectedDevices.map(device => {
+          const screens = deviceScreens(device)
+          const primaryMount = (
+            <LabSurfaceMount
+              adapter={adapter}
+              initialValues={initialValues}
+              surfacePath={surfacePath}
+              onNavigate={setSurfacePath}
+            />
+          )
+
+          // Single-screen device: unchanged path (DeviceFrame fits itself).
+          if (screens.length <= 1) {
+            const screen = screens[0]
+            return (
+              <div key={device.id} data-lab-device-id={device.id}>
+                <DeviceFrame
+                  widthMm={screen.widthMm}
+                  heightMm={screen.heightMm}
+                  pxPerMm={pxPerMm}
+                  maxHeightPx={maxHeightPx}
+                  bezel={screen.bezel}
+                >
+                  {primaryMount}
+                </DeviceFrame>
+              </div>
+            )
+          }
+
+          // Multi-screen device: stack screens and fit the whole cluster as a
+          // unit (the inner frames stay at true px so container queries hold).
+          const clusterTrueH = clusterOuterHeightPx(
+            screens,
+            pxPerMm,
+            SCREEN_GAP_PX,
+          )
+          const clusterFit =
+            maxHeightPx && clusterTrueH > maxHeightPx
+              ? maxHeightPx / clusterTrueH
+              : 1
+          return (
+            <div
+              key={device.id}
+              data-lab-device-id={device.id}
+              className="lab-device-cluster"
+              style={{
+                gap: SCREEN_GAP_PX,
+                transform: clusterFit < 1 ? `scale(${clusterFit})` : undefined,
+                transformOrigin: "top center",
+              }}
             >
-              <LabSurfaceMount
-                adapter={adapter}
-                initialValues={initialValues}
-                surfacePath={surfacePath}
-                onNavigate={setSurfacePath}
-              />
-            </DeviceFrame>
-          </div>
-        ))}
+              {screens.map(screen => (
+                <div
+                  key={screen.id}
+                  data-lab-screen-id={screen.id}
+                  data-lab-screen-role={screen.role ?? "primary"}
+                >
+                  <DeviceFrame
+                    widthMm={screen.widthMm}
+                    heightMm={screen.heightMm}
+                    pxPerMm={pxPerMm}
+                    bezel={screen.bezel}
+                  >
+                    {screen.role === "secondary" ? (
+                      <LabScreenPlaceholder label={screen.label ?? "Screen"} />
+                    ) : (
+                      primaryMount
+                    )}
+                  </DeviceFrame>
+                </div>
+              ))}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

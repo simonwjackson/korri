@@ -46,6 +46,25 @@ const SHIFT_DEVICES: readonly DeviceConfig[] = [
     name: "THOR",
     widthMm: 132,
     heightMm: 76,
+    // Dual-screen: the main panel plus a smaller one beneath it. The bottom
+    // screen is a placeholder slot for now (quick controls / music / a guide
+    // will mount here). Sizes are provisional — calibrate against the hardware.
+    screens: [
+      {
+        id: "thor-top",
+        label: "Top",
+        widthMm: 132,
+        heightMm: 76,
+        role: "primary",
+      },
+      {
+        id: "thor-bottom",
+        label: "Bottom",
+        widthMm: 110,
+        heightMm: 62,
+        role: "secondary",
+      },
+    ],
   },
   {
     id: "odin2portal",

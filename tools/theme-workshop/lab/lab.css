@@ -129,3 +129,43 @@
 	color: #e6e6ea;
 	border-color: #3a3a45;
 }
+
+/* ── Multi-screen device cluster ──────────────────────────────────────────
+ * A device with more than one physical screen stacks them top-to-bottom and
+ * scales as a single unit (the scale is applied inline). The placeholder fills
+ * a secondary screen until a real surface is assigned to it. */
+.lab-device-cluster {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+.lab-screen-placeholder {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	width: 100%;
+	height: 100%;
+	text-align: center;
+	color: #8b93a7;
+	background: repeating-linear-gradient(
+		45deg,
+		#14161c,
+		#14161c 12px,
+		#181b22 12px,
+		#181b22 24px
+	);
+	font: 600 0.8rem/1.3 ui-monospace, monospace;
+	letter-spacing: 0.04em;
+}
+.lab-screen-placeholder-tag {
+	font-size: 1rem;
+	color: #c3cad8;
+	text-transform: uppercase;
+}
+.lab-screen-placeholder-hint {
+	font-weight: 400;
+	opacity: 0.7;
+	max-width: 80%;
+}
