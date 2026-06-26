@@ -56,11 +56,11 @@
 	 * range; tune live in the device-lab (the generator sliders write these
 	 * same vars). Snap stays the recipe default (0.02px) — Shift has a smooth
 	 * font, not pico's 1px pixel snap. */
-	--intrinsic-base-min: var(--shift-base-min, 13px);
+	--intrinsic-base-min: var(--shift-base-min, 14px);
 	--intrinsic-base-cqi: var(--shift-base-cqi, 1.8);
 	--intrinsic-base-max: var(--shift-base-max, 18px);
-	--intrinsic-ratio: var(--shift-type-ratio, 1.2);
-	--intrinsic-space-unit: var(--shift-space-unit, 0.5em);
+	--intrinsic-ratio: var(--shift-type-ratio, 1.44);
+	--intrinsic-space-unit: var(--shift-space-unit, 0.2em);
 
 	/* ── Native semantic type scale (derived off the one base) ─────────────
 	 * Body sits AT the base (text-0), not at the floor. `fine` is one step

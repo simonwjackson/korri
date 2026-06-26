@@ -82,7 +82,7 @@ const SHIFT_KNOBS: readonly ThemeKnob[] = [
     min: 8,
     max: 24,
     step: 1,
-    default: 13,
+    default: 14,
     unit: "px",
   },
   {
@@ -102,7 +102,7 @@ const SHIFT_KNOBS: readonly ThemeKnob[] = [
     min: 1.1,
     max: 1.6,
     step: 0.01,
-    default: 1.2,
+    default: 1.44,
   },
   {
     id: "space",
@@ -111,7 +111,7 @@ const SHIFT_KNOBS: readonly ThemeKnob[] = [
     min: 0.2,
     max: 1.2,
     step: 0.05,
-    default: 0.5,
+    default: 0.2,
     unit: "em",
   },
 ]
