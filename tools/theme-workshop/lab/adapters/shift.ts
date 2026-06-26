@@ -17,7 +17,6 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   ],
   knobs: shiftConfig.knobs,
   defaultPxPerMm: shiftConfig.defaultPxPerMm,
-  scaleVarPrefix: shiftConfig.scaleVarPrefix,
   useControls: useShiftControls,
   makeSeedInitialValues,
   mountSurface: (host, { initialValues, history }) =>

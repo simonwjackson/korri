@@ -109,8 +109,6 @@
 	--intrinsic-base-max: var(--pico-base-max, 200px);
 	--intrinsic-ratio: var(--pico-type-ratio, 1.25);
 	--intrinsic-space-unit: var(--pico-space-unit, 0.5em);
-	--intrinsic-text-scale: var(--pico-text-scale, 1);
-	--intrinsic-pad-scale: var(--pico-pad-scale, 1);
 	--intrinsic-snap: 1px;
 
 	--pico-base: var(--intrinsic-base);

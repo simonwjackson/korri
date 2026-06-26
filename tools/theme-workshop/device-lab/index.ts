@@ -8,8 +8,8 @@
  *   <DeviceLab storageKey="my-template" devices={DEVICES} render={() => <MyDesign />} />
  *
  * Skin it with stageClassName / screensClassName / bezelClassName /
- * screenClassName + scaleVarPrefix, and author the design in cqw units against
- * `--<scaleVarPrefix>-text-scale` and `--<scaleVarPrefix>-pad-scale`.
+ * screenClassName, and author the design in cqw units so it fills the screen
+ * container at any physical size.
  */
 export { Calibrator, type DeviceCal } from "./Calibrator"
 export { DeviceFrame } from "./DeviceFrame"

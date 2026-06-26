@@ -3,8 +3,7 @@
  *
  * widthMm x heightMm are converted to px via the calibrated pxPerMm. The screen
  * is a `container-type: size` query container, so caller content authored in
- * cqw fills it at any physical size. TEXT / PAD scales are published as CSS
- * custom properties (`--<scaleVarPrefix>-text-scale` / `-pad-scale`).
+ * cqw fills it at any physical size.
  *
  * Display fit: a device physically larger than the viewport (a TV) cannot be
  * shown at 1:1. When `maxHeightPx` is given and the true frame is taller, the
@@ -19,9 +18,6 @@ export function DeviceFrame({
   widthMm,
   heightMm,
   pxPerMm,
-  textScale = 1,
-  padScale = 1,
-  scaleVarPrefix = "lab",
   maxHeightPx,
   bezel = true,
   bezelClassName,
@@ -31,9 +27,6 @@ export function DeviceFrame({
   readonly widthMm: number
   readonly heightMm: number
   readonly pxPerMm: number
-  readonly textScale?: number
-  readonly padScale?: number
-  readonly scaleVarPrefix?: string
   /** Max displayed frame height in px; oversized frames scale down to fit. */
   readonly maxHeightPx?: number
   /** Draw the device bezel/frame. Default true; false = bare panel (e.g. TV). */
@@ -53,8 +46,6 @@ export function DeviceFrame({
   const screenStyle = {
     width: widthPx,
     height: heightPx,
-    [`--${scaleVarPrefix}-text-scale`]: textScale,
-    [`--${scaleVarPrefix}-pad-scale`]: padScale,
   } as CSSProperties
 
   return (

@@ -19,16 +19,12 @@ const devices: readonly DeviceConfig[] = [
     name: "RG353M",
     widthMm: 72,
     heightMm: 52,
-    textPct: 100,
-    padPct: 100,
   },
   {
     id: "odin2portal",
     name: "ODIN 2 PORTAL",
     widthMm: 156,
     heightMm: 85,
-    textPct: 100,
-    padPct: 100,
   },
 ]
 
@@ -78,7 +74,11 @@ describe("LabRoot", () => {
     const view = render(
       <LabRoot
         adapters={[adapter]}
-        routeState={{ devicesSegment: "all", themeId: "test", surfacePath: "/" }}
+        routeState={{
+          devicesSegment: "all",
+          themeId: "test",
+          surfacePath: "/",
+        }}
         navigation={{
           setDevicesSegment: mock(() => undefined),
           setThemeId: mock(() => undefined),
@@ -88,7 +88,9 @@ describe("LabRoot", () => {
     )
 
     await waitFor(() => {
-      expect(view.getByRole("dialog", { name: "Calibration desk" })).toBeTruthy()
+      expect(
+        view.getByRole("dialog", { name: "Calibration desk" }),
+      ).toBeTruthy()
     })
     expect(view.getByRole("tab", { name: "Devices" })).toBeTruthy()
     expect(view.getByRole("tab", { name: "Scale" })).toBeTruthy()

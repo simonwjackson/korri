@@ -145,8 +145,6 @@ export interface ThemeWorkshopConfig {
   /** Generator knobs (base size, ratio, space, …) cascaded onto the stage. */
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
-  /** Prefix the lab publishes its `--<prefix>-text-scale` / `-pad-scale` under. */
-  readonly scaleVarPrefix?: string
   /** The screen catalog + group display order. */
   readonly screens: readonly Screen[]
   readonly groups: readonly string[]

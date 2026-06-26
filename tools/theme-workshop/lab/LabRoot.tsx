@@ -192,10 +192,6 @@ export function LabRoot({
     onRemove: () => removeDevice(device.id),
     mm: { w: device.widthMm, h: device.heightMm },
     onMmChange: mm => patchDevice(device.id, { widthMm: mm.w, heightMm: mm.h }),
-    textPct: device.textPct,
-    onTextChange: textPct => patchDevice(device.id, { textPct }),
-    padPct: device.padPct,
-    onPadChange: padPct => patchDevice(device.id, { padPct }),
   }))
 
   const knobCals: KnobCal[] = (adapter.knobs ?? []).map(knob => ({
@@ -294,8 +290,6 @@ function normalizeDevice(value: unknown): DeviceConfig | null {
     name: typeof device.name === "string" ? device.name : device.id,
     widthMm: num(device.widthMm, 100),
     heightMm: num(device.heightMm, 56.25),
-    textPct: num(device.textPct, 140),
-    padPct: num(device.padPct, 100),
     bezel: device.bezel !== false,
   }
 }
@@ -313,7 +307,5 @@ function makeDevice(existing: readonly DeviceConfig[]): DeviceConfig {
     name: `DEVICE ${existing.length + 1}`,
     widthMm: 100,
     heightMm: 56.25,
-    textPct: 140,
-    padPct: 100,
   }
 }

@@ -38,8 +38,6 @@ container) and consumes the scale.
 | `--intrinsic-base-max` | `26px` | clamp ceiling — base never larger |
 | `--intrinsic-ratio` | `1.25` | type scale ratio (`step = base · ratioⁿ`) |
 | `--intrinsic-space-unit` | `0.5em` | space step unit (em → tracks text) |
-| `--intrinsic-text-scale` | `1` | per-surface TEXT multiplier (device lab) |
-| `--intrinsic-pad-scale` | `1` | per-surface PAD multiplier (device lab) |
 | `--intrinsic-snap` | `0.02px` | size quantum — **pixel themes set `1px`** |
 
 **Scale you get** (live, container-adaptive):

@@ -68,8 +68,8 @@ export function LabStage() {
           ) : (
             <div className="lab-screens">
               <div className="lab-empty-state">
-                No parts discovered for <code>{adapter.id}</code>. Add files like{" "}
-                <code>Component.atom.part.tsx</code> under{" "}
+                No parts discovered for <code>{adapter.id}</code>. Add files
+                like <code>Component.atom.part.tsx</code> under{" "}
                 <code>product/surfaces/web/{adapter.id}/</code>.
               </div>
             </div>
@@ -90,9 +90,6 @@ export function LabStage() {
               widthMm={device.widthMm}
               heightMm={device.heightMm}
               pxPerMm={pxPerMm}
-              textScale={device.textPct / 100}
-              padScale={device.padPct / 100}
-              scaleVarPrefix={adapter.scaleVarPrefix ?? "lab"}
               maxHeightPx={maxHeightPx}
               bezel={device.bezel}
             >

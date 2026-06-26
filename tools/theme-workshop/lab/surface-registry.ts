@@ -24,7 +24,6 @@ export interface LabSurfaceAdapter {
   readonly useControls?: () => readonly WorkshopControl[]
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
-  readonly scaleVarPrefix?: string
   readonly makeSeedInitialValues: () => Promise<unknown>
   readonly mountSurface: (
     host: HTMLElement,

@@ -5,8 +5,8 @@
  * optional theme generator knobs) and persists the whole roster as one JSON blob
  * under `storageKey`, so adding / removing / renaming / resizing devices and
  * tuning generators all survive a reload. The design under test is supplied via
- * `render(device)`. Skinnable through *ClassName props and `scaleVarPrefix`; the
- * kit knows nothing of the template.
+ * `render(device)`. Skinnable through *ClassName props; the kit knows nothing of
+ * the template.
  */
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react"
 import { Calibrator, type DeviceCal, type KnobCal } from "./Calibrator"
@@ -29,7 +29,6 @@ export function DeviceLab({
   render,
   themeKnobs = [],
   defaultPxPerMm = DEFAULT_PX_PER_MM,
-  scaleVarPrefix = "lab",
   stageClassName,
   screensClassName,
   bezelClassName,
@@ -44,7 +43,6 @@ export function DeviceLab({
   /** Optional theme-specific generator knobs (base size, ratio, space, ...). */
   readonly themeKnobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
-  readonly scaleVarPrefix?: string
   readonly stageClassName?: string
   readonly screensClassName?: string
   readonly bezelClassName?: string
@@ -106,10 +104,6 @@ export function DeviceLab({
     onRemove: () => removeDevice(device.id),
     mm: { w: device.widthMm, h: device.heightMm },
     onMmChange: mm => patchDevice(device.id, { widthMm: mm.w, heightMm: mm.h }),
-    textPct: device.textPct,
-    onTextChange: textPct => patchDevice(device.id, { textPct }),
-    padPct: device.padPct,
-    onPadChange: padPct => patchDevice(device.id, { padPct }),
   }))
 
   const knobCals: KnobCal[] = themeKnobs.map(knob => ({
@@ -170,9 +164,6 @@ export function DeviceLab({
             widthMm={device.widthMm}
             heightMm={device.heightMm}
             pxPerMm={state.pxPerMm}
-            textScale={device.textPct / 100}
-            padScale={device.padPct / 100}
-            scaleVarPrefix={scaleVarPrefix}
             maxHeightPx={maxHeightPx}
             bezel={device.bezel}
             bezelClassName={bezelClassName}
@@ -209,8 +200,6 @@ function makeDevice(existing: readonly DeviceConfig[]): DeviceConfig {
     name: `DEVICE ${existing.length + 1}`,
     widthMm: 100,
     heightMm: 56.25,
-    textPct: 140,
-    padPct: 100,
   }
 }
 
@@ -278,8 +267,6 @@ function normalizeDevice(value: unknown): DeviceConfig | null {
     name: typeof d.name === "string" ? d.name : d.id,
     widthMm: num(d.widthMm, 100),
     heightMm: num(d.heightMm, 56.25),
-    textPct: num(d.textPct, 140),
-    padPct: num(d.padPct, 100),
     bezel: d.bezel !== false,
   }
 }

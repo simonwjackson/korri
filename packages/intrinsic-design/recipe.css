@@ -14,80 +14,81 @@
  *
  * Declared on `:root` AND any `.intrinsic` element: a per-surface container can
  * carry the class to re-derive the WHOLE scale against ITS OWN container (its
- * cqi, its inherited text/pad-scale) — that's how a theme drives the scale
- * per-screen instead of globally. `:where()` keeps specificity 0, so a consumer
- * always wins when it overrides a knob. */
+ * cqi) — that's how a theme drives the scale per-screen instead of globally.
+ * `:where()` keeps specificity 0, so a consumer always wins when it overrides a
+ * knob. */
 :where(:root, .intrinsic) {
-  --intrinsic-base-min: 12px; /* clamp floor — never smaller than this */
-  --intrinsic-base-cqi: 2.6; /* fluid anchor — × 1cqi of the container */
-  --intrinsic-base-max: 26px; /* clamp ceiling — never larger than this */
-  --intrinsic-ratio: 1.25; /* type scale ratio — step = base · ratioⁿ */
-  --intrinsic-space-unit: 0.5em; /* space step unit — em, so it tracks text */
-  --intrinsic-text-scale: 1; /* per-surface TEXT multiplier (device lab) */
-  --intrinsic-pad-scale: 1; /* per-surface PAD multiplier (device lab) */
-  --intrinsic-snap: 0.02px; /* size quantum — pixel themes set this to 1px */
+	--intrinsic-base-min: 12px; /* clamp floor — never smaller than this */
+	--intrinsic-base-cqi: 2.6; /* fluid anchor — × 1cqi of the container */
+	--intrinsic-base-max: 26px; /* clamp ceiling — never larger than this */
+	--intrinsic-ratio: 1.25; /* type scale ratio — step = base · ratioⁿ */
+	--intrinsic-space-unit: 0.5em; /* space step unit — em, so it tracks text */
+	--intrinsic-snap: 0.02px; /* size quantum — pixel themes set this to 1px */
 
-  /* ── The base: one fluid, clamped anchor for the whole system ──────────
+	/* ── The base: one fluid, clamped anchor for the whole system ──────────
    * clamp() keeps it legible at any size; cqi binds it to the container (not
    * the viewport), so it adapts to any surface/aspect with no breakpoints. */
-  --intrinsic-base: round(
-    clamp(
-      var(--intrinsic-base-min),
-      calc(var(--intrinsic-base-cqi) * 1cqi),
-      var(--intrinsic-base-max)
-    ),
-    var(--intrinsic-snap)
-  );
+	--intrinsic-base: round(
+		clamp(
+			var(--intrinsic-base-min),
+			calc(var(--intrinsic-base-cqi) * 1cqi),
+			var(--intrinsic-base-max)
+		),
+		var(--intrinsic-snap)
+	);
 
-  /* ── Type scale: base · ratioⁿ · text-scale (powers via nested calc) ─── */
-  --intrinsic-text-dn3: round(
-    calc(
-      var(--intrinsic-base) / var(--intrinsic-ratio) / var(--intrinsic-ratio) /
-        var(--intrinsic-ratio) * var(--intrinsic-text-scale)
-    ),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-dn2: round(
-    calc(
-      var(--intrinsic-base) / var(--intrinsic-ratio) / var(--intrinsic-ratio) *
-        var(--intrinsic-text-scale)
-    ),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-dn1: round(
-    calc(var(--intrinsic-base) / var(--intrinsic-ratio) * var(--intrinsic-text-scale)),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-0: round(
-    calc(var(--intrinsic-base) * var(--intrinsic-text-scale)),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-up1: round(
-    calc(var(--intrinsic-base) * var(--intrinsic-ratio) * var(--intrinsic-text-scale)),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-up2: round(
-    calc(
-      var(--intrinsic-base) * var(--intrinsic-ratio) * var(--intrinsic-ratio) *
-        var(--intrinsic-text-scale)
-    ),
-    var(--intrinsic-snap)
-  );
-  --intrinsic-text-up3: round(
-    calc(
-      var(--intrinsic-base) * var(--intrinsic-ratio) * var(--intrinsic-ratio) *
-        var(--intrinsic-ratio) * var(--intrinsic-text-scale)
-    ),
-    var(--intrinsic-snap)
-  );
+	/* ── Type scale: base · ratioⁿ (powers via nested calc) ──────────────── */
+	--intrinsic-text-dn3: round(
+		calc(
+			var(--intrinsic-base) /
+			var(--intrinsic-ratio) /
+			var(--intrinsic-ratio) /
+			var(--intrinsic-ratio)
+		),
+		var(--intrinsic-snap)
+	);
+	--intrinsic-text-dn2: round(
+		calc(
+			var(--intrinsic-base) /
+			var(--intrinsic-ratio) /
+			var(--intrinsic-ratio)
+		),
+		var(--intrinsic-snap)
+	);
+	--intrinsic-text-dn1: round(
+		calc(var(--intrinsic-base) / var(--intrinsic-ratio)),
+		var(--intrinsic-snap)
+	);
+	--intrinsic-text-0: round(var(--intrinsic-base), var(--intrinsic-snap));
+	--intrinsic-text-up1: round(
+		calc(var(--intrinsic-base) * var(--intrinsic-ratio)),
+		var(--intrinsic-snap)
+	);
+	--intrinsic-text-up2: round(
+		calc(
+			var(--intrinsic-base) *
+			var(--intrinsic-ratio) *
+			var(--intrinsic-ratio)
+		),
+		var(--intrinsic-snap)
+	);
+	--intrinsic-text-up3: round(
+		calc(
+			var(--intrinsic-base) *
+			var(--intrinsic-ratio) *
+			var(--intrinsic-ratio) *
+			var(--intrinsic-ratio)
+		),
+		var(--intrinsic-snap)
+	);
 
-  /* ── Space scale: linear steps, em-relative (tracks text), pad-scaled ── */
-  --intrinsic-space-1: calc(var(--intrinsic-space-unit) * 1 * var(--intrinsic-pad-scale));
-  --intrinsic-space-2: calc(var(--intrinsic-space-unit) * 2 * var(--intrinsic-pad-scale));
-  --intrinsic-space-3: calc(var(--intrinsic-space-unit) * 3 * var(--intrinsic-pad-scale));
-  --intrinsic-space-4: calc(var(--intrinsic-space-unit) * 4 * var(--intrinsic-pad-scale));
-  --intrinsic-space-5: calc(var(--intrinsic-space-unit) * 5 * var(--intrinsic-pad-scale));
-  --intrinsic-space-6: calc(var(--intrinsic-space-unit) * 6 * var(--intrinsic-pad-scale));
+	/* ── Space scale: linear steps, em-relative (tracks text) ────────────── */
+	--intrinsic-space-1: calc(var(--intrinsic-space-unit) * 1);
+	--intrinsic-space-2: calc(var(--intrinsic-space-unit) * 2);
+	--intrinsic-space-3: calc(var(--intrinsic-space-unit) * 3);
+	--intrinsic-space-4: calc(var(--intrinsic-space-unit) * 4);
+	--intrinsic-space-5: calc(var(--intrinsic-space-unit) * 5);
+	--intrinsic-space-6: calc(var(--intrinsic-space-unit) * 6);
 }
 
 /* ── Bounded-media ceiling (usage rule, not a token) ─────────────────────

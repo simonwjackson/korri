@@ -67,7 +67,6 @@ export function ThemeWorkshop({
           devices={config.devices}
           themeKnobs={config.knobs}
           defaultPxPerMm={config.defaultPxPerMm}
-          scaleVarPrefix={config.scaleVarPrefix}
           stageClassName={cn.stage}
           screensClassName={cn.screens}
           bezelClassName={cn.bezel}

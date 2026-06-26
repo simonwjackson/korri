@@ -3,7 +3,7 @@
  *
  * Idle, it collapses to a single near-invisible toggle so it stays out of the
  * way. Open, it is a compact tabbed panel:
- *   - Devices    — per-device size (mm) + TEXT / PAD, add / remove / rename
+ *   - Devices    — per-device size (mm), add / remove / rename
  *   - Scale      — the monitor calibration: drag SCALE until the dashed box
  *                  matches a real credit card (ISO ID-1, 85.6 x 53.98 mm). The
  *                  true-size target only appears while this tab is active.
@@ -34,10 +34,6 @@ export type DeviceCal = {
   readonly onRemove: () => void
   readonly mm: { readonly w: number; readonly h: number }
   readonly onMmChange: (next: { w: number; h: number }) => void
-  readonly textPct: number
-  readonly onTextChange: (next: number) => void
-  readonly padPct: number
-  readonly onPadChange: (next: number) => void
 }
 
 export function Calibrator({
@@ -74,8 +70,6 @@ export function Calibrator({
           name: device.name,
           wMm: device.mm.w,
           hMm: device.mm.h,
-          textPct: device.textPct,
-          padPct: device.padPct,
         }),
       ),
       ...knobs.map(knob =>
@@ -166,24 +160,6 @@ export function Calibrator({
                         onChange={h => device.onMmChange({ w: device.mm.w, h })}
                       />
                     </div>
-                    <Slider
-                      label="TEXT"
-                      value={device.textPct}
-                      min={80}
-                      max={220}
-                      step={5}
-                      suffix="%"
-                      onChange={device.onTextChange}
-                    />
-                    <Slider
-                      label="PAD"
-                      value={device.padPct}
-                      min={50}
-                      max={250}
-                      step={5}
-                      suffix="%"
-                      onChange={device.onPadChange}
-                    />
                   </div>
                 ))}
                 <button

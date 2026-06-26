@@ -10,9 +10,8 @@
  * Shift's CSS is scoped under [data-shift-home] (created by ShiftCinematicHome), and
  * that element carries the `intrinsic` class, so the recipe re-derives the whole
  * scale against the device frame the lab renders it inside. The knob sliders
- * drive --shift-base-* / --shift-type-ratio / --shift-space-unit; TEXT / PAD use
- * the scaleVarPrefix ("shift") so the lab publishes --shift-text-scale /
- * --shift-pad-scale, which shift.css reads with a default of 1.
+ * drive the generators only: --shift-base-* / --shift-type-ratio /
+ * --shift-space-unit, which shift.css reads with committed defaults.
  */
 import type {
   DeviceConfig,
@@ -41,32 +40,24 @@ const SHIFT_DEVICES: readonly DeviceConfig[] = [
     name: "RG353M",
     widthMm: 72,
     heightMm: 52,
-    textPct: 100,
-    padPct: 100,
   },
   {
     id: "thor",
     name: "THOR",
     widthMm: 132,
     heightMm: 76,
-    textPct: 100,
-    padPct: 100,
   },
   {
     id: "odin2portal",
     name: "ODIN 2 PORTAL",
     widthMm: 156,
     heightMm: 85,
-    textPct: 100,
-    padPct: 100,
   },
   {
     id: "tv65",
     name: '65" 4K TV',
     widthMm: 1439,
     heightMm: 809,
-    textPct: 100,
-    padPct: 100,
     bezel: false,
   },
 ]
@@ -220,8 +211,6 @@ export const shiftConfig: ThemeWorkshopConfig = {
   devices: SHIFT_DEVICES,
   knobs: SHIFT_KNOBS,
   defaultPxPerMm: SHIFT_DEFAULT_PX_PER_MM,
-  // Lab publishes --shift-text-scale / --shift-pad-scale; shift.css reads them.
-  scaleVarPrefix: "shift",
   screens: SHIFT_SCREENS,
   groups: ["Home", "Detail"],
 }

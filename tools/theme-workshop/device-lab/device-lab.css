@@ -3,9 +3,8 @@
  *
  * Template-agnostic. The design under test supplies its own skin via the
  * *ClassName props on DeviceLab (merged onto .lab-stage / .lab-screens /
- * .lab-bezel / .lab-screen) and authors content against the published
- * `--<scaleVarPrefix>-text-scale` / `--<scaleVarPrefix>-pad-scale` custom
- * properties. These rules only provide neutral structure + the calibrator.
+ * .lab-bezel / .lab-screen) and authors content in cqw units so it fills the
+ * screen container. These rules only provide neutral structure + the calibrator.
  */
 
 /* Desk + device matrix --------------------------------------------------- */

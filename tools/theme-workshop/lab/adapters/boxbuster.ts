@@ -13,16 +13,12 @@ const BOXBUSTER_DEVICES: readonly DeviceConfig[] = [
     name: "ODIN 2 PORTAL",
     widthMm: 156,
     heightMm: 85,
-    textPct: 100,
-    padPct: 100,
   },
   {
     id: "tv65",
     name: '65" 4K TV',
     widthMm: 1439,
     heightMm: 809,
-    textPct: 100,
-    padPct: 100,
     bezel: false,
   },
 ]
@@ -44,7 +40,6 @@ export const boxbusterLabSurfaceAdapter: LabSurfaceAdapter = {
   devices: BOXBUSTER_DEVICES,
   knobs: BOXBUSTER_KNOBS,
   defaultPxPerMm: 6.78,
-  scaleVarPrefix: "bb",
   screens: [
     { label: "Store", path: "/" },
     { label: "Now Playing", path: "/game/hollow-knight" },

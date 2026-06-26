@@ -31,24 +31,18 @@ const PICO_DEVICES: readonly DeviceConfig[] = [
     name: "RG353M",
     widthMm: 72,
     heightMm: 52,
-    textPct: 100,
-    padPct: 100,
   },
   {
     id: "thor",
     name: "THOR",
     widthMm: 132,
     heightMm: 76,
-    textPct: 100,
-    padPct: 100,
   },
   {
     id: "odin2portal",
     name: "ODIN 2 PORTAL",
     widthMm: 156,
     heightMm: 85,
-    textPct: 100,
-    padPct: 100,
   },
   {
     // 65" 16:9 panel. Far larger than the viewport -> the lab scales it down
@@ -57,8 +51,6 @@ const PICO_DEVICES: readonly DeviceConfig[] = [
     name: '65" 4K TV',
     widthMm: 1439,
     heightMm: 809,
-    textPct: 100,
-    padPct: 100,
     bezel: false,
   },
 ]
@@ -132,7 +124,6 @@ export const picoConfig: ThemeWorkshopConfig = {
   devices: PICO_DEVICES,
   knobs: PICO_KNOBS,
   defaultPxPerMm: PICO_DEFAULT_PX_PER_MM,
-  scaleVarPrefix: "pico",
   screens: PICO_SCREENS,
   groups: PICO_GROUPS,
   stories: [...PICO_PAGE_STORIES, ...PICO_STORIES],

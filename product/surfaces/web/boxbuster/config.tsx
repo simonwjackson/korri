@@ -23,16 +23,12 @@ const DEVICES: readonly DeviceConfig[] = [
     name: "RG353M",
     widthMm: 72,
     heightMm: 52,
-    textPct: 100,
-    padPct: 100,
   },
   {
     id: "odin2portal",
     name: "ODIN 2 PORTAL",
     widthMm: 156,
     heightMm: 85,
-    textPct: 100,
-    padPct: 100,
   },
   {
     // 65" 16:9 panel — far larger than the viewport, so the lab scales it down
@@ -41,8 +37,6 @@ const DEVICES: readonly DeviceConfig[] = [
     name: '65" 4K TV',
     widthMm: 1439,
     heightMm: 809,
-    textPct: 100,
-    padPct: 100,
     bezel: false,
   },
 ]
