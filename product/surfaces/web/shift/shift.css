@@ -88,7 +88,7 @@
 
 	/* ── Fluid measures (replace static max-w-* caps) ──────────────────────
 	 * ch tracks the font; cqi bounds against the surface — both stay fluid. */
-	--shift-measure-notice: min(42rem, 88cqi);
+	--shift-measure-notice: min(42em, 88cqi);
 	--shift-measure-prose: min(60ch, 88cqi);
 	--shift-measure-display: 14ch;
 
@@ -564,7 +564,9 @@
 	display: flex;
 	flex-direction: column;
 	gap: var(--shift-space-2);
-	max-width: min(70cqi, 48rem);
+	/* Container-relative only: a `rem` cap here is fixed in px and doesn't grow
+	 * with the base, so on a large screen it clipped the (now big) hero. */
+	max-width: 70cqi;
 }
 
 [data-shift-home] .shift-cine-kicker {
@@ -771,7 +773,7 @@
 /* Indeterminate "powering on" shimmer while launching. */
 [data-shift-home] .shift-cine-loading {
 	margin-top: var(--shift-space-2);
-	width: min(40cqi, 18rem);
+	width: min(40cqi, 18em);
 	height: 0.35em;
 	border-radius: 9999px;
 	background: linear-gradient(
