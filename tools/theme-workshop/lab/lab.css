@@ -179,3 +179,87 @@
 	opacity: 0.7;
 	max-width: 80%;
 }
+
+/* ── Per-device screen editor (Devices panel) ─────────────────────────────
+ * Each device lists its screens; add/remove and place each one above/below/
+ * left/right of the main (anchor) screen. */
+.lab-screen-list {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+.lab-screen-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+.lab-screen-tag {
+	min-width: 38px;
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--pt-ink-faint, #61656f);
+}
+.lab-screen-row label {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--pt-ink-faint, #61656f);
+}
+.lab-screen-row input {
+	width: 48px;
+	font: inherit;
+	color: var(--pt-ink, #e7e8ec);
+	background: #14161d;
+	border: 1px solid var(--pt-line, #272a32);
+	border-radius: 6px;
+	padding: 3px 5px;
+}
+.lab-screen-place {
+	font: inherit;
+	font-size: 11px;
+	color: var(--pt-ink, #e7e8ec);
+	background: #14161d;
+	border: 1px solid var(--pt-line, #272a32);
+	border-radius: 6px;
+	padding: 3px 4px;
+}
+.lab-screen-anchor {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--pt-ink-faint, #61656f);
+}
+.lab-screen-remove {
+	font: inherit;
+	line-height: 1;
+	color: var(--pt-ink-dim, #9a9faa);
+	background: transparent;
+	border: 1px solid var(--pt-line, #272a32);
+	border-radius: 6px;
+	padding: 2px 7px;
+	cursor: pointer;
+}
+.lab-screen-remove:hover {
+	color: #f4b4b4;
+	border-color: #5a3a3a;
+}
+.lab-screen-add {
+	align-self: flex-start;
+	font: inherit;
+	font-size: 11px;
+	color: var(--pt-ink-dim, #9a9faa);
+	background: #14161d;
+	border: 1px dashed var(--pt-line, #272a32);
+	border-radius: 6px;
+	padding: 4px 8px;
+	cursor: pointer;
+}
+.lab-screen-add:hover {
+	color: var(--pt-ink, #e7e8ec);
+	border-color: #393d48;
+}

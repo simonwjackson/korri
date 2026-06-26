@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react"
-import type { DeviceConfig, ThemeKnob } from "../device-lab"
+import type {
+  DeviceConfig,
+  ScreenConfig,
+  ScreenPlacement,
+  ThemeKnob,
+} from "../device-lab"
 import {
   normalizeSurfacePath,
   parseDeviceSegment,
@@ -154,7 +159,9 @@ export function LabRoot({
       initialValues,
       themeId: routeState.themeId,
       surfacePath: partsAlias ? "/" : requestedPath,
-      initialCanvasView: partsAlias ? "gallery" as const : "surface" as const,
+      initialCanvasView: partsAlias
+        ? ("gallery" as const)
+        : ("surface" as const),
       screens: adapter.screens ?? [],
       selection,
       devices: calibration.devices,
@@ -226,12 +233,12 @@ function loadLab(
       .map(normalizeDevice)
       .filter((device): device is DeviceConfig => device !== null)
       .map(device => {
-        // Saved calibration only carries user-tunable values (sizes, bezel).
-        // Structural fields like `screens` live in code, so a persisted device
-        // inherits them from its code counterpart by id — otherwise adding
-        // screens in config would be shadowed by an older saved state.
+        // The user can now edit screens in the lab, so saved screens win when
+        // present. A device with no saved screens (old state, or one never
+        // touched) inherits them from its code counterpart by id, so adding
+        // screens in config still shows up.
         const code = codeById.get(device.id)
-        return code ? { ...device, screens: code.screens } : device
+        return { ...device, screens: device.screens ?? code?.screens }
       })
     if (devices.length === 0) return seeded
     const pxPerMm = Number(parsed.pxPerMm)
@@ -265,12 +272,48 @@ function normalizeDevice(value: unknown): DeviceConfig | null {
       ? Number(candidate)
       : fallback
   if (typeof device.id !== "string") return null
+  const screens = Array.isArray(device.screens)
+    ? device.screens
+        .map(normalizeScreen)
+        .filter((screen): screen is ScreenConfig => screen !== null)
+    : undefined
   return {
     id: device.id,
     name: typeof device.name === "string" ? device.name : device.id,
     widthMm: num(device.widthMm, 100),
     heightMm: num(device.heightMm, 56.25),
     bezel: device.bezel !== false,
+    ...(screens && screens.length > 0 ? { screens } : {}),
+  }
+}
+
+const PLACEMENTS: readonly ScreenPlacement[] = [
+  "above",
+  "below",
+  "left",
+  "right",
+]
+
+function normalizeScreen(value: unknown): ScreenConfig | null {
+  if (typeof value !== "object" || value === null) return null
+  const screen = value as Record<string, unknown>
+  if (typeof screen.id !== "string") return null
+  const num = (candidate: unknown, fallback: number) =>
+    Number.isFinite(Number(candidate)) && Number(candidate) > 0
+      ? Number(candidate)
+      : fallback
+  return {
+    id: screen.id,
+    widthMm: num(screen.widthMm, 100),
+    heightMm: num(screen.heightMm, 56.25),
+    ...(screen.bezel === false ? { bezel: false } : {}),
+    ...(typeof screen.label === "string" ? { label: screen.label } : {}),
+    ...(screen.role === "primary" || screen.role === "secondary"
+      ? { role: screen.role }
+      : {}),
+    ...(PLACEMENTS.includes(screen.placement as ScreenPlacement)
+      ? { placement: screen.placement as ScreenPlacement }
+      : {}),
   }
 }
 
