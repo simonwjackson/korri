@@ -151,6 +151,13 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("Game process removed : AppID $appid")
   })
 
+  it("interrupts best-effort launch focus and audio waits when Steam reports exit", () => {
+    expect(moduleSource).toContain("app_removed_since_mark()")
+    expect(moduleSource).toContain("if app_removed_since_mark; then")
+    expect(moduleSource).toContain("if ! focus_game; then")
+    expect(moduleSource).toContain("if ! repair_game_audio; then")
+  })
+
   it("forwards AppIDs into the warm Steam client without a raw applaunch fallback", () => {
     expect(moduleSource).toContain('"steam://rungameid/$appid"')
     expect(moduleSource).not.toContain('-applaunch "$appid"')

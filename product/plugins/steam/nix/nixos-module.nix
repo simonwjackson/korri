@@ -551,6 +551,9 @@ let
       # Steam-hide policy can put the frontend back on top and drop controls.
       i=0
       while [ "$i" -lt 30 ]; do
+        if app_removed_since_mark; then
+          return 10
+        fi
         if sway_tree | ${pkgs.gnugrep}/bin/grep -a -F "\"class\": \"steam_app_$appid\"" >/dev/null 2>&1; then
           sway "[class=\"steam_app_$appid\"] scratchpad show"
           sway "[class=\"steam_app_$appid\"] floating disable, move to workspace 1, fullscreen enable, focus"
@@ -568,6 +571,9 @@ let
       export PIPEWIRE_RUNTIME_DIR
       i=0
       while [ "$i" -lt 15 ]; do
+        if app_removed_since_mark; then
+          return 10
+        fi
         outputs="$(${pkgs.pipewire}/bin/pw-link -o 2>/dev/null || true)"
         inputs="$(${pkgs.pipewire}/bin/pw-link -i 2>/dev/null || true)"
         left_output="$(printf '%s\n' "$outputs" | ${pkgs.gnugrep}/bin/grep -E '(^|/)30XX\.exe:output_1$' | ${pkgs.coreutils}/bin/head -n 1 || true)"
@@ -703,6 +709,18 @@ let
       ${pkgs.gnugrep}/bin/grep -a -F -q -- "$needle" <<< "$haystack"
     }
 
+    app_removed_since_mark() {
+      [ -f "$console_log" ] || return 1
+      current_mark="$(${pkgs.coreutils}/bin/wc -c < "$console_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
+      if [ "$current_mark" -ge "$mark" ]; then
+        removal_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
+      else
+        removal_log="$(${pkgs.coreutils}/bin/cat "$console_log" 2>/dev/null || true)"
+      fi
+      log_has "$removal_log" "Game process removed: AppID $appid" \
+        || log_has "$removal_log" "Game process removed : AppID $appid"
+    }
+
     deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + launch_timeout ))
     saw_added=0
     while true; do
@@ -720,8 +738,14 @@ let
       if [ "$saw_added" -eq 0 ] && log_has "$new_log" "Game process added : AppID $appid"; then
         saw_added=1
         hide_steam_hat
-        focus_game
-        repair_game_audio
+        if ! focus_game; then
+          hide_steam_hat
+          exit 0
+        fi
+        if ! repair_game_audio; then
+          hide_steam_hat
+          exit 0
+        fi
       fi
 
       if [ "$saw_added" -eq 1 ] \
