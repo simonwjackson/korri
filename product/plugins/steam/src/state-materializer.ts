@@ -223,18 +223,53 @@ async function managedSteamServiceActive(): Promise<boolean> {
 }
 
 async function stateRootProcessRunning(stateRoot: string): Promise<boolean> {
-  const code = await commandExitCode("timeout", [
+  const result = await commandResult("timeout", [
     "5",
-    "pgrep",
-    "-f",
-    stateRoot,
+    "ps",
+    "-eo",
+    "pid=,args=",
   ]).catch(error => {
-    if (isNodeErrorCode(error, "ENOENT")) return 1
+    if (isNodeErrorCode(error, "ENOENT")) return { code: 127, stdout: "" }
     throw error
   })
-  if (code === 0) return true
-  if (code === 1) return false
-  throw new Error(`pgrep status probe exited ${code}`)
+  if (result.code === 0) {
+    return steamStateRootProcessRunningInSnapshot(stateRoot, result.stdout)
+  }
+  throw new Error(`ps status probe exited ${result.code}`)
+}
+
+export function steamStateRootProcessRunningInSnapshot(
+  stateRoot: string,
+  snapshot: string,
+): boolean {
+  const trimmedStateRoot = stateRoot.replace(/\/+$/, "")
+  if (!trimmedStateRoot) return false
+  return snapshot
+    .split("\n")
+    .map(line => line.match(/^\s*(\d+)\s+(.*)$/)?.[2]?.trim() ?? "")
+    .some(commandLine =>
+      steamCommandLineReferencesStateRoot(commandLine, trimmedStateRoot),
+    )
+}
+
+function steamCommandLineReferencesStateRoot(
+  commandLine: string,
+  stateRoot: string,
+): boolean {
+  if (!commandLine.includes(stateRoot)) return false
+  if (isSteamStateRootProbeCommand(commandLine, stateRoot)) return false
+  return true
+}
+
+function isSteamStateRootProbeCommand(
+  commandLine: string,
+  stateRoot: string,
+): boolean {
+  return (
+    commandLine.includes("pgrep") &&
+    commandLine.includes("-f") &&
+    commandLine.includes(stateRoot)
+  )
 }
 
 function runCommand(command: string, args: readonly string[]): Promise<void> {
@@ -247,10 +282,25 @@ function commandExitCode(
   command: string,
   args: readonly string[],
 ): Promise<number> {
+  return commandResult(command, args).then(result => result.code)
+}
+
+function commandResult(
+  command: string,
+  args: readonly string[],
+): Promise<{ readonly code: number; readonly stdout: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, [...args], { stdio: "ignore" })
+    const child = spawn(command, [...args], {
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+    const stdout: Buffer[] = []
+    child.stdout.on("data", chunk => {
+      stdout.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
+    })
     child.on("error", reject)
-    child.on("exit", code => resolve(code ?? 1))
+    child.on("exit", code =>
+      resolve({ code: code ?? 1, stdout: Buffer.concat(stdout).toString() }),
+    )
   })
 }
 

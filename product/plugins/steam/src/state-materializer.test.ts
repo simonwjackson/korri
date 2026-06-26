@@ -5,6 +5,7 @@ import {
   materializeSteamDesiredState,
   parseVdf,
   renderVdf,
+  steamStateRootProcessRunningInSnapshot,
   type SteamLifecycle,
   type SteamStateFileSystem,
   type SteamStateLock,
@@ -73,6 +74,30 @@ const inlineLock: SteamStateLock = {
 }
 
 describe("materializeSteamDesiredState", () => {
+  it("does not treat the Steam state-root probe command as a running Steam process", () => {
+    const probeOnlySnapshot = `
+      100 timeout 5 pgrep -f /var/lib/korri/steam
+      101 pgrep -f /var/lib/korri/steam
+      102 timeout 5 ps -eo pid=,args=
+    `
+    const liveSteamSnapshot = `
+      200 /usr/bin/FEX /var/lib/korri/steam/steamapps/common/30XX/30XX.exe
+    `
+
+    expect(
+      steamStateRootProcessRunningInSnapshot(
+        "/var/lib/korri/steam",
+        probeOnlySnapshot,
+      ),
+    ).toBe(false)
+    expect(
+      steamStateRootProcessRunningInSnapshot(
+        "/var/lib/korri/steam",
+        liveSteamSnapshot,
+      ),
+    ).toBe(true)
+  })
+
   it("uses a fail-closed default lifecycle before production VDF writes", async () => {
     const source = await Bun.file(
       "product/plugins/steam/src/state-materializer.ts",

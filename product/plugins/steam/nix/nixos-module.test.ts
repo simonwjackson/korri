@@ -14,6 +14,16 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
+  it("adds Steam materializer probe tools to the korrid service PATH", () => {
+    expect(moduleSource).toContain("steamMaterializerProbePath = [")
+    expect(moduleSource).toContain("pkgs.coreutils")
+    expect(moduleSource).toContain("pkgs.procps")
+    expect(moduleSource).toContain("pkgs.systemd")
+    expect(moduleSource).toContain("systemd.user.services.korrid =")
+    expect(moduleSource).toContain("systemd.services.korrid =")
+    expect(moduleSource).toContain("path = steamMaterializerProbePath")
+  })
+
   it("exposes a narrow Steam AppID install helper", () => {
     expect(moduleSource).toContain(
       'pkgs.writeShellScriptBin "korri-steam-app-install"',
@@ -23,7 +33,7 @@ describe("Steam plugin Nix module", () => {
     )
     expect(moduleSource).toContain("KORRI_STEAM_APP_INSTALL_HELPER")
     expect(moduleSource).toContain(
-      "systemd.user.services.korrid.environment.KORRI_STEAM_APP_INSTALL_HELPER",
+      "environment.KORRI_STEAM_APP_INSTALL_HELPER",
     )
   })
 

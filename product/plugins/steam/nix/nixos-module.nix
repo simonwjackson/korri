@@ -22,6 +22,11 @@ let
   cfg = config.services.korri.steam;
   korriPulseServer = "unix:/run/user/${toString runtime.uid}/pulse/native";
   steamInputGroup = "korri-steam-input";
+  steamMaterializerProbePath = [
+    pkgs.coreutils
+    pkgs.procps
+    pkgs.systemd
+  ];
 
   defaultSteamArgs = [
     # Keep Steam in SteamOS/Deck-compatible mode for ARM64 AppID forwarding and
@@ -873,7 +878,14 @@ in
     '';
 
     environment.sessionVariables.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
-    systemd.user.services.korrid.environment.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
+    systemd.user.services.korrid = lib.mkIf (config.services.korri.daemon.serviceMode == "user") {
+      path = steamMaterializerProbePath;
+      environment.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
+    };
+    systemd.services.korrid = lib.mkIf (config.services.korri.daemon.serviceMode == "system") {
+      path = steamMaterializerProbePath;
+      environment.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
+    };
 
     security.sudo.extraRules = [
       {
