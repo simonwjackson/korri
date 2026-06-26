@@ -1,4 +1,9 @@
 import { RegistryProvider, useAtomInitialValues } from "@effect/atom-react"
+import {
+  DualScreenBroadcastSessionRoot,
+  type DualScreenChannelFactory,
+} from "@platform/react/display/dual-screen/DualScreenBroadcastSessionRoot"
+import type { DualScreenRole } from "@platform/react/display/dual-screen/dual-screen-events"
 import type { RouterHistory } from "@tanstack/history"
 import { RouterProvider } from "@tanstack/react-router"
 import type { ReactNode } from "react"
@@ -21,10 +26,18 @@ export interface ShiftInputAdapter {
   readonly enabled?: boolean
 }
 
+export interface ShiftDualScreenAdapter {
+  readonly role: DualScreenRole
+  readonly channelName: string
+  readonly initialGameId?: string | null
+  readonly createChannel?: DualScreenChannelFactory
+}
+
 export interface MountShiftOptions {
   readonly data: ShiftDataAdapter
   readonly navigation?: ShiftNavigationAdapter
   readonly input?: ShiftInputAdapter
+  readonly dualScreen?: ShiftDualScreenAdapter
   readonly beforeRouter?: ReactNode
 }
 
@@ -37,17 +50,31 @@ export function ShiftSurfaceApp({
   initialValues,
   router,
   beforeRouter,
+  dualScreen,
 }: {
   readonly initialValues: AtomInitialValues
   readonly router: ShiftRouter
   readonly beforeRouter?: ReactNode
+  readonly dualScreen?: ShiftDualScreenAdapter
 }) {
   useAtomInitialValues(initialValues)
-  return (
+  const routed = (
     <>
       {beforeRouter}
       <RouterProvider router={router} />
     </>
+  )
+  return dualScreen ? (
+    <DualScreenBroadcastSessionRoot
+      role={dualScreen.role}
+      channelName={dualScreen.channelName}
+      initialGameId={dualScreen.initialGameId ?? null}
+      createChannel={dualScreen.createChannel}
+    >
+      {routed}
+    </DualScreenBroadcastSessionRoot>
+  ) : (
+    routed
   )
 }
 
@@ -66,6 +93,7 @@ export function mountShift(
         initialValues={options.data.initialValues}
         router={router}
         beforeRouter={options.beforeRouter}
+        dualScreen={options.dualScreen}
       />
     </RegistryProvider>,
   )

@@ -1,3 +1,4 @@
+import type { DualScreenRole } from "@platform/react/display/dual-screen/dual-screen-events"
 import type { RouterHistory } from "@tanstack/history"
 import type { ReactNode } from "react"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
@@ -15,6 +16,11 @@ import type { LabScreenCoordinate, LabStateAxis } from "./model/lab-state-axis"
 export interface LabMountedSurface {
   readonly router: unknown
   readonly dispose: () => void
+}
+
+export interface LabSurfaceDualScreenOptions {
+  readonly role: DualScreenRole
+  readonly channelName: string
 }
 
 export interface LabSurfaceScreen {
@@ -57,6 +63,7 @@ export interface LabSurfaceAdapter {
     options: {
       readonly initialValues: unknown
       readonly history?: RouterHistory
+      readonly dualScreen?: LabSurfaceDualScreenOptions
     },
   ) => LabMountedSurface
 }

@@ -22,9 +22,10 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   // Shift's Data + Launch state machines are surfaced as the Home screen's axes
   // (see shift-axes.tsx) — not duplicated here as a control.
   makeSeedInitialValues,
-  mountSurface: (host, { initialValues, history }) =>
+  mountSurface: (host, { initialValues, history, dualScreen }) =>
     mountShift(host, {
       data: { initialValues: initialValues as SeedInitialValues },
       navigation: history ? { history: history as RouterHistory } : undefined,
+      dualScreen,
     }),
 }

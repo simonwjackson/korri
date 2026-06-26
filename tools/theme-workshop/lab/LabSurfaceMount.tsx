@@ -1,18 +1,24 @@
 import { createMemoryHistory } from "@tanstack/history"
 import { useEffect, useRef, useState } from "react"
 import { normalizeSurfacePath } from "./lab-route-state"
-import type { LabSurfaceAdapter, LabMountedSurface } from "./surface-registry"
+import type {
+  LabMountedSurface,
+  LabSurfaceAdapter,
+  LabSurfaceDualScreenOptions,
+} from "./surface-registry"
 
 export function LabSurfaceMount({
   adapter,
   initialValues,
   surfacePath,
   onNavigate,
+  dualScreen,
 }: {
   readonly adapter: LabSurfaceAdapter
   readonly initialValues: unknown
   readonly surfacePath: string
   readonly onNavigate: (surfacePath: string) => void
+  readonly dualScreen?: LabSurfaceDualScreenOptions
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const mountedRef = useRef<LabMountedSurface | null>(null)
@@ -22,9 +28,11 @@ export function LabSurfaceMount({
   const canonicalPathRef = useRef(normalizeSurfacePath(surfacePath))
   const initialValuesRef = useRef(initialValues)
   const onNavigateRef = useRef(onNavigate)
+  const dualScreenRef = useRef(dualScreen)
 
   initialValuesRef.current = initialValues
   onNavigateRef.current = onNavigate
+  dualScreenRef.current = dualScreen
   canonicalPathRef.current = normalizeSurfacePath(surfacePath)
 
   useEffect(() => {
@@ -52,6 +60,7 @@ export function LabSurfaceMount({
       mounted = adapter.mountSurface(host, {
         initialValues: initialValuesRef.current,
         history,
+        dualScreen: dualScreenRef.current,
       })
       mountedRef.current = mounted
     } catch (cause) {

@@ -1,26 +1,31 @@
 import { afterEach, describe, expect, it, mock } from "bun:test"
 import type { RouterHistory } from "@tanstack/history"
 import { cleanup, render, waitFor } from "@testing-library/react"
-import type { LabSurfaceAdapter } from "./surface-registry"
+import type {
+  LabSurfaceAdapter,
+  LabSurfaceDualScreenOptions,
+} from "./surface-registry"
 import { LabSurfaceMount } from "./LabSurfaceMount"
 
 afterEach(() => cleanup())
 
 describe("LabSurfaceMount", () => {
-  it("mounts once, drives route changes without remounting, reports inner navigation once, and disposes", async () => {
+  it("mounts once, drives route changes without remounting, reports inner navigation once, forwards dual-screen options, and disposes", async () => {
     const dispose = mock(() => undefined)
     const onNavigate = mock(() => undefined)
     const histories: RouterHistory[] = []
     const hosts: HTMLElement[] = []
+    const dualScreens: (LabSurfaceDualScreenOptions | undefined)[] = []
 
     const adapter: LabSurfaceAdapter = {
       id: "test",
       devices: [],
       makeSeedInitialValues: async () => ({ seed: true }),
-      mountSurface: (host, { history }) => {
+      mountSurface: (host, { history, dualScreen }) => {
         if (!history) throw new Error("expected controlled history")
         histories.push(history)
         hosts.push(host)
+        dualScreens.push(dualScreen)
         const marker = document.createElement("div")
         marker.dataset.testid = "mounted-surface"
         marker.textContent = history.location.pathname
@@ -35,11 +40,13 @@ describe("LabSurfaceMount", () => {
         initialValues={{ seed: true }}
         surfacePath="/"
         onNavigate={onNavigate}
+        dualScreen={{ role: "primary", channelName: "lab:test" }}
       />,
     )
 
     expect(histories).toHaveLength(1)
     expect(histories[0]?.location.pathname).toBe("/")
+    expect(dualScreens).toEqual([{ role: "primary", channelName: "lab:test" }])
     expect(mounted.getByTestId("mounted-surface")).toBeTruthy()
 
     mounted.rerender(
@@ -48,6 +55,7 @@ describe("LabSurfaceMount", () => {
         initialValues={{ seed: true }}
         surfacePath="/game/hollow-knight"
         onNavigate={onNavigate}
+        dualScreen={{ role: "primary", channelName: "lab:test" }}
       />,
     )
 
@@ -69,6 +77,7 @@ describe("LabSurfaceMount", () => {
         initialValues={{ seed: true }}
         surfacePath="/game/celeste"
         onNavigate={onNavigate}
+        dualScreen={{ role: "primary", channelName: "lab:test" }}
       />,
     )
 
