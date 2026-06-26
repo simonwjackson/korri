@@ -91,4 +91,9 @@ describe("LabTopBar Inspect/Live control", () => {
     expect(screen.queryByRole("button", { name: "Inspect" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Live" })).toBeNull()
   })
+
+  it("does not render the legacy Screen dropdown", () => {
+    renderBar("live")
+    expect(screen.queryByLabelText("Screen")).toBeNull()
+  })
 })

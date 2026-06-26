@@ -20,7 +20,7 @@ export function LabTopBar({
   readonly inspectLive: "inspect" | "live" | null
   readonly onToggleInspectLive: () => void
 }) {
-  const { adapter, screens, setThemeId, surfacePath, setSurfacePath } = useLab()
+  const { adapter, setThemeId } = useLab()
   return (
     <header className="pt-topbar">
       <div className="pt-brand">
@@ -82,21 +82,6 @@ export function LabTopBar({
               ))}
             </select>
           </label>
-          {screens.length ? (
-            <label className="pt-surface-select">
-              Screen
-              <select
-                value={surfacePath}
-                onChange={event => setSurfacePath(event.target.value)}
-              >
-                {screens.map(screen => (
-                  <option key={screen.path} value={screen.path}>
-                    {screen.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
         </div>
         <button type="button" className="pt-eye" onClick={onHideChrome}>
           Hide UI
