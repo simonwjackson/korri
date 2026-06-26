@@ -250,28 +250,30 @@ export function ShiftCinematicHome({
               )}
             </motion.div>
           </AnimatePresence>
-
-          {status ? (
-            showActions ? (
-              <div className="shift-cine-legend">
-                {status.canRetry ? (
-                  <CineHint glyph="A" label="Retry" primary />
-                ) : null}
-                <CineHint glyph="B" label="Back" primary={!status.canRetry} />
-              </div>
-            ) : null
-          ) : (
-            <div className="shift-cine-legend">
-              <CineHint
-                glyph="A"
-                label={resuming ? "Continue" : "Play"}
-                primary
-              />
-              <CineHint glyph="X" label="Options" />
-              <CineHint glyph="Y" label="Favorite" />
-            </div>
-          )}
         </div>
+
+        {/* Button hints — their own right-aligned row above the rail, so they
+            never compete with the hero's chips for one line. */}
+        {status ? (
+          showActions ? (
+            <div className="shift-cine-legend">
+              {status.canRetry ? (
+                <CineHint glyph="A" label="Retry" primary />
+              ) : null}
+              <CineHint glyph="B" label="Back" primary={!status.canRetry} />
+            </div>
+          ) : null
+        ) : (
+          <div className="shift-cine-legend">
+            <CineHint
+              glyph="A"
+              label={resuming ? "Continue" : "Play"}
+              primary
+            />
+            <CineHint glyph="X" label="Options" />
+            <CineHint glyph="Y" label="Favorite" />
+          </div>
+        )}
 
         <div className="shift-cine-rail">
           <motion.div

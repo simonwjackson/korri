@@ -57,9 +57,9 @@
 	 * same vars). Snap stays the recipe default (0.02px) — Shift has a smooth
 	 * font, not pico's 1px pixel snap. */
 	--intrinsic-base-min: var(--shift-base-min, 13px);
-	--intrinsic-base-cqi: var(--shift-base-cqi, 2.4);
-	--intrinsic-base-max: var(--shift-base-max, 22px);
-	--intrinsic-ratio: var(--shift-type-ratio, 1.25);
+	--intrinsic-base-cqi: var(--shift-base-cqi, 1.8);
+	--intrinsic-base-max: var(--shift-base-max, 18px);
+	--intrinsic-ratio: var(--shift-type-ratio, 1.2);
 	--intrinsic-space-unit: var(--shift-space-unit, 0.5em);
 
 	/* ── Native semantic type scale (derived off the one base) ─────────────
@@ -541,21 +541,22 @@
 	z-index: 2;
 	display: flex;
 	flex-direction: column;
-	gap: var(--shift-space-3);
-	padding: var(--shift-space-5);
+	gap: var(--shift-space-2);
+	/* Extra top room so the bottom-aligned hero clears the overlaid top bar
+	 * (on very short frames the kicker drops cleanly instead of colliding). */
+	padding: calc(var(--shift-space-5) + var(--shift-space-3))
+		var(--shift-space-5) var(--shift-space-5);
 }
 
 [data-shift-home] .shift-cine-midrow {
 	/* Take the space above the rail and bottom-align the hero, so the rail is
 	 * always fully visible (flex:0 below) no matter how tall the hero grows.
-	 * overflow:hidden keeps an oversized hero from spilling onto the top bar. */
+	 * overflow:hidden clips an oversized hero rather than letting it push out. */
 	flex: 1 1 auto;
 	min-height: 0;
 	overflow: hidden;
 	display: flex;
 	align-items: flex-end;
-	justify-content: space-between;
-	gap: var(--shift-space-4);
 	width: 100%;
 }
 
@@ -591,10 +592,17 @@
 }
 
 [data-shift-home] .shift-cine-chips {
+	/* One line; the hero stays short so the title survives on tiny frames. The
+	 * legend has its own row now, so extra chips clip at the hero edge instead
+	 * of colliding with it. A right fade hints there's more. */
 	display: flex;
 	flex-wrap: nowrap;
 	gap: var(--shift-space-2);
 	margin-top: var(--shift-space-1);
+	max-width: 100%;
+	overflow: hidden;
+	-webkit-mask-image: linear-gradient(to right, #000 88%, transparent 100%);
+	mask-image: linear-gradient(to right, #000 88%, transparent 100%);
 }
 
 [data-shift-home] .shift-cine-chip {
@@ -617,10 +625,16 @@
 }
 
 [data-shift-home] .shift-cine-legend {
+	/* Its own right-aligned hint row above the rail (was inline-right of the
+	 * hero, where it fought the chips for one line). Wraps if a narrow frame
+	 * can't hold all hints. */
+	flex: 0 0 auto;
+	width: 100%;
 	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
 	align-items: center;
-	gap: var(--shift-space-4);
-	flex-shrink: 0;
+	gap: var(--shift-space-2) var(--shift-space-4);
 }
 
 [data-shift-home] .shift-cine-hint {
@@ -664,7 +678,9 @@
 	display: flex;
 	align-items: flex-end;
 	gap: var(--shift-space-3);
-	padding: var(--shift-space-4) 0;
+	/* Just enough headroom for the focused tile's scale-up; the old space-4 was
+	 * wasted vertical room that crowded the hero off short frames. */
+	padding: var(--shift-space-2) 0;
 	will-change: transform;
 }
 
