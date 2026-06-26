@@ -6,38 +6,9 @@ import {
   initialValuesForBinding,
   type SourceStatus,
 } from "../model/lab-source-state"
-import type { LabSurfaceAdapter } from "../surface-registry"
 
 const VIEWPORT_INSET = 112
-
-/** Route a secondary screen mounts at by default until per-screen routing
- * lands. Game detail makes it visibly a distinct surface from the primary's
- * home, proving "any surface/route per screen" with live content. */
-const SECONDARY_INITIAL_PATH = "/game/hollow-knight"
-
-/**
- * A secondary screen's surface. It's a second, fully independent mount that
- * shares only the bound data with the primary (each mount has its own router
- * and registry), so it navigates on its own without driving the primary's
- * route. This is the lab's stand-in for a real per-device companion surface.
- */
-function LabSecondaryScreen({
-  adapter,
-  initialValues,
-}: {
-  readonly adapter: LabSurfaceAdapter
-  readonly initialValues: unknown
-}) {
-  const [path, setPath] = useState(SECONDARY_INITIAL_PATH)
-  return (
-    <LabSurfaceMount
-      adapter={adapter}
-      initialValues={initialValues}
-      surfacePath={path}
-      onNavigate={setPath}
-    />
-  )
-}
+const COMPANION_SURFACE_PATH = "/companion"
 
 export function LabSurfaceView({
   sourceId,
@@ -107,30 +78,42 @@ export function LabSurfaceView({
       className="lab-surface-view"
       style={{ "--lab-px-per-mm": pxPerMm } as CSSProperties}
     >
-      {selectedDevices.map(device => (
-        <LabDeviceCluster
-          key={device.id}
-          device={device}
-          pxPerMm={pxPerMm}
-          maxHeightPx={maxHeightPx}
-          renderPrimary={() => (
-            <LabSurfaceMount
-              key={`${sourceId}:${stateId}`}
-              adapter={adapter}
-              initialValues={boundValues}
-              surfacePath={surfacePath}
-              onNavigate={setSurfacePath}
-            />
-          )}
-          renderSecondary={screen => (
-            <LabSecondaryScreen
-              key={`${screen.id}:${sourceId}:${stateId}`}
-              adapter={adapter}
-              initialValues={boundValues}
-            />
-          )}
-        />
-      ))}
+      {selectedDevices.map(device => {
+        const hasMultipleScreens = (device.screens?.length ?? 0) > 1
+        const channelName = `lab:${adapter.id}:${device.id}`
+        return (
+          <LabDeviceCluster
+            key={device.id}
+            device={device}
+            pxPerMm={pxPerMm}
+            maxHeightPx={maxHeightPx}
+            renderPrimary={() => (
+              <LabSurfaceMount
+                key={`${sourceId}:${stateId}`}
+                adapter={adapter}
+                initialValues={boundValues}
+                surfacePath={surfacePath}
+                onNavigate={setSurfacePath}
+                dualScreen={
+                  hasMultipleScreens
+                    ? { role: "primary", channelName }
+                    : undefined
+                }
+              />
+            )}
+            renderSecondary={screen => (
+              <LabSurfaceMount
+                key={`${screen.id}:${sourceId}:${stateId}`}
+                adapter={adapter}
+                initialValues={boundValues}
+                surfacePath={COMPANION_SURFACE_PATH}
+                onNavigate={() => {}}
+                dualScreen={{ role: "companion", channelName }}
+              />
+            )}
+          />
+        )
+      })}
     </div>
   )
 }
