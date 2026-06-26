@@ -1,4 +1,5 @@
 import { humanizeTag } from "@platform/state/state-variants"
+import type { ReactNode } from "react"
 
 /**
  * A page part exposes one or more named state AXES — each a real state machine
@@ -40,6 +41,10 @@ export interface LabStateAxis {
   readonly enabledWhen?: (active: LabAxisActiveMap) => boolean
   /** Short reason shown when the axis is greyed by `enabledWhen`. */
   readonly disabledHint?: string
+  /** A seeded STATIC render of this axis at one state, for the Matrix fan-out
+   * (every value side by side) — no live mount. Driven by the same sample table
+   * as the pin, so the static fan and the live pin can never drift. */
+  readonly renderSample?: (stateId: string) => ReactNode
 }
 
 /** Derive an axis's selectable options from a state machine's tags. */

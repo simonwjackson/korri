@@ -452,6 +452,7 @@ export function LabShell() {
           states={states}
           activeSourceId={activeSourceId}
           activeStateId={activeStateId}
+          axes={screenAxes}
           zoom={zoom}
           onSelectStory={storyId => selectStory(storyId)}
           onInstancesChange={setInstances}

@@ -10,6 +10,7 @@ import type {
   LabStateOption,
   SourceStatus,
 } from "../model/lab-source-state"
+import type { LabStateAxis } from "../model/lab-state-axis"
 import type { LabPartsCatalog } from "../parts-discovery"
 import { LabCanvasBoard } from "./LabCanvasBoard"
 import { LabGalleryView } from "./LabGalleryView"
@@ -28,6 +29,7 @@ export function LabCanvasContent({
   states,
   activeSourceId,
   activeStateId,
+  axes,
   zoom,
   onSelectStory,
   onInstancesChange,
@@ -41,6 +43,7 @@ export function LabCanvasContent({
   readonly states: readonly LabStateOption[]
   readonly activeSourceId: string
   readonly activeStateId: SourceStatus
+  readonly axes: readonly LabStateAxis[]
   readonly zoom: number
   readonly onSelectStory: (storyId: string) => void
   readonly onInstancesChange: (instances: readonly LabObjectInstance[]) => void
@@ -102,6 +105,7 @@ export function LabCanvasContent({
         sources={sources}
         states={states}
         devices={selectedDevices}
+        axes={axes}
       />
     )
   return (
