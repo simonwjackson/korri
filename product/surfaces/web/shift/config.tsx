@@ -63,6 +63,7 @@ const SHIFT_DEVICES: readonly DeviceConfig[] = [
         widthMm: 110,
         heightMm: 62,
         role: "secondary",
+        placement: "below",
       },
     ],
   },

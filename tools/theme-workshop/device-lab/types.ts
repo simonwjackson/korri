@@ -14,6 +14,9 @@
  * surface mount (own route, own local focus); the screens of one device share
  * that device's single state source.
  */
+/** Which side of the primary screen a secondary screen sits on. */
+export type ScreenPlacement = "above" | "below" | "left" | "right"
+
 export type ScreenConfig = {
   /** Stable id, unique within the device. */
   readonly id: string
@@ -29,6 +32,9 @@ export type ScreenConfig = {
   /** Lab slot: "primary" mounts the surface under design; a "secondary" screen
    * renders a placeholder until a real surface is assigned to it. */
   readonly role?: "primary" | "secondary"
+  /** Side of the primary this screen sits on (above/below/left/right). The
+   * primary screen ignores this; secondaries default to "below". */
+  readonly placement?: ScreenPlacement
 }
 
 /** One screen in the device matrix, with its default physical + tuning values. */

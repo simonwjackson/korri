@@ -12,7 +12,17 @@
  * container at any physical size.
  */
 export { Calibrator, type DeviceCal } from "./Calibrator"
-export { clusterOuterHeightPx, deviceScreens } from "./device-screens"
+export {
+  clusterBoundingHeightPx,
+  deviceScreens,
+  groupScreensByPlacement,
+  type PlacedScreens,
+} from "./device-screens"
 export { DeviceFrame } from "./DeviceFrame"
 export { DeviceLab } from "./DeviceLab"
-export type { DeviceConfig, ScreenConfig, ThemeKnob } from "./types"
+export type {
+  DeviceConfig,
+  ScreenConfig,
+  ScreenPlacement,
+  ThemeKnob,
+} from "./types"

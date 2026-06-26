@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test"
-import { clusterOuterHeightPx, deviceScreens } from "./device-screens"
+import {
+  clusterBoundingHeightPx,
+  deviceScreens,
+  groupScreensByPlacement,
+} from "./device-screens"
 import type { DeviceConfig, ScreenConfig } from "./types"
 
 describe("deviceScreens", () => {
@@ -31,21 +35,73 @@ describe("deviceScreens", () => {
   })
 })
 
-describe("clusterOuterHeightPx", () => {
-  it("sums screen heights with gaps when bezels are disabled", () => {
-    const screens: readonly ScreenConfig[] = [
-      { id: "a", widthMm: 100, heightMm: 100, bezel: false },
-      { id: "b", widthMm: 100, heightMm: 50, bezel: false },
-    ]
-    // 100*2 + 50*2 + one 10px gap = 310
-    expect(clusterOuterHeightPx(screens, 2, 10)).toBe(310)
+describe("groupScreensByPlacement", () => {
+  const make = (
+    id: string,
+    extra: Partial<ScreenConfig> = {},
+  ): ScreenConfig => ({
+    id,
+    widthMm: 100,
+    heightMm: 100,
+    ...extra,
   })
 
-  it("adds bezel padding when bezel is not disabled", () => {
-    const screens: readonly ScreenConfig[] = [
-      { id: "a", widthMm: 100, heightMm: 100 },
+  it("buckets each secondary onto its placement side", () => {
+    const primary = make("p", { role: "primary" })
+    const screens = [
+      primary,
+      make("a", { role: "secondary", placement: "above" }),
+      make("b", { role: "secondary", placement: "below" }),
+      make("l", { role: "secondary", placement: "left" }),
+      make("r", { role: "secondary", placement: "right" }),
     ]
-    // heightPx 100, pad round(100*0.037)=4, outer 100 + 4*2 = 108
-    expect(clusterOuterHeightPx(screens, 1)).toBe(108)
+    const placed = groupScreensByPlacement(screens)
+    expect(placed.primary).toBe(primary)
+    expect(placed.above.map(s => s.id)).toEqual(["a"])
+    expect(placed.below.map(s => s.id)).toEqual(["b"])
+    expect(placed.left.map(s => s.id)).toEqual(["l"])
+    expect(placed.right.map(s => s.id)).toEqual(["r"])
+  })
+
+  it("defaults a secondary with no placement to below", () => {
+    const screens = [
+      make("p", { role: "primary" }),
+      make("b", { role: "secondary" }),
+    ]
+    expect(groupScreensByPlacement(screens).below.map(s => s.id)).toEqual(["b"])
+  })
+})
+
+describe("clusterBoundingHeightPx", () => {
+  it("adds a below screen's height to the primary's", () => {
+    const screens: readonly ScreenConfig[] = [
+      { id: "p", widthMm: 100, heightMm: 100, bezel: false, role: "primary" },
+      {
+        id: "b",
+        widthMm: 100,
+        heightMm: 50,
+        bezel: false,
+        role: "secondary",
+        placement: "below",
+      },
+    ]
+    // primary 100 + (below 50 + one 10px gap) = 160
+    expect(clusterBoundingHeightPx(screens, 1, 10)).toBe(160)
+  })
+
+  it("does not add a side screen's height, only the taller of the row", () => {
+    const screens: readonly ScreenConfig[] = [
+      { id: "p", widthMm: 100, heightMm: 100, bezel: false, role: "primary" },
+      {
+        id: "r",
+        widthMm: 60,
+        heightMm: 50,
+        bezel: false,
+        role: "secondary",
+        placement: "right",
+      },
+    ]
+    // right is beside, not below: height stays max(100, 50) = 100
+    expect(clusterBoundingHeightPx(screens, 1, 10)).toBe(100)
   })
 })

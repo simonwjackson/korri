@@ -135,9 +135,19 @@
  * scales as a single unit (the scale is applied inline). The placeholder fills
  * a secondary screen until a real surface is assigned to it. */
 .lab-device-cluster {
+	display: grid;
+	grid-template-areas:
+		".    above   ."
+		"left primary right"
+		".    below   .";
+	justify-items: center;
+	align-items: center;
+}
+.lab-cluster-side {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	gap: 10px;
 }
 .lab-screen-placeholder {
 	display: flex;
