@@ -32,6 +32,12 @@ export function setShiftCatalogPreview(next: CatalogResult | null): void {
   emit()
 }
 
+/** Non-reactive read of the current data pin (null when live). Used by design
+ * tools to capture the current coordinate; product code consults the hook. */
+export function getShiftCatalogPreview(): CatalogResult | null {
+  return preview
+}
+
 export function useShiftCatalogPreview(): CatalogResult | null {
   return useSyncExternalStore(
     subscribe,

@@ -1,0 +1,62 @@
+import { humanizeTag } from "@platform/state/state-variants"
+
+/**
+ * A page part exposes one or more named state AXES — each a real state machine
+ * the surface can be driven through (e.g. Shift Home's catalog Data axis and its
+ * Launch axis). The lab renders each axis as a group with a "Live" chip plus its
+ * states; pinning a state drives the surface's production-inert preview
+ * singleton, and releasing it hands the axis back to the live machine.
+ *
+ * Axes are surface-owned (declared by the adapter, wired to that surface's
+ * singletons), and their state lists are DERIVED from the machine's tags — never
+ * hand-authored — so a new state can't be added without the axis picking it up.
+ */
+
+/** Sentinel axis value: "no pin — let the live machine drive this axis". */
+export const LAB_AXIS_LIVE = "__live__"
+
+/** The active value of an axis: a state tag, or `LAB_AXIS_LIVE`. */
+export type LabAxisValue = string
+
+export interface LabStateAxisOption {
+  readonly id: string
+  readonly label: string
+}
+
+/** Per-axis active values for the current selection, keyed by axis id. */
+export type LabAxisActiveMap = Readonly<Record<string, LabAxisValue>>
+
+export interface LabStateAxis {
+  readonly id: string
+  readonly label: string
+  readonly liveLabel: string
+  readonly states: readonly LabStateAxisOption[]
+  /** Pin the surface's preview singleton to this state's representative sample. */
+  readonly pin: (stateId: string) => void
+  /** Release the pin so the live machine drives this axis again. */
+  readonly release: () => void
+  /** When present, the axis is only meaningful while this holds over the current
+   * per-axis active map (e.g. Launch only matters when Data = Ready). */
+  readonly enabledWhen?: (active: LabAxisActiveMap) => boolean
+}
+
+/** Derive an axis's selectable options from a state machine's tags. */
+export function axisOptionsFromTags(
+  tags: readonly string[],
+  label: (tag: string) => string = humanizeTag,
+): readonly LabStateAxisOption[] {
+  return tags.map(tag => ({ id: tag, label: label(tag) }))
+}
+
+/** True when an axis value means "live" (unset or the live sentinel). */
+export function isAxisLive(value: LabAxisValue | undefined): boolean {
+  return value === undefined || value === LAB_AXIS_LIVE
+}
+
+/** Whether an axis is currently meaningful, honoring its `enabledWhen` nesting. */
+export function axisEnabled(
+  axis: LabStateAxis,
+  active: LabAxisActiveMap,
+): boolean {
+  return axis.enabledWhen ? axis.enabledWhen(active) : true
+}

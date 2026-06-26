@@ -35,6 +35,12 @@ export function setShiftLaunchPreview(next: LaunchState | null): void {
   emit()
 }
 
+/** Non-reactive read of the current launch pin (null when live). Used by design
+ * tools to capture the current coordinate; product code consults the hook. */
+export function getShiftLaunchPreview(): LaunchState | null {
+  return preview
+}
+
 export function useShiftLaunchPreview(): LaunchState | null {
   return useSyncExternalStore(
     subscribe,
