@@ -1,6 +1,7 @@
 import type { RouterHistory } from "@tanstack/history"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
 import type { WorkshopControl } from "../types"
+import type { LabSourceOption, LabStateOption, SourceStatus } from "./model/lab-source-state"
 import { boxbusterLabSurfaceAdapter } from "./adapters/boxbuster"
 import { picoLabSurfaceAdapter } from "./adapters/pico"
 import { shiftLabSurfaceAdapter } from "./adapters/shift"
@@ -24,7 +25,13 @@ export interface LabSurfaceAdapter {
   readonly useControls?: () => readonly WorkshopControl[]
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
+  readonly sources?: readonly LabSourceOption[]
+  readonly states?: readonly LabStateOption[]
   readonly makeSeedInitialValues: () => Promise<unknown>
+  readonly makeSeedInitialValuesForBinding?: (binding: {
+    readonly sourceId: string
+    readonly stateId: SourceStatus
+  }) => Promise<unknown>
   readonly mountSurface: (
     host: HTMLElement,
     options: {

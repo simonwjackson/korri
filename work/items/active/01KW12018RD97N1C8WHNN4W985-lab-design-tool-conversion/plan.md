@@ -1,7 +1,7 @@
 ---
 title: feat: Convert dev-lab into the first-class design tool
 type: feat
-status: active
+status: completed
 date: 2026-06-26
 deepened: 2026-06-26
 ---

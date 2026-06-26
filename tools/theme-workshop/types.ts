@@ -46,6 +46,11 @@ export interface Story {
    * collapses if unsized) — the workshop gives it a sized, framed canvas instead
    * of the default bare, content-sized one. Templates are always framed. */
   readonly surface?: boolean
+  /** Optional lab-only variant tag. Used by dev-lab to relate discovered local
+   * fixture states without introducing a central manifest. */
+  readonly state?: "ready" | "loading" | "empty" | "error"
+  /** Optional IDs of related stories from the same discovered module. */
+  readonly variants?: readonly string[]
   readonly render: () => ReactNode
 }
 

@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client"
 import "../device-lab/device-lab.css"
 import "../workshop.css"
 import "./lab.css"
+import "./lab-shell.css"
 import { createLabRouter } from "./lab-router"
 
 const host = document.getElementById("root")

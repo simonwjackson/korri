@@ -11,10 +11,16 @@ export type PartModule = Record<string, unknown> & {
   readonly classNames?: WorkshopClassNames
 }
 
+export interface PartLoadError {
+  readonly path: string
+  readonly message: string
+}
+
 export interface LabPartsCatalog {
   readonly stories: readonly Story[]
   readonly classNames?: WorkshopClassNames
   readonly rootProps?: Record<string, unknown>
+  readonly errors?: readonly PartLoadError[]
 }
 
 export interface PartPathInfo {
@@ -85,21 +91,41 @@ export function hasSurfaceParts(surfaceId: string): boolean {
 export async function loadSurfaceParts(
   surfaceId: string,
 ): Promise<LabPartsCatalog> {
+  return loadSurfacePartsResult(surfaceId)
+}
+
+export async function loadSurfacePartsResult(
+  surfaceId: string,
+): Promise<LabPartsCatalog> {
   const loaded: Record<string, PartModule> = {}
+  const errors: PartLoadError[] = []
   for (const [path, load] of Object.entries(partModules())) {
     const parsed = parsePartPath(path)
     if (parsed?.surfaceId !== surfaceId) continue
-    loaded[path] = await load()
+    try {
+      loaded[path] = await load()
+    } catch (cause) {
+      errors.push({
+        path,
+        message: cause instanceof Error ? cause.message : String(cause),
+      })
+    }
   }
-  return collectPartsFromModules(loaded, surfaceId)
+  const catalog = collectPartsFromModules(loaded, surfaceId)
+  return errors.length ? { ...catalog, errors } : catalog
 }
 
 export function __setPartModulesForTest(
-  modules: Record<string, PartModule> | null,
+  modules: Record<string, PartModule | PartLoader> | null,
 ): void {
   injectedModules = modules
     ? Object.fromEntries(
-        Object.entries(modules).map(([path, mod]) => [path, async () => mod]),
+        Object.entries(modules).map(([path, mod]) => [
+          path,
+          typeof mod === "function" && !("default" in mod)
+            ? (mod as PartLoader)
+            : async () => mod as PartModule,
+        ]),
       )
     : null
 }
@@ -124,7 +150,18 @@ function storiesFromModule(
   for (const [exportName, value] of Object.entries(mod)) {
     if (RESERVED_EXPORTS.has(exportName)) continue
     if (Array.isArray(value)) {
+      const start = out.length
       for (const [index, item] of value.entries()) push(`${exportName}${index}`, item)
+      const variants = out.slice(start)
+      if (variants.length > 1 && variants.every(story => story.state)) {
+        const ids = variants.map(story => story.id)
+        for (let i = start; i < out.length; i += 1) {
+          out[i] = {
+            ...out[i],
+            variants: out[i]?.variants ?? ids.filter(id => id !== out[i]?.id),
+          }
+        }
+      }
       continue
     }
     if (!isPascalCase(exportName)) continue
@@ -158,6 +195,8 @@ function storyFromExport(
       name,
       note: value.note,
       surface: value.presentation === "surface" ? true : undefined,
+      state: value.state,
+      variants: value.variants,
       render: value.render,
     }
   }
@@ -192,6 +231,8 @@ function isStorySpec(value: unknown): value is {
   readonly name?: string
   readonly note?: string
   readonly presentation?: "part" | "surface"
+  readonly state?: "ready" | "loading" | "empty" | "error"
+  readonly variants?: readonly string[]
   readonly render: () => ReactNode
 } {
   return (

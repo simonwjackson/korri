@@ -85,4 +85,59 @@ describe("lab parts discovery", () => {
       __setPartModulesForTest(null)
     }
   })
+
+  it("relates local array-exported state variants without a central manifest", () => {
+    const catalog = collectPartsFromModules(
+      {
+        "/product/surfaces/web/shift/pages/Home.page.part.tsx": {
+          HomeStates: [
+            { name: "Home Ready", state: "ready", render: () => "ready" },
+            { name: "Home Empty", state: "empty", render: () => "empty" },
+          ],
+        },
+      },
+      "shift",
+    )
+
+    expect(catalog.stories.map(story => story.state)).toEqual(["empty", "ready"])
+    expect(catalog.stories.every(story => story.variants?.length === 1)).toBe(true)
+  })
+
+  it("does not relate ordinary named exports as state variants", () => {
+    const catalog = collectPartsFromModules(
+      {
+        "/product/surfaces/web/shift/ui/Buttons.atom.part.tsx": {
+          PrimaryButton: () => "primary",
+          DangerButton: () => "danger",
+        },
+      },
+      "shift",
+    )
+
+    expect(catalog.stories).toHaveLength(2)
+    expect(catalog.stories.every(story => story.variants === undefined)).toBe(true)
+  })
+
+  it("keeps loaded stories when one injected module fails to import", async () => {
+    __setPartModulesForTest({
+      "/product/surfaces/web/pico/ui/Badge.atom.part.tsx": {
+        default: () => "badge",
+      },
+      "/product/surfaces/web/pico/ui/Broken.atom.part.tsx": async () => {
+        throw new Error("boom")
+      },
+    } as never)
+    try {
+      const catalog = await loadSurfaceParts("pico")
+      expect(catalog.stories).toHaveLength(1)
+      expect(catalog.errors).toEqual([
+        {
+          path: "/product/surfaces/web/pico/ui/Broken.atom.part.tsx",
+          message: "boom",
+        },
+      ])
+    } finally {
+      __setPartModulesForTest(null)
+    }
+  })
 })

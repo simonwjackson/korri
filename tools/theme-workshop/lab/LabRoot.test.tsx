@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, mock } from "bun:test"
 import type { RouterHistory } from "@tanstack/history"
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react"
 import type { DeviceConfig } from "../device-lab"
 import { LabRoot, type LabRouteState } from "./LabRoot"
@@ -68,7 +68,7 @@ function makeAdapter() {
 }
 
 describe("LabRoot", () => {
-  it("keeps the device-lab calibration controls in the real surface lab", async () => {
+  it("keeps physical calibration controls inside the new design shell", async () => {
     const { adapter } = makeAdapter()
 
     const view = render(
@@ -88,12 +88,11 @@ describe("LabRoot", () => {
     )
 
     await waitFor(() => {
-      expect(
-        view.getByRole("dialog", { name: "Calibration desk" }),
-      ).toBeTruthy()
+      expect(view.getByRole("button", { name: "Open devices" })).toBeTruthy()
     })
-    expect(view.getByRole("tab", { name: "Devices" })).toBeTruthy()
-    expect(view.getByRole("tab", { name: "Scale" })).toBeTruthy()
+    fireEvent.click(view.getByRole("button", { name: "Open devices" }))
+    expect(view.getByText("Physical-size device previews. Current selection: all")).toBeTruthy()
+    expect(view.getByText("Scale")).toBeTruthy()
     expect(view.getByRole("button", { name: "+ add device" })).toBeTruthy()
   })
 

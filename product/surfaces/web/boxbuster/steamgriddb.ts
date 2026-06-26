@@ -1,9 +1,11 @@
 // Fetches real cover art from SteamGridDB through the dev-server proxy
 // (see vite.config.ts). The proxy adds the API key and makes the CDN
 // same-origin so the art can be drawn to a canvas without tainting it.
+import { boxbusterOfflineArt } from "./art-mode"
 
 const API = "/sgdb/api"
 const CDN_RE = /^https?:\/\/cdn[0-9]*\.steamgriddb\.com/
+
 
 const proxied = (url: string) => url.replace(CDN_RE, "/sgdb/cdn")
 
@@ -32,7 +34,8 @@ async function gridUrl(id: number): Promise<string | null> {
   return null
 }
 
-export function loadCoverImage(src: string): Promise<HTMLImageElement> {
+export function loadCoverImage(src: string): Promise<HTMLImageElement | null> {
+  if (boxbusterOfflineArt()) return Promise.resolve(null)
   return new Promise((res, rej) => {
     const im = new Image()
     im.crossOrigin = "anonymous"
@@ -46,6 +49,7 @@ export function loadCoverImage(src: string): Promise<HTMLImageElement> {
 export async function fetchCoverImage(
   title: string,
 ): Promise<HTMLImageElement | null> {
+  if (boxbusterOfflineArt()) return null
   try {
     const id = await searchGameId(title)
     if (id == null) return null

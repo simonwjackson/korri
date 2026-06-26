@@ -1,8 +1,10 @@
 // Fetches real gameplay screenshots from the Steam store API through the dev
 // proxy (see vite.config.ts). Same-origin so the canvas stays untainted.
+import { boxbusterOfflineArt } from "./art-mode"
 
 const API = "/steam/api"
 const CDN_RE = /^https?:\/\/[a-z0-9.]*steamstatic\.com/
+
 
 const proxied = (url: string) => url.replace(CDN_RE, "/steam/cdn")
 
@@ -20,6 +22,7 @@ export async function fetchSteamScreenshots(
   appid: number,
   count = 3,
 ): Promise<HTMLImageElement[]> {
+  if (boxbusterOfflineArt()) return []
   try {
     const r = await fetch(`${API}/appdetails?appids=${appid}&l=english`)
     if (!r.ok) return []

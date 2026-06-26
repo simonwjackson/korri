@@ -1,3 +1,4 @@
+import { setBoxbusterArtMode } from "@product/surfaces/web/boxbuster/art-mode"
 import { mountBoxbuster } from "@product/surfaces/web/boxbuster/mount-boxbuster"
 import type { RouterHistory } from "@tanstack/history"
 import type { DeviceConfig, ThemeKnob } from "../../device-lab"
@@ -45,9 +46,18 @@ export const boxbusterLabSurfaceAdapter: LabSurfaceAdapter = {
     { label: "Now Playing", path: "/game/hollow-knight" },
   ],
   makeSeedInitialValues,
-  mountSurface: (host, { initialValues, history }) =>
-    mountBoxbuster(host, {
+  mountSurface: (host, { initialValues, history }) => {
+    const resetArtMode = setBoxbusterArtMode("offline")
+    const mounted = mountBoxbuster(host, {
       data: { initialValues: initialValues as SeedInitialValues },
       navigation: history ? { history: history as RouterHistory } : undefined,
-    }),
+    })
+    return {
+      ...mounted,
+      dispose: () => {
+        mounted.dispose()
+        resetArtMode()
+      },
+    }
+  },
 }

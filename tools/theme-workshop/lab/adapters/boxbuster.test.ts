@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test"
+import { act } from "@testing-library/react"
+import { boxbusterArtMode } from "@product/surfaces/web/boxbuster/art-mode"
 import { catalogFactsSourceLayerAtom } from "@platform/react/catalog/catalog-atoms"
 import {
   labSurfaceAdapters,
@@ -32,5 +34,20 @@ describe("boxbuster lab surface adapter", () => {
       ])[]
     const atoms = initialValues.map(([atom]) => atom)
     expect(atoms).toContain(catalogFactsSourceLayerAtom)
+  })
+
+  it("enables offline art before mounting and resets it on dispose", async () => {
+    const adapter = resolveLabSurfaceAdapter("boxbuster")
+    const host = document.createElement("div")
+    const initialValues = await adapter.makeSeedInitialValues()
+
+    expect(boxbusterArtMode()).toBe("external")
+    let mounted: ReturnType<typeof adapter.mountSurface> | undefined
+    act(() => {
+      mounted = adapter.mountSurface(host, { initialValues })
+    })
+    expect(boxbusterArtMode()).toBe("offline")
+    act(() => mounted?.dispose())
+    expect(boxbusterArtMode()).toBe("external")
   })
 })

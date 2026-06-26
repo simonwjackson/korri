@@ -1,20 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
 import {
-  Calibrator,
-  type DeviceCal,
-  type KnobCal,
-} from "../device-lab/Calibrator"
-import {
   normalizeSurfacePath,
   parseDeviceSegment,
   selectedDevicesForSegment,
 } from "./lab-route-state"
 import { LabContext } from "./Lab.context"
-import { LabDevicePicker } from "./components/LabDevicePicker"
-import { LabRouteBar } from "./components/LabRouteBar"
-import { LabStage } from "./components/LabStage"
-import { LabSurfaceControls } from "./components/LabSurfaceControls"
+import { LabShell } from "./LabShell"
 import { labSurfaceAdapters, type LabSurfaceAdapter } from "./surface-registry"
 
 const DEFAULT_PX_PER_MM = 3.7795275591
@@ -105,36 +97,6 @@ export function LabRoot({
     }
   }, [adapter, routeState.themeId])
 
-  const context = useMemo(() => {
-    if (!adapter || initialValues === null || calibration === null) return null
-
-    const deviceIds = calibration.devices.map(device => device.id)
-    const selection = parseDeviceSegment(routeState.devicesSegment, deviceIds)
-    const selectedIds = new Set(
-      selectedDevicesForSegment(routeState.devicesSegment, deviceIds),
-    )
-    const selectedDevices = calibration.devices.filter(device =>
-      selectedIds.has(device.id),
-    )
-
-    return {
-      adapter,
-      initialValues,
-      themeId: routeState.themeId,
-      surfacePath: normalizeSurfacePath(routeState.surfacePath),
-      screens: adapter.screens ?? [],
-      selection,
-      devices: calibration.devices,
-      selectedDevices,
-      pxPerMm: calibration.pxPerMm,
-      knobValues: calibration.knobs,
-      setDevicesSegment: navigation.setDevicesSegment,
-      setThemeId: navigation.setThemeId,
-      setSurfacePath: (surfacePath: string) =>
-        navigation.setSurfacePath(normalizeSurfacePath(surfacePath)),
-    }
-  }, [adapter, calibration, initialValues, navigation, routeState])
-
   const setPxPerMm = (pxPerMm: number) =>
     setCalibration(prev => (prev ? { ...prev, pxPerMm } : prev))
   const patchDevice = (id: string, next: Partial<DeviceConfig>) =>
@@ -173,6 +135,48 @@ export function LabRoot({
     })
   }
 
+  const context = useMemo(() => {
+    if (!adapter || initialValues === null || calibration === null) return null
+
+    const deviceIds = calibration.devices.map(device => device.id)
+    const selection = parseDeviceSegment(routeState.devicesSegment, deviceIds)
+    const selectedIds = new Set(
+      selectedDevicesForSegment(routeState.devicesSegment, deviceIds),
+    )
+    const selectedDevices = calibration.devices.filter(device =>
+      selectedIds.has(device.id),
+    )
+    const requestedPath = normalizeSurfacePath(routeState.surfacePath)
+    const partsAlias = requestedPath === "/parts"
+
+    return {
+      adapter,
+      initialValues,
+      themeId: routeState.themeId,
+      surfacePath: partsAlias ? "/" : requestedPath,
+      initialCanvasView: partsAlias ? "gallery" as const : "surface" as const,
+      screens: adapter.screens ?? [],
+      selection,
+      devices: calibration.devices,
+      selectedDevices,
+      pxPerMm: calibration.pxPerMm,
+      knobValues: calibration.knobs,
+      calibration: {
+        setPxPerMm,
+        patchDevice,
+        addDevice,
+        removeDevice,
+        setKnob,
+        reset,
+        storageKey: labStorageKey(adapter.id),
+      },
+      setDevicesSegment: navigation.setDevicesSegment,
+      setThemeId: navigation.setThemeId,
+      setSurfacePath: (surfacePath: string) =>
+        navigation.setSurfacePath(normalizeSurfacePath(surfacePath)),
+    }
+  }, [adapter, calibration, initialValues, navigation, routeState])
+
   if (error) {
     return (
       <div role="alert" className="lab-stage">
@@ -185,43 +189,9 @@ export function LabRoot({
     return <div className="lab-stage">Loading lab…</div>
   }
 
-  const deviceCals: DeviceCal[] = calibration.devices.map(device => ({
-    id: device.id,
-    name: device.name,
-    onNameChange: name => patchDevice(device.id, { name }),
-    onRemove: () => removeDevice(device.id),
-    mm: { w: device.widthMm, h: device.heightMm },
-    onMmChange: mm => patchDevice(device.id, { widthMm: mm.w, heightMm: mm.h }),
-  }))
-
-  const knobCals: KnobCal[] = (adapter.knobs ?? []).map(knob => ({
-    id: knob.id,
-    label: knob.label,
-    cssVar: knob.cssVar,
-    value: calibration.knobs[knob.cssVar] ?? knob.default,
-    min: knob.min,
-    max: knob.max,
-    step: knob.step,
-    unit: knob.unit,
-    infinityAtMax: knob.infinityAtMax,
-    onChange: value => setKnob(knob.cssVar, value),
-  }))
-
   return (
     <LabContext.Provider value={context}>
-      <LabDevicePicker />
-      <LabRouteBar />
-      <LabSurfaceControls />
-      <LabStage />
-      <Calibrator
-        pxPerMm={calibration.pxPerMm}
-        onPxPerMmChange={setPxPerMm}
-        devices={deviceCals}
-        knobs={knobCals}
-        onAdd={addDevice}
-        onReset={reset}
-        storageKey={labStorageKey(adapter.id)}
-      />
+      <LabShell />
     </LabContext.Provider>
   )
 }

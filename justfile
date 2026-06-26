@@ -17,11 +17,12 @@ dev-web port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}":
 dev-api port="${API_PORT:-3001}":
   PORT={{port}} NODE_ENV=development bun product/services/server/http/server.ts
 
-# Dev-only theme workshop: physical-size viewer for theme prototypes (standalone, no backend).
-dev-theme-workshop port="3110":
-  bun run vite --config tools/theme-workshop/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
+# Deprecated: dev-lab is the canonical design tool. Kept as a compatibility alias.
+dev-theme-workshop port="3130":
+  @echo "dev-theme-workshop is deprecated; starting dev-lab instead"
+  bun run vite --config tools/theme-workshop/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
 
-# Dev-only multi-device Shift lab: real app surface mirrored across physical frames.
+# Dev-only first-class design lab: real app surfaces, parts, sources/states, and multi-device routing.
 dev-lab port="3130":
   bun run vite --config tools/theme-workshop/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
 
