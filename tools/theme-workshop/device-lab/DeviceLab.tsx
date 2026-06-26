@@ -115,15 +115,21 @@ export function DeviceLab({
     max: knob.max,
     step: knob.step,
     unit: knob.unit,
+    infinityAtMax: knob.infinityAtMax,
     onChange: value => setKnob(knob.cssVar, value),
   }))
 
   // Generator knobs cascade to every screen from the stage.
   const stageStyle = Object.fromEntries(
-    themeKnobs.map(knob => [
-      knob.cssVar,
-      `${state.knobs[knob.cssVar] ?? knob.default}${knob.unit ?? ""}`,
-    ]),
+    themeKnobs.map(knob => {
+      const value = state.knobs[knob.cssVar] ?? knob.default
+      return [
+        knob.cssVar,
+        knob.infinityAtMax && value >= knob.max
+          ? "infinity"
+          : `${value}${knob.unit ?? ""}`,
+      ]
+    }),
   ) as CSSProperties
 
   const shownDevices =

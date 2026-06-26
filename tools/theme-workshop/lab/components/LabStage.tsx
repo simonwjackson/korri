@@ -48,10 +48,15 @@ export function LabStage() {
   }, [adapter.id, surfacePath])
 
   const stageStyle = Object.fromEntries(
-    (adapter.knobs ?? []).map(knob => [
-      knob.cssVar,
-      `${knobValues[knob.cssVar] ?? knob.default}${knob.unit ?? ""}`,
-    ]),
+    (adapter.knobs ?? []).map(knob => {
+      const value = knobValues[knob.cssVar] ?? knob.default
+      return [
+        knob.cssVar,
+        knob.infinityAtMax && value >= knob.max
+          ? "infinity"
+          : `${value}${knob.unit ?? ""}`,
+      ]
+    }),
   ) as CSSProperties
 
   if (surfacePath === "/parts") {

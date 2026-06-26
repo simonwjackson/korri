@@ -43,4 +43,7 @@ export type ThemeKnob = {
   readonly default: number
   /** Unit suffix appended when applied (e.g. "px", "em"). Omit for a raw number. */
   readonly unit?: string
+  /** When set, the slider's max position is treated as infinity: it displays
+   * "∞" and writes the CSS keyword `infinity` (e.g. to disable a ceiling). */
+  readonly infinityAtMax?: boolean
 }

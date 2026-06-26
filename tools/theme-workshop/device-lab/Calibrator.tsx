@@ -24,6 +24,7 @@ export type KnobCal = {
   readonly max: number
   readonly step: number
   readonly unit?: string
+  readonly infinityAtMax?: boolean
   readonly onChange: (next: number) => void
 }
 
@@ -205,6 +206,14 @@ export function Calibrator({
                     max={knob.max}
                     step={knob.step}
                     suffix={knob.unit ?? ""}
+                    format={
+                      knob.infinityAtMax
+                        ? value =>
+                            value >= knob.max
+                              ? "\u221e"
+                              : `${value}${knob.unit ?? ""}`
+                        : undefined
+                    }
                     onChange={knob.onChange}
                   />
                 ))}

@@ -96,6 +96,9 @@ const SHIFT_KNOBS: readonly ThemeKnob[] = [
     max: 12,
     step: 0.1,
     default: 4,
+    // Far-right of the slider = ∞: writes `infinity`, disabling the height
+    // ceiling entirely (pure width-driven base).
+    infinityAtMax: true,
   },
   {
     id: "ratio",

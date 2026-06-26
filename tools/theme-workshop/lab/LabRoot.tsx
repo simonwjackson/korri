@@ -203,6 +203,7 @@ export function LabRoot({
     max: knob.max,
     step: knob.step,
     unit: knob.unit,
+    infinityAtMax: knob.infinityAtMax,
     onChange: value => setKnob(knob.cssVar, value),
   }))
 
