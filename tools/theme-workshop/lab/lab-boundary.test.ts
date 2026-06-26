@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative } from "node:path"
 
 const PRODUCT_ROOT = "product"
@@ -31,5 +31,18 @@ describe("lab tooling boundary", () => {
     })
 
     expect(offenders).toEqual([])
+  })
+
+  it("keeps the design-tool preview singletons product-side, not in the lab", () => {
+    // The seam that lets the lab drive a mounted surface lives in product (inert
+    // in production); the lab consumes it through the adapter, never the reverse.
+    const singletons = [
+      "product/surfaces/web/shift/shift-catalog-preview.ts",
+      "product/surfaces/web/shift/shift-launch-preview.ts",
+      "product/surfaces/web/pico/pico-data-preview.ts",
+    ]
+    for (const path of singletons) {
+      expect(existsSync(path)).toBe(true)
+    }
   })
 })
