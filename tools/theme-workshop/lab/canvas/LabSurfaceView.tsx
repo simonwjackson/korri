@@ -6,8 +6,38 @@ import {
   initialValuesForBinding,
   type SourceStatus,
 } from "../model/lab-source-state"
+import type { LabSurfaceAdapter } from "../surface-registry"
 
 const VIEWPORT_INSET = 112
+
+/** Route a secondary screen mounts at by default until per-screen routing
+ * lands. Game detail makes it visibly a distinct surface from the primary's
+ * home, proving "any surface/route per screen" with live content. */
+const SECONDARY_INITIAL_PATH = "/game/hollow-knight"
+
+/**
+ * A secondary screen's surface. It's a second, fully independent mount that
+ * shares only the bound data with the primary (each mount has its own router
+ * and registry), so it navigates on its own without driving the primary's
+ * route. This is the lab's stand-in for a real per-device companion surface.
+ */
+function LabSecondaryScreen({
+  adapter,
+  initialValues,
+}: {
+  readonly adapter: LabSurfaceAdapter
+  readonly initialValues: unknown
+}) {
+  const [path, setPath] = useState(SECONDARY_INITIAL_PATH)
+  return (
+    <LabSurfaceMount
+      adapter={adapter}
+      initialValues={initialValues}
+      surfacePath={path}
+      onNavigate={setPath}
+    />
+  )
+}
 
 export function LabSurfaceView({
   sourceId,
@@ -90,6 +120,13 @@ export function LabSurfaceView({
               initialValues={boundValues}
               surfacePath={surfacePath}
               onNavigate={setSurfacePath}
+            />
+          )}
+          renderSecondary={screen => (
+            <LabSecondaryScreen
+              key={`${screen.id}:${sourceId}:${stateId}`}
+              adapter={adapter}
+              initialValues={boundValues}
             />
           )}
         />

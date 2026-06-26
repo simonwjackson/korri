@@ -22,17 +22,21 @@ const SCREEN_GAP_PX = 10
  * `renderPrimary` supplies the primary screen's content (the surface mount), so
  * every lab view shares one multi-screen implementation instead of re-deriving
  * it — which is how the dual-screen render got lost in the design-tool redesign.
+ * `renderSecondary` optionally supplies live content for non-primary screens;
+ * when omitted, secondaries fall back to a placeholder.
  */
 export function LabDeviceCluster({
   device,
   pxPerMm,
   maxHeightPx,
   renderPrimary,
+  renderSecondary,
 }: {
   readonly device: DeviceConfig
   readonly pxPerMm: number
   readonly maxHeightPx?: number
   readonly renderPrimary: () => ReactNode
+  readonly renderSecondary?: (screen: ScreenConfig) => ReactNode
 }) {
   const screens = deviceScreens(device)
 
@@ -84,7 +88,9 @@ export function LabDeviceCluster({
         {list.map(screen =>
           frame(
             screen,
-            <LabScreenPlaceholder label={screen.label ?? "Screen"} />,
+            renderSecondary?.(screen) ?? (
+              <LabScreenPlaceholder label={screen.label ?? "Screen"} />
+            ),
           ),
         )}
       </div>
