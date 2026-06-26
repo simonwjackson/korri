@@ -1,0 +1,161 @@
+import { useEffect, useMemo, useState } from "react"
+import type { Story } from "../types"
+import {
+  axisEnabled,
+  isAxisLive,
+  LAB_AXIS_LIVE,
+  type LabAxisActiveMap,
+  type LabStateAxis,
+  liveActiveMap,
+  pinAxisActive,
+  releaseAxisActive,
+  restorePinsActive,
+} from "./model/lab-state-axis"
+import type { LabSurfaceAdapter } from "./surface-registry"
+
+export interface LabAxisController {
+  readonly screenAxes: readonly LabStateAxis[]
+  readonly activeByAxis: LabAxisActiveMap
+  readonly mode: "inspect" | "live"
+  readonly pinAxis: (axisId: string, stateId: string) => void
+  readonly liveAxis: (axisId: string) => void
+  /** Capture the running surface's coordinate as Inspect pins, when the surface
+   * supports it; undefined otherwise (the States panel hides the control). */
+  readonly pinCurrent: (() => void) | undefined
+  readonly toggleMode: () => void
+}
+
+/**
+ * Owns the page-axis lifecycle for the lab: which screen's axes are active, the
+ * per-axis pinned/Live map, the derived global Inspect/Live mode, and the
+ * pin/release side effects against the surface's preview singletons — including
+ * nested-axis release and the release-on-selection-change cleanup. Kept out of
+ * LabShell so the ordering contract lives (and is tested) in one place.
+ */
+export function useLabAxisController(
+  adapter: LabSurfaceAdapter,
+  primaryStory: Story | null,
+): LabAxisController {
+  // Default to the first screen that exposes axes (the surface's home); a page
+  // selection retargets it to that screen's route.
+  const defaultAxisScreenPath = useMemo(() => {
+    for (const screen of adapter.screens ?? []) {
+      if ((adapter.axesForScreen?.(screen.path) ?? []).length > 0)
+        return screen.path
+    }
+    return "/"
+  }, [adapter])
+
+  const activeScreenPath = primaryStory?.screenPath ?? defaultAxisScreenPath
+  const isPageSelection =
+    !primaryStory ||
+    primaryStory.layer === "page" ||
+    primaryStory.layer === "template"
+  const screenAxes = useMemo(
+    () =>
+      isPageSelection ? (adapter.axesForScreen?.(activeScreenPath) ?? []) : [],
+    [adapter, activeScreenPath, isPageSelection],
+  )
+
+  const [activeByAxis, setActiveByAxis] = useState<LabAxisActiveMap>(() =>
+    liveActiveMap(screenAxes),
+  )
+  // Pins remembered while in Live, so toggling back to Inspect restores them.
+  const [rememberedByAxis, setRememberedByAxis] = useState<LabAxisActiveMap>({})
+  // Mode is derived: any pinned axis ⇒ Inspect; everything Live ⇒ Live.
+  const mode: "inspect" | "live" = screenAxes.some(
+    axis => !isAxisLive(activeByAxis[axis.id]),
+  )
+    ? "inspect"
+    : "live"
+
+  // Commit a new active map, first releasing any nested axis that is no longer
+  // meaningful (e.g. Launch once Data leaves Ready) so a stale pin can't strand
+  // a greyed-out, unreleasable overlay.
+  const applyAxisMap = (next: LabAxisActiveMap) => {
+    let result = next
+    for (const axis of screenAxes) {
+      if (!axisEnabled(axis, result) && !isAxisLive(result[axis.id])) {
+        axis.release()
+        result = releaseAxisActive(result, axis.id)
+      }
+    }
+    setActiveByAxis(result)
+  }
+
+  const pinAxis = (axisId: string, stateId: string) => {
+    const axis = screenAxes.find(candidate => candidate.id === axisId)
+    if (!axis) return
+    axis.pin(stateId)
+    applyAxisMap(pinAxisActive(activeByAxis, axisId, stateId))
+  }
+  const liveAxis = (axisId: string) => {
+    const axis = screenAxes.find(candidate => candidate.id === axisId)
+    if (!axis) return
+    axis.release()
+    applyAxisMap(releaseAxisActive(activeByAxis, axisId))
+  }
+
+  // Capture-back: read the running surface's current coordinate and map it onto
+  // the axis pins (Live → Inspect), so a live exploration becomes addressable.
+  const pinCurrent = () => {
+    const captured = adapter.captureCoordinate?.(activeScreenPath)
+    if (!captured) return
+    for (const axis of screenAxes) {
+      const tag = captured[axis.id]
+      if (tag && !isAxisLive(tag)) axis.pin(tag)
+      else axis.release()
+    }
+    setActiveByAxis(prev => {
+      const next = { ...prev }
+      for (const axis of screenAxes)
+        next[axis.id] = captured[axis.id] ?? LAB_AXIS_LIVE
+      return next
+    })
+  }
+
+  // The global headline: Live releases every axis (hands the running app the
+  // wheel from the current coordinate, route preserved) and remembers the pins;
+  // Inspect re-applies them. "Go live from here" falls out for free.
+  const toggleMode = () => {
+    if (mode === "live") {
+      for (const axis of screenAxes) {
+        const remembered = rememberedByAxis[axis.id]
+        if (remembered && !isAxisLive(remembered)) axis.pin(remembered)
+      }
+      setActiveByAxis(
+        restorePinsActive(screenAxes, activeByAxis, rememberedByAxis),
+      )
+    } else {
+      setRememberedByAxis(activeByAxis)
+      for (const axis of screenAxes) axis.release()
+      setActiveByAxis(liveActiveMap(screenAxes))
+    }
+  }
+
+  // Release the active axis pins whenever the visible axis set changes — surface
+  // switch OR selecting a screen/part with different (or no) axes — so a pin can
+  // never leak onto a surface where it has no visible release control (plan risk
+  // #1, generalized to screen changes). axes is recomputed from the deps (not
+  // the screenAxes memo) so the effect only re-runs on a real axis-set change.
+  useEffect(() => {
+    const axes = isPageSelection
+      ? (adapter.axesForScreen?.(activeScreenPath) ?? [])
+      : []
+    setActiveByAxis(liveActiveMap(axes))
+    setRememberedByAxis({})
+    return () => {
+      for (const axis of axes) axis.release()
+    }
+  }, [adapter, activeScreenPath, isPageSelection])
+
+  return {
+    screenAxes,
+    activeByAxis,
+    mode,
+    pinAxis,
+    liveAxis,
+    pinCurrent: adapter.captureCoordinate ? pinCurrent : undefined,
+    toggleMode,
+  }
+}

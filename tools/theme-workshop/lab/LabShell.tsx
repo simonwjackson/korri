@@ -31,16 +31,6 @@ import {
   type SourceStatus,
   sourcesForAdapter,
 } from "./model/lab-source-state"
-import {
-  axisEnabled,
-  isAxisLive,
-  LAB_AXIS_LIVE,
-  type LabAxisActiveMap,
-  liveActiveMap,
-  pinAxisActive,
-  releaseAxisActive,
-  restorePinsActive,
-} from "./model/lab-state-axis"
 import { LabDevicesPanel } from "./panels/LabDevicesPanel"
 import { LabInspectorPanel } from "./panels/LabInspectorPanel"
 import { LabPartsPanel } from "./panels/LabPartsPanel"
@@ -48,6 +38,7 @@ import { LabSourcesPanel } from "./panels/LabSourcesPanel"
 import { LabStatesPanel } from "./panels/LabStatesPanel"
 import { LabSurfaceControlsPanel } from "./panels/LabSurfaceControlsPanel"
 import { type LabPartsCatalog, loadSurfacePartsResult } from "./parts-discovery"
+import { useLabAxisController } from "./useLabAxisController"
 
 const DOCK_WIDTH_KEY = "lab-dock-width"
 const DEFAULT_DOCK_WIDTH = 280
@@ -119,122 +110,19 @@ export function LabShell() {
   const [activeStateId, setActiveStateId] =
     useState<SourceStatus>(defaultStateId)
 
-  // State AXES for the active screen (the surface's real state machines), wired
-  // to the surface's production-inert preview singletons. Default to the first
-  // screen that exposes axes (the surface's home); a page selection retargets it.
-  const defaultAxisScreenPath = useMemo(() => {
-    for (const screen of adapter.screens ?? []) {
-      if ((adapter.axesForScreen?.(screen.path) ?? []).length > 0)
-        return screen.path
-    }
-    return "/"
-  }, [adapter])
-  // A selected screen part retargets the axes to its route; otherwise the
-  // default (home) screen's axes are shown so they're visible without hunting.
-  const activeScreenPath = primaryStory?.screenPath ?? defaultAxisScreenPath
-  const isPageSelection =
-    !primaryStory ||
-    primaryStory.layer === "page" ||
-    primaryStory.layer === "template"
-  const screenAxes = useMemo(
-    () =>
-      isPageSelection ? (adapter.axesForScreen?.(activeScreenPath) ?? []) : [],
-    [adapter, activeScreenPath, isPageSelection],
-  )
-  const [activeByAxis, setActiveByAxis] = useState<LabAxisActiveMap>(() =>
-    liveActiveMap(screenAxes),
-  )
-  // Pins remembered while in Live, so toggling back to Inspect restores them.
-  const [rememberedByAxis, setRememberedByAxis] = useState<LabAxisActiveMap>({})
-  // Mode is derived: any pinned axis ⇒ Inspect; everything Live ⇒ Live.
-  const mode: "inspect" | "live" = screenAxes.some(
-    axis => !isAxisLive(activeByAxis[axis.id]),
-  )
-    ? "inspect"
-    : "live"
-
-  // Commit a new active map, first releasing any nested axis that is no longer
-  // meaningful (e.g. Launch once Data leaves Ready) so a stale pin can't strand
-  // a greyed-out, unreleasable overlay.
-  const applyAxisMap = (next: LabAxisActiveMap) => {
-    let result = next
-    for (const axis of screenAxes) {
-      if (!axisEnabled(axis, result) && !isAxisLive(result[axis.id])) {
-        axis.release()
-        result = releaseAxisActive(result, axis.id)
-      }
-    }
-    setActiveByAxis(result)
-  }
-
-  // Tapping an axis state pins that axis (Inspect); the Live chip releases it.
-  // Both drive the surface singletons, so the mounted surface reflects them.
-  const pinAxis = (axisId: string, stateId: string) => {
-    const axis = screenAxes.find(candidate => candidate.id === axisId)
-    if (!axis) return
-    axis.pin(stateId)
-    applyAxisMap(pinAxisActive(activeByAxis, axisId, stateId))
-  }
-  const liveAxis = (axisId: string) => {
-    const axis = screenAxes.find(candidate => candidate.id === axisId)
-    if (!axis) return
-    axis.release()
-    applyAxisMap(releaseAxisActive(activeByAxis, axisId))
-  }
-
-  // Capture-back: read the running surface's current coordinate and map it onto
-  // the axis pins (Live → Inspect), so a live exploration becomes addressable.
-  const pinCurrent = () => {
-    const captured = adapter.captureCoordinate?.(activeScreenPath)
-    if (!captured) return
-    for (const axis of screenAxes) {
-      const tag = captured[axis.id]
-      if (tag && !isAxisLive(tag)) axis.pin(tag)
-      else axis.release()
-    }
-    setActiveByAxis(prev => {
-      const next = { ...prev }
-      for (const axis of screenAxes)
-        next[axis.id] = captured[axis.id] ?? LAB_AXIS_LIVE
-      return next
-    })
-  }
-
-  // The global headline: Live releases every axis (hands the running app the
-  // wheel from the current coordinate, route preserved) and remembers the pins;
-  // Inspect re-applies them. "Go live from here" falls out for free.
-  const toggleMode = () => {
-    if (mode === "live") {
-      for (const axis of screenAxes) {
-        const remembered = rememberedByAxis[axis.id]
-        if (remembered && !isAxisLive(remembered)) axis.pin(remembered)
-      }
-      setActiveByAxis(
-        restorePinsActive(screenAxes, activeByAxis, rememberedByAxis),
-      )
-    } else {
-      setRememberedByAxis(activeByAxis)
-      for (const axis of screenAxes) axis.release()
-      setActiveByAxis(liveActiveMap(screenAxes))
-    }
-  }
-
-  // Release the active axis pins whenever the visible axis set changes — surface
-  // switch OR selecting a screen/part with different (or no) axes — so a pin can
-  // never leak onto a surface where it has no visible release control (plan risk
-  // #1, generalized to screen changes). The new selection starts fully Live.
-  // axes is recomputed from the deps (not the screenAxes memo) so the effect
-  // only re-runs when the active axis set actually changes.
-  useEffect(() => {
-    const axes = isPageSelection
-      ? (adapter.axesForScreen?.(activeScreenPath) ?? [])
-      : []
-    setActiveByAxis(liveActiveMap(axes))
-    setRememberedByAxis({})
-    return () => {
-      for (const axis of axes) axis.release()
-    }
-  }, [adapter, activeScreenPath, isPageSelection])
+  // The page-axis lifecycle — active screen's axes, the pinned/Live map, derived
+  // Inspect/Live mode, pin/release side effects (incl. nested-axis release),
+  // capture-back, and the release-on-selection-change cleanup — lives in a
+  // focused controller so its ordering contract is in one place.
+  const {
+    screenAxes,
+    activeByAxis,
+    mode,
+    pinAxis,
+    liveAxis,
+    pinCurrent,
+    toggleMode,
+  } = useLabAxisController(adapter, primaryStory)
 
   useEffect(() => {
     setView(initialCanvasView)
@@ -335,7 +223,7 @@ export function LabShell() {
       activeByAxis={activeByAxis}
       onPin={pinAxis}
       onLive={liveAxis}
-      onPinCurrent={adapter.captureCoordinate ? pinCurrent : undefined}
+      onPinCurrent={pinCurrent}
       states={states}
       activeId={activeStateId}
       onSelect={selectState}
