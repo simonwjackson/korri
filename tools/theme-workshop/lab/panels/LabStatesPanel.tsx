@@ -1,11 +1,7 @@
 import type { LabStateOption } from "../model/lab-source-state"
-import {
-  axisEnabled,
-  isAxisLive,
-  type LabAxisActiveMap,
-  type LabStateAxis,
-} from "../model/lab-state-axis"
+import type { LabAxisActiveMap, LabStateAxis } from "../model/lab-state-axis"
 import { LAB_BIND_MIME } from "./LabSourcesPanel"
+import { LabStatesAxisGroup } from "./LabStatesAxisGroup"
 
 export function LabStatesPanel({
   axes,
@@ -100,58 +96,6 @@ export function LabStatesPanel({
           <span className="pt-source-label">{state.label}</span>
         </div>
       ))}
-    </div>
-  )
-}
-
-function LabStatesAxisGroup({
-  axis,
-  active,
-  onPin,
-  onLive,
-}: {
-  readonly axis: LabStateAxis
-  readonly active: LabAxisActiveMap
-  readonly onPin: (axisId: string, stateId: string) => void
-  readonly onLive: (axisId: string) => void
-}) {
-  const enabled = axisEnabled(axis, active)
-  const value = active[axis.id]
-  return (
-    <div className={`pt-axis-group${enabled ? "" : " is-disabled"}`}>
-      <div className="pt-axis-head">
-        <span className="pt-axis-label">{axis.label}</span>
-        {!enabled && axis.disabledHint ? (
-          <span className="pt-axis-reason">{axis.disabledHint}</span>
-        ) : null}
-      </div>
-      <div className="pt-axis-rows">
-        <button
-          type="button"
-          className={`pt-axis-chip is-live${isAxisLive(value) ? " is-on" : ""}`}
-          disabled={!enabled}
-          aria-pressed={isAxisLive(value)}
-          onClick={() => onLive(axis.id)}
-        >
-          {axis.liveLabel}
-        </button>
-        {axis.states.map(state => (
-          <button
-            key={state.id}
-            type="button"
-            className={`pt-axis-chip${value === state.id ? " is-on" : ""}`}
-            disabled={!enabled}
-            aria-pressed={value === state.id}
-            onClick={() => onPin(axis.id, state.id)}
-          >
-            <span
-              className={`pt-state-dot is-${state.id.toLowerCase()}`}
-              aria-hidden
-            />
-            {state.label}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }
