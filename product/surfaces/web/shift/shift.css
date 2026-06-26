@@ -675,6 +675,9 @@
 	position: relative;
 	flex: 0 0 auto;
 	width: 100%;
+	/* Headroom for the focused tile's lift to spill into, so on a cramped frame
+	 * it overflows into empty space above the rail rather than onto the legend. */
+	margin-top: calc(var(--cine-tile) * 0.12);
 	/* Clip the off-screen tiles horizontally, but let the focused tile's
 	 * scale-up/lift (and its shadow) spill upward instead of being cut off.
 	 * `clip` (not `hidden`) keeps overflow-y: visible from coercing to auto. */
