@@ -12,6 +12,7 @@ import { Option } from "effect"
 import { type ComponentProps, useEffect, useState } from "react"
 
 const noop = () => {}
+import { useShiftCatalogPreview } from "../shift-catalog-preview"
 import {
   setShiftLaunchPreview,
   useShiftLaunchPreview,
@@ -58,8 +59,11 @@ export function ShiftHomeStateView({
 }
 
 export function ShiftHomeRoute() {
-  const snapshot = useAtomValue(catalogSnapshotAtom)
+  const live = useAtomValue(catalogSnapshotAtom)
   const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
+  // The design-tool data pin wins over the live loader when set; releasing it
+  // (preview = null) falls straight back to the real catalog snapshot.
+  const snapshot = useShiftCatalogPreview() ?? live
   return <ShiftHomeStateView result={snapshot} onRetry={refreshSnapshot} />
 }
 

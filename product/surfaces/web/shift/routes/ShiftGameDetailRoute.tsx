@@ -13,9 +13,12 @@ import {
   useShiftCatalogCase,
 } from "../catalog/ShiftCatalogStateRoot"
 import { ShiftGameDetailScreen } from "../pages/ShiftGameDetailScreen"
+import { useShiftCatalogPreview } from "../shift-catalog-preview"
 
 export function ShiftGameDetailRoute() {
-  const snapshot = useAtomValue(catalogSnapshotAtom)
+  const live = useAtomValue(catalogSnapshotAtom)
+  // Same data pin the home consults, so a pinned coordinate addresses detail too.
+  const snapshot = useShiftCatalogPreview() ?? live
   return (
     <ShiftCatalogStateRoot result={snapshot}>
       <DetailReadyBody />
