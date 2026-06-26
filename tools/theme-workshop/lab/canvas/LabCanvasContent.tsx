@@ -1,12 +1,20 @@
 import type { Story } from "../../types"
-import type { LabPartsCatalog } from "../parts-discovery"
-import type { LabCanvasView, LabObjectInstance } from "../model/lab-canvas-state"
-import type { LabStoryIndex } from "../model/lab-part-model"
-import type { LabSourceOption, LabStateOption, SourceStatus } from "../model/lab-source-state"
 import { useLab } from "../Lab.context"
+import type {
+  LabCanvasView,
+  LabObjectInstance,
+} from "../model/lab-canvas-state"
+import type { LabStoryIndex } from "../model/lab-part-model"
+import type {
+  LabSourceOption,
+  LabStateOption,
+  SourceStatus,
+} from "../model/lab-source-state"
+import type { LabPartsCatalog } from "../parts-discovery"
 import { LabCanvasBoard } from "./LabCanvasBoard"
 import { LabGalleryView } from "./LabGalleryView"
 import { LabMatrixView } from "./LabMatrixView"
+import { LabScreenView } from "./LabScreenView"
 import { LabSelectionView } from "./LabSelectionView"
 import { LabSurfaceView } from "./LabSurfaceView"
 
@@ -38,14 +46,71 @@ export function LabCanvasContent({
   readonly onInstancesChange: (instances: readonly LabObjectInstance[]) => void
 }) {
   const { selectedDevices } = useLab()
-  const selectedStories = selectedIds.map(id => index.byId.get(id)).filter((story): story is Story => Boolean(story))
+  const selectedStories = selectedIds
+    .map(id => index.byId.get(id))
+    .filter((story): story is Story => Boolean(story))
   const primaryStory = selectedStories[0] ?? null
-  const primaryInstance = primaryStory ? instances.find(instance => instance.storyId === primaryStory.id) ?? null : null
-  if (view === "surface") return <LabSurfaceView sourceId={activeSourceId} stateId={activeStateId} />
-  if (view === "gallery") return <LabGalleryView catalog={catalog} index={index} selectedIds={selectedIds} onSelect={onSelectStory} />
+  const primaryInstance = primaryStory
+    ? (instances.find(instance => instance.storyId === primaryStory.id) ?? null)
+    : null
+  if (view === "surface")
+    return <LabSurfaceView sourceId={activeSourceId} stateId={activeStateId} />
+  if (view === "gallery")
+    return (
+      <LabGalleryView
+        catalog={catalog}
+        index={index}
+        selectedIds={selectedIds}
+        onSelect={onSelectStory}
+      />
+    )
   if (view === "selection") {
-    return <LabSelectionView story={primaryStory} byId={index.byId} instance={primaryInstance} sources={sources} states={states} zoom={zoom} onBind={(id, patch) => onInstancesChange(instances.map(instance => instance.id === id ? { ...instance, ...patch } : instance))} />
+    // A page part that IS a screen mounts the live surface at its route; every
+    // other part renders as a static isolated preview.
+    if (primaryStory?.screenPath) {
+      return (
+        <LabScreenView
+          screenPath={primaryStory.screenPath}
+          sourceId={activeSourceId}
+          stateId={activeStateId}
+        />
+      )
+    }
+    return (
+      <LabSelectionView
+        story={primaryStory}
+        byId={index.byId}
+        instance={primaryInstance}
+        sources={sources}
+        states={states}
+        zoom={zoom}
+        onBind={(id, patch) =>
+          onInstancesChange(
+            instances.map(instance =>
+              instance.id === id ? { ...instance, ...patch } : instance,
+            ),
+          )
+        }
+      />
+    )
   }
-  if (view === "matrix") return <LabMatrixView selectedStories={selectedStories} stories={index.byId} sources={sources} states={states} devices={selectedDevices} />
-  return <LabCanvasBoard instances={instances} stories={index.byId} sources={sources} states={states} onInstancesChange={onInstancesChange} />
+  if (view === "matrix")
+    return (
+      <LabMatrixView
+        selectedStories={selectedStories}
+        stories={index.byId}
+        sources={sources}
+        states={states}
+        devices={selectedDevices}
+      />
+    )
+  return (
+    <LabCanvasBoard
+      instances={instances}
+      stories={index.byId}
+      sources={sources}
+      states={states}
+      onInstancesChange={onInstancesChange}
+    />
+  )
 }

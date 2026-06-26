@@ -24,6 +24,7 @@ import {
   firstStateFamilyStory,
   statesForStory,
 } from "./model/lab-part-model"
+import { withScreenStories } from "./model/lab-screen-parts"
 import {
   DEFAULT_SOURCE_ID,
   DEFAULT_STATE_ID,
@@ -80,7 +81,12 @@ export function LabShell() {
     sources[0]?.id ?? DEFAULT_SOURCE_ID,
   )
   const [instances, setInstances] = useState<readonly LabObjectInstance[]>([])
-  const index = useMemo(() => buildStoryIndex(catalog), [catalog])
+  // The surface's screens ARE its page parts (mounted live); discovered atoms /
+  // molecules / etc. stay as static parts in the tree.
+  const index = useMemo(
+    () => withScreenStories(buildStoryIndex(catalog), adapter.screens ?? []),
+    [catalog, adapter],
+  )
   // States are dynamic: derived from the selected part's discovered variant
   // family (its real state-machine tags), not a fixed vocabulary.
   const primaryStory = useMemo(() => {
@@ -119,9 +125,9 @@ export function LabShell() {
     }
     return "/"
   }, [adapter])
-  const [activeScreenPath, setActiveScreenPath] = useState(
-    defaultAxisScreenPath,
-  )
+  // A selected screen part retargets the axes to its route; otherwise the
+  // default (home) screen's axes are shown so they're visible without hunting.
+  const activeScreenPath = primaryStory?.screenPath ?? defaultAxisScreenPath
   const isPageSelection =
     !primaryStory ||
     primaryStory.layer === "page" ||
@@ -155,7 +161,6 @@ export function LabShell() {
   // Release the previous surface's axis pins on surface switch so a pin can't
   // leak across surfaces (plan risk #1); start the new surface fully Live.
   useEffect(() => {
-    setActiveScreenPath(defaultAxisScreenPath)
     setActiveByAxis(
       liveActiveMap(adapter.axesForScreen?.(defaultAxisScreenPath) ?? []),
     )

@@ -53,6 +53,10 @@ export interface Story {
   readonly state?: string
   /** Optional IDs of related stories from the same discovered module. */
   readonly variants?: readonly string[]
+  /** Set for a page part that IS a mounted screen (a route on the surface).
+   * Selecting it mounts the live surface at this path on one device and drives
+   * it through its state-machine axes, instead of rendering a static preview. */
+  readonly screenPath?: string
   readonly render: () => ReactNode
 }
 
