@@ -100,7 +100,7 @@ pkgs.stdenv.mkDerivation {
         exit 1
       fi
     done
-    if ! grep -F -q "shift-home-rail-region" $css_files; then
+    if ! grep -F -q "shift-cine-rail" $css_files; then
       echo "korri-portal CSS is missing Shift theme rail styles" >&2
       exit 1
     fi
