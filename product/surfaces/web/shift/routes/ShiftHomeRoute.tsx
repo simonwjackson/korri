@@ -6,6 +6,7 @@ import {
   type LaunchState as LaunchStateValue,
 } from "@platform/library/launch-state"
 import { launchFailureExitCode } from "@platform/library/launcher"
+import { useOptionalDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 import {
   getPlayableDisplayName,
   getPlayableImageUrl,
@@ -17,7 +18,7 @@ import { useLibraryLaunchController } from "@platform/react/library/use-library-
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import { Option } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
-import { type ComponentProps, useEffect, useState } from "react"
+import { type ComponentProps, useCallback, useEffect, useState } from "react"
 
 const noop = () => {}
 
@@ -168,6 +169,11 @@ function NavigatingReadyBody() {
   const foregroundPreview = useShiftForegroundPreview()
   const foreground = foregroundPreview ?? liveForeground
   const preview = useShiftLaunchPreview()
+  const focusGame = useOptionalDualScreenSession()?.focusGame
+  const publishGameFocus = useCallback(
+    (gameId: string) => focusGame?.(gameId, "primary"),
+    [focusGame],
+  )
   const [acked, setAcked] = useState(false)
 
   // The design-tool preview override wins over the live controller when set.
@@ -204,6 +210,7 @@ function NavigatingReadyBody() {
           games={games.map(toCinematicGame)}
           avatarSrc={AVATAR}
           launchState={launchState}
+          onGameFocus={publishGameFocus}
           onLaunch={makeLaunchHandler(games, launch.start)}
           onRetry={() => {
             if (preview) setShiftLaunchPreview(null)

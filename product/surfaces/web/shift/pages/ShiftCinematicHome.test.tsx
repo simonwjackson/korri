@@ -30,6 +30,17 @@ describe("ShiftCinematicHome onLaunch", () => {
     expect(onLaunch).toHaveBeenCalledWith("b")
   })
 
+  it("reports the initial and focused game through an optional focus callback", () => {
+    const onGameFocus = mock(() => undefined)
+    render(<ShiftCinematicHome games={games} onGameFocus={onGameFocus} />)
+
+    expect(onGameFocus).toHaveBeenCalledWith("a")
+
+    fireEvent.focus(screen.getByRole("button", { name: "Game B" }))
+
+    expect(onGameFocus).toHaveBeenLastCalledWith("b")
+  })
+
   it("follows DOM focus so every device drives the rail, not just the keyboard", () => {
     render(<ShiftCinematicHome games={games} />)
     const tileB = screen.getByRole("button", { name: "Game B" })

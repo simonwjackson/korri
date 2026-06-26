@@ -40,6 +40,9 @@ export interface ShiftCinematicHomeProps {
   readonly games: readonly ShiftCinematicGame[]
   readonly time?: string
   readonly avatarSrc?: string
+  /** Publish the focused game. Dual-screen hosts wire this to the shared
+   * session; standalone prototype usage omits it (focus-only). */
+  readonly onGameFocus?: (gameId: string) => void
   /** Launch the focused game. The real host wires this to the launch
    * controller; the standalone prototype omits it (focus-only). */
   readonly onLaunch?: (gameId: string) => void
@@ -57,6 +60,7 @@ export function ShiftCinematicHome({
   games,
   time = "4:24 PM",
   avatarSrc,
+  onGameFocus,
   onLaunch,
   launchState,
   onRetry,
@@ -67,6 +71,10 @@ export function ShiftCinematicHome({
   const stageRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const game = games[index]
+
+  useEffect(() => {
+    if (game) onGameFocus?.(game.id)
+  }, [game?.id, onGameFocus])
 
   // The scene reacts to the launch lifecycle in place — no modal. When a status
   // is showing, the hero + legend morph and the buttons remap (A = Retry / B =
