@@ -12,9 +12,12 @@ import {
 import { Hero } from "@product/surfaces/web/pico/ui/organisms/Hero"
 import { ScreenShell as Screen } from "@product/surfaces/web/pico/ui/templates/ScreenShell"
 import * as Atom from "effect/unstable/reactivity/Atom"
-import { axisOptionsFromTags, type LabStateAxis } from "../model/lab-state-axis"
-
-type Tag = (typeof PICO_DATA_TAGS)[number]
+import {
+  axisOptionsFromTags,
+  type LabStateAxis,
+  pinFromTable,
+  renderFromTable,
+} from "../model/lab-state-axis"
 
 const previewAtom = Atom.make<PicoCatalogResult>(picoDataStateSamples.Loading())
 
@@ -26,12 +29,12 @@ const picoDataAxis: LabStateAxis = {
   label: "Data",
   liveLabel: "Live",
   states: axisOptionsFromTags([...PICO_DATA_TAGS]),
-  pin: tag => setPicoDataPreview(picoDataStateSamples[tag as Tag]()),
+  pin: pinFromTable(picoDataStateSamples, setPicoDataPreview),
   release: () => setPicoDataPreview(null),
-  renderSample: tag => (
+  renderSample: renderFromTable(picoDataStateSamples, result => (
     <PicoData
       atom={previewAtom}
-      seed={[[previewAtom, picoDataStateSamples[tag as Tag]()]] as LayerSeed}
+      seed={[[previewAtom, result]] as LayerSeed}
       title="LIBRARY"
     >
       {(facts: CatalogSnapshotFacts) =>
@@ -51,7 +54,7 @@ const picoDataAxis: LabStateAxis = {
         )
       }
     </PicoData>
-  ),
+  )),
 }
 
 export function picoAxesForScreen(screenPath: string): readonly LabStateAxis[] {

@@ -16,6 +16,8 @@ import {
   LAB_AXIS_LIVE,
   type LabAxisActiveMap,
   type LabStateAxis,
+  pinFromTable,
+  renderFromTable,
 } from "../model/lab-state-axis"
 
 // Shift Home's two orthogonal-but-nested state machines, surfaced as axes wired
@@ -28,18 +30,13 @@ const shiftDataAxis: LabStateAxis = {
   label: "Data",
   liveLabel: "Live",
   states: axisOptionsFromTags(ShiftCatalogState.tags),
-  pin: tag =>
-    setShiftCatalogPreview(
-      shiftCatalogStateSamples[tag as ShiftCatalogState["_tag"]](),
-    ),
+  pin: pinFromTable(shiftCatalogStateSamples, setShiftCatalogPreview),
   release: () => setShiftCatalogPreview(null),
-  renderSample: tag => (
+  renderSample: renderFromTable(shiftCatalogStateSamples, result => (
     <RegistryProvider>
-      <ShiftHomeStateView
-        result={shiftCatalogStateSamples[tag as ShiftCatalogState["_tag"]]()}
-      />
+      <ShiftHomeStateView result={result} />
     </RegistryProvider>
-  ),
+  )),
 }
 
 const shiftLaunchAxis: LabStateAxis = {
@@ -47,18 +44,17 @@ const shiftLaunchAxis: LabStateAxis = {
   label: "Launch",
   liveLabel: "Live",
   states: axisOptionsFromTags(LaunchState.tags),
-  pin: tag =>
-    setShiftLaunchPreview(launchStateSamples[tag as LaunchState["_tag"]]()),
+  pin: pinFromTable(launchStateSamples, setShiftLaunchPreview),
   release: () => setShiftLaunchPreview(null),
   // The cinematic home (and its launch overlay) only exists in the Ready body.
   enabledWhen: active => active.data === "Ready",
   disabledHint: "Only while Data = Ready",
-  renderSample: tag => (
+  renderSample: renderFromTable(launchStateSamples, launchState => (
     <ShiftCinematicHome
       games={SHIFT_CINEMATIC_GAMES}
-      launchState={launchStateSamples[tag as LaunchState["_tag"]]()}
+      launchState={launchState}
     />
-  ),
+  )),
 }
 
 export function shiftAxesForScreen(

@@ -47,6 +47,31 @@ export interface LabStateAxis {
   readonly renderSample?: (stateId: string) => ReactNode
 }
 
+/**
+ * Build an axis `pin` from a sample table keyed by state id, looking the sample
+ * up safely (no `as Tag` cast): an unknown id is a no-op rather than a crash.
+ */
+export function pinFromTable<S>(
+  table: Readonly<Record<string, () => S>>,
+  apply: (value: S) => void,
+): (stateId: string) => void {
+  return stateId => {
+    const make = table[stateId]
+    if (make) apply(make())
+  }
+}
+
+/** Build an axis `renderSample` from the same sample table, equally cast-free. */
+export function renderFromTable<S>(
+  table: Readonly<Record<string, () => S>>,
+  render: (value: S) => ReactNode,
+): (stateId: string) => ReactNode {
+  return stateId => {
+    const make = table[stateId]
+    return make ? render(make()) : null
+  }
+}
+
 /** Derive an axis's selectable options from a state machine's tags. */
 export function axisOptionsFromTags(
   tags: readonly string[],

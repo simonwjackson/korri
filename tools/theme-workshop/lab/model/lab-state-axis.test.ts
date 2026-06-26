@@ -7,7 +7,9 @@ import {
   type LabStateAxis,
   liveActiveMap,
   pinAxisActive,
+  pinFromTable,
   releaseAxisActive,
+  renderFromTable,
   restorePinsActive,
 } from "./lab-state-axis"
 
@@ -62,6 +64,28 @@ describe("axisEnabled", () => {
 
   it("is always enabled when no enabledWhen is declared", () => {
     expect(axisEnabled(axis("data"), {})).toBe(true)
+  })
+})
+
+describe("pinFromTable / renderFromTable", () => {
+  const table = { Ready: () => "ready-sample", Empty: () => "empty-sample" }
+
+  it("applies the looked-up sample for a known id", () => {
+    const applied: string[] = []
+    pinFromTable(table, value => applied.push(value))("Empty")
+    expect(applied).toEqual(["empty-sample"])
+  })
+
+  it("is a safe no-op for an unknown id (no cast, no crash)", () => {
+    const applied: string[] = []
+    pinFromTable(table, value => applied.push(value))("Nope")
+    expect(applied).toEqual([])
+  })
+
+  it("renders the looked-up sample, or null for an unknown id", () => {
+    const render = renderFromTable(table, value => `<${value}>`)
+    expect(render("Ready")).toBe("<ready-sample>")
+    expect(render("Nope")).toBeNull()
   })
 })
 
