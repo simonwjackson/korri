@@ -168,8 +168,8 @@ const DEV_GAMES = DEV_GAME_MEDIA.map((media, index) => ({
   userData: syntheticUserData(index),
 }))
 
-const SHIFT_CINEMATIC_GAMES: readonly ShiftCinematicGame[] = DEV_GAMES.map(
-  ({ media, userData }) => ({
+export const SHIFT_CINEMATIC_GAMES: readonly ShiftCinematicGame[] =
+  DEV_GAMES.map(({ media, userData }) => ({
     id: media.id,
     title: media.title,
     tileArtUrl: media.gridUrl,
@@ -179,8 +179,7 @@ const SHIFT_CINEMATIC_GAMES: readonly ShiftCinematicGame[] = DEV_GAMES.map(
     lastPlayedLabel: relativeLastPlayed(userData.lastPlayed),
     playtimeLabel: playtimeLabel(userData.playtime),
     favorite: userData.favorite,
-  }),
-)
+  }))
 
 const SHIFT_DETAIL_GAMES: readonly ShiftGameDetailView[] = DEV_GAMES.map(
   ({ media, userData }) => ({
