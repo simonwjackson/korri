@@ -5,16 +5,20 @@ export function LabStatesPanel({
   states,
   activeId,
   onSelect,
+  hasSelection = false,
 }: {
   readonly states: readonly LabStateOption[]
   readonly activeId: string
   readonly onSelect: (id: LabStateOption["id"]) => void
+  readonly hasSelection?: boolean
 }) {
   if (states.length === 0) {
     return (
       <div className="pt-sources">
         <div className="pt-sources-hint">
-          Select a part with multiple states (e.g. a data-states screen) to switch between them. States come from the part's own state machine — there is no fixed list.
+          {hasSelection
+            ? "This part has a single state."
+            : "This surface has no parts with multiple states."}
         </div>
       </div>
     )

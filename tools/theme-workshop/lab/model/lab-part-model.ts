@@ -90,6 +90,18 @@ export function statesForStory(
   return out
 }
 
+/** The first discovered part (in tree order) that exposes multiple states. Used
+ * to populate the States panel by default so a surface's states are visible
+ * without first hunting for the right part. */
+export function firstStateFamilyStory(index: LabStoryIndex): Story | null {
+  for (const group of index.groups) {
+    for (const story of group.stories) {
+      if (statesForStory(story, index.byId).length > 0) return story
+    }
+  }
+  return null
+}
+
 function humanizeStateTag(tag: string): string {
   const spaced = tag.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
   return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase()

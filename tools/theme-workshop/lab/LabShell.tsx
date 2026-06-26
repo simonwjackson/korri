@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react"
-import { buildStoryIndex, statesForStory } from "./model/lab-part-model"
+import { buildStoryIndex, firstStateFamilyStory, statesForStory } from "./model/lab-part-model"
 import {
   DEFAULT_CHROME_MODE,
   reconcileInstancesWithSelection,
@@ -72,7 +72,12 @@ export function LabShell() {
     }
     return null
   }, [selectedIds, index])
-  const states = useMemo(() => statesForStory(primaryStory, index.byId), [primaryStory, index])
+  // The States panel reflects the selected part, or — when nothing is selected —
+  // the surface's first state family, so a surface's states are visible without
+  // hunting for the right part.
+  const fallbackStateStory = useMemo(() => firstStateFamilyStory(index), [index])
+  const stateStory = primaryStory ?? fallbackStateStory
+  const states = useMemo(() => statesForStory(stateStory, index.byId), [stateStory, index])
   const defaultStateId = states.find(state => state.id.toLowerCase() === "ready")?.id ?? states[0]?.id ?? DEFAULT_STATE_ID
   const [activeStateId, setActiveStateId] = useState<SourceStatus>(defaultStateId)
 
@@ -89,7 +94,17 @@ export function LabShell() {
   useEffect(() => {
     setActiveStateId(defaultStateId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [primaryStory?.id])
+  }, [stateStory?.id])
+
+  // Tapping a state with nothing selected previews that state on the fallback
+  // family part (selecting it and switching to the Selection view).
+  const selectState = (stateId: SourceStatus) => {
+    setActiveStateId(stateId)
+    if (!primaryStory && fallbackStateStory) {
+      setSelectedIds([fallbackStateStory.id])
+      setView("selection")
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -141,7 +156,7 @@ export function LabShell() {
     />
   )
   const sourcesPanel = () => <LabSourcesPanel sources={sources} activeId={activeSourceId} onSelect={setActiveSourceId} />
-  const statesPanel = () => <LabStatesPanel states={states} activeId={activeStateId} onSelect={setActiveStateId} />
+  const statesPanel = () => <LabStatesPanel states={states} activeId={activeStateId} onSelect={selectState} hasSelection={Boolean(primaryStory)} />
   const inspectorPanel = () => <LabInspectorPanel accent={accent} onAccent={setAccent} />
   const devicesPanel = () => <LabDevicesPanel />
   const controlsPanel = () => <LabSurfaceControlsPanel />

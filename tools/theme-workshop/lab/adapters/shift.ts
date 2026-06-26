@@ -1,5 +1,4 @@
 import type { RouterHistory } from "@tanstack/history"
-import { useShiftControls } from "@product/surfaces/web/shift/shift-controls"
 import { mountShift } from "@product/surfaces/web/shift/mount-shift"
 import { shiftConfig } from "@product/surfaces/web/shift/config"
 import type { LabSurfaceAdapter } from "../surface-registry"
@@ -17,7 +16,8 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   ],
   knobs: shiftConfig.knobs,
   defaultPxPerMm: shiftConfig.defaultPxPerMm,
-  useControls: useShiftControls,
+  // Shift's launch states are real part states (see ShiftCinematicHomeStates),
+  // surfaced in the States panel — not duplicated here as a control.
   makeSeedInitialValues,
   mountSurface: (host, { initialValues, history }) =>
     mountShift(host, {
