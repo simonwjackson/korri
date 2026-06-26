@@ -8,6 +8,7 @@ import {
   type SeedInitialValues,
 } from "../seed/shift-seed"
 import type { LabSurfaceAdapter } from "../surface-registry"
+import { picoAxesForScreen } from "./pico-axes"
 
 // Inlined from product/surfaces/web/pico/config.tsx so the lab does not import
 // the throwaway 100-screen pico gallery; mountPico pulls only the two real
@@ -100,6 +101,7 @@ export const picoLabSurfaceAdapter: LabSurfaceAdapter = {
     { label: "Home", path: "/" },
     { label: "Game Detail", path: "/game/hollow-knight" },
   ],
+  axesForScreen: picoAxesForScreen,
   useControls: usePicoControls,
   // Pico sizes everything with container queries against a sized
   // [data-pico].pico-screen.intrinsic (640px design width = 100cqw) and derives

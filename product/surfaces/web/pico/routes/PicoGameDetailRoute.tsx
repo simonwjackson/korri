@@ -4,12 +4,14 @@ import { useInputAction } from "@platform/react/input/use-input-action"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import { usePicoDataPreview } from "../pico-data-preview"
 import { VariantGameDetail } from "../VariantGameDetail"
 import { PicoFallback } from "./PicoFallback"
 import { picoGameFromCatalog } from "./pico-catalog-view"
 
 export function PicoGameDetailRoute() {
-  const snapshot = useAtomValue(catalogSnapshotAtom)
+  const live = useAtomValue(catalogSnapshotAtom)
+  const snapshot = usePicoDataPreview() ?? live
   const params = useParams({ strict: false })
   const navigate = useNavigate()
   const launch = useLibraryLaunchController()
