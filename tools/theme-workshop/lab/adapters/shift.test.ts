@@ -12,6 +12,11 @@ import {
 } from "@product/surfaces/web/shift/shift-catalog-preview"
 import { shiftCatalogStateSamples } from "@product/surfaces/web/shift/shift-catalog-state-samples"
 import {
+  foregroundStateSamples,
+  getShiftForegroundPreview,
+  setShiftForegroundPreview,
+} from "@product/surfaces/web/shift/shift-foreground-preview"
+import {
   getShiftLaunchPreview,
   launchStateSamples,
   setShiftLaunchPreview,
@@ -50,43 +55,71 @@ describe("shift home state axes", () => {
   afterEach(() => {
     setShiftCatalogPreview(null)
     setShiftLaunchPreview(null)
+    setShiftForegroundPreview(null)
   })
 
   const home = () =>
     resolveLabSurfaceAdapter("shift").axesForScreen?.("/") ?? []
 
+  const homeAxis = (id: string) => {
+    const axis = home().find(candidate => candidate.id === id)
+    expect(axis).toBeDefined()
+    if (!axis) throw new Error(`Missing axis ${id}`)
+    return axis
+  }
+
   it("exposes Data and Launch axes derived from their machine tags", () => {
     const axes = home()
-    expect(axes.map(axis => axis.id)).toEqual(["data", "launch"])
+    expect(axes.map(axis => axis.id)).toEqual(["data", "launch", "foreground"])
 
-    const data = axes.find(axis => axis.id === "data")!
-    const launch = axes.find(axis => axis.id === "launch")!
+    const data = homeAxis("data")
+    const launch = homeAxis("launch")
+    const foreground = homeAxis("foreground")
+    expect(data.kind).toBe("single")
+    expect(launch.kind).toBe("single")
+    expect(launch.parent).toEqual({ axisId: "data", whenStates: ["Ready"] })
+    expect(foreground.kind).toBe("single")
+    expect(foreground.parent).toBeUndefined()
     expect(data.states.map(state => state.id)).toEqual([
       ...ShiftCatalogState.tags,
     ])
     expect(launch.states.map(state => state.id)).toEqual([...LaunchState.tags])
+    expect(foreground.states.map(state => state.id)).toEqual([
+      "Ready",
+      "Preparing",
+      "Running",
+      "Cooling",
+      "Recovering",
+      "Unknown",
+      "LoadError",
+    ])
   })
 
   it("greys the Launch axis unless Data is Ready (nested axes)", () => {
-    const launch = home().find(axis => axis.id === "launch")!
-    expect(axisEnabled(launch, { data: "Ready" })).toBe(true)
-    expect(axisEnabled(launch, { data: "Empty" })).toBe(false)
+    const launch = homeAxis("launch")
+    expect(
+      axisEnabled(launch, { data: { kind: "single", value: "Ready" } }),
+    ).toBe(true)
+    expect(
+      axisEnabled(launch, { data: { kind: "single", value: "Empty" } }),
+    ).toBe(false)
   })
 
   it("drives the catalog preview singleton on pin and clears it on release", () => {
-    const data = home().find(axis => axis.id === "data")!
+    const data = homeAxis("data")
 
     data.pin("Empty")
     const pinned = getShiftCatalogPreview()
     expect(pinned).not.toBeNull()
-    expect(ShiftCatalogState.fromResult(pinned!)._tag).toBe("Empty")
+    if (!pinned) throw new Error("Expected catalog preview to be pinned")
+    expect(ShiftCatalogState.fromResult(pinned)._tag).toBe("Empty")
 
     data.release()
     expect(getShiftCatalogPreview()).toBeNull()
   })
 
   it("drives the launch preview singleton on pin and clears it on release", () => {
-    const launch = home().find(axis => axis.id === "launch")!
+    const launch = homeAxis("launch")
 
     launch.pin("Launching")
     expect(getShiftLaunchPreview()?._tag).toBe("Launching")
@@ -95,8 +128,18 @@ describe("shift home state axes", () => {
     expect(getShiftLaunchPreview()).toBeNull()
   })
 
+  it("drives the foreground preview singleton on pin and clears it on release", () => {
+    const foreground = homeAxis("foreground")
+
+    foreground.pin("Cooling")
+    expect(getShiftForegroundPreview()?._tag).toBe("Cooling")
+
+    foreground.release()
+    expect(getShiftForegroundPreview()).toBeNull()
+  })
+
   it("exposes no axes for screens without a state machine", () => {
-    expect(home().length).toBe(2)
+    expect(home().length).toBe(3)
     expect(
       resolveLabSurfaceAdapter("shift").axesForScreen?.("/game/hollow-knight"),
     ).toEqual([])
@@ -107,23 +150,41 @@ describe("shift capture-back coordinate", () => {
   afterEach(() => {
     setShiftCatalogPreview(null)
     setShiftLaunchPreview(null)
+    setShiftForegroundPreview(null)
   })
 
   const capture = () =>
     resolveLabSurfaceAdapter("shift").captureCoordinate?.("/")
 
   it("captures the seed's resting coordinate when nothing is pinned", () => {
-    expect(capture()).toEqual({ data: "Ready", launch: "Idle" })
+    expect(capture()).toEqual({
+      data: "Ready",
+      launch: "Idle",
+      foreground: "Ready",
+    })
   })
 
   it("captures a pinned Ready + Launching coordinate", () => {
     setShiftCatalogPreview(shiftCatalogStateSamples.Ready())
     setShiftLaunchPreview(launchStateSamples.Launching())
-    expect(capture()).toEqual({ data: "Ready", launch: "Launching" })
+    expect(capture()).toEqual({
+      data: "Ready",
+      launch: "Launching",
+      foreground: "Ready",
+    })
   })
 
   it("maps Launch to Live when Data is not Ready (nesting round-trips)", () => {
     setShiftCatalogPreview(shiftCatalogStateSamples.Empty())
-    expect(capture()).toEqual({ data: "Empty", launch: LAB_AXIS_LIVE })
+    expect(capture()).toEqual({
+      data: "Empty",
+      launch: LAB_AXIS_LIVE,
+      foreground: "Ready",
+    })
+  })
+
+  it("captures a pinned foreground coordinate", () => {
+    setShiftForegroundPreview(foregroundStateSamples.Cooling())
+    expect(capture()?.foreground).toBe("Cooling")
   })
 })

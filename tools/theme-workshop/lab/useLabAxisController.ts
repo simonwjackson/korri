@@ -4,7 +4,9 @@ import {
   axisEnabled,
   isAxisLive,
   LAB_AXIS_LIVE,
-  type LabAxisActiveMap,
+  type LabAxisActive,
+  type LabAxisCoordinate,
+  type LabScreenActive,
   type LabStateAxis,
   liveActiveMap,
   pinAxisActive,
@@ -15,7 +17,7 @@ import type { LabSurfaceAdapter } from "./surface-registry"
 
 export interface LabAxisController {
   readonly screenAxes: readonly LabStateAxis[]
-  readonly activeByAxis: LabAxisActiveMap
+  readonly activeByAxis: LabScreenActive
   readonly mode: "inspect" | "live"
   readonly pinAxis: (axisId: string, stateId: string) => void
   readonly liveAxis: (axisId: string) => void
@@ -23,6 +25,36 @@ export interface LabAxisController {
    * supports it; undefined otherwise (the States panel hides the control). */
   readonly pinCurrent: (() => void) | undefined
   readonly toggleMode: () => void
+}
+
+function multiSetFromCoordinate(value: LabAxisCoordinate | undefined) {
+  if (!value || value === LAB_AXIS_LIVE) return new Set<string>()
+  if (typeof value === "string") return new Set([value])
+  return new Set(value)
+}
+
+function activeFromCoordinate(
+  axis: LabStateAxis,
+  value: LabAxisCoordinate | undefined,
+): LabAxisActive {
+  if (axis.kind === "multi")
+    return { kind: "multi", on: multiSetFromCoordinate(value) }
+  return {
+    kind: "single",
+    value: typeof value === "string" ? value : LAB_AXIS_LIVE,
+  }
+}
+
+function applyPreview(axis: LabStateAxis, active: LabAxisActive) {
+  if (isAxisLive(active)) {
+    axis.release()
+    return
+  }
+  if (active.kind === "single") {
+    axis.pin(active.value)
+    return
+  }
+  for (const stateId of active.on) axis.pin(stateId)
 }
 
 /**
@@ -57,11 +89,11 @@ export function useLabAxisController(
     [adapter, activeScreenPath, isPageSelection],
   )
 
-  const [activeByAxis, setActiveByAxis] = useState<LabAxisActiveMap>(() =>
+  const [activeByAxis, setActiveByAxis] = useState<LabScreenActive>(() =>
     liveActiveMap(screenAxes),
   )
   // Pins remembered while in Live, so toggling back to Inspect restores them.
-  const [rememberedByAxis, setRememberedByAxis] = useState<LabAxisActiveMap>({})
+  const [rememberedByAxis, setRememberedByAxis] = useState<LabScreenActive>({})
   // Mode is derived: any pinned axis ⇒ Inspect; everything Live ⇒ Live.
   const mode: "inspect" | "live" = screenAxes.some(
     axis => !isAxisLive(activeByAxis[axis.id]),
@@ -72,12 +104,12 @@ export function useLabAxisController(
   // Commit a new active map, first releasing any nested axis that is no longer
   // meaningful (e.g. Launch once Data leaves Ready) so a stale pin can't strand
   // a greyed-out, unreleasable overlay.
-  const applyAxisMap = (next: LabAxisActiveMap) => {
+  const applyAxisMap = (next: LabScreenActive) => {
     let result = next
     for (const axis of screenAxes) {
       if (!axisEnabled(axis, result) && !isAxisLive(result[axis.id])) {
         axis.release()
-        result = releaseAxisActive(result, axis.id)
+        result = releaseAxisActive(result, axis)
       }
     }
     setActiveByAxis(result)
@@ -86,14 +118,24 @@ export function useLabAxisController(
   const pinAxis = (axisId: string, stateId: string) => {
     const axis = screenAxes.find(candidate => candidate.id === axisId)
     if (!axis) return
+    const current = activeByAxis[axisId]
+    if (
+      axis.kind === "multi" &&
+      current?.kind === "multi" &&
+      current.on.has(stateId)
+    ) {
+      axis.release(stateId)
+      applyAxisMap(releaseAxisActive(activeByAxis, axis, stateId))
+      return
+    }
     axis.pin(stateId)
-    applyAxisMap(pinAxisActive(activeByAxis, axisId, stateId))
+    applyAxisMap(pinAxisActive(activeByAxis, axis, stateId))
   }
   const liveAxis = (axisId: string) => {
     const axis = screenAxes.find(candidate => candidate.id === axisId)
     if (!axis) return
     axis.release()
-    applyAxisMap(releaseAxisActive(activeByAxis, axisId))
+    applyAxisMap(releaseAxisActive(activeByAxis, axis))
   }
 
   // Capture-back: read the running surface's current coordinate and map it onto
@@ -101,17 +143,13 @@ export function useLabAxisController(
   const pinCurrent = () => {
     const captured = adapter.captureCoordinate?.(activeScreenPath)
     if (!captured) return
+    const next: Record<string, LabAxisActive> = { ...activeByAxis }
     for (const axis of screenAxes) {
-      const tag = captured[axis.id]
-      if (tag && !isAxisLive(tag)) axis.pin(tag)
-      else axis.release()
+      const active = activeFromCoordinate(axis, captured[axis.id])
+      applyPreview(axis, active)
+      next[axis.id] = active
     }
-    setActiveByAxis(prev => {
-      const next = { ...prev }
-      for (const axis of screenAxes)
-        next[axis.id] = captured[axis.id] ?? LAB_AXIS_LIVE
-      return next
-    })
+    applyAxisMap(next)
   }
 
   // The global headline: Live releases every axis (hands the running app the
@@ -121,7 +159,8 @@ export function useLabAxisController(
     if (mode === "live") {
       for (const axis of screenAxes) {
         const remembered = rememberedByAxis[axis.id]
-        if (remembered && !isAxisLive(remembered)) axis.pin(remembered)
+        if (remembered && !isAxisLive(remembered))
+          applyPreview(axis, remembered)
       }
       setActiveByAxis(
         restorePinsActive(screenAxes, activeByAxis, rememberedByAxis),

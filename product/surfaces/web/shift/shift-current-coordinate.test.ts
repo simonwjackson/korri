@@ -1,20 +1,33 @@
-import { afterEach, describe, expect, it } from "bun:test"
+import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import { setShiftCatalogPreview } from "./shift-catalog-preview"
 import { shiftCatalogStateSamples } from "./shift-catalog-state-samples"
 import { readShiftCurrentCoordinate } from "./shift-current-coordinate"
 import {
+  foregroundStateSamples,
+  setShiftForegroundPreview,
+} from "./shift-foreground-preview"
+import {
   launchStateSamples,
   setShiftLaunchPreview,
 } from "./shift-launch-preview"
-import { setShiftLiveData, setShiftLiveLaunch } from "./shift-live-coordinate"
+import {
+  setShiftLiveData,
+  setShiftLiveForeground,
+  setShiftLiveLaunch,
+} from "./shift-live-coordinate"
 
-afterEach(() => {
+function resetCoordinateSeams() {
   setShiftCatalogPreview(null)
   setShiftLaunchPreview(null)
+  setShiftForegroundPreview(null)
   // Reset the live-coordinate store to the seed resting state between tests.
   setShiftLiveData("Ready")
   setShiftLiveLaunch("Idle")
-})
+  setShiftLiveForeground("Ready")
+}
+
+beforeEach(resetCoordinateSeams)
+afterEach(resetCoordinateSeams)
 
 describe("readShiftCurrentCoordinate", () => {
   it("reports the seed's resting state when nothing is pinned (Live)", () => {
@@ -22,6 +35,7 @@ describe("readShiftCurrentCoordinate", () => {
       route: "/",
       data: "Ready",
       launch: "Idle",
+      foreground: "Ready",
     })
   })
 
@@ -44,7 +58,19 @@ describe("readShiftCurrentCoordinate", () => {
       route: "/",
       data: "Ready",
       launch: "Launching",
+      foreground: "Ready",
     })
+  })
+
+  it("captures a live foreground gate state the route published (no pin)", () => {
+    setShiftLiveForeground("Cooling")
+    expect(readShiftCurrentCoordinate("/").foreground).toBe("Cooling")
+  })
+
+  it("prefers the foreground pin over the live store", () => {
+    setShiftLiveForeground("Cooling")
+    setShiftForegroundPreview(foregroundStateSamples.Recovering())
+    expect(readShiftCurrentCoordinate("/").foreground).toBe("Recovering")
   })
 
   it("captures the pinned data tag for a non-Ready state", () => {

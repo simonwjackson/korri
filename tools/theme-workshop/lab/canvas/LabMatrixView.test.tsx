@@ -52,6 +52,7 @@ function context(): LabContextValue {
 
 const dataAxis: LabStateAxis = {
   id: "data",
+  kind: "single",
   label: "Data",
   liveLabel: "Auto",
   states: [
@@ -66,6 +67,7 @@ const dataAxis: LabStateAxis = {
 
 const launchAxis: LabStateAxis = {
   id: "launch",
+  kind: "single",
   label: "Launch",
   liveLabel: "Auto",
   states: [
@@ -74,9 +76,23 @@ const launchAxis: LabStateAxis = {
   ],
   pin: () => {},
   release: () => {},
-  enabledWhen: active => active.data === "Ready",
+  parent: { axisId: "data", whenStates: ["Ready"] },
   disabledHint: "Only while Data = Ready",
   renderSample: tag => <div data-testid={`launch-${tag}`}>launch {tag}</div>,
+}
+
+const overlaysAxis: LabStateAxis = {
+  id: "overlays",
+  kind: "multi",
+  label: "Overlays",
+  liveLabel: "Auto",
+  states: [
+    { id: "Notice", label: "Notice" },
+    { id: "Toast", label: "Toast" },
+  ],
+  pin: () => {},
+  release: () => {},
+  renderSample: tag => <div data-testid={`overlays-${tag}`}>overlay {tag}</div>,
 }
 
 function renderMatrix(axes: readonly LabStateAxis[]) {
@@ -136,10 +152,16 @@ describe("LabMatrixView axis fan-out", () => {
     expect(screen.queryByText("Only while Data = Ready")).toBeNull()
   })
 
-  it("offers no second axis to cross with when the screen has one axis", () => {
-    renderMatrix([dataAxis])
+  it("excludes multi axes from row and column fan-out choices", () => {
+    renderMatrix([dataAxis, launchAxis, overlaysAxis])
+    expect(screen.queryByRole("option", { name: "Overlays" })).toBeNull()
+    expect(screen.queryByTestId("overlays-Notice")).toBeNull()
+  })
+
+  it("offers no second axis to cross with when the screen has one single axis", () => {
+    renderMatrix([dataAxis, overlaysAxis])
     expect(screen.getByTestId("data-Ready")).toBeTruthy()
-    // The Rows selector only has the "none" option.
+    // The Rows selector only has the "none" option because the multi axis is not selectable.
     const rowSelect = screen.getByDisplayValue("—") as HTMLSelectElement
     expect(rowSelect.querySelectorAll("option").length).toBe(1)
   })

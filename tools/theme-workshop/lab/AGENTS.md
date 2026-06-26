@@ -6,16 +6,26 @@ device lab. It is never bundled with `product/apps/*`.
 ## State axes + Inspect ⇄ Live
 
 A surface's screens **are** its page parts. Each page exposes its real
-state-machine **axes** — Shift Home has a `Data` axis (`ShiftCatalogState`) and a
-`Launch` axis (`LaunchState`); Pico Home has a `Data` axis. There is no fixed,
-global state vocabulary: an axis's states are **derived from the machine's tags**
-(`axisOptionsFromTags(Machine.tags)`), never hand-listed.
+state-machine **axes** — Shift Home has a `Data` region (`ShiftCatalogState`), a
+nested `Launch` axis (`LaunchState` under `Data:Ready`), and a parallel
+`Foreground` region (`ForegroundSessionGateState`); Pico Home has a `Data`
+region. There is no fixed, global state vocabulary: an axis's states are
+**derived from the machine's tags** (`axisOptionsFromTags(Machine.tags)` or an
+exhaustive sample table's keys), never hand-listed.
+
+A region is just a parentless axis. `LabStateAxis.kind` declares whether the axis
+is `single` (XOR: one pinned state or Auto) or `multi` (0..n pinned states, shown
+as checkboxes). Nesting is structural: child axes declare
+`parent: { axisId, whenStates }`, so the panel can reveal children under the
+parent state and the Matrix can suppress impossible cells. Do not use opaque
+runtime predicates for nesting.
 
 A single global **Inspect ⇄ Live** mode is the only difference between a frozen,
 addressable coordinate and the running, navigable surface:
 
-- **Inspect** pins an axis to one state.
-- **Live** releases the axis and lets the mounted surface run.
+- **Inspect** pins at least one axis to one state (`single`) or a set of states
+  (`multi`).
+- **Live** releases every axis and lets the mounted surface run.
 
 Switching a single axis between pinned and live needs **no remount**.
 
@@ -32,10 +42,10 @@ const snapshot = useShiftCatalogPreview() ?? live
 ```
 
 The singletons (`shift-catalog-preview`, `shift-launch-preview`,
-`pico-data-preview`) expose `set*`, `use*` (a `useSyncExternalStore` hook), and a
-non-reactive `get*` for capture-back. A **sample table** keyed by every machine
-tag supplies both the inspect pin and the Matrix fan-out render, so the static
-fan and the live pin can never drift.
+`shift-foreground-preview`, `pico-data-preview`) expose `set*`, `use*` (a
+`useSyncExternalStore` hook), and a non-reactive `get*` for capture-back. A
+**sample table** keyed by every machine tag supplies both the inspect pin and the
+Matrix fan-out render, so the static fan and the live pin can never drift.
 
 ## Adding a new surface's state machine
 
@@ -45,9 +55,12 @@ To expose a new state machine as an axis, follow the existing pattern:
    value per tag) + the live route reads `preview ?? live`.
 2. **Lab side:** declare a `LabStateAxis` in the surface adapter
    (`adapters/<surface>-axes.tsx`) wiring `pin`/`release` to the singleton +
-   sample table, with `states` derived from the machine tags. Nested axes use
-   `enabledWhen` + `disabledHint`. Provide `renderSample(tag)` for the Matrix.
-3. Optionally implement `captureCoordinate` for "Pin current" (Live → Inspect).
+   sample table, with `states` derived from the machine tags. Set `kind` to
+   `single` or `multi`. For nesting, declare `parent: { axisId, whenStates }`.
+   Provide `renderSample(tag)` for the Matrix on single axes.
+3. Optionally implement `captureCoordinate` for "Pin current" (Live → Inspect),
+   returning per-axis tags for `single` axes and tag arrays/sets for `multi`
+   axes.
 
 ## Boundary
 

@@ -1,12 +1,24 @@
 import {
   axisEnabled,
   isAxisLive,
-  type LabAxisActiveMap,
+  type LabAxisActive,
+  type LabScreenActive,
   type LabStateAxis,
 } from "../model/lab-state-axis"
 
-/** One state axis rendered as a group: an Auto chip plus its states, greyed
- * with a reason when its nesting (`enabledWhen`) is not satisfied. */
+function stateIsOn(
+  axis: LabStateAxis,
+  active: LabAxisActive | undefined,
+  stateId: string,
+) {
+  if (!active) return false
+  if (axis.kind === "multi")
+    return active.kind === "multi" && active.on.has(stateId)
+  return active.kind === "single" && active.value === stateId
+}
+
+/** One state axis rendered as a group: an Auto chip plus its states. Single axes
+ * are radio-like choices; multi axes are checkbox-like toggles. */
 export function LabStatesAxisGroup({
   axis,
   active,
@@ -14,7 +26,7 @@ export function LabStatesAxisGroup({
   onLive,
 }: {
   readonly axis: LabStateAxis
-  readonly active: LabAxisActiveMap
+  readonly active: LabScreenActive
   readonly onPin: (axisId: string, stateId: string) => void
   readonly onLive: (axisId: string) => void
 }) {
@@ -38,22 +50,29 @@ export function LabStatesAxisGroup({
         >
           {axis.liveLabel}
         </button>
-        {axis.states.map(state => (
-          <button
-            key={state.id}
-            type="button"
-            className={`pt-axis-chip${value === state.id ? " is-on" : ""}`}
-            disabled={!enabled}
-            aria-pressed={value === state.id}
-            onClick={() => onPin(axis.id, state.id)}
-          >
-            <span
-              className={`pt-state-dot is-${state.id.toLowerCase()}`}
-              aria-hidden
-            />
-            {state.label}
-          </button>
-        ))}
+        {axis.states.map(state => {
+          const on = stateIsOn(axis, value, state.id)
+          const multiProps =
+            axis.kind === "multi"
+              ? ({ role: "checkbox", "aria-checked": on } as const)
+              : ({ "aria-pressed": on } as const)
+          return (
+            <button
+              key={state.id}
+              type="button"
+              className={`pt-axis-chip${on ? " is-on" : ""}`}
+              disabled={!enabled}
+              onClick={() => onPin(axis.id, state.id)}
+              {...multiProps}
+            >
+              <span
+                className={`pt-state-dot is-${state.id.toLowerCase()}`}
+                aria-hidden
+              />
+              {state.label}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

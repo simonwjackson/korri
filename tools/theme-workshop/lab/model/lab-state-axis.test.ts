@@ -4,6 +4,7 @@ import {
   axisOptionsFromTags,
   isAxisLive,
   LAB_AXIS_LIVE,
+  type LabScreenActive,
   type LabStateAxis,
   liveActiveMap,
   pinAxisActive,
@@ -13,8 +14,19 @@ import {
   restorePinsActive,
 } from "./lab-state-axis"
 
-const axis = (id: string): LabStateAxis => ({
+const singleAxis = (id: string): LabStateAxis => ({
   id,
+  kind: "single",
+  label: id,
+  liveLabel: "Auto",
+  states: [],
+  pin: () => {},
+  release: () => {},
+})
+
+const multiAxis = (id: string): LabStateAxis => ({
+  id,
+  kind: "multi",
   label: id,
   liveLabel: "Auto",
   states: [],
@@ -39,31 +51,58 @@ describe("axisOptionsFromTags", () => {
 })
 
 describe("isAxisLive", () => {
-  it("treats an unset value or the live sentinel as live", () => {
+  it("treats an unset value or the live sentinel as live for a single axis", () => {
     expect(isAxisLive(undefined)).toBe(true)
-    expect(isAxisLive(LAB_AXIS_LIVE)).toBe(true)
-    expect(isAxisLive("Ready")).toBe(false)
+    expect(isAxisLive({ kind: "single", value: LAB_AXIS_LIVE })).toBe(true)
+    expect(isAxisLive({ kind: "single", value: "Ready" })).toBe(false)
+  })
+
+  it("treats an empty multi set as live", () => {
+    expect(isAxisLive({ kind: "multi", on: new Set() })).toBe(true)
+    expect(isAxisLive({ kind: "multi", on: new Set(["Toast"]) })).toBe(false)
   })
 })
 
 describe("axisEnabled", () => {
   const launch: LabStateAxis = {
     id: "launch",
+    kind: "single",
     label: "Launch",
     liveLabel: "Auto",
     states: [],
     pin: () => {},
     release: () => {},
-    enabledWhen: active => active.data === "Ready",
+    parent: { axisId: "data", whenStates: ["Ready"] },
   }
 
-  it("honors enabledWhen against the active map", () => {
-    expect(axisEnabled(launch, { data: "Ready" })).toBe(true)
-    expect(axisEnabled(launch, { data: "Empty" })).toBe(false)
+  it("honors structural parents against the active map", () => {
+    expect(
+      axisEnabled(launch, { data: { kind: "single", value: "Ready" } }),
+    ).toBe(true)
+    expect(
+      axisEnabled(launch, { data: { kind: "single", value: "Empty" } }),
+    ).toBe(false)
   })
 
-  it("is always enabled when no enabledWhen is declared", () => {
-    expect(axisEnabled(axis("data"), {})).toBe(true)
+  it("is always enabled when no parent is declared", () => {
+    expect(axisEnabled(singleAxis("data"), {})).toBe(true)
+  })
+
+  it("can be enabled by a multi parent that has a required state on", () => {
+    const child: LabStateAxis = {
+      ...singleAxis("child"),
+      parent: { axisId: "overlays", whenStates: ["Notice"] },
+    }
+    expect(
+      axisEnabled(child, {
+        overlays: { kind: "multi", on: new Set(["Notice", "Toast"]) },
+      }),
+    ).toBe(true)
+    expect(
+      axisEnabled(child, {
+        overlays: { kind: "multi", on: new Set(["Toast"]) },
+      }),
+    ).toBe(false)
   })
 })
 
@@ -91,34 +130,66 @@ describe("pinFromTable / renderFromTable", () => {
 
 describe("active map helpers", () => {
   it("starts every axis Live", () => {
-    expect(liveActiveMap([axis("data"), axis("launch")])).toEqual({
-      data: LAB_AXIS_LIVE,
-      launch: LAB_AXIS_LIVE,
+    expect(liveActiveMap([singleAxis("data"), multiAxis("overlays")])).toEqual({
+      data: { kind: "single", value: LAB_AXIS_LIVE },
+      overlays: { kind: "multi", on: new Set() },
     })
   })
 
-  it("pins one axis and leaves the others untouched", () => {
-    const start = liveActiveMap([axis("data"), axis("launch")])
-    const next = pinAxisActive(start, "data", "Empty")
-    expect(next).toEqual({ data: "Empty", launch: LAB_AXIS_LIVE })
-    expect(start.data).toBe(LAB_AXIS_LIVE)
+  it("pins one single axis and leaves the others untouched", () => {
+    const data = singleAxis("data")
+    const launch = singleAxis("launch")
+    const start = liveActiveMap([data, launch])
+    const next = pinAxisActive(start, data, "Empty")
+    expect(next).toEqual({
+      data: { kind: "single", value: "Empty" },
+      launch: { kind: "single", value: LAB_AXIS_LIVE },
+    })
+    expect(start.data).toEqual({ kind: "single", value: LAB_AXIS_LIVE })
   })
 
-  it("releases one axis back to Live", () => {
-    const pinned = { data: "Empty", launch: "Launching" }
-    expect(releaseAxisActive(pinned, "launch")).toEqual({
-      data: "Empty",
-      launch: LAB_AXIS_LIVE,
+  it("adds and removes individual states for a multi axis", () => {
+    const overlays = multiAxis("overlays")
+    const start = liveActiveMap([overlays])
+    const withNotice = pinAxisActive(start, overlays, "Notice")
+    const withBoth = pinAxisActive(withNotice, overlays, "Toast")
+    expect(withBoth.overlays).toEqual({
+      kind: "multi",
+      on: new Set(["Notice", "Toast"]),
+    })
+
+    const withoutNotice = releaseAxisActive(withBoth, overlays, "Notice")
+    expect(withoutNotice.overlays).toEqual({
+      kind: "multi",
+      on: new Set(["Toast"]),
+    })
+    expect(
+      isAxisLive(releaseAxisActive(withoutNotice, overlays).overlays),
+    ).toBe(true)
+  })
+
+  it("releases one single axis back to Live", () => {
+    const launch = singleAxis("launch")
+    const pinned: LabScreenActive = {
+      data: { kind: "single", value: "Empty" },
+      launch: { kind: "single", value: "Launching" },
+    }
+    expect(releaseAxisActive(pinned, launch)).toEqual({
+      data: { kind: "single", value: "Empty" },
+      launch: { kind: "single", value: LAB_AXIS_LIVE },
     })
   })
 
-  it("restores remembered pins on the Inspect toggle and lives the rest", () => {
-    const axes = [axis("data"), axis("launch")]
+  it("restores remembered single pins and multi sets on the Inspect toggle", () => {
+    const axes = [singleAxis("data"), multiAxis("overlays")]
     const live = liveActiveMap(axes)
-    const remembered = { data: "Empty", launch: LAB_AXIS_LIVE }
+    const remembered: LabScreenActive = {
+      data: { kind: "single", value: "Empty" },
+      overlays: { kind: "multi", on: new Set(["Notice"]) },
+    }
     expect(restorePinsActive(axes, live, remembered)).toEqual({
-      data: "Empty",
-      launch: LAB_AXIS_LIVE,
+      data: { kind: "single", value: "Empty" },
+      overlays: { kind: "multi", on: new Set(["Notice"]) },
     })
   })
 })

@@ -5,10 +5,14 @@ import { LabStatesPanel } from "./LabStatesPanel"
 
 afterEach(() => cleanup())
 
+const liveSingle = { kind: "single" as const, value: LAB_AXIS_LIVE }
+const liveMulti = { kind: "multi" as const, on: new Set<string>() }
+
 function axes(): readonly LabStateAxis[] {
   return [
     {
       id: "data",
+      kind: "single",
       label: "Data",
       liveLabel: "Auto",
       states: [
@@ -21,6 +25,7 @@ function axes(): readonly LabStateAxis[] {
     },
     {
       id: "launch",
+      kind: "single",
       label: "Launch",
       liveLabel: "Auto",
       states: [
@@ -29,8 +34,20 @@ function axes(): readonly LabStateAxis[] {
       ],
       pin: () => {},
       release: () => {},
-      enabledWhen: active => active.data === "Ready",
+      parent: { axisId: "data", whenStates: ["Ready"] },
       disabledHint: "Only while Data = Ready",
+    },
+    {
+      id: "overlays",
+      kind: "multi",
+      label: "Overlays",
+      liveLabel: "Auto",
+      states: [
+        { id: "Notice", label: "Notice" },
+        { id: "Toast", label: "Toast" },
+      ],
+      pin: () => {},
+      release: () => {},
     },
   ]
 }
@@ -41,11 +58,15 @@ const noopPin = (_: string, __: string) => {}
 const noopLive = (_: string) => {}
 
 describe("LabStatesPanel axis groups", () => {
-  it("renders one group per axis with its machine states", () => {
-    render(
+  it("renders parentless axes as separate region groups", () => {
+    const { container } = render(
       <LabStatesPanel
         axes={axes()}
-        activeByAxis={{ data: LAB_AXIS_LIVE, launch: LAB_AXIS_LIVE }}
+        activeByAxis={{
+          data: liveSingle,
+          launch: liveSingle,
+          overlays: liveMulti,
+        }}
         onPin={noopPin}
         onLive={noopLive}
         states={[]}
@@ -55,17 +76,20 @@ describe("LabStatesPanel axis groups", () => {
     )
 
     expect(screen.getByText("Data")).toBeTruthy()
-    expect(screen.getByText("Launch")).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Empty" })).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Launching" })).toBeTruthy()
+    expect(screen.getByText("Overlays")).toBeTruthy()
+    expect(container.querySelectorAll(".pt-axis-region")).toHaveLength(2)
   })
 
-  it("pins an axis when a state chip is clicked", () => {
+  it("pins a single axis when a state chip is clicked", () => {
     const onPin = mock((_: string, __: string) => undefined)
     render(
       <LabStatesPanel
         axes={axes()}
-        activeByAxis={{ data: "Ready", launch: LAB_AXIS_LIVE }}
+        activeByAxis={{
+          data: { kind: "single", value: "Ready" },
+          launch: liveSingle,
+          overlays: liveMulti,
+        }}
         onPin={onPin}
         onLive={noopLive}
         states={[]}
@@ -83,7 +107,11 @@ describe("LabStatesPanel axis groups", () => {
     render(
       <LabStatesPanel
         axes={axes()}
-        activeByAxis={{ data: "Empty", launch: LAB_AXIS_LIVE }}
+        activeByAxis={{
+          data: { kind: "single", value: "Empty" },
+          launch: liveSingle,
+          overlays: liveMulti,
+        }}
         onPin={noopPin}
         onLive={onLive}
         states={[]}
@@ -92,18 +120,21 @@ describe("LabStatesPanel axis groups", () => {
       />,
     )
 
-    // The first "Auto" chip belongs to the Data axis.
     const autoButtons = screen.getAllByRole("button", { name: "Auto" })
     expect(autoButtons.length).toBeGreaterThan(0)
     fireEvent.click(autoButtons[0])
     expect(onLive).toHaveBeenCalledWith("data")
   })
 
-  it("greys the Launch axis and disables its chips unless Data is Ready", () => {
+  it("hides a nested axis until its parent state enables it", () => {
     render(
       <LabStatesPanel
         axes={axes()}
-        activeByAxis={{ data: "Empty", launch: LAB_AXIS_LIVE }}
+        activeByAxis={{
+          data: { kind: "single", value: "Empty" },
+          launch: liveSingle,
+          overlays: liveMulti,
+        }}
         onPin={noopPin}
         onLive={noopLive}
         states={[]}
@@ -112,18 +143,19 @@ describe("LabStatesPanel axis groups", () => {
       />,
     )
 
-    expect(screen.getByText("Only while Data = Ready")).toBeTruthy()
-    expect(
-      (screen.getByRole("button", { name: "Launching" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true)
+    expect(screen.queryByText("Launch")).toBeNull()
+    expect(screen.queryByRole("button", { name: "Launching" })).toBeNull()
   })
 
-  it("enables Launch chips once Data is Ready", () => {
+  it("reveals a nested axis once its parent state enables it", () => {
     render(
       <LabStatesPanel
         axes={axes()}
-        activeByAxis={{ data: "Ready", launch: LAB_AXIS_LIVE }}
+        activeByAxis={{
+          data: { kind: "single", value: "Ready" },
+          launch: liveSingle,
+          overlays: liveMulti,
+        }}
         onPin={noopPin}
         onLive={noopLive}
         states={[]}
@@ -132,11 +164,37 @@ describe("LabStatesPanel axis groups", () => {
       />,
     )
 
+    expect(screen.getByText("Launch")).toBeTruthy()
     expect(
       (screen.getByRole("button", { name: "Launching" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false)
-    expect(screen.queryByText("Only while Data = Ready")).toBeNull()
+  })
+
+  it("renders multi axes as checkboxes that can hold multiple active states", () => {
+    const onPin = mock((_: string, __: string) => undefined)
+    render(
+      <LabStatesPanel
+        axes={axes()}
+        activeByAxis={{
+          data: liveSingle,
+          launch: liveSingle,
+          overlays: { kind: "multi", on: new Set(["Notice", "Toast"]) },
+        }}
+        onPin={onPin}
+        onLive={noopLive}
+        states={[]}
+        activeId=""
+        onSelect={noop}
+      />,
+    )
+
+    const notice = screen.getByRole("checkbox", { name: "Notice" })
+    const toast = screen.getByRole("checkbox", { name: "Toast" })
+    expect(notice.getAttribute("aria-checked")).toBe("true")
+    expect(toast.getAttribute("aria-checked")).toBe("true")
+    fireEvent.click(notice)
+    expect(onPin).toHaveBeenCalledWith("overlays", "Notice")
   })
 
   it("captures the current coordinate when Pin current is clicked", () => {
@@ -144,7 +202,11 @@ describe("LabStatesPanel axis groups", () => {
     render(
       <LabStatesPanel
         axes={axes()}
-        activeByAxis={{ data: LAB_AXIS_LIVE, launch: LAB_AXIS_LIVE }}
+        activeByAxis={{
+          data: liveSingle,
+          launch: liveSingle,
+          overlays: liveMulti,
+        }}
         onPin={noopPin}
         onLive={noopLive}
         onPinCurrent={onPinCurrent}
@@ -162,7 +224,11 @@ describe("LabStatesPanel axis groups", () => {
     render(
       <LabStatesPanel
         axes={axes()}
-        activeByAxis={{ data: LAB_AXIS_LIVE, launch: LAB_AXIS_LIVE }}
+        activeByAxis={{
+          data: liveSingle,
+          launch: liveSingle,
+          overlays: liveMulti,
+        }}
         onPin={noopPin}
         onLive={noopLive}
         states={[]}

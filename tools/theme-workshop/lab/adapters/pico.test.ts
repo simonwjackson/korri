@@ -53,11 +53,15 @@ describe("pico home data axis", () => {
   it("exposes a single Data axis derived from the pico data tags", () => {
     const axes = home()
     expect(axes.map(axis => axis.id)).toEqual(["data"])
+    expect(axes[0]?.kind).toBe("single")
+    expect(axes[0]?.parent).toBeUndefined()
     expect(axes[0]?.states.map(state => state.id)).toEqual([...PICO_DATA_TAGS])
   })
 
   it("drives the pico data preview singleton on pin and clears on release", () => {
-    const data = home()[0]!
+    const data = home()[0]
+    expect(data).toBeDefined()
+    if (!data) throw new Error("Expected Pico data axis")
     data.pin("Empty")
     expect(getPicoDataPreview()).not.toBeNull()
 

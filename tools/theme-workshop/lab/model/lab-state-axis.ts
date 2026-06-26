@@ -4,9 +4,9 @@ import type { ReactNode } from "react"
 /**
  * A page part exposes one or more named state AXES — each a real state machine
  * the surface can be driven through (e.g. Shift Home's catalog Data axis and its
- * Launch axis). The lab renders each axis as a group with an "Auto" chip plus
- * its states; pinning a state drives the surface's production-inert preview
- * singleton, and releasing it hands the axis back to the live machine.
+ * Launch axis). Parentless axes are regions: independent top-level statechart
+ * regions that are simultaneously live. Nested axes declare a structural parent;
+ * multi axes model 0..n active states.
  *
  * Axes are surface-owned (declared by the adapter, wired to that surface's
  * singletons), and their state lists are DERIVED from the machine's tags — never
@@ -16,30 +16,52 @@ import type { ReactNode } from "react"
 /** Sentinel axis value: "no pin — let the live machine drive this axis". */
 export const LAB_AXIS_LIVE = "__live__"
 
-/** The active value of an axis: a state tag, or `LAB_AXIS_LIVE`. */
+/** The active value of a single axis: a state tag, or `LAB_AXIS_LIVE`. */
 export type LabAxisValue = string
+
+export type LabAxisKind = "single" | "multi"
 
 export interface LabStateAxisOption {
   readonly id: string
   readonly label: string
 }
 
+export interface LabAxisParent {
+  readonly axisId: string
+  readonly whenStates: readonly string[]
+}
+
+export type LabAxisActive =
+  | { readonly kind: "single"; readonly value: LabAxisValue }
+  | { readonly kind: "multi"; readonly on: ReadonlySet<string> }
+
+export type LabAxisCoordinate =
+  | LabAxisValue
+  | readonly string[]
+  | ReadonlySet<string>
+
 /** Per-axis active values for the current selection, keyed by axis id. */
-export type LabAxisActiveMap = Readonly<Record<string, LabAxisValue>>
+export type LabScreenActive = Readonly<Record<string, LabAxisActive>>
+
+/** Captured live coordinate values, keyed by axis id. */
+export type LabScreenCoordinate = Readonly<
+  Record<string, LabAxisCoordinate | undefined>
+>
 
 export interface LabStateAxis {
   readonly id: string
+  readonly kind: LabAxisKind
   readonly label: string
   readonly liveLabel: string
   readonly states: readonly LabStateAxisOption[]
   /** Pin the surface's preview singleton to this state's representative sample. */
   readonly pin: (stateId: string) => void
   /** Release the pin so the live machine drives this axis again. */
-  readonly release: () => void
-  /** When present, the axis is only meaningful while this holds over the current
-   * per-axis active map (e.g. Launch only matters when Data = Ready). */
-  readonly enabledWhen?: (active: LabAxisActiveMap) => boolean
-  /** Short reason shown when the axis is greyed by `enabledWhen`. */
+  readonly release: (stateId?: string) => void
+  /** Structural nesting: this axis is meaningful only while the parent is in one
+   * of these states (e.g. Launch only matters when Data = Ready). */
+  readonly parent?: LabAxisParent
+  /** Short reason shown when the axis is greyed by `parent`. */
   readonly disabledHint?: string
   /** A seeded STATIC render of this axis at one state, for the Matrix fan-out
    * (every value side by side) — no live mount. Driven by the same sample table
@@ -80,39 +102,83 @@ export function axisOptionsFromTags(
   return tags.map(tag => ({ id: tag, label: label(tag) }))
 }
 
-/** True when an axis value means "live" (unset or the live sentinel). */
-export function isAxisLive(value: LabAxisValue | undefined): boolean {
-  return value === undefined || value === LAB_AXIS_LIVE
+/** True when an axis value means "live" (unset, single live, or empty multi). */
+export function isAxisLive(value: LabAxisActive | undefined): boolean {
+  if (!value) return true
+  switch (value.kind) {
+    case "single":
+      return value.value === LAB_AXIS_LIVE
+    case "multi":
+      return value.on.size === 0
+  }
 }
 
-/** Whether an axis is currently meaningful, honoring its `enabledWhen` nesting. */
+/** Whether an axis is currently meaningful, honoring structural nesting. */
 export function axisEnabled(
   axis: LabStateAxis,
-  active: LabAxisActiveMap,
+  active: LabScreenActive,
 ): boolean {
-  return axis.enabledWhen ? axis.enabledWhen(active) : true
+  if (!axis.parent) return true
+  const parent = active[axis.parent.axisId]
+  if (!parent) return false
+  switch (parent.kind) {
+    case "single":
+      return axis.parent.whenStates.includes(parent.value)
+    case "multi":
+      return [...parent.on].some(state =>
+        axis.parent?.whenStates.includes(state),
+      )
+  }
+}
+
+function liveAxisActive(axis: LabStateAxis): LabAxisActive {
+  return axis.kind === "multi"
+    ? { kind: "multi", on: new Set() }
+    : { kind: "single", value: LAB_AXIS_LIVE }
+}
+
+function cloneActive(active: LabAxisActive): LabAxisActive {
+  return active.kind === "multi"
+    ? { kind: "multi", on: new Set(active.on) }
+    : { ...active }
 }
 
 /** A fresh active map with every axis Live (no pins). */
-export function liveActiveMap(axes: readonly LabStateAxis[]): LabAxisActiveMap {
-  return Object.fromEntries(axes.map(axis => [axis.id, LAB_AXIS_LIVE]))
+export function liveActiveMap(axes: readonly LabStateAxis[]): LabScreenActive {
+  return Object.fromEntries(axes.map(axis => [axis.id, liveAxisActive(axis)]))
 }
 
 /** Pin one axis to a state tag in the active map (others unchanged). */
 export function pinAxisActive(
-  active: LabAxisActiveMap,
-  axisId: string,
+  active: LabScreenActive,
+  axis: LabStateAxis,
   stateId: string,
-): LabAxisActiveMap {
-  return { ...active, [axisId]: stateId }
+): LabScreenActive {
+  if (axis.kind === "multi") {
+    const current = active[axis.id]
+    const on =
+      current?.kind === "multi" ? new Set(current.on) : new Set<string>()
+    on.add(stateId)
+    return { ...active, [axis.id]: { kind: "multi", on } }
+  }
+  return { ...active, [axis.id]: { kind: "single", value: stateId } }
 }
 
-/** Release one axis (set Live) in the active map (others unchanged). */
+/** Release one axis (or one multi state) in the active map (others unchanged). */
 export function releaseAxisActive(
-  active: LabAxisActiveMap,
-  axisId: string,
-): LabAxisActiveMap {
-  return { ...active, [axisId]: LAB_AXIS_LIVE }
+  active: LabScreenActive,
+  axis: LabStateAxis,
+  stateId?: string,
+): LabScreenActive {
+  if (axis.kind === "multi") {
+    if (!stateId) return { ...active, [axis.id]: liveAxisActive(axis) }
+    const current = active[axis.id]
+    const on =
+      current?.kind === "multi" ? new Set(current.on) : new Set<string>()
+    on.delete(stateId)
+    return { ...active, [axis.id]: { kind: "multi", on } }
+  }
+  return { ...active, [axis.id]: liveAxisActive(axis) }
 }
 
 /**
@@ -122,13 +188,14 @@ export function releaseAxisActive(
  */
 export function restorePinsActive(
   axes: readonly LabStateAxis[],
-  current: LabAxisActiveMap,
-  remembered: LabAxisActiveMap,
-): LabAxisActiveMap {
-  const next: Record<string, LabAxisValue> = { ...current }
+  current: LabScreenActive,
+  remembered: LabScreenActive,
+): LabScreenActive {
+  const next: Record<string, LabAxisActive> = { ...current }
   for (const axis of axes) {
     const pin = remembered[axis.id]
-    next[axis.id] = pin && !isAxisLive(pin) ? pin : LAB_AXIS_LIVE
+    next[axis.id] =
+      pin && !isAxisLive(pin) ? cloneActive(pin) : liveAxisActive(axis)
   }
   return next
 }

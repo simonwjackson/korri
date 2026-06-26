@@ -1,7 +1,59 @@
 import type { LabStateOption } from "../model/lab-source-state"
-import type { LabAxisActiveMap, LabStateAxis } from "../model/lab-state-axis"
+import {
+  axisEnabled,
+  type LabScreenActive,
+  type LabStateAxis,
+} from "../model/lab-state-axis"
 import { LAB_BIND_MIME } from "./LabSourcesPanel"
 import { LabStatesAxisGroup } from "./LabStatesAxisGroup"
+
+function childrenFor(
+  axes: readonly LabStateAxis[],
+  parentId: string,
+): readonly LabStateAxis[] {
+  return axes.filter(axis => axis.parent?.axisId === parentId)
+}
+
+function renderAxisTree({
+  axis,
+  axes,
+  activeByAxis,
+  onPin,
+  onLive,
+}: {
+  readonly axis: LabStateAxis
+  readonly axes: readonly LabStateAxis[]
+  readonly activeByAxis: LabScreenActive
+  readonly onPin: (axisId: string, stateId: string) => void
+  readonly onLive: (axisId: string) => void
+}) {
+  const enabledChildren = childrenFor(axes, axis.id).filter(child =>
+    axisEnabled(child, activeByAxis),
+  )
+  return (
+    <div key={axis.id} className="pt-axis-tree">
+      <LabStatesAxisGroup
+        axis={axis}
+        active={activeByAxis}
+        onPin={onPin}
+        onLive={onLive}
+      />
+      {enabledChildren.length > 0 ? (
+        <div className="pt-axis-children">
+          {enabledChildren.map(child =>
+            renderAxisTree({
+              axis: child,
+              axes,
+              activeByAxis,
+              onPin,
+              onLive,
+            }),
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 export function LabStatesPanel({
   axes,
@@ -19,7 +71,7 @@ export function LabStatesPanel({
    * The axis handlers are required so axis controls can never render enabled but
    * inert; flat-only callers still pass them (the panel may render either mode). */
   readonly axes?: readonly LabStateAxis[]
-  readonly activeByAxis: LabAxisActiveMap
+  readonly activeByAxis: LabScreenActive
   readonly onPin: (axisId: string, stateId: string) => void
   readonly onLive: (axisId: string) => void
   /** Capture the running surface's current coordinate as Inspect pins. */
@@ -30,6 +82,7 @@ export function LabStatesPanel({
   readonly hasSelection?: boolean
 }) {
   if (axes && axes.length > 0) {
+    const regions = axes.filter(axis => !axis.parent)
     return (
       <div className="pt-sources">
         <div className="pt-sources-hint">
@@ -45,14 +98,16 @@ export function LabStatesPanel({
             Pin current
           </button>
         ) : null}
-        {axes.map(axis => (
-          <LabStatesAxisGroup
-            key={axis.id}
-            axis={axis}
-            active={activeByAxis}
-            onPin={onPin}
-            onLive={onLive}
-          />
+        {regions.map(region => (
+          <div key={region.id} className="pt-axis-region">
+            {renderAxisTree({
+              axis: region,
+              axes,
+              activeByAxis,
+              onPin,
+              onLive,
+            })}
+          </div>
         ))}
       </div>
     )

@@ -1,6 +1,11 @@
 import { describe, expect, it, mock } from "bun:test"
 import type { CatalogEntry } from "@platform/catalog/catalog-facts-source"
-import { makeLaunchHandler, toCinematicGame } from "./ShiftHomeRoute"
+import { LaunchState } from "@platform/library/launch-state"
+import {
+  makeLaunchHandler,
+  shiftLaunchStateForForeground,
+  toCinematicGame,
+} from "./ShiftHomeRoute"
 
 function entry(id: string): CatalogEntry {
   return {
@@ -16,6 +21,39 @@ function entry(id: string): CatalogEntry {
     },
   } satisfies CatalogEntry
 }
+
+describe("shiftLaunchStateForForeground", () => {
+  it("leaves launch state alone when the foreground gate is ready", () => {
+    const launching = LaunchState.launching("hollow-knight")
+    expect(
+      shiftLaunchStateForForeground({
+        launch: launching,
+        foreground: { _tag: "Ready" },
+      }),
+    ).toBe(launching)
+  })
+
+  it("maps a blocked foreground gate to visible busy feedback", () => {
+    expect(
+      shiftLaunchStateForForeground({
+        launch: LaunchState.idle,
+        foreground: { _tag: "Cooling", state: "VerifyingReady" },
+      }),
+    ).toMatchObject({
+      _tag: "Failed",
+      failureKind: "session-busy",
+    })
+  })
+
+  it("maps a foreground load error to unavailable feedback", () => {
+    expect(
+      shiftLaunchStateForForeground({
+        launch: LaunchState.idle,
+        foreground: { _tag: "LoadError", message: "HTTP 500" },
+      })._tag,
+    ).toBe("Unavailable")
+  })
+})
 
 describe("makeLaunchHandler", () => {
   it("launches the catalog entry matching the focused id", () => {

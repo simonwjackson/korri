@@ -26,6 +26,7 @@ const previewAtom = Atom.make<PicoCatalogResult>(picoDataStateSamples.Loading())
 // Matrix fan-out renders the seeded sample through the real PicoData seam.
 const picoDataAxis: LabStateAxis = {
   id: "data",
+  kind: "single",
   label: "Data",
   liveLabel: "Auto",
   states: axisOptionsFromTags([...PICO_DATA_TAGS]),

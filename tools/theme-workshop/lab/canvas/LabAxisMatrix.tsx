@@ -1,25 +1,60 @@
 import { Fragment, type ReactNode, useState } from "react"
 import type { Story } from "../../types"
-import { axisEnabled, type LabStateAxis } from "../model/lab-state-axis"
+import {
+  axisEnabled,
+  type LabScreenActive,
+  type LabStateAxis,
+  liveActiveMap,
+  pinAxisActive,
+} from "../model/lab-state-axis"
 import { LabPartPreview } from "./LabPartPreview"
 
 const ROW_NONE = "__none__"
 
+function activeForCell(
+  axes: readonly LabStateAxis[],
+  rowAxis: LabStateAxis | null,
+  rowVal: string,
+  colAxis: LabStateAxis,
+  colVal: string,
+): LabScreenActive {
+  let active = liveActiveMap(axes)
+  active = pinAxisActive(active, colAxis, colVal)
+  if (rowAxis) active = pinAxisActive(active, rowAxis, rowVal)
+  return active
+}
+
+function dependentAxis(
+  rowAxis: LabStateAxis | null,
+  colAxis: LabStateAxis,
+): LabStateAxis | null {
+  if (rowAxis?.parent) return rowAxis
+  if (colAxis.parent) return colAxis
+  return null
+}
+
 /** Fan a screen's state-machine axis across the grid: every value side by side,
- * seeded and static. A second axis adds the cross-product, honoring nesting. */
+ * seeded and static. A second single axis adds the cross-product, honoring
+ * structural nesting. Multi axes are set-valued and therefore not fan-out dims. */
 export function LabAxisMatrix({ axes }: { axes: readonly LabStateAxis[] }) {
-  const [colId, setColId] = useState(axes[0]?.id ?? "")
+  const selectableAxes = axes.filter(axis => axis.kind === "single")
+  const [colId, setColId] = useState(selectableAxes[0]?.id ?? "")
   // Single axis by default — every value of the chosen axis side by side; pick a
   // second axis to add the cross-product.
   const [rowId, setRowId] = useState<string>(ROW_NONE)
-  const colAxis = axes.find(axis => axis.id === colId) ?? axes[0]!
+
+  const colAxis =
+    selectableAxes.find(axis => axis.id === colId) ?? selectableAxes[0]
+  if (!colAxis) {
+    return <div className="lab-empty-state">No single axes to fan out.</div>
+  }
   // Guard against a stale/duplicate row selection (e.g. after switching columns
   // to the current row axis, or switching to a surface with fewer axes): a row
   // equal to the column would drop the cross coordinate and grey every cell.
   const rowAxis =
     rowId === ROW_NONE || rowId === colAxis.id
       ? null
-      : (axes.find(a => a.id === rowId) ?? null)
+      : (selectableAxes.find(a => a.id === rowId) ?? null)
 
   const selectColumn = (next: string) => {
     setColId(next)
@@ -31,9 +66,14 @@ export function LabAxisMatrix({ axes }: { axes: readonly LabStateAxis[] }) {
 
   const cell = (rowVal: string, colVal: string): ReactNode => {
     if (rowAxis) {
-      const active = { [rowAxis.id]: rowVal, [colAxis.id]: colVal }
-      const dependent =
-        [rowAxis, colAxis].find(axis => axis.enabledWhen) ?? null
+      const active = activeForCell(
+        selectableAxes,
+        rowAxis,
+        rowVal,
+        colAxis,
+        colVal,
+      )
+      const dependent = dependentAxis(rowAxis, colAxis)
       if (dependent && !axisEnabled(dependent, active)) {
         return (
           <div className="lab-empty-state">
@@ -53,10 +93,10 @@ export function LabAxisMatrix({ axes }: { axes: readonly LabStateAxis[] }) {
         <label className="pt-matrix-axispick">
           Columns
           <select
-            value={colId}
+            value={colAxis.id}
             onChange={event => selectColumn(event.target.value)}
           >
-            {axes.map(axis => (
+            {selectableAxes.map(axis => (
               <option key={axis.id} value={axis.id}>
                 {axis.label}
               </option>
@@ -67,12 +107,12 @@ export function LabAxisMatrix({ axes }: { axes: readonly LabStateAxis[] }) {
         <label className="pt-matrix-axispick">
           Rows
           <select
-            value={rowId}
+            value={rowAxis ? rowAxis.id : ROW_NONE}
             onChange={event => setRowId(event.target.value)}
           >
             <option value={ROW_NONE}>—</option>
-            {axes
-              .filter(axis => axis.id !== colId)
+            {selectableAxes
+              .filter(axis => axis.id !== colAxis.id)
               .map(axis => (
                 <option key={axis.id} value={axis.id}>
                   {axis.label}
