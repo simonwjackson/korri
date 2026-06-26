@@ -4,8 +4,8 @@ import type { ReactNode } from "react"
 /**
  * A page part exposes one or more named state AXES — each a real state machine
  * the surface can be driven through (e.g. Shift Home's catalog Data axis and its
- * Launch axis). The lab renders each axis as a group with a "Live" chip plus its
- * states; pinning a state drives the surface's production-inert preview
+ * Launch axis). The lab renders each axis as a group with an "Auto" chip plus
+ * its states; pinning a state drives the surface's production-inert preview
  * singleton, and releasing it hands the axis back to the live machine.
  *
  * Axes are surface-owned (declared by the adapter, wired to that surface's

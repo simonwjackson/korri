@@ -12,7 +12,7 @@ function makeAdapter() {
   const dataAxis: LabStateAxis = {
     id: "data",
     label: "Data",
-    liveLabel: "Live",
+    liveLabel: "Auto",
     states: [
       { id: "Loading", label: "Loading" },
       { id: "Ready", label: "Ready" },
@@ -24,7 +24,7 @@ function makeAdapter() {
   const launchAxis: LabStateAxis = {
     id: "launch",
     label: "Launch",
-    liveLabel: "Live",
+    liveLabel: "Auto",
     states: [
       { id: "Idle", label: "Idle" },
       { id: "Launching", label: "Launching" },

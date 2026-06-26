@@ -5,8 +5,8 @@ import {
   type LabStateAxis,
 } from "../model/lab-state-axis"
 
-/** One state axis rendered as a group: a Live chip plus its states, greyed with
- * a reason when its nesting (`enabledWhen`) is not satisfied. */
+/** One state axis rendered as a group: an Auto chip plus its states, greyed
+ * with a reason when its nesting (`enabledWhen`) is not satisfied. */
 export function LabStatesAxisGroup({
   axis,
   active,

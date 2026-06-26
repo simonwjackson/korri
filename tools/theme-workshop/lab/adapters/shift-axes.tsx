@@ -28,7 +28,7 @@ import {
 const shiftDataAxis: LabStateAxis = {
   id: "data",
   label: "Data",
-  liveLabel: "Live",
+  liveLabel: "Auto",
   states: axisOptionsFromTags(ShiftCatalogState.tags),
   pin: pinFromTable(shiftCatalogStateSamples, setShiftCatalogPreview),
   release: () => setShiftCatalogPreview(null),
@@ -42,7 +42,7 @@ const shiftDataAxis: LabStateAxis = {
 const shiftLaunchAxis: LabStateAxis = {
   id: "launch",
   label: "Launch",
-  liveLabel: "Live",
+  liveLabel: "Auto",
   states: axisOptionsFromTags(LaunchState.tags),
   pin: pinFromTable(launchStateSamples, setShiftLaunchPreview),
   release: () => setShiftLaunchPreview(null),

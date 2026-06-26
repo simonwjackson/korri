@@ -27,7 +27,7 @@ const previewAtom = Atom.make<PicoCatalogResult>(picoDataStateSamples.Loading())
 const picoDataAxis: LabStateAxis = {
   id: "data",
   label: "Data",
-  liveLabel: "Live",
+  liveLabel: "Auto",
   states: axisOptionsFromTags([...PICO_DATA_TAGS]),
   pin: pinFromTable(picoDataStateSamples, setPicoDataPreview),
   release: () => setPicoDataPreview(null),

@@ -33,8 +33,8 @@ export function LabStatesPanel({
     return (
       <div className="pt-sources">
         <div className="pt-sources-hint">
-          Each axis is one of this screen's state machines. <b>Live</b> hands it
-          to the running app; pick a state to pin it.
+          Each axis is one of this screen's state machines. <b>Auto</b> follows
+          the running app; pick a state to pin it.
         </div>
         {onPinCurrent ? (
           <button
@@ -76,8 +76,9 @@ export function LabStatesPanel({
         object or tap to make it active.
       </div>
       {states.map(state => (
-        <div
+        <button
           key={state.id}
+          type="button"
           className={`pt-source-row${activeId === state.id ? " is-on" : ""}`}
           draggable
           onClick={() => onSelect(state.id)}
@@ -94,7 +95,7 @@ export function LabStatesPanel({
             aria-hidden
           />
           <span className="pt-source-label">{state.label}</span>
-        </div>
+        </button>
       ))}
     </div>
   )

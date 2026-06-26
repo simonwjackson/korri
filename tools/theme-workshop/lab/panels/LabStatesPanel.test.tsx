@@ -10,7 +10,7 @@ function axes(): readonly LabStateAxis[] {
     {
       id: "data",
       label: "Data",
-      liveLabel: "Live",
+      liveLabel: "Auto",
       states: [
         { id: "Loading", label: "Loading" },
         { id: "Ready", label: "Ready" },
@@ -22,7 +22,7 @@ function axes(): readonly LabStateAxis[] {
     {
       id: "launch",
       label: "Launch",
-      liveLabel: "Live",
+      liveLabel: "Auto",
       states: [
         { id: "Idle", label: "Idle" },
         { id: "Launching", label: "Launching" },
@@ -78,7 +78,7 @@ describe("LabStatesPanel axis groups", () => {
     expect(onPin).toHaveBeenCalledWith("data", "Empty")
   })
 
-  it("releases an axis when its Live chip is clicked", () => {
+  it("releases an axis when its Auto chip is clicked", () => {
     const onLive = mock((_: string) => undefined)
     render(
       <LabStatesPanel
@@ -92,8 +92,10 @@ describe("LabStatesPanel axis groups", () => {
       />,
     )
 
-    // The first "Live" chip belongs to the Data axis.
-    fireEvent.click(screen.getAllByRole("button", { name: "Live" })[0]!)
+    // The first "Auto" chip belongs to the Data axis.
+    const autoButtons = screen.getAllByRole("button", { name: "Auto" })
+    expect(autoButtons.length).toBeGreaterThan(0)
+    fireEvent.click(autoButtons[0])
     expect(onLive).toHaveBeenCalledWith("data")
   })
 

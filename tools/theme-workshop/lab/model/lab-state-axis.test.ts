@@ -16,7 +16,7 @@ import {
 const axis = (id: string): LabStateAxis => ({
   id,
   label: id,
-  liveLabel: "Live",
+  liveLabel: "Auto",
   states: [],
   pin: () => {},
   release: () => {},
@@ -50,7 +50,7 @@ describe("axisEnabled", () => {
   const launch: LabStateAxis = {
     id: "launch",
     label: "Launch",
-    liveLabel: "Live",
+    liveLabel: "Auto",
     states: [],
     pin: () => {},
     release: () => {},
