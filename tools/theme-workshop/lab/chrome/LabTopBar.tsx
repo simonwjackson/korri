@@ -1,5 +1,5 @@
-import type { LabChromeMode } from "../model/lab-canvas-state"
 import { useLab } from "../Lab.context"
+import type { LabChromeMode } from "../model/lab-canvas-state"
 import { labSurfaceAdapters } from "../surface-registry"
 
 const MODES: readonly LabChromeMode[] = ["dock", "float", "focus"]
@@ -9,11 +9,16 @@ export function LabTopBar({
   onChromeModeChange,
   onHideChrome,
   compact,
+  inspectLive,
+  onToggleInspectLive,
 }: {
   readonly chromeMode: LabChromeMode
   readonly onChromeModeChange: (mode: LabChromeMode) => void
   readonly onHideChrome: () => void
   readonly compact: boolean
+  /** The current Inspect/Live mode, or null when the surface has no axes. */
+  readonly inspectLive: "inspect" | "live" | null
+  readonly onToggleInspectLive: () => void
 }) {
   const { adapter, screens, setThemeId, surfacePath, setSurfacePath } = useLab()
   return (
@@ -42,21 +47,52 @@ export function LabTopBar({
       )}
 
       <div className="pt-topbar-right">
+        {inspectLive ? (
+          <div className="pt-seg pt-seg-mode">
+            {/* Inspect ⇄ Live headline */}
+            <button
+              type="button"
+              aria-pressed={inspectLive === "inspect"}
+              className={`pt-seg-btn${inspectLive === "inspect" ? " is-on" : ""}`}
+              onClick={() => inspectLive !== "inspect" && onToggleInspectLive()}
+            >
+              Inspect
+            </button>
+            <button
+              type="button"
+              aria-pressed={inspectLive === "live"}
+              className={`pt-seg-btn${inspectLive === "live" ? " is-on" : ""}`}
+              onClick={() => inspectLive !== "live" && onToggleInspectLive()}
+            >
+              Live
+            </button>
+          </div>
+        ) : null}
         <div className="lab-topbar-extra">
           <label className="pt-surface-select">
             Surface
-            <select value={adapter.id} onChange={event => setThemeId(event.target.value)}>
+            <select
+              value={adapter.id}
+              onChange={event => setThemeId(event.target.value)}
+            >
               {labSurfaceAdapters().map(candidate => (
-                <option key={candidate.id} value={candidate.id}>{candidate.id}</option>
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.id}
+                </option>
               ))}
             </select>
           </label>
           {screens.length ? (
             <label className="pt-surface-select">
               Screen
-              <select value={surfacePath} onChange={event => setSurfacePath(event.target.value)}>
+              <select
+                value={surfacePath}
+                onChange={event => setSurfacePath(event.target.value)}
+              >
                 {screens.map(screen => (
-                  <option key={screen.path} value={screen.path}>{screen.label}</option>
+                  <option key={screen.path} value={screen.path}>
+                    {screen.label}
+                  </option>
                 ))}
               </select>
             </label>

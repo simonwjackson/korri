@@ -32,10 +32,12 @@ import {
   sourcesForAdapter,
 } from "./model/lab-source-state"
 import {
+  isAxisLive,
   type LabAxisActiveMap,
   liveActiveMap,
   pinAxisActive,
   releaseAxisActive,
+  restorePinsActive,
 } from "./model/lab-state-axis"
 import { LabDevicesPanel } from "./panels/LabDevicesPanel"
 import { LabInspectorPanel } from "./panels/LabInspectorPanel"
@@ -140,7 +142,14 @@ export function LabShell() {
   const [activeByAxis, setActiveByAxis] = useState<LabAxisActiveMap>(() =>
     liveActiveMap(screenAxes),
   )
-  const [mode, setMode] = useState<"inspect" | "live">("live")
+  // Pins remembered while in Live, so toggling back to Inspect restores them.
+  const [rememberedByAxis, setRememberedByAxis] = useState<LabAxisActiveMap>({})
+  // Mode is derived: any pinned axis ⇒ Inspect; everything Live ⇒ Live.
+  const mode: "inspect" | "live" = screenAxes.some(
+    axis => !isAxisLive(activeByAxis[axis.id]),
+  )
+    ? "inspect"
+    : "live"
 
   // Tapping an axis state pins that axis (Inspect); the Live chip releases it.
   // Both drive the surface singletons, so the mounted surface reflects them.
@@ -149,7 +158,6 @@ export function LabShell() {
     if (!axis) return
     axis.pin(stateId)
     setActiveByAxis(prev => pinAxisActive(prev, axisId, stateId))
-    setMode("inspect")
   }
   const liveAxis = (axisId: string) => {
     const axis = screenAxes.find(candidate => candidate.id === axisId)
@@ -158,13 +166,32 @@ export function LabShell() {
     setActiveByAxis(prev => releaseAxisActive(prev, axisId))
   }
 
+  // The global headline: Live releases every axis (hands the running app the
+  // wheel from the current coordinate, route preserved) and remembers the pins;
+  // Inspect re-applies them. "Go live from here" falls out for free.
+  const toggleMode = () => {
+    if (mode === "live") {
+      for (const axis of screenAxes) {
+        const remembered = rememberedByAxis[axis.id]
+        if (remembered && !isAxisLive(remembered)) axis.pin(remembered)
+      }
+      setActiveByAxis(
+        restorePinsActive(screenAxes, activeByAxis, rememberedByAxis),
+      )
+    } else {
+      setRememberedByAxis(activeByAxis)
+      for (const axis of screenAxes) axis.release()
+      setActiveByAxis(liveActiveMap(screenAxes))
+    }
+  }
+
   // Release the previous surface's axis pins on surface switch so a pin can't
   // leak across surfaces (plan risk #1); start the new surface fully Live.
   useEffect(() => {
     setActiveByAxis(
       liveActiveMap(adapter.axesForScreen?.(defaultAxisScreenPath) ?? []),
     )
-    setMode("live")
+    setRememberedByAxis({})
     return () => {
       for (const axis of adapter.axesForScreen?.(defaultAxisScreenPath) ?? [])
         axis.release()
@@ -462,6 +489,8 @@ export function LabShell() {
             onChromeModeChange={setChromeMode}
             onHideChrome={() => setChromeVisible(false)}
             compact={compact}
+            inspectLive={screenAxes.length > 0 ? mode : null}
+            onToggleInspectLive={toggleMode}
           />
 
           {compact ? <LabTouchSheet panels={sheetPanels} /> : null}

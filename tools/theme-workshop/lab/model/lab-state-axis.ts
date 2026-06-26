@@ -84,3 +84,21 @@ export function releaseAxisActive(
 ): LabAxisActiveMap {
   return { ...active, [axisId]: LAB_AXIS_LIVE }
 }
+
+/**
+ * The active map after toggling Inspect ⇄ Live: each axis takes its remembered
+ * pin (when it had one) or goes Live. Used by the global toggle to re-apply pins
+ * remembered while Live.
+ */
+export function restorePinsActive(
+  axes: readonly LabStateAxis[],
+  current: LabAxisActiveMap,
+  remembered: LabAxisActiveMap,
+): LabAxisActiveMap {
+  const next: Record<string, LabAxisValue> = { ...current }
+  for (const axis of axes) {
+    const pin = remembered[axis.id]
+    next[axis.id] = pin && !isAxisLive(pin) ? pin : LAB_AXIS_LIVE
+  }
+  return next
+}

@@ -1340,6 +1340,15 @@ body {
 	padding: 2px 4px 10px;
 }
 
+/* inspect / live headline */
+.pt-seg-mode {
+	margin-right: 4px;
+}
+.pt-seg-mode .pt-seg-btn.is-on {
+	background: rgba(134, 239, 172, 0.16);
+	color: #bbf7d0;
+}
+
 /* state axes */
 .pt-axis-group {
 	margin-bottom: 12px;

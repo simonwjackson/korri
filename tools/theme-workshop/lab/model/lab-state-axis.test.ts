@@ -8,6 +8,7 @@ import {
   liveActiveMap,
   pinAxisActive,
   releaseAxisActive,
+  restorePinsActive,
 } from "./lab-state-axis"
 
 const axis = (id: string): LabStateAxis => ({
@@ -82,6 +83,16 @@ describe("active map helpers", () => {
   it("releases one axis back to Live", () => {
     const pinned = { data: "Empty", launch: "Launching" }
     expect(releaseAxisActive(pinned, "launch")).toEqual({
+      data: "Empty",
+      launch: LAB_AXIS_LIVE,
+    })
+  })
+
+  it("restores remembered pins on the Inspect toggle and lives the rest", () => {
+    const axes = [axis("data"), axis("launch")]
+    const live = liveActiveMap(axes)
+    const remembered = { data: "Empty", launch: LAB_AXIS_LIVE }
+    expect(restorePinsActive(axes, live, remembered)).toEqual({
       data: "Empty",
       launch: LAB_AXIS_LIVE,
     })
