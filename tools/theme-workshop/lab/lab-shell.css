@@ -37,6 +37,12 @@
   position: absolute;
   inset: 0;
 }
+/* Self-scoping surfaces whose root sizes to 100vh (e.g. shift's home/detail)
+ * must fill the preview frame instead, mirroring the Surface view's override. */
+.lab-screen-frame [data-shift-home-frame],
+.lab-screen-frame [data-shift-detail] {
+  height: 100%;
+}
 
 /* Card / board / matrix / object stages host the scaled real preview. */
 .pt-card-stage .lab-scale-stage,
