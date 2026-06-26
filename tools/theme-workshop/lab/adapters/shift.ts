@@ -57,8 +57,8 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   knobs: shiftConfig.knobs,
   defaultPxPerMm: shiftConfig.defaultPxPerMm,
   axesForScreen: shiftAxesForScreen,
-  // Shift's launch states are real part states (see ShiftCinematicHomeStates),
-  // surfaced in the States panel — not duplicated here as a control.
+  // Shift's Data + Launch state machines are surfaced as the Home screen's axes
+  // (see shiftAxesForScreen) — not duplicated here as a control.
   makeSeedInitialValues,
   mountSurface: (host, { initialValues, history }) =>
     mountShift(host, {
