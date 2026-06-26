@@ -1,34 +1,39 @@
 /**
  * Shift's design-tool live controls, declared as data (`WorkshopControl[]`) for
- * the lab/workshop to render with neutral chrome. Currently one knob: a "Launch"
- * selector that previews the cinematic home's launch-feedback states (Starting,
- * Now playing, each failure kind, Defect, Unavailable) without a real launch.
+ * the lab/workshop to render with neutral chrome. The "Launch" selector previews
+ * the cinematic home's launch-feedback states — its options are derived from
+ * `LAUNCH_STATE_VARIANTS` (i.e. from LaunchState.tags), the same source the
+ * gallery part reads, so the list can never drift from the state machine.
  */
 import type { WorkshopControl } from "@tools/theme-workshop"
 import { useState } from "react"
 import {
-  SHIFT_LAUNCH_PREVIEWS,
+  LAUNCH_LIVE_TAG,
+  LAUNCH_STATE_VARIANTS,
   setShiftLaunchPreview,
 } from "./shift-launch-preview"
 
 export function useShiftControls(): readonly WorkshopControl[] {
-  const [previewId, setPreviewId] = useState("off")
+  const [tag, setTag] = useState<string>(LAUNCH_LIVE_TAG)
 
   return [
     {
       kind: "select",
       id: "launch-preview",
       label: "Launch",
-      value: previewId,
-      options: SHIFT_LAUNCH_PREVIEWS.map(option => ({
-        value: option.id,
-        label: option.label,
+      value: tag,
+      options: LAUNCH_STATE_VARIANTS.map(variant => ({
+        value: variant.tag,
+        label: variant.tag === LAUNCH_LIVE_TAG ? "Idle (live)" : variant.label,
       })),
       title: "preview the cinematic home's launch feedback states",
       onChange: next => {
-        setPreviewId(next)
-        const option = SHIFT_LAUNCH_PREVIEWS.find(entry => entry.id === next)
-        setShiftLaunchPreview(option?.state ?? null)
+        setTag(next)
+        const variant = LAUNCH_STATE_VARIANTS.find(entry => entry.tag === next)
+        // The live tag clears the override so the real controller drives.
+        setShiftLaunchPreview(
+          next === LAUNCH_LIVE_TAG || !variant ? null : variant.value,
+        )
       },
     },
   ]

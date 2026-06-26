@@ -4,8 +4,16 @@
  * the lab's React root can drive the launch state of a Shift surface mounted in
  * a separate root. Inert in production — nothing sets it unless a design tool
  * does, so `useShiftLaunchPreview()` returns null and the real controller wins.
+ *
+ * `launchStateSamples` is the single source both the lab "Launch" knob and the
+ * gallery part read: one representative value per launch case, keyed by every
+ * tag, so a new state can't be added without a sample and both views pick it up.
  */
 import { LaunchState } from "@platform/library/launch-state"
+import {
+  stateVariants,
+  type StateVariant,
+} from "@platform/state/state-variants"
 import { useSyncExternalStore } from "react"
 
 let preview: LaunchState | null = null
@@ -37,84 +45,33 @@ export function useShiftLaunchPreview(): LaunchState | null {
 
 const PREVIEW_GAME = "preview"
 
-export interface ShiftLaunchPreviewOption {
-  readonly id: string
-  readonly label: string
-  /** null = clear the override and let the live controller drive the home. */
-  readonly state: LaunchState | null
+/** One representative LaunchState per case — exhaustive by construction. */
+export const launchStateSamples: {
+  readonly [Tag in LaunchState["_tag"]]: () => LaunchState
+} = {
+  Idle: () => LaunchState.idle,
+  Launching: () => LaunchState.launching(PREVIEW_GAME),
+  Launched: () => ({ _tag: "Launched", gameId: PREVIEW_GAME }),
+  ReleaseSelectionRequired: () =>
+    LaunchState.releaseSelectionRequired(PREVIEW_GAME, ["steam", "gog"]),
+  Unavailable: () => LaunchState.unavailable(PREVIEW_GAME),
+  Failed: () => ({
+    _tag: "Failed",
+    gameId: PREVIEW_GAME,
+    exitCode: 121,
+    failureKind: "session-busy",
+  }),
+  Defect: () => ({ _tag: "Defect", gameId: PREVIEW_GAME, defect: "preview" }),
 }
 
-/** The catalog the lab's "Launch" selector offers — one entry per scene state. */
-export const SHIFT_LAUNCH_PREVIEWS: readonly ShiftLaunchPreviewOption[] = [
-  { id: "off", label: "Off (live)", state: null },
-  {
-    id: "launching",
-    label: "Starting…",
-    state: LaunchState.launching(PREVIEW_GAME),
-  },
-  {
-    id: "launched",
-    label: "Now playing",
-    state: { _tag: "Launched", gameId: PREVIEW_GAME },
-  },
-  {
-    id: "failed-busy",
-    label: "Failed · busy",
-    state: {
-      _tag: "Failed",
-      gameId: PREVIEW_GAME,
-      exitCode: 121,
-      failureKind: "session-busy",
-    },
-  },
-  {
-    id: "failed-host",
-    label: "Failed · host offline",
-    state: {
-      _tag: "Failed",
-      gameId: PREVIEW_GAME,
-      exitCode: 124,
-      failureKind: "host-unavailable",
-    },
-  },
-  {
-    id: "failed-input",
-    label: "Failed · no controller",
-    state: {
-      _tag: "Failed",
-      gameId: PREVIEW_GAME,
-      exitCode: 123,
-      failureKind: "input-unavailable",
-    },
-  },
-  {
-    id: "failed-crash",
-    label: "Failed · crash",
-    state: {
-      _tag: "Failed",
-      gameId: PREVIEW_GAME,
-      exitCode: 1,
-      failureKind: "command-failed",
-    },
-  },
-  {
-    id: "failed-missing",
-    label: "Failed · not found",
-    state: {
-      _tag: "Failed",
-      gameId: PREVIEW_GAME,
-      exitCode: 127,
-      failureKind: "no-such-game",
-    },
-  },
-  {
-    id: "defect",
-    label: "Defect",
-    state: { _tag: "Defect", gameId: PREVIEW_GAME, defect: "preview" },
-  },
-  {
-    id: "unavailable",
-    label: "Unavailable",
-    state: { _tag: "Unavailable", gameId: PREVIEW_GAME },
-  },
-]
+/** Every launch state as a labeled variant — the shared list views render. */
+export const LAUNCH_STATE_VARIANTS: readonly StateVariant<
+  LaunchState["_tag"],
+  LaunchState
+>[] = stateVariants<LaunchState["_tag"], LaunchState>(
+  LaunchState,
+  launchStateSamples,
+)
+
+/** The tag the knob treats as "no override — let the live controller drive". */
+export const LAUNCH_LIVE_TAG: LaunchState["_tag"] = "Idle"
