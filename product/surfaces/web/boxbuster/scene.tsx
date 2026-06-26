@@ -11,13 +11,11 @@ import {
   vhsAtlas,
   wallTexture,
 } from "./textures"
+import type { StoreLayout } from "./layout"
 import { getStress, getTopple, TOPPLE_SECS } from "./topple"
 import { VhsBoxes } from "./vhs"
 
-export const ROOM = { w: 26, d: 44, h: 4.2 }
-export const GONDOLA_X = [-7, 0, 7]
-export const GONDOLA_Z = 9 // half-length
-export const LEVELS = [0.55, 1.25, 1.95, 2.65]
+export const ROOM_H = 4.2 // store + viewing-room ceiling height
 export const ATLAS_COLS = 8
 export const ATLAS_ROWS = 8
 
@@ -26,8 +24,8 @@ export const ATLAS_ROWS = 8
 export const DOOR_HALF = 1.8 // doorway half-width
 export const BACK_ROOM = {
   halfX: 7,
-  zNear: -ROOM.d / 2,
-  zFar: -ROOM.d / 2 - 15,
+  zNear: -22, // store back wall is pinned here; the viewing room never scales with the library
+  zFar: -37,
 } // -22 .. -37
 export const CONSOLE_POS = new THREE.Vector3(0, 0, -34)
 // where the camera looks when a game loads ("sit down to watch")
@@ -38,10 +36,16 @@ export const TV_FOCUS = new THREE.Vector3(0, 2.0, BACK_ROOM.zFar + 1.66)
 function Gondola({
   gi,
   gx,
+  gondCenterZ,
+  halfLen,
+  levels,
   boardMat,
 }: {
   gi: number
   gx: number
+  gondCenterZ: number
+  halfLen: number
+  levels: number[]
   boardMat: THREE.Material
 }) {
   const ref = useRef<THREE.Group>(null)
@@ -74,19 +78,19 @@ function Gondola({
   })
 
   return (
-    <group ref={ref} position={[gx, 0, 0]}>
+    <group ref={ref} position={[gx, 0, gondCenterZ]}>
       {/* central backing */}
       <mesh position={[0, 1.6, 0]} material={boardMat}>
-        <boxGeometry args={[0.1, 3.2, GONDOLA_Z * 2]} />
+        <boxGeometry args={[0.1, 3.2, halfLen * 2]} />
       </mesh>
       {/* shelf boards under each level */}
-      {LEVELS.map(ly => (
+      {levels.map(ly => (
         <mesh key={`b${ly}`} position={[0, ly, 0]} material={boardMat}>
-          <boxGeometry args={[0.62, 0.06, GONDOLA_Z * 2]} />
+          <boxGeometry args={[0.62, 0.06, halfLen * 2]} />
         </mesh>
       ))}
       {/* end caps */}
-      {[-GONDOLA_Z, GONDOLA_Z].map(z => (
+      {[-halfLen, halfLen].map(z => (
         <mesh key={`c${z}`} position={[0, 1.6, z]} material={boardMat}>
           <boxGeometry args={[0.62, 3.2, 0.1]} />
         </mesh>
@@ -103,6 +107,7 @@ export function Scene({
   onNear,
   playing,
   games,
+  layout,
 }: {
   onHover?: (g: Game | null) => void
   onHeld?: (g: Game | null) => void
@@ -111,14 +116,17 @@ export function Scene({
   onNear?: (near: boolean) => void
   playing?: Game | null
   games: readonly Game[]
+  layout: StoreLayout
 }) {
+  const { room, centerZ, backWallZ, frontWallZ, aisleXs, halfLen, levels, gondCenterZ } =
+    layout
   const built = useMemo(() => {
     const carpet = carpetTexture()
-    carpet.repeat.set(ROOM.w / 2, ROOM.d / 2)
+    carpet.repeat.set(room.w / 2, room.d / 2)
     const wall = wallTexture()
-    wall.repeat.set(ROOM.w / 3, ROOM.h / 3)
+    wall.repeat.set(room.w / 3, room.h / 3)
     const ceil = ceilingTexture()
-    ceil.repeat.set(ROOM.w / 2, ROOM.d / 2)
+    ceil.repeat.set(room.w / 2, room.d / 2)
     const atlas = vhsAtlas(ATLAS_COLS, ATLAS_ROWS)
 
     const floorMat = createPS1Material({ map: carpet, side: THREE.DoubleSide })
@@ -138,82 +146,104 @@ export function Scene({
       boardMat,
       lightMat,
     }
-  }, [])
+  }, [room.w, room.d, room.h])
 
-  const halfW = ROOM.w / 2
-  const halfD = ROOM.d / 2
+  const halfW = room.w / 2
+
+  // ceiling light panels — two columns spaced evenly down the store's depth
+  const lightRows = Math.max(2, Math.round(room.d / 8))
+  const lightZs = Array.from({ length: lightRows }, (_, i) =>
+    lightRows === 1
+      ? centerZ
+      : backWallZ + 3 + ((room.d - 6) * i) / (lightRows - 1),
+  )
+  const lightXs = [-halfW * 0.45, halfW * 0.45]
+
+  // side-wall posters — a few down each wall within the store's depth
+  const posterCount = Math.max(2, Math.min(4, Math.round(room.d / 7)))
+  const posterZs = Array.from({ length: posterCount }, (_, i) =>
+    posterCount === 1
+      ? centerZ
+      : backWallZ + 3.5 + ((room.d - 7) * i) / (posterCount - 1),
+  )
 
   return (
     <group>
       {/* floor */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} material={built.floorMat}>
-        <planeGeometry args={[ROOM.w, ROOM.d, ROOM.w, ROOM.d]} />
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0, centerZ]}
+        material={built.floorMat}
+      >
+        <planeGeometry args={[room.w, room.d, room.w, room.d]} />
       </mesh>
       {/* ceiling */}
       <mesh
         rotation={[Math.PI / 2, 0, 0]}
-        position={[0, ROOM.h, 0]}
+        position={[0, room.h, centerZ]}
         material={built.ceilMat}
       >
-        <planeGeometry args={[ROOM.w, ROOM.d, ROOM.w, ROOM.d]} />
+        <planeGeometry args={[room.w, room.d, room.w, room.d]} />
       </mesh>
 
-      {/* walls — back wall is split around a doorway to the viewing room */}
+      {/* back wall — split around a doorway to the viewing room */}
       {(() => {
         const seg = (halfW - DOOR_HALF) / 2 // width of each side segment
         const doorH = 2.6
         return (
           <>
             <mesh
-              position={[-(DOOR_HALF + seg), ROOM.h / 2, -halfD]}
+              position={[-(DOOR_HALF + seg), room.h / 2, backWallZ]}
               material={built.wallMat}
             >
-              <planeGeometry args={[seg * 2, ROOM.h, 4, 4]} />
+              <planeGeometry args={[seg * 2, room.h, 4, 4]} />
             </mesh>
             <mesh
-              position={[DOOR_HALF + seg, ROOM.h / 2, -halfD]}
+              position={[DOOR_HALF + seg, room.h / 2, backWallZ]}
               material={built.wallMat}
             >
-              <planeGeometry args={[seg * 2, ROOM.h, 4, 4]} />
+              <planeGeometry args={[seg * 2, room.h, 4, 4]} />
             </mesh>
             {/* header above the door */}
             <mesh
-              position={[0, (doorH + ROOM.h) / 2, -halfD]}
+              position={[0, (doorH + room.h) / 2, backWallZ]}
               material={built.wallMat}
             >
-              <planeGeometry args={[DOOR_HALF * 2, ROOM.h - doorH, 2, 2]} />
+              <planeGeometry args={[DOOR_HALF * 2, room.h - doorH, 2, 2]} />
             </mesh>
           </>
         )
       })()}
+      {/* front wall (the entrance) */}
       <mesh
-        position={[0, ROOM.h / 2, halfD]}
+        position={[0, room.h / 2, frontWallZ]}
         rotation={[0, Math.PI, 0]}
         material={built.wallMat}
       >
-        <planeGeometry args={[ROOM.w, ROOM.h, ROOM.w, 4]} />
+        <planeGeometry args={[room.w, room.h, room.w, 4]} />
       </mesh>
+      {/* side walls */}
       <mesh
-        position={[-halfW, ROOM.h / 2, 0]}
+        position={[-halfW, room.h / 2, centerZ]}
         rotation={[0, Math.PI / 2, 0]}
         material={built.wallMat}
       >
-        <planeGeometry args={[ROOM.d, ROOM.h, ROOM.d, 4]} />
+        <planeGeometry args={[room.d, room.h, room.d, 4]} />
       </mesh>
       <mesh
-        position={[halfW, ROOM.h / 2, 0]}
+        position={[halfW, room.h / 2, centerZ]}
         rotation={[0, -Math.PI / 2, 0]}
         material={built.wallMat}
       >
-        <planeGeometry args={[ROOM.d, ROOM.h, ROOM.d, 4]} />
+        <planeGeometry args={[room.d, room.h, room.d, 4]} />
       </mesh>
 
       {/* ceiling light panels */}
-      {[-12, -4, 4, 12].map(z =>
-        [-6, 6].map(x => (
+      {lightZs.map(z =>
+        lightXs.map(x => (
           <mesh
             key={`l${x}_${z}`}
-            position={[x, ROOM.h - 0.06, z]}
+            position={[x, room.h - 0.06, z]}
             rotation={[Math.PI / 2, 0, 0]}
             material={built.lightMat}
           >
@@ -223,8 +253,16 @@ export function Scene({
       )}
 
       {/* gondolas: backing board + shelf boards + the VHS rows */}
-      {GONDOLA_X.map((gx, gi) => (
-        <Gondola key={`g${gx}`} gi={gi} gx={gx} boardMat={built.boardMat} />
+      {aisleXs.map((gx, gi) => (
+        <Gondola
+          key={`g${gi}`}
+          gi={gi}
+          gx={gx}
+          gondCenterZ={gondCenterZ}
+          halfLen={halfLen}
+          levels={levels}
+          boardMat={built.boardMat}
+        />
       ))}
 
       {/* VHS tapes — individual, pickable */}
@@ -237,35 +275,36 @@ export function Scene({
         onNear={onNear}
         games={games}
         playing={playing ?? null}
+        layout={layout}
       />
 
       {/* signage: door sign over the doorway + store name on the front wall */}
       <Banner
         text="◄ VIEWING ROOM"
-        position={[0, 3.4, -halfD + 0.06]}
+        position={[0, 3.4, backWallZ + 0.06]}
         width={3.4}
       />
       <Banner
         text="BOXBUSTER"
-        position={[0, 2.9, halfD - 0.06]}
+        position={[0, 2.9, frontWallZ - 0.06]}
         rotation={[0, Math.PI, 0]}
-        width={12}
+        width={Math.min(12, room.w - 2)}
         bg="#c81d25"
         fg="#f2c100"
       />
 
       {/* side-wall posters */}
-      {[-14, -8, 8, 14].map((z, i) => (
+      {posterZs.map((z, i) => (
         <Poster
-          key={`pl${z}`}
+          key={`pl${i}`}
           seed={i + 1}
           position={[-halfW + 0.06, 2.1, z]}
           rotation={[0, Math.PI / 2, 0]}
         />
       ))}
-      {[-14, -8, 8, 14].map((z, i) => (
+      {posterZs.map((z, i) => (
         <Poster
-          key={`pr${z}`}
+          key={`pr${i}`}
           seed={i + 5}
           position={[halfW - 0.06, 2.1, z]}
           rotation={[0, -Math.PI / 2, 0]}
@@ -317,34 +356,34 @@ function ViewingRoom({
       </mesh>
       <mesh
         rotation={[Math.PI / 2, 0, 0]}
-        position={[0, ROOM.h, cz]}
+        position={[0, ROOM_H, cz]}
         material={built.ceilMat}
       >
         <planeGeometry args={[w, d, w, d]} />
       </mesh>
       {/* left / right / far walls */}
       <mesh
-        position={[-BACK_ROOM.halfX, ROOM.h / 2, cz]}
+        position={[-BACK_ROOM.halfX, ROOM_H / 2, cz]}
         rotation={[0, Math.PI / 2, 0]}
         material={built.wallMat}
       >
-        <planeGeometry args={[d, ROOM.h, d, 4]} />
+        <planeGeometry args={[d, ROOM_H, d, 4]} />
       </mesh>
       <mesh
-        position={[BACK_ROOM.halfX, ROOM.h / 2, cz]}
+        position={[BACK_ROOM.halfX, ROOM_H / 2, cz]}
         rotation={[0, -Math.PI / 2, 0]}
         material={built.wallMat}
       >
-        <planeGeometry args={[d, ROOM.h, d, 4]} />
+        <planeGeometry args={[d, ROOM_H, d, 4]} />
       </mesh>
-      <mesh position={[0, ROOM.h / 2, BACK_ROOM.zFar]} material={built.wallMat}>
-        <planeGeometry args={[w, ROOM.h, w, 4]} />
+      <mesh position={[0, ROOM_H / 2, BACK_ROOM.zFar]} material={built.wallMat}>
+        <planeGeometry args={[w, ROOM_H, w, 4]} />
       </mesh>
       {/* dim ceiling lights so the room + console are visible before the TV is on */}
       {[cz + 4.5, cz - 3].map(z => (
         <mesh
           key={z}
-          position={[0, ROOM.h - 0.06, z]}
+          position={[0, ROOM_H - 0.06, z]}
           rotation={[Math.PI / 2, 0, 0]}
           material={built.lightMat}
         >

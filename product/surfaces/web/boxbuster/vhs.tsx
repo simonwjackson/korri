@@ -2,15 +2,8 @@ import { useFrame, useThree } from "@react-three/fiber"
 import { useEffect, useMemo, useRef } from "react"
 import * as THREE from "three"
 import { createPS1Material } from "./ps1-material"
-import {
-  ATLAS_COLS,
-  ATLAS_ROWS,
-  CONSOLE_POS,
-  GONDOLA_X,
-  GONDOLA_Z,
-  LEVELS,
-  ROOM,
-} from "./scene"
+import type { StoreLayout } from "./layout"
+import { ATLAS_COLS, ATLAS_ROWS, CONSOLE_POS } from "./scene"
 import type { Game } from "./steamgriddb"
 import { COVER_RATIO, gameBackAtlas } from "./textures"
 import { getTopple, TOPPLE_SECS, toppledGondolas } from "./topple"
@@ -44,7 +37,7 @@ interface Tape {
   geo: THREE.BoxGeometry
   base: THREE.Vector3 // its shelf slot
   game: Game
-  gi: number // which gondola (index into GONDOLA_X) this tape sits on
+  gi: number // which gondola (index into layout.aisleXs) this tape sits on
   // where the tape currently rests when not held (shelf slot, or dropped on floor)
   home: { pos: THREE.Vector3; quat: THREE.Quaternion; dropped: boolean }
 }
@@ -58,6 +51,7 @@ export function VhsBoxes({
   onNear,
   games,
   playing,
+  layout,
 }: {
   atlas: THREE.Texture
   onHover?: (g: Game | null) => void
@@ -67,6 +61,7 @@ export function VhsBoxes({
   onNear?: (near: boolean) => void
   games: readonly Game[]
   playing: Game | null
+  layout: StoreLayout
 }) {
   const { camera, raycaster } = useThree()
   // [+X front cover, -X back details, +Y, -Y, +Z, -Z edges] — matches BoxGeometry groups
@@ -92,17 +87,17 @@ export function VhsBoxes({
     const list: Tape[] = []
     if (games.length === 0) return list
     const ATLAS_N = ATLAS_COLS * ATLAS_ROWS // games past this have no cover cell
-    const distinct = Math.min(games.length, ATLAS_N)
     const spacing = 0.46
 
-    // every shelf position, in a stable gondola → level → length → side order
+    // every shelf position, in a stable aisle → level → length → side order
     type Slot = { gx: number; gi: number; ly: number; z: number; side: 1 | -1 }
     const slots: Slot[] = []
-    GONDOLA_X.forEach((gx, gi) => {
-      for (const ly of LEVELS) {
-        const count = Math.floor((GONDOLA_Z * 2) / spacing)
+    layout.aisleXs.forEach((gx, gi) => {
+      for (const ly of layout.levels) {
+        const count = Math.floor((layout.halfLen * 2) / spacing)
         for (let i = 0; i < count; i++) {
-          const z = -GONDOLA_Z + 0.4 + i * spacing
+          const z =
+            layout.gondCenterZ - layout.halfLen + spacing * 0.5 + i * spacing
           for (const side of [1, -1] as const)
             slots.push({ gx, gi, ly, z, side })
         }
@@ -111,6 +106,9 @@ export function VhsBoxes({
 
     const P = slots.length
     if (P === 0) return list
+    // each game at most once; if a small store has fewer slots than games, show
+    // as many distinct games as fit — never repeat one to fill space.
+    const distinct = Math.min(games.length, ATLAS_N, P)
     const stride = P / distinct // one game per window of this many positions
     const window = Math.max(1, Math.floor(stride))
     for (let k = 0; k < distinct; k++) {
@@ -147,7 +145,7 @@ export function VhsBoxes({
       })
     }
     return list
-  }, [games])
+  }, [games, layout])
 
   const meshes = useRef<THREE.Mesh[]>([])
   const hovered = useRef(-1)
@@ -320,15 +318,15 @@ export function VhsBoxes({
         const beyond = SHELF_SPAN + 0.5 + Math.random() * 2.2
         const to = new THREE.Vector3(
           THREE.MathUtils.clamp(
-            GONDOLA_X[gi] + ent.dirSign * beyond,
-            -ROOM.w / 2 + 0.7,
-            ROOM.w / 2 - 0.7,
+            layout.aisleXs[gi] + ent.dirSign * beyond,
+            -layout.room.w / 2 + 0.7,
+            layout.room.w / 2 - 0.7,
           ),
           0.09,
           THREE.MathUtils.clamp(
             tp.base.z + (Math.random() - 0.5) * 3,
-            -ROOM.d / 2 + 0.7,
-            ROOM.d / 2 - 0.7,
+            layout.centerZ - layout.room.d / 2 + 0.7,
+            layout.centerZ + layout.room.d / 2 - 0.7,
           ),
         )
         const toQ = new THREE.Quaternion()
@@ -447,7 +445,7 @@ export function VhsBoxes({
     <group>
       {tapes.map((tape, i) => (
         <mesh
-          key={`${tape.base.x}:${tape.base.y}:${tape.base.z}`}
+          key={i}
           ref={el => {
             if (el) meshes.current[i] = el
           }}

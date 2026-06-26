@@ -1,8 +1,9 @@
 import "./boxbuster.css"
 import { Canvas } from "@react-three/fiber"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import * as THREE from "three"
 import { FirstPerson } from "./controls"
+import { computeLayout, DENSITY } from "./layout"
 import { FOG_COLOR } from "./ps1-material"
 import { Scene, TV_FOCUS } from "./scene"
 import { GAMES, type Game } from "./steamgriddb"
@@ -13,14 +14,22 @@ import { GAMES, type Game } from "./steamgriddb"
 export function App({
   embedded = false,
   games = GAMES,
+  density = DENSITY.livedIn,
   playing: routedPlaying,
   onPlay,
 }: {
   embedded?: boolean
   games?: readonly Game[]
+  /** target shelf-fill fraction; sizes the whole store to the library */
+  density?: number
   playing?: Game | null
   onPlay?: (game: Game | null) => void
 } = {}) {
+  // the store geometry is a deterministic function of how many games there are
+  const layout = useMemo(
+    () => computeLayout(games.length, density),
+    [games.length, density],
+  )
   const [locked, setLocked] = useState(false)
   const [hoverGame, setHoverGame] = useState<Game | null>(null)
   const [heldGame, setHeldGame] = useState<Game | null>(null)
@@ -68,8 +77,9 @@ export function App({
           onNear={setNearConsole}
           playing={playing}
           games={games}
+          layout={layout}
         />
-        <FirstPerson focus={focus} embedded={embedded} />
+        <FirstPerson focus={focus} embedded={embedded} layout={layout} />
       </Canvas>
 
       <Overlay
