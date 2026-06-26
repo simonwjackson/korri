@@ -8,8 +8,12 @@ export type DualScreenSessionContextValue = DualScreenState & {
 export const DualScreenSessionCtx =
   createContext<DualScreenSessionContextValue | null>(null)
 
+export function useOptionalDualScreenSession(): DualScreenSessionContextValue | null {
+  return useContext(DualScreenSessionCtx)
+}
+
 export function useDualScreenSession(): DualScreenSessionContextValue {
-  const context = useContext(DualScreenSessionCtx)
+  const context = useOptionalDualScreenSession()
   if (!context) {
     throw new Error(
       "useDualScreenSession must be used inside a DualScreenSessionRoot",

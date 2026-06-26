@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { useDualScreenSession } from "./DualScreenSession.context"
+import {
+  useDualScreenSession,
+  useOptionalDualScreenSession,
+} from "./DualScreenSession.context"
 import { DualScreenSessionRoot } from "./DualScreenSessionRoot"
 
 afterEach(() => cleanup())
@@ -36,10 +39,26 @@ describe("DualScreenSessionRoot", () => {
     expect(screen.getByText("selected: ember-circuit")).toBeTruthy()
   })
 
-  it("requires a provider", () => {
+  it("can start without a selected game", () => {
+    render(
+      <DualScreenSessionRoot>
+        <SessionProbe />
+      </DualScreenSessionRoot>,
+    )
+
+    expect(screen.getByText("selected: none")).toBeTruthy()
+  })
+
+  it("requires a provider for the strict hook", () => {
     expect(() => render(<SessionProbe />)).toThrow(
       "useDualScreenSession must be used inside a DualScreenSessionRoot",
     )
+  })
+
+  it("returns null from the optional hook outside a provider", () => {
+    render(<OptionalSessionProbe />)
+
+    expect(screen.getByText("optional: none")).toBeTruthy()
   })
 })
 
@@ -49,7 +68,7 @@ function SessionProbe({ label = "selected" }: { readonly label?: string }) {
   return (
     <div>
       <span>
-        {label}: {selectedGameId}
+        {label}: {selectedGameId ?? "none"}
       </span>
       <button
         type="button"
@@ -59,4 +78,9 @@ function SessionProbe({ label = "selected" }: { readonly label?: string }) {
       </button>
     </div>
   )
+}
+
+function OptionalSessionProbe() {
+  const session = useOptionalDualScreenSession()
+  return <span>optional: {session?.selectedGameId ?? "none"}</span>
 }

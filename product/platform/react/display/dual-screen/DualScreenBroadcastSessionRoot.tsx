@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   type DualScreenSessionContextValue,
   DualScreenSessionCtx,
@@ -7,7 +7,8 @@ import {
 import {
   type DualScreenEvent,
   type DualScreenRole,
-  selectedGameIdFromEvent,
+  type DualScreenState,
+  reduceDualScreenEvent,
 } from "./dual-screen-events"
 
 export interface DualScreenChannel {
@@ -26,8 +27,9 @@ export interface DualScreenChannel {
 export type DualScreenChannelFactory = (name: string) => DualScreenChannel
 
 export interface DualScreenBroadcastSessionRootProps {
-  readonly initialGameId: string
-  readonly initialSource?: DualScreenRole
+  readonly initialGameId?: string | null
+  readonly initialSource?: DualScreenRole | null
+  readonly role?: DualScreenRole
   readonly channelName?: string
   readonly createChannel?: DualScreenChannelFactory
   readonly children: ReactNode
@@ -36,16 +38,20 @@ export interface DualScreenBroadcastSessionRootProps {
 const DEFAULT_CHANNEL_NAME = "korri-dual-screen-session"
 
 export function DualScreenBroadcastSessionRoot({
-  initialGameId,
-  initialSource = "primary",
+  initialGameId = null,
+  initialSource = initialGameId ? "primary" : null,
+  role = "primary",
   channelName = DEFAULT_CHANNEL_NAME,
   createChannel = createBroadcastChannel,
   children,
 }: DualScreenBroadcastSessionRootProps) {
-  const [state, setState] = useState(() => ({
+  const [state, setState] = useState<DualScreenState>(() => ({
     selectedGameId: initialGameId,
     lastSource: initialSource,
+    revision: initialGameId ? 1 : 0,
   }))
+  const stateRef = useRef(state)
+  stateRef.current = state
   const channel = useMemo(
     () => createChannel(channelName),
     [channelName, createChannel],
@@ -54,21 +60,38 @@ export function DualScreenBroadcastSessionRoot({
   useEffect(() => {
     const receive = (message: MessageEvent<DualScreenEvent>) => {
       if (!isDualScreenEvent(message.data)) return
-      setState(current => selectedGameIdFromEvent(current, message.data))
+      if (message.data._tag === "SelectionRequested") {
+        if (role === "primary") channel.postMessage(snapshotFor(stateRef.current, role))
+        return
+      }
+      setState(current => reduceDualScreenEvent(current, message.data))
     }
 
     channel.addEventListener("message", receive)
+    if (role === "companion") {
+      channel.postMessage({ _tag: "SelectionRequested", requester: role })
+    } else {
+      channel.postMessage(snapshotFor(stateRef.current, role))
+    }
     return () => {
       channel.removeEventListener("message", receive)
       channel.close()
     }
-  }, [channel])
+  }, [channel, role])
 
   const focusGame = useCallback(
     (gameId: string, source: DualScreenRole) => {
-      const event: DualScreenEvent = { _tag: "GameFocused", gameId, source }
-      setState(current => selectedGameIdFromEvent(current, event))
-      channel.postMessage(event)
+      setState(current => {
+        const event: DualScreenEvent = {
+          _tag: "GameFocused",
+          gameId,
+          source,
+          revision: current.revision + 1,
+        }
+        const next = reduceDualScreenEvent(current, event)
+        channel.postMessage(event)
+        return next
+      })
     },
     [channel],
   )
@@ -92,12 +115,46 @@ function createBroadcastChannel(name: string): DualScreenChannel {
   return new BroadcastChannel(name)
 }
 
+function snapshotFor(
+  state: DualScreenState,
+  source: DualScreenRole,
+): DualScreenEvent {
+  return {
+    _tag: "SelectionSnapshot",
+    selectedGameId: state.selectedGameId,
+    lastSource: state.lastSource,
+    source,
+    revision: state.revision,
+  }
+}
+
 function isDualScreenEvent(value: unknown): value is DualScreenEvent {
   if (typeof value !== "object" || value === null) return false
   const event = value as Partial<DualScreenEvent>
-  return (
-    event._tag === "GameFocused" &&
-    typeof event.gameId === "string" &&
-    (event.source === "primary" || event.source === "companion")
-  )
+  if (event._tag === "GameFocused") {
+    return (
+      typeof event.gameId === "string" &&
+      (event.source === "primary" || event.source === "companion") &&
+      typeof event.revision === "number" &&
+      Number.isInteger(event.revision) &&
+      event.revision >= 0
+    )
+  }
+  if (event._tag === "SelectionRequested") {
+    return event.requester === "primary" || event.requester === "companion"
+  }
+  if (event._tag === "SelectionSnapshot") {
+    return (
+      (typeof event.selectedGameId === "string" ||
+        event.selectedGameId === null) &&
+      (event.lastSource === "primary" ||
+        event.lastSource === "companion" ||
+        event.lastSource === null) &&
+      (event.source === "primary" || event.source === "companion") &&
+      typeof event.revision === "number" &&
+      Number.isInteger(event.revision) &&
+      event.revision >= 0
+    )
+  }
+  return false
 }

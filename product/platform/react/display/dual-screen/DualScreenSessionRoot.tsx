@@ -7,34 +7,39 @@ import {
 import {
   type DualScreenEvent,
   type DualScreenRole,
-  selectedGameIdFromEvent,
+  reduceDualScreenEvent,
 } from "./dual-screen-events"
 
 export interface DualScreenSessionRootProps {
-  readonly initialGameId: string
-  readonly initialSource?: DualScreenRole
+  readonly initialGameId?: string | null
+  readonly initialSource?: DualScreenRole | null
   readonly children: ReactNode
 }
 
 export function DualScreenSessionRoot({
-  initialGameId,
-  initialSource = "primary",
+  initialGameId = null,
+  initialSource = initialGameId ? "primary" : null,
   children,
 }: DualScreenSessionRootProps) {
   const [state, setState] = useState(() => ({
     selectedGameId: initialGameId,
     lastSource: initialSource,
+    revision: initialGameId ? 1 : 0,
   }))
-
-  const publish = useCallback((event: DualScreenEvent) => {
-    setState(current => selectedGameIdFromEvent(current, event))
-  }, [])
 
   const focusGame = useCallback(
     (gameId: string, source: DualScreenRole) => {
-      publish({ _tag: "GameFocused", gameId, source })
+      setState(current => {
+        const event: DualScreenEvent = {
+          _tag: "GameFocused",
+          gameId,
+          source,
+          revision: current.revision + 1,
+        }
+        return reduceDualScreenEvent(current, event)
+      })
     },
-    [publish],
+    [],
   )
 
   const value = useMemo<DualScreenSessionContextValue>(

@@ -24,12 +24,14 @@ describe("DualScreenBroadcastSessionRoot", () => {
       <>
         <DualScreenBroadcastSessionRoot
           initialGameId="crystalline-drift"
+          role="primary"
           createChannel={createChannel}
         >
           <PublisherProbe />
         </DualScreenBroadcastSessionRoot>
         <DualScreenBroadcastSessionRoot
           initialGameId="crystalline-drift"
+          role="companion"
           createChannel={createChannel}
         >
           <ReaderProbe />
@@ -40,6 +42,43 @@ describe("DualScreenBroadcastSessionRoot", () => {
     expect(screen.getByText("reader: crystalline-drift")).toBeTruthy()
 
     fireEvent.click(screen.getByRole("button", { name: "Focus Ember" }))
+
+    await waitFor(() => {
+      expect(screen.getByText("reader: ember-circuit")).toBeTruthy()
+    })
+  })
+
+  it("replays the primary selection to a companion that joins late", async () => {
+    const createChannel = createInProcessChannelFactory()
+    const { rerender } = render(
+      <DualScreenBroadcastSessionRoot
+        initialGameId="crystalline-drift"
+        role="primary"
+        createChannel={createChannel}
+      >
+        <PublisherProbe />
+      </DualScreenBroadcastSessionRoot>,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Focus Ember" }))
+
+    rerender(
+      <>
+        <DualScreenBroadcastSessionRoot
+          initialGameId="crystalline-drift"
+          role="primary"
+          createChannel={createChannel}
+        >
+          <PublisherProbe />
+        </DualScreenBroadcastSessionRoot>
+        <DualScreenBroadcastSessionRoot
+          role="companion"
+          createChannel={createChannel}
+        >
+          <ReaderProbe />
+        </DualScreenBroadcastSessionRoot>
+      </>,
+    )
 
     await waitFor(() => {
       expect(screen.getByText("reader: ember-circuit")).toBeTruthy()
@@ -58,7 +97,7 @@ function PublisherProbe() {
 
 function ReaderProbe() {
   const { selectedGameId } = useDualScreenSession()
-  return <span>reader: {selectedGameId}</span>
+  return <span>reader: {selectedGameId ?? "none"}</span>
 }
 
 function createInProcessChannelFactory(): DualScreenChannelFactory {
