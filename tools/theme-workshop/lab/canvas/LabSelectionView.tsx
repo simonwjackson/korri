@@ -1,7 +1,6 @@
 import type { CSSProperties } from "react"
 import type { Story } from "../../types"
-import { LabPreviewBoundary } from "../model/lab-preview-boundary"
-import { LabScaledPreview } from "./LabScaledPreview"
+import { LabPartPreview } from "./LabPartPreview"
 import { stateVariantFor } from "../model/lab-part-model"
 import { type LabObjectInstance } from "../model/lab-canvas-state"
 import { type SourceStatus, type LabSourceOption, type LabStateOption } from "../model/lab-source-state"
@@ -32,9 +31,7 @@ export function LabSelectionView({
     <div className="pt-artboard" style={{ transform: `scale(${zoom})` } as CSSProperties}>
       <div className="pt-board pt-board-sm lab-real-board">
         {variant ? (
-          <LabScaledPreview>
-            <LabPreviewBoundary label={variant.name}>{variant.render()}</LabPreviewBoundary>
-          </LabScaledPreview>
+          <LabPartPreview story={variant} />
         ) : (
           <div className="lab-empty-state">No {selectedState} variant for {story.name}.</div>
         )}

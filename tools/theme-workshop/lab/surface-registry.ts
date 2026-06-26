@@ -1,4 +1,5 @@
 import type { RouterHistory } from "@tanstack/history"
+import type { ReactNode } from "react"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
 import type { WorkshopControl } from "../types"
 import type { LabSourceOption, LabStateOption, SourceStatus } from "./model/lab-source-state"
@@ -25,6 +26,10 @@ export interface LabSurfaceAdapter {
   readonly useControls?: () => readonly WorkshopControl[]
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
+  /** Wraps an isolated part preview in the surface's style scope so its tokens
+   * and recipes resolve outside a full mount (e.g. pico needs
+   * [data-pico].pico-screen.intrinsic). Omit when parts are self-scoping. */
+  readonly previewScope?: (children: ReactNode) => ReactNode
   readonly sources?: readonly LabSourceOption[]
   readonly states?: readonly LabStateOption[]
   readonly makeSeedInitialValues: () => Promise<unknown>

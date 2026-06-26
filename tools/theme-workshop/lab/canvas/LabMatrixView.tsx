@@ -1,8 +1,7 @@
 import { Fragment, useState } from "react"
 import type { Story } from "../../types"
 import type { DeviceConfig } from "../../device-lab"
-import { LabPreviewBoundary } from "../model/lab-preview-boundary"
-import { LabScaledPreview } from "./LabScaledPreview"
+import { LabPartPreview } from "./LabPartPreview"
 import { stateVariantFor } from "../model/lab-part-model"
 import type { LabSourceOption, LabStateOption, SourceStatus } from "../model/lab-source-state"
 
@@ -62,7 +61,7 @@ export function LabMatrixView({
                     {unsupportedSource ? (
                       <div className="lab-empty-state">Source bindings affect Surface view, not this isolated part.</div>
                     ) : variant ? (
-                      <div className="pt-matrix-stage"><LabScaledPreview><LabPreviewBoundary label={variant.name}>{variant.render()}</LabPreviewBoundary></LabScaledPreview></div>
+                      <div className="pt-matrix-stage"><LabPartPreview story={variant} /></div>
                     ) : (
                       <div className="lab-empty-state">No {state} variant</div>
                     )}

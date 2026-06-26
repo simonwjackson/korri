@@ -1,6 +1,7 @@
 import { mountPico } from "@product/surfaces/web/pico/mount-pico"
 import { usePicoControls } from "@product/surfaces/web/pico/pico-controls"
 import type { RouterHistory } from "@tanstack/history"
+import { createElement, type ReactNode } from "react"
 import type { DeviceConfig, ThemeKnob } from "../../device-lab"
 import {
   makeSeedInitialValues,
@@ -100,6 +101,21 @@ export const picoLabSurfaceAdapter: LabSurfaceAdapter = {
     { label: "Game Detail", path: "/game/hollow-knight" },
   ],
   useControls: usePicoControls,
+  // Pico sizes everything with container queries against a sized
+  // [data-pico].pico-screen.intrinsic (640px design width = 100cqw) and derives
+  // its --pico-text-*/space tokens there. An isolated preview therefore needs a
+  // concretely-sized pico-screen, not just the token scope — otherwise content
+  // collapses to 0. 640x480 is Pico's canonical 4:3 design screen.
+  previewScope: (children: ReactNode) =>
+    createElement(
+      "div",
+      {
+        "data-pico": true,
+        className: "pico-screen intrinsic",
+        style: { position: "relative", width: 640, height: 480 },
+      },
+      children,
+    ),
   makeSeedInitialValues,
   mountSurface: (host, { initialValues, history }) =>
     mountPico(host, {

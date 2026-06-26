@@ -3,8 +3,7 @@ import { LAB_BIND_MIME } from "../panels/LabSourcesPanel"
 import { type LabObjectInstance } from "../model/lab-canvas-state"
 import { isSourceStatus, type LabSourceOption, type LabStateOption, type SourceStatus } from "../model/lab-source-state"
 import { stateVariantFor } from "../model/lab-part-model"
-import { LabPreviewBoundary } from "../model/lab-preview-boundary"
-import { LabScaledPreview } from "./LabScaledPreview"
+import { LabPartPreview } from "./LabPartPreview"
 
 function parseBind(value: string): { axis: "sourceId" | "stateId"; value: string } | null {
   const [axis, id] = value.split(":")
@@ -86,7 +85,7 @@ export function LabDraggablePart({
         <button type="button" className="pt-object-remove" aria-label={`Remove ${story.name}`} onPointerDown={event => event.stopPropagation()} onClick={() => onRemove(instance.id)}>×</button>
       </header>
       <div className="pt-object-body">
-        {variant ? <LabScaledPreview><LabPreviewBoundary label={variant.name}>{variant.render()}</LabPreviewBoundary></LabScaledPreview> : <div className="lab-empty-state">No {instance.stateId} variant.</div>}
+        {variant ? <LabPartPreview story={variant} /> : <div className="lab-empty-state">No {instance.stateId} variant.</div>}
       </div>
     </section>
   )

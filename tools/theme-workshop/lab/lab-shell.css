@@ -25,6 +25,19 @@
   pointer-events: none;
 }
 
+/* Full-screen (surface) parts need a definite, device-shaped box so their
+ * fill/flex layout resolves; the surface scope fills it. */
+.lab-screen-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #07080b;
+}
+.lab-screen-frame > * {
+  position: absolute;
+  inset: 0;
+}
+
 /* Card / board / matrix / object stages host the scaled real preview. */
 .pt-card-stage .lab-scale-stage,
 .pt-board .lab-scale-stage,

@@ -1,7 +1,6 @@
 import type { LabPartsCatalog } from "../parts-discovery"
 import type { LabStoryIndex } from "../model/lab-part-model"
-import { LabPreviewBoundary } from "../model/lab-preview-boundary"
-import { LabScaledPreview } from "./LabScaledPreview"
+import { LabPartPreview } from "./LabPartPreview"
 
 export function LabGalleryView({
   catalog,
@@ -52,9 +51,7 @@ export function LabGalleryView({
                 }}
               >
                 <div className="pt-card-stage">
-                  <LabScaledPreview>
-                    <LabPreviewBoundary label={story.name}>{story.render()}</LabPreviewBoundary>
-                  </LabScaledPreview>
+                  <LabPartPreview story={story} />
                 </div>
                 <div className="pt-card-foot">
                   <span className={`pt-layer-tag layer-${story.layer}`}>{story.layer}</span>
