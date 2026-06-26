@@ -3,6 +3,7 @@ import {
   CatalogFactsError,
   type CatalogSnapshotFacts,
 } from "@platform/catalog/catalog-facts-source"
+import { CATALOG_DISPLAY_TAGS } from "@platform/catalog/catalog-state-samples"
 import { stateMachine } from "@platform/state/state-machine"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 
@@ -22,13 +23,7 @@ export type ShiftCatalogState =
   | { readonly _tag: "LoadError"; readonly error: CatalogFactsError }
   | { readonly _tag: "Defect"; readonly defect: unknown }
 
-const machine = stateMachine<ShiftCatalogState>([
-  "Loading",
-  "Ready",
-  "Empty",
-  "LoadError",
-  "Defect",
-])
+const machine = stateMachine<ShiftCatalogState>([...CATALOG_DISPLAY_TAGS])
 
 export const ShiftCatalogState = {
   tags: machine.tags,

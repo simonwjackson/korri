@@ -2,22 +2,18 @@
  * Design-tool seam: preview the pico home's catalog DATA state without a
  * backend — the pico mirror of shift-catalog-preview. A cross-root singleton the
  * live pico routes consult (`preview ?? live`), inert in production. Pico is a
- * leaf surface, so it carries its own small catalog samples rather than
- * depending on another surface's.
+ * leaf surface, so it supplies only its own fixture entries; the sample
+ * scaffolding and the state-tag list are shared via `catalog-state-samples`.
  */
-import type {
-  CatalogEntry,
-  CatalogSnapshotFacts,
-} from "@platform/catalog/catalog-facts-source"
-import { CatalogFactsError } from "@platform/catalog/catalog-facts-source"
-import { Cause } from "effect"
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import type { CatalogEntry } from "@platform/catalog/catalog-facts-source"
+import {
+  CATALOG_DISPLAY_TAGS,
+  makeCatalogStateSamples,
+  type CatalogResult as PicoCatalogResult,
+} from "@platform/catalog/catalog-state-samples"
 import { useSyncExternalStore } from "react"
 
-export type PicoCatalogResult = AsyncResult.AsyncResult<
-  CatalogSnapshotFacts,
-  CatalogFactsError
->
+export type { PicoCatalogResult }
 
 let preview: PicoCatalogResult | null = null
 const subscribers = new Set<() => void>()
@@ -67,56 +63,11 @@ const PICO_ENTRIES: readonly CatalogEntry[] = [
   },
 }))
 
-function snapshot(
-  entries: readonly CatalogEntry[],
-  self: "ready" | "loading" | "failed",
-): CatalogSnapshotFacts {
-  return {
-    entries,
-    peers: [
-      {
-        hostId: "self",
-        displayName: "self",
-        controlUrl: "http://127.0.0.1:3001",
-        isLocal: true,
-        caps: ["source"],
-        status: self,
-        entryCount: entries.length,
-        updatedAt: "2026-06-13T00:00:00.000Z",
-      },
-    ],
-    generation: 1,
-    updatedAt: "2026-06-13T00:00:00.000Z",
-    health: {
-      coordinatorReachable: true,
-      self,
-      loadingPeers: self === "loading" ? 1 : 0,
-      readyPeers: self === "ready" ? 1 : 0,
-      failedPeers: self === "failed" ? 1 : 0,
-      generation: 1,
-    },
-  }
-}
-
 /** One representative catalog snapshot per pico data state — exhaustive. */
-export const picoDataStateSamples = {
-  Loading: () => AsyncResult.initial(true),
-  Ready: () => AsyncResult.success(snapshot(PICO_ENTRIES, "ready")),
-  Empty: () => AsyncResult.success(snapshot([], "ready")),
-  LoadError: () =>
-    AsyncResult.fail(
-      new CatalogFactsError({
-        reason: "unavailable",
-        message: "Library is offline",
-      }),
-    ),
-  Defect: () => AsyncResult.failure(Cause.die("Unexpected library defect")),
-} satisfies Record<string, () => PicoCatalogResult>
+export const picoDataStateSamples = makeCatalogStateSamples(PICO_ENTRIES, {
+  offlineMessage: "Library is offline",
+  defectMessage: "Unexpected library defect",
+})
 
-export const PICO_DATA_TAGS = [
-  "Loading",
-  "Ready",
-  "Empty",
-  "LoadError",
-  "Defect",
-] as const
+/** The pico Data axis states — the shared catalog display tags. */
+export const PICO_DATA_TAGS = CATALOG_DISPLAY_TAGS
