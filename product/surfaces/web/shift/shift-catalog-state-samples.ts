@@ -17,7 +17,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import type { ShiftCatalogState } from "./catalog/shift-catalog-state"
 import { DEV_GAME_MEDIA } from "./dev-game-media"
 
-type CatalogResult = AsyncResult.AsyncResult<
+export type CatalogResult = AsyncResult.AsyncResult<
   CatalogSnapshotFacts,
   CatalogFactsError
 >
