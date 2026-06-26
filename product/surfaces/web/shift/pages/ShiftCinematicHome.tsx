@@ -8,9 +8,14 @@
  * the whole-screen art and springs the hero copy in. Metadata is glanceable
  * chips, never prose, and the bottom legend maps physical buttons.
  *
- * Interactive in the lab: ←/→ (or click a tile) moves focus. useInputAction is
- * intentionally not used here so the prototype is self-contained; the shipping
- * version would subscribe to semantic `direction`/`confirm` actions instead.
+ * Input is device-agnostic and DOM-focus-driven. Tiles are native focusable
+ * <button>s; the platform focus engine — fed by every adapter (keyboard,
+ * gamepad, and the desktop/input-plumber bridge) — moves real DOM focus between
+ * them, and the scene follows focus (onFocus updates the centered index, which
+ * drives the art crossfade + hero). Confirm is the focus engine clicking the
+ * focused tile (→ its onClick); only the semantic `back` is consumed directly
+ * via useInputAction. No raw key handling and no per-component directional
+ * wiring, so adding an input device is free and none can be silently dropped.
  */
 import type { LaunchState } from "@platform/library/launch-state"
 import { useInputAction } from "@platform/react/input/use-input-action"
@@ -63,13 +68,6 @@ export function ShiftCinematicHome({
   const trackRef = useRef<HTMLDivElement>(null)
   const game = games[index]
 
-  const move = useCallback(
-    (delta: number) => {
-      setIndex(i => (i + delta + games.length) % games.length)
-    },
-    [games.length],
-  )
-
   // The scene reacts to the launch lifecycle in place — no modal. When a status
   // is showing, the hero + legend morph and the buttons remap (A = Retry / B =
   // Back); otherwise A launches the focused game.
@@ -104,9 +102,11 @@ export function ShiftCinematicHome({
     [status, index, confirm],
   )
 
-  // Semantic confirm / back via the input bus. No-op when no input system is
-  // running (standalone prototype/fixture).
-  useInputAction("confirm", confirm)
+  // `back` is a semantic action (not a focus move or a click), so the component
+  // consumes it directly. `confirm` is intentionally NOT subscribed here: the
+  // focus engine maps confirm to a click on the focused tile, which already runs
+  // the tile's onClick → launch/retry, so subscribing would double-fire it.
+  // No-op when no input system is running (standalone fixture render).
   useInputAction("back", dismiss)
 
   // Keep the focused tile centered: shift the whole track so the active tile's
@@ -129,25 +129,21 @@ export function ShiftCinematicHome({
     return () => window.removeEventListener("resize", recenter)
   }, [index])
 
+  // Seed focus on the active tile at mount so the focus engine has a starting
+  // point and confirm works immediately. Skipped when focus already lives
+  // somewhere meaningful, so we never yank it from the host or the user.
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "ArrowRight") {
-        event.preventDefault()
-        move(1)
-      } else if (event.key === "ArrowLeft") {
-        event.preventDefault()
-        move(-1)
-      } else if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault()
-        confirm()
-      } else if (event.key === "Escape") {
-        event.preventDefault()
-        dismiss()
-      }
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [move, confirm, dismiss])
+    const active = document.activeElement
+    if (
+      active &&
+      active !== document.body &&
+      active !== document.documentElement
+    )
+      return
+    trackRef.current
+      ?.querySelector<HTMLElement>('[data-cine-index="0"]')
+      ?.focus({ preventScroll: true })
+  }, [])
 
   if (!game) return null
   const resuming = Boolean(game.lastPlayedLabel)
@@ -290,6 +286,7 @@ export function ShiftCinematicHome({
                 data-focused={i === index || undefined}
                 className="shift-cine-tile"
                 aria-label={entry.title}
+                onFocus={() => setIndex(i)}
                 onClick={() => activate(i)}
               >
                 <img src={entry.tileArtUrl} alt="" loading="lazy" />

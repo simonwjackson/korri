@@ -30,6 +30,19 @@ describe("ShiftCinematicHome onLaunch", () => {
     expect(onLaunch).toHaveBeenCalledWith("b")
   })
 
+  it("follows DOM focus so every device drives the rail, not just the keyboard", () => {
+    render(<ShiftCinematicHome games={games} />)
+    const tileB = screen.getByRole("button", { name: "Game B" })
+    // Mount seeds focus on the first tile, so B is not the centered selection.
+    expect(tileB.getAttribute("data-focused")).toBeNull()
+    // Moving real DOM focus is exactly what the platform focus engine does for a
+    // controller `direction` (and keyboard arrows, and the desktop input
+    // bridge). The centered rail selection must follow that focus rather than a
+    // private key handler — the gap that dropped controller navigation before.
+    fireEvent.focus(tileB)
+    expect(tileB.getAttribute("data-focused")).toBe("true")
+  })
+
   it("renders available metadata and play-state chips", () => {
     render(
       <ShiftCinematicHome
