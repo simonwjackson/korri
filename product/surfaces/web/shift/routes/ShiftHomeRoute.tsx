@@ -9,7 +9,9 @@ import { LaunchState } from "@platform/library/launch-state"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import { Option } from "effect"
-import { useEffect, useState } from "react"
+import { type ComponentProps, useEffect, useState } from "react"
+
+const noop = () => {}
 import {
   setShiftLaunchPreview,
   useShiftLaunchPreview,
@@ -30,20 +32,35 @@ import { playtimeLabel, relativeLastPlayed } from "./cinematic-play-labels"
 
 const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
 
-export function ShiftHomeRoute() {
-  const snapshot = useAtomValue(catalogSnapshotAtom)
-  const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
+/**
+ * The home's full data-state composition, seedable by `result` so any host (the
+ * live route, or a gallery part) can drive it through Loading / LoadError /
+ * Defect / Empty / Ready without a backend.
+ */
+export function ShiftHomeStateView({
+  result,
+  onRetry,
+}: {
+  readonly result: ComponentProps<typeof ShiftCatalogStateRoot>["result"]
+  readonly onRetry?: () => void
+}) {
   return (
     <div data-shift-home-frame>
-      <ShiftCatalogStateRoot result={snapshot}>
+      <ShiftCatalogStateRoot result={result}>
         <ShiftHomeLoadingBody />
-        <ShiftHomeLoadErrorBody onRetry={refreshSnapshot} />
+        <ShiftHomeLoadErrorBody onRetry={onRetry ?? noop} />
         <ShiftHomeDefectBody />
         <ShiftHomeEmptyBody />
         <NavigatingReadyBody />
       </ShiftCatalogStateRoot>
     </div>
   )
+}
+
+export function ShiftHomeRoute() {
+  const snapshot = useAtomValue(catalogSnapshotAtom)
+  const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
+  return <ShiftHomeStateView result={snapshot} onRetry={refreshSnapshot} />
 }
 
 function NavigatingReadyBody() {
