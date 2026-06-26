@@ -61,9 +61,10 @@ body {
 	overflow: hidden;
 }
 
-/* When chrome docks (Dock mode), inset the canvas so panels never overlap art. */
+/* When chrome docks (Dock mode), inset the canvas so panels never overlap art.
+ * The rail width is user-resizable via --lab-dock-w (see .pt-dock-resize). */
 .pt-shell[data-chrome="on"].pt-dock .pt-canvas {
-	inset: var(--pt-bar-h) 280px 0 64px;
+	inset: var(--pt-bar-h) var(--lab-dock-w, 280px) 0 64px;
 }
 .pt-shell[data-chrome="on"].pt-float .pt-canvas,
 .pt-shell[data-chrome="on"].pt-focus .pt-canvas {
@@ -1090,7 +1091,7 @@ body {
 	top: var(--pt-bar-h);
 	right: 0;
 	bottom: 0;
-	width: 280px;
+	width: var(--lab-dock-w, 280px);
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
@@ -1099,6 +1100,37 @@ body {
 	overflow-x: hidden;
 	z-index: 45;
 	overscroll-behavior: contain;
+}
+
+/* Draggable handle on the rail's left edge. Rendered as a fixed sibling (not
+ * inside the scrolling rail) so it never scrolls away; anchored to the rail's
+ * left edge via the same --lab-dock-w the rail uses. Pointer-based = touch ok. */
+.pt-dock-resize {
+	position: fixed;
+	top: var(--pt-bar-h);
+	bottom: 0;
+	right: var(--lab-dock-w, 280px);
+	width: 10px;
+	margin-right: -5px;
+	cursor: ew-resize;
+	touch-action: none;
+	z-index: 46;
+}
+.pt-dock-resize::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 50%;
+	width: 1px;
+	transform: translateX(-50%);
+	background: var(--pt-line);
+	transition: background 0.12s ease, width 0.12s ease;
+}
+.pt-dock-resize:hover::before,
+.pt-dock-resize.is-resizing::before {
+	width: 2px;
+	background: var(--pt-accent);
 }
 
 /* Float host: a non-constraining layer so the SAME panel elements persist

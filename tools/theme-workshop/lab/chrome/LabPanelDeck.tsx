@@ -40,17 +40,42 @@ const DEFAULT_RECT: LabFloatRect = { x: 120, y: 120, width: 248 }
  * pointer 1:1 with no spring lag; on release the box is unchanged so re-enabling
  * layout does not animate.
  */
+export const DOCK_WIDTH_MIN = 220
+export const DOCK_WIDTH_MAX = 640
+
 export function LabPanelDeck({
   mode,
   panels,
   floatLayout,
+  onDockResize,
 }: {
   readonly mode: "dock" | "float"
   readonly panels: readonly LabDeckPanel[]
   readonly floatLayout: Record<string, LabFloatRect>
+  readonly onDockResize?: (width: number) => void
 }) {
   const reduce = useReducedMotion()
   const dock = mode === "dock"
+  const [resizing, setResizing] = useState(false)
+
+  const startResize = (event: React.PointerEvent) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return
+    if (!onDockResize) return
+    event.preventDefault()
+    setResizing(true)
+    ;(event.target as Element).setPointerCapture?.(event.pointerId)
+    const move = (next: PointerEvent) => {
+      const width = Math.max(DOCK_WIDTH_MIN, Math.min(DOCK_WIDTH_MAX, window.innerWidth - next.clientX))
+      onDockResize(width)
+    }
+    const up = () => {
+      setResizing(false)
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+  }
   const ids = panels.map(panel => panel.id)
   const idsKey = ids.join(",")
   const byId = useMemo(
@@ -157,6 +182,15 @@ export function LabPanelDeck({
 
   return (
     <LayoutGroup>
+      {dock ? (
+        <div
+          className={`pt-dock-resize${resizing ? " is-resizing" : ""}`}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panel rail"
+          onPointerDown={startResize}
+        />
+      ) : null}
       <div ref={hostRef} className={dock ? "pt-dock-right" : "pt-float-host"}>
         {order.map(id => {
           const panel = byId.get(id)

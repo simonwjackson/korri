@@ -17,7 +17,7 @@ import {
 import { knobStyle } from "./model/lab-calibration-state"
 import { loadSurfacePartsResult, type LabPartsCatalog } from "./parts-discovery"
 import { useLab } from "./Lab.context"
-import { LabPanelDeck, type LabFloatRect } from "./chrome/LabPanelDeck"
+import { DOCK_WIDTH_MAX, DOCK_WIDTH_MIN, LabPanelDeck, type LabFloatRect } from "./chrome/LabPanelDeck"
 import { LabFocusRail } from "./chrome/LabFocusRail"
 import { LabToolRail } from "./chrome/LabToolRail"
 import { LabTopBar } from "./chrome/LabTopBar"
@@ -29,6 +29,16 @@ import { LabPartsPanel } from "./panels/LabPartsPanel"
 import { LabSourcesPanel } from "./panels/LabSourcesPanel"
 import { LabStatesPanel } from "./panels/LabStatesPanel"
 import { LabSurfaceControlsPanel } from "./panels/LabSurfaceControlsPanel"
+
+const DOCK_WIDTH_KEY = "lab-dock-width"
+const DEFAULT_DOCK_WIDTH = 280
+
+function readStoredDockWidth(): number {
+  if (typeof window === "undefined") return DEFAULT_DOCK_WIDTH
+  const raw = Number(window.localStorage.getItem(DOCK_WIDTH_KEY))
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_DOCK_WIDTH
+  return Math.max(DOCK_WIDTH_MIN, Math.min(DOCK_WIDTH_MAX, raw))
+}
 
 const CANVAS_VIEWS: { readonly id: LabCanvasView; readonly label: string }[] = [
   { id: "surface", label: "Surface" },
@@ -43,6 +53,7 @@ export function LabShell() {
   const [catalogError, setCatalogError] = useState<Error | null>(null)
   const [view, setView] = useState<LabCanvasView>(initialCanvasView)
   const [chromeMode, setChromeMode] = useState<LabChromeMode>(DEFAULT_CHROME_MODE)
+  const [dockWidth, setDockWidth] = useState<number>(readStoredDockWidth)
   const [chromeVisible, setChromeVisible] = useState(true)
   const [openPanel, setOpenPanel] = useState("parts")
   const [multi, setMulti] = useState(false)
@@ -155,8 +166,19 @@ export function LabShell() {
   const canvasStyle = { ...knobVars, "--k-accent": accent } as CSSProperties
   const showZoom = view === "selection" && !compact
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      window.localStorage.setItem(DOCK_WIDTH_KEY, String(dockWidth))
+    } catch {
+      // Ignore storage failures (private mode, quota) — width just won't persist.
+    }
+  }, [dockWidth])
+
+  const shellStyle = { "--lab-dock-w": `${dockWidth}px` } as CSSProperties
+
   return (
-    <div className={`pt-shell pt-${chromeMode}`} data-chrome={chromeVisible ? "on" : "off"}>
+    <div className={`pt-shell pt-${chromeMode}`} data-chrome={chromeVisible ? "on" : "off"} style={shellStyle}>
       <div className="pt-canvas" style={canvasStyle}>
         <div className="pt-canvas-bar">
           <div className="pt-seg pt-seg-sm" role="tablist" aria-label="Canvas view">
@@ -219,7 +241,7 @@ export function LabShell() {
           {!compact && chromeMode !== "focus" ? (
             <>
               <LabToolRail docked={chromeMode === "dock"} open={openPanel} onOpen={setOpenPanel} />
-              <LabPanelDeck mode={chromeMode} panels={deckPanels} floatLayout={floatLayout} />
+              <LabPanelDeck mode={chromeMode} panels={deckPanels} floatLayout={floatLayout} onDockResize={setDockWidth} />
             </>
           ) : null}
 
