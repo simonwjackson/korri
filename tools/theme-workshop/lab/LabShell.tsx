@@ -32,6 +32,7 @@ import {
   sourcesForAdapter,
 } from "./model/lab-source-state"
 import {
+  axisEnabled,
   isAxisLive,
   LAB_AXIS_LIVE,
   type LabAxisActiveMap,
@@ -152,19 +153,33 @@ export function LabShell() {
     ? "inspect"
     : "live"
 
+  // Commit a new active map, first releasing any nested axis that is no longer
+  // meaningful (e.g. Launch once Data leaves Ready) so a stale pin can't strand
+  // a greyed-out, unreleasable overlay.
+  const applyAxisMap = (next: LabAxisActiveMap) => {
+    let result = next
+    for (const axis of screenAxes) {
+      if (!axisEnabled(axis, result) && !isAxisLive(result[axis.id])) {
+        axis.release()
+        result = releaseAxisActive(result, axis.id)
+      }
+    }
+    setActiveByAxis(result)
+  }
+
   // Tapping an axis state pins that axis (Inspect); the Live chip releases it.
   // Both drive the surface singletons, so the mounted surface reflects them.
   const pinAxis = (axisId: string, stateId: string) => {
     const axis = screenAxes.find(candidate => candidate.id === axisId)
     if (!axis) return
     axis.pin(stateId)
-    setActiveByAxis(prev => pinAxisActive(prev, axisId, stateId))
+    applyAxisMap(pinAxisActive(activeByAxis, axisId, stateId))
   }
   const liveAxis = (axisId: string) => {
     const axis = screenAxes.find(candidate => candidate.id === axisId)
     if (!axis) return
     axis.release()
-    setActiveByAxis(prev => releaseAxisActive(prev, axisId))
+    applyAxisMap(releaseAxisActive(activeByAxis, axisId))
   }
 
   // Capture-back: read the running surface's current coordinate and map it onto
@@ -204,18 +219,22 @@ export function LabShell() {
     }
   }
 
-  // Release the previous surface's axis pins on surface switch so a pin can't
-  // leak across surfaces (plan risk #1); start the new surface fully Live.
+  // Release the active axis pins whenever the visible axis set changes — surface
+  // switch OR selecting a screen/part with different (or no) axes — so a pin can
+  // never leak onto a surface where it has no visible release control (plan risk
+  // #1, generalized to screen changes). The new selection starts fully Live.
+  // axes is recomputed from the deps (not the screenAxes memo) so the effect
+  // only re-runs when the active axis set actually changes.
   useEffect(() => {
-    setActiveByAxis(
-      liveActiveMap(adapter.axesForScreen?.(defaultAxisScreenPath) ?? []),
-    )
+    const axes = isPageSelection
+      ? (adapter.axesForScreen?.(activeScreenPath) ?? [])
+      : []
+    setActiveByAxis(liveActiveMap(axes))
     setRememberedByAxis({})
     return () => {
-      for (const axis of adapter.axesForScreen?.(defaultAxisScreenPath) ?? [])
-        axis.release()
+      for (const axis of axes) axis.release()
     }
-  }, [adapter, defaultAxisScreenPath])
+  }, [adapter, activeScreenPath, isPageSelection])
 
   useEffect(() => {
     setView(initialCanvasView)
