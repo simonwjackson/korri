@@ -5,6 +5,7 @@ import {
   createRouter,
   Outlet,
 } from "@tanstack/react-router"
+import { ShiftCompanionRoute } from "./ShiftCompanionRoute"
 import { ShiftGameDetailRoute } from "./ShiftGameDetailRoute"
 import { ShiftHomeRoute } from "./ShiftHomeRoute"
 
@@ -22,7 +23,17 @@ const detailRoute = createRoute({
   component: ShiftGameDetailRoute,
 })
 
-export const shiftRouteTree = rootRoute.addChildren([homeRoute, detailRoute])
+const companionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/companion",
+  component: ShiftCompanionRoute,
+})
+
+export const shiftRouteTree = rootRoute.addChildren([
+  homeRoute,
+  detailRoute,
+  companionRoute,
+])
 
 export interface CreateShiftRouterOptions {
   readonly history?: RouterHistory
