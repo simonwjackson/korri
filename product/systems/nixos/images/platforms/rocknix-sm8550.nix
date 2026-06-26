@@ -55,14 +55,10 @@ let
   substrateAudioUcmPath = "${sm8550.audio.ucmPackage}/share/alsa/ucm2";
   substrateAudioRoute = config.rocknix.device.audio.route;
   substrateAudioCard = config.rocknix.device.audio.card;
-  substrateAudioUcmCard = config.rocknix.device.audio.ucmCard;
   substrateAudioSink = sm8550.audio.defaultSink;
   substrateAudioRouteKind = substrateAudioRoute.kind;
   substrateAudioRouteIsUcm = substrateAudioRouteKind == "wireplumber-ucm";
   substrateAudioRouteIsManual = substrateAudioRouteKind == "manual-pcm";
-  substrateAudioRouteHasUcmVerb = substrateAudioRoute.ucmVerb != null;
-  substrateAudioRouteHasUcmDevice = substrateAudioRoute.ucmDevice != null;
-  substrateAudioRouteHasFullUcm = substrateAudioRouteHasUcmVerb && substrateAudioRouteHasUcmDevice;
   substrateAudioTargetSink =
     if substrateAudioRouteIsUcm then
       substrateAudioRoute.expectedSink
@@ -243,10 +239,12 @@ let
         ;;
     esac
   '';
-  # The substrate now exposes explicit audio route strategy under
-  # rocknix.device.audio.route.*. Korri runs the PipeWire graph in the kiosk
-  # user's logind session, but it follows the substrate route contract instead
-  # of hard-coding a hardware PCM or hydrating sound-card udev records itself.
+  # The substrate exposes an explicit audio route strategy under
+  # rocknix.device.audio.route.*. Korri owns the kiosk user's PipeWire graph,
+  # but it still treats the substrate route as the source of truth: product
+  # code selects/clamps the declared PulseAudio-compatible sink and does not
+  # perform hardware-specific UCM card activation. A missing or renamed card
+  # must never prevent the visible kiosk session from starting.
   korriSm8550AudioBootstrap = pkgs.writeShellScript "korri-sm8550-audio-bootstrap" (
     ''
       set -u
@@ -262,8 +260,8 @@ let
       done
 
       if ! ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
-        echo "korri-sm8550-audio-bootstrap: PulseAudio socket unavailable at $PULSE_SERVER" >&2
-        exit 1
+        echo "korri-sm8550-audio-bootstrap: PulseAudio socket unavailable at $PULSE_SERVER; continuing without audio clamp" >&2
+        exit 0
       fi
 
       sink_exists() {
@@ -272,23 +270,6 @@ let
           | ${pkgs.gnugrep}/bin/grep -Fxq -- "$1"
       }
 
-    ''
-    + lib.optionalString substrateAudioRouteHasFullUcm ''
-      ${pkgs.alsa-utils}/bin/alsaucm -c ${lib.escapeShellArg substrateAudioUcmCard} \
-        set _verb ${lib.escapeShellArg (toString substrateAudioRoute.ucmVerb)} \
-        set _enadev ${lib.escapeShellArg (toString substrateAudioRoute.ucmDevice)} \
-        >/dev/null || {
-          echo "korri-sm8550-audio-bootstrap: failed to activate UCM ${toString substrateAudioRoute.ucmVerb}/${toString substrateAudioRoute.ucmDevice} on ${substrateAudioUcmCard}" >&2
-          exit 1
-        }
-    ''
-    + lib.optionalString (substrateAudioRouteHasUcmVerb && !substrateAudioRouteHasUcmDevice) ''
-      ${pkgs.alsa-utils}/bin/alsaucm -c ${lib.escapeShellArg substrateAudioUcmCard} \
-        set _verb ${lib.escapeShellArg (toString substrateAudioRoute.ucmVerb)} \
-        >/dev/null || {
-          echo "korri-sm8550-audio-bootstrap: failed to activate UCM verb ${toString substrateAudioRoute.ucmVerb} on ${substrateAudioUcmCard}" >&2
-          exit 1
-        }
     ''
     + ''
 
@@ -303,8 +284,8 @@ let
           fi
           ${pkgs.coreutils}/bin/sleep 0.25
         done
-        echo "korri-sm8550-audio-bootstrap: target sink $sink unavailable for safe volume clamp" >&2
-        return 1
+        echo "korri-sm8550-audio-bootstrap: target sink $sink unavailable for safe volume clamp; continuing" >&2
+        return 0
       }
 
       clamp_default_sink() {
@@ -318,8 +299,8 @@ let
           fi
           ${pkgs.coreutils}/bin/sleep 0.25
         done
-        echo "korri-sm8550-audio-bootstrap: non-null default sink unavailable for safe volume clamp" >&2
-        return 1
+        echo "korri-sm8550-audio-bootstrap: non-null default sink unavailable for safe volume clamp; continuing" >&2
+        return 0
       }
     ''
     + lib.optionalString substrateAudioRouteIsUcm ''
@@ -339,8 +320,8 @@ let
           sink_name="$target_sink" \
           sink_properties=device.description=${lib.escapeShellArg (toString substrateAudioRoute.description)} \
           >/dev/null || {
-            echo "korri-sm8550-audio-bootstrap: pactl load-module module-alsa-sink failed" >&2
-            exit 1
+            echo "korri-sm8550-audio-bootstrap: pactl load-module module-alsa-sink failed; continuing" >&2
+            exit 0
           }
       fi
       clamp_named_sink "$target_sink"
@@ -683,7 +664,6 @@ in
   };
 
   systemd.user.services.korri-compositor = {
-    requires = [ "korri-sm8550-audio-bootstrap.service" ];
     after = [ "korri-sm8550-audio-bootstrap.service" ];
     serviceConfig.UnsetEnvironment = [
       "DISPLAY"
@@ -692,12 +672,10 @@ in
   };
 
   systemd.user.services.korri-sessiond = {
-    requires = [ "korri-sm8550-audio-bootstrap.service" ];
     after = [ "korri-sm8550-audio-bootstrap.service" ];
   };
 
   systemd.user.services.korri-inputd = {
-    requires = [ "korri-sm8550-audio-bootstrap.service" ];
     after = [ "korri-sm8550-audio-bootstrap.service" ];
   };
 

@@ -547,31 +547,28 @@ let
         && pipewireEnv.ALSA_CONFIG_UCM2 == pipewirePulseEnv.ALSA_CONFIG_UCM2
         && pipewireEnv.ALSA_CONFIG_UCM2 == wireplumberEnv.ALSA_CONFIG_UCM2
       ))
-      (check "${name}: user audio bootstrap orders before Korri runtime services" (
+      (check "${name}: user audio bootstrap is best-effort before Korri runtime services" (
         userServices ? korri-sm8550-audio-bootstrap
         && builtins.elem "korri-session.target" (audioBootstrapUnit.wantedBy or [ ])
         && builtins.elem "pipewire-pulse.service" (audioBootstrapUnit.after or [ ])
         && builtins.elem "wireplumber.service" (audioBootstrapUnit.after or [ ])
         && builtins.elem "korri-sessiond.service" (audioBootstrapUnit.before or [ ])
         && builtins.elem "korri-inputd.service" (audioBootstrapUnit.before or [ ])
-        && builtins.elem "korri-sm8550-audio-bootstrap.service" (compositorUnit.requires or [ ])
-        && builtins.elem "korri-sm8550-audio-bootstrap.service" (sessiondUnit.requires or [ ])
-        && builtins.elem "korri-sm8550-audio-bootstrap.service" (inputdUnit.requires or [ ])
+        && !(builtins.elem "korri-sm8550-audio-bootstrap.service" (compositorUnit.requires or [ ]))
+        && !(builtins.elem "korri-sm8550-audio-bootstrap.service" (sessiondUnit.requires or [ ]))
+        && !(builtins.elem "korri-sm8550-audio-bootstrap.service" (inputdUnit.requires or [ ]))
         && builtins.elem "korri-sm8550-audio-bootstrap.service" (compositorUnit.after or [ ])
         && builtins.elem "korri-sm8550-audio-bootstrap.service" (sessiondUnit.after or [ ])
         && builtins.elem "korri-sm8550-audio-bootstrap.service" (inputdUnit.after or [ ])
         && (audioBootstrapUnit.environment.PULSE_SERVER or null) == "unix:%t/pulse/native"
         && (audioBootstrapUnit.environment.ALSA_CONFIG_UCM2 or null) == pipewireEnv.ALSA_CONFIG_UCM2
       ))
-      (check "${name}: user audio bootstrap follows substrate route and clamps safe volume" (
+      (check "${name}: user audio bootstrap uses graph routes, not hardware UCM card activation" (
         sm8550PlatformAdapterUsesSafeAudioVolume
-        && cfg.rocknix.device.audio.card == "AYNOdin2"
-        && cfg.rocknix.device.audio.ucmCard == "AYN-Odin2"
-        && lib.hasInfix "alsaucm -c" sm8550PlatformAdapterSource
-        && lib.hasInfix "substrateAudioUcmCard" sm8550PlatformAdapterSource
-        && lib.hasInfix "set _verb" sm8550PlatformAdapterSource
-        && lib.hasInfix "set _enadev" sm8550PlatformAdapterSource
-        && lib.hasInfix "substrateAudioRouteHasFullUcm" sm8550PlatformAdapterSource
+        && !(lib.hasInfix "alsaucm -c" sm8550PlatformAdapterSource)
+        && !(lib.hasInfix "substrateAudioUcmCard" sm8550PlatformAdapterSource)
+        && !(lib.hasInfix "set _verb" sm8550PlatformAdapterSource)
+        && !(lib.hasInfix "set _enadev" sm8550PlatformAdapterSource)
       ))
       (check "${name}: sessiond launches inherit Korri user Pulse socket" (
         sessiondEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
