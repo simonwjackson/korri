@@ -598,8 +598,13 @@
 	display: flex;
 	flex-wrap: nowrap;
 	gap: var(--shift-space-2);
+	/* font-size = the chip size so the negative pull below matches the chip's
+	 * own left padding exactly, optically aligning the first tag's TEXT with
+	 * the title/eyebrow (which start at the hero edge). */
+	font-size: var(--shift-text-fine);
 	margin-top: var(--shift-space-1);
-	max-width: 100%;
+	margin-left: calc(-1 * var(--shift-space-3));
+	max-width: calc(100% + var(--shift-space-3));
 	overflow: hidden;
 	-webkit-mask-image: linear-gradient(to right, #000 88%, transparent 100%);
 	mask-image: linear-gradient(to right, #000 88%, transparent 100%);
