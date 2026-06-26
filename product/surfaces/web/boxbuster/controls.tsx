@@ -2,8 +2,8 @@ import { PointerLockControls } from "@react-three/drei"
 import { useFrame, useThree } from "@react-three/fiber"
 import { useEffect, useMemo, useRef } from "react"
 import * as THREE from "three"
-import type { StoreLayout } from "./layout"
-import { BACK_ROOM, DOOR_HALF } from "./scene"
+import type { StoreMap } from "./map"
+import { BACK_ROOM } from "./scene"
 import { getTopple, setStress, startTopple } from "./topple"
 
 const EYE = 1.55
@@ -14,42 +14,37 @@ const MIN_PUSH = 0.5 // how head-on you must be (0..~1.4) for a shove to count
 const SHOVE_TO_TOPPLE = 1.4 // seconds of solid head-on shoving before it goes over
 const SHOVE_DECAY = 2.5 // how fast the charge bleeds off once you ease up
 
-// Navigation derived from the (library-sized) store layout: gondola blockers,
-// and the walkable region (store ∪ doorway ∪ viewing room). Built per layout.
-function buildNav(layout: StoreLayout) {
-  const blockers = layout.aisleXs.map(cx => ({
-    minX: cx - 0.5 - PLAYER_R,
-    maxX: cx + 0.5 + PLAYER_R,
-    minZ: layout.gondCenterZ - layout.halfLen - 0.5 - PLAYER_R,
-    maxZ: layout.gondCenterZ + layout.halfLen + 0.5 + PLAYER_R,
+// Navigation derived from the store MAP: gondola blockers (across all rooms) and
+// the walkable region (every room rect ∪ archway passages ∪ the viewing room).
+function buildNav(map: StoreMap) {
+  const blockers = map.gondolas.map(g => ({
+    gi: g.gi,
+    minX: g.x - 0.5 - PLAYER_R,
+    maxX: g.x + 0.5 + PLAYER_R,
+    minZ: g.zc - g.half - 0.5 - PLAYER_R,
+    maxZ: g.zc + g.half + 0.5 + PLAYER_R,
   }))
   const gondolaAt = (x: number, z: number): number => {
-    for (let i = 0; i < blockers.length; i++) {
-      const b = blockers[i]
-      if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) return i
+    for (const b of blockers) {
+      if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) return b.gi
     }
     return -1
   }
   const blocked = (x: number, z: number): boolean => {
-    const i = gondolaAt(x, z)
-    return i >= 0 && !getTopple(i) // a toppled shelf no longer blocks the floor
+    const gi = gondolaAt(x, z)
+    return gi >= 0 && !getTopple(gi) // a toppled shelf no longer blocks the floor
   }
   const walkable = (x: number, z: number): boolean => {
-    const hw = layout.room.w / 2 - M
-    const inStore =
-      x > -hw &&
-      x < hw &&
-      z > layout.backWallZ + M &&
-      z < layout.frontWallZ - M
-    const inDoor =
-      Math.abs(x) < DOOR_HALF - 0.2 &&
-      z < BACK_ROOM.zNear + M &&
-      z > BACK_ROOM.zNear - M
-    const inBack =
+    for (const r of map.walkRects) {
+      if (x > r.minX + M && x < r.maxX - M && z > r.minZ + M && z < r.maxZ - M)
+        return true
+    }
+    // viewing room (fixed, behind the hub)
+    return (
       Math.abs(x) < BACK_ROOM.halfX - M &&
       z < BACK_ROOM.zNear - M &&
       z > BACK_ROOM.zFar + M
-    return inStore || inDoor || inBack
+    )
   }
   const allowed = (x: number, z: number) => walkable(x, z) && !blocked(x, z)
   return { gondolaAt, allowed }
@@ -58,11 +53,13 @@ function buildNav(layout: StoreLayout) {
 export function FirstPerson({
   focus,
   embedded = false,
-  layout,
+  map,
+  moveTarget,
 }: {
   focus?: THREE.Vector3 | null
   embedded?: boolean
-  layout: StoreLayout
+  map: StoreMap
+  moveTarget: { current: { x: number; z: number } | null }
 }) {
   const { camera, gl } = useThree()
   const keys = useRef<Record<string, boolean>>({})
@@ -71,7 +68,7 @@ export function FirstPerson({
   const aim = useRef<THREE.Vector3 | null>(null) // active "sit down to watch" target
   const mat = useMemo(() => new THREE.Matrix4(), [])
   const desired = useMemo(() => new THREE.Quaternion(), [])
-  const nav = useMemo(() => buildNav(layout), [layout])
+  const nav = useMemo(() => buildNav(map), [map])
   const shove = useRef(0) // accumulated shove against shoveGi
   const shoveGi = useRef(-1) // which shelf we're currently leaning on
 
@@ -81,7 +78,7 @@ export function FirstPerson({
   }, [focus])
 
   useEffect(() => {
-    camera.position.set(0, EYE, layout.camStartZ)
+    camera.position.set(map.camStart.x, EYE, map.camStart.z)
     ;(window as unknown as { __cam?: THREE.Camera }).__cam = camera // dev hook
 
     const down = (e: KeyboardEvent) => {
@@ -96,7 +93,7 @@ export function FirstPerson({
       window.removeEventListener("keydown", down)
       window.removeEventListener("keyup", up)
     }
-  }, [camera, layout.camStartZ])
+  }, [camera, map.camStart.x, map.camStart.z])
 
   // Embedded mode (e.g. theme-workshop): no global pointer-lock — it would
   // hijack the whole window and block surrounding widgets. Drag-to-look instead,
@@ -156,6 +153,37 @@ export function FirstPerson({
     const k = keys.current
     const f = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0)
     const s = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0)
+
+    // tap-to-move (point-and-go): glide toward the tapped spot until reached or
+    // blocked. Any manual steering (WASD) cancels it.
+    if (f !== 0 || s !== 0) {
+      moveTarget.current = null
+    } else if (moveTarget.current) {
+      const tgt = moveTarget.current
+      const dx = tgt.x - camera.position.x
+      const dz = tgt.z - camera.position.z
+      const dist = Math.hypot(dx, dz)
+      if (dist < 0.5) {
+        moveTarget.current = null
+      } else {
+        const step = Math.min(dt, 0.05) * SPEED
+        let nx = camera.position.x + (dx / dist) * step
+        let nz = camera.position.z + (dz / dist) * step
+        if (!nav.allowed(nx, camera.position.z)) nx = camera.position.x
+        if (!nav.allowed(nx, nz)) nz = camera.position.z
+        if (
+          Math.abs(nx - camera.position.x) < 1e-4 &&
+          Math.abs(nz - camera.position.z) < 1e-4
+        ) {
+          moveTarget.current = null // wedged against something — stop
+        } else {
+          camera.position.x = nx
+          camera.position.z = nz
+          camera.position.y = EYE
+        }
+      }
+    }
+
     if (f === 0 && s === 0) {
       // standing still: bleed off any shove charge so the shelf settles back
       if (shoveGi.current >= 0) {

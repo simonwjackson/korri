@@ -15,7 +15,6 @@ import type {
   ThemeWorkshopConfig,
 } from "@tools/theme-workshop"
 import { App } from "./app"
-import { DENSITY } from "./layout"
 
 const DEVICES: readonly DeviceConfig[] = [
   {
@@ -44,39 +43,23 @@ const DEVICES: readonly DeviceConfig[] = [
 // The surface fills its box via `position: absolute` (see boxbuster.css). The
 // DeviceLab frame is a positioned/scaled box, so App just needs a full-size
 // relative parent to anchor against.
-function StoreScreen({ density }: { density: number }) {
+function StoreScreen() {
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       {/* embedded: drag-to-look, no global pointer-lock — keeps the workshop
           chrome (tabs, knobs, navigator) clickable. */}
-      <App embedded density={density} />
+      <App embedded />
     </div>
   )
 }
 
-// Three feels to walk through and compare — each sizes the whole store to the
-// library at a different target fill (see layout.ts). Switch with the bottom bar.
 const SCREENS: readonly Screen[] = [
   {
-    id: "lived-in",
+    id: "store",
     group: "Store",
-    name: "Lived-in (~45%)",
-    note: "stocked, but you see the rented gaps",
-    render: () => <StoreScreen density={DENSITY.livedIn} />,
-  },
-  {
-    id: "cozy",
-    group: "Store",
-    name: "Cozy (~60%)",
-    note: "smaller, fuller, fewest gaps",
-    render: () => <StoreScreen density={DENSITY.cozy} />,
-  },
-  {
-    id: "atmospheric",
-    group: "Store",
-    name: "Atmospheric (~30%)",
-    note: "more open space, most rented-out feel",
-    render: () => <StoreScreen density={DENSITY.atmospheric} />,
+    name: "Boxbuster — connected rooms",
+    note: "hub lobby + New Releases / Staff Picks / Classics — walk between them",
+    render: () => <StoreScreen />,
   },
 ]
 

@@ -1,9 +1,9 @@
 import "./boxbuster.css"
 import { Canvas } from "@react-three/fiber"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import * as THREE from "three"
 import { FirstPerson } from "./controls"
-import { computeLayout, DENSITY } from "./layout"
+import { computeMap } from "./map"
 import { FOG_COLOR } from "./ps1-material"
 import { Scene, TV_FOCUS } from "./scene"
 import { GAMES, type Game } from "./steamgriddb"
@@ -14,22 +14,23 @@ import { GAMES, type Game } from "./steamgriddb"
 export function App({
   embedded = false,
   games = GAMES,
-  density = DENSITY.livedIn,
   playing: routedPlaying,
   onPlay,
 }: {
   embedded?: boolean
   games?: readonly Game[]
-  /** target shelf-fill fraction; sizes the whole store to the library */
-  density?: number
   playing?: Game | null
   onPlay?: (game: Game | null) => void
 } = {}) {
-  // the store geometry is a deterministic function of how many games there are
-  const layout = useMemo(
-    () => computeLayout(games.length, density),
-    [games.length, density],
-  )
+  // the whole connected store (hub + themed rooms) is a deterministic function
+  // of the library — partitioned across rooms, each room sized to its content
+  const map = useMemo(() => computeMap(games), [games])
+  // dev hook: expose the computed store map for headless geometry checks
+  useEffect(() => {
+    ;(window as unknown as { __boxmap?: unknown }).__boxmap = map
+  }, [map])
+  // tap-to-move target (touch / point-and-go): vhs sets it, controls walks to it
+  const moveTarget = useRef<{ x: number; z: number } | null>(null)
   const [locked, setLocked] = useState(false)
   const [hoverGame, setHoverGame] = useState<Game | null>(null)
   const [heldGame, setHeldGame] = useState<Game | null>(null)
@@ -76,10 +77,16 @@ export function App({
           onPlay={handlePlay}
           onNear={setNearConsole}
           playing={playing}
-          games={games}
-          layout={layout}
+          map={map}
+          embedded={embedded}
+          moveTarget={moveTarget}
         />
-        <FirstPerson focus={focus} embedded={embedded} layout={layout} />
+        <FirstPerson
+          focus={focus}
+          embedded={embedded}
+          map={map}
+          moveTarget={moveTarget}
+        />
       </Canvas>
 
       <Overlay
@@ -151,7 +158,7 @@ function Overlay({
         <br />
         <span style={{ color: "#9fc8ff" }}>
           {embedded
-            ? "WASD / arrows · drag to look · click or [E] grab"
+            ? "tap to go · tap a tape to grab · drag to look"
             : "WASD / arrows · mouse look · click or [E] grab · Esc release"}
         </span>
       </div>

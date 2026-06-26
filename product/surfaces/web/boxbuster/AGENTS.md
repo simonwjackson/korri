@@ -90,11 +90,16 @@ resist each; do not reintroduce them in the name of consistency or velocity:
 - **Treat objects as stateful.** A tape carries *how you left it* — returned, rewound, worn,
   misfiled. Continuity lives in the user's treatment of the object, not in the media's content
   (this is also how the rewind ritual translates to games with no narrative).
-- **The store is sized to the library.** Store geometry (aisle count, shelf length, room
-  dimensions) is a deterministic function of the number of games — see `layout.ts`
-  (`computeLayout`). It grows so a small library never reads as a 95%-empty hall and a large one
-  isn't a packed wall. The store grows forward from a *fixed back wall* so the viewing room never
-  moves. This is the same "stable spatial layout" test applied to the room itself.
+- **Rooms are curation.** The store is a *connected map* — a hub lobby with themed rooms opening
+  off it through wide archways (New Releases / Staff Picks / Classics), plus the fixed Viewing
+  Room behind the hub. See `map.ts` (`computeMap`): it partitions the library across rooms and
+  emits the whole floorplan (floors / wall segments with archway gaps / lights / gondolas / nav
+  rects) as deterministic data; `scene.tsx` renders it, `controls.tsx` navigates it. The *place*
+  tells you what you're looking at — no filters, no badges. Each room carries its own density +
+  accent so it *feels* distinct. (`layout.ts`'s `computeLayout` — the earlier single-room,
+  library-sized model — is kept for reference but the map is the live structure.) Adding a room is
+  a new entry in `ROOMS_BASE` + its placement; v1 uses fixed room boxes, content-driven room
+  sizing is the next step.
 - **Lived-in over lined-up.** Games are spread across the shelves with natural, irregular gaps —
   "rented", never repeated to fill space and never packed wall-to-wall. The slight not-lined-up
   irregularity is load-bearing: in a stylized, deliberately-unrealistic world it's what makes the

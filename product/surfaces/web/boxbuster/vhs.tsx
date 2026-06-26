@@ -2,7 +2,7 @@ import { useFrame, useThree } from "@react-three/fiber"
 import { useEffect, useMemo, useRef } from "react"
 import * as THREE from "three"
 import { createPS1Material } from "./ps1-material"
-import type { StoreLayout } from "./layout"
+import type { StoreMap } from "./map"
 import { ATLAS_COLS, ATLAS_ROWS, CONSOLE_POS } from "./scene"
 import type { Game } from "./steamgriddb"
 import { COVER_RATIO, gameBackAtlas } from "./textures"
@@ -49,9 +49,10 @@ export function VhsBoxes({
   onFlip,
   onPlay,
   onNear,
-  games,
   playing,
-  layout,
+  map,
+  embedded = false,
+  moveTarget,
 }: {
   atlas: THREE.Texture
   onHover?: (g: Game | null) => void
@@ -59,11 +60,12 @@ export function VhsBoxes({
   onFlip?: (flipped: boolean) => void
   onPlay?: (g: Game | null) => void
   onNear?: (near: boolean) => void
-  games: readonly Game[]
   playing: Game | null
-  layout: StoreLayout
+  map: StoreMap
+  embedded?: boolean
+  moveTarget: { current: { x: number; z: number } | null }
 }) {
-  const { camera, raycaster } = useThree()
+  const { camera, raycaster, gl } = useThree()
   // [+X front cover, -X back details, +Y, -Y, +Z, -Z edges] — matches BoxGeometry groups
   const mats = useMemo(() => {
     const cover = createPS1Material({ map: atlas })
@@ -77,75 +79,69 @@ export function VhsBoxes({
   // Individual boxes (not merged) so each tape is its own pickable object.
   // Each shelf slot holds a tape facing EACH aisle (back-to-back), so you always
   // see a front cover whichever side of the gondola you're on.
-  // Each game appears AT MOST ONCE. We enumerate every shelf position, then
-  // spread the distinct games EVENLY across all of them (with a deterministic
-  // per-game jitter so the gaps look natural, not gridded). Unfilled positions
-  // stay empty — "rented", on theme — and because the spread is even, every
-  // gondola is lightly-but-evenly stocked rather than one packed and the rest
-  // bare. Pure function of `games`, so the layout stays deterministic/stable.
+  // Place tapes room by room: within each room, each game appears AT MOST ONCE,
+  // spread evenly across that room's shelves with a per-game jitter for natural,
+  // lived-in gaps. The atlas cell comes from the game's own `atlasIndex` so the
+  // cover always matches regardless of which room it landed in. Deterministic.
   const tapes = useMemo<Tape[]>(() => {
     const list: Tape[] = []
-    if (games.length === 0) return list
-    const ATLAS_N = ATLAS_COLS * ATLAS_ROWS // games past this have no cover cell
+    const ATLAS_N = ATLAS_COLS * ATLAS_ROWS
     const spacing = 0.46
-
-    // every shelf position, in a stable aisle → level → length → side order
     type Slot = { gx: number; gi: number; ly: number; z: number; side: 1 | -1 }
-    const slots: Slot[] = []
-    layout.aisleXs.forEach((gx, gi) => {
-      for (const ly of layout.levels) {
-        const count = Math.floor((layout.halfLen * 2) / spacing)
-        for (let i = 0; i < count; i++) {
-          const z =
-            layout.gondCenterZ - layout.halfLen + spacing * 0.5 + i * spacing
-          for (const side of [1, -1] as const)
-            slots.push({ gx, gi, ly, z, side })
+
+    for (const room of map.rooms) {
+      const roomGondolas = map.gondolas.filter(g => g.roomId === room.id)
+      const roomGames = map.roomGames[room.id] ?? []
+      if (roomGames.length === 0 || roomGondolas.length === 0) continue
+
+      const slots: Slot[] = []
+      for (const g of roomGondolas) {
+        for (const ly of g.levels) {
+          const count = Math.floor((g.half * 2) / spacing)
+          for (let i = 0; i < count; i++) {
+            const z = g.zc - g.half + spacing * 0.5 + i * spacing
+            for (const side of [1, -1] as const)
+              slots.push({ gx: g.x, gi: g.gi, ly, z, side })
+          }
         }
       }
-    })
-
-    const P = slots.length
-    if (P === 0) return list
-    // each game at most once; if a small store has fewer slots than games, show
-    // as many distinct games as fit — never repeat one to fill space.
-    const distinct = Math.min(games.length, ATLAS_N, P)
-    const stride = P / distinct // one game per window of this many positions
-    const window = Math.max(1, Math.floor(stride))
-    for (let k = 0; k < distinct; k++) {
-      // place game k in its own window, jittered within it for natural-looking
-      // gaps. Windows don't overlap, so two games never land on one position.
-      const jitter = ((k * 2654435761) >>> 0) % window
-      const slot = slots[(Math.floor(k * stride) + jitter) % P]
-      const game = games[k]
-      if (!slot || !game) continue
-      // atlas cell for this game — cover (+X) and back (-X) share the cell, so
-      // the art always matches the game object
-      const rx = k % ATLAS_COLS
-      const ry = (k / ATLAS_COLS) | 0
-      // a game's box is always the same height ("the tall one" stays tall)
-      const h = 0.6 + ((k * 37) % 9) / 100
-      const w = h * COVER_RATIO // 2:3 cover face (matches SteamGridDB art)
-      const geo = new THREE.BoxGeometry(0.15, h, w)
-      remapFace(geo, 0, rx, ry) // front cover (+X)
-      remapFace(geo, 1, rx, ry) // back details (-X)
-      const base = new THREE.Vector3(
-        slot.gx + slot.side * 0.095,
-        slot.ly + h / 2,
-        slot.z,
-      )
-      // the -X-side tape is turned 180° so its front cover faces that aisle
-      const quat = new THREE.Quaternion()
-      if (slot.side < 0) quat.setFromAxisAngle(AXIS_Y, Math.PI)
-      list.push({
-        geo,
-        base,
-        game,
-        gi: slot.gi,
-        home: { pos: base.clone(), quat, dropped: false },
-      })
+      const P = slots.length
+      if (P === 0) continue
+      const distinct = Math.min(roomGames.length, P)
+      const stride = P / distinct
+      const win = Math.max(1, Math.floor(stride))
+      for (let k = 0; k < distinct; k++) {
+        const jitter = ((k * 2654435761) >>> 0) % win
+        const slot = slots[(Math.floor(k * stride) + jitter) % P]
+        const game = roomGames[k]
+        if (!slot || !game) continue
+        const ai = game.atlasIndex % ATLAS_N
+        const rx = ai % ATLAS_COLS
+        const ry = (ai / ATLAS_COLS) | 0
+        const h = 0.6 + ((ai * 37) % 9) / 100
+        const w = h * COVER_RATIO // 2:3 cover face (matches SteamGridDB art)
+        const geo = new THREE.BoxGeometry(0.15, h, w)
+        remapFace(geo, 0, rx, ry) // front cover (+X)
+        remapFace(geo, 1, rx, ry) // back details (-X)
+        const base = new THREE.Vector3(
+          slot.gx + slot.side * 0.095,
+          slot.ly + h / 2,
+          slot.z,
+        )
+        // the -X-side tape is turned 180° so its front cover faces that aisle
+        const quat = new THREE.Quaternion()
+        if (slot.side < 0) quat.setFromAxisAngle(AXIS_Y, Math.PI)
+        list.push({
+          geo,
+          base,
+          game,
+          gi: slot.gi,
+          home: { pos: base.clone(), quat, dropped: false },
+        })
+      }
     }
     return list
-  }, [games, layout])
+  }, [map])
 
   const meshes = useRef<THREE.Mesh[]>([])
   const hovered = useRef(-1)
@@ -281,15 +277,72 @@ export function VhsBoxes({
       else if (e.button === 2) flip() // right-click flips
     }
     const onCtx = (e: Event) => e.preventDefault() // suppress context menu
+
+    // Touch / point-and-go (no virtual controller). A tap (as opposed to a
+    // look-drag, which controls handles) either grabs the tape you tapped, or
+    // walks you toward wherever you tapped — a tape across the room, an archway,
+    // a patch of floor. Holding a tape, a tap sets it down / loads it.
+    const el = gl.domElement
+    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+    const ndc = new THREE.Vector2()
+    const hitPt = new THREE.Vector3()
+    let downX = 0
+    let downY = 0
+    let downT = 0
+    const onPointerDown = (e: PointerEvent) => {
+      downX = e.clientX
+      downY = e.clientY
+      downT = performance.now()
+    }
+    const onPointerUp = (e: PointerEvent) => {
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 10) return // a look-drag
+      if (performance.now() - downT > 600) return // long press, not a tap
+      if (held.current >= 0) return toggle() // set down / load into console
+      if (inserted.current >= 0 && nearConsole()) return toggle() // eject
+      const rect = el.getBoundingClientRect()
+      ndc.set(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      )
+      raycaster.setFromCamera(ndc, camera)
+      raycaster.far = 200
+      const cand = meshes.current.filter(
+        m => m?.visible && !fallingMeshes.current.has(m),
+      )
+      const hit = raycaster.intersectObjects(cand, false)[0]
+      if (hit) {
+        const idx = meshes.current.indexOf(hit.object as THREE.Mesh)
+        if (idx >= 0) {
+          if (hit.distance <= REACH + 0.6) {
+            hovered.current = idx // grab the tape you tapped
+            toggle()
+          } else {
+            moveTarget.current = { x: tapes[idx].base.x, z: tapes[idx].base.z }
+          }
+          return
+        }
+      }
+      if (raycaster.ray.intersectPlane(ground, hitPt))
+        moveTarget.current = { x: hitPt.x, z: hitPt.z } // walk to the tapped spot
+    }
+
     window.addEventListener("keydown", onKey)
-    window.addEventListener("mousedown", onDown)
-    window.addEventListener("contextmenu", onCtx)
+    if (embedded) {
+      el.style.touchAction = "none" // own touch gestures; no page scroll/zoom
+      el.addEventListener("pointerdown", onPointerDown)
+      window.addEventListener("pointerup", onPointerUp)
+    } else {
+      window.addEventListener("mousedown", onDown)
+      window.addEventListener("contextmenu", onCtx)
+    }
     return () => {
       window.removeEventListener("keydown", onKey)
+      el.removeEventListener("pointerdown", onPointerDown)
+      window.removeEventListener("pointerup", onPointerUp)
       window.removeEventListener("mousedown", onDown)
       window.removeEventListener("contextmenu", onCtx)
     }
-  }, [tapes, onHeld, onHover, onFlip, onPlay, playing])
+  }, [tapes, onHeld, onHover, onFlip, onPlay, playing, embedded, gl])
 
   useFrame((state, dt) => {
     const t = state.clock.elapsedTime
@@ -307,6 +360,13 @@ export function VhsBoxes({
       handledTopple.current.add(gi)
       const ent = getTopple(gi)
       if (!ent) continue
+      const gond = map.gondolas.find(g => g.gi === gi)
+      const box = map.rooms.find(r => r.id === gond?.roomId)?.box ?? {
+        minX: -21,
+        maxX: 21,
+        minZ: -37,
+        maxZ: 4,
+      }
       tapes.forEach((tp, i) => {
         if (tp.gi !== gi) return
         if (held.current === i || inserted.current === i) return
@@ -318,15 +378,15 @@ export function VhsBoxes({
         const beyond = SHELF_SPAN + 0.5 + Math.random() * 2.2
         const to = new THREE.Vector3(
           THREE.MathUtils.clamp(
-            layout.aisleXs[gi] + ent.dirSign * beyond,
-            -layout.room.w / 2 + 0.7,
-            layout.room.w / 2 - 0.7,
+            (gond?.x ?? 0) + ent.dirSign * beyond,
+            box.minX + 0.7,
+            box.maxX - 0.7,
           ),
           0.09,
           THREE.MathUtils.clamp(
             tp.base.z + (Math.random() - 0.5) * 3,
-            layout.centerZ - layout.room.d / 2 + 0.7,
-            layout.centerZ + layout.room.d / 2 - 0.7,
+            box.minZ + 0.7,
+            box.maxZ - 0.7,
           ),
         )
         const toQ = new THREE.Quaternion()

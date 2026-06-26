@@ -11,7 +11,7 @@ import {
   vhsAtlas,
   wallTexture,
 } from "./textures"
-import type { StoreLayout } from "./layout"
+import type { StoreMap, WallSeg } from "./map"
 import { getStress, getTopple, TOPPLE_SECS } from "./topple"
 import { VhsBoxes } from "./vhs"
 
@@ -99,6 +99,23 @@ function Gondola({
   )
 }
 
+// A single axis-aligned wall segment (a vertical plane) between two floor points.
+function Wall({ seg, mat }: { seg: WallSeg; mat: THREE.Material }) {
+  const dx = seg.x2 - seg.x1
+  const dz = seg.z2 - seg.z1
+  const len = Math.hypot(dx, dz)
+  if (len < 0.001) return null
+  return (
+    <mesh
+      position={[(seg.x1 + seg.x2) / 2, ROOM_H / 2, (seg.z1 + seg.z2) / 2]}
+      rotation={[0, -Math.atan2(dz, dx), 0]}
+      material={mat}
+    >
+      <planeGeometry args={[len, ROOM_H, Math.max(2, Math.round(len)), 4]} />
+    </mesh>
+  )
+}
+
 export function Scene({
   onHover,
   onHeld,
@@ -106,8 +123,9 @@ export function Scene({
   onPlay,
   onNear,
   playing,
-  games,
-  layout,
+  map,
+  embedded = false,
+  moveTarget,
 }: {
   onHover?: (g: Game | null) => void
   onHeld?: (g: Game | null) => void
@@ -115,18 +133,17 @@ export function Scene({
   onPlay?: (g: Game | null) => void
   onNear?: (near: boolean) => void
   playing?: Game | null
-  games: readonly Game[]
-  layout: StoreLayout
+  map: StoreMap
+  embedded?: boolean
+  moveTarget: { current: { x: number; z: number } | null }
 }) {
-  const { room, centerZ, backWallZ, frontWallZ, aisleXs, halfLen, levels, gondCenterZ } =
-    layout
   const built = useMemo(() => {
     const carpet = carpetTexture()
-    carpet.repeat.set(room.w / 2, room.d / 2)
+    carpet.repeat.set(6, 6)
     const wall = wallTexture()
-    wall.repeat.set(room.w / 3, room.h / 3)
+    wall.repeat.set(3, ROOM_H / 3)
     const ceil = ceilingTexture()
-    ceil.repeat.set(room.w / 2, room.d / 2)
+    ceil.repeat.set(6, 6)
     const atlas = vhsAtlas(ATLAS_COLS, ATLAS_ROWS)
 
     const floorMat = createPS1Material({ map: carpet, side: THREE.DoubleSide })
@@ -146,126 +163,61 @@ export function Scene({
       boardMat,
       lightMat,
     }
-  }, [room.w, room.d, room.h])
-
-  const halfW = room.w / 2
-
-  // ceiling light panels — two columns spaced evenly down the store's depth
-  const lightRows = Math.max(2, Math.round(room.d / 8))
-  const lightZs = Array.from({ length: lightRows }, (_, i) =>
-    lightRows === 1
-      ? centerZ
-      : backWallZ + 3 + ((room.d - 6) * i) / (lightRows - 1),
-  )
-  const lightXs = [-halfW * 0.45, halfW * 0.45]
-
-  // side-wall posters — a few down each wall within the store's depth
-  const posterCount = Math.max(2, Math.min(4, Math.round(room.d / 7)))
-  const posterZs = Array.from({ length: posterCount }, (_, i) =>
-    posterCount === 1
-      ? centerZ
-      : backWallZ + 3.5 + ((room.d - 7) * i) / (posterCount - 1),
-  )
+  }, [])
 
   return (
     <group>
-      {/* floor */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0, centerZ]}
-        material={built.floorMat}
-      >
-        <planeGeometry args={[room.w, room.d, room.w, room.d]} />
-      </mesh>
-      {/* ceiling */}
-      <mesh
-        rotation={[Math.PI / 2, 0, 0]}
-        position={[0, room.h, centerZ]}
-        material={built.ceilMat}
-      >
-        <planeGeometry args={[room.w, room.d, room.w, room.d]} />
-      </mesh>
+      {/* floors + ceilings, one per room */}
+      {map.floors.map(f => (
+        <group key={`f${f.cx}:${f.cz}`}>
+          <mesh
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[f.cx, 0, f.cz]}
+            material={built.floorMat}
+          >
+            <planeGeometry args={[f.w, f.d, f.w, f.d]} />
+          </mesh>
+          <mesh
+            rotation={[Math.PI / 2, 0, 0]}
+            position={[f.cx, ROOM_H, f.cz]}
+            material={built.ceilMat}
+          >
+            <planeGeometry args={[f.w, f.d, f.w, f.d]} />
+          </mesh>
+        </group>
+      ))}
 
-      {/* back wall — split around a doorway to the viewing room */}
-      {(() => {
-        const seg = (halfW - DOOR_HALF) / 2 // width of each side segment
-        const doorH = 2.6
-        return (
-          <>
-            <mesh
-              position={[-(DOOR_HALF + seg), room.h / 2, backWallZ]}
-              material={built.wallMat}
-            >
-              <planeGeometry args={[seg * 2, room.h, 4, 4]} />
-            </mesh>
-            <mesh
-              position={[DOOR_HALF + seg, room.h / 2, backWallZ]}
-              material={built.wallMat}
-            >
-              <planeGeometry args={[seg * 2, room.h, 4, 4]} />
-            </mesh>
-            {/* header above the door */}
-            <mesh
-              position={[0, (doorH + room.h) / 2, backWallZ]}
-              material={built.wallMat}
-            >
-              <planeGeometry args={[DOOR_HALF * 2, room.h - doorH, 2, 2]} />
-            </mesh>
-          </>
-        )
-      })()}
-      {/* front wall (the entrance) */}
-      <mesh
-        position={[0, room.h / 2, frontWallZ]}
-        rotation={[0, Math.PI, 0]}
-        material={built.wallMat}
-      >
-        <planeGeometry args={[room.w, room.h, room.w, 4]} />
-      </mesh>
-      {/* side walls */}
-      <mesh
-        position={[-halfW, room.h / 2, centerZ]}
-        rotation={[0, Math.PI / 2, 0]}
-        material={built.wallMat}
-      >
-        <planeGeometry args={[room.d, room.h, room.d, 4]} />
-      </mesh>
-      <mesh
-        position={[halfW, room.h / 2, centerZ]}
-        rotation={[0, -Math.PI / 2, 0]}
-        material={built.wallMat}
-      >
-        <planeGeometry args={[room.d, room.h, room.d, 4]} />
-      </mesh>
+      {/* walls (interior dividers carry archway gaps) */}
+      {map.walls.map((w, i) => (
+        <Wall key={`w${i}:${w.x1}:${w.z1}`} seg={w} mat={built.wallMat} />
+      ))}
 
       {/* ceiling light panels */}
-      {lightZs.map(z =>
-        lightXs.map(x => (
-          <mesh
-            key={`l${x}_${z}`}
-            position={[x, room.h - 0.06, z]}
-            rotation={[Math.PI / 2, 0, 0]}
-            material={built.lightMat}
-          >
-            <planeGeometry args={[2.4, 1.0]} />
-          </mesh>
-        )),
-      )}
+      {map.lights.map(l => (
+        <mesh
+          key={`l${l.x}:${l.z}`}
+          position={[l.x, ROOM_H - 0.06, l.z]}
+          rotation={[Math.PI / 2, 0, 0]}
+          material={built.lightMat}
+        >
+          <planeGeometry args={[2.4, 1.0]} />
+        </mesh>
+      ))}
 
-      {/* gondolas: backing board + shelf boards + the VHS rows */}
-      {aisleXs.map((gx, gi) => (
+      {/* gondolas across every room */}
+      {map.gondolas.map(g => (
         <Gondola
-          key={`g${gi}`}
-          gi={gi}
-          gx={gx}
-          gondCenterZ={gondCenterZ}
-          halfLen={halfLen}
-          levels={levels}
+          key={`g${g.gi}`}
+          gi={g.gi}
+          gx={g.x}
+          gondCenterZ={g.zc}
+          halfLen={g.half}
+          levels={g.levels}
           boardMat={built.boardMat}
         />
       ))}
 
-      {/* VHS tapes — individual, pickable */}
+      {/* VHS tapes — individual, pickable, across every room */}
       <VhsBoxes
         atlas={built.atlas}
         onHover={onHover}
@@ -273,45 +225,27 @@ export function Scene({
         onFlip={onFlip}
         onPlay={onPlay}
         onNear={onNear}
-        games={games}
         playing={playing ?? null}
-        layout={layout}
+        map={map}
+        embedded={embedded}
+        moveTarget={moveTarget}
       />
 
-      {/* signage: door sign over the doorway + store name on the front wall */}
-      <Banner
-        text="◄ VIEWING ROOM"
-        position={[0, 3.4, backWallZ + 0.06]}
-        width={3.4}
-      />
-      <Banner
-        text="BOXBUSTER"
-        position={[0, 2.9, frontWallZ - 0.06]}
-        rotation={[0, Math.PI, 0]}
-        width={Math.min(12, room.w - 2)}
-        bg="#c81d25"
-        fg="#f2c100"
-      />
-
-      {/* side-wall posters */}
-      {posterZs.map((z, i) => (
-        <Poster
-          key={`pl${i}`}
-          seed={i + 1}
-          position={[-halfW + 0.06, 2.1, z]}
-          rotation={[0, Math.PI / 2, 0]}
+      {/* room signage over each archway + the viewing-room sign */}
+      {map.banners.map(b => (
+        <Banner
+          key={b.text}
+          text={b.text}
+          position={[b.x, b.y, b.z]}
+          rotation={[0, b.rotY, 0]}
+          width={Math.min(6, b.text.length * 0.42 + 1)}
+          bg={b.accent}
+          fg="#0a0a12"
         />
       ))}
-      {posterZs.map((z, i) => (
-        <Poster
-          key={`pr${i}`}
-          seed={i + 5}
-          position={[halfW - 0.06, 2.1, z]}
-          rotation={[0, -Math.PI / 2, 0]}
-        />
-      ))}
+      <Banner text="◄ VIEWING ROOM" position={[0, 3.5, -21.9]} width={3.4} />
 
-      {/* the viewing room + console, through the doorway */}
+      {/* the viewing room + console (fixed, behind the hub) */}
       <ViewingRoom built={built} />
       <Console playing={playing ?? null} />
     </group>
@@ -514,7 +448,11 @@ function Banner({
   fg?: string
 }) {
   const mat = useMemo(
-    () => createPS1Material({ map: bannerTexture(text, bg, fg) }),
+    () =>
+      createPS1Material({
+        map: bannerTexture(text, bg, fg),
+        side: THREE.DoubleSide,
+      }),
     [text, bg, fg],
   )
   return (
