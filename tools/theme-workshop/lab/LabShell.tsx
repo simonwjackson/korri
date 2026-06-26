@@ -1,33 +1,48 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react"
-import { buildStoryIndex, firstStateFamilyStory, statesForStory } from "./model/lab-part-model"
-import {
-  DEFAULT_CHROME_MODE,
-  reconcileInstancesWithSelection,
-  type LabCanvasView,
-  type LabChromeMode,
-  type LabObjectInstance,
-} from "./model/lab-canvas-state"
-import {
-  DEFAULT_SOURCE_ID,
-  DEFAULT_STATE_ID,
-  sourcesForAdapter,
-  type SourceStatus,
-} from "./model/lab-source-state"
-import { knobStyle } from "./model/lab-calibration-state"
-import { loadSurfacePartsResult, type LabPartsCatalog } from "./parts-discovery"
-import { useLab } from "./Lab.context"
-import { DOCK_WIDTH_MAX, DOCK_WIDTH_MIN, LabPanelDeck, type LabFloatRect } from "./chrome/LabPanelDeck"
+import { LabCanvasContent } from "./canvas/LabCanvasContent"
 import { LabFocusRail } from "./chrome/LabFocusRail"
+import {
+  DOCK_WIDTH_MAX,
+  DOCK_WIDTH_MIN,
+  type LabFloatRect,
+  LabPanelDeck,
+} from "./chrome/LabPanelDeck"
 import { LabToolRail } from "./chrome/LabToolRail"
 import { LabTopBar } from "./chrome/LabTopBar"
 import { LabTouchSheet } from "./chrome/LabTouchSheet"
-import { LabCanvasContent } from "./canvas/LabCanvasContent"
+import { useLab } from "./Lab.context"
+import { knobStyle } from "./model/lab-calibration-state"
+import {
+  DEFAULT_CHROME_MODE,
+  type LabCanvasView,
+  type LabChromeMode,
+  type LabObjectInstance,
+  reconcileInstancesWithSelection,
+} from "./model/lab-canvas-state"
+import {
+  buildStoryIndex,
+  firstStateFamilyStory,
+  statesForStory,
+} from "./model/lab-part-model"
+import {
+  DEFAULT_SOURCE_ID,
+  DEFAULT_STATE_ID,
+  type SourceStatus,
+  sourcesForAdapter,
+} from "./model/lab-source-state"
+import {
+  type LabAxisActiveMap,
+  liveActiveMap,
+  pinAxisActive,
+  releaseAxisActive,
+} from "./model/lab-state-axis"
 import { LabDevicesPanel } from "./panels/LabDevicesPanel"
 import { LabInspectorPanel } from "./panels/LabInspectorPanel"
 import { LabPartsPanel } from "./panels/LabPartsPanel"
 import { LabSourcesPanel } from "./panels/LabSourcesPanel"
 import { LabStatesPanel } from "./panels/LabStatesPanel"
 import { LabSurfaceControlsPanel } from "./panels/LabSurfaceControlsPanel"
+import { type LabPartsCatalog, loadSurfacePartsResult } from "./parts-discovery"
 
 const DOCK_WIDTH_KEY = "lab-dock-width"
 const DEFAULT_DOCK_WIDTH = 280
@@ -51,7 +66,8 @@ export function LabShell() {
   const [catalog, setCatalog] = useState<LabPartsCatalog | null>(null)
   const [catalogError, setCatalogError] = useState<Error | null>(null)
   const [view, setView] = useState<LabCanvasView>(initialCanvasView)
-  const [chromeMode, setChromeMode] = useState<LabChromeMode>(DEFAULT_CHROME_MODE)
+  const [chromeMode, setChromeMode] =
+    useState<LabChromeMode>(DEFAULT_CHROME_MODE)
   const [dockWidth, setDockWidth] = useState<number>(readStoredDockWidth)
   const [chromeVisible, setChromeVisible] = useState(true)
   const [openPanel, setOpenPanel] = useState("parts")
@@ -60,7 +76,9 @@ export function LabShell() {
   const [accent, setAccent] = useState("#7dd3fc")
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const sources = useMemo(() => sourcesForAdapter(adapter), [adapter])
-  const [activeSourceId, setActiveSourceId] = useState(sources[0]?.id ?? DEFAULT_SOURCE_ID)
+  const [activeSourceId, setActiveSourceId] = useState(
+    sources[0]?.id ?? DEFAULT_SOURCE_ID,
+  )
   const [instances, setInstances] = useState<readonly LabObjectInstance[]>([])
   const index = useMemo(() => buildStoryIndex(catalog), [catalog])
   // States are dynamic: derived from the selected part's discovered variant
@@ -75,11 +93,78 @@ export function LabShell() {
   // The States panel reflects the selected part, or — when nothing is selected —
   // the surface's first state family, so a surface's states are visible without
   // hunting for the right part.
-  const fallbackStateStory = useMemo(() => firstStateFamilyStory(index), [index])
+  const fallbackStateStory = useMemo(
+    () => firstStateFamilyStory(index),
+    [index],
+  )
   const stateStory = primaryStory ?? fallbackStateStory
-  const states = useMemo(() => statesForStory(stateStory, index.byId), [stateStory, index])
-  const defaultStateId = states.find(state => state.id.toLowerCase() === "ready")?.id ?? states[0]?.id ?? DEFAULT_STATE_ID
-  const [activeStateId, setActiveStateId] = useState<SourceStatus>(defaultStateId)
+  const states = useMemo(
+    () => statesForStory(stateStory, index.byId),
+    [stateStory, index],
+  )
+  const defaultStateId =
+    states.find(state => state.id.toLowerCase() === "ready")?.id ??
+    states[0]?.id ??
+    DEFAULT_STATE_ID
+  const [activeStateId, setActiveStateId] =
+    useState<SourceStatus>(defaultStateId)
+
+  // State AXES for the active screen (the surface's real state machines), wired
+  // to the surface's production-inert preview singletons. Default to the first
+  // screen that exposes axes (the surface's home); a page selection retargets it.
+  const defaultAxisScreenPath = useMemo(() => {
+    for (const screen of adapter.screens ?? []) {
+      if ((adapter.axesForScreen?.(screen.path) ?? []).length > 0)
+        return screen.path
+    }
+    return "/"
+  }, [adapter])
+  const [activeScreenPath, setActiveScreenPath] = useState(
+    defaultAxisScreenPath,
+  )
+  const isPageSelection =
+    !primaryStory ||
+    primaryStory.layer === "page" ||
+    primaryStory.layer === "template"
+  const screenAxes = useMemo(
+    () =>
+      isPageSelection ? (adapter.axesForScreen?.(activeScreenPath) ?? []) : [],
+    [adapter, activeScreenPath, isPageSelection],
+  )
+  const [activeByAxis, setActiveByAxis] = useState<LabAxisActiveMap>(() =>
+    liveActiveMap(screenAxes),
+  )
+  const [mode, setMode] = useState<"inspect" | "live">("live")
+
+  // Tapping an axis state pins that axis (Inspect); the Live chip releases it.
+  // Both drive the surface singletons, so the mounted surface reflects them.
+  const pinAxis = (axisId: string, stateId: string) => {
+    const axis = screenAxes.find(candidate => candidate.id === axisId)
+    if (!axis) return
+    axis.pin(stateId)
+    setActiveByAxis(prev => pinAxisActive(prev, axisId, stateId))
+    setMode("inspect")
+  }
+  const liveAxis = (axisId: string) => {
+    const axis = screenAxes.find(candidate => candidate.id === axisId)
+    if (!axis) return
+    axis.release()
+    setActiveByAxis(prev => releaseAxisActive(prev, axisId))
+  }
+
+  // Release the previous surface's axis pins on surface switch so a pin can't
+  // leak across surfaces (plan risk #1); start the new surface fully Live.
+  useEffect(() => {
+    setActiveScreenPath(defaultAxisScreenPath)
+    setActiveByAxis(
+      liveActiveMap(adapter.axesForScreen?.(defaultAxisScreenPath) ?? []),
+    )
+    setMode("live")
+    return () => {
+      for (const axis of adapter.axesForScreen?.(defaultAxisScreenPath) ?? [])
+        axis.release()
+    }
+  }, [adapter, defaultAxisScreenPath])
 
   useEffect(() => {
     setView(initialCanvasView)
@@ -119,7 +204,10 @@ export function LabShell() {
         if (!cancelled) setCatalog(next)
       })
       .catch(cause => {
-        if (!cancelled) setCatalogError(cause instanceof Error ? cause : new Error(String(cause)))
+        if (!cancelled)
+          setCatalogError(
+            cause instanceof Error ? cause : new Error(String(cause)),
+          )
       })
     return () => {
       cancelled = true
@@ -127,14 +215,21 @@ export function LabShell() {
   }, [adapter.id])
 
   useEffect(() => {
-    setInstances(prev => reconcileInstancesWithSelection(prev, selectedIds, { sourceId: activeSourceId, stateId: activeStateId }))
+    setInstances(prev =>
+      reconcileInstancesWithSelection(prev, selectedIds, {
+        sourceId: activeSourceId,
+        stateId: activeStateId,
+      }),
+    )
   }, [selectedIds, activeSourceId, activeStateId])
 
   const selectStory = (storyId: string, additive = false) => {
     const add = additive || multi
     setSelectedIds(prev => {
       if (!add) return [storyId]
-      return prev.includes(storyId) ? prev.filter(id => id !== storyId) : [...prev, storyId]
+      return prev.includes(storyId)
+        ? prev.filter(id => id !== storyId)
+        : [...prev, storyId]
     })
     setView(add ? "canvas" : "selection")
   }
@@ -157,9 +252,28 @@ export function LabShell() {
       onSelectLayer={selectLayer}
     />
   )
-  const sourcesPanel = () => <LabSourcesPanel sources={sources} activeId={activeSourceId} onSelect={setActiveSourceId} />
-  const statesPanel = () => <LabStatesPanel states={states} activeId={activeStateId} onSelect={selectState} hasSelection={Boolean(primaryStory)} />
-  const inspectorPanel = () => <LabInspectorPanel accent={accent} onAccent={setAccent} />
+  const sourcesPanel = () => (
+    <LabSourcesPanel
+      sources={sources}
+      activeId={activeSourceId}
+      onSelect={setActiveSourceId}
+    />
+  )
+  const statesPanel = () => (
+    <LabStatesPanel
+      axes={screenAxes}
+      activeByAxis={activeByAxis}
+      onPin={pinAxis}
+      onLive={liveAxis}
+      states={states}
+      activeId={activeStateId}
+      onSelect={selectState}
+      hasSelection={Boolean(primaryStory)}
+    />
+  )
+  const inspectorPanel = () => (
+    <LabInspectorPanel accent={accent} onAccent={setAccent} />
+  )
   const devicesPanel = () => <LabDevicesPanel />
   const controlsPanel = () => <LabSurfaceControlsPanel />
   const hasControls = Boolean(adapter.useControls)
@@ -170,18 +284,48 @@ export function LabShell() {
     { id: "states", label: "States", render: statesPanel },
     { id: "inspector", label: "Inspector", render: inspectorPanel },
     { id: "devices", label: "Devices", render: devicesPanel },
-    ...(hasControls ? [{ id: "controls", label: "Controls", render: controlsPanel }] : []),
+    ...(hasControls
+      ? [{ id: "controls", label: "Controls", render: controlsPanel }]
+      : []),
   ]
   const deckPanels = [
     { id: "parts", title: "Parts", accent: "#7dd3fc", render: partsPanel },
-    { id: "sources", title: "Sources", accent: "#f0abfc", render: sourcesPanel },
+    {
+      id: "sources",
+      title: "Sources",
+      accent: "#f0abfc",
+      render: sourcesPanel,
+    },
     { id: "states", title: "States", accent: "#86efac", render: statesPanel },
-    { id: "devices", title: "Devices", accent: "#fcd34d", render: devicesPanel },
-    { id: "inspector", title: "Inspector", accent: "#c4b5fd", render: inspectorPanel },
-    ...(hasControls ? [{ id: "controls", title: "Controls", accent: "#fca5a5", render: controlsPanel }] : []),
+    {
+      id: "devices",
+      title: "Devices",
+      accent: "#fcd34d",
+      render: devicesPanel,
+    },
+    {
+      id: "inspector",
+      title: "Inspector",
+      accent: "#c4b5fd",
+      render: inspectorPanel,
+    },
+    ...(hasControls
+      ? [
+          {
+            id: "controls",
+            title: "Controls",
+            accent: "#fca5a5",
+            render: controlsPanel,
+          },
+        ]
+      : []),
   ]
 
-  const compact = typeof window !== "undefined" && Boolean(window.matchMedia?.("(max-width: 760px), (pointer: coarse)")?.matches)
+  const compact =
+    typeof window !== "undefined" &&
+    Boolean(
+      window.matchMedia?.("(max-width: 760px), (pointer: coarse)")?.matches,
+    )
   const w = typeof window === "undefined" ? 1440 : window.innerWidth
   const floatLayout: Record<string, LabFloatRect> = {
     parts: { x: 96, y: 120, width: 236 },
@@ -191,7 +335,10 @@ export function LabShell() {
     inspector: { x: w - 300, y: 110, width: 252 },
     controls: { x: 348, y: 120, width: 236 },
   }
-  const knobVars = knobStyle(adapter.knobs ?? [], knobValues) as Record<string, string | number>
+  const knobVars = knobStyle(adapter.knobs ?? [], knobValues) as Record<
+    string,
+    string | number
+  >
   const canvasStyle = { ...knobVars, "--k-accent": accent } as CSSProperties
   const showZoom = view === "selection" && !compact
 
@@ -207,10 +354,19 @@ export function LabShell() {
   const shellStyle = { "--lab-dock-w": `${dockWidth}px` } as CSSProperties
 
   return (
-    <div className={`pt-shell pt-${chromeMode}`} data-chrome={chromeVisible ? "on" : "off"} style={shellStyle}>
+    <div
+      className={`pt-shell pt-${chromeMode}`}
+      data-chrome={chromeVisible ? "on" : "off"}
+      data-lab-mode={mode}
+      style={shellStyle}
+    >
       <div className="pt-canvas" style={canvasStyle}>
         <div className="pt-canvas-bar">
-          <div className="pt-seg pt-seg-sm" role="tablist" aria-label="Canvas view">
+          <div
+            className="pt-seg pt-seg-sm"
+            role="tablist"
+            aria-label="Canvas view"
+          >
             {CANVAS_VIEWS.map(candidate => (
               <button
                 key={candidate.id}
@@ -224,18 +380,35 @@ export function LabShell() {
               </button>
             ))}
           </div>
-          <button type="button" className={`pt-multi${multi ? " is-on" : ""}`} aria-pressed={multi} onClick={() => setMulti(value => !value)}>
+          <button
+            type="button"
+            className={`pt-multi${multi ? " is-on" : ""}`}
+            aria-pressed={multi}
+            onClick={() => setMulti(value => !value)}
+          >
             {multi ? "◉" : "○"} Multi
           </button>
           {instances.length > 0 ? (
             <>
-              <span className="pt-canvas-count">{instances.length} object{instances.length === 1 ? "" : "s"}</span>
-              <button type="button" className="pt-canvas-clear" onClick={clearAll}>Clear</button>
+              <span className="pt-canvas-count">
+                {instances.length} object{instances.length === 1 ? "" : "s"}
+              </span>
+              <button
+                type="button"
+                className="pt-canvas-clear"
+                onClick={clearAll}
+              >
+                Clear
+              </button>
             </>
           ) : null}
         </div>
 
-        {catalogError ? <div role="alert" className="lab-catalog-error">Failed to load parts: {catalogError.message}</div> : null}
+        {catalogError ? (
+          <div role="alert" className="lab-catalog-error">
+            Failed to load parts: {catalogError.message}
+          </div>
+        ) : null}
 
         <LabCanvasContent
           view={view}
@@ -254,23 +427,53 @@ export function LabShell() {
 
         {showZoom ? (
           <div className="pt-zoombar">
-            <button type="button" aria-label="Zoom out" onClick={() => setZoom(z => Math.max(0.4, Number((z - 0.1).toFixed(2))))}>–</button>
+            <button
+              type="button"
+              aria-label="Zoom out"
+              onClick={() =>
+                setZoom(z => Math.max(0.4, Number((z - 0.1).toFixed(2))))
+              }
+            >
+              –
+            </button>
             <span>{Math.round(zoom * 100)}%</span>
-            <button type="button" aria-label="Zoom in" onClick={() => setZoom(z => Math.min(2, Number((z + 0.1).toFixed(2))))}>+</button>
+            <button
+              type="button"
+              aria-label="Zoom in"
+              onClick={() =>
+                setZoom(z => Math.min(2, Number((z + 0.1).toFixed(2))))
+              }
+            >
+              +
+            </button>
           </div>
         ) : null}
       </div>
 
       {chromeVisible ? (
         <>
-          <LabTopBar chromeMode={chromeMode} onChromeModeChange={setChromeMode} onHideChrome={() => setChromeVisible(false)} compact={compact} />
+          <LabTopBar
+            chromeMode={chromeMode}
+            onChromeModeChange={setChromeMode}
+            onHideChrome={() => setChromeVisible(false)}
+            compact={compact}
+          />
 
           {compact ? <LabTouchSheet panels={sheetPanels} /> : null}
 
           {!compact && chromeMode !== "focus" ? (
             <>
-              <LabToolRail docked={chromeMode === "dock"} open={openPanel} onOpen={setOpenPanel} />
-              <LabPanelDeck mode={chromeMode} panels={deckPanels} floatLayout={floatLayout} onDockResize={setDockWidth} />
+              <LabToolRail
+                docked={chromeMode === "dock"}
+                open={openPanel}
+                onOpen={setOpenPanel}
+              />
+              <LabPanelDeck
+                mode={chromeMode}
+                panels={deckPanels}
+                floatLayout={floatLayout}
+                onDockResize={setDockWidth}
+              />
             </>
           ) : null}
 
@@ -279,7 +482,13 @@ export function LabShell() {
           ) : null}
         </>
       ) : (
-        <button type="button" className="pt-show" onClick={() => setChromeVisible(true)}>Show UI</button>
+        <button
+          type="button"
+          className="pt-show"
+          onClick={() => setChromeVisible(true)}
+        >
+          Show UI
+        </button>
       )}
     </div>
   )

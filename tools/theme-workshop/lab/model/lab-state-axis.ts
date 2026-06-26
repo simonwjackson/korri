@@ -38,6 +38,8 @@ export interface LabStateAxis {
   /** When present, the axis is only meaningful while this holds over the current
    * per-axis active map (e.g. Launch only matters when Data = Ready). */
   readonly enabledWhen?: (active: LabAxisActiveMap) => boolean
+  /** Short reason shown when the axis is greyed by `enabledWhen`. */
+  readonly disabledHint?: string
 }
 
 /** Derive an axis's selectable options from a state machine's tags. */
@@ -59,4 +61,26 @@ export function axisEnabled(
   active: LabAxisActiveMap,
 ): boolean {
   return axis.enabledWhen ? axis.enabledWhen(active) : true
+}
+
+/** A fresh active map with every axis Live (no pins). */
+export function liveActiveMap(axes: readonly LabStateAxis[]): LabAxisActiveMap {
+  return Object.fromEntries(axes.map(axis => [axis.id, LAB_AXIS_LIVE]))
+}
+
+/** Pin one axis to a state tag in the active map (others unchanged). */
+export function pinAxisActive(
+  active: LabAxisActiveMap,
+  axisId: string,
+  stateId: string,
+): LabAxisActiveMap {
+  return { ...active, [axisId]: stateId }
+}
+
+/** Release one axis (set Live) in the active map (others unchanged). */
+export function releaseAxisActive(
+  active: LabAxisActiveMap,
+  axisId: string,
+): LabAxisActiveMap {
+  return { ...active, [axisId]: LAB_AXIS_LIVE }
 }

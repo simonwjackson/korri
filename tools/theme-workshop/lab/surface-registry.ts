@@ -2,11 +2,15 @@ import type { RouterHistory } from "@tanstack/history"
 import type { ReactNode } from "react"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
 import type { WorkshopControl } from "../types"
-import type { LabSourceOption, LabStateOption, SourceStatus } from "./model/lab-source-state"
-import type { LabStateAxis } from "./model/lab-state-axis"
 import { boxbusterLabSurfaceAdapter } from "./adapters/boxbuster"
 import { picoLabSurfaceAdapter } from "./adapters/pico"
 import { shiftLabSurfaceAdapter } from "./adapters/shift"
+import type {
+  LabSourceOption,
+  LabStateOption,
+  SourceStatus,
+} from "./model/lab-source-state"
+import type { LabStateAxis } from "./model/lab-state-axis"
 
 export interface LabMountedSurface {
   readonly router: unknown
@@ -22,6 +26,11 @@ export interface LabSurfaceAdapter {
   readonly id: string
   readonly devices: readonly DeviceConfig[]
   readonly screens?: readonly LabSurfaceScreen[]
+  /** The state-machine axes a given screen (by route path) exposes — each wired
+   * to the surface's production-inert preview singletons. Screens with no state
+   * machine (or surfaces with none at all) return an empty list. Derived from
+   * the machine tags, never hand-authored. */
+  readonly axesForScreen?: (screenPath: string) => readonly LabStateAxis[]
   /** Surface-owned live controls (e.g. pico's palette/granularity), rendered
    * neutrally by the lab. A hook so control values track surface state. */
   readonly useControls?: () => readonly WorkshopControl[]

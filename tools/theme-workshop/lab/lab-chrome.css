@@ -1339,6 +1339,65 @@ body {
 	color: var(--pt-ink-faint);
 	padding: 2px 4px 10px;
 }
+
+/* state axes */
+.pt-axis-group {
+	margin-bottom: 12px;
+}
+.pt-axis-group.is-disabled {
+	opacity: 0.45;
+}
+.pt-axis-head {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 0 4px 6px;
+}
+.pt-axis-label {
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--pt-ink-dim);
+}
+.pt-axis-reason {
+	font-size: 10px;
+	color: var(--pt-ink-faint);
+}
+.pt-axis-rows {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.pt-axis-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 9px;
+	border: 1px solid var(--pt-line-soft);
+	border-radius: 7px;
+	background: transparent;
+	color: var(--pt-ink-dim);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+.pt-axis-chip:hover:not(:disabled) {
+	border-color: var(--pt-line);
+	background: #16171d;
+}
+.pt-axis-chip.is-on {
+	border-color: var(--k-accent, #7dd3fc);
+	color: var(--pt-ink);
+	background: rgba(125, 211, 252, 0.12);
+}
+.pt-axis-chip.is-live.is-on {
+	border-color: #86efac;
+	background: rgba(134, 239, 172, 0.14);
+}
+.pt-axis-chip:disabled {
+	cursor: default;
+}
 .pt-source-row {
 	display: flex;
 	align-items: center;

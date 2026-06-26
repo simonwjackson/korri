@@ -1,5 +1,5 @@
-import { RegistryProvider, useAtomSet } from "@effect/atom-react"
 import { afterEach, describe, expect, it } from "bun:test"
+import { RegistryProvider, useAtomSet } from "@effect/atom-react"
 import {
   type CatalogSnapshotFacts,
   makeInMemoryCatalogFactsSourceLayer,
@@ -13,10 +13,13 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react"
-import { type ReactNode, useLayoutEffect } from "react"
+import { useLayoutEffect } from "react"
 import { setShiftCatalogPreview } from "../shift-catalog-preview"
 import { shiftCatalogStateSamples } from "../shift-catalog-state-samples"
-import { launchStateSamples, setShiftLaunchPreview } from "../shift-launch-preview"
+import {
+  launchStateSamples,
+  setShiftLaunchPreview,
+} from "../shift-launch-preview"
 import { ShiftHomeRoute } from "./ShiftHomeRoute"
 
 function readyFacts(): CatalogSnapshotFacts {
