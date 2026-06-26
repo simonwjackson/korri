@@ -1101,6 +1101,19 @@ body {
 	overscroll-behavior: contain;
 }
 
+/* Float host: a non-constraining layer so the SAME panel elements persist
+ * across the dock<->float toggle (lets framer-motion animate the morph). The
+ * panels themselves are position:fixed, so the host only needs to exist. */
+.pt-float-host {
+	position: fixed;
+	inset: var(--pt-bar-h) 0 0 0;
+	pointer-events: none;
+	z-index: 45;
+}
+.pt-float-host .pt-panel {
+	pointer-events: auto;
+}
+
 /* Docked panels snap into the rail: full width, in normal flow, no free drag. */
 .pt-dock-right .pt-panel.is-docked {
 	position: static;

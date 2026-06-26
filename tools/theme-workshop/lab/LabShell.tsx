@@ -17,8 +17,7 @@ import {
 import { knobStyle } from "./model/lab-calibration-state"
 import { loadSurfacePartsResult, type LabPartsCatalog } from "./parts-discovery"
 import { useLab } from "./Lab.context"
-import { LabDockRail } from "./chrome/LabDockRail"
-import { LabFloatingPanel } from "./chrome/LabFloatingPanel"
+import { LabPanelDeck, type LabFloatRect } from "./chrome/LabPanelDeck"
 import { LabFocusRail } from "./chrome/LabFocusRail"
 import { LabToolRail } from "./chrome/LabToolRail"
 import { LabTopBar } from "./chrome/LabTopBar"
@@ -133,7 +132,7 @@ export function LabShell() {
     { id: "devices", label: "Devices", render: devicesPanel },
     ...(hasControls ? [{ id: "controls", label: "Controls", render: controlsPanel }] : []),
   ]
-  const dockPanels = [
+  const deckPanels = [
     { id: "parts", title: "Parts", accent: "#7dd3fc", render: partsPanel },
     { id: "sources", title: "Sources", accent: "#f0abfc", render: sourcesPanel },
     { id: "states", title: "States", accent: "#86efac", render: statesPanel },
@@ -144,6 +143,14 @@ export function LabShell() {
 
   const compact = typeof window !== "undefined" && Boolean(window.matchMedia?.("(max-width: 760px), (pointer: coarse)")?.matches)
   const w = typeof window === "undefined" ? 1440 : window.innerWidth
+  const floatLayout: Record<string, LabFloatRect> = {
+    parts: { x: 96, y: 120, width: 236 },
+    sources: { x: 96, y: 430, width: 236 },
+    states: { x: 348, y: 430, width: 236 },
+    devices: { x: w - 300, y: 430, width: 252 },
+    inspector: { x: w - 300, y: 110, width: 252 },
+    controls: { x: 348, y: 120, width: 236 },
+  }
   const knobVars = knobStyle(adapter.knobs ?? [], knobValues) as Record<string, string | number>
   const canvasStyle = { ...knobVars, "--k-accent": accent } as CSSProperties
   const showZoom = view === "selection" && !compact
@@ -209,22 +216,10 @@ export function LabShell() {
 
           {compact ? <LabTouchSheet panels={sheetPanels} /> : null}
 
-          {!compact && chromeMode === "dock" ? (
+          {!compact && chromeMode !== "focus" ? (
             <>
-              <LabToolRail docked open={openPanel} onOpen={setOpenPanel} />
-              <LabDockRail panels={dockPanels} />
-            </>
-          ) : null}
-
-          {!compact && chromeMode === "float" ? (
-            <>
-              <LabToolRail docked={false} open={openPanel} onOpen={setOpenPanel} />
-              <LabFloatingPanel title="Parts" initial={{ x: 96, y: 120 }} width={236} accent="#7dd3fc">{partsPanel()}</LabFloatingPanel>
-              <LabFloatingPanel title="Inspector" initial={{ x: w - 300, y: 110 }} width={252} accent="#c4b5fd">{inspectorPanel()}</LabFloatingPanel>
-              <LabFloatingPanel title="Sources" initial={{ x: 96, y: 430 }} width={236} accent="#f0abfc">{sourcesPanel()}</LabFloatingPanel>
-              <LabFloatingPanel title="States" initial={{ x: 348, y: 430 }} width={236} accent="#86efac">{statesPanel()}</LabFloatingPanel>
-              <LabFloatingPanel title="Devices" initial={{ x: w - 300, y: 430 }} width={252} accent="#fcd34d">{devicesPanel()}</LabFloatingPanel>
-              {hasControls ? <LabFloatingPanel title="Controls" initial={{ x: 348, y: 120 }} width={236} accent="#fca5a5">{controlsPanel()}</LabFloatingPanel> : null}
+              <LabToolRail docked={chromeMode === "dock"} open={openPanel} onOpen={setOpenPanel} />
+              <LabPanelDeck mode={chromeMode} panels={deckPanels} floatLayout={floatLayout} />
             </>
           ) : null}
 
