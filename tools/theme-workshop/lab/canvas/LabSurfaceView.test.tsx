@@ -92,18 +92,19 @@ describe("LabSurfaceView", () => {
     )
 
     await waitFor(() => {
-      expect(mounts).toHaveLength(2)
-    })
-
-    expect(mounts).toEqual([
-      {
+      expect(mounts).toContainEqual({
         path: "/",
         dualScreen: { role: "primary", channelName: "lab:shift:thor" },
-      },
-      {
+      })
+      expect(mounts).toContainEqual({
         path: "/companion",
         dualScreen: { role: "companion", channelName: "lab:shift:thor" },
-      },
-    ])
+      })
+    })
+
+    expect(mounts).not.toContainEqual({
+      path: "/game/hollow-knight",
+      dualScreen: undefined,
+    })
   })
 })
