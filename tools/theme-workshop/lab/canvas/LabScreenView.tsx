@@ -25,7 +25,15 @@ export function LabScreenView({
   readonly stateId: SourceStatus
 }) {
   const { adapter, selectedDevices, pxPerMm } = useLab()
+  // `path` tracks internal navigation within a screen; `anchor` snaps it back to
+  // the selected screen's route synchronously (no flash) when the selection
+  // changes, before the keyed remount reads it.
   const [path, setPath] = useState(screenPath)
+  const [anchor, setAnchor] = useState(screenPath)
+  if (screenPath !== anchor) {
+    setAnchor(screenPath)
+    setPath(screenPath)
+  }
   // Load the seed once (null until ready) so the surface mounts a single time;
   // axis pins then update it cross-root without a remount.
   const [boundValues, setBoundValues] = useState<unknown | null>(null)
@@ -35,11 +43,6 @@ export function LabScreenView({
       ? undefined
       : window.innerHeight - VIEWPORT_INSET,
   )
-
-  // Re-anchor to the selected screen's route when the selection changes.
-  useEffect(() => {
-    setPath(screenPath)
-  }, [screenPath])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -93,7 +96,10 @@ export function LabScreenView({
         maxHeightPx={maxHeightPx}
         renderPrimary={() => (
           <LabSurfaceMount
-            key={`${sourceId}:${stateId}`}
+            // Key by screenPath so selecting a different screen part remounts
+            // crisply at the new route (no stale-screen flash); internal
+            // navigation updates `path` without remounting.
+            key={`${screenPath}:${sourceId}:${stateId}`}
             adapter={adapter}
             initialValues={boundValues}
             surfacePath={path}

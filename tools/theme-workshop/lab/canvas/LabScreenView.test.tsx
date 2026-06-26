@@ -92,7 +92,7 @@ describe("LabScreenView", () => {
     expect(mountCounts.count).toBe(1)
   })
 
-  it("re-anchors to a new screen route without remounting the surface", async () => {
+  it("remounts crisply at the new screen route on a selection change", async () => {
     const { adapter, mountCounts } = makeAdapter()
     const view = render(
       <LabContext.Provider value={context(adapter)}>
@@ -119,8 +119,9 @@ describe("LabScreenView", () => {
         "/game/hollow-knight",
       )
     })
-    // Route change pushes history rather than remounting (no second mount).
-    expect(mountCounts.count).toBe(1)
+    // Selecting a different screen part remounts at the new route (keyed by
+    // screenPath), so the old screen never lingers as a stale flash.
+    expect(mountCounts.count).toBe(2)
   })
 
   it("falls back to the adapter's device roster when none is selected", async () => {
