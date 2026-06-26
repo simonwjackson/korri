@@ -86,14 +86,16 @@ const SHIFT_KNOBS: readonly ThemeKnob[] = [
     unit: "px",
   },
   {
-    id: "max",
-    label: "MAX",
-    cssVar: "--shift-base-max",
-    min: 14,
-    max: 960,
-    step: 1,
-    default: 18,
-    unit: "px",
+    // Height-relative ceiling (cqh): base never exceeds CEIL% of the screen
+    // height. Replaces the old fixed px MAX so the TV scales by width while a
+    // wide-short frame stays capped by height. Higher = ceiling bites later.
+    id: "ceil",
+    label: "CEIL",
+    cssVar: "--shift-base-cqh",
+    min: 1,
+    max: 12,
+    step: 0.1,
+    default: 4,
   },
   {
     id: "ratio",

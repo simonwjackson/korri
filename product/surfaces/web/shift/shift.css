@@ -50,17 +50,31 @@
 [data-shift-detail] {
 	/* ── Intrinsic generator knobs ─────────────────────────────────────────
 	 * Shift instantiates @korri/intrinsic-design against its OWN container.
-	 * The surface element carries the `intrinsic` class so the recipe computes
-	 * --intrinsic-base / --intrinsic-text-* / --intrinsic-space-* here from
-	 * these knobs. Calibrated to Shift's Switch-like handheld → panel → TV
-	 * range; tune live in the device-lab (the generator sliders write these
-	 * same vars). Snap stays the recipe default (0.02px) — Shift has a smooth
-	 * font, not pico's 1px pixel snap. */
-	--intrinsic-base-min: var(--shift-base-min, 14px);
-	--intrinsic-base-cqi: var(--shift-base-cqi, 1.8);
-	--intrinsic-base-max: var(--shift-base-max, 18px);
+	 * The surface element carries the `intrinsic` class so --intrinsic-text-* /
+	 * --intrinsic-space-* derive here; the base itself is overridden just below
+	 * with a height-relative ceiling. Tune live in the device-lab (the generator
+	 * sliders write these same vars). Snap stays the recipe default (0.02px) —
+	 * Shift has a smooth font, not pico's 1px pixel snap. */
 	--intrinsic-ratio: var(--shift-type-ratio, 1.44);
 	--intrinsic-space-unit: var(--shift-space-unit, 0.2em);
+
+	/* ── The base: width-driven, height-capped (no fixed px ceiling) ───────
+	 * BASE (cqi) sets size as a fraction of WIDTH, so a bigger screen gets
+	 * bigger text — a TV scales up like a far-away handheld. CEIL (cqh) caps it
+	 * as a fraction of HEIGHT, so a wide-and-short frame can't grow text taller
+	 * than its screen. The MIN floor stays absolute px for legibility. This
+	 * replaces the recipe's clamp(min, cqi, max) — the ceiling is now relative,
+	 * not an unjustifiable pixel number. */
+	--intrinsic-base: round(
+		max(
+			var(--shift-base-min, 14px),
+			min(
+				calc(var(--shift-base-cqi, 1.8) * 1cqi),
+				calc(var(--shift-base-cqh, 4) * 1cqh)
+			)
+		),
+		var(--intrinsic-snap)
+	);
 
 	/* ── Native semantic type scale (derived off the one base) ─────────────
 	 * Body sits AT the base (text-0), not at the floor. `fine` is one step
