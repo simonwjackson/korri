@@ -212,8 +212,8 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("if ! repair_game_audio; then")
   })
 
-  it("forwards AppIDs into the warm Steam client without a raw applaunch fallback", () => {
-    expect(moduleSource).toContain('"steam://rungameid/$appid"')
-    expect(moduleSource).not.toContain('-applaunch "$appid"')
+  it("forwards AppIDs into the warm Steam client with the working applaunch shape", () => {
+    expect(moduleSource).toContain('-applaunch "$appid"')
+    expect(moduleSource).not.toContain('"steam://rungameid/$appid"')
   })
 })

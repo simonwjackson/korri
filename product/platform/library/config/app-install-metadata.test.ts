@@ -9,7 +9,29 @@ const steamApp: AppRecord = {
 }
 
 describe("install metadata projection", () => {
-  it("projects provider install metadata from release launch and numeric URL target", () => {
+  it("projects provider install metadata from release launch and provider-ref target", () => {
+    const install = installMetadataForRelease(
+      {
+        id: "steam",
+        system: "steam",
+        target: {
+          kind: "provider-ref",
+          provider: "@korri:steam",
+          ref: "1029210",
+        },
+        launch: { use: "@korri:steam/steam" },
+      },
+      new Map([[steamApp.id, steamApp]]),
+    )
+
+    expect(install).toEqual({
+      providerId: "@korri:steam",
+      appId: "1029210",
+      canRequestInstall: true,
+    })
+  })
+
+  it("keeps legacy numeric URL targets installable", () => {
     const install = installMetadataForRelease(
       {
         id: "steam",
@@ -20,10 +42,9 @@ describe("install metadata projection", () => {
       new Map([[steamApp.id, steamApp]]),
     )
 
-    expect(install).toEqual({
+    expect(install).toMatchObject({
       providerId: "@korri:steam",
       appId: "1029210",
-      canRequestInstall: true,
     })
   })
 

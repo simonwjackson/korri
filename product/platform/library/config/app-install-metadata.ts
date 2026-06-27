@@ -41,6 +41,10 @@ export function installMetadataAllowed(
 function steamAppIdFromTarget(
   target: LibraryReleasePayload["target"],
 ): string | undefined {
+  if (target?.kind === "provider-ref" && target.provider === STEAM_PROVIDER_ID) {
+    return /^\d+$/.test(target.ref) ? target.ref : undefined
+  }
+
   const value = target?.kind === "url" ? target.value : undefined
   if (!value) return undefined
   const match = value.match(/^steam:\/\/(?:rungameid|run|install)\/([0-9]+)$/)

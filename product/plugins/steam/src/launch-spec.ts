@@ -12,7 +12,8 @@ export class InvalidSteamLaunchOptions extends Data.TaggedError(
   readonly token: string
 }> {}
 
-const STEAM_TARGET_PATTERN = /^steam:\/\/rungameid\/(\d+)$/
+const STEAM_URL_TARGET_PATTERN = /^steam:\/\/rungameid\/(\d+)$/
+const STEAM_PROVIDER_REF_TARGET_PATTERN = /^@korri:steam:(\d+)$/
 const KORRI_TOKEN_PATTERN = /\{[^}]+\}/
 const DEFAULT_KORRI_STEAM_APP_COMMAND =
   "/run/current-system/sw/bin/korri-steam-app"
@@ -24,7 +25,9 @@ export type SteamEither<E, A> =
 export const parseSteamAppId = (
   target: string,
 ): SteamEither<InvalidSteamTarget, string> => {
-  const match = STEAM_TARGET_PATTERN.exec(target)
+  const match =
+    STEAM_PROVIDER_REF_TARGET_PATTERN.exec(target) ??
+    STEAM_URL_TARGET_PATTERN.exec(target)
   return match?.[1]
     ? { _tag: "Right", right: match[1] }
     : { _tag: "Left", left: new InvalidSteamTarget({ target }) }

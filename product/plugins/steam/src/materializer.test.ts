@@ -75,7 +75,7 @@ const context = (root: string): ReadableResolvedLaunchContext => ({
   itemId: "thirty-xx",
   releaseId: "steam",
   system: "windows",
-  target: "steam://rungameid/1029210",
+  target: "@korri:steam:1029210",
   app: {
     id: KORRI_STEAM_APP_ID,
     plugin: KORRI_STEAM_PLUGIN_ID,
@@ -104,7 +104,7 @@ const context = (root: string): ReadableResolvedLaunchContext => ({
 })
 
 describe("steamReadableLaunchIntegration", () => {
-  it("matches provider-qualified Steam contexts with an AppID target and plugin policy", async () => {
+  it("matches provider-qualified Steam contexts with a provider-ref AppID target and plugin policy", async () => {
     await withRoot(async root => {
       expect(steamReadableLaunchIntegration).toMatchObject({
         providerId: KORRI_STEAM_PLUGIN_ID,

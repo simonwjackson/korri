@@ -3,7 +3,7 @@
 # Authoring contract:
 # - releases choose launch behavior with launch.use / launch.plugin.
 # - plugin lives only on top-level launchers.<id>, never on a system record.
-# - Steam appid comes only from target: steam://rungameid/<appid>.
+# - Steam appid comes from a collision-proof provider-ref target.
 # - Steam LaunchOptions are literal Steam syntax; %command% is not a Korri placeholder.
 # - Readiness probing, VDF/localconfig paths, wrapper provisioning, and daemon
 #   orchestration are implementation-owned plugin details, not generic app fields.
@@ -51,16 +51,18 @@ library:
       - id: steam-store
         system: steam
         target:
-          kind: url
-          value: steam://rungameid/2379780
+          kind: provider-ref
+          provider: "@korri:steam"
+          ref: "2379780"
         launch:
           use: "@korri:steam/steam"
 
       - id: steam-store-mangohud
         system: steam
         target:
-          kind: url
-          value: steam://rungameid/2379780
+          kind: provider-ref
+          provider: "@korri:steam"
+          ref: "2379780"
         launch:
           use: "@korri:steam/steam"
           settings:

@@ -801,7 +801,7 @@ let
     # console-log prompts.
     focus_korri_output
     hide_steam_hat
-    if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest "steam://rungameid/$appid" >/dev/null; then
+    if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest -applaunch "$appid" >/dev/null; then
       echo "korri-steam-app: timed out forwarding AppID $appid to Steam" >&2
       exit 125
     fi

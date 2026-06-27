@@ -712,7 +712,7 @@ async function seedSteamLaunchConfig(
       "    releases:",
       "      - id: steam",
       "        system: steam",
-      "        target: { kind: url, value: steam://rungameid/1029210 }",
+      `        target: { kind: provider-ref, provider: "${KORRI_STEAM_PLUGIN_ID}", ref: "1029210" }`,
       `        launch: { use: "${KORRI_STEAM_APP_ID}" }`,
       "",
     ].join("\n"),

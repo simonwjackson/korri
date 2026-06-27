@@ -10,14 +10,29 @@ import {
 const defaultWrapper = "/run/current-system/sw/bin/korri-steam-app"
 
 describe("steam launch spec", () => {
-  it("parses Steam rungameid targets", () => {
+  it("parses Steam provider-ref and legacy rungameid targets", () => {
+    expect(parseSteamAppId("@korri:steam:2379780")).toMatchObject({
+      _tag: "Right",
+      right: "2379780",
+    })
     expect(parseSteamAppId("steam://rungameid/2379780")).toMatchObject({
       _tag: "Right",
       right: "2379780",
     })
   })
 
-  it("renders the managed korri-steam-app wrapper for the parsed appid", async () => {
+  it("renders the managed korri-steam-app wrapper for a provider-ref appid", async () => {
+    const spec = await Effect.runPromise(
+      renderSteamLaunchSpec({
+        command: "steam",
+        target: "@korri:steam:2379780",
+      }),
+    )
+
+    expect(spec).toEqual({ command: defaultWrapper, args: ["2379780"] })
+  })
+
+  it("renders the managed korri-steam-app wrapper for a legacy URL appid", async () => {
     const spec = await Effect.runPromise(
       renderSteamLaunchSpec({
         command: "steam",

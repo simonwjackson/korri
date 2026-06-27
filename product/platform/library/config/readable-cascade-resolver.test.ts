@@ -319,7 +319,11 @@ const steamReadableSnapshot = (
           {
             id: "steam",
             system: "steam",
-            target: { kind: "url", value: "steam://rungameid/2379780" },
+            target: {
+              kind: "provider-ref",
+              provider: "@korri:steam",
+              ref: "2379780",
+            },
             launch: { use: steamAppId },
           },
         ],

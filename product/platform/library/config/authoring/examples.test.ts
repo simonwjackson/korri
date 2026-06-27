@@ -231,8 +231,9 @@ describe("checked-in readable library example", () => {
         Object.values(parsed.library ?? {}).some(item =>
           decodeLibraryItemPayload(item).releases.some(
             release =>
-              release.target?.kind === "url" &&
-              release.target.value === "steam://rungameid/2379780" &&
+              release.target?.kind === "provider-ref" &&
+              release.target.provider === "@korri:steam" &&
+              release.target.ref === "2379780" &&
               release.launch?.use === "@korri:steam/steam",
           ),
         ),
