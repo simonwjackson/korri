@@ -57,6 +57,7 @@ let
       daemonEnv = (userServices.korrid or { }).environment or { };
       activationScripts = cfg.system.activationScripts or { };
       rocknixGuestProfile = cfg.services.korri.rocknixGuestProfile or { };
+      rocknixGuestDeviceAccess = cfg.services.korri.rocknixGuestDeviceAccess or { };
       rocknixAudioBootstrap = cfg.services.korri.rocknixAudioBootstrap or { };
       audioBootstrapActions = rocknixAudioBootstrap.actions or [ ];
       normalizeAudioBootstrapAction =
@@ -259,6 +260,30 @@ let
       (check "${name}: Bandai DSI panel keeps the known-good rotation" (
         lib.hasInfix "output DSI-1 transform 270" compositor.sway.extraConfig
       ))
+      (check "${name}: RockNIX guest device access module must be enabled" (
+        (rocknixGuestDeviceAccess.enable or false) == true
+        && (rocknixGuestDeviceAccess.runtimeUser or null) == runtime.user
+        &&
+          (rocknixGuestDeviceAccess.retriggerSubsystems or [ ]) == [
+            "drm"
+            "input"
+            "sound"
+          ]
+        &&
+          (rocknixGuestDeviceAccess.aclNodeGlobs or [ ]) == [
+            "/dev/dri/card*"
+            "/dev/dri/renderD*"
+            "/dev/input/event*"
+            "/dev/snd/*"
+            "/dev/tty0"
+            "/dev/tty1"
+          ]
+        && (rocknixGuestDeviceAccess.fallbackDelaySeconds or null) == 2
+        && (rocknixGuestDeviceAccess.enableDrmSeatTag or false) == true
+        && (rocknixGuestDeviceAccess.enableInputUdevAcl or false) == true
+        && (rocknixGuestDeviceAccess.enableBacklightRepair or false) == true
+        && (rocknixGuestDeviceAccess.backlightGroup or null) == "video"
+      ))
       (check "${name}: SM8550 DRM is tagged for logind seats" (
         lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' cfg.services.udev.extraRules
       ))
@@ -273,6 +298,10 @@ let
         && builtins.elem "greetd.service" (
           (cfg.systemd.services.korri-rocknix-device-acl-fallback or { }).after or [ ]
         )
+        && (seatDeviceTrigger.serviceConfig.Type or null) == "oneshot"
+        &&
+          ((cfg.systemd.services.korri-rocknix-device-acl-fallback or { }).serviceConfig.Type or null)
+          == "oneshot"
         && (
           let
             raw = seatDeviceTrigger.serviceConfig.ExecStart or [ ];

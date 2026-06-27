@@ -74,75 +74,6 @@ let
   # watcher; this is where the product drops enter/exit markers). Derived
   # from the substrate option so the two stay in sync.
   powerRequestDir = "${config.rocknix.power.runtimeDir}/requests";
-  korriRocknixSeatDeviceSetup = pkgs.writeShellScript "korri-rocknix-seat-device-setup" ''
-    set -u
-    export PATH=${
-      lib.makeBinPath (
-        with pkgs;
-        [
-          acl
-          coreutils
-          gnugrep
-          systemd
-        ]
-      )
-    }
-
-    # Host-bound ROCKNIX device nodes already exist when the guest boots, so
-    # ask udev to re-apply rules when the nspawn sysfs allows it. On Sobo the
-    # DRM sysfs uevent file is read-only from the guest; that path must be a
-    # warning, not a failed boot gate.
-    udevadm control --reload >/dev/null 2>&1 || true
-    udevadm trigger --subsystem-match=drm --action=change || true
-    udevadm trigger --subsystem-match=input --action=change || true
-    udevadm trigger --subsystem-match=sound --action=change || true
-
-    # The guest's numeric device groups can differ from the NixOS group ids
-    # (for example tty/input/sound nodes inherited from the ROCKNIX host).
-    # Directly grant the runtime user access to the nodes wlroots/inputd/audio
-    # need so the appliance can start even when guest udev cannot tag the host
-    # devices.
-    for node in /dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/snd/* /dev/tty0 /dev/tty1; do
-      [ -e "$node" ] || continue
-      setfacl -m m::rw,u:${runtime.user}:rw "$node" || true
-    done
-
-    # Sysfs backlight brightness files do not support POSIX ACLs on Sobo.
-    # Make the standard video-group path writable so Korri inputd can drive
-    # brightnessctl from Home+Volume chords without running as root.
-    for node in /sys/class/backlight/*/brightness; do
-      [ -e "$node" ] || continue
-      chgrp video "$node" || true
-      chmod g+w "$node" || true
-    done
-  '';
-  korriRocknixDeviceAclFallback = pkgs.writeShellScript "korri-rocknix-device-acl-fallback" ''
-    set -u
-    export PATH=${
-      lib.makeBinPath (
-        with pkgs;
-        [
-          acl
-          coreutils
-        ]
-      )
-    }
-
-    # greetd/logind can re-open and chmod tty1 while creating the runtime
-    # session, after the early setup unit has run. Re-apply only ACLs after
-    # greetd starts; the compositor unit has Restart=on-failure and will
-    # recover once these permissions are present.
-    sleep 2
-    for node in /dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/snd/* /dev/tty0 /dev/tty1; do
-      [ -e "$node" ] || continue
-      setfacl -m m::rw,u:${runtime.user}:rw "$node" || true
-    done
-    for node in /sys/class/backlight/*/brightness; do
-      [ -e "$node" ] || continue
-      chgrp video "$node" || true
-      chmod g+w "$node" || true
-    done
-  '';
   # korri-fakesuspend-toggle -- product fake-suspend policy. Runs as the
   # Korri runtime user (dispatched by inputd) and owns ONLY the session
   # half of suspend/resume: blank the screen via Korri's own compositor
@@ -407,6 +338,7 @@ in
     deviceProfile
     korri.nixosModules.korri-steam
     ../../modules/korri-rocknix-audio-bootstrap.nix
+    ../../modules/korri-rocknix-guest-device-access.nix
     ../../modules/korri-rocknix-guest-profile.nix
     ../../modules/korri-removable-media.nix
   ];
@@ -433,6 +365,30 @@ in
     proofMarkerLabel = "korri-sm8550-kiosk-system";
   };
 
+  services.korri.rocknixGuestDeviceAccess = {
+    enable = true;
+    runtimeUser = runtime.user;
+    retriggerSubsystems = [
+      "drm"
+      "input"
+      "sound"
+    ];
+    aclNodeGlobs = [
+      "/dev/dri/card*"
+      "/dev/dri/renderD*"
+      "/dev/input/event*"
+      "/dev/snd/*"
+      "/dev/tty0"
+      "/dev/tty1"
+    ];
+    fallbackDelaySeconds = 2;
+    enableDrmSeatTag = true;
+    enableInputUdevAcl = true;
+    enableBacklightRepair = true;
+    backlightGroup = "video";
+    backlightNodeGlobs = [ "/sys/class/backlight/*/brightness" ];
+  };
+
   services.korri.rocknixAudioBootstrap = {
     enable = true;
     pulseServer = korriPulseServer;
@@ -442,22 +398,6 @@ in
     failOnSocketUnavailable = false;
     actions = sm8550AudioBootstrapActions;
   };
-
-  services.udev.extraRules = ''
-    # Rootless wlroots compositors acquire DRM through logind/libseat, so the
-    # SM8550 KMS card must be attached to seat0. RockNIX guest device events do
-    # not currently carry systemd's generic seat tags for this platform node.
-    SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"
-
-    # Korri inputd runs as the kiosk user and reads evdev directly before
-    # forwarding controller events to the desktop renderer. On the RockNIX
-    # SM8550 substrate these event nodes can inherit a numeric group that does
-    # not match the NixOS input group, and InputPlumber-created virtual nodes
-    # can be created after the static group/mode rewrite. Restate both the
-    # group/mode invariant and an explicit Korri ACL so inputd can read the
-    # normalized controller without boot-time live ACL repair.
-    SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess", RUN+="${pkgs.acl}/bin/setfacl -m u:${runtime.user}:rw /dev/input/%k"
-  '';
 
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 
@@ -479,17 +419,13 @@ in
     };
   };
 
-  # The guest sees DRM and input devices that already exist in the
-  # ROCKNIX-hosted device namespace. Host-bound nodes do not emit a fresh
-  # guest `add` event, so the guest udev rules above may never fire for them.
-  # Reprocess both subsystems when the guest's sysfs permits it, then apply a
-  # direct ACL fallback for DRM/input/tty nodes. Sobo exposes DRM uevent files
-  # read-only inside nspawn, so udev re-trigger failure is expected and must
-  # not block greetd or the compositor.
-  # Running before greetd keeps any successful re-trigger off the live
-  # InputPlumber session and ensures wlroots direct-session tty ACLs exist.
+  # The shared guest-device-access module owns the retrigger/ACL scripts and
+  # udev rules. SM8550 owns only ordering: run setup before greetd so any
+  # successful re-trigger stays off the live InputPlumber session and wlroots
+  # direct-session tty ACLs exist. The substrate sound-card hydrate unit remains
+  # substrate-owned; this adapter only waits for it before the shared sound
+  # retrigger posture runs.
   systemd.services.korri-rocknix-seat-device-trigger = {
-    description = "Apply Korri RockNIX seat + input udev metadata";
     wantedBy = [ "multi-user.target" ];
     after = [
       "systemd-udevd.service"
@@ -497,22 +433,11 @@ in
     ];
     wants = [ "rocknix-sound-card-udev-hydrate.service" ];
     before = [ "greetd.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = korriRocknixSeatDeviceSetup;
-      RemainAfterExit = true;
-    };
   };
 
   systemd.services.korri-rocknix-device-acl-fallback = {
-    description = "Re-apply Korri SM8550 device ACLs after greetd opens the TTY";
     wantedBy = [ "multi-user.target" ];
     after = [ "greetd.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = korriRocknixDeviceAclFallback;
-      RemainAfterExit = true;
-    };
   };
 
   # Korri SM8550 runs a real greetd/logind session as the non-root Korri
