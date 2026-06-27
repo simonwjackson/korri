@@ -114,6 +114,12 @@ pkgs.lib.optionalAttrs isX86Linux {
     matcherSource = ../../../../product/systems/nixos/modules/korri-removable-media-match.sh;
     moduleSource = ../../../../product/systems/nixos/modules/korri-removable-media.nix;
   };
+  korri-rocknix-guest-profile-module =
+    import ../../../../tools/testing/nix/korri-rocknix-guest-profile-module-check.nix
+      {
+        inherit pkgs;
+        korriRocknixGuestProfileModule = self.nixosModules.korri-rocknix-guest-profile;
+      };
   korri-module-identity-audit =
     import ../../../../tools/testing/nix/korri-module-identity-audit-check.nix
       {
@@ -341,6 +347,10 @@ pkgs.lib.optionalAttrs isX86Linux {
       }
       {
         name = "korri-removable-media";
+        owner = "module";
+      }
+      {
+        name = "korri-rocknix-guest-profile-module";
         owner = "module";
       }
       {
