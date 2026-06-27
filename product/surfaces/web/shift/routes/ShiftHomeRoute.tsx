@@ -6,13 +6,13 @@ import {
   type LaunchState as LaunchStateValue,
 } from "@platform/library/launch-state"
 import { launchFailureExitCode } from "@platform/library/launcher"
-import { useOptionalDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 import {
   getPlayableDisplayName,
   getPlayableImageUrl,
   getPlayableWideImageUrl,
 } from "@platform/library/playable-library-ui"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
+import { useOptionalDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 import { foregroundSessionGateStateAtom } from "@platform/react/library/library-atoms"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
