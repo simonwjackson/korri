@@ -1,7 +1,7 @@
 ---
 title: "feat: Share Thor screen selection state"
 type: feat
-status: active
+status: completed
 date: 2026-06-26
 verify_command: "bun test product/platform/react/display/dual-screen product/surfaces/web/shift tools/theme-workshop/lab product/apps/desktop product/apps/portal && bunx vite build --config tools/theme-workshop/lab/vite.config.mjs"
 ---
