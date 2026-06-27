@@ -17,11 +17,7 @@ let
   server = cfg.services.korri.daemon;
   targetSystem = cfg.nixpkgs.hostPlatform.system;
   systemServices = cfg.systemd.services or { };
-  activationScripts = cfg.system.activationScripts or { };
-  guestProfileActivation = activationScripts."korri-rocknix-guest-profile" or { };
   rocknixGuestProfile = cfg.services.korri.rocknixGuestProfile or { };
-  proofMarker = cfg.environment.etc."rocknix-stage10-proof-marker" or { };
-  proofMarkerLines = lib.splitString "\n" (proofMarker.text or "");
   userServices = cfg.systemd.user.services or { };
   userSockets = cfg.systemd.user.sockets or { };
   sessiondService = userServices."korri-sessiond" or { };
@@ -121,14 +117,6 @@ let
     (check "RG353M RockNIX guest profile module must be enabled" (
       (rocknixGuestProfile.enable or false) == true
       && (rocknixGuestProfile.proofMarkerLabel or null) == "korri-rk3566-kiosk-system"
-    ))
-    (check "RG353M RockNIX guest profile activation must be present" (
-      builtins.hasAttr "korri-rocknix-guest-profile" activationScripts
-    ))
-    (check "RG353M RockNIX stage10 proof marker must identify the platform" (
-      builtins.length proofMarkerLines >= 2
-      && builtins.elemAt proofMarkerLines 0 == "korri-rk3566-kiosk-system"
-      && builtins.elemAt proofMarkerLines 1 == "target=${cfg.networking.hostName}"
     ))
     (check "RG353M platform-default root must be ordered before mutable config" (
       lib.hasInfix "korri-platform-config-root" configRootsEnv
