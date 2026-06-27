@@ -57,6 +57,13 @@ let
     };
   };
 
+  multilineLabel = evaluateWith {
+    services.korri.rocknixGuestProfile = {
+      enable = true;
+      proofMarkerLabel = "korri-test-system\nextra";
+    };
+  };
+
   missingLabelTryEval = builtins.tryEval (
     (evaluateWith {
       services.korri.rocknixGuestProfile.enable = true;
@@ -66,6 +73,7 @@ let
   failedAssertions = cfg: builtins.filter (a: !a.assertion) cfg.assertions;
   activationScript = cfg: cfg.system.activationScripts.korri-rocknix-guest-profile or { };
   proofMarker = cfg: cfg.environment.etc."rocknix-stage10-proof-marker" or { };
+  proofMarkerLines = cfg: lib.splitString "\n" ((proofMarker cfg).text or "");
 
   check = message: assertion: { inherit message assertion; };
 
@@ -79,8 +87,9 @@ let
     ))
     (check "enabled module renders the stage10 proof marker" (
       enabled.environment.etc ? "rocknix-stage10-proof-marker"
-      && lib.hasPrefix "korri-test-system" ((proofMarker enabled).text or "")
-      && lib.hasInfix "target=korri-test" ((proofMarker enabled).text or "")
+      && builtins.length (proofMarkerLines enabled) >= 2
+      && builtins.elemAt (proofMarkerLines enabled) 0 == "korri-test-system"
+      && builtins.elemAt (proofMarkerLines enabled) 1 == "target=korri-test"
     ))
     (check "disabled module renders no guest-profile activation script" (
       !(disabled.system.activationScripts ? korri-rocknix-guest-profile)
@@ -90,6 +99,9 @@ let
     ))
     (check "enabled module requires a proof marker label" (!missingLabelTryEval.success))
     (check "enabled module rejects an empty proof marker label" (failedAssertions emptyLabel != [ ]))
+    (check "enabled module rejects a multi-line proof marker label" (
+      failedAssertions multilineLabel != [ ]
+    ))
   ];
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;

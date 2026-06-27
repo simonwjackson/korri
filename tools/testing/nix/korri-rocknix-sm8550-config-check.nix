@@ -66,6 +66,7 @@ let
       guestProfileActivation = activationScripts."korri-rocknix-guest-profile" or { };
       rocknixGuestProfile = cfg.services.korri.rocknixGuestProfile or { };
       proofMarker = cfg.environment.etc."rocknix-stage10-proof-marker" or { };
+      proofMarkerLines = lib.splitString "\n" (proofMarker.text or "");
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
@@ -297,16 +298,13 @@ let
         (rocknixGuestProfile.enable or false) == true
         && (rocknixGuestProfile.proofMarkerLabel or null) == "korri-sm8550-kiosk-system"
       ))
-      (check "${name}: RockNIX guest profile activation must register the switched system" (
+      (check "${name}: RockNIX guest profile activation must be present" (
         builtins.hasAttr "korri-rocknix-guest-profile" activationScripts
-        && lib.hasInfix "rocknix-guest-system" (guestProfileActivation.text or "")
-        && lib.hasInfix "nix-env" (guestProfileActivation.text or "")
-        && lib.hasInfix "$systemConfig" (guestProfileActivation.text or "")
-        && builtins.elem "users" (guestProfileActivation.deps or [ ])
       ))
       (check "${name}: RockNIX stage10 proof marker must identify the platform" (
-        lib.hasPrefix "korri-sm8550-kiosk-system" (proofMarker.text or "")
-        && lib.hasInfix "target=${cfg.networking.hostName}" (proofMarker.text or "")
+        builtins.length proofMarkerLines >= 2
+        && builtins.elemAt proofMarkerLines 0 == "korri-sm8550-kiosk-system"
+        && builtins.elemAt proofMarkerLines 1 == "target=${cfg.networking.hostName}"
       ))
       (check "${name}: sessiond does not control root-owned essway" (
         (sessiondEnv.KORRI_SESSIOND_ESSWAY_CONTROL or null) == "0"

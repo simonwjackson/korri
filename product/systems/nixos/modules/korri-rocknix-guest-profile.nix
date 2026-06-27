@@ -41,8 +41,8 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = cfg.proofMarkerLabel != "";
-        message = "services.korri.rocknixGuestProfile.proofMarkerLabel must be non-empty when enabled.";
+        assertion = cfg.proofMarkerLabel != "" && !(lib.hasInfix "\n" cfg.proofMarkerLabel);
+        message = "services.korri.rocknixGuestProfile.proofMarkerLabel must be a non-empty single line when enabled.";
       }
     ];
 
