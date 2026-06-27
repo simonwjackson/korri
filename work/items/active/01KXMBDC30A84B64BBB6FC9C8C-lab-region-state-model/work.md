@@ -1,7 +1,7 @@
 ---
 id: 01KXMBDC30A84B64BBB6FC9C8C
 title: Model dev-lab state as regions (single | nested | multi)
-status: active
+status: done
 created: 2026-06-26
 source: se-plan
 ---
