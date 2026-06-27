@@ -46,6 +46,8 @@ let
       product.chipset
     else if compatible == "rockchip,rk3566-rk817-tablet" || compatible == "rockchip,rk3566" then
       "rk3566"
+    else if compatible == "gameconsole,r36tmax" || compatible == "rockchip,rk3326" then
+      "rk3326"
     else
       "sm8550";
 
@@ -56,6 +58,8 @@ let
     in
     if inferredChipset == "rk3566" then
       ../images/platforms/rocknix-rk3566.nix
+    else if inferredChipset == "rk3326" then
+      ../images/platforms/rocknix-rk3326.nix
     else
       ../images/platforms/rocknix-sm8550.nix;
 
