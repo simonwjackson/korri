@@ -1,4 +1,3 @@
-import { SHIFT_COMPANION_PATH } from "@product/surfaces/web/shift/routes/paths"
 import { type CSSProperties, useEffect, useState } from "react"
 import { LabDeviceCluster } from "../components/LabDeviceCluster"
 import { useLab } from "../Lab.context"
@@ -9,6 +8,15 @@ import {
 } from "../model/lab-source-state"
 
 const VIEWPORT_INSET = 112
+
+let fallbackLabViewSessionId = 0
+
+function createLabViewSessionId(): string {
+  const randomId = globalThis.crypto?.randomUUID?.()
+  if (randomId) return randomId
+  fallbackLabViewSessionId += 1
+  return `view-${fallbackLabViewSessionId}`
+}
 
 export function LabSurfaceView({
   sourceId,
@@ -25,6 +33,7 @@ export function LabSurfaceView({
     setSurfacePath,
     pxPerMm,
   } = useLab()
+  const [viewSessionId] = useState(createLabViewSessionId)
   const [maxHeightPx, setMaxHeightPx] = useState(() =>
     typeof window === "undefined"
       ? undefined
@@ -42,6 +51,12 @@ export function LabSurfaceView({
   }, [])
 
   useEffect(() => {
+    if (!adapter.makeSeedInitialValuesForBinding) {
+      setError(null)
+      setBoundValues(initialValues)
+      return
+    }
+
     let cancelled = false
     setError(null)
     setBoundValues(null)
@@ -56,7 +71,7 @@ export function LabSurfaceView({
     return () => {
       cancelled = true
     }
-  }, [adapter, sourceId, stateId])
+  }, [adapter, initialValues, sourceId, stateId])
 
   if (selectedDevices.length === 0)
     return (
@@ -80,11 +95,15 @@ export function LabSurfaceView({
     >
       {selectedDevices.map(device => {
         const hasMultipleScreens = (device.screens?.length ?? 0) > 1
-        const channelName = `lab:${adapter.id}:${device.id}`
+        const channelName = `lab:${viewSessionId}:${adapter.id}:${device.id}`
         const createChannel = adapter.createDualScreenChannel
         const dualScreenSession = createChannel
           ? { channelName, createChannel }
           : { channelName }
+        const secondaryScreenPath = adapter.secondaryScreenPath ?? surfacePath
+        const mountKey = adapter.makeSeedInitialValuesForBinding
+          ? `${sourceId}:${stateId}`
+          : "default-seed"
         return (
           <LabDeviceCluster
             key={device.id}
@@ -93,7 +112,7 @@ export function LabSurfaceView({
             maxHeightPx={maxHeightPx}
             renderPrimary={() => (
               <LabSurfaceMount
-                key={`${sourceId}:${stateId}`}
+                key={mountKey}
                 adapter={adapter}
                 initialValues={boundValues}
                 surfacePath={surfacePath}
@@ -107,10 +126,10 @@ export function LabSurfaceView({
             )}
             renderSecondary={screen => (
               <LabSurfaceMount
-                key={`${screen.id}:${sourceId}:${stateId}`}
+                key={`${screen.id}:${mountKey}`}
                 adapter={adapter}
                 initialValues={boundValues}
-                surfacePath={SHIFT_COMPANION_PATH}
+                surfacePath={secondaryScreenPath}
                 onNavigate={() => {}}
                 dualScreen={{ role: "companion", ...dualScreenSession }}
               />

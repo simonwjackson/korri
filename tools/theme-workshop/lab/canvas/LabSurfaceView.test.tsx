@@ -86,6 +86,7 @@ function makeAdapter() {
   const adapter: LabSurfaceAdapter = {
     id: "shift",
     devices: [thor],
+    secondaryScreenPath: "/adapter-secondary",
     makeSeedInitialValues: async () => ({ seed: true }),
     mountSurface: (host, { history, dualScreen }) => {
       if (!history) throw new Error("expected controlled history")
@@ -110,6 +111,7 @@ function makeSharedSessionAdapter(): LabSurfaceAdapter {
   return {
     id: "shift",
     devices: [thor],
+    secondaryScreenPath: "/companion",
     createDualScreenChannel,
     makeSeedInitialValues: async () => ({ seed: true }),
     mountSurface: (host, { history, dualScreen }) => {
@@ -137,6 +139,7 @@ function mountPrimaryProbe(
 ) {
   let selectedGameId = "hollow-knight"
   let revision = 1
+  const revisionSourceId = "primary:lab-probe"
   const button = document.createElement("button")
   button.type = "button"
   button.textContent = "Celeste"
@@ -147,6 +150,7 @@ function mountPrimaryProbe(
       lastSource: "primary",
       source: "primary",
       revision,
+      revisionSourceId,
     })
   const receive = (event: MessageEvent) => {
     if (event.data?._tag === "SelectionRequested") snapshot()
@@ -159,6 +163,7 @@ function mountPrimaryProbe(
       gameId: selectedGameId,
       source: "primary",
       revision,
+      revisionSourceId,
     })
   }
   button.addEventListener("focus", focusCeleste)
@@ -246,20 +251,85 @@ describe("LabSurfaceView", () => {
     )
 
     await waitFor(() => {
-      expect(mounts).toContainEqual({
-        path: "/",
-        dualScreen: { role: "primary", channelName: "lab:shift:thor" },
-      })
-      expect(mounts).toContainEqual({
-        path: "/companion",
-        dualScreen: { role: "companion", channelName: "lab:shift:thor" },
-      })
+      expect(mounts.some(mount => mount.path === "/")).toBe(true)
+      expect(mounts.some(mount => mount.path === "/adapter-secondary")).toBe(
+        true,
+      )
     })
+
+    const primaryMount = mounts.find(mount => mount.path === "/")
+    const companionMount = mounts.find(
+      mount => mount.path === "/adapter-secondary",
+    )
+    expect(primaryMount?.dualScreen?.role).toBe("primary")
+    expect(companionMount?.dualScreen?.role).toBe("companion")
+    expect(primaryMount?.dualScreen?.channelName).toBe(
+      companionMount?.dualScreen?.channelName,
+    )
+    expect(primaryMount?.dualScreen?.channelName.startsWith("lab:")).toBe(true)
+    expect(primaryMount?.dualScreen?.channelName.endsWith(":shift:thor")).toBe(
+      true,
+    )
 
     expect(mounts).not.toContainEqual({
       path: "/game/hollow-knight",
       dualScreen: undefined,
     })
+  })
+
+  it("does not remount default-seed adapters when source state changes", async () => {
+    const { adapter, mounts } = makeAdapter()
+    const view = render(
+      <LabContext.Provider value={context(adapter)}>
+        <LabSurfaceView sourceId="default" stateId="ready" />
+      </LabContext.Provider>,
+    )
+
+    await waitFor(() => {
+      expect(mounts.filter(mount => mount.path === "/").length).toBe(1)
+      expect(
+        mounts.filter(mount => mount.path === "/adapter-secondary").length,
+      ).toBe(1)
+    })
+
+    view.rerender(
+      <LabContext.Provider value={context(adapter)}>
+        <LabSurfaceView sourceId="alternate" stateId="loading" />
+      </LabContext.Provider>,
+    )
+
+    await waitFor(() => {
+      expect(mounts.filter(mount => mount.path === "/").length).toBe(1)
+      expect(
+        mounts.filter(mount => mount.path === "/adapter-secondary").length,
+      ).toBe(1)
+    })
+  })
+
+  it("uses a different dual-screen channel for each lab view", async () => {
+    const { adapter, mounts } = makeAdapter()
+
+    render(
+      <>
+        <LabContext.Provider value={context(adapter)}>
+          <LabSurfaceView sourceId="default" stateId="ready" />
+        </LabContext.Provider>
+        <LabContext.Provider value={context(adapter)}>
+          <LabSurfaceView sourceId="default" stateId="ready" />
+        </LabContext.Provider>
+      </>,
+    )
+
+    await waitFor(() => {
+      expect(mounts.filter(mount => mount.path === "/").length).toBe(2)
+    })
+
+    const channelNames = mounts
+      .filter(mount => mount.path === "/")
+      .map(mount => mount.dualScreen?.channelName)
+    expect(channelNames[0]).toBeTruthy()
+    expect(channelNames[1]).toBeTruthy()
+    expect(channelNames[0]).not.toBe(channelNames[1])
   })
 
   it("lets a product-session companion follow primary focus through lab wiring", async () => {

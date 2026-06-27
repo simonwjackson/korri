@@ -5,6 +5,7 @@ import {
   DualScreenSessionCtx,
 } from "./DualScreenSession.context"
 import {
+  createDualScreenRevisionSourceId,
   type DualScreenEvent,
   type DualScreenRole,
   type DualScreenState,
@@ -45,56 +46,69 @@ export function DualScreenBroadcastSessionRoot({
   createChannel = createBroadcastChannel,
   children,
 }: DualScreenBroadcastSessionRootProps) {
+  const revisionSourceIdRef = useRef<string | null>(null)
+  revisionSourceIdRef.current ??= createDualScreenRevisionSourceId(role)
   const [state, setState] = useState<DualScreenState>(() => ({
     selectedGameId: initialGameId,
     lastSource: initialSource,
     revision: initialGameId ? 1 : 0,
+    revisionSourceId: initialGameId ? revisionSourceIdRef.current : null,
+    supersededRevisionSourceIds: [],
   }))
   const stateRef = useRef(state)
   stateRef.current = state
-  const channel = useMemo(
-    () => createChannel(channelName),
-    [channelName, createChannel],
-  )
+  const channelRef = useRef<DualScreenChannel | null>(null)
 
   useEffect(() => {
+    let channel: DualScreenChannel
+    try {
+      channel = createChannel(channelName)
+    } catch {
+      channelRef.current = null
+      return
+    }
+    channelRef.current = channel
+
     const receive = (message: MessageEvent<DualScreenEvent>) => {
       if (!isDualScreenEvent(message.data)) return
       if (message.data._tag === "SelectionRequested") {
         if (role === "primary")
-          channel.postMessage(snapshotFor(stateRef.current, role))
+          postToChannel(channel, snapshotFor(stateRef.current, role))
         return
       }
-      setState(current => reduceDualScreenEvent(current, message.data))
+      setState(current => {
+        const next = reduceDualScreenEvent(current, message.data)
+        stateRef.current = next
+        return next
+      })
     }
 
     channel.addEventListener("message", receive)
     if (role === "companion") {
-      channel.postMessage({ _tag: "SelectionRequested", requester: role })
+      postToChannel(channel, { _tag: "SelectionRequested", requester: role })
     } else {
-      channel.postMessage(snapshotFor(stateRef.current, role))
+      postToChannel(channel, snapshotFor(stateRef.current, role))
     }
     return () => {
+      if (channelRef.current === channel) channelRef.current = null
       channel.removeEventListener("message", receive)
       channel.close()
     }
-  }, [channel, role])
+  }, [channelName, createChannel, role])
 
-  const focusGame = useCallback(
-    (gameId: string, source: DualScreenRole) => {
-      const event: DualScreenEvent = {
-        _tag: "GameFocused",
-        gameId,
-        source,
-        revision: stateRef.current.revision + 1,
-      }
-      const next = reduceDualScreenEvent(stateRef.current, event)
-      stateRef.current = next
-      setState(next)
-      channel.postMessage(event)
-    },
-    [channel],
-  )
+  const focusGame = useCallback((gameId: string, source: DualScreenRole) => {
+    const event: DualScreenEvent = {
+      _tag: "GameFocused",
+      gameId,
+      source,
+      revision: stateRef.current.revision + 1,
+      revisionSourceId: revisionSourceIdRef.current ?? source,
+    }
+    const next = reduceDualScreenEvent(stateRef.current, event)
+    stateRef.current = next
+    setState(next)
+    if (channelRef.current) postToChannel(channelRef.current, event)
+  }, [])
 
   const value = useMemo<DualScreenSessionContextValue>(
     () => ({
@@ -115,6 +129,19 @@ function createBroadcastChannel(name: string): DualScreenChannel {
   return new BroadcastChannel(name)
 }
 
+function postToChannel(
+  channel: DualScreenChannel,
+  event: DualScreenEvent,
+): void {
+  try {
+    channel.postMessage(event)
+  } catch {
+    // BroadcastChannel is best-effort UI coordination. A closed or unavailable
+    // channel must not crash the mounted surface; the next focus/snapshot can
+    // repair peers that are still listening.
+  }
+}
+
 function snapshotFor(
   state: DualScreenState,
   source: DualScreenRole,
@@ -125,6 +152,8 @@ function snapshotFor(
     lastSource: state.lastSource,
     source,
     revision: state.revision,
+    revisionSourceId: state.revisionSourceId,
+    supersededRevisionSourceIds: state.supersededRevisionSourceIds,
   }
 }
 
@@ -137,7 +166,9 @@ function isDualScreenEvent(value: unknown): value is DualScreenEvent {
       (event.source === "primary" || event.source === "companion") &&
       typeof event.revision === "number" &&
       Number.isInteger(event.revision) &&
-      event.revision >= 0
+      event.revision >= 0 &&
+      (typeof event.revisionSourceId === "string" ||
+        event.revisionSourceId === undefined)
     )
   }
   if (event._tag === "SelectionRequested") {
@@ -150,10 +181,18 @@ function isDualScreenEvent(value: unknown): value is DualScreenEvent {
       (event.lastSource === "primary" ||
         event.lastSource === "companion" ||
         event.lastSource === null) &&
-      (event.source === "primary" || event.source === "companion") &&
+      event.source === "primary" &&
       typeof event.revision === "number" &&
       Number.isInteger(event.revision) &&
-      event.revision >= 0
+      event.revision >= 0 &&
+      (typeof event.revisionSourceId === "string" ||
+        event.revisionSourceId === null ||
+        event.revisionSourceId === undefined) &&
+      (event.supersededRevisionSourceIds === undefined ||
+        (Array.isArray(event.supersededRevisionSourceIds) &&
+          event.supersededRevisionSourceIds.every(
+            sourceId => typeof sourceId === "string",
+          )))
     )
   }
   return false

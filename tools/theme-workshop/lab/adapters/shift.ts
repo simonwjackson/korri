@@ -1,5 +1,6 @@
 import { shiftConfig } from "@product/surfaces/web/shift/config"
 import { mountShift } from "@product/surfaces/web/shift/mount-shift"
+import { SHIFT_COMPANION_PATH } from "@product/surfaces/web/shift/routes/paths"
 import type { RouterHistory } from "@tanstack/history"
 import {
   makeSeedInitialValues,
@@ -17,6 +18,7 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   ],
   knobs: shiftConfig.knobs,
   defaultPxPerMm: shiftConfig.defaultPxPerMm,
+  secondaryScreenPath: SHIFT_COMPANION_PATH,
   axesForScreen: shiftAxesForScreen,
   captureCoordinate: shiftCaptureCoordinate,
   // Shift's Data + Launch state machines are surfaced as the Home screen's axes

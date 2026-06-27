@@ -49,6 +49,11 @@ export interface LabSurfaceAdapter {
   readonly useControls?: () => readonly WorkshopControl[]
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
+  /** Surface-owned route for secondary/companion screens in a multi-screen
+   * device. The generic lab canvas only arranges screens; the adapter decides
+   * what route a secondary surface should mount.
+   */
+  readonly secondaryScreenPath?: string
   readonly createDualScreenChannel?: DualScreenChannelFactory
   /** Wraps an isolated part preview in the surface's style scope so its tokens
    * and recipes resolve outside a full mount (e.g. pico needs
