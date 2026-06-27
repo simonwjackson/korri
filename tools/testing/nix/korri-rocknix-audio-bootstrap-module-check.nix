@@ -2,8 +2,7 @@
 #
 # Device-neutral: evaluates the shared ROCKNIX audio-bootstrap module against a
 # minimal fixture host and asserts the rendered service scope, socket failure
-# posture, and route-script insertion contract independently from any platform
-# adapter.
+# posture, and route-action contract independently from any platform adapter.
 #
 # Run with:
 #   nix build .#checks.x86_64-linux.korri-rocknix-audio-bootstrap-module --no-link
@@ -50,10 +49,16 @@ let
       safeVolume = "15%";
       serviceScope = "user";
       failOnSocketUnavailable = false;
-      routeBootstrapScript = ''
-        echo user-route-script
-        clamp_named_sink "$target_sink" || true
-      '';
+      actions = [
+        {
+          kind = "clamp-target-sink";
+          onFailure = "continue";
+        }
+        {
+          kind = "clamp-current-default-sink";
+          onFailure = "continue";
+        }
+      ];
     };
   };
 
@@ -64,10 +69,64 @@ let
       targetSink = "test-system-sink";
       serviceScope = "system";
       failOnSocketUnavailable = true;
-      routeBootstrapScript = ''
-        echo system-route-script
-        clamp_named_sink "$target_sink" || exit 1
-      '';
+      actions = [
+        {
+          kind = "clamp-target-sink";
+          onFailure = "continue";
+        }
+      ];
+    };
+  };
+
+  hardFailRoute = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "unix:/run/korri-test/pulse/native";
+      targetSink = "test-hard-fail-sink";
+      serviceScope = "system";
+      failOnSocketUnavailable = true;
+      actions = [
+        {
+          kind = "clamp-target-sink";
+          onFailure = "fail";
+        }
+      ];
+    };
+  };
+
+  manualPcmRoute = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "unix:%t/pulse/native";
+      targetSink = "manual-sink";
+      failOnSocketUnavailable = false;
+      actions = [
+        {
+          kind = "load-alsa-sink-if-missing";
+          pcm = "hw:0,0";
+          description = "Manual Sink";
+          onFailure = "continue";
+        }
+        {
+          kind = "clamp-target-sink";
+          onFailure = "continue";
+        }
+      ];
+    };
+  };
+
+  defaultSinkRoute = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "unix:%t/pulse/native";
+      targetSink = "fallback-sink";
+      failOnSocketUnavailable = false;
+      actions = [
+        {
+          kind = "clamp-default-sink";
+          onFailure = "continue";
+        }
+      ];
     };
   };
 
@@ -78,7 +137,17 @@ let
       enable = true;
       targetSink = "test-sink";
       failOnSocketUnavailable = false;
-      routeBootstrapScript = ''clamp_named_sink "$target_sink" || true'';
+      actions = [ { kind = "clamp-target-sink"; } ];
+    };
+  };
+
+  emptyPulseServer = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "";
+      targetSink = "test-sink";
+      failOnSocketUnavailable = false;
+      actions = [ { kind = "clamp-target-sink"; } ];
     };
   };
 
@@ -87,7 +156,17 @@ let
       enable = true;
       pulseServer = "unix:%t/pulse/native";
       failOnSocketUnavailable = false;
-      routeBootstrapScript = ''clamp_named_sink "$target_sink" || true'';
+      actions = [ { kind = "clamp-target-sink"; } ];
+    };
+  };
+
+  emptyTargetSink = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "unix:%t/pulse/native";
+      targetSink = "";
+      failOnSocketUnavailable = false;
+      actions = [ { kind = "clamp-target-sink"; } ];
     };
   };
 
@@ -96,16 +175,32 @@ let
       enable = true;
       pulseServer = "unix:%t/pulse/native";
       targetSink = "test-sink";
-      routeBootstrapScript = ''clamp_named_sink "$target_sink" || true'';
+      actions = [ { kind = "clamp-target-sink"; } ];
     };
   };
 
-  missingRouteScript = evaluateWith {
+  emptyActions = evaluateWith {
     services.korri.rocknixAudioBootstrap = {
       enable = true;
       pulseServer = "unix:%t/pulse/native";
       targetSink = "test-sink";
       failOnSocketUnavailable = false;
+      actions = [ ];
+    };
+  };
+
+  missingManualPcm = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "unix:%t/pulse/native";
+      targetSink = "manual-sink";
+      failOnSocketUnavailable = false;
+      actions = [
+        {
+          kind = "load-alsa-sink-if-missing";
+          description = "Manual Sink";
+        }
+      ];
     };
   };
 
@@ -116,6 +211,16 @@ let
 
   userScript = scriptText (userService userScope);
   systemScript = scriptText (systemService systemScope);
+  hardFailRouteScript = scriptText (systemService hardFailRoute);
+  manualPcmScript = scriptText (userService manualPcmRoute);
+  defaultSinkScript = scriptText (userService defaultSinkRoute);
+
+  socketFailureBlockHasExit =
+    exitCode: script:
+    lib.hasInfix "PulseAudio socket unavailable at $PULSE_SERVER" script
+    && lib.hasInfix "exit ${exitCode}" (
+      builtins.concatStringsSep "\n" (lib.take 4 (lib.drop 12 (lib.splitString "\n" script)))
+    );
 
   check = message: assertion: { inherit message assertion; };
 
@@ -130,7 +235,9 @@ let
     (check "system scope renders only a system service" (
       systemScope.systemd.services ? korri-rocknix-audio-bootstrap
       && !(systemScope.systemd.user.services ? korri-rocknix-audio-bootstrap)
-      && ((systemService systemScope).environment.PULSE_SERVER or null) == "unix:/run/korri-test/pulse/native"
+      &&
+        ((systemService systemScope).environment.PULSE_SERVER or null)
+        == "unix:/run/korri-test/pulse/native"
       && ((systemService systemScope).serviceConfig.Type or null) == "oneshot"
       && ((systemService systemScope).serviceConfig.RemainAfterExit or false) == true
     ))
@@ -146,26 +253,31 @@ let
       && lib.hasInfix "set-default-sink" userScript
       && lib.hasInfix "set-sink-volume" userScript
     ))
-    (check "route scripts are appended after shared helpers" (
-      lib.hasInfix "echo user-route-script" userScript
-      && lib.hasInfix "clamp_named_sink \"$target_sink\" || true" userScript
-      && lib.hasInfix "echo system-route-script" systemScript
-      && lib.hasInfix "clamp_named_sink \"$target_sink\" || exit 1" systemScript
+    (check "route actions render expected shell" (
+      lib.hasInfix ''clamp_named_sink "$target_sink" || true'' userScript
+      && lib.hasInfix "set-sink-volume @DEFAULT_SINK@" userScript
+      && lib.hasInfix ''clamp_named_sink "$target_sink" || exit 1'' hardFailRouteScript
+      && lib.hasInfix "load-module module-alsa-sink" manualPcmScript
+      && lib.hasInfix "device=hw:0,0" manualPcmScript
+      && lib.hasInfix "sink_properties=device.description='Manual Sink'" manualPcmScript
+      && lib.hasInfix "clamp_default_sink()" defaultSinkScript
+      && lib.hasInfix "clamp_default_sink || true" defaultSinkScript
     ))
     (check "socket failure posture controls generated exit code" (
-      lib.hasInfix "exit 0" userScript
-      && lib.hasInfix "exit 1" systemScript
+      socketFailureBlockHasExit "0" userScript && socketFailureBlockHasExit "1" systemScript
     ))
-    (check "shared module does not carry SM8550-only default sink fallback" (
-      !(lib.hasInfix "clamp_default_sink" userScript)
-      && !(lib.hasInfix "@DEFAULT_SINK@" userScript)
-      && !(lib.hasInfix "clamp_default_sink" systemScript)
-      && !(lib.hasInfix "@DEFAULT_SINK@" systemScript)
+    (check "shared module omits default-sink helper unless requested" (
+      !(lib.hasInfix "clamp_default_sink" userScript) && !(lib.hasInfix "clamp_default_sink" systemScript)
     ))
     (check "enabled module requires pulseServer" (failedAssertions missingPulseServer != [ ]))
+    (check "enabled module rejects empty pulseServer" (failedAssertions emptyPulseServer != [ ]))
     (check "enabled module requires targetSink" (failedAssertions missingTargetSink != [ ]))
-    (check "enabled module requires explicit socket failure posture" (failedAssertions missingFailurePosture != [ ]))
-    (check "enabled module requires a route bootstrap script" (failedAssertions missingRouteScript != [ ]))
+    (check "enabled module rejects empty targetSink" (failedAssertions emptyTargetSink != [ ]))
+    (check "enabled module requires explicit socket failure posture" (
+      failedAssertions missingFailurePosture != [ ]
+    ))
+    (check "enabled module requires at least one route action" (failedAssertions emptyActions != [ ]))
+    (check "manual PCM action requires a PCM device" (failedAssertions missingManualPcm != [ ]))
   ];
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;

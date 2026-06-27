@@ -37,17 +37,8 @@ let
     && !(containsQuotedAssignment "pulseaudio" sm8550PlatformAdapterSourceFile);
   sm8550PlatformAdapterFreeOfSubstrateSteam =
     !(lib.hasInfix "substratePackages.steam" sm8550PlatformAdapterSource);
-  # The evaluated bootstrap ExecStart points at an aarch64 shell-script
-  # derivation. Grepping that artifact from this x86_64 host check would force
-  # a target-platform build, so keep route-script-specific checks as adapter
-  # source invariants and assert shared-module posture through evaluated config.
-  sm8550PlatformAdapterKeepsAudioRouteScriptSoft =
-    lib.hasInfix ''safeVolume = "10%"'' sm8550PlatformAdapterSource
-    && lib.hasInfix ''clamp_named_sink "$target_sink" || true'' sm8550PlatformAdapterSource
-    && lib.hasInfix "clamp_default_sink || true" sm8550PlatformAdapterSource
-    && lib.hasInfix ''set-sink-volume @DEFAULT_SINK@ "$korri_safe_default_sink_volume"'' sm8550PlatformAdapterSource
-    && lib.hasInfix "auto_null*)" sm8550PlatformAdapterSource
-    && !(lib.hasInfix ''set-sink-volume "$sink" 70%'' sm8550PlatformAdapterSource)
+  sm8550PlatformAdapterFreeOfUnsafeAudioVolume =
+    !(lib.hasInfix ''set-sink-volume "$sink" 70%'' sm8550PlatformAdapterSource)
     && !(lib.hasInfix ''set-sink-volume "$target_sink" 70%'' sm8550PlatformAdapterSource);
 
   soboAudioRoute = soboSystem.config.rocknix.device.audio.route;
@@ -67,6 +58,19 @@ let
       activationScripts = cfg.system.activationScripts or { };
       rocknixGuestProfile = cfg.services.korri.rocknixGuestProfile or { };
       rocknixAudioBootstrap = cfg.services.korri.rocknixAudioBootstrap or { };
+      audioBootstrapActions = rocknixAudioBootstrap.actions or [ ];
+      hasAudioBootstrapAction =
+        kind: onFailure:
+        builtins.any (
+          action: (action.kind or null) == kind && (action.onFailure or null) == onFailure
+        ) audioBootstrapActions;
+      hasManualPcmAudioBootstrapAction = builtins.any (
+        action:
+        (action.kind or null) == "load-alsa-sink-if-missing"
+        && (action.onFailure or null) == "continue"
+        && (action.pcm or null) == toString audioRoute.pcm
+        && (action.description or null) == toString audioRoute.description
+      ) audioBootstrapActions;
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
@@ -566,6 +570,15 @@ let
         && (rocknixAudioBootstrap.safeVolume or null) == "10%"
         && (rocknixAudioBootstrap.serviceScope or null) == "user"
         && (rocknixAudioBootstrap.failOnSocketUnavailable or true) == false
+        && hasAudioBootstrapAction "clamp-current-default-sink" "continue"
+        && (
+          if audioRoute.kind == "wireplumber-ucm" then
+            hasAudioBootstrapAction "clamp-target-sink" "continue"
+          else if audioRoute.kind == "manual-pcm" then
+            hasManualPcmAudioBootstrapAction && hasAudioBootstrapAction "clamp-target-sink" "continue"
+          else
+            hasAudioBootstrapAction "clamp-default-sink" "continue"
+        )
       ))
       (check "${name}: user audio bootstrap is best-effort before Korri runtime services" (
         userServices ? korri-rocknix-audio-bootstrap
@@ -584,7 +597,7 @@ let
         && (audioBootstrapUnit.environment.ALSA_CONFIG_UCM2 or null) == pipewireEnv.ALSA_CONFIG_UCM2
       ))
       (check "${name}: user audio bootstrap uses graph routes, not hardware UCM card activation" (
-        sm8550PlatformAdapterKeepsAudioRouteScriptSoft
+        sm8550PlatformAdapterFreeOfUnsafeAudioVolume
         && !(lib.hasInfix "alsaucm -c" sm8550PlatformAdapterSource)
         && !(lib.hasInfix "substrateAudioUcmCard" sm8550PlatformAdapterSource)
         && !(lib.hasInfix "set _verb" sm8550PlatformAdapterSource)
@@ -710,7 +723,7 @@ let
   checks = [
     (check "SM8550 adapter does not hard-code substrate literals" sm8550PlatformAdapterFreeOfHardwareLiterals)
     (check "SM8550 adapter does not explicitly install substrate Steam" sm8550PlatformAdapterFreeOfSubstrateSteam)
-    (check "SM8550 adapter keeps audio route script best-effort" sm8550PlatformAdapterKeepsAudioRouteScriptSoft)
+    (check "SM8550 adapter avoids unsafe audio volume literals" sm8550PlatformAdapterFreeOfUnsafeAudioVolume)
     (check "Sobo declares the substrate WirePlumber UCM speaker route" (
       soboAudioRoute.kind == "wireplumber-ucm"
       && soboSystem.config.rocknix.device.audio.card == "AYNOdin2"

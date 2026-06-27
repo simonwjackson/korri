@@ -245,60 +245,37 @@ let
   # code selects/clamps the declared PulseAudio-compatible sink and does not
   # perform hardware-specific UCM card activation. A missing or renamed card
   # must never prevent the visible kiosk session from starting.
-  sm8550AudioRouteBootstrapScript = ''
-    clamp_default_sink() {
-      for _ in $(${pkgs.coreutils}/bin/seq 1 40); do
-        default_sink="$(${pkgs.pulseaudio}/bin/pactl get-default-sink 2>/dev/null || true)"
-        case "$default_sink" in
-          ""|auto_null*) ${pkgs.coreutils}/bin/sleep 0.25; continue ;;
-        esac
-        if ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$default_sink" "$korri_safe_default_sink_volume" >/dev/null 2>&1; then
-          return 0
-        fi
-        ${pkgs.coreutils}/bin/sleep 0.25
-      done
-      echo "korri-rocknix-audio-bootstrap: non-null default sink unavailable for safe volume clamp; continuing" >&2
-      return 0
-    }
-  ''
-  + lib.optionalString substrateAudioRouteIsUcm ''
-
-    # The substrate-declared UCM route is graph-owned by WirePlumber. Wait
-    # for that exact sink and clamp graph volume; do not load a direct ALSA
-    # sink because that bypasses handheld volume policy.
-    clamp_named_sink "$target_sink" || true
-  ''
-  + lib.optionalString substrateAudioRouteIsManual ''
-
-    # Compatibility for substrate profiles that still declare an explicit
-    # manual PCM route. SM8550 handhelds should normally use wireplumber-ucm.
-    if ! sink_exists "$target_sink"; then
-      ${pkgs.pulseaudio}/bin/pactl load-module module-alsa-sink \
-        device=${lib.escapeShellArg (toString substrateAudioRoute.pcm)} \
-        sink_name="$target_sink" \
-        sink_properties=device.description=${lib.escapeShellArg (toString substrateAudioRoute.description)} \
-        >/dev/null || {
-          echo "korri-rocknix-audio-bootstrap: pactl load-module module-alsa-sink failed; continuing" >&2
-          exit 0
-        }
-    fi
-    clamp_named_sink "$target_sink" || true
-  ''
-  + lib.optionalString (!substrateAudioRouteIsUcm && !substrateAudioRouteIsManual) ''
-
-    # Profiles without a declared route get a best-effort clamp against the
-    # current non-null default sink. If only auto_null exists, allow the
-    # session to start silent rather than inventing a product-side route.
-    clamp_default_sink || true
-  ''
-  + ''
-
-    # Never boot the handheld at an unsafe speaker level. The product volume
-    # buttons adjust the user-session PipeWire/Pulse sink in 5% steps; start
-    # from a quiet default so app launches cannot surprise-blast before the
-    # operator has interacted with inputd.
-    ${pkgs.pulseaudio}/bin/pactl set-sink-volume @DEFAULT_SINK@ "$korri_safe_default_sink_volume" >/dev/null 2>&1 || true
-  '';
+  sm8550AudioBootstrapActions =
+    lib.optionals substrateAudioRouteIsUcm [
+      {
+        kind = "clamp-target-sink";
+        onFailure = "continue";
+      }
+    ]
+    ++ lib.optionals substrateAudioRouteIsManual [
+      {
+        kind = "load-alsa-sink-if-missing";
+        pcm = toString substrateAudioRoute.pcm;
+        description = toString substrateAudioRoute.description;
+        onFailure = "continue";
+      }
+      {
+        kind = "clamp-target-sink";
+        onFailure = "continue";
+      }
+    ]
+    ++ lib.optionals (!substrateAudioRouteIsUcm && !substrateAudioRouteIsManual) [
+      {
+        kind = "clamp-default-sink";
+        onFailure = "continue";
+      }
+    ]
+    ++ [
+      {
+        kind = "clamp-current-default-sink";
+        onFailure = "continue";
+      }
+    ];
   inputplumberPackage =
     pkgs.runCommand "korri-rocknix-inputplumber-xb360"
       {
@@ -463,7 +440,7 @@ in
     safeVolume = "10%";
     serviceScope = "user";
     failOnSocketUnavailable = false;
-    routeBootstrapScript = sm8550AudioRouteBootstrapScript;
+    actions = sm8550AudioBootstrapActions;
   };
 
   services.udev.extraRules = ''

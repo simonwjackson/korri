@@ -100,9 +100,12 @@ in
     safeVolume = "10%";
     serviceScope = "system";
     failOnSocketUnavailable = true;
-    routeBootstrapScript = ''
-      clamp_named_sink "$target_sink" || exit 1
-    '';
+    actions = [
+      {
+        kind = "clamp-target-sink";
+        onFailure = "fail";
+      }
+    ];
   };
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 

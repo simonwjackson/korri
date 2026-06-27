@@ -16,14 +16,50 @@ let
   cfg = config.services.korri.rocknixAudioBootstrap;
 
   inherit (lib)
+    concatMapStringsSep
     mkEnableOption
     mkIf
     mkMerge
     mkOption
+    optionalString
     types
     ;
 
   socketFailureExitCode = if cfg.failOnSocketUnavailable == true then "1" else "0";
+  hasClampDefaultSinkAction = builtins.any (action: action.kind == "clamp-default-sink") cfg.actions;
+  failureCommand = action: if action.onFailure == "fail" then "exit 1" else "true";
+
+  renderAction =
+    action:
+    if action.kind == "clamp-target-sink" then
+      ''
+        clamp_named_sink "$target_sink" || ${failureCommand action}
+      ''
+    else if action.kind == "load-alsa-sink-if-missing" then
+      ''
+        if ! sink_exists "$target_sink"; then
+          ${pkgs.pulseaudio}/bin/pactl load-module module-alsa-sink \
+            device=${lib.escapeShellArg action.pcm} \
+            sink_name="$target_sink" \
+            sink_properties=device.description=${lib.escapeShellArg action.description} \
+            >/dev/null || {
+              echo "korri-rocknix-audio-bootstrap: pactl load-module module-alsa-sink failed" >&2
+              ${failureCommand action}
+            }
+        fi
+      ''
+    else if action.kind == "clamp-default-sink" then
+      ''
+        clamp_default_sink || ${failureCommand action}
+      ''
+    else if action.kind == "clamp-current-default-sink" then
+      ''
+        ${pkgs.pulseaudio}/bin/pactl set-sink-volume @DEFAULT_SINK@ "$korri_safe_default_sink_volume" >/dev/null 2>&1 || ${failureCommand action}
+      ''
+    else
+      throw "Unsupported ROCKNIX audio bootstrap action kind `${action.kind}`";
+
+  routeBootstrapScript = concatMapStringsSep "\n" renderAction cfg.actions;
 
   audioBootstrapScript = pkgs.writeShellScript "korri-rocknix-audio-bootstrap" ''
     set -u
@@ -64,7 +100,24 @@ let
       return 1
     }
 
-    ${cfg.routeBootstrapScript}
+    ${optionalString hasClampDefaultSinkAction ''
+      clamp_default_sink() {
+        for _ in $(${pkgs.coreutils}/bin/seq 1 40); do
+          default_sink="$(${pkgs.pulseaudio}/bin/pactl get-default-sink 2>/dev/null || true)"
+          case "$default_sink" in
+            ""|auto_null*) ${pkgs.coreutils}/bin/sleep 0.25; continue ;;
+          esac
+          if ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$default_sink" "$korri_safe_default_sink_volume" >/dev/null 2>&1; then
+            return 0
+          fi
+          ${pkgs.coreutils}/bin/sleep 0.25
+        done
+        echo "korri-rocknix-audio-bootstrap: non-null default sink unavailable for safe volume clamp" >&2
+        return 1
+      }
+    ''}
+
+    ${routeBootstrapScript}
   '';
 
   service = {
@@ -104,7 +157,10 @@ in
     };
 
     serviceScope = mkOption {
-      type = types.enum [ "user" "system" ];
+      type = types.enum [
+        "user"
+        "system"
+      ];
       default = "user";
       description = "Whether to render the bootstrap as a systemd user service or system service.";
     };
@@ -119,15 +175,48 @@ in
       '';
     };
 
-    routeBootstrapScript = mkOption {
-      type = types.nullOr types.lines;
-      default = null;
+    actions = mkOption {
+      type = types.listOf (
+        types.submodule {
+          options = {
+            kind = mkOption {
+              type = types.enum [
+                "clamp-target-sink"
+                "load-alsa-sink-if-missing"
+                "clamp-default-sink"
+                "clamp-current-default-sink"
+              ];
+              description = "Route action rendered by the shared audio bootstrap script.";
+            };
+
+            onFailure = mkOption {
+              type = types.enum [
+                "continue"
+                "fail"
+              ];
+              default = "continue";
+              description = "Whether this route action failure should continue boot or fail the service.";
+            };
+
+            pcm = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "ALSA PCM device used by load-alsa-sink-if-missing.";
+            };
+
+            description = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Pulse sink description used by load-alsa-sink-if-missing.";
+            };
+          };
+        }
+      );
+      default = [ ];
       description = ''
-        Platform-owned route script appended after the shared Pulse readiness
-        gate and clamp_named_sink helper are defined. The script may use
-        target_sink, korri_safe_default_sink_volume, sink_exists, and
-        clamp_named_sink. It must not mutate service ordering or global audio
-        services; it is responsible for whether sink clamp failures are fatal.
+        Ordered route actions rendered by the shared bootstrap script after
+        Pulse readiness and helper definitions. Platform adapters select the
+        actions; the module owns the shell implementation.
       '';
     };
   };
@@ -148,10 +237,18 @@ in
           message = "services.korri.rocknixAudioBootstrap.failOnSocketUnavailable must be set explicitly when enabled.";
         }
         {
-          assertion = cfg.routeBootstrapScript != null && cfg.routeBootstrapScript != "";
-          message = "services.korri.rocknixAudioBootstrap.routeBootstrapScript must be set when enabled.";
+          assertion = cfg.actions != [ ];
+          message = "services.korri.rocknixAudioBootstrap.actions must contain at least one route action when enabled.";
         }
-      ];
+      ]
+      ++ map (action: {
+        assertion =
+          action.kind != "load-alsa-sink-if-missing"
+          || (
+            action.pcm != null && action.pcm != "" && action.description != null && action.description != ""
+          );
+        message = "load-alsa-sink-if-missing actions require non-empty pcm and description values.";
+      }) cfg.actions;
     }
     (mkIf (cfg.serviceScope == "user") {
       systemd.user.services.korri-rocknix-audio-bootstrap = service;

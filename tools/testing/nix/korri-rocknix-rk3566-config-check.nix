@@ -64,7 +64,6 @@ let
   rk3566PlatformAdapterSource = builtins.readFile rk3566PlatformAdapterSourceFile;
   rk3566PlatformAdapterKeepsMainSpaceAudioTopology =
     lib.hasInfix "rk3566TargetSink = config.rocknix.device.audio.defaultSink.name" rk3566PlatformAdapterSource
-    && lib.hasInfix ''clamp_named_sink "$target_sink" || exit 1'' rk3566PlatformAdapterSource
     && lib.hasInfix "systemd.user.services.pipewire.enable = lib.mkForce false" rk3566PlatformAdapterSource;
   systemServiceEnabled =
     serviceName:
@@ -185,6 +184,9 @@ let
       && (rocknixAudioBootstrap.safeVolume or null) == "10%"
       && (rocknixAudioBootstrap.serviceScope or null) == "system"
       && (rocknixAudioBootstrap.failOnSocketUnavailable or false) == true
+      && builtins.any (
+        action: (action.kind or null) == "clamp-target-sink" && (action.onFailure or null) == "fail"
+      ) (rocknixAudioBootstrap.actions or [ ])
     ))
     (check "RG353M safe audio bootstrap targets the main-space Pulse socket" (
       systemServices ? korri-rocknix-audio-bootstrap
