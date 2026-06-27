@@ -68,7 +68,6 @@ let
     else
       substrateAudioSink.name;
   korriPulseServer = "unix:%t/pulse/native";
-  korriSafeDefaultSinkVolume = "10%";
   korriRuntimeUid = toString (config.users.users.${runtime.user}.uid or 2000);
   korriRuntimeDir = "/run/user/${korriRuntimeUid}";
   # Substrate power-state request channel (nix-on-rocks owns the verb +
@@ -246,103 +245,60 @@ let
   # code selects/clamps the declared PulseAudio-compatible sink and does not
   # perform hardware-specific UCM card activation. A missing or renamed card
   # must never prevent the visible kiosk session from starting.
-  korriSm8550AudioBootstrap = pkgs.writeShellScript "korri-sm8550-audio-bootstrap" (
-    ''
-      set -u
-
-      target_sink=${lib.escapeShellArg substrateAudioTargetSink}
-      korri_safe_default_sink_volume=${lib.escapeShellArg korriSafeDefaultSinkVolume}
-
-      for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
-        if ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
-          break
+  sm8550AudioRouteBootstrapScript = ''
+    clamp_default_sink() {
+      for _ in $(${pkgs.coreutils}/bin/seq 1 40); do
+        default_sink="$(${pkgs.pulseaudio}/bin/pactl get-default-sink 2>/dev/null || true)"
+        case "$default_sink" in
+          ""|auto_null*) ${pkgs.coreutils}/bin/sleep 0.25; continue ;;
+        esac
+        if ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$default_sink" "$korri_safe_default_sink_volume" >/dev/null 2>&1; then
+          return 0
         fi
-        ${pkgs.coreutils}/bin/sleep 0.5
+        ${pkgs.coreutils}/bin/sleep 0.25
       done
+      echo "korri-rocknix-audio-bootstrap: non-null default sink unavailable for safe volume clamp; continuing" >&2
+      return 0
+    }
+  ''
+  + lib.optionalString substrateAudioRouteIsUcm ''
 
-      if ! ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
-        echo "korri-sm8550-audio-bootstrap: PulseAudio socket unavailable at $PULSE_SERVER; continuing without audio clamp" >&2
-        exit 0
-      fi
+    # The substrate-declared UCM route is graph-owned by WirePlumber. Wait
+    # for that exact sink and clamp graph volume; do not load a direct ALSA
+    # sink because that bypasses handheld volume policy.
+    clamp_named_sink "$target_sink" || true
+  ''
+  + lib.optionalString substrateAudioRouteIsManual ''
 
-      sink_exists() {
-        ${pkgs.pulseaudio}/bin/pactl list short sinks \
-          | ${pkgs.coreutils}/bin/cut -f2 \
-          | ${pkgs.gnugrep}/bin/grep -Fxq -- "$1"
-      }
+    # Compatibility for substrate profiles that still declare an explicit
+    # manual PCM route. SM8550 handhelds should normally use wireplumber-ucm.
+    if ! sink_exists "$target_sink"; then
+      ${pkgs.pulseaudio}/bin/pactl load-module module-alsa-sink \
+        device=${lib.escapeShellArg (toString substrateAudioRoute.pcm)} \
+        sink_name="$target_sink" \
+        sink_properties=device.description=${lib.escapeShellArg (toString substrateAudioRoute.description)} \
+        >/dev/null || {
+          echo "korri-rocknix-audio-bootstrap: pactl load-module module-alsa-sink failed; continuing" >&2
+          exit 0
+        }
+    fi
+    clamp_named_sink "$target_sink" || true
+  ''
+  + lib.optionalString (!substrateAudioRouteIsUcm && !substrateAudioRouteIsManual) ''
 
-    ''
-    + ''
+    # Profiles without a declared route get a best-effort clamp against the
+    # current non-null default sink. If only auto_null exists, allow the
+    # session to start silent rather than inventing a product-side route.
+    clamp_default_sink || true
+  ''
+  + ''
 
-      clamp_named_sink() {
-        sink="$1"
-        for _ in $(${pkgs.coreutils}/bin/seq 1 40); do
-          if sink_exists "$sink"; then
-            if ${pkgs.pulseaudio}/bin/pactl set-default-sink "$sink" >/dev/null 2>&1 \
-              && ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$sink" "$korri_safe_default_sink_volume" >/dev/null 2>&1; then
-              return 0
-            fi
-          fi
-          ${pkgs.coreutils}/bin/sleep 0.25
-        done
-        echo "korri-sm8550-audio-bootstrap: target sink $sink unavailable for safe volume clamp; continuing" >&2
-        return 0
-      }
-
-      clamp_default_sink() {
-        for _ in $(${pkgs.coreutils}/bin/seq 1 40); do
-          default_sink="$(${pkgs.pulseaudio}/bin/pactl get-default-sink 2>/dev/null || true)"
-          case "$default_sink" in
-            ""|auto_null*) ${pkgs.coreutils}/bin/sleep 0.25; continue ;;
-          esac
-          if ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$default_sink" "$korri_safe_default_sink_volume" >/dev/null 2>&1; then
-            return 0
-          fi
-          ${pkgs.coreutils}/bin/sleep 0.25
-        done
-        echo "korri-sm8550-audio-bootstrap: non-null default sink unavailable for safe volume clamp; continuing" >&2
-        return 0
-      }
-    ''
-    + lib.optionalString substrateAudioRouteIsUcm ''
-
-      # The substrate-declared UCM route is graph-owned by WirePlumber. Wait
-      # for that exact sink and clamp graph volume; do not load a direct ALSA
-      # sink because that bypasses handheld volume policy.
-      clamp_named_sink "$target_sink"
-    ''
-    + lib.optionalString substrateAudioRouteIsManual ''
-
-      # Compatibility for substrate profiles that still declare an explicit
-      # manual PCM route. SM8550 handhelds should normally use wireplumber-ucm.
-      if ! sink_exists "$target_sink"; then
-        ${pkgs.pulseaudio}/bin/pactl load-module module-alsa-sink \
-          device=${lib.escapeShellArg (toString substrateAudioRoute.pcm)} \
-          sink_name="$target_sink" \
-          sink_properties=device.description=${lib.escapeShellArg (toString substrateAudioRoute.description)} \
-          >/dev/null || {
-            echo "korri-sm8550-audio-bootstrap: pactl load-module module-alsa-sink failed; continuing" >&2
-            exit 0
-          }
-      fi
-      clamp_named_sink "$target_sink"
-    ''
-    + lib.optionalString (!substrateAudioRouteIsUcm && !substrateAudioRouteIsManual) ''
-
-      # Profiles without a declared route get a best-effort clamp against the
-      # current non-null default sink. If only auto_null exists, allow the
-      # session to start silent rather than inventing a product-side route.
-      clamp_default_sink || exit 0
-    ''
-    + ''
-
-      # Never boot the handheld at an unsafe speaker level. The product volume
-      # buttons adjust the user-session PipeWire/Pulse sink in 5% steps; start
-      # from a quiet default so app launches cannot surprise-blast before the
-      # operator has interacted with inputd.
-      ${pkgs.pulseaudio}/bin/pactl set-sink-volume @DEFAULT_SINK@ ${korriSafeDefaultSinkVolume} >/dev/null 2>&1 || true
-    ''
-  );
+    # Never boot the handheld at an unsafe speaker level. The product volume
+    # buttons adjust the user-session PipeWire/Pulse sink in 5% steps; start
+    # from a quiet default so app launches cannot surprise-blast before the
+    # operator has interacted with inputd.
+    ${pkgs.pulseaudio}/bin/pactl set-sink-volume @DEFAULT_SINK@ "$korri_safe_default_sink_volume" >/dev/null 2>&1 || true
+  '';
   inputplumberPackage =
     pkgs.runCommand "korri-rocknix-inputplumber-xb360"
       {
@@ -473,6 +429,7 @@ in
     nix-on-rocks.nixosModules.rocknix-guest-base
     deviceProfile
     korri.nixosModules.korri-steam
+    ../../modules/korri-rocknix-audio-bootstrap.nix
     ../../modules/korri-rocknix-guest-profile.nix
     ../../modules/korri-removable-media.nix
   ];
@@ -497,6 +454,16 @@ in
   services.korri.rocknixGuestProfile = {
     enable = true;
     proofMarkerLabel = "korri-sm8550-kiosk-system";
+  };
+
+  services.korri.rocknixAudioBootstrap = {
+    enable = true;
+    pulseServer = korriPulseServer;
+    targetSink = substrateAudioTargetSink;
+    safeVolume = "10%";
+    serviceScope = "user";
+    failOnSocketUnavailable = false;
+    routeBootstrapScript = sm8550AudioRouteBootstrapScript;
   };
 
   services.udev.extraRules = ''
@@ -625,8 +592,7 @@ in
     PULSE_SERVER = korriPulseServer;
   };
 
-  systemd.user.services.korri-sm8550-audio-bootstrap = {
-    description = "Bootstrap Korri SM8550 user-session audio sink";
+  systemd.user.services.korri-rocknix-audio-bootstrap = {
     wantedBy = [ "korri-session.target" ];
     after = [
       "pipewire.service"
@@ -643,19 +609,11 @@ in
       "korri-sessiond.service"
       "korri-inputd.service"
     ];
-    environment = {
-      ALSA_CONFIG_UCM2 = substrateAudioUcmPath;
-      PULSE_SERVER = korriPulseServer;
-    };
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = korriSm8550AudioBootstrap;
-      RemainAfterExit = true;
-    };
+    environment.ALSA_CONFIG_UCM2 = substrateAudioUcmPath;
   };
 
   systemd.user.services.korri-compositor = {
-    after = [ "korri-sm8550-audio-bootstrap.service" ];
+    after = [ "korri-rocknix-audio-bootstrap.service" ];
     serviceConfig.UnsetEnvironment = [
       "DISPLAY"
       "WAYLAND_DISPLAY"
@@ -663,11 +621,11 @@ in
   };
 
   systemd.user.services.korri-sessiond = {
-    after = [ "korri-sm8550-audio-bootstrap.service" ];
+    after = [ "korri-rocknix-audio-bootstrap.service" ];
   };
 
   systemd.user.services.korri-inputd = {
-    after = [ "korri-sm8550-audio-bootstrap.service" ];
+    after = [ "korri-rocknix-audio-bootstrap.service" ];
   };
 
   services.korri.compositor = {

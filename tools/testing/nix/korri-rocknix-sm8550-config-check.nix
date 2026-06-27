@@ -1,15 +1,15 @@
-{ pkgs
-, products
-, byCompatibleProduct
-, thorSystem
-, soboSystem
-, byCompatibleSystem
-, targetPackages
-, hostPackages
-, configurations
-, hardwareFactSourceFiles
-, sm8550PlatformAdapterSourceFile
-,
+{
+  pkgs,
+  products,
+  byCompatibleProduct,
+  thorSystem,
+  soboSystem,
+  byCompatibleSystem,
+  targetPackages,
+  hostPackages,
+  configurations,
+  hardwareFactSourceFiles,
+  sm8550PlatformAdapterSourceFile,
 }:
 
 let
@@ -39,12 +39,14 @@ let
     !(lib.hasInfix "substratePackages.steam" sm8550PlatformAdapterSource);
   # The evaluated bootstrap ExecStart points at an aarch64 shell-script
   # derivation. Grepping that artifact from this x86_64 host check would force
-  # a target-platform build, so keep this as an adapter-source invariant.
-  sm8550PlatformAdapterUsesSafeAudioVolume =
-    lib.hasInfix ''korriSafeDefaultSinkVolume = "10%"'' sm8550PlatformAdapterSource
-    && lib.hasInfix ''set-sink-volume "$sink" "$korri_safe_default_sink_volume"'' sm8550PlatformAdapterSource
-    && lib.hasInfix ''set-sink-volume "$default_sink" "$korri_safe_default_sink_volume"'' sm8550PlatformAdapterSource
-    && lib.hasInfix ''auto_null*)'' sm8550PlatformAdapterSource
+  # a target-platform build, so keep route-script-specific checks as adapter
+  # source invariants and assert shared-module posture through evaluated config.
+  sm8550PlatformAdapterKeepsAudioRouteScriptSoft =
+    lib.hasInfix ''safeVolume = "10%"'' sm8550PlatformAdapterSource
+    && lib.hasInfix ''clamp_named_sink "$target_sink" || true'' sm8550PlatformAdapterSource
+    && lib.hasInfix "clamp_default_sink || true" sm8550PlatformAdapterSource
+    && lib.hasInfix ''set-sink-volume @DEFAULT_SINK@ "$korri_safe_default_sink_volume"'' sm8550PlatformAdapterSource
+    && lib.hasInfix "auto_null*)" sm8550PlatformAdapterSource
     && !(lib.hasInfix ''set-sink-volume "$sink" 70%'' sm8550PlatformAdapterSource)
     && !(lib.hasInfix ''set-sink-volume "$target_sink" 70%'' sm8550PlatformAdapterSource);
 
@@ -64,6 +66,7 @@ let
       daemonEnv = (userServices.korrid or { }).environment or { };
       activationScripts = cfg.system.activationScripts or { };
       rocknixGuestProfile = cfg.services.korri.rocknixGuestProfile or { };
+      rocknixAudioBootstrap = cfg.services.korri.rocknixAudioBootstrap or { };
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
@@ -94,9 +97,7 @@ let
         "with"
         "@korri:remap"
         "bindings"
-      ]
-        { }
-        yfsPlatformLauncher;
+      ] { } yfsPlatformLauncher;
       steam = cfg.services.korri.steam or { };
       audioRoute = cfg.rocknix.device.audio.route;
       expectedAudioTargetSink =
@@ -113,7 +114,7 @@ let
       pipewireEnv = (userServices.pipewire or { }).environment or { };
       pipewirePulseEnv = (userServices.pipewire-pulse or { }).environment or { };
       wireplumberEnv = (userServices.wireplumber or { }).environment or { };
-      audioBootstrapUnit = userServices.korri-sm8550-audio-bootstrap or { };
+      audioBootstrapUnit = userServices.korri-rocknix-audio-bootstrap or { };
       mainSpaceAudioDisabled =
         serviceName:
         let
@@ -128,15 +129,13 @@ let
         pname: packages: builtins.any (pkg: (pkg.pname or pkg.name or "") == pname) packages;
       findRetroarchWrappers =
         path:
-        builtins.filter
-          (
-            p:
-            let
-              pt = p.passthru or { };
-            in
-            builtins.hasAttr "cores" pt && builtins.hasAttr "unwrapped" pt
-          )
-          path;
+        builtins.filter (
+          p:
+          let
+            pt = p.passthru or { };
+          in
+          builtins.hasAttr "cores" pt && builtins.hasAttr "unwrapped" pt
+        ) path;
       retroarchCoresFor =
         path: lib.concatLists (map (wrapper: wrapper.passthru.cores or [ ]) (findRetroarchWrappers path));
       fake08CoreSource = "${targetPackages.libretro-fake-08}/lib/retroarch/cores/fake08_libretro.so";
@@ -257,12 +256,14 @@ let
         && builtins.elem "rocknix-sound-card-udev-hydrate.service" (seatDeviceTrigger.after or [ ])
         && builtins.elem "rocknix-sound-card-udev-hydrate.service" (seatDeviceTrigger.wants or [ ])
         && !(lib.hasInfix "SOUND_INITIALIZED=1" sm8550PlatformAdapterSource)
-        && !(lib.hasInfix ''/run/udev/data/+sound:'' sm8550PlatformAdapterSource)
+        && !(lib.hasInfix "/run/udev/data/+sound:" sm8550PlatformAdapterSource)
       ))
       (check "${name}: compositor uses the greetd/logind user session bus" (
         compositor.sessionBus.mode == "existing"
         && compositor.sessionBus.address == "unix:path=%t/bus"
-        && !(builtins.elem "main-space-session-dbus.service" ((cfg.systemd.user.services."korri-compositor" or { }).requires or [ ]))
+        && !(builtins.elem "main-space-session-dbus.service" (
+          (cfg.systemd.user.services."korri-compositor" or { }).requires or [ ]
+        ))
         && (sessiondEnv.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=%t/bus"
       ))
       (check "${name}: compositor uses wlroots direct session on host-bound DRM" (
@@ -288,8 +289,8 @@ let
       (check "${name}: stale manual sessiond display drop-in is removed" (
         builtins.hasAttr "korri-remove-legacy-sessiond-display-dropin" activationScripts
         &&
-        lib.hasInfix "/home/korri/.config/systemd/user/korri-sessiond.service.d/display.conf"
-          activationScripts."korri-remove-legacy-sessiond-display-dropin".text
+          lib.hasInfix "/home/korri/.config/systemd/user/korri-sessiond.service.d/display.conf"
+            activationScripts."korri-remove-legacy-sessiond-display-dropin".text
       ))
       (check "${name}: RockNIX guest profile module must be enabled" (
         (rocknixGuestProfile.enable or false) == true
@@ -333,7 +334,9 @@ let
         && (retroarchPolicy.input.maxUsers or 0) == 4
         && (retroarchPolicy.input.ports."1".joypadIndex or null) == 0
         && (retroarchPolicy.input.ports."1".analogDpadMode or null) == 1
-        && lib.hasSuffix "/share/libretro/autoconfig" (retroarchPolicy.paths.joypadAutoconfigDirectory or "")
+        && lib.hasSuffix "/share/libretro/autoconfig" (
+          retroarchPolicy.paths.joypadAutoconfigDirectory or ""
+        )
       ))
       (check "${name}: Switch emulator is installed and available to the compositor" (
         hasPackagePname "ryubing" cfg.environment.systemPackages
@@ -355,17 +358,18 @@ let
       (check "${name}: web-canvas launcher carries SM8550 browser env through argv" (
         !(webCanvasPlatformLauncher ? plugin)
         && (webCanvasPlatformLauncher.command or null) == "korri-web-canvas"
-        && (webCanvasPlatformLauncher.args or [ ]) == [
-          "--settings-json={settings.plugin}"
-          "--browser-env=XDG_RUNTIME_DIR=/run/user/2000"
-          "--browser-env=PULSE_SERVER=unix:/run/user/2000/pulse/native"
-          "--browser-env=WAYLAND_DISPLAY=wayland-1"
-          "--browser-env=HOME=/tmp"
-          "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"
-          "--browser-env=USER=korri-remap-runner"
-          "--browser-env=LOGNAME=korri-remap-runner"
-          "{target}"
-        ]
+        &&
+          (webCanvasPlatformLauncher.args or [ ]) == [
+            "--settings-json={settings.plugin}"
+            "--browser-env=XDG_RUNTIME_DIR=/run/user/2000"
+            "--browser-env=PULSE_SERVER=unix:/run/user/2000/pulse/native"
+            "--browser-env=WAYLAND_DISPLAY=wayland-1"
+            "--browser-env=HOME=/tmp"
+            "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"
+            "--browser-env=USER=korri-remap-runner"
+            "--browser-env=LOGNAME=korri-remap-runner"
+            "{target}"
+          ]
         && (webCanvasPlatformLauncher.env.KORRI_WEB_CANVAS_SETTINGS or null) == "{settings.plugin}"
         && builtins.elem "korri-web-canvas" (webCanvasPlatformLauncher.policy.allowedCommands or [ ])
         && builtins.elem "chromium" (webCanvasPlatformLauncher.policy.allowedCommands or [ ])
@@ -374,18 +378,19 @@ let
       (check "${name}: YFS platform launcher override remains launchable" (
         !(yfsPlatformLauncher ? plugin)
         && (yfsPlatformLauncher.command or null) == "yfs-launch"
-        && (yfsPlatformLauncher.args or [ ]) == [
-          "--settings-json={settings.plugin}"
-          "--cache-root=/tmp/korri-remap-runner-yfs-cache"
-          "--browser-env=XDG_RUNTIME_DIR=/run/user/2000"
-          "--browser-env=PULSE_SERVER=unix:/run/user/2000/pulse/native"
-          "--browser-env=WAYLAND_DISPLAY=wayland-1"
-          "--browser-env=HOME=/tmp"
-          "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"
-          "--browser-env=USER=korri-remap-runner"
-          "--browser-env=LOGNAME=korri-remap-runner"
-          "{content.path}"
-        ]
+        &&
+          (yfsPlatformLauncher.args or [ ]) == [
+            "--settings-json={settings.plugin}"
+            "--cache-root=/tmp/korri-remap-runner-yfs-cache"
+            "--browser-env=XDG_RUNTIME_DIR=/run/user/2000"
+            "--browser-env=PULSE_SERVER=unix:/run/user/2000/pulse/native"
+            "--browser-env=WAYLAND_DISPLAY=wayland-1"
+            "--browser-env=HOME=/tmp"
+            "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"
+            "--browser-env=USER=korri-remap-runner"
+            "--browser-env=LOGNAME=korri-remap-runner"
+            "{content.path}"
+          ]
         && (yfsPlatformLauncher.env.KORRI_YFS_SETTINGS or null) == "{settings.plugin}"
         && builtins.elem "yfs-launch" (yfsPlatformLauncher.policy.allowedCommands or [ ])
       ))
@@ -554,24 +559,32 @@ let
         && pipewireEnv.ALSA_CONFIG_UCM2 == pipewirePulseEnv.ALSA_CONFIG_UCM2
         && pipewireEnv.ALSA_CONFIG_UCM2 == wireplumberEnv.ALSA_CONFIG_UCM2
       ))
+      (check "${name}: shared audio bootstrap module is wired with SM8550 posture" (
+        (rocknixAudioBootstrap.enable or false) == true
+        && (rocknixAudioBootstrap.pulseServer or null) == "unix:%t/pulse/native"
+        && (rocknixAudioBootstrap.targetSink or null) == expectedAudioTargetSink
+        && (rocknixAudioBootstrap.safeVolume or null) == "10%"
+        && (rocknixAudioBootstrap.serviceScope or null) == "user"
+        && (rocknixAudioBootstrap.failOnSocketUnavailable or true) == false
+      ))
       (check "${name}: user audio bootstrap is best-effort before Korri runtime services" (
-        userServices ? korri-sm8550-audio-bootstrap
+        userServices ? korri-rocknix-audio-bootstrap
         && builtins.elem "korri-session.target" (audioBootstrapUnit.wantedBy or [ ])
         && builtins.elem "pipewire-pulse.service" (audioBootstrapUnit.after or [ ])
         && builtins.elem "wireplumber.service" (audioBootstrapUnit.after or [ ])
         && builtins.elem "korri-sessiond.service" (audioBootstrapUnit.before or [ ])
         && builtins.elem "korri-inputd.service" (audioBootstrapUnit.before or [ ])
-        && !(builtins.elem "korri-sm8550-audio-bootstrap.service" (compositorUnit.requires or [ ]))
-        && !(builtins.elem "korri-sm8550-audio-bootstrap.service" (sessiondUnit.requires or [ ]))
-        && !(builtins.elem "korri-sm8550-audio-bootstrap.service" (inputdUnit.requires or [ ]))
-        && builtins.elem "korri-sm8550-audio-bootstrap.service" (compositorUnit.after or [ ])
-        && builtins.elem "korri-sm8550-audio-bootstrap.service" (sessiondUnit.after or [ ])
-        && builtins.elem "korri-sm8550-audio-bootstrap.service" (inputdUnit.after or [ ])
+        && !(builtins.elem "korri-rocknix-audio-bootstrap.service" (compositorUnit.requires or [ ]))
+        && !(builtins.elem "korri-rocknix-audio-bootstrap.service" (sessiondUnit.requires or [ ]))
+        && !(builtins.elem "korri-rocknix-audio-bootstrap.service" (inputdUnit.requires or [ ]))
+        && builtins.elem "korri-rocknix-audio-bootstrap.service" (compositorUnit.after or [ ])
+        && builtins.elem "korri-rocknix-audio-bootstrap.service" (sessiondUnit.after or [ ])
+        && builtins.elem "korri-rocknix-audio-bootstrap.service" (inputdUnit.after or [ ])
         && (audioBootstrapUnit.environment.PULSE_SERVER or null) == "unix:%t/pulse/native"
         && (audioBootstrapUnit.environment.ALSA_CONFIG_UCM2 or null) == pipewireEnv.ALSA_CONFIG_UCM2
       ))
       (check "${name}: user audio bootstrap uses graph routes, not hardware UCM card activation" (
-        sm8550PlatformAdapterUsesSafeAudioVolume
+        sm8550PlatformAdapterKeepsAudioRouteScriptSoft
         && !(lib.hasInfix "alsaucm -c" sm8550PlatformAdapterSource)
         && !(lib.hasInfix "substrateAudioUcmCard" sm8550PlatformAdapterSource)
         && !(lib.hasInfix "set _verb" sm8550PlatformAdapterSource)
@@ -620,8 +633,8 @@ let
         # device must mount media at the same prefix.
         && (removableMountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri"
         &&
-        (removableMountUnit.environment.KORRI_REMOVABLE_CONTENT_ROOT or null)
-        == "/var/lib/korri/content/removable/cards"
+          (removableMountUnit.environment.KORRI_REMOVABLE_CONTENT_ROOT or null)
+          == "/var/lib/korri/content/removable/cards"
         && (removableUnmountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri"
         && builtins.elem "d /run/media/korri 0755 korri korri -" cfg.systemd.tmpfiles.rules
         && builtins.elem "L+ /var/lib/korri/content/removable/cards - - - - /run/media/korri" cfg.systemd.tmpfiles.rules
@@ -660,11 +673,9 @@ let
       ))
       (check "${name}: old substrate Steam launcher/service is absent" (
         !(cfg.systemd.services ? main-space-steam-uinput)
-        && !(builtins.any
-          (
-            pkg: lib.hasInfix "rocknix-steam-guest" (pkg.name or "")
-          )
-          cfg.environment.systemPackages)
+        && !(builtins.any (
+          pkg: lib.hasInfix "rocknix-steam-guest" (pkg.name or "")
+        ) cfg.environment.systemPackages)
       ))
       (check "${name}: Korri Steam tmpfiles create state under Korri roots" (
         builtins.elem "d /var/lib/korri/steam 0750 korri korri -" cfg.systemd.tmpfiles.rules
@@ -699,13 +710,13 @@ let
   checks = [
     (check "SM8550 adapter does not hard-code substrate literals" sm8550PlatformAdapterFreeOfHardwareLiterals)
     (check "SM8550 adapter does not explicitly install substrate Steam" sm8550PlatformAdapterFreeOfSubstrateSteam)
-    (check "SM8550 adapter declares the safe audio bootstrap volume" sm8550PlatformAdapterUsesSafeAudioVolume)
+    (check "SM8550 adapter keeps audio route script best-effort" sm8550PlatformAdapterKeepsAudioRouteScriptSoft)
     (check "Sobo declares the substrate WirePlumber UCM speaker route" (
       soboAudioRoute.kind == "wireplumber-ucm"
-        && soboSystem.config.rocknix.device.audio.card == "AYNOdin2"
-        && soboSystem.config.rocknix.device.audio.ucmCard == "AYN-Odin2"
-        && soboAudioRoute.expectedSink == "alsa_output.platform-sound.HiFi__Speaker__sink"
-        && soboAudioRoute.pcm == null
+      && soboSystem.config.rocknix.device.audio.card == "AYNOdin2"
+      && soboSystem.config.rocknix.device.audio.ucmCard == "AYN-Odin2"
+      && soboAudioRoute.expectedSink == "alsa_output.platform-sound.HiFi__Speaker__sink"
+      && soboAudioRoute.pcm == null
     ))
   ]
   ++ (checkSystem "Odin 2 Portal" thorSystem)
