@@ -43,6 +43,10 @@ in
     [
       ../../../../electrobun.config.ts
       ../../../../product/apps/desktop
+      # Desktop window options share the companion route path with Shift, so
+      # include that route contract without pulling the whole web surface into
+      # the desktop package source.
+      ../../../../product/surfaces/web/shift/routes/paths.ts
       ../../../../product/surfaces/terminal/korri-cli
     ]
     ++ sharedRuntime
