@@ -57,7 +57,20 @@ let
   inputdUnit = cfg: cfg.systemd.user.services.korri-inputd or { };
   inputplumberUnit = cfg: cfg.systemd.services.inputplumber or { };
   inputdPathPackageNames = cfg: map (pkg: pkg.pname or pkg.name or "") ((inputdUnit cfg).path or [ ]);
-  inputdPathPackageByName = cfg: name: lib.findFirst (pkg: (pkg.pname or pkg.name or "") == name) null ((inputdUnit cfg).path or [ ]);
+  inputdPathPackageByName =
+    cfg: name:
+    lib.findFirst (pkg: (pkg.pname or pkg.name or "") == name) null ((inputdUnit cfg).path or [ ]);
+  inputplumberXdgDataDirs = cfg: (inputplumberUnit cfg).environment.XDG_DATA_DIRS or "";
+
+  inputplumberExtraDataA = pkgs.runCommand "korri-inputplumber-extra-data-a" { } ''
+    mkdir -p $out/share
+  '';
+  inputplumberExtraDataB = pkgs.runCommand "korri-inputplumber-extra-data-b" { } ''
+    mkdir -p $out/share
+  '';
+  alternateInputplumberPackage = pkgs.runCommand "korri-inputplumber-alternate-package" { } ''
+    mkdir -p $out/share
+  '';
 
   inputdOnlyBacklightStepPackage = inputdPathPackageByName inputdOnly "korri-backlight-step";
 
@@ -81,6 +94,26 @@ let
       name = "inputplumber";
       services = [ "platform-input.service" ];
     };
+  };
+
+  providerWithExtraData = evaluateWith {
+    services.korri.input.provider = {
+      enable = true;
+      name = "inputplumber";
+      extraDataPackages = [
+        inputplumberExtraDataA
+        inputplumberExtraDataB
+      ];
+    };
+  };
+
+  providerWithResolvedPackageOverride = evaluateWith {
+    services.korri.input.provider = {
+      enable = true;
+      name = "inputplumber";
+      extraDataPackages = [ inputplumberExtraDataA ];
+    };
+    services.inputplumber.package = lib.mkForce alternateInputplumberPackage;
   };
 
   providerWithInvalidService = evaluateWith {
@@ -174,6 +207,23 @@ let
       && lib.hasInfix ''GROUP="input"'' providerInputplumber.services.udev.extraRules
       && lib.hasInfix ''TAG+="uaccess"'' providerInputplumber.services.udev.extraRules
     ))
+    (check "provider/inputplumber: XDG_DATA_DIRS defaults to resolved service package share" (
+      inputplumberXdgDataDirs providerInputplumber
+      == "${providerInputplumber.services.inputplumber.package}/share"
+    ))
+    (check "provider/inputplumber extraDataPackages: extra shares precede service package share" (
+      inputplumberXdgDataDirs providerWithExtraData == lib.concatStringsSep ":" [
+        "${inputplumberExtraDataA}/share"
+        "${inputplumberExtraDataB}/share"
+        "${providerWithExtraData.services.inputplumber.package}/share"
+      ]
+    ))
+    (check "provider/inputplumber extraDataPackages: resolved service package override is honored" (
+      inputplumberXdgDataDirs providerWithResolvedPackageOverride == lib.concatStringsSep ":" [
+        "${inputplumberExtraDataA}/share"
+        "${alternateInputplumberPackage}/share"
+      ]
+    ))
     (check "provider/inputplumber: does NOT emit a korri-inputd unit on its own" (
       # provider and inputd are orthogonal: enabling provider alone must not
       # bring inputd along, since streaming hosts (aka) want the provider
@@ -207,7 +257,9 @@ let
     ))
     (check "inputd-only: brightness shortcuts adjust all backlights through Korri helper" (
       (inputdUnit inputdOnly).environment.KORRI_INPUTD_BRIGHTNESS_UP or null == "korri-backlight-step +5"
-      && (inputdUnit inputdOnly).environment.KORRI_INPUTD_BRIGHTNESS_DOWN or null == "korri-backlight-step -5"
+      &&
+        (inputdUnit inputdOnly).environment.KORRI_INPUTD_BRIGHTNESS_DOWN or null
+        == "korri-backlight-step -5"
       && builtins.elem "korri-backlight-step" (inputdPathPackageNames inputdOnly)
     ))
     (check "inputd-only: wantedBy korri-session.target" (
@@ -247,31 +299,33 @@ if failures != [ ] then
     lib.concatMapStringsSep "\n" (f: "- ${f.message}") failures
   }"
 else
-  pkgs.runCommand "korri-input-module-check" {
-    nativeBuildInputs = [ inputdOnlyBacklightStepPackage ];
-  } ''
-    echo "All ${toString (builtins.length checks)} korri-input module checks passed."
+  pkgs.runCommand "korri-input-module-check"
+    {
+      nativeBuildInputs = [ inputdOnlyBacklightStepPackage ];
+    }
+    ''
+      echo "All ${toString (builtins.length checks)} korri-input module checks passed."
 
-    backlight_root="$TMPDIR/backlight"
-    mkdir -p "$backlight_root/panel-a" "$backlight_root/panel-b"
-    printf '50\n' > "$backlight_root/panel-a/brightness"
-    printf '100\n' > "$backlight_root/panel-a/max_brightness"
-    printf '410\n' > "$backlight_root/panel-b/brightness"
-    printf '4096\n' > "$backlight_root/panel-b/max_brightness"
+      backlight_root="$TMPDIR/backlight"
+      mkdir -p "$backlight_root/panel-a" "$backlight_root/panel-b"
+      printf '50\n' > "$backlight_root/panel-a/brightness"
+      printf '100\n' > "$backlight_root/panel-a/max_brightness"
+      printf '410\n' > "$backlight_root/panel-b/brightness"
+      printf '4096\n' > "$backlight_root/panel-b/max_brightness"
 
-    KORRI_BACKLIGHT_ROOT="$backlight_root" korri-backlight-step +5
-    test "$(cat "$backlight_root/panel-a/brightness")" = 55
-    test "$(cat "$backlight_root/panel-b/brightness")" = 615
+      KORRI_BACKLIGHT_ROOT="$backlight_root" korri-backlight-step +5
+      test "$(cat "$backlight_root/panel-a/brightness")" = 55
+      test "$(cat "$backlight_root/panel-b/brightness")" = 615
 
-    KORRI_BACKLIGHT_ROOT="$backlight_root" korri-backlight-step -5
-    test "$(cat "$backlight_root/panel-a/brightness")" = 50
-    test "$(cat "$backlight_root/panel-b/brightness")" = 410
+      KORRI_BACKLIGHT_ROOT="$backlight_root" korri-backlight-step -5
+      test "$(cat "$backlight_root/panel-a/brightness")" = 50
+      test "$(cat "$backlight_root/panel-b/brightness")" = 410
 
-    printf '3\n' > "$backlight_root/panel-a/brightness"
-    printf '1\n' > "$backlight_root/panel-b/brightness"
-    KORRI_BACKLIGHT_ROOT="$backlight_root" korri-backlight-step -5
-    test "$(cat "$backlight_root/panel-a/brightness")" = 1
-    test "$(cat "$backlight_root/panel-b/brightness")" = 1
+      printf '3\n' > "$backlight_root/panel-a/brightness"
+      printf '1\n' > "$backlight_root/panel-b/brightness"
+      KORRI_BACKLIGHT_ROOT="$backlight_root" korri-backlight-step -5
+      test "$(cat "$backlight_root/panel-a/brightness")" = 1
+      test "$(cat "$backlight_root/panel-b/brightness")" = 1
 
-    touch $out
-  ''
+      touch $out
+    ''

@@ -15,6 +15,7 @@
 let
   targetSystem = pkgs.stdenv.hostPlatform.system;
   substratePackages = nix-on-rocks.packages.${targetSystem};
+  inputplumberHelpers = import ../inputplumber-platform-helpers.nix { inherit pkgs; };
   inputplumberPackage = substratePackages.inputplumber;
   inputplumberDataPackage = pkgs.runCommand "korri-rocknix-rk3566-inputplumber-data-xb360" { } ''
     mkdir -p $out/share
@@ -22,12 +23,7 @@ let
     chmod -R u+w $out
     cp -a ${substratePackages.inputplumber-rk3566-maps}/share/inputplumber/. $out/share/inputplumber/
     chmod -R u+w $out
-    sed -i 's/^  - xbox-series$/  - xb360/' $out/share/inputplumber/devices/01-rg353m.yaml
-    grep -q '^  - xb360$' $out/share/inputplumber/devices/01-rg353m.yaml
-    if grep -q '^  - xbox-series$' $out/share/inputplumber/devices/01-rg353m.yaml; then
-      echo "RG353M InputPlumber map still targets xbox-series" >&2
-      exit 1
-    fi
+    ${inputplumberHelpers.patchInputplumberXb360Target { targetDeviceYaml = "01-rg353m.yaml"; }}
   '';
   gamescopeNix = import ../../../../plugins/gamescope/nix/platform-environments.nix { inherit pkgs; };
   gamescopePackage = korri.packages.${targetSystem}.gamescope-korri;
@@ -72,7 +68,12 @@ let
 
   hideRawGamepadDevices = pkgs.writeShellScript "korri-rk3566-hide-raw-gamepad-devices" ''
     set -euo pipefail
-    export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gawk ]}
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.gawk
+      ]
+    }
 
     ${pkgs.gawk}/bin/awk '
       /^N: Name="retrogame_joypad"/ { matched = 1 }
@@ -92,21 +93,6 @@ let
       done
     done
   '';
-
-  handheldRetroArchInputPolicy = {
-    drivers = {
-      input = "udev";
-      joypad = "udev";
-    };
-    input = {
-      autodetect = true;
-      maxUsers = 4;
-      ports."1" = {
-        joypadIndex = 0;
-        analogDpadMode = 1;
-      };
-    };
-  };
 
   panfrostEnvironment = {
     # RG353M/RK3566 exposes rockchip KMS on card0 and Mali-G52/Panfrost on the
@@ -205,6 +191,7 @@ in
       "inputplumber.service"
       "korri-rk3566-hide-raw-gamepad-devices.service"
     ];
+    extraDataPackages = [ inputplumberDataPackage ];
   };
 
   systemd.services.korri-rk3566-hide-raw-gamepad-devices = {
@@ -241,12 +228,11 @@ in
 
   # RK3566/PanVK RetroArch is the known deadlock case, but platform defaults
   # must not define an apps.retroarch record because user-authored app records
-  # would collide in ProseQL. Apply the Xwayland route at the host layer and
-  # add the host-scoped RetroArch plugin policy so generated configs consume
-  # the InputPlumber virtual gamepad through udev/autodetect.
+  # would collide in ProseQL. Apply the Xwayland route at the host layer; the
+  # shared RetroArch module owns the InputPlumber udev/autodetect/autoconfig
+  # policy for generated RetroArch configs.
   services.korri.daemon.library.platformDefaults.host = {
     launch."with"."@korri:gamescope".app.environment.WAYLAND_DISPLAY = null;
-    plugin."@korri:retroarch" = handheldRetroArchInputPolicy;
   };
 
   systemd.user.services.korrid.environment.KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
@@ -307,13 +293,6 @@ in
     '';
     deps = [ "users" ];
   };
-
-  systemd.services.inputplumber.environment.XDG_DATA_DIRS = lib.mkOverride 40 (
-    lib.concatStringsSep ":" [
-      "${inputplumberDataPackage}/share"
-      "${config.services.inputplumber.package}/share"
-    ]
-  );
 
   environment.etc."rocknix-stage10-proof-marker".text = ''
     korri-rk3566-kiosk-system

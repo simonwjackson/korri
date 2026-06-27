@@ -15,6 +15,7 @@
 let
   targetSystem = pkgs.stdenv.hostPlatform.system;
   substratePackages = nix-on-rocks.packages.${targetSystem};
+  inputplumberHelpers = import ../inputplumber-platform-helpers.nix { inherit pkgs; };
   gamescopeNix = import ../../../../plugins/gamescope/nix/platform-environments.nix { inherit pkgs; };
   gamescopePackage = korri.packages.${targetSystem}.gamescope-korri;
   ryubingPackage = korri.packages.${targetSystem}.ryubing-korri;
@@ -350,8 +351,7 @@ let
       ''
         cp -a ${substratePackages.inputplumber} $out
         chmod -R u+w $out
-        substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
-          --replace-fail "  - xbox-series" "  - xb360"
+        ${inputplumberHelpers.patchInputplumberXb360Target { targetDeviceYaml = "02-ayn-controller.yaml"; }}
       '';
   # SM8550 platform launch policy is rendered into the readable library
   # cascade. Moonlight uses host.moonlight. YFS carries authored plugin

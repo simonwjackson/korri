@@ -179,6 +179,18 @@ in
           not need to list it themselves.
         '';
       };
+
+      extraDataPackages = mkOption {
+        type = types.listOf types.package;
+        default = [ ];
+        example = lib.literalExpression "[ inputplumberDataPackage ]";
+        description = ''
+          Packages whose share directories are prepended to InputPlumber's
+          XDG_DATA_DIRS before the resolved provider package. Platform adapters
+          use this for device-map packages that must override the default
+          InputPlumber data bundled in the active service package.
+        '';
+      };
     };
 
     inputd = {
@@ -296,6 +308,15 @@ in
         package = cfg.provider.package;
       };
 
+      systemd.services.inputplumber.environment.XDG_DATA_DIRS =
+        (if cfg.provider.extraDataPackages == [ ] then lib.mkOverride 60 else lib.mkOverride 45)
+          (
+            lib.concatStringsSep ":" (
+              (map (pkg: "${pkg}/share") cfg.provider.extraDataPackages)
+              ++ [ "${config.services.inputplumber.package}/share" ]
+            )
+          );
+
       # uinput is the OUTPUT side of normalized input: InputPlumber writes
       # virtual Xbox 360 controllers through /dev/uinput, and Sunshine reads
       # them as the streamed gamepad. uhid (the DualSense passthrough path)
@@ -332,7 +353,10 @@ in
     (mkIf cfg.inputd.enable {
       assertions = [
         {
-          assertion = cfg.inputd.hostname == "127.0.0.1" || cfg.inputd.hostname == "localhost" || cfg.inputd.hostname == "::1";
+          assertion =
+            cfg.inputd.hostname == "127.0.0.1"
+            || cfg.inputd.hostname == "localhost"
+            || cfg.inputd.hostname == "::1";
           message = "services.korri.input.inputd.hostname must be loopback-only for appliance profiles.";
         }
       ];

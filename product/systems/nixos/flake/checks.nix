@@ -80,6 +80,12 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     korriInputModule = self.nixosModules.korri-input;
   };
+  korri-inputplumber-xb360-helper =
+    import ../../../../tools/testing/nix/korri-inputplumber-xb360-helper-check.nix
+      {
+        inherit pkgs;
+        inputplumberPlatformHelpers = import ../images/inputplumber-platform-helpers.nix { inherit pkgs; };
+      };
   korri-game-stream-module = import ../../../../tools/testing/nix/korri-game-stream-module-check.nix {
     inherit pkgs;
     korriGameStreamModule = self.nixosModules.korri-game-stream;

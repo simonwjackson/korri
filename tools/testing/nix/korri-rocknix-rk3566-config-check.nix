@@ -28,10 +28,9 @@ let
   inputplumberService = systemServices.inputplumber or { };
   inputplumberEnv = inputplumberService.environment or { };
   inputplumberPackage = cfg.services.inputplumber.package or { };
-  inputplumberDataPackage = lib.findFirst
-    (package: lib.hasInfix "inputplumber-data-xb360" (package.name or ""))
-    null
-    cfg.environment.systemPackages;
+  inputplumberDataPackage = lib.findFirst (
+    package: lib.hasInfix "inputplumber-data-xb360" (package.name or "")
+  ) null cfg.environment.systemPackages;
   inputdUnit = userServices.korri-inputd or { };
   inputdEnv = inputdUnit.environment or { };
   inputdWants = inputdUnit.wants or [ ];
@@ -62,9 +61,9 @@ let
   rk3566PlatformAdapterSource = builtins.readFile rk3566PlatformAdapterSourceFile;
   rk3566PlatformAdapterUsesSafeAudioVolume =
     lib.hasInfix ''rk3566SafeDefaultSinkVolume = "10%"'' rk3566PlatformAdapterSource
-    && lib.hasInfix ''rk3566TargetSink = config.rocknix.device.audio.defaultSink.name'' rk3566PlatformAdapterSource
+    && lib.hasInfix "rk3566TargetSink = config.rocknix.device.audio.defaultSink.name" rk3566PlatformAdapterSource
     && lib.hasInfix ''set-sink-volume "$target_sink" "$safe_default_sink_volume"'' rk3566PlatformAdapterSource
-    && lib.hasInfix ''systemd.user.services.pipewire.enable = lib.mkForce false'' rk3566PlatformAdapterSource;
+    && lib.hasInfix "systemd.user.services.pipewire.enable = lib.mkForce false" rk3566PlatformAdapterSource;
   systemServiceEnabled =
     serviceName:
     let
@@ -132,31 +131,35 @@ let
       builtins.elem "inputplumber.service" (rawGamepadHideService.after or [ ])
       && builtins.elem "inputplumber.service" (rawGamepadHideService.requires or [ ])
     ))
-    (check "RG353M InputPlumber package must be present" (
-      (inputplumberPackage.name or "") != ""
-    ))
+    (check "RG353M InputPlumber package must be present" ((inputplumberPackage.name or "") != ""))
     (check "RG353M InputPlumber data root must carry the handheld xb360 posture" (
       inputplumberDataPackage != null
     ))
     (check "RG353M InputPlumber must discover product maps before package defaults" (
       inputplumberDataPackage != null
-      && lib.hasPrefix "${inputplumberDataPackage}/share:" (inputplumberEnv.XDG_DATA_DIRS or "")
+      &&
+        (inputplumberEnv.XDG_DATA_DIRS or "") == lib.concatStringsSep ":" [
+          "${inputplumberDataPackage}/share"
+          "${inputplumberPackage}/share"
+        ]
     ))
     (check "RG353M raw physical gamepad event nodes must be hidden from apps" (
       lib.hasInfix ''KERNEL=="event*", ATTRS{name}=="retrogame_joypad"'' udevRules
       && lib.hasInfix ''MODE="0000"'' udevRules
     ))
     (check "RG353M raw physical gamepad joydev nodes must be hidden from apps" (
-      lib.hasInfix ''KERNEL=="js*"'' udevRules
-      && lib.hasInfix ''MODE="0000"'' udevRules
+      lib.hasInfix ''KERNEL=="js*"'' udevRules && lib.hasInfix ''MODE="0000"'' udevRules
     ))
-    (check "RG353M RetroArch must use the handheld input baseline" (
+    (check "RG353M RetroArch must use the shared InputPlumber autoconfig baseline" (
       (retroarchPolicy.drivers.input or null) == "udev"
       && (retroarchPolicy.drivers.joypad or null) == "udev"
       && (retroarchPolicy.input.autodetect or false) == true
       && (retroarchPolicy.input.maxUsers or 0) == 4
       && (retroarchPolicy.input.ports."1".joypadIndex or null) == 0
       && (retroarchPolicy.input.ports."1".analogDpadMode or null) == 1
+      && lib.hasSuffix "/share/libretro/autoconfig" (
+        retroarchPolicy.paths.joypadAutoconfigDirectory or ""
+      )
     ))
     (check "RG353M keeps only the substrate main-space audio graph enabled" (
       systemServiceEnabled "main-space-pipewire"
