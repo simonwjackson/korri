@@ -100,6 +100,16 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
+  it("treats cold and warm gamescoped Steam startup as one idempotent ensure", () => {
+    expect(moduleSource).toContain("request_steam_service_start()")
+    expect(moduleSource).toContain("service_start_attempted_at=0")
+    expect(moduleSource).toContain("systemctl reset-failed korri-steam-gamescope.service")
+    expect(moduleSource).toContain("systemctl --user restart korri-steam-warm.service")
+    expect(moduleSource).toContain('inactive)')
+    expect(moduleSource).toContain("if ! request_steam_service_start; then")
+    expect(moduleSource).toContain("RemainAfterExit = false")
+  })
+
   it("bounds service-control waits before relying on the readiness loop", () => {
     expect(moduleSource).toContain("systemctl --no-block start")
     expect(moduleSource).toContain("KORRI_STEAM_APP_SYSTEMCTL_TIMEOUT")

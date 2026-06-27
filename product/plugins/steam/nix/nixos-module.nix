@@ -425,7 +425,10 @@ let
     esac
 
     case "$1" in
-      start) exec ${pkgs.systemd}/bin/systemctl --no-block start korri-steam-gamescope.service ;;
+      start)
+        ${pkgs.systemd}/bin/systemctl reset-failed korri-steam-gamescope.service >/dev/null 2>&1 || true
+        exec ${pkgs.systemd}/bin/systemctl --no-block start korri-steam-gamescope.service
+        ;;
       stop) exec ${pkgs.coreutils}/bin/timeout 30 ${pkgs.systemd}/bin/systemctl stop korri-steam-gamescope.service ;;
     esac
   '';
@@ -594,13 +597,17 @@ let
     }
 
     cleanup_done=0
+    service_start_attempted_at=0
 
     control_steam_service() {
       action="$1"
       control_timeout="''${KORRI_STEAM_APP_SYSTEMCTL_TIMEOUT:-$service_ready_timeout}"
       if [ "$(${pkgs.coreutils}/bin/id -u)" -eq 0 ]; then
         case "$action" in
-          start) ${pkgs.systemd}/bin/systemctl --no-block start "$service_name" ;;
+          start)
+            ${pkgs.systemd}/bin/systemctl reset-failed "$service_name" >/dev/null 2>&1 || true
+            ${pkgs.systemd}/bin/systemctl --no-block start "$service_name"
+            ;;
           stop) ${pkgs.coreutils}/bin/timeout "$control_timeout" ${pkgs.systemd}/bin/systemctl stop "$service_name" ;;
         esac
         return $?
@@ -610,11 +617,33 @@ let
         return 1
       fi
       if [ -x /run/wrappers/bin/sudo ]; then
-        ${pkgs.coreutils}/bin/timeout "$control_timeout" /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control "$action"
-        return $?
+        if ${pkgs.coreutils}/bin/timeout "$control_timeout" /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control "$action"; then
+          return 0
+        fi
+        sudo_status="$?"
+        if [ "$action" = "start" ]; then
+          # Launch children can have a narrower privilege context than the
+          # kiosk user manager. If direct sudo service-control cannot start the
+          # system broker, rerun the warmup unit; it performs the same start
+          # request from the long-lived user manager context. This makes AppID
+          # launches an idempotent ensure instead of depending on boot warmth.
+          if ${pkgs.coreutils}/bin/timeout "$control_timeout" ${pkgs.systemd}/bin/systemctl --user restart korri-steam-warm.service; then
+            return 0
+          fi
+        fi
+        return "$sudo_status"
       fi
       echo "korri-steam-app: warning: sudo wrapper unavailable; cannot $action $service_name" >&2
       return 1
+    }
+
+    request_steam_service_start() {
+      now="$(${pkgs.coreutils}/bin/date +%s)"
+      if [ "$service_start_attempted_at" -ne 0 ] && [ "$now" -lt $((service_start_attempted_at + 2)) ]; then
+        return 0
+      fi
+      service_start_attempted_at="$now"
+      control_steam_service start
     }
 
     cleanup() {
@@ -672,16 +701,25 @@ let
           return 0
         fi
         service_state="$(steam_service_state)"
-        if [ "$service_state" = "failed" ] || [ "$service_state" = "unknown" ]; then
-          return 1
-        fi
+        case "$service_state" in
+          active|activating|deactivating|reloading) ;;
+          inactive)
+            if ! request_steam_service_start; then
+              return 1
+            fi
+            ;;
+          failed|unknown)
+            return 1
+            ;;
+          *) ;;
+        esac
         ${pkgs.coreutils}/bin/sleep 1
       done
       return 1
     }
 
     if ! ${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
-      if ! control_steam_service start; then
+      if ! request_steam_service_start; then
         echo "korri-steam-app: could not start gamescoped Steam service $service_name" >&2
         exit 125
       fi
@@ -949,7 +987,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${steamWarmup}/bin/korri-steam-warm";
-        RemainAfterExit = true;
+        RemainAfterExit = false;
       };
     };
 
