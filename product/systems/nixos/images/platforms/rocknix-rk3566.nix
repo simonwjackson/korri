@@ -32,39 +32,7 @@ let
   runtime = config.services.korri.runtime;
   rk3566RuntimeDir = "/run/user/${toString runtime.uid}";
   rk3566PulseServer = "unix:${rk3566RuntimeDir}/pulse/native";
-  rk3566SafeDefaultSinkVolume = "10%";
   rk3566TargetSink = config.rocknix.device.audio.defaultSink.name;
-  korriRk3566AudioBootstrap = pkgs.writeShellScript "korri-rk3566-audio-bootstrap" ''
-    set -u
-
-    safe_default_sink_volume=${lib.escapeShellArg rk3566SafeDefaultSinkVolume}
-    target_sink=${lib.escapeShellArg rk3566TargetSink}
-
-    for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
-      if ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
-        break
-      fi
-      ${pkgs.coreutils}/bin/sleep 0.5
-    done
-
-    if ! ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
-      echo "korri-rk3566-audio-bootstrap: PulseAudio socket unavailable at $PULSE_SERVER" >&2
-      exit 1
-    fi
-
-    for _ in $(${pkgs.coreutils}/bin/seq 1 40); do
-      if ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^[0-9][0-9]*[[:space:]]$target_sink[[:space:]]"; then
-        if ${pkgs.pulseaudio}/bin/pactl set-default-sink "$target_sink" >/dev/null 2>&1 \
-          && ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$target_sink" "$safe_default_sink_volume" >/dev/null 2>&1; then
-          exit 0
-        fi
-      fi
-      ${pkgs.coreutils}/bin/sleep 0.25
-    done
-
-    echo "korri-rk3566-audio-bootstrap: target sink $target_sink unavailable for safe volume clamp" >&2
-    exit 1
-  '';
 
   hideRawGamepadDevices = pkgs.writeShellScript "korri-rk3566-hide-raw-gamepad-devices" ''
     set -euo pipefail
@@ -116,6 +84,7 @@ in
     nix-on-rocks.nixosModules.rocknix-guest-base
     nix-on-rocks.nixosModules.rk3566
     deviceProfile
+    ../../modules/korri-rocknix-audio-bootstrap.nix
     ../../modules/korri-rocknix-guest-profile.nix
   ];
 
@@ -123,6 +92,17 @@ in
   services.korri.rocknixGuestProfile = {
     enable = true;
     proofMarkerLabel = "korri-rk3566-kiosk-system";
+  };
+  services.korri.rocknixAudioBootstrap = {
+    enable = true;
+    pulseServer = rk3566PulseServer;
+    targetSink = rk3566TargetSink;
+    safeVolume = "10%";
+    serviceScope = "system";
+    failOnSocketUnavailable = true;
+    routeBootstrapScript = ''
+      clamp_named_sink "$target_sink" || exit 1
+    '';
   };
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 
@@ -242,8 +222,7 @@ in
 
   systemd.user.services.korrid.environment.KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
 
-  systemd.services.korri-rk3566-audio-bootstrap = {
-    description = "Clamp RG353M main-space audio to a safe default volume";
+  systemd.services.korri-rocknix-audio-bootstrap = {
     wantedBy = [ "multi-user.target" ];
     after = [
       "main-space-runtime-dir.service"
@@ -267,19 +246,13 @@ in
       XDG_RUNTIME_DIR = rk3566RuntimeDir;
       DBUS_SESSION_BUS_ADDRESS = "unix:path=${rk3566RuntimeDir}/bus";
       PIPEWIRE_RUNTIME_DIR = rk3566RuntimeDir;
-      PULSE_SERVER = rk3566PulseServer;
     };
-    serviceConfig = {
-      Type = "oneshot";
-      User = "root";
-      ExecStart = korriRk3566AudioBootstrap;
-      RemainAfterExit = true;
-    };
+    serviceConfig.User = "root";
   };
 
   systemd.services.greetd = {
-    requires = [ "korri-rk3566-audio-bootstrap.service" ];
-    after = [ "korri-rk3566-audio-bootstrap.service" ];
+    requires = [ "korri-rocknix-audio-bootstrap.service" ];
+    after = [ "korri-rocknix-audio-bootstrap.service" ];
   };
 
   systemd.user.services.korri-compositor.serviceConfig.UnsetEnvironment = [

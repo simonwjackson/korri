@@ -18,6 +18,7 @@ let
   targetSystem = cfg.nixpkgs.hostPlatform.system;
   systemServices = cfg.systemd.services or { };
   rocknixGuestProfile = cfg.services.korri.rocknixGuestProfile or { };
+  rocknixAudioBootstrap = cfg.services.korri.rocknixAudioBootstrap or { };
   userServices = cfg.systemd.user.services or { };
   userSockets = cfg.systemd.user.sockets or { };
   sessiondService = userServices."korri-sessiond" or { };
@@ -38,7 +39,7 @@ let
   inputdAfter = inputdUnit.after or [ ];
   rawGamepadHideService = systemServices.korri-rk3566-hide-raw-gamepad-devices or { };
   udevRules = cfg.services.udev.extraRules or "";
-  rkAudioBootstrap = systemServices.korri-rk3566-audio-bootstrap or { };
+  rkAudioBootstrap = systemServices.korri-rocknix-audio-bootstrap or { };
   userCompositorService = userServices."korri-compositor" or { };
   userCompositorEnv = userCompositorService.environment or { };
   userCompositorServiceConfig = userCompositorService.serviceConfig or { };
@@ -58,12 +59,12 @@ let
   rkAudioBootstrapScript = rkAudioBootstrap.serviceConfig.ExecStart or "";
   # The evaluated bootstrap ExecStart points at an aarch64 shell-script
   # derivation. Grepping that artifact from this x86_64 host check would force
-  # a target-platform build, so keep this as an adapter-source invariant.
+  # a target-platform build, so assert shared-module posture through evaluated
+  # config and keep only adapter-topology checks as source invariants.
   rk3566PlatformAdapterSource = builtins.readFile rk3566PlatformAdapterSourceFile;
-  rk3566PlatformAdapterUsesSafeAudioVolume =
-    lib.hasInfix ''rk3566SafeDefaultSinkVolume = "10%"'' rk3566PlatformAdapterSource
-    && lib.hasInfix "rk3566TargetSink = config.rocknix.device.audio.defaultSink.name" rk3566PlatformAdapterSource
-    && lib.hasInfix ''set-sink-volume "$target_sink" "$safe_default_sink_volume"'' rk3566PlatformAdapterSource
+  rk3566PlatformAdapterKeepsMainSpaceAudioTopology =
+    lib.hasInfix "rk3566TargetSink = config.rocknix.device.audio.defaultSink.name" rk3566PlatformAdapterSource
+    && lib.hasInfix ''clamp_named_sink "$target_sink" || exit 1'' rk3566PlatformAdapterSource
     && lib.hasInfix "systemd.user.services.pipewire.enable = lib.mkForce false" rk3566PlatformAdapterSource;
   systemServiceEnabled =
     serviceName:
@@ -177,20 +178,28 @@ let
       && ((userSockets.pipewire or { }).enable or true) == false
       && ((userSockets.pipewire-pulse or { }).enable or true) == false
     ))
+    (check "RG353M shared audio bootstrap module is wired with hard-fail posture" (
+      (rocknixAudioBootstrap.enable or false) == true
+      && (rocknixAudioBootstrap.pulseServer or null) == rkPulseServer
+      && (rocknixAudioBootstrap.targetSink or null) == cfg.rocknix.device.audio.defaultSink.name
+      && (rocknixAudioBootstrap.safeVolume or null) == "10%"
+      && (rocknixAudioBootstrap.serviceScope or null) == "system"
+      && (rocknixAudioBootstrap.failOnSocketUnavailable or false) == true
+    ))
     (check "RG353M safe audio bootstrap targets the main-space Pulse socket" (
-      systemServices ? korri-rk3566-audio-bootstrap
+      systemServices ? korri-rocknix-audio-bootstrap
       && builtins.elem "multi-user.target" (rkAudioBootstrap.wantedBy or [ ])
       && builtins.elem "main-space-pipewire-pulse.service" (rkAudioBootstrap.after or [ ])
       && builtins.elem "main-space-wireplumber.service" (rkAudioBootstrap.after or [ ])
       && builtins.elem "main-space-audio-sink-bootstrap.service" (rkAudioBootstrap.after or [ ])
       && builtins.elem "main-space-audio-sink-bootstrap.service" (rkAudioBootstrap.requires or [ ])
       && builtins.elem "greetd.service" (rkAudioBootstrap.before or [ ])
-      && builtins.elem "korri-rk3566-audio-bootstrap.service" (greetdService.requires or [ ])
-      && builtins.elem "korri-rk3566-audio-bootstrap.service" (greetdService.after or [ ])
+      && builtins.elem "korri-rocknix-audio-bootstrap.service" (greetdService.requires or [ ])
+      && builtins.elem "korri-rocknix-audio-bootstrap.service" (greetdService.after or [ ])
       && (rkAudioBootstrap.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
       && (rkAudioBootstrap.environment.PULSE_SERVER or null) == rkPulseServer
-      && lib.hasInfix "korri-rk3566-audio-bootstrap" rkAudioBootstrapScript
-      && rk3566PlatformAdapterUsesSafeAudioVolume
+      && lib.hasInfix "korri-rocknix-audio-bootstrap" rkAudioBootstrapScript
+      && rk3566PlatformAdapterKeepsMainSpaceAudioTopology
     ))
     (check "RG353M sessiond inherits the main-space Pulse socket" (
       sessiondEnv.PULSE_SERVER or null == rkPulseServer
