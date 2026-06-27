@@ -49,6 +49,14 @@ let
       deviceProfile = nix-on-rocks.nixosModules.rg353m;
       chipset = "rk3566";
     };
+
+    r36tmax = mkProduct {
+      id = "r36tmax";
+      displayName = "R36T Max";
+      compatible = "gameconsole,r36tmax";
+      deviceProfile = nix-on-rocks.nixosModules.r36tmax;
+      chipset = "rk3326";
+    };
   };
 in
 {
@@ -58,6 +66,7 @@ in
     explicitProducts.odin2portal
     explicitProducts.thor
     explicitProducts.rg353m
+    explicitProducts.r36tmax
   ];
 
   byCompatible = {

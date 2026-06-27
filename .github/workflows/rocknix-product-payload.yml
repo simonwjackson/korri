@@ -33,6 +33,7 @@ on:
           - odin2portal
           - thor
           - rg353m
+          - r36tmax
       build_payload:
         description: "Build and upload the candidate payload artifact"
         required: true
@@ -67,6 +68,7 @@ jobs:
           - odin2portal
           - thor
           - rg353m
+          - r36tmax
     steps:
       - name: Maximize build space
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product }}
