@@ -1,0 +1,72 @@
+name: Trigger ROCKNIX R36T Max image
+
+on:
+  workflow_dispatch:
+    inputs:
+      nix_on_rocks_ref:
+        description: "nix-on-rocks ref containing the RK3326/R36TMax image workflow"
+        required: true
+        default: main
+        type: string
+      subdevice:
+        description: "RK3326 subdevice to build"
+        required: true
+        default: R36TMax
+        type: string
+      base_run_id:
+        description: "Optional prior nix-on-rocks RK3326 run ID with base/build-tree artifacts"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  NIX_ON_ROCKS_REPO: simonwjackson/nix-on-rocks
+  NIX_ON_ROCKS_WORKFLOW: build-rk3326.yml
+
+jobs:
+  trigger-r36tmax-image:
+    name: Trigger nix-on-rocks RK3326/R36TMax image build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require cross-repo workflow token
+        env:
+          NIX_ON_ROCKS_WORKFLOW_TOKEN: ${{ secrets.NIX_ON_ROCKS_WORKFLOW_TOKEN }}
+        run: |
+          if [ -z "${NIX_ON_ROCKS_WORKFLOW_TOKEN}" ]; then
+            printf '%s\n' \
+              'Missing secret: NIX_ON_ROCKS_WORKFLOW_TOKEN' \
+              '' \
+              'This workflow dispatches simonwjackson/nix-on-rocks/.github/workflows/build-rk3326.yml.' \
+              'The default GITHUB_TOKEN cannot reliably dispatch workflows in a different repository,' \
+              'so configure NIX_ON_ROCKS_WORKFLOW_TOKEN with workflow dispatch permission there.' >&2
+            exit 1
+          fi
+
+      - name: Dispatch nix-on-rocks RK3326 image workflow
+        env:
+          GH_TOKEN: ${{ secrets.NIX_ON_ROCKS_WORKFLOW_TOKEN }}
+          NIX_ON_ROCKS_REF: ${{ inputs.nix_on_rocks_ref }}
+          SUBDEVICE: ${{ inputs.subdevice }}
+          BASE_RUN_ID: ${{ inputs.base_run_id }}
+        run: |
+          set -euo pipefail
+          args=(
+            workflow run "${NIX_ON_ROCKS_WORKFLOW}"
+            --repo "${NIX_ON_ROCKS_REPO}"
+            --ref "${NIX_ON_ROCKS_REF}"
+            -f "subdevice=${SUBDEVICE}"
+            -f "base_run_id=${BASE_RUN_ID}"
+          )
+          gh "${args[@]}"
+          {
+            printf '%s\n' '## Dispatched ROCKNIX R36T Max image build'
+            printf '\n'
+            printf '%s\n' "- Repository: \`${NIX_ON_ROCKS_REPO}\`"
+            printf '%s\n' "- Workflow: \`${NIX_ON_ROCKS_WORKFLOW}\`"
+            printf '%s\n' "- Ref: \`${NIX_ON_ROCKS_REF}\`"
+            printf '%s\n' "- Subdevice: \`${SUBDEVICE}\`"
+            printf '%s\n' "- Base run ID: \`${BASE_RUN_ID:-<none>}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
