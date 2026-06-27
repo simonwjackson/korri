@@ -155,6 +155,7 @@ describe("ShiftCompanionRoute", () => {
     renderCompanion({ layer: loadingForeverCatalogFactsSourceLayer })
 
     expect(screen.getByText("Loading library…")).toBeTruthy()
+    expect(screen.queryByText("Waiting for primary selection.")).toBeNull()
     expect(screen.queryByText("Hollow Knight")).toBeNull()
   })
 
@@ -164,6 +165,7 @@ describe("ShiftCompanionRoute", () => {
     await waitFor(() => {
       expect(screen.getByText("Could not load library.")).toBeTruthy()
     })
+    expect(screen.queryByText("Waiting for primary selection.")).toBeNull()
     expect(screen.queryByText("Hollow Knight")).toBeNull()
   })
 
@@ -173,6 +175,7 @@ describe("ShiftCompanionRoute", () => {
     await waitFor(() => {
       expect(screen.getByText("Unexpected defect.")).toBeTruthy()
     })
+    expect(screen.queryByText("Waiting for primary selection.")).toBeNull()
     expect(screen.queryByText("Hollow Knight")).toBeNull()
   })
 
@@ -182,6 +185,7 @@ describe("ShiftCompanionRoute", () => {
     await waitFor(() => {
       expect(screen.getByText("No games found.")).toBeTruthy()
     })
+    expect(screen.queryByText("Waiting for primary selection.")).toBeNull()
     expect(screen.queryByText("Hollow Knight")).toBeNull()
   })
 

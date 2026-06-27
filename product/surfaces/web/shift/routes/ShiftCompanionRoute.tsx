@@ -37,12 +37,13 @@ function CompanionReadyBody() {
   const selectedGameId = useOptionalDualScreenSession()?.selectedGameId ?? null
   const launch = useLibraryLaunchController()
 
-  if (!selectedGameId)
-    return <CompanionMessage>Waiting for primary selection.</CompanionMessage>
-
   return Option.match(ready, {
     onNone: () => null,
     onSome: ({ games }) => {
+      if (!selectedGameId)
+        return (
+          <CompanionMessage>Waiting for primary selection.</CompanionMessage>
+        )
       const entry = games.find(game => game.id === selectedGameId)
       if (!entry) return <CompanionMessage>Game not found.</CompanionMessage>
       return (

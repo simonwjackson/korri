@@ -82,18 +82,16 @@ export function DualScreenBroadcastSessionRoot({
 
   const focusGame = useCallback(
     (gameId: string, source: DualScreenRole) => {
-      setState(current => {
-        const event: DualScreenEvent = {
-          _tag: "GameFocused",
-          gameId,
-          source,
-          revision: current.revision + 1,
-        }
-        const next = reduceDualScreenEvent(current, event)
-        stateRef.current = next
-        channel.postMessage(event)
-        return next
-      })
+      const event: DualScreenEvent = {
+        _tag: "GameFocused",
+        gameId,
+        source,
+        revision: stateRef.current.revision + 1,
+      }
+      const next = reduceDualScreenEvent(stateRef.current, event)
+      stateRef.current = next
+      setState(next)
+      channel.postMessage(event)
     },
     [channel],
   )

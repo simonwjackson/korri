@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { RegistryProvider } from "@effect/atom-react"
-import { DualScreenSessionRoot } from "@platform/react/display/dual-screen/DualScreenSessionRoot"
 import { useDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
+import { DualScreenSessionRoot } from "@platform/react/display/dual-screen/DualScreenSessionRoot"
 import {
   cleanup,
   fireEvent,

@@ -1,3 +1,5 @@
+import { SHIFT_COMPANION_PATH } from "@product/surfaces/web/shift/routes/paths"
+
 export type DesktopProfile = "default" | "device"
 
 export interface DesktopServerAddress {
@@ -101,7 +103,7 @@ export function createDesktopDualScreenWindowOptions(
       title: "Korri Companion",
       url: buildDesktopUrl(
         address,
-        `/screen?role=companion&session=${session}#/companion`,
+        `/screen?role=companion&session=${session}#${SHIFT_COMPANION_PATH}`,
       ),
       frame: {
         x: 160,

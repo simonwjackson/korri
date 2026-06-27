@@ -5,6 +5,7 @@ import {
   createRouter,
   Outlet,
 } from "@tanstack/react-router"
+import { SHIFT_COMPANION_PATH } from "./paths"
 import { ShiftCompanionRoute } from "./ShiftCompanionRoute"
 import { ShiftGameDetailRoute } from "./ShiftGameDetailRoute"
 import { ShiftHomeRoute } from "./ShiftHomeRoute"
@@ -25,7 +26,7 @@ const detailRoute = createRoute({
 
 const companionRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/companion",
+  path: SHIFT_COMPANION_PATH,
   component: ShiftCompanionRoute,
 })
 

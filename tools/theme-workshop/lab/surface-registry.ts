@@ -1,3 +1,4 @@
+import type { DualScreenChannelFactory } from "@platform/react/display/dual-screen/DualScreenBroadcastSessionRoot"
 import type { DualScreenRole } from "@platform/react/display/dual-screen/dual-screen-events"
 import type { RouterHistory } from "@tanstack/history"
 import type { ReactNode } from "react"
@@ -21,6 +22,7 @@ export interface LabMountedSurface {
 export interface LabSurfaceDualScreenOptions {
   readonly role: DualScreenRole
   readonly channelName: string
+  readonly createChannel?: DualScreenChannelFactory
 }
 
 export interface LabSurfaceScreen {
@@ -47,6 +49,7 @@ export interface LabSurfaceAdapter {
   readonly useControls?: () => readonly WorkshopControl[]
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
+  readonly createDualScreenChannel?: DualScreenChannelFactory
   /** Wraps an isolated part preview in the surface's style scope so its tokens
    * and recipes resolve outside a full mount (e.g. pico needs
    * [data-pico].pico-screen.intrinsic). Omit when parts are self-scoping. */

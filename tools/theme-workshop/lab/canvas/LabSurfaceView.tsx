@@ -1,3 +1,4 @@
+import { SHIFT_COMPANION_PATH } from "@product/surfaces/web/shift/routes/paths"
 import { type CSSProperties, useEffect, useState } from "react"
 import { LabDeviceCluster } from "../components/LabDeviceCluster"
 import { useLab } from "../Lab.context"
@@ -8,7 +9,6 @@ import {
 } from "../model/lab-source-state"
 
 const VIEWPORT_INSET = 112
-const COMPANION_SURFACE_PATH = "/companion"
 
 export function LabSurfaceView({
   sourceId,
@@ -81,6 +81,10 @@ export function LabSurfaceView({
       {selectedDevices.map(device => {
         const hasMultipleScreens = (device.screens?.length ?? 0) > 1
         const channelName = `lab:${adapter.id}:${device.id}`
+        const createChannel = adapter.createDualScreenChannel
+        const dualScreenSession = createChannel
+          ? { channelName, createChannel }
+          : { channelName }
         return (
           <LabDeviceCluster
             key={device.id}
@@ -96,7 +100,7 @@ export function LabSurfaceView({
                 onNavigate={setSurfacePath}
                 dualScreen={
                   hasMultipleScreens
-                    ? { role: "primary", channelName }
+                    ? { role: "primary", ...dualScreenSession }
                     : undefined
                 }
               />
@@ -106,9 +110,9 @@ export function LabSurfaceView({
                 key={`${screen.id}:${sourceId}:${stateId}`}
                 adapter={adapter}
                 initialValues={boundValues}
-                surfacePath={COMPANION_SURFACE_PATH}
+                surfacePath={SHIFT_COMPANION_PATH}
                 onNavigate={() => {}}
-                dualScreen={{ role: "companion", channelName }}
+                dualScreen={{ role: "companion", ...dualScreenSession }}
               />
             )}
           />

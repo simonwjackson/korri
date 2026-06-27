@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import type { DualScreenChannelFactory } from "@platform/react/display/dual-screen/DualScreenBroadcastSessionRoot"
 import type { RouterHistory } from "@tanstack/history"
 import {
   cleanup,
@@ -55,11 +56,8 @@ class TestBroadcastChannel {
   }
 }
 
-const NativeBroadcastChannel = globalThis.BroadcastChannel
-
 afterEach(() => {
   cleanup()
-  globalThis.BroadcastChannel = NativeBroadcastChannel
   TestBroadcastChannel.channels.clear()
 })
 
@@ -108,13 +106,17 @@ function makeAdapter() {
 }
 
 function makeSharedSessionAdapter(): LabSurfaceAdapter {
+  const createDualScreenChannel = createTestChannelFactory()
   return {
     id: "shift",
     devices: [thor],
+    createDualScreenChannel,
     makeSeedInitialValues: async () => ({ seed: true }),
     mountSurface: (host, { history, dualScreen }) => {
       if (!dualScreen) return { router: {} as never, dispose: () => {} }
-      const channel = new BroadcastChannel(dualScreen.channelName)
+      if (!dualScreen.createChannel)
+        throw new Error("expected injected dual-screen channel factory")
+      const channel = dualScreen.createChannel(dualScreen.channelName)
       const path = history?.location.pathname ?? "/"
       const dispose =
         path === "/companion"
@@ -125,7 +127,14 @@ function makeSharedSessionAdapter(): LabSurfaceAdapter {
   }
 }
 
-function mountPrimaryProbe(host: HTMLElement, channel: BroadcastChannel) {
+function createTestChannelFactory(): DualScreenChannelFactory {
+  return name => new TestBroadcastChannel(name)
+}
+
+function mountPrimaryProbe(
+  host: HTMLElement,
+  channel: ReturnType<DualScreenChannelFactory>,
+) {
   let selectedGameId = "hollow-knight"
   let revision = 1
   const button = document.createElement("button")
@@ -163,7 +172,10 @@ function mountPrimaryProbe(host: HTMLElement, channel: BroadcastChannel) {
   }
 }
 
-function mountCompanionProbe(host: HTMLElement, channel: BroadcastChannel) {
+function mountCompanionProbe(
+  host: HTMLElement,
+  channel: ReturnType<DualScreenChannelFactory>,
+) {
   const heading = document.createElement("h1")
   heading.textContent = "Waiting"
   const receive = (event: MessageEvent) => {
@@ -251,8 +263,6 @@ describe("LabSurfaceView", () => {
   })
 
   it("lets a product-session companion follow primary focus through lab wiring", async () => {
-    globalThis.BroadcastChannel =
-      TestBroadcastChannel as unknown as typeof BroadcastChannel
     const adapter = makeSharedSessionAdapter()
     const { container } = render(
       <LabContext.Provider value={context(adapter)}>
