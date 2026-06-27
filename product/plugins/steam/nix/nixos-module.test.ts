@@ -196,7 +196,7 @@ describe("Steam plugin Nix module", () => {
   it("makes Steam update relaunch exits explicit and restartable", () => {
     expect(moduleSource).toContain('RestartForceExitStatus = [ 42 ]')
     expect(moduleSource).toContain('startLimitBurst = 30')
-    expect(moduleSource).toContain('startLimitIntervalSec = "5min"')
+    expect(moduleSource).toContain("startLimitIntervalSec = 300")
   })
 
   it("recognizes Steam process removal log lines", () => {

@@ -1183,7 +1183,7 @@ in
         RestartSec = "2s";
       };
       startLimitBurst = 30;
-      startLimitIntervalSec = "5min";
+      startLimitIntervalSec = 300;
     };
 
     systemd.services.korri-steam = {
@@ -1225,7 +1225,7 @@ in
         RestartSec = "2s";
       };
       startLimitBurst = 30;
-      startLimitIntervalSec = "5min";
+      startLimitIntervalSec = 300;
     };
   };
 }
