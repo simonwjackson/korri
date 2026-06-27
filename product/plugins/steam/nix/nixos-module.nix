@@ -461,10 +461,10 @@ let
     fi
 
     echo "korri-steam-recover: stopping Steam services" >&2
-    for service in korri-steam-gamescope.service korri-steam.service; do
+    for service in korri-steam-gamescope.service; do
       ${pkgs.systemd}/bin/systemctl stop "$service" 2>/dev/null || true
     done
-    for service in korri-steam-gamescope.service korri-steam.service; do
+    for service in korri-steam-gamescope.service; do
       state="$(${pkgs.systemd}/bin/systemctl is-active "$service" 2>/dev/null || true)"
       case "$state" in
         inactive|failed|unknown|"") ;;
@@ -474,7 +474,7 @@ let
           ;;
       esac
     done
-    ${pkgs.systemd}/bin/systemctl reset-failed korri-steam-gamescope.service korri-steam.service 2>/dev/null || true
+    ${pkgs.systemd}/bin/systemctl reset-failed korri-steam-gamescope.service 2>/dev/null || true
 
     if [ -d "$package_dir" ]; then
       ${pkgs.coreutils}/bin/cp -a "$package_dir" "$backup_dir"
@@ -567,7 +567,7 @@ let
     launch_timeout="''${KORRI_STEAM_APP_LAUNCH_TIMEOUT:-180}"
     forward_timeout="''${KORRI_STEAM_APP_FORWARD_TIMEOUT:-15}"
     service_ready_timeout="''${KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-90}"
-    service_name="''${KORRI_STEAM_SERVICE:-korri-steam-gamescope.service}"
+    service_name="korri-steam-gamescope.service"
     gamescope_display="''${GAMESCOPE_WAYLAND_DISPLAY:-gamescope-0}"
     gamescope_socket="$XDG_RUNTIME_DIR/$gamescope_display"
     target_audio_sink="''${KORRI_STEAM_AUDIO_SINK:-${cfg.appAudioSinkName}}"
@@ -681,10 +681,6 @@ let
           stop) ${pkgs.coreutils}/bin/timeout "$control_timeout" ${pkgs.systemd}/bin/systemctl stop "$service_name" ;;
         esac
         return $?
-      fi
-      if [ "$service_name" != "korri-steam-gamescope.service" ]; then
-        echo "korri-steam-app: warning: cannot $action overridden service $service_name without root" >&2
-        return 1
       fi
       if [ -x /run/wrappers/bin/sudo ]; then
         if ${pkgs.coreutils}/bin/timeout "$control_timeout" /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control "$action"; then
@@ -1154,7 +1150,6 @@ in
         "korri-steam-seed.service"
         "korri-steam-prepare-fex-rootfs.service"
       ];
-      conflicts = [ "korri-steam.service" ];
       environment = {
         HOME = runtime.home;
         USER = runtime.user;
@@ -1186,46 +1181,5 @@ in
       startLimitIntervalSec = 300;
     };
 
-    systemd.services.korri-steam = {
-      description = "Launch Korri guest-native Steam";
-      after = [
-        "korri-steam-uinput.service"
-        "korri-steam-seed.service"
-        "korri-steam-prepare-fex-rootfs.service"
-      ];
-      wants = [
-        "korri-steam-uinput.service"
-        "korri-steam-seed.service"
-        "korri-steam-prepare-fex-rootfs.service"
-      ];
-      environment = {
-        HOME = runtime.home;
-        USER = runtime.user;
-        XDG_RUNTIME_DIR = "/run/user/${toString runtime.uid}";
-        WAYLAND_DISPLAY = "wayland-1";
-        DISPLAY = ":0";
-        DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/${toString runtime.uid}/bus";
-        PULSE_SERVER = korriPulseServer;
-        STEAM_HOME = cfg.home;
-        STEAM_GAMES_ROOT = cfg.gamesRoot;
-        STEAM_DOT = cfg.dotDir;
-        STEAM_BETA = cfg.betaChannel;
-        FEX_ROOTFS = cfg.fexRootfs;
-      };
-      serviceConfig = {
-        Type = "simple";
-        User = runtime.user;
-        Group = runtime.group;
-        SupplementaryGroups = [ steamInputGroup ];
-        WorkingDirectory = cfg.home;
-        LimitNOFILE = 524288;
-        ExecStart = "${steamLauncher}/bin/korri-steam-guest";
-        Restart = "on-failure";
-        RestartForceExitStatus = [ 42 ];
-        RestartSec = "2s";
-      };
-      startLimitBurst = 30;
-      startLimitIntervalSec = 300;
-    };
   };
 }

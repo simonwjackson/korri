@@ -49,12 +49,12 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
-  it("routes AppID launches through the gamescoped SteamOS desktop client", () => {
-    expect(moduleSource).toContain(
-      `service_name="''\${KORRI_STEAM_SERVICE:-korri-steam-gamescope.service}"`,
-    )
+  it("routes all managed Steam launches through the gamescoped SteamOS desktop client", () => {
+    expect(moduleSource).toContain('service_name="korri-steam-gamescope.service"')
+    expect(moduleSource).not.toContain("KORRI_STEAM_SERVICE")
     expect(moduleSource).toContain("systemd.services.korri-steam-gamescope")
-    expect(moduleSource).toContain("systemd.services.korri-steam")
+    expect(moduleSource).not.toMatch(/systemd\.services\.korri-steam\s*=/)
+    expect(moduleSource).not.toContain('conflicts = [ "korri-steam.service" ]')
     expect(moduleSource).toContain("-steamos3")
     expect(moduleSource).toContain("-steampal")
     expect(moduleSource).toContain("-steamdeck")
@@ -110,6 +110,7 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("service_start_attempted_at=0")
     expect(moduleSource).toContain("systemctl reset-failed korri-steam-gamescope.service")
     expect(moduleSource).toContain("systemctl --user restart korri-steam-warm.service")
+    expect(moduleSource).not.toContain('overridden service $service_name')
     expect(moduleSource).toContain('inactive)')
     expect(moduleSource).toContain("if ! request_steam_service_start; then")
     expect(moduleSource).toContain("RemainAfterExit = false")

@@ -134,7 +134,6 @@ let
   hasFailedAssertion =
     needle: cfg: builtins.any (a: lib.hasInfix needle a.message) (failedAssertions cfg);
 
-  steamUnit = enabled.systemd.services.korri-steam or { };
   gamescopedSteamUnit = enabled.systemd.services.korri-steam-gamescope or { };
   steamWarmUnit = enabledKeepWarm.systemd.user.services.korri-steam-warm or { };
   uinputUnit = enabled.systemd.services.korri-steam-uinput or { };
@@ -259,43 +258,31 @@ let
       && lib.hasInfix "-steampal" (serviceExec gamescopedSteamUnit)
       && lib.hasInfix "-steamdeck" (serviceExec gamescopedSteamUnit)
       && !(lib.hasInfix " -O DSI-" (serviceExec gamescopedSteamUnit))
-      && builtins.elem "korri-steam.service" (gamescopedSteamUnit.conflicts or [ ])
+      && !(enabled.systemd.services ? korri-steam)
       && builtins.elem "korri-steam-seed.service" (gamescopedSteamUnit.after or [ ])
       && !(builtins.elem "korri-steam-runtime-prep.service" (gamescopedSteamUnit.after or [ ]))
       && !(builtins.elem "korri-steam-runtime-prep.service" (gamescopedSteamUnit.wants or [ ]))
       && (gamescopedSteamUnit.serviceConfig.RestartForceExitStatus or [ ]) == [ 42 ]
       && (gamescopedSteamUnit.startLimitBurst or null) == 30
     ))
-    (check "non-gamescoped Steam service carries launch identity and prep dependencies" (
-      enabled.systemd.services ? korri-steam
-      && (steamUnit.serviceConfig.User or null) == "korri"
-      && (steamUnit.serviceConfig.Group or null) == "korri"
-      && builtins.elem "korri-steam-input" (steamUnit.serviceConfig.SupplementaryGroups or [ ])
-      && (steamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
-      && (steamUnit.serviceConfig.LimitNOFILE or null) == 524288
-      && lib.hasInfix "korri-steam-guest" (serviceExec steamUnit)
-      && builtins.elem "korri-steam-seed.service" (steamUnit.after or [ ])
-      && builtins.elem "korri-steam-seed.service" (steamUnit.wants or [ ])
-      && !(builtins.elem "korri-steam-runtime-prep.service" (steamUnit.after or [ ]))
-      && !(builtins.elem "korri-steam-runtime-prep.service" (steamUnit.wants or [ ]))
-      && (steamUnit.serviceConfig.RestartForceExitStatus or [ ]) == [ 42 ]
-      && (steamUnit.startLimitBurst or null) == 30
+    (check "module exposes no non-gamescoped Steam service" (!(enabled.systemd.services ? korri-steam)))
+    (check "gamescoped launch service exports the Korri user session environment" (
+      (gamescopedSteamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
+      &&
+        (gamescopedSteamUnit.environment.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=/run/user/2000/bus"
+      && (gamescopedSteamUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
+      && (gamescopedSteamUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
+      &&
+        (gamescopedSteamUnit.environment.STEAM_GAMES_ROOT or null) == "/var/lib/korri/content/games/steam"
+      && (gamescopedSteamUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
+      && (gamescopedSteamUnit.environment.STEAM_BETA or null) == "steamdeck_stable"
     ))
-    (check "launch service exports the Korri user session environment" (
-      (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
-      && (steamUnit.environment.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=/run/user/2000/bus"
-      && (steamUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
-      && (steamUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
-      && (steamUnit.environment.STEAM_GAMES_ROOT or null) == "/var/lib/korri/content/games/steam"
-      && (steamUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
-      && (steamUnit.environment.STEAM_BETA or null) == "steamdeck_stable"
-    ))
-    (check "FEX rootfs service converges before Steam launch" (
+    (check "FEX rootfs service converges before gamescoped Steam launch" (
       enabled.systemd.services ? korri-steam-prepare-fex-rootfs
       && builtins.elem "multi-user.target" (fexRootfsUnit.wantedBy or [ ])
       && lib.hasInfix "korri-steam-prepare-fex-rootfs" (serviceExec fexRootfsUnit)
-      && builtins.elem "korri-steam-prepare-fex-rootfs.service" (steamUnit.after or [ ])
-      && builtins.elem "korri-steam-prepare-fex-rootfs.service" (steamUnit.wants or [ ])
+      && builtins.elem "korri-steam-prepare-fex-rootfs.service" (gamescopedSteamUnit.after or [ ])
+      && builtins.elem "korri-steam-prepare-fex-rootfs.service" (gamescopedSteamUnit.wants or [ ])
     ))
     (check "normal Steam startup has no runtime-prep service or path watch" (
       !(enabled.systemd.services ? korri-steam-runtime-prep)
