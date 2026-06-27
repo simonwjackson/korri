@@ -17,6 +17,10 @@ let
   server = cfg.services.korri.daemon;
   targetSystem = cfg.nixpkgs.hostPlatform.system;
   systemServices = cfg.systemd.services or { };
+  activationScripts = cfg.system.activationScripts or { };
+  guestProfileActivation = activationScripts."korri-rocknix-guest-profile" or { };
+  rocknixGuestProfile = cfg.services.korri.rocknixGuestProfile or { };
+  proofMarker = cfg.environment.etc."rocknix-stage10-proof-marker" or { };
   userServices = cfg.systemd.user.services or { };
   userSockets = cfg.systemd.user.sockets or { };
   sessiondService = userServices."korri-sessiond" or { };
@@ -112,6 +116,21 @@ let
     ))
     (check "RG353M compositor must not require the retired main-space bus unit" (
       !(builtins.elem "main-space-session-dbus.service" userCompositorRequires)
+    ))
+    (check "RG353M RockNIX guest profile module must be enabled" (
+      (rocknixGuestProfile.enable or false) == true
+      && (rocknixGuestProfile.proofMarkerLabel or null) == "korri-rk3566-kiosk-system"
+    ))
+    (check "RG353M RockNIX guest profile activation must register the switched system" (
+      builtins.hasAttr "korri-rocknix-guest-profile" activationScripts
+      && lib.hasInfix "rocknix-guest-system" (guestProfileActivation.text or "")
+      && lib.hasInfix "nix-env" (guestProfileActivation.text or "")
+      && lib.hasInfix "$systemConfig" (guestProfileActivation.text or "")
+      && builtins.elem "users" (guestProfileActivation.deps or [ ])
+    ))
+    (check "RG353M RockNIX stage10 proof marker must identify the platform" (
+      lib.hasPrefix "korri-rk3566-kiosk-system" (proofMarker.text or "")
+      && lib.hasInfix "target=${cfg.networking.hostName}" (proofMarker.text or "")
     ))
     (check "RG353M platform-default root must be ordered before mutable config" (
       lib.hasInfix "korri-platform-config-root" configRootsEnv

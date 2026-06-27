@@ -116,9 +116,14 @@ in
     nix-on-rocks.nixosModules.rocknix-guest-base
     nix-on-rocks.nixosModules.rk3566
     deviceProfile
+    ../../modules/korri-rocknix-guest-profile.nix
   ];
 
   services.inputplumber.package = lib.mkForce inputplumberPackage;
+  services.korri.rocknixGuestProfile = {
+    enable = true;
+    proofMarkerLabel = "korri-rk3566-kiosk-system";
+  };
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 
   # RK3566 keeps the substrate's root-owned main-space PipeWire services, but
@@ -282,20 +287,4 @@ in
     "WAYLAND_DISPLAY"
   ];
 
-  # Keep the nix-on-rocks boot-selected guest profile in sync after switches.
-  system.activationScripts.korri-rocknix-guest-profile = {
-    text = ''
-      profile_dir=/nix/var/nix/profiles/per-user/root
-      ${pkgs.coreutils}/bin/mkdir -p "$profile_dir"
-      ${pkgs.nix}/bin/nix-env \
-        --profile "$profile_dir/rocknix-guest-system" \
-        --set "$systemConfig"
-    '';
-    deps = [ "users" ];
-  };
-
-  environment.etc."rocknix-stage10-proof-marker".text = ''
-    korri-rk3566-kiosk-system
-    target=${config.networking.hostName}
-  '';
 }

@@ -63,6 +63,9 @@ let
       sessiondEnv = sessiondUnit.environment or { };
       daemonEnv = (userServices.korrid or { }).environment or { };
       activationScripts = cfg.system.activationScripts or { };
+      guestProfileActivation = activationScripts."korri-rocknix-guest-profile" or { };
+      rocknixGuestProfile = cfg.services.korri.rocknixGuestProfile or { };
+      proofMarker = cfg.environment.etc."rocknix-stage10-proof-marker" or { };
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
@@ -289,6 +292,21 @@ let
         &&
         lib.hasInfix "/home/korri/.config/systemd/user/korri-sessiond.service.d/display.conf"
           activationScripts."korri-remove-legacy-sessiond-display-dropin".text
+      ))
+      (check "${name}: RockNIX guest profile module must be enabled" (
+        (rocknixGuestProfile.enable or false) == true
+        && (rocknixGuestProfile.proofMarkerLabel or null) == "korri-sm8550-kiosk-system"
+      ))
+      (check "${name}: RockNIX guest profile activation must register the switched system" (
+        builtins.hasAttr "korri-rocknix-guest-profile" activationScripts
+        && lib.hasInfix "rocknix-guest-system" (guestProfileActivation.text or "")
+        && lib.hasInfix "nix-env" (guestProfileActivation.text or "")
+        && lib.hasInfix "$systemConfig" (guestProfileActivation.text or "")
+        && builtins.elem "users" (guestProfileActivation.deps or [ ])
+      ))
+      (check "${name}: RockNIX stage10 proof marker must identify the platform" (
+        lib.hasPrefix "korri-sm8550-kiosk-system" (proofMarker.text or "")
+        && lib.hasInfix "target=${cfg.networking.hostName}" (proofMarker.text or "")
       ))
       (check "${name}: sessiond does not control root-owned essway" (
         (sessiondEnv.KORRI_SESSIOND_ESSWAY_CONTROL or null) == "0"

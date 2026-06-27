@@ -473,6 +473,7 @@ in
     nix-on-rocks.nixosModules.rocknix-guest-base
     deviceProfile
     korri.nixosModules.korri-steam
+    ../../modules/korri-rocknix-guest-profile.nix
     ../../modules/korri-removable-media.nix
   ];
 
@@ -493,6 +494,10 @@ in
   ];
 
   services.inputplumber.package = lib.mkForce inputplumberPackage;
+  services.korri.rocknixGuestProfile = {
+    enable = true;
+    proofMarkerLabel = "korri-sm8550-kiosk-system";
+  };
 
   services.udev.extraRules = ''
     # Rootless wlroots compositors acquire DRM through logind/libseat, so the
@@ -799,39 +804,12 @@ in
   # runtime user's systemd --user manager. Root remains a substrate/setup
   # boundary only; do not reintroduce root lingering or /run/user/0 here.
 
-  # `switch-to-configuration switch` updates /nix/var/nix/profiles/system,
-  # but the nspawn host's rocknix-guest-prep selects the guest generation
-  # to boot from /nix/var/nix/profiles/per-user/root/rocknix-guest-system
-  # (see nix-on-rocks: guest profiles + rocknix-guest-prep helper). Without
-  # this script the runtime activation succeeds but the next reboot reverts
-  # to whatever generation rocknix-guest-promote installed. Keep the rocknix
-  # boot pointer in sync with the active system on every switch.
-  # `$systemConfig` is the new toplevel path that switch-to-configuration
-  # injects when running activation scripts. Referencing
-  # `config.system.build.toplevel` directly would create an infinite
-  # recursion because the activation script is itself part of the toplevel.
-  system.activationScripts.korri-rocknix-guest-profile = {
-    text = ''
-      profile_dir=/nix/var/nix/profiles/per-user/root
-      ${pkgs.coreutils}/bin/mkdir -p "$profile_dir"
-      ${pkgs.nix}/bin/nix-env \
-        --profile "$profile_dir/rocknix-guest-system" \
-        --set "$systemConfig"
-    '';
-    deps = [ "users" ];
-  };
-
   systemd.services.inputplumber.environment.XDG_DATA_DIRS = lib.mkOverride 40 (
     lib.concatStringsSep ":" [
       "${config.services.inputplumber.package}/share"
       "/run/current-system/sw/share"
     ]
   );
-
-  environment.etc."rocknix-stage10-proof-marker".text = ''
-    korri-sm8550-kiosk-system
-    target=${config.networking.hostName}
-  '';
 
   environment.systemPackages = [
     substratePackages.cemu
