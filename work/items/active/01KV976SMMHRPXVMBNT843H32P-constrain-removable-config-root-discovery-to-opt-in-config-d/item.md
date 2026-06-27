@@ -3,7 +3,7 @@ id: 01KV976SMMHRPXVMBNT843H32P
 slug: constrain-removable-config-root-discovery-to-opt-in-config-d
 title: Constrain removable config-root discovery to opt-in config directories
 origin: parked
-status: To Do
+status: active
 priority: medium
 labels:
   - bandai

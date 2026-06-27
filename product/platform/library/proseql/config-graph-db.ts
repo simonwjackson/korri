@@ -379,7 +379,7 @@ const withConfigGraphReadOnlyGuards = (
  * available through the config-graph read path.
  */
 async function loadReadOnlyConfigGraphSidecars(
-  roots: readonly string[],
+  roots: readonly KorriConfigGraphRoot[],
 ): Promise<SidecarSnapshot> {
   const artifacts = new Map<string, SidecarSnapshot["artifacts"][number]>()
   const gameAssets = new Map<string, SidecarSnapshot["gameAssets"][number]>()
@@ -387,7 +387,11 @@ async function loadReadOnlyConfigGraphSidecars(
     string,
     SidecarSnapshot["gameAssetAssignments"][number]
   >()
-  for (const root of roots) {
+  for (const { root, collections } of roots) {
+    // Sidecar collections are execution-adjacent graph extensions, not part
+    // of the data-only removable collection allowlist. Restricted roots such
+    // as untrusted cards contribute only their declared document collections.
+    if (collections !== undefined && collections !== "all") continue
     const snapshot = await loadSidecarSnapshot(root)
     for (const record of snapshot.artifacts) artifacts.set(record.id, record)
     for (const record of snapshot.gameAssets) gameAssets.set(record.id, record)
@@ -417,8 +421,7 @@ export function openKorriConfigGraph(options: KorriConfigGraphOptions) {
 
   return Effect.flatMap(
     Effect.tryPromise({
-      try: () =>
-        loadReadOnlyConfigGraphSidecars(options.roots.map(root => root.root)),
+      try: () => loadReadOnlyConfigGraphSidecars(options.roots),
       catch: error =>
         new Error(error instanceof Error ? error.message : String(error)),
     }),

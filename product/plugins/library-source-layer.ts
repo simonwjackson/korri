@@ -1,6 +1,10 @@
 import { korriStatePath } from "@platform/config/xdg-paths"
+import type { ConfigGraphController } from "@platform/library/config-graph-controller"
 import { LibraryError, LibrarySource } from "@platform/library/library-services"
-import { createLiveLibrarySourceService } from "@platform/library/library-source-layer-live"
+import {
+  createControllerBackedLibrarySourceService,
+  createLiveLibrarySourceService,
+} from "@platform/library/library-source-layer-live"
 import { withPluginLibrarySource } from "@platform/plugin/catalog-library-source"
 import { executableResources } from "@platform/plugin/registry"
 import {
@@ -27,69 +31,88 @@ import {
 
 const DEFAULT_PLUGIN_RESOURCE_ROOT = "/var/lib/korri/plugins/resources"
 
-export const PluginLibrarySourceLayerLive = Layer.effect(
-  LibrarySource,
-  Effect.sync(() => {
-    const registry = createFirstPartyPluginRegistryFromEnv(process.env)
-    const source = withPluginLibrarySource(
-      createLiveLibrarySourceService({
-        repositoryOptions: {
-          pluginRegistry: registry,
-          launchIntegrations: firstPartyLaunchIntegrationsForRegistry(registry),
-        },
-      }),
-      registry,
-      createNixOutLinkResolver({ stateRoot: pluginResourceRoot(process.env) }),
-    )
-    const resourceResolver = createNixOutLinkResolver({
-      stateRoot: pluginResourceRoot(process.env),
-    })
-    const withPortMaster = registry.enabledPluginIds.has(
-      KORRI_PORTMASTER_PLUGIN_ID,
-    )
-      ? withPortMasterInstalledLibrarySource(source, {
-          installRoot: defaultPortMasterInstallRoot(process.env),
-          env: process.env,
-        })
-      : source
-    return registry.enabledPluginIds.has(KORRI_GMLOADER_PLUGIN_ID)
-      ? withGmloaderInstalledLibrarySource(withPortMaster, {
-          installRoot: defaultGmloaderInstallRoot(process.env),
-          env: process.env,
-          resolveRuntime: () => {
-            const resource = executableResources(registry).find(
-              candidate =>
-                candidate.pluginId === KORRI_GMLOADER_PLUGIN_ID &&
-                candidate.resource.id === KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
-            )?.resource
-            if (!resource) {
-              return Effect.fail(
-                new LibraryError({
-                  reason: "unavailable",
-                  message: "GMLoader runtime resource is not registered",
-                }),
-              )
-            }
-            return resourceResolver
-              .resolveExecutable({
-                pluginId: KORRI_GMLOADER_PLUGIN_ID,
-                resource,
-              })
-              .pipe(
-                Effect.mapError(
-                  error =>
-                    new LibraryError({
-                      reason: "unavailable",
-                      message:
-                        error instanceof Error ? error.message : String(error),
-                    }),
-                ),
-              )
-          },
-        })
-      : withPortMaster
-  }),
-)
+export interface PluginLibrarySourceLayerLiveOptions {
+  readonly configGraphController?: ConfigGraphController
+}
+
+export const PluginLibrarySourceLayerLive = makePluginLibrarySourceLayerLive()
+
+export function makePluginLibrarySourceLayerLive(
+  options: PluginLibrarySourceLayerLiveOptions = {},
+) {
+  return Layer.effect(
+    LibrarySource,
+    Effect.sync(() => {
+      const registry = createFirstPartyPluginRegistryFromEnv(process.env)
+      const repositoryOptions = {
+        pluginRegistry: registry,
+        launchIntegrations: firstPartyLaunchIntegrationsForRegistry(registry),
+      }
+      const baseSource = options.configGraphController
+        ? createControllerBackedLibrarySourceService({
+            controller: options.configGraphController,
+            repositoryOptions,
+          })
+        : createLiveLibrarySourceService({ repositoryOptions })
+      const source = withPluginLibrarySource(
+        baseSource,
+        registry,
+        createNixOutLinkResolver({
+          stateRoot: pluginResourceRoot(process.env),
+        }),
+      )
+      const resourceResolver = createNixOutLinkResolver({
+        stateRoot: pluginResourceRoot(process.env),
+      })
+      const withPortMaster = registry.enabledPluginIds.has(
+        KORRI_PORTMASTER_PLUGIN_ID,
+      )
+        ? withPortMasterInstalledLibrarySource(source, {
+            installRoot: defaultPortMasterInstallRoot(process.env),
+            env: process.env,
+          })
+        : source
+      return registry.enabledPluginIds.has(KORRI_GMLOADER_PLUGIN_ID)
+        ? withGmloaderInstalledLibrarySource(withPortMaster, {
+            installRoot: defaultGmloaderInstallRoot(process.env),
+            env: process.env,
+            resolveRuntime: () => {
+              const resource = executableResources(registry).find(
+                candidate =>
+                  candidate.pluginId === KORRI_GMLOADER_PLUGIN_ID &&
+                  candidate.resource.id === KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
+              )?.resource
+              if (!resource) {
+                return Effect.fail(
+                  new LibraryError({
+                    reason: "unavailable",
+                    message: "GMLoader runtime resource is not registered",
+                  }),
+                )
+              }
+              return resourceResolver
+                .resolveExecutable({
+                  pluginId: KORRI_GMLOADER_PLUGIN_ID,
+                  resource,
+                })
+                .pipe(
+                  Effect.mapError(
+                    error =>
+                      new LibraryError({
+                        reason: "unavailable",
+                        message:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      }),
+                  ),
+                )
+            },
+          })
+        : withPortMaster
+    }),
+  )
+}
 
 export function createPluginResourceFulfillerFromEnv(
   env: NodeJS.ProcessEnv = process.env,

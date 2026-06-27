@@ -491,6 +491,30 @@ describe("openKorriConfigGraph — collection-scoped trust", () => {
     })
   })
 
+  it("does not load sidecar collections from a restricted root", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(join(trusted!, "korri.yaml"), trustedHostFragment, "utf8")
+      await writeFile(join(card!, "card.korri.yaml"), cardFragment, "utf8")
+      await writeFile(join(card!, ".korri-artifacts.json"), "not-json", "utf8")
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                { root: card!, collections: REMOVABLE_CONFIG_COLLECTIONS },
+              ],
+            })
+            return yield* db.library.findById("zelda")
+          }),
+        ),
+      )
+
+      expect(loaded.title).toBe("Card Zelda")
+    })
+  })
+
   it("lets a restricted root win on data collections (card-wins)", async () => {
     await withTempRoots(2, async ([base, card]) => {
       await writeFile(

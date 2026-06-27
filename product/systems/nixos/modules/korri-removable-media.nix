@@ -35,6 +35,7 @@ let
   mediaEnv = {
     KORRI_REMOVABLE_MEDIA_ROOT = cfg.mediaRoot;
     KORRI_REMOVABLE_CONFIG_ROOTS_DIR = cfg.configRootsDir;
+    KORRI_REMOVABLE_CONFIG_ANCHORS = lib.concatStringsSep " " cfg.configAnchorDirs;
     KORRI_REMOVABLE_MATCH_MMC = if cfg.match.mmc then "1" else "0";
     KORRI_REMOVABLE_MATCH_USB = if cfg.match.usb then "1" else "0";
     KORRI_REMOVABLE_REQUIRED_SYSTEM_MOUNTS = lib.concatStringsSep " " cfg.requiredSystemMounts;
@@ -50,6 +51,35 @@ let
     dev="/dev/$name"
     media_root="''${KORRI_REMOVABLE_MEDIA_ROOT:-${cfg.mediaRoot}}"
     config_roots_dir="''${KORRI_REMOVABLE_CONFIG_ROOTS_DIR:-${cfg.configRootsDir}}"
+    config_anchor_dirs="''${KORRI_REMOVABLE_CONFIG_ANCHORS:-${lib.concatStringsSep " " cfg.configAnchorDirs}}"
+
+    config_signal_suffix() {
+      local anchor="$1"
+      anchor="''${anchor//./dot-}"
+      anchor="''${anchor//_/-}"
+      printf '%s' "$anchor"
+    }
+
+    publish_config_roots() {
+      local mountpoint="$1"
+      local media_id="$2"
+      local entry anchor anchor_dir suffix
+
+      # Remove the pre-anchor signal from older deployments plus any stale
+      # anchor signals for this media id before publishing the current set.
+      ${pkgs.coreutils}/bin/rm -f "$config_roots_dir/$media_id"
+      for entry in "$config_roots_dir/$media_id"-*; do
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
+        ${pkgs.coreutils}/bin/rm -f "$entry"
+      done
+
+      for anchor in $config_anchor_dirs; do
+        anchor_dir="$mountpoint/$anchor"
+        [ -d "$anchor_dir" ] || continue
+        suffix="$(config_signal_suffix "$anchor")"
+        ${pkgs.coreutils}/bin/ln -sfn "$anchor_dir" "$config_roots_dir/$media_id-$suffix"
+      done
+    }
 
     if [ ! -b "$dev" ]; then
       echo "korri-removable-media-mount: $dev is not a block device; skipping" >&2
@@ -112,7 +142,7 @@ let
       # mix their contents, so the clone is skipped.
       current_source="$(${pkgs.util-linux}/bin/findmnt -rn -o SOURCE --target "$mountpoint" | ${pkgs.coreutils}/bin/head -n 1)"
       if [ "$current_source" = "$dev" ]; then
-        ${pkgs.coreutils}/bin/ln -sfn "$mountpoint" "$config_roots_dir/$media_id"
+        publish_config_roots "$mountpoint" "$media_id"
         exit 0
       fi
       if [ -z "$current_source" ]; then
@@ -154,10 +184,11 @@ let
 
     ${pkgs.util-linux}/bin/mount -t "$fs_type" -o "$mount_options" "$dev" "$mountpoint"
 
-    # Signal korrid: each mounted volume contributes one card-wins config
-    # root through the stable config-roots.d directory, named by media id so
-    # the root identity is stable across slots and re-inserts.
-    ${pkgs.coreutils}/bin/ln -sfn "$mountpoint" "$config_roots_dir/$media_id"
+    # Signal korrid: each mounted volume contributes only explicit, small
+    # config anchors through the stable config-roots.d directory. The media
+    # root itself is content, not a config root, so large ROM trees are never
+    # recursively walked just because the card is mounted.
+    publish_config_roots "$mountpoint" "$media_id"
   '';
 
   unmountScript = pkgs.writeShellScript "korri-removable-media-unmount" ''
@@ -187,9 +218,14 @@ let
               continue
               ;;
           esac
-          # Remove the config-root signal first so korrid converges even when
-          # the card was yanked and the lazy unmount lingers.
+          # Remove config-root signals first so korrid converges even when
+          # the card was yanked and the lazy unmount lingers. Remove both the
+          # legacy whole-media signal and anchor-specific signals.
           ${pkgs.coreutils}/bin/rm -f "$config_roots_dir/$media_id"
+          for entry in "$config_roots_dir/$media_id"-*; do
+            [ -e "$entry" ] || [ -L "$entry" ] || continue
+            ${pkgs.coreutils}/bin/rm -f "$entry"
+          done
           ${pkgs.util-linux}/bin/umount -l "$target" || true
           ${pkgs.coreutils}/bin/rmdir "$target" 2>/dev/null || true
         done
@@ -263,10 +299,26 @@ in
       default = "/run/korri/config-roots.d";
       description = ''
         Stable signal directory korrid watches for dynamic config roots.
-        Mount units add one symlink per mounted volume; unmount removes it.
-        Root-owned so the runtime user cannot inject roots. Read-only by
+        Mount units add one symlink per mounted config anchor; unmount removes
+        it. Root-owned so the runtime user cannot inject roots. Read-only by
         design: korrid, sessiond, and the daemon module all share this
         path as one host contract.
+      '';
+    };
+
+    configAnchorDirs = mkOption {
+      type = types.listOf types.str;
+      default = [ ".korri" ];
+      example = [
+        ".korri"
+        "korri-config"
+      ];
+      description = ''
+        Immediate child directories on a mounted removable volume that are
+        published as Korri config roots. Defaults are intentionally hidden and
+        config-specific so ordinary card content trees (ROMs, media, broad
+        `korri` folders) are not recursively scanned. Broader names may be
+        added by an operator, but each name must be a single safe path segment.
       '';
     };
 
@@ -326,6 +378,31 @@ in
       {
         assertion = cfg.requiredSystemMounts != [ ];
         message = "services.korri.removableMedia.requiredSystemMounts must name at least one system mount (fail-safe deny-list assertion set).";
+      }
+      {
+        assertion = cfg.configAnchorDirs != [ ];
+        message = "services.korri.removableMedia.configAnchorDirs must name at least one config anchor directory.";
+      }
+      {
+        assertion =
+          let
+            validAnchor = name:
+              name != ""
+              && name != "."
+              && name != ".."
+              && !(lib.hasInfix "/" name)
+              && builtins.match "[-._A-Za-z0-9]+" name != null;
+          in
+          lib.all validAnchor cfg.configAnchorDirs;
+        message = "services.korri.removableMedia.configAnchorDirs entries must be safe single path segments.";
+      }
+      {
+        assertion =
+          let
+            suffixes = map (lib.replaceStrings [ "." "_" ] [ "dot-" "-" ]) cfg.configAnchorDirs;
+          in
+          builtins.length suffixes == builtins.length (lib.unique suffixes);
+        message = "services.korri.removableMedia.configAnchorDirs entries must not collide after signal-name sanitization.";
       }
       {
         assertion = cfg.match.mmc || cfg.match.usb;

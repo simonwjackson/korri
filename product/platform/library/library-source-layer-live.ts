@@ -1,10 +1,11 @@
 import { readdirSync, readFileSync, realpathSync } from "node:fs"
-import { join } from "node:path"
+import { join, relative } from "node:path"
 import { korriDataPath } from "@platform/config/xdg-paths"
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { logger } from "@platform/logger"
 import { Effect, Layer } from "effect"
+import type { ConfigGraphController } from "./config-graph-controller"
 import {
   LibraryError,
   LibrarySource,
@@ -120,6 +121,92 @@ export function createLiveLibrarySourceService(
   }
 }
 
+export interface ControllerBackedLibrarySourceServiceOptions
+  extends LiveLibrarySourceServiceOptions {
+  readonly controller: ConfigGraphController
+}
+
+export function createControllerBackedLibrarySourceService(
+  options: ControllerBackedLibrarySourceServiceOptions,
+): LibrarySourceService {
+  const { controller, repositoryOptions } = options
+  return {
+    list: () =>
+      selectedLibrarySourceMode() === "rocknix"
+        ? withRocknixSource(source => source.list(), "list")
+        : withControllerRepository(
+            controller,
+            repository =>
+              repository
+                .listPlayableEntries()
+                .pipe(Effect.map(entries => entries.map(toCompatGameRecord))),
+            repositoryOptions,
+          ),
+    listPlayableEntries: () =>
+      selectedLibrarySourceMode() === "rocknix"
+        ? withRocknixSource(
+            source =>
+              source.list().then(games => games.map(compatGameToPlayableEntry)),
+            "listPlayableEntries",
+          )
+        : withControllerRepository(
+            controller,
+            repository => repository.listPlayableEntries(),
+            repositoryOptions,
+          ),
+    launchSpecFor: (id, releaseId) =>
+      selectedLibrarySourceMode() === "rocknix"
+        ? withRocknixSource(source => source.launchSpecFor(id), "launchSpecFor")
+        : withControllerRepository(
+            controller,
+            repository =>
+              repository
+                .resolveLaunchForPlayable(id, { releaseId })
+                .pipe(Effect.map(resolved => resolved.spec)),
+            repositoryOptions,
+          ).pipe(
+            Effect.matchEffect({
+              onSuccess: spec => Effect.succeed(spec),
+              onFailure: (error: LibraryError) =>
+                error.reason === "config"
+                  ? Effect.succeed(undefined)
+                  : Effect.fail(error),
+            }),
+          ),
+    canResolveLaunchForGame: (id, inputs) =>
+      selectedLibrarySourceMode() === "rocknix"
+        ? withRocknixSource(
+            source =>
+              source.canResolveLaunchForGame
+                ? source.canResolveLaunchForGame(id, inputs)
+                : source.launchSpecFor(id).then(spec => spec !== undefined),
+            "canResolveLaunchForGame",
+          )
+        : withControllerRepository(
+            controller,
+            repository => repository.canResolveLaunchForPlayable(id, inputs),
+            repositoryOptions,
+          ),
+    resolveLaunchForGame: (id, inputs) =>
+      selectedLibrarySourceMode() === "rocknix"
+        ? withRocknixSource(
+            source => source.resolveLaunchForGame(id, inputs),
+            "resolveLaunchForGame",
+          )
+        : withControllerRepository(
+            controller,
+            repository => repository.resolveLaunchForPlayable(id, inputs),
+            repositoryOptions,
+          ),
+    resolveLocalLauncherPolicy: (launcherId, inputs) =>
+      withControllerRepository(
+        controller,
+        repository => repository.resolveLocalLauncherPolicy(launcherId, inputs),
+        repositoryOptions,
+      ),
+  }
+}
+
 function withRocknixSource<T>(
   useSource: (source: PlainLibrarySource) => Promise<T>,
   operation: string,
@@ -170,6 +257,18 @@ function withLibraryRepository<T>(
       )
     }),
   ).pipe(Effect.mapError(toLibraryError))
+}
+
+function withControllerRepository<T>(
+  controller: ConfigGraphController,
+  useRepository: (repository: LibraryRepository) => Effect.Effect<T, unknown>,
+  repositoryOptions: CreateLibraryRepositoryOptions | undefined = undefined,
+): Effect.Effect<T, LibraryError> {
+  return controller
+    .withActiveDb(db =>
+      useRepository(createLibraryRepository(db, repositoryOptions)),
+    )
+    .pipe(Effect.mapError(toLibraryError))
 }
 
 function selectedLibrarySourceMode(): LibrarySourceMode {
@@ -241,9 +340,15 @@ export interface ResolveConfigGraphRootsOptions {
    * seeded.
    */
   readonly mountsTablePath?: string
+  /**
+   * Root under which Korri mounts removable media. Dynamic signal-dir entries
+   * must resolve below this boundary and below a live mount under it.
+   */
+  readonly removableMediaRoot?: string
 }
 
 const DEFAULT_MOUNTS_TABLE_PATH = "/proc/mounts"
+const DEFAULT_REMOVABLE_MEDIA_ROOT = "/run/media/korri"
 
 /** Decode the octal escapes (`\040` …) /proc/mounts uses in path fields. */
 function decodeMountField(field: string): string {
@@ -266,6 +371,42 @@ function readMountTable(path: string): ReadonlyMap<string, string> | undefined {
   } catch {
     return undefined
   }
+}
+
+function isPathAtOrUnder(parent: string, child: string): boolean {
+  const relation = relative(parent, child)
+  return relation === "" || (!relation.startsWith("..") && relation !== "..")
+}
+
+function isPathUnder(parent: string, child: string): boolean {
+  const relation = relative(parent, child)
+  return relation !== "" && !relation.startsWith("..") && relation !== ".."
+}
+
+function realpathOrUndefined(path: string): string | undefined {
+  try {
+    return realpathSync(path)
+  } catch {
+    return undefined
+  }
+}
+
+function owningRemovableMountOptions(
+  target: string,
+  mediaRoot: string,
+  mounts: ReadonlyMap<string, string>,
+): string | undefined {
+  let selected: { readonly mount: string; readonly options: string } | undefined
+  for (const [mount, options] of mounts) {
+    const realMount = realpathOrUndefined(mount)
+    if (realMount === undefined) continue
+    if (!isPathUnder(mediaRoot, realMount)) continue
+    if (!isPathUnder(realMount, target)) continue
+    if (selected === undefined || realMount.length > selected.mount.length) {
+      selected = { mount: realMount, options }
+    }
+  }
+  return selected?.options
 }
 
 /**
@@ -310,6 +451,19 @@ export function removableConfigGraphRootsFromSignalDir(
     return []
   }
 
+  const mediaRootPath =
+    options.removableMediaRoot ??
+    optionalEnv(env.KORRI_REMOVABLE_MEDIA_ROOT) ??
+    DEFAULT_REMOVABLE_MEDIA_ROOT
+  const mediaRoot = realpathOrUndefined(mediaRootPath)
+  if (mediaRoot === undefined) {
+    logger.warn(
+      { signalDir, mediaRoot: mediaRootPath },
+      "library-source-layer-live: removable media root unreadable; ignoring removable config roots",
+    )
+    return []
+  }
+
   const roots: KorriConfigGraphRoot[] = []
   for (const entry of entries) {
     let target: string
@@ -322,11 +476,18 @@ export function removableConfigGraphRootsFromSignalDir(
       )
       continue
     }
-    const mountOptions = mounts.get(target)
+    if (!isPathAtOrUnder(mediaRoot, target)) {
+      logger.warn(
+        { signalDir, entry, target, mediaRoot },
+        "library-source-layer-live: skipping config-root entry outside removable media root",
+      )
+      continue
+    }
+    const mountOptions = owningRemovableMountOptions(target, mediaRoot, mounts)
     if (mountOptions === undefined) {
       logger.warn(
-        { signalDir, entry, target },
-        "library-source-layer-live: skipping config-root entry that is not a live mount",
+        { signalDir, entry, target, mediaRoot },
+        "library-source-layer-live: skipping config-root entry that is not under a live removable mount",
       )
       continue
     }

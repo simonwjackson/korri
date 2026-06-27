@@ -197,6 +197,9 @@ let
   // optionalAttrs (effectiveConfigRootsDir != null) {
     KORRI_CONFIG_ROOTS_DIR = effectiveConfigRootsDir;
   }
+  // optionalAttrs (removableMediaCfg != null && (removableMediaCfg.enable or false)) {
+    KORRI_REMOVABLE_MEDIA_ROOT = removableMediaCfg.mediaRoot;
+  }
   // {
     KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
     KORRI_GAME_STREAM_RUNTIME_DIR = runtimeDir;

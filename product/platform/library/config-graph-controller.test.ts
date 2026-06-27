@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { Effect } from "effect"
 
 import {
   type ConfigGraphController,
@@ -9,6 +10,7 @@ import {
   createConfigGraphController,
 } from "./config-graph-controller"
 import type { KorriConfigGraphRoot } from "./proseql/config-graph-db"
+import { createLibraryRepository } from "./proseql/library-repository"
 
 async function withRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), "korri-config-controller-"))
@@ -104,6 +106,43 @@ describe("createConfigGraphController", () => {
       expect(snapshot.map(entry => entry.id)).toContain("solo")
       await controller.stop()
     })
+  })
+
+  it("serves repository operations from the active graph DB", async () => {
+    await withRoot(async root => {
+      await writeFile(
+        join(root, "local.korri.yaml"),
+        validFragment("Solo"),
+        "utf8",
+      )
+      const controller = createConfigGraphController({
+        roots: [{ root }],
+        watch: false,
+      })
+      await controller.initialize()
+
+      const entries = await Effect.runPromise(
+        controller.withActiveDb(db =>
+          createLibraryRepository(db).listPlayableEntries(),
+        ),
+      )
+
+      expect(entries.map(entry => entry.id)).toEqual(["solo"])
+      await controller.stop()
+    })
+  })
+
+  it("rejects active graph DB access before a valid initialize", async () => {
+    const controller = createConfigGraphController({ roots: [], watch: false })
+
+    const exit = await Effect.runPromiseExit(
+      controller.withActiveDb(db =>
+        createLibraryRepository(db).listPlayableEntries(),
+      ),
+    )
+
+    expect(exit._tag).toBe("Failure")
+    await controller.stop()
   })
 
   it("treats an empty graph as a valid empty baseline", async () => {

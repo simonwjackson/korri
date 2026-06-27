@@ -8,7 +8,7 @@ import {
 import { resolveAllConfigGraphRoots } from "@platform/library/library-source-layer-live"
 import { logger } from "@platform/logger"
 import { createHonoApp } from "@product/apps/portal/api/hono-app"
-import { serverRpcHandler } from "@product/apps/portal/api/server/rpc-server"
+import { createServerRpcHandler } from "@product/apps/portal/api/server/rpc-server"
 import {
   createFirstPartyPluginRegistryFromEnv,
   firstPartyPluginDaemonsForRegistry,
@@ -79,7 +79,7 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
       rootsSignalDir: process.env.KORRI_CONFIG_ROOTS_DIR,
     })
   const app = createHonoApp({
-    rpcHandler: serverRpcHandler,
+    rpcHandler: createServerRpcHandler({ configGraphController }),
     rpcSurface: "server",
     configGraphController,
   })
@@ -94,8 +94,6 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
   return {
     start: async () => {
       if (started) return
-      await listen(server, config.port, config.host)
-      started = true
       for (const daemon of pluginDaemons) await daemon.start()
       try {
         await configGraphController.initialize()
@@ -104,6 +102,14 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
           { err: error },
           "Korri daemon: config graph initialize failed; serving empty baseline",
         )
+      }
+      try {
+        await listen(server, config.port, config.host)
+        started = true
+      } catch (error) {
+        for (const daemon of [...pluginDaemons].reverse()) await daemon.stop()
+        await configGraphController.stop()
+        throw error
       }
       try {
         if (config.advertise) {

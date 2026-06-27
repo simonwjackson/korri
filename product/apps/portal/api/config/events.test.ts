@@ -3,6 +3,7 @@ import type {
   ConfigGraphController,
   ConfigGraphEvent,
 } from "@platform/library/config-graph-controller"
+import { Effect } from "effect"
 import { createConfigEventsStream } from "./events"
 
 function fakeController(
@@ -18,6 +19,7 @@ function fakeController(
       return () => listeners.delete(listener)
     },
     snapshot: async () => [],
+    withActiveDb: () => Effect.fail(new Error("not implemented in fake")),
     state: () => initial,
     stop: async () => {},
     emit: event => {

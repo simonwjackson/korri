@@ -2,9 +2,12 @@ import { type Dirent, type FSWatcher, watch } from "node:fs"
 import { readdir } from "node:fs/promises"
 import { join, relative } from "node:path"
 import { logger } from "@platform/logger"
-import { Effect } from "effect"
+import { Effect, Exit, Scope } from "effect"
 import type { PlayableLibraryEntry } from "./playable-library"
-import type { KorriConfigGraphRoot } from "./proseql/config-graph-db"
+import type {
+  KorriConfigGraphDb,
+  KorriConfigGraphRoot,
+} from "./proseql/config-graph-db"
 import { openKorriConfigGraph } from "./proseql/config-graph-db"
 
 /**
@@ -65,6 +68,10 @@ export interface ConfigGraphController {
   ) => () => void
   /** Last-known-good readable playable entries. */
   readonly snapshot: () => Promise<readonly PlayableLibraryEntry[]>
+  /** Run a read operation against the active last-known-good config graph DB. */
+  readonly withActiveDb: <T, E>(
+    useDb: (db: KorriConfigGraphDb) => Effect.Effect<T, E>,
+  ) => Effect.Effect<T, E | Error>
   /** Current lifecycle state as a `config.ready` event. */
   readonly state: () => ConfigGraphEvent
   /** Stop watchers and release resources. */
@@ -137,30 +144,74 @@ interface ConfigGraphSnapshot {
   readonly diagnostics: readonly ConfigGraphDiagnostic[]
 }
 
-function loadSnapshot(
+interface ConfigGraphBuild extends ConfigGraphSnapshot {
+  readonly db: KorriConfigGraphDb
+  readonly scope: Scope.Scope
+}
+
+interface ActiveGraph {
+  readonly db: KorriConfigGraphDb
+  readonly scope: Scope.Scope
+  readonly generation: number
+  leases: number
+  closeRequested: boolean
+  closeStarted: boolean
+  readonly closed: Promise<void>
+  readonly resolveClosed: () => void
+}
+
+function diagnosticsFromDb(
+  diagnostics: readonly {
+    readonly rootId: string
+    readonly action: ConfigGraphDiagnostic["action"]
+    readonly message: string
+    readonly path?: string
+    readonly collection?: string
+  }[],
+): readonly ConfigGraphDiagnostic[] {
+  return diagnostics.map(diagnostic => ({
+    rootId: diagnostic.rootId,
+    action: diagnostic.action,
+    message: diagnostic.message,
+    ...(diagnostic.path !== undefined ? { path: diagnostic.path } : {}),
+    ...(diagnostic.collection !== undefined
+      ? { collection: diagnostic.collection }
+      : {}),
+  }))
+}
+
+async function loadGraph(
   roots: readonly KorriConfigGraphRoot[],
-): Promise<ConfigGraphSnapshot> {
-  return Effect.runPromise(
-    Effect.scoped(
+): Promise<ConfigGraphBuild> {
+  const scope = Scope.makeUnsafe()
+  try {
+    const db = await Effect.runPromise(
+      openKorriConfigGraph({ roots }).pipe(
+        Effect.provideService(Scope.Scope, scope),
+      ),
+    )
+    const { entries, diagnostics } = await Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* openKorriConfigGraph({ roots })
         const entries = yield* createLibraryRepository(db).listPlayableEntries()
         const diagnostics = yield* db.$documentGraph.getDiagnostics()
-        return {
-          entries,
-          diagnostics: diagnostics.map(diagnostic => ({
-            rootId: diagnostic.rootId,
-            action: diagnostic.action,
-            message: diagnostic.message,
-            ...(diagnostic.path !== undefined ? { path: diagnostic.path } : {}),
-            ...(diagnostic.collection !== undefined
-              ? { collection: diagnostic.collection }
-              : {}),
-          })),
-        }
+        return { entries, diagnostics }
       }),
-    ),
-  )
+    )
+    return {
+      db,
+      scope,
+      entries,
+      diagnostics: diagnosticsFromDb(diagnostics),
+    }
+  } catch (error) {
+    await Effect.runPromise(Scope.close(scope, Exit.void)).catch(closeError =>
+      logger.warn(
+        { err: closeError },
+        "config-graph: failed to close rejected graph scope",
+      ),
+    )
+    throw error
+  }
 }
 
 export function createConfigGraphController(
@@ -189,6 +240,8 @@ export function createConfigGraphController(
   let message: string | undefined
   let diagnostics: readonly ConfigGraphDiagnostic[] = []
   let lastGood: readonly PlayableLibraryEntry[] = []
+  let activeGraph: ActiveGraph | undefined
+  let stopping = false
 
   const listeners = new Set<(event: ConfigGraphEvent) => void>()
   const contentWatchers: FSWatcher[] = []
@@ -217,6 +270,64 @@ export function createConfigGraphController(
     }
   }
 
+  const closeGraphNow = async (graph: ActiveGraph): Promise<void> => {
+    if (graph.closeStarted) return graph.closed
+    graph.closeStarted = true
+    try {
+      await Effect.runPromise(Scope.close(graph.scope, Exit.void))
+    } finally {
+      graph.resolveClosed()
+    }
+  }
+
+  const requestCloseGraph = async (graph: ActiveGraph): Promise<void> => {
+    graph.closeRequested = true
+    if (graph.leases === 0) await closeGraphNow(graph)
+    else await graph.closed
+  }
+
+  const makeActiveGraph = (
+    build: ConfigGraphBuild,
+    activeGeneration: number,
+  ): ActiveGraph => {
+    let resolveClosed: () => void = () => undefined
+    const closed = new Promise<void>(resolve => {
+      resolveClosed = resolve
+    })
+    return {
+      db: build.db,
+      scope: build.scope,
+      generation: activeGeneration,
+      leases: 0,
+      closeRequested: false,
+      closeStarted: false,
+      closed,
+      resolveClosed,
+    }
+  }
+
+  const acquireActiveGraph = (): ActiveGraph => {
+    const graph = activeGraph
+    if (stopping || graph === undefined || graph.closeRequested) {
+      throw new Error("config graph is not ready")
+    }
+    graph.leases += 1
+    return graph
+  }
+
+  const releaseActiveGraph = async (graph: ActiveGraph): Promise<void> => {
+    graph.leases = Math.max(0, graph.leases - 1)
+    if (graph.closeRequested && graph.leases === 0) {
+      await closeGraphNow(graph)
+    }
+  }
+
+  const replaceActiveGraph = async (build: ConfigGraphBuild): Promise<void> => {
+    const previous = activeGraph
+    activeGraph = makeActiveGraph(build, generation)
+    if (previous) await requestCloseGraph(previous)
+  }
+
   const attemptBuild = async (
     name: ConfigGraphEventName,
     roots: readonly KorriConfigGraphRoot[],
@@ -224,15 +335,16 @@ export function createConfigGraphController(
   ): Promise<ConfigGraphEvent> => {
     attempt += 1
     try {
-      const [snapshot, discovered] = await Promise.all([
-        loadSnapshot(roots),
+      const [build, discovered] = await Promise.all([
+        loadGraph(roots),
         discoverFragments(roots),
       ])
-      lastGood = snapshot.entries
+      lastGood = build.entries
       files = discovered
       message = undefined
-      diagnostics = snapshot.diagnostics
+      diagnostics = build.diagnostics
       generation += 1
+      await replaceActiveGraph(build)
       status = "valid"
       const event: ConfigGraphEvent = {
         name,
@@ -340,9 +452,10 @@ export function createConfigGraphController(
 
   const initialize = (): Promise<ConfigGraphEvent> =>
     enqueueBuild(async () => {
+      stopping = false
       const roots = resolveRoots()
       const event = await attemptBuild("config.ready", roots)
-      if (shouldWatch) {
+      if (shouldWatch && !stopping) {
         startContentWatchers(roots)
         startSignalWatcher()
       }
@@ -351,6 +464,7 @@ export function createConfigGraphController(
 
   const rebuild = (changedPath?: string): Promise<ConfigGraphEvent> =>
     enqueueBuild(async () => {
+      if (stopping) return readyEvent()
       // Coarse re-resolve: every rebuild re-reads the root set so dynamically
       // mounted roots join (or leave) the graph regardless of which watcher
       // fired. Content watchers are re-pointed only when the set changed —
@@ -364,7 +478,7 @@ export function createConfigGraphController(
         startContentWatchers(roots)
       }
       const event = await attemptBuild("config.changed", roots, changedPath)
-      publish(event)
+      if (!stopping) publish(event)
       return event
     })
 
@@ -380,13 +494,34 @@ export function createConfigGraphController(
     return () => listeners.delete(listener)
   }
 
+  const withActiveDb = <T, E>(
+    useDb: (db: KorriConfigGraphDb) => Effect.Effect<T, E>,
+  ): Effect.Effect<T, E | Error> =>
+    Effect.acquireUseRelease(
+      Effect.try({
+        try: acquireActiveGraph,
+        catch: error =>
+          error instanceof Error ? error : new Error(String(error)),
+      }),
+      graph => useDb(graph.db),
+      graph => Effect.promise(() => releaseActiveGraph(graph)),
+    )
+
   const stop = async (): Promise<void> => {
+    stopping = true
     if (debounce) clearTimeout(debounce)
     debounce = undefined
     closeContentWatchers()
     signalWatcher?.close()
     signalWatcher = undefined
+    await buildChain.catch(() => undefined)
+    closeContentWatchers()
+    signalWatcher?.close()
+    signalWatcher = undefined
     listeners.clear()
+    const graph = activeGraph
+    activeGraph = undefined
+    if (graph) await requestCloseGraph(graph)
   }
 
   return {
@@ -394,6 +529,7 @@ export function createConfigGraphController(
     rebuild,
     subscribe,
     snapshot: async () => lastGood,
+    withActiveDb,
     state: readyEvent,
     stop,
   }

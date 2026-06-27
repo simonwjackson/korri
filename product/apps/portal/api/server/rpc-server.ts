@@ -3,6 +3,7 @@ import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plu
 import { BatchJsonSerializationLive } from "@platform/api/rpc/serialization"
 import { KorriControlLayerLiveWithPlugins } from "@platform/control/korri-control-live"
 import { FeatureGatesMiddlewareLive } from "@platform/gates/middleware"
+import type { ConfigGraphController } from "@platform/library/config-graph-controller"
 import { GameAssetsLayerLive } from "@platform/library/game-assets/game-assets-service"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import {
@@ -16,7 +17,10 @@ import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
 import { createFirstPartyPluginRegistryFromEnv } from "../../../../plugins"
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "../../../../plugins/acquisition"
-import { PluginLibrarySourceLayerLive } from "../../../../plugins/library-source-layer"
+import {
+  makePluginLibrarySourceLayerLive,
+  PluginLibrarySourceLayerLive,
+} from "../../../../plugins/library-source-layer"
 import { handleAcquisitionDetails } from "../acquisition/details.rpc-handler"
 import { handleAcquisitionPlugins } from "../acquisition/plugins.rpc-handler"
 import { handleAcquisitionResolveDownload } from "../acquisition/resolve-download.rpc-handler"
@@ -85,35 +89,42 @@ const AcquisitionLayerLive = makeLiveAcquisitionLayer({
   ),
 })
 
-const KorriControlInfrastructureLive = KorriControlLayerLiveWithPlugins(
-  createFirstPartyPluginRegistryFromEnv(process.env),
-).pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(PluginLibrarySourceLayerLive, LauncherLayerLive),
-  ),
-)
-
-const CatalogDependenciesLive = Layer.mergeAll(
-  PluginLibrarySourceLayerLive,
-  PeerDiscoveryConfigured,
-  PeerSourceFetcherLive,
-)
-
-const CatalogInfrastructureLive = CatalogSnapshotLive.pipe(
-  Layer.provideMerge(CatalogDependenciesLive),
-)
-
-const LibraryInfrastructureLive = Layer.mergeAll(
-  KorriControlInfrastructureLive,
-  CatalogInfrastructureLive,
-  GameAssetsLayerLive,
-  ForegroundSessionHostLive,
-  RemoteStreamPrepareLive,
-  StreamControlLayerLiveWithPlugins(
+function makeLibraryInfrastructureLive(
+  configGraphController?: ConfigGraphController,
+) {
+  const pluginLibrarySourceLayer = configGraphController
+    ? makePluginLibrarySourceLayerLive({ configGraphController })
+    : PluginLibrarySourceLayerLive
+  const korriControlInfrastructureLive = KorriControlLayerLiveWithPlugins(
     createFirstPartyPluginRegistryFromEnv(process.env),
-  ),
-  AcquisitionLayerLive,
-)
+  ).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(pluginLibrarySourceLayer, LauncherLayerLive),
+    ),
+  )
+
+  const catalogDependenciesLive = Layer.mergeAll(
+    pluginLibrarySourceLayer,
+    PeerDiscoveryConfigured,
+    PeerSourceFetcherLive,
+  )
+
+  const catalogInfrastructureLive = CatalogSnapshotLive.pipe(
+    Layer.provideMerge(catalogDependenciesLive),
+  )
+
+  return Layer.mergeAll(
+    korriControlInfrastructureLive,
+    catalogInfrastructureLive,
+    GameAssetsLayerLive,
+    ForegroundSessionHostLive,
+    RemoteStreamPrepareLive,
+    StreamControlLayerLiveWithPlugins(
+      createFirstPartyPluginRegistryFromEnv(process.env),
+    ),
+    AcquisitionLayerLive,
+  )
+}
 
 const ServerHandlersLive = serverRpcGroup.toLayer(
   serverRpcGroup.of({
@@ -150,22 +161,47 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
   }),
 )
 
-const ServerLive = Layer.mergeAll(
-  ServerHandlersLive.pipe(Layer.provide(LibraryInfrastructureLive)),
-  FeatureGatesMiddlewareLive,
-  InstallControlMiddlewareLive,
-  BatchJsonSerializationLive,
-)
+function makeServerLive(configGraphController?: ConfigGraphController) {
+  return Layer.mergeAll(
+    ServerHandlersLive.pipe(
+      Layer.provide(makeLibraryInfrastructureLive(configGraphController)),
+    ),
+    FeatureGatesMiddlewareLive,
+    InstallControlMiddlewareLive,
+    BatchJsonSerializationLive,
+  )
+}
+
+function makeServerWebHandler(
+  configGraphController: ConfigGraphController | undefined,
+  scope: Scope.Scope,
+) {
+  return HttpEffect.toWebHandlerLayerWith(
+    makeServerLive(configGraphController),
+    {
+      toHandler: context =>
+        RpcServer.toHttpEffect(serverRpcGroup).pipe(
+          Effect.provideContext(context),
+          Effect.provideService(Scope.Scope, scope),
+        ),
+    },
+  )
+}
+
+export interface CreateServerRpcHandlerOptions {
+  readonly configGraphController?: ConfigGraphController
+}
+
+export function createServerRpcHandler(
+  options: CreateServerRpcHandlerOptions = {},
+): (request: Request) => Promise<Response> {
+  const scope = Scope.makeUnsafe()
+  const handler = makeServerWebHandler(options.configGraphController, scope)
+  return request => handler.handler(request)
+}
 
 const rpcScope = Scope.makeUnsafe()
-
-const webHandler = HttpEffect.toWebHandlerLayerWith(ServerLive, {
-  toHandler: context =>
-    RpcServer.toHttpEffect(serverRpcGroup).pipe(
-      Effect.provideContext(context),
-      Effect.provideService(Scope.Scope, rpcScope),
-    ),
-})
+const webHandler = makeServerWebHandler(undefined, rpcScope)
 
 export const serverRpcHandler = (request: Request) =>
   webHandler.handler(request)

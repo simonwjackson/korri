@@ -50,6 +50,7 @@ let
   # the same effective roots as korrid after removable-media hotplug instead
   # of staying on stale static roots.
   daemonConfigRootsDir = daemonKorridEnv "KORRI_CONFIG_ROOTS_DIR";
+  daemonRemovableMediaRoot = daemonKorridEnv "KORRI_REMOVABLE_MEDIA_ROOT";
   userKorridUnitPresent = lib.hasAttrByPath [
     "systemd"
     "user"
@@ -246,6 +247,9 @@ in
       })
       // (lib.optionalAttrs (daemonConfigRootsDir != null) {
         KORRI_CONFIG_ROOTS_DIR = daemonConfigRootsDir;
+      })
+      // (lib.optionalAttrs (daemonRemovableMediaRoot != null) {
+        KORRI_REMOVABLE_MEDIA_ROOT = daemonRemovableMediaRoot;
       })
       // (lib.optionalAttrs (daemonLibraryRoot != null) {
         KORRI_LIBRARY_ROOT = daemonLibraryRoot;

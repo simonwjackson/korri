@@ -74,6 +74,32 @@ let
     };
   };
 
+  withBroadAnchor = evaluateWith {
+    services.korri.removableMedia = {
+      enable = true;
+      configAnchorDirs = [
+        ".korri"
+        "korri-config"
+      ];
+    };
+  };
+
+  invalidAnchorEval = builtins.tryEval (
+    evaluateWith {
+      services.korri.removableMedia = {
+        enable = true;
+        configAnchorDirs = [ "../korri" ];
+      };
+    }).assertions;
+
+  collidingAnchorEval = builtins.tryEval (
+    evaluateWith {
+      services.korri.removableMedia = {
+        enable = true;
+        configAnchorDirs = [ ".korri" "dot-korri" ];
+      };
+    }).assertions;
+
   disabled = evaluateWith { };
 
   failedAssertions = cfg: builtins.filter (a: !a.assertion) cfg.assertions;
@@ -150,12 +176,21 @@ let
     (check "mount unit env carries the matcher contract" (
       ((mountUnit defaults).environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri"
       && ((mountUnit defaults).environment.KORRI_REMOVABLE_CONFIG_ROOTS_DIR or null) == "/run/korri/config-roots.d"
+      && ((mountUnit defaults).environment.KORRI_REMOVABLE_CONFIG_ANCHORS or null) == ".korri"
       && ((mountUnit defaults).environment.KORRI_REMOVABLE_MATCH_MMC or null) == "1"
       && ((mountUnit defaults).environment.KORRI_REMOVABLE_MATCH_USB or null) == "0"
       && ((mountUnit defaults).environment.KORRI_REMOVABLE_REQUIRED_SYSTEM_MOUNTS or null) == "/"
     ))
     (check "usb toggle reaches the matcher env" (
       ((mountUnit withUsb).environment.KORRI_REMOVABLE_MATCH_USB or null) == "1"
+    ))
+    (check "config anchors are hidden/config-specific by default and configurable" (
+      ((mountUnit defaults).environment.KORRI_REMOVABLE_CONFIG_ANCHORS or null) == ".korri"
+      && ((mountUnit withBroadAnchor).environment.KORRI_REMOVABLE_CONFIG_ANCHORS or null) == ".korri korri-config"
+    ))
+    (check "invalid and colliding config anchor names are rejected" (
+      (builtins.any (a: !a.assertion) invalidAnchorEval.value)
+      && (builtins.any (a: !a.assertion) collidingAnchorEval.value)
     ))
     (check "unmount unit shares the media/config-roots env" (
       ((unmountUnit defaults).environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri"
@@ -190,10 +225,12 @@ let
       lib.hasInfix "noexec,nosuid,nodev" moduleText
       && lib.hasInfix "not allowlisted" moduleText
     ))
-    (check "mounts and config roots are named by the media id, not the kernel name" (
+    (check "mounts are named by media id and config roots by anchor, not the whole mount" (
       lib.hasInfix ''mountpoint="$media_root/$media_id"'' moduleText
-      && lib.hasInfix ''ln -sfn "$mountpoint" "$config_roots_dir/$media_id"'' moduleText
+      && lib.hasInfix ''ln -sfn "$anchor_dir" "$config_roots_dir/$media_id-$suffix"'' moduleText
       && lib.hasInfix ''rm -f "$config_roots_dir/$media_id"'' moduleText
+      && lib.hasInfix ''for entry in "$config_roots_dir/$media_id"-*'' moduleText
+      && !(lib.hasInfix ''ln -sfn "$mountpoint" "$config_roots_dir/$media_id"'' moduleText)
     ))
     (check "unmount resolves the mountpoint from the surviving mount table" (
       # On ACTION=remove the device node is gone; the unmount unit must find
