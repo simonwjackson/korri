@@ -88,6 +88,13 @@ in
     ../../modules/korri-rocknix-guest-profile.nix
   ];
 
+  # RK3566 intentionally does not import the shared RockNIX guest device-access
+  # module yet. Unlike SM8550, the compositor runs as root, audio is reached
+  # through the substrate main-space Pulse socket, and the physical
+  # retrogame_joypad nodes are locked down after InputPlumber claims them.
+  # Broad /dev/input ACL repair would risk undoing that raw-node hiding; the
+  # app-facing virtual Xbox controller is covered by the Korri runtime user's
+  # input-group membership instead.
   services.inputplumber.package = lib.mkForce inputplumberPackage;
   services.korri.rocknixGuestProfile = {
     enable = true;

@@ -15,9 +15,12 @@ let
   rg353mProduct = products.rg353m;
   cfg = rg353mSystem.config;
   server = cfg.services.korri.daemon;
+  runtime = cfg.services.korri.runtime;
+  runtimeUser = cfg.users.users.${runtime.user} or { };
   targetSystem = cfg.nixpkgs.hostPlatform.system;
   systemServices = cfg.systemd.services or { };
   rocknixGuestProfile = cfg.services.korri.rocknixGuestProfile or { };
+  rocknixGuestDeviceAccess = cfg.services.korri.rocknixGuestDeviceAccess or { };
   rocknixAudioBootstrap = cfg.services.korri.rocknixAudioBootstrap or { };
   userServices = cfg.systemd.user.services or { };
   userSockets = cfg.systemd.user.sockets or { };
@@ -39,6 +42,9 @@ let
   inputdAfter = inputdUnit.after or [ ];
   rawGamepadHideService = systemServices.korri-rk3566-hide-raw-gamepad-devices or { };
   udevRules = cfg.services.udev.extraRules or "";
+  udevRuleLines = lib.splitString "\n" udevRules;
+  hasUdevRuleWith = needles:
+    builtins.any (line: builtins.all (needle: lib.hasInfix needle line) needles) udevRuleLines;
   rkAudioBootstrap = systemServices.korri-rocknix-audio-bootstrap or { };
   userCompositorService = userServices."korri-compositor" or { };
   userCompositorEnv = userCompositorService.environment or { };
@@ -113,6 +119,32 @@ let
     ))
     (check "RG353M compositor must not require the retired main-space bus unit" (
       !(builtins.elem "main-space-session-dbus.service" userCompositorRequires)
+    ))
+    (check "RG353M compositor stays root-owned while guest device-access is unadopted" (
+      cfg.services.korri.compositor.user == "root"
+      && cfg.services.korri.compositor.createUser == false
+    ))
+    (check "RG353M runtime user keeps normalized input group access" (
+      builtins.elem "input" (runtimeUser.extraGroups or [ ])
+      && hasUdevRuleWith [
+        ''KERNEL=="uinput"''
+        ''GROUP="input"''
+        ''MODE="0660"''
+      ]
+    ))
+    (check "RG353M RockNIX guest device-access module remains explicitly unadopted" (
+      (rocknixGuestDeviceAccess.enable or false) == false
+      && !(systemServices ? korri-rocknix-seat-device-trigger)
+      && !(systemServices ? korri-rocknix-device-acl-fallback)
+      && !(lib.hasInfix ''TAG+="master-of-seat"'' udevRules)
+      && !(hasUdevRuleWith [
+        ''KERNEL=="event*"''
+        ''TAG+="uaccess"''
+      ])
+      && !(hasUdevRuleWith [
+        ''setfacl -m u:''
+        ''/dev/input/%k''
+      ])
     ))
     (check "RG353M RockNIX guest profile module must be enabled" (
       (rocknixGuestProfile.enable or false) == true
