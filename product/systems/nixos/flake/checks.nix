@@ -126,6 +126,12 @@ pkgs.lib.optionalAttrs isX86Linux {
         inherit pkgs;
         korriRocknixAudioBootstrapModule = self.nixosModules.korri-rocknix-audio-bootstrap;
       };
+  korri-rocknix-guest-device-access-module =
+    import ../../../../tools/testing/nix/korri-rocknix-guest-device-access-module-check.nix
+      {
+        inherit pkgs;
+        korriRocknixGuestDeviceAccessModule = self.nixosModules.korri-rocknix-guest-device-access;
+      };
   korri-module-identity-audit =
     import ../../../../tools/testing/nix/korri-module-identity-audit-check.nix
       {
@@ -361,6 +367,10 @@ pkgs.lib.optionalAttrs isX86Linux {
       }
       {
         name = "korri-rocknix-audio-bootstrap-module";
+        owner = "module";
+      }
+      {
+        name = "korri-rocknix-guest-device-access-module";
         owner = "module";
       }
       {
