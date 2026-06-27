@@ -36,6 +36,7 @@ rec {
   };
 
   korri-runtime = import ../modules/korri-runtime.nix;
+  korri-rocknix-audio-bootstrap = import ../modules/korri-rocknix-audio-bootstrap.nix;
   korri-rocknix-guest-profile = import ../modules/korri-rocknix-guest-profile.nix;
   korri-setup = import ../modules/korri-setup.nix;
   # Per-platform opt-in: removable-media mounting + card-wins config-root
