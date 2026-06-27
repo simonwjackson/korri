@@ -59,18 +59,52 @@ let
       rocknixGuestProfile = cfg.services.korri.rocknixGuestProfile or { };
       rocknixAudioBootstrap = cfg.services.korri.rocknixAudioBootstrap or { };
       audioBootstrapActions = rocknixAudioBootstrap.actions or [ ];
-      hasAudioBootstrapAction =
-        kind: onFailure:
-        builtins.any (
-          action: (action.kind or null) == kind && (action.onFailure or null) == onFailure
-        ) audioBootstrapActions;
-      hasManualPcmAudioBootstrapAction = builtins.any (
+      normalizeAudioBootstrapAction =
         action:
-        (action.kind or null) == "load-alsa-sink-if-missing"
-        && (action.onFailure or null) == "continue"
-        && (action.pcm or null) == toString audioRoute.pcm
-        && (action.description or null) == toString audioRoute.description
-      ) audioBootstrapActions;
+        {
+          kind = action.kind;
+          onFailure = action.onFailure;
+        }
+        // lib.optionalAttrs (action.kind == "load-alsa-sink-if-missing") {
+          inherit (action) pcm description;
+        };
+      normalizedAudioBootstrapActions = map normalizeAudioBootstrapAction audioBootstrapActions;
+      expectedAudioBootstrapActions =
+        (
+          if audioRoute.kind == "wireplumber-ucm" then
+            [
+              {
+                kind = "clamp-target-sink";
+                onFailure = "continue";
+              }
+            ]
+          else if audioRoute.kind == "manual-pcm" then
+            [
+              {
+                kind = "load-alsa-sink-if-missing";
+                onFailure = "continue";
+                pcm = toString audioRoute.pcm;
+                description = toString audioRoute.description;
+              }
+              {
+                kind = "clamp-target-sink";
+                onFailure = "continue";
+              }
+            ]
+          else
+            [
+              {
+                kind = "clamp-default-sink";
+                onFailure = "continue";
+              }
+            ]
+        )
+        ++ [
+          {
+            kind = "clamp-current-default-sink";
+            onFailure = "continue";
+          }
+        ];
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
@@ -570,15 +604,7 @@ let
         && (rocknixAudioBootstrap.safeVolume or null) == "10%"
         && (rocknixAudioBootstrap.serviceScope or null) == "user"
         && (rocknixAudioBootstrap.failOnSocketUnavailable or true) == false
-        && hasAudioBootstrapAction "clamp-current-default-sink" "continue"
-        && (
-          if audioRoute.kind == "wireplumber-ucm" then
-            hasAudioBootstrapAction "clamp-target-sink" "continue"
-          else if audioRoute.kind == "manual-pcm" then
-            hasManualPcmAudioBootstrapAction && hasAudioBootstrapAction "clamp-target-sink" "continue"
-          else
-            hasAudioBootstrapAction "clamp-default-sink" "continue"
-        )
+        && normalizedAudioBootstrapActions == expectedAudioBootstrapActions
       ))
       (check "${name}: user audio bootstrap is best-effort before Korri runtime services" (
         userServices ? korri-rocknix-audio-bootstrap

@@ -130,6 +130,38 @@ let
     };
   };
 
+  currentDefaultFailRoute = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "unix:%t/pulse/native";
+      targetSink = "current-default-sink";
+      failOnSocketUnavailable = false;
+      actions = [
+        {
+          kind = "clamp-current-default-sink";
+          onFailure = "fail";
+        }
+      ];
+    };
+  };
+
+  manualPcmFailRoute = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "unix:%t/pulse/native";
+      targetSink = "manual-fail-sink";
+      failOnSocketUnavailable = false;
+      actions = [
+        {
+          kind = "load-alsa-sink-if-missing";
+          pcm = "hw:1,0";
+          description = "Manual Fail Sink";
+          onFailure = "fail";
+        }
+      ];
+    };
+  };
+
   disabled = evaluateWith { };
 
   missingPulseServer = evaluateWith {
@@ -204,6 +236,53 @@ let
     };
   };
 
+  emptyManualPcm = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "unix:%t/pulse/native";
+      targetSink = "manual-sink";
+      failOnSocketUnavailable = false;
+      actions = [
+        {
+          kind = "load-alsa-sink-if-missing";
+          pcm = "";
+          description = "Manual Sink";
+        }
+      ];
+    };
+  };
+
+  missingManualDescription = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "unix:%t/pulse/native";
+      targetSink = "manual-sink";
+      failOnSocketUnavailable = false;
+      actions = [
+        {
+          kind = "load-alsa-sink-if-missing";
+          pcm = "hw:0,0";
+        }
+      ];
+    };
+  };
+
+  emptyManualDescription = evaluateWith {
+    services.korri.rocknixAudioBootstrap = {
+      enable = true;
+      pulseServer = "unix:%t/pulse/native";
+      targetSink = "manual-sink";
+      failOnSocketUnavailable = false;
+      actions = [
+        {
+          kind = "load-alsa-sink-if-missing";
+          pcm = "hw:0,0";
+          description = "";
+        }
+      ];
+    };
+  };
+
   failedAssertions = cfg: builtins.filter (a: !a.assertion) cfg.assertions;
   userService = cfg: cfg.systemd.user.services.korri-rocknix-audio-bootstrap or { };
   systemService = cfg: cfg.systemd.services.korri-rocknix-audio-bootstrap or { };
@@ -214,13 +293,28 @@ let
   hardFailRouteScript = scriptText (systemService hardFailRoute);
   manualPcmScript = scriptText (userService manualPcmRoute);
   defaultSinkScript = scriptText (userService defaultSinkRoute);
+  currentDefaultFailScript = scriptText (userService currentDefaultFailRoute);
+  manualPcmFailScript = scriptText (userService manualPcmFailRoute);
 
   socketFailureBlockHasExit =
     exitCode: script:
-    lib.hasInfix "PulseAudio socket unavailable at $PULSE_SERVER" script
-    && lib.hasInfix "exit ${exitCode}" (
-      builtins.concatStringsSep "\n" (lib.take 4 (lib.drop 12 (lib.splitString "\n" script)))
-    );
+    let
+      marker = "PulseAudio socket unavailable at $PULSE_SERVER";
+      parts = lib.splitString marker script;
+      blockTail = if builtins.length parts > 1 then builtins.elemAt parts 1 else "";
+      nearbyLines = builtins.concatStringsSep "\n" (lib.take 3 (lib.splitString "\n" blockTail));
+    in
+    builtins.length parts == 2 && lib.hasInfix "exit ${exitCode}" nearbyLines;
+
+  loadFailureBlockHasCommand =
+    command: script:
+    let
+      marker = "bin/pactl load-module module-alsa-sink";
+      parts = lib.splitString marker script;
+      blockTail = if builtins.length parts > 1 then builtins.elemAt parts 1 else "";
+      nearbyLines = builtins.concatStringsSep "\n" (lib.take 8 (lib.splitString "\n" blockTail));
+    in
+    builtins.length parts == 2 && lib.hasInfix command nearbyLines;
 
   check = message: assertion: { inherit message assertion; };
 
@@ -255,11 +349,15 @@ let
     ))
     (check "route actions render expected shell" (
       lib.hasInfix ''clamp_named_sink "$target_sink" || true'' userScript
-      && lib.hasInfix "set-sink-volume @DEFAULT_SINK@" userScript
+      && lib.hasInfix ''set-sink-volume @DEFAULT_SINK@ "$korri_safe_default_sink_volume" >/dev/null 2>&1 || true'' userScript
+      && lib.hasInfix ''set-sink-volume @DEFAULT_SINK@ "$korri_safe_default_sink_volume" >/dev/null 2>&1 || exit 1'' currentDefaultFailScript
       && lib.hasInfix ''clamp_named_sink "$target_sink" || exit 1'' hardFailRouteScript
       && lib.hasInfix "load-module module-alsa-sink" manualPcmScript
       && lib.hasInfix "device=hw:0,0" manualPcmScript
       && lib.hasInfix "sink_properties=device.description='Manual Sink'" manualPcmScript
+      && loadFailureBlockHasCommand "true" manualPcmScript
+      && lib.hasInfix "Manual Fail Sink" manualPcmFailScript
+      && loadFailureBlockHasCommand "exit 1" manualPcmFailScript
       && lib.hasInfix "clamp_default_sink()" defaultSinkScript
       && lib.hasInfix "clamp_default_sink || true" defaultSinkScript
     ))
@@ -278,6 +376,13 @@ let
     ))
     (check "enabled module requires at least one route action" (failedAssertions emptyActions != [ ]))
     (check "manual PCM action requires a PCM device" (failedAssertions missingManualPcm != [ ]))
+    (check "manual PCM action rejects an empty PCM device" (failedAssertions emptyManualPcm != [ ]))
+    (check "manual PCM action requires a description" (
+      failedAssertions missingManualDescription != [ ]
+    ))
+    (check "manual PCM action rejects an empty description" (
+      failedAssertions emptyManualDescription != [ ]
+    ))
   ];
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;
