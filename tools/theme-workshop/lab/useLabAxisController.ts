@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useLayoutEffect, useMemo, useState } from "react"
 import type { Story } from "../types"
 import {
   axisEnabled,
@@ -28,9 +28,8 @@ export interface LabAxisController {
 }
 
 function multiSetFromCoordinate(value: LabAxisCoordinate | undefined) {
-  if (!value || value === LAB_AXIS_LIVE) return new Set<string>()
-  if (typeof value === "string") return new Set([value])
-  return new Set(value)
+  if (value?.kind !== "multi") return new Set<string>()
+  return new Set(value.values.filter(state => state !== LAB_AXIS_LIVE))
 }
 
 function activeFromCoordinate(
@@ -41,7 +40,7 @@ function activeFromCoordinate(
     return { kind: "multi", on: multiSetFromCoordinate(value) }
   return {
     kind: "single",
-    value: typeof value === "string" ? value : LAB_AXIS_LIVE,
+    value: value?.kind === "single" ? value.value : LAB_AXIS_LIVE,
   }
 }
 
@@ -107,10 +106,15 @@ export function useLabAxisController(
   // a greyed-out, unreleasable overlay.
   const applyAxisMap = (next: LabScreenActive) => {
     let result = next
-    for (const axis of screenAxes) {
-      if (!axisEnabled(axis, result) && !isAxisLive(result[axis.id])) {
-        axis.release()
-        result = releaseAxisActive(result, axis)
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const axis of screenAxes) {
+        if (!axisEnabled(axis, result) && !isAxisLive(result[axis.id])) {
+          axis.release()
+          result = releaseAxisActive(result, axis)
+          changed = true
+        }
       }
     }
     setActiveByAxis(result)
@@ -125,8 +129,10 @@ export function useLabAxisController(
       current?.kind === "multi" &&
       current.on.has(stateId)
     ) {
-      axis.release(stateId)
-      applyAxisMap(releaseAxisActive(activeByAxis, axis, stateId))
+      const next = releaseAxisActive(activeByAxis, axis, stateId)
+      const active = next[axis.id]
+      if (active) applyPreview(axis, active)
+      applyAxisMap(next)
       return
     }
     axis.pin(stateId)
@@ -178,7 +184,7 @@ export function useLabAxisController(
   // never leak onto a surface where it has no visible release control (plan risk
   // #1, generalized to screen changes). axes is recomputed from the deps (not
   // the screenAxes memo) so the effect only re-runs on a real axis-set change.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const axes = isPageSelection
       ? (adapter.axesForScreen?.(activeScreenPath) ?? [])
       : []

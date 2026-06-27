@@ -1,17 +1,21 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { act, cleanup, renderHook } from "@testing-library/react"
 import type { Story } from "../types"
-import { LAB_AXIS_LIVE, type LabStateAxis } from "./model/lab-state-axis"
+import {
+  LAB_AXIS_LIVE,
+  type LabScreenCoordinate,
+  type LabStateAxis,
+} from "./model/lab-state-axis"
 import type { LabSurfaceAdapter } from "./surface-registry"
 import { useLabAxisController } from "./useLabAxisController"
 
 afterEach(() => cleanup())
 
 function makeAdapter(
-  captureCoordinate = () => ({
-    data: "Empty",
-    launch: LAB_AXIS_LIVE,
-    overlays: ["Notice", "Toast"],
+  captureCoordinate: () => LabScreenCoordinate = () => ({
+    data: { kind: "single", value: "Empty" },
+    launch: { kind: "single", value: LAB_AXIS_LIVE },
+    overlays: { kind: "multi", values: ["Notice", "Toast"] },
   }),
 ) {
   const calls: string[] = []
@@ -51,7 +55,7 @@ function makeAdapter(
       { id: "Toast", label: "Toast" },
     ],
     pin: tag => calls.push(`overlays.pin:${tag}`),
-    release: tag => calls.push(`overlays.release:${tag ?? "*"}`),
+    release: () => calls.push("overlays.release:*"),
   }
   const adapter: LabSurfaceAdapter = {
     id: "test",
@@ -133,7 +137,8 @@ describe("useLabAxisController", () => {
     act(() => result.current.pinAxis("overlays", "Toast"))
     calls.length = 0
     act(() => result.current.pinAxis("overlays", "Notice"))
-    expect(calls).toContain("overlays.release:Notice")
+    expect(calls).toContain("overlays.release:*")
+    expect(calls).toContain("overlays.pin:Toast")
     expect(result.current.activeByAxis.overlays).toEqual({
       kind: "multi",
       on: new Set(["Toast"]),
@@ -142,9 +147,9 @@ describe("useLabAxisController", () => {
 
   it("replaces stale multi preview states when capturing current", () => {
     const { adapter, calls } = makeAdapter(() => ({
-      data: "Ready",
-      launch: LAB_AXIS_LIVE,
-      overlays: ["Toast"],
+      data: { kind: "single", value: "Ready" },
+      launch: { kind: "single", value: LAB_AXIS_LIVE },
+      overlays: { kind: "multi", values: ["Toast"] },
     }))
     const { result } = renderHook(() => useLabAxisController(adapter, null))
     act(() => result.current.pinAxis("overlays", "Notice"))
@@ -167,6 +172,80 @@ describe("useLabAxisController", () => {
     act(() => result.current.liveAxis("data"))
     expect(calls).toContain("launch.release")
     expect(result.current.activeByAxis.launch).toEqual({
+      kind: "single",
+      value: LAB_AXIS_LIVE,
+    })
+  })
+
+  it("releases a nested axis when its parent is pinned away from Ready", () => {
+    const { adapter, calls } = makeAdapter()
+    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    act(() => result.current.pinAxis("data", "Ready"))
+    act(() => result.current.pinAxis("launch", "Launching"))
+    calls.length = 0
+    act(() => result.current.pinAxis("data", "Empty"))
+    expect(calls).toContain("launch.release")
+    expect(result.current.activeByAxis.launch).toEqual({
+      kind: "single",
+      value: LAB_AXIS_LIVE,
+    })
+  })
+
+  it("cleans disabled nested pins to a fixed point regardless of adapter order", () => {
+    const calls: string[] = []
+    const parent: LabStateAxis = {
+      id: "parent",
+      kind: "single",
+      label: "Parent",
+      liveLabel: "Auto",
+      states: [
+        { id: "Open", label: "Open" },
+        { id: "Closed", label: "Closed" },
+      ],
+      pin: tag => calls.push(`parent.pin:${tag}`),
+      release: () => calls.push("parent.release"),
+    }
+    const child: LabStateAxis = {
+      id: "child",
+      kind: "single",
+      label: "Child",
+      liveLabel: "Auto",
+      states: [{ id: "Open", label: "Open" }],
+      parent: { axisId: "parent", whenStates: ["Open"] },
+      pin: tag => calls.push(`child.pin:${tag}`),
+      release: () => calls.push("child.release"),
+    }
+    const grandchild: LabStateAxis = {
+      id: "grandchild",
+      kind: "single",
+      label: "Grandchild",
+      liveLabel: "Auto",
+      states: [{ id: "Dirty", label: "Dirty" }],
+      parent: { axisId: "child", whenStates: ["Open"] },
+      pin: tag => calls.push(`grandchild.pin:${tag}`),
+      release: () => calls.push("grandchild.release"),
+    }
+    const adapter: LabSurfaceAdapter = {
+      id: "deep",
+      devices: [],
+      screens: [{ label: "Home", path: "/" }],
+      axesForScreen: () => [grandchild, child, parent],
+      makeSeedInitialValues: async () => ({}),
+      mountSurface: () => ({ router: {}, dispose: () => {} }),
+    }
+    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    act(() => result.current.pinAxis("parent", "Open"))
+    act(() => result.current.pinAxis("child", "Open"))
+    act(() => result.current.pinAxis("grandchild", "Dirty"))
+    calls.length = 0
+    act(() => result.current.pinAxis("parent", "Closed"))
+    expect(calls).toContain("child.release")
+    expect(calls).toContain("grandchild.release")
+    expect(result.current.activeByAxis.child).toEqual({
+      kind: "single",
+      value: LAB_AXIS_LIVE,
+    })
+    expect(result.current.activeByAxis.grandchild).toEqual({
       kind: "single",
       value: LAB_AXIS_LIVE,
     })

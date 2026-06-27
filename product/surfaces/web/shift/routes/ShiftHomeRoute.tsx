@@ -18,7 +18,13 @@ import { useLibraryLaunchController } from "@platform/react/library/use-library-
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import { Option } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
-import { type ComponentProps, useCallback, useEffect, useState } from "react"
+import {
+  type ComponentProps,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 
 const noop = () => {}
 
@@ -45,6 +51,10 @@ import {
   useShiftLaunchPreview,
 } from "../shift-launch-preview"
 import {
+  clearShiftLiveCoordinate,
+  clearShiftLiveLaunch,
+  createShiftLiveCoordinateOwner,
+  type ShiftLiveCoordinateOwner,
   setShiftLiveData,
   setShiftLiveForeground,
   setShiftLiveLaunch,
@@ -128,9 +138,13 @@ export function visibleShiftLaunchState({
 export function ShiftHomeStateView({
   result,
   onRetry,
+  foreground: foregroundOverride,
+  liveCoordinateOwner,
 }: {
   readonly result: ComponentProps<typeof ShiftCatalogStateRoot>["result"]
   readonly onRetry?: () => void
+  readonly foreground?: ForegroundSessionGateState
+  readonly liveCoordinateOwner?: ShiftLiveCoordinateOwner
 }) {
   return (
     <div data-shift-home-frame>
@@ -139,7 +153,10 @@ export function ShiftHomeStateView({
         <ShiftHomeLoadErrorBody onRetry={onRetry ?? noop} />
         <ShiftHomeDefectBody />
         <ShiftHomeEmptyBody />
-        <NavigatingReadyBody />
+        <NavigatingReadyBody
+          foreground={foregroundOverride}
+          liveCoordinateOwner={liveCoordinateOwner}
+        />
       </ShiftCatalogStateRoot>
     </div>
   )
@@ -148,26 +165,51 @@ export function ShiftHomeStateView({
 export function ShiftHomeRoute() {
   const live = useAtomValue(catalogSnapshotAtom)
   const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
+  const liveCoordinateOwner = useMemo(createShiftLiveCoordinateOwner, [])
+  const liveForeground = foregroundStateFromAtom(
+    useAtomValue(foregroundSessionGateStateAtom),
+  )
+  const foreground = useShiftForegroundPreview() ?? liveForeground
   // The design-tool data pin wins over the live loader when set; releasing it
   // (preview = null) falls straight back to the real catalog snapshot.
   const snapshot = useShiftCatalogPreview() ?? live
-  // Publish the resolved data state for the design-tool capture seam (inert in
-  // production — nothing reads it there).
+  // Publish the resolved data and foreground states for the design-tool capture
+  // seam (inert in production — nothing reads them there). Foreground is
+  // independent of Data, so publish it at the route level rather than only from
+  // the Ready body.
   const dataTag = ShiftCatalogState.fromResult(snapshot)._tag
   useEffect(() => {
-    setShiftLiveData(dataTag)
-  }, [dataTag])
-  return <ShiftHomeStateView result={snapshot} onRetry={refreshSnapshot} />
+    setShiftLiveData(dataTag, liveCoordinateOwner)
+    setShiftLiveForeground(foreground._tag, liveCoordinateOwner)
+  }, [dataTag, foreground._tag, liveCoordinateOwner])
+  useEffect(
+    () => () => clearShiftLiveCoordinate(liveCoordinateOwner),
+    [liveCoordinateOwner],
+  )
+  return (
+    <ShiftHomeStateView
+      result={snapshot}
+      onRetry={refreshSnapshot}
+      foreground={foreground}
+      liveCoordinateOwner={liveCoordinateOwner}
+    />
+  )
 }
 
-function NavigatingReadyBody() {
+function NavigatingReadyBody({
+  foreground: foregroundOverride,
+  liveCoordinateOwner,
+}: {
+  readonly foreground?: ForegroundSessionGateState
+  readonly liveCoordinateOwner?: ShiftLiveCoordinateOwner
+}) {
   const ready = useShiftCatalogCase("Ready")
   const launch = useLibraryLaunchController()
   const liveForeground = foregroundStateFromAtom(
     useAtomValue(foregroundSessionGateStateAtom),
   )
   const foregroundPreview = useShiftForegroundPreview()
-  const foreground = foregroundPreview ?? liveForeground
+  const foreground = foregroundOverride ?? foregroundPreview ?? liveForeground
   const preview = useShiftLaunchPreview()
   const focusGame = useOptionalDualScreenSession()?.focusGame
   const publishGameFocus = useCallback(
@@ -192,15 +234,13 @@ function NavigatingReadyBody() {
     acked,
   })
 
-  // Publish the on-screen launch and foreground state for the design-tool
-  // capture seam.
+  // Publish the independent launch-machine coordinate for the design-tool
+  // capture seam. Foreground blocking is represented by the foreground axis;
+  // it must not contaminate the launch coordinate captured by Pin current.
   useEffect(() => {
-    setShiftLiveLaunch(launchState._tag)
-  }, [launchState._tag])
-
-  useEffect(() => {
-    setShiftLiveForeground(foreground._tag)
-  }, [foreground._tag])
+    setShiftLiveLaunch(rawLaunch._tag, liveCoordinateOwner)
+    return () => clearShiftLiveLaunch(liveCoordinateOwner)
+  }, [rawLaunch._tag, liveCoordinateOwner])
 
   return Option.match(ready, {
     onNone: () => null,

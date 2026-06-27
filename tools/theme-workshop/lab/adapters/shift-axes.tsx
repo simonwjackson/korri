@@ -101,8 +101,11 @@ export function shiftCaptureCoordinate(
 ): LabScreenCoordinate {
   const coordinate = readShiftCurrentCoordinate(screenPath)
   return {
-    data: coordinate.data,
-    launch: coordinate.data === "Ready" ? coordinate.launch : LAB_AXIS_LIVE,
-    foreground: coordinate.foreground,
+    data: { kind: "single", value: coordinate.data },
+    launch: {
+      kind: "single",
+      value: coordinate.data === "Ready" ? coordinate.launch : LAB_AXIS_LIVE,
+    },
+    foreground: { kind: "single", value: coordinate.foreground },
   }
 }

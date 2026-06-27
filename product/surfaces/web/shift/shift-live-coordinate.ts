@@ -12,22 +12,76 @@ import type { LaunchState } from "@platform/library/launch-state"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import type { ShiftCatalogState } from "./catalog/shift-catalog-state"
 
-let liveData: ShiftCatalogState["_tag"] | null = null
-let liveLaunch: LaunchState["_tag"] | null = null
-let liveForeground: ForegroundSessionGateState["_tag"] | null = null
+export type ShiftLiveCoordinateOwner = object
 
-export function setShiftLiveData(tag: ShiftCatalogState["_tag"]): void {
-  liveData = tag
+let liveData: ShiftCatalogState["_tag"] | null = null
+let liveDataOwner: ShiftLiveCoordinateOwner | null = null
+let liveLaunch: LaunchState["_tag"] | null = null
+let liveLaunchOwner: ShiftLiveCoordinateOwner | null = null
+let liveForeground: ForegroundSessionGateState["_tag"] | null = null
+let liveForegroundOwner: ShiftLiveCoordinateOwner | null = null
+
+export function createShiftLiveCoordinateOwner(): ShiftLiveCoordinateOwner {
+  return {}
 }
 
-export function setShiftLiveLaunch(tag: LaunchState["_tag"]): void {
+function shouldClear(
+  current: ShiftLiveCoordinateOwner | null,
+  owner: ShiftLiveCoordinateOwner | undefined,
+): boolean {
+  return owner === undefined || current === owner
+}
+
+export function setShiftLiveData(
+  tag: ShiftCatalogState["_tag"],
+  owner?: ShiftLiveCoordinateOwner,
+): void {
+  liveData = tag
+  liveDataOwner = owner ?? null
+}
+
+export function clearShiftLiveData(owner?: ShiftLiveCoordinateOwner): void {
+  if (!shouldClear(liveDataOwner, owner)) return
+  liveData = null
+  liveDataOwner = null
+}
+
+export function setShiftLiveLaunch(
+  tag: LaunchState["_tag"],
+  owner?: ShiftLiveCoordinateOwner,
+): void {
   liveLaunch = tag
+  liveLaunchOwner = owner ?? null
+}
+
+export function clearShiftLiveLaunch(owner?: ShiftLiveCoordinateOwner): void {
+  if (!shouldClear(liveLaunchOwner, owner)) return
+  liveLaunch = null
+  liveLaunchOwner = null
 }
 
 export function setShiftLiveForeground(
   tag: ForegroundSessionGateState["_tag"],
+  owner?: ShiftLiveCoordinateOwner,
 ): void {
   liveForeground = tag
+  liveForegroundOwner = owner ?? null
+}
+
+export function clearShiftLiveForeground(
+  owner?: ShiftLiveCoordinateOwner,
+): void {
+  if (!shouldClear(liveForegroundOwner, owner)) return
+  liveForeground = null
+  liveForegroundOwner = null
+}
+
+export function clearShiftLiveCoordinate(
+  owner?: ShiftLiveCoordinateOwner,
+): void {
+  clearShiftLiveData(owner)
+  clearShiftLiveLaunch(owner)
+  clearShiftLiveForeground(owner)
 }
 
 export function getShiftLiveData(): ShiftCatalogState["_tag"] | null {

@@ -158,9 +158,9 @@ describe("shift capture-back coordinate", () => {
 
   it("captures the seed's resting coordinate when nothing is pinned", () => {
     expect(capture()).toEqual({
-      data: "Ready",
-      launch: "Idle",
-      foreground: "Ready",
+      data: { kind: "single", value: "Ready" },
+      launch: { kind: "single", value: "Idle" },
+      foreground: { kind: "single", value: "Ready" },
     })
   })
 
@@ -168,23 +168,23 @@ describe("shift capture-back coordinate", () => {
     setShiftCatalogPreview(shiftCatalogStateSamples.Ready())
     setShiftLaunchPreview(launchStateSamples.Launching())
     expect(capture()).toEqual({
-      data: "Ready",
-      launch: "Launching",
-      foreground: "Ready",
+      data: { kind: "single", value: "Ready" },
+      launch: { kind: "single", value: "Launching" },
+      foreground: { kind: "single", value: "Ready" },
     })
   })
 
   it("maps Launch to Live when Data is not Ready (nesting round-trips)", () => {
     setShiftCatalogPreview(shiftCatalogStateSamples.Empty())
     expect(capture()).toEqual({
-      data: "Empty",
-      launch: LAB_AXIS_LIVE,
-      foreground: "Ready",
+      data: { kind: "single", value: "Empty" },
+      launch: { kind: "single", value: LAB_AXIS_LIVE },
+      foreground: { kind: "single", value: "Ready" },
     })
   })
 
   it("captures a pinned foreground coordinate", () => {
     setShiftForegroundPreview(foregroundStateSamples.Cooling())
-    expect(capture()?.foreground).toBe("Cooling")
+    expect(capture()?.foreground).toEqual({ kind: "single", value: "Cooling" })
   })
 })

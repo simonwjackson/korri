@@ -16,6 +16,7 @@ import {
 import { useLayoutEffect } from "react"
 import { setShiftCatalogPreview } from "../shift-catalog-preview"
 import { shiftCatalogStateSamples } from "../shift-catalog-state-samples"
+import { readShiftCurrentCoordinate } from "../shift-current-coordinate"
 import {
   foregroundStateSamples,
   setShiftForegroundPreview,
@@ -158,5 +159,39 @@ describe("ShiftHomeRoute catalog preview override", () => {
 
     expect(screen.getByText("Couldn't start")).toBeTruthy()
     expect(screen.getByText("Another game is running")).toBeTruthy()
+  })
+
+  it("publishes the raw launch coordinate while foreground blocks display", () => {
+    renderBareHome()
+
+    act(() => {
+      setShiftCatalogPreview(shiftCatalogStateSamples.Ready())
+      setShiftForegroundPreview(foregroundStateSamples.Running())
+    })
+
+    expect(screen.getByText("Another game is running")).toBeTruthy()
+    expect(readShiftCurrentCoordinate("/")).toMatchObject({
+      launch: "Idle",
+      foreground: "Running",
+    })
+  })
+
+  it("keeps foreground live capture fresh when Data leaves Ready", async () => {
+    renderBareHome()
+
+    act(() => {
+      setShiftCatalogPreview(shiftCatalogStateSamples.Ready())
+      setShiftForegroundPreview(foregroundStateSamples.Running())
+    })
+    expect(readShiftCurrentCoordinate("/").foreground).toBe("Running")
+
+    act(() => {
+      setShiftCatalogPreview(shiftCatalogStateSamples.Empty())
+      setShiftForegroundPreview(null)
+    })
+
+    await waitFor(() => {
+      expect(readShiftCurrentCoordinate("/").foreground).toBe("Ready")
+    })
   })
 })

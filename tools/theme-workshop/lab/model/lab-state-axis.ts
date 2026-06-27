@@ -35,7 +35,9 @@ export type LabAxisActive =
   | { readonly kind: "single"; readonly value: LabAxisValue }
   | { readonly kind: "multi"; readonly on: ReadonlySet<string> }
 
-export type LabAxisCoordinate = LabAxisValue | readonly string[]
+export type LabAxisCoordinate =
+  | { readonly kind: "single"; readonly value: LabAxisValue }
+  | { readonly kind: "multi"; readonly values: readonly string[] }
 
 /** Per-axis active values for the current selection, keyed by axis id. */
 export type LabScreenActive = Readonly<
@@ -55,8 +57,8 @@ export interface LabStateAxis {
   readonly states: readonly LabStateAxisOption[]
   /** Pin the surface's preview singleton to this state's representative sample. */
   readonly pin: (stateId: string) => void
-  /** Release the pin so the live machine drives this axis again. */
-  readonly release: (stateId?: string) => void
+  /** Release every pin on this axis so the live machine drives it again. */
+  readonly release: () => void
   /** Structural nesting: this axis is meaningful only while the parent is in one
    * of these states (e.g. Launch only matters when Data = Ready). */
   readonly parent?: LabAxisParent
