@@ -381,7 +381,10 @@ in
       "/dev/tty0"
       "/dev/tty1"
     ];
+    udevSettleTimeoutSeconds = 5;
     fallbackDelaySeconds = 2;
+    fallbackAttempts = 3;
+    fallbackRetryDelaySeconds = 1;
     enableDrmSeatTag = true;
     enableInputUdevAcl = true;
     enableBacklightRepair = true;

@@ -24,9 +24,15 @@ let
     types
     ;
 
+  matches = pattern: value: builtins.match pattern value != null;
+  safeName = "[-_a-z0-9]+";
+  safeSubsystem = "[-A-Za-z0-9_+.]+";
+  safeShellGlob = "[-A-Za-z0-9_./*+@:]+";
+
   # Device node entries are shell globs by design, so do not quote them here:
   # quoting would turn `/dev/dri/card*` into a literal string and skip existing
-  # host-bound nodes. Option assertions below keep entries single-line.
+  # host-bound nodes. Option assertions below restrict entries to safe path-glob
+  # characters before they are rendered into the loop.
   shellGlobs = values: lib.concatStringsSep " " values;
   aclNodeWords = shellGlobs cfg.aclNodeGlobs;
   backlightNodeWords = shellGlobs cfg.backlightNodeGlobs;
@@ -69,6 +75,7 @@ let
     # warnings, not boot gates.
     udevadm control --reload >/dev/null 2>&1 || true
     ${retriggerCommands}
+    udevadm settle --timeout=${toString cfg.udevSettleTimeoutSeconds} || true
 
     # The guest's numeric device groups can differ from the NixOS group ids.
     # Directly grant the runtime user access to the nodes this platform declares
@@ -96,8 +103,13 @@ let
     # early setup unit has run. Re-apply only direct access repairs here; the
     # platform adapter decides when this service runs.
     sleep ${toString cfg.fallbackDelaySeconds}
-    ${aclLoop}
-    ${backlightRepairLoop}
+    for attempt in $(${pkgs.coreutils}/bin/seq 1 ${toString cfg.fallbackAttempts}); do
+      ${aclLoop}
+      ${backlightRepairLoop}
+      if [ "$attempt" -lt ${toString cfg.fallbackAttempts} ]; then
+        ${pkgs.coreutils}/bin/sleep ${toString cfg.fallbackRetryDelaySeconds}
+      fi
+    done
   '';
 
   drmSeatRule = optionalString cfg.enableDrmSeatTag ''
@@ -134,7 +146,8 @@ in
 
     retriggerSubsystems = mkOption {
       type = types.listOf types.str;
-      default = [
+      default = [ ];
+      example = [
         "drm"
         "input"
         "sound"
@@ -142,9 +155,16 @@ in
       description = "Guest udev subsystems to re-trigger before direct ACL repair.";
     };
 
+    udevSettleTimeoutSeconds = mkOption {
+      type = types.ints.unsigned;
+      default = 5;
+      description = "Best-effort udev settle timeout after configured subsystem retriggers.";
+    };
+
     aclNodeGlobs = mkOption {
       type = types.listOf types.str;
-      default = [
+      default = [ ];
+      example = [
         "/dev/dri/card*"
         "/dev/dri/renderD*"
         "/dev/input/event*"
@@ -159,6 +179,18 @@ in
       type = types.ints.unsigned;
       default = 2;
       description = "Delay before the fallback service re-applies direct device access repairs.";
+    };
+
+    fallbackAttempts = mkOption {
+      type = types.ints.unsigned;
+      default = 3;
+      description = "Number of bounded fallback repair attempts after the initial delay.";
+    };
+
+    fallbackRetryDelaySeconds = mkOption {
+      type = types.ints.unsigned;
+      default = 1;
+      description = "Delay between bounded fallback repair attempts.";
     };
 
     enableDrmSeatTag = mkOption {
@@ -187,7 +219,8 @@ in
 
     backlightNodeGlobs = mkOption {
       type = types.listOf types.str;
-      default = [ "/sys/class/backlight/*/brightness" ];
+      default = [ ];
+      example = [ "/sys/class/backlight/*/brightness" ];
       description = "Sysfs brightness node globs repaired when backlight repair is enabled.";
     };
   };
@@ -195,32 +228,30 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion =
-          cfg.runtimeUser != null && cfg.runtimeUser != "" && !(lib.hasInfix "\n" cfg.runtimeUser);
-        message = "services.korri.rocknixGuestDeviceAccess.runtimeUser must be a non-empty single-line user when enabled.";
+        assertion = cfg.runtimeUser != null && matches safeName cfg.runtimeUser;
+        message = "services.korri.rocknixGuestDeviceAccess.runtimeUser must be a non-empty shell-safe user name when enabled.";
       }
       {
-        assertion = lib.all (value: value != "" && !(lib.hasInfix "\n" value)) cfg.retriggerSubsystems;
-        message = "services.korri.rocknixGuestDeviceAccess.retriggerSubsystems entries must be non-empty single-line values.";
+        assertion = lib.all (matches safeSubsystem) cfg.retriggerSubsystems;
+        message = "services.korri.rocknixGuestDeviceAccess.retriggerSubsystems entries must be shell-safe subsystem names.";
       }
       {
-        assertion =
-          cfg.aclNodeGlobs != [ ]
-          && lib.all (value: value != "" && !(lib.hasInfix "\n" value)) cfg.aclNodeGlobs;
-        message = "services.korri.rocknixGuestDeviceAccess.aclNodeGlobs must contain non-empty single-line globs when enabled.";
+        assertion = cfg.aclNodeGlobs != [ ] && lib.all (matches safeShellGlob) cfg.aclNodeGlobs;
+        message = "services.korri.rocknixGuestDeviceAccess.aclNodeGlobs must contain shell-safe path globs when enabled.";
       }
       {
         assertion =
           !cfg.enableBacklightRepair
-          || (
-            cfg.backlightNodeGlobs != [ ]
-            && lib.all (value: value != "" && !(lib.hasInfix "\n" value)) cfg.backlightNodeGlobs
-          );
-        message = "services.korri.rocknixGuestDeviceAccess.backlightNodeGlobs must contain non-empty single-line globs when backlight repair is enabled.";
+          || (cfg.backlightNodeGlobs != [ ] && lib.all (matches safeShellGlob) cfg.backlightNodeGlobs);
+        message = "services.korri.rocknixGuestDeviceAccess.backlightNodeGlobs must contain shell-safe path globs when backlight repair is enabled.";
       }
       {
-        assertion = cfg.backlightGroup != "" && !(lib.hasInfix "\n" cfg.backlightGroup);
-        message = "services.korri.rocknixGuestDeviceAccess.backlightGroup must be a non-empty single-line group.";
+        assertion = matches safeName cfg.backlightGroup;
+        message = "services.korri.rocknixGuestDeviceAccess.backlightGroup must be a non-empty shell-safe group.";
+      }
+      {
+        assertion = cfg.fallbackAttempts > 0;
+        message = "services.korri.rocknixGuestDeviceAccess.fallbackAttempts must be greater than zero.";
       }
     ];
 

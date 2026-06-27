@@ -278,11 +278,15 @@ let
             "/dev/tty0"
             "/dev/tty1"
           ]
+        && (rocknixGuestDeviceAccess.udevSettleTimeoutSeconds or null) == 5
         && (rocknixGuestDeviceAccess.fallbackDelaySeconds or null) == 2
+        && (rocknixGuestDeviceAccess.fallbackAttempts or null) == 3
+        && (rocknixGuestDeviceAccess.fallbackRetryDelaySeconds or null) == 1
         && (rocknixGuestDeviceAccess.enableDrmSeatTag or false) == true
         && (rocknixGuestDeviceAccess.enableInputUdevAcl or false) == true
         && (rocknixGuestDeviceAccess.enableBacklightRepair or false) == true
         && (rocknixGuestDeviceAccess.backlightGroup or null) == "video"
+        && (rocknixGuestDeviceAccess.backlightNodeGlobs or [ ]) == [ "/sys/class/backlight/*/brightness" ]
       ))
       (check "${name}: SM8550 DRM is tagged for logind seats" (
         lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' cfg.services.udev.extraRules

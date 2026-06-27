@@ -17,6 +17,15 @@ let
 
   hostSystem = pkgs.stdenv.hostPlatform.system;
 
+  defaultAclNodeGlobs = [
+    "/dev/dri/card*"
+    "/dev/dri/renderD*"
+    "/dev/input/event*"
+    "/dev/snd/*"
+    "/dev/tty0"
+    "/dev/tty1"
+  ];
+
   baseModule =
     { ... }:
     {
@@ -41,15 +50,30 @@ let
       ];
     }).config;
 
-  disabled = evaluateWith { };
-
-  enabledDefault = evaluateWith {
+  enabledBase = {
     services.korri.rocknixGuestDeviceAccess = {
       enable = true;
       runtimeUser = "test-user";
+      aclNodeGlobs = defaultAclNodeGlobs;
+    };
+  };
+
+  disabled = evaluateWith { };
+
+  enabledPolicy = evaluateWith {
+    services.korri.rocknixGuestDeviceAccess = {
+      enable = true;
+      runtimeUser = "test-user";
+      retriggerSubsystems = [
+        "drm"
+        "input"
+        "sound"
+      ];
+      aclNodeGlobs = defaultAclNodeGlobs;
       enableDrmSeatTag = true;
       enableInputUdevAcl = true;
       enableBacklightRepair = true;
+      backlightNodeGlobs = [ "/sys/class/backlight/*/brightness" ];
     };
   };
 
@@ -61,33 +85,51 @@ let
         "drm"
         "input"
       ];
+      udevSettleTimeoutSeconds = 9;
       aclNodeGlobs = [
         "/dev/custom0"
         "/dev/custom/render*"
       ];
       fallbackDelaySeconds = 7;
+      fallbackAttempts = 4;
+      fallbackRetryDelaySeconds = 3;
       enableBacklightRepair = true;
       backlightGroup = "custom-video";
       backlightNodeGlobs = [ "/sys/class/backlight/custom/brightness" ];
     };
   };
 
-  noBacklightRepair = evaluateWith {
-    services.korri.rocknixGuestDeviceAccess = {
-      enable = true;
-      runtimeUser = "test-user";
-      enableBacklightRepair = false;
-    };
-  };
+  noBacklightRepair = evaluateWith enabledBase;
 
   missingRuntimeUser = evaluateWith {
-    services.korri.rocknixGuestDeviceAccess.enable = true;
+    services.korri.rocknixGuestDeviceAccess = {
+      enable = true;
+      aclNodeGlobs = defaultAclNodeGlobs;
+    };
   };
 
   emptyRuntimeUser = evaluateWith {
     services.korri.rocknixGuestDeviceAccess = {
       enable = true;
       runtimeUser = "";
+      aclNodeGlobs = defaultAclNodeGlobs;
+    };
+  };
+
+  unsafeRuntimeUser = evaluateWith {
+    services.korri.rocknixGuestDeviceAccess = {
+      enable = true;
+      runtimeUser = "bad user";
+      aclNodeGlobs = defaultAclNodeGlobs;
+    };
+  };
+
+  unsafeSubsystem = evaluateWith {
+    services.korri.rocknixGuestDeviceAccess = {
+      enable = true;
+      runtimeUser = "test-user";
+      retriggerSubsystems = [ "bad subsystem" ];
+      aclNodeGlobs = defaultAclNodeGlobs;
     };
   };
 
@@ -99,12 +141,51 @@ let
     };
   };
 
+  unsafeAclGlob = evaluateWith {
+    services.korri.rocknixGuestDeviceAccess = {
+      enable = true;
+      runtimeUser = "test-user";
+      aclNodeGlobs = [ "/dev/input/event*;rm" ];
+    };
+  };
+
   emptyBacklightGlobs = evaluateWith {
     services.korri.rocknixGuestDeviceAccess = {
       enable = true;
       runtimeUser = "test-user";
+      aclNodeGlobs = defaultAclNodeGlobs;
       enableBacklightRepair = true;
       backlightNodeGlobs = [ ];
+    };
+  };
+
+  unsafeBacklightGlob = evaluateWith {
+    services.korri.rocknixGuestDeviceAccess = {
+      enable = true;
+      runtimeUser = "test-user";
+      aclNodeGlobs = defaultAclNodeGlobs;
+      enableBacklightRepair = true;
+      backlightNodeGlobs = [ "/sys/class/backlight/*/brightness;rm" ];
+    };
+  };
+
+  unsafeBacklightGroup = evaluateWith {
+    services.korri.rocknixGuestDeviceAccess = {
+      enable = true;
+      runtimeUser = "test-user";
+      aclNodeGlobs = defaultAclNodeGlobs;
+      enableBacklightRepair = true;
+      backlightNodeGlobs = [ "/sys/class/backlight/*/brightness" ];
+      backlightGroup = "bad group";
+    };
+  };
+
+  zeroFallbackAttempts = evaluateWith {
+    services.korri.rocknixGuestDeviceAccess = {
+      enable = true;
+      runtimeUser = "test-user";
+      aclNodeGlobs = defaultAclNodeGlobs;
+      fallbackAttempts = 0;
     };
   };
 
@@ -135,6 +216,8 @@ let
     && (unit.wants or [ ]) == [ ]
     && (unit.requires or [ ]) == [ ];
 
+  allIn = values: text: builtins.all (value: lib.hasInfix value text) values;
+
   check = message: assertion: { inherit message assertion; };
 
   checks = [
@@ -147,18 +230,18 @@ let
       && !(lib.hasInfix "setfacl -m u:" (udevRules disabled))
     ))
     (check "enabled module emits canonical oneshot services" (
-      (triggerUnit enabledDefault).serviceConfig.Type == "oneshot"
-      && (fallbackUnit enabledDefault).serviceConfig.Type == "oneshot"
-      && (triggerUnit enabledDefault).serviceConfig.RemainAfterExit == true
-      && (fallbackUnit enabledDefault).serviceConfig.RemainAfterExit == true
+      (triggerUnit enabledPolicy).serviceConfig.Type == "oneshot"
+      && (fallbackUnit enabledPolicy).serviceConfig.Type == "oneshot"
+      && (triggerUnit enabledPolicy).serviceConfig.RemainAfterExit == true
+      && (fallbackUnit enabledPolicy).serviceConfig.RemainAfterExit == true
     ))
     (check "module services do not own platform ordering" (
-      hasNoPlatformOrdering (triggerUnit enabledDefault)
-      && hasNoPlatformOrdering (fallbackUnit enabledDefault)
+      hasNoPlatformOrdering (triggerUnit enabledPolicy)
+      && hasNoPlatformOrdering (fallbackUnit enabledPolicy)
     ))
     (check "drm seat tag rule is emitted only when requested" (
       lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' (
-        udevRules enabledDefault
+        udevRules enabledPolicy
       )
       && !(lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat"'' (
         udevRules noBacklightRepair
@@ -166,38 +249,43 @@ let
     ))
     (check "input udev acl rule uses configured runtime user" (
       lib.hasInfix ''SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"'' (
-        udevRules enabledDefault
+        udevRules enabledPolicy
       )
-      && lib.hasInfix "setfacl -m u:test-user:rw /dev/input/%k" (udevRules enabledDefault)
+      && lib.hasInfix "setfacl -m u:test-user:rw /dev/input/%k" (udevRules enabledPolicy)
     ))
-    (check "default setup script preserves current retrigger and acl posture" (
-      lib.hasInfix "udevadm control --reload" (triggerScript enabledDefault)
-      && lib.hasInfix "--subsystem-match=drm" (triggerScript enabledDefault)
-      && lib.hasInfix "--subsystem-match=input" (triggerScript enabledDefault)
-      && lib.hasInfix "--subsystem-match=sound" (triggerScript enabledDefault)
-      && lib.hasInfix "/dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/snd/* /dev/tty0 /dev/tty1" (
-        triggerScript enabledDefault
-      )
-      && lib.hasInfix "setfacl -m m::rw,u:test-user:rw" (triggerScript enabledDefault)
+    (check "setup script applies declared retrigger and acl posture" (
+      lib.hasInfix "udevadm control --reload" (triggerScript enabledPolicy)
+      && lib.hasInfix "udevadm settle --timeout=5" (triggerScript enabledPolicy)
+      && lib.hasInfix "--subsystem-match=drm" (triggerScript enabledPolicy)
+      && lib.hasInfix "--subsystem-match=input" (triggerScript enabledPolicy)
+      && lib.hasInfix "--subsystem-match=sound" (triggerScript enabledPolicy)
+      && allIn defaultAclNodeGlobs (triggerScript enabledPolicy)
+      && lib.hasInfix "setfacl -m m::rw,u:test-user:rw" (triggerScript enabledPolicy)
     ))
-    (check "fallback script reuses acl posture and default delay" (
-      lib.hasInfix "sleep 2" (fallbackScript enabledDefault)
-      && lib.hasInfix "/dev/dri/card* /dev/dri/renderD* /dev/input/event* /dev/snd/* /dev/tty0 /dev/tty1" (
-        fallbackScript enabledDefault
-      )
-      && lib.hasInfix "setfacl -m m::rw,u:test-user:rw" (fallbackScript enabledDefault)
+    (check "fallback script reapplies declared acl posture with bounded attempts" (
+      lib.hasInfix "sleep 2" (fallbackScript enabledPolicy)
+      && lib.hasInfix "seq 1 3" (fallbackScript enabledPolicy)
+      && lib.hasInfix "sleep 1" (fallbackScript enabledPolicy)
+      && allIn defaultAclNodeGlobs (fallbackScript enabledPolicy)
+      && lib.hasInfix "setfacl -m m::rw,u:test-user:rw" (fallbackScript enabledPolicy)
     ))
     (check "custom policy controls retrigger subsystems and node globs" (
-      lib.hasInfix "--subsystem-match=drm" (triggerScript customPolicy)
+      lib.hasInfix "udevadm settle --timeout=9" (triggerScript customPolicy)
+      && lib.hasInfix "--subsystem-match=drm" (triggerScript customPolicy)
       && lib.hasInfix "--subsystem-match=input" (triggerScript customPolicy)
       && !(lib.hasInfix "--subsystem-match=sound" (triggerScript customPolicy))
-      && lib.hasInfix "/dev/custom0 /dev/custom/render*" (triggerScript customPolicy)
+      && allIn [
+        "/dev/custom0"
+        "/dev/custom/render*"
+      ] (triggerScript customPolicy)
       && lib.hasInfix "setfacl -m m::rw,u:custom-user:rw" (triggerScript customPolicy)
       && lib.hasInfix "sleep 7" (fallbackScript customPolicy)
+      && lib.hasInfix "seq 1 4" (fallbackScript customPolicy)
+      && lib.hasInfix "sleep 3" (fallbackScript customPolicy)
     ))
     (check "backlight repair is explicit and configurable" (
-      lib.hasInfix "/sys/class/backlight/*/brightness" (triggerScript enabledDefault)
-      && lib.hasInfix "chgrp video" (triggerScript enabledDefault)
+      lib.hasInfix "/sys/class/backlight/*/brightness" (triggerScript enabledPolicy)
+      && lib.hasInfix "chgrp video" (triggerScript enabledPolicy)
       && lib.hasInfix "/sys/class/backlight/custom/brightness" (triggerScript customPolicy)
       && lib.hasInfix "chgrp custom-video" (triggerScript customPolicy)
       && !(lib.hasInfix "/sys/class/backlight/*/brightness" (triggerScript noBacklightRepair))
@@ -206,11 +294,17 @@ let
     (check "runtime user is required only when enabled" (
       hasFailure "rocknixGuestDeviceAccess.runtimeUser" missingRuntimeUser
       && hasFailure "rocknixGuestDeviceAccess.runtimeUser" emptyRuntimeUser
+      && hasFailure "rocknixGuestDeviceAccess.runtimeUser" unsafeRuntimeUser
       && failedAssertions disabled == [ ]
     ))
-    (check "declared node globs are validated when enabled" (
-      hasFailure "rocknixGuestDeviceAccess.aclNodeGlobs" emptyAclGlobs
+    (check "shell-rendered option values are validated" (
+      hasFailure "rocknixGuestDeviceAccess.retriggerSubsystems" unsafeSubsystem
+      && hasFailure "rocknixGuestDeviceAccess.aclNodeGlobs" emptyAclGlobs
+      && hasFailure "rocknixGuestDeviceAccess.aclNodeGlobs" unsafeAclGlob
       && hasFailure "rocknixGuestDeviceAccess.backlightNodeGlobs" emptyBacklightGlobs
+      && hasFailure "rocknixGuestDeviceAccess.backlightNodeGlobs" unsafeBacklightGlob
+      && hasFailure "rocknixGuestDeviceAccess.backlightGroup" unsafeBacklightGroup
+      && hasFailure "rocknixGuestDeviceAccess.fallbackAttempts" zeroFallbackAttempts
     ))
   ];
 
