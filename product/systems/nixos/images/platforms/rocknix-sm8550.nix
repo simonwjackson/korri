@@ -606,6 +606,8 @@ in
     fexRootfs = "${runtime.stateRoot}/steam/fex-rootfs";
     keepWarm = true;
     keepVisibleDuringLaunch = true;
+    gamescopePreferOutput = "DSI-2";
+    useGamepadUi = true;
     appAudioSinkName = substrateAudioTargetSink;
   };
 

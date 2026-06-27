@@ -30,8 +30,8 @@ let
 
   defaultSteamArgs = [
     # Keep Steam in SteamOS/Deck-compatible mode for ARM64 AppID forwarding and
-    # Steam Input, but do not enable Big Picture/gamepad UI: it consumes
-    # controller input globally even when hidden or unfocused.
+    # Steam Input. Platforms that need Steam to map an initial gamescope surface
+    # can opt into gamepad UI separately via useGamepadUi.
     "-steamos3"
     "-steampal"
     "-steamdeck"
@@ -45,6 +45,21 @@ let
     "-skipinitialbootstrap"
     "-norepairfiles"
   ];
+  gamescopeArgs = lib.escapeShellArgs (
+    [
+      "-e"
+      "-f"
+      "-W"
+      "1920"
+      "-H"
+      "1080"
+    ]
+    ++ lib.optionals (cfg.gamescopePreferOutput != null) [
+      "-O"
+      cfg.gamescopePreferOutput
+    ]
+  );
+  steamClientArgs = lib.escapeShellArgs ((lib.optional cfg.useGamepadUi "-gamepadui") ++ cfg.defaultArgs);
 
   steamUinputPrep = pkgs.writeShellScriptBin "korri-steam-ensure-uinput" ''
     set -eu
@@ -884,6 +899,27 @@ in
       '';
     };
 
+    gamescopePreferOutput = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = ''
+        Optional Gamescope embedded-mode output preference. Device profiles may
+        set this from their display contract when nested/headless Gamescope does
+        not present a visible foreground surface.
+      '';
+    };
+
+    useGamepadUi = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Start Steam with its gamepad UI. This is off by default because the UI
+        can capture controller input globally, but some handheld profiles need
+        an initial mapped Steam surface so the gamescoped broker becomes visible
+        before AppID forwarding.
+      '';
+    };
+
     appAudioSinkName = mkOption {
       type = types.str;
       default = "";
@@ -1112,7 +1148,7 @@ in
         SupplementaryGroups = [ steamInputGroup ];
         WorkingDirectory = cfg.home;
         LimitNOFILE = 524288;
-        ExecStart = "${pkgs.gamescope}/bin/gamescope --backend wayland -e -f -w 1920 -h 1080 -W 1920 -H 1080 -- ${steamLauncher}/bin/korri-steam-guest -steamos3 -steampal -steamdeck -silent -nochatui -nofriendsui -forcedesktopscaling 1.5 -noverifyfiles -nobootstrapupdate -skipinitialbootstrap -norepairfiles";
+        ExecStart = "${pkgs.gamescope}/bin/gamescope ${gamescopeArgs} -- ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}";
         Restart = "on-failure";
         RestartSec = "2s";
       };

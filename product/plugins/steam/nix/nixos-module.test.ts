@@ -59,15 +59,18 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("-steampal")
     expect(moduleSource).toContain("-steamdeck")
     expect(moduleSource).toContain("-silent")
-    expect(moduleSource).toContain("--backend wayland")
-    expect(moduleSource).toContain("-w 1920 -h 1080 -W 1920 -H 1080")
-    expect(moduleSource).not.toContain("-gamepadui")
+    expect(moduleSource).toContain("useGamepadUi")
+    expect(moduleSource).toContain('lib.optional cfg.useGamepadUi "-gamepadui"')
+    expect(moduleSource).toContain("steamClientArgs")
     expect(moduleSource).not.toContain("starting Steam directly without sudo")
     expect(moduleSource).not.toContain("direct_steam_pid")
   })
 
-  it("does not pin Steam or game windows to a physical display output", () => {
-    expect(moduleSource).not.toContain("KORRI_STEAM_APP_OUTPUT")
+  it("keeps Gamescope output selection device-configurable", () => {
+    expect(moduleSource).toContain("gamescopePreferOutput")
+    expect(moduleSource).toContain("types.nullOr types.str")
+    expect(moduleSource).toContain('cfg.gamescopePreferOutput != null')
+    expect(moduleSource).toContain('"-O"')
     expect(moduleSource).not.toContain("-O DSI-")
     expect(moduleSource).not.toContain("focus output")
     expect(moduleSource).not.toContain("move to output")
@@ -154,7 +157,7 @@ describe("Steam plugin Nix module", () => {
     )
     expect(moduleSource).toContain("set -- \"''" + "$" + '{filtered[@]}"')
     expect(moduleSource).toContain(
-      'ExecStart = "' + "$" + "{pkgs.gamescope}/bin/gamescope",
+      'ExecStart = "' + "$" + "{pkgs.gamescope}/bin/gamescope " + "$" + "{gamescopeArgs}",
     )
   })
 
