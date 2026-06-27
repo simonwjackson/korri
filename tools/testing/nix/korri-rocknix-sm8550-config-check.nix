@@ -321,13 +321,14 @@ let
         (sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null) == "1"
         && (daemonEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null) == "1"
       ))
-      (check "${name}: RetroArch must use the handheld input baseline" (
+      (check "${name}: RetroArch must use the InputPlumber autoconfig baseline" (
         (retroarchPolicy.drivers.input or null) == "udev"
         && (retroarchPolicy.drivers.joypad or null) == "udev"
         && (retroarchPolicy.input.autodetect or false) == true
         && (retroarchPolicy.input.maxUsers or 0) == 4
         && (retroarchPolicy.input.ports."1".joypadIndex or null) == 0
         && (retroarchPolicy.input.ports."1".analogDpadMode or null) == 1
+        && lib.hasSuffix "/share/libretro/autoconfig" (retroarchPolicy.paths.joypadAutoconfigDirectory or "")
       ))
       (check "${name}: Switch emulator is installed and available to the compositor" (
         hasPackagePname "ryubing" cfg.environment.systemPackages

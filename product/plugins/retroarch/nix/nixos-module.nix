@@ -37,6 +37,24 @@ let
 
   shaderPresetPackage = pkgs.libretro-shaders-slang;
   shaderPresetDirectory = "${shaderPresetPackage}/share/libretro/shaders/shaders_slang";
+  joypadAutoconfigPackage = pkgs.retroarch-joypad-autoconfig;
+  joypadAutoconfigDirectory = "${joypadAutoconfigPackage}/share/libretro/autoconfig";
+
+  inputplumberRetroArchPolicy = {
+    drivers = {
+      input = "udev";
+      joypad = "udev";
+    };
+    paths.joypadAutoconfigDirectory = joypadAutoconfigDirectory;
+    input = {
+      autodetect = true;
+      maxUsers = 4;
+      ports."1" = {
+        joypadIndex = 0;
+        analogDpadMode = 1;
+      };
+    };
+  };
 
   retroarchKiosk = pkgs.symlinkJoin {
     name = "korri-retroarch";
@@ -53,6 +71,7 @@ let
       ppssppCore
       pkgs.libretro.bsnes
       shaderPresetPackage
+      joypadAutoconfigPackage
     ];
     passthru = {
       cores = [
@@ -69,6 +88,8 @@ let
       ];
       shaderPresets = shaderPresetPackage;
       shaderPresetDirectory = shaderPresetDirectory;
+      joypadAutoconfig = joypadAutoconfigPackage;
+      joypadAutoconfigDirectory = joypadAutoconfigDirectory;
       mesaTurnip = retroarchBinary.passthru.mesaTurnip or null;
       turnipIcd = retroarchBinary.passthru.vulkanIcd or null;
       turnipPinned = retroarchBinary.passthru.turnipPinned or false;
@@ -105,6 +126,10 @@ in
     environment.etc."korri/cores/bsnes_libretro.so".source =
       "${pkgs.libretro.bsnes}/lib/retroarch/cores/bsnes_libretro.so";
     environment.etc."korri/shaders/slang".source = shaderPresetDirectory;
+
+    services.korri.daemon.library.platformDefaults.host.plugin."@korri:retroarch" = lib.mkIf (
+      config.services.korri.input.provider.name == "inputplumber"
+    ) inputplumberRetroArchPolicy;
 
     services.korri.compositor.path = lib.mkAfter [ retroarchKiosk ];
     systemd.user.services.korri-sessiond.path = lib.mkAfter [ retroarchKiosk ];

@@ -20,6 +20,7 @@ let
   greetd = cfg.systemd.services.greetd;
   platformDefaults = cfg.services.korri.daemon.library.platformDefaults or { };
   moonlightPolicy = platformDefaults.host.moonlight or { };
+  retroarchPolicy = (platformDefaults.host.plugin or { })."@korri:retroarch" or { };
   deprecatedMoonlightLaunchEnvKeys = [
     "KORRI_MOONLIGHT_COMMAND"
     "KORRI_MOONLIGHT_CLIENT"
@@ -131,6 +132,12 @@ let
     (check "live USB Moonlight must use readable policy for command and mapping DB" (
       lib.hasSuffix "/bin/moonlight" (moonlightPolicy.command or "")
       && lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (moonlightPolicy.input.mappingFile or "")
+    ))
+    (check "live USB RetroArch must use the InputPlumber autoconfig baseline" (
+      (retroarchPolicy.drivers.input or null) == "udev"
+      && (retroarchPolicy.drivers.joypad or null) == "udev"
+      && (retroarchPolicy.input.autodetect or false) == true
+      && lib.hasSuffix "/share/libretro/autoconfig" (retroarchPolicy.paths.joypadAutoconfigDirectory or "")
     ))
     (check "live USB deprecated Moonlight launch-policy env must be absent from launch-owning services" (
       !hasDeprecatedMoonlightLaunchEnv compositorEnv
