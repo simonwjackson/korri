@@ -42,6 +42,7 @@ const FAILURE_REASON: Record<LaunchFailureKind, string> = {
 const NON_RETRYABLE: ReadonlySet<LaunchFailureKind> = new Set([
   "no-such-game",
   "host-control-disabled",
+  "session-busy",
 ])
 
 /**

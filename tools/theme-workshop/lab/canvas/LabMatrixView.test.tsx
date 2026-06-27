@@ -81,6 +81,22 @@ const launchAxis: LabStateAxis = {
   renderSample: tag => <div data-testid={`launch-${tag}`}>launch {tag}</div>,
 }
 
+const foregroundAxis: LabStateAxis = {
+  id: "foreground",
+  kind: "single",
+  label: "Foreground",
+  liveLabel: "Auto",
+  states: [
+    { id: "Ready", label: "Ready" },
+    { id: "Running", label: "Running" },
+  ],
+  pin: () => {},
+  release: () => {},
+  renderSample: tag => (
+    <div data-testid={`foreground-${tag}`}>foreground {tag}</div>
+  ),
+}
+
 const overlaysAxis: LabStateAxis = {
   id: "overlays",
   kind: "multi",
@@ -135,6 +151,16 @@ describe("LabMatrixView axis fan-out", () => {
     ).toBeGreaterThan(0)
   })
 
+  it("does not offer unrelated single axes as fake cross-product rows", () => {
+    renderMatrix([dataAxis, launchAxis, foregroundAxis])
+    const rowSelect = screen.getByDisplayValue("—") as HTMLSelectElement
+    const rowLabels = [...rowSelect.querySelectorAll("option")].map(
+      option => option.textContent,
+    )
+    expect(rowLabels).toEqual(["—", "Launch"])
+    expect(rowLabels).not.toContain("Foreground")
+  })
+
   it("collapses to a single axis when rows would duplicate the column", () => {
     renderMatrix([dataAxis, launchAxis])
     // Cross with Launch rows first.
@@ -164,5 +190,11 @@ describe("LabMatrixView axis fan-out", () => {
     // The Rows selector only has the "none" option because the multi axis is not selectable.
     const rowSelect = screen.getByDisplayValue("—") as HTMLSelectElement
     expect(rowSelect.querySelectorAll("option").length).toBe(1)
+  })
+
+  it("renders an empty state when every axis is multi-active", () => {
+    renderMatrix([overlaysAxis])
+    expect(screen.getByText("No single axes to fan out.")).toBeTruthy()
+    expect(screen.queryByText("Columns")).toBeNull()
   })
 })

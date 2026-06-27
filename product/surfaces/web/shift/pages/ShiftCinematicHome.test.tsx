@@ -89,14 +89,14 @@ describe("ShiftCinematicHome launch feedback", () => {
         launchState={{
           _tag: "Failed",
           gameId: "a",
-          exitCode: 121,
-          failureKind: "session-busy",
+          exitCode: 1,
+          failureKind: "command-failed",
         }}
       />,
     )
 
     expect(screen.getByText("Couldn't start")).toBeTruthy()
-    expect(screen.getByText("Another game is running")).toBeTruthy()
+    expect(screen.getByText("It didn't start")).toBeTruthy()
     expect(screen.getByText("Retry")).toBeTruthy()
 
     // A (the focused tile) retries while a failure is shown — it does not launch.

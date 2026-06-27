@@ -54,6 +54,7 @@ function applyPreview(axis: LabStateAxis, active: LabAxisActive) {
     axis.pin(active.value)
     return
   }
+  axis.release()
   for (const stateId of active.on) axis.pin(stateId)
 }
 
@@ -143,7 +144,7 @@ export function useLabAxisController(
   const pinCurrent = () => {
     const captured = adapter.captureCoordinate?.(activeScreenPath)
     if (!captured) return
-    const next: Record<string, LabAxisActive> = { ...activeByAxis }
+    const next: Record<string, LabAxisActive | undefined> = { ...activeByAxis }
     for (const axis of screenAxes) {
       const active = activeFromCoordinate(axis, captured[axis.id])
       applyPreview(axis, active)

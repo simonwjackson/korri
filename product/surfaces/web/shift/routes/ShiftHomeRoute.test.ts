@@ -1,10 +1,12 @@
 import { describe, expect, it, mock } from "bun:test"
 import type { CatalogEntry } from "@platform/catalog/catalog-facts-source"
 import { LaunchState } from "@platform/library/launch-state"
+import { launchFailureExitCode } from "@platform/library/launcher"
 import {
   makeLaunchHandler,
   shiftLaunchStateForForeground,
   toCinematicGame,
+  visibleShiftLaunchState,
 } from "./ShiftHomeRoute"
 
 function entry(id: string): CatalogEntry {
@@ -42,16 +44,101 @@ describe("shiftLaunchStateForForeground", () => {
     ).toMatchObject({
       _tag: "Failed",
       failureKind: "session-busy",
+      exitCode: launchFailureExitCode("session-busy"),
     })
   })
 
-  it("maps a foreground load error to unavailable feedback", () => {
+  it("lets foreground busy feedback override retryable failure feedback", () => {
+    expect(
+      shiftLaunchStateForForeground({
+        launch: {
+          _tag: "Failed",
+          gameId: "game-1",
+          exitCode: 1,
+          failureKind: "command-failed",
+        },
+        foreground: {
+          _tag: "Running",
+          requestId: "req-1",
+          gameId: "game-1",
+        },
+      }),
+    ).toMatchObject({
+      _tag: "Failed",
+      failureKind: "session-busy",
+      exitCode: launchFailureExitCode("session-busy"),
+    })
+  })
+
+  it("lets foreground busy feedback override release selection feedback", () => {
+    expect(
+      shiftLaunchStateForForeground({
+        launch: {
+          _tag: "ReleaseSelectionRequired",
+          gameId: "game-1",
+          releaseIds: ["a", "b"],
+        },
+        foreground: {
+          _tag: "Running",
+          requestId: "req-1",
+          gameId: "other-game",
+        },
+      }),
+    ).toMatchObject({
+      _tag: "Failed",
+      failureKind: "session-busy",
+      exitCode: launchFailureExitCode("session-busy"),
+    })
+  })
+
+  it("leaves launch state alone when foreground status is unavailable", () => {
     expect(
       shiftLaunchStateForForeground({
         launch: LaunchState.idle,
         foreground: { _tag: "LoadError", message: "HTTP 500" },
       })._tag,
-    ).toBe("Unavailable")
+    ).toBe("Idle")
+  })
+
+  it("preserves successful launch feedback while foreground is running", () => {
+    expect(
+      shiftLaunchStateForForeground({
+        launch: { _tag: "Launched", gameId: "game-1" },
+        foreground: {
+          _tag: "Running",
+          requestId: "req-1",
+          gameId: "game-1",
+        },
+      })._tag,
+    ).toBe("Launched")
+  })
+})
+
+describe("visibleShiftLaunchState", () => {
+  it("does not let dismiss hide an active foreground block", () => {
+    const visible = visibleShiftLaunchState({
+      launch: LaunchState.idle,
+      foreground: {
+        _tag: "Running",
+        requestId: "req-1",
+        gameId: "game-1",
+      },
+      acked: true,
+    })
+    expect(visible._tag).toBe("Failed")
+  })
+
+  it("still lets dismiss hide ordinary launch feedback", () => {
+    const visible = visibleShiftLaunchState({
+      launch: {
+        _tag: "Failed",
+        gameId: "game-1",
+        exitCode: 1,
+      },
+      foreground: { _tag: "Ready" },
+      acked: true,
+    })
+    expect(visible._tag).toBe("Idle")
   })
 })
 

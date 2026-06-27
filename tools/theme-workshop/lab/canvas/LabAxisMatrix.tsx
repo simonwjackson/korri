@@ -28,9 +28,21 @@ function dependentAxis(
   rowAxis: LabStateAxis | null,
   colAxis: LabStateAxis,
 ): LabStateAxis | null {
-  if (rowAxis?.parent) return rowAxis
-  if (colAxis.parent) return colAxis
+  if (rowAxis?.parent?.axisId === colAxis.id) return rowAxis
+  if (rowAxis && colAxis.parent?.axisId === rowAxis.id) return colAxis
   return null
+}
+
+function relatedRowAxes(
+  selectableAxes: readonly LabStateAxis[],
+  colAxis: LabStateAxis,
+): readonly LabStateAxis[] {
+  return selectableAxes.filter(
+    axis =>
+      axis.id !== colAxis.id &&
+      (axis.parent?.axisId === colAxis.id ||
+        colAxis.parent?.axisId === axis.id),
+  )
 }
 
 /** Fan a screen's state-machine axis across the grid: every value side by side,
@@ -48,13 +60,13 @@ export function LabAxisMatrix({ axes }: { axes: readonly LabStateAxis[] }) {
   if (!colAxis) {
     return <div className="lab-empty-state">No single axes to fan out.</div>
   }
-  // Guard against a stale/duplicate row selection (e.g. after switching columns
-  // to the current row axis, or switching to a surface with fewer axes): a row
-  // equal to the column would drop the cross coordinate and grey every cell.
+  const rowOptions = relatedRowAxes(selectableAxes, colAxis)
+  // Guard against a stale/duplicate/unrelated row selection (e.g. after
+  // switching columns): only structurally related axes can share a truthful
+  // matrix cell because renderSample renders one axis sample, not an arbitrary
+  // independent coordinate.
   const rowAxis =
-    rowId === ROW_NONE || rowId === colAxis.id
-      ? null
-      : (selectableAxes.find(a => a.id === rowId) ?? null)
+    rowId === ROW_NONE ? null : (rowOptions.find(a => a.id === rowId) ?? null)
 
   const selectColumn = (next: string) => {
     setColId(next)
@@ -111,13 +123,11 @@ export function LabAxisMatrix({ axes }: { axes: readonly LabStateAxis[] }) {
             onChange={event => setRowId(event.target.value)}
           >
             <option value={ROW_NONE}>—</option>
-            {selectableAxes
-              .filter(axis => axis.id !== colAxis.id)
-              .map(axis => (
-                <option key={axis.id} value={axis.id}>
-                  {axis.label}
-                </option>
-              ))}
+            {rowOptions.map(axis => (
+              <option key={axis.id} value={axis.id}>
+                {axis.label}
+              </option>
+            ))}
           </select>
         </label>
       </div>

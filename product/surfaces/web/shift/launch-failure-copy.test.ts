@@ -17,23 +17,23 @@ describe("launchStatusView", () => {
     })
   })
 
-  it("maps a known failure kind to a calm, retryable reason", () => {
+  it("maps a known failure kind to calm retryable copy", () => {
     expect(
       launchStatusView({
         _tag: "Failed",
         gameId: "g",
-        exitCode: 121,
-        failureKind: "session-busy",
+        exitCode: 1,
+        failureKind: "command-failed",
       }),
     ).toMatchObject({
       tone: "failed",
       kicker: "Couldn't start",
-      reason: "Another game is running",
+      reason: "It didn't start",
       canRetry: true,
     })
   })
 
-  it("marks no-such-game and host-control-disabled as non-retryable", () => {
+  it("marks no-such-game, host-control-disabled, and session-busy as non-retryable", () => {
     expect(
       launchStatusView({
         _tag: "Failed",
@@ -50,6 +50,17 @@ describe("launchStatusView", () => {
         failureKind: "host-control-disabled",
       })?.canRetry,
     ).toBe(false)
+    expect(
+      launchStatusView({
+        _tag: "Failed",
+        gameId: "g",
+        exitCode: 121,
+        failureKind: "session-busy",
+      }),
+    ).toMatchObject({
+      reason: "Another game is running",
+      canRetry: false,
+    })
   })
 
   it("falls back for failures without a kind and for defects", () => {

@@ -88,7 +88,7 @@ describe("axisEnabled", () => {
     expect(axisEnabled(singleAxis("data"), {})).toBe(true)
   })
 
-  it("can be enabled by a multi parent that has a required state on", () => {
+  it("does not treat multi axes as structural parents yet", () => {
     const child: LabStateAxis = {
       ...singleAxis("child"),
       parent: { axisId: "overlays", whenStates: ["Notice"] },
@@ -96,11 +96,6 @@ describe("axisEnabled", () => {
     expect(
       axisEnabled(child, {
         overlays: { kind: "multi", on: new Set(["Notice", "Toast"]) },
-      }),
-    ).toBe(true)
-    expect(
-      axisEnabled(child, {
-        overlays: { kind: "multi", on: new Set(["Toast"]) },
       }),
     ).toBe(false)
   })

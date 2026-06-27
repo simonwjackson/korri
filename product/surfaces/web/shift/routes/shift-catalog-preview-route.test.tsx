@@ -17,6 +17,10 @@ import { useLayoutEffect } from "react"
 import { setShiftCatalogPreview } from "../shift-catalog-preview"
 import { shiftCatalogStateSamples } from "../shift-catalog-state-samples"
 import {
+  foregroundStateSamples,
+  setShiftForegroundPreview,
+} from "../shift-foreground-preview"
+import {
   launchStateSamples,
   setShiftLaunchPreview,
 } from "../shift-launch-preview"
@@ -97,6 +101,7 @@ function renderBareHome(): void {
 afterEach(() => {
   setShiftCatalogPreview(null)
   setShiftLaunchPreview(null)
+  setShiftForegroundPreview(null)
   cleanup()
 })
 
@@ -141,5 +146,17 @@ describe("ShiftHomeRoute catalog preview override", () => {
     act(() => setShiftCatalogPreview(shiftCatalogStateSamples.Empty()))
     expect(screen.getByText("No games found.")).toBeTruthy()
     expect(screen.queryByText("Starting\u2026")).toBeNull()
+  })
+
+  it("renders foreground preview feedback through the route", () => {
+    renderBareHome()
+
+    act(() => {
+      setShiftCatalogPreview(shiftCatalogStateSamples.Ready())
+      setShiftForegroundPreview(foregroundStateSamples.Cooling())
+    })
+
+    expect(screen.getByText("Couldn't start")).toBeTruthy()
+    expect(screen.getByText("Another game is running")).toBeTruthy()
   })
 })

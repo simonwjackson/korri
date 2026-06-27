@@ -4,10 +4,6 @@
  * singletons: inert in production because only the lab sets it.
  */
 
-import {
-  type StateVariant,
-  stateVariants,
-} from "@platform/state/state-variants"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import { useSyncExternalStore } from "react"
 
@@ -86,15 +82,3 @@ export const foregroundStateSamples: {
 export const FOREGROUND_SESSION_GATE_STATE_TAGS = Object.keys(
   foregroundStateSamples,
 ) as readonly ForegroundSessionGateState["_tag"][]
-
-/** Every foreground gate state as a labeled variant — the shared list views render. */
-export const FOREGROUND_SESSION_GATE_STATE_VARIANTS: readonly StateVariant<
-  ForegroundSessionGateState["_tag"],
-  ForegroundSessionGateState
->[] = stateVariants<
-  ForegroundSessionGateState["_tag"],
-  ForegroundSessionGateState
->({ tags: FOREGROUND_SESSION_GATE_STATE_TAGS }, foregroundStateSamples)
-
-/** The tag the knob treats as "no override — let the live gate drive". */
-export const FOREGROUND_LIVE_TAG: ForegroundSessionGateState["_tag"] = "Ready"

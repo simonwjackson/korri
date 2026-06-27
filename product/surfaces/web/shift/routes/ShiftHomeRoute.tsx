@@ -5,6 +5,7 @@ import {
   LaunchState,
   type LaunchState as LaunchStateValue,
 } from "@platform/library/launch-state"
+import { launchFailureExitCode } from "@platform/library/launcher"
 import {
   getPlayableDisplayName,
   getPlayableImageUrl,
@@ -15,6 +16,7 @@ import { foregroundSessionGateStateAtom } from "@platform/react/library/library-
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import { Option } from "effect"
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { type ComponentProps, useEffect, useState } from "react"
 
 const noop = () => {}
@@ -49,25 +51,24 @@ import {
 import { playtimeLabel, relativeLastPlayed } from "./cinematic-play-labels"
 
 const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
-const READY_FOREGROUND = { _tag: "Ready" } satisfies ForegroundSessionGateState
-const FOREGROUND_TAGS = new Set<string>([
-  "Ready",
-  "Preparing",
-  "Running",
-  "Cooling",
-  "Recovering",
-  "Unknown",
-  "LoadError",
-])
+const UNKNOWN_FOREGROUND = {
+  _tag: "Unknown",
+  state: "foreground-status-waiting",
+} satisfies ForegroundSessionGateState
+const LOAD_ERROR_FOREGROUND = {
+  _tag: "LoadError",
+  message: "Unable to read foreground session status.",
+} satisfies ForegroundSessionGateState
 
-function foregroundStateFromAtom(value: unknown): ForegroundSessionGateState {
-  if (!value || typeof value !== "object" || !("_tag" in value))
-    return READY_FOREGROUND
-  const tagged = value as { readonly _tag: string; readonly value?: unknown }
-  if (tagged._tag === "Success") return foregroundStateFromAtom(tagged.value)
-  return FOREGROUND_TAGS.has(tagged._tag)
-    ? (value as ForegroundSessionGateState)
-    : READY_FOREGROUND
+function foregroundStateFromAtom(
+  result: AsyncResult.AsyncResult<ForegroundSessionGateState, unknown>,
+): ForegroundSessionGateState {
+  return AsyncResult.matchWithWaiting(result, {
+    onWaiting: () => UNKNOWN_FOREGROUND,
+    onError: () => LOAD_ERROR_FOREGROUND,
+    onDefect: () => LOAD_ERROR_FOREGROUND,
+    onSuccess: success => success.value,
+  })
 }
 
 export function shiftLaunchStateForForeground({
@@ -78,22 +79,44 @@ export function shiftLaunchStateForForeground({
   readonly foreground: ForegroundSessionGateState | undefined
 }): LaunchStateValue {
   if (!foreground) return launch
-  const action = launchActionStateFrom({ launch, foreground })
+  const canApplyForegroundGate =
+    launch._tag !== "Launching" && launch._tag !== "Launched"
+  if (!canApplyForegroundGate) return launch
+  const action = launchActionStateFrom({ launch: LaunchState.idle, foreground })
   if (!action) return launch
   switch (action._tag) {
     case "Allowed":
     case "Launching":
       return launch
     case "AllowedWithUnknownStatus":
-      return LaunchState.unavailable("foreground-session")
+      return launch
     case "Blocked":
       return {
         _tag: "Failed",
         gameId: action.gameId ?? "foreground-session",
-        exitCode: 0,
+        exitCode: launchFailureExitCode("session-busy"),
         failureKind: "session-busy",
       }
   }
+}
+
+export function visibleShiftLaunchState({
+  launch,
+  foreground,
+  acked,
+}: {
+  readonly launch: LaunchStateValue
+  readonly foreground: ForegroundSessionGateState | undefined
+  readonly acked: boolean
+}): LaunchStateValue {
+  const raw = shiftLaunchStateForForeground({ launch, foreground })
+  const foregroundBlocked =
+    launch._tag !== "Launching" &&
+    shiftLaunchStateForForeground({
+      launch: LaunchState.idle,
+      foreground,
+    })._tag !== "Idle"
+  return acked && !foregroundBlocked ? LaunchState.idle : raw
 }
 
 /**
@@ -157,7 +180,11 @@ function NavigatingReadyBody() {
   useEffect(() => {
     if (raw._tag === "Idle" || raw._tag === "Launching") setAcked(false)
   }, [raw._tag])
-  const launchState = acked ? LaunchState.idle : raw
+  const launchState = visibleShiftLaunchState({
+    launch: rawLaunch,
+    foreground,
+    acked,
+  })
 
   // Publish the on-screen launch and foreground state for the design-tool
   // capture seam.

@@ -7,7 +7,13 @@ import { useLabAxisController } from "./useLabAxisController"
 
 afterEach(() => cleanup())
 
-function makeAdapter() {
+function makeAdapter(
+  captureCoordinate = () => ({
+    data: "Empty",
+    launch: LAB_AXIS_LIVE,
+    overlays: ["Notice", "Toast"],
+  }),
+) {
   const calls: string[] = []
   const dataAxis: LabStateAxis = {
     id: "data",
@@ -56,11 +62,7 @@ function makeAdapter() {
     ],
     axesForScreen: path =>
       path === "/" ? [dataAxis, launchAxis, overlaysAxis] : [],
-    captureCoordinate: () => ({
-      data: "Empty",
-      launch: LAB_AXIS_LIVE,
-      overlays: ["Notice", "Toast"],
-    }),
+    captureCoordinate,
     makeSeedInitialValues: async () => ({}),
     mountSurface: () => ({ router: {}, dispose: () => {} }),
   }
@@ -121,6 +123,38 @@ describe("useLabAxisController", () => {
     expect(result.current.activeByAxis.overlays).toEqual({
       kind: "multi",
       on: new Set(),
+    })
+  })
+
+  it("toggles one active multi state off", () => {
+    const { adapter, calls } = makeAdapter()
+    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    act(() => result.current.pinAxis("overlays", "Notice"))
+    act(() => result.current.pinAxis("overlays", "Toast"))
+    calls.length = 0
+    act(() => result.current.pinAxis("overlays", "Notice"))
+    expect(calls).toContain("overlays.release:Notice")
+    expect(result.current.activeByAxis.overlays).toEqual({
+      kind: "multi",
+      on: new Set(["Toast"]),
+    })
+  })
+
+  it("replaces stale multi preview states when capturing current", () => {
+    const { adapter, calls } = makeAdapter(() => ({
+      data: "Ready",
+      launch: LAB_AXIS_LIVE,
+      overlays: ["Toast"],
+    }))
+    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    act(() => result.current.pinAxis("overlays", "Notice"))
+    calls.length = 0
+    act(() => result.current.pinCurrent?.())
+    expect(calls).toContain("overlays.release:*")
+    expect(calls).toContain("overlays.pin:Toast")
+    expect(result.current.activeByAxis.overlays).toEqual({
+      kind: "multi",
+      on: new Set(["Toast"]),
     })
   })
 

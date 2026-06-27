@@ -35,13 +35,12 @@ export type LabAxisActive =
   | { readonly kind: "single"; readonly value: LabAxisValue }
   | { readonly kind: "multi"; readonly on: ReadonlySet<string> }
 
-export type LabAxisCoordinate =
-  | LabAxisValue
-  | readonly string[]
-  | ReadonlySet<string>
+export type LabAxisCoordinate = LabAxisValue | readonly string[]
 
 /** Per-axis active values for the current selection, keyed by axis id. */
-export type LabScreenActive = Readonly<Record<string, LabAxisActive>>
+export type LabScreenActive = Readonly<
+  Record<string, LabAxisActive | undefined>
+>
 
 /** Captured live coordinate values, keyed by axis id. */
 export type LabScreenCoordinate = Readonly<
@@ -121,14 +120,9 @@ export function axisEnabled(
   if (!axis.parent) return true
   const parent = active[axis.parent.axisId]
   if (!parent) return false
-  switch (parent.kind) {
-    case "single":
-      return axis.parent.whenStates.includes(parent.value)
-    case "multi":
-      return [...parent.on].some(state =>
-        axis.parent?.whenStates.includes(state),
-      )
-  }
+  return (
+    parent.kind === "single" && axis.parent.whenStates.includes(parent.value)
+  )
 }
 
 function liveAxisActive(axis: LabStateAxis): LabAxisActive {
@@ -191,7 +185,7 @@ export function restorePinsActive(
   current: LabScreenActive,
   remembered: LabScreenActive,
 ): LabScreenActive {
-  const next: Record<string, LabAxisActive> = { ...current }
+  const next: Record<string, LabAxisActive | undefined> = { ...current }
   for (const axis of axes) {
     const pin = remembered[axis.id]
     next[axis.id] =
