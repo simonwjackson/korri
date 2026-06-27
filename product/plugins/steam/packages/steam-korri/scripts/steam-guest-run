@@ -7,8 +7,9 @@ usage: steam-guest-run [--check|--run] [steam args...]
 
 Run the mutable ARM64 Steam client from the package-owned FHS runtime capsule.
 The caller/guest adapter supplies paths, session variables, driver variables,
-and default Steam args. This helper owns generic Steam/FEX/pressure-vessel
-runtime mechanics only.
+and default Steam args. This helper owns the generic FHS execution capsule;
+it does not mutate Steam-owned runtime or pressure-vessel files during normal
+startup.
 
 Required environment:
   STEAM_HOME        Steam client home containing steamrtarm64/steam
@@ -16,7 +17,7 @@ Required environment:
 
 Optional environment:
   STEAM_CLIENT      Override Steam client path
-  STEAM_RUNTIME_PREP  Runtime prep helper path (default: steam-guest-runtime-prep)
+  STEAM_RUNTIME_PREP  Diagnostic runtime check helper path (default: steam-guest-runtime-prep)
   STEAM_PRESSURE_VESSEL_RW_PATHS
                     Colon-separated paths exposed read-write to pressure-vessel
                     (default: /dev/uinput:/dev/input)
@@ -86,7 +87,8 @@ if [ "$mode" = check ]; then
   exit 0
 fi
 
-"$runtime_prep" --apply || true
-
+# Steam owns its mutable client/runtime tree after seed/bootstrap. Do not run
+# steam-guest-runtime-prep --apply here: pre-start pressure-vessel mutations make
+# Steam's installed-file verifier repair and relaunch the client repeatedly.
 cd "$STEAM_HOME"
 exec "$client" "$@"

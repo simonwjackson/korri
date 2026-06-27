@@ -64,8 +64,8 @@ PREP_LOG="$prep_log" \
 STEAM_CLIENT_LOG="$client_log" \
 bash "$SCRIPT" --run -steamdeck -gamepadui
 
-grep -q -- '--apply' "$prep_log" || fail "--run should apply runtime prep"
-[ -e "$steam_home/prep-applied" ] || fail "--run should allow runtime prep mutation"
+! grep -q -- '--apply' "$prep_log" || fail "--run must not apply mutable runtime prep"
+[ ! -e "$steam_home/prep-applied" ] || fail "--run must leave Steam-owned runtime files untouched"
 grep -q 'client-args=-steamdeck -gamepadui' "$client_log" \
   || fail "--run should exec the Steam client with caller-provided args"
 grep -q 'client-pv=/dev/uinput:/dev/input' "$client_log" \

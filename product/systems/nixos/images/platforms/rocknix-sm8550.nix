@@ -465,6 +465,7 @@ in
     gamesRoot = "${runtime.gamesRoot}/steam";
     dotDir = "${runtime.home}/.steam";
     fexRootfs = "${runtime.stateRoot}/steam/fex-rootfs";
+    betaChannel = "steamdeck_stable";
     keepWarm = true;
     keepVisibleDuringLaunch = true;
     gamescopePreferOutput = "DSI-2";

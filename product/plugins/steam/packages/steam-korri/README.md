@@ -24,8 +24,12 @@ through `services.korri.steam.*`.
   (`steam-arm64-seed`, `steam-guest-run`, etc.) are preserved for reviewable
   upstream parity.
 - `steam-guest-run` provides the package-owned FHS Steam execution capsule for
-  the mutable ARM64 client payload.
-- `steam-guest-runtime-prep` performs package-owned Steam Runtime / pressure-vessel repair
-  for mutable Valve runtime trees before launch.
+  the mutable ARM64 client payload without applying Steam-owned runtime repairs
+  during normal startup.
+- `steam-guest-runtime-prep` is an explicit legacy Steam Runtime / pressure-vessel repair
+  helper for manual recovery/debugging, not part of normal launch startup.
 - x86/FEX helper wrapping is an implementation detail for Valve runtime
   compatibility, not a product compatibility surface.
+- Steam owns mutable client/runtime files under `steamrt64/`, `steamrtarm64/`,
+  `SteamLinuxRuntime_*`, and pressure-vessel after seed/bootstrap; Korri owns
+  compatibility-tool declarations and VDF/config state.

@@ -17,8 +17,10 @@ for script in \
   [ -f "$SCRIPT_DIR/$script" ] || fail "missing package script: $script"
 done
 
-grep -q 'Steam Runtime / pressure-vessel repair' "$README" \
-  || fail "README must describe package-owned Steam Runtime / pressure-vessel repair"
+grep -q 'explicit legacy Steam Runtime / pressure-vessel repair' "$README" \
+  || fail "README must describe runtime prep as explicit legacy repair"
+grep -q 'not part of normal launch startup' "$README" \
+  || fail "README must state runtime prep is not normal startup"
 grep -q 'FHS Steam execution capsule' "$README" \
   || fail "README must describe the package-owned FHS Steam execution capsule"
 grep -q 'not a product compatibility surface' "$README" \
@@ -30,10 +32,12 @@ grep -q 'steam-guest-run' "$MANIFEST" \
   || fail "manifest must list steam-guest-run in the package contract"
 grep -q 'fex-emu/Config.json' "$MANIFEST" \
   || fail "manifest must list the ROCKNIX FEX config template"
-grep -q 'publicbeta' "$SCRIPT_DIR/steam-arm64-bootstrap" \
-  || fail "ARM64 bootstrap should default to the publicbeta channel that ROCKNIX used"
-grep -q 'publicbeta' "$SCRIPT_DIR/steam-arm64-seed" \
-  || fail "ARM64 seed should default to the publicbeta channel that ROCKNIX used"
+grep -q 'steamdeck_stable' "$SCRIPT_DIR/steam-arm64-bootstrap" \
+  || fail "ARM64 bootstrap should default to the steamdeck_stable tracking channel"
+grep -q 'steamdeck_stable' "$SCRIPT_DIR/steam-arm64-seed" \
+  || fail "ARM64 seed should default to the steamdeck_stable tracking channel"
+grep -q 'steam_client_${STEAM_BETA}_linuxarm64' "$SCRIPT_DIR/steam-arm64-seed" \
+  || fail "ARM64 seed should resolve the configured linuxarm64 channel"
 [ -f "$PACKAGE_DIR/resources/fex-emu/Config.json" ] \
   || fail "missing vendored FEX Config.json template"
 [ -f "$PACKAGE_DIR/resources/fex-emu/AppConfig/steamwebhelper.json" ] \

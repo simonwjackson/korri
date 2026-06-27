@@ -14,6 +14,9 @@ Required environment:
   STEAM_GAMES_ROOT  Steam library root to create
   STEAM_DOT         Steam dot-directory for registry/sdk symlinks
 
+Optional environment:
+  STEAM_BETA        Steam client tracking channel to resolve (default: steamdeck_stable)
+
 Modes:
   --dry-run         Print intended network/filesystem actions (default)
   --apply           Download/extract Steam ARM64 runtime and client into STEAM_HOME
@@ -45,7 +48,8 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 RUNTIME_DIR="$STEAM_HOME/steam-runtime-steamrt-arm64"
 CLIENT_DIR="$STEAM_HOME/steamrtarm64"
 RUNTIME_TAR_URL="https://repo.steampowered.com/steamrt3c/images/latest-public-beta/steam-runtime-steamrt-arm64.tar.xz"
-STEAM_MANIFEST_URL="https://client-update.fastly.steamstatic.com/steam_client_publicbeta_linuxarm64"
+STEAM_BETA="${STEAM_BETA:-steamdeck_stable}"
+STEAM_MANIFEST_URL="https://client-update.fastly.steamstatic.com/steam_client_${STEAM_BETA}_linuxarm64"
 STEAM_CDN="https://client-update.steamstatic.com"
 PROTON_TOOL_NAME="proton-cachyos-11.0-20260601-slr-arm64"
 PROTON_SOURCE="@korriProtonCachyosArm64@"
@@ -165,7 +169,7 @@ install_links_and_metadata() {
   run mkdir -p "$STEAM_GAMES_ROOT" "$STEAM_DOT" "$STEAM_HOME/compatibilitytools.d"
   run rm -f "$STEAM_HOME/compatibilitytools.d/Proton11ARM"
   run ln -sfn "$PROTON_SOURCE/" "$PROTON_LINK"
-  STEAM_BETA="${STEAM_BETA:-publicbeta}" "$script_dir/steam-arm64-bootstrap" "--$mode"
+  STEAM_BETA="$STEAM_BETA" "$script_dir/steam-arm64-bootstrap" "--$mode"
 }
 
 say "steam-arm64-seed mode=$mode"
@@ -173,6 +177,7 @@ say "STEAM_HOME=$STEAM_HOME"
 say "STEAM_GAMES_ROOT=$STEAM_GAMES_ROOT"
 say "STEAM_DOT=$STEAM_DOT"
 say "runtime-url=$RUNTIME_TAR_URL"
+say "STEAM_BETA=$STEAM_BETA"
 say "client-manifest-url=$STEAM_MANIFEST_URL"
 say "client-cdn-base=$STEAM_CDN"
 

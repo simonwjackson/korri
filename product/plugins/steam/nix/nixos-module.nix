@@ -59,7 +59,9 @@ let
       cfg.gamescopePreferOutput
     ]
   );
-  steamClientArgs = lib.escapeShellArgs ((lib.optional cfg.useGamepadUi "-gamepadui") ++ cfg.defaultArgs);
+  steamClientArgs = lib.escapeShellArgs (
+    (lib.optional cfg.useGamepadUi "-gamepadui") ++ cfg.defaultArgs
+  );
 
   steamUinputPrep = pkgs.writeShellScriptBin "korri-steam-ensure-uinput" ''
     set -eu
@@ -160,18 +162,10 @@ let
       ${pkgs.coreutils}/bin/install -o ${runtime.user} -g ${runtime.group} -m 0640 "$fex_config_source/AppConfig/steamwebhelper.json" "$fex_config_dir/AppConfig/steamwebhelper.json"
     fi
 
-    prepare_proton_fex_share() {
-      local proton_dir target
-      for proton_dir in "$steam_home"/steamapps/common/Proton*; do
-        [ -d "$proton_dir/files/share" ] || continue
-        target="$proton_dir/files/share/fex-emu"
-        if [ -e "$target" ] && [ ! -L "$target" ]; then
-          ${pkgs.coreutils}/bin/mv -f "$target" "$target.pre-korri-fex-share"
-        fi
-        ln -sfn "$fex_share" "$target"
-        ${pkgs.coreutils}/bin/chown -h ${runtime.user}:${runtime.group} "$target"
-      done
-    }
+    # Do not patch Steam-managed Proton trees here. Steam owns mutable
+    # steamapps/common/Proton* content; Korri-owned compatibility-tool metadata
+    # is seeded by steam-arm64-seed/bootstrap and VDF state is materialized by
+    # the Steam plugin.
 
     ensure_rootfs_squashfs() {
       ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 "$steam_home/fex-data/RootFS"
@@ -340,7 +334,6 @@ let
     }
 
     ensure_rootfs_squashfs
-    prepare_proton_fex_share
     ensure_mesa26_rootfs
 
     if [ -d "$fex_rootfs" ] && [ ! -L "$fex_rootfs" ]; then
@@ -368,6 +361,7 @@ let
     if [ -z "''${STEAM_HOME:-}" ]; then export STEAM_HOME=${lib.escapeShellArg cfg.home}; fi
     if [ -z "''${STEAM_GAMES_ROOT:-}" ]; then export STEAM_GAMES_ROOT=${lib.escapeShellArg cfg.gamesRoot}; fi
     if [ -z "''${STEAM_DOT:-}" ]; then export STEAM_DOT=${lib.escapeShellArg cfg.dotDir}; fi
+    if [ -z "''${STEAM_BETA:-}" ]; then export STEAM_BETA=${lib.escapeShellArg cfg.betaChannel}; fi
     if [ -z "''${FEX_ROOTFS:-}" ]; then export FEX_ROOTFS=${lib.escapeShellArg cfg.fexRootfs}; fi
 
     export SDL_JOYSTICK_DISABLE_UDEV="''${SDL_JOYSTICK_DISABLE_UDEV:-1}"
@@ -385,7 +379,8 @@ let
       set -- ${lib.escapeShellArgs cfg.defaultArgs}
     fi
 
-    if ! ${pkgs.findutils}/bin/find "$STEAM_HOME/package" -maxdepth 1 -name 'steam_client_*_linuxarm64.installed' -print -quit 2>/dev/null | ${pkgs.gnugrep}/bin/grep -q .; then
+    installed_marker="$STEAM_HOME/package/steam_client_${cfg.betaChannel}_linuxarm64.installed"
+    if [ ! -f "$installed_marker" ]; then
       # The seed fetches the minimal ARM64 client. A first real Steam launch
       # must be allowed to run Valve's bootstrap/update path once, otherwise
       # steamui can load against an incomplete libvideo/libavutil set. Apply
@@ -446,6 +441,66 @@ let
         ;;
       stop) exec ${pkgs.coreutils}/bin/timeout 30 ${pkgs.systemd}/bin/systemctl stop korri-steam-gamescope.service ;;
     esac
+  '';
+
+  steamRecovery = pkgs.writeShellScriptBin "korri-steam-recover" ''
+    set -eu
+
+    steam_home=${lib.escapeShellArg cfg.home}
+    beta_channel=${lib.escapeShellArg cfg.betaChannel}
+    package_dir="$steam_home/package"
+    stamp="$(${pkgs.coreutils}/bin/date -u +%Y%m%d%H%M%S)"
+    backup_dir="$steam_home/.backup-package-before-recover-$stamp"
+    pending_marker="$package_dir/steam_client_${cfg.betaChannel}_linuxarm64"
+    beta_tmp="$package_dir/beta.tmp.$$"
+    korri_ipc="/dev/shm/u${toString runtime.uid}-ValveIPCSharedObj-Steam"
+
+    if [ "$(${pkgs.coreutils}/bin/id -u)" -ne 0 ]; then
+      echo "korri-steam-recover: must run as root so managed Steam services can be stopped before package repair" >&2
+      exit 77
+    fi
+
+    echo "korri-steam-recover: stopping Steam services" >&2
+    for service in korri-steam-gamescope.service korri-steam.service; do
+      ${pkgs.systemd}/bin/systemctl stop "$service" 2>/dev/null || true
+    done
+    for service in korri-steam-gamescope.service korri-steam.service; do
+      state="$(${pkgs.systemd}/bin/systemctl is-active "$service" 2>/dev/null || true)"
+      case "$state" in
+        inactive|failed|unknown|"") ;;
+        *)
+          echo "korri-steam-recover: refusing package repair while $service is $state" >&2
+          exit 1
+          ;;
+      esac
+    done
+    ${pkgs.systemd}/bin/systemctl reset-failed korri-steam-gamescope.service korri-steam.service 2>/dev/null || true
+
+    if [ -d "$package_dir" ]; then
+      ${pkgs.coreutils}/bin/cp -a "$package_dir" "$backup_dir"
+      echo "korri-steam-recover: backed up package state to $backup_dir" >&2
+    else
+      ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 "$package_dir"
+      echo "korri-steam-recover: created missing package directory $package_dir" >&2
+    fi
+
+    printf '%s\n' "$beta_channel" > "$beta_tmp"
+    ${pkgs.coreutils}/bin/chown ${runtime.user}:${runtime.group} "$beta_tmp" 2>/dev/null || true
+    ${pkgs.coreutils}/bin/mv -f "$beta_tmp" "$package_dir/beta"
+    if [ -e "$pending_marker" ]; then
+      ${pkgs.coreutils}/bin/rm -f "$pending_marker"
+      echo "korri-steam-recover: removed stale pending marker $pending_marker" >&2
+    else
+      echo "korri-steam-recover: no pending marker at $pending_marker" >&2
+    fi
+
+    if [ -e "$korri_ipc" ]; then
+      ${pkgs.coreutils}/bin/rm -f "$korri_ipc" || true
+      echo "korri-steam-recover: removed stale Korri Steam IPC $korri_ipc" >&2
+    fi
+
+    echo "korri-steam-recover: channel=$beta_channel" >&2
+    echo "korri-steam-recover: preserved installed/manifest files in $package_dir" >&2
   '';
 
   steamWarmup = pkgs.writeShellScriptBin "korri-steam-warm" ''
@@ -857,6 +912,17 @@ in
       description = "Mutable guest Steam dot-directory used by bootstrap and seed helpers.";
     };
 
+    betaChannel = mkOption {
+      type = types.str;
+      default = "steamdeck_stable";
+      description = ''
+        ARM64 Steam client tracking channel written to package/beta and used
+        when checking channel-specific linuxarm64 installed markers. Initial
+        seed URLs may be separate bootstrap provenance, but the mutable Steam
+        install tracks this configured channel.
+      '';
+    };
+
     fexRootfs = mkOption {
       type = types.str;
       default = "${runtime.stateRoot}/steam/fex-rootfs";
@@ -965,6 +1031,7 @@ in
       steamAppLauncher
       steamAppInstall
       steamServiceControl
+      steamRecovery
       steamWarmup
       steamUinputPrep
       fexRootfsPreparer
@@ -981,14 +1048,18 @@ in
     '';
 
     environment.sessionVariables.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
-    systemd.user.services.korrid = lib.mkIf (config.services.korri.daemon.serviceMode == "user") {
-      path = steamMaterializerProbePath;
-      environment.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
-    };
-    systemd.services.korrid = lib.mkIf (config.services.korri.daemon.serviceMode == "system") {
-      path = steamMaterializerProbePath;
-      environment.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
-    };
+    systemd.user.services.korrid =
+      lib.mkIf ((config.services.korri.daemon.serviceMode or "system") == "user")
+        {
+          path = steamMaterializerProbePath;
+          environment.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
+        };
+    systemd.services.korrid =
+      lib.mkIf ((config.services.korri.daemon.serviceMode or "system") == "system")
+        {
+          path = steamMaterializerProbePath;
+          environment.KORRI_STEAM_APP_INSTALL_HELPER = "${steamAppInstall}/bin/korri-steam-app-install";
+        };
 
     security.sudo.extraRules = [
       {
@@ -1046,7 +1117,7 @@ in
         STEAM_HOME = cfg.home;
         STEAM_GAMES_ROOT = cfg.gamesRoot;
         STEAM_DOT = cfg.dotDir;
-        STEAM_BETA = "publicbeta";
+        STEAM_BETA = cfg.betaChannel;
       };
       serviceConfig = {
         Type = "oneshot";
@@ -1071,60 +1142,17 @@ in
       };
     };
 
-    systemd.services.korri-steam-runtime-prep = {
-      description = "Repair Korri Steam runtime and Proton ARM64 payloads";
-      after = [
-        "korri-steam-seed.service"
-        "korri-steam-prepare-fex-rootfs.service"
-      ];
-      wants = [
-        "korri-steam-seed.service"
-        "korri-steam-prepare-fex-rootfs.service"
-      ];
-      environment = {
-        STEAM_HOME = cfg.home;
-        FEX_ROOTFS = cfg.fexRootfs;
-        FEX_BIN = "${pkgs.fex}/bin/FEX";
-        FEX_WRAPPER_BIN = "/usr/bin/FEX";
-        FEX_SHARE = "${pkgs.fex}/share/fex-emu";
-      };
-      serviceConfig = {
-        Type = "oneshot";
-        User = runtime.user;
-        Group = runtime.group;
-        WorkingDirectory = "-${cfg.home}";
-        ExecStartPre = "+${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${cfg.home}";
-        ExecStart = "${cfg.package}/bin/steam-guest-runtime-prep --apply";
-      };
-    };
-
-    systemd.paths.korri-steam-runtime-prep = {
-      description = "Watch Korri Steam runtime and Proton payloads for repair";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig = {
-        PathChanged = [
-          "${cfg.home}/compatibilitytools.d/proton-cachyos-11.0-20260601-slr-arm64/proton"
-          "${cfg.home}/steamapps/common/Proton 10.0/proton"
-          "${cfg.home}/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap"
-          "${cfg.home}/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb"
-        ];
-        Unit = "korri-steam-runtime-prep.service";
-      };
-    };
-
     systemd.services.korri-steam-gamescope = {
       description = "Launch Korri guest-native Steam inside gamescope";
       after = [
         "korri-steam-uinput.service"
         "korri-steam-seed.service"
         "korri-steam-prepare-fex-rootfs.service"
-        "korri-steam-runtime-prep.service"
       ];
       wants = [
         "korri-steam-uinput.service"
         "korri-steam-seed.service"
         "korri-steam-prepare-fex-rootfs.service"
-        "korri-steam-runtime-prep.service"
       ];
       conflicts = [ "korri-steam.service" ];
       environment = {
@@ -1139,6 +1167,7 @@ in
         STEAM_HOME = cfg.home;
         STEAM_GAMES_ROOT = cfg.gamesRoot;
         STEAM_DOT = cfg.dotDir;
+        STEAM_BETA = cfg.betaChannel;
         FEX_ROOTFS = cfg.fexRootfs;
       };
       serviceConfig = {
@@ -1150,8 +1179,11 @@ in
         LimitNOFILE = 524288;
         ExecStart = "${pkgs.gamescope}/bin/gamescope ${gamescopeArgs} -- ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}";
         Restart = "on-failure";
+        RestartForceExitStatus = [ 42 ];
         RestartSec = "2s";
       };
+      startLimitBurst = 30;
+      startLimitIntervalSec = "5min";
     };
 
     systemd.services.korri-steam = {
@@ -1160,13 +1192,11 @@ in
         "korri-steam-uinput.service"
         "korri-steam-seed.service"
         "korri-steam-prepare-fex-rootfs.service"
-        "korri-steam-runtime-prep.service"
       ];
       wants = [
         "korri-steam-uinput.service"
         "korri-steam-seed.service"
         "korri-steam-prepare-fex-rootfs.service"
-        "korri-steam-runtime-prep.service"
       ];
       environment = {
         HOME = runtime.home;
@@ -1179,6 +1209,7 @@ in
         STEAM_HOME = cfg.home;
         STEAM_GAMES_ROOT = cfg.gamesRoot;
         STEAM_DOT = cfg.dotDir;
+        STEAM_BETA = cfg.betaChannel;
         FEX_ROOTFS = cfg.fexRootfs;
       };
       serviceConfig = {
@@ -1190,8 +1221,11 @@ in
         LimitNOFILE = 524288;
         ExecStart = "${steamLauncher}/bin/korri-steam-guest";
         Restart = "on-failure";
+        RestartForceExitStatus = [ 42 ];
         RestartSec = "2s";
       };
+      startLimitBurst = 30;
+      startLimitIntervalSec = "5min";
     };
   };
 }

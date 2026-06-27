@@ -140,8 +140,6 @@ let
   uinputUnit = enabled.systemd.services.korri-steam-uinput or { };
   seedUnit = enabled.systemd.services.korri-steam-seed or { };
   fexRootfsUnit = enabled.systemd.services.korri-steam-prepare-fex-rootfs or { };
-  runtimePrepUnit = enabled.systemd.services.korri-steam-runtime-prep or { };
-  runtimePrepPath = enabled.systemd.paths.korri-steam-runtime-prep or { };
   udevRules = enabled.services.udev.extraRules or "";
   systemPackageNames = cfg: map (pkg: pkg.name or "") cfg.environment.systemPackages;
   sudoCommands = lib.flatten (
@@ -191,6 +189,7 @@ let
       && builtins.any (name: lib.hasInfix "korri-steam-guest" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-app" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-service-control" name) (systemPackageNames enabled)
+      && builtins.any (name: lib.hasInfix "korri-steam-recover" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-warm" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-ensure-uinput" name) (systemPackageNames enabled)
     ))
@@ -227,6 +226,9 @@ let
       && lib.hasInfix "TAG-=\"uaccess\"" udevRules
       && lib.hasInfix "setfacl -b $env{DEVNAME}" udevRules
     ))
+    (check "default Steam channel tracks Steam Deck stable on ARM64" (
+      enabled.services.korri.steam.betaChannel == "steamdeck_stable"
+    ))
     (check "seed service downloads ARM64 Steam payloads before launch" (
       enabled.systemd.services ? korri-steam-seed
       && builtins.elem "multi-user.target" (seedUnit.wantedBy or [ ])
@@ -238,6 +240,7 @@ let
       && (seedUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
       && (seedUnit.environment.STEAM_GAMES_ROOT or null) == "/var/lib/korri/content/games/steam"
       && (seedUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
+      && (seedUnit.environment.STEAM_BETA or null) == "steamdeck_stable"
       && lib.hasInfix "steam-arm64-seed --apply" (serviceExec seedUnit)
     ))
     (check "gamescoped launch service carries Korri identity, gamescope, and SteamOS flags" (
@@ -258,7 +261,10 @@ let
       && !(lib.hasInfix " -O DSI-" (serviceExec gamescopedSteamUnit))
       && builtins.elem "korri-steam.service" (gamescopedSteamUnit.conflicts or [ ])
       && builtins.elem "korri-steam-seed.service" (gamescopedSteamUnit.after or [ ])
-      && builtins.elem "korri-steam-runtime-prep.service" (gamescopedSteamUnit.after or [ ])
+      && !(builtins.elem "korri-steam-runtime-prep.service" (gamescopedSteamUnit.after or [ ]))
+      && !(builtins.elem "korri-steam-runtime-prep.service" (gamescopedSteamUnit.wants or [ ]))
+      && (gamescopedSteamUnit.serviceConfig.RestartForceExitStatus or [ ]) == [ 42 ]
+      && (gamescopedSteamUnit.startLimitBurst or null) == 30
     ))
     (check "non-gamescoped Steam service carries launch identity and prep dependencies" (
       enabled.systemd.services ? korri-steam
@@ -270,8 +276,10 @@ let
       && lib.hasInfix "korri-steam-guest" (serviceExec steamUnit)
       && builtins.elem "korri-steam-seed.service" (steamUnit.after or [ ])
       && builtins.elem "korri-steam-seed.service" (steamUnit.wants or [ ])
-      && builtins.elem "korri-steam-runtime-prep.service" (steamUnit.after or [ ])
-      && builtins.elem "korri-steam-runtime-prep.service" (steamUnit.wants or [ ])
+      && !(builtins.elem "korri-steam-runtime-prep.service" (steamUnit.after or [ ]))
+      && !(builtins.elem "korri-steam-runtime-prep.service" (steamUnit.wants or [ ]))
+      && (steamUnit.serviceConfig.RestartForceExitStatus or [ ]) == [ 42 ]
+      && (steamUnit.startLimitBurst or null) == 30
     ))
     (check "launch service exports the Korri user session environment" (
       (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
@@ -280,6 +288,7 @@ let
       && (steamUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
       && (steamUnit.environment.STEAM_GAMES_ROOT or null) == "/var/lib/korri/content/games/steam"
       && (steamUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
+      && (steamUnit.environment.STEAM_BETA or null) == "steamdeck_stable"
     ))
     (check "FEX rootfs service converges before Steam launch" (
       enabled.systemd.services ? korri-steam-prepare-fex-rootfs
@@ -288,29 +297,12 @@ let
       && builtins.elem "korri-steam-prepare-fex-rootfs.service" (steamUnit.after or [ ])
       && builtins.elem "korri-steam-prepare-fex-rootfs.service" (steamUnit.wants or [ ])
     ))
-    (check "runtime prep service repairs Proton payloads as the Korri user" (
-      enabled.systemd.services ? korri-steam-runtime-prep
-      && (runtimePrepUnit.serviceConfig.User or null) == "korri"
-      && (runtimePrepUnit.serviceConfig.Group or null) == "korri"
-      && (runtimePrepUnit.serviceConfig.WorkingDirectory or null) == "-/var/lib/korri/steam"
-      && lib.hasInfix "install -d" (serviceExec runtimePrepUnit)
-      && (runtimePrepUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
-      && (runtimePrepUnit.environment.FEX_ROOTFS or null) == "/var/lib/korri/steam/fex-rootfs"
-      && (runtimePrepUnit.environment.FEX_WRAPPER_BIN or null) == "/usr/bin/FEX"
-      && lib.hasInfix "steam-guest-runtime-prep --apply" (serviceExec runtimePrepUnit)
+    (check "normal Steam startup has no runtime-prep service or path watch" (
+      !(enabled.systemd.services ? korri-steam-runtime-prep)
+      && !(enabled.systemd.paths ? korri-steam-runtime-prep)
     ))
-    (check "runtime prep path watches mutable Proton and Sniper updates" (
-      enabled.systemd.paths ? korri-steam-runtime-prep
-      && builtins.elem "multi-user.target" (runtimePrepPath.wantedBy or [ ])
-      && (runtimePrepPath.pathConfig.Unit or null) == "korri-steam-runtime-prep.service"
-      && lib.hasInfix "compatibilitytools.d/proton-cachyos-11.0-20260601-slr-arm64/proton" (pathChangedText runtimePrepPath)
-      && lib.hasInfix "Proton 10.0/proton" (pathChangedText runtimePrepPath)
-      && lib.hasInfix "SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap" (
-        pathChangedText runtimePrepPath
-      )
-      && lib.hasInfix "SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb" (
-        pathChangedText runtimePrepPath
-      )
+    (check "recovery helper is installed for explicit package-state repair" (
+      builtins.any (name: lib.hasInfix "korri-steam-recover" name) (systemPackageNames enabled)
     ))
     (check "tmpfiles create Korri-owned Steam state" (
       builtins.elem "d /var/lib/korri/steam 0750 korri korri -" enabled.systemd.tmpfiles.rules

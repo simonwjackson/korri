@@ -45,10 +45,16 @@ let
       && lib.hasInfix "ln -sfn \"$PROTON_SOURCE/\" \"$PROTON_LINK\"" seedScript
       && lib.hasInfix "rm -f \"$STEAM_HOME/compatibilitytools.d/Proton11ARM\"" seedScript
     ))
-    (check "steam-korri bootstrap registers cachyos compat manifest unconditionally" (
-      lib.hasInfix "atomic_copy \"$resource_dir/compatibilitytool.vdf\" \"$STEAM_HOME/compatibilitytools.d/compatibilitytool.vdf\"" bootstrapScript
-      && lib.hasInfix "rm -f \"$STEAM_HOME/compatibilitytools.d/Proton11ARM\"" bootstrapScript
-      && lib.hasInfix "rm -rf \"$STEAM_HOME/steamapps/common/Proton 11.0 (ARM64)\"" bootstrapScript
+    (check "steam-korri bootstrap registers cachyos compat manifest without touching Steam-managed Proton" (
+      lib.hasInfix ''atomic_copy "$resource_dir/compatibilitytool.vdf" "$STEAM_HOME/compatibilitytools.d/compatibilitytool.vdf"'' bootstrapScript
+      && lib.hasInfix ''rm -f "$STEAM_HOME/compatibilitytools.d/Proton11ARM"'' bootstrapScript
+      && !(lib.hasInfix "steamapps/common/Proton" bootstrapScript)
+    ))
+    (check "steam-korri scripts default to the stable ARM64 tracking channel" (
+      lib.hasInfix ''STEAM_BETA="''${STEAM_BETA:-steamdeck_stable}"'' seedScript
+      && lib.hasInfix ''STEAM_BETA="''${STEAM_BETA:-steamdeck_stable}"'' bootstrapScript
+      && lib.hasInfix "steam_client_\${STEAM_BETA}_linuxarm64" seedScript
+      && lib.hasInfix "steam_client_\${STEAM_BETA}_linuxarm64" bootstrapScript
     ))
     (check "steam-korri seed wrapper includes xz for fresh runtime extraction" (
       lib.hasInfix "unzip xz" packageSource
@@ -62,9 +68,15 @@ let
       lib.hasInfix "steamrtarm64/video:$STEAM_HOME/steamrtarm64" guestRunScript
       && lib.hasInfix "av_malloc_tracked" guestRunScript
     ))
-    (check "steam-korri runtime prep exposes FEX resources to Proton" (
-      lib.hasInfix "files/share/fex-emu" runtimePrepScript
-      && lib.hasInfix "pre-korri-fex-share" runtimePrepScript
+    (check "steam-korri runtime prep keeps patch-proton scoped to compatibility tools" (
+      lib.hasInfix ''"$mode" = patch-proton'' runtimePrepScript
+      && lib.hasInfix ''find "$compat_tools" -mindepth 1 -maxdepth 1 -type d'' runtimePrepScript
+      && lib.hasInfix "find \"$common\" -mindepth 1 -maxdepth 1 -type d -name 'Proton*'" runtimePrepScript
+    ))
+    (check "steam-korri guest runner does not apply runtime prep on normal startup" (
+      lib.hasInfix "must not run --apply" runtimePrepScript
+      && lib.hasInfix "Do not run" guestRunScript
+      && !(lib.hasInfix ''"$runtime_prep" --apply'' guestRunScript)
     ))
     (check "steam-korri runtime prep productizes Proton ARM64 patches" (
       lib.hasInfix "KORRI_FEX_LAUNCHER_PATCH" runtimePrepScript
@@ -163,8 +175,14 @@ else
       tmp=$(mktemp -d)
       trap 'rm -rf "$tmp"' EXIT
       steam_home="$tmp/Steam"
-      proton_dir="$steam_home/steamapps/common/Proton 11.0 (ARM64)"
-      mkdir -p "$proton_dir"
+      proton_dir="$steam_home/compatibilitytools.d/proton-cachyos-11.0-20260601-slr-arm64"
+      steam_managed_proton="$steam_home/steamapps/common/Proton 11.0 (ARM64)"
+      mkdir -p "$proton_dir" "$steam_managed_proton"
+      cat > "$steam_managed_proton/proton" <<'STEAM_MANAGED'
+#!/usr/bin/env python3
+# Steam-managed Proton must stay untouched by --patch-proton.
+STEAM_MANAGED
+      chmod 755 "$steam_managed_proton/proton"
       cat > "$proton_dir/proton" <<'PROTON'
 #!/usr/bin/env python3
 import json
@@ -217,9 +235,13 @@ class Session:
         rc = self.run_proc(adverb + argv + sys.argv[2:] + self.cmdlineappend)
 PROTON
       chmod 755 "$proton_dir/proton"
-      STEAM_HOME="$steam_home" "$package_out/bin/steam-guest-runtime-prep" --apply
+      STEAM_HOME="$steam_home" "$package_out/bin/steam-guest-runtime-prep" --patch-proton
       grep -q 'KORRI_FEX_LAUNCHER_PATCH' "$proton_dir/proton" || {
         echo "runtime prep did not apply Proton FEX launcher patch" >&2
+        exit 1
+      }
+      ! grep -q 'KORRI_FEX_LAUNCHER_PATCH' "$steam_managed_proton/proton" || {
+        echo "patch-proton mutated Steam-managed Proton" >&2
         exit 1
       }
       grep -q 'KORRI_30XX_DIRECT_EXE_PATCH' "$proton_dir/proton" || {
@@ -231,7 +253,7 @@ PROTON
         exit 1
       }
       before=$(sha256sum "$proton_dir/proton" | cut -d' ' -f1)
-      STEAM_HOME="$steam_home" "$package_out/bin/steam-guest-runtime-prep" --apply
+      STEAM_HOME="$steam_home" "$package_out/bin/steam-guest-runtime-prep" --patch-proton
       after=$(sha256sum "$proton_dir/proton" | cut -d' ' -f1)
       test "$before" = "$after" || {
         echo "runtime prep Proton patching is not idempotent" >&2

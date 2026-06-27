@@ -5,17 +5,17 @@ usage() {
   cat <<'EOF'
 usage: steam-guest-runtime-prep [--check|--apply|--patch-proton]
 
-Repair mutable Steam Runtime / pressure-vessel state in a caller-provided
-ARM64 Steam home. This helper is package-owned runtime mechanics only: it does
-not choose guest paths, start system services, or launch a display session.
+Diagnose or explicitly repair mutable Steam Runtime / pressure-vessel state in
+a caller-provided ARM64 Steam home. Normal Steam startup must not run --apply;
+Steam owns its client/runtime files after seed/bootstrap.
 
 Required environment:
   STEAM_HOME        Steam client home containing steamapps/common
 
 Modes:
   --check          Diagnose launch-critical runtime prerequisites without mutation
-  --apply          Repair mutable runtime state (default)
-  --patch-proton   Repair Proton ARM64 payloads/FEX links only
+  --apply          Explicit legacy repair of mutable Steam-owned runtime state (default)
+  --patch-proton   Repair Korri-owned compatibility-tool payloads/FEX links only
 EOF
 }
 
@@ -137,7 +137,23 @@ if [ "$mode" = check ]; then
   exit $?
 fi
 
-[ -d "$common" ] || exit 0
+if [ "$mode" != patch-proton ]; then
+  [ -d "$common" ] || exit 0
+fi
+compat_tools="$STEAM_HOME/compatibilitytools.d"
+
+proton_roots() {
+  if [ "$mode" = patch-proton ]; then
+    [ -d "$compat_tools" ] || return 0
+    # Only real compatibility-tool directories are Korri-owned here. Symlinked
+    # Proton tools commonly point at immutable package/store content and must
+    # not be patched as a startup side effect.
+    find "$compat_tools" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null || true
+  else
+    [ -d "$common" ] || return 0
+    find "$common" -mindepth 1 -maxdepth 1 -type d -name 'Proton*' -print 2>/dev/null || true
+  fi
+}
 
 # Native ARM64 Steam starts this helper by basename. Expose the ARM64 runtime
 # copy in steamrtarm64/bin, which steam-guest-run prepends to PATH, when Valve's
@@ -225,7 +241,7 @@ if [ -z "$fex_share" ]; then
   esac
 fi
 if [ -n "$fex_share" ] && [ -d "$fex_share" ]; then
-  for proton in "$common"/Proton*; do
+  proton_roots | while IFS= read -r proton; do
     [ -d "$proton/files/share" ] || continue
     target="$proton/files/share/fex-emu"
     if [ -e "$target" ] && [ ! -L "$target" ]; then
@@ -334,10 +350,12 @@ EOF
 # Wine's own ELF-header checks. Keep Proton intact and restore any wrappers from
 # backups left by experiments; wrap only Steam Runtime / pressure-vessel Linux
 # helper executables launched by the ARM64 Steam client.
-for dir in "$common"/Proton*/files/bin "$common"/Proton*/files/bin-wow64 "$common"/Proton*/files/lib/wine/*-unix; do
-  [ -d "$dir" ] || continue
-  find "$dir" -maxdepth 1 -type f ! -name '*.x86_64*' ! -name '*.x86' | while IFS= read -r file; do
-    restore_fex_wrapper "$file"
+proton_roots | while IFS= read -r proton; do
+  for dir in "$proton/files/bin" "$proton/files/bin-wow64" "$proton"/files/lib/wine/*-unix; do
+    [ -d "$dir" ] || continue
+    find "$dir" -maxdepth 1 -type f ! -name '*.x86_64*' ! -name '*.x86' | while IFS= read -r file; do
+      restore_fex_wrapper "$file"
+    done
   done
 done
 
@@ -423,7 +441,8 @@ PY
 # Proton and Steam Runtime helper scripts commonly use /usr/bin/env python3.
 # Nested pressure-vessel containers have sparse PATH, so use the FHS-visible
 # absolute interpreter from the FHS runtime.
-for proton in "$common"/Proton*/proton; do
+proton_roots | while IFS= read -r proton_root; do
+  proton="$proton_root/proton"
   [ -f "$proton" ] || continue
   first_line="$(head -n 1 "$proton" 2>/dev/null || true)"
   if [ "$first_line" = "#!/usr/bin/env python3" ]; then
@@ -433,7 +452,7 @@ for proton in "$common"/Proton*/proton; do
     mv -f "$tmp" "$proton"
   fi
   case "$proton" in
-    *"(ARM64)"*)
+    *"(ARM64)"*|*/compatibilitytools.d/*/proton)
       patch_proton_arm64 "$proton" || echo "steam-guest-runtime-prep: warning: could not patch $proton" >&2
       ;;
   esac

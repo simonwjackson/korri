@@ -161,6 +161,44 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
+  it("declares a stable ARM64 Steam tracking channel", () => {
+    expect(moduleSource).toContain("betaChannel = mkOption")
+    expect(moduleSource).toContain('default = "steamdeck_stable"')
+    expect(moduleSource).toContain("STEAM_BETA = cfg.betaChannel")
+    expect(moduleSource).not.toContain('STEAM_BETA = "publicbeta"')
+  })
+
+  it("checks first-launch markers for the configured channel only", () => {
+    expect(moduleSource).toContain(
+      "steam_client_${cfg.betaChannel}_linuxarm64.installed",
+    )
+    expect(moduleSource).not.toContain("-name 'steam_client_*_linuxarm64.installed'")
+  })
+
+  it("does not run Steam-owned runtime prep in normal launch ordering", () => {
+    expect(moduleSource).not.toContain("systemd.paths.korri-steam-runtime-prep")
+    expect(moduleSource).not.toContain('"korri-steam-runtime-prep.service"')
+    expect(moduleSource).not.toContain("steam-guest-runtime-prep --apply")
+    expect(moduleSource).not.toContain("SteamLinuxRuntime_sniper/pressure-vessel")
+  })
+
+  it("exposes a backup-first Steam recovery helper", () => {
+    expect(moduleSource).toContain('pkgs.writeShellScriptBin "korri-steam-recover"')
+    expect(moduleSource).toContain("steam_client_${cfg.betaChannel}_linuxarm64")
+    expect(moduleSource).toContain("must run as root")
+    expect(moduleSource).toContain("refusing package repair while $service is $state")
+    expect(moduleSource).toContain("cp -a \"$package_dir\" \"$backup_dir\"")
+    expect(moduleSource).toContain("rm -f \"$pending_marker\"")
+    expect(moduleSource).toContain("u${toString runtime.uid}-ValveIPCSharedObj-Steam")
+    expect(moduleSource).not.toContain("/dev/shm/u*-ValveIPCSharedObj-Steam")
+  })
+
+  it("makes Steam update relaunch exits explicit and restartable", () => {
+    expect(moduleSource).toContain('RestartForceExitStatus = [ 42 ]')
+    expect(moduleSource).toContain('startLimitBurst = 30')
+    expect(moduleSource).toContain('startLimitIntervalSec = "5min"')
+  })
+
   it("recognizes Steam process removal log lines", () => {
     expect(moduleSource).toContain("Game process removed: AppID $appid")
     expect(moduleSource).toContain("Game process removed : AppID $appid")

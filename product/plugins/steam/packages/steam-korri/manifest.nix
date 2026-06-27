@@ -35,7 +35,8 @@
 
   arm64Bootstrap = {
     runtimeTarUrl = "https://repo.steampowered.com/steamrt3c/images/latest-public-beta/steam-runtime-steamrt-arm64.tar.xz";
-    clientManifestUrl = "https://client-update.fastly.steamstatic.com/steam_client_publicbeta_linuxarm64";
+    defaultTrackingChannel = "steamdeck_stable";
+    clientManifestUrl = "https://client-update.fastly.steamstatic.com/steam_client_steamdeck_stable_linuxarm64";
     cdnBaseUrl = "https://client-update.steamstatic.com";
     protonCompatibilityToolName = "Proton CachyOS 11.0 (ARM64)";
     protonCompatibilityToolLink = "proton-cachyos-11.0-20260601-slr-arm64";
@@ -74,9 +75,9 @@
       "generic env-driven steam-arm64-bootstrap helper"
       "generic env-driven steam-arm64-seed helper for guest-owned mutable ARM64 client/runtime state"
       "generic steam-guest-native launcher preflight that executes the ARM64 client inside the guest"
-      "generic steam-guest-runtime-prep helper for Steam Runtime / pressure-vessel repair"
+      "explicit legacy steam-guest-runtime-prep helper for opt-in Steam Runtime / pressure-vessel repair"
       "generic steam-guest-run helper for the package-owned aarch64 FHS Steam execution capsule"
-      "pressure-vessel exposure of already-provided input devices"
+      "pressure-vessel exposure of already-provided input devices without startup-time Steam-owned file mutation"
       "resource/evidence output for downstream ROCKNIX or guest adapters"
     ];
     downstreamOwned = [

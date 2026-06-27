@@ -15,7 +15,7 @@ Required environment:
   STEAM_DOT         Steam dot-directory for registry metadata
 
 Optional environment:
-  STEAM_BETA        Steam client beta channel to write (default: publicbeta)
+  STEAM_BETA        Steam client tracking channel to write (default: steamdeck_stable)
 
 Modes:
   --dry-run         Print intended actions without writing anything (default)
@@ -44,7 +44,7 @@ for name in STEAM_HOME STEAM_GAMES_ROOT STEAM_DOT; do
   require_env "$name"
 done
 
-STEAM_BETA="${STEAM_BETA:-publicbeta}"
+STEAM_BETA="${STEAM_BETA:-steamdeck_stable}"
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 prefix=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 resource_dir="$prefix/share/steam-rocknix-bootstrap/resources"
@@ -96,7 +96,7 @@ say "STEAM_GAMES_ROOT=$STEAM_GAMES_ROOT"
 say "STEAM_DOT=$STEAM_DOT"
 say "STEAM_BETA=$STEAM_BETA"
 say "runtime-url=https://repo.steampowered.com/steamrt3c/images/latest-public-beta/steam-runtime-steamrt-arm64.tar.xz"
-say "client-manifest-url=https://client-update.fastly.steamstatic.com/steam_client_publicbeta_linuxarm64"
+say "client-manifest-url=https://client-update.fastly.steamstatic.com/steam_client_${STEAM_BETA}_linuxarm64"
 say "client-cdn-base=https://client-update.steamstatic.com"
 
 run mkdir -p \
@@ -104,8 +104,6 @@ run mkdir -p \
   "$STEAM_HOME/compatibilitytools.d" \
   "$STEAM_GAMES_ROOT" \
   "$STEAM_DOT"
-
-run rm -rf "$STEAM_HOME/steamapps/common/Proton 11.0 (ARM64)"
 
 # Keep the conventional ~/.steam layout pointing at the Korri-managed Steam
 # home. Proton/lsteamclient and Steam Runtime helpers still discover pieces via
