@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, mock } from "bun:test"
 import type { RouterHistory } from "@tanstack/history"
 import { cleanup, render, waitFor } from "@testing-library/react"
+import { LabSurfaceMount } from "./LabSurfaceMount"
 import type {
   LabSurfaceAdapter,
   LabSurfaceDualScreenOptions,
 } from "./surface-registry"
-import { LabSurfaceMount } from "./LabSurfaceMount"
 
 afterEach(() => cleanup())
 

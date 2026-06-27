@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react"
+import { type ComponentProps, createElement, useEffect } from "react"
 import {
   DualScreenBroadcastSessionRoot,
   type DualScreenChannel,
@@ -13,6 +14,25 @@ import {
 } from "./DualScreenBroadcastSessionRoot"
 import { useDualScreenSession } from "./DualScreenSession.context"
 import type { DualScreenEvent } from "./dual-screen-events"
+
+type SessionProps = Omit<
+  ComponentProps<typeof DualScreenBroadcastSessionRoot>,
+  "role"
+>
+
+function PrimarySession(props: SessionProps) {
+  return createElement(DualScreenBroadcastSessionRoot, {
+    ...props,
+    role: "primary",
+  })
+}
+
+function CompanionSession(props: SessionProps) {
+  return createElement(DualScreenBroadcastSessionRoot, {
+    ...props,
+    role: "companion",
+  })
+}
 
 afterEach(() => cleanup())
 
@@ -22,20 +42,18 @@ describe("DualScreenBroadcastSessionRoot", () => {
 
     render(
       <>
-        <DualScreenBroadcastSessionRoot
+        <PrimarySession
           initialGameId="crystalline-drift"
-          role="primary"
           createChannel={createChannel}
         >
           <PublisherProbe />
-        </DualScreenBroadcastSessionRoot>
-        <DualScreenBroadcastSessionRoot
+        </PrimarySession>
+        <CompanionSession
           initialGameId="crystalline-drift"
-          role="companion"
           createChannel={createChannel}
         >
           <ReaderProbe />
-        </DualScreenBroadcastSessionRoot>
+        </CompanionSession>
       </>,
     )
 
@@ -48,35 +66,49 @@ describe("DualScreenBroadcastSessionRoot", () => {
     })
   })
 
+  it("replays child-published initial focus when the companion requests a snapshot", async () => {
+    const createChannel = createInProcessChannelFactory()
+
+    render(
+      <>
+        <PrimarySession createChannel={createChannel}>
+          <InitialFocusProbe />
+        </PrimarySession>
+        <CompanionSession createChannel={createChannel}>
+          <ReaderProbe />
+        </CompanionSession>
+      </>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("reader: hollow-knight")).toBeTruthy()
+    })
+  })
+
   it("replays the primary selection to a companion that joins late", async () => {
     const createChannel = createInProcessChannelFactory()
     const { rerender } = render(
-      <DualScreenBroadcastSessionRoot
+      <PrimarySession
         initialGameId="crystalline-drift"
-        role="primary"
         createChannel={createChannel}
       >
         <PublisherProbe />
-      </DualScreenBroadcastSessionRoot>,
+      </PrimarySession>,
     )
 
     fireEvent.click(screen.getByRole("button", { name: "Focus Ember" }))
 
     rerender(
       <>
-        <DualScreenBroadcastSessionRoot
+        <PrimarySession
           initialGameId="crystalline-drift"
-          role="primary"
           createChannel={createChannel}
         >
           <PublisherProbe />
-        </DualScreenBroadcastSessionRoot>
-        <DualScreenBroadcastSessionRoot
-          role="companion"
-          createChannel={createChannel}
-        >
+        </PrimarySession>
+        <CompanionSession createChannel={createChannel}>
           <ReaderProbe />
-        </DualScreenBroadcastSessionRoot>
+        </CompanionSession>
       </>,
     )
 
@@ -93,6 +125,14 @@ function PublisherProbe() {
       Focus Ember
     </button>
   )
+}
+
+function InitialFocusProbe() {
+  const { focusGame } = useDualScreenSession()
+  useEffect(() => {
+    focusGame("hollow-knight", "primary")
+  }, [focusGame])
+  return null
 }
 
 function ReaderProbe() {

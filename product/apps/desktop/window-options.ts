@@ -84,7 +84,10 @@ export function createDesktopDualScreenWindowOptions(
   return {
     primary: {
       title: "Korri Primary",
-      url: buildDesktopUrl(address, `/screen?role=primary&session=${session}#/`),
+      url: buildDesktopUrl(
+        address,
+        `/screen?role=primary&session=${session}#/`,
+      ),
       frame: {
         x: 120,
         y: 80,

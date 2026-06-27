@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import {
-  reduceDualScreenEvent,
   type DualScreenState,
+  reduceDualScreenEvent,
 } from "./dual-screen-events"
 
 describe("dual-screen events", () => {

@@ -16,13 +16,13 @@ import {
   catalogFactsSourceLayerAtom,
   catalogSnapshotAtom,
 } from "@platform/react/catalog/catalog-atoms"
+import type { DualScreenRole } from "@platform/react/display/dual-screen/dual-screen-events"
 import {
   foregroundSessionStatusLayerAtom,
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
 import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
-import type { DualScreenRole } from "@platform/react/display/dual-screen/dual-screen-events"
 import type {
   KorriPlatformBridge,
   KorriSurfaceEntrypoint,
@@ -80,7 +80,7 @@ function ShiftBridgeRuntimeChrome({
   return <LiveUsbArtifactNotice artifact={liveUsbArtifact} />
 }
 
-function readDualScreenConfig(target: Window):
+export function readDualScreenConfig(target: Window):
   | {
       readonly role: DualScreenRole
       readonly channelName: string

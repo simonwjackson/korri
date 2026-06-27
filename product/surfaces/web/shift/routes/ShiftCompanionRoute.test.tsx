@@ -1,13 +1,23 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { RegistryProvider, useAtomSet } from "@effect/atom-react"
 import {
+  CatalogFactsError,
+  CatalogFactsSource,
   type CatalogSnapshotFacts,
+  loadingForeverCatalogFactsSourceLayer,
   makeInMemoryCatalogFactsSourceLayer,
 } from "@platform/catalog/catalog-facts-source"
-import { DualScreenSessionRoot } from "@platform/react/display/dual-screen/DualScreenSessionRoot"
-import { useDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 import { catalogFactsSourceLayerAtom } from "@platform/react/catalog/catalog-atoms"
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { useDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
+import { DualScreenSessionRoot } from "@platform/react/display/dual-screen/DualScreenSessionRoot"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react"
+import { Effect, type Layer as EffectLayer, Layer } from "effect"
 import { useLayoutEffect } from "react"
 import { setShiftCatalogPreview } from "../shift-catalog-preview"
 import { shiftCatalogStateSamples } from "../shift-catalog-state-samples"
@@ -15,7 +25,10 @@ import { ShiftCompanionRoute } from "./ShiftCompanionRoute"
 
 function readyFacts(): CatalogSnapshotFacts {
   return {
-    entries: [entry("hollow-knight", "Hollow Knight"), entry("celeste", "Celeste")],
+    entries: [
+      entry("hollow-knight", "Hollow Knight"),
+      entry("celeste", "Celeste"),
+    ],
     peers: [
       {
         hostId: "self",
@@ -41,7 +54,10 @@ function readyFacts(): CatalogSnapshotFacts {
   }
 }
 
-function entry(id: string, title: string): CatalogSnapshotFacts["entries"][number] {
+function entry(
+  id: string,
+  title: string,
+): CatalogSnapshotFacts["entries"][number] {
   return {
     id,
     itemId: id,
@@ -66,21 +82,28 @@ function entry(id: string, title: string): CatalogSnapshotFacts["entries"][numbe
   }
 }
 
+type CatalogLayer = EffectLayer.Layer<CatalogFactsSource>
+
 function CompanionUnderTest({
   facts = readyFacts(),
+  layer,
   initialGameId = null,
   controls = false,
 }: {
   readonly facts?: CatalogSnapshotFacts
+  readonly layer?: CatalogLayer
   readonly initialGameId?: string | null
   readonly controls?: boolean
 }) {
   const setLayer = useAtomSet(catalogFactsSourceLayerAtom)
   useLayoutEffect(() => {
-    setLayer(makeInMemoryCatalogFactsSourceLayer(facts))
-  }, [setLayer, facts])
+    setLayer(layer ?? makeInMemoryCatalogFactsSourceLayer(facts))
+  }, [setLayer, facts, layer])
   return (
-    <DualScreenSessionRoot initialGameId={initialGameId} initialSource="primary">
+    <DualScreenSessionRoot
+      initialGameId={initialGameId}
+      initialSource="primary"
+    >
       {controls ? <SessionControls /> : null}
       <ShiftCompanionRoute />
     </DualScreenSessionRoot>
@@ -104,12 +127,64 @@ function renderCompanion(props: Parameters<typeof CompanionUnderTest>[0] = {}) {
   )
 }
 
+function emptyFacts(): CatalogSnapshotFacts {
+  return { ...readyFacts(), entries: [] }
+}
+
+const loadErrorLayer: CatalogLayer = Layer.succeed(CatalogFactsSource)({
+  snapshot: () =>
+    Effect.fail(
+      new CatalogFactsError({
+        reason: "unavailable",
+        message: "offline",
+      }),
+    ),
+})
+
+const defectLayer: CatalogLayer = Layer.succeed(CatalogFactsSource)({
+  snapshot: () => Effect.die("boom"),
+})
+
 afterEach(() => {
   setShiftCatalogPreview(null)
   cleanup()
 })
 
 describe("ShiftCompanionRoute", () => {
+  it("renders loading state without inventing a game", () => {
+    renderCompanion({ layer: loadingForeverCatalogFactsSourceLayer })
+
+    expect(screen.getByText("Loading library…")).toBeTruthy()
+    expect(screen.queryByText("Hollow Knight")).toBeNull()
+  })
+
+  it("renders load error state without inventing a game", async () => {
+    renderCompanion({ layer: loadErrorLayer })
+
+    await waitFor(() => {
+      expect(screen.getByText("Could not load library.")).toBeTruthy()
+    })
+    expect(screen.queryByText("Hollow Knight")).toBeNull()
+  })
+
+  it("renders defect state without inventing a game", async () => {
+    renderCompanion({ layer: defectLayer })
+
+    await waitFor(() => {
+      expect(screen.getByText("Unexpected defect.")).toBeTruthy()
+    })
+    expect(screen.queryByText("Hollow Knight")).toBeNull()
+  })
+
+  it("renders empty state without inventing a game", async () => {
+    renderCompanion({ facts: emptyFacts() })
+
+    await waitFor(() => {
+      expect(screen.getByText("No games found.")).toBeTruthy()
+    })
+    expect(screen.queryByText("Hollow Knight")).toBeNull()
+  })
+
   it("waits for the primary selection instead of inventing a game", () => {
     renderCompanion()
 
@@ -121,7 +196,9 @@ describe("ShiftCompanionRoute", () => {
     renderCompanion({ initialGameId: "hollow-knight" })
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Hollow Knight" })).toBeTruthy()
+      expect(
+        screen.getByRole("heading", { name: "Hollow Knight" }),
+      ).toBeTruthy()
     })
   })
 
@@ -129,7 +206,9 @@ describe("ShiftCompanionRoute", () => {
     renderCompanion({ initialGameId: "hollow-knight", controls: true })
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Hollow Knight" })).toBeTruthy()
+      expect(
+        screen.getByRole("heading", { name: "Hollow Knight" }),
+      ).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole("button", { name: "Focus Celeste" }))
@@ -153,7 +232,9 @@ describe("ShiftCompanionRoute", () => {
     renderCompanion({ initialGameId: "hollow-knight" })
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Hollow Knight" })).toBeTruthy()
+      expect(
+        screen.getByRole("heading", { name: "Hollow Knight" }),
+      ).toBeTruthy()
     })
     expect(screen.queryByText("No games found.")).toBeNull()
   })

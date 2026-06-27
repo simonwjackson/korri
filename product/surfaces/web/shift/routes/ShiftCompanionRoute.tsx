@@ -3,8 +3,8 @@ import {
   getPlayableDisplayName,
   getPlayableImageUrl,
 } from "@platform/library/playable-library-ui"
-import { useOptionalDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
+import { useOptionalDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import { Option } from "effect"
 import {
@@ -37,7 +37,8 @@ function CompanionReadyBody() {
   const selectedGameId = useOptionalDualScreenSession()?.selectedGameId ?? null
   const launch = useLibraryLaunchController()
 
-  if (!selectedGameId) return <CompanionMessage>Waiting for primary selection.</CompanionMessage>
+  if (!selectedGameId)
+    return <CompanionMessage>Waiting for primary selection.</CompanionMessage>
 
   return Option.match(ready, {
     onNone: () => null,

@@ -27,20 +27,17 @@ export function DualScreenSessionRoot({
     revision: initialGameId ? 1 : 0,
   }))
 
-  const focusGame = useCallback(
-    (gameId: string, source: DualScreenRole) => {
-      setState(current => {
-        const event: DualScreenEvent = {
-          _tag: "GameFocused",
-          gameId,
-          source,
-          revision: current.revision + 1,
-        }
-        return reduceDualScreenEvent(current, event)
-      })
-    },
-    [],
-  )
+  const focusGame = useCallback((gameId: string, source: DualScreenRole) => {
+    setState(current => {
+      const event: DualScreenEvent = {
+        _tag: "GameFocused",
+        gameId,
+        source,
+        revision: current.revision + 1,
+      }
+      return reduceDualScreenEvent(current, event)
+    })
+  }, [])
 
   const value = useMemo<DualScreenSessionContextValue>(
     () => ({

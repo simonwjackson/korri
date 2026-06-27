@@ -71,10 +71,11 @@ export function ShiftCinematicHome({
   const stageRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const game = games[index]
+  const gameId = game?.id
 
   useEffect(() => {
-    if (game) onGameFocus?.(game.id)
-  }, [game?.id, onGameFocus])
+    if (gameId) onGameFocus?.(gameId)
+  }, [gameId, onGameFocus])
 
   // The scene reacts to the launch lifecycle in place — no modal. When a status
   // is showing, the hero + legend morph and the buttons remap (A = Retry / B =

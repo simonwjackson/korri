@@ -61,7 +61,8 @@ export function DualScreenBroadcastSessionRoot({
     const receive = (message: MessageEvent<DualScreenEvent>) => {
       if (!isDualScreenEvent(message.data)) return
       if (message.data._tag === "SelectionRequested") {
-        if (role === "primary") channel.postMessage(snapshotFor(stateRef.current, role))
+        if (role === "primary")
+          channel.postMessage(snapshotFor(stateRef.current, role))
         return
       }
       setState(current => reduceDualScreenEvent(current, message.data))
@@ -89,6 +90,7 @@ export function DualScreenBroadcastSessionRoot({
           revision: current.revision + 1,
         }
         const next = reduceDualScreenEvent(current, event)
+        stateRef.current = next
         channel.postMessage(event)
         return next
       })

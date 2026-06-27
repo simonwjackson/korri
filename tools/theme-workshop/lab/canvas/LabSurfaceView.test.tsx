@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import type { RouterHistory } from "@tanstack/history"
-import { cleanup, render, waitFor } from "@testing-library/react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import type { DeviceConfig } from "../../device-lab"
 import { LabContext, type LabContextValue } from "../Lab.context"
 import type {
@@ -9,7 +15,53 @@ import type {
 } from "../surface-registry"
 import { LabSurfaceView } from "./LabSurfaceView"
 
-afterEach(() => cleanup())
+type BroadcastListener = (event: MessageEvent) => void
+
+class TestBroadcastChannel {
+  static channels = new Map<string, Set<TestBroadcastChannel>>()
+
+  readonly name: string
+  private readonly listeners = new Set<BroadcastListener>()
+
+  constructor(name: string) {
+    this.name = name
+    const peers = TestBroadcastChannel.channels.get(name) ?? new Set()
+    peers.add(this)
+    TestBroadcastChannel.channels.set(name, peers)
+  }
+
+  postMessage(message: unknown) {
+    for (const peer of TestBroadcastChannel.channels.get(this.name) ?? []) {
+      if (peer === this) continue
+      for (const listener of peer.listeners) {
+        queueMicrotask(() =>
+          listener(new MessageEvent("message", { data: message })),
+        )
+      }
+    }
+  }
+
+  close() {
+    TestBroadcastChannel.channels.get(this.name)?.delete(this)
+    this.listeners.clear()
+  }
+
+  addEventListener(type: "message", listener: BroadcastListener) {
+    if (type === "message") this.listeners.add(listener)
+  }
+
+  removeEventListener(type: "message", listener: BroadcastListener) {
+    if (type === "message") this.listeners.delete(listener)
+  }
+}
+
+const NativeBroadcastChannel = globalThis.BroadcastChannel
+
+afterEach(() => {
+  cleanup()
+  globalThis.BroadcastChannel = NativeBroadcastChannel
+  TestBroadcastChannel.channels.clear()
+})
 
 const thor: DeviceConfig = {
   id: "thor",
@@ -44,19 +96,109 @@ function makeAdapter() {
       marker.dataset.testid = "mounted-route"
       marker.textContent = `${history.location.pathname}:${dualScreen?.role ?? "none"}`
       host.append(marker)
-      const unsubscribe = (history as RouterHistory).subscribe(({ location }) => {
-        marker.textContent = `${location.pathname}:${dualScreen?.role ?? "none"}`
-      })
+      const unsubscribe = (history as RouterHistory).subscribe(
+        ({ location }) => {
+          marker.textContent = `${location.pathname}:${dualScreen?.role ?? "none"}`
+        },
+      )
       return { router: {} as never, dispose: () => unsubscribe() }
     },
   }
   return { adapter, mounts }
 }
 
-function context(adapter: LabSurfaceAdapter): LabContextValue {
+function makeSharedSessionAdapter(): LabSurfaceAdapter {
+  return {
+    id: "shift",
+    devices: [thor],
+    makeSeedInitialValues: async () => ({ seed: true }),
+    mountSurface: (host, { history, dualScreen }) => {
+      if (!dualScreen) return { router: {} as never, dispose: () => {} }
+      const channel = new BroadcastChannel(dualScreen.channelName)
+      const path = history?.location.pathname ?? "/"
+      const dispose =
+        path === "/companion"
+          ? mountCompanionProbe(host, channel)
+          : mountPrimaryProbe(host, channel)
+      return { router: {} as never, dispose }
+    },
+  }
+}
+
+function mountPrimaryProbe(host: HTMLElement, channel: BroadcastChannel) {
+  let selectedGameId = "hollow-knight"
+  let revision = 1
+  const button = document.createElement("button")
+  button.type = "button"
+  button.textContent = "Celeste"
+  const snapshot = () =>
+    channel.postMessage({
+      _tag: "SelectionSnapshot",
+      selectedGameId,
+      lastSource: "primary",
+      source: "primary",
+      revision,
+    })
+  const receive = (event: MessageEvent) => {
+    if (event.data?._tag === "SelectionRequested") snapshot()
+  }
+  const focusCeleste = () => {
+    selectedGameId = "celeste"
+    revision += 1
+    channel.postMessage({
+      _tag: "GameFocused",
+      gameId: selectedGameId,
+      source: "primary",
+      revision,
+    })
+  }
+  button.addEventListener("focus", focusCeleste)
+  channel.addEventListener("message", receive)
+  host.append(button)
+  queueMicrotask(snapshot)
+  return () => {
+    button.removeEventListener("focus", focusCeleste)
+    channel.removeEventListener("message", receive)
+    channel.close()
+  }
+}
+
+function mountCompanionProbe(host: HTMLElement, channel: BroadcastChannel) {
+  const heading = document.createElement("h1")
+  heading.textContent = "Waiting"
+  const receive = (event: MessageEvent) => {
+    if (
+      event.data?._tag !== "GameFocused" &&
+      event.data?._tag !== "SelectionSnapshot"
+    )
+      return
+    const selectedGameId =
+      event.data._tag === "GameFocused"
+        ? event.data.gameId
+        : event.data.selectedGameId
+    heading.textContent =
+      selectedGameId === "celeste"
+        ? "Celeste"
+        : selectedGameId === "hollow-knight"
+          ? "Hollow Knight"
+          : "Waiting"
+  }
+  channel.addEventListener("message", receive)
+  host.append(heading)
+  channel.postMessage({ _tag: "SelectionRequested", requester: "companion" })
+  return () => {
+    channel.removeEventListener("message", receive)
+    channel.close()
+  }
+}
+
+function context(
+  adapter: LabSurfaceAdapter,
+  initialValues: unknown = { seed: true },
+): LabContextValue {
   return {
     adapter,
-    initialValues: { seed: true },
+    initialValues,
     themeId: adapter.id,
     surfacePath: "/",
     initialCanvasView: "surface",
@@ -105,6 +247,45 @@ describe("LabSurfaceView", () => {
     expect(mounts).not.toContainEqual({
       path: "/game/hollow-knight",
       dualScreen: undefined,
+    })
+  })
+
+  it("lets a product-session companion follow primary focus through lab wiring", async () => {
+    globalThis.BroadcastChannel =
+      TestBroadcastChannel as unknown as typeof BroadcastChannel
+    const adapter = makeSharedSessionAdapter()
+    const { container } = render(
+      <LabContext.Provider value={context(adapter)}>
+        <LabSurfaceView sourceId="default" stateId="ready" />
+      </LabContext.Provider>,
+    )
+
+    const secondary = await waitFor(() => {
+      const node = container.querySelector<HTMLElement>(
+        '[data-lab-device-id="thor"] [data-lab-screen-role="secondary"]',
+      )
+      expect(node).toBeTruthy()
+      return node as HTMLElement
+    })
+    const primary = container.querySelector<HTMLElement>(
+      '[data-lab-device-id="thor"] [data-lab-screen-role="primary"]',
+    )
+    expect(primary).toBeTruthy()
+
+    await waitFor(() => {
+      expect(
+        within(secondary).getByRole("heading", { name: "Hollow Knight" }),
+      ).toBeTruthy()
+    })
+
+    fireEvent.focus(
+      within(primary as HTMLElement).getByRole("button", { name: "Celeste" }),
+    )
+
+    await waitFor(() => {
+      expect(
+        within(secondary).getByRole("heading", { name: "Celeste" }),
+      ).toBeTruthy()
     })
   })
 })
