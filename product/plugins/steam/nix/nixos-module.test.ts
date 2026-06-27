@@ -59,6 +59,8 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("-steampal")
     expect(moduleSource).toContain("-steamdeck")
     expect(moduleSource).toContain("-silent")
+    expect(moduleSource).toContain("--backend wayland")
+    expect(moduleSource).toContain("-w 1920 -h 1080 -W 1920 -H 1080")
     expect(moduleSource).not.toContain("-gamepadui")
     expect(moduleSource).not.toContain("starting Steam directly without sudo")
     expect(moduleSource).not.toContain("direct_steam_pid")

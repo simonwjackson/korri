@@ -1112,7 +1112,7 @@ in
         SupplementaryGroups = [ steamInputGroup ];
         WorkingDirectory = cfg.home;
         LimitNOFILE = 524288;
-        ExecStart = "${pkgs.gamescope}/bin/gamescope -e -f -W 1920 -H 1080 -- ${steamLauncher}/bin/korri-steam-guest -steamos3 -steampal -steamdeck -silent -nochatui -nofriendsui -forcedesktopscaling 1.5 -noverifyfiles -nobootstrapupdate -skipinitialbootstrap -norepairfiles";
+        ExecStart = "${pkgs.gamescope}/bin/gamescope --backend wayland -e -f -w 1920 -h 1080 -W 1920 -H 1080 -- ${steamLauncher}/bin/korri-steam-guest -steamos3 -steampal -steamdeck -silent -nochatui -nofriendsui -forcedesktopscaling 1.5 -noverifyfiles -nobootstrapupdate -skipinitialbootstrap -norepairfiles";
         Restart = "on-failure";
         RestartSec = "2s";
       };
