@@ -33,6 +33,7 @@ import {
 } from "./control-renderers"
 import { createEffectGamePicker } from "./game-picker"
 import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"
+import { scoutCommand } from "./scout-command"
 import { runSourceAwarePlayCommand } from "./source-aware-play"
 import { runStreamLaunchCommand } from "./stream-launch"
 
@@ -262,6 +263,7 @@ export const korriCommand = Command.make("korri").pipe(
     gamesCommand,
     launchCommand,
     playCommand,
+    scoutCommand,
     sessionCommand,
     streamCommand,
   ]),

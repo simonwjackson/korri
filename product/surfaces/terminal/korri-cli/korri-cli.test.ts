@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test"
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises"
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
@@ -64,6 +71,63 @@ describe("korri CLI", () => {
     )
 
     expect(Exit.isSuccess(exit)).toBe(true)
+  })
+
+  it("renders help for the scout scan releases command", async () => {
+    const result = await captureCliOutput(() =>
+      Effect.runPromiseExit(
+        runKorriCli(["scout", "scan", "releases", "--help"]),
+      ),
+    )
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain("Scan files under a root")
+    expect(result.stdout).toContain("--root")
+    expect(result.stdout).toContain("--storage")
+    expect(result.stdout).toContain("--config")
+  })
+
+  it("scouts release candidates into the default config file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-scout-releases-"))
+    const dataHome = await mkdtemp(join(tmpdir(), "korri-scout-data-"))
+    const previousDataHome = process.env.XDG_DATA_HOME
+    const previousConfigRoots = process.env.KORRI_CONFIG_ROOTS
+    try {
+      process.env.XDG_DATA_HOME = dataHome
+      delete process.env.KORRI_CONFIG_ROOTS
+      await writeFile(join(root, "Metroid Fusion.gba"), "")
+      const config = join(dataHome, "korri", "config", "korri.yaml")
+
+      const result = await captureCliOutput(() =>
+        Effect.runPromiseExit(
+          runKorriCli([
+            "scout",
+            "scan",
+            "releases",
+            "--root",
+            root,
+            "--storage",
+            "sd-releases",
+          ]),
+        ),
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain("scout release candidates")
+      expect(result.stdout).toContain("metroid-fusion")
+      expect(result.stdout).toContain(config)
+      const generated = await readFile(config, "utf8")
+      expect(generated).toContain("storage:")
+      expect(generated).toContain("path: Metroid Fusion.gba")
+    } finally {
+      if (previousDataHome === undefined) delete process.env.XDG_DATA_HOME
+      else process.env.XDG_DATA_HOME = previousDataHome
+      if (previousConfigRoots === undefined)
+        delete process.env.KORRI_CONFIG_ROOTS
+      else process.env.KORRI_CONFIG_ROOTS = previousConfigRoots
+      await rm(root, { recursive: true, force: true })
+      await rm(dataHome, { recursive: true, force: true })
+    }
   })
 
   it("renders help for the stream remote-launch command", async () => {
