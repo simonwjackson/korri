@@ -79,6 +79,7 @@ pkgs.stdenv.mkDerivation {
     # typescript, ...) despite none of it being reachable at runtime.
 
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri" \
+      --set KORRI_FIND_BIN ${pkgs.findutils}/bin/find \
       --add-flags "$out/share/korri-cli/korri-cli.js"
 
     runHook postInstall
@@ -126,6 +127,23 @@ pkgs.stdenv.mkDerivation {
         exit 1
       fi
     done
+
+    scout_root="$TMPDIR/scout-root"
+    scout_config="$TMPDIR/scout-config/korri.yaml"
+    mkdir -p "$scout_root" "$(dirname "$scout_config")"
+    touch "$scout_root/Metroid Fusion.gba"
+    if ! env -i HOME="$HOME" XDG_DATA_HOME="$TMPDIR/xdg-data" "$out/bin/korri" scout scan releases --root "$scout_root" --storage scout-smoke --config "$scout_config" > "$TMPDIR/korri-scout-smoke.out" 2> "$TMPDIR/korri-scout-smoke.err"; then
+      echo "korri-cli smoke test failed: scout scan releases did not run with isolated environment" >&2
+      cat "$TMPDIR/korri-scout-smoke.out" >&2 || true
+      cat "$TMPDIR/korri-scout-smoke.err" >&2 || true
+      exit 1
+    fi
+    if ! grep -q "metroid-fusion" "$scout_config"; then
+      echo "korri-cli smoke test failed: scout scan did not merge candidate config" >&2
+      cat "$TMPDIR/korri-scout-smoke.out" >&2 || true
+      cat "$scout_config" >&2 || true
+      exit 1
+    fi
 
     # Safe Bazzar contract-command smoke: use an unknown-but-valid source name
     # so the command exercises the bundled acquisition CLI/RPC contract envelope

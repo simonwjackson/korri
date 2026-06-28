@@ -42,6 +42,15 @@ async function runCli(
   return { stdout, stderr, exitCode }
 }
 
+function resolveFromPath(command: string): string {
+  for (const directory of (process.env.PATH ?? "").split(":")) {
+    if (directory.length === 0) continue
+    const candidate = join(directory, command)
+    if (Bun.file(candidate).size !== 0) return candidate
+  }
+  throw new Error(`could not resolve ${command} from PATH`)
+}
+
 describe("korri CLI", () => {
   it("renders help for the root command", async () => {
     const exit = await Effect.runPromiseExit(runKorriCli(["--help"]))
@@ -92,8 +101,10 @@ describe("korri CLI", () => {
     const dataHome = await mkdtemp(join(tmpdir(), "korri-scout-data-"))
     const previousDataHome = process.env.XDG_DATA_HOME
     const previousConfigRoots = process.env.KORRI_CONFIG_ROOTS
+    const previousFindBin = process.env.KORRI_FIND_BIN
     try {
       process.env.XDG_DATA_HOME = dataHome
+      process.env.KORRI_FIND_BIN = resolveFromPath("find")
       delete process.env.KORRI_CONFIG_ROOTS
       await writeFile(join(root, "Metroid Fusion.gba"), "")
       const config = join(dataHome, "korri", "config", "korri.yaml")
@@ -116,15 +127,50 @@ describe("korri CLI", () => {
       expect(result.stdout).toContain("scout release candidates")
       expect(result.stdout).toContain("metroid-fusion")
       expect(result.stdout).toContain(config)
+      const summary = JSON.parse(result.stdout.split("---")[0] ?? "{}") as {
+        readonly merge: { readonly libraryAdded: number }
+      }
+      expect(summary.merge.libraryAdded).toBe(1)
       const generated = await readFile(config, "utf8")
       expect(generated).toContain("storage:")
       expect(generated).toContain("path: Metroid Fusion.gba")
+
+      const second = await captureCliOutput(() =>
+        Effect.runPromiseExit(
+          runKorriCli([
+            "scout",
+            "scan",
+            "releases",
+            "--root",
+            root,
+            "--storage",
+            "sd-releases",
+          ]),
+        ),
+      )
+      const secondSummary = JSON.parse(
+        second.stdout.split("---")[0] ?? "{}",
+      ) as {
+        readonly merge: {
+          readonly storageSkipped: number
+          readonly libraryAdded: number
+          readonly librarySkipped: number
+        }
+      }
+      expect(second.exitCode).toBe(0)
+      expect(secondSummary.merge).toMatchObject({
+        storageSkipped: 1,
+        libraryAdded: 0,
+        librarySkipped: 1,
+      })
     } finally {
       if (previousDataHome === undefined) delete process.env.XDG_DATA_HOME
       else process.env.XDG_DATA_HOME = previousDataHome
       if (previousConfigRoots === undefined)
         delete process.env.KORRI_CONFIG_ROOTS
       else process.env.KORRI_CONFIG_ROOTS = previousConfigRoots
+      if (previousFindBin === undefined) delete process.env.KORRI_FIND_BIN
+      else process.env.KORRI_FIND_BIN = previousFindBin
       await rm(root, { recursive: true, force: true })
       await rm(dataHome, { recursive: true, force: true })
     }

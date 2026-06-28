@@ -15,7 +15,11 @@ const scoutScanReleasesCommand = Command.make(
   },
   ({ root, storage, config }) =>
     Effect.promise(async () => {
-      const result = await scanReleaseCandidates({ root, storage })
+      const result = await scanReleaseCandidates({
+        root,
+        storage,
+        findBinary: optionalEnv("KORRI_FIND_BIN"),
+      })
       if (result.status === "diagnostic") {
         console.log(JSON.stringify(result, null, 2))
         process.exitCode = 1
@@ -56,6 +60,11 @@ export const scoutCommand = Command.make("scout").pipe(
   ),
   Command.withSubcommands([scoutScanCommand]),
 )
+
+function optionalEnv(name: string): string | undefined {
+  const value = process.env[name]
+  return value && value.length > 0 ? value : undefined
+}
 
 export function defaultScoutConfigPath(env: XdgPathEnv = process.env): string {
   const explicitRoot = env.KORRI_CONFIG_ROOTS?.split(":")

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { decodeLibraryItemPayload } from "@platform/library/config/records/library-item"
@@ -254,6 +261,35 @@ describe("scanReleaseCandidates", () => {
     expect(firstParsed.library).toEqual(secondParsed.library)
   })
 
+  it("uses a provided find binary instead of ambient command lookup", async () => {
+    await using fixture = await withTempRomRoot({
+      "Metroid Fusion.gba": "",
+    })
+    const realFind = resolveFromPath("find")
+    const marker = join(fixture.root, "find-shim-called.txt")
+    const shim = join(fixture.root, "find-shim.sh")
+    await writeFile(
+      shim,
+      [
+        "#!/bin/sh",
+        `echo "$0 $*" > ${JSON.stringify(marker)}`,
+        `exec ${JSON.stringify(realFind)} "$@"`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+    await chmod(shim, 0o755)
+
+    const result = await scanReleaseCandidates({
+      root: fixture.root,
+      storage: "roms",
+      findBinary: shim,
+    })
+
+    expect(result.status).toBe("ok")
+    expect(await readFile(marker, "utf8")).toContain(fixture.root)
+  })
+
   it("succeeds for an empty root", async () => {
     await using fixture = await withTempRomRoot({})
 
@@ -448,6 +484,15 @@ describe("mergeReleaseCandidateConfig", () => {
     expect(loaded.canResolve).toBe(true)
   })
 })
+
+function resolveFromPath(command: string): string {
+  for (const directory of (process.env.PATH ?? "").split(":")) {
+    if (directory.length === 0) continue
+    const candidate = join(directory, command)
+    if (Bun.file(candidate).size !== 0) return candidate
+  }
+  throw new Error(`could not resolve ${command} from PATH`)
+}
 
 async function withTempRomRoot(files: Record<string, string>) {
   const root = await mkdtemp(join(tmpdir(), "korri-rom-scan-"))

@@ -45,6 +45,7 @@ export interface RomScanSample {
 interface RomScanArgs {
   readonly root: string
   readonly storage: string
+  readonly findBinary?: string
 }
 
 export interface MergeReleaseCandidateConfigArgs {
@@ -77,9 +78,27 @@ export async function scanReleaseCandidates(
 ): Promise<RomScanResult> {
   const report = emptyReport()
   const candidates: RomScanCandidate[] = []
-  const child = spawn("find", [args.root, "-type", "f", "-print0"], {
-    stdio: ["ignore", "pipe", "pipe"],
-  })
+  const findBinary = args.findBinary ?? "find"
+  let child: ReturnType<typeof spawn>
+  try {
+    child = spawn(findBinary, [args.root, "-type", "f", "-print0"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+  } catch (error) {
+    return {
+      status: "diagnostic",
+      reason: "ScanFailed",
+      message: `failed to start ${findBinary}: ${errorMessage(error)}`,
+    }
+  }
+
+  if (child.stdout === null || child.stderr === null) {
+    return {
+      status: "diagnostic",
+      reason: "ScanFailed",
+      message: `${findBinary} did not provide scan output streams`,
+    }
+  }
 
   let pending: Buffer<ArrayBufferLike> = Buffer.alloc(0)
   let stderr = ""
@@ -101,9 +120,10 @@ export async function scanReleaseCandidates(
     stderrTruncated = stderrTruncated || appended.truncated
   })
 
-  const exitCode = await new Promise<number | null>(resolve =>
-    child.on("close", resolve),
-  )
+  const exit = await new Promise<number | null | Error>(resolve => {
+    child.on("error", resolve)
+    child.on("close", resolve)
+  })
   if (pending.length > 0) {
     const path = pending.toString("utf8")
     const classification = classifyRomScanPath(path, { root: args.root })
@@ -111,11 +131,19 @@ export async function scanReleaseCandidates(
     if (classification._tag === "Candidate") candidates.push(classification)
   }
 
-  if (exitCode !== 0) {
+  if (exit instanceof Error) {
     return {
       status: "diagnostic",
       reason: "ScanFailed",
-      message: `find failed with exit code ${exitCode ?? "unknown"}${
+      message: `failed to start ${findBinary}: ${errorMessage(exit)}`,
+    }
+  }
+
+  if (exit !== 0) {
+    return {
+      status: "diagnostic",
+      reason: "ScanFailed",
+      message: `${findBinary} failed with exit code ${exit ?? "unknown"}${
         stderr.trim() ? `: ${stderr.trim()}${stderrTruncated ? "…" : ""}` : ""
       }`,
     }
@@ -366,6 +394,10 @@ async function writeFileAtomically(
     await rm(tempPath, { force: true })
     throw error
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function appendBounded(
