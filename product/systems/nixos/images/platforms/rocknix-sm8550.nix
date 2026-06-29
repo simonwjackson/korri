@@ -569,6 +569,12 @@ in
       pkgs.moonlight-embedded
     ];
 
+    # Seat/session backend for wlroots. "direct" is the legacy ROCKNIX-guest
+    # workaround (builtin libseat opens VT/DRM/input via the runtime user's
+    # ACLs). Flip to "logind" to let libseat acquire the guest's
+    # systemd-logind seat0; validate on a clean guest reboot.
+    seatBackend = "logind";
+
     environment =
       moonlightCompositorEnvironment
       // gamescopeControlEnvironment
@@ -577,13 +583,6 @@ in
         CEMU_BIOS_ROOT = "/storage/roms/bios/cemu";
         CEMU_AFFINITY_MASK = sm8550.performance.cemuAffinityMask;
         WLR_NO_HARDWARE_CURSORS = "1";
-        WLR_LIBINPUT_NO_DEVICES = "1";
-        # Sobo's host-bound DRM node cannot be attached to logind's seat from
-        # inside the guest because the relevant sysfs uevent path is read-only.
-        # Use wlroots' direct session path; the setup units above grant the
-        # runtime user access to /dev/dri, /dev/input, and the active ttys.
-        WLR_SESSION = "direct";
-        LIBSEAT_BACKEND = "builtin";
         USER = runtime.user;
       };
 

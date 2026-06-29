@@ -161,8 +161,22 @@ let
     swayConfigPrelude + "\n" + cfg.sway.extraConfig
   );
 
+  seatBackendEnvironment =
+    if cfg.seatBackend == "direct" then {
+      # Legacy ROCKNIX-guest path: wlroots' builtin libseat opens the VT, DRM,
+      # and input nodes directly via the runtime user's ACLs, bypassing
+      # systemd-logind seat management.
+      WLR_SESSION = "direct";
+      LIBSEAT_BACKEND = "builtin";
+      WLR_LIBINPUT_NO_DEVICES = "1";
+    } else {
+      # "logind": let wlroots/libseat autodetect the guest's systemd-logind
+      # seat0. No session/backend override is emitted.
+    };
+
   sessionEnvironment =
     cfg.environment
+    // seatBackendEnvironment
     // {
       HOME = cfg.home;
       XDG_RUNTIME_DIR = cfg.runtimeDir;
@@ -255,6 +269,22 @@ in
       type = types.attrsOf types.str;
       default = { };
       description = "Extra environment variables for the Korri compositor session.";
+    };
+
+    seatBackend = mkOption {
+      type = types.enum [
+        "direct"
+        "logind"
+      ];
+      default = "logind";
+      description = ''
+        Seat/session backend for the wlroots compositor. "direct" uses
+        wlroots' builtin libseat backend, which opens the VT, DRM, and input
+        devices directly via the runtime user's ACLs -- the legacy
+        ROCKNIX-guest workaround for environments where systemd-logind could
+        not own seat0. "logind" emits no session override and lets
+        wlroots/libseat acquire the guest's systemd-logind seat0 directly.
+      '';
     };
 
     path = mkOption {
