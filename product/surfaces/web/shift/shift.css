@@ -47,7 +47,8 @@
  * -------------------------------------------------------------------------- */
 
 [data-shift-home],
-[data-shift-detail] {
+[data-shift-detail],
+[data-shift-library] {
 	/* ── Intrinsic generator knobs ─────────────────────────────────────────
 	 * Shift instantiates @korri/intrinsic-design against its OWN container.
 	 * The surface element carries the `intrinsic` class so --intrinsic-text-* /
@@ -807,4 +808,745 @@
 	100% {
 		background-position: -200% 0;
 	}
+}
+
+/* ========================================================================== *
+ * LIBRARY (browse-everything surface)
+ *
+ * Two explorable variants share one scope and one cover tile:
+ *   - Variant A (.shift-lib + .shift-lib-grid): an ADDITIVE cover grid. The
+ *     track min is base-relative, so a wider frame gains columns (denser on a
+ *     TV) instead of zooming the same few up.
+ *   - Variant B (.shift-lib-shelves): the same tiles in horizontal shelves
+ *     grouped by intent.
+ * Tiles are native <button>s; the focus ring is the shared
+ * :focus / [data-korri-active-focus] seam the rest of Shift uses.
+ * ========================================================================== */
+
+[data-shift-library].shift-lib {
+	height: 100%;
+	overflow-y: auto;
+	overflow-x: hidden;
+	background-color: var(--shift-surface);
+	color: var(--shift-ink);
+	font-family: "Geist Variable", system-ui, sans-serif;
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-4);
+	padding: var(--shift-space-5) var(--shift-space-5) var(--shift-space-6);
+}
+
+[data-shift-library] .shift-lib-top {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--shift-space-3);
+}
+
+[data-shift-library] .shift-lib-heading {
+	margin: 0;
+	font-size: var(--shift-text-heading);
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	line-height: 1.05;
+	color: var(--shift-ink);
+}
+
+[data-shift-library] .shift-lib-count {
+	font-size: var(--shift-text-fine);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-library] .shift-lib-empty {
+	margin: 0;
+	font-size: var(--shift-text-body);
+	color: var(--shift-ink-dim);
+}
+
+/* ── Variant A: additive cover grid ──────────────────────────────────────── */
+[data-shift-library] .shift-lib-grid {
+	display: grid;
+	/* Additive: auto-fill adds columns as width allows; the min track is
+	 * base-relative so cover size tracks the device scale, not viewport px. */
+	grid-template-columns: repeat(
+		auto-fill,
+		minmax(calc(var(--intrinsic-base) * 4.5), 1fr)
+	);
+	gap: var(--shift-space-4) var(--shift-space-3);
+}
+
+/* ── Shared cover tile ───────────────────────────────────────────────────── */
+[data-shift-library] .shift-lib-tile {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	outline: none;
+	text-align: left;
+	min-width: 0;
+	color: inherit;
+}
+
+[data-shift-library] .shift-lib-tile-art {
+	position: relative;
+	display: block;
+	aspect-ratio: 3 / 4;
+	border-radius: var(--shift-radius-panel);
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+	transform: scale(1);
+	transition:
+		transform 200ms ease,
+		box-shadow 200ms ease;
+}
+
+[data-shift-library] .shift-lib-tile-art img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+[data-shift-library] .shift-lib-tile-fav {
+	position: absolute;
+	top: var(--shift-space-2);
+	right: var(--shift-space-2);
+	font-size: var(--shift-text-fine);
+	line-height: 1;
+	color: var(--shift-accent);
+	text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+}
+
+[data-shift-library] .shift-lib-tile-title {
+	font-size: var(--shift-text-fine);
+	font-weight: 600;
+	line-height: 1.2;
+	color: var(--shift-ink-dim);
+	/* Clamp to two lines so a long title never reflows the grid row. */
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+}
+
+[data-shift-library]
+	.shift-lib-tile:is(:focus, [data-korri-active-focus])
+	.shift-lib-tile-art {
+	transform: scale(1.04);
+	box-shadow:
+		0 18px 46px rgba(0, 0, 0, 0.55),
+		0 0 0 3px var(--shift-accent);
+}
+
+[data-shift-library]
+	.shift-lib-tile:is(:focus, [data-korri-active-focus])
+	.shift-lib-tile-title {
+	color: var(--shift-ink);
+}
+
+/* ── Variant B: sectioned shelves ────────────────────────────────────────── */
+[data-shift-library] .shift-lib-shelf-stack {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-5);
+}
+
+[data-shift-library] .shift-lib-shelf-title {
+	margin: 0 0 var(--shift-space-2);
+	font-size: var(--shift-text-title);
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	color: var(--shift-ink);
+}
+
+[data-shift-library] .shift-lib-shelf-track {
+	display: flex;
+	gap: var(--shift-space-3);
+	overflow-x: auto;
+	overflow-y: visible;
+	scroll-snap-type: x proximity;
+	/* Room for the focused tile's scale-up + ring, so it isn't clipped by the
+	 * horizontal scroll container. */
+	padding: var(--shift-space-2) var(--shift-space-1) var(--shift-space-3);
+	scrollbar-width: none;
+}
+
+[data-shift-library] .shift-lib-shelf-track::-webkit-scrollbar {
+	display: none;
+}
+
+/* In a shelf the grid no longer sizes the tile, so the row pins a base-relative
+ * width; the tile's own aspect-ratio derives its height. */
+[data-shift-library] .shift-lib-shelf-track .shift-lib-tile {
+	flex: 0 0 auto;
+	width: calc(var(--intrinsic-base) * 5);
+	scroll-snap-align: start;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	[data-shift-library] .shift-lib-tile-art {
+		transition: none;
+	}
+}
+
+/* ── Depth controls (shared by lens + filter-bar variants) ───────────────── *
+ * Two control philosophies over the same query core: the lens variant keeps
+ * one frame row standing and summons sort on demand; the filter-bar variant
+ * stands every control up. Both use the same pill vocabulary so the contrast is
+ * the layout, not the styling.
+ * -------------------------------------------------------------------------- */
+
+[data-shift-library] .shift-lib-options-btn,
+[data-shift-library] .shift-lib-chip,
+[data-shift-library] .shift-lib-option {
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-fine);
+	font-weight: 600;
+	color: var(--shift-pill-fg);
+	background: var(--shift-pill-bg);
+	border: 1px solid var(--shift-rule);
+	border-radius: 9999px;
+	padding: var(--shift-space-1) var(--shift-space-3);
+	outline: none;
+	white-space: nowrap;
+	transition:
+		box-shadow 140ms ease,
+		background 140ms ease,
+		color 140ms ease;
+}
+
+[data-shift-library] .shift-lib-options-btn:is(:focus, [data-korri-active-focus]),
+[data-shift-library] .shift-lib-chip:is(:focus, [data-korri-active-focus]),
+[data-shift-library] .shift-lib-option:is(:focus, [data-korri-active-focus]),
+[data-shift-library] .shift-lib-lens-item:is(:focus, [data-korri-active-focus]) {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+/* Active (selected) pill: accent fill. */
+[data-shift-library] .shift-lib-chip[data-active],
+[data-shift-library] .shift-lib-option[data-active] {
+	color: var(--shift-on-accent);
+	background: var(--shift-accent);
+	border-color: transparent;
+}
+
+/* ── Lens variant: standing frame row + summoned sort ─────────────────────── */
+[data-shift-library] .shift-lib-lens-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--shift-space-2);
+}
+
+[data-shift-library] .shift-lib-lens-item {
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	color: var(--shift-ink-faint);
+	background: transparent;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	padding: var(--shift-space-1) var(--shift-space-1) var(--shift-space-2);
+	outline: none;
+	transition: color 140ms ease;
+}
+
+[data-shift-library] .shift-lib-lens-item[data-active] {
+	color: var(--shift-ink);
+	border-bottom-color: var(--shift-accent);
+}
+
+/* The summoned sort options — appear only when the Options button is pressed,
+ * so no sort chrome competes with the games by default. */
+[data-shift-library] .shift-lib-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--shift-space-2);
+	padding: var(--shift-space-2) var(--shift-space-3);
+	border-radius: var(--shift-radius-panel);
+	background: var(--shift-surface-raised);
+	border: 1px solid var(--shift-rule);
+}
+
+/* ── Filter-bar variant: every control standing ───────────────────────────── */
+[data-shift-library] .shift-lib-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--shift-space-2);
+}
+
+[data-shift-library] .shift-lib-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-1);
+}
+
+[data-shift-library] .shift-lib-chip-count {
+	font-size: 0.85em;
+	font-weight: 700;
+	opacity: 0.7;
+}
+
+[data-shift-library] .shift-lib-chip-sort {
+	margin-left: auto;
+}
+
+/* ── Concierge variant: intent-first front door ───────────────────────────── *
+ * The library as a question. A column of intent prompts replaces the wall; an
+ * answer is a small grid you reach via one of them.
+ * -------------------------------------------------------------------------- */
+[data-shift-library] .shift-lib-intents {
+	display: grid;
+	grid-template-columns: repeat(
+		auto-fit,
+		minmax(calc(var(--intrinsic-base) * 9), 1fr)
+	);
+	gap: var(--shift-space-3);
+}
+
+[data-shift-library] .shift-lib-intent {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+	text-align: left;
+	cursor: pointer;
+	font: inherit;
+	color: var(--shift-ink);
+	background: var(--shift-surface-raised);
+	border: 1px solid var(--shift-rule);
+	border-radius: var(--shift-radius-panel);
+	padding: var(--shift-space-3) var(--shift-space-4);
+	outline: none;
+	transition:
+		box-shadow 140ms ease,
+		transform 140ms ease,
+		border-color 140ms ease;
+}
+
+[data-shift-library] .shift-lib-intent:is(:focus, [data-korri-active-focus]) {
+	transform: translateY(-2px);
+	border-color: color-mix(in srgb, var(--shift-accent) 60%, transparent);
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+[data-shift-library] .shift-lib-intent-label {
+	font-size: var(--shift-text-title);
+	font-weight: 800;
+	letter-spacing: -0.01em;
+}
+
+[data-shift-library] .shift-lib-intent-blurb {
+	font-size: var(--shift-text-fine);
+	color: var(--shift-ink-dim);
+}
+
+/* ── Queue variant: Now Playing hero over the lanes ───────────────────────── */
+[data-shift-library] .shift-lib-now {
+	display: flex;
+	align-items: center;
+	gap: var(--shift-space-4);
+	padding: var(--shift-space-3);
+	border-radius: var(--shift-radius-panel);
+	background: var(--shift-surface-raised);
+	border: 1px solid var(--shift-rule);
+}
+
+[data-shift-library] .shift-lib-now-art {
+	flex: 0 0 auto;
+	display: block;
+	width: calc(var(--intrinsic-base) * 4);
+	aspect-ratio: 3 / 4;
+	border-radius: var(--shift-radius-panel);
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+}
+
+[data-shift-library] .shift-lib-now-art img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+[data-shift-library] .shift-lib-now-meta {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+	min-width: 0;
+}
+
+[data-shift-library] .shift-lib-now-kicker {
+	font-size: var(--shift-text-fine);
+	font-weight: 800;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--shift-accent);
+}
+
+[data-shift-library] .shift-lib-now-title {
+	margin: 0;
+	font-size: var(--shift-text-heading);
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	line-height: 1.05;
+	color: var(--shift-ink);
+}
+
+[data-shift-library] .shift-lib-resume {
+	align-self: flex-start;
+	margin-top: var(--shift-space-1);
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	color: var(--shift-on-accent);
+	background: var(--shift-accent);
+	border: 0;
+	border-radius: 9999px;
+	padding: var(--shift-space-2) var(--shift-space-4);
+	outline: none;
+	transition:
+		box-shadow 140ms ease,
+		transform 140ms ease;
+}
+
+[data-shift-library] .shift-lib-resume:is(:focus, [data-korri-active-focus]) {
+	transform: translateY(-1px);
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+/* ========================================================================== *
+ * ENGAGING VARIANTS — Deck / Reel / Atlas
+ *
+ * Art-forward, motion-led takes where the games are the spectacle: the Deck
+ * fills the screen with one cover and you flick the stack; the Reel is a wheel
+ * you spin; the Atlas is a territory map you pan and zoom.
+ * ========================================================================== */
+
+/* ── Deck: one full-screen card over a blurred bleed of itself ────────────── */
+[data-shift-library].shift-lib-deck {
+	position: relative;
+	overflow: hidden;
+	padding: 0;
+	background-color: #06060a;
+}
+
+[data-shift-library] .shift-lib-deck-bleed {
+	position: absolute;
+	inset: -8%;
+	z-index: 0;
+	background-size: cover;
+	background-position: center;
+	filter: blur(36px) saturate(1.2) brightness(0.55);
+	transform: scale(1.1);
+}
+
+[data-shift-library] .shift-lib-deck-scrim {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	background: linear-gradient(
+		to bottom,
+		rgba(4, 4, 8, 0.4) 0%,
+		rgba(4, 4, 8, 0.1) 38%,
+		rgba(4, 4, 8, 0.86) 100%
+	);
+}
+
+[data-shift-library] .shift-lib-deck-counter {
+	position: absolute;
+	top: var(--shift-space-4);
+	right: var(--shift-space-5);
+	z-index: 4;
+	font-size: var(--shift-text-fine);
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	color: var(--shift-on-media-ink-dim);
+}
+
+[data-shift-library] .shift-lib-deck-stage {
+	position: relative;
+	z-index: 2;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--shift-space-5) var(--shift-space-5) var(--shift-space-2);
+}
+
+[data-shift-library] .shift-lib-deck-card {
+	height: min(60cqh, calc(var(--intrinsic-base) * 16));
+	aspect-ratio: 3 / 4;
+	border-radius: var(--shift-radius-panel);
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+	box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+	cursor: grab;
+	touch-action: pan-y;
+}
+
+[data-shift-library] .shift-lib-deck-card img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	pointer-events: none;
+}
+
+[data-shift-library] .shift-lib-deck-hero {
+	position: relative;
+	z-index: 3;
+	text-align: center;
+	padding: 0 var(--shift-space-5);
+	color: var(--shift-on-media-ink);
+}
+
+[data-shift-library] .shift-lib-deck-title {
+	margin: 0;
+	font-size: var(--shift-text-display);
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	line-height: 1.05;
+	text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6);
+}
+
+[data-shift-library] .shift-lib-deck-tags {
+	margin: var(--shift-space-1) 0 0;
+	font-size: var(--shift-text-fine);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--shift-on-media-ink-dim);
+}
+
+[data-shift-library] .shift-lib-deck-actions {
+	position: relative;
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--shift-space-3);
+	padding: var(--shift-space-4) var(--shift-space-5) var(--shift-space-5);
+}
+
+[data-shift-library] .shift-lib-deck-arrow,
+[data-shift-library] .shift-lib-deck-fav {
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	color: var(--shift-pill-fg);
+	background: var(--shift-pill-bg);
+	border: 1px solid var(--shift-rule);
+	border-radius: 9999px;
+	padding: var(--shift-space-2) var(--shift-space-4);
+	outline: none;
+	backdrop-filter: blur(8px);
+}
+
+[data-shift-library] .shift-lib-deck-fav[aria-pressed="true"] {
+	color: var(--shift-accent);
+	border-color: color-mix(in srgb, var(--shift-accent) 50%, transparent);
+}
+
+[data-shift-library] .shift-lib-deck-play {
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 800;
+	color: var(--shift-on-accent);
+	background: var(--shift-accent);
+	border: 0;
+	border-radius: 9999px;
+	padding: var(--shift-space-2) var(--shift-space-5);
+	outline: none;
+}
+
+[data-shift-library] .shift-lib-deck-arrow:is(:focus, [data-korri-active-focus]),
+[data-shift-library] .shift-lib-deck-fav:is(:focus, [data-korri-active-focus]),
+[data-shift-library] .shift-lib-deck-play:is(:focus, [data-korri-active-focus]) {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+/* ── Reel: a spinnable wheel of covers, centre enlarged ───────────────────── */
+[data-shift-library].shift-lib-reel {
+	overflow: hidden;
+	align-items: center;
+	justify-content: center;
+	gap: var(--shift-space-3);
+}
+
+[data-shift-library] .shift-lib-reel-stage {
+	position: relative;
+	width: 100%;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+[data-shift-library] .shift-lib-reel-cover {
+	position: absolute;
+	height: min(48cqh, calc(var(--intrinsic-base) * 12));
+	aspect-ratio: 3 / 4;
+	border: 0;
+	padding: 0;
+	border-radius: var(--shift-radius-panel);
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+	cursor: pointer;
+	outline: none;
+	will-change: transform, opacity;
+}
+
+[data-shift-library] .shift-lib-reel-cover img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	pointer-events: none;
+}
+
+[data-shift-library] .shift-lib-reel-cover[data-center] {
+	box-shadow:
+		0 24px 60px rgba(0, 0, 0, 0.55),
+		0 0 0 3px var(--shift-accent);
+}
+
+[data-shift-library] .shift-lib-reel-hero {
+	text-align: center;
+	color: var(--shift-ink);
+}
+
+[data-shift-library] .shift-lib-reel-title {
+	margin: 0;
+	font-size: var(--shift-text-heading);
+	font-weight: 800;
+	letter-spacing: -0.02em;
+}
+
+[data-shift-library] .shift-lib-reel-tags {
+	margin: var(--shift-space-1) 0 0;
+	font-size: var(--shift-text-fine);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--shift-ink-dim);
+}
+
+[data-shift-library] .shift-lib-reel-actions {
+	display: flex;
+	gap: var(--shift-space-3);
+}
+
+[data-shift-library] .shift-lib-reel-spin {
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	color: var(--shift-pill-fg);
+	background: var(--shift-pill-bg);
+	border: 1px solid var(--shift-rule);
+	border-radius: 9999px;
+	padding: var(--shift-space-2) var(--shift-space-4);
+	outline: none;
+}
+
+[data-shift-library] .shift-lib-reel-play {
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 800;
+	color: var(--shift-on-accent);
+	background: var(--shift-accent);
+	border: 0;
+	border-radius: 9999px;
+	padding: var(--shift-space-2) var(--shift-space-5);
+	outline: none;
+}
+
+[data-shift-library] .shift-lib-reel-spin:is(:focus, [data-korri-active-focus]),
+[data-shift-library] .shift-lib-reel-play:is(:focus, [data-korri-active-focus]),
+[data-shift-library] .shift-lib-reel-cover:is(:focus, [data-korri-active-focus]) {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+/* ── Atlas: a pannable, zoomable territory map ────────────────────────────── */
+[data-shift-library] .shift-lib-atlas-viewport {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+	border-radius: var(--shift-radius-panel);
+	background:
+		radial-gradient(
+			circle at 30% 20%,
+			rgba(91, 208, 255, 0.08),
+			transparent 60%
+		),
+		var(--shift-surface-sunk);
+}
+
+[data-shift-library] .shift-lib-atlas-board {
+	--atlas-cell-w: 78cqw;
+	--atlas-cell-h: 66cqh;
+	position: absolute;
+	top: 0;
+	left: 0;
+	display: grid;
+	grid-template-columns: repeat(var(--atlas-columns), var(--atlas-cell-w));
+	grid-auto-rows: var(--atlas-cell-h);
+	gap: var(--shift-space-3);
+	transform-origin: top left;
+	transform: translate(
+			calc(50cqw - (var(--atlas-col) + 0.5) * var(--atlas-cell-w)),
+			calc(50cqh - (var(--atlas-row) + 0.5) * var(--atlas-cell-h))
+		)
+		scale(var(--atlas-zoom));
+	transition: transform 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+[data-shift-library] .shift-lib-atlas-territory {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-2);
+	padding: var(--shift-space-3);
+	border-radius: var(--shift-radius-panel);
+	border: 1px solid var(--shift-rule);
+	background: rgba(255, 255, 255, 0.02);
+	transition:
+		border-color 240ms ease,
+		background 240ms ease;
+}
+
+[data-shift-library] .shift-lib-atlas-territory[data-focused] {
+	border-color: color-mix(in srgb, var(--shift-accent) 55%, transparent);
+	background: color-mix(in srgb, var(--shift-accent) 8%, transparent);
+}
+
+[data-shift-library] .shift-lib-atlas-label {
+	margin: 0;
+	font-size: var(--shift-text-title);
+	font-weight: 800;
+	letter-spacing: -0.01em;
+	color: var(--shift-ink);
+}
+
+[data-shift-library] .shift-lib-atlas-covers {
+	display: grid;
+	grid-template-columns: repeat(
+		auto-fill,
+		minmax(calc(var(--intrinsic-base) * 3.4), 1fr)
+	);
+	gap: var(--shift-space-2);
+	overflow: hidden;
 }

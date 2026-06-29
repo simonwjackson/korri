@@ -28,6 +28,17 @@ import {
   ShiftGameDetailScreen,
   type ShiftGameDetailView,
 } from "./pages/ShiftGameDetailScreen"
+import { ShiftLibraryAtlas } from "./pages/ShiftLibraryAtlas"
+import { ShiftLibraryConcierge } from "./pages/ShiftLibraryConcierge"
+import { ShiftLibraryDeck } from "./pages/ShiftLibraryDeck"
+import { ShiftLibraryFilterBar } from "./pages/ShiftLibraryFilterBar"
+import { ShiftLibraryGrid } from "./pages/ShiftLibraryGrid"
+import { ShiftLibraryLens } from "./pages/ShiftLibraryLens"
+import { ShiftLibraryQueue } from "./pages/ShiftLibraryQueue"
+import { ShiftLibraryReel } from "./pages/ShiftLibraryReel"
+import { ShiftLibraryShelves } from "./pages/ShiftLibraryShelves"
+import type { ShiftLibraryGame } from "./pages/shift-library-game"
+import { buildShiftLibrarySections } from "./pages/shift-library-sections"
 import "./shift.css"
 
 const SHIFT_DEFAULT_PX_PER_MM = 6.78
@@ -210,6 +221,25 @@ const SHIFT_DETAIL_GAMES: readonly ShiftGameDetailView[] = DEV_GAMES.map(
   }),
 )
 
+const SHIFT_LIBRARY_GAMES: readonly ShiftLibraryGame[] = DEV_GAMES.map(
+  ({ media, userData }) => ({
+    id: media.id,
+    title: media.title,
+    artUrl: media.gridUrl,
+    genre: media.genre,
+    developer: media.developer,
+    ...(userData.lastPlayed
+      ? { lastPlayedAt: userData.lastPlayed.getTime() }
+      : {}),
+    ...(userData.playtime !== undefined
+      ? { playtimeMinutes: userData.playtime }
+      : {}),
+    favorite: userData.favorite,
+  }),
+)
+
+const SHIFT_LIBRARY_SECTIONS = buildShiftLibrarySections(SHIFT_LIBRARY_GAMES)
+
 const SHIFT_SCREENS: readonly Screen[] = [
   {
     id: "home",
@@ -222,6 +252,69 @@ const SHIFT_SCREENS: readonly Screen[] = [
         avatarSrc={PLACEHOLDER_AVATAR_SRC}
       />
     ),
+  },
+  {
+    id: "library-grid",
+    group: "Library",
+    name: "Library — Grid",
+    note: "Variant A: additive cover grid",
+    render: () => <ShiftLibraryGrid games={SHIFT_LIBRARY_GAMES} />,
+  },
+  {
+    id: "library-shelves",
+    group: "Library",
+    name: "Library — Shelves",
+    note: "Variant B: sectioned shelves",
+    render: () => <ShiftLibraryShelves sections={SHIFT_LIBRARY_SECTIONS} />,
+  },
+  {
+    id: "library-lens",
+    group: "Library",
+    name: "Library — Lens",
+    note: "Variant C: lens + summoned sort (progressive disclosure)",
+    render: () => <ShiftLibraryLens games={SHIFT_LIBRARY_GAMES} />,
+  },
+  {
+    id: "library-filterbar",
+    group: "Library",
+    name: "Library — Filter Bar",
+    note: "Variant D: persistent filter + sort bar",
+    render: () => <ShiftLibraryFilterBar games={SHIFT_LIBRARY_GAMES} />,
+  },
+  {
+    id: "library-concierge",
+    group: "Library",
+    name: "Library — Concierge",
+    note: "Variant E: intent-first (the library as a question)",
+    render: () => <ShiftLibraryConcierge games={SHIFT_LIBRARY_GAMES} />,
+  },
+  {
+    id: "library-queue",
+    group: "Library",
+    name: "Library — Queue",
+    note: "Variant F: backlog pipeline (Now / Up Next / Backlog)",
+    render: () => <ShiftLibraryQueue games={SHIFT_LIBRARY_GAMES} />,
+  },
+  {
+    id: "library-deck",
+    group: "Library",
+    name: "Library — Deck",
+    note: "Variant G: flickable full-screen cards",
+    render: () => <ShiftLibraryDeck games={SHIFT_LIBRARY_GAMES} />,
+  },
+  {
+    id: "library-reel",
+    group: "Library",
+    name: "Library — Reel",
+    note: "Variant H: spinnable momentum wheel",
+    render: () => <ShiftLibraryReel games={SHIFT_LIBRARY_GAMES} />,
+  },
+  {
+    id: "library-atlas",
+    group: "Library",
+    name: "Library — Atlas",
+    note: "Variant I: zoomable territory map",
+    render: () => <ShiftLibraryAtlas games={SHIFT_LIBRARY_GAMES} />,
   },
   {
     id: "game-detail",
@@ -237,5 +330,5 @@ export const shiftConfig: ThemeWorkshopConfig = {
   knobs: SHIFT_KNOBS,
   defaultPxPerMm: SHIFT_DEFAULT_PX_PER_MM,
   screens: SHIFT_SCREENS,
-  groups: ["Home", "Detail"],
+  groups: ["Home", "Library", "Detail"],
 }
