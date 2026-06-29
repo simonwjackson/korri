@@ -164,6 +164,68 @@ describe("LibraryItemPayload playable/release identity", () => {
     expect(item.releases[0]?.identity).toBeUndefined()
   })
 
+  it("decodes discovery metadata on file targets", () => {
+    const item = decodeLibraryItemPayload({
+      releases: [
+        {
+          id: "gba",
+          system: "gba",
+          target: {
+            kind: "file",
+            storage: "roms",
+            path: "gba/cart.gba",
+            discovery: { "first-seen-at": "2026-06-29T12:34:56.000Z" },
+          },
+        },
+      ],
+    })
+
+    expect(item.releases[0]?.target).toEqual({
+      kind: "file",
+      storage: "roms",
+      path: "gba/cart.gba",
+      discovery: { "first-seen-at": "2026-06-29T12:34:56.000Z" },
+    })
+  })
+
+  it("rejects empty discovery metadata on file targets", () => {
+    expect(() =>
+      decodeLibraryItemPayload({
+        releases: [
+          {
+            id: "gba",
+            system: "gba",
+            target: {
+              kind: "file",
+              storage: "roms",
+              path: "gba/cart.gba",
+              discovery: { "first-seen-at": "" },
+            },
+          },
+        ],
+      }),
+    ).toThrow(/non-empty|first-seen-at/i)
+  })
+
+  it("rejects discovery metadata on non-file targets", () => {
+    expect(() =>
+      decodeLibraryItemPayload({
+        releases: [
+          {
+            id: "steam",
+            system: "windows",
+            target: {
+              kind: "provider-ref",
+              provider: "@korri:steam",
+              ref: "1029210",
+              discovery: { "first-seen-at": "2026-06-29T12:34:56.000Z" },
+            },
+          },
+        ],
+      }),
+    ).toThrow(/discovery|Unexpected key/i)
+  })
+
   it("decodes declared hash identity for file releases", () => {
     const artifactId =
       "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

@@ -44,6 +44,7 @@ export interface CreateRomLibraryCandidatesOptions {
   readonly storage: string
   readonly root?: string
   readonly reservedIds?: Set<string>
+  readonly firstSeenAt: string
 }
 
 export interface RomLibraryCandidate {
@@ -219,6 +220,7 @@ export function createRomLibraryCandidatesFromClassifications(
             kind: "file",
             storage: options.storage,
             path: classification.path,
+            discovery: { "first-seen-at": options.firstSeenAt },
           },
           launch: {
             use: classification.app,

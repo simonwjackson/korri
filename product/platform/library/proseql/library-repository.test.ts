@@ -74,7 +74,12 @@ const sonic: LibraryItemRecord = {
     {
       id: "genesis",
       system: "genesis",
-      target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
+      target: {
+        kind: "file",
+        storage: "roms",
+        path: "genesis/Sonic.md",
+        discovery: { "first-seen-at": "2026-06-29T12:34:56.000Z" },
+      },
       launch: { use: KORRI_RETROARCH_APP_ID, runtime: "genesis-plus-gx" },
     },
     {
@@ -265,6 +270,11 @@ describe("createLibraryRepository — readable playable entries", () => {
           .find(entry => entry.id === "sonic-the-hedgehog")
           ?.releases.find(release => release.id === "genesis")?.identity,
       ).toBeUndefined()
+      expect(
+        entries
+          .find(entry => entry.id === "sonic-the-hedgehog")
+          ?.releases.find(release => release.id === "genesis")?.target,
+      ).toEqual({ kind: "file", storage: "roms", path: "genesis/Sonic.md" })
     })
   })
 
@@ -1111,6 +1121,11 @@ describe("createLibraryRepository — readable playable entries", () => {
       )
 
       expect(resolved.release.id).toBe("genesis")
+      expect(resolved.release.target).toEqual({
+        kind: "file",
+        storage: "roms",
+        path: "genesis/Sonic.md",
+      })
       expect(resolved.content?.path).toBe("/games/genesis/Sonic.md")
       expect(resolved.app.integration).toBe("retroarch")
       expect(resolved.spec.args).toEqual([

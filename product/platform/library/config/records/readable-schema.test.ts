@@ -505,6 +505,28 @@ describe("readable library schema records", () => {
     expect(targetOnly.releases[0]?.launch).toBeUndefined()
   })
 
+  it("decodes file-target discovery metadata", () => {
+    const item = decodeLibraryItemPayload({
+      title: "Metroid Fusion",
+      releases: [
+        {
+          id: "gba",
+          system: "gba",
+          target: {
+            kind: "file",
+            storage: "roms",
+            path: "gba/Metroid Fusion.gba",
+            discovery: { "first-seen-at": "2026-06-29T12:34:56.000Z" },
+          },
+        },
+      ],
+    })
+
+    expect(item.releases[0]?.target).toMatchObject({
+      discovery: { "first-seen-at": "2026-06-29T12:34:56.000Z" },
+    })
+  })
+
   it("rejects absolute release targets", () => {
     expect(() =>
       decodeLibraryItemPayload({

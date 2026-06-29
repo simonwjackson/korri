@@ -33,10 +33,15 @@ const TargetString = NonEmptyString.pipe(
   ),
 )
 
+const FileTargetDiscovery = Schema.Struct({
+  "first-seen-at": NonEmptyString,
+})
+
 const FileTarget = Schema.Struct({
   kind: Schema.Literal("file"),
   storage: NonEmptyString,
   path: TargetString,
+  discovery: Schema.optional(FileTargetDiscovery),
 })
 
 const FileSetPart = Schema.Struct({

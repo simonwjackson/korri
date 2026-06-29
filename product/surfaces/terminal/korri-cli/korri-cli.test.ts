@@ -13,16 +13,32 @@ import {
   KorriControl,
   type KorriControlService,
 } from "@platform/control/korri-control"
+import type { LibraryReleasePayload } from "@platform/library/config/records/library-item"
+import { decodeLibraryItemPayload } from "@platform/library/config/records/library-item"
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { executablePath } from "@platform/plugin/resources"
 import { KORRI_SRB2_PLUGIN_ID } from "@product/plugins/srb2"
 import { Effect, Exit, Layer } from "effect"
+import { parse } from "yaml"
 import { runKorriCli, runKorriCliWithLayer } from "./korri-cli"
 import { captureCliOutput } from "./test-helpers/capture-cli-output"
 
 const cliPath = new URL("./korri-cli.ts", import.meta.url).pathname
 const repoRoot = new URL("../../../..", import.meta.url).pathname
+
+type FileTarget = Extract<
+  NonNullable<LibraryReleasePayload["target"]>,
+  { readonly kind: "file" }
+>
+
+function firstFileTargetFromLibraryYaml(yaml: string): FileTarget {
+  const parsed = parse(yaml) as { readonly library?: Record<string, unknown> }
+  const target = decodeLibraryItemPayload(parsed.library?.["metroid-fusion"])
+    .releases[0]?.target
+  if (target?.kind !== "file") throw new Error("expected first file target")
+  return target
+}
 
 async function runCli(
   args: readonly string[],
@@ -129,7 +145,11 @@ describe("korri CLI", () => {
       expect(summary.results[0]?.status).toBe("scanned")
       const generated = await readFile(config, "utf8")
       expect(generated).toContain("metroid-fusion")
-      expect(generated).toContain("path: Metroid Fusion.gba")
+      expect(firstFileTargetFromLibraryYaml(generated)).toMatchObject({
+        storage: "sd-releases",
+        path: "Metroid Fusion.gba",
+        discovery: { "first-seen-at": expect.any(String) },
+      })
     } finally {
       if (previousConfigRoots === undefined)
         delete process.env.KORRI_CONFIG_ROOTS
@@ -174,11 +194,21 @@ describe("korri CLI", () => {
         readonly merge: { readonly libraryAdded: number }
       }
       expect(summary.yaml).toContain("metroid-fusion")
+      expect(firstFileTargetFromLibraryYaml(summary.yaml)).toMatchObject({
+        storage: "sd-releases",
+        path: "Metroid Fusion.gba",
+        discovery: { "first-seen-at": expect.any(String) },
+      })
+      expect(summary.yaml).not.toContain("Scout")
       expect(summary.config).toBe(config)
       expect(summary.merge.libraryAdded).toBe(1)
       const generated = await readFile(config, "utf8")
       expect(generated).toContain("storage:")
-      expect(generated).toContain("path: Metroid Fusion.gba")
+      expect(firstFileTargetFromLibraryYaml(generated)).toMatchObject({
+        storage: "sd-releases",
+        path: "Metroid Fusion.gba",
+        discovery: { "first-seen-at": expect.any(String) },
+      })
 
       const second = await captureCliOutput(() =>
         Effect.runPromiseExit(

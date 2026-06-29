@@ -38,7 +38,10 @@ import type { GameRecord } from "@platform/library/config/records/game"
 import type { GameAssetRecord } from "@platform/library/config/records/game-asset"
 import type { GameAssetAssignmentRecord } from "@platform/library/config/records/game-asset-assignment"
 import type { LauncherRecord } from "@platform/library/config/records/launcher"
-import type { LibraryItemRecord } from "@platform/library/config/records/library-item"
+import type {
+  LibraryItemRecord,
+  LibraryReleasePayload,
+} from "@platform/library/config/records/library-item"
 import type { ModuleRecord } from "@platform/library/config/records/module"
 import type { ProfileRecord } from "@platform/library/config/records/profile"
 import {
@@ -1057,7 +1060,7 @@ function toPlayableReleaseEntry(
     readonly id: string
     readonly system: string
     readonly source?: unknown
-    readonly target?: PlayableReleaseEntry["target"]
+    readonly target?: LibraryReleasePayload["target"]
     readonly identity?: PlayableReleaseEntry["identity"]
     readonly launch?: {
       readonly use?: string
@@ -1068,11 +1071,12 @@ function toPlayableReleaseEntry(
   },
   install?: PlayableReleaseEntry["install"],
 ): PlayableReleaseEntry {
+  const target = playableReleaseTargetFor(release.target)
   const identity = releaseIdentityTagFor(release)
   return {
     id: release.id,
     system: release.system,
-    ...(release.target !== undefined ? { target: release.target } : {}),
+    ...(target !== undefined ? { target } : {}),
     ...(identity !== undefined ? { identity } : {}),
     ...(release.launch
       ? {
@@ -1087,12 +1091,53 @@ function toPlayableReleaseEntry(
       : {}),
     ...(release.display ? { display: release.display } : {}),
     ...(install ? { install } : {}),
-    launchable: release.target !== undefined && release.launch !== undefined,
+    launchable: target !== undefined && release.launch !== undefined,
   }
 }
 
+function playableReleaseTargetFor(
+  target: LibraryReleasePayload["target"] | undefined,
+): PlayableReleaseEntry["target"] | undefined {
+  if (target === undefined) return undefined
+  switch (target.kind) {
+    case "file":
+      return {
+        kind: "file",
+        storage: target.storage,
+        path: target.path,
+      }
+    case "file-set":
+      return {
+        kind: "file-set",
+        storage: target.storage,
+        ...(target.root !== undefined ? { root: target.root } : {}),
+        files: target.files.map(file => ({
+          id: file.id,
+          ...(file.role !== undefined ? { role: file.role } : {}),
+          path: file.path,
+        })),
+      }
+    case "url":
+      return { kind: "url", value: target.value }
+    case "executable":
+      return { kind: "executable", path: target.path }
+    case "provider-ref":
+      return {
+        kind: "provider-ref",
+        provider: target.provider,
+        ref: target.ref,
+      }
+    default:
+      return assertNever(target)
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`unexpected release target: ${String(value)}`)
+}
+
 function releaseIdentityTagFor(release: {
-  readonly target?: PlayableReleaseEntry["target"]
+  readonly target?: LibraryReleasePayload["target"]
   readonly identity?: PlayableReleaseEntry["identity"]
 }): PlayableReleaseEntry["identity"] | undefined {
   if (release.target?.kind === "provider-ref") {
