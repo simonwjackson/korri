@@ -469,7 +469,10 @@ in
     keepWarm = true;
     keepVisibleDuringLaunch = true;
     gamescopePreferOutput = "DSI-2";
-    useGamepadUi = true;
+    # Steam's Gamepad UI can grab controller focus from the foreground AppID
+    # game; keep Steam in the gamescoped service, but launch the desktop client
+    # without -gamepadui so control stays with the game window.
+    useGamepadUi = false;
     appAudioSinkName = substrateAudioTargetSink;
   };
 
