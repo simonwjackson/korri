@@ -19,6 +19,7 @@ import { Effect } from "effect"
 import { parse } from "yaml"
 import {
   mergeReleaseCandidateConfig,
+  scanConfiguredReleaseCandidates,
   scanReleaseCandidates,
 } from "./release-candidate-scan"
 import {
@@ -319,6 +320,310 @@ describe("scanReleaseCandidates", () => {
       expect(result.reason).toBe("ScanFailed")
       expect(result.message).toContain("find")
     }
+  })
+
+  it("bounds find runtime with a scan timeout", async () => {
+    await using fixture = await withTempRomRoot({})
+    const shim = join(fixture.root, "slow-find.sh")
+    await writeFile(
+      shim,
+      ["#!/bin/sh", "while :; do :; done", ""].join("\n"),
+      "utf8",
+    )
+    await chmod(shim, 0o755)
+
+    const result = await scanReleaseCandidates({
+      root: fixture.root,
+      storage: "roms",
+      findBinary: shim,
+      timeoutMs: 25,
+    })
+
+    expect(result.status).toBe("diagnostic")
+    if (result.status === "diagnostic") {
+      expect(result.message).toContain("timed out")
+    }
+  })
+})
+
+describe("scanConfiguredReleaseCandidates", () => {
+  it("scans storage roots declared by the effective config graph", async () => {
+    await using fixture = await withTempRomRoot({
+      "roms/Metroid Fusion.gba": "",
+    })
+    const config = join(fixture.root, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  sd-releases:",
+        `    root: ${join(fixture.root, "roms")}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [{ root: fixture.root, optional: false }],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.scanned).toBe(1)
+    expect(result.skipped).toBe(0)
+    expect(result.results[0]).toMatchObject({
+      storage: "sd-releases",
+      status: "scanned",
+      merge: { libraryAdded: 1 },
+    })
+    const merged = await readFile(config, "utf8")
+    expect(merged).toContain("metroid-fusion")
+    expect(merged).toContain("path: Metroid Fusion.gba")
+  })
+
+  it("skips configured storage roots that are not eligible to scan", async () => {
+    await using fixture = await withTempRomRoot({})
+    const config = join(fixture.root, "korri.yaml")
+    const missingRoot = join(fixture.root, "missing-roms")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  missing:",
+        `    root: ${missingRoot}`,
+        "  relative:",
+        "    root: relative/roms",
+        "  templated:",
+        '    root: "{storage:other}/roms"',
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [{ root: fixture.root, optional: false }],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.scanned).toBe(0)
+    expect(result.skipped).toBe(3)
+    expect(result.results.map(item => item.reason).sort()).toEqual([
+      "missing",
+      "non-absolute",
+      "unresolved-template",
+    ])
+  })
+
+  it("carries generated ids across configured storages and reserves external effective ids", async () => {
+    await using fixture = await withTempRomRoot({
+      "platform/platform.korri.yaml": [
+        "library:",
+        "  metroid-fusion:",
+        "    title: Authored Metroid",
+        "    releases:",
+        "      - id: gba",
+        "        system: gba",
+        "        target:",
+        "          kind: file",
+        "          storage: platform",
+        "          path: authored.gba",
+        "        launch:",
+        '          use: "@korri:retroarch/retroarch"',
+        '          runtime: "@korri:retroarch/mgba"',
+        "",
+      ].join("\n"),
+      "card-a/Metroid Fusion.gba": "",
+      "card-b/Metroid Fusion.gba": "",
+    })
+    const localRoot = join(fixture.root, "local")
+    await mkdir(localRoot, { recursive: true })
+    const config = join(localRoot, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  card-a:",
+        `    root: ${join(fixture.root, "card-a")}`,
+        "  card-b:",
+        `    root: ${join(fixture.root, "card-b")}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [
+        { root: join(fixture.root, "platform"), optional: false },
+        { root: localRoot, optional: false },
+      ],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.scanned).toBe(2)
+    const parsed = parse(await readFile(config, "utf8")) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(Object.keys(parsed.library).sort()).toEqual([
+      "metroid-fusion-2",
+      "metroid-fusion-3",
+    ])
+
+    const second = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [
+        { root: join(fixture.root, "platform"), optional: false },
+        { root: localRoot, optional: false },
+      ],
+      findBinary: resolveFromPath("find"),
+    })
+    expect(second.status).toBe("ok")
+    if (second.status !== "ok") return
+    expect(
+      second.results
+        .filter(result => result.status === "scanned")
+        .map(result => result.merge.librarySkipped),
+    ).toEqual([1, 1])
+  })
+
+  it("does not rewrite configured storage records while merging candidates", async () => {
+    await using fixture = await withTempRomRoot({
+      "roms/Metroid Fusion.gba": "",
+    })
+    const operatorRoot = join(fixture.root, "operator")
+    await mkdir(operatorRoot, { recursive: true })
+    const operatorConfig = join(operatorRoot, "operator.korri.yaml")
+    await writeFile(
+      operatorConfig,
+      [
+        "storage:",
+        "  sd-releases:",
+        `    root: ${join(fixture.root, "roms")}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+    const localRoot = join(fixture.root, "local")
+    await mkdir(localRoot, { recursive: true })
+    const config = join(localRoot, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  sd-releases:",
+        `    root: ${join(fixture.root, "old-roms")}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [
+        { root: localRoot, optional: false },
+        { root: operatorRoot, optional: false },
+      ],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.scanned).toBe(1)
+    const merged = await readFile(config, "utf8")
+    expect(merged).toContain(`root: ${join(fixture.root, "old-roms")}`)
+    expect(merged).toContain("metroid-fusion")
+  })
+
+  it("continues configured scans after one storage scan fails", async () => {
+    await using fixture = await withTempRomRoot({
+      "good/Metroid Fusion.gba": "",
+    })
+    const badRoot = join(fixture.root, "bad")
+    await mkdir(badRoot)
+    const config = join(fixture.root, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  bad:",
+        `    root: ${badRoot}`,
+        "  good:",
+        `    root: ${join(fixture.root, "good")}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+    const failFind = join(fixture.root, "fail-on-bad-find.sh")
+    await writeFile(
+      failFind,
+      [
+        "#!/bin/sh",
+        `if [ "$1" = ${JSON.stringify(badRoot)} ]; then exit 7; fi`,
+        `exec ${JSON.stringify(resolveFromPath("find"))} "$@"`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+    await chmod(failFind, 0o755)
+
+    const result = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [{ root: fixture.root, optional: false }],
+      findBinary: failFind,
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.failed).toBe(1)
+    expect(result.scanned).toBe(1)
+    expect(result.results.map(item => item.status)).toEqual([
+      "failed",
+      "scanned",
+    ])
+    expect(await readFile(config, "utf8")).toContain("metroid-fusion")
+  })
+
+  it("does not treat restricted removable roots as storage config sources", async () => {
+    await using fixture = await withTempRomRoot({
+      "roms/Metroid Fusion.gba": "",
+    })
+    const config = join(fixture.root, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  card-owned:",
+        `    root: ${join(fixture.root, "roms")}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [
+        {
+          root: fixture.root,
+          optional: false,
+          collections: ["library", "collections", "users"],
+        },
+      ],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.scanned).toBe(0)
+    expect(result.skipped).toBe(0)
+    const merged = await readFile(config, "utf8")
+    expect(merged).not.toContain("metroid-fusion")
   })
 })
 

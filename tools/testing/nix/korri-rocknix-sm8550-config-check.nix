@@ -119,6 +119,9 @@ let
       removableUnmountUnit = cfg.systemd.services."korri-removable-media-unmount@" or { };
       removableColdplugUnit = cfg.systemd.services.korri-removable-media-coldplug or { };
       removableMedia = cfg.services.korri.removableMedia or { };
+      scoutReleaseScan = cfg.services.korri.scout.releaseScan or { };
+      scoutReleaseScanUnit = cfg.systemd.services.korri-scout-release-scan or { };
+      scoutReleaseScanEnv = scoutReleaseScanUnit.environment or { };
       platformDefaults = cfg.services.korri.daemon.library.platformDefaults or { };
       hostDefaults = platformDefaults.host or { };
       retroarchPolicy = (hostDefaults.plugin or { })."@korri:retroarch" or { };
@@ -146,7 +149,6 @@ let
           audioRoute.sinkName
         else
           cfg.rocknix.sm8550.audio.defaultSink.name;
-      steamUnit = cfg.systemd.services.korri-steam or { };
       steamGamescopeUnit = cfg.systemd.services.korri-steam-gamescope or { };
       steamWarmUnit = userServices.korri-steam-warm or { };
       steamUinputUnit = cfg.systemd.services.korri-steam-uinput or { };
@@ -233,6 +235,25 @@ let
       (check "${name}: korrid and sessiond share the dynamic config-roots dir" (
         (daemonEnv.KORRI_CONFIG_ROOTS_DIR or null) == "/run/korri/config-roots.d"
         && (sessiondEnv.KORRI_CONFIG_ROOTS_DIR or null) == (daemonEnv.KORRI_CONFIG_ROOTS_DIR or null)
+      ))
+      (check "${name}: boot release scanning is opt-in and targets local config" (
+        (scoutReleaseScan.enable or false)
+        && (scoutReleaseScan.configPath or null) == "/var/lib/korri/config/korri.yaml"
+        && cfg.systemd.services ? korri-scout-release-scan
+        && ((scoutReleaseScanUnit.serviceConfig.User or null) == runtime.user)
+        && ((scoutReleaseScanUnit.serviceConfig.Group or null) == runtime.group)
+        && builtins.elem "/var/lib/korri/config" (scoutReleaseScanUnit.serviceConfig.ReadWritePaths or [ ])
+      ))
+      (check "${name}: boot release scan waits for removable media coldplug" (
+        builtins.elem "korri-removable-media-coldplug.service" (scoutReleaseScanUnit.after or [ ])
+        && builtins.elem "korri-removable-media-coldplug.service" (scoutReleaseScanUnit.wants or [ ])
+        && builtins.any (cmd: lib.hasInfix "korri-scout-wait-for-removable-media" cmd) (scoutReleaseScanUnit.serviceConfig.ExecStartPre or [ ])
+      ))
+      (check "${name}: boot release scan inherits trusted config roots and Nix find" (
+        (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
+        && (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS_DIR or null) == "/run/korri/config-roots.d"
+        && lib.hasInfix "findutils" (scoutReleaseScanEnv.KORRI_FIND_BIN or "")
+        && lib.hasSuffix "/bin/find" (scoutReleaseScanEnv.KORRI_FIND_BIN or "")
       ))
       (check "${name}: compositor/sessiond/inputd/korrid are user services" (
         userServices ? "korri-compositor"
@@ -725,15 +746,15 @@ let
         && (steam.keepWarm or false)
         && (steam.appAudioSinkName or null) == expectedAudioTargetSink
       ))
-      (check "${name}: Korri Steam launch services are hardened" (
+      (check "${name}: Korri Steam gamescoped launch services are hardened" (
         cfg.systemd.services ? korri-steam-uinput
-        && cfg.systemd.services ? korri-steam
+        && cfg.systemd.services ? korri-steam-gamescope
+        && !(cfg.systemd.services ? korri-steam)
         && builtins.elem "multi-user.target" (steamUinputUnit.wantedBy or [ ])
-        && (steamUnit.serviceConfig.User or null) == runtime.user
-        && (steamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
-        && (steamUnit.serviceConfig.LimitNOFILE or null) == 524288
-        && (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
-        && (steamUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
+        && (steamGamescopeUnit.serviceConfig.User or null) == runtime.user
+        && (steamGamescopeUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
+        && (steamGamescopeUnit.serviceConfig.LimitNOFILE or null) == 524288
+        && (steamGamescopeUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
         && (steamGamescopeUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
       ))
       (check "${name}: Korri Steam is warmed from the real user session" (

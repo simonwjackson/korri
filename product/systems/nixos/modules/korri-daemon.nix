@@ -9,6 +9,8 @@
 
 let
   cfg = config.services.korri.daemon;
+  runtime = config.services.korri.runtime;
+  scoutReleaseScan = config.services.korri.scout.releaseScan;
   system = pkgs.stdenv.hostPlatform.system;
   packagesForSystem = korri.packages.${system} or { };
   defaultPackage =
@@ -16,6 +18,7 @@ let
       or (throw "Korri daemon package is not available for system `${system}`. Set services.korri.daemon.package explicitly.");
 
   inherit (lib)
+    mkEnableOption
     mkIf
     mkOption
     optionalAttrs
@@ -56,13 +59,41 @@ let
   # imported and enabled, so platforms opting into removable media get the
   # korrid watcher wiring without restating the path.
   removableMediaCfg = lib.attrByPath [ "services" "korri" "removableMedia" ] null config;
+  removableMediaEnabled = removableMediaCfg != null && (removableMediaCfg.enable or false);
   effectiveConfigRootsDir =
     if korriConfig.rootsDir != null then
       korriConfig.rootsDir
-    else if removableMediaCfg != null && (removableMediaCfg.enable or false) then
+    else if removableMediaEnabled then
       removableMediaCfg.configRootsDir
     else
       null;
+  scoutConfigPath = scoutReleaseScan.configPath;
+  pathHasParentReference = path: lib.elem ".." (lib.splitString "/" path);
+  scoutColdplugSettleScript = pkgs.writeShellScript "korri-scout-wait-for-removable-media" ''
+    set -eu
+    timeout="''${KORRI_SCOUT_COLDPLUG_SETTLE_SECONDS:-${toString scoutReleaseScan.coldplugSettleSeconds}}"
+    elapsed=0
+    while [ "$elapsed" -lt "$timeout" ]; do
+      active="$(${pkgs.systemd}/bin/systemctl list-units 'korri-removable-media-mount@*.service' --state=activating --no-legend --no-pager 2>/dev/null || true)"
+      queued="$(${pkgs.systemd}/bin/systemctl list-jobs --no-legend --no-pager 2>/dev/null | ${pkgs.gnugrep}/bin/grep 'korri-removable-media-mount@' || true)"
+      [ -z "$active$queued" ] && exit 0
+      ${pkgs.coreutils}/bin/sleep 1
+      elapsed=$((elapsed + 1))
+    done
+    echo "korri-scout-release-scan: timed out waiting for removable media mount units; continuing" >&2
+  '';
+  scoutReleaseScanScript = pkgs.writeShellScript "korri-scout-release-scan" ''
+    set -eu
+    exec ${config.services.korri.cli.package}/bin/korri scout scan configured --config ${lib.escapeShellArg scoutConfigPath}
+  '';
+  scoutEnv = {
+    KORRI_CONFIG_ROOTS = configRootsEnv;
+    KORRI_FIND_BIN = "${pkgs.findutils}/bin/find";
+    HOME = runtime.home;
+  }
+  // optionalAttrs (effectiveConfigRootsDir != null) {
+    KORRI_CONFIG_ROOTS_DIR = effectiveConfigRootsDir;
+  };
   desktopAppCommand = pkgs.writeShellScript "korri-sunshine-desktop-app" ''
     set -eu
     echo "korri-sunshine-desktop-app: keeping existing compositor session alive for Moonlight" >&2
@@ -197,7 +228,7 @@ let
   // optionalAttrs (effectiveConfigRootsDir != null) {
     KORRI_CONFIG_ROOTS_DIR = effectiveConfigRootsDir;
   }
-  // optionalAttrs (removableMediaCfg != null && (removableMediaCfg.enable or false)) {
+  // optionalAttrs removableMediaEnabled {
     KORRI_REMOVABLE_MEDIA_ROOT = removableMediaCfg.mediaRoot;
   }
   // {
@@ -261,6 +292,30 @@ in
         user ownership before korrid starts so the config watcher attaches.
         The legacy `${config.services.korri.runtime.stateRoot}/library` path is
         not read automatically.
+      '';
+    };
+  };
+
+  options.services.korri.scout.releaseScan = {
+    enable = mkEnableOption "Korri Scout boot-time release scanning for configured storage roots";
+
+    configPath = mkOption {
+      type = types.str;
+      default = "${config.services.korri.config.localRoot}/korri.yaml";
+      defaultText = lib.literalExpression ''"''${config.services.korri.config.localRoot}/korri.yaml"'';
+      description = ''
+        Mutable readable-library config file that receives Scout release
+        candidates. The boot service passes this path explicitly so it never
+        writes to read-only platform defaults or dynamic config roots.
+      '';
+    };
+
+    coldplugSettleSeconds = mkOption {
+      type = types.ints.unsigned;
+      default = 10;
+      description = ''
+        Bounded wait for asynchronously started removable-media mount units
+        before boot-time Scout scans configured storage roots.
       '';
     };
   };
@@ -588,6 +643,16 @@ in
 
   config = mkIf cfg.enable {
     assertions = [
+      {
+        assertion = !scoutReleaseScan.enable || isAbsolutePath scoutConfigPath;
+        message = "services.korri.scout.releaseScan.configPath must be an absolute path.";
+      }
+      {
+        assertion =
+          !scoutReleaseScan.enable
+          || (lib.hasPrefix "${configLocalRoot}/" scoutConfigPath && !pathHasParentReference scoutConfigPath);
+        message = "services.korri.scout.releaseScan.configPath must live under services.korri.config.localRoot without parent-directory segments.";
+      }
       {
         assertion = isUserSpecifierPath launchArtifactsDir || isAbsolutePath launchArtifactsDir;
         message = ''
@@ -983,6 +1048,44 @@ in
             age = "-";
           };
         };
+
+    systemd.services.korri-scout-release-scan = mkIf scoutReleaseScan.enable {
+      description = "Scan configured Korri release storage roots";
+      wantedBy = [ "multi-user.target" ];
+      after = [
+        "korri-setup.service"
+        "systemd-tmpfiles-setup.service"
+      ] ++ lib.optional removableMediaEnabled "korri-removable-media-coldplug.service";
+      wants = lib.optional removableMediaEnabled "korri-removable-media-coldplug.service";
+      environment = scoutEnv;
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStartPre = [
+          "${pkgs.coreutils}/bin/install -d -m 700 ${configLocalRoot}"
+        ] ++ lib.optional removableMediaEnabled (toString scoutColdplugSettleScript);
+        ExecStart = toString scoutReleaseScanScript;
+        User = runtime.user;
+        Group = runtime.group;
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ProtectHome = "read-only";
+        ReadWritePaths = [ configLocalRoot ];
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        RestrictSUIDSGID = true;
+        RestrictRealtime = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = false;
+        SystemCallArchitectures = "native";
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+        ];
+      };
+    };
 
     systemd.services.korrid = mkIf isSystemMode {
       description = "Korri headless server control plane";

@@ -96,6 +96,50 @@ describe("korri CLI", () => {
     expect(result.stdout).toContain("--config")
   })
 
+  it("scouts configured storage roots into an explicit config file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-scout-configured-"))
+    const previousConfigRoots = process.env.KORRI_CONFIG_ROOTS
+    const previousFindBin = process.env.KORRI_FIND_BIN
+    try {
+      const romRoot = join(root, "roms")
+      const config = join(root, "korri.yaml")
+      await mkdir(romRoot, { recursive: true })
+      await writeFile(join(romRoot, "Metroid Fusion.gba"), "")
+      await writeFile(
+        config,
+        ["storage:", "  sd-releases:", `    root: ${romRoot}`, ""].join("\n"),
+      )
+      delete process.env.KORRI_CONFIG_ROOTS
+      process.env.KORRI_FIND_BIN = resolveFromPath("find")
+
+      const result = await captureCliOutput(() =>
+        Effect.runPromiseExit(
+          runKorriCli(["scout", "scan", "configured", "--config", config]),
+        ),
+      )
+
+      expect(result.exitCode).toBe(0)
+      const summary = JSON.parse(result.stdout) as {
+        readonly status: string
+        readonly scanned: number
+        readonly results: readonly [{ readonly status: string }]
+      }
+      expect(summary.status).toBe("ok")
+      expect(summary.scanned).toBe(1)
+      expect(summary.results[0]?.status).toBe("scanned")
+      const generated = await readFile(config, "utf8")
+      expect(generated).toContain("metroid-fusion")
+      expect(generated).toContain("path: Metroid Fusion.gba")
+    } finally {
+      if (previousConfigRoots === undefined)
+        delete process.env.KORRI_CONFIG_ROOTS
+      else process.env.KORRI_CONFIG_ROOTS = previousConfigRoots
+      if (previousFindBin === undefined) delete process.env.KORRI_FIND_BIN
+      else process.env.KORRI_FIND_BIN = previousFindBin
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("scouts release candidates into the default config file", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-scout-releases-"))
     const dataHome = await mkdtemp(join(tmpdir(), "korri-scout-data-"))
@@ -124,12 +168,13 @@ describe("korri CLI", () => {
       )
 
       expect(result.exitCode).toBe(0)
-      expect(result.stdout).toContain("scout release candidates")
-      expect(result.stdout).toContain("metroid-fusion")
-      expect(result.stdout).toContain(config)
-      const summary = JSON.parse(result.stdout.split("---")[0] ?? "{}") as {
+      const summary = JSON.parse(result.stdout) as {
+        readonly config: string
+        readonly yaml: string
         readonly merge: { readonly libraryAdded: number }
       }
+      expect(summary.yaml).toContain("metroid-fusion")
+      expect(summary.config).toBe(config)
       expect(summary.merge.libraryAdded).toBe(1)
       const generated = await readFile(config, "utf8")
       expect(generated).toContain("storage:")
@@ -148,9 +193,7 @@ describe("korri CLI", () => {
           ]),
         ),
       )
-      const secondSummary = JSON.parse(
-        second.stdout.split("---")[0] ?? "{}",
-      ) as {
+      const secondSummary = JSON.parse(second.stdout) as {
         readonly merge: {
           readonly storageSkipped: number
           readonly libraryAdded: number
@@ -173,6 +216,56 @@ describe("korri CLI", () => {
       else process.env.KORRI_FIND_BIN = previousFindBin
       await rm(root, { recursive: true, force: true })
       await rm(dataHome, { recursive: true, force: true })
+    }
+  })
+
+  it("reports explicit release merge conflicts as JSON diagnostics", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-scout-conflict-root-"))
+    const configRoot = await mkdtemp(
+      join(tmpdir(), "korri-scout-conflict-config-"),
+    )
+    const previousFindBin = process.env.KORRI_FIND_BIN
+    try {
+      const config = join(configRoot, "korri.yaml")
+      await writeFile(join(root, "Metroid Fusion.gba"), "")
+      await writeFile(
+        config,
+        ["storage:", "  sd-releases:", "    root: /different/root", ""].join(
+          "\n",
+        ),
+      )
+      process.env.KORRI_FIND_BIN = resolveFromPath("find")
+
+      const result = await captureCliOutput(() =>
+        Effect.runPromiseExit(
+          runKorriCli([
+            "scout",
+            "scan",
+            "releases",
+            "--root",
+            root,
+            "--storage",
+            "sd-releases",
+            "--config",
+            config,
+          ]),
+        ),
+      )
+
+      expect(result.exitCode).toBe(1)
+      const diagnostic = JSON.parse(result.stdout) as {
+        readonly status: string
+        readonly reason: string
+      }
+      expect(diagnostic).toMatchObject({
+        status: "diagnostic",
+        reason: "MergeFailed",
+      })
+    } finally {
+      if (previousFindBin === undefined) delete process.env.KORRI_FIND_BIN
+      else process.env.KORRI_FIND_BIN = previousFindBin
+      await rm(root, { recursive: true, force: true })
+      await rm(configRoot, { recursive: true, force: true })
     }
   })
 

@@ -450,6 +450,8 @@ in
   # AYN UCM package), but the product owns where the graph lives.
   services.korri.remap.enable = true;
 
+  services.korri.scout.releaseScan.enable = true;
+
   services.korri.runtime.extraGroups = [
     "audio"
     "input"

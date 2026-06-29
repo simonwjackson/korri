@@ -43,6 +43,7 @@ export interface RomScanOptions {
 export interface CreateRomLibraryCandidatesOptions {
   readonly storage: string
   readonly root?: string
+  readonly reservedIds?: Set<string>
 }
 
 export interface RomLibraryCandidate {
@@ -199,7 +200,7 @@ export function createRomLibraryCandidatesFromClassifications(
   classifications: readonly RomScanCandidate[],
   options: CreateRomLibraryCandidatesOptions,
 ): readonly RomLibraryCandidate[] {
-  const usedIds = new Set<string>()
+  const usedIds = options.reservedIds ?? new Set<string>()
   const candidates: RomLibraryCandidate[] = []
 
   for (const classification of [...classifications].sort((a, b) =>

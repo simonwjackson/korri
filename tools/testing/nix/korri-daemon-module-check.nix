@@ -34,7 +34,9 @@ let
   failedAssertions = cfg: builtins.filter (a: !a.assertion) cfg.assertions;
   userUnit = cfg: cfg.systemd.user.services.korrid or { };
   systemUnit = cfg: cfg.systemd.services.korrid or { };
+  scoutUnit = cfg: cfg.systemd.services.korri-scout-release-scan or { };
   env = cfg: (userUnit cfg).environment or { };
+  scoutEnv = cfg: (scoutUnit cfg).environment or { };
 
   defaultUserMode = evaluateWith { services.korri.daemon.enable = true; };
   socketPaired = evaluateWith {
@@ -77,6 +79,45 @@ let
         }
       ];
     }).config;
+  withScout = evaluateWith {
+    services.korri.daemon.enable = true;
+    services.korri.scout.releaseScan.enable = true;
+  };
+  withScoutRemovable =
+    (evalConfig {
+      system = hostSystem;
+      modules = [
+        korriDaemonModule
+        ../../../product/systems/nixos/modules/korri-removable-media.nix
+        baseModule
+        {
+          services.korri.daemon.enable = true;
+          services.korri.removableMedia.enable = true;
+          services.korri.scout.releaseScan.enable = true;
+        }
+      ];
+    }).config;
+  withScoutRelativeConfig = evaluateWith {
+    services.korri.daemon.enable = true;
+    services.korri.scout.releaseScan = {
+      enable = true;
+      configPath = "relative/korri.yaml";
+    };
+  };
+  withScoutOutsideLocalRoot = evaluateWith {
+    services.korri.daemon.enable = true;
+    services.korri.scout.releaseScan = {
+      enable = true;
+      configPath = "/tmp/korri.yaml";
+    };
+  };
+  withScoutEscapingLocalRoot = evaluateWith {
+    services.korri.daemon.enable = true;
+    services.korri.scout.releaseScan = {
+      enable = true;
+      configPath = "/var/lib/korri/config/../other/korri.yaml";
+    };
+  };
   systemMode = evaluateWith {
     services.korri.daemon = {
       enable = true;
@@ -187,6 +228,41 @@ let
     ))
     (check "removable-media enablement defaults the dynamic roots dir" (
       (env withRemovableMedia).KORRI_CONFIG_ROOTS_DIR == "/run/korri/config-roots.d"
+    ))
+    (check "scout release scan is disabled by default" (
+      !(defaultUserMode.systemd.services ? korri-scout-release-scan)
+    ))
+    (check "scout release scan emits an opt-in boot oneshot" (
+      withScout.systemd.services ? korri-scout-release-scan
+      && (scoutUnit withScout).wantedBy == [ "multi-user.target" ]
+      && ((scoutUnit withScout).serviceConfig.Type or null) == "oneshot"
+    ))
+    (check "scout release scan uses local config as explicit merge target" (
+      lib.hasInfix "korri-scout-release-scan" ((scoutUnit withScout).serviceConfig.ExecStart or "")
+      && withScout.services.korri.scout.releaseScan.configPath == "/var/lib/korri/config/korri.yaml"
+      && lib.hasPrefix "/var/lib/korri/config/" withScout.services.korri.scout.releaseScan.configPath
+    ))
+    (check "scout release scan runs as runtime user with narrow write access" (
+      ((scoutUnit withScout).serviceConfig.User or null) == "korri"
+      && ((scoutUnit withScout).serviceConfig.Group or null) == "korri"
+      && lib.elem "/var/lib/korri/config" ((scoutUnit withScout).serviceConfig.ReadWritePaths or [ ])
+      && ((scoutUnit withScout).serviceConfig.ProtectSystem or null) == "strict"
+    ))
+    (check "scout release scan receives config roots and Nix find binary" (
+      (scoutEnv withScout).KORRI_CONFIG_ROOTS == "/var/lib/korri/config"
+      && lib.hasInfix "findutils" (scoutEnv withScout).KORRI_FIND_BIN
+      && lib.hasSuffix "/bin/find" (scoutEnv withScout).KORRI_FIND_BIN
+    ))
+    (check "scout release scan waits for removable coldplug when enabled" (
+      lib.elem "korri-removable-media-coldplug.service" ((scoutUnit withScoutRemovable).after or [ ])
+      && lib.elem "korri-removable-media-coldplug.service" ((scoutUnit withScoutRemovable).wants or [ ])
+      && lib.any (cmd: lib.hasInfix "korri-scout-wait-for-removable-media" cmd) ((scoutUnit withScoutRemovable).serviceConfig.ExecStartPre or [ ])
+      && (scoutEnv withScoutRemovable).KORRI_CONFIG_ROOTS_DIR == "/run/korri/config-roots.d"
+    ))
+    (check "scout release scan config target assertions reject unsafe paths" (
+      failedAssertions withScoutRelativeConfig != [ ]
+      && failedAssertions withScoutOutsideLocalRoot != [ ]
+      && failedAssertions withScoutEscapingLocalRoot != [ ]
     ))
     (check "system-mode daemon owns config-root tmpfiles and hardening" (
       lib.elem "d /var/lib/korri/config 0700 korri korri -" systemMode.systemd.tmpfiles.rules

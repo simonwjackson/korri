@@ -1,7 +1,23 @@
 import { Buffer } from "node:buffer"
 import { spawn } from "node:child_process"
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
-import { dirname } from "node:path"
+import { constants } from "node:fs"
+import {
+  access,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises"
+import { dirname, isAbsolute } from "node:path"
+import type { StorageRecord } from "@platform/library/config/records/storage"
+import { resolveAllConfigGraphRoots } from "@platform/library/library-source-layer-live"
+import {
+  type KorriConfigGraphRoot,
+  openKorriConfigGraph,
+} from "@platform/library/proseql/config-graph-db"
+import { Effect } from "effect"
 import { parse, stringify } from "yaml"
 import {
   classifyRomScanPath,
@@ -46,11 +62,14 @@ interface RomScanArgs {
   readonly root: string
   readonly storage: string
   readonly findBinary?: string
+  readonly timeoutMs?: number
+  readonly reservedLibraryIds?: Set<string>
 }
 
 export interface MergeReleaseCandidateConfigArgs {
   readonly path: string
   readonly candidateYaml: string
+  readonly mergeStorage?: boolean
 }
 
 export interface MergeReleaseCandidateConfigResult {
@@ -60,6 +79,60 @@ export interface MergeReleaseCandidateConfigResult {
   readonly libraryAdded: number
   readonly librarySkipped: number
 }
+
+export interface ScanConfiguredReleaseCandidatesArgs {
+  readonly configPath: string
+  readonly roots?: readonly KorriConfigGraphRoot[]
+  readonly env?: NodeJS.ProcessEnv
+  readonly findBinary?: string
+  readonly timeoutMs?: number
+}
+
+export type ConfiguredStorageScanResult =
+  | {
+      readonly storage: string
+      readonly root: string
+      readonly status: "scanned"
+      readonly report: RomScanReport
+      readonly merge: MergeReleaseCandidateConfigResult
+    }
+  | {
+      readonly storage: string
+      readonly root: string
+      readonly status: "skipped"
+      readonly reason: ConfiguredStorageSkipReason
+      readonly message: string
+    }
+  | {
+      readonly storage: string
+      readonly root: string
+      readonly status: "failed"
+      readonly reason: "ScanFailed"
+      readonly message: string
+    }
+
+export type ConfiguredStorageSkipReason =
+  | "missing"
+  | "non-directory"
+  | "non-absolute"
+  | "unreadable"
+  | "unresolved-template"
+
+export type ScanConfiguredReleaseCandidatesResult =
+  | {
+      readonly status: "ok"
+      readonly config: string
+      readonly scanned: number
+      readonly skipped: number
+      readonly failed: number
+      readonly results: readonly ConfiguredStorageScanResult[]
+    }
+  | {
+      readonly status: "diagnostic"
+      readonly reason: "ConfigLoadFailed" | "ScanFailed" | "MergeFailed"
+      readonly message: string
+      readonly results?: readonly ConfiguredStorageScanResult[]
+    }
 
 interface MutableReport {
   files: number
@@ -120,15 +193,35 @@ export async function scanReleaseCandidates(
     stderrTruncated = stderrTruncated || appended.truncated
   })
 
+  let timedOut = false
+  const timeout = args.timeoutMs ?? 10 * 60 * 1000
   const exit = await new Promise<number | null | Error>(resolve => {
-    child.on("error", resolve)
-    child.on("close", resolve)
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill("SIGTERM")
+    }, timeout)
+    child.on("error", error => {
+      clearTimeout(timer)
+      resolve(error)
+    })
+    child.on("close", code => {
+      clearTimeout(timer)
+      resolve(code)
+    })
   })
   if (pending.length > 0) {
     const path = pending.toString("utf8")
     const classification = classifyRomScanPath(path, { root: args.root })
     recordClassification(report, classification)
     if (classification._tag === "Candidate") candidates.push(classification)
+  }
+
+  if (timedOut) {
+    return {
+      status: "diagnostic",
+      reason: "ScanFailed",
+      message: `${findBinary} timed out after ${timeout}ms`,
+    }
   }
 
   if (exit instanceof Error) {
@@ -151,7 +244,7 @@ export async function scanReleaseCandidates(
 
   const candidateRecords = createRomLibraryCandidatesFromClassifications(
     candidates,
-    { storage: args.storage },
+    { storage: args.storage, reservedIds: args.reservedLibraryIds },
   )
   return {
     status: "ok",
@@ -163,6 +256,180 @@ export async function scanReleaseCandidates(
       storage: args.storage,
     }),
   }
+}
+
+export async function scanConfiguredReleaseCandidates(
+  args: ScanConfiguredReleaseCandidatesArgs,
+): Promise<ScanConfiguredReleaseCandidatesResult> {
+  const roots = args.roots ?? resolveAllConfigGraphRoots(args.env)
+  let snapshot: ConfiguredScanSnapshot
+  try {
+    snapshot = await readConfiguredScanSnapshot(roots)
+  } catch (error) {
+    return {
+      status: "diagnostic",
+      reason: "ConfigLoadFailed",
+      message: errorMessage(error),
+    }
+  }
+
+  const reservedLibraryIds = new Set(snapshot.libraryIds)
+  for (const id of await targetLibraryIds(args.configPath)) {
+    reservedLibraryIds.delete(id)
+  }
+
+  const results: ConfiguredStorageScanResult[] = []
+  for (const storage of snapshot.storages) {
+    const eligible = await storageScanEligibility(storage)
+    if (eligible.status === "skipped") {
+      results.push(eligible)
+      continue
+    }
+
+    const scan = await scanReleaseCandidates({
+      root: storage.root,
+      storage: storage.id,
+      findBinary: args.findBinary,
+      timeoutMs: args.timeoutMs,
+      reservedLibraryIds,
+    })
+    if (scan.status === "diagnostic") {
+      results.push({
+        storage: storage.id,
+        root: storage.root,
+        status: "failed",
+        reason: "ScanFailed",
+        message: scan.message,
+      })
+      continue
+    }
+
+    try {
+      const merge = await mergeReleaseCandidateConfig({
+        path: args.configPath,
+        candidateYaml: scan.yaml,
+        mergeStorage: false,
+      })
+      results.push({
+        storage: storage.id,
+        root: storage.root,
+        status: "scanned",
+        report: scan.report,
+        merge,
+      })
+    } catch (error) {
+      return {
+        status: "diagnostic",
+        reason: "MergeFailed",
+        message: `storage '${storage.id}' merge failed: ${errorMessage(error)}`,
+        results,
+      }
+    }
+  }
+
+  return {
+    status: "ok",
+    config: args.configPath,
+    scanned: results.filter(result => result.status === "scanned").length,
+    skipped: results.filter(result => result.status === "skipped").length,
+    failed: results.filter(result => result.status === "failed").length,
+    results,
+  }
+}
+
+interface ConfiguredScanSnapshot {
+  readonly storages: readonly StorageRecord[]
+  readonly libraryIds: readonly string[]
+}
+
+async function readConfiguredScanSnapshot(
+  roots: readonly KorriConfigGraphRoot[],
+): Promise<ConfiguredScanSnapshot> {
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* openKorriConfigGraph({ roots })
+        return yield* Effect.tryPromise({
+          try: async () => ({
+            storages: await db.storage.query().runPromise,
+            libraryIds: (await db.library.query().runPromise).map(
+              item => item.id,
+            ),
+          }),
+          catch: error => new Error(errorMessage(error)),
+        })
+      }),
+    ),
+  )
+}
+
+async function targetLibraryIds(path: string): Promise<readonly string[]> {
+  try {
+    const document = await readExistingReadableDocument(path)
+    return Object.keys(document.library ?? {})
+  } catch {
+    return []
+  }
+}
+
+async function storageScanEligibility(
+  storage: StorageRecord,
+): Promise<ConfiguredStorageScanResult | { readonly status: "eligible" }> {
+  if (looksLikeUnresolvedTemplate(storage.root)) {
+    return skippedStorage(
+      storage,
+      "unresolved-template",
+      "storage root contains an unresolved template expression",
+    )
+  }
+  if (!isAbsolute(storage.root)) {
+    return skippedStorage(
+      storage,
+      "non-absolute",
+      "storage root is not absolute",
+    )
+  }
+
+  let info: Awaited<ReturnType<typeof stat>>
+  try {
+    info = await stat(storage.root)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return skippedStorage(storage, "missing", "storage root does not exist")
+    }
+    return skippedStorage(storage, "unreadable", errorMessage(error))
+  }
+  if (!info.isDirectory()) {
+    return skippedStorage(
+      storage,
+      "non-directory",
+      "storage root is not a directory",
+    )
+  }
+  try {
+    await access(storage.root, constants.R_OK)
+  } catch (error) {
+    return skippedStorage(storage, "unreadable", errorMessage(error))
+  }
+  return { status: "eligible" }
+}
+
+function skippedStorage(
+  storage: StorageRecord,
+  reason: ConfiguredStorageSkipReason,
+  message: string,
+): ConfiguredStorageScanResult {
+  return {
+    storage: storage.id,
+    root: storage.root,
+    status: "skipped",
+    reason,
+    message,
+  }
+}
+
+function looksLikeUnresolvedTemplate(path: string): boolean {
+  return /\{[^}]+\}/.test(path)
 }
 
 export async function mergeReleaseCandidateConfig(
@@ -177,7 +444,9 @@ export async function mergeReleaseCandidateConfig(
   let libraryAdded = 0
   let librarySkipped = 0
 
-  for (const [id, payload] of Object.entries(candidates.storage ?? {})) {
+  for (const [id, payload] of Object.entries(
+    args.mergeStorage === false ? {} : (candidates.storage ?? {}),
+  )) {
     const current = storage[id]
     if (current === undefined) {
       storage[id] = payload

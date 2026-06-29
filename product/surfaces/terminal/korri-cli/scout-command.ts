@@ -1,6 +1,8 @@
+import { dirname } from "node:path"
 import { korriDataPath, type XdgPathEnv } from "@platform/config/xdg-paths"
 import {
   mergeReleaseCandidateConfig,
+  scanConfiguredReleaseCandidates,
   scanReleaseCandidates,
 } from "@platform/library/discovery/release-candidate-scan"
 import { Effect } from "effect"
@@ -28,20 +30,39 @@ const scoutScanReleasesCommand = Command.make(
 
       const configPath =
         config._tag === "Some" ? config.value : defaultScoutConfigPath()
-      const merge = await mergeReleaseCandidateConfig({
-        path: configPath,
-        candidateYaml: result.yaml,
-      })
-      console.log(
-        JSON.stringify(
-          { status: "ok", report: result.report, config: configPath, merge },
-          null,
-          2,
-        ),
-      )
-      console.log("--- scout release candidates ---")
-      console.log(result.yaml.trimEnd())
-      process.exitCode = 0
+      try {
+        const merge = await mergeReleaseCandidateConfig({
+          path: configPath,
+          candidateYaml: result.yaml,
+        })
+        console.log(
+          JSON.stringify(
+            {
+              status: "ok",
+              report: result.report,
+              config: configPath,
+              merge,
+              yaml: result.yaml,
+            },
+            null,
+            2,
+          ),
+        )
+        process.exitCode = 0
+      } catch (error) {
+        console.log(
+          JSON.stringify(
+            {
+              status: "diagnostic",
+              reason: "MergeFailed",
+              message: errorMessage(error),
+            },
+            null,
+            2,
+          ),
+        )
+        process.exitCode = 1
+      }
     }),
 ).pipe(
   Command.withDescription(
@@ -49,9 +70,35 @@ const scoutScanReleasesCommand = Command.make(
   ),
 )
 
+const scoutScanConfiguredCommand = Command.make(
+  "configured",
+  {
+    config: Flag.string("config").pipe(Flag.optional),
+  },
+  ({ config }) =>
+    Effect.promise(async () => {
+      const configPath =
+        config._tag === "Some" ? config.value : defaultScoutConfigPath()
+      const result = await scanConfiguredReleaseCandidates({
+        configPath,
+        roots: configuredScanRoots(configPath),
+        findBinary: optionalEnv("KORRI_FIND_BIN"),
+      })
+      console.log(JSON.stringify(result, null, 2))
+      process.exitCode = result.status === "ok" ? 0 : 1
+    }),
+).pipe(
+  Command.withDescription(
+    "Scan configured storage roots and merge release candidates into config.",
+  ),
+)
+
 const scoutScanCommand = Command.make("scan").pipe(
   Command.withDescription("Scan local sources for authorable candidates."),
-  Command.withSubcommands([scoutScanReleasesCommand]),
+  Command.withSubcommands([
+    scoutScanReleasesCommand,
+    scoutScanConfiguredCommand,
+  ]),
 )
 
 export const scoutCommand = Command.make("scout").pipe(
@@ -64,6 +111,22 @@ export const scoutCommand = Command.make("scout").pipe(
 function optionalEnv(name: string): string | undefined {
   const value = process.env[name]
   return value && value.length > 0 ? value : undefined
+}
+
+function configuredScanRoots(
+  configPath: string,
+): readonly [{ readonly root: string; readonly optional: false }] | undefined {
+  if (
+    optionalEnv("KORRI_CONFIG_ROOTS") ||
+    optionalEnv("KORRI_CONFIG_ROOTS_DIR")
+  ) {
+    return undefined
+  }
+  return [{ root: dirname(configPath), optional: false }]
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 export function defaultScoutConfigPath(env: XdgPathEnv = process.env): string {

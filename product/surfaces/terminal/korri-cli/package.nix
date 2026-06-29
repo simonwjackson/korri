@@ -144,6 +144,17 @@ pkgs.stdenv.mkDerivation {
       cat "$scout_config" >&2 || true
       exit 1
     fi
+    if ! env -i HOME="$HOME" XDG_DATA_HOME="$TMPDIR/xdg-data" KORRI_CONFIG_ROOTS="$(dirname "$scout_config")" "$out/bin/korri" scout scan configured --config "$scout_config" > "$TMPDIR/korri-scout-configured-smoke.out" 2> "$TMPDIR/korri-scout-configured-smoke.err"; then
+      echo "korri-cli smoke test failed: configured scout scan did not run with isolated environment" >&2
+      cat "$TMPDIR/korri-scout-configured-smoke.out" >&2 || true
+      cat "$TMPDIR/korri-scout-configured-smoke.err" >&2 || true
+      exit 1
+    fi
+    if ! grep -q '"scanned": 1' "$TMPDIR/korri-scout-configured-smoke.out"; then
+      echo "korri-cli smoke test failed: configured scout scan did not scan configured storage" >&2
+      cat "$TMPDIR/korri-scout-configured-smoke.out" >&2 || true
+      exit 1
+    fi
 
     # Safe Bazzar contract-command smoke: use an unknown-but-valid source name
     # so the command exercises the bundled acquisition CLI/RPC contract envelope

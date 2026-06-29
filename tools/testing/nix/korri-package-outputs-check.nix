@@ -13,6 +13,11 @@ let
     (check "korri-cli package exposes executable wrapper" (
       builtins.pathExists "${packagePath "korri-cli"}/bin/korri"
     ))
+    (check "korri-cli wrapper provides Nix find for Scout scans" (
+      lib.hasInfix "KORRI_FIND_BIN" (builtins.readFile "${packagePath "korri-cli"}/bin/korri")
+      && lib.hasInfix "findutils" (builtins.readFile "${packagePath "korri-cli"}/bin/korri")
+      && lib.hasInfix "/bin/find" (builtins.readFile "${packagePath "korri-cli"}/bin/korri")
+    ))
     (check "korri-cli package exposes bundled JS" (
       builtins.pathExists "${packagePath "korri-cli"}/share/korri-cli/korri-cli.js"
     ))
