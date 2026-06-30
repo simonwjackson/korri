@@ -19,11 +19,10 @@ let
   gamescopeNix = import ../../../../plugins/gamescope/nix/platform-environments.nix { inherit pkgs; };
   gamescopePackage = korri.packages.${targetSystem}.gamescope-korri;
   ryubingPackage = korri.packages.${targetSystem}.ryubing-korri;
-  yfsPackage = korri.packages.${targetSystem}.yoshis-fabrication-station;
   webCanvasPackage = korri.packages.${targetSystem}.korri-web-canvas;
   box64RuntimePackage = korri.packages.${targetSystem}.korri-box64-runtime or pkgs.box64;
   gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
-  enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:gmloader,@korri:mega-man-rock-n-roll,@korri:neverball,@korri:remap,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:webpage,@korri:web-canvas,@korri:xjlt,@korri:yoshis-fabrication-station,@korri:zquest-classic";
+  enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:gmloader,@korri:mega-man-rock-n-roll,@korri:neverball,@korri:remap,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:webpage,@korri:web-canvas,@korri:xjlt,@korri:zquest-classic";
   moonlightRuntimeSettingsEnvironment = {
     # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
     # These are intentionally enumerated and preserved as Moonlight process env
@@ -218,11 +217,9 @@ let
         ${inputplumberHelpers.patchInputplumberXb360Target { targetDeviceYaml = "02-ayn-controller.yaml"; }}
       '';
   # SM8550 platform launch policy is rendered into the readable library
-  # cascade. Moonlight uses host.moonlight. YFS carries authored plugin
-  # settings and browser display environment on argv because the Remap
-  # runner/Bun boundary cannot rely on KORRI_* process env being visible to
-  # JavaScript. Device-specific YFS presentation settings belong in device
-  # YAML, not in this platform adapter.
+  # cascade. Moonlight uses host.moonlight. YFS is temporarily disabled on
+  # SM8550 while its upstream web export fetch is unstable, so the Thor
+  # product-payload build can proceed without unrelated network fallout.
   sm8550PlatformDefaults = {
     launchers."@korri:web-canvas/chromium" = {
       command = "korri-web-canvas";
@@ -247,53 +244,6 @@ let
       settings.plugin = { };
     };
 
-    launchers."@korri:yoshis-fabrication-station/level" = {
-      command = "yfs-launch";
-      args = [
-        "--settings-json={settings.plugin}"
-        "--cache-root=/tmp/korri-remap-runner-yfs-cache"
-        "--browser-env=XDG_RUNTIME_DIR=${korriRuntimeDir}"
-        "--browser-env=PULSE_SERVER=unix:${korriRuntimeDir}/pulse/native"
-        "--browser-env=WAYLAND_DISPLAY=wayland-1"
-        "--browser-env=HOME=/tmp"
-        "--browser-env=XDG_CACHE_HOME=/tmp/korri-remap-runner-cache"
-        "--browser-env=USER=korri-remap-runner"
-        "--browser-env=LOGNAME=korri-remap-runner"
-        "{content.path}"
-      ];
-      systems = [ "yfs" ];
-      env.KORRI_YFS_SETTINGS = "{settings.plugin}";
-      policy.allowedCommands = [
-        "yfs-launch"
-        "chromium"
-      ];
-      launch."with"."@korri:remap" = {
-        bindings = {
-          "p1.dpad.up" = "key.up";
-          "p1.dpad.down" = "key.down";
-          "p1.dpad.left" = "key.left";
-          "p1.dpad.right" = "key.right";
-          "p1.stick.left.up" = "key.up";
-          "p1.stick.left.down" = "key.down";
-          "p1.stick.left.left" = "key.left";
-          "p1.stick.left.right" = "key.right";
-          "p1.stick.right.up" = "key.up";
-          "p1.stick.right.down" = "key.down";
-          "p1.stick.right.left" = "key.left";
-          "p1.stick.right.right" = "key.right";
-          # YFS keyboard defaults: Z=jump, A=tongue, X=throw. On the
-          # InputPlumber-normalized Sobo controller observed during smoke,
-          # the physical west face button arrives as BTN_NORTH, so keep both
-          # north and west on tongue instead of leaving west inert.
-          "p1.button.south" = "key.z";
-          "p1.button.west" = "key.a";
-          "p1.button.east" = "key.x";
-          "p1.button.north" = "key.a";
-          "p1.button.start" = "key.p";
-        };
-      };
-      settings.plugin = { };
-    };
 
     host.moonlight = {
       command = "${pkgs.moonlight-embedded}/bin/moonlight";
@@ -676,7 +626,6 @@ in
       gamescopePackage
       box64RuntimePackage
       pkgs.moonlight-embedded
-      yfsPackage
       webCanvasPackage
     ];
     extraEnvironment =
@@ -726,7 +675,6 @@ in
   environment.systemPackages = [
     substratePackages.cemu
     ryubingPackage
-    yfsPackage
     webCanvasPackage
   ];
 }
