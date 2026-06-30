@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto"
-import { readFile } from "node:fs/promises"
 import { relative, sep } from "node:path"
 import {
   createArtifactImportService,
@@ -63,7 +61,7 @@ import type { UserRecord } from "@platform/library/config/records/user"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { resolveReleaseTarget } from "@platform/library/config/source-target-resolution"
 import { defaultReleaseContentIdentityResolver } from "@platform/library/content-identity/release-content-identity"
-import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
+import { isGameAssetBlobValid } from "@platform/library/game-assets/game-asset-blob-cache"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { LibraryError } from "@platform/library/library-services"
@@ -1015,7 +1013,7 @@ function mediaForPlayable(
       for (const assignment of assignmentsByGame.get(playableId) ?? []) {
         const asset = assetsById.get(assignment.assetId)
         if (!asset) continue
-        if (!(await assetBytesMatch(asset, env))) continue
+        if (!(await isGameAssetBlobValid(env, asset))) continue
         media.push({
           role: assignment.role,
           type: asset.type,
@@ -1030,20 +1028,6 @@ function mediaForPlayable(
     },
     catch: toLibraryIoError,
   })
-}
-
-async function assetBytesMatch(
-  asset: GameAssetRecord,
-  env: Record<string, string | undefined>,
-): Promise<boolean> {
-  try {
-    const bytes = await readFile(gameAssetBlobPath(env, asset))
-    const expected = asset.id.replace(/^sha256:/, "")
-    const actual = createHash("sha256").update(bytes).digest("hex")
-    return actual === expected
-  } catch {
-    return false
-  }
 }
 
 function toCompatGameRecord(entry: PlayableLibraryEntry): GameRecord {

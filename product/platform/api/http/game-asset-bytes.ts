@@ -1,9 +1,10 @@
-import { createHash } from "node:crypto"
-import { readFile, stat } from "node:fs/promises"
 import { DataError } from "@platform/api/rpc/errors"
 import { korriDataPath, type XdgPathEnv } from "@platform/config/xdg-paths"
 import type { GameAssetRecord } from "@platform/library/config/records/game-asset"
-import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
+import {
+  isGameAssetBlobValid,
+  readValidatedGameAssetBytes,
+} from "@platform/library/game-assets/game-asset-blob-cache"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { Effect } from "effect"
 
@@ -147,29 +148,10 @@ export async function hasValidGameAssetBytes(
   env: XdgPathEnv,
   asset: GameAssetRecord,
 ): Promise<boolean> {
-  return (await readValidatedGameAssetBytes(env, asset)) !== null
+  return isGameAssetBlobValid(env, asset)
 }
 
-export async function readValidatedGameAssetBytes(
-  env: XdgPathEnv,
-  asset: GameAssetRecord,
-): Promise<Buffer | null> {
-  const filePath = gameAssetBlobPath(env, asset)
-  try {
-    const fileStat = await stat(filePath)
-    if (!fileStat.isFile() || fileStat.size !== asset.byteSize) return null
-
-    const body = await readFile(filePath)
-    if (body.byteLength !== asset.byteSize) return null
-
-    const digest = createHash("sha256").update(body).digest("hex")
-    if (asset.id !== `sha256:${digest}`) return null
-
-    return body
-  } catch {
-    return null
-  }
-}
+export { readValidatedGameAssetBytes }
 
 function responseHeaders(asset: GameAssetRecord, byteSize: number): Headers {
   return new Headers({
