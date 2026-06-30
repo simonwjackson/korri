@@ -1,11 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import { setShiftCatalogPreview } from "./shift-catalog-preview"
-import { shiftCatalogStateSamples } from "./shift-catalog-state-samples"
 import { readShiftCurrentCoordinate } from "./shift-current-coordinate"
-import {
-  foregroundStateSamples,
-  setShiftForegroundPreview,
-} from "./shift-foreground-preview"
 import {
   launchStateSamples,
   setShiftLaunchPreview,
@@ -17,9 +11,7 @@ import {
 } from "./shift-live-coordinate"
 
 function resetCoordinateSeams() {
-  setShiftCatalogPreview(null)
   setShiftLaunchPreview(null)
-  setShiftForegroundPreview(null)
   // Reset the live-coordinate store to the seed resting state between tests.
   setShiftLiveData("Ready")
   setShiftLiveLaunch("Idle")
@@ -50,8 +42,8 @@ describe("readShiftCurrentCoordinate", () => {
     expect(readShiftCurrentCoordinate("/").launch).toBe("Failed")
   })
 
-  it("captures a pinned Ready + Launching coordinate", () => {
-    setShiftCatalogPreview(shiftCatalogStateSamples.Ready())
+  it("captures a live Ready + pinned Launching coordinate", () => {
+    setShiftLiveData("Ready")
     setShiftLaunchPreview(launchStateSamples.Launching())
 
     expect(readShiftCurrentCoordinate("/")).toEqual({
@@ -67,14 +59,8 @@ describe("readShiftCurrentCoordinate", () => {
     expect(readShiftCurrentCoordinate("/").foreground).toBe("Cooling")
   })
 
-  it("prefers the foreground pin over the live store", () => {
-    setShiftLiveForeground("Cooling")
-    setShiftForegroundPreview(foregroundStateSamples.Recovering())
-    expect(readShiftCurrentCoordinate("/").foreground).toBe("Recovering")
-  })
-
-  it("captures the pinned data tag for a non-Ready state", () => {
-    setShiftCatalogPreview(shiftCatalogStateSamples.Empty())
+  it("captures the live data tag for a non-Ready state", () => {
+    setShiftLiveData("Empty")
     expect(readShiftCurrentCoordinate("/").data).toBe("Empty")
   })
 

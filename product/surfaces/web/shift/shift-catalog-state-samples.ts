@@ -13,6 +13,7 @@ import type { CatalogEntry } from "@platform/catalog/catalog-facts-source"
 import {
   type CatalogResult,
   makeCatalogStateSamples,
+  makeCatalogStateSourceLayers,
 } from "@platform/catalog/catalog-state-samples"
 import { DEV_GAME_MEDIA } from "./dev-game-media"
 
@@ -57,3 +58,13 @@ const FIXTURE_ENTRIES: readonly CatalogEntry[] = DEV_GAME_MEDIA.slice(0, 6).map(
 )
 
 export const shiftCatalogStateSamples = makeCatalogStateSamples(FIXTURE_ENTRIES)
+
+/**
+ * Shift's catalog states as real source layers — the data set on Shift's live
+ * edge (`catalogFactsSourceLayerAtom`) to drive the Home route through each
+ * state with the production mechanism, no preview side channel. Same fixture
+ * entries as `shiftCatalogStateSamples`, so the gallery snapshots and the
+ * in-place dial can't drift.
+ */
+export const shiftCatalogSourceLayers =
+  makeCatalogStateSourceLayers(FIXTURE_ENTRIES)

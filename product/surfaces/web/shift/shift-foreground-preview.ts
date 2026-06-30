@@ -5,6 +5,8 @@
  */
 
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
+import { Effect, Layer } from "effect"
 import { useSyncExternalStore } from "react"
 
 let preview: ForegroundSessionGateState | null = null
@@ -82,3 +84,27 @@ export const foregroundStateSamples: {
 export const FOREGROUND_SESSION_GATE_STATE_TAGS = Object.keys(
   foregroundStateSamples,
 ) as readonly ForegroundSessionGateState["_tag"][]
+
+/**
+ * Shift's foreground gate states as real `ForegroundSessionStatusSource` layers
+ * — the data set on the real edge (`foregroundSessionStatusLayerAtom`) to drive
+ * the gate through each state with the production mechanism, no preview side
+ * channel. The status source returns the gate state directly, so each layer just
+ * yields its sample. Same samples as the gate dial, so they can't drift.
+ */
+function foregroundSourceLayer(
+  state: ForegroundSessionGateState,
+): Layer.Layer<ForegroundSessionStatusSource> {
+  return Layer.succeed(ForegroundSessionStatusSource)({
+    get: () => Effect.succeed(state),
+  })
+}
+
+export const shiftForegroundSourceLayers = Object.fromEntries(
+  FOREGROUND_SESSION_GATE_STATE_TAGS.map(tag => [
+    tag,
+    () => foregroundSourceLayer(foregroundStateSamples[tag]()),
+  ]),
+) as {
+  readonly [Tag in ForegroundSessionGateState["_tag"]]: () => Layer.Layer<ForegroundSessionStatusSource>
+}

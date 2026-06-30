@@ -1,4 +1,8 @@
-import { RegistryProvider, useAtomInitialValues } from "@effect/atom-react"
+import {
+  RegistryContext,
+  RegistryProvider,
+  useAtomInitialValues,
+} from "@effect/atom-react"
 import {
   DualScreenBroadcastSessionRoot,
   type DualScreenChannelFactory,
@@ -6,7 +10,8 @@ import {
 import type { DualScreenRole } from "@platform/react/display/dual-screen/dual-screen-events"
 import type { RouterHistory } from "@tanstack/history"
 import { RouterProvider } from "@tanstack/react-router"
-import type { ReactNode } from "react"
+import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
+import { type ReactNode, useContext, useEffect } from "react"
 import { createRoot } from "react-dom/client"
 import { createShiftRouter } from "./routes/route-tree"
 
@@ -39,6 +44,9 @@ export interface MountShiftOptions {
   readonly input?: ShiftInputAdapter
   readonly dualScreen?: ShiftDualScreenAdapter
   readonly beforeRouter?: ReactNode
+  /** Design-tool seam: receive the mounted surface's atom registry so a lab can
+   * drive the real source atoms live. Inert in production (nothing passes it). */
+  readonly onRegistry?: (registry: AtomRegistry.AtomRegistry) => void
 }
 
 export interface MountedShiftSurface {
@@ -46,20 +54,35 @@ export interface MountedShiftSurface {
   readonly dispose: () => void
 }
 
+function ShiftRegistryBridge({
+  onRegistry,
+}: {
+  readonly onRegistry: (registry: AtomRegistry.AtomRegistry) => void
+}) {
+  const registry = useContext(RegistryContext)
+  useEffect(() => {
+    onRegistry(registry)
+  }, [registry, onRegistry])
+  return null
+}
+
 export function ShiftSurfaceApp({
   initialValues,
   router,
   beforeRouter,
   dualScreen,
+  onRegistry,
 }: {
   readonly initialValues: AtomInitialValues
   readonly router: ShiftRouter
   readonly beforeRouter?: ReactNode
   readonly dualScreen?: ShiftDualScreenAdapter
+  readonly onRegistry?: (registry: AtomRegistry.AtomRegistry) => void
 }) {
   useAtomInitialValues(initialValues)
   const routed = (
     <>
+      {onRegistry ? <ShiftRegistryBridge onRegistry={onRegistry} /> : null}
       {beforeRouter}
       <RouterProvider router={router} />
     </>
@@ -94,6 +117,7 @@ export function mountShift(
         router={router}
         beforeRouter={options.beforeRouter}
         dualScreen={options.dualScreen}
+        onRegistry={options.onRegistry}
       />
     </RegistryProvider>,
   )

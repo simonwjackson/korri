@@ -41,11 +41,6 @@ import { ShiftHomeDefectBody } from "../pages/ShiftHomeDefectBody"
 import { ShiftHomeEmptyBody } from "../pages/ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "../pages/ShiftHomeLoadErrorBody"
 import { ShiftHomeLoadingBody } from "../pages/ShiftHomeLoadingBody"
-import { useShiftCatalogPreview } from "../shift-catalog-preview"
-import {
-  setShiftForegroundPreview,
-  useShiftForegroundPreview,
-} from "../shift-foreground-preview"
 import {
   setShiftLaunchPreview,
   useShiftLaunchPreview,
@@ -71,7 +66,7 @@ const LOAD_ERROR_FOREGROUND = {
   message: "Unable to read foreground session status.",
 } satisfies ForegroundSessionGateState
 
-function foregroundStateFromAtom(
+export function foregroundStateFromAtom(
   result: AsyncResult.AsyncResult<ForegroundSessionGateState, unknown>,
 ): ForegroundSessionGateState {
   return AsyncResult.matchWithWaiting(result, {
@@ -169,10 +164,13 @@ export function ShiftHomeRoute() {
   const liveForeground = foregroundStateFromAtom(
     useAtomValue(foregroundSessionGateStateAtom),
   )
-  const foreground = useShiftForegroundPreview() ?? liveForeground
-  // The design-tool data pin wins over the live loader when set; releasing it
-  // (preview = null) falls straight back to the real catalog snapshot.
-  const snapshot = useShiftCatalogPreview() ?? live
+  // Foreground reads only its real edge (`foregroundSessionGateStateAtom`); a
+  // design tool drives that atom's source in the mounted registry.
+  const foreground = liveForeground
+  // Data reads only the real catalog edge (`catalogSnapshotAtom`). A design tool
+  // drives that same atom's source in the mounted registry, so there is no
+  // catalog preview branch here — the lab pins by swapping the real source.
+  const snapshot = live
   // Publish the resolved data and foreground states for the design-tool capture
   // seam (inert in production — nothing reads them there). Foreground is
   // independent of Data, so publish it at the route level rather than only from
@@ -208,8 +206,7 @@ function NavigatingReadyBody({
   const liveForeground = foregroundStateFromAtom(
     useAtomValue(foregroundSessionGateStateAtom),
   )
-  const foregroundPreview = useShiftForegroundPreview()
-  const foreground = foregroundOverride ?? foregroundPreview ?? liveForeground
+  const foreground = foregroundOverride ?? liveForeground
   const preview = useShiftLaunchPreview()
   const focusGame = useOptionalDualScreenSession()?.focusGame
   const publishGameFocus = useCallback(
@@ -237,7 +234,14 @@ function NavigatingReadyBody({
   // Publish the independent launch-machine coordinate for the design-tool
   // capture seam. Foreground blocking is represented by the foreground axis;
   // it must not contaminate the launch coordinate captured by Pin current.
+  //
+  // Capture-publish is a Device/Preview concern (one running surface). Only a
+  // host that supplies a coordinate owner — the live route — publishes.
+  // Render-only hosts (e.g. many Compose objects on the board) pass no owner
+  // and must not race this module-global, so the render and the publish are
+  // separated by the presence of an owner.
   useEffect(() => {
+    if (!liveCoordinateOwner) return
     setShiftLiveLaunch(rawLaunch._tag, liveCoordinateOwner)
     return () => clearShiftLiveLaunch(liveCoordinateOwner)
   }, [rawLaunch._tag, liveCoordinateOwner])
@@ -254,12 +258,10 @@ function NavigatingReadyBody({
           onLaunch={makeLaunchHandler(games, launch.start)}
           onRetry={() => {
             if (preview) setShiftLaunchPreview(null)
-            else if (foregroundPreview) setShiftForegroundPreview(null)
             else launch.retry()
           }}
           onDismiss={() => {
             if (preview) setShiftLaunchPreview(null)
-            else if (foregroundPreview) setShiftForegroundPreview(null)
             else setAcked(true)
           }}
         />
