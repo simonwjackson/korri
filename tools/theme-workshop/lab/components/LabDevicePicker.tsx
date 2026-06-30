@@ -1,71 +1,31 @@
-import {
-  deviceSegmentForSelection,
-  type DeviceSelection,
-} from "../lab-route-state"
 import { useLab } from "../Lab.context"
+import { deviceSegmentForSelection } from "../lab-route-state"
 
 export function LabDevicePicker() {
   const { devices, selection, setDevicesSegment } = useLab()
-  const selected =
-    selection.kind === "all"
-      ? new Set(devices.map(device => device.id))
-      : new Set(selection.ids)
-
-  const toggleDevice = (id: string) => {
-    if (selection.kind === "all") {
-      setDevicesSegment(id)
-      return
-    }
-
-    const next = new Set(selection.ids)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-
-    const orderedIds = devices
-      .map(device => device.id)
-      .filter(deviceId => next.has(deviceId))
-    const nextSelection: DeviceSelection =
-      orderedIds.length === 0
-        ? { kind: "all" }
-        : { kind: "set", ids: orderedIds }
-    setDevicesSegment(
-      deviceSegmentForSelection(
-        nextSelection,
-        devices.map(device => device.id),
-      ),
-    )
-  }
+  const deviceIds = devices.map(device => device.id)
+  const currentValue = deviceSegmentForSelection(selection, deviceIds)
+  const hasMultiDeviceSelection =
+    selection.kind === "set" && selection.ids.length > 1
 
   return (
-    <div className="lab-focus" aria-label="Device selection">
-      <button
-        type="button"
-        className={cx(
-          "lab-focus-tab",
-          selection.kind === "all" ? "on" : undefined,
-        )}
-        aria-pressed={selection.kind === "all"}
-        onClick={() => setDevicesSegment("all")}
+    <label className="pt-surface-select pt-device-select">
+      Device
+      <select
+        aria-label="Device selection"
+        value={currentValue}
+        onChange={event => setDevicesSegment(event.currentTarget.value)}
       >
-        ALL
-      </button>
-      {devices.map(device => (
-        <button
-          key={device.id}
-          type="button"
-          className={cx(
-            "lab-focus-tab",
-            selected.has(device.id) ? "on" : undefined,
-          )}
-          aria-pressed={selected.has(device.id)}
-          onClick={() => toggleDevice(device.id)}
-        >
-          {device.name}
-        </button>
-      ))}
-    </div>
+        <option value="all">All devices</option>
+        {hasMultiDeviceSelection ? (
+          <option value={currentValue}>{selection.ids.length} devices</option>
+        ) : null}
+        {devices.map(device => (
+          <option key={device.id} value={device.id}>
+            {device.name}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
-
-const cx = (...classes: readonly (string | undefined)[]) =>
-  classes.filter(Boolean).join(" ")

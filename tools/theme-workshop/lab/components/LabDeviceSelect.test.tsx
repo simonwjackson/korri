@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import type { DeviceConfig } from "../../device-lab"
 import { LabContext, type LabContextValue } from "../Lab.context"
 import type { LabSurfaceAdapter } from "../surface-registry"
-import { LabDevicePicker } from "./LabDevicePicker"
+import { LabDeviceSelect } from "./LabDeviceSelect"
 
 const devices: readonly DeviceConfig[] = [
   {
@@ -20,9 +20,6 @@ const devices: readonly DeviceConfig[] = [
   },
 ]
 
-const rg353m = devices[0]
-if (!rg353m) throw new Error("expected RG353M fixture")
-
 const adapter: LabSurfaceAdapter = {
   id: "test",
   devices,
@@ -30,7 +27,7 @@ const adapter: LabSurfaceAdapter = {
   mountSurface: () => ({ router: {} as never, dispose: () => undefined }),
 }
 
-function renderPicker(
+function renderSelect(
   overrides: Partial<LabContextValue> & Pick<LabContextValue, "selection">,
 ) {
   const setDevicesSegment = mock(() => undefined)
@@ -61,46 +58,31 @@ function renderPicker(
   }
   render(
     <LabContext.Provider value={value}>
-      <LabDevicePicker />
+      <LabDeviceSelect />
     </LabContext.Provider>,
   )
   return { setDevicesSegment }
 }
 
-describe("LabDevicePicker", () => {
-  it("selects one device from all", () => {
-    const { setDevicesSegment } = renderPicker({ selection: { kind: "all" } })
+describe("LabDeviceSelect", () => {
+  it("renders device selection as a dropdown", () => {
+    renderSelect({ selection: { kind: "all" } })
 
-    fireEvent.change(screen.getByLabelText("Device selection"), {
-      target: { value: "rg353m" },
-    })
-
-    expect(setDevicesSegment).toHaveBeenCalledWith("rg353m")
+    expect(screen.getByRole("combobox", { name: "Device selection" })).toBe(
+      screen.getByLabelText("Device selection"),
+    )
+    expect(
+      screen.queryByRole("toolbar", { name: "Device selection" }),
+    ).toBeNull()
   })
 
-  it("switches explicitly back to all", () => {
-    const { setDevicesSegment } = renderPicker({
-      selection: { kind: "set", ids: ["rg353m"] },
-      selectedDevices: [rg353m],
-    })
+  it("selects one device from the dropdown", () => {
+    const { setDevicesSegment } = renderSelect({ selection: { kind: "all" } })
 
     fireEvent.change(screen.getByLabelText("Device selection"), {
-      target: { value: "all" },
+      target: { value: "odin2portal" },
     })
 
-    expect(setDevicesSegment).toHaveBeenCalledWith("all")
-  })
-
-  it("shows an existing multi-device URL segment as the current value", () => {
-    renderPicker({
-      selection: { kind: "set", ids: ["rg353m", "odin2portal"] },
-    })
-
-    const select = screen.getByLabelText("Device selection")
-    expect(select).toBeInstanceOf(HTMLSelectElement)
-    expect((select as HTMLSelectElement).value).toBe("rg353m,odin2portal")
-    const option = screen.getByRole("option", { name: "2 devices" })
-    expect(option).toBeInstanceOf(HTMLOptionElement)
-    expect((option as HTMLOptionElement).value).toBe("rg353m,odin2portal")
+    expect(setDevicesSegment).toHaveBeenCalledWith("odin2portal")
   })
 })
