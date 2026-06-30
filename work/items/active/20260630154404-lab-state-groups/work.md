@@ -1,6 +1,6 @@
 ---
 title: Refactor lab object states into independent groups
-status: active
+status: completed
 created: 2026-06-30
 source: user
 ---

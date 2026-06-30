@@ -1,7 +1,7 @@
 ---
 title: Refactor lab object states into independent groups
 type: refactor
-status: active
+status: completed
 date: 2026-06-30
 verify_command: "bun test tools/theme-workshop/lab && bun test product/surfaces/web/shift"
 ---
