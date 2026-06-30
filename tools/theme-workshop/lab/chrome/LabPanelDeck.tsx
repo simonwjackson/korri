@@ -693,16 +693,19 @@ export function LabPanelDeck({
         maxH,
       )
       if (dockedSide && wellIds) {
-        // Docked panels stay content-height (never taller than content): only
-        // width changes, and the whole well re-stacks at content height.
+        // Same rule as floating: a docked panel grows taller only while its
+        // content overflows, capped at content (maxH already bounds height to
+        // the natural content height). Resizing one re-stacks the well so the
+        // panels below shift down; width stays uniform across the well.
         setFloatPos(prev => {
-          const widened = { ...prev }
+          const sized = { ...prev }
           for (const mid of wellIds) {
             const r = prev[mid]
-            if (r) widened[mid] = { ...r, width }
+            if (!r) continue
+            sized[mid] = mid === id ? { ...r, width, height } : { ...r, width }
           }
           return layoutWell(
-            widened,
+            sized,
             wellIds,
             dockedSide,
             window.innerWidth,

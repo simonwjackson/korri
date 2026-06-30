@@ -46,9 +46,10 @@ export function dockedSide(
 
 /**
  * Lay the given panels out as a top-aligned, gapped vertical stack inside a
- * side well, anchored to the current viewport edge. The rects carry NO explicit
- * height, so each panel sizes to its own content (never taller than content);
- * the supplied content heights are used only to space the stack.
+ * side well, anchored to the current viewport edge. A panel's explicit height
+ * is preserved when set (the user resized it, always within content); otherwise
+ * the rect stays height-auto so it sizes to its content. The stack is spaced by
+ * each panel's effective height (explicit height when set, else content).
  */
 export function layoutWell(
   pos: Record<string, DockRect>,
@@ -64,12 +65,12 @@ export function layoutWell(
   for (const id of ids) {
     const rect = pos[id]
     if (!rect) continue
-    next[id] = {
-      x: dockedX(side, rect.width, innerWidth),
-      y: cursor,
-      width: rect.width,
-    }
-    cursor += contentHeight(id) + WELL_GAP
+    const x = dockedX(side, rect.width, innerWidth)
+    next[id] =
+      rect.height != null
+        ? { x, y: cursor, width: rect.width, height: rect.height }
+        : { x, y: cursor, width: rect.width }
+    cursor += (rect.height ?? contentHeight(id)) + WELL_GAP
   }
   return next
 }

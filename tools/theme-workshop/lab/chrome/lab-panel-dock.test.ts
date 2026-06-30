@@ -62,10 +62,10 @@ describe("dockedX", () => {
 })
 
 describe("layoutWell", () => {
-  it("stacks panels top-aligned and spaces them by content height, leaving height auto", () => {
+  it("stacks height-auto panels top-aligned and spaces them by content height", () => {
     const pos: Record<string, DockRect> = {
-      a: { x: 0, y: 0, width: 248, height: 999 },
-      b: { x: 0, y: 0, width: 248, height: 999 },
+      a: { x: 0, y: 0, width: 248 },
+      b: { x: 0, y: 0, width: 248 },
     }
     const content: Record<string, number> = { a: 120, b: 200 }
     const out = layoutWell(
@@ -91,10 +91,36 @@ describe("layoutWell", () => {
       width: 248,
     })
   })
+
+  it("preserves an explicit (resized) height and spaces the stack by it", () => {
+    const pos: Record<string, DockRect> = {
+      a: { x: 0, y: 0, width: 248, height: 360 },
+      b: { x: 0, y: 0, width: 248 },
+    }
+    const content: Record<string, number> = { a: 120, b: 200 }
+    const out = layoutWell(
+      pos,
+      ["a", "b"],
+      "left",
+      INNER_W,
+      BAR_H,
+      id => content[id] ?? 0,
+    )
+
+    // a keeps its resized height; the stack is spaced by it, not by content.
+    expect(out.a).toEqual({
+      x: WELL_PAD,
+      y: BAR_H + WELL_PAD,
+      width: 248,
+      height: 360,
+    })
+    expect(out.b?.y).toBe(BAR_H + WELL_PAD + 360 + WELL_GAP)
+    expect(out.b?.height).toBeUndefined()
+  })
 })
 
 describe("reanchorOnResize", () => {
-  it("keeps a right-docked panel docked after the window widens", () => {
+  it("keeps a right-docked panel docked after the window widens and preserves its resized height", () => {
     const pos: Record<string, DockRect> = {
       inspector: {
         x: INNER_W - WELL_PAD - 248,
@@ -120,13 +146,14 @@ describe("reanchorOnResize", () => {
     if (!inspector) throw new Error("expected inspector rect")
     expect(dockedSide(inspector, 1600)).toBe("right")
     expect(inspector.x).toBe(1600 - WELL_PAD - 248)
-    expect(inspector.height).toBeUndefined()
+    // An explicitly resized docked panel keeps its height across the resize.
+    expect(inspector.height).toBe(180)
   })
 
   it("re-stacks a side well at content height and leaves floating panels untouched", () => {
     const pos: Record<string, DockRect> = {
-      a: { x: WELL_PAD, y: 60, width: 248, height: 999 },
-      b: { x: WELL_PAD, y: 400, width: 248, height: 999 },
+      a: { x: WELL_PAD, y: 60, width: 248 },
+      b: { x: WELL_PAD, y: 400, width: 248 },
       floating: { x: 500, y: 300, width: 248, height: 220 },
     }
     const content: Record<string, number> = { a: 100, b: 140, floating: 220 }
