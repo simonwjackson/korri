@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from "react"
 import type {
   LabCanvasView,
   LabObjectInstance,
@@ -33,7 +34,9 @@ export function LabCanvasContent({
   readonly workshopScreenId: string | null
   readonly selectedObjectId: string | null
   readonly onSelectObject: (id: string | null) => void
-  readonly onInstancesChange: (instances: readonly LabObjectInstance[]) => void
+  readonly onInstancesChange: Dispatch<
+    SetStateAction<readonly LabObjectInstance[]>
+  >
 }) {
   if (view === "device")
     return <LabSurfaceView sourceId={activeSourceId} stateId={activeStateId} />

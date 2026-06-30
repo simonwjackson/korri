@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from "react"
 import type {
   LabObjectInstance,
   LabWorkshopCommandSignal,
@@ -32,7 +33,9 @@ export function LabComposeView({
   readonly screenId: string | null
   readonly selectedObjectId: string | null
   readonly onSelectObject: (id: string | null) => void
-  readonly onInstancesChange: (instances: readonly LabObjectInstance[]) => void
+  readonly onInstancesChange: Dispatch<
+    SetStateAction<readonly LabObjectInstance[]>
+  >
 }) {
   return (
     <div className="lab-compose-frame" data-lab-frame="compose">
