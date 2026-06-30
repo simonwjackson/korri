@@ -35,7 +35,7 @@ describe("pico click-through handlers", () => {
     fireEvent.click(screen.getByRole("button", { name: /open Game C/i }))
 
     expect(onSelect).toHaveBeenCalledTimes(1)
-    expect(onSelect.mock.calls[0]?.[0]).toMatchObject({ id: "c" })
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "c" }))
   })
 
   it("VariantCartridgeShelf renders no select hit without a handler", () => {
