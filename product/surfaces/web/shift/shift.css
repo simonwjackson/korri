@@ -486,6 +486,21 @@
 	width: 100%;
 }
 
+[data-shift-home] .shift-cine-hero-stack {
+	/* Grid-stack every hero layer (the AnimatePresence outgoing + incoming
+	 * title) into a single cell so a fast focus change crossfades the titles in
+	 * place. Without this, the briefly co-mounted layers flow as two side-by-side
+	 * flex columns and the new title visibly snaps left when the old one leaves. */
+	display: grid;
+	width: 100%;
+	max-width: 70cqi;
+}
+
+[data-shift-home] .shift-cine-hero-stack > .shift-cine-hero {
+	grid-area: 1 / 1;
+	align-self: end;
+}
+
 [data-shift-home] .shift-cine-hero {
 	display: flex;
 	flex-direction: column;

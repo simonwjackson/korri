@@ -24,53 +24,60 @@ export function ShiftCineHero({
   readonly resuming: boolean
 }) {
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={`${game.id}:${status?.tone ?? "live"}`}
-        className="shift-cine-hero"
-        role={status ? "status" : undefined}
-        aria-live={
-          status?.tone === "failed"
-            ? "assertive"
-            : status
-              ? "polite"
-              : undefined
-        }
-        initial={{ opacity: 0, y: 22 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -14 }}
-        transition={{ duration: 0.32, ease: "easeOut" }}
-      >
-        {status ? (
-          <>
-            <ShiftCineKicker tone={status.tone}>
-              {status.kicker}
-            </ShiftCineKicker>
-            <ShiftCineTitle>{game.title}</ShiftCineTitle>
-            {status.tone === "launching" ? (
-              <ShiftCineLoading />
-            ) : status.reason ? (
-              <div className="shift-cine-chips">
-                <ShiftCineChip tone="reason">{status.reason}</ShiftCineChip>
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <ShiftCineKicker>
-              {resuming ? "Continue playing" : "Ready to play"}
-            </ShiftCineKicker>
-            <ShiftCineTitle>{game.title}</ShiftCineTitle>
-            <ShiftCineChips
-              genre={game.genre}
-              developer={game.developer}
-              lastPlayedLabel={game.lastPlayedLabel}
-              playtimeLabel={game.playtimeLabel}
-              favorite={game.favorite}
-            />
-          </>
-        )}
-      </motion.div>
-    </AnimatePresence>
+    // Keep the cinematic crossfade/lift, but do not use `mode="wait"` here:
+    // rapid rail focus changes must be latest-state-wins instead of queueing
+    // outgoing titles behind old exit animations. The stack wrapper grid-stacks
+    // the outgoing/incoming hero layers into one cell so they crossfade in
+    // place instead of briefly flowing as two side-by-side columns.
+    <div className="shift-cine-hero-stack">
+      <AnimatePresence>
+        <motion.div
+          key={`${game.id}:${status?.tone ?? "live"}`}
+          className="shift-cine-hero"
+          role={status ? "status" : undefined}
+          aria-live={
+            status?.tone === "failed"
+              ? "assertive"
+              : status
+                ? "polite"
+                : undefined
+          }
+          initial={{ opacity: 0, y: 22 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -14 }}
+          transition={{ duration: 0.32, ease: "easeOut" }}
+        >
+          {status ? (
+            <>
+              <ShiftCineKicker tone={status.tone}>
+                {status.kicker}
+              </ShiftCineKicker>
+              <ShiftCineTitle>{game.title}</ShiftCineTitle>
+              {status.tone === "launching" ? (
+                <ShiftCineLoading />
+              ) : status.reason ? (
+                <div className="shift-cine-chips">
+                  <ShiftCineChip tone="reason">{status.reason}</ShiftCineChip>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <ShiftCineKicker>
+                {resuming ? "Continue playing" : "Ready to play"}
+              </ShiftCineKicker>
+              <ShiftCineTitle>{game.title}</ShiftCineTitle>
+              <ShiftCineChips
+                genre={game.genre}
+                developer={game.developer}
+                lastPlayedLabel={game.lastPlayedLabel}
+                playtimeLabel={game.playtimeLabel}
+                favorite={game.favorite}
+              />
+            </>
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </div>
   )
 }
