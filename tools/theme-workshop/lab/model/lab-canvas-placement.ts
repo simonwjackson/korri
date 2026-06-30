@@ -116,16 +116,23 @@ function placeGrid(
   return origin
 }
 
-/** The world point a placement pattern should organize around. Spiral rings
- * outward from the centre of the existing cluster (stable as the camera moves,
- * which is what makes it read as a spiral rather than a wandering chain). Grid
- * and the empty board place where the user is looking. */
+/** The world point a placement pattern should organize around. Both patterns
+ * anchor on the existing cluster (not the moving viewport) so the camera
+ * following each placement doesn't drift the layout: spiral rings out from the
+ * cluster centroid; grid continues the lattice from its top-left-most card.
+ * An empty board places where the user is looking. */
 export function placementAnchor(
   pattern: LabPlacementPattern,
   occupied: readonly Rect[],
   viewportCenter: Point,
 ): Point {
-  if (pattern !== "spiral" || occupied.length === 0) return viewportCenter
+  if (occupied.length === 0) return viewportCenter
+  if (pattern === "grid") {
+    return {
+      x: Math.min(...occupied.map(rect => rect.x)),
+      y: Math.min(...occupied.map(rect => rect.y)),
+    }
+  }
   const sum = occupied.reduce(
     (acc, rect) => ({
       x: acc.x + (rect.x + rect.w / 2),

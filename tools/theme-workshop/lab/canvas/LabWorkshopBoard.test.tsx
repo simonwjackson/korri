@@ -171,11 +171,11 @@ const anchor = {
 }
 
 describe("LabWorkshopBoard placement", () => {
-  it("persists a grid-pattern position for a newly added part, anchored to the view", async () => {
+  it("continues the grid lattice from the cluster's top-left, on the same row", async () => {
     setLabPlacementPattern("grid")
     render(
       <Harness
-        initial={[instance("far", { x: -5000, y: -5000 }), instance("new")]}
+        initial={[instance("first", { x: 0, y: 0 }), instance("new")]}
       />,
     )
 
@@ -184,18 +184,22 @@ describe("LabWorkshopBoard placement", () => {
       expect(added?.x).toBeTypeOf("number")
     })
 
+    // Anchor is the existing card's top-left (0,0); slot 0 is taken, so the new
+    // card lands one column to the right on the SAME row — no diagonal drift.
     const expected = placeNext(
       "grid",
-      [{ x: -5000, y: -5000, w: PLACEMENT_CELL.w, h: PLACEMENT_CELL.h }],
-      anchor,
+      [{ x: 0, y: 0, w: PLACEMENT_CELL.w, h: PLACEMENT_CELL.h }],
+      { x: 0, y: 0 },
       PLACEMENT_CELL,
     )
     const added = dumped().find(item => item.id === "new")
     expect({ x: added?.x, y: added?.y }).toEqual(expected)
-    // The far, already-positioned card is left exactly where it was.
-    expect(dumped().find(item => item.id === "far")).toMatchObject({
-      x: -5000,
-      y: -5000,
+    expect(added?.y).toBe(0)
+    expect((added?.x ?? 0) > 0).toBe(true)
+    // The first, already-positioned card is left exactly where it was.
+    expect(dumped().find(item => item.id === "first")).toMatchObject({
+      x: 0,
+      y: 0,
     })
   })
 

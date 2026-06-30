@@ -67,12 +67,27 @@ describe("placementAnchor", () => {
     })
   })
 
-  it("keeps grid placement anchored to the viewport centre", () => {
-    const occupied: Rect[] = [{ x: -5000, y: -5000, w: 100, h: 100 }]
-    expect(placementAnchor("grid", occupied, { x: 24, y: 24 })).toEqual({
-      x: 24,
-      y: 24,
+  it("anchors grid placement on the cluster's top-left, not the moving viewport", () => {
+    const occupied: Rect[] = [
+      { x: 200, y: 80, w: 100, h: 100 },
+      { x: 40, y: 300, w: 100, h: 100 },
+    ]
+    // Top-left-most corner across the cluster: (min x, min y) = (40, 80).
+    expect(placementAnchor("grid", occupied, { x: 9999, y: 9999 })).toEqual({
+      x: 40,
+      y: 80,
     })
+  })
+
+  it("keeps grid rows aligned as the camera follows each placement", () => {
+    // Card placed first becomes the lattice origin; the next free slot is to its
+    // right on the SAME row (no diagonal drift).
+    const origin = { x: 0, y: 0 }
+    const first: Rect = { x: 0, y: 0, w: 100, h: 100 }
+    const anchor = placementAnchor("grid", [first], origin)
+    const second = placeNext("grid", [first], anchor, size)
+    expect(second.y).toBe(first.y)
+    expect(second.x).toBeGreaterThan(first.x)
   })
 })
 
