@@ -155,6 +155,12 @@ let
     # connections. `xwayland force` starts the Xwayland process at sway startup
     # so no client ever pays the cold-start cost.
     xwayland force
+
+    # TEMPORARY (remove later): debug terminal hotkey on every device.
+    # Super+E opens a foot terminal as the runtime user. Referenced by
+    # absolute store path so the bind works regardless of the per-platform
+    # session PATH.
+    bindsym Mod4+e exec ${pkgs.foot}/bin/foot
   '';
 
   swayConfig = pkgs.writeText "korri-compositor-sway.conf" (

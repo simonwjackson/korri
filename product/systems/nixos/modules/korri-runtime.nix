@@ -1,7 +1,36 @@
 { config, lib, pkgs, ... }:
 
 let
+  cfg = config.services.korri.runtime;
+
   inherit (lib) mkEnableOption mkOption types;
+
+  korriSessionShellInit = ''
+    if [ "''${USER:-}" = "${cfg.user}" ]; then
+      export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+
+      if [ -z "''${WAYLAND_DISPLAY:-}" ]; then
+        for candidate in "$XDG_RUNTIME_DIR"/wayland-*; do
+          case "$candidate" in
+            *.lock) continue ;;
+          esac
+          if [ -S "$candidate" ]; then
+            export WAYLAND_DISPLAY="$(basename "$candidate")"
+            break
+          fi
+        done
+      fi
+
+      if [ -z "''${SWAYSOCK:-}" ]; then
+        for candidate in "$XDG_RUNTIME_DIR"/sway-ipc.*.sock; do
+          if [ -S "$candidate" ]; then
+            export SWAYSOCK="$candidate"
+            break
+          fi
+        done
+      fi
+    fi
+  '';
 in
 {
   key = "korri-runtime";
@@ -82,51 +111,54 @@ in
     };
   };
 
-  config = lib.mkIf config.services.korri.runtime.enable {
+  config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = config.services.korri.runtime.user != "root";
+        assertion = cfg.user != "root";
         message = "services.korri.runtime.user must not be root.";
       }
       {
-        assertion = config.services.korri.runtime.uid != 0;
+        assertion = cfg.uid != 0;
         message = "services.korri.runtime.uid must be non-zero.";
       }
       {
-        assertion = lib.hasPrefix "/home/" config.services.korri.runtime.home;
+        assertion = lib.hasPrefix "/home/" cfg.home;
         message = "services.korri.runtime.home must be a normal /home/<user> path.";
       }
       {
-        assertion = lib.hasPrefix "/var/lib/korri" config.services.korri.runtime.stateRoot;
+        assertion = lib.hasPrefix "/var/lib/korri" cfg.stateRoot;
         message = "services.korri.runtime.stateRoot must live under /var/lib/korri.";
       }
       {
-        assertion = lib.hasPrefix config.services.korri.runtime.stateRoot config.services.korri.runtime.gamesRoot;
+        assertion = lib.hasPrefix cfg.stateRoot cfg.gamesRoot;
         message = "services.korri.runtime.gamesRoot must live under services.korri.runtime.stateRoot.";
       }
       {
-        assertion = lib.hasPrefix "/run/korri/" config.services.korri.runtime.launchArtifactsDir;
+        assertion = lib.hasPrefix "/run/korri/" cfg.launchArtifactsDir;
         message = "services.korri.runtime.launchArtifactsDir must live under /run/korri.";
       }
       {
-        assertion = (config.users.users.${config.services.korri.runtime.user}.linger or false) != true;
+        assertion = (config.users.users.${cfg.user}.linger or false) != true;
         message = "Korri must not use pre-session lingering; start korri-session.target from a real greetd/logind session.";
       }
     ];
 
-    users.groups = lib.mkIf config.services.korri.runtime.createUser (
-      lib.genAttrs ([ config.services.korri.runtime.group ] ++ config.services.korri.runtime.extraGroups) (_: { })
+    users.groups = lib.mkIf cfg.createUser (
+      lib.genAttrs ([ cfg.group ] ++ cfg.extraGroups) (_: { })
     );
 
-    users.users.${config.services.korri.runtime.user} = lib.mkIf config.services.korri.runtime.createUser {
+    users.users.${cfg.user} = lib.mkIf cfg.createUser {
       isNormalUser = true;
-      uid = config.services.korri.runtime.uid;
-      group = config.services.korri.runtime.group;
-      home = config.services.korri.runtime.home;
+      uid = cfg.uid;
+      group = cfg.group;
+      home = cfg.home;
       createHome = true;
-      shell = "${pkgs.shadow}/bin/nologin";
-      extraGroups = config.services.korri.runtime.extraGroups;
+      shell = pkgs.bashInteractive;
+      extraGroups = cfg.extraGroups;
     };
+
+    environment.loginShellInit = korriSessionShellInit;
+    environment.interactiveShellInit = korriSessionShellInit;
 
     systemd.user.targets.korri-session = {
       description = "Korri appliance session";
