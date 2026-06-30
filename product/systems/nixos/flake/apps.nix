@@ -9,6 +9,7 @@
   korriHeadlessSource,
   korriDesktop,
   korriDesktopDevice,
+  korriDesktopDeviceCurrent,
   korriKioskLiveUsbRuntimeSystem,
   korriKioskLiveUsbSystem,
   korriKioskLiveUsbDeveloperSystem,
@@ -55,6 +56,10 @@ pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
   korri-desktop-device = {
     type = "app";
     program = "${korriDesktopDevice}/bin/korri-desktop-device";
+  };
+  korri-desktop-device-current = {
+    type = "app";
+    program = "${korriDesktopDeviceCurrent}/bin/korri-desktop-device-current";
   };
 }
 // pkgs.lib.optionalAttrs isX86Linux {

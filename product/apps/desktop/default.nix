@@ -152,6 +152,21 @@ let
 
   device = if isSupportedSystem then wrap (deviceWrapOverrides // { profile = "device"; }) else null;
 
+  # Experimental validation target for SM8550/Bandai: keep the device desktop
+  # profile but use the current nixpkgs WebKit/GTK/Mesa-facing closure instead
+  # of the historical pkgs2405 rendering fallback. This is intentionally not
+  # wired into any NixOS image by default; it exists so on-device GPU
+  # acceleration can be tested without changing korri-desktop-device.
+  deviceCurrent =
+    if isSupportedSystem then
+      wrap {
+        korri-desktop-unwrapped = unwrapped;
+        stdenvCcLib = pkgs.stdenv.cc.cc.lib;
+        profile = "device-current";
+      }
+    else
+      null;
+
   x86Kiosk =
     if isX86Linux then
       wrap (
@@ -190,6 +205,7 @@ in
       unwrapped
       host
       device
+      deviceCurrent
       x86Kiosk
       ;
   };

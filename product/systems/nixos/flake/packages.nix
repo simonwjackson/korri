@@ -25,6 +25,7 @@
   korriDesktopUnwrapped,
   korriDesktop,
   korriDesktopDevice,
+  korriDesktopDeviceCurrent,
   korriDesktopX86Kiosk,
   korriHeadlessSystem,
   korriKioskSystem,
@@ -57,6 +58,7 @@
   korri-desktop-unwrapped = korriDesktopUnwrapped;
   korri-desktop = korriDesktop;
   korri-desktop-device = korriDesktopDevice;
+  korri-desktop-device-current = korriDesktopDeviceCurrent;
   default = korriDesktop;
 }
 // pkgs.lib.optionalAttrs isX86Linux {

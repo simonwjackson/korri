@@ -30,10 +30,12 @@
 }:
 
 let
-  isDeviceLike = profile == "device" || profile == "x86-kiosk";
+  isDeviceLike = profile == "device" || profile == "device-current" || profile == "x86-kiosk";
   binName =
     if profile == "x86-kiosk" then
       "korri-desktop-x86-kiosk"
+    else if profile == "device-current" then
+      "korri-desktop-device-current"
     else if isDeviceLike then
       "korri-desktop-device"
     else

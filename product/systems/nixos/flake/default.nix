@@ -205,6 +205,7 @@ flake-utils.lib.eachDefaultSystem (
     korriDesktopUnwrapped = desktop.packages.unwrapped;
     korriDesktop = desktop.packages.host;
     korriDesktopDevice = desktop.packages.device;
+    korriDesktopDeviceCurrent = desktop.packages.deviceCurrent;
     korriDesktopX86Kiosk = desktop.packages.x86Kiosk;
 
     firstPartyPluginComposition = import ./plugins.nix {
@@ -290,6 +291,7 @@ flake-utils.lib.eachDefaultSystem (
         korriDesktopUnwrapped
         korriDesktop
         korriDesktopDevice
+        korriDesktopDeviceCurrent
         korriDesktopX86Kiosk
         korriHeadlessSystem
         korriKioskSystem
@@ -346,6 +348,7 @@ flake-utils.lib.eachDefaultSystem (
         korriHeadlessSource
         korriDesktop
         korriDesktopDevice
+        korriDesktopDeviceCurrent
         korriKioskLiveUsbRuntimeSystem
         korriKioskLiveUsbSystem
         korriKioskLiveUsbDeveloperSystem
