@@ -49,13 +49,13 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
-  it("routes all managed Steam launches through the gamescoped SteamOS desktop client", () => {
+  it("routes all managed Steam launches through the gamescoped Deck client", () => {
     expect(moduleSource).toContain('service_name="korri-steam-gamescope.service"')
     expect(moduleSource).not.toContain("KORRI_STEAM_SERVICE")
     expect(moduleSource).toContain("systemd.services.korri-steam-gamescope")
     expect(moduleSource).not.toMatch(/systemd\.services\.korri-steam\s*=/)
     expect(moduleSource).not.toContain('conflicts = [ "korri-steam.service" ]')
-    expect(moduleSource).toContain("-steamos3")
+    expect(moduleSource).not.toContain('"-steamos3"')
     expect(moduleSource).toContain("-steampal")
     expect(moduleSource).toContain("-steamdeck")
     expect(moduleSource).toContain("-silent")

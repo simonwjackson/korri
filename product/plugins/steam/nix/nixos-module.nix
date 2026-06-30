@@ -29,10 +29,12 @@ let
   ];
 
   defaultSteamArgs = [
-    # Keep Steam in SteamOS/Deck-compatible mode for ARM64 AppID forwarding and
-    # Steam Input. Platforms that need Steam to map an initial gamescope surface
-    # can opt into gamepad UI separately via useGamepadUi.
-    "-steamos3"
+    # Keep Steam in Deck-compatible mode for ARM64 AppID forwarding and Steam
+    # Input without enabling SteamOS system-management hooks. In particular,
+    # -steamos3 makes Steam assume it owns platform Bluetooth policy and power
+    # the adapter off on non-SteamOS guests.
+    # Platforms that need Steam to map an initial gamescope surface can opt into
+    # gamepad UI separately via useGamepadUi.
     "-steampal"
     "-steamdeck"
     "-silent"
