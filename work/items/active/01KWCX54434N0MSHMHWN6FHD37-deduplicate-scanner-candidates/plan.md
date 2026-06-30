@@ -1,7 +1,7 @@
 ---
 title: fix: Deduplicate ROM scanner candidates against authored entries
 type: fix
-status: active
+status: completed
 date: 2026-06-30
 origin: work/items/active/01KWCX54434N0MSHMHWN6FHD37-deduplicate-scanner-candidates/item.md
 deepened: 2026-06-30
