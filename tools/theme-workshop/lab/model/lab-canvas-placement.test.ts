@@ -3,6 +3,7 @@ import {
   DEFAULT_PLACEMENT_PATTERN,
   isPlacementPattern,
   LAB_PLACEMENT_PATTERNS,
+  placementAnchor,
   placeNext,
   type Rect,
   rectsOverlap,
@@ -20,13 +21,15 @@ function overlapsAny(
 }
 
 describe("placement pattern enum", () => {
-  it("exposes the three selectable patterns with cascade as default", () => {
-    expect([...LAB_PLACEMENT_PATTERNS]).toEqual(["cascade", "spiral", "grid"])
-    expect(DEFAULT_PLACEMENT_PATTERN).toBe("cascade")
+  it("exposes spiral and grid with spiral as the default", () => {
+    expect([...LAB_PLACEMENT_PATTERNS]).toEqual(["spiral", "grid"])
+    expect(DEFAULT_PLACEMENT_PATTERN).toBe("spiral")
   })
 
-  it("guards arbitrary strings", () => {
+  it("guards arbitrary strings and rejects the removed cascade pattern", () => {
     expect(isPlacementPattern("spiral")).toBe(true)
+    expect(isPlacementPattern("grid")).toBe(true)
+    expect(isPlacementPattern("cascade")).toBe(false)
     expect(isPlacementPattern("nope")).toBe(false)
   })
 })
@@ -40,23 +43,40 @@ describe("rectsOverlap", () => {
   })
 })
 
-describe("placeNext", () => {
-  it("cascade centers the card on the anchor when space is free", () => {
-    expect(placeNext("cascade", [], { x: 0, y: 0 }, size)).toEqual({
-      x: -50,
-      y: -50,
+describe("placementAnchor", () => {
+  it("uses the viewport centre for an empty board", () => {
+    expect(placementAnchor("spiral", [], { x: 10, y: 20 })).toEqual({
+      x: 10,
+      y: 20,
+    })
+    expect(placementAnchor("grid", [], { x: 10, y: 20 })).toEqual({
+      x: 10,
+      y: 20,
     })
   })
 
-  it("cascade steps diagonally into free space when the anchor slot is taken", () => {
-    const occupied: Rect[] = [{ x: -50, y: -50, ...size }]
-    const next = placeNext("cascade", occupied, { x: 0, y: 0 }, size)
-
-    expect(next.x).toBeGreaterThan(-50)
-    expect(next.y).toBeGreaterThan(-50)
-    expect(overlapsAny(next, occupied)).toBe(false)
+  it("rings spiral placement around the cluster centroid, not the moving viewport", () => {
+    const occupied: Rect[] = [
+      { x: 0, y: 0, w: 100, h: 100 },
+      { x: 200, y: 0, w: 100, h: 100 },
+    ]
+    // Centroid of the two card centres: ((50+250)/2, (50+50)/2) = (150, 50).
+    expect(placementAnchor("spiral", occupied, { x: 9999, y: 9999 })).toEqual({
+      x: 150,
+      y: 50,
+    })
   })
 
+  it("keeps grid placement anchored to the viewport centre", () => {
+    const occupied: Rect[] = [{ x: -5000, y: -5000, w: 100, h: 100 }]
+    expect(placementAnchor("grid", occupied, { x: 24, y: 24 })).toEqual({
+      x: 24,
+      y: 24,
+    })
+  })
+})
+
+describe("placeNext", () => {
   it("spiral centers the first card and rings outward without overlap", () => {
     const first = placeNext("spiral", [], { x: 0, y: 0 }, size)
     expect(first).toEqual({ x: -50, y: -50 })
@@ -76,16 +96,25 @@ describe("placeNext", () => {
     const second = placeNext("grid", occupied, origin, size)
     expect(overlapsAny(second, occupied)).toBe(false)
   })
+
+  it("spiral fills a compact, non-overlapping cluster around a fixed anchor", () => {
+    const placed: Rect[] = []
+    for (let i = 0; i < 6; i += 1) {
+      const point = placeNext("spiral", placed, { x: 0, y: 0 }, size)
+      expect(overlapsAny(point, placed)).toBe(false)
+      placed.push({ ...point, ...size })
+    }
+  })
 })
 
 describe("repackPositions", () => {
   it("grid repacks row-major across three columns with gap-inclusive stride", () => {
-    const size = { w: 540, h: 480 }
+    const big = { w: 540, h: 480 }
     const gap = 32
-    const positions = repackPositions("grid", 4, { x: 24, y: 24 }, size)
+    const positions = repackPositions("grid", 4, { x: 24, y: 24 }, big)
     expect(positions[0]).toEqual({ x: 24, y: 24 })
-    expect(positions[1]).toEqual({ x: 24 + size.w + gap, y: 24 })
-    expect(positions[3]).toEqual({ x: 24, y: 24 + size.h + gap })
+    expect(positions[1]).toEqual({ x: 24 + big.w + gap, y: 24 })
+    expect(positions[3]).toEqual({ x: 24, y: 24 + big.h + gap })
   })
 
   it("spiral repack starts centered on the anchor and never overlaps", () => {
@@ -94,29 +123,6 @@ describe("repackPositions", () => {
     for (const [i, a] of positions.entries()) {
       for (const b of positions.slice(i + 1)) {
         expect(rectsOverlap({ ...a, ...size }, { ...b, ...size })).toBe(false)
-      }
-    }
-  })
-
-  it("cascade repack offsets each card diagonally without overlapping", () => {
-    const positions = repackPositions("cascade", 3, { x: 0, y: 0 }, size)
-    const [first, second] = positions
-    expect(first).toEqual({ x: -50, y: -50 })
-    expect(second?.x ?? 0).toBeGreaterThan(first?.x ?? 0)
-    expect(second?.y ?? 0).toBeGreaterThan(first?.y ?? 0)
-    for (const [i, a] of positions.entries()) {
-      for (const b of positions.slice(i + 1)) {
-        expect(rectsOverlap({ ...a, ...size }, { ...b, ...size })).toBe(false)
-      }
-    }
-  })
-
-  it("cascade repack keeps full-size cards from overlapping", () => {
-    const big = { w: 540, h: 480 }
-    const positions = repackPositions("cascade", 3, { x: 0, y: 0 }, big)
-    for (const [i, a] of positions.entries()) {
-      for (const b of positions.slice(i + 1)) {
-        expect(rectsOverlap({ ...a, ...big }, { ...b, ...big })).toBe(false)
       }
     }
   })

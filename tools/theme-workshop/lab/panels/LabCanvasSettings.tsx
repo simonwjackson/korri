@@ -12,16 +12,10 @@ type PatternChoice = {
 
 const CHOICES: readonly PatternChoice[] = [
   {
-    id: "cascade",
-    label: "Cascade",
-    description:
-      "New parts land where you're looking, nudged diagonally if the spot is taken.",
-  },
-  {
     id: "spiral",
     label: "Spiral",
     description:
-      "Parts ring outward from the centre of the view, staying a compact cluster.",
+      "Parts ring outward from the centre of the cluster, staying compact.",
   },
   {
     id: "grid",

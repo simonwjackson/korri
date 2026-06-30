@@ -12,6 +12,7 @@ import type { Story } from "../../types"
 import { useLab } from "../Lab.context"
 import {
   PLACEMENT_CELL,
+  placementAnchor,
   placeNext,
   type Rect,
   repackPositions,
@@ -191,10 +192,12 @@ export function LabWorkshopBoard({
   useEffect(() => {
     const pending = instances.filter(instance => instance.x === undefined)
     if (pending.length === 0) return
-    const anchor = worldAnchor()
     const occupied: Rect[] = instances
       .filter(instance => instance.x !== undefined)
       .map(instanceRect)
+    // Spiral rings around the existing cluster's centre (stable as the camera
+    // follows placements); grid/empty place where the user is looking.
+    const anchor = placementAnchor(pattern, occupied, worldAnchor())
     const placements = new Map<string, { x: number; y: number }>()
     for (const instance of pending) {
       const point = placeNext(pattern, occupied, anchor, PLACEMENT_CELL)

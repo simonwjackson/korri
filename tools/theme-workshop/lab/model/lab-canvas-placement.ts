@@ -1,16 +1,16 @@
 /**
  * Pure Compose-board placement math. Where a freshly placed part lands is a
- * user-selectable pattern (Cascade / Spiral / Grid) so the board never just
- * marches off one axis to infinity. All functions here are pure: the board
- * supplies the world anchor (the viewport center in world space), the already
- * occupied rects, and a nominal card size, and gets back a top-left point.
+ * user-selectable pattern (Spiral / Grid) so the board never just marches off
+ * one axis to infinity. All functions are pure: the board supplies the world
+ * anchor, the already occupied rects, and a nominal card size, and gets back a
+ * top-left point.
  */
 
-export const LAB_PLACEMENT_PATTERNS = ["cascade", "spiral", "grid"] as const
+export const LAB_PLACEMENT_PATTERNS = ["spiral", "grid"] as const
 
 export type LabPlacementPattern = (typeof LAB_PLACEMENT_PATTERNS)[number]
 
-export const DEFAULT_PLACEMENT_PATTERN: LabPlacementPattern = "cascade"
+export const DEFAULT_PLACEMENT_PATTERN: LabPlacementPattern = "spiral"
 
 export function isPlacementPattern(
   value: string,
@@ -27,7 +27,6 @@ export type Rect = Point & Size
 export const PLACEMENT_CELL: Size = { w: 540, h: 480 }
 const GRID_COLUMNS = 3
 const GAP = 32
-const CASCADE_STEP = 56
 const MAX_SLOTS = 512
 
 export function rectsOverlap(a: Rect, b: Rect, gap = GAP): boolean {
@@ -78,22 +77,6 @@ function spiralOffsets(count: number): readonly Point[] {
   return offsets
 }
 
-function placeCascade(
-  occupied: readonly Rect[],
-  anchor: Point,
-  size: Size,
-): Point {
-  const start = centeredOn(anchor, size)
-  for (let i = 0; i < MAX_SLOTS; i += 1) {
-    const point = {
-      x: start.x + i * CASCADE_STEP,
-      y: start.y + i * CASCADE_STEP,
-    }
-    if (isFree(point, size, occupied)) return point
-  }
-  return start
-}
-
 function placeSpiral(
   occupied: readonly Rect[],
   anchor: Point,
@@ -133,6 +116,26 @@ function placeGrid(
   return origin
 }
 
+/** The world point a placement pattern should organize around. Spiral rings
+ * outward from the centre of the existing cluster (stable as the camera moves,
+ * which is what makes it read as a spiral rather than a wandering chain). Grid
+ * and the empty board place where the user is looking. */
+export function placementAnchor(
+  pattern: LabPlacementPattern,
+  occupied: readonly Rect[],
+  viewportCenter: Point,
+): Point {
+  if (pattern !== "spiral" || occupied.length === 0) return viewportCenter
+  const sum = occupied.reduce(
+    (acc, rect) => ({
+      x: acc.x + (rect.x + rect.w / 2),
+      y: acc.y + (rect.y + rect.h / 2),
+    }),
+    { x: 0, y: 0 },
+  )
+  return { x: sum.x / occupied.length, y: sum.y / occupied.length }
+}
+
 /** Where the next placed card's top-left should sit, avoiding `occupied`. */
 export function placeNext(
   pattern: LabPlacementPattern,
@@ -140,14 +143,8 @@ export function placeNext(
   anchor: Point,
   size: Size = PLACEMENT_CELL,
 ): Point {
-  switch (pattern) {
-    case "spiral":
-      return placeSpiral(occupied, anchor, size)
-    case "grid":
-      return placeGrid(occupied, anchor, size)
-    default:
-      return placeCascade(occupied, anchor, size)
-  }
+  if (pattern === "grid") return placeGrid(occupied, anchor, size)
+  return placeSpiral(occupied, anchor, size)
 }
 
 /** Deterministic full layout of `count` cards for the Tidy command, using the
@@ -162,24 +159,12 @@ export function repackPositions(
   if (pattern === "grid") {
     return Array.from({ length: count }, (_, i) => gridSlot(anchor, size, i))
   }
-  if (pattern === "spiral") {
-    const stepX = size.w + GAP
-    const stepY = size.h + GAP
-    return spiralOffsets(count).map(offset =>
-      centeredOn(
-        { x: anchor.x + offset.x * stepX, y: anchor.y + offset.y * stepY },
-        size,
-      ),
-    )
-  }
-  // Cascade repack must not overlap: step each card down the diagonal until it
-  // clears the ones already placed (mirrors placeCascade for new cards).
-  const placed: Rect[] = []
-  const out: Point[] = []
-  for (let i = 0; i < count; i += 1) {
-    const point = placeCascade(placed, anchor, size)
-    out.push(point)
-    placed.push({ ...point, w: size.w, h: size.h })
-  }
-  return out
+  const stepX = size.w + GAP
+  const stepY = size.h + GAP
+  return spiralOffsets(count).map(offset =>
+    centeredOn(
+      { x: anchor.x + offset.x * stepX, y: anchor.y + offset.y * stepY },
+      size,
+    ),
+  )
 }

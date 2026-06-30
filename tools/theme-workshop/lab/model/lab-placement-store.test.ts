@@ -11,15 +11,15 @@ afterEach(() => {
 })
 
 describe("lab placement store", () => {
-  it("defaults to the cascade pattern", () => {
+  it("defaults to the spiral pattern", () => {
     expect(getLabPlacementPattern()).toBe(DEFAULT_PLACEMENT_PATTERN)
-    expect(getLabPlacementPattern()).toBe("cascade")
+    expect(getLabPlacementPattern()).toBe("spiral")
   })
 
   it("updates and persists the chosen pattern", () => {
-    setLabPlacementPattern("spiral")
-    expect(getLabPlacementPattern()).toBe("spiral")
-    expect(window.localStorage.getItem("lab-placement-pattern")).toBe("spiral")
+    setLabPlacementPattern("grid")
+    expect(getLabPlacementPattern()).toBe("grid")
+    expect(window.localStorage.getItem("lab-placement-pattern")).toBe("grid")
   })
 
   it("reads a previously persisted pattern on next hydrate", () => {
@@ -31,6 +31,6 @@ describe("lab placement store", () => {
   it("ignores an invalid persisted value and keeps the default", () => {
     resetLabPlacementPatternForTest()
     window.localStorage.setItem("lab-placement-pattern", "bogus")
-    expect(getLabPlacementPattern()).toBe("cascade")
+    expect(getLabPlacementPattern()).toBe("spiral")
   })
 })
