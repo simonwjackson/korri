@@ -9,7 +9,6 @@ import { deviceScreens } from "../../device-lab"
 import type { Story } from "../../types"
 import { useLab } from "../Lab.context"
 import {
-  bindObjectAxisState,
   bindObjectInstance,
   clampScale,
   DEFAULT_CAMERA,
@@ -18,7 +17,6 @@ import {
   type LabWorkshopCommandSignal,
   type LabWorkshopTool,
 } from "../model/lab-canvas-state"
-import type { LabSourceOption } from "../model/lab-source-state"
 import { LabDraggablePart } from "./LabDraggablePart"
 
 /** Grid spacing for auto-placed / tidied cards — generous enough that a
@@ -50,19 +48,21 @@ function zoomAtPoint(
 export function LabWorkshopBoard({
   instances,
   stories,
-  sources,
   tool,
   command,
   screenId,
+  selectedId,
+  onSelect,
   onInstancesChange,
 }: {
   readonly instances: readonly LabObjectInstance[]
   readonly stories: ReadonlyMap<string, Story>
-  readonly sources: readonly LabSourceOption[]
   readonly tool: LabWorkshopTool
   readonly command: LabWorkshopCommandSignal | null
   /** Which logical screen aspect to render (multi-screen devices); null = first/default. */
   readonly screenId: string | null
+  readonly selectedId: string | null
+  readonly onSelect: (id: string | null) => void
   readonly onInstancesChange: (instances: readonly LabObjectInstance[]) => void
 }) {
   const { selectedDevices } = useLab()
@@ -85,8 +85,6 @@ export function LabWorkshopBoard({
     id: string,
     patch: Partial<Pick<LabObjectInstance, "sourceId" | "stateId">>,
   ) => onInstancesChange(bindObjectInstance(instances, id, patch))
-  const bindAxis = (id: string, axisId: string, stateId: string) =>
-    onInstancesChange(bindObjectAxisState(instances, id, axisId, stateId))
   const move = (id: string, x: number, y: number) =>
     onInstancesChange(bindObjectInstance(instances, id, { x, y }))
   const remove = (id: string) =>
@@ -193,14 +191,6 @@ export function LabWorkshopBoard({
     }
   }, [command])
 
-  if (instances.length === 0)
-    return (
-      <div className="lab-empty-state">
-        Pick parts from the palette to place them on the logical screen. Add as
-        many as you like — drag to arrange, scroll to zoom.
-      </div>
-    )
-
   return (
     <div
       ref={boardRef}
@@ -215,6 +205,8 @@ export function LabWorkshopBoard({
       }}
       onPointerDown={event => {
         if (event.target !== event.currentTarget) return
+        // Clicking empty canvas clears the selection.
+        onSelect(null)
         startPan(event)
       }}
       onPointerMove={event => {
@@ -267,10 +259,10 @@ export function LabWorkshopBoard({
               story={story}
               byId={stories}
               screen={screen}
-              sources={sources}
               scale={camera.scale}
+              selected={instance.id === selectedId}
+              onSelect={onSelect}
               onBind={bind}
-              onBindAxis={bindAxis}
               onMove={move}
               onRemove={remove}
             />

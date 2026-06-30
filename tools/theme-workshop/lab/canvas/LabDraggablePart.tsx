@@ -2,13 +2,9 @@ import type { ScreenConfig } from "../../device-lab"
 import type { Story } from "../../types"
 import { useLab } from "../Lab.context"
 import type { LabObjectInstance } from "../model/lab-canvas-state"
-import { statesForStory, stateVariantFor } from "../model/lab-part-model"
+import { stateVariantFor } from "../model/lab-part-model"
 import { LabPreviewBoundary } from "../model/lab-preview-boundary"
-import {
-  isSourceStatus,
-  type LabSourceOption,
-  type SourceStatus,
-} from "../model/lab-source-state"
+import { isSourceStatus } from "../model/lab-source-state"
 import { LAB_BIND_MIME } from "../panels/LabSourcesPanel"
 import { LabScreenFrame } from "./LabScreenFrame"
 
@@ -24,21 +20,20 @@ function parseBind(
 
 /**
  * One placed part on the Compose board: the part rendered inside a single
- * logical screen frame with a drag bar carrying its own data source / state /
- * remove. Compose is device-agnostic: the selected screen contributes aspect
- * ratio only. Physical size, bezels, and multi-screen arrangement belong to the
- * Device frame.
+ * logical screen frame with a drag bar carrying only identity, drag, and
+ * remove. Its bindings (data source, state, extra axes) are edited in the
+ * selection-scoped Inspector, which scales to any number of axes. Compose is
+ * device-agnostic: the selected screen contributes aspect ratio only.
  */
 export function LabDraggablePart({
   instance,
   story,
   byId,
-
   screen,
-  sources,
   scale,
+  selected,
+  onSelect,
   onBind,
-  onBindAxis,
   onMove,
   onRemove,
 }: {
@@ -46,20 +41,19 @@ export function LabDraggablePart({
   readonly story: Story
   readonly byId: ReadonlyMap<string, Story>
   readonly screen?: ScreenConfig
-  readonly sources: readonly LabSourceOption[]
   readonly scale: number
+  readonly selected: boolean
+  readonly onSelect: (id: string) => void
   readonly onBind: (
     id: string,
     patch: Partial<Pick<LabObjectInstance, "sourceId" | "stateId">>,
   ) => void
-  readonly onBindAxis: (id: string, axisId: string, stateId: string) => void
   readonly onMove: (id: string, x: number, y: number) => void
   readonly onRemove: (id: string) => void
 }) {
   const { adapter } = useLab()
   const x = instance.x ?? 24
   const y = instance.y ?? 24
-  const states = statesForStory(story, byId)
   // Fall back to the part's own representative when the requested state isn't in
   // its family (e.g. a state inherited from another card), so a card always
   // renders something.
@@ -68,8 +62,6 @@ export function LabDraggablePart({
     Boolean(variant.surface) ||
     variant.layer === "page" ||
     variant.layer === "template"
-  // Extra per-object dials (beyond Data) for an edge-rendered surface part.
-  const extraAxes = fill ? (adapter.surfacePartAxes?.(story) ?? []) : []
 
   const renderBody = () => {
     // Surface/page parts of a binding-capable adapter render through the real
@@ -94,8 +86,9 @@ export function LabDraggablePart({
 
   return (
     <fieldset
-      className="pt-object"
+      className={`pt-object${selected ? " is-selected" : ""}`}
       style={{ left: x, top: y }}
+      onPointerDownCapture={() => onSelect(instance.id)}
       onDragOver={event => {
         if (event.dataTransfer.types.includes(LAB_BIND_MIME))
           event.preventDefault()
@@ -133,76 +126,6 @@ export function LabDraggablePart({
           {story.layer}
         </span>
         <span className="pt-object-title">{story.name}</span>
-        <label
-          className="pt-object-source"
-          onPointerDown={event => event.stopPropagation()}
-        >
-          <span className="pt-object-source-icon" aria-hidden>
-            ◈
-          </span>
-          <select
-            value={instance.sourceId}
-            aria-label={`Data source for ${story.name}`}
-            onChange={event =>
-              onBind(instance.id, { sourceId: event.target.value })
-            }
-          >
-            {sources.map(source => (
-              <option key={source.id} value={source.id}>
-                {source.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label
-          className="pt-object-source"
-          onPointerDown={event => event.stopPropagation()}
-        >
-          <span className="pt-object-source-icon pt-icon-state" aria-hidden>
-            ◆
-          </span>
-          <select
-            value={instance.stateId}
-            aria-label={`State for ${story.name}`}
-            onChange={event =>
-              onBind(instance.id, {
-                stateId: event.target.value as SourceStatus,
-              })
-            }
-          >
-            {states.map(state => (
-              <option key={state.id} value={state.id}>
-                {state.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {extraAxes.map(axis => (
-          <label
-            key={axis.id}
-            className="pt-object-source"
-            onPointerDown={event => event.stopPropagation()}
-          >
-            <span className="pt-object-source-icon pt-icon-state" aria-hidden>
-              ◆
-            </span>
-            <select
-              value={
-                instance.axisStateIds?.[axis.id] ?? axis.states[0]?.id ?? ""
-              }
-              aria-label={`${axis.label} for ${story.name}`}
-              onChange={event =>
-                onBindAxis(instance.id, axis.id, event.target.value)
-              }
-            >
-              {axis.states.map(state => (
-                <option key={state.id} value={state.id}>
-                  {state.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
         <button
           type="button"
           className="pt-object-remove"

@@ -1,6 +1,7 @@
-import { Monitor, X } from "lucide-react"
+import { CreditCard, Monitor, X } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
 import { LabDeviceSetup } from "../panels/LabDeviceSetup"
+import { LabScaleCalibrator } from "../panels/LabScaleCalibrator"
 
 type LabSettingsSection = {
   readonly id: string
@@ -15,6 +16,12 @@ const SECTIONS: readonly LabSettingsSection[] = [
     label: "Devices",
     icon: <Monitor size={16} strokeWidth={2} aria-hidden />,
     render: () => <LabDeviceSetup />,
+  },
+  {
+    id: "scale",
+    label: "Scale",
+    icon: <CreditCard size={16} strokeWidth={2} aria-hidden />,
+    render: () => <LabScaleCalibrator />,
   },
 ]
 

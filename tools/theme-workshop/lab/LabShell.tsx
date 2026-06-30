@@ -1,23 +1,28 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react"
 import { deviceScreens } from "../device-lab"
 import { LabCanvasContent } from "./canvas/LabCanvasContent"
-import { LabFocusRail } from "./chrome/LabFocusRail"
+import { LabBarChrome } from "./chrome/LabBarChrome"
+import { LabControls } from "./chrome/LabControls"
+import { LabOverlayChrome } from "./chrome/LabOverlayChrome"
 import {
   DOCK_WIDTH_MAX,
   DOCK_WIDTH_MIN,
   type LabFloatRect,
-  LabPanelDeck,
 } from "./chrome/LabPanelDeck"
 import { LabSettingsModal } from "./chrome/LabSettingsModal"
-import { LabToolRail } from "./chrome/LabToolRail"
-import { LabTopBar } from "./chrome/LabTopBar"
-import { LabTouchSheet } from "./chrome/LabTouchSheet"
+import {
+  type LabPresentation,
+  NARROW_QUERY,
+  persistPresentation,
+  readStoredPresentation,
+  viewportPresentation,
+} from "./chrome/lab-presentation"
 import { useLab } from "./Lab.context"
 import { knobStyle } from "./model/lab-calibration-state"
 import {
-  DEFAULT_CHROME_MODE,
+  bindObjectAxisState,
+  bindObjectInstance,
   type LabCanvasView,
-  type LabChromeMode,
   type LabObjectInstance,
   type LabWorkshopCommand,
   type LabWorkshopCommandSignal,
@@ -35,11 +40,18 @@ import {
   type SourceStatus,
   sourcesForAdapter,
 } from "./model/lab-source-state"
+import { LabDeviceInspector } from "./panels/LabDeviceInspector"
+import { LabDevicePanel } from "./panels/LabDevicePanel"
 import { LabInspectorPanel } from "./panels/LabInspectorPanel"
+import { LabObjectInspector } from "./panels/LabObjectInspector"
 import { LabPartsPanel } from "./panels/LabPartsPanel"
-import { LabSourcesPanel } from "./panels/LabSourcesPanel"
-import { LabStatesPanel } from "./panels/LabStatesPanel"
+import { LabPartsViewToggle } from "./panels/LabPartsViewToggle"
 import { LabSurfaceControlsPanel } from "./panels/LabSurfaceControlsPanel"
+import {
+  type LabPartsView,
+  persistPartsView,
+  readStoredPartsView,
+} from "./panels/lab-parts-view"
 import { type LabPartsCatalog, loadSurfacePartsResult } from "./parts-discovery"
 import { useLabAxisController } from "./useLabAxisController"
 
@@ -63,21 +75,32 @@ export function LabShell() {
   const [catalog, setCatalog] = useState<LabPartsCatalog | null>(null)
   const [catalogError, setCatalogError] = useState<Error | null>(null)
   const [view, setView] = useState<LabCanvasView>(initialCanvasView)
-  const [chromeMode, setChromeMode] =
-    useState<LabChromeMode>(DEFAULT_CHROME_MODE)
   const [dockWidth, setDockWidth] = useState<number>(readStoredDockWidth)
-  const [chromeVisible, setChromeVisible] = useState(true)
+  // One adaptive chrome: position defaults from the viewport and is overridable
+  // by the user. Effective = explicit choice ?? viewport default.
+  const [userPresentation, setUserPresentation] =
+    useState<LabPresentation | null>(readStoredPresentation)
+  const [autoPresentation, setAutoPresentation] =
+    useState<LabPresentation>(viewportPresentation)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [workshopTool, setWorkshopTool] = useState<LabWorkshopTool>("select")
   const [workshopCommand, setWorkshopCommand] =
     useState<LabWorkshopCommandSignal | null>(null)
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [workshopScreenId, setWorkshopScreenId] = useState<string | null>(null)
+  const [partsView, setPartsView] = useState<LabPartsView>(readStoredPartsView)
   const sources = useMemo(() => sourcesForAdapter(adapter), [adapter])
   const [activeSourceId, setActiveSourceId] = useState(
     sources[0]?.id ?? DEFAULT_SOURCE_ID,
   )
   const [instances, setInstances] = useState<readonly LabObjectInstance[]>([])
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null)
+  const bindObject = (
+    id: string,
+    patch: Partial<Pick<LabObjectInstance, "sourceId" | "stateId">>,
+  ) => setInstances(prev => bindObjectInstance(prev, id, patch))
+  const bindObjectAxis = (id: string, axisId: string, stateId: string) =>
+    setInstances(prev => bindObjectAxisState(prev, id, axisId, stateId))
   // Parts are the surface's static discovered *.part.tsx components only — never
   // the surface's routes. The live, router-driven surface lives in the Preview
   // view; Parts stay isolated from the router.
@@ -116,6 +139,23 @@ export function LabShell() {
   // focused controller so its ordering contract is in one place.
   const { screenAxes, activeByAxis, mode, pinAxis, liveAxis, pinCurrent } =
     useLabAxisController(adapter)
+  const presentation = userPresentation ?? autoPresentation
+  const choosePresentation = (next: LabPresentation) => {
+    setUserPresentation(next)
+    persistPresentation(next)
+  }
+
+  // Follow the viewport so the default position tracks the screen until the
+  // user explicitly picks one.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return
+    const query = window.matchMedia(NARROW_QUERY)
+    const update = () =>
+      setAutoPresentation(query.matches ? "overlay" : "workspace")
+    update()
+    query.addEventListener?.("change", update)
+    return () => query.removeEventListener?.("change", update)
+  }, [])
 
   useEffect(() => {
     setView(initialCanvasView)
@@ -130,18 +170,6 @@ export function LabShell() {
   useEffect(() => {
     setActiveStateId(defaultStateId)
   }, [defaultStateId])
-
-  // Tapping a state in the dock is the active state for the current selection:
-  // bind every placed object to it (so Selection/Canvas re-render), and when
-  // nothing is selected, show it on the fallback family part in Compose.
-  const selectState = (stateId: SourceStatus) => {
-    setActiveStateId(stateId)
-    setInstances(prev => prev.map(instance => ({ ...instance, stateId })))
-    if (!primaryStory && fallbackStateStory) {
-      setSelectedIds([fallbackStateStory.id])
-      setView("compose")
-    }
-  }
 
   useEffect(() => {
     let cancelled = false
@@ -193,6 +221,7 @@ export function LabShell() {
   const clearAll = () => {
     setSelectedIds([])
     setInstances([])
+    setSelectedObjectId(null)
   }
 
   const switchWorkshopTool = (tool: LabWorkshopTool) => {
@@ -205,59 +234,85 @@ export function LabShell() {
     setView("compose")
   }
 
+  const choosePartsView = (next: LabPartsView) => {
+    setPartsView(next)
+    persistPartsView(next)
+  }
+  const partsAction = (
+    <LabPartsViewToggle mode={partsView} onChange={choosePartsView} />
+  )
   const partsPanel = () => (
     <LabPartsPanel
-      groups={index.groups}
+      mode={partsView}
+      catalog={catalog}
+      index={index}
       selectedIds={selectedIds}
-      onSelect={story => selectStory(story.id)}
+      onSelect={selectStory}
       onSelectLayer={selectLayer}
     />
   )
-  const sourcesPanel = () => (
-    <LabSourcesPanel
-      sources={sources}
-      activeId={activeSourceId}
-      onSelect={setActiveSourceId}
-    />
+  // The Inspector scopes to the selected Compose object (its bindings are an
+  // open-ended axis list), and otherwise edits the whole canvas.
+  const selectedObject =
+    instances.find(instance => instance.id === selectedObjectId) ?? null
+  const selectedObjectStory = selectedObject
+    ? (index.byId.get(selectedObject.storyId) ?? null)
+    : null
+  // Inspector scope follows the view: the Device frame edits the running
+  // surface's live state-machine axes; Compose edits the selected object's
+  // bindings, falling back to whole-canvas theme knobs.
+  // The Inspector coalesces everything into one surface: a view-scoped context
+  // section (Device live axes / selected-object bindings, both as dropdowns) on
+  // top, and the intrinsic-design sliders always present below.
+  const inspectorPanel = () => (
+    <div className="pt-inspect">
+      {view === "device" ? (
+        <LabDeviceInspector
+          axes={screenAxes}
+          activeByAxis={activeByAxis}
+          onPin={pinAxis}
+          onLive={liveAxis}
+          onPinCurrent={pinCurrent}
+        />
+      ) : selectedObject && selectedObjectStory ? (
+        <LabObjectInspector
+          instance={selectedObject}
+          story={selectedObjectStory}
+          byId={index.byId}
+          sources={sources}
+          onBind={bindObject}
+          onBindAxis={bindObjectAxis}
+        />
+      ) : null}
+      <LabInspectorPanel />
+    </div>
   )
-  // Live state-machine axes belong to the Device frame (they drive the running
-  // surface). In Compose, the panel shows the part's own fixture states instead.
-  const panelAxes = view === "device" ? screenAxes : []
-  const statesPanel = () => (
-    <LabStatesPanel
-      axes={panelAxes}
-      activeByAxis={activeByAxis}
-      onPin={pinAxis}
-      onLive={liveAxis}
-      onPinCurrent={pinCurrent}
-      states={states}
-      activeId={activeStateId}
-      onSelect={selectState}
-      hasSelection={Boolean(primaryStory)}
-    />
-  )
-  const inspectorPanel = () => <LabInspectorPanel />
   const controlsPanel = () => <LabSurfaceControlsPanel />
+  const devicePanel = () => <LabDevicePanel />
   const hasControls = Boolean(adapter.useControls)
 
   const sheetPanels = [
-    { id: "parts", label: "Parts", render: partsPanel },
-    { id: "sources", label: "Sources", render: sourcesPanel },
-    { id: "states", label: "States", render: statesPanel },
+    { id: "device", label: "Device", render: devicePanel },
+    { id: "parts", label: "Parts", render: partsPanel, action: partsAction },
     { id: "inspector", label: "Inspector", render: inspectorPanel },
     ...(hasControls
       ? [{ id: "controls", label: "Controls", render: controlsPanel }]
       : []),
   ]
   const deckPanels = [
-    { id: "parts", title: "Parts", accent: "#7dd3fc", render: partsPanel },
     {
-      id: "sources",
-      title: "Sources",
-      accent: "#f0abfc",
-      render: sourcesPanel,
+      id: "device",
+      title: "Device",
+      accent: "#fcd34d",
+      render: devicePanel,
     },
-    { id: "states", title: "States", accent: "#86efac", render: statesPanel },
+    {
+      id: "parts",
+      title: "Parts",
+      accent: "#7dd3fc",
+      render: partsPanel,
+      action: partsAction,
+    },
     {
       id: "inspector",
       title: "Inspector",
@@ -287,16 +342,10 @@ export function LabShell() {
     activeScreens[0]?.id ??
     null
 
-  const compact =
-    typeof window !== "undefined" &&
-    Boolean(
-      window.matchMedia?.("(max-width: 760px), (pointer: coarse)")?.matches,
-    )
   const w = typeof window === "undefined" ? 1440 : window.innerWidth
   const floatLayout: Record<string, LabFloatRect> = {
+    device: { x: 600, y: 120, width: 236 },
     parts: { x: 96, y: 120, width: 236 },
-    sources: { x: 96, y: 430, width: 236 },
-    states: { x: 348, y: 430, width: 236 },
     inspector: { x: w - 300, y: 110, width: 252 },
     controls: { x: 348, y: 120, width: 236 },
   }
@@ -317,45 +366,35 @@ export function LabShell() {
 
   const shellStyle = { "--lab-dock-w": `${dockWidth}px` } as CSSProperties
 
+  // One control cluster, built once and reflowed into whichever chrome position
+  // is active. Same components, different position.
+  const controls = (
+    <LabControls
+      views={CANVAS_VIEWS}
+      view={view}
+      onViewChange={setView}
+      screenChoices={view === "compose" ? activeScreens : undefined}
+      activeScreenId={resolvedScreenId ?? undefined}
+      onScreenChange={setWorkshopScreenId}
+      tool={workshopTool}
+      hasObjects={instances.length > 0}
+      onToolChange={switchWorkshopTool}
+      onCommand={sendWorkshopCommand}
+      onClear={clearAll}
+      presentation={presentation}
+      onPresentationChange={choosePresentation}
+      onOpenSettings={() => setSettingsOpen(true)}
+    />
+  )
+
   return (
     <div
-      className={`pt-shell pt-${chromeMode}${compact ? " pt-compact" : ""}`}
-      data-chrome={chromeVisible ? "on" : "off"}
+      className="pt-shell"
+      data-present={presentation}
       data-lab-mode={mode}
       style={shellStyle}
     >
       <div className="pt-canvas" style={canvasStyle}>
-        <div className="pt-canvas-bar">
-          <div className="pt-seg pt-seg-sm" role="tablist" aria-label="View">
-            {CANVAS_VIEWS.map(candidate => (
-              <button
-                key={candidate.id}
-                type="button"
-                role="tab"
-                aria-selected={view === candidate.id}
-                className={`pt-seg-btn${view === candidate.id ? " is-on" : ""}`}
-                onClick={() => setView(candidate.id)}
-              >
-                {candidate.label}
-              </button>
-            ))}
-          </div>
-          {instances.length > 0 ? (
-            <>
-              <span className="pt-canvas-count">
-                {instances.length} object{instances.length === 1 ? "" : "s"}
-              </span>
-              <button
-                type="button"
-                className="pt-canvas-clear"
-                onClick={clearAll}
-              >
-                Clear
-              </button>
-            </>
-          ) : null}
-        </div>
-
         {catalogError ? (
           <div role="alert" className="lab-catalog-error">
             Failed to load parts: {catalogError.message}
@@ -364,67 +403,29 @@ export function LabShell() {
 
         <LabCanvasContent
           view={view}
-          catalog={catalog}
           index={index}
-          selectedIds={selectedIds}
           instances={instances}
-          sources={sources}
           activeSourceId={activeSourceId}
           activeStateId={activeStateId}
           workshopTool={workshopTool}
           workshopCommand={workshopCommand}
           workshopScreenId={resolvedScreenId}
-          onSelectStory={storyId => selectStory(storyId)}
+          selectedObjectId={selectedObjectId}
+          onSelectObject={setSelectedObjectId}
           onInstancesChange={setInstances}
         />
       </div>
 
-      {chromeVisible ? (
-        <>
-          <LabTopBar
-            chromeMode={chromeMode}
-            onChromeModeChange={setChromeMode}
-            onHideChrome={() => setChromeVisible(false)}
-            onOpenSettings={() => setSettingsOpen(true)}
-            compact={compact}
-            screenChoices={view === "compose" ? activeScreens : undefined}
-            activeScreenId={resolvedScreenId ?? undefined}
-            onScreenChange={setWorkshopScreenId}
-          />
-
-          {compact ? <LabTouchSheet panels={sheetPanels} /> : null}
-
-          {!compact && chromeMode !== "focus" ? (
-            <>
-              <LabToolRail
-                docked={chromeMode === "dock"}
-                tool={workshopTool}
-                hasObjects={instances.length > 0}
-                onToolChange={switchWorkshopTool}
-                onCommand={sendWorkshopCommand}
-                onClear={clearAll}
-              />
-              <LabPanelDeck
-                mode={chromeMode}
-                panels={deckPanels}
-                floatLayout={floatLayout}
-                onDockResize={setDockWidth}
-              />
-            </>
-          ) : null}
-
-          {!compact && chromeMode === "focus" ? (
-            <LabFocusRail panels={sheetPanels} />
-          ) : null}
-        </>
+      {presentation === "overlay" ? (
+        <LabOverlayChrome controls={controls} panels={sheetPanels} />
       ) : (
-        <button
-          type="button"
-          className="pt-show"
-          onClick={() => setChromeVisible(true)}
-        >
-          Show UI
-        </button>
+        <LabBarChrome
+          controls={controls}
+          deckMode="float"
+          panels={deckPanels}
+          floatLayout={floatLayout}
+          onDockResize={setDockWidth}
+        />
       )}
       <LabSettingsModal
         open={settingsOpen}

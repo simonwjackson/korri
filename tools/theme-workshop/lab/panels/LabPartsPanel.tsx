@@ -1,50 +1,46 @@
 import type { Story } from "../../types"
-import { type LabStoryGroup, partLabel } from "../model/lab-part-model"
+import { LabGalleryView } from "../canvas/LabGalleryView"
+import type { LabStoryIndex } from "../model/lab-part-model"
+import type { LabPartsCatalog } from "../parts-discovery"
+import { LabPartsList } from "./LabPartsList"
+import type { LabPartsView } from "./lab-parts-view"
 
+/**
+ * The Parts panel body. Renders either the visual gallery or the compact list;
+ * the Visual ⇄ List switch lives in the panel titlebar (see LabPartsViewToggle),
+ * so the active mode is passed in.
+ */
 export function LabPartsPanel({
-  groups,
+  mode,
+  catalog,
+  index,
   selectedIds,
   onSelect,
   onSelectLayer,
 }: {
-  readonly groups: readonly LabStoryGroup[]
+  readonly mode: LabPartsView
+  readonly catalog: LabPartsCatalog | null
+  readonly index: LabStoryIndex
   readonly selectedIds: readonly string[]
-  readonly onSelect: (story: Story) => void
+  readonly onSelect: (storyId: string) => void
   readonly onSelectLayer: (stories: readonly Story[]) => void
 }) {
+  if (mode === "list")
+    return (
+      <LabPartsList
+        groups={index.groups}
+        selectedIds={selectedIds}
+        onSelect={onSelect}
+        onSelectLayer={onSelectLayer}
+      />
+    )
   return (
-    <div className="pt-tree">
-      <div className="pt-tree-hint">
-        Tap to place on the Compose screen · tap again to remove
-      </div>
-      {groups.map(group => (
-        <div key={group.layer} className="pt-tree-group">
-          <button
-            type="button"
-            className="pt-tree-layer"
-            onClick={() => onSelectLayer(group.stories)}
-          >
-            {group.layer}
-            <span className="pt-tree-layer-all">all</span>
-          </button>
-          {group.stories.map(story => {
-            const on = selectedIds.includes(story.id)
-            return (
-              <button
-                key={story.id}
-                type="button"
-                className={`pt-tree-item${on ? " is-sel" : ""}`}
-                onClick={() => onSelect(story)}
-              >
-                <span className="pt-tree-check" aria-hidden>
-                  {on ? "◉" : "○"}
-                </span>
-                {partLabel(story)}
-              </button>
-            )
-          })}
-        </div>
-      ))}
-    </div>
+    <LabGalleryView
+      catalog={catalog}
+      index={index}
+      selectedIds={selectedIds}
+      onSelect={onSelect}
+      onSelectLayer={onSelectLayer}
+    />
   )
 }

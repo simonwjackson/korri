@@ -4,61 +4,47 @@ import type {
   LabWorkshopTool,
 } from "../model/lab-canvas-state"
 import type { LabStoryIndex } from "../model/lab-part-model"
-import type { LabSourceOption } from "../model/lab-source-state"
-import type { LabPartsCatalog } from "../parts-discovery"
-import { LabGalleryView } from "./LabGalleryView"
 import { LabWorkshopBoard } from "./LabWorkshopBoard"
 
 /**
- * Compose frame: one logical screen-design surface.
+ * Compose frame: one logical screen-design surface — just the board.
  *
- * This collapses the old Gallery + Workshop split. The gallery is now the
- * palette inside Compose; picking a part places it on the same board where the
- * real page renderer runs through real edge data. Device/Preview owns physical
- * multi-screen validation; Compose is device-agnostic screen design.
+ * Parts are picked from the single visual Parts panel in the chrome (which
+ * reflows into the dock, float, or overlay); placing one drops it on this board
+ * where the real page renderer runs through real edge data. Device/Preview owns
+ * physical multi-screen validation; Compose is device-agnostic screen design.
  */
 export function LabComposeView({
-  catalog,
   index,
-  selectedIds,
   instances,
-  sources,
   tool,
   command,
   screenId,
-  onSelectStory,
+  selectedObjectId,
+  onSelectObject,
   onInstancesChange,
 }: {
-  readonly catalog: LabPartsCatalog | null
   readonly index: LabStoryIndex
-  readonly selectedIds: readonly string[]
   readonly instances: readonly LabObjectInstance[]
-  readonly sources: readonly LabSourceOption[]
   readonly tool: LabWorkshopTool
   readonly command: LabWorkshopCommandSignal | null
   /** Which logical screen aspect to render for multi-screen devices. */
   readonly screenId: string | null
-  readonly onSelectStory: (storyId: string) => void
+  readonly selectedObjectId: string | null
+  readonly onSelectObject: (id: string | null) => void
   readonly onInstancesChange: (instances: readonly LabObjectInstance[]) => void
 }) {
   return (
     <div className="lab-compose-frame" data-lab-frame="compose">
-      <aside className="lab-compose-palette" aria-label="Parts palette">
-        <LabGalleryView
-          catalog={catalog}
-          index={index}
-          selectedIds={selectedIds}
-          onSelect={onSelectStory}
-        />
-      </aside>
       <section className="lab-compose-board" aria-label="Compose board">
         <LabWorkshopBoard
           instances={instances}
           stories={index.byId}
-          sources={sources}
           tool={tool}
           command={command}
           screenId={screenId}
+          selectedId={selectedObjectId}
+          onSelect={onSelectObject}
           onInstancesChange={onInstancesChange}
         />
       </section>

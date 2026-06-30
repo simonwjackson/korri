@@ -103,13 +103,31 @@ describe("LabRoot", () => {
     fireEvent.click(view.getByRole("button", { name: "Settings" }))
 
     await waitFor(() => {
-      expect(view.getByText("Scale")).toBeTruthy()
+      expect(view.getAllByText("Scale").length).toBeGreaterThan(0)
     })
     expect(view.getByRole("button", { name: "+ add device" })).toBeTruthy()
   })
 
-  it("marks the shell compact on mobile so dock spacing is not reserved", async () => {
+  function renderShell() {
     const { adapter } = makeAdapter()
+    return render(
+      <LabRoot
+        adapters={[adapter]}
+        routeState={{
+          devicesSegment: "all",
+          themeId: "test",
+          surfacePath: "/",
+        }}
+        navigation={{
+          setDevicesSegment: mock(() => undefined),
+          setThemeId: mock(() => undefined),
+          setSurfacePath: mock(() => undefined),
+        }}
+      />,
+    )
+  }
+
+  function withNarrowViewport(run: () => Promise<void>): Promise<void> {
     const originalMatchMedia = window.matchMedia
     Object.defineProperty(window, "matchMedia", {
       configurable: true,
@@ -124,37 +142,69 @@ describe("LabRoot", () => {
         dispatchEvent: () => false,
       })),
     })
-
-    try {
-      const view = render(
-        <LabRoot
-          adapters={[adapter]}
-          routeState={{
-            devicesSegment: "all",
-            themeId: "test",
-            surfacePath: "/",
-          }}
-          navigation={{
-            setDevicesSegment: mock(() => undefined),
-            setThemeId: mock(() => undefined),
-            setSurfacePath: mock(() => undefined),
-          }}
-        />,
-      )
-
-      await waitFor(() => {
-        expect(view.container.querySelector(".pt-shell")?.classList).toContain(
-          "pt-compact",
-        )
-      })
-      expect(view.container.querySelector(".pt-dock-right")).toBeNull()
-      expect(screen.getByRole("tablist", { name: "Panels" })).toBeTruthy()
-    } finally {
+    return run().finally(() => {
       Object.defineProperty(window, "matchMedia", {
         configurable: true,
         value: originalMatchMedia,
       })
-    }
+    })
+  }
+
+  it("defaults to the workspace layout on a wide viewport", async () => {
+    const view = renderShell()
+
+    await waitFor(() => {
+      expect(
+        view.container.querySelector(".pt-shell")?.getAttribute("data-present"),
+      ).toBe("workspace")
+    })
+    expect(view.container.querySelector(".pt-float-host")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Settings" })).toBeTruthy()
+  })
+
+  it("uses the overlay layout on a narrow viewport", async () => {
+    await withNarrowViewport(async () => {
+      const view = renderShell()
+
+      await waitFor(() => {
+        expect(
+          view.container
+            .querySelector(".pt-shell")
+            ?.getAttribute("data-present"),
+        ).toBe("overlay")
+      })
+      expect(view.container.querySelector(".pt-dock-right")).toBeNull()
+
+      fireEvent.click(screen.getByRole("button", { name: "Open lab controls" }))
+      await waitFor(() => {
+        expect(
+          screen.getByRole("dialog", { name: "Lab controls" }),
+        ).toBeTruthy()
+      })
+      expect(screen.getByLabelText("Device selection")).toBeTruthy()
+    })
+  })
+
+  it("lets the user switch layout regardless of viewport", async () => {
+    const view = renderShell()
+
+    await waitFor(() => {
+      expect(
+        view.container.querySelector(".pt-shell")?.getAttribute("data-present"),
+      ).toBe("workspace")
+    })
+
+    fireEvent.click(screen.getByRole("tab", { name: "Overlay" }))
+
+    await waitFor(() => {
+      expect(
+        view.container.querySelector(".pt-shell")?.getAttribute("data-present"),
+      ).toBe("overlay")
+    })
+    expect(view.container.querySelector(".pt-dock-right")).toBeNull()
+    expect(
+      screen.getByRole("button", { name: "Open lab controls" }),
+    ).toBeTruthy()
   })
 
   it("renders selected real-surface frames and mirrors navigation from one frame to all frames", async () => {
@@ -313,6 +363,47 @@ describe("LabRoot", () => {
     expect(screen.queryByRole("tab", { name: "Workshop" })).toBeNull()
     expect(view.queryByTestId("surface-rg353m")).toBeNull()
     expect(mountCounts.size).toBe(0)
+  })
+
+  it("toggles the Parts panel between visual and list from the titlebar", async () => {
+    const { adapter } = makeAdapter()
+    __setPartModulesForTest({
+      "/product/surfaces/web/test/ui/Test.atom.part.tsx": {
+        default: {
+          name: "Test Atom",
+          render: () => <div>discovered test atom</div>,
+        },
+      },
+    })
+
+    const view = render(
+      <LabRoot
+        adapters={[adapter]}
+        routeState={{
+          devicesSegment: "all",
+          themeId: "test",
+          surfacePath: "/parts",
+        }}
+        navigation={{
+          setDevicesSegment: mock(() => undefined),
+          setThemeId: mock(() => undefined),
+          setSurfacePath: mock(() => undefined),
+        }}
+      />,
+    )
+
+    // Visual by default: the card grid renders, not the list tree.
+    await waitFor(() => {
+      expect(view.container.querySelector(".pt-grid")).toBeTruthy()
+    })
+    expect(view.container.querySelector(".pt-tree")).toBeNull()
+
+    fireEvent.click(screen.getByRole("tab", { name: "List" }))
+
+    await waitFor(() => {
+      expect(view.container.querySelector(".pt-tree")).toBeTruthy()
+    })
+    expect(view.container.querySelector(".pt-grid")).toBeNull()
   })
 
   it("places a part from the Compose palette onto a logical screen frame", async () => {

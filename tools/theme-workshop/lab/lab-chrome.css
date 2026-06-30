@@ -124,14 +124,14 @@ body {
 	overflow: hidden;
 }
 
-/* When chrome docks (Dock mode), inset the canvas so panels never overlap art.
- * The rail width is user-resizable via --lab-dock-w (see .pt-dock-resize). */
-.pt-shell[data-chrome="on"].pt-dock .pt-canvas {
-	inset: var(--pt-bar-h) var(--lab-dock-w, 280px) 0 64px;
-}
-.pt-shell[data-chrome="on"].pt-float .pt-canvas,
-.pt-shell[data-chrome="on"].pt-focus .pt-canvas {
+/* The canvas reflows to the active chrome position. Workspace reserves only the
+ * top bar (panels float / dock into edge wells over the canvas); Overlay is
+ * full-bleed (controls live behind the summon pill). */
+.pt-shell[data-present="workspace"] .pt-canvas {
 	inset: var(--pt-bar-h) 0 0 0;
+}
+.pt-shell[data-present="overlay"] .pt-canvas {
+	inset: 0;
 }
 
 .pt-artboard {
@@ -272,7 +272,7 @@ body {
 	position: absolute;
 	inset: 0;
 	display: grid;
-	grid-template-columns: minmax(240px, 30%) 1fr;
+	grid-template-columns: 1fr;
 	gap: 0;
 	min-width: 0;
 	min-height: 0;
@@ -369,6 +369,11 @@ body {
 	user-select: none;
 	touch-action: none;
 	backdrop-filter: blur(10px);
+	/* Keep the drag bar above the part body. Fill parts position themselves
+	 * against .pt-object's filter containing block and would otherwise paint
+	 * over the bar; a higher stacking context keeps the handle/close reachable. */
+	position: relative;
+	z-index: 2;
 }
 .pt-object-bar:active {
 	cursor: grabbing;
@@ -394,13 +399,13 @@ body {
 	color: #f0abfc;
 }
 .pt-object-source select {
-	font: inherit;
 	font-size: 11px;
-	color: var(--pt-ink);
-	background: transparent;
+	background-color: transparent;
 	border: 0;
-	cursor: pointer;
-	max-width: 110px;
+	border-radius: 0;
+	max-width: 120px;
+	padding: 2px 18px 2px 2px;
+	background-position: right 2px center;
 }
 .pt-object-act,
 .pt-object-remove {
@@ -446,8 +451,54 @@ body {
 	background: #23252e;
 	color: var(--pt-ink);
 }
+/* Selected Compose object: accent the title bar so the canvas shows which
+ * object the Inspector is bound to. */
+.pt-object.is-selected .pt-object-bar {
+	border-color: var(--pt-accent);
+	box-shadow: 0 0 0 1px var(--pt-accent);
+}
+/* Inspector bindings: an open-ended vertical list (label over flat select). */
+.pt-bind {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.pt-bind-row {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+.pt-bind-label {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--pt-ink-faint);
+}
+.pt-bind-row select {
+	width: 100%;
+}
+.pt-shell select:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+/* The Inspector stacks a view-scoped context section over the always-present
+ * intrinsic-design sliders, divided by a hairline. */
+.pt-inspect {
+	display: flex;
+	flex-direction: column;
+}
+.pt-inspect > * + * {
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top: 1px solid var(--pt-line-soft);
+}
 .pt-object-body {
 	display: flex;
+	/* Own stacking context below the bar so fill-part content (even fixed,
+	 * contained by .pt-object's filter) can never paint over the drag bar. */
+	position: relative;
+	z-index: 1;
+	min-height: 0;
 }
 .pt-object .pt-board {
 	border-radius: 0 0 12px 12px;
@@ -458,14 +509,46 @@ body {
 
 /* ----------------------------------------------------------------- gallery */
 
-.pt-gallery {
-	position: absolute;
-	inset: 0;
-	overflow: auto;
-	padding: 18px;
+/* Titlebar controls: a panel can render a compact action (e.g. the Parts
+ * Visual⇄List toggle) on the right of its titlebar / tab row. */
+.pt-panel-actions {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
 }
-.lab-compose-palette .pt-gallery {
-	padding: 18px;
+.pt-sheet-actions {
+	display: flex;
+	justify-content: flex-end;
+	padding: 0 12px 8px;
+}
+.pt-titlebar-toggle {
+	display: inline-flex;
+	gap: 2px;
+}
+.pt-titlebar-btn {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 22px;
+	color: var(--pt-ink-dim);
+	background: #131419;
+	border: 1px solid var(--pt-line);
+	border-radius: 6px;
+	cursor: pointer;
+}
+.pt-titlebar-btn:hover {
+	color: var(--pt-ink);
+	border-color: #393d48;
+}
+.pt-titlebar-btn.is-on {
+	color: var(--pt-accent);
+	border-color: var(--pt-accent);
+}
+
+/* The gallery is the Parts panel's content; it flows inside the scrolling
+ * panel/sheet body (no own positioning or scroll). */
+.pt-gallery {
+	padding: 0;
 }
 .pt-gallery-group + .pt-gallery-group {
 	margin-top: 24px;
@@ -482,10 +565,25 @@ body {
 		11px / 1 ui-monospace,
 		monospace;
 }
+.pt-gallery-all {
+	margin-left: auto;
+	font: inherit;
+	font-size: 11px;
+	color: var(--pt-ink-dim);
+	background: #131419;
+	border: 1px solid var(--pt-line);
+	padding: 3px 9px;
+	border-radius: 7px;
+	cursor: pointer;
+}
+.pt-gallery-all:hover {
+	color: var(--pt-ink);
+	border-color: #393d48;
+}
 .pt-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-	gap: 14px;
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: 12px;
 }
 .pt-card {
 	display: flex;
@@ -1035,6 +1133,46 @@ body {
 	align-items: center;
 	gap: 12px;
 }
+/* Lab dropdowns follow the chrome aesthetic, not the OS widget: a flat themed
+ * field, a custom chevron, and a themed option list (the lab runs in Chromium,
+ * which honours option colours). Applies to every <select> under the shell. */
+.pt-shell select {
+	appearance: none;
+	-webkit-appearance: none;
+	font: inherit;
+	text-transform: none;
+	letter-spacing: 0;
+	color: var(--pt-ink);
+	/* Flat by default so a select blends into its panel/bar rather than reading
+	 * as a box nested in a box; the field surfaces only on hover/focus. */
+	background-color: transparent;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23808591' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 8px center;
+	background-size: 11px;
+	border: 1px solid transparent;
+	border-radius: 7px;
+	padding: 5px 26px 5px 9px;
+	cursor: pointer;
+	transition:
+		border-color 0.12s ease,
+		box-shadow 0.12s ease,
+		background-color 0.12s ease;
+}
+.pt-shell select:hover {
+	border-color: var(--pt-line);
+	background-color: rgba(255, 255, 255, 0.03);
+}
+.pt-shell select:focus-visible {
+	outline: none;
+	border-color: var(--pt-accent);
+	box-shadow: 0 0 0 1px var(--pt-accent);
+}
+.pt-shell select option,
+.pt-shell select optgroup {
+	background: var(--pt-panel-solid);
+	color: var(--pt-ink);
+}
 .pt-surface-select {
 	display: flex;
 	align-items: center;
@@ -1044,15 +1182,65 @@ body {
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
 }
+/* Credit-card DPI calibrator (Settings → Scale): a dashed outline sized to a
+ * real ISO ID-1 card at the current pixels-per-mm, plus the Scale slider. */
+.lab-scale-cal {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	align-items: flex-start;
+}
+.lab-scale-cal-hint {
+	margin: 0;
+	max-width: 360px;
+	color: var(--pt-ink-faint);
+	font-size: 12px;
+	line-height: 1.5;
+}
+/* The reference outline must render at exact physical size, so it floats as a
+ * fixed, screen-centered overlay above the modal rather than being clipped by
+ * (or scaled to) the pane. pointer-events:none keeps the Scale slider beneath
+ * it fully draggable even when the card overlaps it. */
+.lab-scale-cal-card {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 90;
+	pointer-events: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 2px dashed #fcd34d;
+	border-radius: 10px;
+	background: rgba(252, 211, 77, 0.06);
+	color: var(--pt-ink-faint);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+}
+.lab-scale-cal .pt-knob {
+	align-self: stretch;
+	max-width: 360px;
+}
+
+/* Device panel: stack the Surface/Device selects full-width, label over field. */
+.pt-device-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 2px;
+}
+.pt-device-panel .pt-surface-select {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 5px;
+}
+.pt-device-panel .pt-surface-select select {
+	width: 100%;
+}
 .pt-surface-select select {
-	font: inherit;
-	text-transform: none;
-	letter-spacing: 0;
-	color: var(--pt-ink);
-	background: #131419;
-	border: 1px solid var(--pt-line);
-	border-radius: 7px;
-	padding: 5px 8px;
+	padding: 5px 26px 5px 9px;
 }
 .pt-eye {
 	font: inherit;
@@ -1311,11 +1499,55 @@ body {
 }
 .pt-float-host .pt-panel {
 	pointer-events: auto;
+	display: flex;
+	flex-direction: column;
+}
+/* Once a floating panel has an explicit height, its body fills the remaining
+ * space and scrolls inside (instead of the size-to-content default cap). */
+.pt-float-host .pt-panel.is-sized .pt-panel-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	max-height: none;
+}
+
+/* Connected group: a shared frame drawn behind a cluster of touching panels.
+ * The members themselves go seamless (square corners, no own shadow) so the
+ * cluster reads as one cohesive surface with thin internal seams. */
+.pt-panel-group {
+	border-radius: var(--pt-radius);
+	background: rgba(10, 11, 14, 0.35);
+	box-shadow:
+		0 0 0 1px var(--pt-line),
+		0 22px 60px -26px rgba(0, 0, 0, 0.9);
+	pointer-events: none;
+	z-index: 44;
+}
+/* Side dock well: the darker recessed lane a side-docked panel sits inside,
+ * matching the global Docked rail (padding shows around the inset panels). */
+.pt-side-well {
+	position: fixed;
+	top: var(--pt-bar-h);
+	bottom: 0;
+	background: var(--pt-bg);
+	box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
+	pointer-events: none;
+	z-index: 44;
+}
+.pt-side-well-left {
+	left: 0;
+}
+.pt-side-well-right {
+	right: 0;
+}
+.pt-float-host .pt-panel.is-grouped {
+	box-shadow: none;
+	border-radius: 0;
+	border-color: var(--pt-line-soft);
 }
 
 /* Docked panels snap into the rail: full width, in normal flow, no free drag. */
 .pt-dock-right .pt-panel.is-docked {
-	position: static;
+	position: relative;
 	left: auto;
 	top: auto;
 	width: 100% !important;
@@ -1371,6 +1603,28 @@ body {
 	letter-spacing: 0.09em;
 	color: var(--pt-ink);
 }
+.pt-panel-tear {
+	margin-left: auto;
+	width: 18px;
+	height: 18px;
+	display: grid;
+	place-items: center;
+	border: 0;
+	background: transparent;
+	color: var(--pt-ink-faint);
+	font-size: 11px;
+	line-height: 1;
+	cursor: grab;
+	touch-action: none;
+	border-radius: 5px;
+}
+.pt-panel-tear:hover {
+	background: #23252e;
+	color: var(--pt-ink);
+}
+.pt-panel-tear:active {
+	cursor: grabbing;
+}
 .pt-panel-collapse {
 	margin-left: auto;
 	width: 20px;
@@ -1391,6 +1645,65 @@ body {
 	padding: 10px;
 	max-height: 300px;
 	overflow: auto;
+}
+
+/* Per-panel resize grips. Floating: bottom-right corner (width + height).
+ * Docked: bottom edge (height only). Pointer-based so touch works too. */
+.pt-panel-resize {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	width: 16px;
+	height: 16px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: nwse-resize;
+	touch-action: none;
+	z-index: 2;
+}
+.pt-panel-resize::after {
+	content: "";
+	position: absolute;
+	right: 3px;
+	bottom: 3px;
+	width: 7px;
+	height: 7px;
+	border-right: 2px solid var(--pt-line);
+	border-bottom: 2px solid var(--pt-line);
+	border-bottom-right-radius: 3px;
+	transition: border-color 0.12s ease;
+}
+.pt-panel-resize:hover::after {
+	border-color: var(--pt-accent);
+}
+.pt-panel-resize-y {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 9px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: ns-resize;
+	touch-action: none;
+	z-index: 2;
+}
+.pt-panel-resize-y::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	bottom: 2px;
+	width: 28px;
+	height: 2px;
+	transform: translateX(-50%);
+	background: var(--pt-line);
+	border-radius: 2px;
+	transition: background 0.12s ease;
+}
+.pt-panel-resize-y:hover::after {
+	background: var(--pt-accent);
 }
 
 /* parts tree */
@@ -1944,7 +2257,7 @@ body {
 .pt-compact .pt-surface-select select {
 	max-width: min(34vw, 132px);
 	font-size: 11px;
-	padding: 5px 6px;
+	padding: 5px 22px 5px 6px;
 }
 .pt-compact .pt-topbar {
 	gap: 10px;
@@ -2017,4 +2330,137 @@ body {
 }
 .pt-icon-state {
 	color: #86efac !important;
+}
+
+/* ============================================ adaptive chrome: controls */
+/* The shared control cluster (LabControls) lays out inside the top bar for the
+ * Docked/Floating positions, and inside the overlay head for Overlay. Same
+ * components either way; only the wrapper differs. */
+.pt-controls-spacer {
+	flex: 1 1 auto;
+}
+.pt-ctl-btn {
+	flex: 0 0 auto;
+	font: inherit;
+	font-weight: 600;
+	color: var(--pt-ink-dim);
+	background: #131419;
+	border: 1px solid var(--pt-line);
+	padding: 6px 11px;
+	border-radius: 8px;
+	cursor: pointer;
+}
+.pt-ctl-btn:hover {
+	color: var(--pt-ink);
+	border-color: #393d48;
+}
+.pt-ctl-icon {
+	flex: 0 0 auto;
+	display: inline-grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	color: var(--pt-ink-dim);
+	background: #131419;
+	border: 1px solid var(--pt-line);
+	border-radius: 8px;
+	cursor: pointer;
+}
+.pt-ctl-icon:hover {
+	color: var(--pt-ink);
+	border-color: #393d48;
+}
+
+/* Compose tools sit inline in the control cluster. */
+.pt-overlay-tools {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex: 0 0 auto;
+}
+.pt-tool-divider {
+	width: 1px;
+	align-self: stretch;
+	min-height: 22px;
+	background: var(--pt-line);
+	margin: 0 2px;
+}
+
+/* Overlay position: subtle summon pill + a control sheet. */
+.pt-summon {
+	position: fixed;
+	right: calc(14px + env(safe-area-inset-right));
+	bottom: calc(14px + env(safe-area-inset-bottom));
+	width: 40px;
+	height: 40px;
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--pt-line);
+	border-radius: 999px;
+	color: var(--pt-ink-dim);
+	background: rgba(20, 21, 27, 0.55);
+	backdrop-filter: blur(10px);
+	box-shadow: 0 8px 22px -14px rgba(0, 0, 0, 0.7);
+	opacity: 0.55;
+	transition:
+		opacity 0.15s ease,
+		color 0.15s ease,
+		background 0.15s ease;
+	z-index: 55;
+	cursor: pointer;
+}
+.pt-summon:hover,
+.pt-summon:focus-visible,
+.pt-summon:active {
+	opacity: 1;
+	color: var(--pt-ink);
+	background: rgba(20, 21, 27, 0.85);
+}
+.pt-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 70;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+}
+.pt-overlay-scrim {
+	position: absolute;
+	inset: 0;
+	border: 0;
+	background: rgba(4, 5, 8, 0.55);
+	cursor: pointer;
+}
+.pt-overlay-panel {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	max-height: 82vh;
+	background: var(--pt-panel-solid);
+	border-top: 1px solid var(--pt-line);
+	border-radius: 16px 16px 0 0;
+	box-shadow: 0 -18px 44px -20px rgba(0, 0, 0, 0.8);
+	padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-overlay-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 12px;
+	border-bottom: 1px solid var(--pt-line-soft);
+}
+/* On wider screens the summoned sheet centers as a panel rather than a full
+ * bottom drawer. Same component, viewport-aware placement. */
+@media (min-width: 760px) {
+	.pt-overlay {
+		align-items: center;
+		justify-content: center;
+	}
+	.pt-overlay-panel {
+		width: 100%;
+		max-width: 760px;
+		max-height: 80vh;
+		border-radius: 16px;
+	}
 }
