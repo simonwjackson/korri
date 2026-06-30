@@ -458,6 +458,50 @@ in
     "render"
     "seat"
     "video"
+    "wheel"
+  ];
+
+  # Korri OS is a device-user system, not a root-SSH appliance. Keep remote
+  # access key-only, enter through the Korri runtime user, and use sudo for
+  # administrative work. During migration, preserve existing root SSH public
+  # keys by merging them into the runtime user's authorized_keys before root
+  # SSH is disabled. This does not delete or modify root's key files.
+  system.activationScripts.korriSshAuthorizedKeysMigration = {
+    deps = [ "users" ];
+    text = ''
+      if [ -s /root/.ssh/authorized_keys ]; then
+        runtime_home=${runtime.home}
+        ssh_dir="$runtime_home/.ssh"
+        auth_keys="$ssh_dir/authorized_keys"
+        tmp="$(${pkgs.coreutils}/bin/mktemp)"
+
+        ${pkgs.coreutils}/bin/install -d -m 700 -o ${runtime.user} -g ${runtime.group} "$ssh_dir"
+        ${pkgs.coreutils}/bin/cat "$auth_keys" 2>/dev/null > "$tmp" || true
+        ${pkgs.coreutils}/bin/cat /root/.ssh/authorized_keys >> "$tmp"
+        ${pkgs.coreutils}/bin/sort -u "$tmp" > "$auth_keys"
+        ${pkgs.coreutils}/bin/rm -f "$tmp"
+        ${pkgs.coreutils}/bin/chown ${runtime.user}:${runtime.group} "$auth_keys"
+        ${pkgs.coreutils}/bin/chmod 600 "$auth_keys"
+      fi
+    '';
+  };
+
+  services.openssh.settings = {
+    PasswordAuthentication = false;
+    KbdInteractiveAuthentication = false;
+    PermitRootLogin = lib.mkForce "no";
+  };
+
+  security.sudo.extraRules = [
+    {
+      users = [ runtime.user ];
+      commands = [
+        {
+          command = "ALL";
+          options = [ "NOPASSWD" ];
+        }
+      ];
+    }
   ];
 
   services.korri.steam = {
