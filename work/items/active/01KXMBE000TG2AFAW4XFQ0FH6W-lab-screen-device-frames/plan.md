@@ -1,7 +1,7 @@
 ---
 title: "refactor: Restructure dev-lab around screen vs device frames"
 type: refactor
-status: active
+status: completed
 date: 2026-06-29
 verify_command: "bun test tools/theme-workshop/lab product/surfaces/web/shift && just typecheck"
 ---
