@@ -1100,136 +1100,12 @@
 	margin-left: auto;
 }
 
-/* ── Concierge variant: intent-first front door ───────────────────────────── *
- * The library as a question. A column of intent prompts replaces the wall; an
- * answer is a small grid you reach via one of them.
- * -------------------------------------------------------------------------- */
-[data-shift-library] .shift-lib-intents {
-	display: grid;
-	grid-template-columns: repeat(
-		auto-fit,
-		minmax(calc(var(--intrinsic-base) * 9), 1fr)
-	);
-	gap: var(--shift-space-3);
-}
-
-[data-shift-library] .shift-lib-intent {
-	display: flex;
-	flex-direction: column;
-	gap: var(--shift-space-1);
-	text-align: left;
-	cursor: pointer;
-	font: inherit;
-	color: var(--shift-ink);
-	background: var(--shift-surface-raised);
-	border: 1px solid var(--shift-rule);
-	border-radius: var(--shift-radius-panel);
-	padding: var(--shift-space-3) var(--shift-space-4);
-	outline: none;
-	transition:
-		box-shadow 140ms ease,
-		transform 140ms ease,
-		border-color 140ms ease;
-}
-
-[data-shift-library] .shift-lib-intent:is(:focus, [data-korri-active-focus]) {
-	transform: translateY(-2px);
-	border-color: color-mix(in srgb, var(--shift-accent) 60%, transparent);
-	box-shadow: 0 0 0 3px var(--shift-focus-glow);
-}
-
-[data-shift-library] .shift-lib-intent-label {
-	font-size: var(--shift-text-title);
-	font-weight: 800;
-	letter-spacing: -0.01em;
-}
-
-[data-shift-library] .shift-lib-intent-blurb {
-	font-size: var(--shift-text-fine);
-	color: var(--shift-ink-dim);
-}
-
-/* ── Queue variant: Now Playing hero over the lanes ───────────────────────── */
-[data-shift-library] .shift-lib-now {
-	display: flex;
-	align-items: center;
-	gap: var(--shift-space-4);
-	padding: var(--shift-space-3);
-	border-radius: var(--shift-radius-panel);
-	background: var(--shift-surface-raised);
-	border: 1px solid var(--shift-rule);
-}
-
-[data-shift-library] .shift-lib-now-art {
-	flex: 0 0 auto;
-	display: block;
-	width: calc(var(--intrinsic-base) * 4);
-	aspect-ratio: 3 / 4;
-	border-radius: var(--shift-radius-panel);
-	overflow: hidden;
-	background: var(--shift-surface-sunk);
-}
-
-[data-shift-library] .shift-lib-now-art img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-[data-shift-library] .shift-lib-now-meta {
-	display: flex;
-	flex-direction: column;
-	gap: var(--shift-space-1);
-	min-width: 0;
-}
-
-[data-shift-library] .shift-lib-now-kicker {
-	font-size: var(--shift-text-fine);
-	font-weight: 800;
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
-	color: var(--shift-accent);
-}
-
-[data-shift-library] .shift-lib-now-title {
-	margin: 0;
-	font-size: var(--shift-text-heading);
-	font-weight: 800;
-	letter-spacing: -0.02em;
-	line-height: 1.05;
-	color: var(--shift-ink);
-}
-
-[data-shift-library] .shift-lib-resume {
-	align-self: flex-start;
-	margin-top: var(--shift-space-1);
-	cursor: pointer;
-	font: inherit;
-	font-size: var(--shift-text-body);
-	font-weight: 700;
-	color: var(--shift-on-accent);
-	background: var(--shift-accent);
-	border: 0;
-	border-radius: 9999px;
-	padding: var(--shift-space-2) var(--shift-space-4);
-	outline: none;
-	transition:
-		box-shadow 140ms ease,
-		transform 140ms ease;
-}
-
-[data-shift-library] .shift-lib-resume:is(:focus, [data-korri-active-focus]) {
-	transform: translateY(-1px);
-	box-shadow: 0 0 0 3px var(--shift-focus-glow);
-}
-
 /* ========================================================================== *
- * ENGAGING VARIANTS — Deck / Reel / Atlas
+ * ENGAGING VARIANTS — Deck / Reel
  *
  * Art-forward, motion-led takes where the games are the spectacle: the Deck
  * fills the screen with one cover and you flick the stack; the Reel is a wheel
- * you spin; the Atlas is a territory map you pan and zoom.
+ * you spin.
  * ========================================================================== */
 
 /* ── Deck: one full-screen card over a blurred bleed of itself ────────────── */
@@ -1480,73 +1356,182 @@
 	box-shadow: 0 0 0 3px var(--shift-focus-glow);
 }
 
-/* ── Atlas: a pannable, zoomable territory map ────────────────────────────── */
-[data-shift-library] .shift-lib-atlas-viewport {
+/* ========================================================================== *
+ * GAME DETAIL REBALANCES — Immersive / Split / Poster
+ *
+ * Three weight distributions of the same detail content (cover, title, tags,
+ * synopsis, stats, actions, legend), reusing the shift-detail-* leaf classes.
+ * Derived from the Deck's art-forward identity, minus any browse affordance.
+ * ========================================================================== */
+
+/* ── Rebalance A: Immersive — art as environment, weight bottom-left ───────── */
+[data-shift-detail].shift-detail-immersive {
 	position: relative;
-	flex: 1 1 auto;
-	min-height: 0;
+	height: 100%;
 	overflow: hidden;
-	border-radius: var(--shift-radius-panel);
-	background:
-		radial-gradient(
-			circle at 30% 20%,
-			rgba(91, 208, 255, 0.08),
-			transparent 60%
-		),
-		var(--shift-surface-sunk);
+	background-color: #06060a;
+	color: var(--shift-ink);
+	font-family: "Geist Variable", system-ui, sans-serif;
 }
 
-[data-shift-library] .shift-lib-atlas-board {
-	--atlas-cell-w: 78cqw;
-	--atlas-cell-h: 66cqh;
+[data-shift-detail] .shift-detail-imm-bleed {
 	position: absolute;
-	top: 0;
-	left: 0;
-	display: grid;
-	grid-template-columns: repeat(var(--atlas-columns), var(--atlas-cell-w));
-	grid-auto-rows: var(--atlas-cell-h);
-	gap: var(--shift-space-3);
-	transform-origin: top left;
-	transform: translate(
-			calc(50cqw - (var(--atlas-col) + 0.5) * var(--atlas-cell-w)),
-			calc(50cqh - (var(--atlas-row) + 0.5) * var(--atlas-cell-h))
-		)
-		scale(var(--atlas-zoom));
-	transition: transform 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+	inset: -8%;
+	z-index: 0;
+	background-size: cover;
+	background-position: center;
+	filter: blur(40px) brightness(0.5) saturate(1.15);
+	transform: scale(1.1);
 }
 
-[data-shift-library] .shift-lib-atlas-territory {
+[data-shift-detail] .shift-detail-imm-scrim {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	background: linear-gradient(
+		to top,
+		rgba(4, 4, 8, 0.94) 0%,
+		rgba(4, 4, 8, 0.45) 46%,
+		rgba(4, 4, 8, 0.08) 78%
+	);
+}
+
+[data-shift-detail] .shift-detail-imm-hud {
+	position: absolute;
+	z-index: 3;
+	top: var(--shift-space-3);
+	right: var(--shift-space-4);
+}
+
+[data-shift-detail] .shift-detail-imm-content {
+	position: absolute;
+	z-index: 2;
+	left: 0;
+	right: 0;
+	bottom: 0;
 	display: flex;
 	flex-direction: column;
+	align-items: flex-start;
 	gap: var(--shift-space-2);
-	padding: var(--shift-space-3);
-	border-radius: var(--shift-radius-panel);
-	border: 1px solid var(--shift-rule);
-	background: rgba(255, 255, 255, 0.02);
-	transition:
-		border-color 240ms ease,
-		background 240ms ease;
+	max-width: var(--shift-measure-prose);
+	padding: var(--shift-space-6);
 }
 
-[data-shift-library] .shift-lib-atlas-territory[data-focused] {
-	border-color: color-mix(in srgb, var(--shift-accent) 55%, transparent);
-	background: color-mix(in srgb, var(--shift-accent) 8%, transparent);
-}
-
-[data-shift-library] .shift-lib-atlas-label {
-	margin: 0;
-	font-size: var(--shift-text-title);
-	font-weight: 800;
-	letter-spacing: -0.01em;
-	color: var(--shift-ink);
-}
-
-[data-shift-library] .shift-lib-atlas-covers {
-	display: grid;
-	grid-template-columns: repeat(
-		auto-fill,
-		minmax(calc(var(--intrinsic-base) * 3.4), 1fr)
-	);
-	gap: var(--shift-space-2);
+/* ── Rebalance B: Split — balanced art | info ─────────────────────────────── */
+[data-shift-detail].shift-detail-split {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
 	overflow: hidden;
+	background-color: var(--shift-surface);
+	color: var(--shift-ink);
+	font-family: "Geist Variable", system-ui, sans-serif;
+}
+
+[data-shift-detail] .shift-detail-split-art {
+	flex: 1 1 40%;
+	min-height: 0;
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+}
+
+[data-shift-detail] .shift-detail-split-art img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+[data-shift-detail] .shift-detail-split-info {
+	flex: 1 1 60%;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--shift-space-2);
+	padding: var(--shift-space-5) var(--shift-space-6);
+	overflow-y: auto;
+}
+
+[data-shift-detail] .shift-detail-split .shift-detail-buttonbar {
+	margin-top: auto;
+	padding: var(--shift-space-3) 0 0;
+	justify-content: flex-start;
+}
+
+/* Wide lean-back frame: split art | info side by side. */
+@container (min-aspect-ratio: 16 / 10) {
+	[data-shift-detail].shift-detail-split {
+		flex-direction: row;
+	}
+	[data-shift-detail] .shift-detail-split-art {
+		flex-basis: 46%;
+	}
+	[data-shift-detail] .shift-detail-split-info {
+		flex-basis: 54%;
+		justify-content: center;
+	}
+}
+
+/* ── Rebalance C: Poster — centred, symmetric, object-forward ─────────────── */
+[data-shift-detail].shift-detail-poster {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+	background-color: #06060a;
+	color: var(--shift-ink);
+	font-family: "Geist Variable", system-ui, sans-serif;
+}
+
+[data-shift-detail] .shift-detail-poster-bleed {
+	position: absolute;
+	inset: -8%;
+	z-index: 0;
+	background-size: cover;
+	background-position: center;
+	filter: blur(48px) brightness(0.42) saturate(1.1);
+	transform: scale(1.12);
+}
+
+[data-shift-detail] .shift-detail-poster-scrim {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	background: radial-gradient(
+		ellipse at center,
+		rgba(4, 4, 8, 0.2) 0%,
+		rgba(4, 4, 8, 0.78) 100%
+	);
+}
+
+[data-shift-detail] .shift-detail-poster-stack {
+	position: relative;
+	z-index: 2;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	gap: var(--shift-space-2);
+	padding: var(--shift-space-5);
+}
+
+[data-shift-detail] .shift-detail-poster-art {
+	height: min(52cqh, calc(var(--intrinsic-base) * 13));
+	aspect-ratio: 3 / 4;
+	box-shadow: 0 26px 70px rgba(0, 0, 0, 0.6);
+}
+
+[data-shift-detail] .shift-detail-poster .shift-detail-stats,
+[data-shift-detail] .shift-detail-poster .shift-detail-actions {
+	justify-content: center;
+}
+
+[data-shift-detail] .shift-detail-poster .shift-detail-buttonbar {
+	position: relative;
+	z-index: 2;
 }

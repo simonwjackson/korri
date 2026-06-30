@@ -1,0 +1,76 @@
+import { AnimatePresence, motion } from "framer-motion"
+import type { LaunchStatusView } from "../../launch-failure-copy"
+import type { ShiftCinematicGame } from "../../pages/ShiftCinematicHome"
+import { ShiftCineChip } from "../atoms/ShiftCineChip"
+import { ShiftCineKicker } from "../atoms/ShiftCineKicker"
+import { ShiftCineLoading } from "../atoms/ShiftCineLoading"
+import { ShiftCineTitle } from "../atoms/ShiftCineTitle"
+import { ShiftCineChips } from "../molecules/ShiftCineChips"
+
+/**
+ * The cinematic hero — the focused game's kicker, title, and glanceable copy. It
+ * morphs in place with the launch lifecycle: a live `status` swaps the browsing
+ * chips for a status kicker plus a loading bar (launching) or a calm reason chip
+ * (failure/unavailable). Springs in on change (keyed by game + tone) and carries
+ * the polite/assertive live-region semantics for the status announcement.
+ */
+export function ShiftCineHero({
+  game,
+  status,
+  resuming,
+}: {
+  readonly game: ShiftCinematicGame
+  readonly status: LaunchStatusView | null
+  readonly resuming: boolean
+}) {
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={`${game.id}:${status?.tone ?? "live"}`}
+        className="shift-cine-hero"
+        role={status ? "status" : undefined}
+        aria-live={
+          status?.tone === "failed"
+            ? "assertive"
+            : status
+              ? "polite"
+              : undefined
+        }
+        initial={{ opacity: 0, y: 22 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -14 }}
+        transition={{ duration: 0.32, ease: "easeOut" }}
+      >
+        {status ? (
+          <>
+            <ShiftCineKicker tone={status.tone}>
+              {status.kicker}
+            </ShiftCineKicker>
+            <ShiftCineTitle>{game.title}</ShiftCineTitle>
+            {status.tone === "launching" ? (
+              <ShiftCineLoading />
+            ) : status.reason ? (
+              <div className="shift-cine-chips">
+                <ShiftCineChip tone="reason">{status.reason}</ShiftCineChip>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <ShiftCineKicker>
+              {resuming ? "Continue playing" : "Ready to play"}
+            </ShiftCineKicker>
+            <ShiftCineTitle>{game.title}</ShiftCineTitle>
+            <ShiftCineChips
+              genre={game.genre}
+              developer={game.developer}
+              lastPlayedLabel={game.lastPlayedLabel}
+              playtimeLabel={game.playtimeLabel}
+              favorite={game.favorite}
+            />
+          </>
+        )}
+      </motion.div>
+    </AnimatePresence>
+  )
+}

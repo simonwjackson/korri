@@ -19,10 +19,16 @@
  */
 import type { LaunchState } from "@platform/library/launch-state"
 import { useInputAction } from "@platform/react/input/use-input-action"
-import { AnimatePresence, motion } from "framer-motion"
-import { BatteryMedium, Wifi } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { launchStatusView } from "../launch-failure-copy"
+import { ShiftCineBackdrop } from "../ui/molecules/ShiftCineBackdrop"
+import {
+  type ShiftCineHintSpec,
+  ShiftCineLegend,
+} from "../ui/molecules/ShiftCineLegend"
+import { ShiftStatusBar } from "../ui/molecules/ShiftStatusBar"
+import { ShiftCineHero } from "../ui/organisms/ShiftCineHero"
+import { ShiftCineRail } from "../ui/organisms/ShiftCineRail"
 
 export interface ShiftCinematicGame {
   readonly id: string
@@ -53,8 +59,6 @@ export interface ShiftCinematicHomeProps {
   /** Dismiss the launch feedback and return to browsing (B). */
   readonly onDismiss?: () => void
 }
-
-const SPRING = { type: "spring", stiffness: 260, damping: 32 } as const
 
 export function ShiftCinematicHome({
   games,
@@ -157,172 +161,54 @@ export function ShiftCinematicHome({
   if (!game) return null
   const resuming = Boolean(game.lastPlayedLabel)
 
+  // The legend's hint set changes with launch state: browsing shows
+  // Play/Options/Favorite; a shown failure shows Retry/Back; a non-actionable
+  // status (launching/launched) shows none.
+  const legendHints: readonly ShiftCineHintSpec[] | null = status
+    ? showActions
+      ? [
+          ...(status.canRetry
+            ? [{ glyph: "A", label: "Retry", primary: true }]
+            : []),
+          { glyph: "B", label: "Back", primary: !status.canRetry },
+        ]
+      : null
+    : [
+        { glyph: "A", label: resuming ? "Continue" : "Play", primary: true },
+        { glyph: "X", label: "Options" },
+        { glyph: "Y", label: "Favorite" },
+      ]
+
   return (
     <div
       data-shift-home
       className="shift-cine intrinsic relative h-full w-full overflow-hidden"
     >
-      {/* Full-bleed art environment — crossfades + parallax-scales on focus. */}
-      <AnimatePresence>
-        <motion.div
-          key={game.id}
-          className="shift-cine-bg"
-          data-cooled={status?.tone === "failed" || undefined}
-          style={{ backgroundImage: `url(${game.wideArtUrl})` }}
-          initial={{ opacity: 0, scale: 1.1 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-        />
-      </AnimatePresence>
-      <div className="shift-cine-scrim" />
+      <ShiftCineBackdrop
+        artUrl={game.wideArtUrl}
+        cooled={status?.tone === "failed"}
+      />
 
-      <header className="shift-cine-top">
-        <span className="shift-cine-clock">{time}</span>
-        <span className="shift-cine-status">
-          <Wifi className="shift-cine-status-icon" aria-hidden />
-          <BatteryMedium className="shift-cine-status-icon" aria-hidden />
-          {avatarSrc ? (
-            <img className="shift-cine-avatar" src={avatarSrc} alt="" />
-          ) : null}
-        </span>
-      </header>
+      <ShiftStatusBar time={time} avatarSrc={avatarSrc} />
 
       <div className="shift-cine-stage" ref={stageRef}>
         <div className="shift-cine-midrow">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`${game.id}:${status?.tone ?? "live"}`}
-              className="shift-cine-hero"
-              role={status ? "status" : undefined}
-              aria-live={
-                status?.tone === "failed"
-                  ? "assertive"
-                  : status
-                    ? "polite"
-                    : undefined
-              }
-              initial={{ opacity: 0, y: 22 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -14 }}
-              transition={{ duration: 0.32, ease: "easeOut" }}
-            >
-              {status ? (
-                <>
-                  <span className="shift-cine-kicker" data-tone={status.tone}>
-                    {status.kicker}
-                  </span>
-                  <h1 className="shift-cine-title">{game.title}</h1>
-                  {status.tone === "launching" ? (
-                    <div className="shift-cine-loading" aria-hidden />
-                  ) : status.reason ? (
-                    <div className="shift-cine-chips">
-                      <span className="shift-cine-chip is-reason">
-                        {status.reason}
-                      </span>
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <span className="shift-cine-kicker">
-                    {resuming ? "Continue playing" : "Ready to play"}
-                  </span>
-                  <h1 className="shift-cine-title">{game.title}</h1>
-                  {/* Glanceable single row — full metadata lives on Game Detail. */}
-                  <div className="shift-cine-chips">
-                    {game.genre ? (
-                      <span className="shift-cine-chip">{game.genre}</span>
-                    ) : null}
-                    {game.developer ? (
-                      <span className="shift-cine-chip">{game.developer}</span>
-                    ) : null}
-                    {game.lastPlayedLabel ? (
-                      <span className="shift-cine-chip">
-                        {game.lastPlayedLabel}
-                      </span>
-                    ) : null}
-                    {game.playtimeLabel ? (
-                      <span className="shift-cine-chip">
-                        {game.playtimeLabel}
-                      </span>
-                    ) : null}
-                    {game.favorite ? (
-                      <span className="shift-cine-chip is-fav">★ Favorite</span>
-                    ) : null}
-                  </div>
-                </>
-              )}
-            </motion.div>
-          </AnimatePresence>
+          <ShiftCineHero game={game} status={status} resuming={resuming} />
         </div>
 
         {/* Button hints — their own right-aligned row above the rail, so they
             never compete with the hero's chips for one line. */}
-        {status ? (
-          showActions ? (
-            <div className="shift-cine-legend">
-              {status.canRetry ? (
-                <CineHint glyph="A" label="Retry" primary />
-              ) : null}
-              <CineHint glyph="B" label="Back" primary={!status.canRetry} />
-            </div>
-          ) : null
-        ) : (
-          <div className="shift-cine-legend">
-            <CineHint
-              glyph="A"
-              label={resuming ? "Continue" : "Play"}
-              primary
-            />
-            <CineHint glyph="X" label="Options" />
-            <CineHint glyph="Y" label="Favorite" />
-          </div>
-        )}
+        {legendHints ? <ShiftCineLegend hints={legendHints} /> : null}
 
-        <div className="shift-cine-rail">
-          <motion.div
-            className="shift-cine-track"
-            ref={trackRef}
-            animate={{ x: trackX }}
-            transition={SPRING}
-          >
-            {games.map((entry, i) => (
-              <button
-                type="button"
-                key={entry.id}
-                data-cine-index={i}
-                data-focused={i === index || undefined}
-                className="shift-cine-tile"
-                aria-label={entry.title}
-                onFocus={() => setIndex(i)}
-                onClick={() => activate(i)}
-              >
-                <img src={entry.tileArtUrl} alt="" loading="lazy" />
-              </button>
-            ))}
-          </motion.div>
-        </div>
+        <ShiftCineRail
+          games={games}
+          index={index}
+          trackX={trackX}
+          trackRef={trackRef}
+          onTileFocus={setIndex}
+          onTileActivate={activate}
+        />
       </div>
     </div>
-  )
-}
-
-function CineHint({
-  glyph,
-  label,
-  primary,
-}: {
-  readonly glyph: string
-  readonly label: string
-  readonly primary?: boolean
-}) {
-  return (
-    <span className="shift-cine-hint" data-primary={primary || undefined}>
-      <span className="shift-cine-hint-glyph" aria-hidden>
-        {glyph}
-      </span>
-      <span>{label}</span>
-    </span>
   )
 }

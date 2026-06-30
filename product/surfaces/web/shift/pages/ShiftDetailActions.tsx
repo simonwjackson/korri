@@ -1,0 +1,48 @@
+/**
+ * Shift game detail — action buttons (shared atom).
+ *
+ * Play/Continue (primary) + New Game (only once played) + Favorite. Shared by
+ * every detail rebalance so the action set and wording stay identical across
+ * layouts; the layouts only choose where to place it.
+ */
+import type { ShiftGameDetailView } from "./ShiftGameDetailScreen"
+import { shiftDetailPlayLabel } from "./shift-detail-copy"
+
+export interface ShiftDetailActionsProps {
+  readonly game: ShiftGameDetailView
+  readonly onPlay?: (id: string) => void
+  readonly onFavorite?: (id: string) => void
+}
+
+export function ShiftDetailActions({
+  game,
+  onPlay,
+  onFavorite,
+}: ShiftDetailActionsProps) {
+  const played = Boolean(game.lastPlayedLabel)
+
+  return (
+    <div className="shift-detail-actions">
+      <button
+        type="button"
+        className="shift-detail-btn primary"
+        onClick={() => onPlay?.(game.id)}
+      >
+        ▶ {shiftDetailPlayLabel(game)}
+      </button>
+      {played ? (
+        <button type="button" className="shift-detail-btn">
+          New Game
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="shift-detail-btn"
+        aria-pressed={game.favorite === true}
+        onClick={() => onFavorite?.(game.id)}
+      >
+        {game.favorite ? "★ Favorited" : "☆ Favorite"}
+      </button>
+    </div>
+  )
+}

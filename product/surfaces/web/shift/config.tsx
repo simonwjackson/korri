@@ -24,17 +24,17 @@ import {
   type ShiftCinematicGame,
   ShiftCinematicHome,
 } from "./pages/ShiftCinematicHome"
+import { ShiftDetailImmersive } from "./pages/ShiftDetailImmersive"
+import { ShiftDetailPoster } from "./pages/ShiftDetailPoster"
+import { ShiftDetailSplit } from "./pages/ShiftDetailSplit"
 import {
   ShiftGameDetailScreen,
   type ShiftGameDetailView,
 } from "./pages/ShiftGameDetailScreen"
-import { ShiftLibraryAtlas } from "./pages/ShiftLibraryAtlas"
-import { ShiftLibraryConcierge } from "./pages/ShiftLibraryConcierge"
 import { ShiftLibraryDeck } from "./pages/ShiftLibraryDeck"
 import { ShiftLibraryFilterBar } from "./pages/ShiftLibraryFilterBar"
 import { ShiftLibraryGrid } from "./pages/ShiftLibraryGrid"
 import { ShiftLibraryLens } from "./pages/ShiftLibraryLens"
-import { ShiftLibraryQueue } from "./pages/ShiftLibraryQueue"
 import { ShiftLibraryReel } from "./pages/ShiftLibraryReel"
 import { ShiftLibraryShelves } from "./pages/ShiftLibraryShelves"
 import type { ShiftLibraryGame } from "./pages/shift-library-game"
@@ -282,20 +282,6 @@ const SHIFT_SCREENS: readonly Screen[] = [
     render: () => <ShiftLibraryFilterBar games={SHIFT_LIBRARY_GAMES} />,
   },
   {
-    id: "library-concierge",
-    group: "Library",
-    name: "Library — Concierge",
-    note: "Variant E: intent-first (the library as a question)",
-    render: () => <ShiftLibraryConcierge games={SHIFT_LIBRARY_GAMES} />,
-  },
-  {
-    id: "library-queue",
-    group: "Library",
-    name: "Library — Queue",
-    note: "Variant F: backlog pipeline (Now / Up Next / Backlog)",
-    render: () => <ShiftLibraryQueue games={SHIFT_LIBRARY_GAMES} />,
-  },
-  {
     id: "library-deck",
     group: "Library",
     name: "Library — Deck",
@@ -310,17 +296,32 @@ const SHIFT_SCREENS: readonly Screen[] = [
     render: () => <ShiftLibraryReel games={SHIFT_LIBRARY_GAMES} />,
   },
   {
-    id: "library-atlas",
-    group: "Library",
-    name: "Library — Atlas",
-    note: "Variant I: zoomable territory map",
-    render: () => <ShiftLibraryAtlas games={SHIFT_LIBRARY_GAMES} />,
-  },
-  {
     id: "game-detail",
     group: "Detail",
     name: "Game Detail",
+    note: "Baseline (stacked / split body)",
     render: () => <ShiftGameDetailScreen games={SHIFT_DETAIL_GAMES} />,
+  },
+  {
+    id: "detail-immersive",
+    group: "Detail",
+    name: "Game Detail — Immersive",
+    note: "Rebalance A: art as environment, content bottom-anchored",
+    render: () => <ShiftDetailImmersive game={SHIFT_DETAIL_GAMES[0]} />,
+  },
+  {
+    id: "detail-split",
+    group: "Detail",
+    name: "Game Detail — Split",
+    note: "Rebalance B: balanced art | info",
+    render: () => <ShiftDetailSplit game={SHIFT_DETAIL_GAMES[0]} />,
+  },
+  {
+    id: "detail-poster",
+    group: "Detail",
+    name: "Game Detail — Poster",
+    note: "Rebalance C: centred poster hero",
+    render: () => <ShiftDetailPoster game={SHIFT_DETAIL_GAMES[0]} />,
   },
 ]
 
