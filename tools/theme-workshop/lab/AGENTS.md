@@ -3,6 +3,15 @@
 A dev-only design tool that renders real product surfaces on a physical-size
 device lab. It is never bundled with `product/apps/*`.
 
+> Governing rule: the tool is the app unwrapped, never a simulation. Swap the
+> data at the last-mile edge; never the mechanism. See `../AGENTS.md`.
+>
+> Two frames over the same real app: **Compose** designs one logical **screen**
+> (device-agnostic); **Device** validates the page on physical hardware that
+> tiles 1..n screens. Both share **one** page renderer — the lab always renders
+> the real page, never a static re-implementation. See `../AGENTS.md` →
+> "Two primitives: screen vs device".
+
 ## State axes + Inspect ⇄ Live
 
 A surface's screens **are** its page parts. Each page exposes its real
@@ -17,8 +26,7 @@ A region is just a parentless axis. `LabStateAxis.kind` declares whether the axi
 is `single` (XOR: one pinned state or Auto) or `multi` (0..n pinned states, shown
 as checkboxes). Nesting is structural: child axes declare
 `parent: { axisId, whenStates }`, so the panel can reveal children under the
-parent state and the Matrix can suppress impossible cells. Do not use opaque
-runtime predicates for nesting.
+parent state. Do not use opaque runtime predicates for nesting.
 
 A single global **Inspect ⇄ Live** mode is the only difference between a frozen,
 addressable coordinate and the running, navigable surface:
@@ -44,8 +52,8 @@ const snapshot = useShiftCatalogPreview() ?? live
 The singletons (`shift-catalog-preview`, `shift-launch-preview`,
 `shift-foreground-preview`, `pico-data-preview`) expose `set*`, `use*` (a
 `useSyncExternalStore` hook), and a non-reactive `get*` for capture-back. A
-**sample table** keyed by every machine tag supplies both the inspect pin and the
-Matrix fan-out render, so the static fan and the live pin can never drift.
+**sample table** keyed by every machine tag supplies the inspect pin, so a new
+state can't be added without the axis picking it up.
 
 ## Adding a new surface's state machine
 
@@ -57,7 +65,6 @@ To expose a new state machine as an axis, follow the existing pattern:
    (`adapters/<surface>-axes.tsx`) wiring `pin`/`release` to the singleton +
    sample table, with `states` derived from the machine tags. Set `kind` to
    `single` or `multi`. For nesting, declare `parent: { axisId, whenStates }`.
-   Provide `renderSample(tag)` for the Matrix on single axes.
 3. Optionally implement `captureCoordinate` for "Pin current" (Live → Inspect),
    returning per-axis tags for `single` axes and tag arrays/sets for `multi`
    axes.
