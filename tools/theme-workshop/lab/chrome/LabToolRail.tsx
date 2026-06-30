@@ -34,7 +34,7 @@ const COMMANDS: readonly {
   { id: "zoom-in", Icon: ZoomIn, label: "Zoom in" },
   { id: "reset-view", Icon: RotateCcw, label: "Reset view to 100%" },
   { id: "tidy", Icon: Grid3X3, label: "Tidy cards" },
-  { id: "clear", Icon: Trash2, label: "Clear workshop" },
+  { id: "clear", Icon: Trash2, label: "Clear compose board" },
 ]
 
 function ToolIcon({ Icon }: { readonly Icon: LucideIcon }) {
@@ -60,7 +60,7 @@ export function LabToolRail({
     <div
       className={`pt-toolrail${docked ? " is-docked" : ""}`}
       role="toolbar"
-      aria-label="Workshop tools"
+      aria-label="Compose tools"
     >
       {TOOLS.map(candidate => (
         <button

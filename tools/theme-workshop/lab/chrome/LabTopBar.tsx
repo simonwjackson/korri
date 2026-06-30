@@ -28,7 +28,7 @@ export function LabTopBar({
   /** The current Inspect/Live mode, or null when the surface has no axes. */
   readonly inspectLive: "inspect" | "live" | null
   readonly onToggleInspectLive: () => void
-  /** Workshop-only screen choices for a multi-screen device; omit otherwise. */
+  /** Compose-only logical screen choices for a multi-screen device; omit otherwise. */
   readonly screenChoices?: readonly ScreenConfig[]
   readonly activeScreenId?: string
   readonly onScreenChange?: (id: string) => void

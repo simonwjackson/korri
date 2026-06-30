@@ -1,18 +1,18 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type {
   DeviceConfig,
   ScreenConfig,
   ScreenPlacement,
   ThemeKnob,
 } from "../device-lab"
+import { LabContext } from "./Lab.context"
+import { LabShell } from "./LabShell"
 import {
   normalizeSurfacePath,
   parseDeviceSegment,
   selectedDevicesForSegment,
 } from "./lab-route-state"
-import { LabContext } from "./Lab.context"
-import { LabShell } from "./LabShell"
-import { labSurfaceAdapters, type LabSurfaceAdapter } from "./surface-registry"
+import { type LabSurfaceAdapter, labSurfaceAdapters } from "./surface-registry"
 
 const DEFAULT_PX_PER_MM = 3.7795275591
 
@@ -102,43 +102,61 @@ export function LabRoot({
     }
   }, [adapter, routeState.themeId])
 
-  const setPxPerMm = (pxPerMm: number) =>
-    setCalibration(prev => (prev ? { ...prev, pxPerMm } : prev))
-  const patchDevice = (id: string, next: Partial<DeviceConfig>) =>
-    setCalibration(prev =>
-      prev
-        ? {
-            ...prev,
-            devices: prev.devices.map(device =>
-              device.id === id ? { ...device, ...next } : device,
-            ),
-          }
-        : prev,
-    )
-  const addDevice = () =>
-    setCalibration(prev =>
-      prev
-        ? { ...prev, devices: [...prev.devices, makeDevice(prev.devices)] }
-        : prev,
-    )
-  const removeDevice = (id: string) =>
-    setCalibration(prev =>
-      prev
-        ? { ...prev, devices: prev.devices.filter(device => device.id !== id) }
-        : prev,
-    )
-  const setKnob = (cssVar: string, value: number) =>
-    setCalibration(prev =>
-      prev ? { ...prev, knobs: { ...prev.knobs, [cssVar]: value } } : prev,
-    )
-  const reset = () => {
+  const setPxPerMm = useCallback(
+    (pxPerMm: number) =>
+      setCalibration(prev => (prev ? { ...prev, pxPerMm } : prev)),
+    [],
+  )
+  const patchDevice = useCallback(
+    (id: string, next: Partial<DeviceConfig>) =>
+      setCalibration(prev =>
+        prev
+          ? {
+              ...prev,
+              devices: prev.devices.map(device =>
+                device.id === id ? { ...device, ...next } : device,
+              ),
+            }
+          : prev,
+      ),
+    [],
+  )
+  const addDevice = useCallback(
+    () =>
+      setCalibration(prev =>
+        prev
+          ? { ...prev, devices: [...prev.devices, makeDevice(prev.devices)] }
+          : prev,
+      ),
+    [],
+  )
+  const removeDevice = useCallback(
+    (id: string) =>
+      setCalibration(prev =>
+        prev
+          ? {
+              ...prev,
+              devices: prev.devices.filter(device => device.id !== id),
+            }
+          : prev,
+      ),
+    [],
+  )
+  const setKnob = useCallback(
+    (cssVar: string, value: number) =>
+      setCalibration(prev =>
+        prev ? { ...prev, knobs: { ...prev.knobs, [cssVar]: value } } : prev,
+      ),
+    [],
+  )
+  const reset = useCallback(() => {
     if (!adapter) return
     setCalibration({
       pxPerMm: adapter.defaultPxPerMm ?? DEFAULT_PX_PER_MM,
       devices: adapter.devices.map(device => ({ ...device })),
       knobs: knobDefaults(adapter.knobs ?? []),
     })
-  }
+  }, [adapter])
 
   const context = useMemo(() => {
     if (!adapter || initialValues === null || calibration === null) return null
@@ -160,8 +178,8 @@ export function LabRoot({
       themeId: routeState.themeId,
       surfacePath: partsAlias ? "/" : requestedPath,
       initialCanvasView: partsAlias
-        ? ("gallery" as const)
-        : ("preview" as const),
+        ? ("compose" as const)
+        : ("device" as const),
       screens: adapter.screens ?? [],
       selection,
       devices: calibration.devices,
@@ -182,7 +200,19 @@ export function LabRoot({
       setSurfacePath: (surfacePath: string) =>
         navigation.setSurfacePath(normalizeSurfacePath(surfacePath)),
     }
-  }, [adapter, calibration, initialValues, navigation, routeState])
+  }, [
+    adapter,
+    addDevice,
+    calibration,
+    initialValues,
+    navigation,
+    patchDevice,
+    removeDevice,
+    reset,
+    routeState,
+    setKnob,
+    setPxPerMm,
+  ])
 
   if (error) {
     return (

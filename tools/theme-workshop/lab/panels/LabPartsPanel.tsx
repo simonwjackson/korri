@@ -15,7 +15,7 @@ export function LabPartsPanel({
   return (
     <div className="pt-tree">
       <div className="pt-tree-hint">
-        Tap to place on the device · tap again to remove
+        Tap to place on the Compose screen · tap again to remove
       </div>
       {groups.map(group => (
         <div key={group.layer} className="pt-tree-group">

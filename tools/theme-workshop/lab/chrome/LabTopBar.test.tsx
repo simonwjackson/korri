@@ -20,7 +20,7 @@ function context(): LabContextValue {
     initialValues: {},
     themeId: "shift",
     surfacePath: "/",
-    initialCanvasView: "preview",
+    initialCanvasView: "device",
     screens: adapter.screens ?? [],
     selection: { kind: "all" },
     devices: [],

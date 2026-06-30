@@ -61,7 +61,7 @@ export function LabWorkshopBoard({
   readonly sources: readonly LabSourceOption[]
   readonly tool: LabWorkshopTool
   readonly command: LabWorkshopCommandSignal | null
-  /** Which screen of the device to render (multi-screen devices); null = first. */
+  /** Which logical screen aspect to render (multi-screen devices); null = first/default. */
   readonly screenId: string | null
   readonly onInstancesChange: (instances: readonly LabObjectInstance[]) => void
 }) {
@@ -193,18 +193,11 @@ export function LabWorkshopBoard({
     }
   }, [command])
 
-  if (!device)
-    return (
-      <div className="lab-empty-state">
-        Turn on a device in the Devices panel.
-      </div>
-    )
-
   if (instances.length === 0)
     return (
       <div className="lab-empty-state">
-        Pick parts from the Parts panel to place them on the device. Add as many
-        as you like — drag to arrange, scroll to zoom.
+        Pick parts from the palette to place them on the logical screen. Add as
+        many as you like — drag to arrange, scroll to zoom.
       </div>
     )
 
@@ -273,7 +266,6 @@ export function LabWorkshopBoard({
               instance={positioned}
               story={story}
               byId={stories}
-              device={device}
               screen={screen}
               sources={sources}
               scale={camera.scale}

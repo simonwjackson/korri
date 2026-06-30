@@ -3,7 +3,7 @@ export type SurfacePartLoader = () => Promise<SurfacePartModule>
 
 export function surfacePartModules(): Record<string, SurfacePartLoader> {
   try {
-    return import.meta.glob("./**/*.part.tsx")
+    return import.meta.glob<SurfacePartModule>("./**/*.part.tsx")
   } catch {
     return {}
   }

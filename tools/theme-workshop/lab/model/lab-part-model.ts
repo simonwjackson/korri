@@ -21,7 +21,10 @@ export type LabStoryIndex = {
 }
 
 /** The family of a story = the story plus its linked variants, in byId order. */
-function familyOf(story: Story, byId: ReadonlyMap<string, Story>): readonly Story[] {
+function familyOf(
+  story: Story,
+  byId: ReadonlyMap<string, Story>,
+): readonly Story[] {
   const ids = [story.id, ...(story.variants ?? [])]
   const seen = new Set<string>()
   const out: Story[] = []
@@ -41,13 +44,20 @@ const RESTING_STATES = ["ready", "idle", "live", "default", "loaded", "success"]
 
 function representativeOf(family: readonly Story[]): Story {
   for (const resting of RESTING_STATES) {
-    const match = family.find(member => (member.state ?? "").toLowerCase() === resting)
+    const match = family.find(
+      member => (member.state ?? "").toLowerCase() === resting,
+    )
     if (match) return match
   }
-  return family[0]!
+  const first = family[0]
+  if (!first)
+    throw new Error("Cannot choose a representative for an empty family")
+  return first
 }
 
-export function buildStoryIndex(catalog: LabPartsCatalog | null): LabStoryIndex {
+export function buildStoryIndex(
+  catalog: LabPartsCatalog | null,
+): LabStoryIndex {
   const stories = catalog?.stories ?? []
   const byId = new Map(stories.map(story => [story.id, story] as const))
 
@@ -129,11 +139,11 @@ export function stateVariantFor(
   if ((story.state ?? "").toLowerCase() === want) return story
   for (const variantId of story.variants ?? []) {
     const variant = byId.get(variantId)
-    if ((variant?.state ?? "").toLowerCase() === want) return variant
+    if (variant && (variant.state ?? "").toLowerCase() === want) return variant
   }
   // A stateless part (no tag, no variants) always renders, whatever state is
   // active. A stateful part only renders for a state in its own family.
-  if (!story.state && !(story.variants?.length)) return story
+  if (!story.state && !story.variants?.length) return story
   return null
 }
 

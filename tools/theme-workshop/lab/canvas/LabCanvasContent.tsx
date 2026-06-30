@@ -7,9 +7,8 @@ import type {
 import type { LabStoryIndex } from "../model/lab-part-model"
 import type { LabSourceOption, SourceStatus } from "../model/lab-source-state"
 import type { LabPartsCatalog } from "../parts-discovery"
-import { LabGalleryView } from "./LabGalleryView"
+import { LabComposeView } from "./LabComposeView"
 import { LabSurfaceView } from "./LabSurfaceView"
-import { LabWorkshopBoard } from "./LabWorkshopBoard"
 
 export function LabCanvasContent({
   view,
@@ -36,33 +35,25 @@ export function LabCanvasContent({
   readonly activeStateId: SourceStatus
   readonly workshopTool: LabWorkshopTool
   readonly workshopCommand: LabWorkshopCommandSignal | null
-  /** Which screen of the active device the Workshop renders (multi-screen). */
+  /** Which logical screen aspect Compose renders for multi-screen devices. */
   readonly workshopScreenId: string | null
   readonly onSelectStory: (storyId: string) => void
   readonly onInstancesChange: (instances: readonly LabObjectInstance[]) => void
 }) {
-  if (view === "preview")
+  if (view === "device")
     return <LabSurfaceView sourceId={activeSourceId} stateId={activeStateId} />
-  if (view === "gallery")
-    return (
-      <LabGalleryView
-        catalog={catalog}
-        index={index}
-        selectedIds={selectedIds}
-        onSelect={onSelectStory}
-      />
-    )
-  // Workshop: a single spatial board holding 0..n placed parts, each rendered
-  // in the active device frame. The live, router-mounted surface is the Preview
-  // view; the workshop is static, isolated previews.
+
   return (
-    <LabWorkshopBoard
+    <LabComposeView
+      catalog={catalog}
+      index={index}
+      selectedIds={selectedIds}
       instances={instances}
-      stories={index.byId}
       sources={sources}
       tool={workshopTool}
       command={workshopCommand}
       screenId={workshopScreenId}
+      onSelectStory={onSelectStory}
       onInstancesChange={onInstancesChange}
     />
   )

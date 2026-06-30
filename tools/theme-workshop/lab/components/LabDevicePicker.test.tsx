@@ -20,6 +20,9 @@ const devices: readonly DeviceConfig[] = [
   },
 ]
 
+const rg353m = devices[0]
+if (!rg353m) throw new Error("expected RG353M fixture")
+
 const adapter: LabSurfaceAdapter = {
   id: "test",
   devices,
@@ -36,11 +39,21 @@ function renderPicker(
     initialValues: {},
     themeId: "test",
     surfacePath: "/",
+    initialCanvasView: "device",
     screens: [],
     devices,
     selectedDevices: devices,
     pxPerMm: 3.7795275591,
     knobValues: {},
+    calibration: {
+      setPxPerMm: () => {},
+      patchDevice: () => {},
+      addDevice: () => {},
+      removeDevice: () => {},
+      setKnob: () => {},
+      reset: () => {},
+      storageKey: "test",
+    },
     setDevicesSegment,
     setThemeId: mock(() => undefined),
     setSurfacePath: mock(() => undefined),
@@ -76,7 +89,7 @@ describe("LabDevicePicker", () => {
   it("coerces the last deselected device back to all", () => {
     const { setDevicesSegment } = renderPicker({
       selection: { kind: "set", ids: ["rg353m"] },
-      selectedDevices: [devices[0]!],
+      selectedDevices: [rg353m],
     })
 
     fireEvent.click(screen.getByRole("button", { name: "RG353M" }))
@@ -87,7 +100,7 @@ describe("LabDevicePicker", () => {
   it("switches explicitly back to all", () => {
     const { setDevicesSegment } = renderPicker({
       selection: { kind: "set", ids: ["rg353m"] },
-      selectedDevices: [devices[0]!],
+      selectedDevices: [rg353m],
     })
 
     fireEvent.click(screen.getByRole("button", { name: "ALL" }))

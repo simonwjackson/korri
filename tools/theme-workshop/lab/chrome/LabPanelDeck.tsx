@@ -1,4 +1,10 @@
 import {
+  LayoutGroup,
+  motion,
+  type Transition,
+  useReducedMotion,
+} from "framer-motion"
+import {
   type CSSProperties,
   type ReactNode,
   useEffect,
@@ -6,7 +12,6 @@ import {
   useRef,
   useState,
 } from "react"
-import { LayoutGroup, motion, useReducedMotion } from "framer-motion"
 
 export type LabDeckPanel = {
   readonly id: string
@@ -65,7 +70,10 @@ export function LabPanelDeck({
     setResizing(true)
     ;(event.target as Element).setPointerCapture?.(event.pointerId)
     const move = (next: PointerEvent) => {
-      const width = Math.max(DOCK_WIDTH_MIN, Math.min(DOCK_WIDTH_MAX, window.innerWidth - next.clientX))
+      const width = Math.max(
+        DOCK_WIDTH_MIN,
+        Math.min(DOCK_WIDTH_MAX, window.innerWidth - next.clientX),
+      )
       onDockResize(width)
     }
     const up = () => {
@@ -76,8 +84,7 @@ export function LabPanelDeck({
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", up)
   }
-  const ids = panels.map(panel => panel.id)
-  const idsKey = ids.join(",")
+  const ids = useMemo(() => panels.map(panel => panel.id), [panels])
   const byId = useMemo(
     () => new Map(panels.map(panel => [panel.id, panel])),
     [panels],
@@ -106,10 +113,9 @@ export function LabPanelDeck({
         if (!next[id]) next[id] = floatLayout[id] ?? DEFAULT_RECT
       return next
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey])
+  }, [ids, floatLayout])
 
-  const transition = reduce
+  const transition: Transition = reduce
     ? { duration: 0 }
     : { type: "spring", stiffness: 520, damping: 44 }
 
@@ -183,10 +189,9 @@ export function LabPanelDeck({
   return (
     <LayoutGroup>
       {dock ? (
-        <div
+        <button
+          type="button"
           className={`pt-dock-resize${resizing ? " is-resizing" : ""}`}
-          role="separator"
-          aria-orientation="vertical"
           aria-label="Resize panel rail"
           onPointerDown={startResize}
         />

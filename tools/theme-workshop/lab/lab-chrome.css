@@ -266,6 +266,49 @@ body {
 	border-color: #393d48;
 }
 
+/* -------------------------------------------------- compose frame */
+
+.lab-compose-frame {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	grid-template-columns: minmax(240px, 30%) 1fr;
+	gap: 0;
+	min-width: 0;
+	min-height: 0;
+}
+.lab-compose-palette {
+	position: relative;
+	min-width: 0;
+	min-height: 0;
+	border-right: 1px solid var(--pt-line-soft);
+	background: rgba(10, 11, 14, 0.72);
+	overflow: hidden;
+}
+.lab-compose-board {
+	position: relative;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+.lab-compose-screen-frame {
+	width: min(520px, 70vw);
+	background: #05060a;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 0 0 14px 14px;
+	overflow: hidden;
+	container-type: size;
+}
+.lab-compose-screen {
+	width: 100%;
+	height: 100%;
+}
+.lab-compose-screen > .lab-part-mount,
+.lab-compose-screen > .lab-part-mount > * {
+	width: 100%;
+	height: 100%;
+}
+
 /* ------------------------------------------------- free canvas (multi) */
 
 .pt-board-free {
@@ -308,6 +351,10 @@ body {
 	display: flex;
 	flex-direction: column;
 	filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.55));
+	border: 0;
+	padding: 0;
+	margin: 0;
+	min-inline-size: 0;
 }
 .pt-object-bar {
 	display: flex;
@@ -415,7 +462,10 @@ body {
 	position: absolute;
 	inset: 0;
 	overflow: auto;
-	padding: 60px 26px 26px;
+	padding: 18px;
+}
+.lab-compose-palette .pt-gallery {
+	padding: 18px;
 }
 .pt-gallery-group + .pt-gallery-group {
 	margin-top: 24px;
@@ -1213,6 +1263,10 @@ body {
  * left edge via the same --lab-dock-w the rail uses. Pointer-based = touch ok. */
 .pt-dock-resize {
 	position: fixed;
+	appearance: none;
+	border: 0;
+	padding: 0;
+	background: transparent;
 	top: var(--pt-bar-h);
 	bottom: 0;
 	right: var(--lab-dock-w, 280px);

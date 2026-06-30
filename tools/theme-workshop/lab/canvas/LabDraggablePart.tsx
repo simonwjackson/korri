@@ -1,8 +1,4 @@
-import {
-  type DeviceConfig,
-  DeviceFrame,
-  type ScreenConfig,
-} from "../../device-lab"
+import type { ScreenConfig } from "../../device-lab"
 import type { Story } from "../../types"
 import { useLab } from "../Lab.context"
 import type { LabObjectInstance } from "../model/lab-canvas-state"
@@ -14,6 +10,7 @@ import {
   type SourceStatus,
 } from "../model/lab-source-state"
 import { LAB_BIND_MIME } from "../panels/LabSourcesPanel"
+import { LabScreenFrame } from "./LabScreenFrame"
 
 function parseBind(
   value: string,
@@ -26,18 +23,17 @@ function parseBind(
 }
 
 /**
- * One placed part on the workshop board: the part rendered inside a single
- * device screen frame (sized to physical mm) with a drag bar carrying its own
- * data source / state / remove. The board's camera handles zoom, so the frame
- * renders at true physical size here. The Workshop shows exactly one screen —
- * multi-screen arrangement is the Preview's job — so a multi-screen device's
- * chosen screen arrives via `screen`.
+ * One placed part on the Compose board: the part rendered inside a single
+ * logical screen frame with a drag bar carrying its own data source / state /
+ * remove. Compose is device-agnostic: the selected screen contributes aspect
+ * ratio only. Physical size, bezels, and multi-screen arrangement belong to the
+ * Device frame.
  */
 export function LabDraggablePart({
   instance,
   story,
   byId,
-  device,
+
   screen,
   sources,
   scale,
@@ -49,8 +45,7 @@ export function LabDraggablePart({
   readonly instance: LabObjectInstance
   readonly story: Story
   readonly byId: ReadonlyMap<string, Story>
-  readonly device: DeviceConfig
-  readonly screen: ScreenConfig
+  readonly screen?: ScreenConfig
   readonly sources: readonly LabSourceOption[]
   readonly scale: number
   readonly onBind: (
@@ -61,7 +56,7 @@ export function LabDraggablePart({
   readonly onMove: (id: string, x: number, y: number) => void
   readonly onRemove: (id: string) => void
 }) {
-  const { adapter, pxPerMm } = useLab()
+  const { adapter } = useLab()
   const x = instance.x ?? 24
   const y = instance.y ?? 24
   const states = statesForStory(story, byId)
@@ -98,7 +93,7 @@ export function LabDraggablePart({
   }
 
   return (
-    <section
+    <fieldset
       className="pt-object"
       style={{ left: x, top: y }}
       onDragOver={event => {
@@ -192,7 +187,9 @@ export function LabDraggablePart({
               ◆
             </span>
             <select
-              value={instance.axisStateIds?.[axis.id] ?? axis.states[0]?.id ?? ""}
+              value={
+                instance.axisStateIds?.[axis.id] ?? axis.states[0]?.id ?? ""
+              }
               aria-label={`${axis.label} for ${story.name}`}
               onChange={event =>
                 onBindAxis(instance.id, axis.id, event.target.value)
@@ -217,17 +214,8 @@ export function LabDraggablePart({
         </button>
       </header>
       <div className="pt-object-body">
-        <div data-lab-device-id={device.id} data-lab-screen-id={screen.id}>
-          <DeviceFrame
-            widthMm={screen.widthMm}
-            heightMm={screen.heightMm}
-            pxPerMm={pxPerMm}
-            bezel={screen.bezel}
-          >
-            {renderBody()}
-          </DeviceFrame>
-        </div>
+        <LabScreenFrame screen={screen}>{renderBody()}</LabScreenFrame>
       </div>
-    </section>
+    </fieldset>
   )
 }

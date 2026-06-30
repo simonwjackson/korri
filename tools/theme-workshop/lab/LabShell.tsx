@@ -54,9 +54,8 @@ function readStoredDockWidth(): number {
 }
 
 const CANVAS_VIEWS: { readonly id: LabCanvasView; readonly label: string }[] = [
-  { id: "preview", label: "Preview" },
-  { id: "workshop", label: "Workshop" },
-  { id: "gallery", label: "Gallery" },
+  { id: "device", label: "Device" },
+  { id: "compose", label: "Compose" },
 ]
 
 export function LabShell() {
@@ -127,7 +126,7 @@ export function LabShell() {
 
   useEffect(() => {
     setView(initialCanvasView)
-  }, [initialCanvasView, adapter.id])
+  }, [initialCanvasView])
 
   useEffect(() => {
     setActiveSourceId(sources[0]?.id ?? DEFAULT_SOURCE_ID)
@@ -137,18 +136,17 @@ export function LabShell() {
   // default (its "ready" tag if present, else its first state).
   useEffect(() => {
     setActiveStateId(defaultStateId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stateStory?.id])
+  }, [defaultStateId])
 
   // Tapping a state in the dock is the active state for the current selection:
   // bind every placed object to it (so Selection/Canvas re-render), and when
-  // nothing is selected, preview it on the fallback family part.
+  // nothing is selected, show it on the fallback family part in Compose.
   const selectState = (stateId: SourceStatus) => {
     setActiveStateId(stateId)
     setInstances(prev => prev.map(instance => ({ ...instance, stateId })))
     if (!primaryStory && fallbackStateStory) {
       setSelectedIds([fallbackStateStory.id])
-      setView("workshop")
+      setView("compose")
     }
   }
 
@@ -182,21 +180,21 @@ export function LabShell() {
     )
   }, [selectedIds, activeSourceId, activeStateId])
 
-  // The Parts panel is a palette: each pick toggles that part onto the
-  // workshop board (one part is just the n=1 case). There is no separate
-  // single-part mode.
+  // The Parts panel is a palette: each pick toggles that part onto the Compose
+  // board (one part is just the n=1 case). There is no separate single-part
+  // mode.
   const selectStory = (storyId: string) => {
     setSelectedIds(prev =>
       prev.includes(storyId)
         ? prev.filter(id => id !== storyId)
         : [...prev, storyId],
     )
-    setView("workshop")
+    setView("compose")
   }
 
   const selectLayer = (stories: readonly { id: string }[]) => {
     setSelectedIds(stories.map(story => story.id))
-    setView("workshop")
+    setView("compose")
   }
 
   const clearAll = () => {
@@ -206,12 +204,12 @@ export function LabShell() {
 
   const switchWorkshopTool = (tool: LabWorkshopTool) => {
     setWorkshopTool(tool)
-    setView("workshop")
+    setView("compose")
   }
 
   const sendWorkshopCommand = (command: LabWorkshopCommand) => {
     setWorkshopCommand(prev => ({ id: (prev?.id ?? 0) + 1, command }))
-    setView("workshop")
+    setView("compose")
   }
 
   const partsPanel = () => (
@@ -229,10 +227,9 @@ export function LabShell() {
       onSelect={setActiveSourceId}
     />
   )
-  // Live state-machine axes belong to the Preview view (they drive the running
-  // surface). When inspecting a static part, the panel shows the part's own
-  // fixture states instead.
-  const panelAxes = view === "preview" ? screenAxes : []
+  // Live state-machine axes belong to the Device frame (they drive the running
+  // surface). In Compose, the panel shows the part's own fixture states instead.
+  const panelAxes = view === "device" ? screenAxes : []
   const statesPanel = () => (
     <LabStatesPanel
       axes={panelAxes}
@@ -286,9 +283,10 @@ export function LabShell() {
       : []),
   ]
 
-  // The Workshop renders one device at a time; a multi-screen device must pick a
-  // single screen (no arrangement here — that's the Preview's job). Resolve the
-  // chosen screen against the active device, defaulting to its primary.
+  // Compose renders one logical screen at a time; a multi-screen device only
+  // contributes selectable screen aspects here. Physical arrangement is the
+  // Device frame's job. Resolve the chosen screen against the active device,
+  // defaulting to its primary.
   const activeDevice = selectedDevices[0]
   const activeScreens = activeDevice ? deviceScreens(activeDevice) : []
   const resolvedScreenId =
@@ -396,11 +394,11 @@ export function LabShell() {
             onHideChrome={() => setChromeVisible(false)}
             onOpenSettings={() => setSettingsOpen(true)}
             compact={compact}
-            screenChoices={view === "workshop" ? activeScreens : undefined}
+            screenChoices={view === "compose" ? activeScreens : undefined}
             activeScreenId={resolvedScreenId ?? undefined}
             onScreenChange={setWorkshopScreenId}
             inspectLive={
-              view === "preview" && screenAxes.length > 0 ? mode : null
+              view === "device" && screenAxes.length > 0 ? mode : null
             }
             onToggleInspectLive={toggleMode}
           />

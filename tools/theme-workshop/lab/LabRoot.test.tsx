@@ -228,7 +228,7 @@ describe("LabRoot", () => {
     })
   })
 
-  it("renders discovered parts at /parts without mounting device frames", async () => {
+  it("renders discovered parts at /parts in the Compose frame without mounting device frames", async () => {
     const { adapter, mountCounts } = makeAdapter()
     __setPartModulesForTest({
       "/product/surfaces/web/test/ui/Test.atom.part.tsx": {
@@ -258,8 +258,50 @@ describe("LabRoot", () => {
     await waitFor(() => {
       expect(screen.getByText("discovered test atom")).toBeTruthy()
     })
+    expect(screen.getByRole("tab", { name: "Compose" })).toBeTruthy()
+    expect(screen.getByRole("tab", { name: "Device" })).toBeTruthy()
+    expect(screen.queryByRole("tab", { name: "Gallery" })).toBeNull()
+    expect(screen.queryByRole("tab", { name: "Workshop" })).toBeNull()
     expect(view.queryByTestId("surface-rg353m")).toBeNull()
     expect(mountCounts.size).toBe(0)
+  })
+
+  it("places a part from the Compose palette onto a logical screen frame", async () => {
+    const { adapter } = makeAdapter()
+    __setPartModulesForTest({
+      "/product/surfaces/web/test/ui/Test.atom.part.tsx": {
+        default: {
+          name: "Test Atom",
+          render: () => <div>placed test atom</div>,
+        },
+      },
+    })
+
+    const view = render(
+      <LabRoot
+        adapters={[adapter]}
+        routeState={{
+          devicesSegment: "all",
+          themeId: "test",
+          surfacePath: "/parts",
+        }}
+        navigation={{
+          setDevicesSegment: mock(() => undefined),
+          setThemeId: mock(() => undefined),
+          setSurfacePath: mock(() => undefined),
+        }}
+      />,
+    )
+
+    const card = await screen.findByRole("button", { name: "Open Test Atom" })
+    fireEvent.click(card)
+
+    await waitFor(() => {
+      expect(
+        view.container.querySelector('[data-lab-frame="screen"]'),
+      ).toBeTruthy()
+    })
+    expect(view.queryByTestId("surface-rg353m")).toBeNull()
   })
 
   it("shows a direct /parts empty state when a surface has no discovered parts", async () => {

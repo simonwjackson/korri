@@ -6,10 +6,10 @@ function screenLabel(screen: ScreenConfig, index: number): string {
 }
 
 /**
- * Top-bar screen sub-selector for the Workshop. A device with multiple physical
- * screens can only show one at a time on the board (there is no arrangement in
- * Workshop — that's the Preview's job), so this picks which screen renders.
- * Shown only when the active device has more than one screen.
+ * Top-bar screen sub-selector for Compose. A device with multiple physical
+ * screens contributes multiple logical screen aspects; Compose shows one at a
+ * time because physical arrangement is the Device frame's job. Shown only when
+ * the active device has more than one screen.
  */
 export function LabScreenSelect({
   screens,

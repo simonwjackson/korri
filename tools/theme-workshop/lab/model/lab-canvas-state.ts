@@ -1,6 +1,6 @@
 import type { SourceStatus } from "./lab-source-state"
 
-export type LabCanvasView = "preview" | "gallery" | "workshop"
+export type LabCanvasView = "device" | "compose"
 export type LabChromeMode = "dock" | "float" | "focus"
 export type LabWorkshopTool = "select" | "hand"
 export type LabWorkshopCommand = "zoom-out" | "zoom-in" | "reset-view" | "tidy"
@@ -27,7 +27,7 @@ export type LabCamera = {
   readonly scale: number
 }
 
-export const DEFAULT_CANVAS_VIEW: LabCanvasView = "preview"
+export const DEFAULT_CANVAS_VIEW: LabCanvasView = "device"
 export const DEFAULT_CHROME_MODE: LabChromeMode = "dock"
 export const DEFAULT_CAMERA: LabCamera = { x: 24, y: 24, scale: 1 }
 
