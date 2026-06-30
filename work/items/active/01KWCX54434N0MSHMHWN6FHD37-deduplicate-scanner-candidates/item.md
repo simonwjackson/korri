@@ -3,7 +3,7 @@ id: 01KWCX54434N0MSHMHWN6FHD37
 slug: deduplicate-scanner-candidates-against-authored-library-entr
 title: Deduplicate scanner candidates against authored library entries
 origin: parked
-status: To Do
+status: In Progress
 priority: high
 labels:
   - scanner
