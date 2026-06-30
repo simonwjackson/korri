@@ -8,12 +8,15 @@
  * Inert in production — only the preview singletons and dev-lab adapters consume
  * these; the live routes read the real catalog loader.
  */
-import { Cause } from "effect"
+import { Cause, Effect, Layer } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import {
   type CatalogEntry,
   CatalogFactsError,
+  CatalogFactsSource,
   type CatalogSnapshotFacts,
+  loadingForeverCatalogFactsSourceLayer,
+  makeInMemoryCatalogFactsSourceLayer,
 } from "./catalog-facts-source"
 
 export type CatalogResult = AsyncResult.AsyncResult<
@@ -85,5 +88,44 @@ export function makeCatalogStateSamples(
         }),
       ),
     Defect: () => AsyncResult.failure(Cause.die(defectMessage)),
+  }
+}
+
+/**
+ * The same exhaustive per-state table, expressed as real `CatalogFactsSource`
+ * **layers** — the data swapped at the surface's real edge
+ * (`catalogFactsSourceLayerAtom`), not a side channel. Setting one of these on
+ * the live source atom drives the real route through that state with the exact
+ * production mechanism; the route reads only `catalogSnapshotAtom`. The Loading
+ * layer never resolves (the real loading state); LoadError fails the snapshot;
+ * Defect dies. Keyed by every display tag so a new state can't be added without
+ * a source layer.
+ */
+export function makeCatalogStateSourceLayers(
+  entries: readonly CatalogEntry[],
+  options: CatalogSampleOptions = {},
+): {
+  readonly [Tag in CatalogDisplayTag]: () => Layer.Layer<CatalogFactsSource>
+} {
+  const offlineMessage = options.offlineMessage ?? "Local catalog is offline"
+  const defectMessage = options.defectMessage ?? "Unexpected catalog defect"
+  return {
+    Loading: () => loadingForeverCatalogFactsSourceLayer,
+    Ready: () => makeInMemoryCatalogFactsSourceLayer(readySnapshot(entries)),
+    Empty: () => makeInMemoryCatalogFactsSourceLayer(readySnapshot([])),
+    LoadError: () =>
+      Layer.succeed(CatalogFactsSource)({
+        snapshot: () =>
+          Effect.fail(
+            new CatalogFactsError({
+              reason: "unavailable",
+              message: offlineMessage,
+            }),
+          ),
+      }),
+    Defect: () =>
+      Layer.succeed(CatalogFactsSource)({
+        snapshot: () => Effect.die(defectMessage),
+      }),
   }
 }
