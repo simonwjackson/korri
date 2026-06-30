@@ -31,6 +31,80 @@ export const DEFAULT_CANVAS_VIEW: LabCanvasView = "device"
 export const DEFAULT_CHROME_MODE: LabChromeMode = "dock"
 export const DEFAULT_CAMERA: LabCamera = { x: 24, y: 24, scale: 1 }
 
+/** Camera that centers `rect` (world coords) in a `viewport` (px) at the
+ * camera's current scale, so a placed/selected object is framed on screen. */
+export function frameCameraOn(
+  camera: LabCamera,
+  rect: {
+    readonly x: number
+    readonly y: number
+    readonly w: number
+    readonly h: number
+  },
+  viewport: { readonly w: number; readonly h: number },
+): LabCamera {
+  const centerX = (rect.x + rect.w / 2) * camera.scale
+  const centerY = (rect.y + rect.h / 2) * camera.scale
+  return {
+    scale: camera.scale,
+    x: viewport.w / 2 - centerX,
+    y: viewport.h / 2 - centerY,
+  }
+}
+
+/** Linear interpolation between two cameras; `t` is clamped to [0, 1]. */
+export function lerpCamera(
+  from: LabCamera,
+  to: LabCamera,
+  t: number,
+): LabCamera {
+  const k = t < 0 ? 0 : t > 1 ? 1 : t
+  return {
+    x: from.x + (to.x - from.x) * k,
+    y: from.y + (to.y - from.y) * k,
+    scale: from.scale + (to.scale - from.scale) * k,
+  }
+}
+
+/** Whether a world-space `rect` is fully inside the `viewport` under `camera`
+ * (optionally inset by `margin`). Lets selection skip a pointless re-frame when
+ * the card is already on screen. */
+export function isRectFullyVisible(
+  camera: LabCamera,
+  rect: {
+    readonly x: number
+    readonly y: number
+    readonly w: number
+    readonly h: number
+  },
+  viewport: { readonly w: number; readonly h: number },
+  margin = 0,
+): boolean {
+  const left = rect.x * camera.scale + camera.x
+  const top = rect.y * camera.scale + camera.y
+  const right = left + rect.w * camera.scale
+  const bottom = top + rect.h * camera.scale
+  return (
+    left >= margin &&
+    top >= margin &&
+    right <= viewport.w - margin &&
+    bottom <= viewport.h - margin
+  )
+}
+
+/** Whether `from` is within `epsilon` of `to` on every axis, so a tween can stop. */
+export function cameraSettled(
+  from: LabCamera,
+  to: LabCamera,
+  epsilon = 0.5,
+): boolean {
+  return (
+    Math.abs(from.x - to.x) <= epsilon &&
+    Math.abs(from.y - to.y) <= epsilon &&
+    Math.abs(from.scale - to.scale) <= epsilon / 100
+  )
+}
+
 let objectSeq = 0
 export function nextObjectId(): string {
   objectSeq += 1
