@@ -451,11 +451,21 @@ body {
 	background: #23252e;
 	color: var(--pt-ink);
 }
-/* Selected Compose object: accent the title bar so the canvas shows which
- * object the Inspector is bound to. */
-.pt-object.is-selected .pt-object-bar {
-	border-color: var(--pt-accent);
-	box-shadow: 0 0 0 1px var(--pt-accent);
+/* Selected Compose object: a calm full-card lavender ring + glow and a slight
+ * lift, matching the tool's signature accent instead of a hard blue outline. */
+.pt-object.is-selected {
+	filter: drop-shadow(0 26px 52px rgba(0, 0, 0, 0.62));
+}
+.pt-object.is-selected::after {
+	content: "";
+	position: absolute;
+	inset: -3px;
+	border-radius: 18px;
+	box-shadow:
+		0 0 0 2px #f0abfc,
+		0 0 24px 2px rgba(240, 171, 252, 0.34);
+	pointer-events: none;
+	z-index: 3;
 }
 /* Inspector bindings: an open-ended vertical list (label over flat select). */
 .pt-bind {
@@ -2463,4 +2473,73 @@ body {
 		max-height: 80vh;
 		border-radius: 16px;
 	}
+}
+
+/* ------------------------------------------------- canvas settings (placement) */
+.lab-canvas-settings {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.lab-canvas-settings-hint {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--pt-ink-dim);
+}
+.lab-canvas-settings-group {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.lab-canvas-settings-legend {
+	padding: 0;
+	margin-bottom: 4px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--pt-ink-faint);
+}
+.lab-canvas-settings-choice {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid var(--pt-line);
+	border-radius: 10px;
+	background: var(--pt-panel);
+	cursor: pointer;
+	transition:
+		border-color 120ms ease,
+		box-shadow 120ms ease;
+}
+.lab-canvas-settings-choice:hover {
+	border-color: var(--pt-line-soft);
+}
+.lab-canvas-settings-choice.is-on {
+	border-color: #f0abfc;
+	box-shadow: 0 0 0 1px #f0abfc;
+}
+.lab-canvas-settings-choice input {
+	margin-top: 2px;
+	accent-color: #f0abfc;
+}
+.lab-canvas-settings-choice-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.lab-canvas-settings-choice-label {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--pt-ink);
+}
+.lab-canvas-settings-choice-desc {
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--pt-ink-dim);
 }

@@ -1,5 +1,6 @@
-import { CreditCard, Monitor, X } from "lucide-react"
+import { CreditCard, LayoutGrid, Monitor, X } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
+import { LabCanvasSettings } from "../panels/LabCanvasSettings"
 import { LabDeviceSetup } from "../panels/LabDeviceSetup"
 import { LabScaleCalibrator } from "../panels/LabScaleCalibrator"
 
@@ -22,6 +23,12 @@ const SECTIONS: readonly LabSettingsSection[] = [
     label: "Scale",
     icon: <CreditCard size={16} strokeWidth={2} aria-hidden />,
     render: () => <LabScaleCalibrator />,
+  },
+  {
+    id: "canvas",
+    label: "Canvas",
+    icon: <LayoutGrid size={16} strokeWidth={2} aria-hidden />,
+    render: () => <LabCanvasSettings />,
   },
 ]
 
