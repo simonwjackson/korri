@@ -30,12 +30,13 @@ Rules that follow from this:
   mechanism doing the changing is not present in production, it is wrong. If the
   app hard-codes a value today, then giving that value a real edge to be fed from
   is real-app work that ships unchanged — not tool work.
-- **Known debt this principle is driving out:** the dev-lab's current
-  `preview ?? live` preview-singleton seam (see `lab/AGENTS.md`) is exactly such a
-  tool-only path — production carries a branch only the tool ever exercises. It is
-  a transitional mechanism, not the destination. The target is a single real edge
-  that updates live (no reload), fed by production from the live source and by the
-  tool from chosen data, with no second machinery.
+- **Known debt this principle is driving out:** any remaining `preview ?? live`
+  preview-singleton seam is a tool-only path — production carries a branch only
+  the tool ever exercises. It is a transitional mechanism, not the destination.
+  The target is a single real edge that updates live (no reload), fed by
+  production from the live source and by the tool from chosen data, with no
+  second machinery. Shift now follows the real-edge pattern; do not reintroduce
+  preview branches there.
 
 ## Two primitives: screen vs device
 

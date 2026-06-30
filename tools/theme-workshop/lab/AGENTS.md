@@ -15,10 +15,10 @@ device lab. It is never bundled with `product/apps/*`.
 ## State axes + Inspect ⇄ Live
 
 A surface's screens **are** its page parts. Each page exposes its real
-state-machine **axes** — Shift Home has a `Data` region (`ShiftCatalogState`), a
-nested `Launch` axis (`LaunchState` under `Data:Ready`), and a parallel
-`Foreground` region (`ForegroundSessionGateState`); Pico Home has a `Data`
-region. There is no fixed, global state vocabulary: an axis's states are
+state-machine **axes** — Shift Home has a `Data` region (`ShiftCatalogState`)
+and a parallel `Foreground` region (`ForegroundSessionGateState`); Pico Home has
+a `Data` region. Shift Launch is produced by pressing Play against the real
+in-memory launcher, not injected as an axis. There is no fixed, global state vocabulary: an axis's states are
 **derived from the machine's tags** (`axisOptionsFromTags(Machine.tags)` or an
 exhaustive sample table's keys), never hand-listed.
 
@@ -37,33 +37,35 @@ addressable coordinate and the running, navigable surface:
 
 Switching a single axis between pinned and live needs **no remount**.
 
-## The seam: a preview singleton the live route consults
+## The seam: swap real data at the mounted app's edge
 
-Each axis is driven by a **cross-root preview singleton** that lives in the
-product surface and is **inert in production** (nothing sets it). The live route
-reads `preview ?? live`:
+Inspect pins drive the same source atoms the mounted product app already reads.
+The lab captures each mounted surface's registry, then a pin swaps that registry's
+source layer; releasing the pin restores the seed value the app was mounted with.
+The route still reads the real atom:
 
 ```ts
 // product/surfaces/web/shift/routes/ShiftHomeRoute.tsx
-const live = useAtomValue(catalogSnapshotAtom)
-const snapshot = useShiftCatalogPreview() ?? live
+const snapshot = useAtomValue(catalogSnapshotAtom)
 ```
 
-The singletons (`shift-catalog-preview`, `shift-launch-preview`,
-`shift-foreground-preview`, `pico-data-preview`) expose `set*`, `use*` (a
-`useSyncExternalStore` hook), and a non-reactive `get*` for capture-back. A
-**sample table** keyed by every machine tag supplies the inspect pin, so a new
-state can't be added without the axis picking it up.
+For Shift, the Data axis swaps `catalogFactsSourceLayerAtom`, and Foreground
+swaps `foregroundSessionStatusLayerAtom`. Launch is not injected as a design-tool
+axis; pressing Play runs the real in-memory launcher and lets the app produce the
+real launch state.
+
+Pico still has a transitional preview singleton. Do not copy that pattern for new
+Shift work or new surfaces; prefer the real-edge source swap.
 
 ## Adding a new surface's state machine
 
-To expose a new state machine as an axis, follow the existing pattern:
+To expose a new state machine as an axis, follow the existing Shift pattern:
 
-1. **Product side:** a preview singleton + a sample table (one representative
-   value per tag) + the live route reads `preview ?? live`.
+1. **Product side:** keep the route reading its real source atom. Provide an
+   exhaustive sample table or source-layer factory keyed by the machine's tags.
 2. **Lab side:** declare a `LabStateAxis` in the surface adapter
-   (`adapters/<surface>-axes.tsx`) wiring `pin`/`release` to the singleton +
-   sample table, with `states` derived from the machine tags. Set `kind` to
+   (`adapters/<surface>-axes.tsx`) whose `pin` swaps the mounted registry's real
+   source layer and whose `release` restores the seed layer. Set `kind` to
    `single` or `multi`. For nesting, declare `parent: { axisId, whenStates }`.
 3. Optionally implement `captureCoordinate` for "Pin current" (Live → Inspect),
    returning per-axis tags for `single` axes and tag arrays/sets for `multi`
@@ -72,7 +74,6 @@ To expose a new state machine as an axis, follow the existing pattern:
 ## Boundary
 
 Product runtime must **not** import dev-lab runtime modules (`lab-boundary.test`
-enforces this). The preview singletons live in `product/`; the lab consumes them
-through the surface adapter, which is the only lab → product bridge. Previews
-stay offline / fixture-backed — mounting a page part must not add external art
-calls.
+enforces this). The lab consumes product surfaces through the surface adapter,
+which is the only lab → product bridge. Previews stay offline / fixture-backed —
+mounting a page part must not add external art calls.

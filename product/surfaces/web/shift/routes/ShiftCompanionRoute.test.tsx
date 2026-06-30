@@ -19,8 +19,6 @@ import {
 } from "@testing-library/react"
 import { Effect, type Layer as EffectLayer, Layer } from "effect"
 import { useLayoutEffect } from "react"
-import { setShiftCatalogPreview } from "../shift-catalog-preview"
-import { shiftCatalogStateSamples } from "../shift-catalog-state-samples"
 import { ShiftCompanionRoute } from "./ShiftCompanionRoute"
 
 function readyFacts(): CatalogSnapshotFacts {
@@ -146,7 +144,6 @@ const defectLayer: CatalogLayer = Layer.succeed(CatalogFactsSource)({
 })
 
 afterEach(() => {
-  setShiftCatalogPreview(null)
   cleanup()
 })
 
@@ -228,18 +225,5 @@ describe("ShiftCompanionRoute", () => {
     await waitFor(() => {
       expect(screen.getByText("Game not found.")).toBeTruthy()
     })
-  })
-
-  it("does not use the design-tool catalog preview as its data source", async () => {
-    setShiftCatalogPreview(shiftCatalogStateSamples.Empty())
-
-    renderCompanion({ initialGameId: "hollow-knight" })
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { name: "Hollow Knight" }),
-      ).toBeTruthy()
-    })
-    expect(screen.queryByText("No games found.")).toBeNull()
   })
 })

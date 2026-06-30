@@ -38,12 +38,9 @@ describe("lab tooling boundary", () => {
 
   it("keeps any remaining transitional preview singletons product-side, not in the lab", () => {
     // Transitional seams that still exist live in product (inert in production);
-    // the lab consumes them through the adapter, never the reverse. Shift Home
-    // Data/Foreground/Launch no longer use preview singleton render paths.
-    const singletons = [
-      "product/surfaces/web/shift/shift-catalog-preview.ts",
-      "product/surfaces/web/pico/pico-data-preview.ts",
-    ]
+    // the lab consumes them through the adapter, never the reverse. Shift no
+    // longer uses preview singleton render paths.
+    const singletons = ["product/surfaces/web/pico/pico-data-preview.ts"]
     for (const path of singletons) {
       expect(existsSync(path)).toBe(true)
     }

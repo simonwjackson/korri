@@ -1,7 +1,7 @@
 /**
- * Design-tool seam: preview the pico home's catalog DATA state without a
- * backend — the pico mirror of shift-catalog-preview. A cross-root singleton the
- * live pico routes consult (`preview ?? live`), inert in production. Pico is a
+ * Transitional design-tool seam: preview the pico home's catalog DATA state
+ * without a backend. A cross-root singleton the live pico routes consult
+ * (`preview ?? live`), inert in production. Pico is a
  * leaf surface, so it supplies only its own fixture entries; the sample
  * scaffolding and the state-tag list are shared via `catalog-state-samples`.
  */
