@@ -110,7 +110,7 @@ function instance(
     id,
     storyId: "pill",
     sourceId: "dev",
-    stateGroupValues: {},
+    inputValues: {},
     ...extra,
   }
 }

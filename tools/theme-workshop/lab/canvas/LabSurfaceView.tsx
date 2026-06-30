@@ -4,7 +4,7 @@ import { useLab } from "../Lab.context"
 import { LabSurfaceMount } from "../LabSurfaceMount"
 import {
   initialValuesForBinding,
-  type SourceStatus,
+  type LabInputValue,
 } from "../model/lab-source-state"
 import { useLabFitHeight } from "./useLabFitHeight"
 
@@ -22,7 +22,7 @@ export function LabSurfaceView({
   stateId,
 }: {
   readonly sourceId: string
-  readonly stateId: SourceStatus
+  readonly stateId: LabInputValue
 }) {
   const {
     adapter,

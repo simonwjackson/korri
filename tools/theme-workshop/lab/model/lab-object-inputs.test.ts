@@ -3,16 +3,30 @@ import type { Story } from "../../types"
 import { shiftLabSurfaceAdapter } from "../adapters/shift"
 import type { LabSurfaceAdapter } from "../surface-registry"
 import {
-  LAB_VARIANT_STATE_GROUP_ROLE,
-  objectStateGroupsForStory,
-  resolveObjectStateGroupValues,
-} from "./lab-object-state-groups"
+  LAB_VARIANT_INPUT_ROLE,
+  objectInputsForStory,
+  resolveObjectInputValues,
+} from "./lab-object-inputs"
 
 const pill: Story = {
   id: "pill",
   layer: "atom",
   name: "Pill",
   render: () => "pill",
+}
+
+const battery: Story = {
+  id: "battery",
+  layer: "atom",
+  name: "Battery",
+  render: () => "battery",
+}
+
+const statusBar: Story = {
+  id: "status-bar",
+  layer: "molecule",
+  name: "Status Bar",
+  render: () => "status bar",
 }
 
 const homeReady: Story = {
@@ -81,6 +95,8 @@ const pageWithoutVariants: Story = {
 const byId = new Map(
   [
     pill,
+    battery,
+    statusBar,
     homeReady,
     homeEmpty,
     homeLoadError,
@@ -91,35 +107,35 @@ const byId = new Map(
 )
 
 const adapter = {
-  surfacePartStateGroups: (story: Story) =>
+  surfacePartInputs: (story: Story) =>
     story.name === "Home" || story.name.startsWith("Home ·")
       ? [
           {
             id: "foreground",
             label: "Foreground",
-            defaultStateId: "Ready",
-            states: [
+            defaultValue: "Ready",
+            options: [
               { id: "Ready", label: "Ready" },
               { id: "Running", label: "Running" },
             ],
           },
         ]
       : [],
-} as Pick<LabSurfaceAdapter, "surfacePartStateGroups">
+} as Pick<LabSurfaceAdapter, "surfacePartInputs">
 
-describe("objectStateGroupsForStory", () => {
-  it("returns no groups for a stateless atom", () => {
-    expect(objectStateGroupsForStory(pill, byId, adapter)).toEqual([])
+describe("objectInputsForStory", () => {
+  it("returns no inputs for a stateless atom", () => {
+    expect(objectInputsForStory(pill, byId, adapter)).toEqual([])
   })
 
-  it("wraps a variant family as a render-selecting state group", () => {
-    expect(objectStateGroupsForStory(detailContinue, byId, adapter)).toEqual([
+  it("wraps a variant family as a render-selecting input", () => {
+    expect(objectInputsForStory(detailContinue, byId, adapter)).toEqual([
       {
         id: "variant",
         label: "Action",
-        role: LAB_VARIANT_STATE_GROUP_ROLE,
-        defaultStateId: "Continue",
-        states: [
+        role: LAB_VARIANT_INPUT_ROLE,
+        defaultValue: "Continue",
+        options: [
           { id: "Continue", label: "Continue" },
           { id: "Play", label: "Play" },
         ],
@@ -127,14 +143,14 @@ describe("objectStateGroupsForStory", () => {
     ])
   })
 
-  it("combines Shift Home Data and Foreground as peer groups", () => {
-    expect(objectStateGroupsForStory(homeReady, byId, adapter)).toEqual([
+  it("combines Shift Home Data and Foreground as peer inputs", () => {
+    expect(objectInputsForStory(homeReady, byId, adapter)).toEqual([
       {
         id: "variant",
         label: "Data",
-        role: LAB_VARIANT_STATE_GROUP_ROLE,
-        defaultStateId: "Ready",
-        states: [
+        role: LAB_VARIANT_INPUT_ROLE,
+        defaultValue: "Ready",
+        options: [
           { id: "Ready", label: "Ready" },
           { id: "Empty", label: "Empty" },
           { id: "LoadError", label: "Load error" },
@@ -143,8 +159,8 @@ describe("objectStateGroupsForStory", () => {
       {
         id: "foreground",
         label: "Foreground",
-        defaultStateId: "Ready",
-        states: [
+        defaultValue: "Ready",
+        options: [
           { id: "Ready", label: "Ready" },
           { id: "Running", label: "Running" },
         ],
@@ -152,94 +168,135 @@ describe("objectStateGroupsForStory", () => {
     ])
   })
 
-  it("does not give Game Detail the Home-only Foreground group", () => {
-    expect(objectStateGroupsForStory(detailContinue, byId, adapter)).toEqual([
+  it("does not give Game Detail the Home-only Foreground input", () => {
+    expect(objectInputsForStory(detailContinue, byId, adapter)).toEqual([
       expect.objectContaining({ id: "variant" }),
     ])
   })
 
   it("uses the real Shift adapter to expose Foreground only on Home", () => {
     expect(
-      objectStateGroupsForStory(homeReady, byId, shiftLabSurfaceAdapter).map(
-        group => [group.label, group.id],
+      objectInputsForStory(homeReady, byId, shiftLabSurfaceAdapter).map(
+        input => [input.label, input.id],
       ),
     ).toEqual([
       ["Data", "variant"],
       ["Foreground", "foreground"],
+      ["Power", "power"],
+      ["Clock", "clock"],
+      ["Network", "network"],
     ])
     expect(
-      objectStateGroupsForStory(
-        detailContinue,
-        byId,
-        shiftLabSurfaceAdapter,
-      ).map(group => [group.label, group.id]),
+      objectInputsForStory(detailContinue, byId, shiftLabSurfaceAdapter).map(
+        input => [input.label, input.id],
+      ),
     ).toEqual([["Action", "variant"]])
   })
 
-  it("can return adapter-owned groups for a stateless page", () => {
+  it("uses the real Shift adapter to expose matching real inputs on parts", () => {
+    expect(
+      objectInputsForStory(battery, byId, shiftLabSurfaceAdapter).map(input => [
+        input.label,
+        input.id,
+      ]),
+    ).toEqual([["Power", "power"]])
+    expect(
+      objectInputsForStory(statusBar, byId, shiftLabSurfaceAdapter).map(
+        input => [input.label, input.id],
+      ),
+    ).toEqual([
+      ["Power", "power"],
+      ["Clock", "clock"],
+      ["Network", "network"],
+    ])
+  })
+
+  it("can return adapter-owned inputs for a stateless page", () => {
     const pageAdapter = {
-      surfacePartStateGroups: (story: Story) =>
+      surfacePartInputs: (story: Story) =>
         story.layer === "page"
           ? [
               {
                 id: "foreground",
                 label: "Foreground",
-                states: [{ id: "Ready", label: "Ready" }],
+                options: [{ id: "Ready", label: "Ready" }],
               },
             ]
           : [],
-    } as Pick<LabSurfaceAdapter, "surfacePartStateGroups">
+    } as Pick<LabSurfaceAdapter, "surfacePartInputs">
 
     expect(
-      objectStateGroupsForStory(pageWithoutVariants, byId, pageAdapter),
+      objectInputsForStory(pageWithoutVariants, byId, pageAdapter),
     ).toEqual([
       {
         id: "foreground",
         label: "Foreground",
-        defaultStateId: "Ready",
-        states: [{ id: "Ready", label: "Ready" }],
+        defaultValue: "Ready",
+        options: [{ id: "Ready", label: "Ready" }],
       },
     ])
   })
 
-  it("rejects duplicate state group ids", () => {
+  it("rejects duplicate input ids", () => {
     const duplicate = {
-      surfacePartStateGroups: () => [
+      surfacePartInputs: () => [
         {
           id: "variant",
           label: "Data duplicate",
-          states: [{ id: "Ready", label: "Ready" }],
+          options: [{ id: "Ready", label: "Ready" }],
         },
       ],
-    } as Pick<LabSurfaceAdapter, "surfacePartStateGroups">
+    } as Pick<LabSurfaceAdapter, "surfacePartInputs">
 
-    expect(() => objectStateGroupsForStory(homeReady, byId, duplicate)).toThrow(
-      "Duplicate object state group id variant",
+    expect(() => objectInputsForStory(homeReady, byId, duplicate)).toThrow(
+      "Duplicate object input id variant",
     )
   })
 })
 
-describe("resolveObjectStateGroupValues", () => {
-  it("fills missing and invalid values from group defaults", () => {
-    const groups = objectStateGroupsForStory(homeReady, byId, adapter)
+describe("resolveObjectInputValues", () => {
+  it("fills missing and invalid values from input defaults", () => {
+    const inputs = objectInputsForStory(homeReady, byId, adapter)
 
     expect(
-      resolveObjectStateGroupValues(groups, {
+      resolveObjectInputValues(inputs, {
         variant: "Nope",
         foreground: "Running",
       }),
     ).toEqual({ variant: "Ready", foreground: "Running" })
-    expect(resolveObjectStateGroupValues(groups, {})).toEqual({
+    expect(resolveObjectInputValues(inputs, {})).toEqual({
       variant: "Ready",
       foreground: "Ready",
     })
   })
 
+  it("preserves arbitrary valid ISO values for date-time controls", () => {
+    expect(
+      resolveObjectInputValues(
+        [
+          {
+            id: "clock",
+            label: "Clock",
+            defaultValue: "2026-06-30T16:24:00.000Z",
+            options: [
+              {
+                id: "2026-06-30T16:24:00.000Z",
+                label: "4:24 PM",
+              },
+            ],
+            control: { kind: "iso-datetime" },
+          },
+        ],
+        { clock: "2026-07-01T01:02:00.000Z" },
+      ),
+    ).toEqual({ clock: "2026-07-01T01:02:00.000Z" })
+  })
+
   it("normalizes case-insensitive stored values to their canonical ids", () => {
-    const groups = objectStateGroupsForStory(homeReady, byId, adapter)
+    const inputs = objectInputsForStory(homeReady, byId, adapter)
 
     expect(
-      resolveObjectStateGroupValues(groups, {
+      resolveObjectInputValues(inputs, {
         variant: "empty",
         foreground: "running",
       }),

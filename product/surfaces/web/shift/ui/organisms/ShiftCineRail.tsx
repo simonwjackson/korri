@@ -22,6 +22,7 @@ export function ShiftCineRail({
   index,
   trackX,
   trackRef,
+  imageWindow,
   onTileFocus,
   onTileActivate,
 }: {
@@ -29,6 +30,7 @@ export function ShiftCineRail({
   readonly index: number
   readonly trackX: number
   readonly trackRef: Ref<HTMLDivElement>
+  readonly imageWindow?: { readonly start: number; readonly end: number }
   readonly onTileFocus: (index: number) => void
   readonly onTileActivate: (index: number) => void
 }) {
@@ -47,6 +49,9 @@ export function ShiftCineRail({
             title={entry.title}
             artUrl={entry.tileArtUrl}
             focused={i === index}
+            renderImage={
+              !imageWindow || (i >= imageWindow.start && i <= imageWindow.end)
+            }
             onFocus={() => onTileFocus(i)}
             onActivate={() => onTileActivate(i)}
           />

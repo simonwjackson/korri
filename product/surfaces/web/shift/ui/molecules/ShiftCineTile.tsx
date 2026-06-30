@@ -7,6 +7,7 @@ export interface ShiftCineTileProps {
   readonly title: string
   readonly artUrl: string
   readonly focused?: boolean
+  readonly renderImage?: boolean
   readonly onFocus: () => void
   readonly onActivate: () => void
 }
@@ -16,6 +17,7 @@ export function ShiftCineTile({
   title,
   artUrl,
   focused,
+  renderImage = true,
   onFocus,
   onActivate,
 }: ShiftCineTileProps) {
@@ -29,7 +31,7 @@ export function ShiftCineTile({
       onFocus={onFocus}
       onClick={onActivate}
     >
-      <img src={artUrl} alt="" loading="lazy" />
+      {renderImage ? <img src={artUrl} alt="" loading="eager" /> : null}
     </button>
   )
 }

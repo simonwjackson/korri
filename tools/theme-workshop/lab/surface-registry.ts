@@ -9,9 +9,10 @@ import { boxbusterLabSurfaceAdapter } from "./adapters/boxbuster"
 import { picoLabSurfaceAdapter } from "./adapters/pico"
 import { shiftLabSurfaceAdapter } from "./adapters/shift"
 import type {
+  LabInputControl,
+  LabInputOption,
+  LabInputValue,
   LabSourceOption,
-  LabStateOption,
-  SourceStatus,
 } from "./model/lab-source-state"
 import type { LabScreenCoordinate, LabStateAxis } from "./model/lab-state-axis"
 
@@ -20,11 +21,12 @@ export interface LabMountedSurface {
   readonly dispose: () => void
 }
 
-export interface LabSurfacePartStateGroup {
+export interface LabSurfacePartInput {
   readonly id: string
   readonly label: string
-  readonly states: readonly LabStateOption[]
-  readonly defaultStateId?: SourceStatus
+  readonly options: readonly LabInputOption[]
+  readonly defaultValue?: LabInputValue
+  readonly control?: LabInputControl
 }
 
 export interface LabSurfaceDualScreenOptions {
@@ -67,29 +69,27 @@ export interface LabSurfaceAdapter {
    * and recipes resolve outside a full mount (e.g. pico needs
    * [data-pico].pico-screen.intrinsic). Omit when parts are self-scoping. */
   readonly previewScope?: (children: ReactNode) => ReactNode
-  /** Render a placed surface/page part on the Workshop board through the real
-   * data edge, seeded for the object's source + named state groups — so
-   * per-object state swap works like Preview. Omit to fall back to the part's
-   * baked render. */
+  /** Render a placed part on the Workshop board through the real data edge or
+   * component input the surface owns. Page parts use source/input data;
+   * smaller parts can feed the same selected input values into their real
+   * component props. Omit to fall back to the part's baked render. */
   readonly renderSurfacePart?: (
     story: Story,
     binding: {
       readonly sourceId: string
-      readonly stateGroupValues: Readonly<Record<string, SourceStatus>>
+      readonly inputValues: Readonly<Record<string, LabInputValue>>
     },
   ) => ReactNode
-  /** Surface-owned state groups a Compose object exposes in addition to any
+  /** Surface-owned product inputs a Compose object exposes in addition to any
    * discovered variant family, e.g. Shift Home Foreground. The adapter filters by
    * story so unrelated pages/parts do not show controls they cannot consume. */
-  readonly surfacePartStateGroups?: (
-    story: Story,
-  ) => readonly LabSurfacePartStateGroup[]
+  readonly surfacePartInputs?: (story: Story) => readonly LabSurfacePartInput[]
   readonly sources?: readonly LabSourceOption[]
-  readonly states?: readonly LabStateOption[]
+  readonly states?: readonly LabInputOption[]
   readonly makeSeedInitialValues: () => Promise<unknown>
   readonly makeSeedInitialValuesForBinding?: (binding: {
     readonly sourceId: string
-    readonly stateId: SourceStatus
+    readonly stateId: LabInputValue
   }) => Promise<unknown>
   readonly mountSurface: (
     host: HTMLElement,

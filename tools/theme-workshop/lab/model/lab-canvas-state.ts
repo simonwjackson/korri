@@ -1,4 +1,4 @@
-import type { SourceStatus } from "./lab-source-state"
+import type { LabInputValue } from "./lab-source-state"
 
 export type LabCanvasView = "device" | "compose"
 export type LabChromeMode = "dock" | "float" | "focus"
@@ -9,14 +9,14 @@ export type LabWorkshopCommandSignal = {
   readonly command: LabWorkshopCommand
 }
 
-export type LabObjectStateValues = Readonly<Record<string, SourceStatus>>
+export type LabObjectInputValues = Readonly<Record<string, LabInputValue>>
 
 export type LabObjectInstance = {
   readonly id: string
   readonly storyId: string
   readonly sourceId: string
-  /** Compose-object state values keyed by independent state-group id. */
-  readonly stateGroupValues: LabObjectStateValues
+  /** Compose-object input values keyed by independent input id. */
+  readonly inputValues: LabObjectInputValues
   readonly x?: number
   readonly y?: number
 }
@@ -118,9 +118,9 @@ export function resetObjectIdCounterForTest(): void {
 export function createObjectInstance(
   storyId: string,
   sourceId: string,
-  stateGroupValues: LabObjectStateValues,
+  inputValues: LabObjectInputValues,
 ): LabObjectInstance {
-  return { id: nextObjectId(), storyId, sourceId, stateGroupValues }
+  return { id: nextObjectId(), storyId, sourceId, inputValues }
 }
 
 export function reconcileInstancesWithSelection(
@@ -128,7 +128,7 @@ export function reconcileInstancesWithSelection(
   selectedStoryIds: readonly string[],
   defaults: {
     readonly sourceId: string
-    readonly stateGroupValuesForStory: (storyId: string) => LabObjectStateValues
+    readonly inputValuesForStory: (storyId: string) => LabObjectInputValues
   },
 ): readonly LabObjectInstance[] {
   const selected = new Set(selectedStoryIds)
@@ -140,7 +140,7 @@ export function reconcileInstancesWithSelection(
         createObjectInstance(
           storyId,
           defaults.sourceId,
-          defaults.stateGroupValuesForStory(storyId),
+          defaults.inputValuesForStory(storyId),
         ),
       )
     }
@@ -163,19 +163,19 @@ export function bindObjectInstance(
   )
 }
 
-export function bindObjectStateGroup(
+export function bindObjectInput(
   instances: readonly LabObjectInstance[],
   id: string,
-  groupId: string,
-  stateId: SourceStatus,
+  inputId: string,
+  value: LabInputValue,
 ): readonly LabObjectInstance[] {
   return instances.map(instance =>
     instance.id === id
       ? {
           ...instance,
-          stateGroupValues: {
-            ...instance.stateGroupValues,
-            [groupId]: stateId,
+          inputValues: {
+            ...instance.inputValues,
+            [inputId]: value,
           },
         }
       : instance,

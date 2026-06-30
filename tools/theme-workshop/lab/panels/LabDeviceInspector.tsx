@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react"
+import { LabIsoDateTimeInput } from "../components/LabIsoDateTimeInput"
 import {
   axisEnabled,
   isAxisLive,
@@ -43,6 +44,34 @@ function AxisControl({
     !value || isAxisLive(value) || value.kind !== "single"
       ? LAB_AXIS_LIVE
       : value.value
+  if (axis.control?.kind === "iso-datetime") {
+    const live = current === LAB_AXIS_LIVE
+    return (
+      <div className="pt-bind-row">
+        <span className="pt-bind-label">
+          {axis.label}
+          {!enabled && axis.disabledHint ? ` · ${axis.disabledHint}` : ""}
+        </span>
+        <span className="pt-bind-inline">
+          <LabIsoDateTimeInput
+            disabled={!enabled}
+            value={live ? undefined : current}
+            options={axis.states}
+            ariaLabel={axis.label}
+            onChange={next => onPin(axis.id, next)}
+          />
+          <button
+            type="button"
+            className="pt-axis-pincurrent"
+            disabled={!enabled || live}
+            onClick={() => onLive(axis.id)}
+          >
+            {axis.liveLabel}
+          </button>
+        </span>
+      </div>
+    )
+  }
   return (
     <label className="pt-bind-row">
       <span className="pt-bind-label">

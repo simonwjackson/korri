@@ -1,6 +1,6 @@
 import type { Story, StoryLayer } from "../../types"
 import type { LabPartsCatalog } from "../parts-discovery"
-import type { LabStateOption, SourceStatus } from "./lab-source-state"
+import type { LabInputOption, LabInputValue } from "./lab-source-state"
 
 export const LAB_LAYER_ORDER: readonly StoryLayer[] = [
   "page",
@@ -86,10 +86,10 @@ export function buildStoryIndex(
 export function statesForStory(
   story: Story | null,
   byId: ReadonlyMap<string, Story>,
-): readonly LabStateOption[] {
+): readonly LabInputOption[] {
   if (!story) return []
   const family = familyOf(story, byId)
-  const out: LabStateOption[] = []
+  const out: LabInputOption[] = []
   const seen = new Set<string>()
   for (const member of family) {
     const tag = member.state
@@ -101,9 +101,9 @@ export function statesForStory(
 }
 
 /** Label for a part in the tree/gallery. A collapsed state-variant family is
- * named by its state group (the part's note, e.g. "Data states") rather than the
- * single representative state, so "Home · Ready" reads as "Home · Data states" —
- * making clear it's a state set you switch for the selected object, not a
+ * named by the part's note (e.g. "Data states") rather than the single
+ * representative state, so "Home · Ready" reads as "Home · Data states" —
+ * making clear it's a variant set you switch for the selected object, not a
  * distinct page. Non-family parts keep their authored name. */
 export function partLabel(story: Story): string {
   if (story.variants?.length && story.note) {
@@ -132,7 +132,7 @@ function humanizeStateTag(tag: string): string {
 
 export function stateVariantFor(
   story: Story,
-  stateId: SourceStatus,
+  stateId: LabInputValue,
   byId: ReadonlyMap<string, Story>,
 ): Story | null {
   const want = stateId.toLowerCase()
@@ -149,7 +149,7 @@ export function stateVariantFor(
 
 export function storySupportsState(
   story: Story,
-  stateId: SourceStatus,
+  stateId: LabInputValue,
   byId: ReadonlyMap<string, Story>,
 ): boolean {
   return stateVariantFor(story, stateId, byId) !== null

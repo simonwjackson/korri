@@ -1,12 +1,11 @@
 import type { LabSurfaceAdapter } from "../surface-registry"
 
 /**
- * A state tag is free-form. The lab does not own a fixed state vocabulary;
- * states are derived from the actual tags a discovered part's variant family
- * carries (e.g. a state machine's "Loading" / "Ready" / "LoadError" / "Defect").
- * See statesForStory in lab-part-model.
+ * Object inputs store product-shaped values: machine tags, ISO strings,
+ * percentages, or other surface-owned values. The lab validates only the shape
+ * of the input control; the product owns what the value means visually.
  */
-export type SourceStatus = string
+export type LabInputValue = string
 
 export type LabSourceOption = {
   readonly id: string
@@ -14,16 +13,22 @@ export type LabSourceOption = {
   readonly description?: string
 }
 
-export type LabStateOption = {
+export type LabInputOption = {
   readonly id: string
   readonly label: string
   readonly description?: string
 }
 
-export const DEFAULT_SOURCE_ID = "default"
-export const DEFAULT_STATE_ID = "ready"
+export type LabInputControl =
+  | { readonly kind: "select" }
+  | { readonly kind: "iso-datetime" }
 
-export function sourcesForAdapter(adapter: LabSurfaceAdapter): readonly LabSourceOption[] {
+export const DEFAULT_SOURCE_ID = "default"
+export const DEFAULT_INPUT_VALUE = "ready"
+
+export function sourcesForAdapter(
+  adapter: LabSurfaceAdapter,
+): readonly LabSourceOption[] {
   const configured = adapter.sources ?? []
   if (configured.length > 0) return configured
   return [
@@ -35,14 +40,14 @@ export function sourcesForAdapter(adapter: LabSurfaceAdapter): readonly LabSourc
   ]
 }
 
-/** A valid state tag is any non-empty string (states are dynamic). */
-export function isSourceStatus(value: string): value is SourceStatus {
+/** A valid input value is any non-empty string; surfaces define semantics. */
+export function isLabInputValue(value: string): value is LabInputValue {
   return typeof value === "string" && value.length > 0
 }
 
 export async function initialValuesForBinding(
   adapter: LabSurfaceAdapter,
-  binding: { readonly sourceId: string; readonly stateId: SourceStatus },
+  binding: { readonly sourceId: string; readonly stateId: LabInputValue },
 ): Promise<unknown> {
   if (adapter.makeSeedInitialValuesForBinding) {
     return adapter.makeSeedInitialValuesForBinding(binding)

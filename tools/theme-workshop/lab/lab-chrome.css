@@ -479,8 +479,20 @@ body {
 	letter-spacing: 0.06em;
 	color: var(--pt-ink-faint);
 }
-.pt-bind-row select {
+.pt-bind-row select,
+.pt-bind-row input {
 	width: 100%;
+}
+.pt-bind-inline {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+.pt-bind-inline input {
+	min-width: 0;
+}
+.pt-bind-inline button {
+	flex: 0 0 auto;
 }
 .pt-shell select:disabled {
 	opacity: 0.5;

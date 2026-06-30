@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import {
+  bindObjectInput,
   bindObjectInstance,
-  bindObjectStateGroup,
   cameraSettled,
   clampScale,
   createObjectInstance,
@@ -24,7 +24,7 @@ describe("lab canvas state", () => {
       ["story-a", "story-b"],
       {
         sourceId: "default",
-        stateGroupValuesForStory: storyId => {
+        inputValuesForStory: storyId => {
           if (storyId === "story-b")
             return { variant: "Ready", foreground: "Ready" }
           const empty: Readonly<Record<string, string>> = {}
@@ -38,7 +38,7 @@ describe("lab canvas state", () => {
     expect(reconciled[1]).toMatchObject({
       storyId: "story-b",
       sourceId: "default",
-      stateGroupValues: { variant: "Ready", foreground: "Ready" },
+      inputValues: { variant: "Ready", foreground: "Ready" },
     })
   })
 
@@ -54,13 +54,13 @@ describe("lab canvas state", () => {
     const reconciled = reconcileInstancesWithSelection(
       [first, second],
       ["story-b"],
-      { sourceId: "default", stateGroupValuesForStory: () => ({}) },
+      { sourceId: "default", inputValuesForStory: () => ({}) },
     )
 
     expect(reconciled).toEqual([second])
   })
 
-  it("binds source, state groups, and camera position without resetting siblings", () => {
+  it("binds source, inputs, and camera position without resetting siblings", () => {
     resetObjectIdCounterForTest()
     const first = createObjectInstance("story-a", "default", {
       variant: "Ready",
@@ -73,11 +73,11 @@ describe("lab canvas state", () => {
     })
     expect(moved).toBeDefined()
     if (!moved) throw new Error("Expected moved object")
-    const [bound] = bindObjectStateGroup([moved], first.id, "variant", "Empty")
+    const [bound] = bindObjectInput([moved], first.id, "variant", "Empty")
 
     expect(bound).toMatchObject({
       sourceId: "sparse",
-      stateGroupValues: { variant: "Empty", foreground: "Ready" },
+      inputValues: { variant: "Empty", foreground: "Ready" },
       x: 10,
       y: 20,
     })
@@ -86,12 +86,12 @@ describe("lab canvas state", () => {
     expect(clampScale(1.5)).toBe(1.5)
   })
 
-  it("creates stateless object instances with an empty state group map", () => {
+  it("creates stateless object instances with an empty input map", () => {
     resetObjectIdCounterForTest()
     expect(createObjectInstance("pill", "default", {})).toMatchObject({
       storyId: "pill",
       sourceId: "default",
-      stateGroupValues: {},
+      inputValues: {},
     })
   })
 })

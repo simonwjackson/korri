@@ -30,8 +30,17 @@ const playStory: Story = {
   render: () => <div>Play story rendered</div>,
 }
 
+const atomStory: Story = {
+  id: "atom-pill",
+  layer: "atom",
+  name: "Pill",
+  render: () => <div>Atom baked render</div>,
+}
+
 const stories = new Map(
-  [continueStory, playStory].map(story => [story.id, story] as const),
+  [continueStory, playStory, atomStory].map(
+    story => [story.id, story] as const,
+  ),
 )
 
 const adapter: LabSurfaceAdapter = {
@@ -70,7 +79,7 @@ const context: LabContextValue = {
 }
 
 describe("LabDraggablePart", () => {
-  it("uses the variant state group value to render the selected story variant", () => {
+  it("uses the variant input value to render the selected story variant", () => {
     render(
       <LabContext.Provider value={context}>
         <LabDraggablePart
@@ -78,7 +87,7 @@ describe("LabDraggablePart", () => {
             id: "object-1",
             storyId: "detail-continue",
             sourceId: "dev",
-            stateGroupValues: { variant: "Play" },
+            inputValues: { variant: "Play" },
           }}
           story={continueStory}
           byId={stories}
@@ -94,5 +103,36 @@ describe("LabDraggablePart", () => {
 
     expect(screen.getByText("Play story rendered")).toBeTruthy()
     expect(screen.queryByText("Continue story rendered")).toBeNull()
+  })
+
+  it("lets adapters render atom parts through their real inputs", () => {
+    const adapterRendered = {
+      ...adapter,
+      renderSurfacePart: () => <div>Adapter rendered atom</div>,
+    }
+
+    render(
+      <LabContext.Provider value={{ ...context, adapter: adapterRendered }}>
+        <LabDraggablePart
+          instance={{
+            id: "object-1",
+            storyId: "atom-pill",
+            sourceId: "dev",
+            inputValues: {},
+          }}
+          story={atomStory}
+          byId={stories}
+          scale={1}
+          selected={false}
+          onSelect={() => undefined}
+          onBind={() => undefined}
+          onMove={() => undefined}
+          onRemove={mock(() => undefined)}
+        />
+      </LabContext.Provider>,
+    )
+
+    expect(screen.getByText("Adapter rendered atom")).toBeTruthy()
+    expect(screen.queryByText("Atom baked render")).toBeNull()
   })
 })

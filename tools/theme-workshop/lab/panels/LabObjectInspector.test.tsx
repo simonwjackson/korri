@@ -69,14 +69,14 @@ const byId = new Map(
 const adapter: LabSurfaceAdapter = {
   id: "test",
   devices: [],
-  surfacePartStateGroups: (story: Story) =>
+  surfacePartInputs: (story: Story) =>
     story.name === "Home"
       ? [
           {
             id: "foreground",
             label: "Foreground",
-            defaultStateId: "Ready",
-            states: [
+            defaultValue: "Ready",
+            options: [
               { id: "Ready", label: "Ready" },
               { id: "Running", label: "Running" },
             ],
@@ -97,9 +97,11 @@ const calibration: LabCalibrationController = {
   storageKey: "test",
 }
 
-function context(): LabContextValue {
+function context(
+  adapterOverride: LabSurfaceAdapter = adapter,
+): LabContextValue {
   return {
-    adapter,
+    adapter: adapterOverride,
     initialValues: {},
     themeId: "test",
     surfacePath: "/",
@@ -119,13 +121,13 @@ function context(): LabContextValue {
 
 function instance(
   storyId: string,
-  stateGroupValues: LabObjectInstance["stateGroupValues"],
+  inputValues: LabObjectInstance["inputValues"],
 ): LabObjectInstance {
   return {
     id: "object-1",
     storyId,
     sourceId: "dev",
-    stateGroupValues,
+    inputValues,
   }
 }
 
@@ -133,7 +135,8 @@ function renderInspector({
   story,
   object = instance(story.id, {}),
   onBind = mock(() => undefined),
-  onBindStateGroup = mock(() => undefined),
+  onBindInput = mock(() => undefined),
+  adapterOverride,
 }: {
   readonly story: Story
   readonly object?: LabObjectInstance
@@ -141,14 +144,11 @@ function renderInspector({
     id: string,
     patch: Partial<Pick<LabObjectInstance, "sourceId">>,
   ) => void
-  readonly onBindStateGroup?: (
-    id: string,
-    groupId: string,
-    stateId: string,
-  ) => void
+  readonly onBindInput?: (id: string, inputId: string, value: string) => void
+  readonly adapterOverride?: LabSurfaceAdapter
 }) {
   render(
-    <LabContext.Provider value={context()}>
+    <LabContext.Provider value={context(adapterOverride)}>
       <LabObjectInspector
         instance={object}
         story={story}
@@ -158,15 +158,15 @@ function renderInspector({
           { id: "cozy", label: "Cozy" },
         ]}
         onBind={onBind}
-        onBindStateGroup={onBindStateGroup}
+        onBindInput={onBindInput}
       />
     </LabContext.Provider>,
   )
-  return { onBind, onBindStateGroup }
+  return { onBind, onBindInput }
 }
 
 describe("LabObjectInspector", () => {
-  it("shows Game Detail Action as a state group without Home-only Foreground", () => {
+  it("shows Game Detail Action as an input without Home-only Foreground", () => {
     renderInspector({ story: detailContinue })
 
     expect(screen.getByLabelText("Action for Game Detail")).toBeTruthy()
@@ -174,7 +174,7 @@ describe("LabObjectInspector", () => {
     expect(screen.queryByLabelText("Foreground for Game Detail")).toBeNull()
   })
 
-  it("shows Shift Home Data and Foreground as peer state groups", () => {
+  it("shows Shift Home Data and Foreground as peer inputs", () => {
     renderInspector({
       story: homeReady,
       object: instance("home-ready", {
@@ -194,8 +194,8 @@ describe("LabObjectInspector", () => {
     expect(screen.queryByLabelText("State for Home")).toBeNull()
   })
 
-  it("sends every state group through the same binding path", () => {
-    const { onBindStateGroup } = renderInspector({ story: homeReady })
+  it("sends every input through the same binding path", () => {
+    const { onBindInput } = renderInspector({ story: homeReady })
 
     fireEvent.change(screen.getByLabelText("Data for Home"), {
       target: { value: "Empty" },
@@ -204,19 +204,15 @@ describe("LabObjectInspector", () => {
       target: { value: "Running" },
     })
 
-    expect(onBindStateGroup).toHaveBeenCalledWith(
-      "object-1",
-      "variant",
-      "Empty",
-    )
-    expect(onBindStateGroup).toHaveBeenCalledWith(
+    expect(onBindInput).toHaveBeenCalledWith("object-1", "variant", "Empty")
+    expect(onBindInput).toHaveBeenCalledWith(
       "object-1",
       "foreground",
       "Running",
     )
   })
 
-  it("omits state-group controls for a stateless atom", () => {
+  it("omits input controls for a stateless atom", () => {
     renderInspector({ story: pill })
 
     expect(screen.getByLabelText("Data source for Pill")).toBeTruthy()
@@ -238,6 +234,46 @@ describe("LabObjectInspector", () => {
     expect(screen.getByLabelText("Foreground for Home")).toHaveProperty(
       "value",
       "Ready",
+    )
+  })
+
+  it("renders ISO date-time inputs with a date-time field", () => {
+    const onBindInput = mock(() => undefined)
+    renderInspector({
+      story: homeReady,
+      object: instance("home-ready", {
+        clock: "2026-06-30T16:24:00.000Z",
+      }),
+      onBindInput,
+      adapterOverride: {
+        ...adapter,
+        surfacePartInputs: () => [
+          {
+            id: "clock",
+            label: "Clock",
+            defaultValue: "2026-06-30T16:24:00.000Z",
+            options: [
+              {
+                id: "2026-06-30T16:24:00.000Z",
+                label: "4:24 PM",
+              },
+            ],
+            control: { kind: "iso-datetime" },
+          },
+        ],
+      },
+    })
+
+    const clock = screen.getByLabelText("Clock for Home")
+    expect(clock).toHaveProperty("type", "datetime-local")
+    expect(clock).toHaveProperty("value", "2026-06-30T16:24")
+
+    fireEvent.change(clock, { target: { value: "2026-07-01T01:02" } })
+
+    expect(onBindInput).toHaveBeenCalledWith(
+      "object-1",
+      "clock",
+      "2026-07-01T01:02:00.000Z",
     )
   })
 })

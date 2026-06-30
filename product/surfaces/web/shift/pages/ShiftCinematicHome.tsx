@@ -26,7 +26,10 @@ import {
   type ShiftCineHintSpec,
   ShiftCineLegend,
 } from "../ui/molecules/ShiftCineLegend"
-import { ShiftStatusBar } from "../ui/molecules/ShiftStatusBar"
+import {
+  ShiftStatusBar,
+  type ShiftStatusBarProps,
+} from "../ui/molecules/ShiftStatusBar"
 import { ShiftCineHero } from "../ui/organisms/ShiftCineHero"
 import { ShiftCineRail } from "../ui/organisms/ShiftCineRail"
 
@@ -42,10 +45,65 @@ export interface ShiftCinematicGame {
   readonly favorite?: boolean
 }
 
+export interface ShiftImageWindow {
+  readonly start: number
+  readonly end: number
+}
+
+const TILE_IMAGE_RADIUS = 9
+const TILE_PRELOAD_RADIUS = 12
+const BACKDROP_PRELOAD_RADIUS = 2
+
+export function shiftImageWindow({
+  index,
+  total,
+  radius,
+}: {
+  readonly index: number
+  readonly total: number
+  readonly radius: number
+}): ShiftImageWindow {
+  if (total <= 0) return { start: 0, end: -1 }
+  return {
+    start: Math.max(0, index - radius),
+    end: Math.min(total - 1, index + radius),
+  }
+}
+
+export function shiftPreloadImageUrls(
+  games: readonly ShiftCinematicGame[],
+  index: number,
+): readonly string[] {
+  const tileWindow = shiftImageWindow({
+    index,
+    total: games.length,
+    radius: TILE_PRELOAD_RADIUS,
+  })
+  const backdropWindow = shiftImageWindow({
+    index,
+    total: games.length,
+    radius: BACKDROP_PRELOAD_RADIUS,
+  })
+  const urls = new Set<string>()
+  for (let i = tileWindow.start; i <= tileWindow.end; i++) {
+    const url = games[i]?.tileArtUrl
+    if (url) urls.add(url)
+  }
+  for (let i = backdropWindow.start; i <= backdropWindow.end; i++) {
+    const url = games[i]?.wideArtUrl
+    if (url) urls.add(url)
+  }
+  return Array.from(urls)
+}
+
 export interface ShiftCinematicHomeProps {
   readonly games: readonly ShiftCinematicGame[]
   readonly time?: string
   readonly avatarSrc?: string
+  /** Status-bar battery state; defaults to a mid-charge battery. */
+  readonly battery?: ShiftStatusBarProps["battery"]
+  /** Status-bar network state; defaults to connected. */
+  readonly network?: ShiftStatusBarProps["network"]
   /** Publish the focused game. Dual-screen hosts wire this to the shared
    * session; standalone prototype usage omits it (focus-only). */
   readonly onGameFocus?: (gameId: string) => void
@@ -64,6 +122,8 @@ export function ShiftCinematicHome({
   games,
   time = "4:24 PM",
   avatarSrc,
+  battery,
+  network,
   onGameFocus,
   onLaunch,
   launchState,
@@ -74,12 +134,69 @@ export function ShiftCinematicHome({
   const [trackX, setTrackX] = useState(0)
   const stageRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
+  const preloadedImageUrlsRef = useRef<Set<string>>(new Set())
   const game = games[index]
   const gameId = game?.id
+  const [backdropArtUrl, setBackdropArtUrl] = useState(
+    () => game?.wideArtUrl ?? "",
+  )
+  const tileImageWindow = useMemo(
+    () =>
+      shiftImageWindow({
+        index,
+        total: games.length,
+        radius: TILE_IMAGE_RADIUS,
+      }),
+    [index, games.length],
+  )
+  const preloadImageUrls = useMemo(
+    () => shiftPreloadImageUrls(games, index),
+    [games, index],
+  )
 
   useEffect(() => {
     if (gameId) onGameFocus?.(gameId)
   }, [gameId, onGameFocus])
+
+  useEffect(() => {
+    if (typeof Image === "undefined") return
+    for (const url of preloadImageUrls) {
+      if (preloadedImageUrlsRef.current.has(url)) continue
+      preloadedImageUrlsRef.current.add(url)
+      const image = new Image()
+      image.decoding = "async"
+      image.src = url
+      void image.decode?.().catch(() => undefined)
+    }
+  }, [preloadImageUrls])
+
+  useEffect(() => {
+    const nextArtUrl = game?.wideArtUrl ?? ""
+    if (!nextArtUrl) {
+      setBackdropArtUrl("")
+      return
+    }
+    if (nextArtUrl === backdropArtUrl) return
+    if (typeof Image === "undefined") {
+      setBackdropArtUrl(nextArtUrl)
+      return
+    }
+
+    let cancelled = false
+    const image = new Image()
+    image.decoding = "async"
+    const commit = () => {
+      if (!cancelled) setBackdropArtUrl(nextArtUrl)
+    }
+    image.onload = commit
+    image.onerror = commit
+    image.src = nextArtUrl
+    if (image.complete) commit()
+    else if (image.decode) void image.decode().then(commit, commit)
+    return () => {
+      cancelled = true
+    }
+  }, [game?.wideArtUrl, backdropArtUrl])
 
   // The scene reacts to the launch lifecycle in place — no modal. When a status
   // is showing, the hero + legend morph and the buttons remap (A = Retry / B =
@@ -185,11 +302,16 @@ export function ShiftCinematicHome({
       className="shift-cine intrinsic relative h-full w-full overflow-hidden"
     >
       <ShiftCineBackdrop
-        artUrl={game.wideArtUrl}
+        artUrl={backdropArtUrl}
         cooled={status?.tone === "failed"}
       />
 
-      <ShiftStatusBar time={time} avatarSrc={avatarSrc} />
+      <ShiftStatusBar
+        time={time}
+        avatarSrc={avatarSrc}
+        battery={battery}
+        network={network}
+      />
 
       <div className="shift-cine-stage" ref={stageRef}>
         <div className="shift-cine-midrow">
@@ -205,6 +327,7 @@ export function ShiftCinematicHome({
           index={index}
           trackX={trackX}
           trackRef={trackRef}
+          imageWindow={tileImageWindow}
           onTileFocus={setIndex}
           onTileActivate={activate}
         />

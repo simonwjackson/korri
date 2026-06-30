@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { DEFAULT_SOURCE_ID, initialValuesForBinding, isSourceStatus, sourcesForAdapter } from "./lab-source-state"
+import { DEFAULT_SOURCE_ID, initialValuesForBinding, isLabInputValue, sourcesForAdapter } from "./lab-source-state"
 import type { LabSurfaceAdapter } from "../surface-registry"
 
 const adapter: LabSurfaceAdapter = {
@@ -27,8 +27,8 @@ describe("lab source/state model", () => {
   })
 
   it("treats any non-empty tag as a valid dynamic state", () => {
-    expect(isSourceStatus("Ready")).toBe(true)
-    expect(isSourceStatus("LoadError")).toBe(true)
-    expect(isSourceStatus("")).toBe(false)
+    expect(isLabInputValue("Ready")).toBe(true)
+    expect(isLabInputValue("LoadError")).toBe(true)
+    expect(isLabInputValue("")).toBe(false)
   })
 })

@@ -1,11 +1,28 @@
-import { afterEach, describe, expect, it, mock } from "bun:test"
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import {
   type ShiftCinematicGame,
   ShiftCinematicHome,
+  shiftImageWindow,
+  shiftPreloadImageUrls,
 } from "./ShiftCinematicHome"
 
-afterEach(() => cleanup())
+const BrowserImage = globalThis.Image
+
+beforeEach(() => {
+  Object.defineProperty(globalThis, "Image", {
+    configurable: true,
+    value: undefined,
+  })
+})
+
+afterEach(() => {
+  Object.defineProperty(globalThis, "Image", {
+    configurable: true,
+    value: BrowserImage,
+  })
+  cleanup()
+})
 
 const games: readonly ShiftCinematicGame[] = [
   { id: "a", title: "Game A", tileArtUrl: "a.png", wideArtUrl: "aw.png" },
@@ -85,6 +102,67 @@ describe("ShiftCinematicHome onLaunch", () => {
     fireEvent.click(screen.getByRole("button", { name: "Game A" }))
     // No throw, tile is focusable without a handler.
     expect(screen.getByRole("button", { name: "Game A" })).toBeTruthy()
+  })
+
+  it("bounds mounted tile images while keeping every tile focusable", () => {
+    const manyGames = Array.from({ length: 30 }, (_, index) => ({
+      id: `game-${index}`,
+      title: `Game ${index}`,
+      tileArtUrl: `tile-${index}.png`,
+      wideArtUrl: `wide-${index}.png`,
+    })) satisfies readonly ShiftCinematicGame[]
+
+    const { container } = render(<ShiftCinematicHome games={manyGames} />)
+
+    expect(screen.getAllByRole("button")).toHaveLength(30)
+    expect(container.querySelectorAll(".shift-cine-tile img")).toHaveLength(10)
+    expect(
+      screen.getByRole("button", { name: "Game 0" }).querySelector("img"),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("button", { name: "Game 29" }).querySelector("img"),
+    ).toBeNull()
+
+    fireEvent.focus(screen.getByRole("button", { name: "Game 15" }))
+
+    expect(container.querySelectorAll(".shift-cine-tile img")).toHaveLength(19)
+    expect(
+      screen.getByRole("button", { name: "Game 15" }).querySelector("img"),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("button", { name: "Game 0" }).querySelector("img"),
+    ).toBeNull()
+  })
+})
+
+describe("ShiftCinematicHome image windows", () => {
+  it("selects a bounded image window around focus", () => {
+    expect(shiftImageWindow({ index: 0, total: 30, radius: 9 })).toEqual({
+      start: 0,
+      end: 9,
+    })
+    expect(shiftImageWindow({ index: 15, total: 30, radius: 9 })).toEqual({
+      start: 6,
+      end: 24,
+    })
+  })
+
+  it("preloads nearby tile art and only adjacent backdrop art", () => {
+    const manyGames = Array.from({ length: 30 }, (_, index) => ({
+      id: `game-${index}`,
+      title: `Game ${index}`,
+      tileArtUrl: `tile-${index}.png`,
+      wideArtUrl: `wide-${index}.png`,
+    })) satisfies readonly ShiftCinematicGame[]
+
+    const urls = shiftPreloadImageUrls(manyGames, 15)
+
+    expect(urls).toContain("tile-3.png")
+    expect(urls).toContain("tile-27.png")
+    expect(urls).not.toContain("tile-2.png")
+    expect(urls).toContain("wide-13.png")
+    expect(urls).toContain("wide-17.png")
+    expect(urls).not.toContain("wide-12.png")
   })
 })
 

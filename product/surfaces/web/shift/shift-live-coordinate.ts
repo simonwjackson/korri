@@ -6,11 +6,15 @@
  *
  * Written by the route (a cheap module-global assignment with no effect on
  * production rendering) and read only by the design-tool capture path. The
- * preview pins still win over this in `readShiftCurrentCoordinate`.
+ * dials themselves drive real source atoms; this seam only remembers what the
+ * mounted route most recently resolved so "Pin current" can capture it.
  */
 import type { LaunchState } from "@platform/library/launch-state"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import type { ShiftCatalogState } from "./catalog/shift-catalog-state"
+import type { ShiftClockIso } from "./shift-clock-state"
+import type { ShiftNetworkStatus } from "./shift-network-state"
+import type { ShiftPowerState } from "./shift-power-state"
 
 export type ShiftLiveCoordinateOwner = object
 
@@ -20,6 +24,12 @@ let liveLaunch: LaunchState["_tag"] | null = null
 let liveLaunchOwner: ShiftLiveCoordinateOwner | null = null
 let liveForeground: ForegroundSessionGateState["_tag"] | null = null
 let liveForegroundOwner: ShiftLiveCoordinateOwner | null = null
+let livePower: ShiftPowerState | null = null
+let livePowerOwner: ShiftLiveCoordinateOwner | null = null
+let liveClock: ShiftClockIso | null = null
+let liveClockOwner: ShiftLiveCoordinateOwner | null = null
+let liveNetwork: ShiftNetworkStatus | null = null
+let liveNetworkOwner: ShiftLiveCoordinateOwner | null = null
 
 export function createShiftLiveCoordinateOwner(): ShiftLiveCoordinateOwner {
   return {}
@@ -76,12 +86,57 @@ export function clearShiftLiveForeground(
   liveForegroundOwner = null
 }
 
+export function setShiftLivePower(
+  tag: ShiftPowerState,
+  owner?: ShiftLiveCoordinateOwner,
+): void {
+  livePower = tag
+  livePowerOwner = owner ?? null
+}
+
+export function clearShiftLivePower(owner?: ShiftLiveCoordinateOwner): void {
+  if (!shouldClear(livePowerOwner, owner)) return
+  livePower = null
+  livePowerOwner = null
+}
+
+export function setShiftLiveClock(
+  iso: ShiftClockIso,
+  owner?: ShiftLiveCoordinateOwner,
+): void {
+  liveClock = iso
+  liveClockOwner = owner ?? null
+}
+
+export function clearShiftLiveClock(owner?: ShiftLiveCoordinateOwner): void {
+  if (!shouldClear(liveClockOwner, owner)) return
+  liveClock = null
+  liveClockOwner = null
+}
+
+export function setShiftLiveNetwork(
+  status: ShiftNetworkStatus,
+  owner?: ShiftLiveCoordinateOwner,
+): void {
+  liveNetwork = status
+  liveNetworkOwner = owner ?? null
+}
+
+export function clearShiftLiveNetwork(owner?: ShiftLiveCoordinateOwner): void {
+  if (!shouldClear(liveNetworkOwner, owner)) return
+  liveNetwork = null
+  liveNetworkOwner = null
+}
+
 export function clearShiftLiveCoordinate(
   owner?: ShiftLiveCoordinateOwner,
 ): void {
   clearShiftLiveData(owner)
   clearShiftLiveLaunch(owner)
   clearShiftLiveForeground(owner)
+  clearShiftLivePower(owner)
+  clearShiftLiveClock(owner)
+  clearShiftLiveNetwork(owner)
 }
 
 export function getShiftLiveData(): ShiftCatalogState["_tag"] | null {
@@ -96,4 +151,16 @@ export function getShiftLiveForeground():
   | ForegroundSessionGateState["_tag"]
   | null {
   return liveForeground
+}
+
+export function getShiftLivePower(): ShiftPowerState | null {
+  return livePower
+}
+
+export function getShiftLiveClock(): ShiftClockIso | null {
+  return liveClock
+}
+
+export function getShiftLiveNetwork(): ShiftNetworkStatus | null {
+  return liveNetwork
 }

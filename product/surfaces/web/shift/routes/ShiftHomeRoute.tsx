@@ -41,15 +41,24 @@ import { ShiftHomeDefectBody } from "../pages/ShiftHomeDefectBody"
 import { ShiftHomeEmptyBody } from "../pages/ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "../pages/ShiftHomeLoadErrorBody"
 import { ShiftHomeLoadingBody } from "../pages/ShiftHomeLoadingBody"
+import { shiftClockIsoAtom, shiftClockLabelForIso } from "../shift-clock-state"
 import {
   clearShiftLiveCoordinate,
   clearShiftLiveLaunch,
   createShiftLiveCoordinateOwner,
   type ShiftLiveCoordinateOwner,
+  setShiftLiveClock,
   setShiftLiveData,
   setShiftLiveForeground,
   setShiftLiveLaunch,
+  setShiftLiveNetwork,
+  setShiftLivePower,
 } from "../shift-live-coordinate"
+import { shiftNetworkStatusAtom } from "../shift-network-state"
+import {
+  shiftBatteryPropsForPowerState,
+  shiftPowerStateAtom,
+} from "../shift-power-state"
 import { playtimeLabel, relativeLastPlayed } from "./cinematic-play-labels"
 
 const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
@@ -160,6 +169,9 @@ export function ShiftHomeRoute() {
   const liveForeground = foregroundStateFromAtom(
     useAtomValue(foregroundSessionGateStateAtom),
   )
+  const livePower = useAtomValue(shiftPowerStateAtom)
+  const liveClockIso = useAtomValue(shiftClockIsoAtom)
+  const liveNetwork = useAtomValue(shiftNetworkStatusAtom)
   // Foreground reads only its real edge (`foregroundSessionGateStateAtom`); a
   // design tool drives that atom's source in the mounted registry.
   const foreground = liveForeground
@@ -167,15 +179,25 @@ export function ShiftHomeRoute() {
   // drives that same atom's source in the mounted registry, so there is no
   // catalog preview branch here — the lab pins by swapping the real source.
   const snapshot = live
-  // Publish the resolved data and foreground states for the design-tool capture
-  // seam (inert in production — nothing reads them there). Foreground is
-  // independent of Data, so publish it at the route level rather than only from
-  // the Ready body.
+  // Publish the resolved data, foreground, power, clock, and network values for the design-tool
+  // capture seam (inert in production — nothing reads them there). Foreground
+  // and Power are independent of Data, so publish them at the route level rather
+  // than only from the Ready body.
   const dataTag = ShiftCatalogState.fromResult(snapshot)._tag
   useEffect(() => {
     setShiftLiveData(dataTag, liveCoordinateOwner)
     setShiftLiveForeground(foreground._tag, liveCoordinateOwner)
-  }, [dataTag, foreground._tag, liveCoordinateOwner])
+    setShiftLivePower(livePower, liveCoordinateOwner)
+    setShiftLiveClock(liveClockIso, liveCoordinateOwner)
+    setShiftLiveNetwork(liveNetwork, liveCoordinateOwner)
+  }, [
+    dataTag,
+    foreground._tag,
+    livePower,
+    liveClockIso,
+    liveNetwork,
+    liveCoordinateOwner,
+  ])
   useEffect(
     () => () => clearShiftLiveCoordinate(liveCoordinateOwner),
     [liveCoordinateOwner],
@@ -199,6 +221,10 @@ function NavigatingReadyBody({
 }) {
   const ready = useShiftCatalogCase("Ready")
   const launch = useLibraryLaunchController()
+  const power = useAtomValue(shiftPowerStateAtom)
+  const clockIso = useAtomValue(shiftClockIsoAtom)
+  const network = useAtomValue(shiftNetworkStatusAtom)
+  const battery = shiftBatteryPropsForPowerState(power)
   const liveForeground = foregroundStateFromAtom(
     useAtomValue(foregroundSessionGateStateAtom),
   )
@@ -247,6 +273,9 @@ function NavigatingReadyBody({
         <ShiftCinematicHome
           games={games.map(toCinematicGame)}
           avatarSrc={AVATAR}
+          time={shiftClockLabelForIso(clockIso)}
+          battery={battery}
+          network={network}
           launchState={launchState}
           onGameFocus={publishGameFocus}
           onLaunch={makeLaunchHandler(games, launch.start)}

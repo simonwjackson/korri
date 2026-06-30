@@ -15,7 +15,19 @@ import {
   shiftCatalogFixtureEntries,
   shiftCatalogSourceLayers,
 } from "@product/surfaces/web/shift/shift-catalog-state-samples"
+import {
+  DEFAULT_SHIFT_CLOCK_ISO,
+  shiftClockIsoAtom,
+} from "@product/surfaces/web/shift/shift-clock-state"
 import { shiftForegroundSourceLayers } from "@product/surfaces/web/shift/shift-foreground-preview"
+import {
+  DEFAULT_SHIFT_NETWORK_STATUS,
+  shiftNetworkStatusAtom,
+} from "@product/surfaces/web/shift/shift-network-state"
+import {
+  DEFAULT_SHIFT_POWER_STATE,
+  shiftPowerStateAtom,
+} from "@product/surfaces/web/shift/shift-power-state"
 import { Layer } from "effect"
 import type { LabSourceOption } from "../model/lab-source-state"
 import { makeSeededProseqlLibrarySource } from "./shift-proseql-seed"
@@ -42,6 +54,9 @@ export async function makeSeedInitialValues() {
       makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }),
     ],
     [foregroundSessionStatusLayerAtom, shiftForegroundSourceLayers.Ready()],
+    [shiftPowerStateAtom, DEFAULT_SHIFT_POWER_STATE],
+    [shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO],
+    [shiftNetworkStatusAtom, DEFAULT_SHIFT_NETWORK_STATUS],
   ] as const
 }
 

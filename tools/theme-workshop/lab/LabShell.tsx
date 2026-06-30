@@ -20,8 +20,8 @@ import {
 import { useLab } from "./Lab.context"
 import { knobStyle } from "./model/lab-calibration-state"
 import {
+  bindObjectInput,
   bindObjectInstance,
-  bindObjectStateGroup,
   type LabCanvasView,
   type LabObjectInstance,
   type LabWorkshopCommand,
@@ -30,18 +30,18 @@ import {
   reconcileInstancesWithSelection,
 } from "./model/lab-canvas-state"
 import {
-  objectStateGroupsForStory,
-  resolveObjectStateGroupValues,
-} from "./model/lab-object-state-groups"
+  objectInputsForStory,
+  resolveObjectInputValues,
+} from "./model/lab-object-inputs"
 import {
   buildStoryIndex,
   firstStateFamilyStory,
   statesForStory,
 } from "./model/lab-part-model"
 import {
+  DEFAULT_INPUT_VALUE,
   DEFAULT_SOURCE_ID,
-  DEFAULT_STATE_ID,
-  type SourceStatus,
+  type LabInputValue,
   sourcesForAdapter,
 } from "./model/lab-source-state"
 import { LabDeviceInspector } from "./panels/LabDeviceInspector"
@@ -103,8 +103,8 @@ export function LabShell() {
     id: string,
     patch: Partial<Pick<LabObjectInstance, "sourceId">>,
   ) => setInstances(prev => bindObjectInstance(prev, id, patch))
-  const bindObjectState = (id: string, groupId: string, stateId: string) =>
-    setInstances(prev => bindObjectStateGroup(prev, id, groupId, stateId))
+  const bindObjectInputValue = (id: string, inputId: string, value: string) =>
+    setInstances(prev => bindObjectInput(prev, id, inputId, value))
   // Parts are the surface's static discovered *.part.tsx components only — never
   // the surface's routes. The live, router-driven surface lives in the Preview
   // view; Parts stay isolated from the router.
@@ -133,9 +133,9 @@ export function LabShell() {
   const defaultStateId =
     states.find(state => state.id.toLowerCase() === "ready")?.id ??
     states[0]?.id ??
-    DEFAULT_STATE_ID
+    DEFAULT_INPUT_VALUE
   const [activeStateId, setActiveStateId] =
-    useState<SourceStatus>(defaultStateId)
+    useState<LabInputValue>(defaultStateId)
 
   // The page-axis lifecycle — active screen's axes, the pinned/Live map, derived
   // Inspect/Live mode, pin/release side effects (incl. nested-axis release),
@@ -200,11 +200,11 @@ export function LabShell() {
     setInstances(prev =>
       reconcileInstancesWithSelection(prev, selectedIds, {
         sourceId: activeSourceId,
-        stateGroupValuesForStory: storyId => {
+        inputValuesForStory: storyId => {
           const story = index.byId.get(storyId)
           if (!story) return {}
-          return resolveObjectStateGroupValues(
-            objectStateGroupsForStory(story, index.byId, adapter),
+          return resolveObjectInputValues(
+            objectInputsForStory(story, index.byId, adapter),
             {},
           )
         },
@@ -289,7 +289,7 @@ export function LabShell() {
         byId={index.byId}
         sources={sources}
         onBind={bindObject}
-        onBindStateGroup={bindObjectState}
+        onBindInput={bindObjectInputValue}
       />
     ) : (
       <div className="pt-inspector">

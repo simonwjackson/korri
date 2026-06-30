@@ -3,10 +3,10 @@ import type { Story } from "../../types"
 import { useLab } from "../Lab.context"
 import type { LabObjectInstance } from "../model/lab-canvas-state"
 import {
-  objectStateGroupsForStory,
-  resolveObjectStateGroupValues,
-  variantStateGroup,
-} from "../model/lab-object-state-groups"
+  objectInputsForStory,
+  resolveObjectInputValues,
+  variantInput,
+} from "../model/lab-object-inputs"
 import { stateVariantFor } from "../model/lab-part-model"
 import { LabPreviewBoundary } from "../model/lab-preview-boundary"
 import { LAB_BIND_MIME } from "../panels/LabSourcesPanel"
@@ -21,8 +21,8 @@ function parseBind(value: string): { axis: "sourceId"; value: string } | null {
 /**
  * One placed part on the Compose board: the part rendered inside a single
  * logical screen frame with a drag bar carrying only identity, drag, and
- * remove. Its bindings (data source plus state groups) are edited in the
- * selection-scoped Inspector, which scales to any number of groups. Compose is
+ * remove. Its bindings (data source plus product inputs) are edited in the
+ * selection-scoped Inspector, which scales to any number of inputs. Compose is
  * device-agnostic: the selected screen contributes aspect ratio only.
  */
 export function LabDraggablePart({
@@ -54,18 +54,16 @@ export function LabDraggablePart({
   const { adapter } = useLab()
   const x = instance.x ?? 24
   const y = instance.y ?? 24
-  const groups = objectStateGroupsForStory(story, byId, adapter)
-  const stateGroupValues = resolveObjectStateGroupValues(
-    groups,
-    instance.stateGroupValues,
-  )
-  const variantGroup = variantStateGroup(groups)
-  // Fall back to the part's own representative when the requested state isn't in
-  // its family (e.g. stale stored state), so a card always renders something.
-  const variant = variantGroup
+  const inputs = objectInputsForStory(story, byId, adapter)
+  const inputValues = resolveObjectInputValues(inputs, instance.inputValues)
+  const selectedVariantInput = variantInput(inputs)
+  // Fall back to the part's own representative when the requested variant tag
+  // is stale or unavailable, so a card always renders something.
+  const variant = selectedVariantInput
     ? (stateVariantFor(
         story,
-        stateGroupValues[variantGroup.id] ?? variantGroup.defaultStateId,
+        inputValues[selectedVariantInput.id] ??
+          selectedVariantInput.defaultValue,
         byId,
       ) ?? story)
     : story
@@ -75,17 +73,16 @@ export function LabDraggablePart({
     variant.layer === "template"
 
   const renderBody = () => {
-    // Surface/page parts of a binding-capable adapter render through the real
-    // data edge, seeded for this object's source + state groups (e.g. Data and
-    // Foreground), so Inspector dropdowns swap the actual app-edge data. Other
-    // parts (atoms/molecules) keep their baked render.
-    const node =
-      adapter.renderSurfacePart && fill
-        ? adapter.renderSurfacePart(variant, {
-            sourceId: instance.sourceId,
-            stateGroupValues,
-          })
-        : variant.render()
+    // A binding-capable adapter may render any placed part through the real
+    // data edge or component input it owns. Page parts use app-edge data; atoms
+    // and molecules can use the same selected input values to feed their real
+    // component props instead of falling back to pre-baked snapshots.
+    const node = adapter.renderSurfacePart
+      ? adapter.renderSurfacePart(variant, {
+          sourceId: instance.sourceId,
+          inputValues,
+        })
+      : variant.render()
     const scoped = adapter.previewScope ? adapter.previewScope(node) : node
     return (
       <div className="lab-part-mount" data-fill={fill ? "true" : undefined}>

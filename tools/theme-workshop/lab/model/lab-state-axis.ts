@@ -1,4 +1,5 @@
 import { humanizeTag } from "@platform/state/state-variants"
+import type { LabInputControl } from "./lab-source-state"
 
 /**
  * A page part exposes one or more named state AXES — each a real state machine
@@ -54,6 +55,7 @@ export interface LabStateAxis {
   readonly label: string
   readonly liveLabel: string
   readonly states: readonly LabStateAxisOption[]
+  readonly control?: LabInputControl
   /** Pin the surface's preview singleton to this state's representative sample. */
   readonly pin: (stateId: string) => void
   /** Release every pin on this axis so the live machine drives it again. */

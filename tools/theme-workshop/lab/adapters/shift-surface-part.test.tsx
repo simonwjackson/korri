@@ -35,6 +35,20 @@ const gameDetailStory: Story = {
   render: () => <div>Game Detail selected page</div>,
 }
 
+const batteryStory: Story = {
+  id: "shift-atom-shiftbattery-battery",
+  layer: "atom",
+  name: "Battery",
+  render: () => <div>Pre-baked battery snapshot</div>,
+}
+
+const statusBarStory: Story = {
+  id: "shift-molecule-shiftstatusbar-status-bar",
+  layer: "molecule",
+  name: "Status Bar",
+  render: () => <div>Pre-baked status bar snapshot</div>,
+}
+
 afterEach(cleanup)
 
 describe("renderShiftSurfacePart (Workshop edge render)", () => {
@@ -43,7 +57,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "dev",
-          stateGroupValues: { variant: "Ready" },
+          inputValues: { variant: "Ready" },
         })}
       </div>,
     )
@@ -57,7 +71,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "cozy",
-          stateGroupValues: { variant: "Ready" },
+          inputValues: { variant: "Ready" },
         })}
       </div>,
     )
@@ -71,7 +85,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "retro",
-          stateGroupValues: { variant: "Ready" },
+          inputValues: { variant: "Ready" },
         })}
       </div>,
     )
@@ -85,7 +99,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "cozy",
-          stateGroupValues: { variant: "Empty" },
+          inputValues: { variant: "Empty" },
         })}
       </div>,
     )
@@ -99,7 +113,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "cozy",
-          stateGroupValues: { variant: "Ready" },
+          inputValues: { variant: "Ready" },
         })}
       </div>,
     )
@@ -122,7 +136,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "cozy",
-          stateGroupValues: { variant: "Ready" },
+          inputValues: { variant: "Ready" },
         })}
       </div>,
     )
@@ -137,7 +151,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(gameDetailStory, {
           sourceId: "cozy",
-          stateGroupValues: { action: "Continue" },
+          inputValues: { action: "Continue" },
         })}
       </div>,
     )
@@ -153,12 +167,128 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "cozy",
-          stateGroupValues: { variant: "Ready", foreground: "Running" },
+          inputValues: { variant: "Ready", foreground: "Running" },
         })}
       </div>,
     )
     await waitFor(() => {
       expect(screen.getByText("Another game is running")).toBeTruthy()
     })
+  })
+
+  it("feeds Battery power into the real Battery atom instead of using the baked render", () => {
+    const { container } = render(
+      <div>
+        {renderShiftSurfacePart(batteryStory, {
+          sourceId: "dev",
+          inputValues: { power: "Charging" },
+        })}
+      </div>,
+    )
+
+    expect(screen.queryByText("Pre-baked battery snapshot")).toBeNull()
+    expect(container.querySelector(".lucide-battery-charging")).toBeTruthy()
+  })
+
+  it("feeds Status Bar power through its real Battery child", () => {
+    const { container } = render(
+      <div>
+        {renderShiftSurfacePart(statusBarStory, {
+          sourceId: "dev",
+          inputValues: { power: "Low" },
+        })}
+      </div>,
+    )
+
+    expect(screen.queryByText("Pre-baked status bar snapshot")).toBeNull()
+    expect(container.querySelector(".lucide-battery-low")).toBeTruthy()
+  })
+
+  it("feeds Status Bar clock text through the real Status Bar molecule", () => {
+    render(
+      <div>
+        {renderShiftSurfacePart(statusBarStory, {
+          sourceId: "dev",
+          inputValues: { clock: "2026-06-30T23:08:00.000Z" },
+        })}
+      </div>,
+    )
+
+    expect(screen.queryByText("Pre-baked status bar snapshot")).toBeNull()
+    expect(screen.getByText("11:08 PM")).toBeTruthy()
+  })
+
+  it("feeds Status Bar network status through the real Status Bar molecule", () => {
+    const { container } = render(
+      <div>
+        {renderShiftSurfacePart(statusBarStory, {
+          sourceId: "dev",
+          inputValues: { network: "Disconnected" },
+        })}
+      </div>,
+    )
+
+    expect(screen.queryByText("Pre-baked status bar snapshot")).toBeNull()
+    expect(container.querySelector(".lucide-wifi-off")).toBeTruthy()
+  })
+
+  it("feeds Home power through the full Home page's real Status Bar", async () => {
+    const { container } = render(
+      <div>
+        {renderShiftSurfacePart(homeStory, {
+          sourceId: "cozy",
+          inputValues: {
+            variant: "Ready",
+            foreground: "Ready",
+            power: "Charging",
+          },
+        })}
+      </div>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Aurora Drift")).toBeTruthy()
+    })
+    expect(container.querySelector(".lucide-battery-charging")).toBeTruthy()
+  })
+
+  it("feeds Home clock text through the full Home page's real Status Bar", async () => {
+    render(
+      <div>
+        {renderShiftSurfacePart(homeStory, {
+          sourceId: "cozy",
+          inputValues: {
+            variant: "Ready",
+            foreground: "Ready",
+            clock: "2026-06-30T09:41:00.000Z",
+          },
+        })}
+      </div>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Aurora Drift")).toBeTruthy()
+    })
+    expect(screen.getByText("9:41 AM")).toBeTruthy()
+  })
+
+  it("feeds Home network status through the full Home page's real Status Bar", async () => {
+    const { container } = render(
+      <div>
+        {renderShiftSurfacePart(homeStory, {
+          sourceId: "cozy",
+          inputValues: {
+            variant: "Ready",
+            foreground: "Ready",
+            network: "Disconnected",
+          },
+        })}
+      </div>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Aurora Drift")).toBeTruthy()
+    })
+    expect(container.querySelector(".lucide-wifi-off")).toBeTruthy()
   })
 })

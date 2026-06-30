@@ -1,7 +1,8 @@
 /**
  * Read the Shift surface's current addressable coordinate — `{ route, data,
- * launch, foreground }` — so a design tool can capture a live exploration back
- * into a frozen Inspect pin (the Live → Inspect direction).
+ * launch, foreground, power, clock, network }` — so a design tool can capture a
+ * live exploration back into a frozen Inspect pin (the Live → Inspect
+ * direction).
  *
  * Data, launch, and foreground are read from what the mounted route actually
  * resolved (driven by real source edges / the real launch controller, not
@@ -11,17 +12,32 @@
 import type { LaunchState } from "@platform/library/launch-state"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import type { ShiftCatalogState } from "./catalog/shift-catalog-state"
+import { DEFAULT_SHIFT_CLOCK_ISO } from "./shift-clock-state"
 import {
+  getShiftLiveClock,
   getShiftLiveData,
   getShiftLiveForeground,
   getShiftLiveLaunch,
+  getShiftLiveNetwork,
+  getShiftLivePower,
 } from "./shift-live-coordinate"
+import {
+  DEFAULT_SHIFT_NETWORK_STATUS,
+  type ShiftNetworkStatus,
+} from "./shift-network-state"
+import {
+  DEFAULT_SHIFT_POWER_STATE,
+  type ShiftPowerState,
+} from "./shift-power-state"
 
 export interface ShiftCoordinate {
   readonly route: string
   readonly data: ShiftCatalogState["_tag"]
   readonly launch: LaunchState["_tag"]
   readonly foreground: ForegroundSessionGateState["_tag"]
+  readonly power: ShiftPowerState
+  readonly clock: string
+  readonly network: ShiftNetworkStatus
 }
 
 export function readShiftCurrentCoordinate(route: string): ShiftCoordinate {
@@ -32,5 +48,8 @@ export function readShiftCurrentCoordinate(route: string): ShiftCoordinate {
   const launch = getShiftLiveLaunch() ?? "Idle"
   // Foreground reflects what the mounted route resolved from its real edge.
   const foreground = getShiftLiveForeground() ?? "Ready"
-  return { route, data, launch, foreground }
+  const power = getShiftLivePower() ?? DEFAULT_SHIFT_POWER_STATE
+  const clock = getShiftLiveClock() ?? DEFAULT_SHIFT_CLOCK_ISO
+  const network = getShiftLiveNetwork() ?? DEFAULT_SHIFT_NETWORK_STATUS
+  return { route, data, launch, foreground, power, clock, network }
 }

@@ -1,17 +1,18 @@
 import type { Story } from "../../types"
+import { LabIsoDateTimeInput } from "../components/LabIsoDateTimeInput"
 import { useLab } from "../Lab.context"
 import type { LabObjectInstance } from "../model/lab-canvas-state"
 import {
-  objectStateGroupsForStory,
-  resolveObjectStateGroupValues,
-} from "../model/lab-object-state-groups"
-import type { LabSourceOption, SourceStatus } from "../model/lab-source-state"
+  objectInputsForStory,
+  resolveObjectInputValues,
+} from "../model/lab-object-inputs"
+import type { LabInputValue, LabSourceOption } from "../model/lab-source-state"
 
 /**
  * Inspector scoped to the selected Compose object. Its bindings — data source
- * plus zero/one/many state groups — stack vertically and scroll instead of
- * crowding the object's title bar horizontally. No state group is special to the
- * Inspector; a group's render role is consumed by the canvas, not by this UI.
+ * plus zero/one/many product inputs — stack vertically and scroll instead of
+ * crowding the object's title bar horizontally. No input is special to the
+ * Inspector; an input's render role is consumed by the canvas, not by this UI.
  */
 export function LabObjectInspector({
   instance,
@@ -19,7 +20,7 @@ export function LabObjectInspector({
   byId,
   sources,
   onBind,
-  onBindStateGroup,
+  onBindInput,
 }: {
   readonly instance: LabObjectInstance
   readonly story: Story
@@ -29,18 +30,15 @@ export function LabObjectInspector({
     id: string,
     patch: Partial<Pick<LabObjectInstance, "sourceId">>,
   ) => void
-  readonly onBindStateGroup: (
+  readonly onBindInput: (
     id: string,
-    groupId: string,
-    stateId: SourceStatus,
+    inputId: string,
+    value: LabInputValue,
   ) => void
 }) {
   const { adapter } = useLab()
-  const groups = objectStateGroupsForStory(story, byId, adapter)
-  const values = resolveObjectStateGroupValues(
-    groups,
-    instance.stateGroupValues,
-  )
+  const inputs = objectInputsForStory(story, byId, adapter)
+  const values = resolveObjectInputValues(inputs, instance.inputValues)
 
   return (
     <div className="pt-inspector">
@@ -67,24 +65,41 @@ export function LabObjectInspector({
             ))}
           </select>
         </label>
-        {groups.map(group => (
-          <label key={group.id} className="pt-bind-row">
-            <span className="pt-bind-label">{group.label}</span>
-            <select
-              value={values[group.id] ?? group.defaultStateId}
-              aria-label={`${group.label} for ${story.name}`}
-              onChange={event =>
-                onBindStateGroup(instance.id, group.id, event.target.value)
-              }
-            >
-              {group.states.map(state => (
-                <option key={state.id} value={state.id}>
-                  {state.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
+        {inputs.map(input => {
+          const label = `${input.label} for ${story.name}`
+          const value = values[input.id] ?? input.defaultValue
+          if (input.control?.kind === "iso-datetime") {
+            return (
+              <div key={input.id} className="pt-bind-row">
+                <span className="pt-bind-label">{input.label}</span>
+                <LabIsoDateTimeInput
+                  value={value}
+                  options={input.options}
+                  ariaLabel={label}
+                  onChange={next => onBindInput(instance.id, input.id, next)}
+                />
+              </div>
+            )
+          }
+          return (
+            <label key={input.id} className="pt-bind-row">
+              <span className="pt-bind-label">{input.label}</span>
+              <select
+                value={value}
+                aria-label={label}
+                onChange={event =>
+                  onBindInput(instance.id, input.id, event.target.value)
+                }
+              >
+                {input.options.map(option => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
+        })}
       </div>
     </div>
   )
