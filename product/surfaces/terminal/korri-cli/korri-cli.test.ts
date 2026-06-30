@@ -234,7 +234,9 @@ describe("korri CLI", () => {
       expect(secondSummary.merge).toMatchObject({
         storageSkipped: 1,
         libraryAdded: 0,
-        librarySkipped: 1,
+        libraryDeduplicated: 1,
+        identityBackfilled: 1,
+        librarySkipped: 0,
       })
     } finally {
       if (previousDataHome === undefined) delete process.env.XDG_DATA_HOME
@@ -246,6 +248,84 @@ describe("korri CLI", () => {
       else process.env.KORRI_FIND_BIN = previousFindBin
       await rm(root, { recursive: true, force: true })
       await rm(dataHome, { recursive: true, force: true })
+    }
+  })
+
+  it("deduplicates explicit release scans against an authored config entry", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-scout-dedupe-root-"))
+    const configRoot = await mkdtemp(
+      join(tmpdir(), "korri-scout-dedupe-config-"),
+    )
+    const previousFindBin = process.env.KORRI_FIND_BIN
+    try {
+      const romRoot = join(root, "roms")
+      const config = join(configRoot, "korri.yaml")
+      await mkdir(join(romRoot, "gba"), { recursive: true })
+      await writeFile(
+        join(romRoot, "gba", "Metroid Fusion.gba"),
+        "metroid-bytes",
+      )
+      await writeFile(
+        config,
+        [
+          "storage:",
+          "  sd-releases:",
+          `    root: ${romRoot}`,
+          "library:",
+          "  metroid-fusion-authored:",
+          "    title: Authored Metroid",
+          "    releases:",
+          "      - id: gba",
+          "        system: gba",
+          "        target:",
+          "          kind: file",
+          "          storage: sd-releases",
+          "          path: gba/Metroid Fusion.gba",
+          "",
+        ].join("\n"),
+      )
+      process.env.KORRI_FIND_BIN = resolveFromPath("find")
+
+      const result = await captureCliOutput(() =>
+        Effect.runPromiseExit(
+          runKorriCli([
+            "scout",
+            "scan",
+            "releases",
+            "--root",
+            romRoot,
+            "--storage",
+            "sd-releases",
+            "--config",
+            config,
+          ]),
+        ),
+      )
+
+      expect(result.exitCode).toBe(0)
+      const summary = JSON.parse(result.stdout) as {
+        readonly report: { readonly deduplicated: number }
+        readonly merge: {
+          readonly libraryAdded: number
+          readonly libraryDeduplicated: number
+          readonly identityBackfilled: number
+        }
+      }
+      expect(summary.report.deduplicated).toBe(1)
+      expect(summary.merge).toMatchObject({
+        libraryAdded: 0,
+        libraryDeduplicated: 1,
+        identityBackfilled: 1,
+      })
+      const generated = await readFile(config, "utf8")
+      expect(generated).toContain("metroid-fusion-authored")
+      expect(generated).not.toContain("metroid-fusion:")
+      expect(generated).toContain("identity:")
+    } finally {
+      if (previousFindBin === undefined) delete process.env.KORRI_FIND_BIN
+      else process.env.KORRI_FIND_BIN = previousFindBin
+      await rm(root, { recursive: true, force: true })
+      await rm(configRoot, { recursive: true, force: true })
     }
   })
 

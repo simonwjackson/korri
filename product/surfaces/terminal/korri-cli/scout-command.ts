@@ -1,9 +1,8 @@
 import { dirname } from "node:path"
 import { korriDataPath, type XdgPathEnv } from "@platform/config/xdg-paths"
 import {
-  mergeReleaseCandidateConfig,
+  scanAndMergeReleaseCandidates,
   scanConfiguredReleaseCandidates,
-  scanReleaseCandidates,
 } from "@platform/library/discovery/release-candidate-scan"
 import { Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
@@ -17,52 +16,17 @@ const scoutScanReleasesCommand = Command.make(
   },
   ({ root, storage, config }) =>
     Effect.promise(async () => {
-      const result = await scanReleaseCandidates({
-        root,
-        storage,
-        findBinary: optionalEnv("KORRI_FIND_BIN"),
-      })
-      if (result.status === "diagnostic") {
-        console.log(JSON.stringify(result, null, 2))
-        process.exitCode = 1
-        return
-      }
-
       const configPath =
         config._tag === "Some" ? config.value : defaultScoutConfigPath()
-      try {
-        const merge = await mergeReleaseCandidateConfig({
-          path: configPath,
-          candidateYaml: result.yaml,
-        })
-        console.log(
-          JSON.stringify(
-            {
-              status: "ok",
-              report: result.report,
-              config: configPath,
-              merge,
-              yaml: result.yaml,
-            },
-            null,
-            2,
-          ),
-        )
-        process.exitCode = 0
-      } catch (error) {
-        console.log(
-          JSON.stringify(
-            {
-              status: "diagnostic",
-              reason: "MergeFailed",
-              message: errorMessage(error),
-            },
-            null,
-            2,
-          ),
-        )
-        process.exitCode = 1
-      }
+      const merged = await scanAndMergeReleaseCandidates({
+        root,
+        storage,
+        configPath,
+        roots: configuredScanRoots(configPath, { optional: true }),
+        findBinary: optionalEnv("KORRI_FIND_BIN"),
+      })
+      console.log(JSON.stringify(merged, null, 2))
+      process.exitCode = merged.status === "ok" ? 0 : 1
     }),
 ).pipe(
   Command.withDescription(
@@ -115,18 +79,17 @@ function optionalEnv(name: string): string | undefined {
 
 function configuredScanRoots(
   configPath: string,
-): readonly [{ readonly root: string; readonly optional: false }] | undefined {
+  options: { readonly optional?: boolean } = {},
+):
+  | readonly [{ readonly root: string; readonly optional: boolean }]
+  | undefined {
   if (
     optionalEnv("KORRI_CONFIG_ROOTS") ||
     optionalEnv("KORRI_CONFIG_ROOTS_DIR")
   ) {
     return undefined
   }
-  return [{ root: dirname(configPath), optional: false }]
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return [{ root: dirname(configPath), optional: options.optional ?? false }]
 }
 
 export function defaultScoutConfigPath(env: XdgPathEnv = process.env): string {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { createHash } from "node:crypto"
 import {
   chmod,
   mkdir,
@@ -19,6 +20,7 @@ import { Effect } from "effect"
 import { parse } from "yaml"
 import {
   mergeReleaseCandidateConfig,
+  scanAndMergeReleaseCandidates,
   scanConfiguredReleaseCandidates,
   scanReleaseCandidates,
 } from "./release-candidate-scan"
@@ -401,6 +403,372 @@ describe("scanConfiguredReleaseCandidates", () => {
     expect(merged).toContain("path: Metroid Fusion.gba")
   })
 
+  it("deduplicates a configured scan against an authored same-path release and backfills identity", async () => {
+    await using fixture = await withTempRomRoot({
+      "roms/gba/Metroid Fusion.gba": "metroid-bytes",
+    })
+    const config = join(fixture.root, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  sd-releases:",
+        `    root: ${join(fixture.root, "roms")}`,
+        "library:",
+        "  metroid-fusion-authored:",
+        "    title: Authored Metroid",
+        "    releases:",
+        "      - id: gba",
+        "        system: gba",
+        "        target:",
+        "          kind: file",
+        "          storage: sd-releases",
+        "          path: gba/Metroid Fusion.gba",
+        "        launch:",
+        '          use: "@korri:retroarch/retroarch"',
+        '          runtime: "@korri:retroarch/mgba"',
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [{ root: fixture.root, optional: false }],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.results[0]).toMatchObject({
+      storage: "sd-releases",
+      status: "scanned",
+      report: { deduplicated: 1 },
+      merge: { libraryAdded: 0, libraryDeduplicated: 1, identityBackfilled: 1 },
+    })
+    const parsed = parse(await readFile(config, "utf8")) as {
+      readonly library: Record<
+        string,
+        {
+          readonly title?: string
+          readonly releases?: readonly [
+            { readonly identity?: { readonly value?: string } },
+          ]
+        }
+      >
+    }
+    expect(Object.keys(parsed.library).sort()).toEqual([
+      "metroid-fusion-authored",
+    ])
+    expect(parsed.library["metroid-fusion-authored"]?.title).toBe(
+      "Authored Metroid",
+    )
+    expect(
+      parsed.library["metroid-fusion-authored"]?.releases?.[0]?.identity?.value,
+    ).toBe(sha256Artifact("metroid-bytes"))
+  })
+
+  it("backfills a cross-root authored release with a full local overlay", async () => {
+    await using fixture = await withTempRomRoot({
+      "platform/platform.korri.yaml": [
+        "library:",
+        "  metroid-fusion:",
+        "    title: Curated Metroid",
+        "    releases:",
+        "      - id: gba",
+        "        system: gba",
+        "        target:",
+        "          kind: file",
+        "          storage: sd-releases",
+        "          path: gba/Metroid Fusion.gba",
+        "        launch:",
+        '          use: "@korri:retroarch/retroarch"',
+        '          runtime: "@korri:retroarch/mgba"',
+        "",
+      ].join("\n"),
+      "roms/gba/Metroid Fusion.gba": "metroid-bytes",
+    })
+    const localRoot = join(fixture.root, "local")
+    await mkdir(localRoot, { recursive: true })
+    const config = join(localRoot, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  sd-releases:",
+        `    root: ${join(fixture.root, "roms")}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [
+        { root: join(fixture.root, "platform"), optional: false },
+        { root: localRoot, optional: false },
+      ],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.results[0]).toMatchObject({
+      status: "scanned",
+      merge: { libraryAdded: 0, libraryDeduplicated: 1, identityBackfilled: 1 },
+    })
+    const local = parse(await readFile(config, "utf8")) as {
+      readonly library: Record<
+        string,
+        {
+          readonly title?: string
+          readonly releases?: readonly [
+            {
+              readonly launch?: unknown
+              readonly target?: unknown
+              readonly identity?: { readonly value?: string }
+            },
+          ]
+        }
+      >
+    }
+    expect(local.library["metroid-fusion"]?.title).toBe("Curated Metroid")
+    expect(local.library["metroid-fusion"]?.releases?.[0]?.target).toEqual({
+      kind: "file",
+      storage: "sd-releases",
+      path: "gba/Metroid Fusion.gba",
+    })
+    expect(local.library["metroid-fusion"]?.releases?.[0]?.launch).toEqual({
+      use: "@korri:retroarch/retroarch",
+      runtime: "@korri:retroarch/mgba",
+    })
+    expect(
+      local.library["metroid-fusion"]?.releases?.[0]?.identity?.value,
+    ).toBe(sha256Artifact("metroid-bytes"))
+
+    const loaded = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const db = yield* openKorriConfigGraph({
+            roots: [
+              { root: join(fixture.root, "platform"), optional: false },
+              { root: localRoot, optional: false },
+            ],
+          })
+          return yield* db.library.findById("metroid-fusion")
+        }),
+      ),
+    )
+    expect(loaded.title).toBe("Curated Metroid")
+    expect(loaded.releases[0]?.launch).toMatchObject({
+      use: "@korri:retroarch/retroarch",
+      runtime: "@korri:retroarch/mgba",
+    })
+  })
+
+  it("deduplicates by existing hash identity when the scanned path changed", async () => {
+    const identity = sha256Artifact("same-rom-bytes")
+    await using fixture = await withTempRomRoot({
+      "roms/gba/Renamed Metroid.gba": "same-rom-bytes",
+    })
+    const config = join(fixture.root, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  sd-releases:",
+        `    root: ${join(fixture.root, "roms")}`,
+        "library:",
+        "  metroid-fusion-authored:",
+        "    title: Authored Metroid",
+        "    releases:",
+        "      - id: gba",
+        "        system: gba",
+        "        target:",
+        "          kind: file",
+        "          storage: sd-releases",
+        "          path: gba/Original Metroid.gba",
+        "        identity:",
+        "          kind: hash",
+        `          value: ${identity}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [{ root: fixture.root, optional: false }],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.results[0]).toMatchObject({
+      status: "scanned",
+      report: { deduplicated: 1 },
+      merge: { libraryAdded: 0, libraryDeduplicated: 0, identityBackfilled: 0 },
+    })
+    const parsed = parse(await readFile(config, "utf8")) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(Object.keys(parsed.library)).toEqual(["metroid-fusion-authored"])
+  })
+
+  it("backfills identity when the target config path is relative inside an absolute root", async () => {
+    const previousCwd = process.cwd()
+    await using fixture = await withTempRomRoot({
+      "roms/gba/Metroid Fusion.gba": "metroid-bytes",
+    })
+    const config = join(fixture.root, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  sd-releases:",
+        `    root: ${join(fixture.root, "roms")}`,
+        "library:",
+        "  metroid-fusion-authored:",
+        "    title: Authored Metroid",
+        "    releases:",
+        "      - id: gba",
+        "        system: gba",
+        "        target:",
+        "          kind: file",
+        "          storage: sd-releases",
+        "          path: gba/Metroid Fusion.gba",
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    try {
+      process.chdir(fixture.root)
+      const result = await scanAndMergeReleaseCandidates({
+        root: join(fixture.root, "roms"),
+        storage: "sd-releases",
+        configPath: "korri.yaml",
+        roots: [{ root: fixture.root, optional: false }],
+        findBinary: resolveFromPath("find"),
+      })
+
+      expect(result.status).toBe("ok")
+      if (result.status !== "ok") return
+      expect(result.merge).toMatchObject({
+        libraryAdded: 0,
+        libraryDeduplicated: 1,
+        identityBackfilled: 1,
+        identityBackfillSkipped: 0,
+      })
+    } finally {
+      process.chdir(previousCwd)
+    }
+  })
+
+  it("suppresses duplicates but skips backfill when the target config is outside effective roots", async () => {
+    await using fixture = await withTempRomRoot({
+      "platform/korri.yaml": [
+        "storage:",
+        "  sd-releases:",
+        `    root: ${join(fixtureRootToken, "roms")}`,
+        "library:",
+        "  metroid-fusion:",
+        "    title: Curated Metroid",
+        "    releases:",
+        "      - id: gba",
+        "        system: gba",
+        "        target:",
+        "          kind: file",
+        "          storage: sd-releases",
+        "          path: gba/Metroid Fusion.gba",
+        "",
+      ].join("\n"),
+      "roms/gba/Metroid Fusion.gba": "metroid-bytes",
+    })
+    const platformConfig = join(fixture.root, "platform", "korri.yaml")
+    await writeFile(
+      platformConfig,
+      (await readFile(platformConfig, "utf8")).replaceAll(
+        fixtureRootToken,
+        fixture.root,
+      ),
+      "utf8",
+    )
+    const outConfig = join(fixture.root, "out", "korri.yaml")
+
+    const result = await scanAndMergeReleaseCandidates({
+      root: join(fixture.root, "roms"),
+      storage: "sd-releases",
+      configPath: outConfig,
+      roots: [{ root: join(fixture.root, "platform"), optional: false }],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.merge).toMatchObject({
+      libraryAdded: 0,
+      libraryDeduplicated: 1,
+      identityBackfilled: 0,
+      identityBackfillSkipped: 1,
+    })
+    const parsed = parse(await readFile(outConfig, "utf8")) as {
+      readonly library?: Record<string, unknown>
+    }
+    expect(Object.keys(parsed.library ?? {})).toHaveLength(0)
+  })
+
+  it("warns on overlapping storage roots and suppresses same-run duplicates", async () => {
+    await using fixture = await withTempRomRoot({
+      "roms/gba/Metroid Fusion.gba": "metroid-bytes",
+    })
+    const config = join(fixture.root, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  card:",
+        `    root: ${fixture.root}`,
+        "  roms:",
+        `    root: ${join(fixture.root, "roms")}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      configPath: config,
+      roots: [{ root: fixture.root, optional: false }],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.results).toHaveLength(2)
+    expect(
+      result.results.filter(item => item.status === "scanned"),
+    ).toHaveLength(2)
+    expect(
+      result.results.some(
+        item => item.status === "scanned" && item.overlapWarnings.length > 0,
+      ),
+    ).toBe(true)
+    expect(
+      result.results
+        .filter(item => item.status === "scanned")
+        .reduce((total, item) => total + item.merge.libraryAdded, 0),
+    ).toBe(1)
+    expect(
+      result.results
+        .filter(item => item.status === "scanned")
+        .reduce((total, item) => total + item.merge.libraryDeduplicated, 0),
+    ).toBe(1)
+    const parsed = parse(await readFile(config, "utf8")) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(Object.keys(parsed.library)).toHaveLength(1)
+  })
+
   it("skips configured storage roots that are not eligible to scan", async () => {
     await using fixture = await withTempRomRoot({})
     const config = join(fixture.root, "korri.yaml")
@@ -513,8 +881,13 @@ describe("scanConfiguredReleaseCandidates", () => {
     expect(
       second.results
         .filter(result => result.status === "scanned")
-        .map(result => result.merge.librarySkipped),
+        .map(result => result.merge.libraryDeduplicated),
     ).toEqual([1, 1])
+    expect(
+      second.results
+        .filter(result => result.status === "scanned")
+        .map(result => result.merge.librarySkipped),
+    ).toEqual([0, 0])
     const afterSecond = parse(await readFile(config, "utf8")) as {
       readonly library: Record<string, unknown>
     }
@@ -880,6 +1253,12 @@ describe("mergeReleaseCandidateConfig", () => {
     expect(loaded.canResolve).toBe(true)
   })
 })
+
+const fixtureRootToken = "__KORRI_TEST_FIXTURE_ROOT__"
+
+function sha256Artifact(content: string): string {
+  return `sha256:${createHash("sha256").update(content).digest("hex")}`
+}
 
 function resolveFromPath(command: string): string {
   for (const directory of (process.env.PATH ?? "").split(":")) {

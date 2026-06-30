@@ -9,6 +9,20 @@ export interface ReleaseHashIdentityTag {
   readonly value: ArtifactId
 }
 
+export function releaseHashIdentityFromSha256Digest(
+  digest: string,
+): ReleaseHashIdentityTag {
+  return { kind: "hash", value: `sha256:${digest}` as ArtifactId }
+}
+
+export function releaseHashIdentityForContent(
+  content: string | Uint8Array,
+): ReleaseHashIdentityTag {
+  return releaseHashIdentityFromSha256Digest(
+    createHash("sha256").update(content).digest("hex"),
+  )
+}
+
 interface FileStatKey {
   readonly path: string
   readonly size: number
@@ -276,8 +290,7 @@ async function hashFile(
     for await (const chunk of createReadStream(path)) {
       hash.update(chunk)
     }
-    const digest = hash.digest("hex")
-    return { kind: "hash", value: `sha256:${digest}` as ArtifactId }
+    return releaseHashIdentityFromSha256Digest(hash.digest("hex"))
   } catch {
     return undefined
   }

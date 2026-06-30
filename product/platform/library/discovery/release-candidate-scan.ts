@@ -10,8 +10,20 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises"
-import { dirname, isAbsolute } from "node:path"
+import {
+  dirname,
+  isAbsolute,
+  join,
+  normalize,
+  resolve as resolvePath,
+} from "node:path"
+import type { LibraryItemPayload } from "@platform/library/config/records/library-item"
 import type { StorageRecord } from "@platform/library/config/records/storage"
+import {
+  defaultReleaseContentIdentityResolver,
+  type ReleaseHashIdentityTag,
+  releaseHashIdentityForContent,
+} from "@platform/library/content-identity/release-content-identity"
 import { resolveAllConfigGraphRoots } from "@platform/library/library-source-layer-live"
 import {
   type KorriConfigGraphRoot,
@@ -33,6 +45,7 @@ export type RomScanResult =
       readonly storage: string
       readonly report: RomScanReport
       readonly yaml: string
+      readonly backfills: readonly ReleaseIdentityBackfill[]
     }
   | {
       readonly status: "diagnostic"
@@ -47,6 +60,7 @@ export interface RomScanReport {
   readonly unsupported: number
   readonly ignored: number
   readonly ambiguous: number
+  readonly deduplicated: number
   readonly bySystem: Readonly<Record<string, number>>
   readonly reasons: Readonly<Record<string, number>>
   readonly samples: readonly RomScanSample[]
@@ -54,7 +68,7 @@ export interface RomScanReport {
 
 export interface RomScanSample {
   readonly path: string
-  readonly tag: RomScanClassification["_tag"]
+  readonly tag: RomScanClassification["_tag"] | "Deduplicated"
   readonly detail?: string
 }
 
@@ -65,12 +79,14 @@ interface RomScanArgs {
   readonly timeoutMs?: number
   readonly reservedLibraryIds?: Set<string>
   readonly now?: () => string
+  readonly claimedIndex?: ClaimedContentIndex
 }
 
 export interface MergeReleaseCandidateConfigArgs {
   readonly path: string
   readonly candidateYaml: string
   readonly mergeStorage?: boolean
+  readonly identityBackfills?: readonly ReleaseIdentityBackfill[]
 }
 
 export interface MergeReleaseCandidateConfigResult {
@@ -79,6 +95,9 @@ export interface MergeReleaseCandidateConfigResult {
   readonly storageSkipped: number
   readonly libraryAdded: number
   readonly librarySkipped: number
+  readonly libraryDeduplicated: number
+  readonly identityBackfilled: number
+  readonly identityBackfillSkipped: number
 }
 
 export interface ScanConfiguredReleaseCandidatesArgs {
@@ -97,6 +116,7 @@ export type ConfiguredStorageScanResult =
       readonly status: "scanned"
       readonly report: RomScanReport
       readonly merge: MergeReleaseCandidateConfigResult
+      readonly overlapWarnings: readonly string[]
     }
   | {
       readonly storage: string
@@ -136,6 +156,32 @@ export type ScanConfiguredReleaseCandidatesResult =
       readonly results?: readonly ConfiguredStorageScanResult[]
     }
 
+export interface ScanAndMergeReleaseCandidatesArgs {
+  readonly root: string
+  readonly storage: string
+  readonly configPath: string
+  readonly roots?: readonly KorriConfigGraphRoot[]
+  readonly env?: NodeJS.ProcessEnv
+  readonly findBinary?: string
+  readonly timeoutMs?: number
+}
+
+export type ScanAndMergeReleaseCandidatesResult =
+  | {
+      readonly status: "ok"
+      readonly root: string
+      readonly storage: string
+      readonly config: string
+      readonly report: RomScanReport
+      readonly merge: MergeReleaseCandidateConfigResult
+      readonly yaml: string
+    }
+  | {
+      readonly status: "diagnostic"
+      readonly reason: "ConfigLoadFailed" | "ScanFailed" | "MergeFailed"
+      readonly message: string
+    }
+
 interface MutableReport {
   files: number
   candidates: number
@@ -143,9 +189,43 @@ interface MutableReport {
   unsupported: number
   ignored: number
   ambiguous: number
+  deduplicated: number
   bySystem: Map<string, number>
   reasons: Map<string, number>
   samples: RomScanSample[]
+}
+
+type ReleaseMatchKind = "storage-path" | "absolute-path" | "hash"
+
+export interface ClaimedRelease {
+  readonly libraryId: string
+  readonly releaseId: string
+  readonly storage: string
+  readonly path: string
+  readonly absolutePath?: string
+  readonly identity?: ReleaseHashIdentityTag
+  readonly effectiveRecord: LibraryItemPayload
+}
+
+interface ClaimedContentIndex {
+  readonly byStoragePath: Map<string, ClaimedRelease>
+  readonly byAbsolutePath: Map<string, ClaimedRelease>
+  readonly byHash: Map<string, ClaimedRelease>
+}
+
+export interface ReleaseIdentityBackfill {
+  readonly claim: ClaimedRelease
+  readonly identity?: ReleaseHashIdentityTag
+  readonly skipped?: boolean
+  readonly reason?: string
+}
+
+function createClaimedContentIndex(): ClaimedContentIndex {
+  return {
+    byStoragePath: new Map(),
+    byAbsolutePath: new Map(),
+    byHash: new Map(),
+  }
 }
 
 export async function scanReleaseCandidates(
@@ -245,8 +325,9 @@ export async function scanReleaseCandidates(
     }
   }
 
+  const reconciled = await reconcileRomCandidates(candidates, args, report)
   const candidateRecords = createRomLibraryCandidatesFromClassifications(
-    candidates,
+    reconciled.candidates,
     {
       storage: args.storage,
       reservedIds: args.reservedLibraryIds,
@@ -262,6 +343,67 @@ export async function scanReleaseCandidates(
       root: args.root,
       storage: args.storage,
     }),
+    backfills: reconciled.backfills,
+  }
+}
+
+export async function scanAndMergeReleaseCandidates(
+  args: ScanAndMergeReleaseCandidatesArgs,
+): Promise<ScanAndMergeReleaseCandidatesResult> {
+  const roots = args.roots ?? resolveAllConfigGraphRoots(args.env)
+  let snapshot: ConfiguredScanSnapshot
+  try {
+    snapshot = await readConfiguredScanSnapshot(roots)
+  } catch (error) {
+    return {
+      status: "diagnostic",
+      reason: "ConfigLoadFailed",
+      message: errorMessage(error),
+    }
+  }
+
+  const reservedLibraryIds = new Set(snapshot.libraryIds)
+  for (const id of await targetLibraryIds(args.configPath)) {
+    reservedLibraryIds.delete(id)
+  }
+  const claimedIndex = cloneClaimedContentIndex(snapshot.claimedIndex)
+  const scan = await scanReleaseCandidates({
+    root: args.root,
+    storage: args.storage,
+    findBinary: args.findBinary,
+    timeoutMs: args.timeoutMs,
+    reservedLibraryIds,
+    claimedIndex,
+  })
+  if (scan.status === "diagnostic") return scan
+
+  try {
+    const merge = await mergeReleaseCandidateConfig({
+      path: args.configPath,
+      candidateYaml: scan.yaml,
+      identityBackfills: canBackfillToTarget(args.configPath, roots)
+        ? scan.backfills
+        : scan.backfills.map(backfill => ({
+            ...backfill,
+            skipped: true,
+            reason: "target config is not part of the effective config roots",
+          })),
+    })
+    return {
+      status: "ok",
+      root: args.root,
+      storage: args.storage,
+      config: args.configPath,
+      report: scan.report,
+      merge,
+      yaml: scan.yaml,
+    }
+  } catch (error) {
+    return {
+      status: "diagnostic",
+      reason: "MergeFailed",
+      message: errorMessage(error),
+    }
   }
 }
 
@@ -286,6 +428,7 @@ export async function scanConfiguredReleaseCandidates(
     reservedLibraryIds.delete(id)
   }
 
+  const claimedIndex = cloneClaimedContentIndex(snapshot.claimedIndex)
   const results: ConfiguredStorageScanResult[] = []
   for (const storage of snapshot.storages) {
     const eligible = await storageScanEligibility(storage)
@@ -301,6 +444,7 @@ export async function scanConfiguredReleaseCandidates(
       timeoutMs: args.timeoutMs,
       reservedLibraryIds,
       now: () => firstSeenAt,
+      claimedIndex,
     })
     if (scan.status === "diagnostic") {
       results.push({
@@ -318,13 +462,24 @@ export async function scanConfiguredReleaseCandidates(
         path: args.configPath,
         candidateYaml: scan.yaml,
         mergeStorage: false,
+        identityBackfills: canBackfillToTarget(args.configPath, roots)
+          ? scan.backfills
+          : scan.backfills.map(backfill => ({
+              ...backfill,
+              skipped: true,
+              reason: "target config is not part of the effective config roots",
+            })),
       })
+      addCandidateYamlClaims(claimedIndex, scan.yaml, snapshot.storageRootById)
+      addBackfillClaims(claimedIndex, scan.backfills)
       results.push({
         storage: storage.id,
         root: storage.root,
         status: "scanned",
         report: scan.report,
         merge,
+        overlapWarnings:
+          snapshot.overlapWarningsByStorage.get(storage.id) ?? [],
       })
     } catch (error) {
       return {
@@ -349,6 +504,9 @@ export async function scanConfiguredReleaseCandidates(
 interface ConfiguredScanSnapshot {
   readonly storages: readonly StorageRecord[]
   readonly libraryIds: readonly string[]
+  readonly claimedIndex: ClaimedContentIndex
+  readonly storageRootById: ReadonlyMap<string, string>
+  readonly overlapWarningsByStorage: ReadonlyMap<string, readonly string[]>
 }
 
 async function readConfiguredScanSnapshot(
@@ -359,12 +517,25 @@ async function readConfiguredScanSnapshot(
       Effect.gen(function* () {
         const db = yield* openKorriConfigGraph({ roots })
         return yield* Effect.tryPromise({
-          try: async () => ({
-            storages: await db.storage.query().runPromise,
-            libraryIds: (await db.library.query().runPromise).map(
-              item => item.id,
-            ),
-          }),
+          try: async () => {
+            const storages = await db.storage.query().runPromise
+            const libraryItems = await db.library.query().runPromise
+            const storageRootById = new Map(
+              storages.map(storage => [storage.id, storage.root] as const),
+            )
+            return {
+              storages,
+              libraryIds: libraryItems.map(item => item.id),
+              claimedIndex: buildClaimedContentIndex(
+                libraryItems as readonly (LibraryItemPayload & {
+                  readonly id: string
+                })[],
+                storageRootById,
+              ),
+              storageRootById,
+              overlapWarningsByStorage: detectStorageOverlapWarnings(storages),
+            }
+          },
           catch: error => new Error(errorMessage(error)),
         })
       }),
@@ -452,6 +623,9 @@ export async function mergeReleaseCandidateConfig(
   let storageSkipped = 0
   let libraryAdded = 0
   let librarySkipped = 0
+  let libraryDeduplicated = 0
+  let identityBackfilled = 0
+  let identityBackfillSkipped = 0
 
   for (const [id, payload] of Object.entries(
     args.mergeStorage === false ? {} : (candidates.storage ?? {}),
@@ -479,6 +653,35 @@ export async function mergeReleaseCandidateConfig(
     }
   }
 
+  const backfilledPayloads = new Map<string, LibraryItemPayload>()
+  for (const backfill of args.identityBackfills ?? []) {
+    libraryDeduplicated += 1
+    if (backfill.skipped === true || backfill.identity === undefined) {
+      identityBackfillSkipped += 1
+      continue
+    }
+    const base =
+      backfilledPayloads.get(backfill.claim.libraryId) ??
+      libraryPayloadForBackfill(
+        library[backfill.claim.libraryId],
+        backfill.claim.effectiveRecord,
+      )
+    const updated = payloadWithIdentity(
+      base,
+      backfill.claim.releaseId,
+      backfill.identity,
+    )
+    if (updated === undefined) {
+      identityBackfillSkipped += 1
+      continue
+    }
+    backfilledPayloads.set(backfill.claim.libraryId, updated)
+    identityBackfilled += 1
+  }
+  for (const [id, payload] of backfilledPayloads) {
+    library[id] = payload
+  }
+
   await writeFileAtomically(args.path, stringify(existing))
   return {
     path: args.path,
@@ -486,6 +689,9 @@ export async function mergeReleaseCandidateConfig(
     storageSkipped,
     libraryAdded,
     librarySkipped,
+    libraryDeduplicated,
+    identityBackfilled,
+    identityBackfillSkipped,
   }
 }
 
@@ -536,6 +742,290 @@ function ensureRecordSection(
 
 function sameJsonValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
+}
+
+async function reconcileRomCandidates(
+  candidates: readonly RomScanCandidate[],
+  args: RomScanArgs,
+  report: MutableReport,
+): Promise<{
+  readonly candidates: readonly RomScanCandidate[]
+  readonly backfills: readonly ReleaseIdentityBackfill[]
+}> {
+  const claimedIndex = args.claimedIndex
+  if (claimedIndex === undefined) return { candidates, backfills: [] }
+
+  const kept: RomScanCandidate[] = []
+  const backfills: ReleaseIdentityBackfill[] = []
+  for (const candidate of candidates) {
+    const match = await matchCandidate(candidate, args, claimedIndex)
+    if (match === undefined) {
+      kept.push(candidate)
+      continue
+    }
+    report.deduplicated += 1
+    addSample(report, {
+      path: candidate.path,
+      tag: "Deduplicated",
+      detail: `${match.kind}:${match.claim.libraryId}/${match.claim.releaseId}`,
+    })
+    if (match.claim.identity === undefined) {
+      const identity = await resolveFreshFileHash(
+        join(args.root, candidate.path),
+      )
+      backfills.push({
+        claim: match.claim,
+        ...(identity === undefined
+          ? { skipped: true, reason: "content identity unavailable" }
+          : { identity }),
+      })
+      if (identity !== undefined && args.claimedIndex !== undefined) {
+        addClaim(args.claimedIndex, { ...match.claim, identity })
+      }
+    }
+  }
+  return { candidates: kept, backfills }
+}
+
+async function matchCandidate(
+  candidate: RomScanCandidate,
+  args: RomScanArgs,
+  index: ClaimedContentIndex,
+): Promise<
+  | { readonly kind: ReleaseMatchKind; readonly claim: ClaimedRelease }
+  | undefined
+> {
+  const storagePath = storagePathKey(args.storage, candidate.path)
+  const byStoragePath = index.byStoragePath.get(storagePath)
+  if (byStoragePath !== undefined) {
+    return { kind: "storage-path", claim: byStoragePath }
+  }
+
+  const absolutePath = absoluteFilePath(args.root, candidate.path)
+  const byAbsolutePath = index.byAbsolutePath.get(absolutePath)
+  if (byAbsolutePath !== undefined) {
+    return { kind: "absolute-path", claim: byAbsolutePath }
+  }
+
+  if (index.byHash.size > 0) {
+    const identity =
+      await defaultReleaseContentIdentityResolver.resolveFileHash(absolutePath)
+    if (identity !== undefined) {
+      const byHash = index.byHash.get(identity.value)
+      if (byHash !== undefined) return { kind: "hash", claim: byHash }
+    }
+  }
+  return undefined
+}
+
+function buildClaimedContentIndex(
+  items: readonly (LibraryItemPayload & { readonly id: string })[],
+  storageRootById: ReadonlyMap<string, string>,
+): ClaimedContentIndex {
+  const index = createClaimedContentIndex()
+  for (const item of items) {
+    item.releases.forEach(release => {
+      const target = release.target
+      if (target?.kind !== "file") return
+      addClaim(index, {
+        libraryId: item.id,
+        releaseId: release.id,
+        storage: target.storage,
+        path: normalizeTargetPath(target.path),
+        absolutePath: absolutePathForStorageTarget(
+          storageRootById,
+          target.storage,
+          target.path,
+        ),
+        identity: release.identity,
+        effectiveRecord: libraryPayloadFromRecord(item),
+      })
+    })
+  }
+  return index
+}
+
+function addClaim(index: ClaimedContentIndex, claim: ClaimedRelease): void {
+  index.byStoragePath.set(storagePathKey(claim.storage, claim.path), claim)
+  if (claim.absolutePath !== undefined) {
+    index.byAbsolutePath.set(claim.absolutePath, claim)
+  }
+  if (claim.identity !== undefined) {
+    index.byHash.set(claim.identity.value, claim)
+  }
+}
+
+function cloneClaimedContentIndex(
+  index: ClaimedContentIndex,
+): ClaimedContentIndex {
+  return {
+    byStoragePath: new Map(index.byStoragePath),
+    byAbsolutePath: new Map(index.byAbsolutePath),
+    byHash: new Map(index.byHash),
+  }
+}
+
+function addCandidateYamlClaims(
+  index: ClaimedContentIndex,
+  yaml: string,
+  storageRootById: ReadonlyMap<string, string>,
+): void {
+  const document = readableDocumentFromYaml(yaml)
+  for (const [libraryId, rawPayload] of Object.entries(
+    document.library ?? {},
+  )) {
+    const payload = structuredClone(rawPayload) as LibraryItemPayload
+    payload.releases?.forEach(release => {
+      const target = release.target
+      if (target?.kind !== "file") return
+      addClaim(index, {
+        libraryId,
+        releaseId: release.id,
+        storage: target.storage,
+        path: normalizeTargetPath(target.path),
+        absolutePath: absolutePathForStorageTarget(
+          storageRootById,
+          target.storage,
+          target.path,
+        ),
+        identity: release.identity,
+        effectiveRecord: payload,
+      })
+    })
+  }
+}
+
+function addBackfillClaims(
+  index: ClaimedContentIndex,
+  backfills: readonly ReleaseIdentityBackfill[],
+): void {
+  for (const backfill of backfills) {
+    if (backfill.identity === undefined) continue
+    addClaim(index, { ...backfill.claim, identity: backfill.identity })
+  }
+}
+
+function payloadWithIdentity(
+  record: LibraryItemPayload,
+  releaseId: string,
+  identity: ReleaseHashIdentityTag,
+): LibraryItemPayload | undefined {
+  const next = structuredClone(record) as LibraryItemPayload
+  const releases = [...next.releases]
+  const releaseIndex = releases.findIndex(release => release.id === releaseId)
+  const release = releases[releaseIndex]
+  if (release === undefined) return undefined
+  releases[releaseIndex] = { ...release, identity }
+  return { ...next, releases }
+}
+
+function libraryPayloadForBackfill(
+  existing: unknown,
+  effective: LibraryItemPayload,
+): LibraryItemPayload {
+  if (isLibraryPayload(existing)) return structuredClone(existing)
+  return structuredClone(effective)
+}
+
+function isLibraryPayload(value: unknown): value is LibraryItemPayload {
+  if (typeof value !== "object" || value === null) return false
+  const record = value as { readonly releases?: unknown }
+  return Array.isArray(record.releases)
+}
+
+async function resolveFreshFileHash(
+  path: string,
+): Promise<ReleaseHashIdentityTag | undefined> {
+  try {
+    const content = await readFile(path)
+    return releaseHashIdentityForContent(content)
+  } catch {
+    return undefined
+  }
+}
+
+function libraryPayloadFromRecord(
+  record: LibraryItemPayload & { readonly id: string },
+): LibraryItemPayload {
+  const clone = structuredClone(record) as LibraryItemPayload & { id?: string }
+  delete clone.id
+  return clone
+}
+
+function storagePathKey(storage: string, path: string): string {
+  return `${storage}:${normalizeTargetPath(path)}`
+}
+
+function normalizeTargetPath(path: string): string {
+  return normalize(path).replace(/\\/g, "/").replace(/^\.\//, "")
+}
+
+function absolutePathForStorageTarget(
+  storageRootById: ReadonlyMap<string, string>,
+  storage: string,
+  path: string,
+): string | undefined {
+  const root = storageRootById.get(storage)
+  if (root === undefined || !isAbsolute(root)) return undefined
+  return absoluteFilePath(root, path)
+}
+
+function absoluteFilePath(root: string, path: string): string {
+  return normalize(join(root, normalizeTargetPath(path)))
+}
+
+function canBackfillToTarget(
+  configPath: string,
+  roots: readonly KorriConfigGraphRoot[],
+): boolean {
+  const configRoot = normalize(resolvePath(dirname(configPath)))
+  return roots.some(root => {
+    const graphRoot = normalize(resolvePath(root.root))
+    return configRoot === graphRoot || configRoot.startsWith(`${graphRoot}/`)
+  })
+}
+
+function detectStorageOverlapWarnings(
+  storages: readonly StorageRecord[],
+): ReadonlyMap<string, readonly string[]> {
+  const warnings = new Map<string, string[]>()
+  for (let leftIndex = 0; leftIndex < storages.length; leftIndex += 1) {
+    const left = storages[leftIndex]
+    if (left === undefined || !isAbsolute(left.root)) continue
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < storages.length;
+      rightIndex += 1
+    ) {
+      const right = storages[rightIndex]
+      if (right === undefined || !isAbsolute(right.root)) continue
+      if (!rootsOverlap(left.root, right.root)) continue
+      const message = `storage '${left.id}' root overlaps storage '${right.id}' root`
+      pushWarning(warnings, left.id, message)
+      pushWarning(warnings, right.id, message)
+    }
+  }
+  return warnings
+}
+
+function rootsOverlap(leftRoot: string, rightRoot: string): boolean {
+  const left = normalize(leftRoot)
+  const right = normalize(rightRoot)
+  return (
+    left === right ||
+    left.startsWith(`${right}/`) ||
+    right.startsWith(`${left}/`)
+  )
+}
+
+function pushWarning(
+  warnings: Map<string, string[]>,
+  storage: string,
+  message: string,
+): void {
+  const current = warnings.get(storage) ?? []
+  current.push(message)
+  warnings.set(storage, current)
 }
 
 function processChunk(
@@ -627,6 +1117,7 @@ function emptyReport(): MutableReport {
     unsupported: 0,
     ignored: 0,
     ambiguous: 0,
+    deduplicated: 0,
     bySystem: new Map(),
     reasons: new Map(),
     samples: [],
@@ -641,6 +1132,7 @@ function freezeReport(report: MutableReport): RomScanReport {
     unsupported: report.unsupported,
     ignored: report.ignored,
     ambiguous: report.ambiguous,
+    deduplicated: report.deduplicated,
     bySystem: Object.fromEntries(sortEntries(report.bySystem)),
     reasons: Object.fromEntries(sortEntries(report.reasons)),
     samples: report.samples,
