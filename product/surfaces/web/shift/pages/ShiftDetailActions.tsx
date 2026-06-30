@@ -5,8 +5,9 @@
  * every detail rebalance so the action set and wording stay identical across
  * layouts; the layouts only choose where to place it.
  */
-import type { ShiftGameDetailView } from "./ShiftGameDetailScreen"
+
 import { shiftDetailPlayLabel } from "./shift-detail-copy"
+import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
 export interface ShiftDetailActionsProps {
   readonly game: ShiftGameDetailView

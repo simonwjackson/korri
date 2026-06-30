@@ -6,7 +6,7 @@
  * synopsis fallback when the source carries no description. Kept pure so the
  * three layouts read identically and the wording lives in one tested place.
  */
-import type { ShiftGameDetailView } from "./ShiftGameDetailScreen"
+import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
 export function shiftDetailPlayLabel(game: ShiftGameDetailView): string {
   return game.lastPlayedLabel ? "Continue" : "Play"

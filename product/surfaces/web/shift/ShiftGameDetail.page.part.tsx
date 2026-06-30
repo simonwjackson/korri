@@ -8,10 +8,8 @@
  */
 import type { Story } from "@tools/theme-workshop"
 import { DEV_GAME_MEDIA } from "./dev-game-media"
-import {
-  ShiftGameDetailScreen,
-  type ShiftGameDetailView,
-} from "./pages/ShiftGameDetailScreen"
+import { ShiftDetailSplit } from "./pages/ShiftDetailSplit"
+import type { ShiftGameDetailView } from "./pages/shift-game-detail-view"
 
 function detailFixture(
   over: Partial<ShiftGameDetailView>,
@@ -42,7 +40,7 @@ export const ShiftGameDetailStates = [
     note: "Action states",
     surface: true,
     state: "Continue",
-    render: () => <ShiftGameDetailScreen games={[played]} />,
+    render: () => <ShiftDetailSplit game={played} />,
   },
   {
     id: "shift-game-detail-play",
@@ -51,6 +49,6 @@ export const ShiftGameDetailStates = [
     note: "Action states",
     surface: true,
     state: "Play",
-    render: () => <ShiftGameDetailScreen games={[fresh]} />,
+    render: () => <ShiftDetailSplit game={fresh} />,
   },
 ] satisfies readonly Story[]

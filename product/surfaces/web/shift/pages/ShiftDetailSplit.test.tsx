@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, mock } from "bun:test"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { ShiftDetailImmersive } from "./ShiftDetailImmersive"
-import { ShiftDetailPoster } from "./ShiftDetailPoster"
 import { ShiftDetailSplit } from "./ShiftDetailSplit"
-import type { ShiftGameDetailView } from "./ShiftGameDetailScreen"
+import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
 afterEach(() => cleanup())
 
@@ -24,15 +22,9 @@ const fresh: ShiftGameDetailView = {
   artUrl: "new.png",
 }
 
-const variants = [
-  ["Immersive", ShiftDetailImmersive],
-  ["Split", ShiftDetailSplit],
-  ["Poster", ShiftDetailPoster],
-] as const
-
-describe.each(variants)("ShiftDetail%s", (_name, Variant) => {
+describe("ShiftDetailSplit", () => {
   it("shows the game title and tags, with no riffle arrows or counter", () => {
-    render(<Variant game={played} />)
+    render(<ShiftDetailSplit game={played} />)
 
     expect(screen.getByRole("heading", { name: "Hollow Knight" })).toBeDefined()
     expect(screen.getByText("Metroidvania · Team Cherry")).toBeDefined()
@@ -43,20 +35,20 @@ describe.each(variants)("ShiftDetail%s", (_name, Variant) => {
 
   it("labels the primary action Continue once played", () => {
     const onPlay = mock(() => undefined)
-    render(<Variant game={played} onPlay={onPlay} />)
+    render(<ShiftDetailSplit game={played} onPlay={onPlay} />)
 
     fireEvent.click(screen.getByRole("button", { name: "▶ Continue" }))
     expect(onPlay).toHaveBeenCalledWith("hk")
   })
 
   it("labels the primary action Play when never played", () => {
-    render(<Variant game={fresh} />)
+    render(<ShiftDetailSplit game={fresh} />)
     expect(screen.getByRole("button", { name: "▶ Play" })).toBeDefined()
   })
 
   it("favorites the game by id", () => {
     const onFavorite = mock(() => undefined)
-    render(<Variant game={played} onFavorite={onFavorite} />)
+    render(<ShiftDetailSplit game={played} onFavorite={onFavorite} />)
 
     fireEvent.click(screen.getByRole("button", { name: /Favorit/ }))
     expect(onFavorite).toHaveBeenCalledWith("hk")

@@ -4,7 +4,6 @@ import {
   getPlayableImageUrl,
 } from "@platform/library/playable-library-ui"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
-import { useInputAction } from "@platform/react/input/use-input-action"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { Option } from "effect"
@@ -12,20 +11,18 @@ import {
   ShiftCatalogStateRoot,
   useShiftCatalogCase,
 } from "../catalog/ShiftCatalogStateRoot"
-import { ShiftGameDetailScreen } from "../pages/ShiftGameDetailScreen"
+import { ShiftDetailSplit } from "../pages/ShiftDetailSplit"
 import { ShiftHomeDefectBody } from "../pages/ShiftHomeDefectBody"
 import { ShiftHomeEmptyBody } from "../pages/ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "../pages/ShiftHomeLoadErrorBody"
 import { ShiftHomeLoadingBody } from "../pages/ShiftHomeLoadingBody"
-import { useShiftCatalogPreview } from "../shift-catalog-preview"
 
 export function ShiftGameDetailRoute() {
   const live = useAtomValue(catalogSnapshotAtom)
   const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
-  // Same data pin the home consults, so a pinned coordinate addresses detail too.
-  // Render the non-Ready bodies as well, so a pinned non-Ready coordinate shows
-  // its real state instead of a blank route.
-  const snapshot = useShiftCatalogPreview() ?? live
+  // Render non-Ready bodies too, so the route reflects whichever real catalog
+  // source is mounted at the edge instead of falling through to a blank detail.
+  const snapshot = live
   return (
     <ShiftCatalogStateRoot result={snapshot}>
       <ShiftHomeLoadingBody />
@@ -43,8 +40,6 @@ function DetailReadyBody() {
   const navigate = useNavigate()
   const launch = useLibraryLaunchController()
 
-  useInputAction("back", () => navigate({ to: "/" }))
-
   return Option.match(ready, {
     onNone: () => null,
     onSome: ({ games }) => {
@@ -59,15 +54,20 @@ function DetailReadyBody() {
           </main>
         )
       return (
-        <ShiftGameDetailScreen
-          games={[
-            {
-              id: entry.id,
-              title: getPlayableDisplayName(entry),
-              artUrl: getPlayableImageUrl(entry) ?? "",
-            },
-          ]}
+        <ShiftDetailSplit
+          game={{
+            id: entry.id,
+            title: getPlayableDisplayName(entry),
+            artUrl: getPlayableImageUrl(entry) ?? "",
+            ...(entry.metadata?.genre?.[0]
+              ? { genre: entry.metadata.genre[0] }
+              : {}),
+            ...(entry.metadata?.developer
+              ? { developer: entry.metadata.developer }
+              : {}),
+          }}
           onPlay={() => launch.start(entry)}
+          onBack={() => navigate({ to: "/" })}
         />
       )
     },

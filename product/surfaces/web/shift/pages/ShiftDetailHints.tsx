@@ -4,8 +4,9 @@
  * The controller legend shared by the detail rebalances: A maps to the primary
  * verb, Y to favourite, B to back. Layouts decide where the bar sits.
  */
-import type { ShiftGameDetailView } from "./ShiftGameDetailScreen"
+
 import { shiftDetailPlayLabel } from "./shift-detail-copy"
+import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
 export function ShiftDetailHints({
   game,

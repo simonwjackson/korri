@@ -10,8 +10,8 @@
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { ShiftDetailActions } from "./ShiftDetailActions"
 import { ShiftDetailHints } from "./ShiftDetailHints"
-import type { ShiftGameDetailView } from "./ShiftGameDetailScreen"
 import { shiftDetailSynopsis } from "./shift-detail-copy"
+import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
 export interface ShiftDetailSplitProps {
   readonly game: ShiftGameDetailView

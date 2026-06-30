@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import type { ShiftGameDetailView } from "./ShiftGameDetailScreen"
 import { shiftDetailPlayLabel, shiftDetailSynopsis } from "./shift-detail-copy"
+import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
 const game = (
   extra: Partial<ShiftGameDetailView> = {},

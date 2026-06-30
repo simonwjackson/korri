@@ -24,19 +24,14 @@ import {
   type ShiftCinematicGame,
   ShiftCinematicHome,
 } from "./pages/ShiftCinematicHome"
-import { ShiftDetailImmersive } from "./pages/ShiftDetailImmersive"
-import { ShiftDetailPoster } from "./pages/ShiftDetailPoster"
 import { ShiftDetailSplit } from "./pages/ShiftDetailSplit"
-import {
-  ShiftGameDetailScreen,
-  type ShiftGameDetailView,
-} from "./pages/ShiftGameDetailScreen"
 import { ShiftLibraryDeck } from "./pages/ShiftLibraryDeck"
 import { ShiftLibraryFilterBar } from "./pages/ShiftLibraryFilterBar"
 import { ShiftLibraryGrid } from "./pages/ShiftLibraryGrid"
 import { ShiftLibraryLens } from "./pages/ShiftLibraryLens"
 import { ShiftLibraryReel } from "./pages/ShiftLibraryReel"
 import { ShiftLibraryShelves } from "./pages/ShiftLibraryShelves"
+import type { ShiftGameDetailView } from "./pages/shift-game-detail-view"
 import type { ShiftLibraryGame } from "./pages/shift-library-game"
 import { buildShiftLibrarySections } from "./pages/shift-library-sections"
 import "./shift.css"
@@ -299,29 +294,8 @@ const SHIFT_SCREENS: readonly Screen[] = [
     id: "game-detail",
     group: "Detail",
     name: "Game Detail",
-    note: "Baseline (stacked / split body)",
-    render: () => <ShiftGameDetailScreen games={SHIFT_DETAIL_GAMES} />,
-  },
-  {
-    id: "detail-immersive",
-    group: "Detail",
-    name: "Game Detail — Immersive",
-    note: "Rebalance A: art as environment, content bottom-anchored",
-    render: () => <ShiftDetailImmersive game={SHIFT_DETAIL_GAMES[0]} />,
-  },
-  {
-    id: "detail-split",
-    group: "Detail",
-    name: "Game Detail — Split",
-    note: "Rebalance B: balanced art | info",
+    note: "Split art | info",
     render: () => <ShiftDetailSplit game={SHIFT_DETAIL_GAMES[0]} />,
-  },
-  {
-    id: "detail-poster",
-    group: "Detail",
-    name: "Game Detail — Poster",
-    note: "Rebalance C: centred poster hero",
-    render: () => <ShiftDetailPoster game={SHIFT_DETAIL_GAMES[0]} />,
   },
 ]
 

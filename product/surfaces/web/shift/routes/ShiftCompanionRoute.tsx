@@ -11,7 +11,7 @@ import {
   ShiftCatalogStateRoot,
   useShiftCatalogCase,
 } from "../catalog/ShiftCatalogStateRoot"
-import { ShiftGameDetailScreen } from "../pages/ShiftGameDetailScreen"
+import { ShiftDetailSplit } from "../pages/ShiftDetailSplit"
 import { ShiftHomeDefectBody } from "../pages/ShiftHomeDefectBody"
 import { ShiftHomeEmptyBody } from "../pages/ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "../pages/ShiftHomeLoadErrorBody"
@@ -47,14 +47,18 @@ function CompanionReadyBody() {
       const entry = games.find(game => game.id === selectedGameId)
       if (!entry) return <CompanionMessage>Game not found.</CompanionMessage>
       return (
-        <ShiftGameDetailScreen
-          games={[
-            {
-              id: entry.id,
-              title: getPlayableDisplayName(entry),
-              artUrl: getPlayableImageUrl(entry) ?? "",
-            },
-          ]}
+        <ShiftDetailSplit
+          game={{
+            id: entry.id,
+            title: getPlayableDisplayName(entry),
+            artUrl: getPlayableImageUrl(entry) ?? "",
+            ...(entry.metadata?.genre?.[0]
+              ? { genre: entry.metadata.genre[0] }
+              : {}),
+            ...(entry.metadata?.developer
+              ? { developer: entry.metadata.developer }
+              : {}),
+          }}
           onPlay={() => launch.start(entry)}
         />
       )

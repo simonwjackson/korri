@@ -254,73 +254,16 @@
 }
 
 /* -------------------------------------------------------------------------- *
- * Game Detail (screen) — art + info, with a form-factor seam
+ * Game Detail — shared leaf classes
  *
- * Port of pico's Variant D into Shift. The body is a flex column that becomes
- * a hero | info row on a wide (lean-back) device; the seam is keyed off the
- * surface's TRUE aspect ratio (a container query against [data-shift-detail],
- * which is container-type:size), so it is monitor-calibration independent — a
- * squarish handheld stays stacked, a 16:9 panel splits. Art is bounded by the
- * type scale (min(<cqh>, base·N)) so it shares the base's ceiling and tracks
- * the text instead of running away on big screens.
+ * The routed detail page uses the Split layout below. These shared leaf classes
+ * keep title, tags, synopsis, stats, actions, and controller hints consistent
+ * across the route and page-part previews.
  * -------------------------------------------------------------------------- */
 
 [data-shift-detail] {
 	position: relative;
 	height: 100%;
-	display: grid;
-	grid-template-rows: auto 1fr auto;
-}
-
-[data-shift-detail] .shift-detail-statusbar {
-	display: flex;
-	align-items: center;
-	padding: var(--shift-space-3) var(--shift-space-6);
-	font-size: var(--shift-text-fine);
-	font-weight: 700;
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
-	color: var(--shift-ink-dim);
-}
-
-[data-shift-detail] .shift-detail-body {
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	/* `safe` centers when content fits but anchors to the start when the column
-	 * is taller than the body, so the title is never clipped on short frames. */
-	justify-content: safe center;
-	gap: var(--shift-space-3);
-	padding: var(--shift-space-3) 6cqw;
-	overflow: hidden;
-}
-
-[data-shift-detail] .shift-detail-art {
-	container-type: size;
-	flex: 0 0 auto;
-	aspect-ratio: 3 / 4;
-	height: min(46cqh, calc(var(--intrinsic-base) * 12));
-	border-radius: var(--shift-radius-panel);
-	overflow: hidden;
-	background: var(--shift-surface-sunk);
-	box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-}
-
-[data-shift-detail] .shift-detail-art img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-[data-shift-detail] .shift-detail-info {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	text-align: center;
-	gap: var(--shift-space-2);
-	min-width: 0;
 }
 
 [data-shift-detail] .shift-detail-title {
@@ -426,38 +369,6 @@
 	font-size: var(--shift-text-fine);
 	font-weight: 800;
 	line-height: 1;
-}
-
-/* Art-direction seam: a wide (lean-back) screen splits hero | info. */
-@container (min-aspect-ratio: 16 / 10) {
-	[data-shift-detail] .shift-detail-body {
-		flex-direction: row;
-		/* `safe`: center the row vertically, but fall back to top-align when the
-		 * info column is taller than the body so the title stays visible. */
-		align-items: safe center;
-		justify-content: flex-start;
-		gap: 6cqw;
-	}
-
-	[data-shift-detail] .shift-detail-art {
-		align-self: center;
-		height: min(78cqh, calc(var(--intrinsic-base) * 13));
-	}
-
-	[data-shift-detail] .shift-detail-info {
-		flex: 1;
-		align-items: flex-start;
-		text-align: left;
-	}
-
-	[data-shift-detail] .shift-detail-synopsis {
-		max-width: 46cqw;
-	}
-
-	[data-shift-detail] .shift-detail-stats,
-	[data-shift-detail] .shift-detail-actions {
-		justify-content: flex-start;
-	}
 }
 
 /* ========================================================================== *
@@ -871,9 +782,9 @@
 	/* Additive: auto-fill adds columns as width allows; the min track is
 	 * base-relative so cover size tracks the device scale, not viewport px. */
 	grid-template-columns: repeat(
-		auto-fill,
-		minmax(calc(var(--intrinsic-base) * 4.5), 1fr)
-	);
+			auto-fill,
+			minmax(calc(var(--intrinsic-base) * 4.5), 1fr)
+		);
 	gap: var(--shift-space-4) var(--shift-space-3);
 }
 
@@ -1022,10 +933,12 @@
 		color 140ms ease;
 }
 
-[data-shift-library] .shift-lib-options-btn:is(:focus, [data-korri-active-focus]),
+[data-shift-library]
+	.shift-lib-options-btn:is(:focus, [data-korri-active-focus]),
 [data-shift-library] .shift-lib-chip:is(:focus, [data-korri-active-focus]),
 [data-shift-library] .shift-lib-option:is(:focus, [data-korri-active-focus]),
-[data-shift-library] .shift-lib-lens-item:is(:focus, [data-korri-active-focus]) {
+[data-shift-library]
+	.shift-lib-lens-item:is(:focus, [data-korri-active-focus]) {
 	box-shadow: 0 0 0 3px var(--shift-focus-glow);
 }
 
@@ -1247,9 +1160,11 @@
 	outline: none;
 }
 
-[data-shift-library] .shift-lib-deck-arrow:is(:focus, [data-korri-active-focus]),
+[data-shift-library]
+	.shift-lib-deck-arrow:is(:focus, [data-korri-active-focus]),
 [data-shift-library] .shift-lib-deck-fav:is(:focus, [data-korri-active-focus]),
-[data-shift-library] .shift-lib-deck-play:is(:focus, [data-korri-active-focus]) {
+[data-shift-library]
+	.shift-lib-deck-play:is(:focus, [data-korri-active-focus]) {
 	box-shadow: 0 0 0 3px var(--shift-focus-glow);
 }
 
@@ -1352,72 +1267,18 @@
 
 [data-shift-library] .shift-lib-reel-spin:is(:focus, [data-korri-active-focus]),
 [data-shift-library] .shift-lib-reel-play:is(:focus, [data-korri-active-focus]),
-[data-shift-library] .shift-lib-reel-cover:is(:focus, [data-korri-active-focus]) {
+[data-shift-library]
+	.shift-lib-reel-cover:is(:focus, [data-korri-active-focus]) {
 	box-shadow: 0 0 0 3px var(--shift-focus-glow);
 }
 
 /* ========================================================================== *
- * GAME DETAIL REBALANCES — Immersive / Split / Poster
+ * GAME DETAIL — Split layout
  *
- * Three weight distributions of the same detail content (cover, title, tags,
- * synopsis, stats, actions, legend), reusing the shift-detail-* leaf classes.
- * Derived from the Deck's art-forward identity, minus any browse affordance.
+ * Balanced art | info detail content (cover, title, tags, synopsis, stats,
+ * actions, legend), reusing the shift-detail-* leaf classes. Derived from the
+ * Deck's art-forward identity, minus any browse affordance.
  * ========================================================================== */
-
-/* ── Rebalance A: Immersive — art as environment, weight bottom-left ───────── */
-[data-shift-detail].shift-detail-immersive {
-	position: relative;
-	height: 100%;
-	overflow: hidden;
-	background-color: #06060a;
-	color: var(--shift-ink);
-	font-family: "Geist Variable", system-ui, sans-serif;
-}
-
-[data-shift-detail] .shift-detail-imm-bleed {
-	position: absolute;
-	inset: -8%;
-	z-index: 0;
-	background-size: cover;
-	background-position: center;
-	filter: blur(40px) brightness(0.5) saturate(1.15);
-	transform: scale(1.1);
-}
-
-[data-shift-detail] .shift-detail-imm-scrim {
-	position: absolute;
-	inset: 0;
-	z-index: 1;
-	background: linear-gradient(
-		to top,
-		rgba(4, 4, 8, 0.94) 0%,
-		rgba(4, 4, 8, 0.45) 46%,
-		rgba(4, 4, 8, 0.08) 78%
-	);
-}
-
-[data-shift-detail] .shift-detail-imm-hud {
-	position: absolute;
-	z-index: 3;
-	top: var(--shift-space-3);
-	right: var(--shift-space-4);
-}
-
-[data-shift-detail] .shift-detail-imm-content {
-	position: absolute;
-	z-index: 2;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: var(--shift-space-2);
-	max-width: var(--shift-measure-prose);
-	padding: var(--shift-space-6);
-}
-
-/* ── Rebalance B: Split — balanced art | info ─────────────────────────────── */
 [data-shift-detail].shift-detail-split {
 	display: flex;
 	flex-direction: column;
@@ -1471,67 +1332,4 @@
 		flex-basis: 54%;
 		justify-content: center;
 	}
-}
-
-/* ── Rebalance C: Poster — centred, symmetric, object-forward ─────────────── */
-[data-shift-detail].shift-detail-poster {
-	position: relative;
-	display: flex;
-	flex-direction: column;
-	height: 100%;
-	overflow: hidden;
-	background-color: #06060a;
-	color: var(--shift-ink);
-	font-family: "Geist Variable", system-ui, sans-serif;
-}
-
-[data-shift-detail] .shift-detail-poster-bleed {
-	position: absolute;
-	inset: -8%;
-	z-index: 0;
-	background-size: cover;
-	background-position: center;
-	filter: blur(48px) brightness(0.42) saturate(1.1);
-	transform: scale(1.12);
-}
-
-[data-shift-detail] .shift-detail-poster-scrim {
-	position: absolute;
-	inset: 0;
-	z-index: 1;
-	background: radial-gradient(
-		ellipse at center,
-		rgba(4, 4, 8, 0.2) 0%,
-		rgba(4, 4, 8, 0.78) 100%
-	);
-}
-
-[data-shift-detail] .shift-detail-poster-stack {
-	position: relative;
-	z-index: 2;
-	flex: 1 1 auto;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	text-align: center;
-	gap: var(--shift-space-2);
-	padding: var(--shift-space-5);
-}
-
-[data-shift-detail] .shift-detail-poster-art {
-	height: min(52cqh, calc(var(--intrinsic-base) * 13));
-	aspect-ratio: 3 / 4;
-	box-shadow: 0 26px 70px rgba(0, 0, 0, 0.6);
-}
-
-[data-shift-detail] .shift-detail-poster .shift-detail-stats,
-[data-shift-detail] .shift-detail-poster .shift-detail-actions {
-	justify-content: center;
-}
-
-[data-shift-detail] .shift-detail-poster .shift-detail-buttonbar {
-	position: relative;
-	z-index: 2;
 }
