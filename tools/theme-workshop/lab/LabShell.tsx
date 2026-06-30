@@ -114,15 +114,8 @@ export function LabShell() {
   // Inspect/Live mode, pin/release side effects (incl. nested-axis release),
   // capture-back, and the release-on-selection-change cleanup — lives in a
   // focused controller so its ordering contract is in one place.
-  const {
-    screenAxes,
-    activeByAxis,
-    mode,
-    pinAxis,
-    liveAxis,
-    pinCurrent,
-    toggleMode,
-  } = useLabAxisController(adapter)
+  const { screenAxes, activeByAxis, mode, pinAxis, liveAxis, pinCurrent } =
+    useLabAxisController(adapter)
 
   useEffect(() => {
     setView(initialCanvasView)
@@ -397,10 +390,6 @@ export function LabShell() {
             screenChoices={view === "compose" ? activeScreens : undefined}
             activeScreenId={resolvedScreenId ?? undefined}
             onScreenChange={setWorkshopScreenId}
-            inspectLive={
-              view === "device" && screenAxes.length > 0 ? mode : null
-            }
-            onToggleInspectLive={toggleMode}
           />
 
           {compact ? <LabTouchSheet panels={sheetPanels} /> : null}

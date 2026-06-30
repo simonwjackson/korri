@@ -14,8 +14,6 @@ export function LabTopBar({
   onHideChrome,
   onOpenSettings,
   compact,
-  inspectLive,
-  onToggleInspectLive,
   screenChoices,
   activeScreenId,
   onScreenChange,
@@ -25,9 +23,6 @@ export function LabTopBar({
   readonly onHideChrome: () => void
   readonly onOpenSettings: () => void
   readonly compact: boolean
-  /** The current Inspect/Live mode, or null when the surface has no axes. */
-  readonly inspectLive: "inspect" | "live" | null
-  readonly onToggleInspectLive: () => void
   /** Compose-only logical screen choices for a multi-screen device; omit otherwise. */
   readonly screenChoices?: readonly ScreenConfig[]
   readonly activeScreenId?: string
@@ -60,27 +55,6 @@ export function LabTopBar({
       )}
 
       <div className="pt-topbar-right">
-        {inspectLive ? (
-          <div className="pt-seg pt-seg-mode">
-            {/* Inspect ⇄ Live headline */}
-            <button
-              type="button"
-              aria-pressed={inspectLive === "inspect"}
-              className={`pt-seg-btn${inspectLive === "inspect" ? " is-on" : ""}`}
-              onClick={() => inspectLive !== "inspect" && onToggleInspectLive()}
-            >
-              Inspect
-            </button>
-            <button
-              type="button"
-              aria-pressed={inspectLive === "live"}
-              className={`pt-seg-btn${inspectLive === "live" ? " is-on" : ""}`}
-              onClick={() => inspectLive !== "live" && onToggleInspectLive()}
-            >
-              Live
-            </button>
-          </div>
-        ) : null}
         <div className="lab-topbar-extra">
           <LabDeviceSelect />
           {screenChoices &&

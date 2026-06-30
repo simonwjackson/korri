@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, mock } from "bun:test"
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it } from "bun:test"
+import { cleanup, render, screen } from "@testing-library/react"
 import { LabContext, type LabContextValue } from "../Lab.context"
 import type { LabSurfaceAdapter } from "../surface-registry"
 import { LabTopBar } from "./LabTopBar"
@@ -42,10 +42,7 @@ function context(): LabContextValue {
   }
 }
 
-function renderBar(
-  inspectLive: "inspect" | "live" | null,
-  onToggle = mock(() => undefined),
-) {
+function renderBar() {
   render(
     <LabContext.Provider value={context()}>
       <LabTopBar
@@ -54,47 +51,21 @@ function renderBar(
         onHideChrome={() => {}}
         onOpenSettings={() => {}}
         compact={false}
-        inspectLive={inspectLive}
-        onToggleInspectLive={onToggle}
       />
     </LabContext.Provider>,
   )
-  return onToggle
 }
 
-describe("LabTopBar Inspect/Live control", () => {
-  it("shows the headline toggle reflecting the current mode", () => {
-    renderBar("inspect")
-    expect(
-      screen
-        .getByRole("button", { name: "Inspect" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true")
-    expect(
-      screen.getByRole("button", { name: "Live" }).getAttribute("aria-pressed"),
-    ).toBe("false")
-  })
+describe("LabTopBar", () => {
+  it("does not render the Inspect/Live toggle", () => {
+    renderBar()
 
-  it("toggles when the inactive side is clicked", () => {
-    const onToggle = renderBar("inspect")
-    fireEvent.click(screen.getByRole("button", { name: "Live" }))
-    expect(onToggle).toHaveBeenCalledTimes(1)
-  })
-
-  it("does not toggle when the active side is clicked", () => {
-    const onToggle = renderBar("live")
-    fireEvent.click(screen.getByRole("button", { name: "Live" }))
-    expect(onToggle).not.toHaveBeenCalled()
-  })
-
-  it("hides the toggle when the surface has no axes", () => {
-    renderBar(null)
     expect(screen.queryByRole("button", { name: "Inspect" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Live" })).toBeNull()
   })
 
   it("does not render the legacy Screen dropdown", () => {
-    renderBar("live")
+    renderBar()
     expect(screen.queryByLabelText("Screen")).toBeNull()
   })
 })
