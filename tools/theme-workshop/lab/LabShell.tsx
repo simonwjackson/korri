@@ -269,35 +269,36 @@ export function LabShell() {
   const selectedObjectStory = selectedObject
     ? (index.byId.get(selectedObject.storyId) ?? null)
     : null
-  // Inspector scope follows the view: the Device frame edits the running
-  // surface's live state-machine axes; Compose edits the selected object's
-  // bindings, falling back to whole-canvas theme knobs.
-  // The Inspector coalesces everything into one surface: a view-scoped context
-  // section (Device live axes / selected-object bindings, both as dropdowns) on
-  // top, and the intrinsic-design sliders always present below.
-  const inspectorPanel = () => (
-    <div className="pt-inspect">
-      {view === "device" ? (
-        <LabDeviceInspector
-          axes={screenAxes}
-          activeByAxis={activeByAxis}
-          onPin={pinAxis}
-          onLive={liveAxis}
-          onPinCurrent={pinCurrent}
-        />
-      ) : selectedObject && selectedObjectStory ? (
-        <LabObjectInspector
-          instance={selectedObject}
-          story={selectedObjectStory}
-          byId={index.byId}
-          sources={sources}
-          onBind={bindObject}
-          onBindStateGroup={bindObjectState}
-        />
-      ) : null}
-      <LabInspectorPanel />
-    </div>
-  )
+  // The Inspector is split into two panels: a view-scoped State panel (the
+  // Device frame's live state-machine axes, or the selected Compose object's
+  // bindings) and a Design panel (the always-present intrinsic-design sliders
+  // for the whole canvas). They edit unrelated things, so they live apart.
+  const statePanel = () =>
+    view === "device" ? (
+      <LabDeviceInspector
+        axes={screenAxes}
+        activeByAxis={activeByAxis}
+        onPin={pinAxis}
+        onLive={liveAxis}
+        onPinCurrent={pinCurrent}
+      />
+    ) : selectedObject && selectedObjectStory ? (
+      <LabObjectInspector
+        instance={selectedObject}
+        story={selectedObjectStory}
+        byId={index.byId}
+        sources={sources}
+        onBind={bindObject}
+        onBindStateGroup={bindObjectState}
+      />
+    ) : (
+      <div className="pt-inspector">
+        <div className="pt-sources-hint">
+          Select an object on the board to edit its state.
+        </div>
+      </div>
+    )
+  const designPanel = () => <LabInspectorPanel />
   const controlsPanel = () => <LabSurfaceControlsPanel />
   const devicePanel = () => <LabDevicePanel />
   const hasControls = Boolean(adapter.useControls)
@@ -305,7 +306,8 @@ export function LabShell() {
   const sheetPanels = [
     { id: "device", label: "Device", render: devicePanel },
     { id: "parts", label: "Parts", render: partsPanel, action: partsAction },
-    { id: "inspector", label: "Inspector", render: inspectorPanel },
+    { id: "inspector", label: "Inspector", render: statePanel },
+    { id: "design", label: "Design", render: designPanel },
     ...(hasControls
       ? [{ id: "controls", label: "Controls", render: controlsPanel }]
       : []),
@@ -328,7 +330,13 @@ export function LabShell() {
       id: "inspector",
       title: "Inspector",
       accent: "#c4b5fd",
-      render: inspectorPanel,
+      render: statePanel,
+    },
+    {
+      id: "design",
+      title: "Design",
+      accent: "#5eead4",
+      render: designPanel,
     },
     ...(hasControls
       ? [
@@ -358,6 +366,7 @@ export function LabShell() {
     device: { x: 600, y: 120, width: 236 },
     parts: { x: 96, y: 120, width: 236 },
     inspector: { x: w - 300, y: 110, width: 252 },
+    design: { x: w - 300, y: 392, width: 252 },
     controls: { x: 348, y: 120, width: 236 },
   }
   const knobVars = knobStyle(adapter.knobs ?? [], knobValues) as Record<

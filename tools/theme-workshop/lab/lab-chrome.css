@@ -486,17 +486,6 @@ body {
 	opacity: 0.5;
 	cursor: not-allowed;
 }
-/* The Inspector stacks a view-scoped context section over the always-present
- * intrinsic-design sliders, divided by a hairline. */
-.pt-inspect {
-	display: flex;
-	flex-direction: column;
-}
-.pt-inspect > * + * {
-	margin-top: 14px;
-	padding-top: 14px;
-	border-top: 1px solid var(--pt-line-soft);
-}
 .pt-object-body {
 	display: flex;
 	/* Own stacking context below the bar so fill-part content (even fixed,
