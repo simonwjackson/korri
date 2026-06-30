@@ -18,6 +18,7 @@ import {
   dockedIds,
   dockedSide,
   layoutWell,
+  maxResizeHeight,
   reanchorOnResize,
   WELL_PAD,
 } from "./lab-panel-dock"
@@ -269,6 +270,22 @@ export function LabPanelDeck({
   // carry no explicit height.
   const contentHeightOf = (id: string): number =>
     measured[id]?.height ?? floatPos[id]?.height ?? 200
+  // The panel's natural height with all content visible (no scrollbar): header +
+  // the body's full scroll height + the section's borders. Read live from the
+  // DOM so it reflects true content even when the body is currently clipped to a
+  // shorter height (scrollbar showing). Used to cap manual resize.
+  const naturalContentHeight = (id: string): number => {
+    const section = hostRef.current?.querySelector<HTMLElement>(
+      `[data-dock-id="${id}"]`,
+    )
+    if (!section) return contentHeightOf(id)
+    const header = section.querySelector<HTMLElement>(".pt-panel-bar")
+    const body = section.querySelector<HTMLElement>(".pt-panel-body")
+    const headerH = header?.offsetHeight ?? 0
+    const bodyH = body?.scrollHeight ?? 0
+    // +2 for the section's top/bottom border.
+    return headerH + bodyH + 2
+  }
   // Latest values for the mount-once resize listener without re-subscribing.
   const orderRef = useRef(order)
   orderRef.current = order
@@ -638,9 +655,10 @@ export function LabPanelDeck({
           })
           .sort((a, b) => liveRect(a).y - liveRect(b).y)
       : null
-    // Cap manual height at the panel's content so it is never taller than what
-    // it holds; the body scrolls when dragged shorter.
-    const contentCap = contentHeightOf(id)
+    // Cap manual height at the panel's NATURAL content height (the point where
+    // the scrollbar disappears): you can grow a panel taller only while its
+    // content overflows, and no higher once it all fits.
+    const contentCap = naturalContentHeight(id)
     const neighbors = order
       .filter(other => other !== id && !(groupIds?.includes(other) ?? false))
       .map(other => liveRect(other))
@@ -655,9 +673,10 @@ export function LabPanelDeck({
     const baseH = base.height ?? self.height
     ;(event.target as Element).setPointerCapture?.(event.pointerId)
     const move = (next: PointerEvent) => {
-      const maxH = Math.min(
+      const maxH = maxResizeHeight(
+        contentCap,
         window.innerHeight - base.y - 12,
-        Math.max(PANEL_MIN_H, contentCap),
+        PANEL_MIN_H,
       )
       const rawRight =
         base.x + clamp(baseW + next.clientX - startX, FLOAT_MIN_W, FLOAT_MAX_W)

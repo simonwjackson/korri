@@ -74,6 +74,20 @@ export function layoutWell(
   return next
 }
 
+/**
+ * The tallest a panel may be resized to: its natural content height, bounded by
+ * the available viewport space and a floor. A panel can grow only while its
+ * content overflows (a scrollbar shows); once the content fully fits, the
+ * natural height equals the current height and no further growth is allowed.
+ */
+export function maxResizeHeight(
+  naturalContentHeight: number,
+  viewportMax: number,
+  minHeight: number,
+): number {
+  return Math.max(minHeight, Math.min(naturalContentHeight, viewportMax))
+}
+
 /** Ids docked to a side at the given width, ordered top-to-bottom. */
 export function dockedIds(
   pos: Record<string, DockRect>,

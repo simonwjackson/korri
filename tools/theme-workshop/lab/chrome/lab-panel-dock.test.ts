@@ -4,6 +4,7 @@ import {
   dockedSide,
   dockedX,
   layoutWell,
+  maxResizeHeight,
   reanchorOnResize,
   WELL_GAP,
   WELL_PAD,
@@ -30,6 +31,26 @@ describe("dockedSide", () => {
     const rect: DockRect = { x: INNER_W - WELL_PAD - 248, y: 60, width: 248 }
     expect(dockedSide(rect, INNER_W)).toBe("right")
     expect(dockedSide(rect, 1600)).toBeNull()
+  })
+})
+
+describe("maxResizeHeight", () => {
+  it("lets a panel grow up to its natural content height", () => {
+    // Content taller than the current box (scrollbar showing) -> can grow to it.
+    expect(maxResizeHeight(840, 2000, 140)).toBe(840)
+  })
+
+  it("never exceeds the natural content height once content fits", () => {
+    // Asking for more than content is capped at content (no scrollbar -> no taller).
+    expect(maxResizeHeight(300, 2000, 140)).toBe(300)
+  })
+
+  it("is bounded by the available viewport space", () => {
+    expect(maxResizeHeight(2000, 600, 140)).toBe(600)
+  })
+
+  it("never drops below the minimum height", () => {
+    expect(maxResizeHeight(80, 2000, 140)).toBe(140)
   })
 })
 
