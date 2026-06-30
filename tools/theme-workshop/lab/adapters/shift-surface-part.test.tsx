@@ -3,7 +3,13 @@ import {
   getShiftLiveLaunch,
   setShiftLiveLaunch,
 } from "@product/surfaces/web/shift/shift-live-coordinate"
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react"
 import type { Story } from "../../types"
 import { renderShiftSurfacePart } from "./shift-surface-part"
 
@@ -76,6 +82,26 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
     )
     await waitFor(() => {
       expect(screen.getByText("No games found.")).toBeTruthy()
+    })
+  })
+
+  it("produces launch feedback by pressing Play in a render-only Compose object", async () => {
+    render(
+      <div>
+        {renderShiftSurfacePart(homeStory, {
+          sourceId: "cozy",
+          stateId: "Ready",
+        })}
+      </div>,
+    )
+
+    const firstGame = await screen.findByRole("button", {
+      name: /Aurora Drift/i,
+    })
+    fireEvent.click(firstGame)
+
+    await waitFor(() => {
+      expect(screen.getByText("Now playing")).toBeTruthy()
     })
   })
 

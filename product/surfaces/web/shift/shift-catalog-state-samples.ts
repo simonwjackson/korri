@@ -19,8 +19,8 @@ import { DEV_GAME_MEDIA } from "./dev-game-media"
 
 export type { CatalogResult }
 
-const FIXTURE_ENTRIES: readonly CatalogEntry[] = DEV_GAME_MEDIA.slice(0, 6).map(
-  media => ({
+export const shiftCatalogFixtureEntries: readonly CatalogEntry[] =
+  DEV_GAME_MEDIA.slice(0, 6).map(media => ({
     id: media.id,
     itemId: media.id,
     title: media.title,
@@ -54,10 +54,11 @@ const FIXTURE_ENTRIES: readonly CatalogEntry[] = DEV_GAME_MEDIA.slice(0, 6).map(
       controlUrl: "http://127.0.0.1:3001",
       isLocal: true,
     },
-  }),
-)
+  }))
 
-export const shiftCatalogStateSamples = makeCatalogStateSamples(FIXTURE_ENTRIES)
+export const shiftCatalogStateSamples = makeCatalogStateSamples(
+  shiftCatalogFixtureEntries,
+)
 
 /**
  * Shift's catalog states as real source layers — the data set on Shift's live
@@ -66,5 +67,6 @@ export const shiftCatalogStateSamples = makeCatalogStateSamples(FIXTURE_ENTRIES)
  * entries as `shiftCatalogStateSamples`, so the gallery snapshots and the
  * in-place dial can't drift.
  */
-export const shiftCatalogSourceLayers =
-  makeCatalogStateSourceLayers(FIXTURE_ENTRIES)
+export const shiftCatalogSourceLayers = makeCatalogStateSourceLayers(
+  shiftCatalogFixtureEntries,
+)

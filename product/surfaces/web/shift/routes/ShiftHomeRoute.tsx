@@ -42,10 +42,6 @@ import { ShiftHomeEmptyBody } from "../pages/ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "../pages/ShiftHomeLoadErrorBody"
 import { ShiftHomeLoadingBody } from "../pages/ShiftHomeLoadingBody"
 import {
-  setShiftLaunchPreview,
-  useShiftLaunchPreview,
-} from "../shift-launch-preview"
-import {
   clearShiftLiveCoordinate,
   clearShiftLiveLaunch,
   createShiftLiveCoordinateOwner,
@@ -207,7 +203,6 @@ function NavigatingReadyBody({
     useAtomValue(foregroundSessionGateStateAtom),
   )
   const foreground = foregroundOverride ?? liveForeground
-  const preview = useShiftLaunchPreview()
   const focusGame = useOptionalDualScreenSession()?.focusGame
   const publishGameFocus = useCallback(
     (gameId: string) => focusGame?.(gameId, "primary"),
@@ -215,8 +210,7 @@ function NavigatingReadyBody({
   )
   const [acked, setAcked] = useState(false)
 
-  // The design-tool preview override wins over the live controller when set.
-  const rawLaunch = preview ?? launch.state
+  const rawLaunch = launch.state
   const raw = shiftLaunchStateForForeground({
     launch: rawLaunch,
     foreground,
@@ -256,14 +250,8 @@ function NavigatingReadyBody({
           launchState={launchState}
           onGameFocus={publishGameFocus}
           onLaunch={makeLaunchHandler(games, launch.start)}
-          onRetry={() => {
-            if (preview) setShiftLaunchPreview(null)
-            else launch.retry()
-          }}
-          onDismiss={() => {
-            if (preview) setShiftLaunchPreview(null)
-            else setAcked(true)
-          }}
+          onRetry={launch.retry}
+          onDismiss={() => setAcked(true)}
         />
       ) : null,
   })

@@ -1,4 +1,3 @@
-import { LaunchState } from "@platform/library/launch-state"
 import { catalogFactsSourceLayerAtom } from "@platform/react/catalog/catalog-atoms"
 import { foregroundSessionStatusLayerAtom } from "@platform/react/library/library-atoms"
 import { ShiftCatalogState } from "@product/surfaces/web/shift/catalog/shift-catalog-state"
@@ -9,23 +8,18 @@ import {
   shiftForegroundSourceLayers,
 } from "@product/surfaces/web/shift/shift-foreground-preview"
 import {
-  launchStateSamples,
-  setShiftLaunchPreview,
-} from "@product/surfaces/web/shift/shift-launch-preview"
-import {
   axisOptionsFromTags,
-  LAB_AXIS_LIVE,
   type LabScreenCoordinate,
   type LabStateAxis,
-  pinFromTable,
 } from "../model/lab-state-axis"
 import { eachLabSurfaceRegistry } from "../model/lab-surface-registries"
 
 // Shift Home's state regions surfaced as axes. The Data axis drives the REAL
 // edge: it sets the surface's own catalog source atom in every mounted registry
 // (the same value production injects from the live loader), so the route reads
-// only `catalogSnapshotAtom` — no preview side channel. Launch/foreground still
-// use their preview singletons pending the same treatment.
+// only `catalogSnapshotAtom` — no preview side channel. Foreground is the same
+// real-edge pattern. Launch is intentionally not an axis: it is produced by
+// pressing Play against the real in-memory launcher.
 
 type CatalogSourceLayer = ReturnType<(typeof shiftCatalogSourceLayers)["Ready"]>
 
@@ -50,19 +44,6 @@ const shiftDataAxis: LabStateAxis = {
       if (live !== undefined)
         registry.set(catalogFactsSourceLayerAtom, live as CatalogSourceLayer)
     }),
-}
-
-const shiftLaunchAxis: LabStateAxis = {
-  id: "launch",
-  kind: "single",
-  label: "Launch",
-  liveLabel: "Auto",
-  states: axisOptionsFromTags(LaunchState.tags),
-  pin: pinFromTable(launchStateSamples, setShiftLaunchPreview),
-  release: () => setShiftLaunchPreview(null),
-  // The cinematic home (and its launch overlay) only exists in the Ready body.
-  parent: { axisId: "data", whenStates: ["Ready"] },
-  disabledHint: "Only while Data = Ready",
 }
 
 type ForegroundSourceLayer = ReturnType<
@@ -102,9 +83,7 @@ const shiftForegroundAxis: LabStateAxis = {
 export function shiftAxesForScreen(
   screenPath: string,
 ): readonly LabStateAxis[] {
-  return screenPath === "/"
-    ? [shiftDataAxis, shiftLaunchAxis, shiftForegroundAxis]
-    : []
+  return screenPath === "/" ? [shiftDataAxis, shiftForegroundAxis] : []
 }
 
 /** Capture the running surface's coordinate as per-axis pins. Launch maps to
@@ -115,10 +94,6 @@ export function shiftCaptureCoordinate(
   const coordinate = readShiftCurrentCoordinate(screenPath)
   return {
     data: { kind: "single", value: coordinate.data },
-    launch: {
-      kind: "single",
-      value: coordinate.data === "Ready" ? coordinate.launch : LAB_AXIS_LIVE,
-    },
     foreground: { kind: "single", value: coordinate.foreground },
   }
 }

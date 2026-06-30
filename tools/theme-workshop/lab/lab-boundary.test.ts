@@ -26,19 +26,22 @@ describe("lab tooling boundary", () => {
   it("does not let product runtime files import dev-lab runtime modules", () => {
     const offenders = walk(PRODUCT_ROOT).flatMap(path => {
       const text = readFileSync(path, "utf8")
-      const importsLab = /from\s+["'][^"']*tools\/theme-workshop\/lab|from\s+["']@tools\/theme-workshop\/lab/.test(text)
+      const importsLab =
+        /from\s+["'][^"']*tools\/theme-workshop\/lab|from\s+["']@tools\/theme-workshop\/lab/.test(
+          text,
+        )
       return importsLab ? [relative(process.cwd(), path)] : []
     })
 
     expect(offenders).toEqual([])
   })
 
-  it("keeps the design-tool preview singletons product-side, not in the lab", () => {
-    // The seam that lets the lab drive a mounted surface lives in product (inert
-    // in production); the lab consumes it through the adapter, never the reverse.
+  it("keeps any remaining transitional preview singletons product-side, not in the lab", () => {
+    // Transitional seams that still exist live in product (inert in production);
+    // the lab consumes them through the adapter, never the reverse. Shift Home
+    // Data/Foreground/Launch no longer use preview singleton render paths.
     const singletons = [
       "product/surfaces/web/shift/shift-catalog-preview.ts",
-      "product/surfaces/web/shift/shift-launch-preview.ts",
       "product/surfaces/web/pico/pico-data-preview.ts",
     ]
     for (const path of singletons) {

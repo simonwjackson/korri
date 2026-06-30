@@ -59,7 +59,7 @@ function applyPreview(axis: LabStateAxis, active: LabAxisActive) {
 /**
  * Owns the page-axis lifecycle for the lab: which screen's axes are active, the
  * per-axis pinned/Live map, the derived global Inspect/Live mode, and the
- * pin/release side effects against the surface's preview singletons — including
+ * pin/release side effects against the surface's real state edges — including
  * nested-axis release and the release-on-selection-change cleanup. Kept out of
  * LabShell so the ordering contract lives (and is tested) in one place.
  */

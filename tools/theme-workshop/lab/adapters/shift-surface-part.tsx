@@ -1,4 +1,6 @@
 import { RegistryProvider, useAtomValue } from "@effect/atom-react"
+import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
+import { makeInMemoryLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
 import {
   catalogFactsSourceLayerAtom,
   catalogSnapshotAtom,
@@ -6,6 +8,8 @@ import {
 import {
   foregroundSessionGateStateAtom,
   foregroundSessionStatusLayerAtom,
+  launcherLayerAtom,
+  librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
 import {
   foregroundStateFromAtom,
@@ -15,7 +19,10 @@ import { shiftForegroundSourceLayers } from "@product/surfaces/web/shift/shift-f
 import type { ReactNode } from "react"
 import type { Story } from "../../types"
 import type { SourceStatus } from "../model/lab-source-state"
-import { shiftCatalogLayerForBinding } from "../seed/shift-seed"
+import {
+  shiftCatalogLayerForBinding,
+  shiftEntriesForBinding,
+} from "../seed/shift-seed"
 
 /**
  * Render a placed Shift surface/page part on the Workshop board through the REAL
@@ -48,6 +55,7 @@ export function renderShiftSurfacePart(
     binding.sourceId,
     binding.stateId,
   )
+  const entries = shiftEntriesForBinding(binding.sourceId)
   const foregroundTag = binding.axisStateIds?.foreground ?? "Ready"
   const makeForeground =
     shiftForegroundSourceLayers[
@@ -61,6 +69,14 @@ export function renderShiftSurfacePart(
       initialValues={[
         [catalogFactsSourceLayerAtom, catalogLayer],
         [foregroundSessionStatusLayerAtom, makeForeground()],
+        [
+          librarySourceLayerAtom,
+          makeInMemoryLibrarySourceLayer({ playableEntries: entries }),
+        ],
+        [
+          launcherLayerAtom,
+          makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }),
+        ],
       ]}
     >
       <ShiftHomeFromEdge />

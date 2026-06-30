@@ -11,7 +11,10 @@ import {
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
 import { DEV_GAME_MEDIA } from "@product/surfaces/web/shift/dev-game-media"
-import { shiftCatalogSourceLayers } from "@product/surfaces/web/shift/shift-catalog-state-samples"
+import {
+  shiftCatalogFixtureEntries,
+  shiftCatalogSourceLayers,
+} from "@product/surfaces/web/shift/shift-catalog-state-samples"
 import { shiftForegroundSourceLayers } from "@product/surfaces/web/shift/shift-foreground-preview"
 import { Layer } from "effect"
 import type { LabSourceOption } from "../model/lab-source-state"
@@ -96,7 +99,7 @@ const RETRO_LIBRARY: readonly CatalogEntry[] = [
 
 const SHIFT_FIXTURE_SETS: Record<string, readonly CatalogEntry[] | undefined> =
   {
-    dev: undefined,
+    dev: shiftCatalogFixtureEntries,
     cozy: COZY_LIBRARY,
     retro: RETRO_LIBRARY,
   }
@@ -132,7 +135,7 @@ export async function makeSeedInitialValuesForBinding(binding: {
 }): Promise<SeedInitialValues> {
   const base = await makeSeedInitialValues()
   const entries = SHIFT_FIXTURE_SETS[binding.sourceId]
-  if (!entries) return base
+  if (!entries || binding.sourceId === "dev") return base
   const layer = makeCatalogStateSourceLayers(entries).Ready()
   return base.map(pair =>
     pair[0] === catalogFactsSourceLayerAtom
@@ -149,9 +152,16 @@ export async function makeSeedInitialValuesForBinding(binding: {
  */
 export function shiftCatalogLayerForBinding(sourceId: string, stateId: string) {
   const entries = SHIFT_FIXTURE_SETS[sourceId]
-  const layers = entries
-    ? makeCatalogStateSourceLayers(entries)
-    : shiftCatalogSourceLayers
+  const layers =
+    entries && sourceId !== "dev"
+      ? makeCatalogStateSourceLayers(entries)
+      : shiftCatalogSourceLayers
   const tag = (stateId in layers ? stateId : "Ready") as keyof typeof layers
   return layers[tag]()
+}
+
+export function shiftEntriesForBinding(
+  sourceId: string,
+): readonly CatalogEntry[] {
+  return SHIFT_FIXTURE_SETS[sourceId] ?? shiftCatalogFixtureEntries
 }

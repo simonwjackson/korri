@@ -1,7 +1,7 @@
 /**
- * Design-tool seam: preview the home's catalog DATA state without a backend. A
- * tiny cross-root singleton (mirrors shift-launch-preview / pico-settings) so a
- * control in the lab's React root can drive the data state of a Shift surface
+ * Legacy design-tool seam: preview the home's catalog DATA state without a
+ * backend. A tiny cross-root singleton (mirrors pico-settings) so a control in
+ * the lab's React root can drive the data state of a Shift surface
  * mounted in a separate root. Inert in production — nothing sets it unless a
  * design tool does, so `useShiftCatalogPreview()` returns null and the real
  * catalog loader wins.

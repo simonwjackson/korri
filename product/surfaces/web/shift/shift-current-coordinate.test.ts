@@ -1,17 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import { readShiftCurrentCoordinate } from "./shift-current-coordinate"
 import {
-  launchStateSamples,
-  setShiftLaunchPreview,
-} from "./shift-launch-preview"
-import {
   setShiftLiveData,
   setShiftLiveForeground,
   setShiftLiveLaunch,
 } from "./shift-live-coordinate"
 
 function resetCoordinateSeams() {
-  setShiftLaunchPreview(null)
   // Reset the live-coordinate store to the seed resting state between tests.
   setShiftLiveData("Ready")
   setShiftLiveLaunch("Idle")
@@ -31,20 +26,14 @@ describe("readShiftCurrentCoordinate", () => {
     })
   })
 
-  it("captures a live launch state the route published (no pin)", () => {
+  it("captures a live launch state the route published", () => {
     setShiftLiveLaunch("Launching")
     expect(readShiftCurrentCoordinate("/").launch).toBe("Launching")
   })
 
-  it("prefers the launch pin over the live store", () => {
-    setShiftLiveLaunch("Launching")
-    setShiftLaunchPreview(launchStateSamples.Failed())
-    expect(readShiftCurrentCoordinate("/").launch).toBe("Failed")
-  })
-
-  it("captures a live Ready + pinned Launching coordinate", () => {
+  it("captures a live Ready + Launching coordinate", () => {
     setShiftLiveData("Ready")
-    setShiftLaunchPreview(launchStateSamples.Launching())
+    setShiftLiveLaunch("Launching")
 
     expect(readShiftCurrentCoordinate("/")).toEqual({
       route: "/",
@@ -54,7 +43,7 @@ describe("readShiftCurrentCoordinate", () => {
     })
   })
 
-  it("captures a live foreground gate state the route published (no pin)", () => {
+  it("captures a live foreground gate state the route published", () => {
     setShiftLiveForeground("Cooling")
     expect(readShiftCurrentCoordinate("/").foreground).toBe("Cooling")
   })

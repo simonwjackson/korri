@@ -1,34 +1,54 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { RegistryProvider, useAtomSet } from "@effect/atom-react"
+import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
+import { makeInMemoryLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
 import { catalogFactsSourceLayerAtom } from "@platform/react/catalog/catalog-atoms"
-import { foregroundSessionStatusLayerAtom } from "@platform/react/library/library-atoms"
+import {
+  foregroundSessionStatusLayerAtom,
+  launcherLayerAtom,
+  librarySourceLayerAtom,
+} from "@platform/react/library/library-atoms"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react"
 import { useLayoutEffect } from "react"
-import { shiftCatalogSourceLayers } from "../shift-catalog-state-samples"
+import {
+  shiftCatalogFixtureEntries,
+  shiftCatalogSourceLayers,
+} from "../shift-catalog-state-samples"
 import { readShiftCurrentCoordinate } from "../shift-current-coordinate"
 import { shiftForegroundSourceLayers } from "../shift-foreground-preview"
-import {
-  launchStateSamples,
-  setShiftLaunchPreview,
-} from "../shift-launch-preview"
 import { ShiftHomeRoute } from "./ShiftHomeRoute"
 
 /**
- * Data and foreground are driven through their REAL edges
- * (`catalogFactsSourceLayerAtom`, `foregroundSessionStatusLayerAtom`) — no
- * preview side channel. The launch preview singleton (still in use, pending its
- * own migration) is set before render so the first cinematic frame carries it.
+ * Data and foreground are driven through their REAL edges. Launch is produced by
+ * interacting with the real launch controller against an in-memory
+ * LibrarySource/Launcher, not by injecting a preview singleton.
  */
 type ForegroundTag = ForegroundSessionGateState["_tag"]
 
 function ReadyHome({ foreground }: { readonly foreground?: ForegroundTag }) {
   const setCatalog = useAtomSet(catalogFactsSourceLayerAtom)
   const setForeground = useAtomSet(foregroundSessionStatusLayerAtom)
+  const setLibrarySource = useAtomSet(librarySourceLayerAtom)
+  const setLauncher = useAtomSet(launcherLayerAtom)
   useLayoutEffect(() => {
     setCatalog(shiftCatalogSourceLayers.Ready())
+    setLibrarySource(
+      makeInMemoryLibrarySourceLayer({
+        playableEntries: shiftCatalogFixtureEntries,
+      }),
+    )
+    setLauncher(
+      makeInMemoryLauncherLayer({ behavior: { kind: "succeed", delayMs: 25 } }),
+    )
     if (foreground) setForeground(shiftForegroundSourceLayers[foreground]())
-  }, [setCatalog, setForeground, foreground])
+  }, [setCatalog, setForeground, setLibrarySource, setLauncher, foreground])
   return <ShiftHomeRoute />
 }
 
@@ -40,26 +60,28 @@ function EmptyHome() {
   return <ShiftHomeRoute />
 }
 
-afterEach(() => {
-  setShiftLaunchPreview(null)
-  cleanup()
-})
+afterEach(cleanup)
 
-describe("ShiftHomeRoute launch + foreground over the real edges", () => {
-  it("rides the launch pin on the cinematic home when Data is Ready", async () => {
-    setShiftLaunchPreview(launchStateSamples.Launching())
+describe("ShiftHomeRoute produced launch + foreground over the real edges", () => {
+  it("produces launch feedback from pressing Play when Data is Ready", async () => {
     render(
       <RegistryProvider>
         <ReadyHome />
       </RegistryProvider>,
     )
-    await waitFor(() => {
-      expect(screen.getByText("Starting\u2026")).toBeTruthy()
+
+    const firstGame = await screen.findByRole("button", {
+      name: /Hollow Knight/i,
     })
+    fireEvent.click(firstGame)
+
+    await waitFor(() => {
+      expect(screen.getByText("Now playing")).toBeTruthy()
+    })
+    expect(readShiftCurrentCoordinate("/").launch).toBe("Launched")
   })
 
-  it("hides the launch overlay when Data is not Ready", async () => {
-    setShiftLaunchPreview(launchStateSamples.Launching())
+  it("hides launch feedback when Data is not Ready", async () => {
     render(
       <RegistryProvider>
         <EmptyHome />
@@ -68,7 +90,7 @@ describe("ShiftHomeRoute launch + foreground over the real edges", () => {
     await waitFor(() => {
       expect(screen.getByText("No games found.")).toBeTruthy()
     })
-    expect(screen.queryByText("Starting\u2026")).toBeNull()
+    expect(screen.queryByText("Starting…")).toBeNull()
   })
 
   it("renders foreground feedback through the route's real edge", async () => {
@@ -83,7 +105,7 @@ describe("ShiftHomeRoute launch + foreground over the real edges", () => {
     expect(screen.getByText("Another game is running")).toBeTruthy()
   })
 
-  it("publishes the raw launch coordinate while foreground blocks display", async () => {
+  it("publishes foreground while launch remains the produced controller state", async () => {
     render(
       <RegistryProvider>
         <ReadyHome foreground="Running" />

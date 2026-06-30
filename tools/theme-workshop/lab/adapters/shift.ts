@@ -25,8 +25,9 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   secondaryScreenPath: SHIFT_COMPANION_PATH,
   axesForScreen: shiftAxesForScreen,
   captureCoordinate: shiftCaptureCoordinate,
-  // Shift's Data + Launch state machines are surfaced as the Home screen's axes
-  // (see shift-axes.tsx) — not duplicated here as a control.
+  // Shift's Data + Foreground state machines are surfaced as Home screen axes
+  // (see shift-axes.tsx). Launch is produced by pressing Play against the real
+  // in-memory launcher, not injected as a lab axis/control.
   sources: shiftLabSources,
   renderSurfacePart: renderShiftSurfacePart,
   // The Home surface part carries a second dial — Foreground — alongside its Data
