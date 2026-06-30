@@ -25,12 +25,13 @@ import {
 } from "../seed/shift-seed"
 
 /**
- * Render a placed Shift surface/page part on the Workshop board through the REAL
+ * Render a placed Shift Home page part on the Workshop board through the REAL
  * edges, seeded for the object's chosen fixture source + Data state + Foreground
- * state. The part reads `catalogSnapshotAtom` and `foregroundSessionGateStateAtom`
+ * state. Home reads `catalogSnapshotAtom` and `foregroundSessionGateStateAtom`
  * (the production atoms); swapping any dial in the object's drag bar re-seeds
  * those atoms, so the same page renders that Data×Foreground combination — the
- * same swap that works in Preview, now per object.
+ * same swap that works in Preview, now per object. Non-Home page parts keep their
+ * own selected story render instead of falling through to Home.
  */
 function ShiftHomeFromEdge() {
   const result = useAtomValue(catalogSnapshotAtom)
@@ -43,14 +44,20 @@ function ShiftHomeFromEdge() {
   return <ShiftHomeStateView result={result} foreground={foreground} />
 }
 
+function isShiftHomeStory(story: Story): boolean {
+  return story.layer === "page" && story.name === "Home"
+}
+
 export function renderShiftSurfacePart(
-  _story: Story,
+  story: Story,
   binding: {
     readonly sourceId: string
     readonly stateId: SourceStatus
     readonly axisStateIds?: Readonly<Record<string, SourceStatus>>
   },
 ): ReactNode {
+  if (!isShiftHomeStory(story)) return story.render()
+
   const catalogLayer = shiftCatalogLayerForBinding(
     binding.sourceId,
     binding.stateId,

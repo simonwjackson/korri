@@ -26,6 +26,15 @@ const homeStory: Story = {
   render: () => null,
 }
 
+const gameDetailStory: Story = {
+  id: "shift-game-detail-continue",
+  layer: "page",
+  name: "Game Detail",
+  surface: true,
+  state: "Continue",
+  render: () => <div>Game Detail selected page</div>,
+}
+
 afterEach(cleanup)
 
 describe("renderShiftSurfacePart (Workshop edge render)", () => {
@@ -121,6 +130,22 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       expect(screen.getByText("Aurora Drift")).toBeTruthy()
     })
     expect(getShiftLiveLaunch()).toBe("Launching")
+  })
+
+  it("renders a selected non-Home page part instead of always rendering Home", async () => {
+    render(
+      <div>
+        {renderShiftSurfacePart(gameDetailStory, {
+          sourceId: "cozy",
+          stateId: "Continue",
+        })}
+      </div>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Game Detail selected page")).toBeTruthy()
+    })
+    expect(screen.queryByRole("button", { name: /Aurora Drift/i })).toBeNull()
   })
 
   it("combines Data×Foreground: a busy foreground blocks on the Ready page", async () => {
