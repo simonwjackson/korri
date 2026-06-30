@@ -101,10 +101,10 @@ export function statesForStory(
 }
 
 /** Label for a part in the tree/gallery. A collapsed state-variant family is
- * named by its STATE AXIS (the part's note, e.g. "Data states") rather than the
+ * named by its state group (the part's note, e.g. "Data states") rather than the
  * single representative state, so "Home · Ready" reads as "Home · Data states" —
- * making clear it's a state set you switch in the States panel, not a distinct
- * page. Non-family parts keep their authored name. */
+ * making clear it's a state set you switch for the selected object, not a
+ * distinct page. Non-family parts keep their authored name. */
 export function partLabel(story: Story): string {
   if (story.variants?.length && story.note) {
     const base = story.name.split(" · ")[0]

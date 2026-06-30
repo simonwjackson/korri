@@ -18,6 +18,7 @@ import {
 import { shiftForegroundSourceLayers } from "@product/surfaces/web/shift/shift-foreground-preview"
 import type { ReactNode } from "react"
 import type { Story } from "../../types"
+import { LAB_VARIANT_STATE_GROUP_ID } from "../model/lab-object-state-groups"
 import type { SourceStatus } from "../model/lab-source-state"
 import {
   shiftCatalogLayerForBinding,
@@ -26,8 +27,8 @@ import {
 
 /**
  * Render a placed Shift Home page part on the Workshop board through the REAL
- * edges, seeded for the object's chosen fixture source + Data state + Foreground
- * state. Home reads `catalogSnapshotAtom` and `foregroundSessionGateStateAtom`
+ * edges, seeded for the object's chosen fixture source + Data and Foreground
+ * state groups. Home reads `catalogSnapshotAtom` and `foregroundSessionGateStateAtom`
  * (the production atoms); swapping any dial in the object's drag bar re-seeds
  * those atoms, so the same page renders that Data×Foreground combination — the
  * same swap that works in Preview, now per object. Non-Home page parts keep their
@@ -52,18 +53,16 @@ export function renderShiftSurfacePart(
   story: Story,
   binding: {
     readonly sourceId: string
-    readonly stateId: SourceStatus
-    readonly axisStateIds?: Readonly<Record<string, SourceStatus>>
+    readonly stateGroupValues: Readonly<Record<string, SourceStatus>>
   },
 ): ReactNode {
   if (!isShiftHomeStory(story)) return story.render()
 
-  const catalogLayer = shiftCatalogLayerForBinding(
-    binding.sourceId,
-    binding.stateId,
-  )
+  const dataTag =
+    binding.stateGroupValues[LAB_VARIANT_STATE_GROUP_ID] ?? "Ready"
+  const catalogLayer = shiftCatalogLayerForBinding(binding.sourceId, dataTag)
   const entries = shiftEntriesForBinding(binding.sourceId)
-  const foregroundTag = binding.axisStateIds?.foreground ?? "Ready"
+  const foregroundTag = binding.stateGroupValues.foreground ?? "Ready"
   const makeForeground =
     shiftForegroundSourceLayers[
       foregroundTag as keyof typeof shiftForegroundSourceLayers
@@ -72,7 +71,7 @@ export function renderShiftSurfacePart(
   // on first render.
   return (
     <RegistryProvider
-      key={`${binding.sourceId}:${binding.stateId}:${foregroundTag}`}
+      key={`${binding.sourceId}:${dataTag}:${foregroundTag}`}
       initialValues={[
         [catalogFactsSourceLayerAtom, catalogLayer],
         [foregroundSessionStatusLayerAtom, makeForeground()],

@@ -20,10 +20,11 @@ export interface LabMountedSurface {
   readonly dispose: () => void
 }
 
-export interface LabSurfacePartAxis {
+export interface LabSurfacePartStateGroup {
   readonly id: string
   readonly label: string
   readonly states: readonly LabStateOption[]
+  readonly defaultStateId?: SourceStatus
 }
 
 export interface LabSurfaceDualScreenOptions {
@@ -67,21 +68,22 @@ export interface LabSurfaceAdapter {
    * [data-pico].pico-screen.intrinsic). Omit when parts are self-scoping. */
   readonly previewScope?: (children: ReactNode) => ReactNode
   /** Render a placed surface/page part on the Workshop board through the real
-   * data edge, seeded for the object's source + Data state + any extra-axis pins
-   * — so per-object state swap works like Preview. Omit to fall back to the
-   * part's baked render. */
+   * data edge, seeded for the object's source + named state groups — so
+   * per-object state swap works like Preview. Omit to fall back to the part's
+   * baked render. */
   readonly renderSurfacePart?: (
     story: Story,
     binding: {
       readonly sourceId: string
-      readonly stateId: SourceStatus
-      readonly axisStateIds?: Readonly<Record<string, SourceStatus>>
+      readonly stateGroupValues: Readonly<Record<string, SourceStatus>>
     },
   ) => ReactNode
-  /** Extra state-machine dials (beyond the primary Data state) a surface part
-   * exposes per Workshop object, e.g. Foreground. Drives `renderSurfacePart`'s
-   * `axisStateIds`. Omit when a surface part has a single state dimension. */
-  readonly surfacePartAxes?: (story: Story) => readonly LabSurfacePartAxis[]
+  /** Surface-owned state groups a Compose object exposes in addition to any
+   * discovered variant family, e.g. Shift Home Foreground. The adapter filters by
+   * story so unrelated pages/parts do not show controls they cannot consume. */
+  readonly surfacePartStateGroups?: (
+    story: Story,
+  ) => readonly LabSurfacePartStateGroup[]
   readonly sources?: readonly LabSourceOption[]
   readonly states?: readonly LabStateOption[]
   readonly makeSeedInitialValues: () => Promise<unknown>

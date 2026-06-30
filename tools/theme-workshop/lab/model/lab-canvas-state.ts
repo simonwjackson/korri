@@ -9,14 +9,14 @@ export type LabWorkshopCommandSignal = {
   readonly command: LabWorkshopCommand
 }
 
+export type LabObjectStateValues = Readonly<Record<string, SourceStatus>>
+
 export type LabObjectInstance = {
   readonly id: string
   readonly storyId: string
   readonly sourceId: string
-  readonly stateId: SourceStatus
-  /** Extra per-axis pins for a multi-machine surface part (e.g. foreground),
-   * keyed by axis id. The primary `stateId` is the part's Data state. */
-  readonly axisStateIds?: Readonly<Record<string, SourceStatus>>
+  /** Compose-object state values keyed by independent state-group id. */
+  readonly stateGroupValues: LabObjectStateValues
   readonly x?: number
   readonly y?: number
 }
@@ -44,15 +44,18 @@ export function resetObjectIdCounterForTest(): void {
 export function createObjectInstance(
   storyId: string,
   sourceId: string,
-  stateId: SourceStatus,
+  stateGroupValues: LabObjectStateValues,
 ): LabObjectInstance {
-  return { id: nextObjectId(), storyId, sourceId, stateId }
+  return { id: nextObjectId(), storyId, sourceId, stateGroupValues }
 }
 
 export function reconcileInstancesWithSelection(
   instances: readonly LabObjectInstance[],
   selectedStoryIds: readonly string[],
-  defaults: { readonly sourceId: string; readonly stateId: SourceStatus },
+  defaults: {
+    readonly sourceId: string
+    readonly stateGroupValuesForStory: (storyId: string) => LabObjectStateValues
+  },
 ): readonly LabObjectInstance[] {
   const selected = new Set(selectedStoryIds)
   const kept = instances.filter(instance => selected.has(instance.storyId))
@@ -60,7 +63,11 @@ export function reconcileInstancesWithSelection(
   for (const storyId of selectedStoryIds) {
     if (!out.some(instance => instance.storyId === storyId)) {
       out.push(
-        createObjectInstance(storyId, defaults.sourceId, defaults.stateId),
+        createObjectInstance(
+          storyId,
+          defaults.sourceId,
+          defaults.stateGroupValuesForStory(storyId),
+        ),
       )
     }
   }
@@ -75,25 +82,27 @@ export function clampScale(value: number): number {
 export function bindObjectInstance(
   instances: readonly LabObjectInstance[],
   id: string,
-  patch: Partial<Pick<LabObjectInstance, "sourceId" | "stateId" | "x" | "y">>,
+  patch: Partial<Pick<LabObjectInstance, "sourceId" | "x" | "y">>,
 ): readonly LabObjectInstance[] {
   return instances.map(instance =>
     instance.id === id ? { ...instance, ...patch } : instance,
   )
 }
 
-/** Set one extra-axis pin (e.g. foreground) on an object, leaving others. */
-export function bindObjectAxisState(
+export function bindObjectStateGroup(
   instances: readonly LabObjectInstance[],
   id: string,
-  axisId: string,
+  groupId: string,
   stateId: SourceStatus,
 ): readonly LabObjectInstance[] {
   return instances.map(instance =>
     instance.id === id
       ? {
           ...instance,
-          axisStateIds: { ...instance.axisStateIds, [axisId]: stateId },
+          stateGroupValues: {
+            ...instance.stateGroupValues,
+            [groupId]: stateId,
+          },
         }
       : instance,
   )

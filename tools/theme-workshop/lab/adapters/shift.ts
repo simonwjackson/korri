@@ -30,18 +30,22 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   // in-memory launcher, not injected as a lab axis/control.
   sources: shiftLabSources,
   renderSurfacePart: renderShiftSurfacePart,
-  // The Home surface part carries a second dial — Foreground — alongside its Data
-  // state, so a placed object can show any Data×Foreground combination.
-  surfacePartAxes: () => [
-    {
-      id: "foreground",
-      label: "Foreground",
-      states: FOREGROUND_SESSION_GATE_STATE_TAGS.map(tag => ({
-        id: tag,
-        label: tag,
-      })),
-    },
-  ],
+  // The Home surface part carries a second state group — Foreground — alongside
+  // its Data family, so a placed object can show any Data×Foreground combination.
+  surfacePartStateGroups: story =>
+    story.layer === "page" && story.name.startsWith("Home")
+      ? [
+          {
+            id: "foreground",
+            label: "Foreground",
+            defaultStateId: "Ready",
+            states: FOREGROUND_SESSION_GATE_STATE_TAGS.map(tag => ({
+              id: tag,
+              label: tag,
+            })),
+          },
+        ]
+      : [],
   makeSeedInitialValues,
   makeSeedInitialValuesForBinding,
   mountSurface: (host, { initialValues, history, dualScreen, onRegistry }) =>

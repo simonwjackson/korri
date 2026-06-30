@@ -83,7 +83,7 @@ export function LabWorkshopBoard({
 
   const bind = (
     id: string,
-    patch: Partial<Pick<LabObjectInstance, "sourceId" | "stateId">>,
+    patch: Partial<Pick<LabObjectInstance, "sourceId">>,
   ) => onInstancesChange(bindObjectInstance(instances, id, patch))
   const move = (id: string, x: number, y: number) =>
     onInstancesChange(bindObjectInstance(instances, id, { x, y }))

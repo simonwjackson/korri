@@ -2,27 +2,27 @@ import type { ScreenConfig } from "../../device-lab"
 import type { Story } from "../../types"
 import { useLab } from "../Lab.context"
 import type { LabObjectInstance } from "../model/lab-canvas-state"
+import {
+  objectStateGroupsForStory,
+  resolveObjectStateGroupValues,
+  variantStateGroup,
+} from "../model/lab-object-state-groups"
 import { stateVariantFor } from "../model/lab-part-model"
 import { LabPreviewBoundary } from "../model/lab-preview-boundary"
-import { isSourceStatus } from "../model/lab-source-state"
 import { LAB_BIND_MIME } from "../panels/LabSourcesPanel"
 import { LabScreenFrame } from "./LabScreenFrame"
 
-function parseBind(
-  value: string,
-): { axis: "sourceId" | "stateId"; value: string } | null {
+function parseBind(value: string): { axis: "sourceId"; value: string } | null {
   const [axis, id] = value.split(":")
   if (axis === "source" && id) return { axis: "sourceId", value: id }
-  if (axis === "state" && isSourceStatus(id))
-    return { axis: "stateId", value: id }
   return null
 }
 
 /**
  * One placed part on the Compose board: the part rendered inside a single
  * logical screen frame with a drag bar carrying only identity, drag, and
- * remove. Its bindings (data source, state, extra axes) are edited in the
- * selection-scoped Inspector, which scales to any number of axes. Compose is
+ * remove. Its bindings (data source plus state groups) are edited in the
+ * selection-scoped Inspector, which scales to any number of groups. Compose is
  * device-agnostic: the selected screen contributes aspect ratio only.
  */
 export function LabDraggablePart({
@@ -46,7 +46,7 @@ export function LabDraggablePart({
   readonly onSelect: (id: string) => void
   readonly onBind: (
     id: string,
-    patch: Partial<Pick<LabObjectInstance, "sourceId" | "stateId">>,
+    patch: Partial<Pick<LabObjectInstance, "sourceId">>,
   ) => void
   readonly onMove: (id: string, x: number, y: number) => void
   readonly onRemove: (id: string) => void
@@ -54,10 +54,21 @@ export function LabDraggablePart({
   const { adapter } = useLab()
   const x = instance.x ?? 24
   const y = instance.y ?? 24
+  const groups = objectStateGroupsForStory(story, byId, adapter)
+  const stateGroupValues = resolveObjectStateGroupValues(
+    groups,
+    instance.stateGroupValues,
+  )
+  const variantGroup = variantStateGroup(groups)
   // Fall back to the part's own representative when the requested state isn't in
-  // its family (e.g. a state inherited from another card), so a card always
-  // renders something.
-  const variant = stateVariantFor(story, instance.stateId, byId) ?? story
+  // its family (e.g. stale stored state), so a card always renders something.
+  const variant = variantGroup
+    ? (stateVariantFor(
+        story,
+        stateGroupValues[variantGroup.id] ?? variantGroup.defaultStateId,
+        byId,
+      ) ?? story)
+    : story
   const fill =
     Boolean(variant.surface) ||
     variant.layer === "page" ||
@@ -65,15 +76,14 @@ export function LabDraggablePart({
 
   const renderBody = () => {
     // Surface/page parts of a binding-capable adapter render through the real
-    // data edge, seeded for this object's source + Data state + extra-axis pins
-    // (e.g. foreground), so the drag bar's dropdowns swap the actual data (like
-    // Preview). Other parts (atoms/molecules) keep their baked render.
+    // data edge, seeded for this object's source + state groups (e.g. Data and
+    // Foreground), so Inspector dropdowns swap the actual app-edge data. Other
+    // parts (atoms/molecules) keep their baked render.
     const node =
       adapter.renderSurfacePart && fill
         ? adapter.renderSurfacePart(variant, {
             sourceId: instance.sourceId,
-            stateId: instance.stateId,
-            axisStateIds: instance.axisStateIds,
+            stateGroupValues,
           })
         : variant.render()
     const scoped = adapter.previewScope ? adapter.previewScope(node) : node
@@ -95,10 +105,7 @@ export function LabDraggablePart({
       }}
       onDrop={event => {
         const bind = parseBind(event.dataTransfer.getData(LAB_BIND_MIME))
-        if (bind)
-          onBind(instance.id, {
-            [bind.axis]: bind.value,
-          } as Partial<Pick<LabObjectInstance, "sourceId" | "stateId">>)
+        if (bind) onBind(instance.id, { [bind.axis]: bind.value })
       }}
     >
       <header

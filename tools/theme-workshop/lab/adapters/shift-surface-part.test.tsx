@@ -43,7 +43,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "dev",
-          stateId: "Ready",
+          stateGroupValues: { variant: "Ready" },
         })}
       </div>,
     )
@@ -57,7 +57,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "cozy",
-          stateId: "Ready",
+          stateGroupValues: { variant: "Ready" },
         })}
       </div>,
     )
@@ -71,7 +71,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "retro",
-          stateId: "Ready",
+          stateGroupValues: { variant: "Ready" },
         })}
       </div>,
     )
@@ -85,7 +85,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "cozy",
-          stateId: "Empty",
+          stateGroupValues: { variant: "Empty" },
         })}
       </div>,
     )
@@ -99,7 +99,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "cozy",
-          stateId: "Ready",
+          stateGroupValues: { variant: "Ready" },
         })}
       </div>,
     )
@@ -122,7 +122,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "cozy",
-          stateId: "Ready",
+          stateGroupValues: { variant: "Ready" },
         })}
       </div>,
     )
@@ -137,7 +137,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(gameDetailStory, {
           sourceId: "cozy",
-          stateId: "Continue",
+          stateGroupValues: { action: "Continue" },
         })}
       </div>,
     )
@@ -153,8 +153,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(homeStory, {
           sourceId: "cozy",
-          stateId: "Ready",
-          axisStateIds: { foreground: "Running" },
+          stateGroupValues: { variant: "Ready", foreground: "Running" },
         })}
       </div>,
     )

@@ -20,8 +20,8 @@ import {
 import { useLab } from "./Lab.context"
 import { knobStyle } from "./model/lab-calibration-state"
 import {
-  bindObjectAxisState,
   bindObjectInstance,
+  bindObjectStateGroup,
   type LabCanvasView,
   type LabObjectInstance,
   type LabWorkshopCommand,
@@ -29,6 +29,10 @@ import {
   type LabWorkshopTool,
   reconcileInstancesWithSelection,
 } from "./model/lab-canvas-state"
+import {
+  objectStateGroupsForStory,
+  resolveObjectStateGroupValues,
+} from "./model/lab-object-state-groups"
 import {
   buildStoryIndex,
   firstStateFamilyStory,
@@ -97,10 +101,10 @@ export function LabShell() {
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null)
   const bindObject = (
     id: string,
-    patch: Partial<Pick<LabObjectInstance, "sourceId" | "stateId">>,
+    patch: Partial<Pick<LabObjectInstance, "sourceId">>,
   ) => setInstances(prev => bindObjectInstance(prev, id, patch))
-  const bindObjectAxis = (id: string, axisId: string, stateId: string) =>
-    setInstances(prev => bindObjectAxisState(prev, id, axisId, stateId))
+  const bindObjectState = (id: string, groupId: string, stateId: string) =>
+    setInstances(prev => bindObjectStateGroup(prev, id, groupId, stateId))
   // Parts are the surface's static discovered *.part.tsx components only — never
   // the surface's routes. The live, router-driven surface lives in the Preview
   // view; Parts stay isolated from the router.
@@ -196,10 +200,17 @@ export function LabShell() {
     setInstances(prev =>
       reconcileInstancesWithSelection(prev, selectedIds, {
         sourceId: activeSourceId,
-        stateId: activeStateId,
+        stateGroupValuesForStory: storyId => {
+          const story = index.byId.get(storyId)
+          if (!story) return {}
+          return resolveObjectStateGroupValues(
+            objectStateGroupsForStory(story, index.byId, adapter),
+            {},
+          )
+        },
       }),
     )
-  }, [selectedIds, activeSourceId, activeStateId])
+  }, [selectedIds, activeSourceId, index, adapter])
 
   // The Parts panel is a palette: each pick toggles that part onto the Compose
   // board (one part is just the n=1 case). There is no separate single-part
@@ -281,7 +292,7 @@ export function LabShell() {
           byId={index.byId}
           sources={sources}
           onBind={bindObject}
-          onBindAxis={bindObjectAxis}
+          onBindStateGroup={bindObjectState}
         />
       ) : null}
       <LabInspectorPanel />

@@ -1,15 +1,17 @@
 import type { Story } from "../../types"
 import { useLab } from "../Lab.context"
 import type { LabObjectInstance } from "../model/lab-canvas-state"
-import { statesForStory, stateVariantFor } from "../model/lab-part-model"
+import {
+  objectStateGroupsForStory,
+  resolveObjectStateGroupValues,
+} from "../model/lab-object-state-groups"
 import type { LabSourceOption, SourceStatus } from "../model/lab-source-state"
 
 /**
- * Inspector scoped to the selected Compose object. Its bindings — data source,
- * Data state, and any adapter-provided extra axes (foreground, …) — are an
- * open-ended list, so they stack vertically and scroll, instead of crowding the
- * object's title bar horizontally. The title bar now carries only identity,
- * drag, and remove.
+ * Inspector scoped to the selected Compose object. Its bindings — data source
+ * plus zero/one/many state groups — stack vertically and scroll instead of
+ * crowding the object's title bar horizontally. No state group is special to the
+ * Inspector; a group's render role is consumed by the canvas, not by this UI.
  */
 export function LabObjectInspector({
   instance,
@@ -17,7 +19,7 @@ export function LabObjectInspector({
   byId,
   sources,
   onBind,
-  onBindAxis,
+  onBindStateGroup,
 }: {
   readonly instance: LabObjectInstance
   readonly story: Story
@@ -25,18 +27,20 @@ export function LabObjectInspector({
   readonly sources: readonly LabSourceOption[]
   readonly onBind: (
     id: string,
-    patch: Partial<Pick<LabObjectInstance, "sourceId" | "stateId">>,
+    patch: Partial<Pick<LabObjectInstance, "sourceId">>,
   ) => void
-  readonly onBindAxis: (id: string, axisId: string, stateId: string) => void
+  readonly onBindStateGroup: (
+    id: string,
+    groupId: string,
+    stateId: SourceStatus,
+  ) => void
 }) {
   const { adapter } = useLab()
-  const states = statesForStory(story, byId)
-  const variant = stateVariantFor(story, instance.stateId, byId) ?? story
-  const fill =
-    Boolean(variant.surface) ||
-    variant.layer === "page" ||
-    variant.layer === "template"
-  const extraAxes = fill ? (adapter.surfacePartAxes?.(story) ?? []) : []
+  const groups = objectStateGroupsForStory(story, byId, adapter)
+  const values = resolveObjectStateGroupValues(
+    groups,
+    instance.stateGroupValues,
+  )
 
   return (
     <div className="pt-inspector">
@@ -63,37 +67,17 @@ export function LabObjectInspector({
             ))}
           </select>
         </label>
-        <label className="pt-bind-row">
-          <span className="pt-bind-label">State</span>
-          <select
-            value={instance.stateId}
-            aria-label={`State for ${story.name}`}
-            onChange={event =>
-              onBind(instance.id, {
-                stateId: event.target.value as SourceStatus,
-              })
-            }
-          >
-            {states.map(state => (
-              <option key={state.id} value={state.id}>
-                {state.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {extraAxes.map(axis => (
-          <label key={axis.id} className="pt-bind-row">
-            <span className="pt-bind-label">{axis.label}</span>
+        {groups.map(group => (
+          <label key={group.id} className="pt-bind-row">
+            <span className="pt-bind-label">{group.label}</span>
             <select
-              value={
-                instance.axisStateIds?.[axis.id] ?? axis.states[0]?.id ?? ""
-              }
-              aria-label={`${axis.label} for ${story.name}`}
+              value={values[group.id] ?? group.defaultStateId}
+              aria-label={`${group.label} for ${story.name}`}
               onChange={event =>
-                onBindAxis(instance.id, axis.id, event.target.value)
+                onBindStateGroup(instance.id, group.id, event.target.value)
               }
             >
-              {axis.states.map(state => (
+              {group.states.map(state => (
                 <option key={state.id} value={state.id}>
                   {state.label}
                 </option>
