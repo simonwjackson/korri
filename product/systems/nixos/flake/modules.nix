@@ -36,6 +36,7 @@ rec {
   };
 
   korri-runtime = import ../modules/korri-runtime.nix;
+  korri-bluetooth = import ../modules/korri-bluetooth.nix;
   korri-rocknix-audio-bootstrap = import ../modules/korri-rocknix-audio-bootstrap.nix;
   korri-rocknix-guest-device-access = import ../modules/korri-rocknix-guest-device-access.nix;
   korri-rocknix-guest-profile = import ../modules/korri-rocknix-guest-profile.nix;
@@ -104,6 +105,7 @@ rec {
   korri = {
     imports = [
       korri-runtime
+      korri-bluetooth
       korri-setup
       korri-login
       korri-compositor
