@@ -218,7 +218,7 @@ function context(
     initialValues,
     themeId: adapter.id,
     surfacePath: "/",
-    initialCanvasView: "surface",
+    initialCanvasView: "preview",
     screens: adapter.screens ?? [],
     selection: { kind: "set", ids: ["thor"] },
     devices: [thor],

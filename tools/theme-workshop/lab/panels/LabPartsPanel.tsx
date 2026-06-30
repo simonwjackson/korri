@@ -1,5 +1,5 @@
 import type { Story } from "../../types"
-import { partLabel, type LabStoryGroup } from "../model/lab-part-model"
+import { type LabStoryGroup, partLabel } from "../model/lab-part-model"
 
 export function LabPartsPanel({
   groups,
@@ -9,17 +9,21 @@ export function LabPartsPanel({
 }: {
   readonly groups: readonly LabStoryGroup[]
   readonly selectedIds: readonly string[]
-  readonly onSelect: (story: Story, additive: boolean) => void
+  readonly onSelect: (story: Story) => void
   readonly onSelectLayer: (stories: readonly Story[]) => void
 }) {
   return (
     <div className="pt-tree">
       <div className="pt-tree-hint">
-        Tap to open · use <b>Multi</b> (or ⌘/Ctrl-click) to stack several
+        Tap to place on the device · tap again to remove
       </div>
       {groups.map(group => (
         <div key={group.layer} className="pt-tree-group">
-          <button type="button" className="pt-tree-layer" onClick={() => onSelectLayer(group.stories)}>
+          <button
+            type="button"
+            className="pt-tree-layer"
+            onClick={() => onSelectLayer(group.stories)}
+          >
             {group.layer}
             <span className="pt-tree-layer-all">all</span>
           </button>
@@ -30,9 +34,11 @@ export function LabPartsPanel({
                 key={story.id}
                 type="button"
                 className={`pt-tree-item${on ? " is-sel" : ""}`}
-                onClick={event => onSelect(story, event.metaKey || event.ctrlKey || event.shiftKey)}
+                onClick={() => onSelect(story)}
               >
-                <span className="pt-tree-check" aria-hidden>{on ? "◉" : "○"}</span>
+                <span className="pt-tree-check" aria-hidden>
+                  {on ? "◉" : "○"}
+                </span>
                 {partLabel(story)}
               </button>
             )

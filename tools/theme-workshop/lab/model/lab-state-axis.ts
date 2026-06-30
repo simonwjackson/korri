@@ -1,5 +1,4 @@
 import { humanizeTag } from "@platform/state/state-variants"
-import type { ReactNode } from "react"
 
 /**
  * A page part exposes one or more named state AXES — each a real state machine
@@ -64,10 +63,6 @@ export interface LabStateAxis {
   readonly parent?: LabAxisParent
   /** Short reason shown when the axis is greyed by `parent`. */
   readonly disabledHint?: string
-  /** A seeded STATIC render of this axis at one state, for the Matrix fan-out
-   * (every value side by side) — no live mount. Driven by the same sample table
-   * as the pin, so the static fan and the live pin can never drift. */
-  readonly renderSample?: (stateId: string) => ReactNode
 }
 
 /**
@@ -81,17 +76,6 @@ export function pinFromTable<S>(
   return stateId => {
     const make = table[stateId]
     if (make) apply(make())
-  }
-}
-
-/** Build an axis `renderSample` from the same sample table, equally cast-free. */
-export function renderFromTable<S>(
-  table: Readonly<Record<string, () => S>>,
-  render: (value: S) => ReactNode,
-): (stateId: string) => ReactNode {
-  return stateId => {
-    const make = table[stateId]
-    return make ? render(make()) : null
   }
 }
 

@@ -6,8 +6,7 @@ import {
   initialValuesForBinding,
   type SourceStatus,
 } from "../model/lab-source-state"
-
-const VIEWPORT_INSET = 112
+import { useLabFitHeight } from "./useLabFitHeight"
 
 let fallbackLabViewSessionId = 0
 
@@ -34,21 +33,9 @@ export function LabSurfaceView({
     pxPerMm,
   } = useLab()
   const [viewSessionId] = useState(createLabViewSessionId)
-  const [maxHeightPx, setMaxHeightPx] = useState(() =>
-    typeof window === "undefined"
-      ? undefined
-      : window.innerHeight - VIEWPORT_INSET,
-  )
+  const maxHeightPx = useLabFitHeight()
   const [boundValues, setBoundValues] = useState<unknown | null>(initialValues)
   const [error, setError] = useState<Error | null>(null)
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const update = () => setMaxHeightPx(window.innerHeight - VIEWPORT_INSET)
-    update()
-    window.addEventListener("resize", update)
-    return () => window.removeEventListener("resize", update)
-  }, [])
 
   useEffect(() => {
     if (!adapter.makeSeedInitialValuesForBinding) {

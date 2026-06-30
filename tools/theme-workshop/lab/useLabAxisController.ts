@@ -1,5 +1,4 @@
 import { useLayoutEffect, useMemo, useState } from "react"
-import type { Story } from "../types"
 import {
   axisEnabled,
   isAxisLive,
@@ -66,11 +65,10 @@ function applyPreview(axis: LabStateAxis, active: LabAxisActive) {
  */
 export function useLabAxisController(
   adapter: LabSurfaceAdapter,
-  primaryStory: Story | null,
 ): LabAxisController {
-  // Default to the first screen that exposes axes (the surface's home); a page
-  // selection retargets it to that screen's route.
-  const defaultAxisScreenPath = useMemo(() => {
+  // The surface's home screen (its first screen that exposes axes) is the live
+  // target the axes drive.
+  const activeScreenPath = useMemo(() => {
     for (const screen of adapter.screens ?? []) {
       if ((adapter.axesForScreen?.(screen.path) ?? []).length > 0)
         return screen.path
@@ -78,15 +76,12 @@ export function useLabAxisController(
     return "/"
   }, [adapter])
 
-  const activeScreenPath = primaryStory?.screenPath ?? defaultAxisScreenPath
-  const isPageSelection =
-    !primaryStory ||
-    primaryStory.layer === "page" ||
-    primaryStory.layer === "template"
+  // Axes are the live surface's state machines and no longer depend on part
+  // selection: parts are static and drive their own fixture states instead. The
+  // axes belong to the Preview view (see LabShell, which only shows them there).
   const screenAxes = useMemo(
-    () =>
-      isPageSelection ? (adapter.axesForScreen?.(activeScreenPath) ?? []) : [],
-    [adapter, activeScreenPath, isPageSelection],
+    () => adapter.axesForScreen?.(activeScreenPath) ?? [],
+    [adapter, activeScreenPath],
   )
 
   const [activeByAxis, setActiveByAxis] = useState<LabScreenActive>(() =>
@@ -179,21 +174,18 @@ export function useLabAxisController(
     }
   }
 
-  // Release the active axis pins whenever the visible axis set changes — surface
-  // switch OR selecting a screen/part with different (or no) axes — so a pin can
-  // never leak onto a surface where it has no visible release control (plan risk
-  // #1, generalized to screen changes). axes is recomputed from the deps (not
-  // the screenAxes memo) so the effect only re-runs on a real axis-set change.
+  // Release the active axis pins whenever the surface (and thus its axis set)
+  // changes, so a pin can never leak onto a surface where it has no visible
+  // release control. axes is recomputed from the deps (not the screenAxes memo)
+  // so the effect only re-runs on a real axis-set change.
   useLayoutEffect(() => {
-    const axes = isPageSelection
-      ? (adapter.axesForScreen?.(activeScreenPath) ?? [])
-      : []
+    const axes = adapter.axesForScreen?.(activeScreenPath) ?? []
     setActiveByAxis(liveActiveMap(axes))
     setRememberedByAxis({})
     return () => {
       for (const axis of axes) axis.release()
     }
-  }, [adapter, activeScreenPath, isPageSelection])
+  }, [adapter, activeScreenPath])
 
   return {
     screenAxes,

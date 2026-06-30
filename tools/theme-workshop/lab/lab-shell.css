@@ -10,163 +10,247 @@
 
 /* Fit any real part (tiny atom → full-screen page) into a fixed stage. */
 .lab-scale-stage {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  min-height: 140px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  overflow: hidden;
+	position: relative;
+	width: 100%;
+	height: 100%;
+	min-height: 140px;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	overflow: hidden;
 }
 .lab-scale-content {
-  flex: 0 0 auto;
-  transform-origin: top center;
-  pointer-events: none;
+	flex: 0 0 auto;
+	transform-origin: top center;
+	pointer-events: none;
 }
 
 /* Full-screen (surface) parts need a definite, device-shaped box so their
  * fill/flex layout resolves; the surface scope fills it. */
 .lab-screen-frame {
-  position: relative;
-  overflow: hidden;
-  border-radius: 8px;
-  background: #07080b;
+	position: relative;
+	overflow: hidden;
+	border-radius: 8px;
+	background: #07080b;
 }
 .lab-screen-frame > * {
-  position: absolute;
-  inset: 0;
+	position: absolute;
+	inset: 0;
 }
 /* Self-scoping surfaces whose root sizes to 100vh (e.g. shift's home/detail)
  * must fill the preview frame instead, mirroring the Surface view's override. */
 .lab-screen-frame [data-shift-home-frame],
 .lab-screen-frame [data-shift-detail] {
-  height: 100%;
+	height: 100%;
 }
 
-/* Card / board / matrix / object stages host the scaled real preview. */
+/* Card / board / object stages host the scaled real preview. */
 .pt-card-stage .lab-scale-stage,
 .pt-board .lab-scale-stage,
-.pt-matrix-stage .lab-scale-stage,
 .pt-object-body .lab-scale-stage {
-  min-height: inherit;
+	min-height: inherit;
 }
 .pt-board.lab-real-board {
-  width: 460px;
-  min-height: 300px;
-  padding: 0;
-  overflow: hidden;
+	width: 460px;
+	min-height: 300px;
+	padding: 0;
+	overflow: hidden;
 }
 .pt-object-body {
-  min-height: 150px;
-  overflow: hidden;
+	min-height: 150px;
+	overflow: hidden;
 }
 
 /* Surface view: real device frames mounted inside the canvas. */
 .lab-surface-view {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: 24px;
-  padding: 60px 26px 26px;
-  overflow: auto;
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	flex-wrap: wrap;
+	align-content: flex-start;
+	gap: 24px;
+	padding: 60px 26px 26px;
+	overflow: auto;
+}
+
+/* Selection view: one part inspected inside the real selected device frame(s),
+ * sharing the Surface view's device stage. A scrollable stage holds the
+ * device(s); the meta/data row is pinned below. */
+.lab-selection-view {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+}
+.lab-part-stage {
+	flex: 1 1 auto;
+	display: flex;
+	padding: 26px;
+	overflow: auto;
+}
+/* margin:auto centers the device(s) dead center on both axes, yet collapses to
+ * the top-left (scrollable) if a frame is ever taller/wider than the stage. */
+.lab-part-stage-inner {
+	margin: auto;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	align-content: center;
+	justify-content: center;
+	gap: 24px;
+}
+.lab-selection-view .pt-artboard-meta {
+	flex: 0 0 auto;
+	margin: 0;
+	padding: 10px 12px 14px;
+}
+
+/* The part's mount box: it fills the device screen (which is the cqi/cqh query
+ * container). Full-bleed parts stretch to it; smaller parts sit at natural size,
+ * top-left, so their container-relative tokens still resolve against the
+ * device. */
+.lab-part-mount {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+}
+.lab-part-mount[data-fill="true"] {
+	display: grid;
+}
+.lab-part-mount[data-fill="true"] > * {
+	width: 100%;
+	height: 100%;
 }
 
 /* Load / error / empty states (mock prototype had none of these). */
 .lab-empty-state {
-  margin: auto;
-  max-width: 420px;
-  padding: 16px 18px;
-  text-align: center;
-  color: var(--pt-ink-dim, #9a9faa);
-  border: 1px dashed var(--pt-line, #272a32);
-  border-radius: 12px;
-  font-size: 13px;
+	margin: auto;
+	max-width: 420px;
+	padding: 16px 18px;
+	text-align: center;
+	color: var(--pt-ink-dim, #9a9faa);
+	border: 1px dashed var(--pt-line, #272a32);
+	border-radius: 12px;
+	font-size: 13px;
 }
 .lab-empty-state code {
-  font: 11px/1 ui-monospace, monospace;
-  color: var(--pt-accent, #7dd3fc);
+	font:
+		11px / 1 ui-monospace,
+		monospace;
+	color: var(--pt-accent, #7dd3fc);
 }
 .lab-catalog-error,
 .lab-preview-error {
-  margin: 12px;
-  padding: 10px 12px;
-  color: #fecaca;
-  border: 1px solid rgba(248, 113, 113, 0.45);
-  background: rgba(127, 29, 29, 0.25);
-  border-radius: 12px;
-  font-size: 12px;
+	margin: 12px;
+	padding: 10px 12px;
+	color: #fecaca;
+	border: 1px solid rgba(248, 113, 113, 0.45);
+	background: rgba(127, 29, 29, 0.25);
+	border-radius: 12px;
+	font-size: 12px;
 }
 
 /* Devices panel: physical-size fields + actions (prototype had toggles only). */
 .lab-device-card {
-  display: grid;
-  gap: 6px;
-  padding: 7px 8px;
-  border: 1px solid var(--pt-line-soft, #1d1f26);
-  border-radius: 7px;
-  margin-bottom: 6px;
+	display: grid;
+	gap: 6px;
+	padding: 7px 8px;
+	border: 1px solid var(--pt-line-soft, #1d1f26);
+	border-radius: 7px;
+	margin-bottom: 6px;
 }
 .lab-device-card .pt-device {
-  margin-bottom: 0;
+	margin-bottom: 0;
+}
+.lab-device-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.lab-device-name {
+	flex: 1;
+	min-width: 0;
+	font: inherit;
+	font-weight: 600;
+	color: var(--pt-ink, #e7e8ec);
+	background: #14161d;
+	border: 1px solid var(--pt-line, #272a32);
+	border-radius: 6px;
+	padding: 6px 8px;
+}
+.lab-device-remove {
+	flex: 0 0 auto;
+	display: inline-grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	font-size: 16px;
+	line-height: 1;
+	color: var(--pt-ink-faint, #61656f);
+	background: #14161d;
+	border: 1px solid var(--pt-line, #272a32);
+	border-radius: 6px;
+	cursor: pointer;
+}
+.lab-device-remove:hover {
+	color: #fca5a5;
+	border-color: #4a2f33;
 }
 .lab-mm-fields {
-  display: flex;
-  gap: 8px;
+	display: flex;
+	gap: 8px;
 }
 .lab-mm-fields label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--pt-ink-faint, #61656f);
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--pt-ink-faint, #61656f);
 }
 .lab-mm-fields input {
-  width: 58px;
-  font: inherit;
-  color: var(--pt-ink, #e7e8ec);
-  background: #14161d;
-  border: 1px solid var(--pt-line, #272a32);
-  border-radius: 6px;
-  padding: 4px 6px;
+	width: 58px;
+	font: inherit;
+	color: var(--pt-ink, #e7e8ec);
+	background: #14161d;
+	border: 1px solid var(--pt-line, #272a32);
+	border-radius: 6px;
+	padding: 4px 6px;
 }
 .lab-panel-actions {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
+	display: flex;
+	gap: 6px;
+	margin-top: 8px;
 }
 .lab-panel-actions button {
-  flex: 1;
-  font: inherit;
-  font-size: 11px;
-  color: var(--pt-ink-dim, #9a9faa);
-  background: #14161d;
-  border: 1px solid var(--pt-line, #272a32);
-  padding: 7px 9px;
-  border-radius: 7px;
-  cursor: pointer;
+	flex: 1;
+	font: inherit;
+	font-size: 11px;
+	color: var(--pt-ink-dim, #9a9faa);
+	background: #14161d;
+	border: 1px solid var(--pt-line, #272a32);
+	padding: 7px 9px;
+	border-radius: 7px;
+	cursor: pointer;
 }
 .lab-panel-actions button:hover {
-  color: var(--pt-ink, #e7e8ec);
-  border-color: #393d48;
+	color: var(--pt-ink, #e7e8ec);
+	border-color: #393d48;
 }
 
 /* Surface/screen selector pair in the top bar keeps the real navigation. */
 .pt-topbar .lab-topbar-extra {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
+	display: inline-flex;
+	align-items: center;
+	gap: 12px;
 }
 
 /* Compact-mode empty states still need to clear the touch sheet. */
 @media (pointer: coarse), (max-width: 760px) {
-  .lab-surface-view {
-    padding: 56px 14px 80px;
-  }
+	.lab-surface-view {
+		padding: 56px 14px 80px;
+	}
 }

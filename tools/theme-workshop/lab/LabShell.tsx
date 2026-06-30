@@ -1,4 +1,5 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react"
+import { deviceScreens } from "../device-lab"
 import { LabCanvasContent } from "./canvas/LabCanvasContent"
 import { LabFocusRail } from "./chrome/LabFocusRail"
 import {
@@ -7,6 +8,7 @@ import {
   type LabFloatRect,
   LabPanelDeck,
 } from "./chrome/LabPanelDeck"
+import { LabSettingsModal } from "./chrome/LabSettingsModal"
 import { LabToolRail } from "./chrome/LabToolRail"
 import { LabTopBar } from "./chrome/LabTopBar"
 import { LabTouchSheet } from "./chrome/LabTouchSheet"
@@ -17,6 +19,9 @@ import {
   type LabCanvasView,
   type LabChromeMode,
   type LabObjectInstance,
+  type LabWorkshopCommand,
+  type LabWorkshopCommandSignal,
+  type LabWorkshopTool,
   reconcileInstancesWithSelection,
 } from "./model/lab-canvas-state"
 import {
@@ -24,14 +29,12 @@ import {
   firstStateFamilyStory,
   statesForStory,
 } from "./model/lab-part-model"
-import { withScreenStories } from "./model/lab-screen-parts"
 import {
   DEFAULT_SOURCE_ID,
   DEFAULT_STATE_ID,
   type SourceStatus,
   sourcesForAdapter,
 } from "./model/lab-source-state"
-import { LabDevicesPanel } from "./panels/LabDevicesPanel"
 import { LabInspectorPanel } from "./panels/LabInspectorPanel"
 import { LabPartsPanel } from "./panels/LabPartsPanel"
 import { LabSourcesPanel } from "./panels/LabSourcesPanel"
@@ -51,14 +54,13 @@ function readStoredDockWidth(): number {
 }
 
 const CANVAS_VIEWS: { readonly id: LabCanvasView; readonly label: string }[] = [
-  { id: "surface", label: "Surface" },
-  { id: "selection", label: "Selection" },
-  { id: "matrix", label: "Matrix" },
+  { id: "preview", label: "Preview" },
+  { id: "workshop", label: "Workshop" },
   { id: "gallery", label: "Gallery" },
 ]
 
 export function LabShell() {
-  const { adapter, initialCanvasView, knobValues } = useLab()
+  const { adapter, initialCanvasView, knobValues, selectedDevices } = useLab()
   const [catalog, setCatalog] = useState<LabPartsCatalog | null>(null)
   const [catalogError, setCatalogError] = useState<Error | null>(null)
   const [view, setView] = useState<LabCanvasView>(initialCanvasView)
@@ -66,22 +68,21 @@ export function LabShell() {
     useState<LabChromeMode>(DEFAULT_CHROME_MODE)
   const [dockWidth, setDockWidth] = useState<number>(readStoredDockWidth)
   const [chromeVisible, setChromeVisible] = useState(true)
-  const [openPanel, setOpenPanel] = useState("parts")
-  const [multi, setMulti] = useState(false)
-  const [zoom, setZoom] = useState(1)
-  const [accent, setAccent] = useState("#7dd3fc")
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [workshopTool, setWorkshopTool] = useState<LabWorkshopTool>("select")
+  const [workshopCommand, setWorkshopCommand] =
+    useState<LabWorkshopCommandSignal | null>(null)
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
+  const [workshopScreenId, setWorkshopScreenId] = useState<string | null>(null)
   const sources = useMemo(() => sourcesForAdapter(adapter), [adapter])
   const [activeSourceId, setActiveSourceId] = useState(
     sources[0]?.id ?? DEFAULT_SOURCE_ID,
   )
   const [instances, setInstances] = useState<readonly LabObjectInstance[]>([])
-  // The surface's screens ARE its page parts (mounted live); discovered atoms /
-  // molecules / etc. stay as static parts in the tree.
-  const index = useMemo(
-    () => withScreenStories(buildStoryIndex(catalog), adapter.screens ?? []),
-    [catalog, adapter],
-  )
+  // Parts are the surface's static discovered *.part.tsx components only — never
+  // the surface's routes. The live, router-driven surface lives in the Preview
+  // view; Parts stay isolated from the router.
+  const index = useMemo(() => buildStoryIndex(catalog), [catalog])
   // States are dynamic: derived from the selected part's discovered variant
   // family (its real state-machine tags), not a fixed vocabulary.
   const primaryStory = useMemo(() => {
@@ -122,7 +123,7 @@ export function LabShell() {
     liveAxis,
     pinCurrent,
     toggleMode,
-  } = useLabAxisController(adapter, primaryStory)
+  } = useLabAxisController(adapter)
 
   useEffect(() => {
     setView(initialCanvasView)
@@ -147,7 +148,7 @@ export function LabShell() {
     setInstances(prev => prev.map(instance => ({ ...instance, stateId })))
     if (!primaryStory && fallbackStateStory) {
       setSelectedIds([fallbackStateStory.id])
-      setView("selection")
+      setView("workshop")
     }
   }
 
@@ -181,20 +182,21 @@ export function LabShell() {
     )
   }, [selectedIds, activeSourceId, activeStateId])
 
-  const selectStory = (storyId: string, additive = false) => {
-    const add = additive || multi
-    setSelectedIds(prev => {
-      if (!add) return [storyId]
-      return prev.includes(storyId)
+  // The Parts panel is a palette: each pick toggles that part onto the
+  // workshop board (one part is just the n=1 case). There is no separate
+  // single-part mode.
+  const selectStory = (storyId: string) => {
+    setSelectedIds(prev =>
+      prev.includes(storyId)
         ? prev.filter(id => id !== storyId)
-        : [...prev, storyId]
-    })
-    setView(add ? "canvas" : "selection")
+        : [...prev, storyId],
+    )
+    setView("workshop")
   }
 
   const selectLayer = (stories: readonly { id: string }[]) => {
     setSelectedIds(stories.map(story => story.id))
-    setView("canvas")
+    setView("workshop")
   }
 
   const clearAll = () => {
@@ -202,11 +204,21 @@ export function LabShell() {
     setInstances([])
   }
 
+  const switchWorkshopTool = (tool: LabWorkshopTool) => {
+    setWorkshopTool(tool)
+    setView("workshop")
+  }
+
+  const sendWorkshopCommand = (command: LabWorkshopCommand) => {
+    setWorkshopCommand(prev => ({ id: (prev?.id ?? 0) + 1, command }))
+    setView("workshop")
+  }
+
   const partsPanel = () => (
     <LabPartsPanel
       groups={index.groups}
       selectedIds={selectedIds}
-      onSelect={(story, additive) => selectStory(story.id, additive)}
+      onSelect={story => selectStory(story.id)}
       onSelectLayer={selectLayer}
     />
   )
@@ -217,9 +229,13 @@ export function LabShell() {
       onSelect={setActiveSourceId}
     />
   )
+  // Live state-machine axes belong to the Preview view (they drive the running
+  // surface). When inspecting a static part, the panel shows the part's own
+  // fixture states instead.
+  const panelAxes = view === "preview" ? screenAxes : []
   const statesPanel = () => (
     <LabStatesPanel
-      axes={screenAxes}
+      axes={panelAxes}
       activeByAxis={activeByAxis}
       onPin={pinAxis}
       onLive={liveAxis}
@@ -230,10 +246,7 @@ export function LabShell() {
       hasSelection={Boolean(primaryStory)}
     />
   )
-  const inspectorPanel = () => (
-    <LabInspectorPanel accent={accent} onAccent={setAccent} />
-  )
-  const devicesPanel = () => <LabDevicesPanel />
+  const inspectorPanel = () => <LabInspectorPanel />
   const controlsPanel = () => <LabSurfaceControlsPanel />
   const hasControls = Boolean(adapter.useControls)
 
@@ -242,7 +255,6 @@ export function LabShell() {
     { id: "sources", label: "Sources", render: sourcesPanel },
     { id: "states", label: "States", render: statesPanel },
     { id: "inspector", label: "Inspector", render: inspectorPanel },
-    { id: "devices", label: "Devices", render: devicesPanel },
     ...(hasControls
       ? [{ id: "controls", label: "Controls", render: controlsPanel }]
       : []),
@@ -256,12 +268,6 @@ export function LabShell() {
       render: sourcesPanel,
     },
     { id: "states", title: "States", accent: "#86efac", render: statesPanel },
-    {
-      id: "devices",
-      title: "Devices",
-      accent: "#fcd34d",
-      render: devicesPanel,
-    },
     {
       id: "inspector",
       title: "Inspector",
@@ -280,6 +286,16 @@ export function LabShell() {
       : []),
   ]
 
+  // The Workshop renders one device at a time; a multi-screen device must pick a
+  // single screen (no arrangement here — that's the Preview's job). Resolve the
+  // chosen screen against the active device, defaulting to its primary.
+  const activeDevice = selectedDevices[0]
+  const activeScreens = activeDevice ? deviceScreens(activeDevice) : []
+  const resolvedScreenId =
+    activeScreens.find(screen => screen.id === workshopScreenId)?.id ??
+    activeScreens[0]?.id ??
+    null
+
   const compact =
     typeof window !== "undefined" &&
     Boolean(
@@ -290,7 +306,6 @@ export function LabShell() {
     parts: { x: 96, y: 120, width: 236 },
     sources: { x: 96, y: 430, width: 236 },
     states: { x: 348, y: 430, width: 236 },
-    devices: { x: w - 300, y: 430, width: 252 },
     inspector: { x: w - 300, y: 110, width: 252 },
     controls: { x: 348, y: 120, width: 236 },
   }
@@ -298,8 +313,7 @@ export function LabShell() {
     string,
     string | number
   >
-  const canvasStyle = { ...knobVars, "--k-accent": accent } as CSSProperties
-  const showZoom = view === "selection" && !compact
+  const canvasStyle = knobVars as CSSProperties
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -321,11 +335,7 @@ export function LabShell() {
     >
       <div className="pt-canvas" style={canvasStyle}>
         <div className="pt-canvas-bar">
-          <div
-            className="pt-seg pt-seg-sm"
-            role="tablist"
-            aria-label="Canvas view"
-          >
+          <div className="pt-seg pt-seg-sm" role="tablist" aria-label="View">
             {CANVAS_VIEWS.map(candidate => (
               <button
                 key={candidate.id}
@@ -339,14 +349,6 @@ export function LabShell() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className={`pt-multi${multi ? " is-on" : ""}`}
-            aria-pressed={multi}
-            onClick={() => setMulti(value => !value)}
-          >
-            {multi ? "◉" : "○"} Multi
-          </button>
           {instances.length > 0 ? (
             <>
               <span className="pt-canvas-count">
@@ -376,38 +378,14 @@ export function LabShell() {
           selectedIds={selectedIds}
           instances={instances}
           sources={sources}
-          states={states}
           activeSourceId={activeSourceId}
           activeStateId={activeStateId}
-          axes={screenAxes}
-          zoom={zoom}
+          workshopTool={workshopTool}
+          workshopCommand={workshopCommand}
+          workshopScreenId={resolvedScreenId}
           onSelectStory={storyId => selectStory(storyId)}
           onInstancesChange={setInstances}
         />
-
-        {showZoom ? (
-          <div className="pt-zoombar">
-            <button
-              type="button"
-              aria-label="Zoom out"
-              onClick={() =>
-                setZoom(z => Math.max(0.4, Number((z - 0.1).toFixed(2))))
-              }
-            >
-              –
-            </button>
-            <span>{Math.round(zoom * 100)}%</span>
-            <button
-              type="button"
-              aria-label="Zoom in"
-              onClick={() =>
-                setZoom(z => Math.min(2, Number((z + 0.1).toFixed(2))))
-              }
-            >
-              +
-            </button>
-          </div>
-        ) : null}
       </div>
 
       {chromeVisible ? (
@@ -416,8 +394,14 @@ export function LabShell() {
             chromeMode={chromeMode}
             onChromeModeChange={setChromeMode}
             onHideChrome={() => setChromeVisible(false)}
+            onOpenSettings={() => setSettingsOpen(true)}
             compact={compact}
-            inspectLive={screenAxes.length > 0 ? mode : null}
+            screenChoices={view === "workshop" ? activeScreens : undefined}
+            activeScreenId={resolvedScreenId ?? undefined}
+            onScreenChange={setWorkshopScreenId}
+            inspectLive={
+              view === "preview" && screenAxes.length > 0 ? mode : null
+            }
             onToggleInspectLive={toggleMode}
           />
 
@@ -427,8 +411,11 @@ export function LabShell() {
             <>
               <LabToolRail
                 docked={chromeMode === "dock"}
-                open={openPanel}
-                onOpen={setOpenPanel}
+                tool={workshopTool}
+                hasObjects={instances.length > 0}
+                onToolChange={switchWorkshopTool}
+                onCommand={sendWorkshopCommand}
+                onClear={clearAll}
               />
               <LabPanelDeck
                 mode={chromeMode}
@@ -452,6 +439,10 @@ export function LabShell() {
           Show UI
         </button>
       )}
+      <LabSettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   )
 }

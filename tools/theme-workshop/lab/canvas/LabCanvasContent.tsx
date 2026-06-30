@@ -1,23 +1,15 @@
-import type { Story } from "../../types"
-import { useLab } from "../Lab.context"
 import type {
   LabCanvasView,
   LabObjectInstance,
+  LabWorkshopCommandSignal,
+  LabWorkshopTool,
 } from "../model/lab-canvas-state"
 import type { LabStoryIndex } from "../model/lab-part-model"
-import type {
-  LabSourceOption,
-  LabStateOption,
-  SourceStatus,
-} from "../model/lab-source-state"
-import type { LabStateAxis } from "../model/lab-state-axis"
+import type { LabSourceOption, SourceStatus } from "../model/lab-source-state"
 import type { LabPartsCatalog } from "../parts-discovery"
-import { LabCanvasBoard } from "./LabCanvasBoard"
 import { LabGalleryView } from "./LabGalleryView"
-import { LabMatrixView } from "./LabMatrixView"
-import { LabScreenView } from "./LabScreenView"
-import { LabSelectionView } from "./LabSelectionView"
 import { LabSurfaceView } from "./LabSurfaceView"
+import { LabWorkshopBoard } from "./LabWorkshopBoard"
 
 export function LabCanvasContent({
   view,
@@ -26,11 +18,11 @@ export function LabCanvasContent({
   selectedIds,
   instances,
   sources,
-  states,
   activeSourceId,
   activeStateId,
-  axes,
-  zoom,
+  workshopTool,
+  workshopCommand,
+  workshopScreenId,
   onSelectStory,
   onInstancesChange,
 }: {
@@ -40,23 +32,16 @@ export function LabCanvasContent({
   readonly selectedIds: readonly string[]
   readonly instances: readonly LabObjectInstance[]
   readonly sources: readonly LabSourceOption[]
-  readonly states: readonly LabStateOption[]
   readonly activeSourceId: string
   readonly activeStateId: SourceStatus
-  readonly axes: readonly LabStateAxis[]
-  readonly zoom: number
+  readonly workshopTool: LabWorkshopTool
+  readonly workshopCommand: LabWorkshopCommandSignal | null
+  /** Which screen of the active device the Workshop renders (multi-screen). */
+  readonly workshopScreenId: string | null
   readonly onSelectStory: (storyId: string) => void
   readonly onInstancesChange: (instances: readonly LabObjectInstance[]) => void
 }) {
-  const { selectedDevices } = useLab()
-  const selectedStories = selectedIds
-    .map(id => index.byId.get(id))
-    .filter((story): story is Story => Boolean(story))
-  const primaryStory = selectedStories[0] ?? null
-  const primaryInstance = primaryStory
-    ? (instances.find(instance => instance.storyId === primaryStory.id) ?? null)
-    : null
-  if (view === "surface")
+  if (view === "preview")
     return <LabSurfaceView sourceId={activeSourceId} stateId={activeStateId} />
   if (view === "gallery")
     return (
@@ -67,53 +52,17 @@ export function LabCanvasContent({
         onSelect={onSelectStory}
       />
     )
-  if (view === "selection") {
-    // A page part that IS a screen mounts the live surface at its route; every
-    // other part renders as a static isolated preview.
-    if (primaryStory?.screenPath) {
-      return (
-        <LabScreenView
-          screenPath={primaryStory.screenPath}
-          sourceId={activeSourceId}
-          stateId={activeStateId}
-        />
-      )
-    }
-    return (
-      <LabSelectionView
-        story={primaryStory}
-        byId={index.byId}
-        instance={primaryInstance}
-        sources={sources}
-        states={states}
-        zoom={zoom}
-        onBind={(id, patch) =>
-          onInstancesChange(
-            instances.map(instance =>
-              instance.id === id ? { ...instance, ...patch } : instance,
-            ),
-          )
-        }
-      />
-    )
-  }
-  if (view === "matrix")
-    return (
-      <LabMatrixView
-        selectedStories={selectedStories}
-        stories={index.byId}
-        sources={sources}
-        states={states}
-        devices={selectedDevices}
-        axes={axes}
-      />
-    )
+  // Workshop: a single spatial board holding 0..n placed parts, each rendered
+  // in the active device frame. The live, router-mounted surface is the Preview
+  // view; the workshop is static, isolated previews.
   return (
-    <LabCanvasBoard
+    <LabWorkshopBoard
       instances={instances}
       stories={index.byId}
       sources={sources}
-      states={states}
+      tool={workshopTool}
+      command={workshopCommand}
+      screenId={workshopScreenId}
       onInstancesChange={onInstancesChange}
     />
   )

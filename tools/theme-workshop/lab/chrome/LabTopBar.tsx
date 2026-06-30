@@ -1,3 +1,7 @@
+import { Settings } from "lucide-react"
+import type { ScreenConfig } from "../../device-lab"
+import { LabDeviceSelect } from "../components/LabDeviceSelect"
+import { LabScreenSelect } from "../components/LabScreenSelect"
 import { useLab } from "../Lab.context"
 import type { LabChromeMode } from "../model/lab-canvas-state"
 import { labSurfaceAdapters } from "../surface-registry"
@@ -8,17 +12,26 @@ export function LabTopBar({
   chromeMode,
   onChromeModeChange,
   onHideChrome,
+  onOpenSettings,
   compact,
   inspectLive,
   onToggleInspectLive,
+  screenChoices,
+  activeScreenId,
+  onScreenChange,
 }: {
   readonly chromeMode: LabChromeMode
   readonly onChromeModeChange: (mode: LabChromeMode) => void
   readonly onHideChrome: () => void
+  readonly onOpenSettings: () => void
   readonly compact: boolean
   /** The current Inspect/Live mode, or null when the surface has no axes. */
   readonly inspectLive: "inspect" | "live" | null
   readonly onToggleInspectLive: () => void
+  /** Workshop-only screen choices for a multi-screen device; omit otherwise. */
+  readonly screenChoices?: readonly ScreenConfig[]
+  readonly activeScreenId?: string
+  readonly onScreenChange?: (id: string) => void
 }) {
   const { adapter, setThemeId } = useLab()
   return (
@@ -69,6 +82,17 @@ export function LabTopBar({
           </div>
         ) : null}
         <div className="lab-topbar-extra">
+          <LabDeviceSelect />
+          {screenChoices &&
+          screenChoices.length > 1 &&
+          activeScreenId &&
+          onScreenChange ? (
+            <LabScreenSelect
+              screens={screenChoices}
+              activeId={activeScreenId}
+              onChange={onScreenChange}
+            />
+          ) : null}
           <label className="pt-surface-select">
             Surface
             <select
@@ -83,6 +107,14 @@ export function LabTopBar({
             </select>
           </label>
         </div>
+        <button
+          type="button"
+          className="pt-topbar-gear"
+          aria-label="Settings"
+          onClick={onOpenSettings}
+        >
+          <Settings size={16} strokeWidth={2} aria-hidden />
+        </button>
         <button type="button" className="pt-eye" onClick={onHideChrome}>
           Hide UI
         </button>

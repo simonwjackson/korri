@@ -10,7 +10,6 @@ import {
   pinAxisActive,
   pinFromTable,
   releaseAxisActive,
-  renderFromTable,
   restorePinsActive,
 } from "./lab-state-axis"
 
@@ -101,7 +100,7 @@ describe("axisEnabled", () => {
   })
 })
 
-describe("pinFromTable / renderFromTable", () => {
+describe("pinFromTable", () => {
   const table = { Ready: () => "ready-sample", Empty: () => "empty-sample" }
 
   it("applies the looked-up sample for a known id", () => {
@@ -114,12 +113,6 @@ describe("pinFromTable / renderFromTable", () => {
     const applied: string[] = []
     pinFromTable(table, value => applied.push(value))("Nope")
     expect(applied).toEqual([])
-  })
-
-  it("renders the looked-up sample, or null for an unknown id", () => {
-    const render = renderFromTable(table, value => `<${value}>`)
-    expect(render("Ready")).toBe("<ready-sample>")
-    expect(render("Nope")).toBeNull()
   })
 })
 

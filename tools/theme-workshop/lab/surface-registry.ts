@@ -1,9 +1,10 @@
 import type { DualScreenChannelFactory } from "@platform/react/display/dual-screen/DualScreenBroadcastSessionRoot"
 import type { DualScreenRole } from "@platform/react/display/dual-screen/dual-screen-events"
 import type { RouterHistory } from "@tanstack/history"
+import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
 import type { ReactNode } from "react"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
-import type { WorkshopControl } from "../types"
+import type { Story, WorkshopControl } from "../types"
 import { boxbusterLabSurfaceAdapter } from "./adapters/boxbuster"
 import { picoLabSurfaceAdapter } from "./adapters/pico"
 import { shiftLabSurfaceAdapter } from "./adapters/shift"
@@ -17,6 +18,12 @@ import type { LabScreenCoordinate, LabStateAxis } from "./model/lab-state-axis"
 export interface LabMountedSurface {
   readonly router: unknown
   readonly dispose: () => void
+}
+
+export interface LabSurfacePartAxis {
+  readonly id: string
+  readonly label: string
+  readonly states: readonly LabStateOption[]
 }
 
 export interface LabSurfaceDualScreenOptions {
@@ -59,6 +66,22 @@ export interface LabSurfaceAdapter {
    * and recipes resolve outside a full mount (e.g. pico needs
    * [data-pico].pico-screen.intrinsic). Omit when parts are self-scoping. */
   readonly previewScope?: (children: ReactNode) => ReactNode
+  /** Render a placed surface/page part on the Workshop board through the real
+   * data edge, seeded for the object's source + Data state + any extra-axis pins
+   * — so per-object state swap works like Preview. Omit to fall back to the
+   * part's baked render. */
+  readonly renderSurfacePart?: (
+    story: Story,
+    binding: {
+      readonly sourceId: string
+      readonly stateId: SourceStatus
+      readonly axisStateIds?: Readonly<Record<string, SourceStatus>>
+    },
+  ) => ReactNode
+  /** Extra state-machine dials (beyond the primary Data state) a surface part
+   * exposes per Workshop object, e.g. Foreground. Drives `renderSurfacePart`'s
+   * `axisStateIds`. Omit when a surface part has a single state dimension. */
+  readonly surfacePartAxes?: (story: Story) => readonly LabSurfacePartAxis[]
   readonly sources?: readonly LabSourceOption[]
   readonly states?: readonly LabStateOption[]
   readonly makeSeedInitialValues: () => Promise<unknown>
@@ -72,6 +95,9 @@ export interface LabSurfaceAdapter {
       readonly initialValues: unknown
       readonly history?: RouterHistory
       readonly dualScreen?: LabSurfaceDualScreenOptions
+      /** Receive the mounted surface's atom registry so the lab can drive the
+       * real source atoms live (e.g. a state axis pinning the data source). */
+      readonly onRegistry?: (registry: AtomRegistry.AtomRegistry) => void
     },
   ) => LabMountedSurface
 }

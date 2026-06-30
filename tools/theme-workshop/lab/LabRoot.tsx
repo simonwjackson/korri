@@ -161,7 +161,7 @@ export function LabRoot({
       surfacePath: partsAlias ? "/" : requestedPath,
       initialCanvasView: partsAlias
         ? ("gallery" as const)
-        : ("surface" as const),
+        : ("preview" as const),
       screens: adapter.screens ?? [],
       selection,
       devices: calibration.devices,

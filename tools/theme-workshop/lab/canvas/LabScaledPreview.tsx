@@ -20,8 +20,8 @@ export function LabScaledPreview({
   readonly children: ReactNode
   readonly maxScale?: number
   /** When true the stage fills its (fixed-size) container instead of shrinking
-   * to the scaled content height — used by uniform gallery cards / matrix
-   * cells. Default false: the stage sizes to the scaled content so artboards
+   * to the scaled content height — used by uniform gallery cards. Default
+   * false: the stage sizes to the scaled content so artboards
    * and canvas objects have no dead space below the preview. */
   readonly fill?: boolean
 }) {

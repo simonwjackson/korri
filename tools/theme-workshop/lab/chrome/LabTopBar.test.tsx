@@ -20,7 +20,7 @@ function context(): LabContextValue {
     initialValues: {},
     themeId: "shift",
     surfacePath: "/",
-    initialCanvasView: "surface",
+    initialCanvasView: "preview",
     screens: adapter.screens ?? [],
     selection: { kind: "all" },
     devices: [],
@@ -52,6 +52,7 @@ function renderBar(
         chromeMode="dock"
         onChromeModeChange={() => {}}
         onHideChrome={() => {}}
+        onOpenSettings={() => {}}
         compact={false}
         inspectLive={inspectLive}
         onToggleInspectLive={onToggle}

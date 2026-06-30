@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { act, cleanup, renderHook } from "@testing-library/react"
-import type { Story } from "../types"
 import {
   LAB_AXIS_LIVE,
   type LabScreenCoordinate,
@@ -73,24 +72,10 @@ function makeAdapter(
   return { adapter, calls }
 }
 
-const homePart: Story = {
-  id: "home",
-  layer: "page",
-  name: "Home",
-  screenPath: "/",
-  render: () => null,
-}
-const atomPart: Story = {
-  id: "pill",
-  layer: "atom",
-  name: "Pill",
-  render: () => null,
-}
-
 describe("useLabAxisController", () => {
   it("exposes the active screen's axes and starts Live", () => {
     const { adapter } = makeAdapter()
-    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    const { result } = renderHook(() => useLabAxisController(adapter))
     expect(result.current.screenAxes.map(a => a.id)).toEqual([
       "data",
       "launch",
@@ -101,7 +86,7 @@ describe("useLabAxisController", () => {
 
   it("pins a single axis, driving its singleton and flipping to Inspect", () => {
     const { adapter, calls } = makeAdapter()
-    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    const { result } = renderHook(() => useLabAxisController(adapter))
     act(() => result.current.pinAxis("data", "Empty"))
     expect(calls).toContain("data.pin:Empty")
     expect(result.current.activeByAxis.data).toEqual({
@@ -113,7 +98,7 @@ describe("useLabAxisController", () => {
 
   it("adds multi axis states and clears them on Live", () => {
     const { adapter, calls } = makeAdapter()
-    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    const { result } = renderHook(() => useLabAxisController(adapter))
     act(() => result.current.pinAxis("overlays", "Notice"))
     act(() => result.current.pinAxis("overlays", "Toast"))
     expect(calls).toContain("overlays.pin:Notice")
@@ -132,7 +117,7 @@ describe("useLabAxisController", () => {
 
   it("toggles one active multi state off", () => {
     const { adapter, calls } = makeAdapter()
-    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    const { result } = renderHook(() => useLabAxisController(adapter))
     act(() => result.current.pinAxis("overlays", "Notice"))
     act(() => result.current.pinAxis("overlays", "Toast"))
     calls.length = 0
@@ -151,7 +136,7 @@ describe("useLabAxisController", () => {
       launch: { kind: "single", value: LAB_AXIS_LIVE },
       overlays: { kind: "multi", values: ["Toast"] },
     }))
-    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    const { result } = renderHook(() => useLabAxisController(adapter))
     act(() => result.current.pinAxis("overlays", "Notice"))
     calls.length = 0
     act(() => result.current.pinCurrent?.())
@@ -165,7 +150,7 @@ describe("useLabAxisController", () => {
 
   it("releases a now-disabled nested axis when its parent leaves Ready", () => {
     const { adapter, calls } = makeAdapter()
-    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    const { result } = renderHook(() => useLabAxisController(adapter))
     act(() => result.current.pinAxis("data", "Ready"))
     act(() => result.current.pinAxis("launch", "Launching"))
     calls.length = 0
@@ -179,7 +164,7 @@ describe("useLabAxisController", () => {
 
   it("releases a nested axis when its parent is pinned away from Ready", () => {
     const { adapter, calls } = makeAdapter()
-    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    const { result } = renderHook(() => useLabAxisController(adapter))
     act(() => result.current.pinAxis("data", "Ready"))
     act(() => result.current.pinAxis("launch", "Launching"))
     calls.length = 0
@@ -233,7 +218,7 @@ describe("useLabAxisController", () => {
       makeSeedInitialValues: async () => ({}),
       mountSurface: () => ({ router: {}, dispose: () => {} }),
     }
-    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    const { result } = renderHook(() => useLabAxisController(adapter))
     act(() => result.current.pinAxis("parent", "Open"))
     act(() => result.current.pinAxis("child", "Open"))
     act(() => result.current.pinAxis("grandchild", "Dirty"))
@@ -253,7 +238,7 @@ describe("useLabAxisController", () => {
 
   it("global toggle releases all pins on Live and restores single and multi pins on Inspect", () => {
     const { adapter, calls } = makeAdapter()
-    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    const { result } = renderHook(() => useLabAxisController(adapter))
     act(() => result.current.pinAxis("data", "Empty"))
     act(() => result.current.pinAxis("overlays", "Notice"))
     act(() => result.current.toggleMode()) // → Live
@@ -274,7 +259,7 @@ describe("useLabAxisController", () => {
 
   it("applies the captured coordinate on Pin current", () => {
     const { adapter, calls } = makeAdapter()
-    const { result } = renderHook(() => useLabAxisController(adapter, null))
+    const { result } = renderHook(() => useLabAxisController(adapter))
     act(() => result.current.pinCurrent?.())
     expect(calls).toContain("data.pin:Empty")
     expect(calls).toContain("launch.release")
@@ -287,16 +272,17 @@ describe("useLabAxisController", () => {
     })
   })
 
-  it("releases the axes when the selection leaves the axis set", () => {
+  it("releases the axes when the surface (adapter) changes", () => {
     const { adapter, calls } = makeAdapter()
+    const other = makeAdapter().adapter
     const { result, rerender } = renderHook(
-      ({ story }: { story: Story | null }) =>
-        useLabAxisController(adapter, story),
-      { initialProps: { story: homePart as Story | null } },
+      ({ current }: { current: typeof adapter }) =>
+        useLabAxisController(current),
+      { initialProps: { current: adapter } },
     )
     act(() => result.current.pinAxis("data", "Empty"))
     calls.length = 0
-    act(() => rerender({ story: atomPart }))
+    act(() => rerender({ current: other }))
     expect(calls).toContain("data.release")
     expect(calls).toContain("launch.release")
     expect(calls).toContain("overlays.release:*")

@@ -8,7 +8,7 @@ const FRAME_WIDTH = 900
 
 /**
  * Renders one discovered part for an isolated preview (gallery card, selection
- * artboard, matrix cell, canvas object). It does three things a bare
+ * artboard, canvas object). It does three things a bare
  * `story.render()` does not:
  *  1. Applies the surface's style scope (adapter.previewScope) so tokens and
  *     recipes resolve outside a full mount — e.g. pico's [data-pico] scope.

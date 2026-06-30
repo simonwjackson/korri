@@ -1,6 +1,8 @@
 import { createMemoryHistory } from "@tanstack/history"
+import type * as Atom from "effect/unstable/reactivity/Atom"
 import { useEffect, useRef, useState } from "react"
 import { normalizeSurfacePath } from "./lab-route-state"
+import { registerLabSurfaceRegistry } from "./model/lab-surface-registries"
 import type {
   LabMountedSurface,
   LabSurfaceAdapter,
@@ -22,6 +24,7 @@ export function LabSurfaceMount({
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const mountedRef = useRef<LabMountedSurface | null>(null)
+  const unregisterRegistryRef = useRef<() => void>(() => {})
   const historyRef = useRef<ReturnType<typeof createMemoryHistory> | null>(null)
   const [mountError, setMountError] = useState<Error | null>(null)
   const suppressPathRef = useRef<string | null>(null)
@@ -61,6 +64,13 @@ export function LabSurfaceMount({
         initialValues: initialValuesRef.current,
         history,
         dualScreen: dualScreenRef.current,
+        onRegistry: registry => {
+          unregisterRegistryRef.current()
+          unregisterRegistryRef.current = registerLabSurfaceRegistry({
+            registry,
+            seed: seedMapFromInitialValues(initialValuesRef.current),
+          })
+        },
       })
       mountedRef.current = mounted
     } catch (cause) {
@@ -69,6 +79,8 @@ export function LabSurfaceMount({
 
     return () => {
       unsubscribe()
+      unregisterRegistryRef.current()
+      unregisterRegistryRef.current = () => {}
       mounted?.dispose()
       history.destroy()
       mountedRef.current = null
@@ -97,4 +109,13 @@ export function LabSurfaceMount({
   }
 
   return <div data-lab-surface-mount={adapter.id} ref={hostRef} />
+}
+
+function seedMapFromInitialValues(
+  initialValues: unknown,
+): ReadonlyMap<Atom.Atom<unknown>, unknown> {
+  if (!Array.isArray(initialValues)) return new Map()
+  return new Map(
+    initialValues as readonly (readonly [Atom.Atom<unknown>, unknown])[],
+  )
 }

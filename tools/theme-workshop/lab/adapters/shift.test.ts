@@ -1,27 +1,29 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { loadingForeverCatalogFactsSourceLayer } from "@platform/catalog/catalog-facts-source"
 import { LaunchState } from "@platform/library/launch-state"
 import { catalogFactsSourceLayerAtom } from "@platform/react/catalog/catalog-atoms"
 import {
+  foregroundSessionStatusLayerAtom,
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
 import { ShiftCatalogState } from "@product/surfaces/web/shift/catalog/shift-catalog-state"
-import {
-  getShiftCatalogPreview,
-  setShiftCatalogPreview,
-} from "@product/surfaces/web/shift/shift-catalog-preview"
-import { shiftCatalogStateSamples } from "@product/surfaces/web/shift/shift-catalog-state-samples"
-import {
-  foregroundStateSamples,
-  getShiftForegroundPreview,
-  setShiftForegroundPreview,
-} from "@product/surfaces/web/shift/shift-foreground-preview"
+import { shiftForegroundSourceLayers } from "@product/surfaces/web/shift/shift-foreground-preview"
 import {
   getShiftLaunchPreview,
   launchStateSamples,
   setShiftLaunchPreview,
 } from "@product/surfaces/web/shift/shift-launch-preview"
+import {
+  setShiftLiveData,
+  setShiftLiveForeground,
+} from "@product/surfaces/web/shift/shift-live-coordinate"
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
 import { axisEnabled, LAB_AXIS_LIVE } from "../model/lab-state-axis"
+import {
+  clearLabSurfaceRegistries,
+  registerLabSurfaceRegistry,
+} from "../model/lab-surface-registries"
 import { resolveLabSurfaceAdapter } from "../surface-registry"
 
 describe("shift lab surface adapter", () => {
@@ -53,9 +55,8 @@ describe("shift lab surface adapter", () => {
 
 describe("shift home state axes", () => {
   afterEach(() => {
-    setShiftCatalogPreview(null)
+    clearLabSurfaceRegistries()
     setShiftLaunchPreview(null)
-    setShiftForegroundPreview(null)
   })
 
   const home = () =>
@@ -105,17 +106,30 @@ describe("shift home state axes", () => {
     ).toBe(false)
   })
 
-  it("drives the catalog preview singleton on pin and clears it on release", () => {
+  it("drives the real catalog source edge on pin and restores the seed on release", () => {
     const data = homeAxis("data")
+    const seed = loadingForeverCatalogFactsSourceLayer
+    const registry = AtomRegistry.make({
+      initialValues: [[catalogFactsSourceLayerAtom, seed]],
+    })
+    const unregister = registerLabSurfaceRegistry({
+      registry,
+      seed: new Map([[catalogFactsSourceLayerAtom, seed]]),
+    })
 
-    data.pin("Empty")
-    const pinned = getShiftCatalogPreview()
-    expect(pinned).not.toBeNull()
-    if (!pinned) throw new Error("Expected catalog preview to be pinned")
-    expect(ShiftCatalogState.fromResult(pinned)._tag).toBe("Empty")
+    try {
+      // Pin swaps the surface's real source atom (no preview singleton); the
+      // route then reads only catalogSnapshotAtom over this new source.
+      data.pin("Empty")
+      expect(registry.get(catalogFactsSourceLayerAtom)).not.toBe(seed)
 
-    data.release()
-    expect(getShiftCatalogPreview()).toBeNull()
+      // Release restores the seeded live source it was first mounted with.
+      data.release()
+      expect(registry.get(catalogFactsSourceLayerAtom)).toBe(seed)
+    } finally {
+      unregister()
+      registry.dispose()
+    }
   })
 
   it("drives the launch preview singleton on pin and clears it on release", () => {
@@ -128,14 +142,27 @@ describe("shift home state axes", () => {
     expect(getShiftLaunchPreview()).toBeNull()
   })
 
-  it("drives the foreground preview singleton on pin and clears it on release", () => {
+  it("drives the real foreground source edge on pin and restores the seed on release", () => {
     const foreground = homeAxis("foreground")
+    const seed = shiftForegroundSourceLayers.Ready()
+    const registry = AtomRegistry.make({
+      initialValues: [[foregroundSessionStatusLayerAtom, seed]],
+    })
+    const unregister = registerLabSurfaceRegistry({
+      registry,
+      seed: new Map([[foregroundSessionStatusLayerAtom, seed]]),
+    })
 
-    foreground.pin("Cooling")
-    expect(getShiftForegroundPreview()?._tag).toBe("Cooling")
+    try {
+      foreground.pin("Cooling")
+      expect(registry.get(foregroundSessionStatusLayerAtom)).not.toBe(seed)
 
-    foreground.release()
-    expect(getShiftForegroundPreview()).toBeNull()
+      foreground.release()
+      expect(registry.get(foregroundSessionStatusLayerAtom)).toBe(seed)
+    } finally {
+      unregister()
+      registry.dispose()
+    }
   })
 
   it("exposes no axes for screens without a state machine", () => {
@@ -148,9 +175,9 @@ describe("shift home state axes", () => {
 
 describe("shift capture-back coordinate", () => {
   afterEach(() => {
-    setShiftCatalogPreview(null)
+    setShiftLiveData("Ready")
+    setShiftLiveForeground("Ready")
     setShiftLaunchPreview(null)
-    setShiftForegroundPreview(null)
   })
 
   const capture = () =>
@@ -164,8 +191,8 @@ describe("shift capture-back coordinate", () => {
     })
   })
 
-  it("captures a pinned Ready + Launching coordinate", () => {
-    setShiftCatalogPreview(shiftCatalogStateSamples.Ready())
+  it("captures a live Ready + pinned Launching coordinate", () => {
+    setShiftLiveData("Ready")
     setShiftLaunchPreview(launchStateSamples.Launching())
     expect(capture()).toEqual({
       data: { kind: "single", value: "Ready" },
@@ -175,7 +202,7 @@ describe("shift capture-back coordinate", () => {
   })
 
   it("maps Launch to Live when Data is not Ready (nesting round-trips)", () => {
-    setShiftCatalogPreview(shiftCatalogStateSamples.Empty())
+    setShiftLiveData("Empty")
     expect(capture()).toEqual({
       data: { kind: "single", value: "Empty" },
       launch: { kind: "single", value: LAB_AXIS_LIVE },
@@ -183,8 +210,8 @@ describe("shift capture-back coordinate", () => {
     })
   })
 
-  it("captures a pinned foreground coordinate", () => {
-    setShiftForegroundPreview(foregroundStateSamples.Cooling())
+  it("captures the live foreground coordinate the route published", () => {
+    setShiftLiveForeground("Cooling")
     expect(capture()?.foreground).toEqual({ kind: "single", value: "Cooling" })
   })
 })
