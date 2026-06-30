@@ -14,6 +14,14 @@ import {
   useState,
 } from "react"
 import {
+  type DockSide,
+  dockedIds,
+  dockedSide,
+  layoutWell,
+  reanchorOnResize,
+  WELL_PAD,
+} from "./lab-panel-dock"
+import {
   computeGroups,
   type Rect,
   reflowStack,
@@ -67,16 +75,10 @@ const DOCK_MAX_H = 900
 const SNAP = 8
 /** Drag a panel/group within this of a side edge to dock it full-height there. */
 const EDGE_DOCK = 28
-/** Padding/gap of a side dock well, matching the global Docked rail. */
-const WELL_PAD = 12
-const WELL_GAP = 10
 
 /** True when a panel sits inset in a left/right dock well (not full-width). */
-function isSideDocked(r: LabFloatRect, side: "left" | "right"): boolean {
-  if (r.width >= window.innerWidth - 4) return false
-  return side === "left"
-    ? Math.abs(r.x - WELL_PAD) < 1
-    : Math.abs(r.x + r.width - (window.innerWidth - WELL_PAD)) < 1
+function isSideDocked(r: LabFloatRect, side: DockSide): boolean {
+  return dockedSide(r, window.innerWidth) === side
 }
 
 const clamp = (value: number, min: number, max: number) =>
@@ -87,6 +89,9 @@ const LAYOUT_KEY = "lab-panel-layout"
 type StoredLayout = {
   readonly order: readonly string[]
   readonly floatPos: Record<string, LabFloatRect>
+  /** Viewport width when saved, so docked panels can be re-anchored to the new
+   * edge if the window is a different size on the next mount. */
+  readonly width?: number
 }
 function readStoredLayout(): StoredLayout | null {
   if (typeof window === "undefined") return null
@@ -95,7 +100,11 @@ function readStoredLayout(): StoredLayout | null {
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<StoredLayout>
     if (parsed && Array.isArray(parsed.order) && parsed.floatPos)
-      return { order: parsed.order, floatPos: parsed.floatPos }
+      return {
+        order: parsed.order,
+        floatPos: parsed.floatPos,
+        width: typeof parsed.width === "number" ? parsed.width : undefined,
+      }
   } catch {
     // Ignore malformed/blocked storage; fall back to defaults.
   }
@@ -107,7 +116,10 @@ function persistLayout(
 ): void {
   if (typeof window === "undefined") return
   try {
-    window.localStorage.setItem(LAYOUT_KEY, JSON.stringify({ order, floatPos }))
+    window.localStorage.setItem(
+      LAYOUT_KEY,
+      JSON.stringify({ order, floatPos, width: window.innerWidth }),
+    )
   } catch {
     // Ignore storage failures (private mode/quota).
   }
@@ -244,6 +256,24 @@ export function LabPanelDeck({
   const [resizeId, setResizeId] = useState<string | null>(null)
   const dragRef = useRef<string | null>(null)
   const hostRef = useRef<HTMLDivElement>(null)
+  // Seed from the width the layout was saved at, so the mount re-anchor pass
+  // re-docks panels even when the window is a different size than last session.
+  const prevWidthRef = useRef(
+    readStoredLayout()?.width ??
+      (typeof window === "undefined" ? 1440 : window.innerWidth),
+  )
+
+  // A panel's natural content height (its rendered box when unconstrained), used
+  // to stack docked panels and to cap manual resize so a panel is never taller
+  // than its content. Measured boxes reflect content because docked/auto panels
+  // carry no explicit height.
+  const contentHeightOf = (id: string): number =>
+    measured[id]?.height ?? floatPos[id]?.height ?? 200
+  // Latest values for the mount-once resize listener without re-subscribing.
+  const orderRef = useRef(order)
+  orderRef.current = order
+  const contentHeightRef = useRef(contentHeightOf)
+  contentHeightRef.current = contentHeightOf
 
   // Keep order + float positions in sync as panels appear/disappear (e.g. the
   // Controls panel only exists for surfaces that declare controls), preserving
@@ -274,27 +304,46 @@ export function LabPanelDeck({
     return () => window.clearTimeout(saveTimer.current)
   }, [order, floatPos])
 
-  // Never let a panel hide off-screen: clamp every panel back into view on
-  // mount (restored positions may exceed a now-smaller window) and on resize.
+  // On resize (and mount), keep side-docked panels docked by re-anchoring each
+  // well to the new viewport edge and re-stacking at content height; clamp the
+  // remaining floating panels back into view. Docked state is derived from
+  // coordinates, so without re-anchoring a width change would silently undock.
   useEffect(() => {
     if (typeof window === "undefined") return
     const apply = () => {
       const barH = hostRef.current?.getBoundingClientRect().top ?? 0
+      const innerW = window.innerWidth
+      const innerH = window.innerHeight
+      const prevW = prevWidthRef.current
       setFloatPos(prev => {
-        let changed = false
+        const heightOf = (id: string) => contentHeightRef.current(id)
+        const docked = new Set<string>()
+        for (const side of ["left", "right"] as const)
+          for (const id of dockedIds(prev, orderRef.current, side, prevW))
+            docked.add(id)
+        const reanchored = reanchorOnResize(
+          prev,
+          orderRef.current,
+          prevW,
+          innerW,
+          barH,
+          heightOf,
+        )
+        let changed = reanchored !== prev
         const next: Record<string, LabFloatRect> = {}
-        for (const [id, rect] of Object.entries(prev)) {
-          const clamped = clampIntoView(
-            rect,
-            window.innerWidth,
-            window.innerHeight,
-            barH,
-          )
+        for (const [id, rect] of Object.entries(reanchored)) {
+          // Docked panels were just re-anchored; don't clamp them back off-edge.
+          if (docked.has(id)) {
+            next[id] = rect
+            continue
+          }
+          const clamped = clampIntoView(rect, innerW, innerH, barH)
           if (clamped !== rect) changed = true
           next[id] = clamped
         }
         return changed ? next : prev
       })
+      prevWidthRef.current = innerW
     }
     apply()
     window.addEventListener("resize", apply)
@@ -444,33 +493,15 @@ export function LabPanelDeck({
       window.innerHeight,
       ...neighbors.flatMap(n => [n.y, n.y + n.height]),
     ]
-    // Lay the panels docked to one side as an inset, gapped vertical split that
-    // sits inside a padded well (matching the global Docked rail).
+    // Lay the panels docked to one side as a top-aligned, gapped vertical stack
+    // sized to each panel's content (never taller than content), anchored to
+    // the current viewport edge.
     const layoutColumn = (
       pos: Record<string, LabFloatRect>,
       ids: readonly string[],
-      side: "left" | "right",
-    ): Record<string, LabFloatRect> => {
-      if (ids.length === 0) return pos
-      const avail =
-        window.innerHeight - barH - 2 * WELL_PAD - (ids.length - 1) * WELL_GAP
-      const slice = avail / ids.length
-      const next = { ...pos }
-      let cursor = barH + WELL_PAD
-      for (const mid of ids) {
-        const r = pos[mid]
-        if (!r) continue
-        next[mid] = {
-          x:
-            side === "left" ? WELL_PAD : window.innerWidth - WELL_PAD - r.width,
-          y: cursor,
-          width: r.width,
-          height: slice,
-        }
-        cursor += slice + WELL_GAP
-      }
-      return next
-    }
+      side: DockSide,
+    ): Record<string, LabFloatRect> =>
+      layoutWell(pos, ids, side, window.innerWidth, barH, contentHeightOf)
     // Re-split a side well to fill the height, leaving out the dragged panel.
     // Run when a panel leaves a column so the remaining ones re-expand.
     const rebalance = (
@@ -607,8 +638,9 @@ export function LabPanelDeck({
           })
           .sort((a, b) => liveRect(a).y - liveRect(b).y)
       : null
-    const wellBase: Record<string, Rect> = {}
-    if (wellIds) for (const m of wellIds) wellBase[m] = liveRect(m)
+    // Cap manual height at the panel's content so it is never taller than what
+    // it holds; the body scrolls when dragged shorter.
+    const contentCap = contentHeightOf(id)
     const neighbors = order
       .filter(other => other !== id && !(groupIds?.includes(other) ?? false))
       .map(other => liveRect(other))
@@ -623,7 +655,10 @@ export function LabPanelDeck({
     const baseH = base.height ?? self.height
     ;(event.target as Element).setPointerCapture?.(event.pointerId)
     const move = (next: PointerEvent) => {
-      const maxH = window.innerHeight - base.y - 12
+      const maxH = Math.min(
+        window.innerHeight - base.y - 12,
+        Math.max(PANEL_MIN_H, contentCap),
+      )
       const rawRight =
         base.x + clamp(baseW + next.clientX - startX, FLOAT_MIN_W, FLOAT_MAX_W)
       const rawBottom =
@@ -639,24 +674,22 @@ export function LabPanelDeck({
         maxH,
       )
       if (dockedSide && wellIds) {
+        // Docked panels stay content-height (never taller than content): only
+        // width changes, and the whole well re-stacks at content height.
         setFloatPos(prev => {
-          const out = { ...prev }
-          let cursor = barH + WELL_PAD
+          const widened = { ...prev }
           for (const mid of wellIds) {
-            const h =
-              mid === id ? height : (wellBase[mid]?.height ?? PANEL_MIN_H)
-            out[mid] = {
-              x:
-                dockedSide === "left"
-                  ? WELL_PAD
-                  : window.innerWidth - WELL_PAD - width,
-              y: cursor,
-              width,
-              height: h,
-            }
-            cursor += h + WELL_GAP
+            const r = prev[mid]
+            if (r) widened[mid] = { ...r, width }
           }
-          return out
+          return layoutWell(
+            widened,
+            wellIds,
+            dockedSide,
+            window.innerWidth,
+            barH,
+            contentHeightOf,
+          )
         })
         return
       }
