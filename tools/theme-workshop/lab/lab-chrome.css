@@ -1030,6 +1030,11 @@ body {
 	align-items: center;
 	gap: 12px;
 }
+.lab-topbar-extra {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
 .pt-surface-select {
 	display: flex;
 	align-items: center;
@@ -1929,8 +1934,17 @@ body {
 .pt-compact .pt-brand-sub {
 	display: none;
 }
+.pt-compact .lab-topbar-extra {
+	gap: 6px;
+}
 .pt-compact .pt-surface-select {
-	display: none;
+	gap: 4px;
+	font-size: 0;
+}
+.pt-compact .pt-surface-select select {
+	max-width: min(34vw, 132px);
+	font-size: 11px;
+	padding: 5px 6px;
 }
 .pt-compact .pt-topbar {
 	gap: 10px;

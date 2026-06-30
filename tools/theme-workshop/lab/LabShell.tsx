@@ -319,7 +319,7 @@ export function LabShell() {
 
   return (
     <div
-      className={`pt-shell pt-${chromeMode}`}
+      className={`pt-shell pt-${chromeMode}${compact ? " pt-compact" : ""}`}
       data-chrome={chromeVisible ? "on" : "off"}
       data-lab-mode={mode}
       style={shellStyle}

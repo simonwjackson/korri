@@ -108,6 +108,55 @@ describe("LabRoot", () => {
     expect(view.getByRole("button", { name: "+ add device" })).toBeTruthy()
   })
 
+  it("marks the shell compact on mobile so dock spacing is not reserved", async () => {
+    const { adapter } = makeAdapter()
+    const originalMatchMedia = window.matchMedia
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: mock(() => ({
+        matches: true,
+        media: "(max-width: 760px), (pointer: coarse)",
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      })),
+    })
+
+    try {
+      const view = render(
+        <LabRoot
+          adapters={[adapter]}
+          routeState={{
+            devicesSegment: "all",
+            themeId: "test",
+            surfacePath: "/",
+          }}
+          navigation={{
+            setDevicesSegment: mock(() => undefined),
+            setThemeId: mock(() => undefined),
+            setSurfacePath: mock(() => undefined),
+          }}
+        />,
+      )
+
+      await waitFor(() => {
+        expect(view.container.querySelector(".pt-shell")?.classList).toContain(
+          "pt-compact",
+        )
+      })
+      expect(view.container.querySelector(".pt-dock-right")).toBeNull()
+      expect(screen.getByRole("tablist", { name: "Panels" })).toBeTruthy()
+    } finally {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: originalMatchMedia,
+      })
+    }
+  })
+
   it("renders selected real-surface frames and mirrors navigation from one frame to all frames", async () => {
     const { adapter, histories, mountCounts } = makeAdapter()
     const surfaceWrites: string[] = []

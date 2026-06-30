@@ -42,7 +42,7 @@ function context(): LabContextValue {
   }
 }
 
-function renderBar() {
+function renderBar({ compact = false }: { readonly compact?: boolean } = {}) {
   render(
     <LabContext.Provider value={context()}>
       <LabTopBar
@@ -50,7 +50,7 @@ function renderBar() {
         onChromeModeChange={() => {}}
         onHideChrome={() => {}}
         onOpenSettings={() => {}}
-        compact={false}
+        compact={compact}
       />
     </LabContext.Provider>,
   )
@@ -62,6 +62,18 @@ describe("LabTopBar", () => {
 
     expect(screen.queryByRole("button", { name: "Inspect" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Live" })).toBeNull()
+  })
+
+  it("keeps essential dropdown controls in compact mode", async () => {
+    renderBar({ compact: true })
+
+    expect(screen.getByLabelText("Device selection")).toBeTruthy()
+    expect(screen.getByLabelText("Surface")).toBeTruthy()
+
+    const css = await Bun.file("tools/theme-workshop/lab/lab-chrome.css").text()
+    expect(css).not.toContain(
+      ".pt-compact .pt-surface-select {\n\tdisplay: none;\n}",
+    )
   })
 
   it("does not render the legacy Screen dropdown", () => {
