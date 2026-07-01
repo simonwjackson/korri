@@ -640,7 +640,7 @@ in
       # Bandai/Sobo's DSI panel is physically mounted rotated. Keep the
       # operator-validated right-side-up transform explicit here so product
       # redeploys cannot regress the kiosk back to the substrate default.
-      output DSI-1 transform 270
+      output DSI-1 transform 90
     '';
   };
 
