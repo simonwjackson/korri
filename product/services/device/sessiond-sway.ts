@@ -125,6 +125,17 @@ export function parseSwayWindowEvent(raw: string): SwayNode | undefined {
   return parsed.container
 }
 
+export interface SwayWorkspaceEvent {
+  readonly change?: string
+  readonly current?: SwayNode
+  readonly old?: SwayNode
+}
+
+export function parseSwayWorkspaceEvent(raw: string): SwayWorkspaceEvent {
+  const parsed = JSON.parse(raw) as SwayWorkspaceEvent
+  return parsed
+}
+
 function walkSwayTree(node: SwayNode, visit: (node: SwayNode) => void) {
   visit(node)
   for (const child of node.nodes ?? []) walkSwayTree(child, visit)

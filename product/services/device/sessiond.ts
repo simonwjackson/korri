@@ -1,6 +1,4 @@
-import { readdirSync } from "node:fs"
 import { unlink } from "node:fs/promises"
-import { join } from "node:path"
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import {
   type LaunchResult,
@@ -74,6 +72,7 @@ import {
   createStatusSidecar,
   type StatusSidecar,
 } from "./sessiond-status-sidecar"
+import { discoverSwaySocketEnv } from "./sessiond-sway-socket"
 import {
   createSwayController,
   type SwayCommandRunner,
@@ -1235,31 +1234,6 @@ function realRendererController(): KorriRendererController {
     },
     runner: realElectrobunRunner,
   })
-}
-
-/**
- * Discover Sway's IPC socket from XDG_RUNTIME_DIR. The kiosk image
- * runs sway in korri-compositor.service while korri-sessiond is a
- * sibling unit; sessiond doesn't inherit SWAYSOCK from the
- * compositor's process tree, and swaymsg refuses to run without
- * either SWAYSOCK or I3SOCK set. Match the `sway-ipc.<uid>.<pid>.sock`
- * convention sway uses; return the first match (there is one sway
- * per host on a Korri kiosk by construction).
- */
-function discoverSwaySocketEnv(
-  env: NodeJS.ProcessEnv = process.env,
-): Record<string, string> {
-  if (env.SWAYSOCK) return { SWAYSOCK: env.SWAYSOCK }
-  const runtimeDir = env.XDG_RUNTIME_DIR
-  if (!runtimeDir) return {}
-  try {
-    const entry = readdirSync(runtimeDir).find(
-      name => name.startsWith("sway-ipc.") && name.endsWith(".sock"),
-    )
-    return entry ? { SWAYSOCK: join(runtimeDir, entry) } : {}
-  } catch {
-    return {}
-  }
 }
 
 function realSwayCommandRunner(): SwayCommandRunner {
