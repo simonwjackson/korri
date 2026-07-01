@@ -1297,7 +1297,14 @@ function realSourceMachineSurfaceRepair() {
   const selector = streamSurfaceSelectorFromEnv()
   const runner = realSwayCommandRunner()
   return async () => {
-    await repairStreamSurface({ runner, selector })
+    await repairStreamSurface({
+      runner,
+      selector,
+      timeoutMs: parsePositiveIntEnv(
+        "KORRI_STREAM_SURFACE_READY_TIMEOUT_MS",
+        60_000,
+      ),
+    })
   }
 }
 
@@ -1341,6 +1348,11 @@ function delay(ms: number): Promise<void> {
     const timer = setTimeout(resolve, ms)
     if ("unref" in timer && typeof timer.unref === "function") timer.unref()
   })
+}
+
+function parsePositiveIntEnv(name: string, fallback: number): number {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
 function envList(name: string): readonly string[] | undefined {
