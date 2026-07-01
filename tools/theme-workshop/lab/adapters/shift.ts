@@ -1,6 +1,7 @@
 import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import { shiftConfig } from "@product/surfaces/web/shift/config"
 import { mountShift } from "@product/surfaces/web/shift/mount-shift"
+import { ShiftPartSurface } from "@product/surfaces/web/shift/mount-shift-part"
 import { SHIFT_COMPANION_PATH } from "@product/surfaces/web/shift/routes/paths"
 import {
   DEFAULT_SHIFT_CLOCK_ISO,
@@ -44,6 +45,7 @@ import {
   SHIFT_NETWORK_INPUT_ID,
   SHIFT_POWER_INPUT_CONTROL,
   SHIFT_POWER_INPUT_ID,
+  shiftSurfacePartMount,
 } from "./shift-surface-part"
 
 function eachTargetRegistry(
@@ -199,6 +201,11 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   // (see shift-axes.tsx). Launch is produced by pressing Play against the real
   // in-memory launcher, not injected as a lab axis/control.
   sources: shiftLabSources,
+  // Placed parts mount through the same real registry path a live device uses;
+  // parts not yet migrated (Battery, Status Bar) fall back to the static
+  // real-input render below until their real derivation hosts exist.
+  partRegistryRoot: ShiftPartSurface,
+  surfacePartMount: shiftSurfacePartMount,
   renderSurfacePart: renderShiftSurfacePart,
   // These are real inputs the Shift components/page can consume. Home exposes
   // Foreground plus Power plus Clock plus Network; Battery exposes Power; Status

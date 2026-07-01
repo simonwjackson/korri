@@ -49,6 +49,7 @@ import {
   shiftCatalogLayerForBinding,
   shiftEntriesForBinding,
 } from "../seed/shift-seed"
+import type { LabSurfacePartMountSpec } from "../surface-registry"
 
 /**
  * Render a placed Shift Home page part on the Workshop board through the REAL
@@ -210,6 +211,34 @@ export function renderShiftSurfacePart(
 
   if (!isShiftHomeStory(story)) return story.render()
 
+  const spec = shiftSurfacePartMount(story, binding)
+  if (!spec) return story.render()
+  return (
+    <RegistryProvider
+      key={`${binding.sourceId}:${JSON.stringify(binding.inputValues)}`}
+      initialValues={spec.initialValues}
+    >
+      {spec.node}
+    </RegistryProvider>
+  )
+}
+
+/**
+ * The binding→atoms projection for a placed Home part: every real atom Home's
+ * subtree reads, valued for the object's current source/state/input binding.
+ * Seeded into a fresh part registry at mount and re-written into the SAME live
+ * registry when the binding changes — one source of truth for both the live
+ * part mount and the legacy static render above.
+ */
+export function shiftSurfacePartMount(
+  story: Story,
+  binding: {
+    readonly sourceId: string
+    readonly inputValues: Readonly<Record<string, LabInputValue>>
+  },
+): LabSurfacePartMountSpec | null {
+  if (!isShiftHomeStory(story)) return null
+
   const power = powerFromBinding(binding.inputValues)
   const clock = clockFromBinding(binding.inputValues, undefined)
   const network = networkFromBinding(binding.inputValues)
@@ -224,27 +253,25 @@ export function renderShiftSurfacePart(
     shiftForegroundSourceLayers[
       foregroundTag as keyof typeof shiftForegroundSourceLayers
     ] ?? shiftForegroundSourceLayers.Ready
-  return (
-    <RegistryProvider
-      key={`${binding.sourceId}:${dataTag}:${foregroundTag}:${JSON.stringify(power)}:${clock}:${JSON.stringify(network)}`}
-      initialValues={[
-        [catalogFactsSourceLayerAtom, catalogLayer],
-        [foregroundSessionStatusLayerAtom, makeForeground()],
-        [shiftPowerReadingAtom, power],
-        [deviceStateAtom, shiftDeviceStateForPowerReading(power)],
-        [shiftClockIsoAtom, clock],
-        [shiftNetworkReadingAtom, network],
-        [
-          librarySourceLayerAtom,
-          makeInMemoryLibrarySourceLayer({ playableEntries: entries }),
-        ],
-        [
-          launcherLayerAtom,
-          makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }),
-        ],
-      ]}
-    >
-      <ShiftHomeFromEdge />
-    </RegistryProvider>
-  )
+  const initialValues = [
+    [catalogFactsSourceLayerAtom, catalogLayer],
+    [foregroundSessionStatusLayerAtom, makeForeground()],
+    [shiftPowerReadingAtom, power],
+    [deviceStateAtom, shiftDeviceStateForPowerReading(power)],
+    [shiftClockIsoAtom, clock],
+    [shiftNetworkReadingAtom, network],
+    [
+      librarySourceLayerAtom,
+      makeInMemoryLibrarySourceLayer({ playableEntries: entries }),
+    ],
+    [
+      launcherLayerAtom,
+      makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }),
+    ],
+  ] as const
+  return {
+    initialValues:
+      initialValues as unknown as LabSurfacePartMountSpec["initialValues"],
+    node: <ShiftHomeFromEdge />,
+  }
 }

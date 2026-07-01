@@ -54,7 +54,10 @@ export interface MountedShiftSurface {
   readonly dispose: () => void
 }
 
-function ShiftRegistryBridge({
+/** Reports the surrounding atom registry to a design-tool seam. Shared by the
+ * full-surface mount below and the single-part root in `mount-shift-part.tsx`;
+ * inert in production (nothing passes `onRegistry`). */
+export function ShiftRegistryBridge({
   onRegistry,
 }: {
   readonly onRegistry: (registry: AtomRegistry.AtomRegistry) => void

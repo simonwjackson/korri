@@ -13,6 +13,7 @@ import { partMetaLabel, stateVariantFor } from "../model/lab-part-model"
 import { LabPreviewBoundary } from "../model/lab-preview-boundary"
 import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import { LAB_BIND_MIME } from "../panels/LabSourcesPanel"
+import { LabPartMount } from "../part-mount/LabPartMount"
 import { LabInspectableContent } from "./LabInspectableContent"
 import { LabScreenFrame } from "./LabScreenFrame"
 
@@ -102,6 +103,31 @@ export function LabDraggablePart({
   const canPromoteTake = canDeleteTake && storyMeta?.promoted !== true
 
   const renderBody = () => {
+    // A part the adapter can live-mount goes through the SAME real mount +
+    // scoped registry path a live device uses: its registry is registered
+    // under this object's scope, so part edges (axes/inputs/events) drive the
+    // real atoms, and binding edits re-seed the live registry instead of
+    // remounting.
+    if (adapter.partRegistryRoot && adapter.surfacePartMount) {
+      const spec = adapter.surfacePartMount(variant, {
+        sourceId: instance.sourceId,
+        inputValues,
+      })
+      if (spec) {
+        return (
+          <div className="lab-part-mount" data-fill={fill ? "true" : undefined}>
+            <LabPreviewBoundary label={variant.name}>
+              <LabPartMount
+                Root={adapter.partRegistryRoot}
+                spec={spec}
+                bindingKey={`${instance.sourceId}:${JSON.stringify(inputValues)}`}
+                scopeId={instance.id}
+              />
+            </LabPreviewBoundary>
+          </div>
+        )
+      }
+    }
     // A binding-capable adapter may render any placed part through the real
     // data edge or component input it owns. Page parts use app-edge data; atoms
     // and molecules can use the same selected input values to feed their real

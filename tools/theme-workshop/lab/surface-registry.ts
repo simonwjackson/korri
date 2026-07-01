@@ -1,8 +1,9 @@
 import type { DualScreenChannelFactory } from "@platform/react/display/dual-screen/DualScreenBroadcastSessionRoot"
 import type { DualScreenRole } from "@platform/react/display/dual-screen/dual-screen-events"
 import type { RouterHistory } from "@tanstack/history"
+import type * as Atom from "effect/unstable/reactivity/Atom"
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
-import type { ReactNode } from "react"
+import type { ComponentType, ReactNode } from "react"
 import type { DeviceConfig, ThemeKnob } from "../device-lab"
 import type { Story, WorkshopControl } from "../types"
 import { boxbusterLabSurfaceAdapter } from "./adapters/boxbuster"
@@ -70,6 +71,29 @@ export interface LabSurfaceEvent {
   ) => void
 }
 
+/** One mount-time atom seed pair for a part registry root. */
+export type LabPartSeedEntry = readonly [Atom.Atom<unknown>, unknown]
+
+/**
+ * Live-mount spec for one placed part: the binding→atoms projection (the real
+ * atoms the part's subtree reads, valued for the object's current binding)
+ * plus the part's real component subtree. The lab seeds `initialValues` into a
+ * fresh registry at mount and re-writes the projection into the SAME live
+ * registry when the binding changes — the part is driven through real atoms,
+ * never re-rendered from props.
+ */
+export interface LabSurfacePartMountSpec {
+  readonly initialValues: readonly LabPartSeedEntry[]
+  readonly node: ReactNode
+}
+
+/** Props of a surface-owned part registry root (see `partRegistryRoot`). */
+export interface LabPartRegistryRootProps {
+  readonly initialValues: readonly LabPartSeedEntry[]
+  readonly onRegistry?: (registry: AtomRegistry.AtomRegistry) => void
+  readonly children?: ReactNode
+}
+
 export interface LabSurfaceDualScreenOptions {
   readonly role: DualScreenRole
   readonly channelName: string
@@ -120,6 +144,22 @@ export interface LabSurfaceAdapter {
    * and recipes resolve outside a full mount (e.g. pico needs
    * [data-pico].pico-screen.intrinsic). Omit when parts are self-scoping. */
   readonly previewScope?: (children: ReactNode) => ReactNode
+  /** Surface-owned registry root that hosts one part's real component with a
+   * fresh registry and reports it — the product-side part counterpart of
+   * `mountSurface` (e.g. Shift's `ShiftPartSurface`). Required for
+   * `surfacePartMount` to take effect. */
+  readonly partRegistryRoot?: ComponentType<LabPartRegistryRootProps>
+  /** Live-mount spec for a placed part: same real mount + scoped registry path
+   * a live device uses, so part edges (axes/inputs/events) drive real atoms.
+   * Return null for parts not yet migrated; the lab falls back to
+   * `renderSurfacePart` / the story's baked render. */
+  readonly surfacePartMount?: (
+    story: Story,
+    binding: {
+      readonly sourceId: string
+      readonly inputValues: Readonly<Record<string, LabInputValue>>
+    },
+  ) => LabSurfacePartMountSpec | null
   /** Render a placed part on the Workshop board through the real data edge or
    * component input the surface owns. Page parts use source/input data;
    * smaller parts can feed the same selected input values into their real
