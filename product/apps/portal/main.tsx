@@ -9,6 +9,7 @@ import { createRouter, RouterProvider } from "@tanstack/react-router"
 import ReactDOM from "react-dom/client"
 import { createPortalPlatformBridge } from "./platform-bridge"
 import { readInlinedRuntimeConfig } from "./read-inlined-runtime-config"
+import { notifyRendererReady } from "./renderer-ready"
 import { routeTree } from "./routeTree.gen"
 import { buildSpatialNavigationConfig } from "./spatial-navigation-config"
 import "@platform/react/primitives/theme/styles.css"
@@ -69,6 +70,8 @@ ReactDOM.createRoot(rootElement).render(
     <RouterProvider router={router} />
   </PlatformBridgeProvider>,
 )
+
+notifyRendererReady(window)
 
 function readControllerInputProfile(value: unknown): ControllerInputProfile {
   return isControllerInputProfile(value) ? value : "auto"
