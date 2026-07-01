@@ -1,6 +1,7 @@
 import { Settings } from "lucide-react"
 import type { ScreenConfig } from "../../device-lab"
 import { LabScreenSelect } from "../components/LabScreenSelect"
+import { LabSurfaceSelect } from "../components/LabSurfaceSelect"
 import type {
   LabWorkshopCommand,
   LabWorkshopTool,
@@ -11,9 +12,10 @@ import { LabPreviewPickToggle } from "./LabPreviewPickToggle"
 import type { LabPresentation } from "./lab-presentation"
 
 /**
- * The shared workspace control cluster: placed-part screen aspect, board tools,
- * Pick mode, layout presentation, and settings. Device and Parts selection live
- * in their panels; the canvas itself no longer has a Device/Compose mode toggle.
+ * The shared workspace control cluster: surface choice, placed-part screen aspect,
+ * board tools, Pick mode, layout presentation, and settings. Device and Parts
+ * selection live in their panels; the canvas itself no longer has a Device/Compose
+ * mode toggle.
  */
 export function LabControls({
   screenChoices,
@@ -46,6 +48,7 @@ export function LabControls({
 }) {
   return (
     <>
+      <LabSurfaceSelect />
       {screenChoices &&
       screenChoices.length > 1 &&
       activeScreenId &&

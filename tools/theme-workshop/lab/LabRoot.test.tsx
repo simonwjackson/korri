@@ -159,6 +159,7 @@ describe("LabRoot", () => {
       ).toBe("workspace")
     })
     expect(view.container.querySelector(".pt-float-host")).toBeTruthy()
+    expect(screen.getByLabelText("Surface")).toBeTruthy()
     expect(screen.getByRole("button", { name: "Settings" })).toBeTruthy()
   })
 
@@ -181,7 +182,8 @@ describe("LabRoot", () => {
           screen.getByRole("dialog", { name: "Lab controls" }),
         ).toBeTruthy()
       })
-      expect(screen.getByRole("tab", { name: "Surface" })).toBeTruthy()
+      expect(screen.getByLabelText("Surface")).toBeTruthy()
+      expect(screen.queryByRole("tab", { name: "Surface" })).toBeNull()
       fireEvent.click(screen.getByRole("tab", { name: "Devices" }))
       expect(screen.getByRole("list", { name: "Live devices" })).toBeTruthy()
     })

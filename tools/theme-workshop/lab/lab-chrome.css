@@ -1290,21 +1290,12 @@ body {
 	max-width: 360px;
 }
 
-/* Surface and device panels: surface owns adapter choice; devices are a list of live objects. */
-.pt-surface-panel,
+/* Device panel: devices are a list of live workspace objects. */
 .pt-device-panel {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
 	padding: 2px;
-}
-.pt-surface-panel .pt-surface-select {
-	flex-direction: column;
-	align-items: stretch;
-	gap: 5px;
-}
-.pt-surface-panel .pt-surface-select select {
-	width: 100%;
 }
 .pt-device-picker {
 	display: flex;
