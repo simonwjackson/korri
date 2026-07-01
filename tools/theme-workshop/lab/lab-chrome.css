@@ -2454,7 +2454,7 @@ body {
 	border-color: #393d48;
 }
 
-/* Compose tools sit inline in the control cluster. */
+/* Workspace tools sit inline in the control cluster. */
 .pt-overlay-tools {
 	display: inline-flex;
 	align-items: center;

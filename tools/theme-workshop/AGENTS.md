@@ -38,28 +38,25 @@ Rules that follow from this:
   second machinery. Shift now follows the real-edge pattern; do not reintroduce
   preview branches there.
 
-## Two primitives: screen vs device
+## Two object types: live devices and placed parts
 
-The lab is organized around two primitives that nest cleanly:
+The lab workspace is organized around two object types that keep screen and
+physical-device concerns cleanly separated:
 
-- **Screen** — one logical window. It is the unit of atomic design: a **page
-  fills exactly one screen and never spans across screens**. Pages are
-  device-agnostic; cross-screen relationships are never a page concern.
-- **Device** — physical hardware that **tiles 1..n screens**. A device is where
-  bezels, millimetre sizing, and cross-screen wiring (e.g. Thor's
+- **Placed part object** — one logical window or atomic design part. A page fills
+  exactly one screen and never spans across screens. Pages are device-agnostic;
+  cross-screen relationships are never a page concern.
+- **Live device object** — physical hardware that tiles 1..n screens. A device is
+  where bezels, millimetre sizing, and cross-screen wiring (e.g. Thor's
   primary↔companion handoff) live.
 
-From these come two **frames** over the *same real app*:
+Both object types sit in one workspace canvas. Users select a workspace object,
+or pick a named inner product part inside it, and the Inspector routes from that
+selection. There is no user-facing Device/Compose canvas mode.
 
-- **Compose frame** — design against one logical **screen**, device-agnostic.
-  This is where a page is composed and its states are explored. (Today's Gallery
-  and Workshop are both Compose surfaces.)
-- **Device frame** — validate the page on real hardware: the **device** tiles
-  screens, adds the physical frame, and wires cross-screen handoff. (Today's
-  Preview.)
-
-The Device frame **reuses the Compose frame's page renderer** — once per screen.
-There is one rendering path, not two.
+Live device objects reuse the same real page renderer and mounted-surface path as
+production. Placed part objects reuse discovered product part/story seams and
+adapter-owned real edge data. There is one product mechanism, not two.
 
 ### The one-renderer rule
 
@@ -71,9 +68,10 @@ is the first-principle violation surfacing as render code instead of data.
 Consequences:
 
 - A page's state machines (Shift Home's Data, Foreground, Launch) are **the
-  page's own state**, driven identically in Compose and Device by swapping data
-  at the real edge. Per-object dials and the global Inspect⇄Live mode are the
-  *same* state-driving capability surfaced in each frame — not duplicated logic.
+  page's own state**, driven by swapping data at the real edge. Live device
+  objects share live dials/screen inputs for now; placed part object inputs stay
+  object-local. These are scoped views of the same real state-driving capability,
+  not duplicated logic.
 - Adding a new state machine to a page requires **no** second display
   implementation in the lab: it appears in every frame by virtue of the shared
   renderer. (This is why the real renderer is unified *before* Launch migrates.)

@@ -108,7 +108,6 @@ function context(
     initialValues: {},
     themeId: "test",
     surfacePath: "/",
-    initialCanvasView: "compose",
     screens: [],
     selection: { kind: "set", ids: [] },
     devices: [],
@@ -127,6 +126,7 @@ function instance(
   inputValues: LabObjectInstance["inputValues"],
 ): LabObjectInstance {
   return {
+    kind: "placed-part",
     id: "object-1",
     storyId,
     sourceId: "dev",

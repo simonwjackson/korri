@@ -7,9 +7,9 @@ function screenLabel(screen: ScreenConfig, index: number): string {
 
 /**
  * Top-bar screen sub-selector for Compose. A device with multiple physical
- * screens contributes multiple logical screen aspects; Compose shows one at a
- * time because physical arrangement is the Device frame's job. Shown only when
- * the active device has more than one screen.
+ * screens contributes multiple logical screen aspects; placed part objects show
+ * one at a time because physical arrangement belongs to live device objects.
+ * Shown only when the active device has more than one screen.
  */
 export function LabScreenSelect({
   screens,

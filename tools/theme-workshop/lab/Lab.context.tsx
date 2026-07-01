@@ -2,7 +2,6 @@ import { createContext, useContext } from "react"
 import type { DeviceConfig } from "../device-lab"
 import type { DeviceSelection } from "./lab-route-state"
 import type { LabCalibrationController } from "./model/lab-calibration-state"
-import type { LabCanvasView } from "./model/lab-canvas-state"
 import type { LabSurfaceAdapter, LabSurfaceScreen } from "./surface-registry"
 
 export interface LabContextValue {
@@ -10,7 +9,6 @@ export interface LabContextValue {
   readonly initialValues: unknown
   readonly themeId: string
   readonly surfacePath: string
-  readonly initialCanvasView: LabCanvasView
   readonly screens: readonly LabSurfaceScreen[]
   readonly selection: DeviceSelection
   readonly devices: readonly DeviceConfig[]

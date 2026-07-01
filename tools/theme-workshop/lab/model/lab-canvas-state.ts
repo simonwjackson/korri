@@ -1,6 +1,14 @@
+import {
+  bindPlacedPartInput,
+  bindPlacedPartObject,
+  createPlacedPartObject,
+  nextCanvasObjectId,
+  resetCanvasObjectIdCounterForTest,
+  type LabObjectInputValues,
+  type LabPlacedPartObject,
+} from "./lab-canvas-object"
 import type { LabInputValue } from "./lab-source-state"
 
-export type LabCanvasView = "device" | "compose"
 export type LabChromeMode = "dock" | "float" | "focus"
 export type LabWorkshopTool = "select" | "hand"
 export type LabWorkshopCommand = "zoom-out" | "zoom-in" | "reset-view" | "tidy"
@@ -9,17 +17,8 @@ export type LabWorkshopCommandSignal = {
   readonly command: LabWorkshopCommand
 }
 
-export type LabObjectInputValues = Readonly<Record<string, LabInputValue>>
-
-export type LabObjectInstance = {
-  readonly id: string
-  readonly storyId: string
-  readonly sourceId: string
-  /** Compose-object input values keyed by independent input id. */
-  readonly inputValues: LabObjectInputValues
-  readonly x?: number
-  readonly y?: number
-}
+export type { LabObjectInputValues }
+export type LabObjectInstance = LabPlacedPartObject
 
 export type LabCamera = {
   readonly x: number
@@ -27,7 +26,6 @@ export type LabCamera = {
   readonly scale: number
 }
 
-export const DEFAULT_CANVAS_VIEW: LabCanvasView = "device"
 export const DEFAULT_CHROME_MODE: LabChromeMode = "dock"
 export const DEFAULT_CAMERA: LabCamera = { x: 24, y: 24, scale: 1 }
 
@@ -105,14 +103,12 @@ export function cameraSettled(
   )
 }
 
-let objectSeq = 0
 export function nextObjectId(): string {
-  objectSeq += 1
-  return `lab-object-${objectSeq}`
+  return nextCanvasObjectId()
 }
 
 export function resetObjectIdCounterForTest(): void {
-  objectSeq = 0
+  resetCanvasObjectIdCounterForTest()
 }
 
 export function createObjectInstance(
@@ -120,7 +116,7 @@ export function createObjectInstance(
   sourceId: string,
   inputValues: LabObjectInputValues,
 ): LabObjectInstance {
-  return { id: nextObjectId(), storyId, sourceId, inputValues }
+  return createPlacedPartObject(storyId, sourceId, inputValues)
 }
 
 export function reconcileInstancesWithSelection(
@@ -158,9 +154,7 @@ export function bindObjectInstance(
   id: string,
   patch: Partial<Pick<LabObjectInstance, "sourceId" | "x" | "y">>,
 ): readonly LabObjectInstance[] {
-  return instances.map(instance =>
-    instance.id === id ? { ...instance, ...patch } : instance,
-  )
+  return bindPlacedPartObject(instances, id, patch) as readonly LabObjectInstance[]
 }
 
 export function bindObjectInput(
@@ -169,15 +163,10 @@ export function bindObjectInput(
   inputId: string,
   value: LabInputValue,
 ): readonly LabObjectInstance[] {
-  return instances.map(instance =>
-    instance.id === id
-      ? {
-          ...instance,
-          inputValues: {
-            ...instance.inputValues,
-            [inputId]: value,
-          },
-        }
-      : instance,
-  )
+  return bindPlacedPartInput(
+    instances,
+    id,
+    inputId,
+    value,
+  ) as readonly LabObjectInstance[]
 }

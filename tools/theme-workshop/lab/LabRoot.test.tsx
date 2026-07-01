@@ -327,7 +327,7 @@ describe("LabRoot", () => {
     })
   })
 
-  it("renders discovered parts at /parts in the Compose frame without mounting device frames", async () => {
+  it("renders discovered parts at /parts in one workspace beside live device frames", async () => {
     const { adapter, mountCounts } = makeAdapter()
     __setPartModulesForTest({
       "/product/surfaces/web/test/ui/Test.atom.part.tsx": {
@@ -357,12 +357,12 @@ describe("LabRoot", () => {
     await waitFor(() => {
       expect(screen.getByText("discovered test atom")).toBeTruthy()
     })
-    expect(screen.getByRole("tab", { name: "Compose" })).toBeTruthy()
-    expect(screen.getByRole("tab", { name: "Device" })).toBeTruthy()
+    expect(screen.queryByRole("tab", { name: "Compose" })).toBeNull()
+    expect(screen.queryByRole("tab", { name: "Device" })).toBeNull()
     expect(screen.queryByRole("tab", { name: "Gallery" })).toBeNull()
     expect(screen.queryByRole("tab", { name: "Workshop" })).toBeNull()
-    expect(view.queryByTestId("surface-rg353m")).toBeNull()
-    expect(mountCounts.size).toBe(0)
+    expect(view.queryByTestId("surface-rg353m")).toBeTruthy()
+    expect(mountCounts.size).toBeGreaterThan(0)
   })
 
   it("toggles the Parts panel between visual and list from the titlebar", async () => {
@@ -406,8 +406,8 @@ describe("LabRoot", () => {
     expect(view.container.querySelector(".pt-grid")).toBeNull()
   })
 
-  it("places a part from the Compose palette onto a logical screen frame", async () => {
-    const { adapter } = makeAdapter()
+  it("places a part from the workspace palette without remounting live devices", async () => {
+    const { adapter, mountCounts } = makeAdapter()
     __setPartModulesForTest({
       "/product/surfaces/web/test/ui/Test.atom.part.tsx": {
         default: {
@@ -433,6 +433,11 @@ describe("LabRoot", () => {
       />,
     )
 
+    await waitFor(() => {
+      expect(view.queryByTestId("surface-rg353m")).toBeTruthy()
+    })
+    const countsBeforePlacement = new Map(mountCounts)
+
     const card = await screen.findByRole("button", { name: "Open Test Atom" })
     fireEvent.click(card)
 
@@ -441,7 +446,8 @@ describe("LabRoot", () => {
         view.container.querySelector('[data-lab-frame="screen"]'),
       ).toBeTruthy()
     })
-    expect(view.queryByTestId("surface-rg353m")).toBeNull()
+    expect(view.queryByTestId("surface-rg353m")).toBeTruthy()
+    expect(mountCounts).toEqual(countsBeforePlacement)
   })
 
   it("shows a direct /parts empty state when a surface has no discovered parts", async () => {

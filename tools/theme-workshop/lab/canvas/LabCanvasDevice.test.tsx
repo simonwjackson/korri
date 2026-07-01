@@ -14,7 +14,7 @@ import type {
   LabSurfaceAdapter,
   LabSurfaceDualScreenOptions,
 } from "../surface-registry"
-import { LabSurfaceView } from "./LabSurfaceView"
+import { LabCanvasDevice } from "./LabCanvasDevice"
 
 type BroadcastListener = (event: MessageEvent) => void
 
@@ -218,7 +218,6 @@ function context(
     initialValues,
     themeId: adapter.id,
     surfacePath: "/",
-    initialCanvasView: "device",
     screens: adapter.screens ?? [],
     selection: { kind: "set", ids: ["thor"] },
     devices: [thor],
@@ -268,14 +267,44 @@ function makeInspectableAdapter() {
   return { adapter, clicks: () => clicks }
 }
 
-describe("LabSurfaceView", () => {
+function renderLiveDevice({
+  adapter,
+  sourceId = "default",
+  stateId = "ready",
+  pickMode = false,
+  onInnerSelect = () => undefined,
+}: {
+  readonly adapter: LabSurfaceAdapter
+  readonly sourceId?: string
+  readonly stateId?: string
+  readonly pickMode?: boolean
+  readonly onInnerSelect?: Parameters<typeof LabCanvasDevice>[0]["onInnerSelect"]
+}) {
+  return (
+    <LabContext.Provider value={context(adapter)}>
+      <LabCanvasDevice
+        object={{ kind: "live-device", id: "live-thor", deviceId: "thor" }}
+        scale={1}
+        selected={false}
+        sourceId={sourceId}
+        stateId={stateId}
+        pickMode={pickMode}
+        innerSelection={null}
+        onSelect={() => undefined}
+        onInnerSelect={onInnerSelect}
+        onMove={() => undefined}
+        onMeasure={() => undefined}
+      />
+    </LabContext.Provider>
+  )
+}
+
+describe("LabCanvasDevice", () => {
   it("mounts Thor primary and companion screens with one scoped dual-screen channel", async () => {
     const { adapter, mounts } = makeAdapter()
 
     render(
-      <LabContext.Provider value={context(adapter)}>
-        <LabSurfaceView sourceId="default" stateId="ready" />
-      </LabContext.Provider>,
+      <>{renderLiveDevice({ adapter })}</>,
     )
 
     await waitFor(() => {
@@ -308,9 +337,7 @@ describe("LabSurfaceView", () => {
   it("does not remount default-seed adapters when source state changes", async () => {
     const { adapter, mounts } = makeAdapter()
     const view = render(
-      <LabContext.Provider value={context(adapter)}>
-        <LabSurfaceView sourceId="default" stateId="ready" />
-      </LabContext.Provider>,
+      <>{renderLiveDevice({ adapter })}</>,
     )
 
     await waitFor(() => {
@@ -321,9 +348,7 @@ describe("LabSurfaceView", () => {
     })
 
     view.rerender(
-      <LabContext.Provider value={context(adapter)}>
-        <LabSurfaceView sourceId="alternate" stateId="loading" />
-      </LabContext.Provider>,
+      <>{renderLiveDevice({ adapter, sourceId: "alternate", stateId: "loading" })}</>,
     )
 
     await waitFor(() => {
@@ -339,12 +364,8 @@ describe("LabSurfaceView", () => {
 
     render(
       <>
-        <LabContext.Provider value={context(adapter)}>
-          <LabSurfaceView sourceId="default" stateId="ready" />
-        </LabContext.Provider>
-        <LabContext.Provider value={context(adapter)}>
-          <LabSurfaceView sourceId="default" stateId="ready" />
-        </LabContext.Provider>
+        {renderLiveDevice({ adapter })}
+        {renderLiveDevice({ adapter })}
       </>,
     )
 
@@ -363,9 +384,7 @@ describe("LabSurfaceView", () => {
   it("lets a product-session companion follow primary focus through lab wiring", async () => {
     const adapter = makeSharedSessionAdapter()
     const { container } = render(
-      <LabContext.Provider value={context(adapter)}>
-        <LabSurfaceView sourceId="default" stateId="ready" />
-      </LabContext.Provider>,
+      <>{renderLiveDevice({ adapter })}</>,
     )
 
     const secondary = await waitFor(() => {
@@ -402,17 +421,16 @@ describe("LabSurfaceView", () => {
     const selectedNames: string[] = []
 
     render(
-      <LabContext.Provider value={context(adapter)}>
-        <LabSurfaceView
-          sourceId="default"
-          stateId="ready"
-          pickMode
-          onPreviewSelectionChange={selection => {
+      <>
+        {renderLiveDevice({
+          adapter,
+          pickMode: true,
+          onInnerSelect: selection => {
             const name = selection?.targets[0]?.name
             if (name) selectedNames.push(name)
-          }}
-        />
-      </LabContext.Provider>,
+          },
+        })}
+      </>,
     )
 
     const button = await waitFor(() =>

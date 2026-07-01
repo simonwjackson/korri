@@ -36,7 +36,6 @@ function renderSelect(
     initialValues: {},
     themeId: "test",
     surfacePath: "/",
-    initialCanvasView: "device",
     screens: [],
     devices,
     selectedDevices: devices,

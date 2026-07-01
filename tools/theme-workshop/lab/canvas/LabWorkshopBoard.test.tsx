@@ -7,10 +7,11 @@ import {
   mock,
   spyOn,
 } from "bun:test"
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react"
 import type { Story } from "../../types"
 import { LabContext, type LabContextValue } from "../Lab.context"
+import type { LabCanvasObject } from "../model/lab-canvas-object"
 import {
   PLACEMENT_CELL,
   placeNext,
@@ -26,6 +27,7 @@ import {
   resetLabPlacementPatternForTest,
   setLabPlacementPattern,
 } from "../model/lab-placement-store"
+import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import { LabWorkshopBoard } from "./LabWorkshopBoard"
 
 const VIEWPORT = { width: 1000, height: 600 }
@@ -58,7 +60,6 @@ const context: LabContextValue = {
   initialValues: {},
   themeId: "test",
   surfacePath: "/",
-  initialCanvasView: "compose",
   screens: [],
   selection: { kind: "set", ids: [] },
   devices: [],
@@ -75,33 +76,43 @@ function Harness({
   initial,
   command = null,
   selectedId = null,
+  pickMode = false,
+  onSelect = () => undefined,
+  onInnerSelect = () => undefined,
 }: {
-  readonly initial: readonly LabObjectInstance[]
+  readonly initial: readonly LabCanvasObject[]
   readonly command?: LabWorkshopCommandSignal | null
   readonly selectedId?: string | null
+  readonly pickMode?: boolean
+  readonly onSelect?: (id: string | null) => void
+  readonly onInnerSelect?: (selection: LabPreviewSelection | null) => void
 }) {
-  const [instances, setInstances] = useState(initial)
+  const [instances, setInstances] = useState<readonly LabCanvasObject[]>(initial)
   return (
     <LabContext.Provider value={context}>
       <LabWorkshopBoard
-        instances={instances}
+        objects={instances}
         stories={stories}
         tool="select"
         command={command}
         screenId={null}
         selectedId={selectedId}
-        pickMode={false}
-        innerSelection={null}
-        onSelect={() => undefined}
-        onInnerSelect={() => undefined}
-        onInstancesChange={setInstances}
+        pickMode={pickMode}
+        innerSelection={
+          pickMode ? { scopeId: "first", targets: [], activeIndex: 0 } : null
+        }
+        onSelect={onSelect}
+        onInnerSelect={onInnerSelect}
+        sourceId="dev"
+        stateId="ready"
+        onObjectsChange={setInstances}
       />
       <div data-testid="dump">{JSON.stringify(instances)}</div>
     </LabContext.Provider>
   )
 }
 
-function dumped(): readonly LabObjectInstance[] {
+function dumped(): readonly LabCanvasObject[] {
   return JSON.parse(screen.getByTestId("dump").textContent ?? "[]")
 }
 
@@ -110,6 +121,7 @@ function instance(
   extra: Partial<LabObjectInstance> = {},
 ): LabObjectInstance {
   return {
+    kind: "placed-part",
     id,
     storyId: "pill",
     sourceId: "dev",
@@ -227,6 +239,34 @@ describe("LabWorkshopBoard placement", () => {
       expected[1],
     ])
   })
+
+  it("tidies mixed live-device and placed-part bounds without overlap", async () => {
+    setLabPlacementPattern("grid")
+    render(
+      <Harness
+        initial={[
+          {
+            kind: "live-device",
+            id: "device",
+            deviceId: "thor",
+            measuredSize: { w: 900, h: 480 },
+            x: 10,
+            y: 10,
+          },
+          instance("part", { x: 20, y: 20 }),
+        ]}
+        command={{ id: 1, command: "tidy" }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(dumped().find(item => item.id === "device")?.x).not.toBe(10)
+    })
+    const device = dumped().find(item => item.id === "device")
+    const part = dumped().find(item => item.id === "part")
+    expect(device?.x).toBeTypeOf("number")
+    expect(part?.x).toBeGreaterThanOrEqual((device?.x ?? 0) + 900)
+  })
 })
 
 describe("LabWorkshopBoard selection framing", () => {
@@ -266,5 +306,24 @@ describe("LabWorkshopBoard selection framing", () => {
     expect(cameraTransform()).toBe(
       `translate(${DEFAULT_CAMERA.x}px, ${DEFAULT_CAMERA.y}px)`,
     )
+  })
+
+  it("clears only inner selection on empty-board clicks while picking", () => {
+    const selected: (string | null)[] = []
+    const inner: (LabPreviewSelection | null)[] = []
+    render(
+      <Harness
+        initial={[instance("first", { x: 100, y: 40 })]}
+        selectedId="first"
+        pickMode
+        onSelect={id => selected.push(id)}
+        onInnerSelect={selection => inner.push(selection)}
+      />,
+    )
+
+    fireEvent.pointerDown(document.querySelector(".pt-board-free") as Element)
+
+    expect(selected).toEqual([])
+    expect(inner).toEqual([null])
   })
 })

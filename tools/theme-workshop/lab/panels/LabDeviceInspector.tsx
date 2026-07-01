@@ -106,8 +106,9 @@ function AxisTree({
 }
 
 /**
- * Inspector scoped to the Device frame: live state-machine axes plus product
- * inputs that the mounted screen consumes (power, clock, network, etc.).
+ * Inspector scoped to a selected live device object: shared live state-machine
+ * axes plus product inputs that the mounted screen consumes (power, clock,
+ * network, etc.).
  */
 export function LabDeviceInspector({
   axes,

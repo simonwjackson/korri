@@ -1,20 +1,17 @@
 import type { Dispatch, SetStateAction } from "react"
+import type { LabCanvasObject } from "../model/lab-canvas-object"
 import type {
-  LabCanvasView,
-  LabObjectInstance,
   LabWorkshopCommandSignal,
   LabWorkshopTool,
 } from "../model/lab-canvas-state"
 import type { LabStoryIndex } from "../model/lab-part-model"
 import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import type { LabInputValue } from "../model/lab-source-state"
-import { LabComposeView } from "./LabComposeView"
-import { LabSurfaceView } from "./LabSurfaceView"
+import { LabWorkspaceView } from "./LabWorkspaceView"
 
 export function LabCanvasContent({
-  view,
   index,
-  instances,
+  objects,
   activeSourceId,
   activeStateId,
   workshopTool,
@@ -25,16 +22,15 @@ export function LabCanvasContent({
   previewSelection,
   onPreviewSelectionChange,
   onSelectObject,
-  onInstancesChange,
+  onObjectsChange,
 }: {
-  readonly view: LabCanvasView
   readonly index: LabStoryIndex
-  readonly instances: readonly LabObjectInstance[]
+  readonly objects: readonly LabCanvasObject[]
   readonly activeSourceId: string
   readonly activeStateId: LabInputValue
   readonly workshopTool: LabWorkshopTool
   readonly workshopCommand: LabWorkshopCommandSignal | null
-  /** Which logical screen aspect Compose renders for multi-screen devices. */
+  /** Which logical screen aspect placed parts render for multi-screen devices. */
   readonly workshopScreenId: string | null
   readonly selectedObjectId: string | null
   readonly previewPickMode: boolean
@@ -43,25 +39,12 @@ export function LabCanvasContent({
     selection: LabPreviewSelection | null,
   ) => void
   readonly onSelectObject: (id: string | null) => void
-  readonly onInstancesChange: Dispatch<
-    SetStateAction<readonly LabObjectInstance[]>
-  >
+  readonly onObjectsChange: Dispatch<SetStateAction<readonly LabCanvasObject[]>>
 }) {
-  if (view === "device")
-    return (
-      <LabSurfaceView
-        sourceId={activeSourceId}
-        stateId={activeStateId}
-        pickMode={previewPickMode}
-        previewSelection={previewSelection}
-        onPreviewSelectionChange={onPreviewSelectionChange}
-      />
-    )
-
   return (
-    <LabComposeView
+    <LabWorkspaceView
       index={index}
-      instances={instances}
+      objects={objects}
       tool={workshopTool}
       command={workshopCommand}
       screenId={workshopScreenId}
@@ -70,7 +53,9 @@ export function LabCanvasContent({
       innerSelection={previewSelection}
       onSelectObject={onSelectObject}
       onInnerSelect={onPreviewSelectionChange}
-      onInstancesChange={onInstancesChange}
+      sourceId={activeSourceId}
+      stateId={activeStateId}
+      onObjectsChange={onObjectsChange}
     />
   )
 }

@@ -177,9 +177,6 @@ export function LabRoot({
       initialValues,
       themeId: routeState.themeId,
       surfacePath: partsAlias ? "/" : requestedPath,
-      initialCanvasView: partsAlias
-        ? ("compose" as const)
-        : ("device" as const),
       screens: adapter.screens ?? [],
       selection,
       devices: calibration.devices,

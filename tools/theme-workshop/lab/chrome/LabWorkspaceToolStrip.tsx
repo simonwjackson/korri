@@ -38,7 +38,7 @@ const COMMANDS: readonly {
  * the control overlay. The whole lab chrome lives in one overlay, so the tools
  * sit alongside the panels rather than in a separate floating rail.
  */
-export function LabComposeToolStrip({
+export function LabWorkspaceToolStrip({
   tool,
   hasObjects,
   onToolChange,
@@ -52,7 +52,7 @@ export function LabComposeToolStrip({
   readonly onClear: () => void
 }) {
   return (
-    <div className="pt-overlay-tools" role="toolbar" aria-label="Compose tools">
+    <div className="pt-overlay-tools" role="toolbar" aria-label="Workspace tools">
       {TOOLS.map(candidate => (
         <button
           key={candidate.id}
@@ -79,7 +79,7 @@ export function LabComposeToolStrip({
       ))}
       <button
         type="button"
-        aria-label="Clear compose board"
+        aria-label="Clear placed parts"
         className="pt-tool"
         disabled={!hasObjects}
         onClick={onClear}

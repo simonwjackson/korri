@@ -6,11 +6,12 @@ device lab. It is never bundled with `product/apps/*`.
 > Governing rule: the tool is the app unwrapped, never a simulation. Swap the
 > data at the last-mile edge; never the mechanism. See `../AGENTS.md`.
 >
-> Two frames over the same real app: **Compose** designs one logical **screen**
-> (device-agnostic); **Device** validates the page on physical hardware that
-> tiles 1..n screens. Both share **one** page renderer — the lab always renders
-> the real page, never a static re-implementation. See `../AGENTS.md` →
-> "Two primitives: screen vs device".
+> One workspace over the same real app: **live device objects** validate the
+> page on physical hardware that tiles 1..n screens, while **placed part
+> objects** design one logical screen or atomic part in isolation. Both share
+> real product render paths — the lab always renders the real page/part, never a
+> static re-implementation. See `../AGENTS.md` → "Two object types: live devices
+> and placed parts".
 
 ## State axes + Inspect ⇄ Live
 
@@ -27,6 +28,10 @@ is `single` (XOR: one pinned state or Auto) or `multi` (0..n pinned states, show
 as checkboxes). Nesting is structural: child axes declare
 `parent: { axisId, whenStates }`, so the panel can reveal children under the
 parent state. Do not use opaque runtime predicates for nesting.
+
+Live-device state dials and screen inputs are shared across live device objects
+for now, matching the mounted surface registry model. Placed part object inputs
+remain object-local.
 
 A single global **Inspect ⇄ Live** mode is the only difference between a frozen,
 addressable coordinate and the running, navigable surface:

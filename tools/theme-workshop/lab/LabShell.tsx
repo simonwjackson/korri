@@ -20,15 +20,20 @@ import {
 import { useLab } from "./Lab.context"
 import { knobStyle } from "./model/lab-calibration-state"
 import {
-  bindObjectInput,
-  bindObjectInstance,
-  type LabCanvasView,
-  type LabObjectInstance,
   type LabWorkshopCommand,
   type LabWorkshopCommandSignal,
   type LabWorkshopTool,
   reconcileInstancesWithSelection,
 } from "./model/lab-canvas-state"
+import {
+  bindPlacedPartInput,
+  bindPlacedPartObject,
+  createLiveDeviceObject,
+  isLiveDeviceObject,
+  isPlacedPartObject,
+  type LabCanvasObject,
+  type LabPlacedPartObject,
+} from "./model/lab-canvas-object"
 import {
   objectInputsForStory,
   resolveObjectInputValues,
@@ -78,22 +83,10 @@ function readStoredDockWidth(): number {
   return Math.max(DOCK_WIDTH_MIN, Math.min(DOCK_WIDTH_MAX, raw))
 }
 
-const CANVAS_VIEWS: { readonly id: LabCanvasView; readonly label: string }[] = [
-  { id: "device", label: "Device" },
-  { id: "compose", label: "Compose" },
-]
-
 export function LabShell() {
-  const {
-    adapter,
-    initialCanvasView,
-    knobValues,
-    selectedDevices,
-    surfacePath,
-  } = useLab()
+  const { adapter, knobValues, selectedDevices, surfacePath } = useLab()
   const [catalog, setCatalog] = useState<LabPartsCatalog | null>(null)
   const [catalogError, setCatalogError] = useState<Error | null>(null)
-  const [view, setView] = useState<LabCanvasView>(initialCanvasView)
   const [dockWidth, setDockWidth] = useState<number>(readStoredDockWidth)
   // One adaptive chrome: position defaults from the viewport and is overridable
   // by the user. Effective = explicit choice ?? viewport default.
@@ -112,44 +105,31 @@ export function LabShell() {
   const [activeSourceId, setActiveSourceId] = useState(
     sources[0]?.id ?? DEFAULT_SOURCE_ID,
   )
-  const [instances, setInstances] = useState<readonly LabObjectInstance[]>([])
+  const [objects, setObjects] = useState<readonly LabCanvasObject[]>([])
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null)
   const [previewPickMode, setPreviewPickMode] = useState(false)
   const [previewSelection, setPreviewSelection] =
     useState<LabPreviewSelection | null>(null)
   const bindObject = (
     id: string,
-    patch: Partial<Pick<LabObjectInstance, "sourceId">>,
-  ) => setInstances(prev => bindObjectInstance(prev, id, patch))
+    patch: Partial<Pick<LabPlacedPartObject, "sourceId">>,
+  ) => setObjects(prev => bindPlacedPartObject(prev, id, patch))
   const bindObjectInputValue = (
     id: string,
     inputId: string,
     value: LabInputValue,
-  ) => setInstances(prev => bindObjectInput(prev, id, inputId, value))
+  ) => setObjects(prev => bindPlacedPartInput(prev, id, inputId, value))
   // Parts are the surface's static discovered *.part.tsx components only — never
   // the surface's routes. The live, router-driven surface lives in the Preview
   // view; Parts stay isolated from the router.
   const index = useMemo(() => buildStoryIndex(catalog), [catalog])
-  // States are dynamic: derived from the selected part's discovered variant
-  // family (its real state-machine tags), not a fixed vocabulary.
-  const primaryStory = useMemo(() => {
-    for (const id of selectedIds) {
-      const story = index.byId.get(id)
-      if (story) return story
-    }
-    return null
-  }, [selectedIds, index])
-  // The States panel reflects the selected part, or — when nothing is selected —
-  // the surface's first state family, so a surface's states are visible without
-  // hunting for the right part.
-  const fallbackStateStory = useMemo(
-    () => firstStateFamilyStory(index),
-    [index],
-  )
-  const stateStory = primaryStory ?? fallbackStateStory
+  // Live-device seed state stays shared and independent from the Parts palette.
+  // Selecting a placed part is a placement/object action; it must not reseed the
+  // mounted live device objects.
+  const liveStateStory = useMemo(() => firstStateFamilyStory(index), [index])
   const states = useMemo(
-    () => statesForStory(stateStory, index.byId),
-    [stateStory, index],
+    () => statesForStory(liveStateStory, index.byId),
+    [liveStateStory, index],
   )
   const defaultStateId =
     states.find(state => state.id.toLowerCase() === "ready")?.id ??
@@ -201,10 +181,6 @@ export function LabShell() {
   }, [])
 
   useEffect(() => {
-    setView(initialCanvasView)
-  }, [initialCanvasView])
-
-  useEffect(() => {
     if (typeof window === "undefined") return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
@@ -248,7 +224,7 @@ export function LabShell() {
     setCatalog(null)
     setCatalogError(null)
     setSelectedIds([])
-    setInstances([])
+    setObjects(prev => prev.filter(isLiveDeviceObject))
     setPreviewSelection(null)
     void loadSurfacePartsResult(adapter.id)
       .then(next => {
@@ -266,19 +242,38 @@ export function LabShell() {
   }, [adapter.id])
 
   useEffect(() => {
-    setInstances(prev =>
-      reconcileInstancesWithSelection(prev, selectedIds, {
-        sourceId: activeSourceId,
-        inputValuesForStory: storyId => {
-          const story = index.byId.get(storyId)
-          if (!story) return {}
-          return resolveObjectInputValues(
-            objectInputsForStory(story, index.byId, adapter),
-            {},
-          )
+    setObjects(prev => {
+      const placedParts = prev.filter(isPlacedPartObject)
+      const liveDevices = selectedDevices.map(device => {
+        const existing = prev
+          .filter(isLiveDeviceObject)
+          .find(object => object.deviceId === device.id)
+        return existing ?? createLiveDeviceObject(device.id)
+      })
+      return [...liveDevices, ...placedParts]
+    })
+  }, [selectedDevices])
+
+  useEffect(() => {
+    setObjects(prev => {
+      const liveDevices = prev.filter(isLiveDeviceObject)
+      const placedParts = reconcileInstancesWithSelection(
+        prev.filter(isPlacedPartObject),
+        selectedIds,
+        {
+          sourceId: activeSourceId,
+          inputValuesForStory: storyId => {
+            const story = index.byId.get(storyId)
+            if (!story) return {}
+            return resolveObjectInputValues(
+              objectInputsForStory(story, index.byId, adapter),
+              {},
+            )
+          },
         },
-      }),
-    )
+      )
+      return [...liveDevices, ...placedParts]
+    })
   }, [selectedIds, activeSourceId, index, adapter])
 
   // The Parts panel is a palette: each pick toggles that part onto the Compose
@@ -290,29 +285,25 @@ export function LabShell() {
         ? prev.filter(id => id !== storyId)
         : [...prev, storyId],
     )
-    setView("compose")
   }
 
   const selectLayer = (stories: readonly { id: string }[]) => {
     setSelectedIds(stories.map(story => story.id))
-    setView("compose")
   }
 
   const clearAll = () => {
     setSelectedIds([])
-    setInstances([])
+    setObjects(prev => prev.filter(isLiveDeviceObject))
     setSelectedObjectId(null)
     setPreviewSelection(null)
   }
 
   const switchWorkshopTool = (tool: LabWorkshopTool) => {
     setWorkshopTool(tool)
-    setView("compose")
   }
 
   const sendWorkshopCommand = (command: LabWorkshopCommand) => {
     setWorkshopCommand(prev => ({ id: (prev?.id ?? 0) + 1, command }))
-    setView("compose")
   }
 
   const choosePartsView = (next: LabPartsView) => {
@@ -332,22 +323,37 @@ export function LabShell() {
       onSelectLayer={selectLayer}
     />
   )
-  // The Inspector scopes to the selected Compose object (its bindings are an
-  // open-ended axis list), and otherwise edits the whole canvas.
+  useEffect(() => {
+    if (selectedObjectId && !objects.some(object => object.id === selectedObjectId)) {
+      setSelectedObjectId(null)
+    }
+    if (previewSelection && !objects.some(object => object.id === previewSelection.scopeId)) {
+      setPreviewSelection(null)
+    }
+  }, [objects, selectedObjectId, previewSelection])
+
+  // The Inspector scopes to the selected workspace object or picked inner part.
   const selectObject = (id: string | null) => {
     setSelectedObjectId(id)
     setPreviewSelection(prev => (prev && prev.scopeId !== id ? null : prev))
   }
   const selectedObject =
-    instances.find(instance => instance.id === selectedObjectId) ?? null
-  const selectedObjectStory = selectedObject
-    ? (index.byId.get(selectedObject.storyId) ?? null)
+    objects.find(object => object.id === selectedObjectId) ?? null
+  const selectedPlacedObject =
+    selectedObject && isPlacedPartObject(selectedObject) ? selectedObject : null
+  const selectedLiveObject =
+    selectedObject && isLiveDeviceObject(selectedObject) ? selectedObject : null
+  const selectedObjectStory = selectedPlacedObject
+    ? (index.byId.get(selectedPlacedObject.storyId) ?? null)
     : null
   const selectedPreviewTarget = activePreviewTarget(previewSelection)
   const selectedPreviewObject =
-    view === "compose" && previewSelection
-      ? (instances.find(instance => instance.id === previewSelection.scopeId) ??
-        null)
+    previewSelection
+      ? (objects.find(object => object.id === previewSelection.scopeId) ?? null)
+      : null
+  const selectedPreviewPlacedObject =
+    selectedPreviewObject && isPlacedPartObject(selectedPreviewObject)
+      ? selectedPreviewObject
       : null
   const selectedPreviewStory = selectedPreviewTarget
     ? storyForPreviewTarget(index, selectedPreviewTarget)
@@ -359,8 +365,8 @@ export function LabShell() {
     previewInputs.map(input => [
       input.id,
       canonicalInputValue(
-        selectedPreviewObject
-          ? selectedPreviewObject.inputValues[input.id]
+        selectedPreviewPlacedObject
+          ? selectedPreviewPlacedObject.inputValues[input.id]
           : screenInputValues[input.id],
         input.control,
         input.defaultValue,
@@ -368,8 +374,8 @@ export function LabShell() {
     ]),
   )
   const changePreviewInput = (inputId: string, value: LabInputValue) => {
-    if (selectedPreviewObject) {
-      bindObjectInputValue(selectedPreviewObject.id, inputId, value)
+    if (selectedPreviewPlacedObject) {
+      bindObjectInputValue(selectedPreviewPlacedObject.id, inputId, value)
       return
     }
     changeScreenInput(inputId, value)
@@ -380,8 +386,8 @@ export function LabShell() {
     )
   const selectPreviewPart = (selection: LabPreviewSelection | null) => {
     setPreviewSelection(selection)
-    if (view !== "compose" || !selection) return
-    if (instances.some(instance => instance.id === selection.scopeId)) {
+    if (!selection) return
+    if (objects.some(object => object.id === selection.scopeId)) {
       setSelectedObjectId(selection.scopeId)
     }
   }
@@ -389,14 +395,15 @@ export function LabShell() {
     setPreviewSelection(null)
     setPreviewPickMode(false)
   }
-  // The Inspector is split into two panels: a view-scoped State panel (the
-  // Device frame's live state-machine axes, or the selected Compose object's
-  // bindings) and a Design panel (the always-present intrinsic-design sliders
-  // for the whole canvas). They edit unrelated things, so they live apart.
+  // The Inspector is split into two panels: a selection-scoped State panel
+  // (shared live-device axes, selected placed-object bindings, or picked inner
+  // part controls) and a Design panel (the always-present intrinsic-design
+  // sliders for the whole canvas). They edit unrelated things, so they live
+  // apart.
   const statePanel = () =>
     previewSelection &&
     selectedPreviewTarget &&
-    (view === "device" || selectedPreviewObject) ? (
+    selectedPreviewObject ? (
       <LabPreviewInspector
         selection={previewSelection}
         story={selectedPreviewStory}
@@ -406,7 +413,7 @@ export function LabShell() {
         onSelectTargetIndex={choosePreviewTargetIndex}
         onClearSelection={clearPreviewSelection}
       />
-    ) : view === "device" ? (
+    ) : selectedLiveObject ? (
       <LabDeviceInspector
         axes={screenAxes}
         activeByAxis={activeByAxis}
@@ -417,9 +424,9 @@ export function LabShell() {
         onLive={liveAxis}
         onPinCurrent={pinCurrent}
       />
-    ) : selectedObject && selectedObjectStory ? (
+    ) : selectedPlacedObject && selectedObjectStory ? (
       <LabObjectInspector
-        instance={selectedObject}
+        instance={selectedPlacedObject}
         story={selectedObjectStory}
         byId={index.byId}
         sources={sources}
@@ -485,10 +492,9 @@ export function LabShell() {
       : []),
   ]
 
-  // Compose renders one logical screen at a time; a multi-screen device only
-  // contributes selectable screen aspects here. Physical arrangement is the
-  // Device frame's job. Resolve the chosen screen against the active device,
-  // defaulting to its primary.
+  // Placed part objects render one logical screen aspect at a time; live device
+  // objects render their own physical screens. Resolve the chosen aspect against
+  // the active device, defaulting to its primary.
   const activeDevice = selectedDevices[0]
   const activeScreens = activeDevice ? deviceScreens(activeDevice) : []
   const resolvedScreenId =
@@ -523,21 +529,13 @@ export function LabShell() {
 
   // One control cluster, built once and reflowed into whichever chrome position
   // is active. Same components, different position.
-  const chooseView = (next: LabCanvasView) => {
-    setView(next)
-    setPreviewSelection(null)
-  }
-
   const controls = (
     <LabControls
-      views={CANVAS_VIEWS}
-      view={view}
-      onViewChange={chooseView}
-      screenChoices={view === "compose" ? activeScreens : undefined}
+      screenChoices={activeScreens}
       activeScreenId={resolvedScreenId ?? undefined}
       onScreenChange={setWorkshopScreenId}
       tool={workshopTool}
-      hasObjects={instances.length > 0}
+      hasObjects={objects.some(isPlacedPartObject)}
       onToolChange={switchWorkshopTool}
       onCommand={sendWorkshopCommand}
       onClear={clearAll}
@@ -564,9 +562,8 @@ export function LabShell() {
         ) : null}
 
         <LabCanvasContent
-          view={view}
           index={index}
-          instances={instances}
+          objects={objects}
           activeSourceId={activeSourceId}
           activeStateId={activeStateId}
           workshopTool={workshopTool}
@@ -577,7 +574,7 @@ export function LabShell() {
           previewSelection={previewSelection}
           onPreviewSelectionChange={selectPreviewPart}
           onSelectObject={selectObject}
-          onInstancesChange={setInstances}
+          onObjectsChange={setObjects}
         />
       </div>
 

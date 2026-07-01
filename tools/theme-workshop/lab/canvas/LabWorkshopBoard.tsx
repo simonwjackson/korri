@@ -15,23 +15,30 @@ import {
   placementAnchor,
   placeNext,
   type Rect,
-  repackPositions,
 } from "../model/lab-canvas-placement"
 import {
-  bindObjectInstance,
+  bindPlacedPartObject,
+  isLiveDeviceObject,
+  isPlacedPartObject,
+  moveCanvasObject,
+  objectBounds,
+  updateLiveDeviceObjectSize,
+  type LabCanvasObject,
+} from "../model/lab-canvas-object"
+import {
   cameraSettled,
   clampScale,
   DEFAULT_CAMERA,
   frameCameraOn,
   isRectFullyVisible,
   type LabCamera,
-  type LabObjectInstance,
   type LabWorkshopCommandSignal,
   type LabWorkshopTool,
   lerpCamera,
 } from "../model/lab-canvas-state"
 import { useLabPlacementPattern } from "../model/lab-placement-store"
 import type { LabPreviewSelection } from "../model/lab-preview-selection"
+import { LabCanvasDevice } from "./LabCanvasDevice"
 import { LabDraggablePart } from "./LabDraggablePart"
 
 /** How quickly the camera eases toward its target each frame (0..1). */
@@ -58,17 +65,12 @@ function zoomAtPoint(
   }
 }
 
-function instanceRect(instance: LabObjectInstance): Rect {
-  return {
-    x: instance.x ?? 0,
-    y: instance.y ?? 0,
-    w: PLACEMENT_CELL.w,
-    h: PLACEMENT_CELL.h,
-  }
+function fallbackRect(object: LabCanvasObject): Rect {
+  return objectBounds(object)
 }
 
 export function LabWorkshopBoard({
-  instances,
+  objects,
   stories,
   tool,
   command,
@@ -78,9 +80,11 @@ export function LabWorkshopBoard({
   innerSelection,
   onSelect,
   onInnerSelect,
-  onInstancesChange,
+  sourceId,
+  stateId,
+  onObjectsChange,
 }: {
-  readonly instances: readonly LabObjectInstance[]
+  readonly objects: readonly LabCanvasObject[]
   readonly stories: ReadonlyMap<string, Story>
   readonly tool: LabWorkshopTool
   readonly command: LabWorkshopCommandSignal | null
@@ -91,14 +95,16 @@ export function LabWorkshopBoard({
   readonly innerSelection: LabPreviewSelection | null
   readonly onSelect: (id: string | null) => void
   readonly onInnerSelect: (selection: LabPreviewSelection | null) => void
-  readonly onInstancesChange: Dispatch<
-    SetStateAction<readonly LabObjectInstance[]>
+  readonly sourceId: string
+  readonly stateId: import("../model/lab-source-state").LabInputValue
+  readonly onObjectsChange: Dispatch<
+    SetStateAction<readonly LabCanvasObject[]>
   >
 }) {
-  const { selectedDevices } = useLab()
   const pattern = useLabPlacementPattern()
-  const device = selectedDevices[0]
-  const screens = device ? deviceScreens(device) : []
+  const { selectedDevices } = useLab()
+  const activeDevice = selectedDevices[0]
+  const screens = activeDevice ? deviceScreens(activeDevice) : []
   const screen = screens.find(s => s.id === screenId) ?? screens[0]
   const [camera, setCamera] = useState<LabCamera>(DEFAULT_CAMERA)
   const boardRef = useRef<HTMLDivElement | null>(null)
@@ -183,57 +189,62 @@ export function LabWorkshopBoard({
   }
   const bind = (
     id: string,
-    patch: Partial<Pick<LabObjectInstance, "sourceId">>,
-  ) => onInstancesChange(prev => bindObjectInstance(prev, id, patch))
+    patch: Partial<import("../model/lab-canvas-object").LabPlacedPartObject>,
+  ) => onObjectsChange(prev => bindPlacedPartObject(prev, id, patch))
   const move = (id: string, x: number, y: number) => {
     stopTween()
-    onInstancesChange(prev => bindObjectInstance(prev, id, { x, y }))
+    onObjectsChange(prev => moveCanvasObject(prev, id, x, y))
   }
   const remove = (id: string) =>
-    onInstancesChange(prev => prev.filter(instance => instance.id !== id))
+    onObjectsChange(prev => prev.filter(object => object.id !== id))
+  const measure = useCallback(
+    (id: string, size: { readonly w: number; readonly h: number }) =>
+      onObjectsChange(prev => updateLiveDeviceObjectSize(prev, id, size)),
+    [onObjectsChange],
+  )
 
   // Assign a real, persisted position to freshly placed parts using the chosen
   // pattern, then ease the camera to frame the last one. Persisting the spot
   // (rather than deriving it from list index) keeps cards put when siblings are
   // removed and gives the camera a stable target.
   useEffect(() => {
-    const pending = instances.filter(instance => instance.x === undefined)
+    const pending = objects.filter(object => object.x === undefined)
     if (pending.length === 0) return
-    const occupied: Rect[] = instances
-      .filter(instance => instance.x !== undefined)
-      .map(instanceRect)
+    const occupied: Rect[] = objects
+      .filter(object => object.x !== undefined)
+      .map(fallbackRect)
     // Spiral rings around the existing cluster's centre (stable as the camera
     // follows placements); grid/empty place where the user is looking.
     const anchor = placementAnchor(pattern, occupied, worldAnchor())
     const placements = new Map<string, { x: number; y: number }>()
-    for (const instance of pending) {
-      const point = placeNext(pattern, occupied, anchor, PLACEMENT_CELL)
-      placements.set(instance.id, point)
-      occupied.push({ ...point, w: PLACEMENT_CELL.w, h: PLACEMENT_CELL.h })
+    for (const object of pending) {
+      const size = objectBounds(object)
+      const point = placeNext(pattern, occupied, anchor, { w: size.w, h: size.h })
+      placements.set(object.id, point)
+      occupied.push({ ...point, w: size.w, h: size.h })
     }
     // Merge against the latest state (not this render's snapshot) and only patch
     // ids still present and still unpositioned, so a concurrent remove/move/tidy
     // is never clobbered.
-    onInstancesChange(prev =>
-      prev.map(instance => {
-        const point = placements.get(instance.id)
-        return point && instance.x === undefined
-          ? { ...instance, ...point }
-          : instance
+    onObjectsChange(prev =>
+      prev.map(object => {
+        const point = placements.get(object.id)
+        return point && object.x === undefined ? { ...object, ...point } : object
       }),
     )
     const last = pending[pending.length - 1]
     const point = last ? placements.get(last.id) : undefined
-    if (point) {
+    if (last && point) {
+      const size = objectBounds(last)
       animateTo(
         frameCameraOn(
           cameraRef.current,
-          { ...point, w: PLACEMENT_CELL.w, h: PLACEMENT_CELL.h },
+          { ...point, w: size.w, h: size.h },
           viewport(),
         ),
       )
     }
-  }, [instances, pattern, onInstancesChange, worldAnchor, viewport, animateTo])
+  }, [objects, pattern, onObjectsChange, worldAnchor, viewport, animateTo])
 
   // Frame the selected object only when it isn't already fully on screen, so
   // clicking a visible card to drag it never yanks the camera. Depends only on
@@ -241,9 +252,9 @@ export function LabWorkshopBoard({
   // biome-ignore lint/correctness/useExhaustiveDependencies: framing reads instances/viewport on demand; only a selection change should retarget.
   useEffect(() => {
     if (!selectedId) return
-    const instance = instances.find(item => item.id === selectedId)
-    if (!instance || instance.x === undefined) return
-    const rect = instanceRect(instance)
+    const object = objects.find(item => item.id === selectedId)
+    if (!object || object.x === undefined) return
+    const rect = objectBounds(object)
     const view = viewport()
     if (isRectFullyVisible(cameraRef.current, rect, view, 24)) return
     animateTo(frameCameraOn(cameraRef.current, rect, view))
@@ -285,19 +296,19 @@ export function LabWorkshopBoard({
 
   const tidy = useCallback(() => {
     const anchor = worldAnchor()
-    onInstancesChange(prev => {
-      const positions = repackPositions(
-        pattern,
-        prev.length,
-        anchor,
-        PLACEMENT_CELL,
-      )
-      return prev.map((instance, index) => ({
-        ...instance,
-        ...(positions[index] ?? { x: instance.x, y: instance.y }),
-      }))
+    onObjectsChange(prev => {
+      const occupied: Rect[] = []
+      return prev.map(object => {
+        const size = objectBounds(object)
+        const point = placeNext(pattern, occupied, anchor, {
+          w: size.w,
+          h: size.h,
+        })
+        occupied.push({ ...point, w: size.w, h: size.h })
+        return { ...object, ...point }
+      })
     })
-  }, [onInstancesChange, pattern, worldAnchor])
+  }, [onObjectsChange, pattern, worldAnchor])
   const tidyRef = useRef(tidy)
 
   useEffect(() => {
@@ -372,7 +383,12 @@ export function LabWorkshopBoard({
       }}
       onPointerDown={event => {
         if (event.target !== event.currentTarget) return
-        // Clicking empty canvas clears the selection.
+        if (pickMode) {
+          stopTween()
+          onInnerSelect(null)
+          return
+        }
+        // Clicking empty canvas clears the workspace-object selection.
         handleSelect(null)
         startPan(event)
       }}
@@ -408,26 +424,45 @@ export function LabWorkshopBoard({
           zoom: camera.scale,
         }}
       >
-        {instances.map((instance, index) => {
-          const story = stories.get(instance.storyId)
-          if (!story) return null
+        {objects.map((object, index) => {
           const positioned =
-            instance.x === undefined
+            object.x === undefined
               ? {
-                  ...instance,
+                  ...object,
                   x: 24 + (index % 3) * PLACEMENT_CELL.w,
                   y: 24 + Math.floor(index / 3) * PLACEMENT_CELL.h,
                 }
-              : instance
+              : object
+          if (isLiveDeviceObject(positioned)) {
+            return (
+              <LabCanvasDevice
+                key={positioned.id}
+                object={positioned}
+                scale={camera.scale}
+                selected={positioned.id === selectedId}
+                sourceId={sourceId}
+                stateId={stateId}
+                pickMode={pickMode}
+                innerSelection={innerSelection}
+                onSelect={handleSelect}
+                onInnerSelect={onInnerSelect}
+                onMove={move}
+                onMeasure={measure}
+              />
+            )
+          }
+          if (!isPlacedPartObject(positioned)) return null
+          const story = stories.get(positioned.storyId)
+          if (!story) return null
           return (
             <LabDraggablePart
-              key={instance.id}
+              key={positioned.id}
               instance={positioned}
               story={story}
               byId={stories}
               screen={screen}
               scale={camera.scale}
-              selected={instance.id === selectedId}
+              selected={positioned.id === selectedId}
               pickMode={pickMode}
               innerSelection={innerSelection}
               onSelect={handleSelect}

@@ -28,7 +28,6 @@ function renderBar(surfacePath: string) {
     initialValues: {},
     themeId: "test",
     surfacePath,
-    initialCanvasView: "device",
     screens: adapter.screens ?? [],
     selection: { kind: "all" },
     devices: [],

@@ -66,7 +66,6 @@ const context: LabContextValue = {
   initialValues: {},
   themeId: "test",
   surfacePath: "/",
-  initialCanvasView: "compose",
   screens: [],
   selection: { kind: "set", ids: [] },
   devices: [],
@@ -85,6 +84,7 @@ describe("LabDraggablePart", () => {
       <LabContext.Provider value={context}>
         <LabDraggablePart
           instance={{
+            kind: "placed-part",
             id: "object-1",
             storyId: "detail-continue",
             sourceId: "dev",
@@ -119,6 +119,7 @@ describe("LabDraggablePart", () => {
       <LabContext.Provider value={{ ...context, adapter: adapterRendered }}>
         <LabDraggablePart
           instance={{
+            kind: "placed-part",
             id: "object-1",
             storyId: "atom-pill",
             sourceId: "dev",
@@ -170,6 +171,7 @@ describe("LabDraggablePart", () => {
       <LabContext.Provider value={context}>
         <LabDraggablePart
           instance={{
+            kind: "placed-part",
             id: "object-1",
             storyId: "home-page",
             sourceId: "dev",

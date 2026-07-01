@@ -1,6 +1,5 @@
 import type { Dispatch, SetStateAction } from "react"
 import type {
-  LabObjectInstance,
   LabWorkshopCommandSignal,
   LabWorkshopTool,
 } from "../model/lab-canvas-state"
@@ -9,16 +8,18 @@ import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import { LabWorkshopBoard } from "./LabWorkshopBoard"
 
 /**
- * Compose frame: one logical screen-design surface — just the board.
+ * Workspace board frame: live device objects and placed part objects share one
+ * canvas.
  *
  * Parts are picked from the single visual Parts panel in the chrome (which
  * reflows into the dock, float, or overlay); placing one drops it on this board
- * where the real page renderer runs through real edge data. Device/Preview owns
- * physical multi-screen validation; Compose is device-agnostic screen design.
+ * where the real page/part renderer runs through real edge data. Live device
+ * objects own physical multi-screen validation; placed part objects are
+ * device-agnostic screen design.
  */
-export function LabComposeView({
+export function LabWorkspaceView({
   index,
-  instances,
+  objects,
   tool,
   command,
   screenId,
@@ -27,10 +28,12 @@ export function LabComposeView({
   innerSelection,
   onSelectObject,
   onInnerSelect,
-  onInstancesChange,
+  sourceId,
+  stateId,
+  onObjectsChange,
 }: {
   readonly index: LabStoryIndex
-  readonly instances: readonly LabObjectInstance[]
+  readonly objects: readonly import("../model/lab-canvas-object").LabCanvasObject[]
   readonly tool: LabWorkshopTool
   readonly command: LabWorkshopCommandSignal | null
   /** Which logical screen aspect to render for multi-screen devices. */
@@ -40,15 +43,17 @@ export function LabComposeView({
   readonly innerSelection: LabPreviewSelection | null
   readonly onSelectObject: (id: string | null) => void
   readonly onInnerSelect: (selection: LabPreviewSelection | null) => void
-  readonly onInstancesChange: Dispatch<
-    SetStateAction<readonly LabObjectInstance[]>
+  readonly sourceId: string
+  readonly stateId: import("../model/lab-source-state").LabInputValue
+  readonly onObjectsChange: Dispatch<
+    SetStateAction<readonly import("../model/lab-canvas-object").LabCanvasObject[]>
   >
 }) {
   return (
-    <div className="lab-compose-frame" data-lab-frame="compose">
-      <section className="lab-compose-board" aria-label="Compose board">
+    <div className="lab-compose-frame lab-workspace-frame" data-lab-frame="workspace">
+      <section className="lab-compose-board" aria-label="Workspace board">
         <LabWorkshopBoard
-          instances={instances}
+          objects={objects}
           stories={index.byId}
           tool={tool}
           command={command}
@@ -58,7 +63,9 @@ export function LabComposeView({
           innerSelection={innerSelection}
           onSelect={onSelectObject}
           onInnerSelect={onInnerSelect}
-          onInstancesChange={onInstancesChange}
+          sourceId={sourceId}
+          stateId={stateId}
+          onObjectsChange={onObjectsChange}
         />
       </section>
     </div>
