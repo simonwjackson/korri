@@ -575,7 +575,12 @@ export function createKorriSessiondCore(
         : undefined
     const pgid = activeForRestore?.processGroupId
     await stopLifecycleHookHandles(activeForRestore?.sessionHookHandles ?? [])
-    await cleanupLifecycleHooks(launchId, pgid, launchMetadata, launchCompanions)
+    await cleanupLifecycleHooks(
+      launchId,
+      pgid,
+      launchMetadata,
+      launchCompanions,
+    )
 
     if (isRemapDirtyCleanupResult(result, launchCompanions)) {
       const message =

@@ -63,9 +63,7 @@ describe("web-surface host app", () => {
         `upstream:${new URL(req.url ?? "/", "http://fixture.local").pathname}`,
       )
     })
-    await new Promise<void>(resolve =>
-      upstream.listen(0, "127.0.0.1", resolve),
-    )
+    await new Promise<void>(resolve => upstream.listen(0, "127.0.0.1", resolve))
     cleanup.push(
       () => new Promise<void>(resolve => upstream.close(() => resolve())),
     )
@@ -176,14 +174,17 @@ describe("web-surface host service", () => {
           port: options.port,
           idleTimeout: options.idleTimeout,
         })
-        return { port: 4321, stop: () => void (stopped = true) }
+        return {
+          port: 4321,
+          stop: () => {
+            stopped = true
+          },
+        }
       },
     )
 
     expect(handle.port).toBe(4321)
-    expect(seen).toEqual([
-      { hostname: "127.0.0.1", port: 0, idleTimeout: 255 },
-    ])
+    expect(seen).toEqual([{ hostname: "127.0.0.1", port: 0, idleTimeout: 255 }])
 
     handle.stop()
     expect(stopped).toBe(true)

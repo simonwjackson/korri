@@ -31,7 +31,10 @@ export interface RuntimeConfig {
 export function isRuntimeConfig(value: unknown): value is RuntimeConfig {
   if (!isObject(value)) return false
   if (value.desktopInput !== true && value.desktopInput !== false) return false
-  if (value.nativeInputdUrl !== undefined && typeof value.nativeInputdUrl !== "string") {
+  if (
+    value.nativeInputdUrl !== undefined &&
+    typeof value.nativeInputdUrl !== "string"
+  ) {
     return false
   }
   if (

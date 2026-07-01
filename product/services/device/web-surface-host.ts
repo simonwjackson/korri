@@ -69,7 +69,10 @@ export function createWebSurfaceHostApp(
   return {
     async fetch(request: Request): Promise<Response> {
       const url = new URL(request.url)
-      if (request.method === "POST" && url.pathname === "/__korri/renderer-ready") {
+      if (
+        request.method === "POST" &&
+        url.pathname === "/__korri/renderer-ready"
+      ) {
         const payload = await request.json().catch(() => ({}))
         await options.onRendererReady?.(payload)
         return new Response(null, { status: 204 })
