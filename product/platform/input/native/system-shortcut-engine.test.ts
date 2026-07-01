@@ -9,8 +9,8 @@ import {
   BTN_TR,
   EV_ABS,
   EV_KEY,
+  KEY_F24,
   KEY_RECORD,
-  KEY_SYSTEM,
   KEY_VOLUMEDOWN,
   KEY_VOLUMEUP,
 } from "./button-codes"
@@ -54,10 +54,10 @@ function input(code: number, value: number, deviceId = "gamepad") {
 
 function home(value: number) {
   return {
-    deviceId: "gpio-keys",
-    deviceClass: "system" as const,
+    deviceId: "gamepad",
+    deviceClass: "gamepad" as const,
     type: EV_KEY,
-    code: KEY_SYSTEM,
+    code: BTN_MODE,
     value,
   }
 }
@@ -135,6 +135,14 @@ describe("system shortcut engine", () => {
     expect(engine.handleEvent(input(KEY_VOLUMEDOWN, 1, "gpio-keys"))).toEqual(
       [],
     )
+  })
+
+  it("does not treat the AYN/F24 device key as Home", () => {
+    const engine = createSystemShortcutEngine({ shortcuts, taps })
+
+    expect(engine.handleEvent(input(KEY_F24, 1, "gpio-keys"))).toEqual([])
+    expect(engine.handleEvent(abs(ABS_HAT0X, -1))).toEqual([])
+    expect(engine.handleEvent(input(KEY_F24, 0, "gpio-keys"))).toEqual([])
   })
 
   it("treats gamepad Home/Guide as the Home shortcut control", () => {

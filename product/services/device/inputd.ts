@@ -19,9 +19,9 @@ import {
   EV_SW,
   KEY_BRIGHTNESSDOWN,
   KEY_BRIGHTNESSUP,
+  KEY_F24,
   KEY_POWER,
   KEY_RECORD,
-  KEY_SYSTEM,
   KEY_VOLUMEDOWN,
   KEY_VOLUMEUP,
   SW_LID,
@@ -395,7 +395,7 @@ export async function startKorriInputd(
     if (matches.length > 0) return true
 
     if (event.type === EV_KEY) {
-      const systemAction = systemKeyAction(event.code, event.value)
+      const systemAction = systemKeyAction(event.code, event.value, process.env)
       if (systemAction) {
         dispatchAction(systemAction)
         return true
@@ -599,7 +599,7 @@ function policyControlForEvent(
   event: EvdevEvent,
 ): SystemShortcutControl | null {
   if (event.type === EV_KEY) {
-    if (event.code === KEY_SYSTEM || event.code === BTN_MODE) return "home"
+    if (event.code === BTN_MODE) return "home"
     if (event.code === BTN_TL) return "l1"
     if (event.code === BTN_TR) return "r1"
     if (event.code === BTN_START) return "start"
@@ -641,8 +641,13 @@ function isReleaseOrNeutralPolicyFrame(event: EvdevEvent): boolean {
 function systemKeyAction(
   code: number,
   value: number,
+  env: NodeJS.ProcessEnv,
 ): KorriInputdActionId | null {
   if (value === 0) return null
+  if (code === KEY_F24) {
+    if (value !== 1) return null
+    return keyF24ActionFromEnv(env)
+  }
   if (code === KEY_VOLUMEUP) return "volume-up"
   if (code === KEY_VOLUMEDOWN) return "volume-down"
   if (code === KEY_BRIGHTNESSUP) return "brightness-up"
@@ -650,6 +655,17 @@ function systemKeyAction(
   if (code === KEY_POWER) return "power-suspend"
   if (code === KEY_RECORD) return "screen-switch"
   return null
+}
+
+function keyF24ActionFromEnv(
+  env: NodeJS.ProcessEnv,
+): KorriInputdActionId | null {
+  switch (env.KORRI_INPUTD_KEY_F24_ACTION) {
+    case "toggle-bottom-screen":
+      return "toggle-bottom-screen"
+    default:
+      return null
+  }
 }
 
 async function readRealProcDevices(): Promise<string> {

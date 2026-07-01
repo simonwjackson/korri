@@ -39,7 +39,7 @@ const BITS_PER_PROC_WORD = 64
 const BTN_JOYSTICK = 0x120
 const BTN_GAMEPAD = 0x130
 const KEY_A = 0x1e
-const KEY_SYSTEM = 0xc2
+const KEY_F24 = 0xc2
 const KEY_VOLUMEUP = 0x73
 const KEY_VOLUMEDOWN = 0x72
 const KEY_BRIGHTNESSUP = 0xe1
@@ -197,7 +197,7 @@ function hasSystemKeyBit(
   capabilities: ReadonlyMap<string, readonly string[]>,
 ): boolean {
   return [
-    KEY_SYSTEM,
+    KEY_F24,
     KEY_VOLUMEUP,
     KEY_VOLUMEDOWN,
     KEY_BRIGHTNESSUP,

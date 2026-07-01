@@ -7,6 +7,7 @@ import {
   ABS_X,
   BTN_A,
   BTN_BACK,
+  BTN_MODE,
   BTN_SELECT,
   BTN_START,
   BTN_THUMBL,
@@ -14,9 +15,9 @@ import {
   BTN_TL,
   BTN_TR,
   KEY_BRIGHTNESSUP,
+  KEY_F24,
   KEY_POWER,
   KEY_RECORD,
-  KEY_SYSTEM,
   KEY_VOLUMEDOWN,
   KEY_VOLUMEUP,
   SW_LID,
@@ -525,7 +526,31 @@ B: KEY=40000000
     expect(actions).toEqual([])
   })
 
-  it("dispatches plain Home as a panel action", async () => {
+  it("dispatches plain gamepad Home as a panel action", async () => {
+    const proc = await loadProcFixture("bus-input-devices-device.txt")
+    const source = createControllableEventSource()
+    const actions: KorriInputdActionId[] = []
+    await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event9"
+          ? source.open()
+          : createControllableEventSource().open(),
+      actionDispatcher: {
+        dispatch: async actionId => {
+          actions.push(actionId)
+        },
+      },
+    })
+
+    source.push(evdevKey(BTN_MODE, 1))
+    source.push(evdevKey(BTN_MODE, 0))
+
+    await waitFor(() => actions.includes("system-panel"), "home panel")
+    expect(actions).toEqual(["system-panel"])
+  })
+
+  it("does not treat AYN/F24 as Home by default", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const source = createControllableEventSource()
     const actions: KorriInputdActionId[] = []
@@ -542,11 +567,49 @@ B: KEY=40000000
       },
     })
 
-    source.push(evdevKey(KEY_SYSTEM, 1))
-    source.push(evdevKey(KEY_SYSTEM, 0))
+    source.push(evdevKey(KEY_F24, 1))
+    source.push(evdevKey(KEY_F24, 0))
+    await Bun.sleep(30)
 
-    await waitFor(() => actions.includes("system-panel"), "home panel")
-    expect(actions).toEqual(["system-panel"])
+    expect(actions).toEqual([])
+  })
+
+  it("routes AYN/F24 to the configured platform action", async () => {
+    const previous = process.env.KORRI_INPUTD_KEY_F24_ACTION
+    process.env.KORRI_INPUTD_KEY_F24_ACTION = "toggle-bottom-screen"
+    try {
+      const proc = await loadProcFixture("bus-input-devices-device.txt")
+      const source = createControllableEventSource()
+      const actions: KorriInputdActionId[] = []
+      await startInputd({
+        readProcDevices: async () => proc,
+        openEventSource: device =>
+          device.eventNode === "event6"
+            ? source.open()
+            : createControllableEventSource().open(),
+        actionDispatcher: {
+          dispatch: async actionId => {
+            actions.push(actionId)
+          },
+        },
+      })
+
+      source.push(evdevKey(KEY_F24, 1))
+      source.push(evdevKey(KEY_F24, 2))
+      source.push(evdevKey(KEY_F24, 0))
+
+      await waitFor(
+        () => actions.includes("toggle-bottom-screen"),
+        "AYN action",
+      )
+      expect(actions).toEqual(["toggle-bottom-screen"])
+    } finally {
+      if (previous === undefined) {
+        delete process.env.KORRI_INPUTD_KEY_F24_ACTION
+      } else {
+        process.env.KORRI_INPUTD_KEY_F24_ACTION = previous
+      }
+    }
   })
 
   it("suppresses Home+D-pad shortcut frames from gamepad subscribers", async () => {
@@ -574,7 +637,7 @@ B: KEY=40000000
     client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
     await client.nextMessage()
 
-    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    systemSource.push(evdevKey(BTN_MODE, 1))
     gamepadSource.push(evdevEvent(3, ABS_HAT0X, -1))
     gamepadSource.push(evdevEvent(3, ABS_HAT0X, 0))
 
@@ -611,9 +674,9 @@ B: KEY=40000000
     await client.nextMessage()
 
     gamepadSource.push(evdevKey(BTN_A, 1))
-    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    systemSource.push(evdevKey(BTN_MODE, 1))
     gamepadSource.push(evdevKey(BTN_A, 0))
-    systemSource.push(evdevKey(KEY_SYSTEM, 0))
+    systemSource.push(evdevKey(BTN_MODE, 0))
     gamepadSource.push(evdevKey(BTN_A, 1))
 
     await waitFor(
@@ -646,7 +709,7 @@ B: KEY=40000000
       },
     })
 
-    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    systemSource.push(evdevKey(BTN_MODE, 1))
     gamepadSource.push(evdevEvent(3, ABS_HAT0X, -1))
     gamepadSource.push(evdevEvent(3, ABS_HAT0X, 0))
     gamepadSource.push(evdevEvent(3, ABS_HAT0X, 1))
@@ -689,7 +752,7 @@ B: KEY=40000000
 
     source.push(evdevKey(KEY_VOLUMEUP, 1))
     source.push(evdevKey(KEY_VOLUMEUP, 0))
-    source.push(evdevKey(KEY_SYSTEM, 1))
+    source.push(evdevKey(BTN_MODE, 1))
     source.push(evdevKey(KEY_VOLUMEUP, 1))
     source.push(evdevKey(KEY_VOLUMEUP, 0))
     source.push(evdevKey(KEY_VOLUMEDOWN, 1))
@@ -779,11 +842,11 @@ B: KEY=40000000
       },
     })
 
-    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    systemSource.push(evdevKey(BTN_MODE, 1))
     gamepadSource.push(evdevKey(BTN_THUMBL, 1))
     gamepadSource.push(evdevKey(BTN_THUMBL, 0))
-    systemSource.push(evdevKey(KEY_SYSTEM, 0))
-    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    systemSource.push(evdevKey(BTN_MODE, 0))
+    systemSource.push(evdevKey(BTN_MODE, 1))
     gamepadSource.push(evdevKey(BTN_THUMBR, 1))
 
     await waitFor(() => actions.length === 2, "screen power toggles")
@@ -810,7 +873,7 @@ B: KEY=40000000
       },
     })
 
-    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    systemSource.push(evdevKey(BTN_MODE, 1))
     gamepadSource.push(evdevKey(BTN_BACK, 1))
 
     await waitFor(() => actions.includes("screen-switch"), "screen-switch")
@@ -898,7 +961,7 @@ B: KEY=40000000
       },
     })
 
-    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    systemSource.push(evdevKey(BTN_MODE, 1))
     await Bun.sleep(20)
 
     proc = ""

@@ -658,7 +658,10 @@ in
   #   - volume up/down -> inputd's built-in `pactl set-sink-volume` default
   #     (PULSE_SERVER below points it at the Korri user-session graph); no
   #     override needed now that the substrate volume handler is gone.
+  #   - AYN/F24 -> bottom-screen toggle. This is SM8550/Bandai-specific device
+  #     policy and intentionally not part of standard controller Home handling.
   services.korri.input.inputd.environment = {
+    KORRI_INPUTD_KEY_F24_ACTION = "toggle-bottom-screen";
     KORRI_INPUTD_POWER_SUSPEND = "${korriFakesuspendToggle}";
     KORRI_INPUTD_LID_CLOSED = "${korriFakesuspendToggle} suspend";
     KORRI_INPUTD_LID_OPENED = "${korriFakesuspendToggle} resume";
