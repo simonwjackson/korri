@@ -362,7 +362,15 @@ export function createLaneAwareKioskSessionRole(
       await deps.serviceManager.restoreEssway()
     },
     beforeChildLaunch: async () => {
-      deps.laneController.beginLaunch({ launchId: "managed-launch" })
+      if (deps.laneToggleAvailable && !deps.laneToggleAvailable()) {
+        throw new Error("lane event source unavailable")
+      }
+      const hubWindows = await deps.sway.getKorriWindows()
+      deps.laneController.beginLaunch({
+        launchId: "managed-launch",
+        ignoredWindowIds: new Set(hubWindows.map(window => window.id)),
+        isCandidateWindow: window => !looksLikeKorriHubWindow(window),
+      })
     },
     afterChildRunning: async () => {},
     restoreIdleAfterLaunch: async () => {
@@ -388,6 +396,23 @@ export function createLaneAwareKioskSessionRole(
       }),
     rendererStatus: () => rendererStatus(deps.renderer, rendererPid),
   }
+}
+
+function looksLikeKorriHubWindow(window: {
+  readonly app_id?: string | null
+  readonly window_properties?: { readonly class?: string | null }
+}): boolean {
+  const appId = window.app_id ?? ""
+  const className = window.window_properties?.class ?? ""
+  return [
+    appId.startsWith("korri"),
+    appId.includes("chromium"),
+    appId.includes("chrome"),
+    className === "Korri",
+    className === "Electrobun",
+    className === "ElectrobunKitchenSink-dev",
+    className.toLowerCase().includes("chromium"),
+  ].some(Boolean)
 }
 
 interface KioskReconcileSummary {

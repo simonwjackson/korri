@@ -336,6 +336,25 @@ describe("lane-aware kiosk session role", () => {
     expect(events).toEqual(["begin:managed-launch"])
   })
 
+  it("fails before child launch while lane events are unavailable", async () => {
+    const { renderer } = makeRecordingRenderer()
+    const { sway } = makeSway([{ id: 101, focused: true, fullscreen: true }])
+    const { serviceManager } = makeServiceManager()
+    const { laneController, events } = makeLaneController()
+    const role = createLaneAwareKioskSessionRole({
+      renderer,
+      sway,
+      serviceManager,
+      laneController,
+      laneToggleAvailable: () => false,
+    })
+
+    await expect(role.beforeChildLaunch()).rejects.toThrow(
+      "lane event source unavailable",
+    )
+    expect(events).toEqual([])
+  })
+
   it("returns unsupported Home toggle while lane events are unavailable", async () => {
     const { renderer } = makeRecordingRenderer()
     const { sway } = makeSway([{ id: 101, focused: true, fullscreen: true }])

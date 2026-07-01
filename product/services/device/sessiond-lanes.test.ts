@@ -69,6 +69,23 @@ describe("Korri workspace lane controller", () => {
     ])
   })
 
+  it("ignores non-candidate windows when matching a pending launch", async () => {
+    const { controller, calls } = makeController()
+    controller.beginLaunch({
+      launchId: "launch-1",
+      isCandidateWindow: window => window.app_id === "game",
+    })
+
+    await controller.handleSwayEvent({
+      kind: "window",
+      change: "new",
+      container: { id: 12, name: "Hub", app_id: "chromium" },
+    })
+
+    expect(snapshot(controller).game.status).toBe("pending")
+    expect(calls).toEqual([])
+  })
+
   it("ignores baseline windows when matching a pending launch", async () => {
     const { controller, calls } = makeController()
     controller.beginLaunch({

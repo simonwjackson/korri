@@ -37,6 +37,7 @@ export interface KorriLaneController {
   readonly beginLaunch: (input: {
     readonly launchId: string
     readonly ignoredWindowIds?: ReadonlySet<number>
+    readonly isCandidateWindow?: (window: SwayNode) => boolean
   }) => void
   readonly handleSwayEvent: (event: SessiondSwayEvent) => Promise<void>
   readonly toggleHome: () => Promise<KorriLaneToggleResult>
@@ -59,6 +60,8 @@ export function createKorriLaneController(options: {
   let launchId: string | undefined
   let generation = 0
   let ignoredWindowIds: ReadonlySet<number> = new Set()
+  let isCandidateWindow: (window: SwayNode) => boolean = () => true
+  let operationQueue: Promise<void> = Promise.resolve()
 
   const controller: KorriLaneController = {
     snapshot: () => ({
@@ -77,53 +80,69 @@ export function createKorriLaneController(options: {
       generation += 1
       launchId = input.launchId
       ignoredWindowIds = input.ignoredWindowIds ?? new Set()
+      isCandidateWindow = input.isCandidateWindow ?? (() => true)
       gameWindowId = undefined
       gameStatus = "pending"
     },
 
     async handleSwayEvent(event) {
-      if (event.kind === "window") {
-        await handleWindowEvent(event)
-        return
-      }
-      await handleWorkspaceEvent(event)
+      await enqueue(async () => {
+        if (event.kind === "window") {
+          await handleWindowEvent(event)
+          return
+        }
+        await handleWorkspaceEvent(event)
+      })
     },
 
     async toggleHome() {
-      if (activePlace === "game" && isLiveGame()) {
-        await focusWorkspace(lanes.hub)
-        activePlace = "hub"
-        gameStatus = "live-backgrounded"
-        return { status: "focused-hub" }
-      }
-
-      if (activePlace === "hub" && isLiveGame()) {
-        if (!(await trackedGameWindowStillExists())) {
-          gameStatus = "exited"
-          gameWindowId = undefined
-          await focusHubInternal()
-          return { status: "no-live-game" }
+      return await enqueue(async () => {
+        if (activePlace === "game" && isLiveGame()) {
+          await focusWorkspace(lanes.hub)
+          activePlace = "hub"
+          gameStatus = "live-backgrounded"
+          return { status: "focused-hub" }
         }
-        await focusWorkspace(lanes.game)
-        activePlace = "game"
-        gameStatus = "live-active"
-        return { status: "focused-game" }
-      }
 
-      await focusHubInternal()
-      return { status: "no-live-game" }
+        if (activePlace === "hub" && isLiveGame()) {
+          if (!(await trackedGameWindowStillExists())) {
+            gameStatus = "exited"
+            gameWindowId = undefined
+            await focusHubInternal()
+            return { status: "no-live-game" }
+          }
+          await focusWorkspace(lanes.game)
+          activePlace = "game"
+          gameStatus = "live-active"
+          return { status: "focused-game" }
+        }
+
+        await focusHubInternal()
+        return { status: "no-live-game" }
+      })
     },
 
     async noteLaunchTimeout(inputLaunchId) {
-      if (inputLaunchId !== launchId || gameStatus !== "pending") return
-      gameStatus = "failed"
-      activePlace = "hub"
-      await focusHubInternal()
+      await enqueue(async () => {
+        if (inputLaunchId !== launchId || gameStatus !== "pending") return
+        gameStatus = "failed"
+        activePlace = "hub"
+        await focusHubInternal()
+      })
     },
 
     async focusHub() {
-      await focusHubInternal()
+      await enqueue(focusHubInternal)
     },
+  }
+
+  async function enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const run = operationQueue.then(operation, operation)
+    operationQueue = run.then(
+      () => {},
+      () => {},
+    )
+    return await run
   }
 
   async function handleWindowEvent(
@@ -142,6 +161,7 @@ export function createKorriLaneController(options: {
 
     if (gameStatus !== "pending") return
     if (ignoredWindowIds.has(windowId)) return
+    if (!isCandidateWindow(event.container)) return
     if (event.change && event.change !== "new") return
 
     gameWindowId = windowId
