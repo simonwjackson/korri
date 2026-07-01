@@ -3,7 +3,7 @@ id: 01KWFRBABT3ETSRZTMRCD04H3N
 slug: pin-korri-hub-window-to-hub-workspace-in-lane-policy
 title: Pin Korri hub window to hub workspace in lane policy
 origin: parked
-status: To Do
+status: In Progress
 priority: high
 labels:
   - korri
