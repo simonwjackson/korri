@@ -18,14 +18,14 @@ import {
   viewportPresentation,
 } from "./chrome/lab-presentation"
 import {
-  persistPromotedGeneratedTakes,
-  readPromotedGeneratedTakes,
-} from "./design-pass/generated-take-storage"
-import {
   createCannedTakeBatch,
   type LabGeneratedTakeDescriptor,
   storiesFromGeneratedTakeDescriptors,
 } from "./design-pass/generated-takes"
+import {
+  persistLabSurfaceState,
+  readLabSurfaceState,
+} from "./design-pass/lab-surface-state"
 import { useLab } from "./Lab.context"
 import { knobStyle } from "./model/lab-calibration-state"
 import {
@@ -220,13 +220,13 @@ export function LabShell() {
     if (!promotedTakesHydrated) return
     const promoted = new Set(promotedTakeStoryIds)
     const deleted = new Set(deletedTakeStoryIds)
-    persistPromotedGeneratedTakes(
-      adapter.id,
-      generatedTakes.descriptors.filter(
+    void persistLabSurfaceState(adapter.id, {
+      version: 1,
+      promotedGeneratedTakes: generatedTakes.descriptors.filter(
         descriptor =>
           promoted.has(descriptor.id) && !deleted.has(descriptor.id),
       ),
-    )
+    })
   }, [
     adapter.id,
     deletedTakeStoryIds,
@@ -332,14 +332,15 @@ export function LabShell() {
     setObjects(prev => prev.filter(isLiveDeviceObject))
     setPreviewSelection(null)
     void loadSurfacePartsResult(adapter.id)
-      .then(next => {
+      .then(async next => {
         if (cancelled) return
-        const storedDescriptors = readPromotedGeneratedTakes(adapter.id)
+        const surfaceState = await readLabSurfaceState(adapter.id)
         const restored = storiesFromGeneratedTakeDescriptors(
-          storedDescriptors,
+          surfaceState.promotedGeneratedTakes,
           new Map(next.stories.map(story => [story.id, story])),
           { promoted: true },
         )
+        if (cancelled) return
         setGeneratedTakes(restored)
         setPromotedTakeStoryIds(restored.stories.map(story => story.id))
         setPromotedTakesHydrated(true)
