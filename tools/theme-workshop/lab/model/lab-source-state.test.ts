@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test"
-import { DEFAULT_SOURCE_ID, initialValuesForBinding, isLabInputValue, sourcesForAdapter } from "./lab-source-state"
 import type { LabSurfaceAdapter } from "../surface-registry"
+import {
+  DEFAULT_SOURCE_ID,
+  initialValuesForBinding,
+  isLabInputValue,
+  sourcesForAdapter,
+} from "./lab-source-state"
 
 const adapter: LabSurfaceAdapter = {
   id: "test",
@@ -9,10 +14,21 @@ const adapter: LabSurfaceAdapter = {
   mountSurface: () => ({ router: {}, dispose: () => undefined }),
 }
 
-describe("lab source/state model", () => {
+describe("lab source/input model", () => {
   it("defaults to a single fixture-only local source", async () => {
-    expect(sourcesForAdapter(adapter)).toEqual([{ id: DEFAULT_SOURCE_ID, label: "test fixture", description: "Default local fixture data." }])
-    await expect(initialValuesForBinding(adapter, { sourceId: "default", stateId: "ready" })).resolves.toEqual({ source: "default" })
+    expect(sourcesForAdapter(adapter)).toEqual([
+      {
+        id: DEFAULT_SOURCE_ID,
+        label: "test fixture",
+        description: "Default local fixture data.",
+      },
+    ])
+    await expect(
+      initialValuesForBinding(adapter, {
+        sourceId: "default",
+        stateId: "ready",
+      }),
+    ).resolves.toEqual({ source: "default" })
   })
 
   it("uses adapter-provided fixture binding when present", async () => {
@@ -22,13 +38,19 @@ describe("lab source/state model", () => {
       makeSeedInitialValuesForBinding: async binding => binding,
     }
 
-    expect(sourcesForAdapter(custom).map(source => source.id)).toEqual(["sparse"])
-    await expect(initialValuesForBinding(custom, { sourceId: "sparse", stateId: "Empty" })).resolves.toEqual({ sourceId: "sparse", stateId: "Empty" })
+    expect(sourcesForAdapter(custom).map(source => source.id)).toEqual([
+      "sparse",
+    ])
+    await expect(
+      initialValuesForBinding(custom, { sourceId: "sparse", stateId: "Empty" }),
+    ).resolves.toEqual({ sourceId: "sparse", stateId: "Empty" })
   })
 
-  it("treats any non-empty tag as a valid dynamic state", () => {
+  it("accepts primitive and structured product input values", () => {
     expect(isLabInputValue("Ready")).toBe(true)
-    expect(isLabInputValue("LoadError")).toBe(true)
-    expect(isLabInputValue("")).toBe(false)
+    expect(isLabInputValue(42)).toBe(true)
+    expect(isLabInputValue(false)).toBe(true)
+    expect(isLabInputValue({ percent: 37, charging: false })).toBe(true)
+    expect(isLabInputValue(["not", "an", "input"])).toBe(false)
   })
 })

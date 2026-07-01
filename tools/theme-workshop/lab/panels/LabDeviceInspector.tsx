@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react"
-import { LabIsoDateTimeInput } from "../components/LabIsoDateTimeInput"
+import { LabInputControlField } from "../components/LabInputControlField"
+import type { LabInputValue } from "../model/lab-source-state"
 import {
   axisEnabled,
   isAxisLive,
@@ -7,6 +8,7 @@ import {
   type LabScreenActive,
   type LabStateAxis,
 } from "../model/lab-state-axis"
+import type { LabSurfacePartInput } from "../surface-registry"
 import { LabStatesAxisGroup } from "./LabStatesAxisGroup"
 
 function childrenFor(
@@ -16,8 +18,7 @@ function childrenFor(
   return axes.filter(axis => axis.parent?.axisId === parentId)
 }
 
-/** One single-choice axis as a dropdown (Auto/Live plus its states), matching
- * the object-binding selects. Multi-select axes keep the chip group. */
+/** One single-choice axis as a dropdown (Auto/Live plus its states). */
 function AxisControl({
   axis,
   active,
@@ -44,34 +45,6 @@ function AxisControl({
     !value || isAxisLive(value) || value.kind !== "single"
       ? LAB_AXIS_LIVE
       : value.value
-  if (axis.control?.kind === "iso-datetime") {
-    const live = current === LAB_AXIS_LIVE
-    return (
-      <div className="pt-bind-row">
-        <span className="pt-bind-label">
-          {axis.label}
-          {!enabled && axis.disabledHint ? ` · ${axis.disabledHint}` : ""}
-        </span>
-        <span className="pt-bind-inline">
-          <LabIsoDateTimeInput
-            disabled={!enabled}
-            value={live ? undefined : current}
-            options={axis.states}
-            ariaLabel={axis.label}
-            onChange={next => onPin(axis.id, next)}
-          />
-          <button
-            type="button"
-            className="pt-axis-pincurrent"
-            disabled={!enabled || live}
-            onClick={() => onLive(axis.id)}
-          >
-            {axis.liveLabel}
-          </button>
-        </span>
-      </div>
-    )
-  }
   return (
     <label className="pt-bind-row">
       <span className="pt-bind-label">
@@ -133,20 +106,24 @@ function AxisTree({
 }
 
 /**
- * Inspector scoped to the Device frame: the running surface's live state-machine
- * axes, each as a dropdown (Auto follows the running app; pick a state to pin
- * it) so it reads the same as the object bindings. Folded in from the old States
- * panel.
+ * Inspector scoped to the Device frame: live state-machine axes plus product
+ * inputs that the mounted screen consumes (power, clock, network, etc.).
  */
 export function LabDeviceInspector({
   axes,
   activeByAxis,
+  inputs,
+  inputValues,
+  onInputChange,
   onPin,
   onLive,
   onPinCurrent,
 }: {
   readonly axes: readonly LabStateAxis[]
   readonly activeByAxis: LabScreenActive
+  readonly inputs: readonly LabSurfacePartInput[]
+  readonly inputValues: Readonly<Record<string, LabInputValue>>
+  readonly onInputChange: (inputId: string, value: LabInputValue) => void
   readonly onPin: (axisId: string, stateId: string) => void
   readonly onLive: (axisId: string) => void
   /** Capture the running surface's current coordinate as Inspect pins. */
@@ -155,14 +132,14 @@ export function LabDeviceInspector({
   const regions = axes.filter(axis => !axis.parent)
   return (
     <div className="pt-inspector">
-      <div className="pt-inspector-scope">Live axes</div>
-      {regions.length === 0 ? (
+      <div className="pt-inspector-scope">Live surface</div>
+      {regions.length === 0 && inputs.length === 0 ? (
         <div className="pt-sources-hint">
-          This surface's screen exposes no live state machines.
+          This surface's screen exposes no live controls.
         </div>
       ) : (
         <div className="pt-bind">
-          {onPinCurrent ? (
+          {onPinCurrent && regions.length > 0 ? (
             <button
               type="button"
               className="pt-axis-pincurrent"
@@ -179,6 +156,17 @@ export function LabDeviceInspector({
               active={activeByAxis}
               onPin={onPin}
               onLive={onLive}
+            />
+          ))}
+          {inputs.map(input => (
+            <LabInputControlField
+              key={input.id}
+              label={input.label}
+              value={inputValues[input.id]}
+              defaultValue={input.defaultValue}
+              control={input.control}
+              ariaLabel={input.label}
+              onChange={value => onInputChange(input.id, value)}
             />
           ))}
         </div>

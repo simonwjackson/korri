@@ -181,7 +181,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(batteryStory, {
           sourceId: "dev",
-          inputValues: { power: "Charging" },
+          inputValues: { power: { percent: 64, charging: true } },
         })}
       </div>,
     )
@@ -195,7 +195,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(statusBarStory, {
           sourceId: "dev",
-          inputValues: { power: "Low" },
+          inputValues: { power: { percent: 12, charging: false } },
         })}
       </div>,
     )
@@ -223,7 +223,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
       <div>
         {renderShiftSurfacePart(statusBarStory, {
           sourceId: "dev",
-          inputValues: { network: "Disconnected" },
+          inputValues: { network: { _tag: "Disconnected" } },
         })}
       </div>,
     )
@@ -240,7 +240,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
           inputValues: {
             variant: "Ready",
             foreground: "Ready",
-            power: "Charging",
+            power: { percent: 64, charging: true },
           },
         })}
       </div>,
@@ -280,7 +280,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
           inputValues: {
             variant: "Ready",
             foreground: "Ready",
-            network: "Disconnected",
+            network: { _tag: "Disconnected" },
           },
         })}
       </div>,

@@ -54,10 +54,10 @@ import {
   setShiftLiveNetwork,
   setShiftLivePower,
 } from "../shift-live-coordinate"
-import { shiftNetworkStatusAtom } from "../shift-network-state"
+import { shiftNetworkReadingAtom } from "../shift-network-state"
 import {
-  shiftBatteryPropsForPowerState,
-  shiftPowerStateAtom,
+  shiftBatteryPropsForPowerReading,
+  shiftPowerReadingAtom,
 } from "../shift-power-state"
 import { playtimeLabel, relativeLastPlayed } from "./cinematic-play-labels"
 
@@ -169,9 +169,9 @@ export function ShiftHomeRoute() {
   const liveForeground = foregroundStateFromAtom(
     useAtomValue(foregroundSessionGateStateAtom),
   )
-  const livePower = useAtomValue(shiftPowerStateAtom)
+  const livePower = useAtomValue(shiftPowerReadingAtom)
   const liveClockIso = useAtomValue(shiftClockIsoAtom)
-  const liveNetwork = useAtomValue(shiftNetworkStatusAtom)
+  const liveNetwork = useAtomValue(shiftNetworkReadingAtom)
   // Foreground reads only its real edge (`foregroundSessionGateStateAtom`); a
   // design tool drives that atom's source in the mounted registry.
   const foreground = liveForeground
@@ -221,10 +221,10 @@ function NavigatingReadyBody({
 }) {
   const ready = useShiftCatalogCase("Ready")
   const launch = useLibraryLaunchController()
-  const power = useAtomValue(shiftPowerStateAtom)
+  const power = useAtomValue(shiftPowerReadingAtom)
   const clockIso = useAtomValue(shiftClockIsoAtom)
-  const network = useAtomValue(shiftNetworkStatusAtom)
-  const battery = shiftBatteryPropsForPowerState(power)
+  const network = useAtomValue(shiftNetworkReadingAtom)
+  const battery = shiftBatteryPropsForPowerReading(power)
   const liveForeground = foregroundStateFromAtom(
     useAtomValue(foregroundSessionGateStateAtom),
   )

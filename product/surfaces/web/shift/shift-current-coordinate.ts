@@ -22,12 +22,12 @@ import {
   getShiftLivePower,
 } from "./shift-live-coordinate"
 import {
-  DEFAULT_SHIFT_NETWORK_STATUS,
-  type ShiftNetworkStatus,
+  DEFAULT_SHIFT_NETWORK_READING,
+  type ShiftNetworkReading,
 } from "./shift-network-state"
 import {
-  DEFAULT_SHIFT_POWER_STATE,
-  type ShiftPowerState,
+  DEFAULT_SHIFT_POWER_READING,
+  type ShiftPowerReading,
 } from "./shift-power-state"
 
 export interface ShiftCoordinate {
@@ -35,9 +35,9 @@ export interface ShiftCoordinate {
   readonly data: ShiftCatalogState["_tag"]
   readonly launch: LaunchState["_tag"]
   readonly foreground: ForegroundSessionGateState["_tag"]
-  readonly power: ShiftPowerState
+  readonly power: ShiftPowerReading
   readonly clock: string
-  readonly network: ShiftNetworkStatus
+  readonly network: ShiftNetworkReading
 }
 
 export function readShiftCurrentCoordinate(route: string): ShiftCoordinate {
@@ -48,8 +48,8 @@ export function readShiftCurrentCoordinate(route: string): ShiftCoordinate {
   const launch = getShiftLiveLaunch() ?? "Idle"
   // Foreground reflects what the mounted route resolved from its real edge.
   const foreground = getShiftLiveForeground() ?? "Ready"
-  const power = getShiftLivePower() ?? DEFAULT_SHIFT_POWER_STATE
+  const power = getShiftLivePower() ?? DEFAULT_SHIFT_POWER_READING
   const clock = getShiftLiveClock() ?? DEFAULT_SHIFT_CLOCK_ISO
-  const network = getShiftLiveNetwork() ?? DEFAULT_SHIFT_NETWORK_STATUS
+  const network = getShiftLiveNetwork() ?? DEFAULT_SHIFT_NETWORK_READING
   return { route, data, launch, foreground, power, clock, network }
 }

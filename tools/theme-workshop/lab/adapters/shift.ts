@@ -1,26 +1,124 @@
 import { shiftConfig } from "@product/surfaces/web/shift/config"
 import { mountShift } from "@product/surfaces/web/shift/mount-shift"
 import { SHIFT_COMPANION_PATH } from "@product/surfaces/web/shift/routes/paths"
-import { DEFAULT_SHIFT_CLOCK_ISO } from "@product/surfaces/web/shift/shift-clock-state"
+import {
+  DEFAULT_SHIFT_CLOCK_ISO,
+  shiftClockIsoAtom,
+} from "@product/surfaces/web/shift/shift-clock-state"
 import { FOREGROUND_SESSION_GATE_STATE_TAGS } from "@product/surfaces/web/shift/shift-foreground-preview"
+import {
+  DEFAULT_SHIFT_NETWORK_READING,
+  shiftNetworkReadingAtom,
+  shiftNetworkReadingForValue,
+} from "@product/surfaces/web/shift/shift-network-state"
+import {
+  DEFAULT_SHIFT_POWER_READING,
+  shiftPowerReadingAtom,
+  shiftPowerReadingForValue,
+} from "@product/surfaces/web/shift/shift-power-state"
 import type { RouterHistory } from "@tanstack/history"
+import { eachLabSurfaceRegistry } from "../model/lab-surface-registries"
 import {
   makeSeedInitialValues,
   makeSeedInitialValuesForBinding,
   type SeedInitialValues,
   shiftLabSources,
 } from "../seed/shift-seed"
-import type { LabSurfaceAdapter } from "../surface-registry"
+import type {
+  LabSurfaceAdapter,
+  LabSurfacePartInput,
+} from "../surface-registry"
 import { shiftAxesForScreen, shiftCaptureCoordinate } from "./shift-axes"
 import {
   renderShiftSurfacePart,
+  SHIFT_CLOCK_INPUT_CONTROL,
   SHIFT_CLOCK_INPUT_ID,
-  SHIFT_CLOCK_OPTIONS,
+  SHIFT_NETWORK_INPUT_CONTROL,
   SHIFT_NETWORK_INPUT_ID,
-  SHIFT_NETWORK_STATE_OPTIONS,
+  SHIFT_POWER_INPUT_CONTROL,
   SHIFT_POWER_INPUT_ID,
-  SHIFT_POWER_STATE_OPTIONS,
 } from "./shift-surface-part"
+
+function shiftStatusInputs(live: boolean): readonly LabSurfacePartInput[] {
+  const power: LabSurfacePartInput = {
+    id: SHIFT_POWER_INPUT_ID,
+    label: "Power",
+    defaultValue: DEFAULT_SHIFT_POWER_READING,
+    control: SHIFT_POWER_INPUT_CONTROL,
+    apply: live
+      ? value => {
+          const reading = shiftPowerReadingForValue(value)
+          eachLabSurfaceRegistry(({ registry }) =>
+            registry.set(shiftPowerReadingAtom, reading),
+          )
+        }
+      : undefined,
+    release: live
+      ? () =>
+          eachLabSurfaceRegistry(({ registry, seed }) => {
+            registry.set(
+              shiftPowerReadingAtom,
+              shiftPowerReadingForValue(
+                seed.get(shiftPowerReadingAtom) ?? DEFAULT_SHIFT_POWER_READING,
+              ),
+            )
+          })
+      : undefined,
+  }
+  const clock: LabSurfacePartInput = {
+    id: SHIFT_CLOCK_INPUT_ID,
+    label: "Clock",
+    defaultValue: DEFAULT_SHIFT_CLOCK_ISO,
+    control: SHIFT_CLOCK_INPUT_CONTROL,
+    apply: live
+      ? value => {
+          if (typeof value !== "string") return
+          eachLabSurfaceRegistry(({ registry }) =>
+            registry.set(shiftClockIsoAtom, value),
+          )
+        }
+      : undefined,
+    release: live
+      ? () =>
+          eachLabSurfaceRegistry(({ registry, seed }) => {
+            const liveValue = seed.get(shiftClockIsoAtom)
+            registry.set(
+              shiftClockIsoAtom,
+              typeof liveValue === "string"
+                ? liveValue
+                : DEFAULT_SHIFT_CLOCK_ISO,
+            )
+          })
+      : undefined,
+  }
+  const network: LabSurfacePartInput = {
+    id: SHIFT_NETWORK_INPUT_ID,
+    label: "Network",
+    defaultValue: DEFAULT_SHIFT_NETWORK_READING,
+    control: SHIFT_NETWORK_INPUT_CONTROL,
+    apply: live
+      ? value => {
+          const reading = shiftNetworkReadingForValue(value)
+          eachLabSurfaceRegistry(({ registry }) =>
+            registry.set(shiftNetworkReadingAtom, reading),
+          )
+        }
+      : undefined,
+    release: live
+      ? () =>
+          eachLabSurfaceRegistry(({ registry, seed }) => {
+            registry.set(
+              shiftNetworkReadingAtom,
+              shiftNetworkReadingForValue(
+                seed.get(shiftNetworkReadingAtom) ??
+                  DEFAULT_SHIFT_NETWORK_READING,
+              ),
+            )
+          })
+      : undefined,
+  }
+  return [power, clock, network]
+}
 
 export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   id: "shift",
@@ -33,6 +131,8 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   defaultPxPerMm: shiftConfig.defaultPxPerMm,
   secondaryScreenPath: SHIFT_COMPANION_PATH,
   axesForScreen: shiftAxesForScreen,
+  inputsForScreen: screenPath =>
+    screenPath === "/" ? shiftStatusInputs(true) : [],
   captureCoordinate: shiftCaptureCoordinate,
   // Shift's Data + Foreground state machines are surfaced as Home screen axes
   // (see shift-axes.tsx). Launch is produced by pressing Play against the real
@@ -43,25 +143,7 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   // Foreground plus Power plus Clock plus Network; Battery exposes Power; Status
   // Bar exposes Power plus Clock plus Network.
   surfacePartInputs: story => {
-    const power = {
-      id: SHIFT_POWER_INPUT_ID,
-      label: "Power",
-      defaultValue: "Medium",
-      options: SHIFT_POWER_STATE_OPTIONS,
-    }
-    const clock = {
-      id: SHIFT_CLOCK_INPUT_ID,
-      label: "Clock",
-      defaultValue: DEFAULT_SHIFT_CLOCK_ISO,
-      options: SHIFT_CLOCK_OPTIONS,
-      control: { kind: "iso-datetime" as const },
-    }
-    const network = {
-      id: SHIFT_NETWORK_INPUT_ID,
-      label: "Network",
-      defaultValue: "Connected",
-      options: SHIFT_NETWORK_STATE_OPTIONS,
-    }
+    const [power, clock, network] = shiftStatusInputs(false)
     if (story.layer === "atom" && story.name === "Battery") return [power]
     if (story.layer === "molecule" && story.name === "Status Bar")
       return [power, clock, network]
@@ -71,10 +153,13 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
           id: "foreground",
           label: "Foreground",
           defaultValue: "Ready",
-          options: FOREGROUND_SESSION_GATE_STATE_TAGS.map(tag => ({
-            id: tag,
-            label: tag,
-          })),
+          control: {
+            kind: "select",
+            options: FOREGROUND_SESSION_GATE_STATE_TAGS.map(tag => ({
+              id: tag,
+              label: tag,
+            })),
+          },
         },
         power,
         clock,

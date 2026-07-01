@@ -21,15 +21,15 @@ import {
 } from "@product/surfaces/web/shift/shift-clock-state"
 import { shiftForegroundSourceLayers } from "@product/surfaces/web/shift/shift-foreground-preview"
 import {
-  DEFAULT_SHIFT_NETWORK_STATUS,
-  shiftNetworkStatusAtom,
+  DEFAULT_SHIFT_NETWORK_READING,
+  shiftNetworkReadingAtom,
 } from "@product/surfaces/web/shift/shift-network-state"
 import {
-  DEFAULT_SHIFT_POWER_STATE,
-  shiftPowerStateAtom,
+  DEFAULT_SHIFT_POWER_READING,
+  shiftPowerReadingAtom,
 } from "@product/surfaces/web/shift/shift-power-state"
 import { Layer } from "effect"
-import type { LabSourceOption } from "../model/lab-source-state"
+import type { LabInputValue, LabSourceOption } from "../model/lab-source-state"
 import { makeSeededProseqlLibrarySource } from "./shift-proseql-seed"
 
 export const SEED_ENTRY_SOURCE = new EntrySource({
@@ -54,9 +54,9 @@ export async function makeSeedInitialValues() {
       makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }),
     ],
     [foregroundSessionStatusLayerAtom, shiftForegroundSourceLayers.Ready()],
-    [shiftPowerStateAtom, DEFAULT_SHIFT_POWER_STATE],
+    [shiftPowerReadingAtom, DEFAULT_SHIFT_POWER_READING],
     [shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO],
-    [shiftNetworkStatusAtom, DEFAULT_SHIFT_NETWORK_STATUS],
+    [shiftNetworkReadingAtom, DEFAULT_SHIFT_NETWORK_READING],
   ] as const
 }
 
@@ -146,7 +146,7 @@ export const shiftLabSources: readonly LabSourceOption[] = [
  */
 export async function makeSeedInitialValuesForBinding(binding: {
   readonly sourceId: string
-  readonly stateId: string
+  readonly stateId: LabInputValue
 }): Promise<SeedInitialValues> {
   const base = await makeSeedInitialValues()
   const entries = SHIFT_FIXTURE_SETS[binding.sourceId]

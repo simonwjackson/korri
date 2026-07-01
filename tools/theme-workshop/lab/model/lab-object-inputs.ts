@@ -1,10 +1,10 @@
 import type { Story } from "../../types"
 import type { LabSurfaceAdapter } from "../surface-registry"
 import { statesForStory } from "./lab-part-model"
-import type {
-  LabInputControl,
-  LabInputOption,
-  LabInputValue,
+import {
+  canonicalInputValue,
+  type LabInputControl,
+  type LabInputValue,
 } from "./lab-source-state"
 
 export const LAB_VARIANT_INPUT_ID = "variant"
@@ -15,9 +15,8 @@ export type LabObjectInputRole = typeof LAB_VARIANT_INPUT_ROLE
 export type LabObjectInput = {
   readonly id: string
   readonly label: string
-  readonly options: readonly LabInputOption[]
   readonly defaultValue: LabInputValue
-  readonly control?: LabInputControl
+  readonly control: LabInputControl
   /** Render role only: this input selects the concrete story variant. The
    * Inspector still renders it exactly like every other input. */
   readonly role?: LabObjectInputRole
@@ -38,22 +37,20 @@ export function objectInputsForStory(
       id: LAB_VARIANT_INPUT_ID,
       label,
       role: LAB_VARIANT_INPUT_ROLE,
-      defaultValue: defaultInputValueFor(variantStates),
-      options: variantStates,
+      defaultValue: defaultVariantValueFor(variantStates),
+      control: { kind: "select", options: variantStates },
     })
   }
 
   for (const input of adapter.surfacePartInputs?.(story) ?? []) {
-    if (input.options.length === 0) continue
     inputs.push({
       id: input.id,
       label: input.label,
       defaultValue: canonicalInputValue(
-        input.options,
-        input.defaultValue ?? input.options[0]?.id,
+        input.defaultValue,
         input.control,
+        input.defaultValue,
       ),
-      options: input.options,
       control: input.control,
     })
   }
@@ -75,9 +72,9 @@ export function resolveObjectInputValues(
   const out: Record<string, LabInputValue> = {}
   for (const input of inputs) {
     out[input.id] = canonicalInputValue(
-      input.options,
-      storedValues?.[input.id] ?? input.defaultValue,
+      storedValues?.[input.id],
       input.control,
+      input.defaultValue,
     )
   }
   return out
@@ -88,8 +85,8 @@ function variantInputLabelForStory(story: Story): string {
   return raw.replace(/\s+states?$/i, "") || "State"
 }
 
-function defaultInputValueFor(
-  options: readonly LabInputOption[],
+function defaultVariantValueFor(
+  options: readonly { readonly id: string }[],
 ): LabInputValue {
   for (const resting of RESTING_STATES) {
     const match = options.find(option => option.id.toLowerCase() === resting)
@@ -98,27 +95,6 @@ function defaultInputValueFor(
   const first = options[0]
   if (!first) throw new Error("Cannot choose a default for an empty input")
   return first.id
-}
-
-function canonicalInputValue(
-  options: readonly LabInputOption[],
-  value: LabInputValue | undefined,
-  control?: LabInputControl,
-): LabInputValue {
-  const fallback = defaultInputValueFor(options)
-  if (control?.kind === "iso-datetime") {
-    if (value && isIsoDateString(value)) return value
-    return isIsoDateString(fallback) ? fallback : ""
-  }
-  if (!value) return fallback
-  const match = options.find(
-    option => option.id.toLowerCase() === value.toLowerCase(),
-  )
-  return match?.id ?? fallback
-}
-
-function isIsoDateString(value: string): boolean {
-  return Number.isFinite(new Date(value).getTime())
 }
 
 function assertUniqueInputIds(inputs: readonly LabObjectInput[]): void {

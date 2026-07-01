@@ -494,6 +494,35 @@ body {
 .pt-bind-inline button {
 	flex: 0 0 auto;
 }
+.pt-bind-number {
+	display: inline-flex;
+	gap: 4px;
+	align-items: center;
+	min-width: 72px;
+	color: var(--pt-ink-muted);
+}
+.pt-bind-number input {
+	width: 64px;
+}
+.pt-bind-row-check input {
+	justify-self: end;
+	width: auto;
+}
+.pt-bind-fieldset {
+	display: grid;
+	gap: 8px;
+	min-inline-size: 0;
+	margin: 0;
+	padding: 4px 0;
+	border: 0;
+}
+.pt-bind-fieldset-title {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--pt-ink-muted);
+}
 .pt-shell select:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;

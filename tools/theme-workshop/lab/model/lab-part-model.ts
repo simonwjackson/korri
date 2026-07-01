@@ -1,6 +1,6 @@
 import type { Story, StoryLayer } from "../../types"
 import type { LabPartsCatalog } from "../parts-discovery"
-import type { LabInputOption, LabInputValue } from "./lab-source-state"
+import type { LabInputOption } from "./lab-source-state"
 
 export const LAB_LAYER_ORDER: readonly StoryLayer[] = [
   "page",
@@ -132,7 +132,7 @@ function humanizeStateTag(tag: string): string {
 
 export function stateVariantFor(
   story: Story,
-  stateId: LabInputValue,
+  stateId: string,
   byId: ReadonlyMap<string, Story>,
 ): Story | null {
   const want = stateId.toLowerCase()
@@ -149,7 +149,7 @@ export function stateVariantFor(
 
 export function storySupportsState(
   story: Story,
-  stateId: LabInputValue,
+  stateId: string,
   byId: ReadonlyMap<string, Story>,
 ): boolean {
   return stateVariantFor(story, stateId, byId) !== null

@@ -59,11 +59,16 @@ export function LabDraggablePart({
   const selectedVariantInput = variantInput(inputs)
   // Fall back to the part's own representative when the requested variant tag
   // is stale or unavailable, so a card always renders something.
+  const variantValue = selectedVariantInput
+    ? (inputValues[selectedVariantInput.id] ??
+      selectedVariantInput.defaultValue)
+    : null
   const variant = selectedVariantInput
     ? (stateVariantFor(
         story,
-        inputValues[selectedVariantInput.id] ??
-          selectedVariantInput.defaultValue,
+        typeof variantValue === "string"
+          ? variantValue
+          : String(selectedVariantInput.defaultValue),
         byId,
       ) ?? story)
     : story

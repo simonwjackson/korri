@@ -1,8 +1,5 @@
 /**
- * Design-tool read seam: the mounted Shift route publishes its currently
- * resolved data/launch/foreground coordinate here, so the lab's "Pin current"
- * can capture a live (un-pinned) exploration — e.g. a launch state reached by
- * actually pressing play — not just whatever was already pinned.
+ * Live coordinate capture for the Shift Home surface.
  *
  * Written by the route (a cheap module-global assignment with no effect on
  * production rendering) and read only by the design-tool capture path. The
@@ -13,8 +10,8 @@ import type { LaunchState } from "@platform/library/launch-state"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import type { ShiftCatalogState } from "./catalog/shift-catalog-state"
 import type { ShiftClockIso } from "./shift-clock-state"
-import type { ShiftNetworkStatus } from "./shift-network-state"
-import type { ShiftPowerState } from "./shift-power-state"
+import type { ShiftNetworkReading } from "./shift-network-state"
+import type { ShiftPowerReading } from "./shift-power-state"
 
 export type ShiftLiveCoordinateOwner = object
 
@@ -24,11 +21,11 @@ let liveLaunch: LaunchState["_tag"] | null = null
 let liveLaunchOwner: ShiftLiveCoordinateOwner | null = null
 let liveForeground: ForegroundSessionGateState["_tag"] | null = null
 let liveForegroundOwner: ShiftLiveCoordinateOwner | null = null
-let livePower: ShiftPowerState | null = null
+let livePower: ShiftPowerReading | null = null
 let livePowerOwner: ShiftLiveCoordinateOwner | null = null
 let liveClock: ShiftClockIso | null = null
 let liveClockOwner: ShiftLiveCoordinateOwner | null = null
-let liveNetwork: ShiftNetworkStatus | null = null
+let liveNetwork: ShiftNetworkReading | null = null
 let liveNetworkOwner: ShiftLiveCoordinateOwner | null = null
 
 export function createShiftLiveCoordinateOwner(): ShiftLiveCoordinateOwner {
@@ -36,10 +33,10 @@ export function createShiftLiveCoordinateOwner(): ShiftLiveCoordinateOwner {
 }
 
 function shouldClear(
-  current: ShiftLiveCoordinateOwner | null,
+  currentOwner: ShiftLiveCoordinateOwner | null,
   owner: ShiftLiveCoordinateOwner | undefined,
 ): boolean {
-  return owner === undefined || current === owner
+  return !owner || !currentOwner || currentOwner === owner
 }
 
 export function setShiftLiveData(
@@ -87,10 +84,10 @@ export function clearShiftLiveForeground(
 }
 
 export function setShiftLivePower(
-  tag: ShiftPowerState,
+  reading: ShiftPowerReading,
   owner?: ShiftLiveCoordinateOwner,
 ): void {
-  livePower = tag
+  livePower = reading
   livePowerOwner = owner ?? null
 }
 
@@ -115,10 +112,10 @@ export function clearShiftLiveClock(owner?: ShiftLiveCoordinateOwner): void {
 }
 
 export function setShiftLiveNetwork(
-  status: ShiftNetworkStatus,
+  reading: ShiftNetworkReading,
   owner?: ShiftLiveCoordinateOwner,
 ): void {
-  liveNetwork = status
+  liveNetwork = reading
   liveNetworkOwner = owner ?? null
 }
 
@@ -153,7 +150,7 @@ export function getShiftLiveForeground():
   return liveForeground
 }
 
-export function getShiftLivePower(): ShiftPowerState | null {
+export function getShiftLivePower(): ShiftPowerReading | null {
   return livePower
 }
 
@@ -161,6 +158,6 @@ export function getShiftLiveClock(): ShiftClockIso | null {
   return liveClock
 }
 
-export function getShiftLiveNetwork(): ShiftNetworkStatus | null {
+export function getShiftLiveNetwork(): ShiftNetworkReading | null {
   return liveNetwork
 }

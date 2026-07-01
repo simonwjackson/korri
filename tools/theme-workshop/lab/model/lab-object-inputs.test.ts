@@ -114,10 +114,13 @@ const adapter = {
             id: "foreground",
             label: "Foreground",
             defaultValue: "Ready",
-            options: [
-              { id: "Ready", label: "Ready" },
-              { id: "Running", label: "Running" },
-            ],
+            control: {
+              kind: "select",
+              options: [
+                { id: "Ready", label: "Ready" },
+                { id: "Running", label: "Running" },
+              ],
+            },
           },
         ]
       : [],
@@ -135,10 +138,13 @@ describe("objectInputsForStory", () => {
         label: "Action",
         role: LAB_VARIANT_INPUT_ROLE,
         defaultValue: "Continue",
-        options: [
-          { id: "Continue", label: "Continue" },
-          { id: "Play", label: "Play" },
-        ],
+        control: {
+          kind: "select",
+          options: [
+            { id: "Continue", label: "Continue" },
+            { id: "Play", label: "Play" },
+          ],
+        },
       },
     ])
   })
@@ -150,20 +156,26 @@ describe("objectInputsForStory", () => {
         label: "Data",
         role: LAB_VARIANT_INPUT_ROLE,
         defaultValue: "Ready",
-        options: [
-          { id: "Ready", label: "Ready" },
-          { id: "Empty", label: "Empty" },
-          { id: "LoadError", label: "Load error" },
-        ],
+        control: {
+          kind: "select",
+          options: [
+            { id: "Ready", label: "Ready" },
+            { id: "Empty", label: "Empty" },
+            { id: "LoadError", label: "Load error" },
+          ],
+        },
       },
       {
         id: "foreground",
         label: "Foreground",
         defaultValue: "Ready",
-        options: [
-          { id: "Ready", label: "Ready" },
-          { id: "Running", label: "Running" },
-        ],
+        control: {
+          kind: "select",
+          options: [
+            { id: "Ready", label: "Ready" },
+            { id: "Running", label: "Running" },
+          ],
+        },
       },
     ])
   })
@@ -219,7 +231,11 @@ describe("objectInputsForStory", () => {
               {
                 id: "foreground",
                 label: "Foreground",
-                options: [{ id: "Ready", label: "Ready" }],
+                defaultValue: "Ready",
+                control: {
+                  kind: "select",
+                  options: [{ id: "Ready", label: "Ready" }],
+                },
               },
             ]
           : [],
@@ -232,7 +248,10 @@ describe("objectInputsForStory", () => {
         id: "foreground",
         label: "Foreground",
         defaultValue: "Ready",
-        options: [{ id: "Ready", label: "Ready" }],
+        control: {
+          kind: "select",
+          options: [{ id: "Ready", label: "Ready" }],
+        },
       },
     ])
   })
@@ -243,7 +262,11 @@ describe("objectInputsForStory", () => {
         {
           id: "variant",
           label: "Data duplicate",
-          options: [{ id: "Ready", label: "Ready" }],
+          defaultValue: "Ready",
+          control: {
+            kind: "select",
+            options: [{ id: "Ready", label: "Ready" }],
+          },
         },
       ],
     } as Pick<LabSurfaceAdapter, "surfacePartInputs">
@@ -278,13 +301,15 @@ describe("resolveObjectInputValues", () => {
             id: "clock",
             label: "Clock",
             defaultValue: "2026-06-30T16:24:00.000Z",
-            options: [
-              {
-                id: "2026-06-30T16:24:00.000Z",
-                label: "4:24 PM",
-              },
-            ],
-            control: { kind: "iso-datetime" },
+            control: {
+              kind: "iso-datetime",
+              options: [
+                {
+                  id: "2026-06-30T16:24:00.000Z",
+                  label: "4:24 PM",
+                },
+              ],
+            },
           },
         ],
         { clock: "2026-07-01T01:02:00.000Z" },

@@ -21,13 +21,14 @@ import {
   setShiftLivePower,
 } from "@product/surfaces/web/shift/shift-live-coordinate"
 import {
-  DEFAULT_SHIFT_NETWORK_STATUS,
-  shiftNetworkStatusAtom,
+  DEFAULT_SHIFT_NETWORK_READING,
+  shiftNetworkReadingAtom,
 } from "@product/surfaces/web/shift/shift-network-state"
 import {
-  DEFAULT_SHIFT_POWER_STATE,
-  shiftPowerStateAtom,
+  DEFAULT_SHIFT_POWER_READING,
+  shiftPowerReadingAtom,
 } from "@product/surfaces/web/shift/shift-power-state"
+import type * as Atom from "effect/unstable/reactivity/Atom"
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
 import {
   clearLabSurfaceRegistries,
@@ -53,9 +54,9 @@ describe("shift lab surface adapter", () => {
     expect(atoms).toContain(catalogFactsSourceLayerAtom)
     expect(atoms).toContain(librarySourceLayerAtom)
     expect(atoms).toContain(launcherLayerAtom)
-    expect(atoms).toContain(shiftPowerStateAtom)
+    expect(atoms).toContain(shiftPowerReadingAtom)
     expect(atoms).toContain(shiftClockIsoAtom)
-    expect(atoms).toContain(shiftNetworkStatusAtom)
+    expect(atoms).toContain(shiftNetworkReadingAtom)
   })
 
   it("reports unknown surface adapters clearly", () => {
@@ -80,26 +81,14 @@ describe("shift home state axes", () => {
     return axis
   }
 
-  it("exposes Data, Foreground, Power, Clock, and Network axes derived from product state", () => {
+  it("exposes Data and Foreground axes derived from product state", () => {
     const axes = home()
-    expect(axes.map(axis => axis.id)).toEqual([
-      "data",
-      "foreground",
-      "power",
-      "clock",
-      "network",
-    ])
+    expect(axes.map(axis => axis.id)).toEqual(["data", "foreground"])
 
     const data = homeAxis("data")
     const foreground = homeAxis("foreground")
-    const power = homeAxis("power")
-    const clock = homeAxis("clock")
-    const network = homeAxis("network")
     expect(data.kind).toBe("single")
     expect(foreground.kind).toBe("single")
-    expect(power.kind).toBe("single")
-    expect(clock.kind).toBe("single")
-    expect(network.kind).toBe("single")
     expect(foreground.parent).toBeUndefined()
     expect(data.states.map(state => state.id)).toEqual([
       ...ShiftCatalogState.tags,
@@ -112,21 +101,6 @@ describe("shift home state axes", () => {
       "Recovering",
       "Unknown",
       "LoadError",
-    ])
-    expect(power.states.map(state => state.id)).toEqual([
-      "Full",
-      "Medium",
-      "Low",
-      "Charging",
-    ])
-    expect(clock.states.map(state => state.id)).toEqual([
-      "2026-06-30T09:41:00.000Z",
-      "2026-06-30T16:24:00.000Z",
-      "2026-06-30T23:08:00.000Z",
-    ])
-    expect(network.states.map(state => state.id)).toEqual([
-      "Connected",
-      "Disconnected",
     ])
   })
 
@@ -183,67 +157,60 @@ describe("shift home state axes", () => {
     }
   })
 
-  it("drives the real power edge on pin and restores the seed on release", () => {
-    const power = homeAxis("power")
+  it("drives real Power, Clock, and Network inputs and restores the seed on release", () => {
+    const inputs =
+      resolveLabSurfaceAdapter("shift").inputsForScreen?.("/") ?? []
+    const power = inputs.find(input => input.id === "power")
+    const clock = inputs.find(input => input.id === "clock")
+    const network = inputs.find(input => input.id === "network")
+    expect(power?.control.kind).toBe("object")
+    expect(clock?.control.kind).toBe("iso-datetime")
+    expect(network?.control.kind).toBe("tagged")
+
     const registry = AtomRegistry.make({
-      initialValues: [[shiftPowerStateAtom, DEFAULT_SHIFT_POWER_STATE]],
+      initialValues: [
+        [shiftPowerReadingAtom, DEFAULT_SHIFT_POWER_READING],
+        [shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO],
+        [shiftNetworkReadingAtom, DEFAULT_SHIFT_NETWORK_READING],
+      ],
     })
     const unregister = registerLabSurfaceRegistry({
       registry,
-      seed: new Map([[shiftPowerStateAtom, DEFAULT_SHIFT_POWER_STATE]]),
+      seed: new Map<Atom.Atom<unknown>, unknown>([
+        [
+          shiftPowerReadingAtom as Atom.Atom<unknown>,
+          DEFAULT_SHIFT_POWER_READING,
+        ],
+        [shiftClockIsoAtom as Atom.Atom<unknown>, DEFAULT_SHIFT_CLOCK_ISO],
+        [
+          shiftNetworkReadingAtom as Atom.Atom<unknown>,
+          DEFAULT_SHIFT_NETWORK_READING,
+        ],
+      ]),
     })
 
     try {
-      power.pin("Charging")
-      expect(registry.get(shiftPowerStateAtom)).toBe("Charging")
-
-      power.release()
-      expect(registry.get(shiftPowerStateAtom)).toBe(DEFAULT_SHIFT_POWER_STATE)
-    } finally {
-      unregister()
-      registry.dispose()
-    }
-  })
-
-  it("drives the real clock edge on pin and restores the seed on release", () => {
-    const clock = homeAxis("clock")
-    const registry = AtomRegistry.make({
-      initialValues: [[shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO]],
-    })
-    const unregister = registerLabSurfaceRegistry({
-      registry,
-      seed: new Map([[shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO]]),
-    })
-
-    try {
-      clock.pin("2026-06-30T23:08:00.000Z")
+      power?.apply?.({ percent: 12, charging: true })
+      clock?.apply?.("2026-06-30T23:08:00.000Z")
+      network?.apply?.({ _tag: "Disconnected" })
+      expect(registry.get(shiftPowerReadingAtom)).toEqual({
+        percent: 12,
+        charging: true,
+      })
       expect(registry.get(shiftClockIsoAtom)).toBe("2026-06-30T23:08:00.000Z")
+      expect(registry.get(shiftNetworkReadingAtom)).toEqual({
+        _tag: "Disconnected",
+      })
 
-      clock.release()
+      power?.release?.()
+      clock?.release?.()
+      network?.release?.()
+      expect(registry.get(shiftPowerReadingAtom)).toEqual(
+        DEFAULT_SHIFT_POWER_READING,
+      )
       expect(registry.get(shiftClockIsoAtom)).toBe(DEFAULT_SHIFT_CLOCK_ISO)
-    } finally {
-      unregister()
-      registry.dispose()
-    }
-  })
-
-  it("drives the real network edge on pin and restores the seed on release", () => {
-    const network = homeAxis("network")
-    const registry = AtomRegistry.make({
-      initialValues: [[shiftNetworkStatusAtom, DEFAULT_SHIFT_NETWORK_STATUS]],
-    })
-    const unregister = registerLabSurfaceRegistry({
-      registry,
-      seed: new Map([[shiftNetworkStatusAtom, DEFAULT_SHIFT_NETWORK_STATUS]]),
-    })
-
-    try {
-      network.pin("Disconnected")
-      expect(registry.get(shiftNetworkStatusAtom)).toBe("Disconnected")
-
-      network.release()
-      expect(registry.get(shiftNetworkStatusAtom)).toBe(
-        DEFAULT_SHIFT_NETWORK_STATUS,
+      expect(registry.get(shiftNetworkReadingAtom)).toEqual(
+        DEFAULT_SHIFT_NETWORK_READING,
       )
     } finally {
       unregister()
@@ -252,7 +219,7 @@ describe("shift home state axes", () => {
   })
 
   it("exposes no axes for screens without a state machine", () => {
-    expect(home().length).toBe(5)
+    expect(home().length).toBe(2)
     expect(
       resolveLabSurfaceAdapter("shift").axesForScreen?.("/game/hollow-knight"),
     ).toEqual([])
@@ -264,9 +231,9 @@ describe("shift capture-back coordinate", () => {
     setShiftLiveData("Ready")
     setShiftLiveLaunch("Idle")
     setShiftLiveForeground("Ready")
-    setShiftLivePower(DEFAULT_SHIFT_POWER_STATE)
+    setShiftLivePower(DEFAULT_SHIFT_POWER_READING)
     setShiftLiveClock(DEFAULT_SHIFT_CLOCK_ISO)
-    setShiftLiveNetwork(DEFAULT_SHIFT_NETWORK_STATUS)
+    setShiftLiveNetwork(DEFAULT_SHIFT_NETWORK_READING)
   })
 
   const capture = () =>
@@ -276,9 +243,6 @@ describe("shift capture-back coordinate", () => {
     expect(capture()).toEqual({
       data: { kind: "single", value: "Ready" },
       foreground: { kind: "single", value: "Ready" },
-      power: { kind: "single", value: "Medium" },
-      clock: { kind: "single", value: "2026-06-30T16:24:00.000Z" },
-      network: { kind: "single", value: "Connected" },
     })
   })
 
@@ -287,35 +251,11 @@ describe("shift capture-back coordinate", () => {
     expect(capture()).toEqual({
       data: { kind: "single", value: "Ready" },
       foreground: { kind: "single", value: "Ready" },
-      power: { kind: "single", value: "Medium" },
-      clock: { kind: "single", value: "2026-06-30T16:24:00.000Z" },
-      network: { kind: "single", value: "Connected" },
     })
   })
 
   it("captures the live foreground coordinate the route published", () => {
     setShiftLiveForeground("Cooling")
     expect(capture()?.foreground).toEqual({ kind: "single", value: "Cooling" })
-  })
-
-  it("captures the live power coordinate the route published", () => {
-    setShiftLivePower("Charging")
-    expect(capture()?.power).toEqual({ kind: "single", value: "Charging" })
-  })
-
-  it("captures the live clock coordinate the route published", () => {
-    setShiftLiveClock("2026-06-30T23:08:00.000Z")
-    expect(capture()?.clock).toEqual({
-      kind: "single",
-      value: "2026-06-30T23:08:00.000Z",
-    })
-  })
-
-  it("captures the live network coordinate the route published", () => {
-    setShiftLiveNetwork("Disconnected")
-    expect(capture()?.network).toEqual({
-      kind: "single",
-      value: "Disconnected",
-    })
   })
 })

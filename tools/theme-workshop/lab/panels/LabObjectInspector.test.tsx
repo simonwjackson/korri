@@ -76,10 +76,13 @@ const adapter: LabSurfaceAdapter = {
             id: "foreground",
             label: "Foreground",
             defaultValue: "Ready",
-            options: [
-              { id: "Ready", label: "Ready" },
-              { id: "Running", label: "Running" },
-            ],
+            control: {
+              kind: "select",
+              options: [
+                { id: "Ready", label: "Ready" },
+                { id: "Running", label: "Running" },
+              ],
+            },
           },
         ]
       : [],
@@ -144,7 +147,11 @@ function renderInspector({
     id: string,
     patch: Partial<Pick<LabObjectInstance, "sourceId">>,
   ) => void
-  readonly onBindInput?: (id: string, inputId: string, value: string) => void
+  readonly onBindInput?: (
+    id: string,
+    inputId: string,
+    value: LabObjectInstance["inputValues"][string],
+  ) => void
   readonly adapterOverride?: LabSurfaceAdapter
 }) {
   render(
@@ -252,13 +259,15 @@ describe("LabObjectInspector", () => {
             id: "clock",
             label: "Clock",
             defaultValue: "2026-06-30T16:24:00.000Z",
-            options: [
-              {
-                id: "2026-06-30T16:24:00.000Z",
-                label: "4:24 PM",
-              },
-            ],
-            control: { kind: "iso-datetime" },
+            control: {
+              kind: "iso-datetime",
+              options: [
+                {
+                  id: "2026-06-30T16:24:00.000Z",
+                  label: "4:24 PM",
+                },
+              ],
+            },
           },
         ],
       },

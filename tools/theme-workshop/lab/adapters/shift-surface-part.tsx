@@ -24,16 +24,17 @@ import {
 } from "@product/surfaces/web/shift/shift-clock-state"
 import { shiftForegroundSourceLayers } from "@product/surfaces/web/shift/shift-foreground-preview"
 import {
-  SHIFT_NETWORK_STATUS_TAGS,
-  shiftNetworkStatusAtom,
-  shiftNetworkStatusForValue,
+  DEFAULT_SHIFT_NETWORK_READING,
+  type ShiftNetworkReading,
+  shiftNetworkReadingAtom,
+  shiftNetworkReadingForValue,
 } from "@product/surfaces/web/shift/shift-network-state"
 import {
-  DEFAULT_SHIFT_POWER_STATE,
-  SHIFT_POWER_STATE_TAGS,
-  type ShiftPowerState,
-  shiftBatteryPropsForPowerState,
-  shiftPowerStateAtom,
+  DEFAULT_SHIFT_POWER_READING,
+  type ShiftPowerReading,
+  shiftBatteryPropsForPowerReading,
+  shiftPowerReadingAtom,
+  shiftPowerReadingForValue,
 } from "@product/surfaces/web/shift/shift-power-state"
 import { ShiftBattery } from "@product/surfaces/web/shift/ui/atoms/ShiftBattery"
 import { ShiftStatusBar } from "@product/surfaces/web/shift/ui/molecules/ShiftStatusBar"
@@ -41,7 +42,7 @@ import { ShiftPartFrame } from "@product/surfaces/web/shift/ui/ShiftPartFrame"
 import type { ReactNode } from "react"
 import type { Story } from "../../types"
 import { LAB_VARIANT_INPUT_ID } from "../model/lab-object-inputs"
-import type { LabInputValue } from "../model/lab-source-state"
+import type { LabInputControl, LabInputValue } from "../model/lab-source-state"
 import {
   shiftCatalogLayerForBinding,
   shiftEntriesForBinding,
@@ -51,37 +52,63 @@ import {
  * Render a placed Shift Home page part on the Workshop board through the REAL
  * edges, seeded for the object's chosen fixture source plus Data, Foreground,
  * Power, Clock, and Network values. Home reads the production atoms; swapping
- * any dial in the object's inspector re-seeds those atoms, so the same page
- * renders that Data×Foreground×Power×Clock×Network combination — the same swap
- * that works in Preview, now per object. Non-Home page parts keep their own
- * selected story render instead of falling through to Home.
+ * any input in the object's inspector re-seeds those atoms.
  */
 export const SHIFT_POWER_INPUT_ID = "power"
 export const SHIFT_CLOCK_INPUT_ID = "clock"
 export const SHIFT_NETWORK_INPUT_ID = "network"
 
-export const SHIFT_POWER_STATE_OPTIONS = SHIFT_POWER_STATE_TAGS.map(tag => ({
-  id: tag,
-  label: tag,
-}))
+export const SHIFT_POWER_INPUT_CONTROL: LabInputControl = {
+  kind: "object",
+  fields: [
+    {
+      id: "percent",
+      label: "Battery",
+      defaultValue: DEFAULT_SHIFT_POWER_READING.percent,
+      control: { kind: "range", min: 0, max: 100, step: 1, unit: "%" },
+    },
+    {
+      id: "charging",
+      label: "Charging",
+      defaultValue: DEFAULT_SHIFT_POWER_READING.charging,
+      control: { kind: "boolean" },
+    },
+  ],
+}
 
-export const SHIFT_CLOCK_OPTIONS = SHIFT_CLOCK_PRESETS
+export const SHIFT_CLOCK_INPUT_CONTROL: LabInputControl = {
+  kind: "iso-datetime",
+  options: SHIFT_CLOCK_PRESETS,
+}
 
-export const SHIFT_NETWORK_STATE_OPTIONS = SHIFT_NETWORK_STATUS_TAGS.map(
-  tag => ({
-    id: tag,
-    label: tag,
-  }),
-)
+export const SHIFT_NETWORK_INPUT_CONTROL: LabInputControl = {
+  kind: "tagged",
+  tagField: "_tag",
+  cases: [
+    { tag: "Disconnected", label: "Disconnected", fields: [] },
+    {
+      tag: "Connected",
+      label: "Connected",
+      fields: [
+        {
+          id: "strengthPercent",
+          label: "Signal",
+          defaultValue:
+            DEFAULT_SHIFT_NETWORK_READING._tag === "Connected"
+              ? DEFAULT_SHIFT_NETWORK_READING.strengthPercent
+              : 80,
+          control: { kind: "range", min: 0, max: 100, step: 1, unit: "%" },
+        },
+      ],
+    },
+  ],
+}
 
 function ShiftHomeFromEdge() {
   const result = useAtomValue(catalogSnapshotAtom)
   const foreground = foregroundStateFromAtom(
     useAtomValue(foregroundSessionGateStateAtom),
   )
-  // Render the REAL home composition (the same component the live route
-  // renders) — not a static re-implementation. No coordinate owner is passed,
-  // so this render-only object does not publish to the capture seam.
   return <ShiftHomeStateView result={result} foreground={foreground} />
 }
 
@@ -97,19 +124,10 @@ function isShiftStatusBarStory(story: Story): boolean {
   return story.layer === "molecule" && story.name === "Status Bar"
 }
 
-function isShiftPowerState(
-  value: string | undefined,
-): value is ShiftPowerState {
-  return SHIFT_POWER_STATE_TAGS.includes(value as ShiftPowerState)
-}
-
-function powerStateFromBinding(
+function powerFromBinding(
   binding: Readonly<Record<string, LabInputValue>>,
-  fallback: LabInputValue | undefined,
-): ShiftPowerState {
-  const value =
-    binding[SHIFT_POWER_INPUT_ID] ?? binding[LAB_VARIANT_INPUT_ID] ?? fallback
-  return isShiftPowerState(value) ? value : DEFAULT_SHIFT_POWER_STATE
+): ShiftPowerReading {
+  return shiftPowerReadingForValue(binding[SHIFT_POWER_INPUT_ID])
 }
 
 function clockFromBinding(
@@ -117,40 +135,52 @@ function clockFromBinding(
   fallback: LabInputValue | undefined,
 ): string {
   return shiftClockIsoForValue(
-    binding[SHIFT_CLOCK_INPUT_ID] ??
-      binding[LAB_VARIANT_INPUT_ID] ??
-      fallback ??
-      DEFAULT_SHIFT_CLOCK_ISO,
+    typeof binding[SHIFT_CLOCK_INPUT_ID] === "string"
+      ? binding[SHIFT_CLOCK_INPUT_ID]
+      : typeof binding[LAB_VARIANT_INPUT_ID] === "string"
+        ? binding[LAB_VARIANT_INPUT_ID]
+        : typeof fallback === "string"
+          ? fallback
+          : DEFAULT_SHIFT_CLOCK_ISO,
   )
 }
 
-function networkFromBinding(binding: Readonly<Record<string, LabInputValue>>) {
-  return shiftNetworkStatusForValue(binding[SHIFT_NETWORK_INPUT_ID])
+function networkFromBinding(
+  binding: Readonly<Record<string, LabInputValue>>,
+): ShiftNetworkReading {
+  return shiftNetworkReadingForValue(binding[SHIFT_NETWORK_INPUT_ID])
 }
 
-function renderShiftBatteryPart(state: ShiftPowerState): ReactNode {
+function tagFromInput(
+  value: LabInputValue | undefined,
+  fallback: string,
+): string {
+  return typeof value === "string" ? value : fallback
+}
+
+function renderShiftBatteryPart(power: ShiftPowerReading): ReactNode {
   return (
     <ShiftPartFrame width={120} height={120}>
-      <ShiftBattery {...shiftBatteryPropsForPowerState(state)} />
+      <ShiftBattery {...shiftBatteryPropsForPowerReading(power)} />
     </ShiftPartFrame>
   )
 }
 
 function renderShiftStatusBarPart({
-  powerState,
+  power,
   clock,
   network,
 }: {
-  readonly powerState: ShiftPowerState
+  readonly power: ShiftPowerReading
   readonly clock: string
-  readonly network: ReturnType<typeof shiftNetworkStatusForValue>
+  readonly network: ShiftNetworkReading
 }): ReactNode {
   return (
     <ShiftPartFrame height={140}>
       <ShiftStatusBar
         time={shiftClockLabelForIso(clock)}
         avatarSrc="https://i.pravatar.cc/96?u=korri-shift-user"
-        battery={shiftBatteryPropsForPowerState(powerState)}
+        battery={shiftBatteryPropsForPowerReading(power)}
         network={network}
       />
     </ShiftPartFrame>
@@ -165,14 +195,12 @@ export function renderShiftSurfacePart(
   },
 ): ReactNode {
   if (isShiftBatteryStory(story)) {
-    return renderShiftBatteryPart(
-      powerStateFromBinding(binding.inputValues, story.state),
-    )
+    return renderShiftBatteryPart(powerFromBinding(binding.inputValues))
   }
 
   if (isShiftStatusBarStory(story)) {
     return renderShiftStatusBarPart({
-      powerState: powerStateFromBinding(binding.inputValues, story.state),
+      power: powerFromBinding(binding.inputValues),
       clock: clockFromBinding(binding.inputValues, story.state),
       network: networkFromBinding(binding.inputValues),
     })
@@ -180,28 +208,29 @@ export function renderShiftSurfacePart(
 
   if (!isShiftHomeStory(story)) return story.render()
 
-  const powerState = powerStateFromBinding(binding.inputValues, undefined)
+  const power = powerFromBinding(binding.inputValues)
   const clock = clockFromBinding(binding.inputValues, undefined)
   const network = networkFromBinding(binding.inputValues)
-  const dataTag = binding.inputValues[LAB_VARIANT_INPUT_ID] ?? "Ready"
+  const dataTag = tagFromInput(
+    binding.inputValues[LAB_VARIANT_INPUT_ID],
+    "Ready",
+  )
   const catalogLayer = shiftCatalogLayerForBinding(binding.sourceId, dataTag)
   const entries = shiftEntriesForBinding(binding.sourceId)
-  const foregroundTag = binding.inputValues.foreground ?? "Ready"
+  const foregroundTag = tagFromInput(binding.inputValues.foreground, "Ready")
   const makeForeground =
     shiftForegroundSourceLayers[
       foregroundTag as keyof typeof shiftForegroundSourceLayers
     ] ?? shiftForegroundSourceLayers.Ready
-  // Key on every dial so changing one re-seeds — atom initial values only seed
-  // on first render.
   return (
     <RegistryProvider
-      key={`${binding.sourceId}:${dataTag}:${foregroundTag}:${powerState}:${clock}:${network}`}
+      key={`${binding.sourceId}:${dataTag}:${foregroundTag}:${JSON.stringify(power)}:${clock}:${JSON.stringify(network)}`}
       initialValues={[
         [catalogFactsSourceLayerAtom, catalogLayer],
         [foregroundSessionStatusLayerAtom, makeForeground()],
-        [shiftPowerStateAtom, powerState],
+        [shiftPowerReadingAtom, power],
         [shiftClockIsoAtom, clock],
-        [shiftNetworkStatusAtom, network],
+        [shiftNetworkReadingAtom, network],
         [
           librarySourceLayerAtom,
           makeInMemoryLibrarySourceLayer({ playableEntries: entries }),

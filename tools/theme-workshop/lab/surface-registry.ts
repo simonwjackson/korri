@@ -24,9 +24,10 @@ export interface LabMountedSurface {
 export interface LabSurfacePartInput {
   readonly id: string
   readonly label: string
-  readonly options: readonly LabInputOption[]
-  readonly defaultValue?: LabInputValue
-  readonly control?: LabInputControl
+  readonly defaultValue: LabInputValue
+  readonly control: LabInputControl
+  readonly apply?: (value: LabInputValue) => void
+  readonly release?: () => void
 }
 
 export interface LabSurfaceDualScreenOptions {
@@ -57,6 +58,11 @@ export interface LabSurfaceAdapter {
   /** Surface-owned live controls (e.g. pico's palette/granularity), rendered
    * neutrally by the lab. A hook so control values track surface state. */
   readonly useControls?: () => readonly WorkshopControl[]
+  /** Product inputs the mounted screen exposes outside its state-machine axes,
+   * e.g. power readings, clock, and network signal. */
+  readonly inputsForScreen?: (
+    screenPath: string,
+  ) => readonly LabSurfacePartInput[]
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
   /** Surface-owned route for secondary/companion screens in a multi-screen

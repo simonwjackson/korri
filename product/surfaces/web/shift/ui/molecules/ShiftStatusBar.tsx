@@ -5,13 +5,17 @@
  * the one the dev-lab can drive in isolation.
  */
 import { Wifi, WifiOff } from "lucide-react"
-import type { ShiftNetworkStatus } from "../../shift-network-state"
+import {
+  DEFAULT_SHIFT_NETWORK_READING,
+  type ShiftNetworkReading,
+  shiftNetworkConnected,
+} from "../../shift-network-state"
 import { ShiftBattery, type ShiftBatteryProps } from "../atoms/ShiftBattery"
 
 export interface ShiftStatusBarProps {
   readonly time?: string
   readonly avatarSrc?: string
-  readonly network?: ShiftNetworkStatus
+  readonly network?: ShiftNetworkReading
   /** Battery state for the indicator; defaults to a mid-charge battery. */
   readonly battery?: ShiftBatteryProps
 }
@@ -19,10 +23,10 @@ export interface ShiftStatusBarProps {
 export function ShiftStatusBar({
   time = "4:24 PM",
   avatarSrc,
-  network = "Connected",
+  network = DEFAULT_SHIFT_NETWORK_READING,
   battery,
 }: ShiftStatusBarProps) {
-  const NetworkIcon = network === "Disconnected" ? WifiOff : Wifi
+  const NetworkIcon = shiftNetworkConnected(network) ? Wifi : WifiOff
   return (
     <header className="shift-cine-top">
       <span className="shift-cine-clock">{time}</span>

@@ -9,17 +9,17 @@ import {
   setShiftLiveNetwork,
   setShiftLivePower,
 } from "./shift-live-coordinate"
-import { DEFAULT_SHIFT_NETWORK_STATUS } from "./shift-network-state"
-import { DEFAULT_SHIFT_POWER_STATE } from "./shift-power-state"
+import { DEFAULT_SHIFT_NETWORK_READING } from "./shift-network-state"
+import { DEFAULT_SHIFT_POWER_READING } from "./shift-power-state"
 
 function resetCoordinateSeams() {
   // Reset the live-coordinate store to the seed resting state between tests.
   setShiftLiveData("Ready")
   setShiftLiveLaunch("Idle")
   setShiftLiveForeground("Ready")
-  setShiftLivePower(DEFAULT_SHIFT_POWER_STATE)
+  setShiftLivePower(DEFAULT_SHIFT_POWER_READING)
   setShiftLiveClock(DEFAULT_SHIFT_CLOCK_ISO)
-  setShiftLiveNetwork(DEFAULT_SHIFT_NETWORK_STATUS)
+  setShiftLiveNetwork(DEFAULT_SHIFT_NETWORK_READING)
 }
 
 beforeEach(resetCoordinateSeams)
@@ -32,9 +32,9 @@ describe("readShiftCurrentCoordinate", () => {
       data: "Ready",
       launch: "Idle",
       foreground: "Ready",
-      power: "Medium",
+      power: DEFAULT_SHIFT_POWER_READING,
       clock: "2026-06-30T16:24:00.000Z",
-      network: "Connected",
+      network: DEFAULT_SHIFT_NETWORK_READING,
     })
   })
 
@@ -52,9 +52,9 @@ describe("readShiftCurrentCoordinate", () => {
       data: "Ready",
       launch: "Launching",
       foreground: "Ready",
-      power: "Medium",
+      power: DEFAULT_SHIFT_POWER_READING,
       clock: "2026-06-30T16:24:00.000Z",
-      network: "Connected",
+      network: DEFAULT_SHIFT_NETWORK_READING,
     })
   })
 
@@ -63,9 +63,10 @@ describe("readShiftCurrentCoordinate", () => {
     expect(readShiftCurrentCoordinate("/").foreground).toBe("Cooling")
   })
 
-  it("captures the live power state the route published", () => {
-    setShiftLivePower("Charging")
-    expect(readShiftCurrentCoordinate("/").power).toBe("Charging")
+  it("captures the live power reading the route published", () => {
+    const reading = { percent: 12, charging: true }
+    setShiftLivePower(reading)
+    expect(readShiftCurrentCoordinate("/").power).toEqual(reading)
   })
 
   it("captures the live clock value the route published", () => {
@@ -75,9 +76,10 @@ describe("readShiftCurrentCoordinate", () => {
     )
   })
 
-  it("captures the live network status the route published", () => {
-    setShiftLiveNetwork("Disconnected")
-    expect(readShiftCurrentCoordinate("/").network).toBe("Disconnected")
+  it("captures the live network reading the route published", () => {
+    const reading = { _tag: "Disconnected" } as const
+    setShiftLiveNetwork(reading)
+    expect(readShiftCurrentCoordinate("/").network).toEqual(reading)
   })
 
   it("captures the live data tag for a non-Ready state", () => {

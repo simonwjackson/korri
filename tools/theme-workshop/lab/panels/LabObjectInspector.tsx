@@ -1,5 +1,5 @@
 import type { Story } from "../../types"
-import { LabIsoDateTimeInput } from "../components/LabIsoDateTimeInput"
+import { LabInputControlField } from "../components/LabInputControlField"
 import { useLab } from "../Lab.context"
 import type { LabObjectInstance } from "../model/lab-canvas-state"
 import {
@@ -65,41 +65,17 @@ export function LabObjectInspector({
             ))}
           </select>
         </label>
-        {inputs.map(input => {
-          const label = `${input.label} for ${story.name}`
-          const value = values[input.id] ?? input.defaultValue
-          if (input.control?.kind === "iso-datetime") {
-            return (
-              <div key={input.id} className="pt-bind-row">
-                <span className="pt-bind-label">{input.label}</span>
-                <LabIsoDateTimeInput
-                  value={value}
-                  options={input.options}
-                  ariaLabel={label}
-                  onChange={next => onBindInput(instance.id, input.id, next)}
-                />
-              </div>
-            )
-          }
-          return (
-            <label key={input.id} className="pt-bind-row">
-              <span className="pt-bind-label">{input.label}</span>
-              <select
-                value={value}
-                aria-label={label}
-                onChange={event =>
-                  onBindInput(instance.id, input.id, event.target.value)
-                }
-              >
-                {input.options.map(option => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )
-        })}
+        {inputs.map(input => (
+          <LabInputControlField
+            key={input.id}
+            label={input.label}
+            value={values[input.id]}
+            defaultValue={input.defaultValue}
+            control={input.control}
+            ariaLabel={`${input.label} for ${story.name}`}
+            onChange={next => onBindInput(instance.id, input.id, next)}
+          />
+        ))}
       </div>
     </div>
   )

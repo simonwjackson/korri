@@ -39,6 +39,7 @@ import {
   statesForStory,
 } from "./model/lab-part-model"
 import {
+  canonicalInputValue,
   DEFAULT_INPUT_VALUE,
   DEFAULT_SOURCE_ID,
   type LabInputValue,
@@ -75,7 +76,13 @@ const CANVAS_VIEWS: { readonly id: LabCanvasView; readonly label: string }[] = [
 ]
 
 export function LabShell() {
-  const { adapter, initialCanvasView, knobValues, selectedDevices } = useLab()
+  const {
+    adapter,
+    initialCanvasView,
+    knobValues,
+    selectedDevices,
+    surfacePath,
+  } = useLab()
   const [catalog, setCatalog] = useState<LabPartsCatalog | null>(null)
   const [catalogError, setCatalogError] = useState<Error | null>(null)
   const [view, setView] = useState<LabCanvasView>(initialCanvasView)
@@ -103,8 +110,11 @@ export function LabShell() {
     id: string,
     patch: Partial<Pick<LabObjectInstance, "sourceId">>,
   ) => setInstances(prev => bindObjectInstance(prev, id, patch))
-  const bindObjectInputValue = (id: string, inputId: string, value: string) =>
-    setInstances(prev => bindObjectInput(prev, id, inputId, value))
+  const bindObjectInputValue = (
+    id: string,
+    inputId: string,
+    value: LabInputValue,
+  ) => setInstances(prev => bindObjectInput(prev, id, inputId, value))
   // Parts are the surface's static discovered *.part.tsx components only — never
   // the surface's routes. The live, router-driven surface lives in the Preview
   // view; Parts stay isolated from the router.
@@ -143,10 +153,28 @@ export function LabShell() {
   // focused controller so its ordering contract is in one place.
   const { screenAxes, activeByAxis, mode, pinAxis, liveAxis, pinCurrent } =
     useLabAxisController(adapter)
+  const screenInputs = useMemo(
+    () => adapter.inputsForScreen?.(surfacePath) ?? [],
+    [adapter, surfacePath],
+  )
+  const [screenInputValues, setScreenInputValues] = useState<
+    Readonly<Record<string, LabInputValue>>
+  >({})
   const presentation = userPresentation ?? autoPresentation
   const choosePresentation = (next: LabPresentation) => {
     setUserPresentation(next)
     persistPresentation(next)
+  }
+  const changeScreenInput = (inputId: string, value: LabInputValue) => {
+    const input = screenInputs.find(candidate => candidate.id === inputId)
+    if (!input) return
+    const canonical = canonicalInputValue(
+      value,
+      input.control,
+      input.defaultValue,
+    )
+    setScreenInputValues(prev => ({ ...prev, [inputId]: canonical }))
+    input.apply?.(canonical)
   }
 
   // Follow the viewport so the default position tracks the screen until the
@@ -168,6 +196,24 @@ export function LabShell() {
   useEffect(() => {
     setActiveSourceId(sources[0]?.id ?? DEFAULT_SOURCE_ID)
   }, [sources])
+
+  useEffect(() => {
+    const values = Object.fromEntries(
+      screenInputs.map(input => [
+        input.id,
+        canonicalInputValue(
+          input.defaultValue,
+          input.control,
+          input.defaultValue,
+        ),
+      ]),
+    )
+    setScreenInputValues(values)
+    for (const input of screenInputs) input.apply?.(values[input.id])
+    return () => {
+      for (const input of screenInputs) input.release?.()
+    }
+  }, [screenInputs])
 
   // When the selected part changes, snap the active state to that part's
   // default (its "ready" tag if present, else its first state).
@@ -278,6 +324,9 @@ export function LabShell() {
       <LabDeviceInspector
         axes={screenAxes}
         activeByAxis={activeByAxis}
+        inputs={screenInputs}
+        inputValues={screenInputValues}
+        onInputChange={changeScreenInput}
         onPin={pinAxis}
         onLive={liveAxis}
         onPinCurrent={pinCurrent}
