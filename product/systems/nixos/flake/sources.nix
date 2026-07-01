@@ -54,6 +54,13 @@ in
   inputd = mkSource (deviceRuntime ++ [ ../../../../tools/types ]);
   gameStream = mkSource deviceRuntime;
   sessiond = mkSource deviceRuntime;
+  webSurfaceHost = mkSource (
+    deviceRuntime
+    ++ [
+      ../../../../product/apps/desktop
+      ../../../../product/systems/nixos/flake/sources.nix
+    ]
+  );
   cli = mkSource ([ ../../../../product/surfaces/terminal/korri-cli ] ++ deviceRuntime);
   server = mkSource (
     [

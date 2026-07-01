@@ -179,6 +179,19 @@ flake-utils.lib.eachDefaultSystem (
       inherit bunDeps;
     };
 
+    korriWebSurfaceHost = import ../../../../product/services/device/nix/web-surface-host.nix {
+      inherit pkgs;
+      lib = pkgs.lib;
+      src = korriSources.webSurfaceHost;
+      inherit bunDeps;
+      portal = korriPortal;
+    };
+
+    korriChromiumKiosk = import ../../../../product/services/device/nix/chromium-kiosk.nix {
+      inherit pkgs;
+      lib = pkgs.lib;
+    };
+
     korriCli = import ../../../../product/surfaces/terminal/korri-cli/package.nix {
       inherit pkgs;
       lib = pkgs.lib;
@@ -281,6 +294,8 @@ flake-utils.lib.eachDefaultSystem (
         korriInputd
         korriGameStream
         korriSessiond
+        korriWebSurfaceHost
+        korriChromiumKiosk
         korriCli
         korrid
         korriHeadlessSource

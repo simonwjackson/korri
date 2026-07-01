@@ -15,6 +15,8 @@
   korriInputd,
   korriGameStream,
   korriSessiond,
+  korriWebSurfaceHost,
+  korriChromiumKiosk,
   korriCli,
   korrid,
   korriHeadlessSource,
@@ -44,6 +46,8 @@
   korri-inputd = korriInputd;
   korri-game-stream = korriGameStream;
   korri-sessiond = korriSessiond;
+  korri-web-surface-host = korriWebSurfaceHost;
+  korri-chromium-kiosk = korriChromiumKiosk;
   korri-cli = korriCli;
   korrid = korrid;
   korri-headless-source = korriHeadlessSource;
