@@ -6,7 +6,7 @@ import { SHIFT_DESIGN_PARTS } from "@product/surfaces/web/shift/shift-design-par
 import { shiftBatteryPropsForPowerReading } from "@product/surfaces/web/shift/shift-power-state"
 import { ShiftStatusBar } from "@product/surfaces/web/shift/ui/molecules/ShiftStatusBar"
 import { ShiftPartFrame } from "@product/surfaces/web/shift/ui/ShiftPartFrame"
-import type { Story } from "../../types"
+import type { Story, StoryLayer } from "../../types"
 import type { LabDesignPassStoryMeta } from "./design-pass-model"
 
 export interface LabGeneratedTakeRequest {
@@ -18,9 +18,23 @@ export interface LabGeneratedTakeRequest {
   readonly seed: number
 }
 
+export interface LabGeneratedTakeDescriptor {
+  readonly id: string
+  readonly designPartId: string
+  readonly layer: StoryLayer
+  readonly name: string
+  readonly note?: string
+  readonly surface?: boolean
+  readonly baseStoryId: string
+  readonly basedOnDesignPartId?: string
+  readonly prompt: string
+  readonly variant: string
+}
+
 export interface LabGeneratedTakeBatch {
   readonly stories: readonly Story[]
   readonly metaByStoryId: Readonly<Record<string, LabDesignPassStoryMeta>>
+  readonly descriptors: readonly LabGeneratedTakeDescriptor[]
 }
 
 const STATUS_BAR_TAKES = [
@@ -71,32 +85,52 @@ export function createCannedTakeBatch({
   const limitedCount = Math.max(1, Math.min(5, Math.floor(count)))
   const basedOnDesignPartId =
     baseStory.designPartId ?? baseMeta?.basedOnDesignPartId
+  const descriptors: LabGeneratedTakeDescriptor[] = []
+
+  for (let index = 0; index < limitedCount; index += 1) {
+    descriptors.push(
+      takeDescriptorFor(baseStory, basedOnDesignPartId, prompt, seed, index),
+    )
+  }
+
+  return storiesFromGeneratedTakeDescriptors(
+    descriptors,
+    new Map([[baseStory.id, baseStory]]),
+  )
+}
+
+export function storiesFromGeneratedTakeDescriptors(
+  descriptors: readonly LabGeneratedTakeDescriptor[],
+  baseStoriesById: ReadonlyMap<string, Story>,
+  options: { readonly promoted?: boolean } = {},
+): LabGeneratedTakeBatch {
   const passId = "live-design-pass"
   const passName = "Live design pass"
   const stories: Story[] = []
   const metaByStoryId: Record<string, LabDesignPassStoryMeta> = {}
 
-  for (let index = 0; index < limitedCount; index += 1) {
-    const story = takeStoryFor(baseStory, basedOnDesignPartId, seed, index)
-    stories.push(story)
-    metaByStoryId[story.id] = {
+  for (const descriptor of descriptors) {
+    stories.push(storyFromDescriptor(descriptor, baseStoriesById))
+    metaByStoryId[descriptor.id] = {
       role: "take",
       passId,
       passName,
-      basedOnDesignPartId,
-      prompt,
+      basedOnDesignPartId: descriptor.basedOnDesignPartId,
+      prompt: descriptor.prompt,
+      ...(options.promoted ? { promoted: true } : {}),
     }
   }
 
-  return { stories, metaByStoryId }
+  return { stories, metaByStoryId, descriptors }
 }
 
-function takeStoryFor(
+function takeDescriptorFor(
   baseStory: Story,
   basedOnDesignPartId: string | undefined,
+  prompt: string,
   seed: number,
   index: number,
-): Story {
+): LabGeneratedTakeDescriptor {
   if (basedOnDesignPartId === SHIFT_DESIGN_PARTS.statusBar.id) {
     const take = STATUS_BAR_TAKES[index % STATUS_BAR_TAKES.length]
     return {
@@ -106,16 +140,10 @@ function takeStoryFor(
       name: take.name,
       note: `Generated from ${baseStory.name}`,
       surface: baseStory.surface,
-      render: () => (
-        <ShiftPartFrame>
-          <ShiftStatusBar
-            time={shiftClockLabelForIso(DEFAULT_SHIFT_CLOCK_ISO)}
-            avatarSrc={take.avatar}
-            battery={shiftBatteryPropsForPowerReading(take.power)}
-            network={take.network}
-          />
-        </ShiftPartFrame>
-      ),
+      baseStoryId: baseStory.id,
+      basedOnDesignPartId,
+      prompt,
+      variant: take.slug,
     }
   }
 
@@ -126,6 +154,43 @@ function takeStoryFor(
     name: `${baseStory.name} take ${index + 1}`,
     note: `Generated from ${baseStory.name}`,
     surface: baseStory.surface,
-    render: baseStory.render,
+    baseStoryId: baseStory.id,
+    basedOnDesignPartId,
+    prompt,
+    variant: "clone",
+  }
+}
+
+function storyFromDescriptor(
+  descriptor: LabGeneratedTakeDescriptor,
+  baseStoriesById: ReadonlyMap<string, Story>,
+): Story {
+  const statusBarTake = STATUS_BAR_TAKES.find(
+    take => take.slug === descriptor.variant,
+  )
+  const render =
+    descriptor.basedOnDesignPartId === SHIFT_DESIGN_PARTS.statusBar.id &&
+    statusBarTake
+      ? () => (
+          <ShiftPartFrame>
+            <ShiftStatusBar
+              time={shiftClockLabelForIso(DEFAULT_SHIFT_CLOCK_ISO)}
+              avatarSrc={statusBarTake.avatar}
+              battery={shiftBatteryPropsForPowerReading(statusBarTake.power)}
+              network={statusBarTake.network}
+            />
+          </ShiftPartFrame>
+        )
+      : (baseStoriesById.get(descriptor.baseStoryId)?.render ??
+        (() => descriptor.name))
+
+  return {
+    id: descriptor.id,
+    designPartId: descriptor.designPartId,
+    layer: descriptor.layer,
+    name: descriptor.name,
+    note: descriptor.note,
+    surface: descriptor.surface,
+    render,
   }
 }

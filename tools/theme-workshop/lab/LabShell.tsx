@@ -17,7 +17,15 @@ import {
   readStoredPresentation,
   viewportPresentation,
 } from "./chrome/lab-presentation"
-import { createCannedTakeBatch } from "./design-pass/generated-takes"
+import {
+  persistPromotedGeneratedTakes,
+  readPromotedGeneratedTakes,
+} from "./design-pass/generated-take-storage"
+import {
+  createCannedTakeBatch,
+  type LabGeneratedTakeDescriptor,
+  storiesFromGeneratedTakeDescriptors,
+} from "./design-pass/generated-takes"
 import { useLab } from "./Lab.context"
 import { knobStyle } from "./model/lab-calibration-state"
 import {
@@ -96,13 +104,15 @@ export function LabShell() {
     readonly metaByStoryId: NonNullable<
       LabPartsCatalog["designPassMetaByStoryId"]
     >
-  }>({ stories: [], metaByStoryId: {} })
+    readonly descriptors: readonly LabGeneratedTakeDescriptor[]
+  }>({ stories: [], metaByStoryId: {}, descriptors: [] })
   const [deletedTakeStoryIds, setDeletedTakeStoryIds] = useState<
     readonly string[]
   >([])
   const [promotedTakeStoryIds, setPromotedTakeStoryIds] = useState<
     readonly string[]
   >([])
+  const [promotedTakesHydrated, setPromotedTakesHydrated] = useState(false)
   const generatedTakeSeed = useRef(0)
   const [catalogError, setCatalogError] = useState<Error | null>(null)
   const [dockWidth, setDockWidth] = useState<number>(readStoredDockWidth)
@@ -205,6 +215,26 @@ export function LabShell() {
     () => buildStoryIndex(partsCatalog),
     [partsCatalog],
   )
+
+  useEffect(() => {
+    if (!promotedTakesHydrated) return
+    const promoted = new Set(promotedTakeStoryIds)
+    const deleted = new Set(deletedTakeStoryIds)
+    persistPromotedGeneratedTakes(
+      adapter.id,
+      generatedTakes.descriptors.filter(
+        descriptor =>
+          promoted.has(descriptor.id) && !deleted.has(descriptor.id),
+      ),
+    )
+  }, [
+    adapter.id,
+    deletedTakeStoryIds,
+    generatedTakes.descriptors,
+    promotedTakeStoryIds,
+    promotedTakesHydrated,
+  ])
+
   // Live-device seed state stays shared and independent from the Parts palette.
   // Selecting a placed part is a placement/object action; it must not reseed the
   // mounted live device objects.
@@ -293,16 +323,27 @@ export function LabShell() {
   useEffect(() => {
     let cancelled = false
     setCatalog(null)
-    setGeneratedTakes({ stories: [], metaByStoryId: {} })
+    setGeneratedTakes({ stories: [], metaByStoryId: {}, descriptors: [] })
     setDeletedTakeStoryIds([])
     setPromotedTakeStoryIds([])
+    setPromotedTakesHydrated(false)
     setCatalogError(null)
     setSelectedIds([])
     setObjects(prev => prev.filter(isLiveDeviceObject))
     setPreviewSelection(null)
     void loadSurfacePartsResult(adapter.id)
       .then(next => {
-        if (!cancelled) setCatalog(next)
+        if (cancelled) return
+        const storedDescriptors = readPromotedGeneratedTakes(adapter.id)
+        const restored = storiesFromGeneratedTakeDescriptors(
+          storedDescriptors,
+          new Map(next.stories.map(story => [story.id, story])),
+          { promoted: true },
+        )
+        setGeneratedTakes(restored)
+        setPromotedTakeStoryIds(restored.stories.map(story => story.id))
+        setPromotedTakesHydrated(true)
+        setCatalog(next)
       })
       .catch(cause => {
         if (!cancelled)
@@ -366,9 +407,17 @@ export function LabShell() {
   }
 
   const clearAll = () => {
+    const promoted = new Set(promotedTakeStoryIds)
     setSelectedIds([])
-    setGeneratedTakes({ stories: [], metaByStoryId: {} })
-    setPromotedTakeStoryIds([])
+    setGeneratedTakes(prev => ({
+      stories: prev.stories.filter(story => promoted.has(story.id)),
+      metaByStoryId: Object.fromEntries(
+        Object.entries(prev.metaByStoryId).filter(([id]) => promoted.has(id)),
+      ),
+      descriptors: prev.descriptors.filter(descriptor =>
+        promoted.has(descriptor.id),
+      ),
+    }))
     setObjects(prev => prev.filter(isLiveDeviceObject))
     setSelectedObjectId(null)
     setPreviewSelection(null)
@@ -385,6 +434,9 @@ export function LabShell() {
       stories: prev.stories.filter(story => story.id !== storyId),
       metaByStoryId: Object.fromEntries(
         Object.entries(prev.metaByStoryId).filter(([id]) => id !== storyId),
+      ),
+      descriptors: prev.descriptors.filter(
+        descriptor => descriptor.id !== storyId,
       ),
     }))
     setSelectedIds(prev => prev.filter(id => id !== storyId))
@@ -464,6 +516,7 @@ export function LabShell() {
         ...prev.metaByStoryId,
         ...batch.metaByStoryId,
       },
+      descriptors: [...prev.descriptors, ...batch.descriptors],
     }))
     setSelectedIds(prev => [
       ...new Set([...prev, ...batch.stories.map(story => story.id)]),
