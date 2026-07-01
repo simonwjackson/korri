@@ -39,16 +39,27 @@ let
   shaderPresetDirectory = "${shaderPresetPackage}/share/libretro/shaders/shaders_slang";
   joypadAutoconfigPackage = pkgs.retroarch-joypad-autoconfig;
   joypadAutoconfigDirectory = "${joypadAutoconfigPackage}/share/libretro/autoconfig";
+  inputplumberJoypadAutoconfigPackage =
+    pkgs.runCommand "korri-inputplumber-retroarch-autoconfig" { }
+      ''
+        mkdir -p $out/share/libretro
+        cp -R --no-preserve=mode,ownership ${joypadAutoconfigDirectory} $out/share/libretro/autoconfig
+        chmod -R u+w $out/share/libretro/autoconfig
+        sed -i '/^input_menu_toggle_btn\(_label\)\? =/d' \
+          "$out/share/libretro/autoconfig/udev/Microsoft X-Box 360 pad.cfg"
+      '';
+  inputplumberJoypadAutoconfigDirectory = "${inputplumberJoypadAutoconfigPackage}/share/libretro/autoconfig";
 
   inputplumberRetroArchPolicy = {
     drivers = {
       input = "udev";
       joypad = "udev";
     };
-    paths.joypadAutoconfigDirectory = joypadAutoconfigDirectory;
+    paths.joypadAutoconfigDirectory = inputplumberJoypadAutoconfigDirectory;
     input = {
       autodetect = true;
       maxUsers = 4;
+      menuToggleGamepadCombo = "l3-r3";
       ports."1" = {
         joypadIndex = 0;
         analogDpadMode = 1;
@@ -90,6 +101,8 @@ let
       shaderPresetDirectory = shaderPresetDirectory;
       joypadAutoconfig = joypadAutoconfigPackage;
       joypadAutoconfigDirectory = joypadAutoconfigDirectory;
+      inputplumberJoypadAutoconfig = inputplumberJoypadAutoconfigPackage;
+      inputplumberJoypadAutoconfigDirectory = inputplumberJoypadAutoconfigDirectory;
       mesaTurnip = retroarchBinary.passthru.mesaTurnip or null;
       turnipIcd = retroarchBinary.passthru.vulkanIcd or null;
       turnipPinned = retroarchBinary.passthru.turnipPinned or false;

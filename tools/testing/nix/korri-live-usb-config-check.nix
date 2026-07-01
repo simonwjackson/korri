@@ -137,6 +137,7 @@ let
       (retroarchPolicy.drivers.input or null) == "udev"
       && (retroarchPolicy.drivers.joypad or null) == "udev"
       && (retroarchPolicy.input.autodetect or false) == true
+      && (retroarchPolicy.input.menuToggleGamepadCombo or null) == "l3-r3"
       && lib.hasSuffix "/share/libretro/autoconfig" (retroarchPolicy.paths.joypadAutoconfigDirectory or "")
     ))
     (check "live USB deprecated Moonlight launch-policy env must be absent from launch-owning services" (

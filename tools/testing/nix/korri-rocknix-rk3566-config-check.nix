@@ -192,6 +192,7 @@ let
       && (retroarchPolicy.drivers.joypad or null) == "udev"
       && (retroarchPolicy.input.autodetect or false) == true
       && (retroarchPolicy.input.maxUsers or 0) == 4
+      && (retroarchPolicy.input.menuToggleGamepadCombo or null) == "l3-r3"
       && (retroarchPolicy.input.ports."1".joypadIndex or null) == 0
       && (retroarchPolicy.input.ports."1".analogDpadMode or null) == 1
       && lib.hasSuffix "/share/libretro/autoconfig" (
