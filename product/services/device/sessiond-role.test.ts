@@ -169,23 +169,16 @@ describe("kiosk session role", () => {
     expect(role.idleReadyEvidence()).toBe("home-invariant windows=1 satisfied")
   })
 
-  it("home-ready evidence reports renderer-relaunched after a missing-window repair (task-015 AC #2/#5)", async () => {
-    // AC #2: a missing window must trigger relaunch BEFORE
-    // home-ready evidence reports "satisfied". This test exercises
-    // both halves: the renderer is launched (relaunch), and the
-    // resulting evidence string carries the "renderer-relaunched"
-    // marker so the readiness event is honest about what just
-    // happened.
+  it("does not relaunch during idle entry while the renderer window is still mapping", async () => {
     const { renderer, events: rendererEvents } = makeRecordingRenderer()
     const { sway } = makeSway([])
     const { serviceManager } = makeServiceManager()
     const role = createKioskSessionRole({ renderer, sway, serviceManager })
+
     await role.enterIdle()
-    // enterIdle launches once + reconcile sees no windows and
-    // relaunches a second time. Both launches must happen before
-    // evidence is generated.
-    expect(rendererEvents.filter(e => e.startsWith("launch:")).length).toBe(2)
-    expect(role.idleReadyEvidence()).toContain("renderer-relaunched")
+
+    expect(rendererEvents.filter(e => e.startsWith("launch:")).length).toBe(1)
+    expect(role.idleReadyEvidence()).not.toContain("renderer-relaunched")
   })
 
   it("home-ready evidence reports duplicates-closed when multiple windows exist (task-015 AC #3/#5)", async () => {
@@ -226,15 +219,17 @@ describe("kiosk session role", () => {
     expect(evidence).not.toContain("satisfied")
   })
 
-  it("relaunches the renderer during reconcile when no window exists", async () => {
+  it("relaunches the renderer during explicit reconcile when no window exists", async () => {
     const { renderer, events: rendererEvents } = makeRecordingRenderer()
     const { sway } = makeSway([])
     const { serviceManager } = makeServiceManager()
     const role = createKioskSessionRole({ renderer, sway, serviceManager })
 
     await role.enterIdle()
+    await role.reconcileIdle()
 
     expect(rendererEvents.filter(e => e.startsWith("launch:")).length).toBe(2)
+    expect(role.idleReadyEvidence()).toContain("renderer-relaunched")
   })
 
   // Phase 4D / Track A U3 -- afterChildRunning hook.

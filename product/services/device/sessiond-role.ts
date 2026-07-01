@@ -196,9 +196,15 @@ export function createKioskSessionRole(
     repairedFullscreen: false,
   }
 
-  const reconcile = async () => {
+  const reconcile = async (
+    options: { readonly allowRelaunch?: boolean } = {},
+  ) => {
     const windows = await deps.sway.getKorriWindows()
-    const decisions = evaluateHomeInvariant({ windows })
+    const decisions = evaluateHomeInvariant({ windows }).filter(
+      decision =>
+        options.allowRelaunch !== false ||
+        decision.kind !== "relaunch-renderer",
+    )
     const summary: KioskReconcileSummary = {
       windowCount: windows.length,
       relaunchedRenderer: false,
@@ -235,7 +241,7 @@ export function createKioskSessionRole(
       await deps.serviceManager.maskEssway()
       const launched = await deps.renderer.launch()
       rendererPid = launched.pid
-      await reconcile()
+      await reconcile({ allowRelaunch: false })
     },
     leaveIdle: async () => {
       await deps.renderer.stop(rendererPid)
@@ -254,7 +260,7 @@ export function createKioskSessionRole(
     restoreIdleAfterLaunch: async () => {
       const launched = await deps.renderer.launch()
       rendererPid = launched.pid
-      await reconcile()
+      await reconcile({ allowRelaunch: false })
     },
     reconcileIdle: reconcile,
     // task-015 AC #5: structured evidence string. Format is a
