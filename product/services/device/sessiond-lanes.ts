@@ -1,5 +1,5 @@
-import type { SessiondSwayEvent } from "./sessiond-sway-events"
 import type { SwayCommandRunner, SwayNode } from "./sessiond-sway"
+import type { SessiondSwayEvent } from "./sessiond-sway-events"
 
 export interface KorriLaneNames {
   readonly hub: string
@@ -53,7 +53,7 @@ export function createKorriLaneController(options: {
     game: options.lanes?.game ?? "korri:game:active",
   }
   let activePlace: KorriActivePlace = "hub"
-  let hubPresent = true
+  const hubPresent = true
   let gameStatus: KorriGameLaneStatus = "none"
   let gameWindowId: number | undefined
   let launchId: string | undefined

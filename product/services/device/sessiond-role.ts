@@ -5,13 +5,13 @@ import type {
   TerminalReadinessEventType,
 } from "@platform/library/sessiond-managed-launch-protocol"
 import type { KorriSessiondServiceManager } from "./sessiond"
+import type { KorriLaneController } from "./sessiond-lanes"
 import type {
   KorriRendererController,
   KorriRendererStatus,
 } from "./sessiond-renderer"
 import { rendererStatus } from "./sessiond-renderer"
 import { evaluateHomeInvariant } from "./sessiond-state"
-import type { KorriLaneController } from "./sessiond-lanes"
 import type { SwayController } from "./sessiond-sway"
 
 /**
