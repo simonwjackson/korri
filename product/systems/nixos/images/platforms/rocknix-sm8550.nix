@@ -402,7 +402,7 @@ in
     actions = sm8550AudioBootstrapActions;
   };
 
-  services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
+  services.korri.client.package = korri.packages.${targetSystem}.korri-chromium-kiosk;
 
   # Swappable game/content cards are operator media, not durable internal
   # guest storage; the shared removable-media module mounts each visible

@@ -114,7 +114,7 @@ in
       }
     ];
   };
-  services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
+  services.korri.client.package = korri.packages.${targetSystem}.korri-chromium-kiosk;
 
   # RK3566 keeps the substrate's root-owned main-space PipeWire services, but
   # runs their socket in the Korri runtime user's logind directory so Korri's

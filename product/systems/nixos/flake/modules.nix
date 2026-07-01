@@ -63,6 +63,7 @@ rec {
   };
   korri-login = import ../modules/korri-login.nix;
   korri-client = import ../modules/korri-client.nix { korri = self; };
+  korri-web-surface-host = import ../modules/korri-web-surface-host.nix { korri = self; };
   korri-cli = import ../modules/korri-cli.nix { korri = self; };
   korri-game-stream = import ../modules/korri-game-stream.nix { korri = self; };
   korri-sessiond = import ../modules/korri-sessiond.nix { korri = self; };
@@ -76,6 +77,7 @@ rec {
   korri-compositor = {
     imports = [
       korri-client
+      korri-web-surface-host
       korri-input
       korri-x86-compositor-overlay
       (import ../modules/korri-compositor.nix { korri = self; })

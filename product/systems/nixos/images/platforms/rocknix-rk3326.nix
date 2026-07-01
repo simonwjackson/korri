@@ -50,7 +50,7 @@ in
     enable = true;
     proofMarkerLabel = "korri-rk3326-r36tmax-kiosk-system";
   };
-  services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
+  services.korri.client.package = korri.packages.${targetSystem}.korri-chromium-kiosk;
 
   rocknix.session.runtimeDir.uid = runtime.uid;
   systemd.user.services.pipewire.enable = lib.mkForce false;

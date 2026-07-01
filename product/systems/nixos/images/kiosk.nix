@@ -10,7 +10,9 @@ let
   # both the sessiond unit and korrid's delegation env so the two
   # cannot drift.
   sessiondPort = 3003;
+  webSurfacePort = 8099;
   sessiondSocketPath = "%t/korri/sessiond.sock";
+  rendererStatusFile = "${config.services.korri.compositor.stateHome}/korri/chromium/status.json";
 
   # Sessiond owns the kiosk renderer (Electrobun). The renderer
   # inherits sessiond's process environment when spawned via the
@@ -40,24 +42,21 @@ let
     KORRI_KIOSK = "1";
     KORRI_DESKTOP_INPUTD_URL = compositorCfg.kiosk.inputdBridgeUrl;
     KORRI_NATIVE_BRIDGE_URL = compositorCfg.kiosk.inputdBridgeUrl;
-    # Renderer stdout/stderr capture. realElectrobunRunner.spawn writes
-    # in append mode (commit 70ea2e7), so multiple spawn attempts in a
-    # sessiond restart loop accumulate. Persistent path so the log
-    # survives reboots — critical because /run/systemd overrides do
-    # not, and on ROCKNIX /etc is read-only.
-    KORRI_ELECTROBUN_LOG = "${compositorCfg.stateHome}/korri/electrobun.log";
+    KORRI_RENDERER = "chromium";
+    KORRI_WEB_SURFACE_URL = "http://127.0.0.1:${toString webSurfacePort}/";
+    KORRI_DESKTOP_STATUS_FILE = rendererStatusFile;
+    # Renderer stdout/stderr capture. realChromiumRunner.spawn writes
+    # in append mode, so multiple spawn attempts in a sessiond restart
+    # loop accumulate. Persistent path so the log survives reboots —
+    # critical because /run/systemd overrides do not, and on ROCKNIX
+    # /etc is read-only.
+    KORRI_CHROMIUM_LOG = "${compositorCfg.stateHome}/korri/chromium.log";
     # Wayland-session identity. These are the env keys Sway puts on
     # its own process env at compositor-init and propagates to every
-    # `exec` child. Hardcoded for the kiosk shape: kiosk-on-Wayland
-    # under Sway with Xwayland's first display.
+    # `exec` child. Chromium connects directly to the Wayland socket;
+    # do not pin GTK/WebKit/X11 backend flags here.
     XDG_SESSION_TYPE = "wayland";
     XDG_CURRENT_DESKTOP = "sway";
-    DISPLAY = ":0";
-    # The kiosk renderer and managed Steam launches are currently validated
-    # through Sway's eager Xwayland server. Keep GTK/WebKit on that stable path
-    # instead of letting a stale user drop-in or backend autodetection pick a
-    # different display after reboot.
-    GDK_BACKEND = "x11";
   }
   //
     lib.optionalAttrs
@@ -94,6 +93,13 @@ in
   services.korri.input.provider = {
     enable = lib.mkDefault true;
     name = lib.mkDefault "inputplumber";
+  };
+
+  services.korri.webSurfaceHost = {
+    enable = true;
+    port = webSurfacePort;
+    inputdUrl = compositorCfg.kiosk.inputdBridgeUrl;
+    statusFile = rendererStatusFile;
   };
 
   # Sessiond owns the foreground-session lifecycle on every kiosk image.
@@ -162,6 +168,7 @@ in
     before = [
       "korri-compositor.service"
       "korri-inputd.service"
+      "korri-web-surface-host.service"
       "korri-sessiond.service"
       "korrid.service"
     ];
@@ -199,9 +206,10 @@ in
     rm -f ${compositorCfg.home}/.config/systemd/user/korri-sessiond.service.d/display.conf
   '';
 
-  # Boot ordering: sessiond's enterIdle spawns Electrobun, which
-  # attaches to sway's wayland-1 socket and dials the inputd bridge
-  # on startup. Both must be up first. `requires = [korri-inputd]`
+  # Boot ordering: sessiond's enterIdle spawns Chromium, which
+  # attaches to sway's wayland-1 socket and loads the web-surface host;
+  # the page then dials inputd directly. Both host and inputd must be up first.
+  # `requires = [korri-inputd]`
   # because the renderer hangs without the bridge; `wants = [korri-
   # compositor]` because a failed sway is recoverable (sessiond
   # restart-loops until the socket appears) and we want diagnostics
@@ -211,9 +219,10 @@ in
     after = [
       "korri-compositor.service"
       "korri-inputd.service"
+      "korri-web-surface-host.service"
     ];
-    wants = [ "korri-compositor.service" ];
-    requires = [ "korri-inputd.service" ];
+    wants = [ "korri-compositor.service" "korri-web-surface-host.service" ];
+    requires = [ "korri-inputd.service" "korri-web-surface-host.service" ];
   };
 
   # Source-machine sessiond owns its own sway; kiosk sessiond ATTACHES
