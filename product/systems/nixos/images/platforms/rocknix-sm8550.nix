@@ -170,6 +170,57 @@ let
         ;;
     esac
   '';
+  # Bandai bottom-screen keyboard MVP. This remains platform-local: the AYN/F24
+  # button dispatches inputd's existing toggle-bottom-screen action, and only
+  # this image overrides that action with second-screen policy.
+  korriBandaiBottomKeyboardToggle = pkgs.writeShellApplication {
+    name = "korri-bandai-bottom-keyboard-toggle";
+    runtimeInputs = with pkgs; [
+      coreutils
+      findutils
+      gnugrep
+      procps
+      sway
+      wvkbd
+    ];
+    text = ''
+      set -u
+
+      runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
+      sock=$(find "$runtime_dir" -maxdepth 1 -name 'sway-ipc.*.sock' -print 2>/dev/null | head -n 1 || true)
+      [ -n "$sock" ] || exit 0
+      export SWAYSOCK="$sock"
+
+      bottom_is_on() {
+        swaymsg -t get_outputs \
+          | grep -A30 '"name": "DSI-1"' \
+          | grep -q '"power": true'
+      }
+
+      stop_keyboard() {
+        pkill -x wvkbd-mobintl 2>/dev/null || true
+        pkill -x wvkbd 2>/dev/null || true
+      }
+
+      if bottom_is_on; then
+        stop_keyboard
+        swaymsg 'focus output DSI-2' >/dev/null 2>&1 || true
+        swaymsg 'output DSI-1 power off' >/dev/null 2>&1 || true
+        exit 0
+      fi
+
+      swaymsg 'output DSI-1 power on' >/dev/null 2>&1 || true
+      swaymsg 'focus output DSI-1' >/dev/null 2>&1 || true
+      swaymsg 'workspace "korri:bottom-keyboard"' >/dev/null 2>&1 || true
+
+      if ! pgrep -x wvkbd-mobintl >/dev/null 2>&1; then
+        wvkbd-mobintl -L 360 --fn 'sans 18' >/tmp/korri-bottom-keyboard.log 2>&1 &
+      fi
+
+      sleep 0.2
+      swaymsg 'focus output DSI-2' >/dev/null 2>&1 || true
+    '';
+  };
   # The substrate exposes an explicit audio route strategy under
   # rocknix.device.audio.route.*. Korri owns the kiosk user's PipeWire graph,
   # but it still treats the substrate route as the source of truth: product
@@ -641,6 +692,7 @@ in
       # operator-validated right-side-up transform explicit here so product
       # redeploys cannot regress the kiosk back to the substrate default.
       output DSI-1 transform 90
+      output DSI-1 power off
     '';
   };
 
@@ -662,6 +714,8 @@ in
   #     policy and intentionally not part of standard controller Home handling.
   services.korri.input.inputd.environment = {
     KORRI_INPUTD_KEY_F24_ACTION = "toggle-bottom-screen";
+    KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN =
+      "${korriBandaiBottomKeyboardToggle}/bin/korri-bandai-bottom-keyboard-toggle";
     KORRI_INPUTD_POWER_SUSPEND = "${korriFakesuspendToggle}";
     KORRI_INPUTD_LID_CLOSED = "${korriFakesuspendToggle} suspend";
     KORRI_INPUTD_LID_OPENED = "${korriFakesuspendToggle} resume";
