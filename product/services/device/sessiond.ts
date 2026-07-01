@@ -1408,19 +1408,17 @@ async function main() {
                     { diagnostic },
                     "sessiond Sway event diagnostic",
                   ),
+                onStatus: status => {
+                  laneToggleAvailable = status === "open"
+                },
               })
-              void swayEventSource
-                .start()
-                .then(() => {
-                  laneToggleAvailable = true
-                })
-                .catch(error => {
-                  laneToggleAvailable = false
-                  defaultLogger.warn(
-                    { err: error },
-                    "sessiond Sway event source failed to start",
-                  )
-                })
+              void swayEventSource.start().catch(error => {
+                laneToggleAvailable = false
+                defaultLogger.warn(
+                  { err: error },
+                  "sessiond Sway event source failed to start",
+                )
+              })
             } else {
               defaultLogger.warn(
                 {},

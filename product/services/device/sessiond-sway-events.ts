@@ -178,6 +178,7 @@ export interface SessiondSwayIpcSocket {
 export type SessiondSwayIpcConnector = (options: {
   readonly socketPath: string
   readonly onData: (data: Uint8Array) => void
+  readonly onClose?: () => void
 }) => Promise<SessiondSwayIpcSocket>
 
 export function createSessiondSwayEventSource(options: {
@@ -185,6 +186,7 @@ export function createSessiondSwayEventSource(options: {
   readonly connector?: SessiondSwayIpcConnector
   readonly onEvent: (event: SessiondSwayEvent) => void | Promise<void>
   readonly onDiagnostic?: (diagnostic: SessiondSwayEventDiagnostic) => void
+  readonly onStatus?: (status: "open" | "closed") => void
 }): SessiondSwayEventSource {
   let socket: SessiondSwayIpcSocket | undefined
   let eventQueue: Promise<void> = Promise.resolve()
@@ -209,7 +211,9 @@ export function createSessiondSwayEventSource(options: {
       socket = await (options.connector ?? realSwayIpcConnector)({
         socketPath: options.socketPath,
         onData: chunk => decoder.push(chunk),
+        onClose: () => options.onStatus?.("closed"),
       })
+      options.onStatus?.("open")
       socket.write(
         encodeSwayIpcFrame({
           messageType: SWAY_IPC_MESSAGE_TYPE.subscribe,
@@ -228,12 +232,19 @@ export function createSessiondSwayEventSource(options: {
 async function realSwayIpcConnector(options: {
   readonly socketPath: string
   readonly onData: (data: Uint8Array) => void
+  readonly onClose?: () => void
 }): Promise<SessiondSwayIpcSocket> {
   const socket = await Bun.connect({
     unix: options.socketPath,
     socket: {
       data(_socket, data) {
         options.onData(new Uint8Array(data))
+      },
+      close() {
+        options.onClose?.()
+      },
+      error() {
+        options.onClose?.()
       },
     },
   } as Parameters<typeof Bun.connect>[0])

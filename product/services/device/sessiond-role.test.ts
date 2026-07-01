@@ -390,6 +390,7 @@ describe("lane-aware kiosk session role", () => {
 
     await role.restoreIdleAfterLaunch()
 
+    expect(laneEvents).toContain("timeout:managed-launch")
     expect(laneEvents).toContain("focus-hub")
     expect(rendererEvents).toEqual([])
     expect(role.idleReadyEvidence()).toBe("home-invariant windows=1 satisfied")

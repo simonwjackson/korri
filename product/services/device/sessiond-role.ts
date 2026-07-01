@@ -374,6 +374,7 @@ export function createLaneAwareKioskSessionRole(
     },
     afterChildRunning: async () => {},
     restoreIdleAfterLaunch: async () => {
+      await deps.laneController.noteLaunchTimeout("managed-launch")
       await deps.laneController.focusHub()
       await reconcile()
     },

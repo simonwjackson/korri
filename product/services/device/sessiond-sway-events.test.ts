@@ -147,6 +147,28 @@ describe("sessiond Sway IPC event decoder", () => {
     ])
   })
 
+  it("reports open and closed status for lane capability gating", async () => {
+    let closeSocket: (() => void) | undefined
+    const statuses: string[] = []
+    const source = createSessiondSwayEventSource({
+      socketPath: "/run/user/1000/sway-ipc.sock",
+      connector: async ({ onClose }) => {
+        closeSocket = onClose
+        return {
+          write: () => {},
+          close: () => onClose?.(),
+        }
+      },
+      onEvent: () => {},
+      onStatus: status => statuses.push(status),
+    })
+
+    await source.start()
+    closeSocket?.()
+
+    expect(statuses).toEqual(["open", "closed"])
+  })
+
   it("serializes async event handlers instead of interleaving Sway events", async () => {
     const written: Uint8Array[] = []
     let pushData: ((data: Uint8Array) => void) | undefined
