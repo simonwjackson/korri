@@ -65,6 +65,7 @@ import { LabPartsPanel } from "./panels/LabPartsPanel"
 import { LabPartsViewToggle } from "./panels/LabPartsViewToggle"
 import { LabPreviewInspector } from "./panels/LabPreviewInspector"
 import { LabSurfaceControlsPanel } from "./panels/LabSurfaceControlsPanel"
+import { LabSurfacePanel } from "./panels/LabSurfacePanel"
 import {
   type LabPartsView,
   persistPartsView,
@@ -443,10 +444,12 @@ export function LabShell() {
   const designPanel = () => <LabInspectorPanel />
   const controlsPanel = () => <LabSurfaceControlsPanel />
   const devicePanel = () => <LabDevicePanel />
+  const surfacePanel = () => <LabSurfacePanel />
   const hasControls = Boolean(adapter.useControls)
 
   const sheetPanels = [
-    { id: "device", label: "Device", render: devicePanel },
+    { id: "surface", label: "Surface", render: surfacePanel },
+    { id: "device", label: "Devices", render: devicePanel },
     { id: "parts", label: "Parts", render: partsPanel, action: partsAction },
     { id: "inspector", label: "Inspector", render: statePanel },
     { id: "design", label: "Design", render: designPanel },
@@ -456,9 +459,15 @@ export function LabShell() {
   ]
   const deckPanels = [
     {
-      id: "device",
-      title: "Device",
+      id: "surface",
+      title: "Surface",
       accent: "#fcd34d",
+      render: surfacePanel,
+    },
+    {
+      id: "device",
+      title: "Devices",
+      accent: "#fbbf24",
       render: devicePanel,
     },
     {
@@ -504,7 +513,8 @@ export function LabShell() {
 
   const w = typeof window === "undefined" ? 1440 : window.innerWidth
   const floatLayout: Record<string, LabFloatRect> = {
-    device: { x: 600, y: 120, width: 236 },
+    surface: { x: 600, y: 120, width: 236 },
+    device: { x: 600, y: 264, width: 236 },
     parts: { x: 96, y: 120, width: 236 },
     inspector: { x: w - 300, y: 110, width: 252 },
     design: { x: w - 300, y: 392, width: 252 },

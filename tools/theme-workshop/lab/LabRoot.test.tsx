@@ -181,7 +181,9 @@ describe("LabRoot", () => {
           screen.getByRole("dialog", { name: "Lab controls" }),
         ).toBeTruthy()
       })
-      expect(screen.getByLabelText("Device selection")).toBeTruthy()
+      expect(screen.getByRole("tab", { name: "Surface" })).toBeTruthy()
+      fireEvent.click(screen.getByRole("tab", { name: "Devices" }))
+      expect(screen.getByRole("list", { name: "Live devices" })).toBeTruthy()
     })
   })
 
@@ -396,12 +398,12 @@ describe("LabRoot", () => {
     await waitFor(() => {
       expect(view.container.querySelector(".pt-grid")).toBeTruthy()
     })
-    expect(view.container.querySelector(".pt-tree")).toBeNull()
+    expect(view.container.querySelector(".pt-tree:not(.pt-device-list)")).toBeNull()
 
     fireEvent.click(screen.getByRole("tab", { name: "List" }))
 
     await waitFor(() => {
-      expect(view.container.querySelector(".pt-tree")).toBeTruthy()
+      expect(view.container.querySelector(".pt-tree:not(.pt-device-list)")).toBeTruthy()
     })
     expect(view.container.querySelector(".pt-grid")).toBeNull()
   })

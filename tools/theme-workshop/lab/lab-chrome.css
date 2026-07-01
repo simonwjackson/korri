@@ -1290,20 +1290,36 @@ body {
 	max-width: 360px;
 }
 
-/* Device panel: stack the Surface/Device selects full-width, label over field. */
+/* Surface and device panels: surface owns adapter choice; devices are a list of live objects. */
+.pt-surface-panel,
 .pt-device-panel {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
 	padding: 2px;
 }
-.pt-device-panel .pt-surface-select {
+.pt-surface-panel .pt-surface-select {
 	flex-direction: column;
 	align-items: stretch;
 	gap: 5px;
 }
-.pt-device-panel .pt-surface-select select {
+.pt-surface-panel .pt-surface-select select {
 	width: 100%;
+}
+.pt-device-picker {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.pt-device-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+.pt-tree-meta {
+	margin-left: auto;
+	font-size: 9px;
+	color: var(--pt-ink-faint);
 }
 .pt-surface-select select {
 	padding: 5px 26px 5px 9px;

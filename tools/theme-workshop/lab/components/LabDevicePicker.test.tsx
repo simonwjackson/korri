@@ -67,39 +67,48 @@ function renderPicker(
 }
 
 describe("LabDevicePicker", () => {
-  it("selects one device from all", () => {
-    const { setDevicesSegment } = renderPicker({ selection: { kind: "all" } })
+  it("renders devices as a selectable list", () => {
+    renderPicker({ selection: { kind: "all" } })
 
-    fireEvent.change(screen.getByLabelText("Device selection"), {
-      target: { value: "rg353m" },
-    })
-
-    expect(setDevicesSegment).toHaveBeenCalledWith("rg353m")
+    expect(screen.getByRole("list", { name: "Live devices" })).toBeTruthy()
+    expect(screen.queryByRole("combobox", { name: "Device selection" })).toBeNull()
+    expect(
+      screen.getByRole("button", { name: "RG353M" }).getAttribute("aria-pressed"),
+    ).toBe("true")
+    expect(
+      screen
+        .getByRole("button", { name: "ODIN 2 PORTAL" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true")
   })
 
-  it("switches explicitly back to all", () => {
+  it("can narrow from all devices by toggling one device off", () => {
+    const { setDevicesSegment } = renderPicker({ selection: { kind: "all" } })
+
+    fireEvent.click(screen.getByRole("button", { name: "RG353M" }))
+
+    expect(setDevicesSegment).toHaveBeenCalledWith("odin2portal")
+  })
+
+  it("collapses to all when the last missing device is toggled on", () => {
     const { setDevicesSegment } = renderPicker({
       selection: { kind: "set", ids: ["rg353m"] },
       selectedDevices: [rg353m],
     })
 
-    fireEvent.change(screen.getByLabelText("Device selection"), {
-      target: { value: "all" },
-    })
+    fireEvent.click(screen.getByRole("button", { name: "ODIN 2 PORTAL" }))
 
     expect(setDevicesSegment).toHaveBeenCalledWith("all")
   })
 
-  it("shows an existing multi-device URL segment as the current value", () => {
-    renderPicker({
-      selection: { kind: "set", ids: ["rg353m", "odin2portal"] },
+  it("offers an explicit all-devices action", () => {
+    const { setDevicesSegment } = renderPicker({
+      selection: { kind: "set", ids: ["rg353m"] },
+      selectedDevices: [rg353m],
     })
 
-    const select = screen.getByLabelText("Device selection")
-    expect(select).toBeInstanceOf(HTMLSelectElement)
-    expect((select as HTMLSelectElement).value).toBe("rg353m,odin2portal")
-    const option = screen.getByRole("option", { name: "2 devices" })
-    expect(option).toBeInstanceOf(HTMLOptionElement)
-    expect((option as HTMLOptionElement).value).toBe("rg353m,odin2portal")
+    fireEvent.click(screen.getByRole("button", { name: "All live devices" }))
+
+    expect(setDevicesSegment).toHaveBeenCalledWith("all")
   })
 })
