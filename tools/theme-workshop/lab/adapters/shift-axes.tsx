@@ -11,61 +11,75 @@ import {
   axisOptionsFromTags,
   type LabScreenCoordinate,
   type LabStateAxis,
+  type LabStateAxisContext,
 } from "../model/lab-state-axis"
-import { eachLabSurfaceRegistry } from "../model/lab-surface-registries"
+import {
+  eachLabSurfaceRegistry,
+  eachLabSurfaceRegistryForScope,
+  type LabSurfaceRegistryEntry,
+} from "../model/lab-surface-registries"
 
-// Shift Home's state regions surfaced as axes. Data and Foreground are real
-// state-machine regions. Power, Clock, and Network are product inputs instead,
-// so they are declared through the surface input contract in shift.ts.
+// Shift Home's screen-state controls. These are real product state machines,
+// scoped by the selected live device when the lab is editing one.
 
 type CatalogSourceLayer = ReturnType<(typeof shiftCatalogSourceLayers)["Ready"]>
+type ForegroundSourceLayer = ReturnType<
+  (typeof shiftForegroundSourceLayers)["Ready"]
+>
 
-const shiftDataAxis: LabStateAxis = {
+function eachTargetRegistry(
+  context: LabStateAxisContext | undefined,
+  run: (entry: LabSurfaceRegistryEntry) => void,
+): void {
+  if (context?.scopeId) {
+    eachLabSurfaceRegistryForScope(context.scopeId, run)
+    return
+  }
+  eachLabSurfaceRegistry(run)
+}
+
+const shiftLibraryAxis: LabStateAxis = {
   id: "data",
   kind: "single",
-  label: "Data",
-  liveLabel: "Auto",
+  label: "Library",
+  liveLabel: "Live",
   states: axisOptionsFromTags(ShiftCatalogState.tags),
-  pin: stateId => {
+  pin: (stateId, context) => {
     const make =
       shiftCatalogSourceLayers[stateId as keyof typeof shiftCatalogSourceLayers]
     if (!make) return
     const layer = make()
-    eachLabSurfaceRegistry(({ registry }) =>
+    eachTargetRegistry(context, ({ registry }) =>
       registry.set(catalogFactsSourceLayerAtom, layer),
     )
   },
-  release: () =>
-    eachLabSurfaceRegistry(({ registry, seed }) => {
+  release: context =>
+    eachTargetRegistry(context, ({ registry, seed }) => {
       const live = seed.get(catalogFactsSourceLayerAtom)
       if (live !== undefined)
         registry.set(catalogFactsSourceLayerAtom, live as CatalogSourceLayer)
     }),
 }
 
-type ForegroundSourceLayer = ReturnType<
-  (typeof shiftForegroundSourceLayers)["Ready"]
->
-
-const shiftForegroundAxis: LabStateAxis = {
+const shiftActiveGameAxis: LabStateAxis = {
   id: "foreground",
   kind: "single",
-  label: "Foreground",
-  liveLabel: "Auto",
+  label: "Active game",
+  liveLabel: "Live",
   states: axisOptionsFromTags(FOREGROUND_SESSION_GATE_STATE_TAGS),
-  pin: stateId => {
+  pin: (stateId, context) => {
     const make =
       shiftForegroundSourceLayers[
         stateId as keyof typeof shiftForegroundSourceLayers
       ]
     if (!make) return
     const layer = make()
-    eachLabSurfaceRegistry(({ registry }) =>
+    eachTargetRegistry(context, ({ registry }) =>
       registry.set(foregroundSessionStatusLayerAtom, layer),
     )
   },
-  release: () =>
-    eachLabSurfaceRegistry(({ registry, seed }) => {
+  release: context =>
+    eachTargetRegistry(context, ({ registry, seed }) => {
       const live = seed.get(foregroundSessionStatusLayerAtom)
       if (live !== undefined)
         registry.set(
@@ -78,7 +92,7 @@ const shiftForegroundAxis: LabStateAxis = {
 export function shiftAxesForScreen(
   screenPath: string,
 ): readonly LabStateAxis[] {
-  return screenPath === "/" ? [shiftDataAxis, shiftForegroundAxis] : []
+  return screenPath === "/" ? [shiftLibraryAxis, shiftActiveGameAxis] : []
 }
 
 export function shiftCaptureCoordinate(

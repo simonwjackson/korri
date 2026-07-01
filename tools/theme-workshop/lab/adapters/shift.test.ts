@@ -81,12 +81,14 @@ describe("shift home state axes", () => {
     return axis
   }
 
-  it("exposes Data and Foreground axes derived from product state", () => {
+  it("exposes Library and Active Game controls derived from product state", () => {
     const axes = home()
     expect(axes.map(axis => axis.id)).toEqual(["data", "foreground"])
 
     const data = homeAxis("data")
     const foreground = homeAxis("foreground")
+    expect(data.label).toBe("Library")
+    expect(foreground.label).toBe("Active game")
     expect(data.kind).toBe("single")
     expect(foreground.kind).toBe("single")
     expect(foreground.parent).toBeUndefined()
@@ -154,6 +156,58 @@ describe("shift home state axes", () => {
     } finally {
       unregister()
       registry.dispose()
+    }
+  })
+
+  it("scopes Library and Active Game state controls to one live device registry", () => {
+    const data = homeAxis("data")
+    const foreground = homeAxis("foreground")
+    const catalogSeed = loadingForeverCatalogFactsSourceLayer
+    const foregroundSeed = shiftForegroundSourceLayers.Ready()
+    const registryA = AtomRegistry.make({
+      initialValues: [
+        [catalogFactsSourceLayerAtom, catalogSeed],
+        [foregroundSessionStatusLayerAtom, foregroundSeed],
+      ],
+    })
+    const registryB = AtomRegistry.make({
+      initialValues: [
+        [catalogFactsSourceLayerAtom, catalogSeed],
+        [foregroundSessionStatusLayerAtom, foregroundSeed],
+      ],
+    })
+    const seed = new Map<Atom.Atom<unknown>, unknown>([
+      [catalogFactsSourceLayerAtom as Atom.Atom<unknown>, catalogSeed],
+      [foregroundSessionStatusLayerAtom as Atom.Atom<unknown>, foregroundSeed],
+    ])
+    const unregisterA = registerLabSurfaceRegistry({
+      scopeId: "device-a",
+      registry: registryA,
+      seed,
+    })
+    const unregisterB = registerLabSurfaceRegistry({
+      scopeId: "device-b",
+      registry: registryB,
+      seed,
+    })
+
+    try {
+      data.pin("Empty", { scopeId: "device-a" })
+      foreground.pin("Cooling", { scopeId: "device-a" })
+
+      expect(registryA.get(catalogFactsSourceLayerAtom)).not.toBe(catalogSeed)
+      expect(registryA.get(foregroundSessionStatusLayerAtom)).not.toBe(
+        foregroundSeed,
+      )
+      expect(registryB.get(catalogFactsSourceLayerAtom)).toBe(catalogSeed)
+      expect(registryB.get(foregroundSessionStatusLayerAtom)).toBe(
+        foregroundSeed,
+      )
+    } finally {
+      unregisterA()
+      unregisterB()
+      registryA.dispose()
+      registryB.dispose()
     }
   })
 

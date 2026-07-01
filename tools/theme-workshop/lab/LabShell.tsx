@@ -139,12 +139,16 @@ export function LabShell() {
   const [activeStateId, setActiveStateId] =
     useState<LabInputValue>(defaultStateId)
 
+  const selectedLiveObjectId = objects.find(
+    object => object.id === selectedObjectId && isLiveDeviceObject(object),
+  )?.id
+
   // The page-axis lifecycle — active screen's axes, the pinned/Live map, derived
   // Inspect/Live mode, pin/release side effects (incl. nested-axis release),
   // capture-back, and the release-on-selection-change cleanup — lives in a
   // focused controller so its ordering contract is in one place.
   const { screenAxes, activeByAxis, mode, pinAxis, liveAxis, pinCurrent } =
-    useLabAxisController(adapter)
+    useLabAxisController(adapter, selectedLiveObjectId)
   const screenInputs = useMemo(
     () => adapter.inputsForScreen?.(surfacePath) ?? [],
     [adapter, surfacePath],

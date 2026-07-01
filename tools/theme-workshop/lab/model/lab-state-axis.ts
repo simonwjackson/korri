@@ -49,6 +49,12 @@ export type LabScreenCoordinate = Readonly<
   Record<string, LabAxisCoordinate | undefined>
 >
 
+export interface LabStateAxisContext {
+  /** Canvas object that owns the mounted live device being edited. Omitted means
+   * the axis is intentionally applying to every mounted surface. */
+  readonly scopeId?: string
+}
+
 export interface LabStateAxis {
   readonly id: string
   readonly kind: LabAxisKind
@@ -56,10 +62,10 @@ export interface LabStateAxis {
   readonly liveLabel: string
   readonly states: readonly LabStateAxisOption[]
   readonly control?: LabInputControl
-  /** Pin the surface's preview singleton to this state's representative sample. */
-  readonly pin: (stateId: string) => void
+  /** Pin this real screen-state input to one representative state. */
+  readonly pin: (stateId: string, context?: LabStateAxisContext) => void
   /** Release every pin on this axis so the live machine drives it again. */
-  readonly release: () => void
+  readonly release: (context?: LabStateAxisContext) => void
   /** Structural nesting: this axis is meaningful only while the parent is in one
    * of these states (e.g. Launch only matters when Data = Ready). */
   readonly parent?: LabAxisParent

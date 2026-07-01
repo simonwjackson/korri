@@ -96,6 +96,38 @@ describe("useLabAxisController", () => {
     expect(result.current.mode).toBe("inspect")
   })
 
+  it("passes the selected live device id to axis pins and releases", () => {
+    const calls: string[] = []
+    const dataAxis: LabStateAxis = {
+      id: "data",
+      kind: "single",
+      label: "Library",
+      liveLabel: "Live",
+      states: [{ id: "Empty", label: "Empty" }],
+      pin: (tag, context) =>
+        calls.push(`data.pin:${tag}:${context?.scopeId ?? "all"}`),
+      release: context =>
+        calls.push(`data.release:${context?.scopeId ?? "all"}`),
+    }
+    const adapter: LabSurfaceAdapter = {
+      id: "test",
+      devices: [],
+      screens: [{ label: "Home", path: "/" }],
+      axesForScreen: () => [dataAxis],
+      makeSeedInitialValues: async () => ({}),
+      mountSurface: () => ({ router: {}, dispose: () => {} }),
+    }
+    const { result } = renderHook(() =>
+      useLabAxisController(adapter, "device-a"),
+    )
+
+    act(() => result.current.pinAxis("data", "Empty"))
+    act(() => result.current.liveAxis("data"))
+
+    expect(calls).toContain("data.pin:Empty:device-a")
+    expect(calls).toContain("data.release:device-a")
+  })
+
   it("adds multi axis states and clears them on Live", () => {
     const { adapter, calls } = makeAdapter()
     const { result } = renderHook(() => useLabAxisController(adapter))

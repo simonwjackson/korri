@@ -7,6 +7,7 @@ import {
   type LabAxisCoordinate,
   type LabScreenActive,
   type LabStateAxis,
+  type LabStateAxisContext,
   liveActiveMap,
   pinAxisActive,
   releaseAxisActive,
@@ -26,6 +27,8 @@ export interface LabAxisController {
   readonly toggleMode: () => void
 }
 
+const GLOBAL_AXIS_SCOPE = "__global__"
+
 function multiSetFromCoordinate(value: LabAxisCoordinate | undefined) {
   if (value?.kind !== "multi") return new Set<string>()
   return new Set(value.values.filter(state => state !== LAB_AXIS_LIVE))
@@ -43,28 +46,33 @@ function activeFromCoordinate(
   }
 }
 
-function applyPreview(axis: LabStateAxis, active: LabAxisActive) {
+function applyPreview(
+  axis: LabStateAxis,
+  active: LabAxisActive,
+  context: LabStateAxisContext,
+) {
   if (isAxisLive(active)) {
-    axis.release()
+    axis.release(context)
     return
   }
   if (active.kind === "single") {
-    axis.pin(active.value)
+    axis.pin(active.value, context)
     return
   }
-  axis.release()
-  for (const stateId of active.on) axis.pin(stateId)
+  axis.release(context)
+  for (const stateId of active.on) axis.pin(stateId, context)
 }
 
 /**
  * Owns the page-axis lifecycle for the lab: which screen's axes are active, the
- * per-axis pinned/Live map, the derived global Inspect/Live mode, and the
- * pin/release side effects against the surface's real state edges — including
- * nested-axis release and the release-on-selection-change cleanup. Kept out of
+ * per-axis pinned/Live map, the derived Inspect/Live mode, and the pin/release
+ * side effects against the selected live device's real state edges — including
+ * nested-axis release and the release-on-surface-change cleanup. Kept out of
  * LabShell so the ordering contract lives (and is tested) in one place.
  */
 export function useLabAxisController(
   adapter: LabSurfaceAdapter,
+  scopeId?: string,
 ): LabAxisController {
   // The surface's home screen (its first screen that exposes axes) is the live
   // target the axes drive.
@@ -84,11 +92,29 @@ export function useLabAxisController(
     [adapter, activeScreenPath],
   )
 
-  const [activeByAxis, setActiveByAxis] = useState<LabScreenActive>(() =>
-    liveActiveMap(screenAxes),
+  const scopeKey = scopeId ?? GLOBAL_AXIS_SCOPE
+  const axisContext = useMemo<LabStateAxisContext>(
+    () => (scopeId ? { scopeId } : {}),
+    [scopeId],
   )
+  const [activeByScope, setActiveByScope] = useState<
+    Readonly<Record<string, LabScreenActive | undefined>>
+  >({})
   // Pins remembered while in Live, so toggling back to Inspect restores them.
-  const [rememberedByAxis, setRememberedByAxis] = useState<LabScreenActive>({})
+  const [rememberedByScope, setRememberedByScope] = useState<
+    Readonly<Record<string, LabScreenActive | undefined>>
+  >({})
+  const activeByAxis = activeByScope[scopeKey] ?? liveActiveMap(screenAxes)
+  const rememberedByAxis = rememberedByScope[scopeKey] ?? {}
+
+  const setScopedActiveByAxis = (next: LabScreenActive) => {
+    setActiveByScope(prev => ({ ...prev, [scopeKey]: next }))
+  }
+
+  const setScopedRememberedByAxis = (next: LabScreenActive) => {
+    setRememberedByScope(prev => ({ ...prev, [scopeKey]: next }))
+  }
+
   // Mode is derived: any pinned axis ⇒ Inspect; everything Live ⇒ Live.
   const mode: "inspect" | "live" = screenAxes.some(
     axis => !isAxisLive(activeByAxis[axis.id]),
@@ -106,13 +132,13 @@ export function useLabAxisController(
       changed = false
       for (const axis of screenAxes) {
         if (!axisEnabled(axis, result) && !isAxisLive(result[axis.id])) {
-          axis.release()
+          axis.release(axisContext)
           result = releaseAxisActive(result, axis)
           changed = true
         }
       }
     }
-    setActiveByAxis(result)
+    setScopedActiveByAxis(result)
   }
 
   const pinAxis = (axisId: string, stateId: string) => {
@@ -126,17 +152,17 @@ export function useLabAxisController(
     ) {
       const next = releaseAxisActive(activeByAxis, axis, stateId)
       const active = next[axis.id]
-      if (active) applyPreview(axis, active)
+      if (active) applyPreview(axis, active, axisContext)
       applyAxisMap(next)
       return
     }
-    axis.pin(stateId)
+    axis.pin(stateId, axisContext)
     applyAxisMap(pinAxisActive(activeByAxis, axis, stateId))
   }
   const liveAxis = (axisId: string) => {
     const axis = screenAxes.find(candidate => candidate.id === axisId)
     if (!axis) return
-    axis.release()
+    axis.release(axisContext)
     applyAxisMap(releaseAxisActive(activeByAxis, axis))
   }
 
@@ -148,40 +174,39 @@ export function useLabAxisController(
     const next: Record<string, LabAxisActive | undefined> = { ...activeByAxis }
     for (const axis of screenAxes) {
       const active = activeFromCoordinate(axis, captured[axis.id])
-      applyPreview(axis, active)
+      applyPreview(axis, active, axisContext)
       next[axis.id] = active
     }
     applyAxisMap(next)
   }
 
-  // The global headline: Live releases every axis (hands the running app the
-  // wheel from the current coordinate, route preserved) and remembers the pins;
-  // Inspect re-applies them. "Go live from here" falls out for free.
+  // The headline: Live releases every axis for the selected live device and
+  // remembers those pins; Inspect re-applies them. "Go live from here" falls out
+  // for free.
   const toggleMode = () => {
     if (mode === "live") {
       for (const axis of screenAxes) {
         const remembered = rememberedByAxis[axis.id]
         if (remembered && !isAxisLive(remembered))
-          applyPreview(axis, remembered)
+          applyPreview(axis, remembered, axisContext)
       }
-      setActiveByAxis(
+      setScopedActiveByAxis(
         restorePinsActive(screenAxes, activeByAxis, rememberedByAxis),
       )
     } else {
-      setRememberedByAxis(activeByAxis)
-      for (const axis of screenAxes) axis.release()
-      setActiveByAxis(liveActiveMap(screenAxes))
+      setScopedRememberedByAxis(activeByAxis)
+      for (const axis of screenAxes) axis.release(axisContext)
+      setScopedActiveByAxis(liveActiveMap(screenAxes))
     }
   }
 
-  // Release the active axis pins whenever the surface (and thus its axis set)
-  // changes, so a pin can never leak onto a surface where it has no visible
-  // release control. axes is recomputed from the deps (not the screenAxes memo)
-  // so the effect only re-runs on a real axis-set change.
+  // Release pins whenever the surface (and thus its axis set) changes, so a pin
+  // can never leak onto a surface where it has no visible release control. This
+  // is intentionally global: a surface switch tears down the mounted workspace.
   useLayoutEffect(() => {
     const axes = adapter.axesForScreen?.(activeScreenPath) ?? []
-    setActiveByAxis(liveActiveMap(axes))
-    setRememberedByAxis({})
+    setActiveByScope({})
+    setRememberedByScope({})
     return () => {
       for (const axis of axes) axis.release()
     }
