@@ -162,6 +162,8 @@ function renderInspector({
   onBindInput = mock(() => undefined),
   adapterOverride,
   storyMeta,
+  events,
+  onEmitEvent,
 }: {
   readonly story: Story
   readonly object?: LabObjectInstance
@@ -176,6 +178,8 @@ function renderInspector({
   ) => void
   readonly adapterOverride?: LabSurfaceAdapter
   readonly storyMeta?: import("../design-pass/design-pass-model").LabDesignPassStoryMeta
+  readonly events?: readonly import("../surface-registry").LabSurfaceEvent[]
+  readonly onEmitEvent?: (eventId: string, payload: unknown) => void
 }) {
   render(
     <LabContext.Provider value={context(adapterOverride)}>
@@ -188,8 +192,10 @@ function renderInspector({
           { id: "dev", label: "Dev" },
           { id: "cozy", label: "Cozy" },
         ]}
+        events={events}
         onBind={onBind}
         onBindInput={onBindInput}
+        onEmitEvent={onEmitEvent}
       />
     </LabContext.Provider>,
   )
@@ -241,6 +247,43 @@ describe("LabObjectInspector", () => {
       "foreground",
       "Running",
     )
+  })
+
+  it("renders part-scoped events with a Send action for a placed part", () => {
+    const emitted: { eventId: string; payload: unknown }[] = []
+    renderInspector({
+      story: homeReady,
+      events: [
+        {
+          id: "battery",
+          label: "Battery",
+          payload: {
+            kind: "object",
+            fields: [
+              {
+                id: "percent",
+                label: "Battery",
+                defaultValue: 80,
+                control: { kind: "range", min: 0, max: 100, step: 1 },
+              },
+            ],
+          },
+          defaultPayload: { percent: 80 },
+          emit: () => undefined,
+        },
+      ],
+      onEmitEvent: (eventId, payload) => emitted.push({ eventId, payload }),
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Battery event" }))
+
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0]?.eventId).toBe("battery")
+  })
+
+  it("shows no events section when the part consumes none", () => {
+    renderInspector({ story: homeReady })
+    expect(screen.queryByText("Events")).toBeNull()
   })
 
   it("omits input controls for a stateless atom", () => {

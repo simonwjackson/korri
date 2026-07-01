@@ -175,6 +175,11 @@ export interface LabSurfaceAdapter {
    * discovered variant family, e.g. Shift Home Foreground. The adapter filters by
    * story so unrelated pages/parts do not show controls they cannot consume. */
   readonly surfacePartInputs?: (story: Story) => readonly LabSurfacePartInput[]
+  /** Discrete device events a PART's real subtree consumes, keyed by story —
+   * the part-scoped counterpart of `eventsForScreen`. Devices inherit their
+   * events from the page part their screen composes (see
+   * model/lab-part-edges.ts); parts fire them into their own scoped registry. */
+  readonly surfacePartEvents?: (story: Story) => readonly LabSurfaceEvent[]
   readonly sources?: readonly LabSourceOption[]
   readonly states?: readonly LabInputOption[]
   readonly makeSeedInitialValues: () => Promise<unknown>

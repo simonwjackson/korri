@@ -52,6 +52,11 @@ import {
   resolveObjectInputValues,
 } from "./model/lab-object-inputs"
 import {
+  deviceEventsForScreen,
+  emitScopedEvent,
+  partEventsForStory,
+} from "./model/lab-part-edges"
+import {
   buildStoryIndex,
   firstStateFamilyStory,
   partLabel,
@@ -264,9 +269,12 @@ export function LabShell() {
     () => adapter.inputsForScreen?.(surfacePath) ?? [],
     [adapter, surfacePath],
   )
+  // A live device inherits its events from the page part its screen composes;
+  // the legacy screen-scoped declaration is only the fallback for surfaces
+  // that have not migrated to part-scoped edges.
   const screenEvents = useMemo(
-    () => adapter.eventsForScreen?.(surfacePath) ?? [],
-    [adapter, surfacePath],
+    () => deviceEventsForScreen(adapter, surfacePath, index.byId.values()),
+    [adapter, surfacePath, index],
   )
   const presentation = userPresentation ?? autoPresentation
   const choosePresentation = (next: LabPresentation) => {
@@ -295,14 +303,7 @@ export function LabShell() {
     eventId: string,
     payload: LabInputValue,
   ) => {
-    const event = screenEvents.find(candidate => candidate.id === eventId)
-    if (!event) return
-    const canonical = canonicalInputValue(
-      payload,
-      event.payload,
-      event.defaultPayload,
-    )
-    event.emit(canonical, { scopeId: deviceObjectId })
+    emitScopedEvent(screenEvents, deviceObjectId, eventId, payload)
   }
 
   // Follow the viewport so the default position tracks the screen until the
@@ -633,6 +634,16 @@ export function LabShell() {
       ),
     ]),
   )
+  // Part-scoped events for the selected placed part / picked inner part: the
+  // part exposes what its real subtree consumes; firing dispatches into the
+  // OWNING object's registered registry (a placed part's own scope, or the
+  // live device a picked part lives inside).
+  const selectedObjectEvents = selectedObjectStory
+    ? partEventsForStory(selectedObjectStory, adapter)
+    : []
+  const previewEvents = selectedPreviewStory
+    ? partEventsForStory(selectedPreviewStory, adapter)
+    : []
   const changePreviewInput = (inputId: string, value: LabInputValue) => {
     if (selectedPreviewPlacedObject) {
       bindObjectInputValue(selectedPreviewPlacedObject.id, inputId, value)
@@ -669,12 +680,21 @@ export function LabShell() {
         story={selectedPreviewStory}
         inputs={previewInputs}
         inputValues={previewInputValues}
+        events={previewEvents}
         scopeNote={
           selectedPreviewLiveObject
             ? "Editing this live device's real inputs."
             : "Editing this placed object's inputs."
         }
         onInputChange={changePreviewInput}
+        onEmitEvent={(eventId, payload) =>
+          emitScopedEvent(
+            previewEvents,
+            previewSelection.scopeId,
+            eventId,
+            payload,
+          )
+        }
         onSelectTargetIndex={choosePreviewTargetIndex}
         onClearSelection={clearPreviewSelection}
       />
@@ -711,8 +731,17 @@ export function LabShell() {
         storyMeta={index.designPassMetaById.get(selectedObjectStory.id)}
         byId={index.byId}
         sources={sources}
+        events={selectedObjectEvents}
         onBind={bindObject}
         onBindInput={bindObjectInputValue}
+        onEmitEvent={(eventId, payload) =>
+          emitScopedEvent(
+            selectedObjectEvents,
+            selectedPlacedObject.id,
+            eventId,
+            payload,
+          )
+        }
       />
     ) : (
       <div className="pt-inspector">

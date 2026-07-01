@@ -5,7 +5,8 @@ import type {
   LabPreviewSelection,
 } from "../model/lab-preview-selection"
 import type { LabInputValue } from "../model/lab-source-state"
-import type { LabSurfacePartInput } from "../surface-registry"
+import type { LabSurfaceEvent, LabSurfacePartInput } from "../surface-registry"
+import { LabDeviceEvents } from "./LabDeviceEvents"
 
 function targetLabel(target: LabPreviewPartTarget): string {
   return target.instanceId
@@ -18,8 +19,10 @@ export function LabPreviewInspector({
   story,
   inputs,
   inputValues,
+  events = [],
   scopeNote,
   onInputChange,
+  onEmitEvent,
   onSelectTargetIndex,
   onClearSelection,
 }: {
@@ -27,8 +30,11 @@ export function LabPreviewInspector({
   readonly story: Story | null
   readonly inputs: readonly LabSurfacePartInput[]
   readonly inputValues: Readonly<Record<string, LabInputValue>>
+  /** Part-scoped device events the picked part's real subtree consumes. */
+  readonly events?: readonly LabSurfaceEvent[]
   readonly scopeNote: string
   readonly onInputChange: (inputId: string, value: LabInputValue) => void
+  readonly onEmitEvent?: (eventId: string, payload: LabInputValue) => void
   readonly onSelectTargetIndex: (index: number) => void
   readonly onClearSelection: () => void
 }) {
@@ -83,7 +89,10 @@ export function LabPreviewInspector({
             onChange={value => onInputChange(input.id, value)}
           />
         ))}
-        {inputs.length === 0 ? (
+        {events.length > 0 && onEmitEvent ? (
+          <LabDeviceEvents events={events} onEmit={onEmitEvent} />
+        ) : null}
+        {inputs.length === 0 && events.length === 0 ? (
           <div className="pt-sources-hint">
             No real inputs are exposed for this part yet.
           </div>

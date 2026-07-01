@@ -11,6 +11,8 @@ import {
   resolveObjectInputValues,
 } from "../model/lab-object-inputs"
 import type { LabInputValue, LabSourceOption } from "../model/lab-source-state"
+import type { LabSurfaceEvent } from "../surface-registry"
+import { LabDeviceEvents } from "./LabDeviceEvents"
 
 /**
  * Inspector scoped to the selected Compose object. Its bindings — data source
@@ -24,14 +26,18 @@ export function LabObjectInspector({
   storyMeta,
   byId,
   sources,
+  events = [],
   onBind,
   onBindInput,
+  onEmitEvent,
 }: {
   readonly instance: LabObjectInstance
   readonly story: Story
   readonly storyMeta?: LabDesignPassStoryMeta
   readonly byId: ReadonlyMap<string, Story>
   readonly sources: readonly LabSourceOption[]
+  /** Part-scoped device events this part's real subtree consumes. */
+  readonly events?: readonly LabSurfaceEvent[]
   readonly onBind: (
     id: string,
     patch: Partial<Pick<LabObjectInstance, "sourceId">>,
@@ -41,6 +47,7 @@ export function LabObjectInspector({
     inputId: string,
     value: LabInputValue,
   ) => void
+  readonly onEmitEvent?: (eventId: string, payload: LabInputValue) => void
 }) {
   const { adapter } = useLab()
   const inputs = objectInputsForStory(story, byId, adapter)
@@ -99,6 +106,9 @@ export function LabObjectInspector({
             onChange={next => onBindInput(instance.id, input.id, next)}
           />
         ))}
+        {events.length > 0 && onEmitEvent ? (
+          <LabDeviceEvents events={events} onEmit={onEmitEvent} />
+        ) : null}
       </div>
     </div>
   )

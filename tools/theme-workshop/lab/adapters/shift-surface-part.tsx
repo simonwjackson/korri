@@ -115,15 +115,15 @@ function ShiftHomeFromEdge() {
   return <ShiftHomeStateView result={result} foreground={foreground} />
 }
 
-function isShiftHomeStory(story: Story): boolean {
+export function isShiftHomeStory(story: Story): boolean {
   return story.layer === "page" && story.name === "Home"
 }
 
-function isShiftBatteryStory(story: Story): boolean {
+export function isShiftBatteryStory(story: Story): boolean {
   return story.layer === "atom" && story.name === "Battery"
 }
 
-function isShiftStatusBarStory(story: Story): boolean {
+export function isShiftStatusBarStory(story: Story): boolean {
   return story.layer === "molecule" && story.name === "Status Bar"
 }
 

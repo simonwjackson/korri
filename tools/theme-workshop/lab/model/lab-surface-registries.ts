@@ -51,6 +51,19 @@ export function eachLabSurfaceRegistryForScope(
   }
 }
 
+/** Run against one scope's registries when scoped, or every mounted registry
+ * when unscoped — the shared dispatch shape for inputs, events, and axes. */
+export function eachLabTargetRegistry(
+  scopeId: string | undefined,
+  run: (entry: LabSurfaceRegistryEntry) => void,
+): void {
+  if (scopeId !== undefined) {
+    eachLabSurfaceRegistryForScope(scopeId, run)
+    return
+  }
+  eachLabSurfaceRegistry(run)
+}
+
 /** Drop every entry. Test-only cleanup; real entries unregister on unmount. */
 export function clearLabSurfaceRegistries(): void {
   entries.clear()
