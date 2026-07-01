@@ -8,7 +8,7 @@ test-results/
 .tanstack/
 .fallow/
 .pi/git/
-/tools/theme-workshop/.state/
+.lab/
 
 .env
 .env.*

@@ -3,8 +3,9 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
-const repoRoot = new URL("../../../", import.meta.url).pathname
-const surfaceStateDir = new URL("../.state/surfaces/", import.meta.url)
+const repoRootUrl = new URL("../../../", import.meta.url)
+const repoRoot = repoRootUrl.pathname
+const surfaceStateRoot = new URL(".lab/", repoRootUrl)
 
 // Same server-side key injection as the portal + theme-workshop, so surfaces
 // that load SteamGridDB/Steam art (e.g. boxbuster) work when hosted in the lab.
@@ -57,7 +58,7 @@ function labSurfaceStatePlugin() {
         }
 
         const surfaceId = match[1]
-        const file = new URL(`${surfaceId}.json`, surfaceStateDir)
+        const file = new URL(`${surfaceId}/state.json`, surfaceStateRoot)
 
         if (request.method === "GET") {
           try {
@@ -85,7 +86,7 @@ function labSurfaceStatePlugin() {
             response.end("Invalid JSON")
             return
           }
-          await mkdir(surfaceStateDir, { recursive: true })
+          await mkdir(new URL("./", file), { recursive: true })
           await writeFile(file, `${body.trim()}\n`, "utf8")
           response.statusCode = 204
           response.end()
