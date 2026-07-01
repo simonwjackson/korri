@@ -236,9 +236,9 @@ async function dispatchSessiondTerminateActive(options: {
   if (status.kind !== "ok") {
     options.logger.warn(
       { status },
-      "inputd kill-current-game failed; sessiond status unavailable",
+      "inputd kill-current-game failed; falling back to kill file",
     )
-    return true
+    return false
   }
 
   const active = status.status.active

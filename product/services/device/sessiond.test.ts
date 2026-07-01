@@ -425,6 +425,37 @@ describe("korri sessiond", () => {
     expect(roleEvents).toEqual(["toggle-home"])
   })
 
+  it("does not advertise Home lane toggle while the role reports unavailable", async () => {
+    const { core } = startHarness({
+      role: {
+        id: "kiosk-lanes",
+        idleModeLabel: "home",
+        idleReadyEventName: "home-ready",
+        emitsRendererStopped: false,
+        enterIdle: async () => {},
+        leaveIdle: async () => {},
+        beforeChildLaunch: async () => {},
+        afterChildRunning: async () => {},
+        restoreIdleAfterLaunch: async () => {},
+        reconcileIdle: async () => {},
+        homeToggleAvailable: () => false,
+        toggleHome: async () => ({ status: "focused-hub" }),
+        idleReadyEvidence: () => "home-invariant windows=1 satisfied",
+        rendererStatus: () => ({ kind: "test-renderer", pid: 101 }),
+      },
+    })
+
+    const statusResponse = await request(core, "/managed-launch/status")
+    const status = await statusResponse.json()
+    expect(status.capabilities.laneToggle).toBeUndefined()
+
+    const response = await request(core, "/managed-launch/home-toggle", {
+      method: "POST",
+    })
+
+    expect(await response.json()).toEqual({ status: "unsupported" })
+  })
+
   it("reports unsupported Home lane toggle when the role has no lane capability", async () => {
     const { core } = startHarness()
 

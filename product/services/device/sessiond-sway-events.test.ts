@@ -140,9 +140,61 @@ describe("sessiond Sway IPC event decoder", () => {
         payload: JSON.stringify({ change: "new", container: { id: 88 } }),
       }),
     )
+    await new Promise(resolve => setTimeout(resolve, 0))
 
     expect(events).toEqual([
       { kind: "window", change: "new", container: { id: 88 } },
+    ])
+  })
+
+  it("serializes async event handlers instead of interleaving Sway events", async () => {
+    const written: Uint8Array[] = []
+    let pushData: ((data: Uint8Array) => void) | undefined
+    const order: string[] = []
+    let releaseFirst: (() => void) | undefined
+    const firstBlocked = new Promise<void>(resolve => {
+      releaseFirst = resolve
+    })
+    const source = createSessiondSwayEventSource({
+      socketPath: "/run/user/1000/sway-ipc.sock",
+      connector: async ({ onData }) => {
+        pushData = onData
+        return {
+          write: data => written.push(data),
+          close: () => {},
+        }
+      },
+      onEvent: async event => {
+        order.push(`start:${event.kind}`)
+        if (order.length === 1) await firstBlocked
+        order.push(`end:${event.kind}`)
+      },
+    })
+
+    await source.start()
+    pushData?.(
+      new Uint8Array([
+        ...encodeSwayIpcFrameForTest({
+          messageType: SWAY_IPC_EVENT_TYPE.window,
+          payload: JSON.stringify({ change: "new", container: { id: 1 } }),
+        }),
+        ...encodeSwayIpcFrameForTest({
+          messageType: SWAY_IPC_EVENT_TYPE.window,
+          payload: JSON.stringify({ change: "close", container: { id: 1 } }),
+        }),
+      ]),
+    )
+
+    await Promise.resolve()
+    expect(order).toEqual(["start:window"])
+    releaseFirst?.()
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(order).toEqual([
+      "start:window",
+      "end:window",
+      "start:window",
+      "end:window",
     ])
   })
 

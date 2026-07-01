@@ -271,7 +271,9 @@ export function createKorriSessiondCore(
         // session-anchored peers. Phase 4B clients omitting the
         // field still negotiate to foreground correctly.
         sessionLifecycle: true,
-        ...(role.toggleHome ? { laneToggle: true } : {}),
+        ...(role.toggleHome && (role.homeToggleAvailable?.() ?? true)
+          ? { laneToggle: true }
+          : {}),
       },
     })
   }
@@ -1020,7 +1022,8 @@ export function createKorriSessiondCore(
           request.method === "POST" &&
           url.pathname === "/managed-launch/home-toggle"
         ) {
-          if (!role.toggleHome) return json({ status: "unsupported" })
+          if (!role.toggleHome || role.homeToggleAvailable?.() === false)
+            return json({ status: "unsupported" })
           return json(await role.toggleHome())
         }
         if (
@@ -1394,6 +1397,7 @@ async function main() {
                   "korri:game:active",
               },
             })
+            let laneToggleAvailable = false
             const socketPath = discoverSwaySocketPath()
             if (socketPath) {
               swayEventSource = createSessiondSwayEventSource({
@@ -1407,12 +1411,16 @@ async function main() {
               })
               void swayEventSource
                 .start()
-                .catch(error =>
+                .then(() => {
+                  laneToggleAvailable = true
+                })
+                .catch(error => {
+                  laneToggleAvailable = false
                   defaultLogger.warn(
                     { err: error },
                     "sessiond Sway event source failed to start",
-                  ),
-                )
+                  )
+                })
             } else {
               defaultLogger.warn(
                 {},
@@ -1427,6 +1435,7 @@ async function main() {
               }),
               serviceManager: realServiceManager(),
               laneController,
+              laneToggleAvailable: () => laneToggleAvailable,
             })
           })()
         : undefined

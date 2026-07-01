@@ -98,6 +98,12 @@ export function createKorriLaneController(options: {
       }
 
       if (activePlace === "hub" && isLiveGame()) {
+        if (!(await trackedGameWindowStillExists())) {
+          gameStatus = "exited"
+          gameWindowId = undefined
+          await focusHubInternal()
+          return { status: "no-live-game" }
+        }
         await focusWorkspace(lanes.game)
         activePlace = "game"
         gameStatus = "live-active"
@@ -175,13 +181,24 @@ export function createKorriLaneController(options: {
   }
 
   async function validateGamePlacement(windowId: number) {
-    const raw = await options.runner.run(["-t", "get_tree"])
-    const tree = JSON.parse(raw) as SwayNode
-    const found = findWindowInWorkspace(tree, windowId, lanes.game)
+    const found = await readGameWindow(windowId)
     if (!found) throw new Error("game lane placement was not observed")
     if (!found.focused) throw new Error("game lane focus was not observed")
     if ((found.fullscreen_mode ?? 0) <= 0)
       throw new Error("game lane fullscreen was not observed")
+  }
+
+  async function trackedGameWindowStillExists(): Promise<boolean> {
+    if (gameWindowId === undefined) return false
+    return (await readGameWindow(gameWindowId)) !== undefined
+  }
+
+  async function readGameWindow(
+    windowId: number,
+  ): Promise<SwayNode | undefined> {
+    const raw = await options.runner.run(["-t", "get_tree"])
+    const tree = JSON.parse(raw) as SwayNode
+    return findWindowInWorkspace(tree, windowId, lanes.game)
   }
 
   async function focusHubInternal() {

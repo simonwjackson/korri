@@ -109,6 +109,14 @@ describe("Korri workspace lane controller", () => {
       activePlace: "hub",
       game: { status: "live-backgrounded" },
     })
+    trees.push(
+      treeWithWindow({
+        id: 42,
+        workspace: GAME,
+        focused: false,
+        fullscreen: true,
+      }),
+    )
 
     expect(await controller.toggleHome()).toEqual({ status: "focused-game" })
     expect(snapshot(controller)).toMatchObject({
@@ -117,7 +125,39 @@ describe("Korri workspace lane controller", () => {
     })
     expect(calls).toEqual([
       [`workspace ${JSON.stringify(HUB)}`],
+      ["-t", "get_tree"],
       [`workspace ${JSON.stringify(GAME)}`],
+    ])
+  })
+
+  it("fails closed to hub when cached game state is stale", async () => {
+    const { controller, calls, trees } = makeController()
+    trees.push(
+      treeWithWindow({
+        id: 42,
+        workspace: GAME,
+        focused: true,
+        fullscreen: true,
+      }),
+    )
+    controller.beginLaunch({ launchId: "launch-1" })
+    await controller.handleSwayEvent({
+      kind: "window",
+      change: "new",
+      container: { id: 42 },
+    })
+    await controller.toggleHome()
+    calls.length = 0
+    trees.push({ id: 1, type: "root", nodes: [] })
+
+    expect(await controller.toggleHome()).toEqual({ status: "no-live-game" })
+    expect(snapshot(controller)).toMatchObject({
+      activePlace: "hub",
+      game: { status: "exited" },
+    })
+    expect(calls).toEqual([
+      ["-t", "get_tree"],
+      [`workspace ${JSON.stringify(HUB)}`],
     ])
   })
 

@@ -108,6 +108,25 @@ describe("inputd actions", () => {
     })
   })
 
+  it("falls back to the kill file when configured sessiond is unavailable", async () => {
+    const dir = await tempDir()
+    const killFilePath = join(dir, "process-kill-data")
+    await writeFile(killFilePath, "retroarch\n")
+    const { dispatcher, commands, warnings } = createHarness({
+      sessiond: {
+        socketPath: "/run/user/1000/korri/sessiond.sock",
+        fetchImpl: async () => {
+          throw new Error("connection refused")
+        },
+      },
+    })
+
+    await dispatcher.dispatch("kill-current-game", { killFilePath })
+
+    expect(commands).toEqual([{ command: "killall", args: ["retroarch"] }])
+    expect(warnings).toHaveLength(1)
+  })
+
   it("falls back to the kill file when sessiond has no active launch", async () => {
     const dir = await tempDir()
     const killFilePath = join(dir, "process-kill-data")

@@ -155,6 +155,9 @@ export interface SessionRole {
   /** Optional Home button lane toggle. Roles without it use legacy fallback. */
   toggleHome?: () => Promise<SessiondManagedLaunchHomeToggleResponse>
 
+  /** Whether the optional Home lane toggle is currently safe to advertise/use. */
+  homeToggleAvailable?: () => boolean
+
   /**
    * Structured diagnostic evidence for the terminal readiness event.
    * Existing wire output stays string-shaped via `idleReadyEvidence`;
@@ -180,6 +183,7 @@ export interface KioskSessionRoleDeps {
 
 export interface LaneAwareKioskSessionRoleDeps extends KioskSessionRoleDeps {
   readonly laneController: KorriLaneController
+  readonly laneToggleAvailable?: () => boolean
 }
 
 /**
@@ -357,16 +361,22 @@ export function createLaneAwareKioskSessionRole(
       rendererPid = undefined
       await deps.serviceManager.restoreEssway()
     },
-    beforeChildLaunch: async () => {},
-    afterChildRunning: async () => {
+    beforeChildLaunch: async () => {
       deps.laneController.beginLaunch({ launchId: "managed-launch" })
     },
+    afterChildRunning: async () => {},
     restoreIdleAfterLaunch: async () => {
       await deps.laneController.focusHub()
       await reconcile()
     },
     reconcileIdle: reconcile,
-    toggleHome: deps.laneController.toggleHome,
+    homeToggleAvailable: deps.laneToggleAvailable,
+    toggleHome: async () => {
+      if (deps.laneToggleAvailable && !deps.laneToggleAvailable()) {
+        return { status: "unsupported" }
+      }
+      return await deps.laneController.toggleHome()
+    },
     idleReadyOutcome: () => ({
       status: "ok",
       evidence: { kind: "home-invariant", ...lastReconcile },

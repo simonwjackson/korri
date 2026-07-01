@@ -318,7 +318,7 @@ describe("lane-aware kiosk session role", () => {
     expect(role.rendererStatus().pid).toBe(101)
   })
 
-  it("promotes the active child through the lane controller", async () => {
+  it("starts lane capture before the child is spawned", async () => {
     const { renderer } = makeRecordingRenderer()
     const { sway } = makeSway([{ id: 101, focused: true, fullscreen: true }])
     const { serviceManager } = makeServiceManager()
@@ -330,9 +330,28 @@ describe("lane-aware kiosk session role", () => {
       laneController,
     })
 
+    await role.beforeChildLaunch()
     await role.afterChildRunning({ command: "/bin/game", args: [] })
 
     expect(events).toEqual(["begin:managed-launch"])
+  })
+
+  it("returns unsupported Home toggle while lane events are unavailable", async () => {
+    const { renderer } = makeRecordingRenderer()
+    const { sway } = makeSway([{ id: 101, focused: true, fullscreen: true }])
+    const { serviceManager } = makeServiceManager()
+    const { laneController, events } = makeLaneController()
+    const role = createLaneAwareKioskSessionRole({
+      renderer,
+      sway,
+      serviceManager,
+      laneController,
+      laneToggleAvailable: () => false,
+    })
+
+    expect(role.homeToggleAvailable?.()).toBe(false)
+    expect(await role.toggleHome?.()).toEqual({ status: "unsupported" })
+    expect(events).toEqual([])
   })
 
   it("restores by focusing hub and reconciling without relaunching an existing renderer", async () => {

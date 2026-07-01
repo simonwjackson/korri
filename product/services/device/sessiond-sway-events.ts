@@ -187,9 +187,19 @@ export function createSessiondSwayEventSource(options: {
   readonly onDiagnostic?: (diagnostic: SessiondSwayEventDiagnostic) => void
 }): SessiondSwayEventSource {
   let socket: SessiondSwayIpcSocket | undefined
+  let eventQueue: Promise<void> = Promise.resolve()
   const decoder = createSwayIpcFrameDecoder({
     onEvent: event => {
-      void options.onEvent(event)
+      eventQueue = eventQueue
+        .then(async () => {
+          await options.onEvent(event)
+        })
+        .catch(error => {
+          options.onDiagnostic?.({
+            message: "Sway IPC event handler failed",
+            error,
+          })
+        })
     },
     onDiagnostic: options.onDiagnostic,
   })
