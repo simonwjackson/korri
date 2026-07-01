@@ -32,13 +32,13 @@ const knownOnly: PlayableLibraryEntry = {
 }
 
 describe("LaunchState", () => {
-  it("maps successful launch exits to Launched", () => {
+  it("maps successful launch exits to Accepted request feedback", () => {
     expect(
       LaunchState.fromExit(
         "crystalline-drift",
         Exit.succeed({ status: "launched" }),
       ),
-    ).toEqual({ _tag: "Launched", gameId: "crystalline-drift" })
+    ).toEqual({ _tag: "Accepted", gameId: "crystalline-drift" })
   })
 
   it("maps failed launch data to Failed", () => {

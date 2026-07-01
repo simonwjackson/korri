@@ -82,7 +82,7 @@ function withLayers({
 }
 
 describe("useLibraryLaunchController", () => {
-  it("transitions Idle → Launching → Launched for a single-release playable", async () => {
+  it("transitions Idle → Launching → Accepted for a single-release playable", async () => {
     const { result } = renderHook(() => useLibraryLaunchController(), {
       wrapper: withLayers(),
     })
@@ -95,7 +95,7 @@ describe("useLibraryLaunchController", () => {
 
     await waitFor(() => {
       expect(result.current.state).toEqual({
-        _tag: "Launched",
+        _tag: "Accepted",
         gameId: game.id,
       })
     })
@@ -124,7 +124,7 @@ describe("useLibraryLaunchController", () => {
 
     await waitFor(() => {
       expect(result.current.state).toEqual({
-        _tag: "Launched",
+        _tag: "Accepted",
         gameId: "sonic-the-hedgehog",
       })
     })
@@ -139,7 +139,7 @@ describe("useLibraryLaunchController", () => {
 
     await waitFor(() => {
       expect(result.current.state).toEqual({
-        _tag: "Launched",
+        _tag: "Accepted",
         gameId: "super-mario-advance-2/super-mario-world",
       })
     })

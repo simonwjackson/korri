@@ -19,6 +19,7 @@
  */
 import type { LaunchState } from "@platform/library/launch-state"
 import { useInputAction } from "@platform/react/input/use-input-action"
+import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { launchStatusView } from "../launch-failure-copy"
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
@@ -111,8 +112,10 @@ export interface ShiftCinematicHomeProps {
   /** Launch the focused game. The real host wires this to the launch
    * controller; the standalone prototype omits it (focus-only). */
   readonly onLaunch?: (gameId: string) => void
-  /** Live launch lifecycle for the in-scene feedback. Omit/Idle = normal hero. */
+  /** Local launch-request feedback. Omit/Idle/Accepted = normal hero unless the foreground session is running. */
   readonly launchState?: LaunchState
+  /** Authoritative foreground-session state; Running owns the Now Playing presentation. */
+  readonly foregroundState?: ForegroundSessionGateState
   /** Retry the failed launch (A while a failure is shown). */
   readonly onRetry?: () => void
   /** Dismiss the launch feedback and return to browsing (B). */
@@ -128,6 +131,7 @@ export function ShiftCinematicHome({
   onGameFocus,
   onLaunch,
   launchState,
+  foregroundState,
   onRetry,
   onDismiss,
 }: ShiftCinematicHomeProps) {
@@ -202,7 +206,10 @@ export function ShiftCinematicHome({
   // The scene reacts to the launch lifecycle in place — no modal. When a status
   // is showing, the hero + legend morph and the buttons remap (A = Retry / B =
   // Back); otherwise A launches the focused game.
-  const status = useMemo(() => launchStatusView(launchState), [launchState])
+  const status = useMemo(
+    () => launchStatusView(launchState, foregroundState),
+    [launchState, foregroundState],
+  )
   const showActions =
     status?.tone === "failed" || status?.tone === "unavailable"
 

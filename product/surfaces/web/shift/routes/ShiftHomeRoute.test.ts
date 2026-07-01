@@ -48,7 +48,7 @@ describe("shiftLaunchStateForForeground", () => {
     })
   })
 
-  it("lets foreground busy feedback override retryable failure feedback", () => {
+  it("lets non-running foreground busy feedback override retryable failure feedback", () => {
     expect(
       shiftLaunchStateForForeground({
         launch: {
@@ -57,11 +57,7 @@ describe("shiftLaunchStateForForeground", () => {
           exitCode: 1,
           failureKind: "command-failed",
         },
-        foreground: {
-          _tag: "Running",
-          requestId: "req-1",
-          gameId: "game-1",
-        },
+        foreground: { _tag: "Cooling", state: "VerifyingReady" },
       }),
     ).toMatchObject({
       _tag: "Failed",
@@ -70,7 +66,7 @@ describe("shiftLaunchStateForForeground", () => {
     })
   })
 
-  it("lets foreground busy feedback override release selection feedback", () => {
+  it("lets non-running foreground busy feedback override release selection feedback", () => {
     expect(
       shiftLaunchStateForForeground({
         launch: {
@@ -78,11 +74,7 @@ describe("shiftLaunchStateForForeground", () => {
           gameId: "game-1",
           releaseIds: ["a", "b"],
         },
-        foreground: {
-          _tag: "Running",
-          requestId: "req-1",
-          gameId: "other-game",
-        },
+        foreground: { _tag: "Cooling", state: "VerifyingReady" },
       }),
     ).toMatchObject({
       _tag: "Failed",
@@ -100,29 +92,25 @@ describe("shiftLaunchStateForForeground", () => {
     ).toBe("Idle")
   })
 
-  it("preserves successful launch feedback while foreground is running", () => {
+  it("preserves accepted request feedback while foreground is running", () => {
     expect(
       shiftLaunchStateForForeground({
-        launch: { _tag: "Launched", gameId: "game-1" },
+        launch: { _tag: "Accepted", gameId: "game-1" },
         foreground: {
           _tag: "Running",
           requestId: "req-1",
           gameId: "game-1",
         },
       })._tag,
-    ).toBe("Launched")
+    ).toBe("Accepted")
   })
 })
 
 describe("visibleShiftLaunchState", () => {
-  it("does not let dismiss hide an active foreground block", () => {
+  it("does not let dismiss hide an active non-running foreground block", () => {
     const visible = visibleShiftLaunchState({
       launch: LaunchState.idle,
-      foreground: {
-        _tag: "Running",
-        requestId: "req-1",
-        gameId: "game-1",
-      },
+      foreground: { _tag: "Cooling", state: "VerifyingReady" },
       acked: true,
     })
     expect(visible._tag).toBe("Failed")
@@ -137,6 +125,15 @@ describe("visibleShiftLaunchState", () => {
       },
       foreground: { _tag: "Ready" },
       acked: true,
+    })
+    expect(visible._tag).toBe("Idle")
+  })
+
+  it("clears accepted request feedback when foreground returns ready", () => {
+    const visible = visibleShiftLaunchState({
+      launch: { _tag: "Accepted", gameId: "game-1" },
+      foreground: { _tag: "Ready" },
+      acked: false,
     })
     expect(visible._tag).toBe("Idle")
   })

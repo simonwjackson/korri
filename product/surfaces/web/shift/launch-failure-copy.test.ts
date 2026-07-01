@@ -7,13 +7,18 @@ describe("launchStatusView", () => {
     expect(launchStatusView(undefined)).toBeNull()
   })
 
-  it("maps the launching and launched stages", () => {
+  it("maps launch request and foreground runtime stages separately", () => {
     expect(launchStatusView({ _tag: "Launching", gameId: "g" })).toMatchObject({
       tone: "launching",
       canRetry: false,
     })
-    expect(launchStatusView({ _tag: "Launched", gameId: "g" })).toMatchObject({
+    expect(launchStatusView({ _tag: "Accepted", gameId: "g" })).toBeNull()
+    expect(
+      launchStatusView({ _tag: "Accepted", gameId: "g" }, { _tag: "Running" }),
+    ).toMatchObject({
       tone: "launched",
+      kicker: "Now playing",
+      canRetry: false,
     })
   })
 

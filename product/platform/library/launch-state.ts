@@ -63,7 +63,7 @@ export type LaunchState =
       readonly releaseId?: string
     }
   | { readonly _tag: "Launching"; readonly gameId: string }
-  | { readonly _tag: "Launched"; readonly gameId: string }
+  | { readonly _tag: "Accepted"; readonly gameId: string }
   | {
       readonly _tag: "Failed"
       readonly gameId: string
@@ -82,7 +82,7 @@ const machine = stateMachine<LaunchState>([
   "ReleaseSelectionRequired",
   "Unavailable",
   "Launching",
-  "Launched",
+  "Accepted",
   "Failed",
   "Defect",
 ])
@@ -134,7 +134,7 @@ export const LaunchState = {
           }
     }
 
-    return { _tag: "Launched", gameId }
+    return { _tag: "Accepted", gameId }
   },
 
   isLaunching: (state: LaunchState): boolean => state._tag === "Launching",

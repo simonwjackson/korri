@@ -44,9 +44,7 @@ function ReadyHome({ foreground }: { readonly foreground?: ForegroundTag }) {
         playableEntries: shiftCatalogFixtureEntries,
       }),
     )
-    setLauncher(
-      makeInMemoryLauncherLayer({ behavior: { kind: "succeed", delayMs: 25 } }),
-    )
+    setLauncher(makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }))
     if (foreground) setForeground(shiftForegroundSourceLayers[foreground]())
   }, [setCatalog, setForeground, setLibrarySource, setLauncher, foreground])
   return <ShiftHomeRoute />
@@ -63,7 +61,7 @@ function EmptyHome() {
 afterEach(cleanup)
 
 describe("ShiftHomeRoute produced launch + foreground over the real edges", () => {
-  it("produces launch feedback from pressing Play when Data is Ready", async () => {
+  it("does not turn request acceptance alone into now-playing feedback", async () => {
     render(
       <RegistryProvider>
         <ReadyHome />
@@ -76,9 +74,10 @@ describe("ShiftHomeRoute produced launch + foreground over the real edges", () =
     fireEvent.click(firstGame)
 
     await waitFor(() => {
-      expect(screen.getByText("Now playing")).toBeTruthy()
+      expect(readShiftCurrentCoordinate("/").launch).toBe("Accepted")
     })
-    expect(readShiftCurrentCoordinate("/").launch).toBe("Launched")
+    expect(screen.queryByText("Now playing")).toBeNull()
+    expect(readShiftCurrentCoordinate("/").launch).toBe("Accepted")
   })
 
   it("hides launch feedback when Data is not Ready", async () => {
@@ -105,14 +104,14 @@ describe("ShiftHomeRoute produced launch + foreground over the real edges", () =
     expect(screen.getByText("Another game is running")).toBeTruthy()
   })
 
-  it("publishes foreground while launch remains the produced controller state", async () => {
+  it("renders now-playing from foreground Running while launch remains idle", async () => {
     render(
       <RegistryProvider>
         <ReadyHome foreground="Running" />
       </RegistryProvider>,
     )
     await waitFor(() => {
-      expect(screen.getByText("Another game is running")).toBeTruthy()
+      expect(screen.getByText("Now playing")).toBeTruthy()
     })
     expect(readShiftCurrentCoordinate("/")).toMatchObject({
       launch: "Idle",

@@ -1,13 +1,15 @@
 /**
  * Surface-side presentation of the launch lifecycle for the cinematic home.
  *
- * The service hands the surface a raw `LaunchState` (launching / launched /
- * failed / defect / unavailable); this maps it to glanceable copy + the legend
- * affordances the scene should show. Failure detail (exitCode / stderrTail)
- * never reaches the hero — only a single calm reason line, per `failureKind`.
+ * The service hands the surface a raw `LaunchState` (launching / accepted /
+ * failed / defect / unavailable) plus the authoritative foreground-session
+ * gate. This maps them to glanceable copy + the legend affordances the scene
+ * should show. Failure detail (exitCode / stderrTail) never reaches the hero —
+ * only a single calm reason line, per `failureKind`.
  */
 import type { LaunchState } from "@platform/library/launch-state"
 import type { LaunchFailureKind } from "@platform/library/launcher"
+import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 
 export type LaunchStatusTone =
   | "launching"
@@ -52,13 +54,25 @@ const NON_RETRYABLE: ReadonlySet<LaunchFailureKind> = new Set([
  */
 export function launchStatusView(
   state: LaunchState | undefined,
+  foreground?: ForegroundSessionGateState,
 ): LaunchStatusView | null {
+  if (state?._tag === "Launching") {
+    return { tone: "launching", kicker: "Starting…", canRetry: false }
+  }
+
+  if (
+    state?._tag !== "Failed" &&
+    state?._tag !== "Defect" &&
+    state?._tag !== "Unavailable" &&
+    foreground?._tag === "Running"
+  ) {
+    return { tone: "launched", kicker: "Now playing", canRetry: false }
+  }
+
   if (!state) return null
   switch (state._tag) {
-    case "Launching":
-      return { tone: "launching", kicker: "Starting…", canRetry: false }
-    case "Launched":
-      return { tone: "launched", kicker: "Now playing", canRetry: false }
+    case "Accepted":
+      return null
     case "Unavailable":
       return {
         tone: "unavailable",

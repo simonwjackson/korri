@@ -25,7 +25,7 @@ describe("stateVariants", () => {
       ReleaseSelectionRequired: () => "pick a version",
       Unavailable: () => "not here",
       Launching: () => "starting",
-      Launched: () => "playing",
+      Accepted: () => "accepted",
       Failed: () => "couldn't start",
       Defect: () => "defect",
     })

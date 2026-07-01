@@ -92,8 +92,9 @@ export function shiftLaunchStateForForeground({
   readonly foreground: ForegroundSessionGateState | undefined
 }): LaunchStateValue {
   if (!foreground) return launch
+  if (foreground._tag === "Running") return launch
   const canApplyForegroundGate =
-    launch._tag !== "Launching" && launch._tag !== "Launched"
+    launch._tag !== "Launching" && launch._tag !== "Accepted"
   if (!canApplyForegroundGate) return launch
   const action = launchActionStateFrom({ launch: LaunchState.idle, foreground })
   if (!action) return launch
@@ -122,6 +123,10 @@ export function visibleShiftLaunchState({
   readonly foreground: ForegroundSessionGateState | undefined
   readonly acked: boolean
 }): LaunchStateValue {
+  if (launch._tag === "Accepted" && foreground?._tag === "Ready") {
+    return LaunchState.idle
+  }
+
   const raw = shiftLaunchStateForForeground({ launch, foreground })
   const foregroundBlocked =
     launch._tag !== "Launching" &&
@@ -281,6 +286,7 @@ function NavigatingReadyBody({
           battery={battery}
           network={network}
           launchState={launchState}
+          foregroundState={foreground}
           onGameFocus={publishGameFocus}
           onLaunch={makeLaunchHandler(games, launch.start)}
           onRetry={launch.retry}
