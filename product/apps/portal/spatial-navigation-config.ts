@@ -6,9 +6,9 @@ import type { RuntimeConfig } from "../desktop/runtime-config-shape"
  * Build the spatial-navigation start options from the runtime config snapshot
  * and the controller profile.
  *
- * Desktop packaged runs receive brokered semantic actions from Electrobun main
- * through `window.__korriInput`; non-desktop/dev runs keep browser gamepad input.
- * The renderer never receives the raw inputd URL.
+ * Device/kiosk packaged runs receive normalized controller actions directly
+ * from inputd through the page-side native WebSocket adapter. Non-desktop/dev
+ * runs keep browser gamepad input.
  */
 export function buildSpatialNavigationConfig(
   runtime: RuntimeConfig,
@@ -18,7 +18,11 @@ export function buildSpatialNavigationConfig(
     diagnostics: true,
     controller: {
       profile,
-      desktop: runtime.desktopInput ? {} : undefined,
+      native:
+        runtime.desktopInput && runtime.nativeInputdUrl
+          ? { url: runtime.nativeInputdUrl }
+          : undefined,
+      desktop: undefined,
     },
   }
 }

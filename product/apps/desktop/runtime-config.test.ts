@@ -9,18 +9,24 @@ describe("readRuntimeConfigFromEnv", () => {
     expect(readRuntimeConfigFromEnv({})).toEqual({ desktopInput: false })
   })
 
-  it("enables desktop input bridge for the device profile", () => {
+  it("enables native input for the device profile", () => {
     expect(
       readRuntimeConfigFromEnv({ KORRI_DESKTOP_PROFILE: "device" }),
-    ).toEqual({ desktopInput: true })
+    ).toEqual({
+      desktopInput: true,
+      nativeInputdUrl: "ws://127.0.0.1:3002",
+    })
   })
 
-  it("enables desktop input bridge for an explicit broker endpoint", () => {
+  it("enables native input for an explicit inputd endpoint", () => {
     expect(
       readRuntimeConfigFromEnv({
         KORRI_DESKTOP_INPUTD_URL: "ws://127.0.0.1:3002",
       }),
-    ).toEqual({ desktopInput: true })
+    ).toEqual({
+      desktopInput: true,
+      nativeInputdUrl: "ws://127.0.0.1:3002",
+    })
   })
 
   it("can disable desktop input bridge explicitly", () => {

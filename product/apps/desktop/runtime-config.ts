@@ -15,8 +15,10 @@ export function readRuntimeConfigFromEnv(
   env: Record<string, string | undefined>,
 ): RuntimeConfig {
   const liveUsbArtifact = liveUsbArtifactFromEnv(env)
+  const nativeInputdUrl = desktopInputdUrlFromEnv(env)
   return {
     desktopInput: isDesktopInputEnabled(env),
+    ...(nativeInputdUrl ? { nativeInputdUrl } : {}),
     ...(liveUsbArtifact ? { liveUsbArtifact } : {}),
   }
 }
