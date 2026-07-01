@@ -258,9 +258,9 @@ in
       ++ persistenceEntryAssertions
     );
 
-    services.korri.client.package = lib.mkIf (
-      cfg.enable && packagesForSystem ? korri-desktop-x86-kiosk
-    ) (lib.mkDefault packagesForSystem.korri-desktop-x86-kiosk);
+    services.korri.client.package = lib.mkIf (cfg.enable && packagesForSystem ? korri-chromium-kiosk) (
+      lib.mkDefault packagesForSystem.korri-chromium-kiosk
+    );
 
     # Live USB has a persistence-aware greetd session wrapper below. Disable
     # the generic Korri login module so the two do not race to own greetd.

@@ -38,8 +38,8 @@ describe("XDG path helpers", () => {
     expect(korriDataPath(env, "library")).toBe(
       "/home/alice/.local/share/korri/library",
     )
-    expect(korriStatePath(env, "electrobun", "status.json")).toBe(
-      "/home/alice/.local/state/korri/electrobun/status.json",
+    expect(korriStatePath(env, "chromium", "status.json")).toBe(
+      "/home/alice/.local/state/korri/chromium/status.json",
     )
   })
 

@@ -2,7 +2,6 @@
   self,
   pkgs,
   system,
-  isSupportedDesktopSystem,
   isX86Linux,
   hasRocknixGuestCompatible,
   attrsForProducts,
@@ -23,12 +22,6 @@
   sunshineKorri,
   moonlightEmbeddedKorri,
   libretroWasm4,
-  electrobunBinaries,
-  korriDesktopUnwrapped,
-  korriDesktop,
-  korriDesktopDevice,
-  korriDesktopDeviceCurrent,
-  korriDesktopX86Kiosk,
   korriHeadlessSystem,
   korriKioskSystem,
   korriDesktopLabSystem,
@@ -56,17 +49,10 @@
   libretro-wasm4 = libretroWasm4;
 }
 // pluginPackages
-// pkgs.lib.optionalAttrs isSupportedDesktopSystem {
-  electrobun-cli = electrobunBinaries.cli;
-  electrobun-core = electrobunBinaries.core;
-  korri-desktop-unwrapped = korriDesktopUnwrapped;
-  korri-desktop = korriDesktop;
-  korri-desktop-device = korriDesktopDevice;
-  korri-desktop-device-current = korriDesktopDeviceCurrent;
-  default = korriDesktop;
+// pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+  default = korriChromiumKiosk;
 }
 // pkgs.lib.optionalAttrs isX86Linux {
-  korri-desktop-x86-kiosk = korriDesktopX86Kiosk;
   korri-headless-system = korriHeadlessSystem.config.system.build.toplevel;
   korri-kiosk-system = korriKioskSystem.config.system.build.toplevel;
   korri-desktop-lab-system = korriDesktopLabSystem.config.system.build.toplevel;

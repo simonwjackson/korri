@@ -7,7 +7,7 @@
 # Source-machine image: a host that runs Korri daemon + Sunshine + a Sway
 # compositor with no Korri GUI client. Sessiond owns the foreground
 # session lifecycle and routes Sunshine-fired managed launches through
-# its source-machine role (idle-blank restore, no Electrobun).
+# its source-machine role (idle-blank restore, no kiosk renderer).
 #
 # Composition is purely capability-driven \u2014 there is no
 # services.korri.role enum; the image just enables the boolean toggles

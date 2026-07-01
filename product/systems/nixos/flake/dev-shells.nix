@@ -2,7 +2,6 @@
   pkgs,
   commonPackages,
   commonShellHook,
-  desktop,
   ...
 }:
 
@@ -26,9 +25,8 @@
         curl
         nodejs_20
         playwright-driver.browsers
-      ])
-      ++ desktop.devShell.packages;
+      ]);
 
-    shellHook = commonShellHook + desktop.devShell.shellHook;
+    shellHook = commonShellHook;
   };
 }

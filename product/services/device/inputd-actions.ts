@@ -313,8 +313,8 @@ function defaultCommands(): InputdActionCommands {
 
   return {
     systemPanel: commandFromEnv("KORRI_INPUTD_SYSTEM_PANEL", "swaymsg", [
-      "exec",
-      "korri-desktop-device",
+      "workspace",
+      "korri:hub",
     ]),
     killCurrentGame: commandFromEnvOptional("KORRI_INPUTD_KILL_CURRENT_GAME"),
     volumeUp: commandFromEnv("KORRI_INPUTD_VOLUME_UP", "pactl", [

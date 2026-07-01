@@ -16,10 +16,10 @@ describe("buildDeviceFlakeExecutionPlan", () => {
     expect(plan).toMatchObject({
       mode: "local",
       flakeRef: ".",
-      app: "korri-desktop-device",
+      app: "korri-chromium-kiosk",
       command: "nix",
-      args: ["run", "--accept-flake-config", ".#korri-desktop-device"],
-      displayCommand: "nix run --accept-flake-config .#korri-desktop-device",
+      args: ["run", "--accept-flake-config", ".#korri-chromium-kiosk"],
+      displayCommand: "nix run --accept-flake-config .#korri-chromium-kiosk",
     })
   })
 
@@ -35,14 +35,14 @@ describe("buildDeviceFlakeExecutionPlan", () => {
     expect(plan).toMatchObject({
       mode: "ssh",
       flakeRef: "git+ssh://source.example/home/me/code/korri",
-      app: "korri-desktop-device",
+      app: "korri-chromium-kiosk",
       command: "ssh",
     })
     if (plan.mode !== "ssh") throw new Error("expected ssh plan")
     expect(plan.args[0]).toBe("root@example-device")
     expect(plan.args[1]).toContain("setsid")
     expect(plan.args[1]).toContain(
-      "git+ssh://source.example/home/me/code/korri#korri-desktop-device",
+      "git+ssh://source.example/home/me/code/korri#korri-chromium-kiosk",
     )
     expect(plan.remoteCommand).toBe(plan.args[1])
   })
@@ -104,7 +104,7 @@ describe("buildDeviceFlakeExecutionPlan", () => {
     expect(buildDeviceFlakeExecutionPlan().args).toEqual([
       "run",
       "--accept-flake-config",
-      ".#korri-desktop-device",
+      ".#korri-chromium-kiosk",
     ])
 
     expect(
@@ -119,7 +119,7 @@ describe("buildDeviceFlakeExecutionPlan", () => {
       "ssh://builder.example aarch64-linux - 8 1",
       "--max-jobs",
       "0",
-      ".#korri-desktop-device",
+      ".#korri-chromium-kiosk",
     ])
   })
 
@@ -139,7 +139,7 @@ describe("buildDeviceFlakeExecutionPlan", () => {
         "nix",
         "run",
         "--accept-flake-config",
-        ".#korri-desktop-device",
+        ".#korri-chromium-kiosk",
       ],
     })
 
@@ -154,7 +154,7 @@ describe("buildDeviceFlakeExecutionPlan", () => {
     expect(remotePlan.remoteCommand).toContain("env")
     expect(remotePlan.remoteCommand).toContain("WAYLAND_DISPLAY=wayland-1")
     expect(remotePlan.remoteCommand).toContain(
-      "git+ssh://source.example/repo/korri#korri-desktop-device",
+      "git+ssh://source.example/repo/korri#korri-chromium-kiosk",
     )
   })
 
@@ -179,8 +179,8 @@ describe("buildDeviceFlakeExecutionPlan", () => {
     expect(plan).toMatchObject({
       mode: "local",
       flakeRef: ".",
-      app: "korri-desktop-device",
-      args: ["run", "--accept-flake-config", ".#korri-desktop-device"],
+      app: "korri-chromium-kiosk",
+      args: ["run", "--accept-flake-config", ".#korri-chromium-kiosk"],
     })
   })
 
@@ -199,7 +199,7 @@ describe("buildDeviceFlakeExecutionPlan", () => {
       "root@example-device",
     ])
     expect(plan.args[5]).toContain(
-      "git+ssh://source.example/repo/korri#korri-desktop-device",
+      "git+ssh://source.example/repo/korri#korri-chromium-kiosk",
     )
   })
 
@@ -374,7 +374,7 @@ describe("runDeviceFlakeCommandCli", () => {
     expect(executed).toBe(false)
     expect(lines).toContain("mode=local")
     expect(lines).toContain(
-      "command=nix run --accept-flake-config .#korri-desktop-device",
+      "command=nix run --accept-flake-config .#korri-chromium-kiosk",
     )
   })
 

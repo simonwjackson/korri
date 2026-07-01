@@ -14,14 +14,10 @@ let
   sessiondSocketPath = "%t/korri/sessiond.sock";
   rendererStatusFile = "${config.services.korri.compositor.stateHome}/korri/chromium/status.json";
 
-  # Sessiond owns the kiosk renderer (Electrobun). The renderer
-  # inherits sessiond's process environment when spawned via the
-  # in-process runner, so the renderer-side identity has to live on
-  # sessiond's unit env, not the compositor's. See
-  # product/services/device/sessiond-electrobun.ts buildElectrobunCommand: HOME
-  # and XDG_STATE_HOME are read from the parent env to derive the
-  # Electrobun state root; KORRI_KIOSK and the inputd URLs are read
-  # directly by the renderer at startup.
+  # Sessiond owns the Chromium kiosk renderer. The renderer inherits
+  # sessiond's process environment when spawned via the in-process
+  # runner, so renderer-side identity has to live on sessiond's unit
+  # env, not the compositor's.
   #
   # The Wayland-session identity (XDG_SESSION_TYPE, XDG_CURRENT_DESKTOP,
   # DBUS_SESSION_BUS_ADDRESS, DISPLAY) is required because when sway
@@ -42,7 +38,6 @@ let
     KORRI_KIOSK = "1";
     KORRI_DESKTOP_INPUTD_URL = compositorCfg.kiosk.inputdBridgeUrl;
     KORRI_NATIVE_BRIDGE_URL = compositorCfg.kiosk.inputdBridgeUrl;
-    KORRI_RENDERER = "chromium";
     KORRI_WEB_SURFACE_URL = "http://127.0.0.1:${toString webSurfacePort}/";
     KORRI_DESKTOP_STATUS_FILE = rendererStatusFile;
     # Renderer stdout/stderr capture. realChromiumRunner.spawn writes
@@ -119,7 +114,7 @@ in
     # listed here:
     #   - bashInteractive: the renderer-launch path's `resolve` step
     #     runs `Bun.spawn(["sh", "-lc", ...])` to look up the
-    #     Electrobun binary; without sh on PATH every renderer launch
+    #     Chromium binary; without sh on PATH every renderer launch
     #     fails with `Executable not found in $PATH: "sh"`. systemd's
     #     default unit PATH on NixOS does NOT include a shell.
     #   - compositor.sway.package: the kiosk role's reconcileIdle
@@ -128,8 +123,8 @@ in
     #     the renderer is already up. Without sway on PATH, every
     #     /control/start throws "Executable not found in $PATH:
     #     swaymsg" before the renderer-launch path runs.
-    #   - client.package: the renderer (Electrobun) binary that
-    #     sessiond's enterIdle spawns by name ("korri-desktop-device").
+    #   - client.package: the Chromium kiosk binary that sessiond's
+    #     enterIdle spawns by name ("korri-chromium-kiosk" by default).
     path = [
       pkgs.bashInteractive
       compositorCfg.sway.package
@@ -227,8 +222,14 @@ in
       "korri-inputd.service"
       "korri-web-surface-host.service"
     ];
-    wants = [ "korri-compositor.service" "korri-web-surface-host.service" ];
-    requires = [ "korri-inputd.service" "korri-web-surface-host.service" ];
+    wants = [
+      "korri-compositor.service"
+      "korri-web-surface-host.service"
+    ];
+    requires = [
+      "korri-inputd.service"
+      "korri-web-surface-host.service"
+    ];
   };
 
   # Source-machine sessiond owns its own sway; kiosk sessiond ATTACHES
@@ -239,9 +240,9 @@ in
   #
   # ReadWritePaths carves a hole in `ProtectSystem = "strict"` (which
   # makes the whole filesystem hierarchy read-only) for the compositor's
-  # home subtree. Sessiond's child Electrobun writes the
-  # status.json, the renderer log, XDG_{DATA,CONFIG,CACHE}_HOME state,
-  # and the library db there. Without this, every spawn dies on EROFS
+  # home subtree. Sessiond's child Chromium writes status.json, the
+  # renderer log, XDG_{DATA,CONFIG,CACHE}_HOME state, and the library db
+  # there. Without this, every spawn dies on EROFS
   # the moment it tries to persist anything.
   systemd.user.services.korri-sessiond.serviceConfig = {
     ProtectHome = lib.mkForce false;

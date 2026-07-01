@@ -5,7 +5,7 @@
  * `KORRI_GAME_STREAM_STATUS_PATH` so existing operator tooling and the
  * `app.server.status` fallback path keep working independently of the
  * Phase 4C runner refactor (U5). Kiosk role does not use this — the
- * existing renderer + electrobun state already covers operator visibility
+ * existing renderer + chromium state already covers operator visibility
  * for kiosk hosts.
  *
  * Plan: docs/plans/2026-05-27-002-feat-foreground-session-source-machine-phase4c-plan.md (U3)

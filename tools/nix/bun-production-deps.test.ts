@@ -24,7 +24,7 @@ describe("production Bun dependency selection", () => {
 
     expect(hasVersionedName(names, "vite")).toBe(true)
     expect(hasVersionedName(names, "@vitejs/plugin-react")).toBe(true)
-    expect(hasVersionedName(names, "electrobun")).toBe(true)
+    expect(hasVersionedName(names, "electrobun")).toBe(false)
     expect(hasVersionedName(names, "effect")).toBe(true)
 
     for (const forbidden of [

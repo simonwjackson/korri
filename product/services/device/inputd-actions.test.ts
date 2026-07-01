@@ -269,7 +269,7 @@ describe("inputd actions", () => {
     await dispatcher.dispatch("system-panel")
 
     expect(commands).toEqual([
-      { command: "swaymsg", args: ["exec", "korri-desktop-device"] },
+      { command: "swaymsg", args: ["workspace", "korri:hub"] },
     ])
   })
 

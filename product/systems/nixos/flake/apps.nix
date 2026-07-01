@@ -1,15 +1,12 @@
 {
   pkgs,
-  isSupportedDesktopSystem,
   isX86Linux,
   korriInputd,
   korriGameStream,
   korriCli,
   korrid,
   korriHeadlessSource,
-  korriDesktop,
-  korriDesktopDevice,
-  korriDesktopDeviceCurrent,
+  korriChromiumKiosk,
   korriKioskLiveUsbRuntimeSystem,
   korriKioskLiveUsbSystem,
   korriKioskLiveUsbDeveloperSystem,
@@ -44,22 +41,14 @@ pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
   };
 }
 // pluginApps
-// pkgs.lib.optionalAttrs isSupportedDesktopSystem {
+// pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
   default = {
     type = "app";
-    program = "${korriDesktop}/bin/korri-desktop";
+    program = "${korriChromiumKiosk}/bin/korri-chromium-kiosk";
   };
-  korri-desktop = {
+  korri-chromium-kiosk = {
     type = "app";
-    program = "${korriDesktop}/bin/korri-desktop";
-  };
-  korri-desktop-device = {
-    type = "app";
-    program = "${korriDesktopDevice}/bin/korri-desktop-device";
-  };
-  korri-desktop-device-current = {
-    type = "app";
-    program = "${korriDesktopDeviceCurrent}/bin/korri-desktop-device-current";
+    program = "${korriChromiumKiosk}/bin/korri-chromium-kiosk";
   };
 }
 // pkgs.lib.optionalAttrs isX86Linux {

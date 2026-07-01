@@ -6,7 +6,7 @@
 
 let
   # Stub sway. The kiosk renderer is no longer launched from the Sway
-  # config — sessiond owns Electrobun launch — so this stub no longer
+  # config — sessiond owns Chromium launch — so this stub no longer
   # needs to parse `exec --no-startup-id` lines. It records its own
   # startup and then sleeps forever, mimicking a long-running
   # compositor process.
@@ -26,17 +26,15 @@ let
     chmod +x "$out/bin/sway" "$out/bin/swaymsg"
   '';
 
-  # Stand-in for the real korri-desktop client package. Sessiond's
-  # renderer-launch path resolves the binary by the hardcoded name
-  # `korri-desktop-device` (see DEFAULT_ELECTROBUN_EXECUTABLE in
-  # product/services/device/sessiond-electrobun.ts) and asserts the resolved
-  # path lives under /nix/store, so a writeShellApplication with the
-  # right binary name satisfies both shapes. The real renderer also
-  # writes KORRI_DESKTOP_STATUS_FILE before sessiond considers it
-  # ready; mirror that handshake so this VM smoke proves the launch
-  # contract instead of timing out in ExecStartPost.
+  # Stand-in for the real Chromium kiosk client package. Sessiond's
+  # renderer-launch path resolves the binary name `korri-chromium-kiosk`
+  # and asserts the resolved path lives under /nix/store, so a
+  # writeShellApplication with the right binary name satisfies both shapes.
+  # The real renderer writes KORRI_DESKTOP_STATUS_FILE before sessiond
+  # considers it ready; mirror that handshake so this VM smoke proves the
+  # launch contract instead of timing out in ExecStartPost.
   markerClientPackage = pkgs.writeShellApplication {
-    name = "korri-desktop-device";
+    name = "korri-chromium-kiosk";
     text = ''
       if [ -n "''${KORRI_DESKTOP_STATUS_FILE:-}" ]; then
         ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$KORRI_DESKTOP_STATUS_FILE")"
@@ -67,9 +65,9 @@ pkgs.testers.runNixOSTest {
               };
               sway.package = fakeSway;
             };
-            # Sessiond's renderer is now the kiosk client; substitute
+            # Sessiond's renderer is the kiosk client; substitute
             # the marker package so the in-process runner resolves
-            # `korri-desktop-device` to a Nix-store path that touches
+            # `korri-chromium-kiosk` to a Nix-store path that touches
             # the marker file the test checks for.
             services.korri.client.package = lib.mkForce markerClientPackage;
             # Live-USB launches Sway via greetd, not via

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process"
 import { createInterface } from "node:readline/promises"
 
-const DEFAULT_APP = "korri-desktop-device"
+const DEFAULT_APP = "korri-chromium-kiosk"
 const REMOTE_PID_FILE = "/tmp/korri-device-run.pid"
 
 export class DeviceFlakeCommandError extends Error {

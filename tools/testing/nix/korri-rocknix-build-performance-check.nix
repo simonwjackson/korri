@@ -67,14 +67,6 @@ pkgs.runCommand "korri-sm8550-build-performance-check"
     test ! -e ${runtimeSources.portal}/docs
     test ! -e ${runtimeSources.portal}/backlog
 
-    test -e ${runtimeSources.desktop}/electrobun.config.ts
-    test -e ${runtimeSources.desktop}/product/apps/desktop
-    test -e ${runtimeSources.desktop}/product/surfaces/terminal/korri-cli
-    test -e ${runtimeSources.desktop}/product/platform
-    test ! -e ${runtimeSources.desktop}/tools/cli
-    test ! -e ${runtimeSources.desktop}/tools/testing
-    test ! -e ${runtimeSources.desktop}/product/apps/storybook
-
     test -e ${runtimeSources.inputd}/product/apps/portal
     test -e ${runtimeSources.inputd}/product/services/device
     test -e ${runtimeSources.inputd}/tools/types
@@ -127,7 +119,6 @@ pkgs.runCommand "korri-sm8550-build-performance-check"
     cp ${productionBunNamesFile} production-bun-package-names.txt
     grep -E '^vite@' production-bun-package-names.txt
     grep -E '^@vitejs/plugin-react@' production-bun-package-names.txt
-    grep -E '^electrobun@' production-bun-package-names.txt
     grep -E '^effect@' production-bun-package-names.txt
 
     for forbidden in ${pkgs.lib.escapeShellArgs forbiddenBunNames}; do

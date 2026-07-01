@@ -126,7 +126,7 @@ let
   };
 
   # kiosk.command / kiosk.launcher were removed when the renderer-
-  # ownership cut moved Electrobun launching from korri-compositor to
+  # ownership cut moved Chromium launching from korri-compositor to
   # korri-sessiond. A host that still tries to set either of them must
   # fail at evaluation time so the breakage is loud, not silent.
   kioskCommandRemoved = builtins.tryEval (evaluateWith {
@@ -336,7 +336,7 @@ let
       )
     ))
     # Renderer-ownership cut: Sway config no longer carries the kiosk
-    # client exec line. Sessiond's enterIdle launches Electrobun.
+    # client exec line. Sessiond's enterIdle launches Chromium.
     (check "compositor+kiosk: Sway config does NOT exec-launch a kiosk client" (
       !(lib.hasInfix "exec --no-startup-id" (swayConfigOf compositorWithKiosk))
       && !(lib.hasInfix "korri-compositor-kiosk-client" (swayConfigOf compositorWithKiosk))

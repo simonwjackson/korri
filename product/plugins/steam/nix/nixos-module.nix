@@ -601,7 +601,9 @@ let
     }
 
     focus_korri_output() {
-      sway '[class="ElectrobunKitchenSink-dev"] focus, fullscreen enable'
+      sway '[app_id="korri-chromium-kiosk"] focus, fullscreen enable'
+      sway '[app_id="^chrome-.*"] focus, fullscreen enable'
+      sway '[class="Chromium-browser"] focus, fullscreen enable'
     }
 
     hide_steam_hat() {

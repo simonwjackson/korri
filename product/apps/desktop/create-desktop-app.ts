@@ -54,9 +54,8 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
   // longer required. Sessiond is the authoritative lifecycle source. See
   // docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md
 
-  // Diagnostic sink: WebView console.log is not captured into
-  // electrobun.log on Linux, so we expose a tiny POST endpoint that
-  // the renderer can hit to surface launch-chain trace events into
+  // Diagnostic sink: expose a tiny POST endpoint that the renderer can
+  // hit to surface launch-chain trace events into
   // pino. Bridge logs use {msg: "renderer-trace"} so they're easy to
   // grep alongside the bun-side launch-bridge logs.
   app.post("/__korri/desktop/trace", async c => {

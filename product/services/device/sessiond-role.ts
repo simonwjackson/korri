@@ -16,7 +16,7 @@ import type { SwayController } from "./sessiond-sway"
 
 /**
  * Identifier for the deployment role that defines what "idle" means for
- * this sessiond instance. Kiosk's idle = Korri home (Electrobun renderer +
+ * this sessiond instance. Kiosk's idle = Korri home (Chromium renderer +
  * essway masked). Source-machine's idle = Sway alive with no foreground
  * application windows.
  */
@@ -100,7 +100,7 @@ export interface SessionRole {
   /**
    * Whether sessiond should emit `renderer-stopped` between
    * `beforeChildLaunch` and `child-running` for this role. Kiosk emits it
-   * (Electrobun gets stopped); source-machine does not (no renderer).
+   * (Chromium gets stopped); source-machine does not (no renderer).
    */
   readonly emitsRendererStopped: boolean
 
@@ -130,7 +130,7 @@ export interface SessionRole {
    * lifecycle proceeds past `child-running`. The role does any
    * foreground-surface promotion here.
    *
-   * Kiosk role: no-op -- Electrobun owns the renderer.
+   * Kiosk role: no-op -- Chromium owns the renderer.
    *
    * Throwing from this hook fails the managed launch; sessiond maps
    * the throw to a `child-exited` event with
@@ -265,7 +265,7 @@ export function createKioskSessionRole(
       await deps.renderer.stop(rendererPid)
       rendererPid = undefined
     },
-    // Kiosk has no foreground surface to promote -- Electrobun owns
+    // Kiosk has no foreground surface to promote -- Chromium owns
     // the renderer. Source-machine implements this hook in U5; the
     // interface declares it here so sessiond's dispatcher can call it
     // role-agnostically.
@@ -410,8 +410,8 @@ function looksLikeKorriHubWindow(window: {
     appId.includes("chromium"),
     appId.includes("chrome"),
     className === "Korri",
-    className === "Electrobun",
-    className === "ElectrobunKitchenSink-dev",
+    className === "Chromium",
+    className === "ChromiumKitchenSink-dev",
     className.toLowerCase().includes("chromium"),
   ].some(Boolean)
 }

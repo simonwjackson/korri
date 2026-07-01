@@ -73,12 +73,12 @@ function startHarness(
       },
     },
     renderer: {
-      kind: "electrobun",
+      kind: "chromium",
       launch: async () => {
         const launchCount = events.filter(
-          event => event === "launch-electrobun",
+          event => event === "launch-renderer",
         ).length
-        events.push("launch-electrobun")
+        events.push("launch-renderer")
         if (
           options.failRendererLaunch ||
           (options.failRendererRestore && launchCount > 0) ||
@@ -91,11 +91,11 @@ function startHarness(
         windows = [{ id: rendererPid, focused: true, fullscreen: true }]
         return {
           pid: rendererPid,
-          command: { command: "electrobun", args: [] },
+          command: { command: "chromium", args: [] },
         }
       },
       stop: async pid => {
-        events.push(`stop-electrobun:${pid ?? "none"}`)
+        events.push(`stop-renderer:${pid ?? "none"}`)
         windows = []
       },
     },
@@ -178,7 +178,7 @@ function authorized(init: RequestInit = {}): RequestInit {
 }
 
 describe("korri sessiond", () => {
-  it("starts Korri mode by masking ES, launching Electrobun, and entering home", async () => {
+  it("starts Korri mode by masking ES, launching Chromium, and entering home", async () => {
     const { core, events } = startHarness()
 
     const response = await request(
@@ -191,7 +191,7 @@ describe("korri sessiond", () => {
 
     expect(body.state.mode).toBe("home")
     expect(events).toContain("mask-es")
-    expect(events).toContain("launch-electrobun")
+    expect(events).toContain("launch-renderer")
   })
 
   it("accepts same-user socket control requests without token headers", async () => {
@@ -200,11 +200,11 @@ describe("korri sessiond", () => {
     const response = await request(core, "/control/start", { method: "POST" })
 
     expect(response.ok).toBe(true)
-    expect(events).toContain("launch-electrobun")
+    expect(events).toContain("launch-renderer")
     expect(core.status().state.mode).toBe("home")
   })
 
-  it("launches a game under session control and restores Electrobun afterward", async () => {
+  it("launches a game under session control and restores Chromium afterward", async () => {
     const { core, events } = startHarness()
     await request(core, "/control/start", authorized({ method: "POST" }))
 
@@ -221,15 +221,13 @@ describe("korri sessiond", () => {
 
     expect(body.result).toEqual({ status: "launched" })
     expect(body.state.mode).toBe("home")
-    expect(body.renderer).toEqual({ kind: "electrobun", pid: 102 })
-    expect(events).toContain("stop-electrobun:101")
+    expect(body.renderer).toEqual({ kind: "chromium", pid: 102 })
+    expect(events).toContain("stop-renderer:101")
     expect(events).toContain("launch-game:/bin/game")
-    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(
-      2,
-    )
+    expect(events.filter(event => event === "launch-renderer")).toHaveLength(2)
   })
 
-  it("restores Electrobun even when the game exits non-zero", async () => {
+  it("restores Chromium even when the game exits non-zero", async () => {
     const { core, events } = startHarness({
       launchResult: { status: "failed", exitCode: 7, stderrTail: "boom" },
     })
@@ -252,9 +250,7 @@ describe("korri sessiond", () => {
       stderrTail: "boom",
     })
     expect(body.state.mode).toBe("home")
-    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(
-      2,
-    )
+    expect(events.filter(event => event === "launch-renderer")).toHaveLength(2)
   })
 
   it("rejects launches when the session is not in home mode", async () => {
@@ -591,7 +587,7 @@ describe("korri sessiond", () => {
 
     expect(commandResponse.ok).toBe(true)
     expect(eventsResponse.ok).toBe(true)
-    expect(events).toContain("launch-electrobun")
+    expect(events).toContain("launch-renderer")
   })
 
   it("keeps the blocking launch path compatible while using managed execution", async () => {
@@ -652,7 +648,7 @@ describe("korri sessiond", () => {
     const core = createKorriSessiondCore({
       logger: silentLogger,
       renderer: {
-        kind: "electrobun",
+        kind: "chromium",
         launch: async () => ({ pid: 10, command: { command: "eb", args: [] } }),
         stop: async () => {},
       },
@@ -1212,9 +1208,7 @@ describe("korri sessiond", () => {
 
     expect(core.status().state.mode).toBe("home")
     expect(core.status().state.restoreAttempts).toBe(0)
-    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(
-      3,
-    )
+    expect(events.filter(event => event === "launch-renderer")).toHaveLength(3)
     expect(lifecycle.map(event => event.type)).toContain("home-ready")
     expect(lifecycle.map(event => event.type)).not.toContain("recovering")
   })
@@ -1240,9 +1234,7 @@ describe("korri sessiond", () => {
     )
     const lifecycle = parseSseEvents(await stream.text())
 
-    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(
-      4,
-    )
+    expect(events.filter(event => event === "launch-renderer")).toHaveLength(4)
     expect(lifecycle.map(event => event.type)).toContain("recovering")
     expect(lifecycle.map(event => event.type)).not.toContain("home-ready")
   })
@@ -1277,7 +1269,7 @@ describe("korri sessiond", () => {
 
     expect(response.status).toBe(200)
     expect(body.state.mode).toBe("stopped")
-    expect(body.renderer.kind).toBe("electrobun")
+    expect(body.renderer.kind).toBe("chromium")
   })
 
   it("runs /control/reconcile through the role's public reconcile hook", async () => {
@@ -1339,7 +1331,7 @@ describe("korri sessiond", () => {
     expect(warnings).toHaveLength(1)
   })
 
-  it("stops Korri mode by stopping Electrobun and restoring ES", async () => {
+  it("stops Korri mode by stopping Chromium and restoring ES", async () => {
     const { core, events } = startHarness()
     await request(core, "/control/start", authorized({ method: "POST" }))
 
@@ -1352,7 +1344,7 @@ describe("korri sessiond", () => {
 
     expect(body.state.mode).toBe("stopped")
     expect(events).toContain("restore-es")
-    expect(events).toContain("stop-electrobun:101")
+    expect(events).toContain("stop-renderer:101")
   })
 
   it("invokes the cleanup with the launch processGroupId at the restoring transition", async () => {
@@ -1454,9 +1446,7 @@ describe("korri sessiond", () => {
 
     expect(lifecycle.map(event => event.type)).toContain("recovering")
     expect(lifecycle.map(event => event.type)).not.toContain("home-ready")
-    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(
-      1,
-    )
+    expect(events.filter(event => event === "launch-renderer")).toHaveLength(1)
   })
 
   it("passes launch companions into lifecycle hook start and cleanup", async () => {
@@ -1538,7 +1528,7 @@ describe("korri sessiond", () => {
       logger: { ...silentLogger, warn: input => warnings.push(input) },
       sessionHooks: [cleanupHook(cleanup)],
       renderer: {
-        kind: "electrobun",
+        kind: "chromium",
         launch: async () => ({ pid: 10, command: { command: "eb", args: [] } }),
         stop: async () => {},
       },
@@ -1601,7 +1591,7 @@ describe("korri sessiond", () => {
         }),
       ],
       renderer: {
-        kind: "electrobun",
+        kind: "chromium",
         launch: async () => ({ pid: 10, command: { command: "eb", args: [] } }),
         stop: async () => {},
       },
@@ -1689,10 +1679,10 @@ describe("korri sessiond", () => {
       statusSidecar: sidecar,
       launcher: { run: async () => ({ status: "launched" }) },
       renderer: {
-        kind: "electrobun",
+        kind: "chromium",
         launch: async () => ({
           pid: 200,
-          command: { command: "electrobun", args: [] },
+          command: { command: "chromium", args: [] },
         }),
         stop: async () => {},
       },
@@ -2168,7 +2158,7 @@ describe("korri sessiond", () => {
     const core = createKorriSessiondCore({
       logger: silentLogger,
       renderer: {
-        kind: "electrobun",
+        kind: "chromium",
         launch: async () => ({ pid: 10, command: { command: "eb", args: [] } }),
         stop: async () => {},
       },
@@ -2493,10 +2483,10 @@ describe("korri sessiond", () => {
         restoreEssway: async () => {},
       },
       renderer: {
-        kind: "electrobun",
+        kind: "chromium",
         launch: async () => ({
           pid: 200,
-          command: { command: "electrobun", args: [] },
+          command: { command: "chromium", args: [] },
         }),
         stop: async () => {},
       },
@@ -2590,10 +2580,10 @@ describe("korri sessiond", () => {
         restoreEssway: async () => {},
       },
       renderer: {
-        kind: "electrobun",
+        kind: "chromium",
         launch: async () => ({
           pid: 200,
-          command: { command: "electrobun", args: [] },
+          command: { command: "chromium", args: [] },
         }),
         stop: async () => {},
       },
@@ -2688,23 +2678,23 @@ describe("korri sessiond", () => {
       appIds: process.env.KORRI_SWAY_APP_IDS,
       titles: process.env.KORRI_SWAY_TITLES,
       classes: process.env.KORRI_SWAY_CLASSES,
-      timeout: process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS,
+      timeout: process.env.KORRI_CHROMIUM_READY_TIMEOUT_MS,
     }
-    process.env.KORRI_SWAY_APP_IDS = "korri, electrobun "
+    process.env.KORRI_SWAY_APP_IDS = "korri, chromium "
     process.env.KORRI_SWAY_TITLES = " Korri Home "
     process.env.KORRI_SWAY_CLASSES = ""
-    process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS = "1234"
+    process.env.KORRI_CHROMIUM_READY_TIMEOUT_MS = "1234"
     try {
       const core = createKorriSessiondCore({
         logger: silentLogger,
       })
       expect(core.status().state.mode).toBe("stopped")
-      expect(core.status().renderer.kind).toBe("electrobun")
+      expect(core.status().renderer.kind).toBe("chromium")
     } finally {
       setOptionalEnv("KORRI_SWAY_APP_IDS", previous.appIds)
       setOptionalEnv("KORRI_SWAY_TITLES", previous.titles)
       setOptionalEnv("KORRI_SWAY_CLASSES", previous.classes)
-      setOptionalEnv("KORRI_ELECTROBUN_READY_TIMEOUT_MS", previous.timeout)
+      setOptionalEnv("KORRI_CHROMIUM_READY_TIMEOUT_MS", previous.timeout)
     }
   })
 

@@ -3,7 +3,6 @@ export const artifactRoot = "out" as const
 export const buildArtifactPaths = {
   portal: `${artifactRoot}/build/portal`,
   api: `${artifactRoot}/build/api`,
-  electrobun: `${artifactRoot}/build/electrobun`,
 } as const
 
 export const reportArtifactPaths = {
@@ -17,9 +16,6 @@ export const testResultArtifactPaths = {
 } as const
 
 export const demoVideoArtifactPath = `${artifactRoot}/demo-videos` as const
-
-export const desktopArtifactPath =
-  `${artifactRoot}/artifacts/electrobun` as const
 
 export const generatedArtifactPaths = {
   bddPlaywright: `${artifactRoot}/generated/bdd/playwright`,
@@ -37,7 +33,6 @@ export const artifactLayout = {
   reports: reportArtifactPaths,
   testResults: testResultArtifactPaths,
   demoVideos: demoVideoArtifactPath,
-  desktopArtifacts: desktopArtifactPath,
   runtimeWatch: runtimeWatchArtifactPath,
   generated: generatedArtifactPaths,
   tmp: tempArtifactPath,
@@ -49,7 +44,6 @@ export const supportedArtifactPaths = [
   ...Object.values(artifactLayout.reports),
   ...Object.values(artifactLayout.testResults),
   artifactLayout.demoVideos,
-  artifactLayout.desktopArtifacts,
   artifactLayout.runtimeWatch,
   ...Object.values(artifactLayout.generated),
   artifactLayout.tmp,

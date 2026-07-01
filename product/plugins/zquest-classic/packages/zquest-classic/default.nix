@@ -121,7 +121,8 @@ stdenv.mkDerivation rec {
 
     perl -0pi -e 's/#include <iterator>/#include <iterator>\n#include <cstdlib>/' src/zc/saves.cpp
     perl -0pi -e 's/return zc_get_config\("zeldadx", "save_folder", "saves"\);/if (const char* save_folder = std::getenv("ZQUEST_CLASSIC_SAVE_FOLDER"))\n\t\treturn save_folder;\n\treturn zc_get_config("zeldadx", "save_folder", "saves");/' src/zc/saves.cpp
-  '' + lib.optionalString stdenv.hostPlatform.isAarch64 ''
+  ''
+  + lib.optionalString stdenv.hostPlatform.isAarch64 ''
     perl -0pi -e 's/if\(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang"\)\r?\n\tadd_compile_options\(-mssse3\)\r?\nendif\(\)/if((CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i.86") AND (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang"))\n\tadd_compile_options(-mssse3)\nendif()/g' CMakeLists.txt
   '';
 
@@ -169,7 +170,6 @@ stdenv.mkDerivation rec {
       --unset KORRI_CONFIG_ROOTS
       --unset KORRI_CONFIG_ROOTS_DIR
       --unset KORRI_DESKTOP_INPUTD_URL
-      --unset KORRI_ELECTROBUN_LOG
       --unset KORRI_ENABLED_PLUGINS
       --unset KORRI_KIOSK
       --unset KORRI_LAUNCH_ARTIFACTS_DIR

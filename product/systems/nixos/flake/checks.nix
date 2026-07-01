@@ -8,10 +8,6 @@
   explicitProductList,
   byCompatibleProduct,
   bunDependencyCache,
-  korriDesktop,
-  korriDesktopDevice,
-  korriDesktopX86Kiosk,
-  korriDesktopUnwrapped,
   korriImages,
   korriKioskLiveUsbSystem,
   korriKioskLiveUsbDeveloperSystem,
@@ -22,15 +18,6 @@
 }:
 
 pkgs.lib.optionalAttrs isX86Linux {
-  korri-desktop-build-graph =
-    import ../../../../tools/testing/nix/korri-desktop-build-graph-check.nix
-      {
-        inherit pkgs pkgs2405;
-        host = korriDesktop;
-        device = korriDesktopDevice;
-        x86Kiosk = korriDesktopX86Kiosk;
-        unwrapped = korriDesktopUnwrapped;
-      };
   korri-package-outputs = import ../../../../tools/testing/nix/korri-package-outputs-check.nix {
     inherit pkgs;
     packages = self.packages.${system};
@@ -395,10 +382,6 @@ pkgs.lib.optionalAttrs isX86Linux {
       }
       {
         name = "libretro-wasm4-check";
-        owner = "package-output";
-      }
-      {
-        name = "korri-desktop-build-graph";
         owner = "package-output";
       }
       {

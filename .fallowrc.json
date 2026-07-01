@@ -1,12 +1,8 @@
 {
 	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
 	"entry": [
-		"electrobun.config.ts",
 		"product/apps/portal/main.tsx",
 		"product/apps/portal/routes/**/*.tsx",
-		"product/apps/desktop/main.ts",
-		"product/apps/desktop/index.ts",
-		"product/apps/desktop/preload-entry.ts",
 		"product/apps/storybook/main.ts",
 		"product/apps/storybook/preview.tsx",
 		"product/platform/**/*.ts",
@@ -20,7 +16,6 @@
 		"product/plugins/cdp-input-bridge/packages/korri-cdp-input-bridge/index.ts",
 		"tools/scripts/**/*.ts",
 		"tools/generators/**/*.ts",
-		"tools/desktop/**/*.ts",
 		"tools/device/**/*.ts",
 		"tools/nix/**/*.ts",
 		"tools/playwright/**/*.ts",
@@ -59,63 +54,43 @@
 	"ignoreExports": [
 		{
 			"file": "product/surfaces/web/pico/screens/kit.tsx",
-			"exports": [
-				"*"
-			]
+			"exports": ["*"]
 		},
 		{
 			"file": "product/plugins/acquisition-fixtures.ts",
-			"exports": [
-				"*"
-			]
+			"exports": ["*"]
 		},
 		{
 			"file": "product/plugins/index.ts",
-			"exports": [
-				"*"
-			]
+			"exports": ["*"]
 		},
 		{
 			"file": "product/plugins/portmaster/index.ts",
-			"exports": [
-				"*"
-			]
+			"exports": ["*"]
 		},
 		{
 			"file": "product/plugins/portmaster/src/envelope.ts",
-			"exports": [
-				"*"
-			]
+			"exports": ["*"]
 		},
 		{
 			"file": "product/plugins/retroarch/index.ts",
-			"exports": [
-				"*"
-			]
+			"exports": ["*"]
 		},
 		{
 			"file": "product/plugins/retroarch/src/materializer.ts",
-			"exports": [
-				"*"
-			]
+			"exports": ["*"]
 		},
 		{
 			"file": "product/plugins/retroarch/src/plugin.ts",
-			"exports": [
-				"*"
-			]
+			"exports": ["*"]
 		},
 		{
 			"file": "product/plugins/retroarch/src/policy.ts",
-			"exports": [
-				"*"
-			]
+			"exports": ["*"]
 		},
 		{
 			"file": "product/apps/portal/peers/peer-discovery.ts",
-			"exports": [
-				"PeerDiscoveryService"
-			]
+			"exports": ["PeerDiscoveryService"]
 		}
 	],
 	"duplicates": {
@@ -157,51 +132,35 @@
 			},
 			{
 				"name": "product-platform",
-				"patterns": [
-					"product/platform/**"
-				]
+				"patterns": ["product/platform/**"]
 			},
 			{
 				"name": "product-surface-pico",
-				"patterns": [
-					"product/surfaces/web/pico/**"
-				]
+				"patterns": ["product/surfaces/web/pico/**"]
 			},
 			{
 				"name": "product-surface-shift",
-				"patterns": [
-					"product/surfaces/web/shift/**"
-				]
+				"patterns": ["product/surfaces/web/shift/**"]
 			},
 			{
 				"name": "product-surfaces-web",
-				"patterns": [
-					"product/surfaces/web/**"
-				]
+				"patterns": ["product/surfaces/web/**"]
 			},
 			{
 				"name": "product-surfaces-terminal",
-				"patterns": [
-					"product/surfaces/terminal/**"
-				]
+				"patterns": ["product/surfaces/terminal/**"]
 			},
 			{
 				"name": "product-apps",
-				"patterns": [
-					"product/apps/**"
-				]
+				"patterns": ["product/apps/**"]
 			},
 			{
 				"name": "product-services",
-				"patterns": [
-					"product/services/**"
-				]
+				"patterns": ["product/services/**"]
 			},
 			{
 				"name": "repo-tools",
-				"patterns": [
-					"tools/**"
-				]
+				"patterns": ["tools/**"]
 			}
 		],
 		"rules": [
@@ -229,31 +188,19 @@
 			},
 			{
 				"from": "product-surfaces-web",
-				"allow": [
-					"product-platform"
-				]
+				"allow": ["product-platform"]
 			},
 			{
 				"from": "product-surface-pico",
-				"allow": [
-					"product-platform",
-					"repo-tools"
-				]
+				"allow": ["product-platform", "repo-tools"]
 			},
 			{
 				"from": "product-surface-shift",
-				"allow": [
-					"product-platform",
-					"repo-tools"
-				]
+				"allow": ["product-platform", "repo-tools"]
 			},
 			{
 				"from": "product-surfaces-terminal",
-				"allow": [
-					"product-platform",
-					"product-apps",
-					"product-services"
-				]
+				"allow": ["product-platform", "product-apps", "product-services"]
 			},
 			{
 				"from": "product-apps",
@@ -266,10 +213,7 @@
 			},
 			{
 				"from": "product-services",
-				"allow": [
-					"product-apps",
-					"product-platform"
-				]
+				"allow": ["product-apps", "product-platform"]
 			},
 			{
 				"from": "repo-tools",

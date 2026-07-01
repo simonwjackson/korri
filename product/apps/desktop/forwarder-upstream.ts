@@ -11,8 +11,7 @@
  *   1. Loopback fast-path. If a local korrid is running on
  *      127.0.0.1:<advertised-port>, use it. Subsequent fan-out happens
  *      on the local server side, which keeps the desktop bun a pure
- *      same-origin pass-through (per the
- *      `electrobun-desktop-wrapper-loopback` learning).
+ *      same-origin pass-through.
  *   2. Optional development mDNS fallback. When explicitly enabled,
  *      browse `_korri-stream._tcp`; pick the first result advertising
  *      `caps: "source"`. This is not enabled for product/kiosk mode,

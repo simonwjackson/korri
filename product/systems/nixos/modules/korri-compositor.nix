@@ -134,10 +134,9 @@ let
     else
       swayCommand;
 
-  # NOTE: korri-compositor no longer launches the kiosk renderer.
-  # Electrobun lifecycle ownership moved to korri-sessiond in the
-  # renderer-ownership cut (Phase 4 kiosk slice). The compositor owns
-  # Sway only; sessiond's enterIdle spawns the renderer. The previous
+  # NOTE: korri-compositor does not launch the kiosk renderer. Chromium
+  # lifecycle ownership lives in korri-sessiond. The compositor owns Sway
+  # only; sessiond's enterIdle spawns the renderer. The previous
   # `kioskClientLauncher` shell wrapper and the Sway `exec --no-startup-id`
   # line that drove it are intentionally absent.
 
@@ -168,17 +167,20 @@ let
   );
 
   seatBackendEnvironment =
-    if cfg.seatBackend == "direct" then {
-      # Legacy ROCKNIX-guest path: wlroots' builtin libseat opens the VT, DRM,
-      # and input nodes directly via the runtime user's ACLs, bypassing
-      # systemd-logind seat management.
-      WLR_SESSION = "direct";
-      LIBSEAT_BACKEND = "builtin";
-      WLR_LIBINPUT_NO_DEVICES = "1";
-    } else {
-      # "logind": let wlroots/libseat autodetect the guest's systemd-logind
-      # seat0. No session/backend override is emitted.
-    };
+    if cfg.seatBackend == "direct" then
+      {
+        # Legacy ROCKNIX-guest path: wlroots' builtin libseat opens the VT, DRM,
+        # and input nodes directly via the runtime user's ACLs, bypassing
+        # systemd-logind seat management.
+        WLR_SESSION = "direct";
+        LIBSEAT_BACKEND = "builtin";
+        WLR_LIBINPUT_NO_DEVICES = "1";
+      }
+    else
+      {
+        # "logind": let wlroots/libseat autodetect the guest's systemd-logind
+        # seat0. No session/backend override is emitted.
+      };
 
   sessionEnvironment =
     cfg.environment
@@ -400,8 +402,8 @@ in
         host a headless streaming appliance (aka shape) without a local GUI.
 
         With this enabled, the compositor still owns Sway only; the kiosk
-        renderer (Electrobun) is launched by `services.korri.sessiond`,
-        which auto-enables on kiosk images via `product/systems/nixos/images/kiosk.nix`. The
+        Chromium renderer is launched by `services.korri.sessiond`, which
+        auto-enables on kiosk images via `product/systems/nixos/images/kiosk.nix`. The
         legacy `kiosk.command` / `kiosk.launcher` options were removed when
         renderer-ownership moved to sessiond; downstream hosts pinning them
         will hit an evaluation error.

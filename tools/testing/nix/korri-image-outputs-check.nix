@@ -197,15 +197,19 @@ let
       liveUsbSummary.inputProviderName == "inputplumber"
     ))
     (check "Product live USB must enable seatd on x86" liveUsbSummary.seatdEnabled)
-    (check "Product live USB client package must be x86 kiosk desktop" (
-      liveUsbSummary.clientMainProgram == "korri-desktop-x86-kiosk"
+    (check "Product live USB client package must be Chromium kiosk" (
+      liveUsbSummary.clientMainProgram == "korri-chromium-kiosk"
     ))
     (check "Product live USB sessiond must export broker-only inputd URL" (
       liveUsbSummary.sessiondEnvironment.KORRI_DESKTOP_INPUTD_URL or null == "ws://127.0.0.1:3002"
     ))
     (check "Product live USB must use moonlight-embedded command from readable policy" (
-      lib.hasInfix "moonlight-embedded" (liveUsbSummary.serverPlatformDefaults.host.moonlight.command or "")
-      && lib.hasInfix "/bin/moonlight" (liveUsbSummary.serverPlatformDefaults.host.moonlight.command or "")
+      lib.hasInfix "moonlight-embedded" (
+        liveUsbSummary.serverPlatformDefaults.host.moonlight.command or ""
+      )
+      && lib.hasInfix "/bin/moonlight" (
+        liveUsbSummary.serverPlatformDefaults.host.moonlight.command or ""
+      )
     ))
     (check "Product live USB must use readable Moonlight mapping policy" (
       lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (
@@ -357,24 +361,63 @@ let
     (check "x86 kiosk RetroArch closure must contain exactly nine libretro cores" (
       builtins.length (retroarchCoresFor kiosk) == 4
     ))
-    (check "x86 kiosk RetroArch closure must contain mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes" (
-      let cores = retroarchCoresFor kiosk; in
-      hasRetroarchCore "mgba" cores && hasRetroarchCore "mupen64plus-next" cores && hasRetroarchCore "genesis-plus-gx" cores && hasRetroarchCore "mednafen-pce-fast" cores && hasRetroarchCore "mesen" cores && hasRetroarchCore "np2kai" cores && hasRetroarchCore "pcsx-rearmed" cores && hasRetroarchCore "ppsspp" cores && hasRetroarchCore "bsnes" cores
-    ))
+    (check
+      "x86 kiosk RetroArch closure must contain mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes"
+      (
+        let
+          cores = retroarchCoresFor kiosk;
+        in
+        hasRetroarchCore "mgba" cores
+        && hasRetroarchCore "mupen64plus-next" cores
+        && hasRetroarchCore "genesis-plus-gx" cores
+        && hasRetroarchCore "mednafen-pce-fast" cores
+        && hasRetroarchCore "mesen" cores
+        && hasRetroarchCore "np2kai" cores
+        && hasRetroarchCore "pcsx-rearmed" cores
+        && hasRetroarchCore "ppsspp" cores
+        && hasRetroarchCore "bsnes" cores
+      )
+    )
     (check "Product live USB RetroArch closure must contain exactly nine libretro cores" (
       builtins.length (retroarchCoresFor liveUsb) == 4
     ))
-    (check "Product live USB RetroArch closure must contain mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes" (
-      let cores = retroarchCoresFor liveUsb; in
-      hasRetroarchCore "mgba" cores && hasRetroarchCore "mupen64plus-next" cores && hasRetroarchCore "genesis-plus-gx" cores && hasRetroarchCore "mednafen-pce-fast" cores && hasRetroarchCore "mesen" cores && hasRetroarchCore "np2kai" cores && hasRetroarchCore "pcsx-rearmed" cores && hasRetroarchCore "ppsspp" cores && hasRetroarchCore "bsnes" cores
-    ))
+    (check
+      "Product live USB RetroArch closure must contain mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes"
+      (
+        let
+          cores = retroarchCoresFor liveUsb;
+        in
+        hasRetroarchCore "mgba" cores
+        && hasRetroarchCore "mupen64plus-next" cores
+        && hasRetroarchCore "genesis-plus-gx" cores
+        && hasRetroarchCore "mednafen-pce-fast" cores
+        && hasRetroarchCore "mesen" cores
+        && hasRetroarchCore "np2kai" cores
+        && hasRetroarchCore "pcsx-rearmed" cores
+        && hasRetroarchCore "ppsspp" cores
+        && hasRetroarchCore "bsnes" cores
+      )
+    )
     (check "Developer live USB RetroArch closure must contain exactly nine libretro cores" (
       builtins.length (retroarchCoresFor liveUsbDeveloper) == 4
     ))
-    (check "Developer live USB RetroArch closure must contain mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes" (
-      let cores = retroarchCoresFor liveUsbDeveloper; in
-      hasRetroarchCore "mgba" cores && hasRetroarchCore "mupen64plus-next" cores && hasRetroarchCore "genesis-plus-gx" cores && hasRetroarchCore "mednafen-pce-fast" cores && hasRetroarchCore "mesen" cores && hasRetroarchCore "np2kai" cores && hasRetroarchCore "pcsx-rearmed" cores && hasRetroarchCore "ppsspp" cores && hasRetroarchCore "bsnes" cores
-    ))
+    (check
+      "Developer live USB RetroArch closure must contain mGBA, Mupen64Plus-Next, Genesis Plus GX, Beetle PCE Fast, Mesen, NP2Kai, PCSX ReARMed, PPSSPP, and bsnes"
+      (
+        let
+          cores = retroarchCoresFor liveUsbDeveloper;
+        in
+        hasRetroarchCore "mgba" cores
+        && hasRetroarchCore "mupen64plus-next" cores
+        && hasRetroarchCore "genesis-plus-gx" cores
+        && hasRetroarchCore "mednafen-pce-fast" cores
+        && hasRetroarchCore "mesen" cores
+        && hasRetroarchCore "np2kai" cores
+        && hasRetroarchCore "pcsx-rearmed" cores
+        && hasRetroarchCore "ppsspp" cores
+        && hasRetroarchCore "bsnes" cores
+      )
+    )
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in

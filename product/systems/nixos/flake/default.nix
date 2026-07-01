@@ -31,19 +31,7 @@ flake-utils.lib.eachDefaultSystem (
       pkgs2405
       ;
 
-    desktop = import ../../../../product/apps/desktop {
-      inherit
-        pkgs
-        pkgs2405
-        system
-        bunDeps
-        ;
-      lib = pkgs.lib;
-      src = korriSources.desktop;
-      portal = korriPortal;
-    };
     hasRocknixGuestCompatible = builtins.getEnv "ROCKNIX_GUEST_DEVICE_COMPATIBLE" != "";
-    isSupportedDesktopSystem = desktop.isSupportedSystem;
     isX86Linux = system == "x86_64-linux";
     productRevision = self.rev or self.dirtyRev or "local-candidate";
     productShortRevision =
@@ -143,7 +131,7 @@ flake-utils.lib.eachDefaultSystem (
     };
     bunDeps = bunDependencyCache.deps;
 
-    # Sources used by the Bun/Electrobun package derivations. Keep these
+    # Sources used by Bun package derivations. Keep these
     # narrower than the flake root so docs, backlog, artifact downloads,
     # test tooling, and unrelated Nix/package work do not invalidate device
     # runtime package builds.
@@ -214,13 +202,6 @@ flake-utils.lib.eachDefaultSystem (
     # to avoid the server closure.
     korriHeadlessSource = korrid;
 
-    electrobunBinaries = desktop.packages.binaries;
-    korriDesktopUnwrapped = desktop.packages.unwrapped;
-    korriDesktop = desktop.packages.host;
-    korriDesktopDevice = desktop.packages.device;
-    korriDesktopDeviceCurrent = desktop.packages.deviceCurrent;
-    korriDesktopX86Kiosk = desktop.packages.x86Kiosk;
-
     firstPartyPluginComposition = import ./plugins.nix {
       inherit pkgs bunDeps;
       src = korriSources.cli;
@@ -281,7 +262,6 @@ flake-utils.lib.eachDefaultSystem (
         self
         pkgs
         system
-        isSupportedDesktopSystem
         isX86Linux
         hasRocknixGuestCompatible
         attrsForProducts
@@ -302,12 +282,6 @@ flake-utils.lib.eachDefaultSystem (
         sunshineKorri
         moonlightEmbeddedKorri
         libretroWasm4
-        electrobunBinaries
-        korriDesktopUnwrapped
-        korriDesktop
-        korriDesktopDevice
-        korriDesktopDeviceCurrent
-        korriDesktopX86Kiosk
         korriHeadlessSystem
         korriKioskSystem
         korriDesktopLabSystem
@@ -319,12 +293,7 @@ flake-utils.lib.eachDefaultSystem (
     };
 
     lib = import ./lib.nix {
-      inherit
-        pkgs
-        isSupportedDesktopSystem
-        korriImages
-        desktop
-        ;
+      inherit pkgs korriImages;
     };
 
     checks = import ./checks.nix {
@@ -338,10 +307,6 @@ flake-utils.lib.eachDefaultSystem (
         explicitProductList
         byCompatibleProduct
         bunDependencyCache
-        korriDesktop
-        korriDesktopDevice
-        korriDesktopX86Kiosk
-        korriDesktopUnwrapped
         korriImages
         korriKioskLiveUsbSystem
         korriKioskLiveUsbDeveloperSystem
@@ -354,16 +319,13 @@ flake-utils.lib.eachDefaultSystem (
     apps = import ./apps.nix {
       inherit
         pkgs
-        isSupportedDesktopSystem
         isX86Linux
         korriInputd
         korriGameStream
         korriCli
         korrid
         korriHeadlessSource
-        korriDesktop
-        korriDesktopDevice
-        korriDesktopDeviceCurrent
+        korriChromiumKiosk
         korriKioskLiveUsbRuntimeSystem
         korriKioskLiveUsbSystem
         korriKioskLiveUsbDeveloperSystem
@@ -372,12 +334,7 @@ flake-utils.lib.eachDefaultSystem (
     };
 
     devShells = import ./dev-shells.nix {
-      inherit
-        pkgs
-        commonPackages
-        commonShellHook
-        desktop
-        ;
+      inherit pkgs commonPackages commonShellHook;
     };
   }
 )

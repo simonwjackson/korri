@@ -45,10 +45,10 @@ export interface SwayController {
 }
 
 export const DEFAULT_SWAY_SELECTOR: Required<SwayWindowSelector> = {
-  appIds: ["korri-desktop", "dev.korri.desktop"],
-  appIdPrefixes: [],
+  appIds: ["chromium", "chromium-browser", "google-chrome", "chrome"],
+  appIdPrefixes: ["chrome-"],
   titles: [],
-  classes: ["Korri", "Electrobun", "ElectrobunKitchenSink-dev"],
+  classes: ["Chromium", "chromium", "Google-chrome"],
 }
 
 export function findKorriWindows(

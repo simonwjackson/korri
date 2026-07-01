@@ -48,9 +48,7 @@ pkgs.stdenv.mkDerivation {
     # not. Patch the installed build output to use namespace imports so
     # the bundles can be fully self-contained without `--external`.
     #
-    # The bun2nix cache override in flake.nix applies the same patch
-    # centrally for korri-desktop, which does not get a sed loop here.
-    # We keep the sed in korri-cli/korrid as defense-in-depth
+    # We keep this sed loop in korrid as defense-in-depth
     # because the central override is keyed on an exact proseql version
     # string; this loop is version-agnostic and protects the bundle if
     # a future bump silently misses the override key.
@@ -77,8 +75,7 @@ pkgs.stdenv.mkDerivation {
     # All three bundles are fully self-contained — no node_modules has
     # to ship in the output. Copying the full dev tree previously
     # inflated the closure with kokoro-js, onnxruntime, @babylonjs,
-    # playwright, storybook, typescript, and the entire electrobun
-    # native package, none of which the headless server reaches at
+    # playwright, storybook, and typescript, none of which the headless server reaches at
     # runtime.
 
     # When `avahi-daemon` is running on the host, the server spawns
@@ -107,8 +104,8 @@ pkgs.stdenv.mkDerivation {
 
     # Guard against future regressions of the dev-deps-in-closure bug:
     # the bundles are self-contained, so $out must not carry any
-    # node_modules tree at all. Subsumes the older electrobun/dangling-
-    # symlink checks, which were band-aids for shipping the full tree.
+    # node_modules tree at all. Subsumes the older dangling-symlink
+    # checks, which were band-aids for shipping the full tree.
     if [ -d "$out/share/korrid/node_modules" ]; then
       echo "korrid install closure must not contain node_modules" >&2
       find "$out/share/korrid/node_modules" -maxdepth 2 -type d >&2

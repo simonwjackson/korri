@@ -51,14 +51,6 @@ build-api:
   tsc --project tsconfig.api.json
   bun x tsc-alias -p tsconfig.api.json --resolve-full-paths --resolve-full-extension .js
 
-# Check whether Electrobun's native runtime can run on this machine.
-desktop-runtime-check:
-  bun run tools/desktop/electrobun-runtime-check.ts
-
-# Smoke-test the desktop HTTP composition against the built portal output.
-desktop-smoke: build-web
-  bun run tools/desktop/desktop-smoke.ts
-
 # Run the selected Korri flake app locally, or on DEVICE_HOST when set.
 device-run *args:
   bun run tools/device/flake-command.ts {{args}}
@@ -66,25 +58,6 @@ device-run *args:
 # Print the selected Device flake run command without executing it.
 device-print-run-command:
   bun run tools/device/flake-command.ts --print
-
-# Bundle the desktop preload script as a separate browser target.
-desktop-preload-build:
-  bun build product/apps/desktop/preload-entry.ts --target=browser --outfile=out/build/desktop-preload/preload.js
-
-# Bundle the waiting-page polling-loop bootstrap as a browser module.
-# Served by bun while the connection controller is not yet `connected`.
-desktop-waiting-page-build:
-  bun build product/apps/desktop/waiting-page/polling-loop-bootstrap.ts --target=browser --outfile=out/build/desktop-waiting-page/waiting-polling-loop.js
-
-# Start the Electrobun desktop app after building portal assets.
-desktop-dev: build-web desktop-preload-build desktop-waiting-page-build desktop-runtime-check
-  bun x electrobun dev
-  bun run tools/desktop/electrobun-post-build-patch.ts
-
-# Package the Electrobun desktop app after building portal assets.
-desktop-build: build-web desktop-preload-build desktop-waiting-page-build desktop-runtime-check
-  bun x electrobun build
-  bun run tools/desktop/electrobun-post-build-patch.ts
 
 # Run TypeScript unit tests.
 test-unit:
@@ -111,7 +84,6 @@ test-coverage-sessiond:
     product/services/device/sessiond-state.test.ts \
     product/services/device/sessiond-role.test.ts \
     product/services/device/sessiond-source-machine.test.ts \
-    product/services/device/sessiond-electrobun.test.ts \
     product/services/device/sessiond-gamescope-reaper.test.ts \
     product/services/device/sessiond-launcher-client.test.ts \
     product/services/device/sessiond-renderer.test.ts \
