@@ -1,7 +1,7 @@
 ---
 title: feat: Add event-driven workspace game lanes
 type: feat
-status: active
+status: completed
 date: 2026-07-01
 deepened: 2026-07-01
 origin: work/items/active/01KWDTQ1S9S46YCCX4V9SYPBH5-design-workspace-backed-game-lanes-for-home-game-switching/item.md
