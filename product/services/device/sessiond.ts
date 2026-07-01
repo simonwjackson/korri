@@ -35,6 +35,10 @@ import {
   repairStreamSurface,
 } from "./game-stream-fullscreen"
 import {
+  createChromiumController,
+  realChromiumRunner,
+} from "./sessiond-chromium"
+import {
   createElectrobunController,
   realElectrobunRunner,
 } from "./sessiond-electrobun"
@@ -1197,6 +1201,22 @@ function isTerminalLifecycleEvent(event: SessiondManagedLaunchEvent): boolean {
 }
 
 function realRendererController(): KorriRendererController {
+  if (process.env.KORRI_RENDERER === "chromium") {
+    return createChromiumController({
+      config: {
+        executablePath: process.env.KORRI_CHROMIUM_APP,
+        hostUrl: process.env.KORRI_WEB_SURFACE_URL,
+        stateRoot: process.env.KORRI_CHROMIUM_STATE_ROOT,
+        statusFile: process.env.KORRI_DESKTOP_STATUS_FILE,
+        logPath: process.env.KORRI_CHROMIUM_LOG,
+        readinessTimeoutMs: process.env.KORRI_CHROMIUM_READY_TIMEOUT_MS
+          ? Number.parseInt(process.env.KORRI_CHROMIUM_READY_TIMEOUT_MS, 10)
+          : 10_000,
+      },
+      runner: realChromiumRunner,
+    })
+  }
+
   return createElectrobunController({
     config: {
       executablePath: process.env.KORRI_ELECTROBUN_APP,
