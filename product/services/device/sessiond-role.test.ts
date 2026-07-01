@@ -3,6 +3,7 @@ import type { KorriSessiondServiceManager } from "./sessiond"
 import type { KorriRendererController } from "./sessiond-renderer"
 import {
   createKioskSessionRole,
+  createLaneAwareKioskSessionRole,
   formatSessionRoleReadyEvidence,
   sessionRoleReadyOutcome,
 } from "./sessiond-role"
@@ -10,6 +11,7 @@ import type {
   HomeInvariantDecision,
   KorriWindowSnapshot,
 } from "./sessiond-state"
+import type { KorriLaneController } from "./sessiond-lanes"
 import type { SwayController } from "./sessiond-sway"
 
 function makeRecordingRenderer(initialPid = 100): {
@@ -256,5 +258,98 @@ describe("kiosk session role", () => {
     expect(rendererEvents).toEqual([])
     expect(swayEvents).toEqual([])
     expect(svcEvents).toEqual([])
+  })
+})
+
+describe("lane-aware kiosk session role", () => {
+  function makeLaneController(): {
+    readonly laneController: KorriLaneController
+    readonly events: string[]
+  } {
+    const events: string[] = []
+    const laneController: KorriLaneController = {
+      snapshot: () => ({
+        lanes: { hub: "korri:hub", game: "korri:game:active" },
+        activePlace: "hub",
+        hub: { present: true },
+        game: { status: "none" },
+        generation: 0,
+      }),
+      beginLaunch: input => events.push(`begin:${input.launchId}`),
+      handleSwayEvent: async () => {},
+      toggleHome: async () => {
+        events.push("toggle-home")
+        return { status: "no-live-game" }
+      },
+      noteLaunchTimeout: async launchId => events.push(`timeout:${launchId}`),
+      focusHub: async () => {
+        events.push("focus-hub")
+      },
+    }
+    return { laneController, events }
+  }
+
+  it("preserves the hub renderer and does not emit renderer-stopped semantics", async () => {
+    const { renderer, events: rendererEvents } = makeRecordingRenderer()
+    const { sway } = makeSway([{ id: 101, focused: true, fullscreen: true }])
+    const { serviceManager } = makeServiceManager()
+    const { laneController } = makeLaneController()
+    const role = createLaneAwareKioskSessionRole({
+      renderer,
+      sway,
+      serviceManager,
+      laneController,
+    })
+
+    await role.enterIdle()
+    rendererEvents.length = 0
+
+    expect(role.id).toBe("kiosk-lanes")
+    expect(role.idleReadyEventName).toBe("home-ready")
+    expect(role.emitsRendererStopped).toBe(false)
+
+    await role.beforeChildLaunch()
+
+    expect(rendererEvents).toEqual([])
+    expect(role.rendererStatus().pid).toBe(101)
+  })
+
+  it("promotes the active child through the lane controller", async () => {
+    const { renderer } = makeRecordingRenderer()
+    const { sway } = makeSway([{ id: 101, focused: true, fullscreen: true }])
+    const { serviceManager } = makeServiceManager()
+    const { laneController, events } = makeLaneController()
+    const role = createLaneAwareKioskSessionRole({
+      renderer,
+      sway,
+      serviceManager,
+      laneController,
+    })
+
+    await role.afterChildRunning({ command: "/bin/game", args: [] })
+
+    expect(events).toEqual(["begin:managed-launch"])
+  })
+
+  it("restores by focusing hub and reconciling without relaunching an existing renderer", async () => {
+    const { renderer, events: rendererEvents } = makeRecordingRenderer()
+    const { sway } = makeSway([{ id: 101, focused: true, fullscreen: true }])
+    const { serviceManager } = makeServiceManager()
+    const { laneController, events: laneEvents } = makeLaneController()
+    const role = createLaneAwareKioskSessionRole({
+      renderer,
+      sway,
+      serviceManager,
+      laneController,
+    })
+
+    await role.enterIdle()
+    rendererEvents.length = 0
+
+    await role.restoreIdleAfterLaunch()
+
+    expect(laneEvents).toContain("focus-hub")
+    expect(rendererEvents).toEqual([])
+    expect(role.idleReadyEvidence()).toBe("home-invariant windows=1 satisfied")
   })
 })

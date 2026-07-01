@@ -10,6 +10,7 @@ import type {
 } from "./sessiond-renderer"
 import { rendererStatus } from "./sessiond-renderer"
 import { evaluateHomeInvariant } from "./sessiond-state"
+import type { KorriLaneController } from "./sessiond-lanes"
 import type { SwayController } from "./sessiond-sway"
 
 /**
@@ -173,6 +174,10 @@ export interface KioskSessionRoleDeps {
   readonly serviceManager: KorriSessiondServiceManager
 }
 
+export interface LaneAwareKioskSessionRoleDeps extends KioskSessionRoleDeps {
+  readonly laneController: KorriLaneController
+}
+
 /**
  * Compose the kiosk session role from the same renderer / sway / service
  * manager controllers sessiond has always used. Behavior is identical to
@@ -269,6 +274,94 @@ export function createKioskSessionRole(
     // repairs ran. "satisfied" appears only when no repair was
     // necessary, distinguishing the post-reconcile state from a
     // happy steady state.
+    idleReadyOutcome: () => ({
+      status: "ok",
+      evidence: { kind: "home-invariant", ...lastReconcile },
+    }),
+    idleReadyEvidence: () =>
+      formatSessionRoleReadyEvidence({
+        kind: "home-invariant",
+        ...lastReconcile,
+      }),
+    rendererStatus: () => rendererStatus(deps.renderer, rendererPid),
+  }
+}
+
+export function createLaneAwareKioskSessionRole(
+  deps: LaneAwareKioskSessionRoleDeps,
+): SessionRole {
+  let rendererPid: number | undefined
+  let lastReconcile: KioskReconcileSummary = {
+    windowCount: 0,
+    relaunchedRenderer: false,
+    closedDuplicates: 0,
+    repairedFocus: false,
+    repairedFullscreen: false,
+  }
+
+  const reconcile = async (
+    options: { readonly allowRelaunch?: boolean } = {},
+  ) => {
+    const windows = await deps.sway.getKorriWindows()
+    const decisions = evaluateHomeInvariant({ windows }).filter(
+      decision =>
+        options.allowRelaunch !== false ||
+        decision.kind !== "relaunch-renderer",
+    )
+    const summary: KioskReconcileSummary = {
+      windowCount: windows.length,
+      relaunchedRenderer: false,
+      closedDuplicates: 0,
+      repairedFocus: false,
+      repairedFullscreen: false,
+    }
+    if (decisions.some(decision => decision.kind === "relaunch-renderer")) {
+      const launched = await deps.renderer.launch()
+      rendererPid = launched.pid
+      summary.relaunchedRenderer = true
+    }
+    for (const decision of decisions) {
+      if (decision.kind === "close-duplicate-windows") {
+        summary.closedDuplicates = decision.duplicateWindowIds.length
+      }
+      if (decision.kind === "repair-window") {
+        summary.repairedFocus = decision.repairs.includes("focus")
+        summary.repairedFullscreen = decision.repairs.includes("fullscreen")
+      }
+    }
+    await deps.sway.applyDecisions(
+      decisions.filter(decision => decision.kind !== "relaunch-renderer"),
+    )
+    lastReconcile = summary
+  }
+
+  return {
+    id: "kiosk-lanes",
+    idleModeLabel: "home",
+    idleReadyEventName: "home-ready",
+    emitsRendererStopped: false,
+    enterIdle: async () => {
+      await deps.serviceManager.maskEssway()
+      if (rendererPid === undefined) {
+        const launched = await deps.renderer.launch()
+        rendererPid = launched.pid
+      }
+      await reconcile({ allowRelaunch: false })
+    },
+    leaveIdle: async () => {
+      await deps.renderer.stop(rendererPid)
+      rendererPid = undefined
+      await deps.serviceManager.restoreEssway()
+    },
+    beforeChildLaunch: async () => {},
+    afterChildRunning: async () => {
+      deps.laneController.beginLaunch({ launchId: "managed-launch" })
+    },
+    restoreIdleAfterLaunch: async () => {
+      await deps.laneController.focusHub()
+      await reconcile()
+    },
+    reconcileIdle: reconcile,
     idleReadyOutcome: () => ({
       status: "ok",
       evidence: { kind: "home-invariant", ...lastReconcile },

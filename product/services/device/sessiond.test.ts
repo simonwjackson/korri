@@ -56,6 +56,7 @@ function startHarness(
     readonly sessionHooks?: readonly KorriSessiondLifecycleHook[]
     readonly managedStopGraceMs?: number
     readonly heartbeatIntervalMs?: number
+    readonly role?: SessionRole
   } = {},
 ) {
   const events: string[] = []
@@ -135,6 +136,7 @@ function startHarness(
         : undefined,
     },
     sessionHooks: options.sessionHooks,
+    ...(options.role ? { role: options.role } : {}),
     ...(options.managedStopGraceMs !== undefined
       ? { managedStopGraceMs: options.managedStopGraceMs }
       : {}),
@@ -314,6 +316,62 @@ describe("korri sessiond", () => {
       "home-ready",
     ])
     expect(core.status().state.mode).toBe("home")
+  })
+
+  it("omits renderer-stopped for lane-aware managed launches", async () => {
+    const control = deferred<LaunchResult>()
+    const roleEvents: string[] = []
+    const { core } = startHarness({
+      runLaunch: async () => await control.promise,
+      role: {
+        id: "kiosk-lanes",
+        idleModeLabel: "home",
+        idleReadyEventName: "home-ready",
+        emitsRendererStopped: false,
+        enterIdle: async () => roleEvents.push("enter-idle"),
+        leaveIdle: async () => roleEvents.push("leave-idle"),
+        beforeChildLaunch: async () => roleEvents.push("before-child"),
+        afterChildRunning: async () => roleEvents.push("after-child"),
+        restoreIdleAfterLaunch: async () => roleEvents.push("restore-idle"),
+        reconcileIdle: async () => roleEvents.push("reconcile-idle"),
+        idleReadyEvidence: () => "home-invariant windows=1 satisfied",
+        rendererStatus: () => ({ kind: "test-renderer", pid: 101 }),
+      },
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-lanes", spec }),
+      }),
+    )
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-lanes",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+
+    control.resolve({ status: "launched" })
+    const lifecycle = parseSseEvents(await streamText)
+
+    expect(lifecycle.map(event => event.type)).toEqual([
+      "launch-accepted",
+      "child-running",
+      "child-exited",
+      "restoring",
+      "home-ready",
+    ])
+    expect(roleEvents).toEqual([
+      "enter-idle",
+      "before-child",
+      "after-child",
+      "restore-idle",
+    ])
   })
 
   it("emits SSE heartbeats so a quiet long-running launch keeps the stream alive", async () => {
