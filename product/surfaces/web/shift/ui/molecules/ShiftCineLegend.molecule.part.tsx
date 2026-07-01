@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { SHIFT_DESIGN_PARTS } from "../../shift-design-parts"
 import { ShiftPartFrame } from "../ShiftPartFrame"
 import { ShiftCineLegend } from "./ShiftCineLegend"
 
@@ -11,6 +12,7 @@ const frame = (children: ReactNode) => (
 
 export const ShiftCineLegendStates = [
   {
+    designPartId: SHIFT_DESIGN_PARTS.legend.id,
     name: "Legend",
     note,
     state: "Browse",
@@ -26,6 +28,7 @@ export const ShiftCineLegendStates = [
       ),
   },
   {
+    designPartId: SHIFT_DESIGN_PARTS.legend.id,
     name: "Legend",
     note,
     state: "Failure",

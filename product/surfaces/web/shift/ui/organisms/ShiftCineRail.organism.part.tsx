@@ -1,3 +1,4 @@
+import { SHIFT_DESIGN_PARTS } from "../../shift-design-parts"
 import { ShiftPartFrame } from "../ShiftPartFrame"
 import { SHIFT_PART_GAMES } from "../shift-part-fixtures"
 import { ShiftCineRail } from "./ShiftCineRail"
@@ -6,6 +7,7 @@ const games = SHIFT_PART_GAMES.slice(0, 8)
 const noop = () => {}
 
 export default {
+  designPartId: SHIFT_DESIGN_PARTS.rail.id,
   name: "Rail",
   note: "Cinematic",
   render: () => (

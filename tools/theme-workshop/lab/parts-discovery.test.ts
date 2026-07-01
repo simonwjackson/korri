@@ -15,9 +15,7 @@ describe("lab parts discovery", () => {
       ),
     ).toEqual({ surfaceId: "shift", layer: "atom", baseName: "ShiftPill" })
     expect(
-      parsePartPath(
-        "/product/surfaces/web/pico/pages/PicoHome.page.part.tsx",
-      ),
+      parsePartPath("/product/surfaces/web/pico/pages/PicoHome.page.part.tsx"),
     ).toEqual({ surfaceId: "pico", layer: "page", baseName: "PicoHome" })
     expect(parsePartPath("./pico/ui/Badge.atom.part.tsx")).toEqual({
       surfaceId: "pico",
@@ -68,6 +66,33 @@ describe("lab parts discovery", () => {
     expect(catalog.stories[0]?.surface).toBe(true)
   })
 
+  it("preserves product-owned design part ids from story specs", () => {
+    const catalog = collectPartsFromModules(
+      {
+        "/product/surfaces/web/shift/ui/Status.molecule.part.tsx": {
+          default: {
+            designPartId: "shift.status-bar",
+            name: "Duplicate Label",
+            render: () => "status",
+          },
+        },
+        "/product/surfaces/web/shift/ui/Other.molecule.part.tsx": {
+          default: {
+            designPartId: "shift.other-status",
+            name: "Duplicate Label",
+            render: () => "other",
+          },
+        },
+      },
+      "shift",
+    )
+
+    expect(catalog.stories.map(story => story.designPartId).sort()).toEqual([
+      "shift.other-status",
+      "shift.status-bar",
+    ])
+  })
+
   it("reports and loads surface parts from injected modules", async () => {
     __setPartModulesForTest({
       "/product/surfaces/web/pico/ui/Badge.atom.part.tsx": {
@@ -99,8 +124,13 @@ describe("lab parts discovery", () => {
       "shift",
     )
 
-    expect(catalog.stories.map(story => story.state)).toEqual(["empty", "ready"])
-    expect(catalog.stories.every(story => story.variants?.length === 1)).toBe(true)
+    expect(catalog.stories.map(story => story.state)).toEqual([
+      "empty",
+      "ready",
+    ])
+    expect(catalog.stories.every(story => story.variants?.length === 1)).toBe(
+      true,
+    )
   })
 
   it("does not relate ordinary named exports as state variants", () => {
@@ -115,7 +145,9 @@ describe("lab parts discovery", () => {
     )
 
     expect(catalog.stories).toHaveLength(2)
-    expect(catalog.stories.every(story => story.variants === undefined)).toBe(true)
+    expect(catalog.stories.every(story => story.variants === undefined)).toBe(
+      true,
+    )
   })
 
   it("keeps loaded stories when one injected module fails to import", async () => {

@@ -18,6 +18,7 @@ export function LabPreviewInspector({
   story,
   inputs,
   inputValues,
+  scopeNote,
   onInputChange,
   onSelectTargetIndex,
   onClearSelection,
@@ -26,6 +27,7 @@ export function LabPreviewInspector({
   readonly story: Story | null
   readonly inputs: readonly LabSurfacePartInput[]
   readonly inputValues: Readonly<Record<string, LabInputValue>>
+  readonly scopeNote: string
   readonly onInputChange: (inputId: string, value: LabInputValue) => void
   readonly onSelectTargetIndex: (index: number) => void
   readonly onClearSelection: () => void
@@ -62,9 +64,7 @@ export function LabPreviewInspector({
         })}
       </nav>
       {story ? (
-        <div className="pt-sources-hint">
-          Editing the real Preview instance.
-        </div>
+        <div className="pt-sources-hint">{scopeNote}</div>
       ) : (
         <div className="pt-sources-hint">
           This part is named by the product, but has no matching catalog

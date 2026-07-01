@@ -20,12 +20,7 @@ import {
 import { useLab } from "./Lab.context"
 import { knobStyle } from "./model/lab-calibration-state"
 import {
-  type LabWorkshopCommand,
-  type LabWorkshopCommandSignal,
-  type LabWorkshopTool,
-  reconcileInstancesWithSelection,
-} from "./model/lab-canvas-state"
-import {
+  bindLiveDeviceInput,
   bindPlacedPartInput,
   bindPlacedPartObject,
   createLiveDeviceObject,
@@ -34,6 +29,12 @@ import {
   type LabCanvasObject,
   type LabPlacedPartObject,
 } from "./model/lab-canvas-object"
+import {
+  type LabWorkshopCommand,
+  type LabWorkshopCommandSignal,
+  type LabWorkshopTool,
+  reconcileInstancesWithSelection,
+} from "./model/lab-canvas-state"
 import {
   objectInputsForStory,
   resolveObjectInputValues,
@@ -148,15 +149,16 @@ export function LabShell() {
     () => adapter.inputsForScreen?.(surfacePath) ?? [],
     [adapter, surfacePath],
   )
-  const [screenInputValues, setScreenInputValues] = useState<
-    Readonly<Record<string, LabInputValue>>
-  >({})
   const presentation = userPresentation ?? autoPresentation
   const choosePresentation = (next: LabPresentation) => {
     setUserPresentation(next)
     persistPresentation(next)
   }
-  const changeScreenInput = (inputId: string, value: LabInputValue) => {
+  const changeLiveDeviceInput = (
+    deviceObjectId: string,
+    inputId: string,
+    value: LabInputValue,
+  ) => {
     const input = screenInputs.find(candidate => candidate.id === inputId)
     if (!input) return
     const canonical = canonicalInputValue(
@@ -164,8 +166,10 @@ export function LabShell() {
       input.control,
       input.defaultValue,
     )
-    setScreenInputValues(prev => ({ ...prev, [inputId]: canonical }))
-    input.apply?.(canonical)
+    setObjects(prev =>
+      bindLiveDeviceInput(prev, deviceObjectId, inputId, canonical),
+    )
+    input.apply?.(canonical, { scopeId: deviceObjectId })
   }
 
   // Follow the viewport so the default position tracks the screen until the
@@ -194,24 +198,6 @@ export function LabShell() {
   useEffect(() => {
     setActiveSourceId(sources[0]?.id ?? DEFAULT_SOURCE_ID)
   }, [sources])
-
-  useEffect(() => {
-    const values = Object.fromEntries(
-      screenInputs.map(input => [
-        input.id,
-        canonicalInputValue(
-          input.defaultValue,
-          input.control,
-          input.defaultValue,
-        ),
-      ]),
-    )
-    setScreenInputValues(values)
-    for (const input of screenInputs) input.apply?.(values[input.id])
-    return () => {
-      for (const input of screenInputs) input.release?.()
-    }
-  }, [screenInputs])
 
   // When the selected part changes, snap the active state to that part's
   // default (its "ready" tag if present, else its first state).
@@ -324,10 +310,16 @@ export function LabShell() {
     />
   )
   useEffect(() => {
-    if (selectedObjectId && !objects.some(object => object.id === selectedObjectId)) {
+    if (
+      selectedObjectId &&
+      !objects.some(object => object.id === selectedObjectId)
+    ) {
       setSelectedObjectId(null)
     }
-    if (previewSelection && !objects.some(object => object.id === previewSelection.scopeId)) {
+    if (
+      previewSelection &&
+      !objects.some(object => object.id === previewSelection.scopeId)
+    ) {
       setPreviewSelection(null)
     }
   }, [objects, selectedObjectId, previewSelection])
@@ -347,19 +339,27 @@ export function LabShell() {
     ? (index.byId.get(selectedPlacedObject.storyId) ?? null)
     : null
   const selectedPreviewTarget = activePreviewTarget(previewSelection)
-  const selectedPreviewObject =
-    previewSelection
-      ? (objects.find(object => object.id === previewSelection.scopeId) ?? null)
-      : null
+  const selectedPreviewObject = previewSelection
+    ? (objects.find(object => object.id === previewSelection.scopeId) ?? null)
+    : null
   const selectedPreviewPlacedObject =
     selectedPreviewObject && isPlacedPartObject(selectedPreviewObject)
+      ? selectedPreviewObject
+      : null
+  const selectedPreviewLiveObject =
+    selectedPreviewObject && isLiveDeviceObject(selectedPreviewObject)
       ? selectedPreviewObject
       : null
   const selectedPreviewStory = selectedPreviewTarget
     ? storyForPreviewTarget(index, selectedPreviewTarget)
     : null
   const previewInputs = selectedPreviewStory
-    ? (adapter.surfacePartInputs?.(selectedPreviewStory) ?? [])
+    ? selectedPreviewLiveObject
+      ? (adapter.surfacePartInputs?.(selectedPreviewStory) ?? []).filter(
+          input =>
+            screenInputs.some(screenInput => screenInput.id === input.id),
+        )
+      : (adapter.surfacePartInputs?.(selectedPreviewStory) ?? [])
     : []
   const previewInputValues = Object.fromEntries(
     previewInputs.map(input => [
@@ -367,7 +367,7 @@ export function LabShell() {
       canonicalInputValue(
         selectedPreviewPlacedObject
           ? selectedPreviewPlacedObject.inputValues[input.id]
-          : screenInputValues[input.id],
+          : selectedPreviewLiveObject?.inputValues[input.id],
         input.control,
         input.defaultValue,
       ),
@@ -378,7 +378,9 @@ export function LabShell() {
       bindObjectInputValue(selectedPreviewPlacedObject.id, inputId, value)
       return
     }
-    changeScreenInput(inputId, value)
+    if (selectedPreviewLiveObject) {
+      changeLiveDeviceInput(selectedPreviewLiveObject.id, inputId, value)
+    }
   }
   const choosePreviewTargetIndex = (targetIndex: number) =>
     setPreviewSelection(prev =>
@@ -401,14 +403,17 @@ export function LabShell() {
   // sliders for the whole canvas). They edit unrelated things, so they live
   // apart.
   const statePanel = () =>
-    previewSelection &&
-    selectedPreviewTarget &&
-    selectedPreviewObject ? (
+    previewSelection && selectedPreviewTarget && selectedPreviewObject ? (
       <LabPreviewInspector
         selection={previewSelection}
         story={selectedPreviewStory}
         inputs={previewInputs}
         inputValues={previewInputValues}
+        scopeNote={
+          selectedPreviewLiveObject
+            ? "Editing this live device's real inputs."
+            : "Editing this placed object's inputs."
+        }
         onInputChange={changePreviewInput}
         onSelectTargetIndex={choosePreviewTargetIndex}
         onClearSelection={clearPreviewSelection}
@@ -418,8 +423,19 @@ export function LabShell() {
         axes={screenAxes}
         activeByAxis={activeByAxis}
         inputs={screenInputs}
-        inputValues={screenInputValues}
-        onInputChange={changeScreenInput}
+        inputValues={Object.fromEntries(
+          screenInputs.map(input => [
+            input.id,
+            canonicalInputValue(
+              selectedLiveObject.inputValues[input.id],
+              input.control,
+              input.defaultValue,
+            ),
+          ]),
+        )}
+        onInputChange={(inputId, value) =>
+          changeLiveDeviceInput(selectedLiveObject.id, inputId, value)
+        }
         onPin={pinAxis}
         onLive={liveAxis}
         onPinCurrent={pinCurrent}
@@ -601,6 +617,12 @@ function storyForPreviewTarget(
   index: ReturnType<typeof buildStoryIndex>,
   target: LabPreviewPartTarget,
 ) {
+  for (const group of index.groups) {
+    for (const story of group.stories) {
+      if (story.designPartId === target.partId) return story
+    }
+  }
+
   for (const group of index.groups) {
     for (const story of group.stories) {
       if (story.layer !== target.layer) continue

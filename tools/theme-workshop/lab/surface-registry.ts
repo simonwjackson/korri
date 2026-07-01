@@ -21,13 +21,22 @@ export interface LabMountedSurface {
   readonly dispose: () => void
 }
 
+export interface LabSurfaceInputContext {
+  /** Canvas object that owns the mounted surface instance, when the edit is
+   * scoped to one live device. Omitted means apply to every mounted surface. */
+  readonly scopeId?: string
+}
+
 export interface LabSurfacePartInput {
   readonly id: string
   readonly label: string
   readonly defaultValue: LabInputValue
   readonly control: LabInputControl
-  readonly apply?: (value: LabInputValue) => void
-  readonly release?: () => void
+  readonly apply?: (
+    value: LabInputValue,
+    context?: LabSurfaceInputContext,
+  ) => void
+  readonly release?: (context?: LabSurfaceInputContext) => void
 }
 
 export interface LabSurfaceDualScreenOptions {

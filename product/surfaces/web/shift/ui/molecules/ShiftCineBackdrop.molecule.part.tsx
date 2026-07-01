@@ -1,3 +1,4 @@
+import { SHIFT_DESIGN_PARTS } from "../../shift-design-parts"
 import { ShiftPartFrame } from "../ShiftPartFrame"
 import { SHIFT_PART_GAMES } from "../shift-part-fixtures"
 import { ShiftCineBackdrop } from "./ShiftCineBackdrop"
@@ -7,6 +8,7 @@ const note = "Mood"
 
 export const ShiftCineBackdropStates = [
   {
+    designPartId: SHIFT_DESIGN_PARTS.backdrop.id,
     name: "Backdrop",
     note,
     state: "Default",
@@ -17,6 +19,7 @@ export const ShiftCineBackdropStates = [
     ),
   },
   {
+    designPartId: SHIFT_DESIGN_PARTS.backdrop.id,
     name: "Backdrop",
     note,
     state: "Cooled",

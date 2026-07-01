@@ -14,6 +14,9 @@ import type * as Atom from "effect/unstable/reactivity/Atom"
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
 
 export interface LabSurfaceRegistryEntry {
+  /** Canvas object that owns this mounted surface, when mounted from the lab
+   * workspace. Unscoped entries are intentionally affected by global controls. */
+  readonly scopeId?: string
   readonly registry: AtomRegistry.AtomRegistry
   /** The surface's mount-time atom seed, so an axis can restore the live source. */
   readonly seed: ReadonlyMap<Atom.Atom<unknown>, unknown>
@@ -36,6 +39,16 @@ export function eachLabSurfaceRegistry(
   run: (entry: LabSurfaceRegistryEntry) => void,
 ): void {
   for (const entry of entries) run(entry)
+}
+
+/** Run a side effect against one canvas object's mounted surface registries. */
+export function eachLabSurfaceRegistryForScope(
+  scopeId: string,
+  run: (entry: LabSurfaceRegistryEntry) => void,
+): void {
+  for (const entry of entries) {
+    if (entry.scopeId === scopeId) run(entry)
+  }
 }
 
 /** Drop every entry. Test-only cleanup; real entries unregister on unmount. */

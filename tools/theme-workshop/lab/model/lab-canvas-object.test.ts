@@ -4,12 +4,12 @@ import {
   createPlacedPartObject,
   isLiveDeviceObject,
   isPlacedPartObject,
+  type LabCanvasObject,
   moveCanvasObject,
   objectBounds,
   removeCanvasObject,
   resetCanvasObjectIdCounterForTest,
   updateLiveDeviceObjectSize,
-  type LabCanvasObject,
 } from "./lab-canvas-object"
 
 describe("lab canvas objects", () => {
@@ -36,6 +36,7 @@ describe("lab canvas objects", () => {
       kind: "live-device",
       id: "lab-object-1",
       deviceId: "thor",
+      inputValues: {},
     })
     expect(isLiveDeviceObject(object)).toBe(true)
     expect(isPlacedPartObject(object)).toBe(false)
@@ -89,8 +90,8 @@ describe("lab canvas objects", () => {
     })
 
     expect(measured).not.toBe(objects)
-    expect(updateLiveDeviceObjectSize(measured, objects[0].id, { w: 640, h: 420 })).toBe(
-      measured,
-    )
+    expect(
+      updateLiveDeviceObjectSize(measured, objects[0].id, { w: 640, h: 420 }),
+    ).toBe(measured)
   })
 })

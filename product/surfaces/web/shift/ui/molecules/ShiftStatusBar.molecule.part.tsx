@@ -6,12 +6,14 @@
  * through the `ShiftStatusBar` → `ShiftBattery` composition.
  */
 
+import { SHIFT_DESIGN_PARTS } from "../../shift-design-parts"
 import { ShiftPartFrame } from "../ShiftPartFrame"
 import { ShiftStatusBar } from "./ShiftStatusBar"
 
 const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
 
 export default {
+  designPartId: SHIFT_DESIGN_PARTS.statusBar.id,
   name: "Status Bar",
   note: "Status",
   render: () => (

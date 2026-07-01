@@ -15,12 +15,14 @@ export function LabSurfaceMount({
   surfacePath,
   onNavigate,
   dualScreen,
+  scopeId,
 }: {
   readonly adapter: LabSurfaceAdapter
   readonly initialValues: unknown
   readonly surfacePath: string
   readonly onNavigate: (surfacePath: string) => void
   readonly dualScreen?: LabSurfaceDualScreenOptions
+  readonly scopeId?: string
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const mountedRef = useRef<LabMountedSurface | null>(null)
@@ -67,6 +69,7 @@ export function LabSurfaceMount({
         onRegistry: registry => {
           unregisterRegistryRef.current()
           unregisterRegistryRef.current = registerLabSurfaceRegistry({
+            scopeId,
             registry,
             seed: seedMapFromInitialValues(initialValuesRef.current),
           })
@@ -87,7 +90,7 @@ export function LabSurfaceMount({
       historyRef.current = null
       host.replaceChildren()
     }
-  }, [adapter])
+  }, [adapter, scopeId])
 
   useEffect(() => {
     const history = historyRef.current

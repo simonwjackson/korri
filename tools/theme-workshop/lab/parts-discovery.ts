@@ -9,6 +9,7 @@ export type PartModule = Record<string, unknown> & {
   readonly surface?: boolean
   readonly rootProps?: Record<string, unknown>
   readonly classNames?: WorkshopClassNames
+  readonly designPartId?: string
 }
 
 export interface PartLoadError {
@@ -151,7 +152,8 @@ function storiesFromModule(
     if (RESERVED_EXPORTS.has(exportName)) continue
     if (Array.isArray(value)) {
       const start = out.length
-      for (const [index, item] of value.entries()) push(`${exportName}${index}`, item)
+      for (const [index, item] of value.entries())
+        push(`${exportName}${index}`, item)
       const variants = out.slice(start)
       if (variants.length > 1 && variants.every(story => story.state)) {
         const ids = variants.map(story => story.id)
@@ -177,10 +179,11 @@ const RESERVED_EXPORTS = new Set([
   "surface",
   "rootProps",
   "classNames",
+  "designPartId",
 ])
 
 function storyFromExport(
-  path: string,
+  _path: string,
   parsed: PartPathInfo,
   exportName: string,
   value: unknown,
@@ -195,6 +198,7 @@ function storyFromExport(
       name,
       note: value.note,
       surface: value.presentation === "surface" ? true : undefined,
+      designPartId: value.designPartId ?? mod.designPartId,
       state: value.state,
       variants: value.variants,
       render: value.render,
@@ -202,9 +206,12 @@ function storyFromExport(
   }
   if (typeof value !== "function") return null
   const name =
-    exportName === "default" ? mod.name ?? humanize(parsed.baseName) : humanize(exportName)
+    exportName === "default"
+      ? (mod.name ?? humanize(parsed.baseName))
+      : humanize(exportName)
   return {
     id: storyId(parsed, exportName, name),
+    designPartId: exportName === "default" ? mod.designPartId : undefined,
     layer: parsed.layer,
     name,
     note: exportName === "default" ? mod.note : undefined,
@@ -230,6 +237,7 @@ function isStory(value: unknown): value is Story {
 function isStorySpec(value: unknown): value is {
   readonly name?: string
   readonly note?: string
+  readonly designPartId?: string
   readonly presentation?: "part" | "surface"
   readonly state?: string
   readonly variants?: readonly string[]
@@ -243,7 +251,11 @@ function isStorySpec(value: unknown): value is {
   )
 }
 
-function storyId(parsed: PartPathInfo, exportName: string, name: string): string {
+function storyId(
+  parsed: PartPathInfo,
+  exportName: string,
+  name: string,
+): string {
   const suffix = exportName === "default" ? "" : `-${exportName}`
   return `${parsed.surfaceId}-${parsed.layer}-${parsed.baseName}${suffix}-${name}`
     .toLowerCase()

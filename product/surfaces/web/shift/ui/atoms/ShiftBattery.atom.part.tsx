@@ -6,10 +6,12 @@
  * instead of switching between pre-baked snapshots.
  */
 
+import { SHIFT_DESIGN_PARTS } from "../../shift-design-parts"
 import { ShiftPartFrame } from "../ShiftPartFrame"
 import { ShiftBattery } from "./ShiftBattery"
 
 export default {
+  designPartId: SHIFT_DESIGN_PARTS.battery.id,
   name: "Battery",
   note: "Power",
   render: () => (

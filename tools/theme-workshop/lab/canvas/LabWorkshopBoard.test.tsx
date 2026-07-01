@@ -7,7 +7,13 @@ import {
   mock,
   spyOn,
 } from "bun:test"
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react"
 import { useState } from "react"
 import type { Story } from "../../types"
 import { LabContext, type LabContextValue } from "../Lab.context"
@@ -87,7 +93,8 @@ function Harness({
   readonly onSelect?: (id: string | null) => void
   readonly onInnerSelect?: (selection: LabPreviewSelection | null) => void
 }) {
-  const [instances, setInstances] = useState<readonly LabCanvasObject[]>(initial)
+  const [instances, setInstances] =
+    useState<readonly LabCanvasObject[]>(initial)
   return (
     <LabContext.Provider value={context}>
       <LabWorkshopBoard
@@ -249,6 +256,7 @@ describe("LabWorkshopBoard placement", () => {
             kind: "live-device",
             id: "device",
             deviceId: "thor",
+            inputValues: {},
             measuredSize: { w: 900, h: 480 },
             x: 10,
             y: 10,

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { SHIFT_DESIGN_PARTS } from "../../shift-design-parts"
 import { ShiftPartFrame } from "../ShiftPartFrame"
 import { SHIFT_PART_GAMES } from "../shift-part-fixtures"
 import { ShiftCineTile } from "./ShiftCineTile"
@@ -14,6 +15,7 @@ const frame = (children: ReactNode) => (
 
 export const ShiftCineTileStates = [
   {
+    designPartId: SHIFT_DESIGN_PARTS.tile.id,
     name: "Tile",
     note,
     state: "Resting",
@@ -29,6 +31,7 @@ export const ShiftCineTileStates = [
       ),
   },
   {
+    designPartId: SHIFT_DESIGN_PARTS.tile.id,
     name: "Tile",
     note,
     state: "Focused",

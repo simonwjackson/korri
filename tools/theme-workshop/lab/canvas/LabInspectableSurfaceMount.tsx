@@ -35,6 +35,7 @@ export function LabInspectableSurfaceMount({
       onSelect={onSelect}
     >
       <LabSurfaceMount
+        scopeId={scopeId}
         adapter={adapter}
         initialValues={initialValues}
         surfacePath={surfacePath}

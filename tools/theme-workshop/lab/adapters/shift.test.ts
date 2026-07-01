@@ -218,6 +218,79 @@ describe("shift home state axes", () => {
     }
   })
 
+  it("scopes real Power, Clock, and Network inputs to one live device registry", () => {
+    const inputs =
+      resolveLabSurfaceAdapter("shift").inputsForScreen?.("/") ?? []
+    const power = inputs.find(input => input.id === "power")
+    const clock = inputs.find(input => input.id === "clock")
+    const network = inputs.find(input => input.id === "network")
+
+    const registryA = AtomRegistry.make({
+      initialValues: [
+        [shiftPowerReadingAtom, DEFAULT_SHIFT_POWER_READING],
+        [shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO],
+        [shiftNetworkReadingAtom, DEFAULT_SHIFT_NETWORK_READING],
+      ],
+    })
+    const registryB = AtomRegistry.make({
+      initialValues: [
+        [shiftPowerReadingAtom, DEFAULT_SHIFT_POWER_READING],
+        [shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO],
+        [shiftNetworkReadingAtom, DEFAULT_SHIFT_NETWORK_READING],
+      ],
+    })
+    const seed = new Map<Atom.Atom<unknown>, unknown>([
+      [
+        shiftPowerReadingAtom as Atom.Atom<unknown>,
+        DEFAULT_SHIFT_POWER_READING,
+      ],
+      [shiftClockIsoAtom as Atom.Atom<unknown>, DEFAULT_SHIFT_CLOCK_ISO],
+      [
+        shiftNetworkReadingAtom as Atom.Atom<unknown>,
+        DEFAULT_SHIFT_NETWORK_READING,
+      ],
+    ])
+    const unregisterA = registerLabSurfaceRegistry({
+      scopeId: "device-a",
+      registry: registryA,
+      seed,
+    })
+    const unregisterB = registerLabSurfaceRegistry({
+      scopeId: "device-b",
+      registry: registryB,
+      seed,
+    })
+
+    try {
+      power?.apply?.({ percent: 9, charging: false }, { scopeId: "device-a" })
+      clock?.apply?.("2026-07-01T09:10:00.000Z", {
+        scopeId: "device-a",
+      })
+      network?.apply?.({ _tag: "Disconnected" }, { scopeId: "device-a" })
+
+      expect(registryA.get(shiftPowerReadingAtom)).toEqual({
+        percent: 9,
+        charging: false,
+      })
+      expect(registryA.get(shiftClockIsoAtom)).toBe("2026-07-01T09:10:00.000Z")
+      expect(registryA.get(shiftNetworkReadingAtom)).toEqual({
+        _tag: "Disconnected",
+      })
+      expect(registryB.get(shiftPowerReadingAtom)).toEqual(
+        DEFAULT_SHIFT_POWER_READING,
+      )
+      expect(registryB.get(shiftClockIsoAtom)).toBe(DEFAULT_SHIFT_CLOCK_ISO)
+      expect(registryB.get(shiftNetworkReadingAtom)).toEqual(
+        DEFAULT_SHIFT_NETWORK_READING,
+      )
+    } finally {
+      unregisterA()
+      unregisterB()
+      registryA.dispose()
+      registryB.dispose()
+    }
+  })
+
   it("exposes no axes for screens without a state machine", () => {
     expect(home().length).toBe(2)
     expect(

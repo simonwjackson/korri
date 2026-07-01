@@ -1,4 +1,5 @@
 import type { LaunchStatusView } from "../../launch-failure-copy"
+import { SHIFT_DESIGN_PARTS } from "../../shift-design-parts"
 import { ShiftPartFrame } from "../ShiftPartFrame"
 import { SHIFT_PART_GAMES } from "../shift-part-fixtures"
 import { ShiftCineHero } from "./ShiftCineHero"
@@ -14,18 +15,21 @@ const hero = (status: LaunchStatusView | null, resuming: boolean) => (
 
 export const ShiftCineHeroStates = [
   {
+    designPartId: SHIFT_DESIGN_PARTS.hero.id,
     name: "Hero",
     note,
     state: "Ready",
     render: () => hero(null, false),
   },
   {
+    designPartId: SHIFT_DESIGN_PARTS.hero.id,
     name: "Hero",
     note,
     state: "Continue",
     render: () => hero(null, true),
   },
   {
+    designPartId: SHIFT_DESIGN_PARTS.hero.id,
     name: "Hero",
     note,
     state: "Launching",
@@ -33,6 +37,7 @@ export const ShiftCineHeroStates = [
       hero({ tone: "launching", kicker: "Starting…", canRetry: false }, false),
   },
   {
+    designPartId: SHIFT_DESIGN_PARTS.hero.id,
     name: "Hero",
     note,
     state: "Failed",
@@ -48,6 +53,7 @@ export const ShiftCineHeroStates = [
       ),
   },
   {
+    designPartId: SHIFT_DESIGN_PARTS.hero.id,
     name: "Hero",
     note,
     state: "Unavailable",

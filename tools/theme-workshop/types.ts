@@ -39,6 +39,10 @@ export type StoryLayer = "page" | "template" | "organism" | "molecule" | "atom"
  */
 export interface Story {
   readonly id: string
+  /** Stable product-owned part id used to match a clicked rendered part back to
+   * its catalog story. Display names may change or collide; this id is the
+   * contract. */
+  readonly designPartId?: string
   readonly layer: StoryLayer
   readonly name: string
   readonly note?: string

@@ -133,7 +133,7 @@ export function LabDeviceInspector({
   const regions = axes.filter(axis => !axis.parent)
   return (
     <div className="pt-inspector">
-      <div className="pt-inspector-scope">Live surface</div>
+      <div className="pt-inspector-scope">Selected live device</div>
       {regions.length === 0 && inputs.length === 0 ? (
         <div className="pt-sources-hint">
           This surface's screen exposes no live controls.

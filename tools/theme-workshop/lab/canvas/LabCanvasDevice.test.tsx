@@ -278,12 +278,19 @@ function renderLiveDevice({
   readonly sourceId?: string
   readonly stateId?: string
   readonly pickMode?: boolean
-  readonly onInnerSelect?: Parameters<typeof LabCanvasDevice>[0]["onInnerSelect"]
+  readonly onInnerSelect?: Parameters<
+    typeof LabCanvasDevice
+  >[0]["onInnerSelect"]
 }) {
   return (
     <LabContext.Provider value={context(adapter)}>
       <LabCanvasDevice
-        object={{ kind: "live-device", id: "live-thor", deviceId: "thor" }}
+        object={{
+          kind: "live-device",
+          id: "live-thor",
+          deviceId: "thor",
+          inputValues: {},
+        }}
         scale={1}
         selected={false}
         sourceId={sourceId}
@@ -303,9 +310,7 @@ describe("LabCanvasDevice", () => {
   it("mounts Thor primary and companion screens with one scoped dual-screen channel", async () => {
     const { adapter, mounts } = makeAdapter()
 
-    render(
-      <>{renderLiveDevice({ adapter })}</>,
-    )
+    render(renderLiveDevice({ adapter }))
 
     await waitFor(() => {
       expect(mounts.some(mount => mount.path === "/")).toBe(true)
@@ -336,9 +341,7 @@ describe("LabCanvasDevice", () => {
 
   it("does not remount default-seed adapters when source state changes", async () => {
     const { adapter, mounts } = makeAdapter()
-    const view = render(
-      <>{renderLiveDevice({ adapter })}</>,
-    )
+    const view = render(renderLiveDevice({ adapter }))
 
     await waitFor(() => {
       expect(mounts.filter(mount => mount.path === "/").length).toBe(1)
@@ -348,7 +351,11 @@ describe("LabCanvasDevice", () => {
     })
 
     view.rerender(
-      <>{renderLiveDevice({ adapter, sourceId: "alternate", stateId: "loading" })}</>,
+      renderLiveDevice({
+        adapter,
+        sourceId: "alternate",
+        stateId: "loading",
+      }),
     )
 
     await waitFor(() => {
@@ -383,9 +390,7 @@ describe("LabCanvasDevice", () => {
 
   it("lets a product-session companion follow primary focus through lab wiring", async () => {
     const adapter = makeSharedSessionAdapter()
-    const { container } = render(
-      <>{renderLiveDevice({ adapter })}</>,
-    )
+    const { container } = render(renderLiveDevice({ adapter }))
 
     const secondary = await waitFor(() => {
       const node = container.querySelector<HTMLElement>(
@@ -421,16 +426,14 @@ describe("LabCanvasDevice", () => {
     const selectedNames: string[] = []
 
     render(
-      <>
-        {renderLiveDevice({
-          adapter,
-          pickMode: true,
-          onInnerSelect: selection => {
-            const name = selection?.targets[0]?.name
-            if (name) selectedNames.push(name)
-          },
-        })}
-      </>,
+      renderLiveDevice({
+        adapter,
+        pickMode: true,
+        onInnerSelect: selection => {
+          const name = selection?.targets[0]?.name
+          if (name) selectedNames.push(name)
+        },
+      }),
     )
 
     const button = await waitFor(() =>

@@ -1,6 +1,6 @@
 import type { DeviceConfig } from "../../device-lab"
-import type { LabInputValue } from "./lab-source-state"
 import { PLACEMENT_CELL, type Rect, type Size } from "./lab-canvas-placement"
+import type { LabInputValue } from "./lab-source-state"
 
 export type LabObjectInputValues = Readonly<Record<string, LabInputValue>>
 
@@ -21,6 +21,8 @@ export type LabPlacedPartObject = LabCanvasObjectBase & {
 export type LabLiveDeviceObject = LabCanvasObjectBase & {
   readonly kind: "live-device"
   readonly deviceId: string
+  /** Product input values owned by this live device object. */
+  readonly inputValues: LabObjectInputValues
   readonly measuredSize?: Size
 }
 
@@ -59,7 +61,13 @@ export function createLiveDeviceObject(
   deviceId: string,
   position?: { readonly x: number; readonly y: number },
 ): LabLiveDeviceObject {
-  return { kind: "live-device", id: nextCanvasObjectId(), deviceId, ...position }
+  return {
+    kind: "live-device",
+    id: nextCanvasObjectId(),
+    deviceId,
+    inputValues: {},
+    ...position,
+  }
 }
 
 export function isPlacedPartObject(
@@ -80,7 +88,9 @@ export function moveCanvasObject(
   x: number,
   y: number,
 ): readonly LabCanvasObject[] {
-  return objects.map(object => (object.id === id ? { ...object, x, y } : object))
+  return objects.map(object =>
+    object.id === id ? { ...object, x, y } : object,
+  )
 }
 
 export function removeCanvasObject(
@@ -108,8 +118,27 @@ export function bindPlacedPartInput(
   inputId: string,
   value: LabInputValue,
 ): readonly LabCanvasObject[] {
+  return bindObjectInput(objects, id, inputId, value, "placed-part")
+}
+
+export function bindLiveDeviceInput(
+  objects: readonly LabCanvasObject[],
+  id: string,
+  inputId: string,
+  value: LabInputValue,
+): readonly LabCanvasObject[] {
+  return bindObjectInput(objects, id, inputId, value, "live-device")
+}
+
+function bindObjectInput(
+  objects: readonly LabCanvasObject[],
+  id: string,
+  inputId: string,
+  value: LabInputValue,
+  kind: LabCanvasObject["kind"],
+): readonly LabCanvasObject[] {
   return objects.map(object =>
-    object.id === id && object.kind === "placed-part"
+    object.id === id && object.kind === kind
       ? {
           ...object,
           inputValues: {
@@ -170,10 +199,7 @@ export function liveDeviceObjectSize(
   }
 }
 
-export function objectBounds(
-  object: LabCanvasObject,
-  liveSize?: Size,
-): Rect {
+export function objectBounds(object: LabCanvasObject, liveSize?: Size): Rect {
   const x = object.x ?? 0
   const y = object.y ?? 0
   if (object.kind === "placed-part") {

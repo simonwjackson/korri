@@ -17,7 +17,11 @@ import {
   shiftPowerReadingForValue,
 } from "@product/surfaces/web/shift/shift-power-state"
 import type { RouterHistory } from "@tanstack/history"
-import { eachLabSurfaceRegistry } from "../model/lab-surface-registries"
+import {
+  eachLabSurfaceRegistry,
+  eachLabSurfaceRegistryForScope,
+  type LabSurfaceRegistryEntry,
+} from "../model/lab-surface-registries"
 import {
   makeSeedInitialValues,
   makeSeedInitialValuesForBinding,
@@ -39,6 +43,17 @@ import {
   SHIFT_POWER_INPUT_ID,
 } from "./shift-surface-part"
 
+function eachTargetRegistry(
+  scopeId: string | undefined,
+  run: (entry: LabSurfaceRegistryEntry) => void,
+): void {
+  if (scopeId) {
+    eachLabSurfaceRegistryForScope(scopeId, run)
+    return
+  }
+  eachLabSurfaceRegistry(run)
+}
+
 function shiftStatusInputs(live: boolean): readonly LabSurfacePartInput[] {
   const power: LabSurfacePartInput = {
     id: SHIFT_POWER_INPUT_ID,
@@ -46,16 +61,16 @@ function shiftStatusInputs(live: boolean): readonly LabSurfacePartInput[] {
     defaultValue: DEFAULT_SHIFT_POWER_READING,
     control: SHIFT_POWER_INPUT_CONTROL,
     apply: live
-      ? value => {
+      ? (value, context) => {
           const reading = shiftPowerReadingForValue(value)
-          eachLabSurfaceRegistry(({ registry }) =>
+          eachTargetRegistry(context?.scopeId, ({ registry }) =>
             registry.set(shiftPowerReadingAtom, reading),
           )
         }
       : undefined,
     release: live
-      ? () =>
-          eachLabSurfaceRegistry(({ registry, seed }) => {
+      ? context =>
+          eachTargetRegistry(context?.scopeId, ({ registry, seed }) => {
             registry.set(
               shiftPowerReadingAtom,
               shiftPowerReadingForValue(
@@ -71,16 +86,16 @@ function shiftStatusInputs(live: boolean): readonly LabSurfacePartInput[] {
     defaultValue: DEFAULT_SHIFT_CLOCK_ISO,
     control: SHIFT_CLOCK_INPUT_CONTROL,
     apply: live
-      ? value => {
+      ? (value, context) => {
           if (typeof value !== "string") return
-          eachLabSurfaceRegistry(({ registry }) =>
+          eachTargetRegistry(context?.scopeId, ({ registry }) =>
             registry.set(shiftClockIsoAtom, value),
           )
         }
       : undefined,
     release: live
-      ? () =>
-          eachLabSurfaceRegistry(({ registry, seed }) => {
+      ? context =>
+          eachTargetRegistry(context?.scopeId, ({ registry, seed }) => {
             const liveValue = seed.get(shiftClockIsoAtom)
             registry.set(
               shiftClockIsoAtom,
@@ -97,16 +112,16 @@ function shiftStatusInputs(live: boolean): readonly LabSurfacePartInput[] {
     defaultValue: DEFAULT_SHIFT_NETWORK_READING,
     control: SHIFT_NETWORK_INPUT_CONTROL,
     apply: live
-      ? value => {
+      ? (value, context) => {
           const reading = shiftNetworkReadingForValue(value)
-          eachLabSurfaceRegistry(({ registry }) =>
+          eachTargetRegistry(context?.scopeId, ({ registry }) =>
             registry.set(shiftNetworkReadingAtom, reading),
           )
         }
       : undefined,
     release: live
-      ? () =>
-          eachLabSurfaceRegistry(({ registry, seed }) => {
+      ? context =>
+          eachTargetRegistry(context?.scopeId, ({ registry, seed }) => {
             registry.set(
               shiftNetworkReadingAtom,
               shiftNetworkReadingForValue(

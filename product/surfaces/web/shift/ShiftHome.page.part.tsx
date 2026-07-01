@@ -15,9 +15,11 @@ import { CATALOG_DISPLAY_TAGS } from "@platform/catalog/catalog-state-samples"
 import type { Story } from "@tools/theme-workshop"
 import { ShiftHomeStateView } from "./routes/ShiftHomeRoute"
 import { shiftCatalogStateSamples } from "./shift-catalog-state-samples"
+import { SHIFT_DESIGN_PARTS } from "./shift-design-parts"
 
 export const ShiftHomeStates = CATALOG_DISPLAY_TAGS.map(tag => ({
   id: `shift-home-${tag.toLowerCase()}`,
+  designPartId: SHIFT_DESIGN_PARTS.home.id,
   layer: "page" as const,
   name: "Home",
   note: "Data states",
