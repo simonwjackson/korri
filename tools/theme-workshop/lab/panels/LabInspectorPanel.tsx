@@ -1,4 +1,5 @@
 import { RotateCcw } from "lucide-react"
+import { LabInputControlField } from "../components/LabInputControlField"
 import { useLab } from "../Lab.context"
 
 export function LabInspectorPanel() {
@@ -10,19 +11,26 @@ export function LabInspectorPanel() {
       {knobs.length === 0 ? (
         <div className="pt-sources-hint">No theme knobs for this surface.</div>
       ) : null}
-      {knobs.map(knob => {
-        const value = knobValues[knob.cssVar] ?? knob.default
-        const changed = value !== knob.default
-        return (
-          <div key={knob.id} className="pt-knob">
-            <div className="pt-knob-row">
-              <span>{knob.label}</span>
-              <span className="pt-knob-value-group">
-                <span className="pt-knob-val">
-                  {value}
-                  {knob.unit ?? ""}
-                </span>
-                {changed ? (
+      <div className="pt-bind">
+        {knobs.map(knob => {
+          const value = knobValues[knob.cssVar] ?? knob.default
+          const changed = value !== knob.default
+          return (
+            <LabInputControlField
+              key={knob.id}
+              label={knob.label}
+              value={value}
+              defaultValue={knob.default}
+              control={{
+                kind: "range",
+                min: knob.min,
+                max: knob.max,
+                step: knob.step,
+                unit: knob.unit,
+              }}
+              ariaLabel={knob.label}
+              labelAction={
+                changed ? (
                   <button
                     type="button"
                     className="pt-knob-reset"
@@ -33,23 +41,13 @@ export function LabInspectorPanel() {
                   >
                     <RotateCcw aria-hidden size={13} strokeWidth={2.2} />
                   </button>
-                ) : null}
-              </span>
-            </div>
-            <input
-              type="range"
-              aria-label={knob.label}
-              min={knob.min}
-              max={knob.max}
-              step={knob.step}
-              value={value}
-              onChange={event =>
-                calibration.setKnob(knob.cssVar, Number(event.target.value))
+                ) : null
               }
+              onChange={next => calibration.setKnob(knob.cssVar, Number(next))}
             />
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import {
   canonicalInputValue,
   defaultInputValueForControl,
@@ -15,6 +16,7 @@ export function LabInputControlField({
   defaultValue,
   control,
   ariaLabel,
+  labelAction,
   disabled,
   onChange,
 }: {
@@ -23,6 +25,7 @@ export function LabInputControlField({
   readonly defaultValue?: LabInputValue
   readonly control: LabInputControl
   readonly ariaLabel: string
+  readonly labelAction?: ReactNode
   readonly disabled?: boolean
   readonly onChange: (value: LabInputValue) => void
 }) {
@@ -31,8 +34,8 @@ export function LabInputControlField({
   switch (control.kind) {
     case "select":
       return (
-        <label className="pt-bind-row">
-          <span className="pt-bind-label">{label}</span>
+        <div className="pt-bind-row">
+          <FieldLabel label={label} action={labelAction} />
           <select
             value={typeof current === "string" ? current : ""}
             aria-label={ariaLabel}
@@ -45,12 +48,12 @@ export function LabInputControlField({
               </option>
             ))}
           </select>
-        </label>
+        </div>
       )
     case "iso-datetime":
       return (
         <div className="pt-bind-row">
-          <span className="pt-bind-label">{label}</span>
+          <FieldLabel label={label} action={labelAction} />
           <LabIsoDateTimeInput
             value={typeof current === "string" ? current : undefined}
             options={control.options}
@@ -62,8 +65,8 @@ export function LabInputControlField({
       )
     case "range":
       return (
-        <label className="pt-bind-row">
-          <span className="pt-bind-label">{label}</span>
+        <div className="pt-bind-row">
+          <FieldLabel label={label} action={labelAction} />
           <span className="pt-bind-inline">
             <input
               type="range"
@@ -89,12 +92,12 @@ export function LabInputControlField({
               {control.unit ? <span>{control.unit}</span> : null}
             </span>
           </span>
-        </label>
+        </div>
       )
     case "boolean":
       return (
-        <label className="pt-bind-row pt-bind-row-check">
-          <span className="pt-bind-label">{label}</span>
+        <div className="pt-bind-row pt-bind-row-check">
+          <FieldLabel label={label} action={labelAction} />
           <input
             type="checkbox"
             checked={current === true}
@@ -102,7 +105,7 @@ export function LabInputControlField({
             disabled={disabled}
             onChange={event => onChange(event.target.checked)}
           />
-        </label>
+        </div>
       )
     case "object":
       return (
@@ -178,6 +181,23 @@ export function LabInputControlField({
       )
     }
   }
+}
+
+function FieldLabel({
+  label,
+  action,
+}: {
+  readonly label: string
+  readonly action?: ReactNode
+}) {
+  return action ? (
+    <span className="pt-bind-label-row">
+      <span className="pt-bind-label">{label}</span>
+      {action}
+    </span>
+  ) : (
+    <span className="pt-bind-label">{label}</span>
+  )
 }
 
 function fieldValue(value: LabInputValue, field: LabInputField): LabInputValue {

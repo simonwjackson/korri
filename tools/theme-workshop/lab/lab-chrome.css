@@ -479,6 +479,12 @@ body {
 	letter-spacing: 0.06em;
 	color: var(--pt-ink-faint);
 }
+.pt-bind-label-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
 .pt-bind-row select,
 .pt-bind-row input {
 	width: 100%;
@@ -1853,7 +1859,8 @@ body {
 	border-color: #3a3f4b;
 	background: #1b1d25;
 }
-.pt-knob input[type="range"] {
+.pt-knob input[type="range"],
+.pt-bind-row input[type="range"] {
 	--pt-range-track: #101218;
 	--pt-range-track-hi: #2b303a;
 	--pt-range-thumb: var(--pt-accent);
@@ -1867,17 +1874,20 @@ body {
 	cursor: pointer;
 	accent-color: var(--pt-accent);
 }
-.pt-knob input[type="range"]:focus {
+.pt-knob input[type="range"]:focus,
+.pt-bind-row input[type="range"]:focus {
 	outline: none;
 }
-.pt-knob input[type="range"]::-webkit-slider-runnable-track {
+.pt-knob input[type="range"]::-webkit-slider-runnable-track,
+.pt-bind-row input[type="range"]::-webkit-slider-runnable-track {
 	height: 8px;
 	border: 1px solid var(--pt-line);
 	border-radius: 999px;
 	background: var(--pt-range-track);
 	box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
 }
-.pt-knob input[type="range"]::-webkit-slider-thumb {
+.pt-knob input[type="range"]::-webkit-slider-thumb,
+.pt-bind-row input[type="range"]::-webkit-slider-thumb {
 	appearance: none;
 	-webkit-appearance: none;
 	width: 16px;
@@ -1890,25 +1900,29 @@ body {
 		0 0 0 1px rgba(255, 255, 255, 0.16),
 		0 4px 12px rgba(0, 0, 0, 0.55);
 }
-.pt-knob input[type="range"]:focus-visible::-webkit-slider-thumb {
+.pt-knob input[type="range"]:focus-visible::-webkit-slider-thumb,
+.pt-bind-row input[type="range"]:focus-visible::-webkit-slider-thumb {
 	box-shadow:
 		0 0 0 1px rgba(255, 255, 255, 0.16),
 		0 0 0 4px color-mix(in srgb, var(--pt-accent) 28%, transparent),
 		0 4px 12px rgba(0, 0, 0, 0.55);
 }
-.pt-knob input[type="range"]::-moz-range-track {
+.pt-knob input[type="range"]::-moz-range-track,
+.pt-bind-row input[type="range"]::-moz-range-track {
 	height: 8px;
 	border: 1px solid var(--pt-line);
 	border-radius: 999px;
 	background: var(--pt-range-track);
 	box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
 }
-.pt-knob input[type="range"]::-moz-range-progress {
+.pt-knob input[type="range"]::-moz-range-progress,
+.pt-bind-row input[type="range"]::-moz-range-progress {
 	height: 8px;
 	border-radius: 999px;
 	background: var(--pt-range-track-hi);
 }
-.pt-knob input[type="range"]::-moz-range-thumb {
+.pt-knob input[type="range"]::-moz-range-thumb,
+.pt-bind-row input[type="range"]::-moz-range-thumb {
 	width: 14px;
 	height: 14px;
 	border: 2px solid var(--pt-range-thumb-edge);
@@ -1918,7 +1932,8 @@ body {
 		0 0 0 1px rgba(255, 255, 255, 0.16),
 		0 4px 12px rgba(0, 0, 0, 0.55);
 }
-.pt-knob input[type="range"]:focus-visible::-moz-range-thumb {
+.pt-knob input[type="range"]:focus-visible::-moz-range-thumb,
+.pt-bind-row input[type="range"]:focus-visible::-moz-range-thumb {
 	box-shadow:
 		0 0 0 1px rgba(255, 255, 255, 0.16),
 		0 0 0 4px color-mix(in srgb, var(--pt-accent) 28%, transparent),
