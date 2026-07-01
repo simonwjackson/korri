@@ -8,6 +8,7 @@ export function parseDeviceSegment(
 ): DeviceSelection {
   const raw = segment?.trim()
   if (!raw || raw === "all") return { kind: "all" }
+  if (raw === "none") return { kind: "set", ids: [] }
 
   const known = new Set(knownDeviceIds)
   const ids: string[] = []
@@ -19,7 +20,7 @@ export function parseDeviceSegment(
     ids.push(normalized)
   }
 
-  return ids.length > 0 ? { kind: "set", ids } : { kind: "all" }
+  return { kind: "set", ids }
 }
 
 export function selectedDevicesForSegment(
@@ -45,7 +46,7 @@ export function deviceSegmentForSelection(
     ids.push(id)
   }
 
-  return ids.length > 0 ? ids.join(",") : "all"
+  return ids.length > 0 ? ids.join(",") : "none"
 }
 
 export function normalizeSurfacePath(path: string | undefined): string {

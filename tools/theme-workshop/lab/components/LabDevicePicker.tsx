@@ -10,7 +10,8 @@ function idsForSelection(
 }
 
 function segmentForIds(ids: readonly string[], deviceIds: readonly string[]) {
-  if (ids.length === 0 || ids.length === deviceIds.length) return "all"
+  if (ids.length === 0) return "none"
+  if (ids.length === deviceIds.length) return "all"
   return ids.join(",")
 }
 

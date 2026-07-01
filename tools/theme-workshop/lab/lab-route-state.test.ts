@@ -27,13 +27,27 @@ describe("lab route state", () => {
     )
   })
 
-  it("normalizes empty, duplicate, and unknown device ids to a valid set", () => {
+  it("keeps no devices as an empty selected set", () => {
+    expect(parseDeviceSegment("none", knownDevices)).toEqual({
+      kind: "set",
+      ids: [],
+    })
+    expect(selectedDevicesForSegment("none", knownDevices)).toEqual([])
+    expect(deviceSegmentForSelection({ kind: "set", ids: [] }, knownDevices)).toBe(
+      "none",
+    )
+  })
+
+  it("normalizes duplicate and unknown device ids to known selected ids", () => {
     expect(parseDeviceSegment("", knownDevices)).toEqual({ kind: "all" })
     expect(parseDeviceSegment("unknown,rg353m,rg353m", knownDevices)).toEqual({
       kind: "set",
       ids: ["rg353m"],
     })
-    expect(parseDeviceSegment("unknown", knownDevices)).toEqual({ kind: "all" })
+    expect(parseDeviceSegment("unknown", knownDevices)).toEqual({
+      kind: "set",
+      ids: [],
+    })
   })
 
   it("normalizes surface splats to app paths", () => {

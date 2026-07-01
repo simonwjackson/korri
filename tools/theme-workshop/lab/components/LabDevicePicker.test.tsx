@@ -90,6 +90,17 @@ describe("LabDevicePicker", () => {
     expect(setDevicesSegment).toHaveBeenCalledWith("odin2portal")
   })
 
+  it("can remove the last selected device", () => {
+    const { setDevicesSegment } = renderPicker({
+      selection: { kind: "set", ids: ["rg353m"] },
+      selectedDevices: [rg353m],
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "RG353M" }))
+
+    expect(setDevicesSegment).toHaveBeenCalledWith("none")
+  })
+
   it("collapses to all when the last missing device is toggled on", () => {
     const { setDevicesSegment } = renderPicker({
       selection: { kind: "set", ids: ["rg353m"] },

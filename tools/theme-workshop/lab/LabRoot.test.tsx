@@ -308,13 +308,13 @@ describe("LabRoot", () => {
     expect(dispose).toHaveBeenCalledTimes(1)
   })
 
-  it("coerces an empty device selection back to all devices", async () => {
+  it("allows an empty workspace when no devices are selected", async () => {
     const { adapter } = makeAdapter()
 
     const view = render(
       <LabRoot
         adapters={[adapter]}
-        routeState={{ devicesSegment: "", themeId: "test", surfacePath: "/" }}
+        routeState={{ devicesSegment: "none", themeId: "test", surfacePath: "/" }}
         navigation={{
           setDevicesSegment: mock(() => undefined),
           setThemeId: mock(() => undefined),
@@ -324,9 +324,19 @@ describe("LabRoot", () => {
     )
 
     await waitFor(() => {
-      expect(view.getByTestId("surface-rg353m")).toBeTruthy()
-      expect(view.getByTestId("surface-odin2portal")).toBeTruthy()
+      expect(
+        screen
+          .getByRole("button", { name: "RG353M" })
+          .getAttribute("aria-pressed"),
+      ).toBe("false")
+      expect(
+        screen
+          .getByRole("button", { name: "ODIN 2 PORTAL" })
+          .getAttribute("aria-pressed"),
+      ).toBe("false")
     })
+    expect(view.queryByTestId("surface-rg353m")).toBeNull()
+    expect(view.queryByTestId("surface-odin2portal")).toBeNull()
   })
 
   it("renders discovered parts at /parts in one workspace beside live device frames", async () => {
