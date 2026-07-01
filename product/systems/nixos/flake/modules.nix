@@ -100,6 +100,18 @@ rec {
       (import ../modules/korri-daemon.nix { korri = self; })
     ];
   };
+  # Downstream-consumable source-machine stream-host posture: daemon +
+  # sessiond + compositor substrate + Sunshine/game-stream, with no local
+  # kiosk GUI. This is intentionally a composition module over existing
+  # services.korri.* wrapper options, not a new app-native config schema.
+  korri-source-machine = {
+    imports = [
+      korri
+      korri-sessiond
+      ../../../plugins/gamescope/nix/source-machine-module.nix
+      ../images/source-machine.nix
+    ];
+  };
   # Aggregate composes the three product roles. Compositor and input
   # are listed explicitly even though korrid transitively
   # imports them, so consumers can read the role topology directly

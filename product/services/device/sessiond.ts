@@ -30,6 +30,7 @@ import type {
 } from "@platform/plugin/session-lifecycle"
 import {
   findStreamSurfaceWindows,
+  isTransientMissingSurfaceCommandError,
   repairStreamSurface,
 } from "./game-stream-fullscreen"
 import {
@@ -1245,7 +1246,7 @@ function realSwayCommandRunner(): SwayCommandRunner {
       const stderr = await new Response(proc.stderr).text()
       const exitCode = await proc.exited
       if (exitCode !== 0)
-        throw new Error(stderr || `swaymsg exited ${exitCode}`)
+        throw new Error(stderr || stdout || `swaymsg exited ${exitCode}`)
       return stdout
     },
   }
@@ -1282,7 +1283,11 @@ function realSourceMachineSwayController(): SourceMachineSwayController {
     },
     clearForegroundWindows: async windows => {
       for (const window of windows) {
-        await runner.run([`[con_id=${window.id}] kill`])
+        try {
+          await runner.run([`[con_id=${window.id}] kill`])
+        } catch (error) {
+          if (!isTransientMissingSurfaceCommandError(error)) throw error
+        }
       }
     },
   }

@@ -127,6 +127,7 @@ let
     '';
   };
 
+  swaySocketPath = "${cfg.runtimeDir}/sway-ipc.sock";
   swayCommand = "${cfg.sway.package}/bin/sway --config ${swayConfig}";
   sessionCommand =
     if cfg.sessionBus.mode == "private" then
@@ -154,6 +155,11 @@ let
     # connections. `xwayland force` starts the Xwayland process at sway startup
     # so no client ever pays the cold-start cost.
     xwayland force
+
+    # Sway chooses an IPC socket name containing its PID. Publish a stable
+    # symlink so peer user services (sessiond/Sunshine helpers) can call
+    # swaymsg without depending on the compositor process id.
+    exec_always ${pkgs.bash}/bin/sh -c 'if [ -n "''${SWAYSOCK:-}" ]; then ln -sf "$SWAYSOCK" "$XDG_RUNTIME_DIR/sway-ipc.sock"; fi'
 
     # TEMPORARY (remove later): debug terminal hotkey on every device.
     # Super+E opens a foot terminal as the runtime user. Referenced by
@@ -191,6 +197,7 @@ let
       XDG_STATE_HOME = cfg.stateHome;
       XDG_DATA_HOME = cfg.dataHome;
       XDG_CONFIG_HOME = cfg.configHome;
+      SWAYSOCK = swaySocketPath;
       # Do NOT set WAYLAND_DISPLAY here. wlroots' backend autodetection
       # treats a pre-set WAYLAND_DISPLAY as "I am a nested wayland
       # client" and tries to connect to a parent compositor, which fails

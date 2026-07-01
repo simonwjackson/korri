@@ -9,6 +9,7 @@ let
   sessiondUnit = cfg.systemd.user.services.korri-sessiond or { };
   sessiondEnv = sessiondUnit.environment or { };
   sessiondPath = sessiondUnit.path or [ ];
+  gameStreamPath = cfg.services.korri.gameStream.path or [ ];
   daemonUnit = cfg.systemd.user.services.korrid or { };
   daemonEnv = daemonUnit.environment or { };
   compositorUnit = cfg.systemd.user.services."korri-compositor" or { };
@@ -24,6 +25,8 @@ let
     if apps == [ ] then null else (builtins.elemAt apps 0).cmd;
   firstAppWrapper = if firstAppCmd == null then "" else builtins.readFile firstAppCmd;
 
+  packageMatches = expected: package: (package.pname or package.name or "") == expected;
+  hasPackage = expected: packages: builtins.any (packageMatches expected) packages;
   check = message: assertion: { inherit message assertion; };
   checks = [
     (check "image evaluates without assertion failures" (failedAssertions == [ ]))
@@ -53,15 +56,9 @@ let
       && cfg.services.greetd.enable
       && greetdSettings.initial_session.user == cfg.services.korri.runtime.user
       && greetdSettings.default_session.user == cfg.services.korri.runtime.user
-      && lib.hasInfix "sleep infinity" (
-        builtins.readFile cfg.services.korri.login.command
-      )
-      && !lib.hasInfix "systemctl" (
-        builtins.readFile cfg.services.korri.login.command
-      )
-      && !lib.hasInfix "--machine=" (
-        builtins.readFile cfg.services.korri.login.command
-      )
+      && lib.hasInfix "sleep infinity" (builtins.readFile cfg.services.korri.login.command)
+      && !lib.hasInfix "systemctl" (builtins.readFile cfg.services.korri.login.command)
+      && !lib.hasInfix "--machine=" (builtins.readFile cfg.services.korri.login.command)
       && !(builtins.elem "korri-session.target" (cfg.systemd.user.targets.default.wants or [ ]))
       && builtins.elem "L+ /home/korri/.config/systemd/user/default.target.wants/korri-session.target - - - - /etc/systemd/user/korri-session.target" cfg.systemd.tmpfiles.rules
     ))
@@ -74,6 +71,29 @@ let
     ))
     (check "sessiond socket path is exported" (
       sessiondEnv.KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"
+    ))
+    (check "stream-host socket delegation cannot drift" (
+      cfg.services.korri.sessiond.socketPath == "%t/korri/sessiond.sock"
+      && cfg.services.korri.daemon.sessiond.socketPath == cfg.services.korri.sessiond.socketPath
+      && cfg.services.korri.gameStream.sessiond.socketPath == cfg.services.korri.sessiond.socketPath
+    ))
+    (check "sessiond foreground children inherit Wayland identity" (
+      sessiondEnv.XDG_RUNTIME_DIR == cfg.services.korri.compositor.runtimeDir
+      && sessiondEnv.WAYLAND_DISPLAY == "wayland-1"
+      && sessiondEnv.XDG_SESSION_TYPE == "wayland"
+      && sessiondEnv.XDG_CURRENT_DESKTOP == "sway"
+      && sessiondEnv.DISPLAY == ":0"
+    ))
+    (check "first-party Gamescope plugin is enabled for source-machine runtime registries" (
+      lib.hasInfix "@korri:gamescope" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
+      && lib.hasInfix "@korri:gamescope" (sessiondEnv.KORRI_ENABLED_PLUGINS or "")
+      && lib.hasInfix "@korri:gamescope" firstAppWrapper
+    ))
+    (check "first-party Gamescope package reaches sessiond and game-stream PATHs" (
+      hasPackage "gamescope-korri" sessiondPath
+      && hasPackage "gamescope-korri" gameStreamPath
+      && lib.hasInfix "coreutils" firstAppWrapper
+      && lib.hasInfix "util-linux" firstAppWrapper
     ))
     (check "daemon uses Korri product library root" (
       cfg.services.korri.daemon.library.root == "/var/lib/korri/library"
@@ -105,6 +125,12 @@ let
     (check "sessiond PATH includes util-linux" (builtins.elem imagePkgs.util-linux sessiondPath))
     (check "compositor participates in korri-session.target" (
       (compositorUnit.wantedBy or [ ]) == [ "korri-session.target" ]
+    ))
+    (check "source-machine keeps local kiosk surfaces disabled" (
+      cfg.services.korri.compositor.enable
+      && !cfg.services.korri.compositor.kiosk.enable
+      && !cfg.services.korri.client.enable
+      && !(lib.attrByPath [ "services" "korri" "webSurfaceHost" "enable" ] false cfg)
     ))
   ];
   failures = builtins.filter (c: !c.assertion) checks;

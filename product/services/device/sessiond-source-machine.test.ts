@@ -290,6 +290,37 @@ describe("source-machine session role", () => {
     expect(now).toBeGreaterThanOrEqual(75)
   })
 
+  it("default restore budget tolerates slow compositor surface cleanup", async () => {
+    let now = 0
+    let snapshots = 0
+    const events: string[] = []
+    const lingeringSnapshots = 90
+    const role = createSourceMachineSessionRole({
+      sway: {
+        getForegroundWindows: async () => {
+          snapshots += 1
+          return snapshots <= lingeringSnapshots
+            ? [{ id: 7, focused: false, fullscreen: true }]
+            : []
+        },
+        clearForegroundWindows: async windows => {
+          events.push(...windows.map(window => `clear:${window.id}`))
+        },
+      },
+      processList: makeProcessList([]),
+      clock: () => now,
+      delay: async ms => {
+        now += ms
+      },
+      cooldownMs: 0,
+    })
+
+    await role.restoreIdleAfterLaunch()
+
+    expect(events.length).toBe(lingeringSnapshots)
+    expect(sessionRoleReadyOutcome(role).status).toBe("ok")
+  })
+
   it("restoreIdleAfterLaunch throws when ready attempts exceed the budget while residual processes linger", async () => {
     const { sway } = makeSway()
     const lingeringPluginProcess: ProcessInfo = {

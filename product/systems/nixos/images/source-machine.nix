@@ -1,4 +1,5 @@
 {
+  config,
   lib,
   pkgs,
   ...
@@ -23,6 +24,8 @@ let
   sessiondPort = 3003;
   gameStreamRuntimeDir = "%t/korri-game-stream";
   gameStreamStatusPath = "${gameStreamRuntimeDir}/status.json";
+  runtime = config.services.korri.runtime;
+  compositorCfg = config.services.korri.compositor;
 in
 {
   # The headless base wires the server bits (users, federation defaults).
@@ -40,9 +43,10 @@ in
   services.korri.compositor = {
     enable = true;
     kiosk.enable = false;
-    user = lib.mkDefault "korri";
+    user = lib.mkDefault runtime.user;
+    group = lib.mkDefault runtime.group;
     createUser = lib.mkDefault false;
-    home = lib.mkDefault "/home/korri";
+    home = lib.mkDefault runtime.home;
     wants = lib.mkDefault [ "seatd.service" ];
     after = lib.mkDefault [ "seatd.service" ];
     path = with pkgs; [
@@ -80,11 +84,29 @@ in
   # "source-machine" without needing the deploy-role aggregate.
   services.korri.sessiond = {
     enable = true;
-    path = [ pkgs.sway ];
+    path = [
+      pkgs.bashInteractive
+      compositorCfg.sway.package
+    ];
     port = sessiondPort;
     socketPath = sessiondSocketPath;
     runtimeDir = sessiondRuntimeDir;
     sunshineRuntimeStatusPath = gameStreamStatusPath;
+    extraEnvironment = {
+      HOME = compositorCfg.home;
+      XDG_RUNTIME_DIR = compositorCfg.runtimeDir;
+      XDG_STATE_HOME = compositorCfg.stateHome;
+      XDG_DATA_HOME = compositorCfg.dataHome;
+      XDG_CONFIG_HOME = compositorCfg.configHome;
+      WAYLAND_DISPLAY = "wayland-1";
+      SWAYSOCK = "${compositorCfg.runtimeDir}/sway-ipc.sock";
+      XDG_SESSION_TYPE = "wayland";
+      XDG_CURRENT_DESKTOP = "sway";
+      DISPLAY = ":0";
+      SDL_VIDEODRIVER = "wayland,x11";
+      GDK_BACKEND = "wayland,x11";
+      QT_QPA_PLATFORM = "wayland;xcb";
+    };
   };
 
   # Game-stream runner routes lifecycle:"foreground" intents through
@@ -100,4 +122,22 @@ in
   # Without this, korrid's Launcher falls through to the in-process
   # shell launcher instead of delegating to the foreground lifecycle service.
   services.korri.daemon.sessiond.socketPath = sessiondSocketPath;
+
+  assertions = [
+    {
+      assertion = config.services.korri.sessiond.enable;
+      message = "Korri source-machine composition requires services.korri.sessiond.enable = true.";
+    }
+    {
+      assertion =
+        config.services.korri.sessiond.socketPath == sessiondSocketPath
+        && config.services.korri.daemon.sessiond.socketPath == sessiondSocketPath
+        && config.services.korri.gameStream.sessiond.socketPath == sessiondSocketPath;
+      message = ''
+        Korri source-machine composition requires sessiond, daemon, and gameStream
+        to share ${sessiondSocketPath}; partial socket overrides would make korrid
+        or Sunshine fall back away from sessiond-owned foreground lifecycle.
+      '';
+    }
+  ];
 }

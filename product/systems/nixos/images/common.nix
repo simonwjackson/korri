@@ -15,6 +15,7 @@
   # that actually reaches those hosts.
   overlays ? [ ],
   pluginNixosModules ? [ ],
+  sourceMachinePluginNixosModules ? [ ],
 }:
 let
   evalConfig = import (nixpkgs.outPath + "/nixos/lib/eval-config.nix");
@@ -23,7 +24,6 @@ let
   liveUsbRuntimeModule = import ./live-usb-runtime.nix { inherit korri; };
   desktopLabModule = ./desktop-lab.nix;
   sourceMachineModule = ./source-machine.nix;
-
   baseModule =
     { lib, ... }:
     {
@@ -123,11 +123,14 @@ rec {
       productModule = sourceMachineModule;
       inherit platformModules includeBase;
       # korri-game-stream is transitively imported via korrid.
-      # korri-sessiond is the new Phase 4C module — added explicitly here
-      # because no aggregate transitively imports it yet.
+      # korri-sessiond is the foreground lifecycle owner for source-machine
+      # launch-capable hosts. Source-machine plugin modules must be explicitly
+      # stream-host-safe; content/kiosk plugin modules stay on the kiosk path
+      # unless they opt into this narrower composition.
       modules = [
         korri.nixosModules.korri-sessiond
       ]
+      ++ sourceMachinePluginNixosModules
       ++ modules;
     };
 

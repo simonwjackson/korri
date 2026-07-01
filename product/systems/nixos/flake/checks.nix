@@ -87,6 +87,12 @@ pkgs.lib.optionalAttrs isX86Linux {
         inherit pkgs;
         sourceMachineSystem = korriSourceMachineSystem;
       };
+  korri-source-machine-module =
+    import ../../../../tools/testing/nix/korri-source-machine-module-check.nix
+      {
+        inherit pkgs;
+        korriSourceMachineModule = self.nixosModules.korri-source-machine;
+      };
   korri-daemon-module = import ../../../../tools/testing/nix/korri-daemon-module-check.nix {
     inherit pkgs;
     korriDaemonModule = self.nixosModules.korri-daemon;
@@ -339,6 +345,10 @@ pkgs.lib.optionalAttrs isX86Linux {
       {
         name = "korri-source-machine-image";
         owner = "composed-system";
+      }
+      {
+        name = "korri-source-machine-module";
+        owner = "module";
       }
       {
         name = "korri-daemon-module";

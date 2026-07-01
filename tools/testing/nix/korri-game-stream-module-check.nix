@@ -117,6 +117,13 @@ let
     };
   };
 
+  extraEnvironment = evaluateWith {
+    services.korri.gameStream = {
+      enable = true;
+      extraEnvironment.KORRI_ENABLED_PLUGINS = "@korri:gamescope";
+    };
+  };
+
   check = message: assertion: { inherit message assertion; };
 
   checks = [
@@ -146,9 +153,7 @@ let
     (check "mismatched statusPath: assertion fires" (
       hasFailure mismatchedStatusPath "statusPath must live under runtimeDir"
     ))
-    (check "sessiond socket: NixOS assertions pass" (
-      failedAssertions sessiondSocket == [ ]
-    ))
+    (check "sessiond socket: NixOS assertions pass" (failedAssertions sessiondSocket == [ ]))
     (check "sessiond socket: wrapper exports KORRI_SESSIOND_SOCKET" (
       lib.hasInfix "KORRI_SESSIOND_SOCKET" (firstAppWrapper sessiondSocket)
       && lib.hasInfix "%t/korri/sessiond.sock" (firstAppWrapper sessiondSocket)
@@ -156,6 +161,10 @@ let
     (check "sessiond socket: no legacy URL/token env" (
       !lib.hasInfix "KORRI_SESSIOND_URL" (firstAppWrapper sessiondSocket)
       && !lib.hasInfix "KORRI_SESSIOND_TOKEN_FILE" (firstAppWrapper sessiondSocket)
+    ))
+    (check "extra environment: wrapper exports plugin registry env" (
+      lib.hasInfix "KORRI_ENABLED_PLUGINS" (firstAppWrapper extraEnvironment)
+      && lib.hasInfix "@korri:gamescope" (firstAppWrapper extraEnvironment)
     ))
   ];
 

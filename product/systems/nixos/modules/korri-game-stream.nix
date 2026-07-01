@@ -48,7 +48,14 @@ let
     else
       ''"''${KORRI_GAME_STREAM_STATUS_PATH:-$runtime_dir/status.json}"'';
 
+  basePath = with pkgs; [
+    coreutils
+    util-linux
+  ];
   displayCompatEnv = cfg.displayCompat.defaults // cfg.displayCompat.extraEnv;
+  extraEnvironmentExports = lib.concatMapStringsSep "\n" (
+    name: "export ${name}=${lib.escapeShellArg cfg.extraEnvironment.${name}}"
+  ) (lib.attrNames cfg.extraEnvironment);
   displayCompatExports = lib.concatMapStringsSep "\n" (
     name:
     let
@@ -62,7 +69,7 @@ let
   runnerCommand = pkgs.writeShellScript "korri-game-stream-sunshine-app" ''
     set -eu
 
-    export PATH=${lib.escapeShellArg (lib.makeBinPath cfg.path)}:$PATH
+    export PATH=${lib.escapeShellArg (lib.makeBinPath (basePath ++ cfg.path))}:$PATH
 
     if [ "$(id -u)" = "0" ]; then
       echo "korri-game-stream: refusing to run as root" >&2
@@ -93,7 +100,7 @@ let
         set -a
         . "$env_file"
         set +a
-        export PATH=${lib.escapeShellArg (lib.makeBinPath cfg.path)}:$PATH
+        export PATH=${lib.escapeShellArg (lib.makeBinPath (basePath ++ cfg.path))}:$PATH
       fi
     ''}
 
@@ -151,6 +158,8 @@ let
       cfg.sessiond.socketPath != null
     ) "export KORRI_SESSIOND_SOCKET=${lib.escapeShellArg cfg.sessiond.socketPath}"}
 
+    ${optionalString (cfg.extraEnvironment != { }) extraEnvironmentExports}
+
     exec ${cfg.package}/bin/korri-game-stream-runner
   '';
 in
@@ -188,13 +197,20 @@ in
       '';
     };
 
+    extraEnvironment = mkOption {
+      type = types.attrsOf types.str;
+      default = { };
+      description = "Additional environment variables exported by the Sunshine app wrapper before it execs the Korri game-stream runner.";
+    };
+
     path = mkOption {
       type = types.listOf types.package;
-      default = with pkgs; [
-        coreutils
-        util-linux
-      ];
-      description = "Packages added to PATH for the Sunshine app wrapper.";
+      default = [ ];
+      description = ''
+        Extra packages added to PATH for the Sunshine app wrapper, in addition
+        to the base wrapper tools (`coreutils`, `util-linux`). Plugin modules
+        should extend this list instead of replacing the base wrapper tools.
+      '';
     };
 
     runtimeDir = mkOption {
@@ -434,6 +450,7 @@ in
       cfg.package
       cfg.sway.package
     ]
+    ++ basePath
     ++ cfg.path;
 
     boot.kernelModules = mkIf cfg.uinput.enable [ "uinput" ];

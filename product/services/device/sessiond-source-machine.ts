@@ -129,7 +129,7 @@ export interface SourceMachineSessionRoleDeps {
 
 const DEFAULT_COOLDOWN_MS = 750
 const DEFAULT_POLL_INTERVAL_MS = 100
-const DEFAULT_MAX_READY_ATTEMPTS = 60
+const DEFAULT_MAX_READY_ATTEMPTS = 300
 
 function isResidualProcess(
   info: ProcessInfo,

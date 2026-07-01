@@ -214,6 +214,9 @@ flake-utils.lib.eachDefaultSystem (
       inherit nixpkgs system;
       overlays = [ korriPackagesOverlay ] ++ firstPartyPluginComposition.overlays;
       pluginNixosModules = firstPartyPluginComposition.nixosModules;
+      sourceMachinePluginNixosModules = [
+        ../../../../product/plugins/gamescope/nix/source-machine-module.nix
+      ];
     };
 
     libretroWasm4 = pkgs.libretro-wasm4;

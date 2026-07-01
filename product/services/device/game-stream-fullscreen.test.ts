@@ -220,6 +220,99 @@ describe("stream surface discovery and repair", () => {
     expect(calls).toContainEqual(["[con_id=42] fullscreen enable"])
   })
 
+  it("retries when a transient stream surface disappears during repair", async () => {
+    let time = 0
+    const calls: string[][] = []
+    const treeWithFirstSurface: SwayNode = {
+      id: 1,
+      nodes: [
+        {
+          id: 2,
+          nodes: [
+            {
+              id: 42,
+              app_id: "stream-surface",
+              focused: false,
+              fullscreen_mode: 0,
+            },
+          ],
+        },
+      ],
+    }
+    const treeWithReplacementSurface: SwayNode = {
+      id: 1,
+      nodes: [
+        {
+          id: 2,
+          nodes: [
+            {
+              id: 43,
+              app_id: "stream-surface",
+              focused: false,
+              fullscreen_mode: 0,
+            },
+          ],
+        },
+      ],
+    }
+    let treeReads = 0
+
+    const result = await repairStreamSurface({
+      selector: { appIds: ["stream-surface"] },
+      pollMs: 1,
+      now: () => time,
+      sleep: async durationMs => {
+        time += durationMs
+      },
+      runner: {
+        run: async args => {
+          calls.push([...args])
+          if (args.includes("get_tree")) {
+            treeReads += 1
+            return JSON.stringify(
+              treeReads === 1 ? treeWithFirstSurface : treeWithReplacementSurface,
+            )
+          }
+          if (args[0]?.includes("con_id=42")) {
+            throw new Error("No matching node.")
+          }
+          return ""
+        },
+      },
+    })
+
+    expect(result.windowId).toBe(43)
+    expect(calls).toContainEqual(["[con_id=42] focus"])
+    expect(calls).toContainEqual(["[con_id=43] focus"])
+    expect(result.commands).toContain("[con_id=43] border none")
+  })
+
+  it("treats persistent no-matching-node repair races as best effort", async () => {
+    let time = 0
+    const calls: string[][] = []
+
+    const result = await repairStreamSurface({
+      selector: { appIds: ["stream-surface"] },
+      timeoutMs: 2,
+      pollMs: 1,
+      now: () => time,
+      sleep: async durationMs => {
+        time += durationMs
+      },
+      runner: {
+        run: async args => {
+          calls.push([...args])
+          if (args.includes("get_tree")) return JSON.stringify(streamSurfaceTree)
+          throw new Error('"error": "No matching node."')
+        },
+      },
+    })
+
+    expect(result.windowId).toBe(42)
+    expect(result.commands).toContain("[con_id=42] focus")
+    expect(calls.filter(call => call.includes("get_tree")).length).toBeGreaterThan(1)
+  })
+
   it("ignores pre-existing stream surfaces while waiting for a new one", async () => {
     const calls: string[][] = []
     const treeWithOldAndNew: SwayNode = {

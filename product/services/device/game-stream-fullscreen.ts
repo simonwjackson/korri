@@ -241,12 +241,43 @@ export async function probeSwayTree(options: {
 export async function repairStreamSurface(
   options: RepairStreamSurfaceOptions,
 ): Promise<StreamSurfaceRepairResult> {
-  const surface = await waitForStreamSurface(options)
-  const commands = buildStreamSurfaceRepairCommands(surface)
-  for (const command of commands) {
-    await options.runner.run([command])
+  const timeoutMs = options.timeoutMs ?? DEFAULT_SURFACE_TIMEOUT_MS
+  const pollMs = options.pollMs ?? DEFAULT_SURFACE_POLL_MS
+  const now = options.now ?? (() => Date.now())
+  const sleep = options.sleep ?? defaultSleep
+  const deadline = now() + timeoutMs
+  const attemptedCommands: string[] = []
+
+  while (true) {
+    const surface = await waitForStreamSurface({
+      ...options,
+      timeoutMs: Math.max(0, deadline - now()),
+      pollMs,
+      now,
+      sleep,
+    })
+    const commands = buildStreamSurfaceRepairCommands(surface)
+    try {
+      for (const command of commands) {
+        attemptedCommands.push(command)
+        await options.runner.run([command])
+      }
+      return { windowId: surface.id, commands: attemptedCommands }
+    } catch (error) {
+      if (!isTransientMissingSurfaceCommandError(error)) {
+        throw error
+      }
+      if (now() >= deadline) {
+        return { windowId: surface.id, commands: attemptedCommands }
+      }
+      await sleep(pollMs)
+    }
   }
-  return { windowId: surface.id, commands }
+}
+
+export function isTransientMissingSurfaceCommandError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes("No matching node") || message.includes("swaymsg exited 2")
 }
 
 async function remainingOwnedSurfaceIds(
