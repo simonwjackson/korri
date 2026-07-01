@@ -1279,6 +1279,7 @@ function realSwayController(): SwayController {
 function korriSwaySelectorFromEnv(): SwayWindowSelector {
   return {
     appIds: envList("KORRI_SWAY_APP_IDS"),
+    appIdPrefixes: envList("KORRI_SWAY_APP_ID_PREFIXES"),
     titles: envList("KORRI_SWAY_TITLES"),
     classes: envList("KORRI_SWAY_CLASSES"),
   }

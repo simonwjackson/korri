@@ -146,6 +146,7 @@ in
       KORRI_SESSIOND_HUB_WORKSPACE = "korri:hub";
       KORRI_SESSIOND_GAME_WORKSPACE = "korri:game:active";
       KORRI_SWAY_APP_IDS = "chromium,chromium-browser,google-chrome,chrome";
+      KORRI_SWAY_APP_ID_PREFIXES = "chrome-";
       KORRI_SWAY_CLASSES = "Chromium,chromium,Google-chrome";
     }
     // kioskRendererEnvironment;

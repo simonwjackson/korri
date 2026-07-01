@@ -28,6 +28,7 @@ export interface SwayNode {
 
 export interface SwayWindowSelector {
   readonly appIds?: readonly string[]
+  readonly appIdPrefixes?: readonly string[]
   readonly titles?: readonly string[]
   readonly classes?: readonly string[]
 }
@@ -45,6 +46,7 @@ export interface SwayController {
 
 export const DEFAULT_SWAY_SELECTOR: Required<SwayWindowSelector> = {
   appIds: ["korri-desktop", "dev.korri.desktop"],
+  appIdPrefixes: [],
   titles: [],
   classes: ["Korri", "Electrobun", "ElectrobunKitchenSink-dev"],
 }
@@ -147,13 +149,17 @@ function matchesSelector(
   selector: SwayWindowSelector,
 ): boolean {
   const appIds = selector.appIds ?? DEFAULT_SWAY_SELECTOR.appIds
+  const appIdPrefixes =
+    selector.appIdPrefixes ?? DEFAULT_SWAY_SELECTOR.appIdPrefixes
   const titles = selector.titles ?? DEFAULT_SWAY_SELECTOR.titles
   const classes = selector.classes ?? DEFAULT_SWAY_SELECTOR.classes
   const title = node.window_properties?.title ?? node.name ?? ""
   const className = node.window_properties?.class ?? ""
+  const appId = node.app_id ?? ""
 
   return (
-    (node.app_id ? appIds.includes(node.app_id) : false) ||
+    (appId ? appIds.includes(appId) : false) ||
+    (appId ? appIdPrefixes.some(prefix => appId.startsWith(prefix)) : false) ||
     titles.includes(title) ||
     (className ? classes.includes(className) : false)
   )
