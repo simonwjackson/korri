@@ -1,3 +1,7 @@
+import {
+  SHIFT_DESIGN_PARTS,
+  shiftDesignPartAttrs,
+} from "../../shift-design-parts"
 import { ShiftCineHint } from "../atoms/ShiftCineHint"
 
 /** The bottom-right row of button hints, mapping physical buttons to actions.
@@ -15,7 +19,10 @@ export function ShiftCineLegend({
   readonly hints: readonly ShiftCineHintSpec[]
 }) {
   return (
-    <div className="shift-cine-legend">
+    <div
+      className="shift-cine-legend"
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.legend)}
+    >
       {hints.map(hint => (
         <ShiftCineHint
           key={`${hint.glyph}:${hint.label}`}

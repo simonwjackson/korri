@@ -463,6 +463,31 @@ body {
 	z-index: 3;
 }
 /* Inspector bindings: an open-ended vertical list (label over flat select). */
+.pt-preview-crumbs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.pt-preview-crumb {
+	font: inherit;
+	font-size: 11px;
+	font-weight: 650;
+	color: var(--pt-ink-muted);
+	background: #111217;
+	border: 1px solid var(--pt-line);
+	border-radius: 999px;
+	padding: 5px 8px;
+	cursor: pointer;
+}
+.pt-preview-crumb:hover {
+	color: var(--pt-ink);
+	border-color: #393d48;
+}
+.pt-preview-crumb.is-on {
+	color: #f5d0fe;
+	border-color: rgba(240, 171, 252, 0.46);
+	background: rgba(240, 171, 252, 0.12);
+}
 .pt-bind {
 	display: flex;
 	flex-direction: column;
@@ -2391,6 +2416,9 @@ body {
 }
 .pt-ctl-btn {
 	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
 	font: inherit;
 	font-weight: 600;
 	color: var(--pt-ink-dim);
@@ -2403,6 +2431,11 @@ body {
 .pt-ctl-btn:hover {
 	color: var(--pt-ink);
 	border-color: #393d48;
+}
+.pt-ctl-btn.is-on {
+	background: rgba(240, 171, 252, 0.15);
+	border-color: rgba(240, 171, 252, 0.5);
+	color: #f5d0fe;
 }
 .pt-ctl-icon {
 	flex: 0 0 auto;

@@ -8,6 +8,7 @@ import type {
 } from "../model/lab-canvas-state"
 import { LabComposeToolStrip } from "./LabComposeToolStrip"
 import { LabPresentationToggle } from "./LabPresentationToggle"
+import { LabPreviewPickToggle } from "./LabPreviewPickToggle"
 import { LabViewToggle } from "./LabViewToggle"
 import type { LabChromeView } from "./lab-chrome-types"
 import type { LabPresentation } from "./lab-presentation"
@@ -31,6 +32,8 @@ export function LabControls({
   onToolChange,
   onCommand,
   onClear,
+  previewPickMode,
+  onPreviewPickModeChange,
   presentation,
   onPresentationChange,
   onOpenSettings,
@@ -46,6 +49,8 @@ export function LabControls({
   readonly onToolChange: (tool: LabWorkshopTool) => void
   readonly onCommand: (command: LabWorkshopCommand) => void
   readonly onClear: () => void
+  readonly previewPickMode?: boolean
+  readonly onPreviewPickModeChange?: (active: boolean) => void
   readonly presentation: LabPresentation
   readonly onPresentationChange: (presentation: LabPresentation) => void
   readonly onOpenSettings: () => void
@@ -70,6 +75,12 @@ export function LabControls({
           onToolChange={onToolChange}
           onCommand={onCommand}
           onClear={onClear}
+        />
+      ) : null}
+      {onPreviewPickModeChange ? (
+        <LabPreviewPickToggle
+          active={Boolean(previewPickMode)}
+          onChange={onPreviewPickModeChange}
         />
       ) : null}
       <span className="pt-controls-spacer" />

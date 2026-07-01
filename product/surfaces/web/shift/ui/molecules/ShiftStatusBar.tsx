@@ -6,6 +6,10 @@
  */
 import { Wifi, WifiOff } from "lucide-react"
 import {
+  SHIFT_DESIGN_PARTS,
+  shiftDesignPartAttrs,
+} from "../../shift-design-parts"
+import {
   DEFAULT_SHIFT_NETWORK_READING,
   type ShiftNetworkReading,
   shiftNetworkConnected,
@@ -28,7 +32,10 @@ export function ShiftStatusBar({
 }: ShiftStatusBarProps) {
   const NetworkIcon = shiftNetworkConnected(network) ? Wifi : WifiOff
   return (
-    <header className="shift-cine-top">
+    <header
+      className="shift-cine-top"
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.statusBar)}
+    >
       <span className="shift-cine-clock">{time}</span>
       <span className="shift-cine-status">
         <NetworkIcon className="shift-cine-status-icon" aria-hidden />

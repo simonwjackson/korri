@@ -1,4 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion"
+import {
+  SHIFT_DESIGN_PARTS,
+  shiftDesignPartAttrs,
+} from "../../shift-design-parts"
 
 /** The full-bleed art environment behind the cinematic home: the focused game's
  * wide art crossfades on change (keyed by `artUrl`) and a scrim keeps foreground
@@ -17,6 +21,7 @@ export function ShiftCineBackdrop({
           key={artUrl}
           className="shift-cine-bg"
           data-cooled={cooled || undefined}
+          {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.backdrop)}
           style={{ backgroundImage: `url(${artUrl})` }}
           initial={{ opacity: 0, scale: 1.1 }}
           animate={{ opacity: 1, scale: 1 }}

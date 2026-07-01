@@ -12,6 +12,10 @@ import {
   BatteryLow,
   BatteryMedium,
 } from "lucide-react"
+import {
+  SHIFT_DESIGN_PARTS,
+  shiftDesignPartAttrs,
+} from "../../shift-design-parts"
 
 export type ShiftBatteryLevel = "full" | "medium" | "low"
 
@@ -31,5 +35,11 @@ export function ShiftBattery({
   charging = false,
 }: ShiftBatteryProps) {
   const Icon = charging ? BatteryCharging : LEVEL_ICON[level]
-  return <Icon className="shift-cine-status-icon" aria-hidden />
+  return (
+    <Icon
+      className="shift-cine-status-icon"
+      aria-hidden
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.battery)}
+    />
+  )
 }

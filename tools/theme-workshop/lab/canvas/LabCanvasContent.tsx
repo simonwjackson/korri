@@ -6,6 +6,7 @@ import type {
   LabWorkshopTool,
 } from "../model/lab-canvas-state"
 import type { LabStoryIndex } from "../model/lab-part-model"
+import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import type { LabInputValue } from "../model/lab-source-state"
 import { LabComposeView } from "./LabComposeView"
 import { LabSurfaceView } from "./LabSurfaceView"
@@ -20,6 +21,9 @@ export function LabCanvasContent({
   workshopCommand,
   workshopScreenId,
   selectedObjectId,
+  previewPickMode,
+  previewSelection,
+  onPreviewSelectionChange,
   onSelectObject,
   onInstancesChange,
 }: {
@@ -33,13 +37,26 @@ export function LabCanvasContent({
   /** Which logical screen aspect Compose renders for multi-screen devices. */
   readonly workshopScreenId: string | null
   readonly selectedObjectId: string | null
+  readonly previewPickMode: boolean
+  readonly previewSelection: LabPreviewSelection | null
+  readonly onPreviewSelectionChange: (
+    selection: LabPreviewSelection | null,
+  ) => void
   readonly onSelectObject: (id: string | null) => void
   readonly onInstancesChange: Dispatch<
     SetStateAction<readonly LabObjectInstance[]>
   >
 }) {
   if (view === "device")
-    return <LabSurfaceView sourceId={activeSourceId} stateId={activeStateId} />
+    return (
+      <LabSurfaceView
+        sourceId={activeSourceId}
+        stateId={activeStateId}
+        pickMode={previewPickMode}
+        previewSelection={previewSelection}
+        onPreviewSelectionChange={onPreviewSelectionChange}
+      />
+    )
 
   return (
     <LabComposeView
@@ -49,7 +66,10 @@ export function LabCanvasContent({
       command={workshopCommand}
       screenId={workshopScreenId}
       selectedObjectId={selectedObjectId}
+      pickMode={previewPickMode}
+      innerSelection={previewSelection}
       onSelectObject={onSelectObject}
+      onInnerSelect={onPreviewSelectionChange}
       onInstancesChange={onInstancesChange}
     />
   )

@@ -31,6 +31,7 @@ import {
   lerpCamera,
 } from "../model/lab-canvas-state"
 import { useLabPlacementPattern } from "../model/lab-placement-store"
+import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import { LabDraggablePart } from "./LabDraggablePart"
 
 /** How quickly the camera eases toward its target each frame (0..1). */
@@ -73,7 +74,10 @@ export function LabWorkshopBoard({
   command,
   screenId,
   selectedId,
+  pickMode,
+  innerSelection,
   onSelect,
+  onInnerSelect,
   onInstancesChange,
 }: {
   readonly instances: readonly LabObjectInstance[]
@@ -83,7 +87,10 @@ export function LabWorkshopBoard({
   /** Which logical screen aspect to render (multi-screen devices); null = first/default. */
   readonly screenId: string | null
   readonly selectedId: string | null
+  readonly pickMode: boolean
+  readonly innerSelection: LabPreviewSelection | null
   readonly onSelect: (id: string | null) => void
+  readonly onInnerSelect: (selection: LabPreviewSelection | null) => void
   readonly onInstancesChange: Dispatch<
     SetStateAction<readonly LabObjectInstance[]>
   >
@@ -421,7 +428,10 @@ export function LabWorkshopBoard({
               screen={screen}
               scale={camera.scale}
               selected={instance.id === selectedId}
+              pickMode={pickMode}
+              innerSelection={innerSelection}
               onSelect={handleSelect}
+              onInnerSelect={onInnerSelect}
               onBind={bind}
               onMove={move}
               onRemove={remove}

@@ -1,11 +1,12 @@
 import { type CSSProperties, useEffect, useState } from "react"
 import { LabDeviceCluster } from "../components/LabDeviceCluster"
 import { useLab } from "../Lab.context"
-import { LabSurfaceMount } from "../LabSurfaceMount"
+import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import {
   initialValuesForBinding,
   type LabInputValue,
 } from "../model/lab-source-state"
+import { LabInspectableSurfaceMount } from "./LabInspectableSurfaceMount"
 import { useLabFitHeight } from "./useLabFitHeight"
 
 let fallbackLabViewSessionId = 0
@@ -20,9 +21,17 @@ function createLabViewSessionId(): string {
 export function LabSurfaceView({
   sourceId,
   stateId,
+  pickMode = false,
+  previewSelection = null,
+  onPreviewSelectionChange = () => {},
 }: {
   readonly sourceId: string
   readonly stateId: LabInputValue
+  readonly pickMode?: boolean
+  readonly previewSelection?: LabPreviewSelection | null
+  readonly onPreviewSelectionChange?: (
+    selection: LabPreviewSelection | null,
+  ) => void
 }) {
   const {
     adapter,
@@ -98,12 +107,16 @@ export function LabSurfaceView({
             pxPerMm={pxPerMm}
             maxHeightPx={maxHeightPx}
             renderPrimary={() => (
-              <LabSurfaceMount
+              <LabInspectableSurfaceMount
                 key={mountKey}
+                scopeId={`${device.id}:primary`}
                 adapter={adapter}
                 initialValues={boundValues}
                 surfacePath={surfacePath}
                 onNavigate={setSurfacePath}
+                pickMode={pickMode}
+                selection={previewSelection}
+                onSelect={onPreviewSelectionChange}
                 dualScreen={
                   hasMultipleScreens
                     ? { role: "primary", ...dualScreenSession }
@@ -112,12 +125,16 @@ export function LabSurfaceView({
               />
             )}
             renderSecondary={screen => (
-              <LabSurfaceMount
+              <LabInspectableSurfaceMount
                 key={`${screen.id}:${mountKey}`}
+                scopeId={`${device.id}:${screen.id}`}
                 adapter={adapter}
                 initialValues={boundValues}
                 surfacePath={secondaryScreenPath}
                 onNavigate={() => {}}
+                pickMode={pickMode}
+                selection={previewSelection}
+                onSelect={onPreviewSelectionChange}
                 dualScreen={{ role: "companion", ...dualScreenSession }}
               />
             )}

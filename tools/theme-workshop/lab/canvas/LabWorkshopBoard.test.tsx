@@ -90,7 +90,10 @@ function Harness({
         command={command}
         screenId={null}
         selectedId={selectedId}
+        pickMode={false}
+        innerSelection={null}
         onSelect={() => undefined}
+        onInnerSelect={() => undefined}
         onInstancesChange={setInstances}
       />
       <div data-testid="dump">{JSON.stringify(instances)}</div>

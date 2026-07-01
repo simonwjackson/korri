@@ -5,6 +5,7 @@ import type {
   LabWorkshopTool,
 } from "../model/lab-canvas-state"
 import type { LabStoryIndex } from "../model/lab-part-model"
+import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import { LabWorkshopBoard } from "./LabWorkshopBoard"
 
 /**
@@ -22,7 +23,10 @@ export function LabComposeView({
   command,
   screenId,
   selectedObjectId,
+  pickMode,
+  innerSelection,
   onSelectObject,
+  onInnerSelect,
   onInstancesChange,
 }: {
   readonly index: LabStoryIndex
@@ -32,7 +36,10 @@ export function LabComposeView({
   /** Which logical screen aspect to render for multi-screen devices. */
   readonly screenId: string | null
   readonly selectedObjectId: string | null
+  readonly pickMode: boolean
+  readonly innerSelection: LabPreviewSelection | null
   readonly onSelectObject: (id: string | null) => void
+  readonly onInnerSelect: (selection: LabPreviewSelection | null) => void
   readonly onInstancesChange: Dispatch<
     SetStateAction<readonly LabObjectInstance[]>
   >
@@ -47,7 +54,10 @@ export function LabComposeView({
           command={command}
           screenId={screenId}
           selectedId={selectedObjectId}
+          pickMode={pickMode}
+          innerSelection={innerSelection}
           onSelect={onSelectObject}
+          onInnerSelect={onInnerSelect}
           onInstancesChange={onInstancesChange}
         />
       </section>

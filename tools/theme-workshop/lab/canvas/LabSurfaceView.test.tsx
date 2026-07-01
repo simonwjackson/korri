@@ -240,6 +240,34 @@ function context(
   }
 }
 
+function makeInspectableAdapter() {
+  let clicks = 0
+  const adapter: LabSurfaceAdapter = {
+    id: "shift",
+    devices: [thor],
+    makeSeedInitialValues: async () => ({ seed: true }),
+    mountSurface: host => {
+      const molecule = document.createElement("section")
+      molecule.setAttribute("data-korri-part", "shift.status-bar")
+      molecule.setAttribute("data-korri-layer", "molecule")
+      molecule.setAttribute("data-korri-name", "Status Bar")
+      const atom = document.createElement("button")
+      atom.type = "button"
+      atom.textContent = "Battery"
+      atom.setAttribute("data-korri-part", "shift.battery")
+      atom.setAttribute("data-korri-layer", "atom")
+      atom.setAttribute("data-korri-name", "Battery")
+      atom.addEventListener("click", () => {
+        clicks += 1
+      })
+      molecule.append(atom)
+      host.append(molecule)
+      return { router: {} as never, dispose: () => {} }
+    },
+  }
+  return { adapter, clicks: () => clicks }
+}
+
 describe("LabSurfaceView", () => {
   it("mounts Thor primary and companion screens with one scoped dual-screen channel", async () => {
     const { adapter, mounts } = makeAdapter()
@@ -367,5 +395,37 @@ describe("LabSurfaceView", () => {
         within(secondary).getByRole("heading", { name: "Celeste" }),
       ).toBeTruthy()
     })
+  })
+
+  it("selects a named preview part in pick mode without running the app click", async () => {
+    const { adapter, clicks } = makeInspectableAdapter()
+    const selectedNames: string[] = []
+
+    render(
+      <LabContext.Provider value={context(adapter)}>
+        <LabSurfaceView
+          sourceId="default"
+          stateId="ready"
+          pickMode
+          onPreviewSelectionChange={selection => {
+            const name = selection?.targets[0]?.name
+            if (name) selectedNames.push(name)
+          }}
+        />
+      </LabContext.Provider>,
+    )
+
+    const button = await waitFor(() =>
+      document.querySelector<HTMLButtonElement>(
+        '[data-korri-part="shift.battery"]',
+      ),
+    )
+    expect(button).toBeTruthy()
+
+    fireEvent.pointerDown(button as HTMLButtonElement)
+    fireEvent.click(button as HTMLButtonElement)
+
+    expect(selectedNames).toContain("Battery")
+    expect(clicks()).toBe(0)
   })
 })

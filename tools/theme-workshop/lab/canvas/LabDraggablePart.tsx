@@ -9,7 +9,9 @@ import {
 } from "../model/lab-object-inputs"
 import { stateVariantFor } from "../model/lab-part-model"
 import { LabPreviewBoundary } from "../model/lab-preview-boundary"
+import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import { LAB_BIND_MIME } from "../panels/LabSourcesPanel"
+import { LabInspectableContent } from "./LabInspectableContent"
 import { LabScreenFrame } from "./LabScreenFrame"
 
 function parseBind(value: string): { axis: "sourceId"; value: string } | null {
@@ -32,7 +34,10 @@ export function LabDraggablePart({
   screen,
   scale,
   selected,
+  pickMode,
+  innerSelection,
   onSelect,
+  onInnerSelect,
   onBind,
   onMove,
   onRemove,
@@ -43,7 +48,10 @@ export function LabDraggablePart({
   readonly screen?: ScreenConfig
   readonly scale: number
   readonly selected: boolean
+  readonly pickMode: boolean
+  readonly innerSelection: LabPreviewSelection | null
   readonly onSelect: (id: string) => void
+  readonly onInnerSelect: (selection: LabPreviewSelection | null) => void
   readonly onBind: (
     id: string,
     patch: Partial<Pick<LabObjectInstance, "sourceId">>,
@@ -146,7 +154,14 @@ export function LabDraggablePart({
         </button>
       </header>
       <div className="pt-object-body">
-        <LabScreenFrame screen={screen}>{renderBody()}</LabScreenFrame>
+        <LabInspectableContent
+          scopeId={instance.id}
+          pickMode={pickMode}
+          selection={innerSelection}
+          onSelect={onInnerSelect}
+        >
+          <LabScreenFrame screen={screen}>{renderBody()}</LabScreenFrame>
+        </LabInspectableContent>
       </div>
     </fieldset>
   )

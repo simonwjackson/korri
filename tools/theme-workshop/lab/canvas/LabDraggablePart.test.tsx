@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, mock } from "bun:test"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { Story } from "../../types"
 import { LabContext, type LabContextValue } from "../Lab.context"
 import type { LabCalibrationController } from "../model/lab-calibration-state"
+import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import type { LabSurfaceAdapter } from "../surface-registry"
 import { LabDraggablePart } from "./LabDraggablePart"
 
@@ -93,7 +94,10 @@ describe("LabDraggablePart", () => {
           byId={stories}
           scale={1}
           selected={false}
+          pickMode={false}
+          innerSelection={null}
           onSelect={() => undefined}
+          onInnerSelect={() => undefined}
           onBind={() => undefined}
           onMove={() => undefined}
           onRemove={mock(() => undefined)}
@@ -124,7 +128,10 @@ describe("LabDraggablePart", () => {
           byId={stories}
           scale={1}
           selected={false}
+          pickMode={false}
+          innerSelection={null}
           onSelect={() => undefined}
+          onInnerSelect={() => undefined}
           onBind={() => undefined}
           onMove={() => undefined}
           onRemove={mock(() => undefined)}
@@ -134,5 +141,62 @@ describe("LabDraggablePart", () => {
 
     expect(screen.getByText("Adapter rendered atom")).toBeTruthy()
     expect(screen.queryByText("Atom baked render")).toBeNull()
+  })
+
+  it("picks a named part inside a placed object without running the inner click", () => {
+    const selections: LabPreviewSelection[] = []
+    let innerClicks = 0
+    const nestedStory: Story = {
+      id: "home-page",
+      layer: "page",
+      name: "Home",
+      surface: true,
+      render: () => (
+        <button
+          type="button"
+          data-korri-part="shift.battery"
+          data-korri-layer="atom"
+          data-korri-name="Battery"
+          onClick={() => {
+            innerClicks += 1
+          }}
+        >
+          Battery
+        </button>
+      ),
+    }
+
+    render(
+      <LabContext.Provider value={context}>
+        <LabDraggablePart
+          instance={{
+            id: "object-1",
+            storyId: "home-page",
+            sourceId: "dev",
+            inputValues: {},
+          }}
+          story={nestedStory}
+          byId={new Map([[nestedStory.id, nestedStory]])}
+          scale={1}
+          selected={false}
+          pickMode
+          innerSelection={null}
+          onSelect={() => undefined}
+          onInnerSelect={selection => {
+            if (selection) selections.push(selection)
+          }}
+          onBind={() => undefined}
+          onMove={() => undefined}
+          onRemove={mock(() => undefined)}
+        />
+      </LabContext.Provider>,
+    )
+
+    const button = screen.getByRole("button", { name: "Battery" })
+    fireEvent.pointerDown(button)
+    fireEvent.click(button)
+
+    expect(selections[0]?.targets[0]?.name).toBe("Battery")
+    expect(innerClicks).toBe(0)
   })
 })

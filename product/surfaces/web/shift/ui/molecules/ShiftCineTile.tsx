@@ -1,3 +1,8 @@
+import {
+  SHIFT_DESIGN_PARTS,
+  shiftDesignPartAttrs,
+} from "../../shift-design-parts"
+
 /** One game tile in the cinematic rail: a native focusable button wrapping the
  * cover art. Focus is driven by the platform focus engine (every input device),
  * so the tile only exposes `onFocus`/`onActivate` and a `focused` flag — no raw
@@ -26,6 +31,7 @@ export function ShiftCineTile({
       type="button"
       data-cine-index={index}
       data-focused={focused || undefined}
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.tile, title)}
       className="shift-cine-tile"
       aria-label={title}
       onFocus={onFocus}

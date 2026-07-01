@@ -1,5 +1,9 @@
 import { motion } from "framer-motion"
 import type { Ref } from "react"
+import {
+  SHIFT_DESIGN_PARTS,
+  shiftDesignPartAttrs,
+} from "../../shift-design-parts"
 import { ShiftCineTile } from "../molecules/ShiftCineTile"
 
 const SPRING = { type: "spring", stiffness: 260, damping: 32 } as const
@@ -35,7 +39,10 @@ export function ShiftCineRail({
   readonly onTileActivate: (index: number) => void
 }) {
   return (
-    <div className="shift-cine-rail">
+    <div
+      className="shift-cine-rail"
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.rail)}
+    >
       <motion.div
         className="shift-cine-track"
         ref={trackRef}

@@ -36,8 +36,15 @@ import {
 import {
   buildStoryIndex,
   firstStateFamilyStory,
+  partLabel,
   statesForStory,
 } from "./model/lab-part-model"
+import {
+  activePreviewTarget,
+  type LabPreviewPartTarget,
+  type LabPreviewSelection,
+  selectPreviewTargetIndex,
+} from "./model/lab-preview-selection"
 import {
   canonicalInputValue,
   DEFAULT_INPUT_VALUE,
@@ -51,6 +58,7 @@ import { LabInspectorPanel } from "./panels/LabInspectorPanel"
 import { LabObjectInspector } from "./panels/LabObjectInspector"
 import { LabPartsPanel } from "./panels/LabPartsPanel"
 import { LabPartsViewToggle } from "./panels/LabPartsViewToggle"
+import { LabPreviewInspector } from "./panels/LabPreviewInspector"
 import { LabSurfaceControlsPanel } from "./panels/LabSurfaceControlsPanel"
 import {
   type LabPartsView,
@@ -106,6 +114,9 @@ export function LabShell() {
   )
   const [instances, setInstances] = useState<readonly LabObjectInstance[]>([])
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null)
+  const [previewPickMode, setPreviewPickMode] = useState(false)
+  const [previewSelection, setPreviewSelection] =
+    useState<LabPreviewSelection | null>(null)
   const bindObject = (
     id: string,
     patch: Partial<Pick<LabObjectInstance, "sourceId">>,
@@ -194,6 +205,17 @@ export function LabShell() {
   }, [initialCanvasView])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      setPreviewPickMode(false)
+      setPreviewSelection(null)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
+
+  useEffect(() => {
     setActiveSourceId(sources[0]?.id ?? DEFAULT_SOURCE_ID)
   }, [sources])
 
@@ -227,6 +249,7 @@ export function LabShell() {
     setCatalogError(null)
     setSelectedIds([])
     setInstances([])
+    setPreviewSelection(null)
     void loadSurfacePartsResult(adapter.id)
       .then(next => {
         if (!cancelled) setCatalog(next)
@@ -279,6 +302,7 @@ export function LabShell() {
     setSelectedIds([])
     setInstances([])
     setSelectedObjectId(null)
+    setPreviewSelection(null)
   }
 
   const switchWorkshopTool = (tool: LabWorkshopTool) => {
@@ -310,17 +334,79 @@ export function LabShell() {
   )
   // The Inspector scopes to the selected Compose object (its bindings are an
   // open-ended axis list), and otherwise edits the whole canvas.
+  const selectObject = (id: string | null) => {
+    setSelectedObjectId(id)
+    setPreviewSelection(prev => (prev && prev.scopeId !== id ? null : prev))
+  }
   const selectedObject =
     instances.find(instance => instance.id === selectedObjectId) ?? null
   const selectedObjectStory = selectedObject
     ? (index.byId.get(selectedObject.storyId) ?? null)
     : null
+  const selectedPreviewTarget = activePreviewTarget(previewSelection)
+  const selectedPreviewObject =
+    view === "compose" && previewSelection
+      ? (instances.find(instance => instance.id === previewSelection.scopeId) ??
+        null)
+      : null
+  const selectedPreviewStory = selectedPreviewTarget
+    ? storyForPreviewTarget(index, selectedPreviewTarget)
+    : null
+  const previewInputs = selectedPreviewStory
+    ? (adapter.surfacePartInputs?.(selectedPreviewStory) ?? [])
+    : []
+  const previewInputValues = Object.fromEntries(
+    previewInputs.map(input => [
+      input.id,
+      canonicalInputValue(
+        selectedPreviewObject
+          ? selectedPreviewObject.inputValues[input.id]
+          : screenInputValues[input.id],
+        input.control,
+        input.defaultValue,
+      ),
+    ]),
+  )
+  const changePreviewInput = (inputId: string, value: LabInputValue) => {
+    if (selectedPreviewObject) {
+      bindObjectInputValue(selectedPreviewObject.id, inputId, value)
+      return
+    }
+    changeScreenInput(inputId, value)
+  }
+  const choosePreviewTargetIndex = (targetIndex: number) =>
+    setPreviewSelection(prev =>
+      prev ? selectPreviewTargetIndex(prev, targetIndex) : prev,
+    )
+  const selectPreviewPart = (selection: LabPreviewSelection | null) => {
+    setPreviewSelection(selection)
+    if (view !== "compose" || !selection) return
+    if (instances.some(instance => instance.id === selection.scopeId)) {
+      setSelectedObjectId(selection.scopeId)
+    }
+  }
+  const clearPreviewSelection = () => {
+    setPreviewSelection(null)
+    setPreviewPickMode(false)
+  }
   // The Inspector is split into two panels: a view-scoped State panel (the
   // Device frame's live state-machine axes, or the selected Compose object's
   // bindings) and a Design panel (the always-present intrinsic-design sliders
   // for the whole canvas). They edit unrelated things, so they live apart.
   const statePanel = () =>
-    view === "device" ? (
+    previewSelection &&
+    selectedPreviewTarget &&
+    (view === "device" || selectedPreviewObject) ? (
+      <LabPreviewInspector
+        selection={previewSelection}
+        story={selectedPreviewStory}
+        inputs={previewInputs}
+        inputValues={previewInputValues}
+        onInputChange={changePreviewInput}
+        onSelectTargetIndex={choosePreviewTargetIndex}
+        onClearSelection={clearPreviewSelection}
+      />
+    ) : view === "device" ? (
       <LabDeviceInspector
         axes={screenAxes}
         activeByAxis={activeByAxis}
@@ -437,11 +523,16 @@ export function LabShell() {
 
   // One control cluster, built once and reflowed into whichever chrome position
   // is active. Same components, different position.
+  const chooseView = (next: LabCanvasView) => {
+    setView(next)
+    setPreviewSelection(null)
+  }
+
   const controls = (
     <LabControls
       views={CANVAS_VIEWS}
       view={view}
-      onViewChange={setView}
+      onViewChange={chooseView}
       screenChoices={view === "compose" ? activeScreens : undefined}
       activeScreenId={resolvedScreenId ?? undefined}
       onScreenChange={setWorkshopScreenId}
@@ -450,6 +541,8 @@ export function LabShell() {
       onToolChange={switchWorkshopTool}
       onCommand={sendWorkshopCommand}
       onClear={clearAll}
+      previewPickMode={previewPickMode}
+      onPreviewPickModeChange={setPreviewPickMode}
       presentation={presentation}
       onPresentationChange={choosePresentation}
       onOpenSettings={() => setSettingsOpen(true)}
@@ -480,7 +573,10 @@ export function LabShell() {
           workshopCommand={workshopCommand}
           workshopScreenId={resolvedScreenId}
           selectedObjectId={selectedObjectId}
-          onSelectObject={setSelectedObjectId}
+          previewPickMode={previewPickMode}
+          previewSelection={previewSelection}
+          onPreviewSelectionChange={selectPreviewPart}
+          onSelectObject={selectObject}
           onInstancesChange={setInstances}
         />
       </div>
@@ -502,4 +598,20 @@ export function LabShell() {
       />
     </div>
   )
+}
+
+function storyForPreviewTarget(
+  index: ReturnType<typeof buildStoryIndex>,
+  target: LabPreviewPartTarget,
+) {
+  for (const group of index.groups) {
+    for (const story of group.stories) {
+      if (story.layer !== target.layer) continue
+      if (story.name === target.name) return story
+      if (partLabel(story) === target.name) return story
+      if (story.name.startsWith(`${target.name} ·`)) return story
+      if (partLabel(story).startsWith(`${target.name} ·`)) return story
+    }
+  }
+  return null
 }

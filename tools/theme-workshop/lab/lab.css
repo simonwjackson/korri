@@ -8,9 +8,32 @@
  */
 
 /* Each mounted surface fills its physical device container. */
-.lab-screen > [data-lab-surface-mount] {
+.lab-inspectable-surface {
+	position: relative;
+}
+
+.lab-preview-selection-ring {
+	position: absolute;
+	z-index: 20;
+	pointer-events: none;
+	border: 1px solid rgba(240, 171, 252, 0.72);
+	border-radius: 10px;
+	box-shadow: 0 0 0 1px rgba(10, 11, 14, 0.58);
+}
+
+.lab-screen > [data-lab-surface-mount],
+.lab-screen > .lab-inspectable-surface,
+.lab-inspectable-surface > [data-lab-surface-mount] {
 	width: 100%;
 	height: 100%;
+}
+
+.pt-object-body > .lab-inspectable-surface {
+	width: 100%;
+}
+
+.lab-inspectable-surface[data-preview-pick="true"] {
+	cursor: crosshair;
 }
 
 /*
@@ -166,7 +189,9 @@
 		#181b22 12px,
 		#181b22 24px
 	);
-	font: 600 0.8rem/1.3 ui-monospace, monospace;
+	font:
+		600 0.8rem / 1.3 ui-monospace,
+		monospace;
 	letter-spacing: 0.04em;
 }
 .lab-screen-placeholder-tag {

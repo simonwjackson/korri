@@ -21,6 +21,7 @@ import type { LaunchState } from "@platform/library/launch-state"
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { launchStatusView } from "../launch-failure-copy"
+import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
 import { ShiftCineBackdrop } from "../ui/molecules/ShiftCineBackdrop"
 import {
   type ShiftCineHintSpec,
@@ -300,6 +301,7 @@ export function ShiftCinematicHome({
     <div
       data-shift-home
       className="shift-cine intrinsic relative h-full w-full overflow-hidden"
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.home)}
     >
       <ShiftCineBackdrop
         artUrl={backdropArtUrl}

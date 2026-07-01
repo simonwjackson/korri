@@ -1,6 +1,10 @@
 import { AnimatePresence, motion } from "framer-motion"
 import type { LaunchStatusView } from "../../launch-failure-copy"
 import type { ShiftCinematicGame } from "../../pages/ShiftCinematicHome"
+import {
+  SHIFT_DESIGN_PARTS,
+  shiftDesignPartAttrs,
+} from "../../shift-design-parts"
 import { ShiftCineChip } from "../atoms/ShiftCineChip"
 import { ShiftCineKicker } from "../atoms/ShiftCineKicker"
 import { ShiftCineLoading } from "../atoms/ShiftCineLoading"
@@ -29,7 +33,10 @@ export function ShiftCineHero({
     // outgoing titles behind old exit animations. The stack wrapper grid-stacks
     // the outgoing/incoming hero layers into one cell so they crossfade in
     // place instead of briefly flowing as two side-by-side columns.
-    <div className="shift-cine-hero-stack">
+    <div
+      className="shift-cine-hero-stack"
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.hero, game.id)}
+    >
       <AnimatePresence>
         <motion.div
           key={`${game.id}:${status?.tone ?? "live"}`}
