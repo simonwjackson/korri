@@ -39,6 +39,37 @@ export interface LabSurfacePartInput {
   readonly release?: (context?: LabSurfaceInputContext) => void
 }
 
+/** Where a fired event should land. Mirrors LabSurfaceInputContext so events and
+ * inputs scope to the same live-device registries. */
+export interface LabSurfaceEventContext {
+  /** Live device object that owns the mounted surface instance, when the emit is
+   * scoped to one device. Omitted means broadcast to every mounted surface. */
+  readonly scopeId?: string
+}
+
+/**
+ * A discrete device event a surface can be driven by — the fire-and-observe
+ * counterpart to `LabSurfacePartInput` (a held value). Where an input pins a
+ * value the surface keeps reading, an event models a fact the surface receives
+ * over time (e.g. a battery-changed or network-changed device event) and reacts
+ * to through its real event/subscription pipeline. The lab renders the payload
+ * editor from `payload` (reusing the input-control vocabulary) and calls `emit`
+ * when the operator sends the event.
+ */
+export interface LabSurfaceEvent {
+  readonly id: string
+  readonly label: string
+  /** Editable shape of this event's payload; reuses the input-control kinds. */
+  readonly payload: LabInputControl
+  readonly defaultPayload: LabInputValue
+  /** Deliver one discrete event with the composed payload into every (or one
+   * scoped) mounted surface. */
+  readonly emit: (
+    payload: LabInputValue,
+    context?: LabSurfaceEventContext,
+  ) => void
+}
+
 export interface LabSurfaceDualScreenOptions {
   readonly role: DualScreenRole
   readonly channelName: string
@@ -72,6 +103,11 @@ export interface LabSurfaceAdapter {
   readonly inputsForScreen?: (
     screenPath: string,
   ) => readonly LabSurfacePartInput[]
+  /** Discrete device events the mounted screen can be driven by, e.g. a battery
+   * or network device-fact change. Rendered by the lab as payload editors with a
+   * Send action, dispatched into the surface's real event pipeline. Screens with
+   * no events (or surfaces with none) return an empty list. */
+  readonly eventsForScreen?: (screenPath: string) => readonly LabSurfaceEvent[]
   readonly knobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
   /** Surface-owned route for secondary/companion screens in a multi-screen

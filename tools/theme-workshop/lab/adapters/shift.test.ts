@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { loadingForeverCatalogFactsSourceLayer } from "@platform/catalog/catalog-facts-source"
+import { unknownDeviceState } from "@platform/device/device-facts"
 import { catalogFactsSourceLayerAtom } from "@platform/react/catalog/catalog-atoms"
+import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import {
   foregroundSessionStatusLayerAtom,
   launcherLayerAtom,
@@ -55,6 +57,7 @@ describe("shift lab surface adapter", () => {
     expect(atoms).toContain(librarySourceLayerAtom)
     expect(atoms).toContain(launcherLayerAtom)
     expect(atoms).toContain(shiftPowerReadingAtom)
+    expect(atoms).toContain(deviceStateAtom)
     expect(atoms).toContain(shiftClockIsoAtom)
     expect(atoms).toContain(shiftNetworkReadingAtom)
   })
@@ -211,129 +214,111 @@ describe("shift home state axes", () => {
     }
   })
 
-  it("drives real Power, Clock, and Network inputs and restores the seed on release", () => {
+  it("keeps clock as the only held live input and drives it on the registry", () => {
     const inputs =
       resolveLabSurfaceAdapter("shift").inputsForScreen?.("/") ?? []
-    const power = inputs.find(input => input.id === "power")
+    expect(inputs.map(input => input.id)).toEqual(["clock"])
     const clock = inputs.find(input => input.id === "clock")
-    const network = inputs.find(input => input.id === "network")
-    expect(power?.control.kind).toBe("object")
     expect(clock?.control.kind).toBe("iso-datetime")
-    expect(network?.control.kind).toBe("tagged")
 
     const registry = AtomRegistry.make({
-      initialValues: [
-        [shiftPowerReadingAtom, DEFAULT_SHIFT_POWER_READING],
-        [shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO],
-        [shiftNetworkReadingAtom, DEFAULT_SHIFT_NETWORK_READING],
-      ],
+      initialValues: [[shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO]],
     })
     const unregister = registerLabSurfaceRegistry({
       registry,
       seed: new Map<Atom.Atom<unknown>, unknown>([
-        [
-          shiftPowerReadingAtom as Atom.Atom<unknown>,
-          DEFAULT_SHIFT_POWER_READING,
-        ],
         [shiftClockIsoAtom as Atom.Atom<unknown>, DEFAULT_SHIFT_CLOCK_ISO],
-        [
-          shiftNetworkReadingAtom as Atom.Atom<unknown>,
-          DEFAULT_SHIFT_NETWORK_READING,
-        ],
       ]),
     })
 
     try {
-      power?.apply?.({ percent: 12, charging: true })
       clock?.apply?.("2026-06-30T23:08:00.000Z")
-      network?.apply?.({ _tag: "Disconnected" })
-      expect(registry.get(shiftPowerReadingAtom)).toEqual({
-        percent: 12,
-        charging: true,
-      })
       expect(registry.get(shiftClockIsoAtom)).toBe("2026-06-30T23:08:00.000Z")
-      expect(registry.get(shiftNetworkReadingAtom)).toEqual({
-        _tag: "Disconnected",
-      })
-
-      power?.release?.()
       clock?.release?.()
-      network?.release?.()
-      expect(registry.get(shiftPowerReadingAtom)).toEqual(
-        DEFAULT_SHIFT_POWER_READING,
-      )
       expect(registry.get(shiftClockIsoAtom)).toBe(DEFAULT_SHIFT_CLOCK_ISO)
-      expect(registry.get(shiftNetworkReadingAtom)).toEqual(
-        DEFAULT_SHIFT_NETWORK_READING,
-      )
     } finally {
       unregister()
       registry.dispose()
     }
   })
 
-  it("scopes real Power, Clock, and Network inputs to one live device registry", () => {
-    const inputs =
-      resolveLabSurfaceAdapter("shift").inputsForScreen?.("/") ?? []
-    const power = inputs.find(input => input.id === "power")
-    const clock = inputs.find(input => input.id === "clock")
-    const network = inputs.find(input => input.id === "network")
+  it("drives battery and network device events into the live registry", () => {
+    const events =
+      resolveLabSurfaceAdapter("shift").eventsForScreen?.("/") ?? []
+    expect(events.map(event => event.id)).toEqual(["battery", "network"])
+    const battery = events.find(event => event.id === "battery")
+    const network = events.find(event => event.id === "network")
+    expect(battery?.payload.kind).toBe("object")
+    expect(network?.payload.kind).toBe("tagged")
 
-    const registryA = AtomRegistry.make({
+    const registry = AtomRegistry.make({
       initialValues: [
-        [shiftPowerReadingAtom, DEFAULT_SHIFT_POWER_READING],
-        [shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO],
+        [deviceStateAtom, unknownDeviceState()],
         [shiftNetworkReadingAtom, DEFAULT_SHIFT_NETWORK_READING],
       ],
     })
-    const registryB = AtomRegistry.make({
-      initialValues: [
-        [shiftPowerReadingAtom, DEFAULT_SHIFT_POWER_READING],
-        [shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO],
-        [shiftNetworkReadingAtom, DEFAULT_SHIFT_NETWORK_READING],
-      ],
+    const unregister = registerLabSurfaceRegistry({
+      registry,
+      seed: new Map<Atom.Atom<unknown>, unknown>(),
     })
-    const seed = new Map<Atom.Atom<unknown>, unknown>([
-      [
-        shiftPowerReadingAtom as Atom.Atom<unknown>,
-        DEFAULT_SHIFT_POWER_READING,
-      ],
-      [shiftClockIsoAtom as Atom.Atom<unknown>, DEFAULT_SHIFT_CLOCK_ISO],
-      [
-        shiftNetworkReadingAtom as Atom.Atom<unknown>,
-        DEFAULT_SHIFT_NETWORK_READING,
-      ],
-    ])
+
+    try {
+      battery?.emit({ percent: 12, charging: true })
+      network?.emit({ _tag: "Disconnected" })
+      expect(registry.get(deviceStateAtom).battery).toMatchObject({
+        _tag: "Ready",
+        percent: 12,
+        charging: true,
+      })
+      expect(registry.get(shiftNetworkReadingAtom)).toEqual({
+        _tag: "Disconnected",
+      })
+    } finally {
+      unregister()
+      registry.dispose()
+    }
+  })
+
+  it("scopes battery and network events to one live device registry", () => {
+    const events =
+      resolveLabSurfaceAdapter("shift").eventsForScreen?.("/") ?? []
+    const battery = events.find(event => event.id === "battery")
+    const network = events.find(event => event.id === "network")
+
+    const makeRegistry = () =>
+      AtomRegistry.make({
+        initialValues: [
+          [deviceStateAtom, unknownDeviceState()],
+          [shiftNetworkReadingAtom, DEFAULT_SHIFT_NETWORK_READING],
+        ],
+      })
+    const registryA = makeRegistry()
+    const registryB = makeRegistry()
     const unregisterA = registerLabSurfaceRegistry({
       scopeId: "device-a",
       registry: registryA,
-      seed,
+      seed: new Map<Atom.Atom<unknown>, unknown>(),
     })
     const unregisterB = registerLabSurfaceRegistry({
       scopeId: "device-b",
       registry: registryB,
-      seed,
+      seed: new Map<Atom.Atom<unknown>, unknown>(),
     })
 
     try {
-      power?.apply?.({ percent: 9, charging: false }, { scopeId: "device-a" })
-      clock?.apply?.("2026-07-01T09:10:00.000Z", {
-        scopeId: "device-a",
-      })
-      network?.apply?.({ _tag: "Disconnected" }, { scopeId: "device-a" })
+      battery?.emit({ percent: 9, charging: false }, { scopeId: "device-a" })
+      network?.emit({ _tag: "Disconnected" }, { scopeId: "device-a" })
 
-      expect(registryA.get(shiftPowerReadingAtom)).toEqual({
+      expect(registryA.get(deviceStateAtom).battery).toMatchObject({
+        _tag: "Ready",
         percent: 9,
-        charging: false,
       })
-      expect(registryA.get(shiftClockIsoAtom)).toBe("2026-07-01T09:10:00.000Z")
       expect(registryA.get(shiftNetworkReadingAtom)).toEqual({
         _tag: "Disconnected",
       })
-      expect(registryB.get(shiftPowerReadingAtom)).toEqual(
-        DEFAULT_SHIFT_POWER_READING,
-      )
-      expect(registryB.get(shiftClockIsoAtom)).toBe(DEFAULT_SHIFT_CLOCK_ISO)
+      expect(registryB.get(deviceStateAtom).battery).toMatchObject({
+        _tag: "Unknown",
+      })
       expect(registryB.get(shiftNetworkReadingAtom)).toEqual(
         DEFAULT_SHIFT_NETWORK_READING,
       )

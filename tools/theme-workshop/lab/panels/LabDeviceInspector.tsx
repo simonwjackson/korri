@@ -8,7 +8,8 @@ import {
   type LabScreenActive,
   type LabStateAxis,
 } from "../model/lab-state-axis"
-import type { LabSurfacePartInput } from "../surface-registry"
+import type { LabSurfaceEvent, LabSurfacePartInput } from "../surface-registry"
+import { LabDeviceEvents } from "./LabDeviceEvents"
 import { LabStatesAxisGroup } from "./LabStatesAxisGroup"
 
 function childrenFor(
@@ -115,7 +116,9 @@ export function LabDeviceInspector({
   activeByAxis,
   inputs,
   inputValues,
+  events = [],
   onInputChange,
+  onEmitEvent,
   onPin,
   onLive,
   onPinCurrent,
@@ -124,17 +127,20 @@ export function LabDeviceInspector({
   readonly activeByAxis: LabScreenActive
   readonly inputs: readonly LabSurfacePartInput[]
   readonly inputValues: Readonly<Record<string, LabInputValue>>
+  readonly events?: readonly LabSurfaceEvent[]
   readonly onInputChange: (inputId: string, value: LabInputValue) => void
+  readonly onEmitEvent?: (eventId: string, payload: LabInputValue) => void
   readonly onPin: (axisId: string, stateId: string) => void
   readonly onLive: (axisId: string) => void
   /** Capture the running surface's current coordinate as Inspect pins. */
   readonly onPinCurrent?: () => void
 }) {
   const regions = axes.filter(axis => !axis.parent)
+  const hasEvents = events.length > 0 && Boolean(onEmitEvent)
   return (
     <div className="pt-inspector">
       <div className="pt-inspector-scope">Selected live device</div>
-      {regions.length === 0 && inputs.length === 0 ? (
+      {regions.length === 0 && inputs.length === 0 && !hasEvents ? (
         <div className="pt-sources-hint">
           This surface's screen exposes no live controls.
         </div>
@@ -170,6 +176,9 @@ export function LabDeviceInspector({
               onChange={value => onInputChange(input.id, value)}
             />
           ))}
+          {hasEvents && onEmitEvent ? (
+            <LabDeviceEvents events={events} onEmit={onEmitEvent} />
+          ) : null}
         </div>
       )}
     </div>

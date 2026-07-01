@@ -5,6 +5,7 @@ import {
   catalogFactsSourceLayerAtom,
   catalogSnapshotAtom,
 } from "@platform/react/catalog/catalog-atoms"
+import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import {
   foregroundSessionGateStateAtom,
   foregroundSessionStatusLayerAtom,
@@ -33,6 +34,7 @@ import {
   DEFAULT_SHIFT_POWER_READING,
   type ShiftPowerReading,
   shiftBatteryPropsForPowerReading,
+  shiftDeviceStateForPowerReading,
   shiftPowerReadingAtom,
   shiftPowerReadingForValue,
 } from "@product/surfaces/web/shift/shift-power-state"
@@ -229,6 +231,7 @@ export function renderShiftSurfacePart(
         [catalogFactsSourceLayerAtom, catalogLayer],
         [foregroundSessionStatusLayerAtom, makeForeground()],
         [shiftPowerReadingAtom, power],
+        [deviceStateAtom, shiftDeviceStateForPowerReading(power)],
         [shiftClockIsoAtom, clock],
         [shiftNetworkReadingAtom, network],
         [

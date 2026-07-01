@@ -5,6 +5,7 @@ import { makeCatalogStateSourceLayers } from "@platform/catalog/catalog-state-sa
 import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
 import { LibrarySource } from "@platform/library/library-services"
 import { catalogFactsSourceLayerAtom } from "@platform/react/catalog/catalog-atoms"
+import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import {
   foregroundSessionStatusLayerAtom,
   launcherLayerAtom,
@@ -26,6 +27,7 @@ import {
 } from "@product/surfaces/web/shift/shift-network-state"
 import {
   DEFAULT_SHIFT_POWER_READING,
+  shiftDeviceStateForPowerReading,
   shiftPowerReadingAtom,
 } from "@product/surfaces/web/shift/shift-power-state"
 import { Layer } from "effect"
@@ -55,10 +57,19 @@ export async function makeSeedInitialValues() {
     ],
     [foregroundSessionStatusLayerAtom, shiftForegroundSourceLayers.Ready()],
     [shiftPowerReadingAtom, DEFAULT_SHIFT_POWER_READING],
+    [deviceStateAtom, SHIFT_SEED_DEVICE_STATE],
     [shiftClockIsoAtom, DEFAULT_SHIFT_CLOCK_ISO],
     [shiftNetworkReadingAtom, DEFAULT_SHIFT_NETWORK_READING],
   ] as const
 }
+
+/** Resting battery device-fact the lab seeds so live Home shows a battery before
+ * any battery event is fired (production seeds this from the device-state
+ * stream's current-state-first delivery). */
+const SHIFT_SEED_DEVICE_STATE = shiftDeviceStateForPowerReading(
+  DEFAULT_SHIFT_POWER_READING,
+  "2026-07-01T00:00:00.000Z",
+)
 
 export type SeedInitialValues = Awaited<
   ReturnType<typeof makeSeedInitialValues>

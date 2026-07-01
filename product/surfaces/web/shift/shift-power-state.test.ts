@@ -1,13 +1,42 @@
 import { describe, expect, it } from "bun:test"
+import type { DeviceState } from "@platform/device/device-facts"
 import {
   shiftBatteryPropsForPowerDisplay,
+  shiftDeviceStateForPowerReading,
   shiftPowerDisplayForDeviceState,
 } from "./shift-power-state"
-import type { DeviceState } from "@platform/device/device-facts"
 
 function state(battery: DeviceState["battery"]): DeviceState {
   return { observedAt: "2026-07-01T00:00:00.000Z", battery }
 }
+
+describe("shiftDeviceStateForPowerReading", () => {
+  it("maps a power reading to a Ready battery device fact", () => {
+    expect(
+      shiftDeviceStateForPowerReading(
+        { percent: 82, charging: true },
+        "2026-07-01T00:00:00.000Z",
+      ),
+    ).toEqual({
+      observedAt: "2026-07-01T00:00:00.000Z",
+      battery: {
+        _tag: "Ready",
+        percent: 82,
+        status: "Charging",
+        charging: true,
+        supplies: [],
+        observedAt: "2026-07-01T00:00:00.000Z",
+      },
+    })
+  })
+
+  it("reports a discharging status when not charging", () => {
+    expect(
+      shiftDeviceStateForPowerReading({ percent: 40, charging: false }, "t")
+        .battery,
+    ).toMatchObject({ status: "Discharging", charging: false })
+  })
+})
 
 describe("Shift power state from device facts", () => {
   it("maps ready battery facts to status-bar battery props", () => {

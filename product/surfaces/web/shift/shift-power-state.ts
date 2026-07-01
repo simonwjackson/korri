@@ -10,8 +10,16 @@ export type ShiftPowerReading = {
 export type ShiftPowerDisplay =
   | { readonly _tag: "Hidden" }
   | { readonly _tag: "Unknown" }
-  | { readonly _tag: "Ready"; readonly percent: number; readonly charging: boolean }
-  | { readonly _tag: "Stale"; readonly percent: number; readonly charging: boolean }
+  | {
+      readonly _tag: "Ready"
+      readonly percent: number
+      readonly charging: boolean
+    }
+  | {
+      readonly _tag: "Stale"
+      readonly percent: number
+      readonly charging: boolean
+    }
 
 export const DEFAULT_SHIFT_POWER_READING: ShiftPowerReading = {
   percent: 64,
@@ -46,6 +54,28 @@ export function shiftBatteryPropsForPowerReading(
   return {
     level: batteryLevelForPercent(power.percent),
     charging: power.charging,
+  }
+}
+
+/**
+ * Canonical Shift power-reading -> Korrid device-state conversion. Production
+ * feeds `deviceStateAtom` from the device-state event stream; previews, lab
+ * events, and seeds share this one mapping so the battery shape never drifts.
+ */
+export function shiftDeviceStateForPowerReading(
+  reading: ShiftPowerReading,
+  observedAt: string = new Date().toISOString(),
+): DeviceState {
+  return {
+    observedAt,
+    battery: {
+      _tag: "Ready",
+      percent: reading.percent,
+      status: reading.charging ? "Charging" : "Discharging",
+      charging: reading.charging,
+      supplies: [],
+      observedAt,
+    },
   }
 }
 

@@ -264,6 +264,10 @@ export function LabShell() {
     () => adapter.inputsForScreen?.(surfacePath) ?? [],
     [adapter, surfacePath],
   )
+  const screenEvents = useMemo(
+    () => adapter.eventsForScreen?.(surfacePath) ?? [],
+    [adapter, surfacePath],
+  )
   const presentation = userPresentation ?? autoPresentation
   const choosePresentation = (next: LabPresentation) => {
     setUserPresentation(next)
@@ -285,6 +289,20 @@ export function LabShell() {
       bindLiveDeviceInput(prev, deviceObjectId, inputId, canonical),
     )
     input.apply?.(canonical, { scopeId: deviceObjectId })
+  }
+  const emitLiveDeviceEvent = (
+    deviceObjectId: string,
+    eventId: string,
+    payload: LabInputValue,
+  ) => {
+    const event = screenEvents.find(candidate => candidate.id === eventId)
+    if (!event) return
+    const canonical = canonicalInputValue(
+      payload,
+      event.payload,
+      event.defaultPayload,
+    )
+    event.emit(canonical, { scopeId: deviceObjectId })
   }
 
   // Follow the viewport so the default position tracks the screen until the
@@ -675,8 +693,12 @@ export function LabShell() {
             ),
           ]),
         )}
+        events={screenEvents}
         onInputChange={(inputId, value) =>
           changeLiveDeviceInput(selectedLiveObject.id, inputId, value)
+        }
+        onEmitEvent={(eventId, payload) =>
+          emitLiveDeviceEvent(selectedLiveObject.id, eventId, payload)
         }
         onPin={pinAxis}
         onLive={liveAxis}

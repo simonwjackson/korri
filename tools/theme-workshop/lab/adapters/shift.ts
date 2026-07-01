@@ -1,3 +1,4 @@
+import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import { shiftConfig } from "@product/surfaces/web/shift/config"
 import { mountShift } from "@product/surfaces/web/shift/mount-shift"
 import { SHIFT_COMPANION_PATH } from "@product/surfaces/web/shift/routes/paths"
@@ -13,6 +14,7 @@ import {
 } from "@product/surfaces/web/shift/shift-network-state"
 import {
   DEFAULT_SHIFT_POWER_READING,
+  shiftDeviceStateForPowerReading,
   shiftPowerReadingAtom,
   shiftPowerReadingForValue,
 } from "@product/surfaces/web/shift/shift-power-state"
@@ -30,6 +32,7 @@ import {
 } from "../seed/shift-seed"
 import type {
   LabSurfaceAdapter,
+  LabSurfaceEvent,
   LabSurfacePartInput,
 } from "../surface-registry"
 import { shiftAxesForScreen, shiftCaptureCoordinate } from "./shift-axes"
@@ -135,6 +138,42 @@ function shiftStatusInputs(live: boolean): readonly LabSurfacePartInput[] {
   return [power, clock, network]
 }
 
+/**
+ * Shift's device events: the two device facts that arrive as events in
+ * production — battery (via device-state) and network. Emitting drives the same
+ * atoms the mounted surface reads, so a fired event reaches the surface through
+ * its real consumption path rather than a lab-only shim.
+ */
+function shiftDeviceEvents(): readonly LabSurfaceEvent[] {
+  const battery: LabSurfaceEvent = {
+    id: "battery",
+    label: "Battery",
+    payload: SHIFT_POWER_INPUT_CONTROL,
+    defaultPayload: DEFAULT_SHIFT_POWER_READING,
+    emit: (payload, context) => {
+      const state = shiftDeviceStateForPowerReading(
+        shiftPowerReadingForValue(payload),
+      )
+      eachTargetRegistry(context?.scopeId, ({ registry }) =>
+        registry.set(deviceStateAtom, state),
+      )
+    },
+  }
+  const network: LabSurfaceEvent = {
+    id: "network",
+    label: "Network",
+    payload: SHIFT_NETWORK_INPUT_CONTROL,
+    defaultPayload: DEFAULT_SHIFT_NETWORK_READING,
+    emit: (payload, context) => {
+      const reading = shiftNetworkReadingForValue(payload)
+      eachTargetRegistry(context?.scopeId, ({ registry }) =>
+        registry.set(shiftNetworkReadingAtom, reading),
+      )
+    },
+  }
+  return [battery, network]
+}
+
 export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   id: "shift",
   devices: shiftConfig.devices,
@@ -146,8 +185,15 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   defaultPxPerMm: shiftConfig.defaultPxPerMm,
   secondaryScreenPath: SHIFT_COMPANION_PATH,
   axesForScreen: shiftAxesForScreen,
+  // Live Home inputs are the ambient values the operator pins-and-holds (clock).
+  // Battery and network are device FACTS delivered as events, so they live under
+  // `eventsForScreen` instead of held inputs.
   inputsForScreen: screenPath =>
-    screenPath === "/" ? shiftStatusInputs(true) : [],
+    screenPath === "/"
+      ? shiftStatusInputs(true).filter(input => input.id === "clock")
+      : [],
+  eventsForScreen: screenPath =>
+    screenPath === "/" ? shiftDeviceEvents() : [],
   captureCoordinate: shiftCaptureCoordinate,
   // Shift's Data + Foreground state machines are surfaced as Home screen axes
   // (see shift-axes.tsx). Launch is produced by pressing Play against the real
