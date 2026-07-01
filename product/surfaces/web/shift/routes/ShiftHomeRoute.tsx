@@ -13,6 +13,7 @@ import {
 } from "@platform/library/playable-library-ui"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
 import { useOptionalDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
+import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import { foregroundSessionGateStateAtom } from "@platform/react/library/library-atoms"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
@@ -56,7 +57,8 @@ import {
 } from "../shift-live-coordinate"
 import { shiftNetworkReadingAtom } from "../shift-network-state"
 import {
-  shiftBatteryPropsForPowerReading,
+  shiftBatteryPropsForPowerDisplay,
+  shiftPowerDisplayForDeviceState,
   shiftPowerReadingAtom,
 } from "../shift-power-state"
 import { playtimeLabel, relativeLastPlayed } from "./cinematic-play-labels"
@@ -221,10 +223,12 @@ function NavigatingReadyBody({
 }) {
   const ready = useShiftCatalogCase("Ready")
   const launch = useLibraryLaunchController()
-  const power = useAtomValue(shiftPowerReadingAtom)
+  const deviceState = useAtomValue(deviceStateAtom)
   const clockIso = useAtomValue(shiftClockIsoAtom)
   const network = useAtomValue(shiftNetworkReadingAtom)
-  const battery = shiftBatteryPropsForPowerReading(power)
+  const battery = shiftBatteryPropsForPowerDisplay(
+    shiftPowerDisplayForDeviceState(deviceState),
+  )
   const liveForeground = foregroundStateFromAtom(
     useAtomValue(foregroundSessionGateStateAtom),
   )

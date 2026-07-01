@@ -30,6 +30,10 @@ describe("createPortalPlatformBridge", () => {
     await expect(bridge.foregroundSession.get()).resolves.toEqual({
       _tag: "Ready",
     })
+    await expect(bridge.device?.status()).resolves.toMatchObject({
+      battery: { _tag: "Unknown" },
+    })
+    await expect(bridge.device?.refresh()).resolves.toBeUndefined()
 
     const seen: InputAction[] = []
     const unsubscribe = bridge.input.subscribe(action => seen.push(action))
@@ -41,6 +45,8 @@ describe("createPortalPlatformBridge", () => {
       { method: "app.catalog.snapshot", payload: { scope: "fabric" } },
       { method: "app.library.launch", payload: { id: "hades" } },
       { method: "app.example", payload: { yes: true } },
+      { method: "app.device.status", payload: {} },
+      { method: "app.device.refresh", payload: {} },
     ])
   })
 

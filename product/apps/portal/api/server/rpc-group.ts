@@ -6,6 +6,8 @@ import { AcquisitionResolveDownloadRpc as appAcquisitionResolveDownload } from "
 import { AcquisitionSearchRpc as appAcquisitionSearch } from "../acquisition/search.rpc"
 import { AcquisitionValidateProvidersRpc as appAcquisitionValidateProviders } from "../acquisition/validate-providers.rpc"
 import { CatalogSnapshotRpc as appCatalogSnapshot } from "../catalog/snapshot.rpc"
+import { DeviceRefreshRpc as appDeviceRefresh } from "../device/refresh.rpc"
+import { DeviceStatusRpc as appDeviceStatus } from "../device/status.rpc"
 import { AssignGameAssetRpc as appGameAssetsAssign } from "../game-assets/assign.rpc"
 import { ListGameAssetCandidatesRpc as appGameAssetsCandidatesList } from "../game-assets/list-candidates.rpc"
 import { UnassignGameAssetRpc as appGameAssetsUnassign } from "../game-assets/unassign.rpc"
@@ -43,6 +45,8 @@ export const serverRpcGroup = RpcGroup.make(
   appGameAssetsAssign,
   appGameAssetsUnassign,
   appCatalogSnapshot,
+  appDeviceStatus,
+  appDeviceRefresh,
   appLibraryLaunch,
   appLibraryLaunchDryRun,
   appPluginDiagnosticsCollect,

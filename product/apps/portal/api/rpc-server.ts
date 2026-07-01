@@ -14,6 +14,7 @@ import { RpcServer } from "effect/unstable/rpc"
 import { PluginLibrarySourceLayerLive } from "../../../plugins/library-source-layer"
 import { appRpcGroup } from "./app-rpc-group"
 import { CatalogSnapshotLive } from "./catalog/catalog-snapshot"
+import { DeviceStateLayerLive } from "./device/device-state"
 import { HandlersLive } from "./handlers"
 import { ForegroundSessionHostLive } from "./library/foreground-session-host-layer"
 import { RemoteStreamPrepareLive } from "./library/remote-stream-prepare"
@@ -58,6 +59,7 @@ const LibraryInfrastructureLive = Layer.mergeAll(
   GameAssetsLayerLive,
   ForegroundSessionHostLive,
   RemoteStreamPrepareLive,
+  DeviceStateLayerLive,
   StreamControlLayerLive,
 )
 

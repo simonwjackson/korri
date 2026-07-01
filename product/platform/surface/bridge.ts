@@ -1,6 +1,7 @@
 import type { EntrySource } from "@platform/api/rpc/entry-source"
 import type { InputListener } from "@platform/input/types"
 import type { LaunchAlternative } from "@platform/library/launch-alternative"
+import type { DeviceState } from "@platform/device/device-facts"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 
 export interface KorriLibraryLaunchInput {
@@ -19,6 +20,11 @@ export interface KorriPlatformBridge {
   }
   readonly foregroundSession: {
     readonly get: () => Promise<ForegroundSessionGateState>
+  }
+  readonly device?: {
+    readonly status: () => Promise<DeviceState>
+    readonly refresh: () => Promise<void>
+    readonly subscribe: (listener: (state: DeviceState) => void) => () => void
   }
   readonly api: {
     readonly rpc: (method: string, payload: unknown) => Promise<unknown>

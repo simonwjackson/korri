@@ -1,7 +1,7 @@
 ---
 id: 20260701154000
 title: Device state events foundation
-status: active
+status: completed
 created: 2026-07-01
 source: se-plan
 ---

@@ -1,4 +1,6 @@
 import { RpcClientLive } from "@platform/api/rpc/client"
+import type { DeviceState } from "@platform/device/device-facts"
+import { unknownDeviceState } from "@platform/device/device-facts"
 import type { InputBus } from "@platform/input/bus"
 import { projectForegroundSessionStatusSnapshot } from "@platform/library/sessiond-lifecycle-projections"
 import { foregroundSessionGateStateFromSnapshot } from "@platform/stream/foreground-session-gate-state"
@@ -81,6 +83,16 @@ export function createPortalPlatformBridge({
         }
       },
     },
+    device: {
+      status: async () => {
+        const response = await appRpc("app.device.status", {})
+        return isDeviceStatusResponse(response) ? response.state : unknownDeviceState()
+      },
+      refresh: async () => {
+        await appRpc("app.device.refresh", {})
+      },
+      subscribe: listener => subscribeToDeviceEvents(listener),
+    },
     api: {
       rpc: (method, payload) => appRpc(method, payload),
     },
@@ -146,6 +158,44 @@ function isServerStatusResponse(value: unknown): value is {
     "serverId" in value &&
     typeof value.serverId === "string"
   )
+}
+
+function isDeviceStatusResponse(value: unknown): value is {
+  readonly state: DeviceState
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "state" in value &&
+    typeof value.state === "object" &&
+    value.state !== null
+  )
+}
+
+function subscribeToDeviceEvents(
+  listener: (state: DeviceState) => void,
+): () => void {
+  if (typeof EventSource === "undefined") return () => undefined
+  const events = new EventSource("/api/device/events")
+  const onState = (event: MessageEvent) => {
+    const state = parseDeviceEventState(event.data)
+    if (state) listener(state)
+  }
+  events.addEventListener("device.state", onState)
+  return () => {
+    events.removeEventListener("device.state", onState)
+    events.close()
+  }
+}
+
+function parseDeviceEventState(data: string): DeviceState | undefined {
+  try {
+    const parsed = JSON.parse(data) as { readonly state?: unknown }
+    if (!parsed.state || typeof parsed.state !== "object") return undefined
+    return parsed.state as DeviceState
+  } catch {
+    return undefined
+  }
 }
 
 function isNoUpstreamCause(cause: unknown): boolean {

@@ -1,5 +1,6 @@
 import { appendFile, mkdir } from "node:fs/promises"
 import { DataError, ValidationError } from "@platform/api/rpc/errors"
+import type { DeviceBatteryState } from "@platform/device/device-facts"
 import {
   type KorriPlugin,
   type PluginHandler,
@@ -33,6 +34,11 @@ import {
 } from "@platform/stream-control/state-normalizer"
 import { Context, Effect, Layer } from "effect"
 import {
+  DeviceState,
+  DeviceStateLayerLive,
+  type DeviceStateService,
+} from "../device/device-state"
+import {
   createDeviceControlService,
   type DeviceControlService,
 } from "./device-control-service"
@@ -65,6 +71,7 @@ export interface StreamControlDependencies {
   readonly readFile?: (path: string, encoding: "utf8") => Promise<string>
   readonly writeFile?: (path: string, content: string) => Promise<void>
   readonly now?: () => Date
+  readonly deviceState?: DeviceStateService
 }
 
 export interface StreamControlService {
@@ -119,6 +126,7 @@ interface Runtime {
   ) => Promise<MoonlightControlClient>
   readonly record: (event: unknown) => Promise<void>
   readonly deviceControl: DeviceControlService
+  readonly deviceState?: DeviceStateService
 }
 
 interface PluginStreamControlDescription {
@@ -196,16 +204,20 @@ export function createStreamControlService(
   }
 }
 
-export const StreamControlLayerLive = Layer.sync(StreamControl)(() =>
-  createStreamControlService(),
-)
+export const StreamControlLayerLive = Layer.effect(StreamControl)(
+  Effect.map(DeviceState, deviceState =>
+    createStreamControlService(undefined, { deviceState }),
+  ),
+).pipe(Layer.provide(DeviceStateLayerLive))
 
 export const StreamControlLayerLiveWithPlugins = (
   pluginRegistry: PluginRegistry,
 ) =>
-  Layer.sync(StreamControl)(() =>
-    createStreamControlService(undefined, { pluginRegistry }),
-  )
+  Layer.effect(StreamControl)(
+    Effect.map(DeviceState, deviceState =>
+      createStreamControlService(undefined, { pluginRegistry, deviceState }),
+    ),
+  ).pipe(Layer.provide(DeviceStateLayerLive))
 
 function createRuntime(
   options: StreamControlOptions,
@@ -233,6 +245,7 @@ function createRuntime(
       deps.connectMoonlight ??
       ((socketPath: string) => connectMoonlightControl({ socketPath })),
     deviceControl,
+    ...(deps.deviceState ? { deviceState: deps.deviceState } : {}),
     record: createStreamControlEventRecorder({
       artifactDir: options.artifactDir,
       mkdir: mkdirImpl,
@@ -516,6 +529,10 @@ async function readBrightnessState(runtime: Runtime) {
 }
 
 async function readBatteryState(runtime: Runtime) {
+  if (runtime.deviceState) {
+    const state = await Effect.runPromise(runtime.deviceState.current())
+    return streamControlBatteryStateFromDeviceState(state.battery)
+  }
   try {
     return {
       status: "ok" as const,
@@ -523,6 +540,33 @@ async function readBatteryState(runtime: Runtime) {
     }
   } catch (error) {
     return { status: "error" as const, error: errorMessage(error) }
+  }
+}
+
+export function streamControlBatteryStateFromDeviceState(
+  battery: DeviceBatteryState,
+): StreamControlStateResponseData["battery"] {
+  switch (battery._tag) {
+    case "Ready":
+      return {
+        status: "ok",
+        readback: {
+          percent: battery.percent,
+          status: battery.status,
+          supplies: battery.supplies,
+        },
+      }
+    case "NoBattery":
+      return {
+        status: "ok",
+        readback: { percent: null, status: null, supplies: battery.supplies },
+      }
+    case "Stale":
+      return { status: "error", error: battery.message }
+    case "ReadError":
+      return { status: "error", error: battery.message }
+    case "Unknown":
+      return { status: "error", error: "battery state is not initialized" }
   }
 }
 

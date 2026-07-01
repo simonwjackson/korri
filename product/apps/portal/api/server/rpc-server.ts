@@ -30,6 +30,9 @@ import { CatalogSnapshotLive } from "../catalog/catalog-snapshot"
 import { handleCatalogSnapshot } from "../catalog/snapshot.rpc-handler"
 import { handleAssignGameAsset } from "../game-assets/assign.rpc-handler"
 import { handleListGameAssetCandidates } from "../game-assets/list-candidates.rpc-handler"
+import { DeviceStateLayerLive } from "../device/device-state"
+import { handleDeviceRefresh } from "../device/refresh.rpc-handler"
+import { handleDeviceStatus } from "../device/status.rpc-handler"
 import { handleUnassignGameAsset } from "../game-assets/unassign.rpc-handler"
 import { handleGetHello } from "../hello/rpc-handler"
 import { handleDryRunLaunch } from "../library/dry-run.rpc-handler"
@@ -117,6 +120,7 @@ function makeLibraryInfrastructureLive(
     korriControlInfrastructureLive,
     catalogInfrastructureLive,
     GameAssetsLayerLive,
+    DeviceStateLayerLive,
     ForegroundSessionHostLive,
     RemoteStreamPrepareLive,
     StreamControlLayerLiveWithPlugins(
@@ -138,6 +142,8 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.game-assets.assign": handleAssignGameAsset,
     "app.game-assets.unassign": handleUnassignGameAsset,
     "app.catalog.snapshot": handleCatalogSnapshot,
+    "app.device.status": handleDeviceStatus,
+    "app.device.refresh": handleDeviceRefresh,
     "app.library.launch": handleLaunchLibrary,
     "app.library.launch.dry-run": handleDryRunLaunch,
     "app.plugin.diagnostics.collect": handleCollectPluginDiagnostics,

@@ -11,6 +11,7 @@ import { bodyLimit } from "hono/body-limit"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
 import { handleConfigEvents } from "./config/events"
+import { handleDeviceEvents } from "./device/events"
 import {
   installControlCookie,
   installControlSecret,
@@ -132,6 +133,7 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
       configGraphController ?? getDefaultConfigGraphController(),
     ),
   )
+  app.get("/api/device/events", c => handleDeviceEvents(c))
 
   if (isDev) {
     app.use(

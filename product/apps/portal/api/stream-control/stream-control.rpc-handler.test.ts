@@ -4,10 +4,11 @@ import { plugin, pluginRecordId } from "@platform/plugin"
 import { createPluginRegistry } from "@platform/plugin/registry"
 import type { MoonlightControlClient } from "@platform/stream/moonlight-control-client"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { handleGetStreamControlConfig } from "./get-config.rpc-handler"
 import { handleGetStreamControlControls } from "./get-controls.rpc-handler"
 import { handleGetStreamControlState } from "./get-state.rpc-handler"
+import { unknownDeviceState } from "@platform/device/device-facts"
 import { createStreamControlService, StreamControl } from "./service"
 import { handleSetStreamControlAction } from "./set-action.rpc-handler"
 import { handleSetBrightness } from "./set-brightness.rpc-handler"
@@ -252,6 +253,77 @@ describe("app.stream-control RPC handlers", () => {
     expect(state.plugins[providerOne]).toEqual({
       status: "ok",
       readback: { fps: 60, filter: "soft" },
+    })
+  })
+
+  it("uses DeviceState as the authoritative battery readback when provided", async () => {
+    const service = createStreamControlService(
+      {},
+      {
+        deviceState: {
+          current: () =>
+            Effect.succeed({
+              observedAt: "2026-07-01T00:00:00.000Z",
+              battery: {
+                _tag: "Ready",
+                percent: 91,
+                status: "Charging",
+                charging: true,
+                observedAt: "2026-07-01T00:00:00.000Z",
+                supplies: [
+                  {
+                    name: "BAT0",
+                    type: "Battery",
+                    status: "Charging",
+                    capacity: 91,
+                    online: null,
+                    voltageNow: null,
+                    currentNow: null,
+                    powerNow: null,
+                    modelName: null,
+                  },
+                ],
+              },
+            }),
+          changes: Stream.empty,
+          refresh: () =>
+            Effect.succeed({
+              accepted: true,
+              fact: "battery",
+              state: unknownDeviceState(),
+            }),
+        },
+        readdir: async () => {
+          throw new Error("stream-control must not read battery sysfs directly")
+        },
+      },
+    )
+
+    const state = await Effect.runPromise(
+      handleGetStreamControlState({}).pipe(
+        Effect.provide(Layer.succeed(StreamControl, service)),
+      ),
+    )
+
+    expect(state.battery).toEqual({
+      status: "ok",
+      readback: {
+        percent: 91,
+        status: "Charging",
+        supplies: [
+          {
+            name: "BAT0",
+            type: "Battery",
+            status: "Charging",
+            capacity: 91,
+            online: null,
+            voltageNow: null,
+            currentNow: null,
+            powerNow: null,
+            modelName: null,
+          },
+        ],
+      },
     })
   })
 

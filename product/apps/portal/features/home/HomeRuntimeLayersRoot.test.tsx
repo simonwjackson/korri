@@ -6,6 +6,7 @@ import {
   catalogFactsSourceLayerAtom,
   catalogSnapshotAtom,
 } from "@platform/react/catalog/catalog-atoms"
+import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import { Effect, Layer } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
@@ -26,6 +27,39 @@ afterEach(() => {
 })
 
 describe("HomeRuntimeLayersRoot", () => {
+  it("updates device state from the current-first device event stream", async () => {
+    globalThis.EventSource = FakeEventSource as unknown as typeof EventSource
+
+    render(
+      <HomeRuntimeLayersRoot>
+        <DeviceBatteryPercent />
+      </HomeRuntimeLayersRoot>,
+    )
+
+    const deviceEvents = FakeEventSource.instances.find(
+      instance => instance.url === "/api/device/events",
+    )
+    expect(deviceEvents).toBeTruthy()
+
+    act(() => {
+      deviceEvents?.emit("device.state", {
+        state: {
+          observedAt: "2026-07-01T00:00:00.000Z",
+          battery: {
+            _tag: "Ready",
+            percent: 72,
+            status: "Discharging",
+            charging: false,
+            supplies: [],
+            observedAt: "2026-07-01T00:00:00.000Z",
+          },
+        },
+      })
+    })
+
+    await waitFor(() => expect(screen.getByText("72")).toBeTruthy())
+  })
+
   it("refreshes mounted library items when korrid announces a config change", async () => {
     let entries: readonly PlayableLibraryEntry[] = [entry("before", "Before")]
     globalThis.EventSource = FakeEventSource as unknown as typeof EventSource
@@ -83,6 +117,11 @@ function WithMutableLibrary({
   }, [getEntries, setSourceLayer])
 
   return <>{children}</>
+}
+
+function DeviceBatteryPercent() {
+  const state = useAtomValue(deviceStateAtom)
+  return <div>{state.battery._tag === "Ready" ? state.battery.percent : "none"}</div>
 }
 
 function LibraryTitles() {
@@ -169,9 +208,9 @@ class FakeEventSource {
     this.closed = true
   }
 
-  emit(type: string) {
+  emit(type: string, data?: unknown) {
     for (const listener of this.listeners.get(type) ?? []) {
-      listener(new MessageEvent(type))
+      listener(new MessageEvent(type, { data: JSON.stringify(data ?? {}) }))
     }
   }
 }

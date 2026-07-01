@@ -1,7 +1,7 @@
 ---
 title: feat: Add Korrid device-state events foundation
 type: feat
-status: active
+status: completed
 date: 2026-07-01
 verify_command: "just test-unit && just typecheck"
 ---

@@ -20,7 +20,7 @@ export interface ShiftStatusBarProps {
   readonly time?: string
   readonly avatarSrc?: string
   readonly network?: ShiftNetworkReading
-  /** Battery state for the indicator; defaults to a mid-charge battery. */
+  /** Battery state for the indicator; omit when no live battery is available. */
   readonly battery?: ShiftBatteryProps
 }
 
@@ -39,7 +39,7 @@ export function ShiftStatusBar({
       <span className="shift-cine-clock">{time}</span>
       <span className="shift-cine-status">
         <NetworkIcon className="shift-cine-status-icon" aria-hidden />
-        <ShiftBattery {...battery} />
+        {battery ? <ShiftBattery {...battery} /> : null}
         {avatarSrc ? (
           <img className="shift-cine-avatar" src={avatarSrc} alt="" />
         ) : null}

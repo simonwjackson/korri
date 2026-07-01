@@ -4,6 +4,8 @@ import { CatalogSnapshotRpc as appCatalogSnapshot } from "./catalog/snapshot.rpc
 import { AssignGameAssetRpc as appGameAssetsAssign } from "./game-assets/assign.rpc"
 import { ListGameAssetCandidatesRpc as appGameAssetsCandidatesList } from "./game-assets/list-candidates.rpc"
 import { UnassignGameAssetRpc as appGameAssetsUnassign } from "./game-assets/unassign.rpc"
+import { DeviceRefreshRpc as appDeviceRefresh } from "./device/refresh.rpc"
+import { DeviceStatusRpc as appDeviceStatus } from "./device/status.rpc"
 import { GetHelloRpc as appHelloGet } from "./hello/rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "./library/launch.rpc"
 import { CollectPluginDiagnosticsRpc as appPluginDiagnosticsCollect } from "./plugin-diagnostics/collect.rpc"
@@ -28,6 +30,8 @@ export const appRpcGroup = RpcGroup.make(
   appGameAssetsAssign,
   appGameAssetsUnassign,
   appCatalogSnapshot,
+  appDeviceStatus,
+  appDeviceRefresh,
   appLibraryLaunch,
   appPluginDiagnosticsCollect,
   appPluginInstallRequest,

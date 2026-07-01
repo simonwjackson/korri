@@ -2,6 +2,7 @@ import {
   RegistryProvider,
   useAtomInitialValues,
   useAtomRefresh,
+  useAtomSet,
 } from "@effect/atom-react"
 import {
   catalogFactsSourceLayerAtom,
@@ -12,7 +13,15 @@ import {
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
+import {
+  deviceFactsSourceLayerAtom,
+  deviceStateAtom,
+} from "@platform/react/device/device-atoms"
 import { CatalogFactsSourceLayerRpc } from "@product/apps/portal/features/home/catalog-source-layer-rpc"
+import {
+  DeviceFactsLayerLive,
+  parseDeviceEventState,
+} from "@product/apps/portal/features/home/device-facts-layer-live"
 import { ForegroundSessionStatusLayerFixture } from "@product/apps/portal/features/home/foreground-session-status-layer-fixture"
 import { ForegroundSessionStatusLayerLive } from "@product/apps/portal/features/home/foreground-session-status-layer-live"
 import { HomeLiveUsbArtifactNotice } from "@product/apps/portal/features/home/HomeLiveUsbArtifactNotice"
@@ -57,6 +66,7 @@ function HomeRuntimeLayersInner({
     [catalogFactsSourceLayerAtom, CatalogFactsSourceLayerRpc],
     [librarySourceLayerAtom, LibrarySourceLayerRpc],
     [launcherLayerAtom, LauncherLayerRpc],
+    [deviceFactsSourceLayerAtom, DeviceFactsLayerLive],
     [
       foregroundSessionStatusLayerAtom,
       desktopInput
@@ -68,6 +78,7 @@ function HomeRuntimeLayersInner({
   return (
     <>
       <ConfigChangeRefreshBridge />
+      <DeviceFactsSubscriptionBridge />
       <HomeLiveUsbArtifactNotice artifact={runtimeConfig.liveUsbArtifact} />
       {children}
     </>
@@ -85,6 +96,33 @@ function HomeRuntimeLayersInner({
  * loop. `config.invalid` is also ignored so the GUI keeps showing the last good
  * catalog (client-side last-known-good).
  */
+function DeviceFactsSubscriptionBridge() {
+  const setDeviceState = useAtomSet(deviceStateAtom)
+
+  useEffect(() => {
+    const bridge = window.korri?.device
+    if (bridge) {
+      // The subscription is current-state-first; avoid a separate snapshot call
+      // that can resolve later and overwrite a newer streamed state.
+      return bridge.subscribe(setDeviceState)
+    }
+
+    if (typeof EventSource === "undefined") return undefined
+    const events = new EventSource("/api/device/events")
+    const onState = (event: MessageEvent) => {
+      const state = parseDeviceEventState(event.data)
+      if (state) setDeviceState(state)
+    }
+    events.addEventListener("device.state", onState)
+    return () => {
+      events.removeEventListener("device.state", onState)
+      events.close()
+    }
+  }, [setDeviceState])
+
+  return null
+}
+
 function ConfigChangeRefreshBridge() {
   const refreshCatalogSnapshot = useAtomRefresh(catalogSnapshotAtom)
 
