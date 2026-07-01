@@ -56,7 +56,7 @@ pkgs.stdenv.mkDerivation {
     cp korri-web-surface-host.js "$out/share/korri-web-surface-host/korri-web-surface-host.js"
 
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-web-surface-host" \
-      --set-default KORRI_ASSET_ROOT ${portal}/mainview \
+      --set-default KORRI_ASSET_ROOT ${portal} \
       --add-flags "$out/share/korri-web-surface-host/korri-web-surface-host.js"
 
     runHook postInstall
@@ -79,6 +79,11 @@ pkgs.stdenv.mkDerivation {
 
     if [ -d "$out/share/korri-web-surface-host/node_modules" ]; then
       echo "korri-web-surface-host install closure must not contain node_modules" >&2
+      exit 1
+    fi
+
+    if [ ! -f ${portal}/index.html ]; then
+      echo "korri-web-surface-host KORRI_ASSET_ROOT must point at the portal root" >&2
       exit 1
     fi
 
