@@ -1,18 +1,22 @@
 import { describe, expect, it } from "bun:test"
 import {
+  createSessiondSwayEventSource,
+  createSwayIpcFrameDecoder,
+  encodeSwayIpcFrameForTest,
+  type SessiondSwayEvent,
   SWAY_IPC_EVENT_TYPE,
   SWAY_IPC_MESSAGE_TYPE,
   SwayIpcFrameDecoderError,
-  createSwayIpcFrameDecoder,
-  encodeSwayIpcFrameForTest,
 } from "./sessiond-sway-events"
 
 function collectDecoder(options: { readonly maxFrameBytes?: number } = {}) {
-  const events: unknown[] = []
+  const events: SessiondSwayEvent[] = []
   const diagnostics: string[] = []
   const decoder = createSwayIpcFrameDecoder({
     ...options,
-    onEvent: event => events.push(event),
+    onEvent: event => {
+      events.push(event)
+    },
     onDiagnostic: diagnostic => diagnostics.push(diagnostic.message),
   })
   return { decoder, events, diagnostics }
@@ -74,7 +78,10 @@ describe("sessiond Sway IPC event decoder", () => {
     })
     const workspaceFrame = encodeSwayIpcFrameForTest({
       messageType: SWAY_IPC_EVENT_TYPE.workspace,
-      payload: JSON.stringify({ change: "focus", current: { name: "korri:hub" } }),
+      payload: JSON.stringify({
+        change: "focus",
+        current: { name: "korri:hub" },
+      }),
     })
 
     decoder.push(new Uint8Array([...windowFrame, ...workspaceFrame]))
@@ -102,6 +109,40 @@ describe("sessiond Sway IPC event decoder", () => {
     expect(diagnostics).toEqual([
       "invalid Sway IPC event JSON",
       "ignored non-event Sway IPC message",
+    ])
+  })
+
+  it("starts a narrow event source by subscribing to Sway window/workspace events", async () => {
+    const written: Uint8Array[] = []
+    let pushData: ((data: Uint8Array) => void) | undefined
+    const events: SessiondSwayEvent[] = []
+    const source = createSessiondSwayEventSource({
+      socketPath: "/run/user/1000/sway-ipc.sock",
+      connector: async ({ socketPath, onData }) => {
+        expect(socketPath).toBe("/run/user/1000/sway-ipc.sock")
+        pushData = onData
+        return {
+          write: data => written.push(data),
+          close: () => {},
+        }
+      },
+      onEvent: event => {
+        events.push(event)
+      },
+    })
+
+    await source.start()
+    expect(written).toHaveLength(1)
+
+    pushData?.(
+      encodeSwayIpcFrameForTest({
+        messageType: SWAY_IPC_EVENT_TYPE.window,
+        payload: JSON.stringify({ change: "new", container: { id: 88 } }),
+      }),
+    )
+
+    expect(events).toEqual([
+      { kind: "window", change: "new", container: { id: 88 } },
     ])
   })
 

@@ -57,6 +57,12 @@ let
   withPath = evaluateWith {
     services.korri.sessiond = { enable = true; path = [ pkgs.gamescope ]; };
   };
+  lanePolicy = evaluateWith {
+    services.korri.sessiond = {
+      enable = true;
+      kioskPolicy = "lanes";
+    };
+  };
   esswayControlEnabled = evaluateWith {
     services.korri.sessiond = {
       enable = true;
@@ -68,6 +74,8 @@ let
   checks = [
     (check "kiosk assertions pass" (failedAssertions baselineKiosk == [ ]))
     (check "kiosk role exported" ((unitEnv baselineKiosk).KORRI_SESSIOND_ROLE == "kiosk"))
+    (check "legacy kiosk policy exported by default" ((unitEnv baselineKiosk).KORRI_SESSIOND_KIOSK_POLICY == "legacy"))
+    (check "lane kiosk policy exported when selected" ((unitEnv lanePolicy).KORRI_SESSIOND_KIOSK_POLICY == "lanes"))
     (check "essway control defaults off for non-root sessiond" ((unitEnv baselineKiosk).KORRI_SESSIOND_ESSWAY_CONTROL == "0"))
     (check "essway control can be explicitly enabled" ((unitEnv esswayControlEnabled).KORRI_SESSIOND_ESSWAY_CONTROL == "1"))
     (check "sessiond is a user service" (baselineKiosk.systemd.user.services ? korri-sessiond))

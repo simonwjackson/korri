@@ -328,12 +328,24 @@ describe("korri sessiond", () => {
         idleModeLabel: "home",
         idleReadyEventName: "home-ready",
         emitsRendererStopped: false,
-        enterIdle: async () => roleEvents.push("enter-idle"),
-        leaveIdle: async () => roleEvents.push("leave-idle"),
-        beforeChildLaunch: async () => roleEvents.push("before-child"),
-        afterChildRunning: async () => roleEvents.push("after-child"),
-        restoreIdleAfterLaunch: async () => roleEvents.push("restore-idle"),
-        reconcileIdle: async () => roleEvents.push("reconcile-idle"),
+        enterIdle: async () => {
+          roleEvents.push("enter-idle")
+        },
+        leaveIdle: async () => {
+          roleEvents.push("leave-idle")
+        },
+        beforeChildLaunch: async () => {
+          roleEvents.push("before-child")
+        },
+        afterChildRunning: async () => {
+          roleEvents.push("after-child")
+        },
+        restoreIdleAfterLaunch: async () => {
+          roleEvents.push("restore-idle")
+        },
+        reconcileIdle: async () => {
+          roleEvents.push("reconcile-idle")
+        },
         toggleHome: async () => {
           roleEvents.push("toggle-home")
           return { status: "focused-hub" }
@@ -1411,7 +1423,9 @@ describe("korri sessiond", () => {
 
     expect(lifecycle.map(event => event.type)).toContain("recovering")
     expect(lifecycle.map(event => event.type)).not.toContain("home-ready")
-    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(1)
+    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(
+      1,
+    )
   })
 
   it("passes launch companions into lifecycle hook start and cleanup", async () => {

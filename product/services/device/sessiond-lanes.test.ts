@@ -9,15 +9,16 @@ const HUB = "korri:hub"
 const GAME = "korri:game:active"
 
 function makeController() {
-  const calls: readonly string[][] = []
-  const mutableCalls = calls as string[][]
+  const calls: string[][] = []
+  const mutableCalls = calls
   const trees: SwayNode[] = []
   const controller = createKorriLaneController({
     lanes: { hub: HUB, game: GAME },
     runner: {
       run: async args => {
         mutableCalls.push([...args])
-        if (args.includes("get_tree")) return JSON.stringify(trees.shift() ?? {})
+        if (args.includes("get_tree"))
+          return JSON.stringify(trees.shift() ?? {})
         return ""
       },
     },
@@ -25,16 +26,28 @@ function makeController() {
   return { controller, calls, trees }
 }
 
-function snapshot(controller: ReturnType<typeof createKorriLaneController>): KorriLaneSnapshot {
+function snapshot(
+  controller: ReturnType<typeof createKorriLaneController>,
+): KorriLaneSnapshot {
   return controller.snapshot()
 }
 
 describe("Korri workspace lane controller", () => {
   it("promotes a new game window after launch intent without focusing an empty lane first", async () => {
     const { controller, calls, trees } = makeController()
-    trees.push(treeWithWindow({ id: 42, workspace: GAME, focused: true, fullscreen: true }))
+    trees.push(
+      treeWithWindow({
+        id: 42,
+        workspace: GAME,
+        focused: true,
+        fullscreen: true,
+      }),
+    )
 
-    controller.beginLaunch({ launchId: "launch-1", ignoredWindowIds: new Set([10]) })
+    controller.beginLaunch({
+      launchId: "launch-1",
+      ignoredWindowIds: new Set([10]),
+    })
     expect(snapshot(controller).game.status).toBe("pending")
     expect(calls).toEqual([])
 
@@ -58,7 +71,10 @@ describe("Korri workspace lane controller", () => {
 
   it("ignores baseline windows when matching a pending launch", async () => {
     const { controller, calls } = makeController()
-    controller.beginLaunch({ launchId: "launch-1", ignoredWindowIds: new Set([10]) })
+    controller.beginLaunch({
+      launchId: "launch-1",
+      ignoredWindowIds: new Set([10]),
+    })
 
     await controller.handleSwayEvent({
       kind: "window",
@@ -72,16 +88,33 @@ describe("Korri workspace lane controller", () => {
 
   it("toggles Home from active game to hub and back to a live game", async () => {
     const { controller, calls, trees } = makeController()
-    trees.push(treeWithWindow({ id: 42, workspace: GAME, focused: true, fullscreen: true }))
+    trees.push(
+      treeWithWindow({
+        id: 42,
+        workspace: GAME,
+        focused: true,
+        fullscreen: true,
+      }),
+    )
     controller.beginLaunch({ launchId: "launch-1" })
-    await controller.handleSwayEvent({ kind: "window", change: "new", container: { id: 42 } })
+    await controller.handleSwayEvent({
+      kind: "window",
+      change: "new",
+      container: { id: 42 },
+    })
     calls.length = 0
 
     expect(await controller.toggleHome()).toEqual({ status: "focused-hub" })
-    expect(snapshot(controller)).toMatchObject({ activePlace: "hub", game: { status: "live-backgrounded" } })
+    expect(snapshot(controller)).toMatchObject({
+      activePlace: "hub",
+      game: { status: "live-backgrounded" },
+    })
 
     expect(await controller.toggleHome()).toEqual({ status: "focused-game" })
-    expect(snapshot(controller)).toMatchObject({ activePlace: "game", game: { status: "live-active" } })
+    expect(snapshot(controller)).toMatchObject({
+      activePlace: "game",
+      game: { status: "live-active" },
+    })
     expect(calls).toEqual([
       [`workspace ${JSON.stringify(HUB)}`],
       [`workspace ${JSON.stringify(GAME)}`],
@@ -98,9 +131,20 @@ describe("Korri workspace lane controller", () => {
 
   it("marks the game exited and focuses hub when the game workspace empties", async () => {
     const { controller, calls, trees } = makeController()
-    trees.push(treeWithWindow({ id: 42, workspace: GAME, focused: true, fullscreen: true }))
+    trees.push(
+      treeWithWindow({
+        id: 42,
+        workspace: GAME,
+        focused: true,
+        fullscreen: true,
+      }),
+    )
     controller.beginLaunch({ launchId: "launch-1" })
-    await controller.handleSwayEvent({ kind: "window", change: "new", container: { id: 42 } })
+    await controller.handleSwayEvent({
+      kind: "window",
+      change: "new",
+      container: { id: 42 },
+    })
     calls.length = 0
 
     await controller.handleSwayEvent({
@@ -109,7 +153,10 @@ describe("Korri workspace lane controller", () => {
       current: { id: 2, name: GAME },
     })
 
-    expect(snapshot(controller)).toMatchObject({ activePlace: "hub", game: { status: "exited" } })
+    expect(snapshot(controller)).toMatchObject({
+      activePlace: "hub",
+      game: { status: "exited" },
+    })
     expect(calls).toEqual([[`workspace ${JSON.stringify(HUB)}`]])
   })
 
@@ -119,7 +166,10 @@ describe("Korri workspace lane controller", () => {
 
     await controller.noteLaunchTimeout("launch-1")
 
-    expect(snapshot(controller)).toMatchObject({ activePlace: "hub", game: { status: "failed" } })
+    expect(snapshot(controller)).toMatchObject({
+      activePlace: "hub",
+      game: { status: "failed" },
+    })
     expect(calls).toEqual([[`workspace ${JSON.stringify(HUB)}`]])
   })
 })

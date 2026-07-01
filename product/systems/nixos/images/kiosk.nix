@@ -111,6 +111,7 @@ in
     enable = true;
     port = sessiondPort;
     socketPath = sessiondSocketPath;
+    kioskPolicy = lib.mkDefault "lanes";
     # Sessiond spawns the foreground app via the in-process shell
     # launcher (createShellLauncher inside product/services/device/sessiond.ts),
     # which inherits this unit's PATH when it spawns. Anything the
@@ -142,6 +143,10 @@ in
     extraEnvironment = {
       XDG_RUNTIME_DIR = compositorCfg.runtimeDir;
       WAYLAND_DISPLAY = "wayland-1";
+      KORRI_SESSIOND_HUB_WORKSPACE = "korri:hub";
+      KORRI_SESSIOND_GAME_WORKSPACE = "korri:game:active";
+      KORRI_SWAY_APP_IDS = "chromium,chromium-browser,google-chrome,chrome";
+      KORRI_SWAY_CLASSES = "Chromium,chromium,Google-chrome";
     }
     // kioskRendererEnvironment;
   };

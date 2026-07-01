@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { KorriSessiondServiceManager } from "./sessiond"
+import type { KorriLaneController } from "./sessiond-lanes"
 import type { KorriRendererController } from "./sessiond-renderer"
 import {
   createKioskSessionRole,
@@ -11,7 +12,6 @@ import type {
   HomeInvariantDecision,
   KorriWindowSnapshot,
 } from "./sessiond-state"
-import type { KorriLaneController } from "./sessiond-lanes"
 import type { SwayController } from "./sessiond-sway"
 
 function makeRecordingRenderer(initialPid = 100): {
@@ -275,13 +275,17 @@ describe("lane-aware kiosk session role", () => {
         game: { status: "none" },
         generation: 0,
       }),
-      beginLaunch: input => events.push(`begin:${input.launchId}`),
+      beginLaunch: input => {
+        events.push(`begin:${input.launchId}`)
+      },
       handleSwayEvent: async () => {},
       toggleHome: async () => {
         events.push("toggle-home")
         return { status: "no-live-game" }
       },
-      noteLaunchTimeout: async launchId => events.push(`timeout:${launchId}`),
+      noteLaunchTimeout: async launchId => {
+        events.push(`timeout:${launchId}`)
+      },
       focusHub: async () => {
         events.push("focus-hub")
       },

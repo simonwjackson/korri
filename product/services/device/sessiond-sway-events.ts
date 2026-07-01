@@ -29,7 +29,9 @@ export type SessiondSwayEvent =
       readonly current?: NonNullable<
         ReturnType<typeof parseSwayWorkspaceEvent>
       >["current"]
-      readonly old?: NonNullable<ReturnType<typeof parseSwayWorkspaceEvent>>["old"]
+      readonly old?: NonNullable<
+        ReturnType<typeof parseSwayWorkspaceEvent>
+      >["old"]
     }
 
 export interface SessiondSwayEventDiagnostic {
@@ -46,7 +48,7 @@ export class SwayIpcFrameDecoderError extends Error {
 }
 
 export interface SwayIpcFrameDecoder {
-  push: (chunk: Uint8Array) => void
+  push: (chunk: Uint8Array<ArrayBufferLike>) => void
   reset: () => void
 }
 
@@ -55,7 +57,7 @@ export function createSwayIpcFrameDecoder(options: {
   readonly onDiagnostic?: (diagnostic: SessiondSwayEventDiagnostic) => void
   readonly maxFrameBytes?: number
 }): SwayIpcFrameDecoder {
-  let buffer = new Uint8Array(0)
+  let buffer: Uint8Array<ArrayBufferLike> = new Uint8Array(0)
   const maxFrameBytes = options.maxFrameBytes ?? DEFAULT_MAX_FRAME_BYTES
 
   const diagnostic = (input: SessiondSwayEventDiagnostic) =>
@@ -102,7 +104,10 @@ function decodeEventFrame(
       const parsed = JSON.parse(payload) as { readonly change?: string }
       const container = parseSwayWindowEvent(payload)
       if (!container) {
-        diagnostic({ message: "Sway window event missing container", messageType })
+        diagnostic({
+          message: "Sway window event missing container",
+          messageType,
+        })
         return undefined
       }
       return { kind: "window", change: parsed.change, container }
@@ -131,8 +136,12 @@ function decodeEventFrame(
   return undefined
 }
 
-function readHeader(buffer: Uint8Array):
-  | { readonly ok: true; readonly payloadLength: number; readonly messageType: number }
+function readHeader(buffer: Uint8Array<ArrayBufferLike>):
+  | {
+      readonly ok: true
+      readonly payloadLength: number
+      readonly messageType: number
+    }
   | { readonly ok: false; readonly message: string } {
   const magic = new TextDecoder().decode(buffer.slice(0, 6))
   if (magic !== SWAY_IPC_MAGIC) {
@@ -146,15 +155,89 @@ function readHeader(buffer: Uint8Array):
   }
 }
 
-function concatBytes(left: Uint8Array, right: Uint8Array): Uint8Array {
-  if (left.length === 0) return right
+function concatBytes(
+  left: Uint8Array<ArrayBufferLike>,
+  right: Uint8Array<ArrayBufferLike>,
+): Uint8Array<ArrayBufferLike> {
   const output = new Uint8Array(left.length + right.length)
   output.set(left, 0)
   output.set(right, left.length)
   return output
 }
 
-export function encodeSwayIpcFrameForTest(options: {
+export interface SessiondSwayEventSource {
+  readonly start: () => Promise<void>
+  readonly stop: () => void
+}
+
+export interface SessiondSwayIpcSocket {
+  readonly write: (data: Uint8Array) => void
+  readonly close: () => void
+}
+
+export type SessiondSwayIpcConnector = (options: {
+  readonly socketPath: string
+  readonly onData: (data: Uint8Array) => void
+}) => Promise<SessiondSwayIpcSocket>
+
+export function createSessiondSwayEventSource(options: {
+  readonly socketPath: string
+  readonly connector?: SessiondSwayIpcConnector
+  readonly onEvent: (event: SessiondSwayEvent) => void | Promise<void>
+  readonly onDiagnostic?: (diagnostic: SessiondSwayEventDiagnostic) => void
+}): SessiondSwayEventSource {
+  let socket: SessiondSwayIpcSocket | undefined
+  const decoder = createSwayIpcFrameDecoder({
+    onEvent: event => {
+      void options.onEvent(event)
+    },
+    onDiagnostic: options.onDiagnostic,
+  })
+
+  return {
+    async start() {
+      socket = await (options.connector ?? realSwayIpcConnector)({
+        socketPath: options.socketPath,
+        onData: chunk => decoder.push(chunk),
+      })
+      socket.write(
+        encodeSwayIpcFrame({
+          messageType: SWAY_IPC_MESSAGE_TYPE.subscribe,
+          payload: JSON.stringify(["window", "workspace"]),
+        }),
+      )
+    },
+    stop() {
+      decoder.reset()
+      socket?.close()
+      socket = undefined
+    },
+  }
+}
+
+async function realSwayIpcConnector(options: {
+  readonly socketPath: string
+  readonly onData: (data: Uint8Array) => void
+}): Promise<SessiondSwayIpcSocket> {
+  const socket = await Bun.connect({
+    unix: options.socketPath,
+    socket: {
+      data(_socket, data) {
+        options.onData(new Uint8Array(data))
+      },
+    },
+  } as Parameters<typeof Bun.connect>[0])
+  return {
+    write: data => {
+      socket.write(data)
+    },
+    close: () => {
+      socket.end()
+    },
+  }
+}
+
+function encodeSwayIpcFrame(options: {
   readonly messageType: number
   readonly payload: string
 }): Uint8Array {
@@ -166,4 +249,11 @@ export function encodeSwayIpcFrameForTest(options: {
   view.setUint32(10, options.messageType, true)
   frame.set(payload, SWAY_IPC_HEADER_BYTES)
   return frame
+}
+
+export function encodeSwayIpcFrameForTest(options: {
+  readonly messageType: number
+  readonly payload: string
+}): Uint8Array {
+  return encodeSwayIpcFrame(options)
 }

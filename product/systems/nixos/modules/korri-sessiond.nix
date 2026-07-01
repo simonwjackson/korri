@@ -151,6 +151,16 @@ in
       description = "Sessiond role selecting the foreground-session adapter.";
     };
 
+    kioskPolicy = mkOption {
+      type = types.enum [ "legacy" "lanes" ];
+      default = "legacy";
+      description = ''
+        Kiosk foreground policy. `legacy` stops/relaunches the renderer around
+        games; `lanes` keeps the hub renderer alive and uses Sway workspaces for
+        hub/game switching.
+      '';
+    };
+
     controlStartRetries = mkOption {
       type = types.ints.positive;
       default = 40;
@@ -237,6 +247,7 @@ in
       path = cfg.path ++ [ pkgs.util-linux ];
       environment = {
         KORRI_SESSIOND_ROLE = cfg.role;
+        KORRI_SESSIOND_KIOSK_POLICY = cfg.kioskPolicy;
         KORRI_SESSIOND_PORT = toString cfg.port;
         KORRI_SESSIOND_SOCKET = cfg.socketPath;
         KORRI_SESSIOND_ESSWAY_CONTROL = if cfg.esswayControl.enable then "1" else "0";

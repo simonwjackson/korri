@@ -40,6 +40,7 @@ import {
   createElectrobunController,
   realElectrobunRunner,
 } from "./sessiond-electrobun"
+import { createKorriLaneController } from "./sessiond-lanes"
 import { sessionLifecycleHooksFromEnv } from "./sessiond-plugin-composition"
 import type {
   KorriRendererController,
@@ -47,6 +48,7 @@ import type {
 } from "./sessiond-renderer"
 import {
   createKioskSessionRole,
+  createLaneAwareKioskSessionRole,
   formatSessionRoleReadyEvidence,
   type SessionRole,
   sessionRoleReadyOutcome,
@@ -72,13 +74,17 @@ import {
   createStatusSidecar,
   type StatusSidecar,
 } from "./sessiond-status-sidecar"
-import { discoverSwaySocketEnv } from "./sessiond-sway-socket"
 import {
   createSwayController,
   type SwayCommandRunner,
   type SwayController,
   type SwayWindowSelector,
 } from "./sessiond-sway"
+import { createSessiondSwayEventSource } from "./sessiond-sway-events"
+import {
+  discoverSwaySocketEnv,
+  discoverSwaySocketPath,
+} from "./sessiond-sway-socket"
 
 export interface KorriSessiondLogger {
   debug: (input: unknown, message?: string) => void
@@ -1264,13 +1270,15 @@ function realSwayCommandRunner(): SwayCommandRunner {
 
 function realSwayController(): SwayController {
   const runner = realSwayCommandRunner()
+  return createSwayController({ runner, selector: korriSwaySelectorFromEnv() })
+}
 
-  const selector: SwayWindowSelector = {
+function korriSwaySelectorFromEnv(): SwayWindowSelector {
+  return {
     appIds: envList("KORRI_SWAY_APP_IDS"),
     titles: envList("KORRI_SWAY_TITLES"),
     classes: envList("KORRI_SWAY_CLASSES"),
   }
-  return createSwayController({ runner, selector })
 }
 
 function realSourceMachineSwayController(): SourceMachineSwayController {
@@ -1363,6 +1371,10 @@ async function main() {
     10,
   )
   const roleId = process.env.KORRI_SESSIOND_ROLE ?? "kiosk"
+  const kioskPolicy = process.env.KORRI_SESSIOND_KIOSK_POLICY ?? "legacy"
+  let swayEventSource:
+    | ReturnType<typeof createSessiondSwayEventSource>
+    | undefined
   const role: SessionRole | undefined =
     roleId === "source-machine"
       ? createSourceMachineSessionRole({
@@ -1370,7 +1382,54 @@ async function main() {
           processList: { list: async () => [] },
           surfaceRepair: realSourceMachineSurfaceRepair(),
         })
-      : undefined
+      : roleId === "kiosk" && kioskPolicy === "lanes"
+        ? (() => {
+            const runner = realSwayCommandRunner()
+            const laneController = createKorriLaneController({
+              runner,
+              lanes: {
+                hub: process.env.KORRI_SESSIOND_HUB_WORKSPACE ?? "korri:hub",
+                game:
+                  process.env.KORRI_SESSIOND_GAME_WORKSPACE ??
+                  "korri:game:active",
+              },
+            })
+            const socketPath = discoverSwaySocketPath()
+            if (socketPath) {
+              swayEventSource = createSessiondSwayEventSource({
+                socketPath,
+                onEvent: event => laneController.handleSwayEvent(event),
+                onDiagnostic: diagnostic =>
+                  defaultLogger.warn(
+                    { diagnostic },
+                    "sessiond Sway event diagnostic",
+                  ),
+              })
+              void swayEventSource
+                .start()
+                .catch(error =>
+                  defaultLogger.warn(
+                    { err: error },
+                    "sessiond Sway event source failed to start",
+                  ),
+                )
+            } else {
+              defaultLogger.warn(
+                {},
+                "sessiond lane-aware kiosk policy could not discover Sway socket",
+              )
+            }
+            return createLaneAwareKioskSessionRole({
+              renderer: realRendererController(),
+              sway: createSwayController({
+                runner,
+                selector: korriSwaySelectorFromEnv(),
+              }),
+              serviceManager: realServiceManager(),
+              laneController,
+            })
+          })()
+        : undefined
 
   const statusSidecar =
     roleId === "source-machine"
@@ -1389,6 +1448,7 @@ async function main() {
 
   const shutdown = async (signal: string) => {
     defaultLogger.info({ signal }, "sessiond shutting down")
+    swayEventSource?.stop()
     await handle.stop()
     process.exit(0)
   }
