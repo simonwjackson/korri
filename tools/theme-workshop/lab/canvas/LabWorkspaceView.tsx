@@ -31,6 +31,9 @@ export function LabWorkspaceView({
   sourceId,
   stateId,
   onObjectsChange,
+  onDeleteTake,
+  onPromoteTake,
+  onGenerateTakes,
 }: {
   readonly index: LabStoryIndex
   readonly objects: readonly import("../model/lab-canvas-object").LabCanvasObject[]
@@ -46,15 +49,27 @@ export function LabWorkspaceView({
   readonly sourceId: string
   readonly stateId: import("../model/lab-source-state").LabInputValue
   readonly onObjectsChange: Dispatch<
-    SetStateAction<readonly import("../model/lab-canvas-object").LabCanvasObject[]>
+    SetStateAction<
+      readonly import("../model/lab-canvas-object").LabCanvasObject[]
+    >
   >
+  readonly onDeleteTake: (storyId: string) => void
+  readonly onPromoteTake: (storyId: string) => void
+  readonly onGenerateTakes: (
+    id: string,
+    request: { readonly prompt: string; readonly count: number },
+  ) => void
 }) {
   return (
-    <div className="lab-compose-frame lab-workspace-frame" data-lab-frame="workspace">
+    <div
+      className="lab-compose-frame lab-workspace-frame"
+      data-lab-frame="workspace"
+    >
       <section className="lab-compose-board" aria-label="Workspace board">
         <LabWorkshopBoard
           objects={objects}
           stories={index.byId}
+          designPassMetaById={index.designPassMetaById}
           tool={tool}
           command={command}
           screenId={screenId}
@@ -66,6 +81,9 @@ export function LabWorkspaceView({
           sourceId={sourceId}
           stateId={stateId}
           onObjectsChange={onObjectsChange}
+          onDeleteTake={onDeleteTake}
+          onPromoteTake={onPromoteTake}
+          onGenerateTakes={onGenerateTakes}
         />
       </section>
     </div>

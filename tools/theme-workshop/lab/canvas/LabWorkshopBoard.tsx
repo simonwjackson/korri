@@ -9,22 +9,23 @@ import {
 } from "react"
 import { deviceScreens } from "../../device-lab"
 import type { Story } from "../../types"
+import type { LabDesignPassStoryMeta } from "../design-pass/design-pass-model"
 import { useLab } from "../Lab.context"
+import {
+  bindPlacedPartObject,
+  isLiveDeviceObject,
+  isPlacedPartObject,
+  type LabCanvasObject,
+  moveCanvasObject,
+  objectBounds,
+  updateLiveDeviceObjectSize,
+} from "../model/lab-canvas-object"
 import {
   PLACEMENT_CELL,
   placementAnchor,
   placeNext,
   type Rect,
 } from "../model/lab-canvas-placement"
-import {
-  bindPlacedPartObject,
-  isLiveDeviceObject,
-  isPlacedPartObject,
-  moveCanvasObject,
-  objectBounds,
-  updateLiveDeviceObjectSize,
-  type LabCanvasObject,
-} from "../model/lab-canvas-object"
 import {
   cameraSettled,
   clampScale,
@@ -43,6 +44,8 @@ import { LabDraggablePart } from "./LabDraggablePart"
 
 /** How quickly the camera eases toward its target each frame (0..1). */
 const TWEEN_FACTOR = 0.2
+const EMPTY_DESIGN_PASS_META: ReadonlyMap<string, LabDesignPassStoryMeta> =
+  new Map()
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -72,6 +75,7 @@ function fallbackRect(object: LabCanvasObject): Rect {
 export function LabWorkshopBoard({
   objects,
   stories,
+  designPassMetaById = EMPTY_DESIGN_PASS_META,
   tool,
   command,
   screenId,
@@ -83,9 +87,13 @@ export function LabWorkshopBoard({
   sourceId,
   stateId,
   onObjectsChange,
+  onDeleteTake,
+  onPromoteTake,
+  onGenerateTakes,
 }: {
   readonly objects: readonly LabCanvasObject[]
   readonly stories: ReadonlyMap<string, Story>
+  readonly designPassMetaById?: ReadonlyMap<string, LabDesignPassStoryMeta>
   readonly tool: LabWorkshopTool
   readonly command: LabWorkshopCommandSignal | null
   /** Which logical screen aspect to render (multi-screen devices); null = first/default. */
@@ -97,9 +105,13 @@ export function LabWorkshopBoard({
   readonly onInnerSelect: (selection: LabPreviewSelection | null) => void
   readonly sourceId: string
   readonly stateId: import("../model/lab-source-state").LabInputValue
-  readonly onObjectsChange: Dispatch<
-    SetStateAction<readonly LabCanvasObject[]>
-  >
+  readonly onObjectsChange: Dispatch<SetStateAction<readonly LabCanvasObject[]>>
+  readonly onDeleteTake?: (storyId: string) => void
+  readonly onPromoteTake?: (storyId: string) => void
+  readonly onGenerateTakes?: (
+    id: string,
+    request: { readonly prompt: string; readonly count: number },
+  ) => void
 }) {
   const pattern = useLabPlacementPattern()
   const { selectedDevices } = useLab()
@@ -219,7 +231,10 @@ export function LabWorkshopBoard({
     const placements = new Map<string, { x: number; y: number }>()
     for (const object of pending) {
       const size = objectBounds(object)
-      const point = placeNext(pattern, occupied, anchor, { w: size.w, h: size.h })
+      const point = placeNext(pattern, occupied, anchor, {
+        w: size.w,
+        h: size.h,
+      })
       placements.set(object.id, point)
       occupied.push({ ...point, w: size.w, h: size.h })
     }
@@ -229,7 +244,9 @@ export function LabWorkshopBoard({
     onObjectsChange(prev =>
       prev.map(object => {
         const point = placements.get(object.id)
-        return point && object.x === undefined ? { ...object, ...point } : object
+        return point && object.x === undefined
+          ? { ...object, ...point }
+          : object
       }),
     )
     const last = pending[pending.length - 1]
@@ -459,6 +476,7 @@ export function LabWorkshopBoard({
               key={positioned.id}
               instance={positioned}
               story={story}
+              storyMeta={designPassMetaById.get(story.id)}
               byId={stories}
               screen={screen}
               scale={camera.scale}
@@ -470,6 +488,9 @@ export function LabWorkshopBoard({
               onBind={bind}
               onMove={move}
               onRemove={remove}
+              onDeleteTake={onDeleteTake}
+              onPromoteTake={onPromoteTake}
+              onGenerateTakes={onGenerateTakes ?? (() => undefined)}
             />
           )
         })}

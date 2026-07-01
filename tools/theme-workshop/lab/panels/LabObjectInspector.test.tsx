@@ -60,10 +60,31 @@ const pill: Story = {
   render: () => "pill",
 }
 
+const statusBar: Story = {
+  id: "status-bar",
+  designPartId: "shift.status-bar",
+  layer: "molecule",
+  name: "Status Bar",
+  render: () => "status",
+}
+
+const statusBarTake: Story = {
+  id: "status-bar-take",
+  layer: "molecule",
+  name: "Calmer status bar",
+  render: () => "take",
+}
+
 const byId = new Map(
-  [homeReady, homeEmpty, detailContinue, detailPlay, pill].map(
-    story => [story.id, story] as const,
-  ),
+  [
+    homeReady,
+    homeEmpty,
+    detailContinue,
+    detailPlay,
+    pill,
+    statusBar,
+    statusBarTake,
+  ].map(story => [story.id, story] as const),
 )
 
 const adapter: LabSurfaceAdapter = {
@@ -140,6 +161,7 @@ function renderInspector({
   onBind = mock(() => undefined),
   onBindInput = mock(() => undefined),
   adapterOverride,
+  storyMeta,
 }: {
   readonly story: Story
   readonly object?: LabObjectInstance
@@ -153,12 +175,14 @@ function renderInspector({
     value: LabObjectInstance["inputValues"][string],
   ) => void
   readonly adapterOverride?: LabSurfaceAdapter
+  readonly storyMeta?: import("../design-pass/design-pass-model").LabDesignPassStoryMeta
 }) {
   render(
     <LabContext.Provider value={context(adapterOverride)}>
       <LabObjectInspector
         instance={object}
         story={story}
+        storyMeta={storyMeta}
         byId={byId}
         sources={[
           { id: "dev", label: "Dev" },
@@ -226,6 +250,25 @@ describe("LabObjectInspector", () => {
     expect(screen.queryByLabelText("State for Pill")).toBeNull()
     expect(screen.queryByLabelText("Data for Pill")).toBeNull()
     expect(screen.queryByLabelText("Foreground for Pill")).toBeNull()
+  })
+
+  it("shows Take context on the selected canvas object", () => {
+    renderInspector({
+      story: statusBarTake,
+      storyMeta: {
+        role: "take",
+        passId: "status-bar-ideas",
+        passName: "Status bar ideas",
+        basedOnDesignPartId: "shift.status-bar",
+        prompt: "Make this feel calmer and more premium.",
+      },
+    })
+
+    expect(screen.getByText("Take")).toBeTruthy()
+    expect(screen.getByText("Based on Status Bar")).toBeTruthy()
+    expect(
+      screen.getByText("“Make this feel calmer and more premium.”"),
+    ).toBeTruthy()
   })
 
   it("falls back to declared defaults for sparse object values", () => {

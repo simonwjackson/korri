@@ -23,6 +23,9 @@ export function LabCanvasContent({
   onPreviewSelectionChange,
   onSelectObject,
   onObjectsChange,
+  onDeleteTake,
+  onPromoteTake,
+  onGenerateTakes,
 }: {
   readonly index: LabStoryIndex
   readonly objects: readonly LabCanvasObject[]
@@ -40,6 +43,12 @@ export function LabCanvasContent({
   ) => void
   readonly onSelectObject: (id: string | null) => void
   readonly onObjectsChange: Dispatch<SetStateAction<readonly LabCanvasObject[]>>
+  readonly onDeleteTake: (storyId: string) => void
+  readonly onPromoteTake: (storyId: string) => void
+  readonly onGenerateTakes: (
+    id: string,
+    request: { readonly prompt: string; readonly count: number },
+  ) => void
 }) {
   return (
     <LabWorkspaceView
@@ -56,6 +65,9 @@ export function LabCanvasContent({
       sourceId={activeSourceId}
       stateId={activeStateId}
       onObjectsChange={onObjectsChange}
+      onDeleteTake={onDeleteTake}
+      onPromoteTake={onPromoteTake}
+      onGenerateTakes={onGenerateTakes}
     />
   )
 }

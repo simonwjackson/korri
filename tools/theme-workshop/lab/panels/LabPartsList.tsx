@@ -1,5 +1,10 @@
 import type { Story } from "../../types"
-import { type LabStoryGroup, partLabel } from "../model/lab-part-model"
+import {
+  type LabStoryGroup,
+  type LabStoryIndex,
+  partLabel,
+  partMetaLabel,
+} from "../model/lab-part-model"
 
 /**
  * Compact list (tree) view of parts, grouped by atomic layer. The dense
@@ -7,11 +12,13 @@ import { type LabStoryGroup, partLabel } from "../model/lab-part-model"
  */
 export function LabPartsList({
   groups,
+  metaById,
   selectedIds,
   onSelect,
   onSelectLayer,
 }: {
   readonly groups: readonly LabStoryGroup[]
+  readonly metaById: LabStoryIndex["designPassMetaById"]
   readonly selectedIds: readonly string[]
   readonly onSelect: (storyId: string) => void
   readonly onSelectLayer: (stories: readonly Story[]) => void
@@ -33,6 +40,7 @@ export function LabPartsList({
           </button>
           {group.stories.map(story => {
             const on = selectedIds.includes(story.id)
+            const metaLabel = partMetaLabel(metaById.get(story.id))
             return (
               <button
                 key={story.id}
@@ -43,7 +51,10 @@ export function LabPartsList({
                 <span className="pt-tree-check" aria-hidden>
                   {on ? "◉" : "○"}
                 </span>
-                {partLabel(story)}
+                <span className="pt-tree-name">{partLabel(story)}</span>
+                {metaLabel ? (
+                  <span className="pt-work-badge">{metaLabel}</span>
+                ) : null}
               </button>
             )
           })}

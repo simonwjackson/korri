@@ -1,5 +1,9 @@
 import type { Story } from "../../types"
-import { type LabStoryIndex, partLabel } from "../model/lab-part-model"
+import {
+  type LabStoryIndex,
+  partLabel,
+  partMetaLabel,
+} from "../model/lab-part-model"
 import type { LabPartsCatalog } from "../parts-discovery"
 import { LabPartPreview } from "./LabPartPreview"
 
@@ -56,33 +60,41 @@ export function LabGalleryView({
             ) : null}
           </header>
           <div className="pt-grid">
-            {group.stories.map(story => (
-              // biome-ignore lint/a11y/useSemanticElements: card wraps a live preview that may contain its own interactive elements
-              <div
-                key={story.id}
-                role="button"
-                tabIndex={0}
-                aria-label={`Open ${story.name}`}
-                className={`pt-card${selectedIds.includes(story.id) ? " is-sel" : ""}`}
-                onClick={() => onSelect(story.id)}
-                onKeyDown={event => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault()
-                    onSelect(story.id)
-                  }
-                }}
-              >
-                <div className="pt-card-stage">
-                  <LabPartPreview story={story} fill />
+            {group.stories.map(story => {
+              const metaLabel = partMetaLabel(
+                index.designPassMetaById.get(story.id),
+              )
+              return (
+                // biome-ignore lint/a11y/useSemanticElements: card wraps a live preview that may contain its own interactive elements
+                <div
+                  key={story.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open ${story.name}`}
+                  className={`pt-card${selectedIds.includes(story.id) ? " is-sel" : ""}`}
+                  onClick={() => onSelect(story.id)}
+                  onKeyDown={event => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      onSelect(story.id)
+                    }
+                  }}
+                >
+                  <div className="pt-card-stage">
+                    <LabPartPreview story={story} fill />
+                  </div>
+                  <div className="pt-card-foot">
+                    <span className={`pt-layer-tag layer-${story.layer}`}>
+                      {story.layer}
+                    </span>
+                    <span className="pt-card-name">{partLabel(story)}</span>
+                    {metaLabel ? (
+                      <span className="pt-work-badge">{metaLabel}</span>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="pt-card-foot">
-                  <span className={`pt-layer-tag layer-${story.layer}`}>
-                    {story.layer}
-                  </span>
-                  <span className="pt-card-name">{partLabel(story)}</span>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
       ))}

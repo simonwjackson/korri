@@ -1,4 +1,5 @@
 import type { Story, StoryLayer } from "../../types"
+import { designPassStoryMetaLabel } from "../design-pass/design-pass-model"
 import type { LabPartsCatalog } from "../parts-discovery"
 import type { LabInputOption } from "./lab-source-state"
 
@@ -18,6 +19,10 @@ export type LabStoryGroup = {
 export type LabStoryIndex = {
   readonly groups: readonly LabStoryGroup[]
   readonly byId: ReadonlyMap<string, Story>
+  readonly designPassMetaById: ReadonlyMap<
+    string,
+    import("../design-pass/design-pass-model").LabDesignPassStoryMeta
+  >
 }
 
 /** The family of a story = the story plus its linked variants, in byId order. */
@@ -77,7 +82,13 @@ export function buildStoryIndex(
     layer,
     stories: representatives.filter(story => story.layer === layer),
   })).filter(group => group.stories.length > 0)
-  return { groups, byId }
+  return {
+    groups,
+    byId,
+    designPassMetaById: new Map(
+      Object.entries(catalog?.designPassMetaByStoryId ?? {}),
+    ),
+  }
 }
 
 /** The states a part can show, derived from its discovered variant family's
@@ -111,6 +122,14 @@ export function partLabel(story: Story): string {
     return `${base} · ${story.note}`
   }
   return story.name
+}
+
+export function partMetaLabel(
+  meta:
+    | import("../design-pass/design-pass-model").LabDesignPassStoryMeta
+    | undefined,
+): string | null {
+  return designPassStoryMetaLabel(meta)
 }
 
 /** The first discovered part (in tree order) that exposes multiple states. Used

@@ -111,6 +111,24 @@ describe("lab parts discovery", () => {
     }
   })
 
+  it("adds active design-pass takes without marking the component export", async () => {
+    __setPartModulesForTest({})
+    try {
+      const catalog = await loadSurfaceParts("shift")
+      const take = catalog.stories.find(
+        story => story.name === "Calmer status bar",
+      )
+      expect(take?.layer).toBe("molecule")
+      expect(catalog.designPassMetaByStoryId?.[take?.id ?? ""]).toMatchObject({
+        role: "take",
+        passName: "Status bar ideas",
+        basedOnDesignPartId: "shift.status-bar",
+      })
+    } finally {
+      __setPartModulesForTest(null)
+    }
+  })
+
   it("relates local array-exported state variants without a central manifest", () => {
     const catalog = collectPartsFromModules(
       {

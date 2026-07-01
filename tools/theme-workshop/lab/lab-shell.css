@@ -15,13 +15,13 @@
 	height: 100%;
 	min-height: 140px;
 	display: flex;
-	align-items: flex-start;
+	align-items: center;
 	justify-content: center;
 	overflow: hidden;
 }
 .lab-scale-content {
 	flex: 0 0 auto;
-	transform-origin: top center;
+	transform-origin: center;
 	pointer-events: none;
 }
 
@@ -109,15 +109,17 @@
 
 /* The part's mount box: it fills the device screen (which is the cqi/cqh query
  * container). Full-bleed parts stretch to it; smaller parts sit at natural size,
- * top-left, so their container-relative tokens still resolve against the
+ * centered, while their container-relative tokens still resolve against the
  * device. */
 .lab-part-mount {
 	position: absolute;
 	inset: 0;
+	display: grid;
+	place-items: center;
 	overflow: hidden;
 }
 .lab-part-mount[data-fill="true"] {
-	display: grid;
+	place-items: stretch;
 }
 .lab-part-mount[data-fill="true"] > * {
 	width: 100%;

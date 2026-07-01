@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useState } from "react"
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react"
 import { deviceScreens } from "../device-lab"
 import { LabCanvasContent } from "./canvas/LabCanvasContent"
 import { LabBarChrome } from "./chrome/LabBarChrome"
@@ -17,6 +17,7 @@ import {
   readStoredPresentation,
   viewportPresentation,
 } from "./chrome/lab-presentation"
+import { createCannedTakeBatch } from "./design-pass/generated-takes"
 import { useLab } from "./Lab.context"
 import { knobStyle } from "./model/lab-calibration-state"
 import {
@@ -24,11 +25,14 @@ import {
   bindPlacedPartInput,
   bindPlacedPartObject,
   createLiveDeviceObject,
+  createPlacedPartObject,
   isLiveDeviceObject,
   isPlacedPartObject,
   type LabCanvasObject,
   type LabPlacedPartObject,
+  objectBounds,
 } from "./model/lab-canvas-object"
+import { PLACEMENT_CELL, placeNext } from "./model/lab-canvas-placement"
 import {
   type LabWorkshopCommand,
   type LabWorkshopCommandSignal,
@@ -87,6 +91,19 @@ function readStoredDockWidth(): number {
 export function LabShell() {
   const { adapter, knobValues, selectedDevices, surfacePath } = useLab()
   const [catalog, setCatalog] = useState<LabPartsCatalog | null>(null)
+  const [generatedTakes, setGeneratedTakes] = useState<{
+    readonly stories: readonly import("../types").Story[]
+    readonly metaByStoryId: NonNullable<
+      LabPartsCatalog["designPassMetaByStoryId"]
+    >
+  }>({ stories: [], metaByStoryId: {} })
+  const [deletedTakeStoryIds, setDeletedTakeStoryIds] = useState<
+    readonly string[]
+  >([])
+  const [promotedTakeStoryIds, setPromotedTakeStoryIds] = useState<
+    readonly string[]
+  >([])
+  const generatedTakeSeed = useRef(0)
   const [catalogError, setCatalogError] = useState<Error | null>(null)
   const [dockWidth, setDockWidth] = useState<number>(readStoredDockWidth)
   // One adaptive chrome: position defaults from the viewport and is overridable
@@ -120,10 +137,74 @@ export function LabShell() {
     inputId: string,
     value: LabInputValue,
   ) => setObjects(prev => bindPlacedPartInput(prev, id, inputId, value))
-  // Parts are the surface's static discovered *.part.tsx components only — never
-  // the surface's routes. The live, router-driven surface lives in the Preview
-  // view; Parts stay isolated from the router.
-  const index = useMemo(() => buildStoryIndex(catalog), [catalog])
+  // The workspace story index includes generated Takes so existing canvas cards
+  // can render immediately. The Parts browser only receives source-backed parts
+  // plus generated Takes that the user promoted into the normal atomic catalog.
+  const catalogWithGenerated = useMemo<LabPartsCatalog | null>(() => {
+    if (!catalog) return null
+    const deleted = new Set(deletedTakeStoryIds)
+    const promoted = new Set(promotedTakeStoryIds)
+    const designPassMetaByStoryId = Object.fromEntries(
+      Object.entries({
+        ...(catalog.designPassMetaByStoryId ?? {}),
+        ...generatedTakes.metaByStoryId,
+      })
+        .filter(([storyId]) => !deleted.has(storyId))
+        .map(([storyId, meta]) => [
+          storyId,
+          promoted.has(storyId) ? { ...meta, promoted: true } : meta,
+        ]),
+    )
+    return {
+      ...catalog,
+      stories: [...catalog.stories, ...generatedTakes.stories].filter(
+        story => !deleted.has(story.id),
+      ),
+      ...(Object.keys(designPassMetaByStoryId).length
+        ? { designPassMetaByStoryId }
+        : {}),
+    }
+  }, [catalog, generatedTakes, deletedTakeStoryIds, promotedTakeStoryIds])
+  const partsCatalog = useMemo<LabPartsCatalog | null>(() => {
+    if (!catalog) return null
+    const deleted = new Set(deletedTakeStoryIds)
+    const promoted = new Set(promotedTakeStoryIds)
+    const promotedStories = generatedTakes.stories.filter(
+      story => promoted.has(story.id) && !deleted.has(story.id),
+    )
+    const catalogMetaByStoryId = Object.fromEntries(
+      Object.entries(catalog.designPassMetaByStoryId ?? {}).filter(
+        ([storyId]) => !deleted.has(storyId),
+      ),
+    )
+    const promotedMetaByStoryId = Object.fromEntries(
+      Object.entries(generatedTakes.metaByStoryId)
+        .filter(([storyId]) => promoted.has(storyId) && !deleted.has(storyId))
+        .map(([storyId, meta]) => [storyId, { ...meta, promoted: true }]),
+    )
+    const designPassMetaByStoryId = {
+      ...catalogMetaByStoryId,
+      ...promotedMetaByStoryId,
+    }
+    return {
+      ...catalog,
+      stories: [
+        ...catalog.stories.filter(story => !deleted.has(story.id)),
+        ...promotedStories,
+      ],
+      ...(Object.keys(designPassMetaByStoryId).length
+        ? { designPassMetaByStoryId }
+        : {}),
+    }
+  }, [catalog, generatedTakes, deletedTakeStoryIds, promotedTakeStoryIds])
+  const index = useMemo(
+    () => buildStoryIndex(catalogWithGenerated),
+    [catalogWithGenerated],
+  )
+  const partsIndex = useMemo(
+    () => buildStoryIndex(partsCatalog),
+    [partsCatalog],
+  )
   // Live-device seed state stays shared and independent from the Parts palette.
   // Selecting a placed part is a placement/object action; it must not reseed the
   // mounted live device objects.
@@ -212,6 +293,9 @@ export function LabShell() {
   useEffect(() => {
     let cancelled = false
     setCatalog(null)
+    setGeneratedTakes({ stories: [], metaByStoryId: {} })
+    setDeletedTakeStoryIds([])
+    setPromotedTakeStoryIds([])
     setCatalogError(null)
     setSelectedIds([])
     setObjects(prev => prev.filter(isLiveDeviceObject))
@@ -283,9 +367,109 @@ export function LabShell() {
 
   const clearAll = () => {
     setSelectedIds([])
+    setGeneratedTakes({ stories: [], metaByStoryId: {} })
+    setPromotedTakeStoryIds([])
     setObjects(prev => prev.filter(isLiveDeviceObject))
     setSelectedObjectId(null)
     setPreviewSelection(null)
+  }
+
+  const deleteTake = (storyId: string) => {
+    const meta = index.designPassMetaById.get(storyId)
+    if (meta?.role !== "take") return
+
+    setDeletedTakeStoryIds(prev =>
+      prev.includes(storyId) ? prev : [...prev, storyId],
+    )
+    setGeneratedTakes(prev => ({
+      stories: prev.stories.filter(story => story.id !== storyId),
+      metaByStoryId: Object.fromEntries(
+        Object.entries(prev.metaByStoryId).filter(([id]) => id !== storyId),
+      ),
+    }))
+    setSelectedIds(prev => prev.filter(id => id !== storyId))
+    setPromotedTakeStoryIds(prev => prev.filter(id => id !== storyId))
+    setObjects(prev =>
+      prev.filter(
+        object => !isPlacedPartObject(object) || object.storyId !== storyId,
+      ),
+    )
+    const selectedObject = objects.find(
+      object => object.id === selectedObjectId,
+    )
+    if (
+      selectedObject &&
+      isPlacedPartObject(selectedObject) &&
+      selectedObject.storyId === storyId
+    ) {
+      setSelectedObjectId(null)
+    }
+    const previewObject = previewSelection
+      ? objects.find(object => object.id === previewSelection.scopeId)
+      : null
+    if (
+      previewObject &&
+      isPlacedPartObject(previewObject) &&
+      previewObject.storyId === storyId
+    ) {
+      setPreviewSelection(null)
+    }
+  }
+
+  const promoteTake = (storyId: string) => {
+    const meta = index.designPassMetaById.get(storyId)
+    if (meta?.role !== "take") return
+    setPromotedTakeStoryIds(prev =>
+      prev.includes(storyId) ? prev : [...prev, storyId],
+    )
+  }
+
+  const generateTakesForObject = (
+    objectId: string,
+    request: { readonly prompt: string; readonly count: number },
+  ) => {
+    const object = objects.find(candidate => candidate.id === objectId)
+    if (!object || !isPlacedPartObject(object)) return
+    const story = index.byId.get(object.storyId)
+    if (!story) return
+
+    generatedTakeSeed.current += 1
+    const batch = createCannedTakeBatch({
+      surfaceId: adapter.id,
+      baseStory: story,
+      baseMeta: index.designPassMetaById.get(story.id),
+      prompt: request.prompt,
+      count: request.count,
+      seed: generatedTakeSeed.current,
+    })
+    const occupied = objects.map(object => objectBounds(object))
+    const origin = {
+      x: (object.x ?? 24) + PLACEMENT_CELL.w + 32,
+      y: object.y ?? 24,
+    }
+    const nextObjects = batch.stories.map(take => {
+      const point = placeNext("grid", occupied, origin, PLACEMENT_CELL)
+      occupied.push({ ...point, ...PLACEMENT_CELL })
+      return createPlacedPartObject(
+        take.id,
+        object.sourceId,
+        object.inputValues,
+        point,
+      )
+    })
+
+    setGeneratedTakes(prev => ({
+      stories: [...prev.stories, ...batch.stories],
+      metaByStoryId: {
+        ...prev.metaByStoryId,
+        ...batch.metaByStoryId,
+      },
+    }))
+    setSelectedIds(prev => [
+      ...new Set([...prev, ...batch.stories.map(story => story.id)]),
+    ])
+    setObjects(prev => [...prev, ...nextObjects])
+    setSelectedObjectId(nextObjects[0]?.id ?? objectId)
   }
 
   const switchWorkshopTool = (tool: LabWorkshopTool) => {
@@ -306,8 +490,8 @@ export function LabShell() {
   const partsPanel = () => (
     <LabPartsPanel
       mode={partsView}
-      catalog={catalog}
-      index={index}
+      catalog={partsCatalog}
+      index={partsIndex}
       selectedIds={selectedIds}
       onSelect={selectStory}
       onSelectLayer={selectLayer}
@@ -402,10 +586,10 @@ export function LabShell() {
     setPreviewPickMode(false)
   }
   // The Inspector is split into two panels: a selection-scoped State panel
-  // (shared live-device axes, selected placed-object bindings, or picked inner
-  // part controls) and a Design panel (the always-present intrinsic-design
-  // sliders for the whole canvas). They edit unrelated things, so they live
-  // apart.
+  // (shared live-device axes, selected placed-object bindings, picked inner
+  // part controls, or Take context) and a Design panel (the always-present
+  // intrinsic-design sliders for the whole canvas). They edit unrelated things,
+  // so they live apart.
   const statePanel = () =>
     previewSelection && selectedPreviewTarget && selectedPreviewObject ? (
       <LabPreviewInspector
@@ -448,6 +632,7 @@ export function LabShell() {
       <LabObjectInspector
         instance={selectedPlacedObject}
         story={selectedObjectStory}
+        storyMeta={index.designPassMetaById.get(selectedObjectStory.id)}
         byId={index.byId}
         sources={sources}
         onBind={bindObject}
@@ -595,6 +780,9 @@ export function LabShell() {
           onPreviewSelectionChange={selectPreviewPart}
           onSelectObject={selectObject}
           onObjectsChange={setObjects}
+          onDeleteTake={deleteTake}
+          onPromoteTake={promoteTake}
+          onGenerateTakes={generateTakesForObject}
         />
       </div>
 

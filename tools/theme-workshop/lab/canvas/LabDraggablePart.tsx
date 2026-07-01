@@ -1,5 +1,7 @@
+import { Trash2 } from "lucide-react"
 import type { ScreenConfig } from "../../device-lab"
 import type { Story } from "../../types"
+import { LabCanvasInteractionBar } from "../concepts/LabCanvasInteractionBar"
 import { useLab } from "../Lab.context"
 import type { LabObjectInstance } from "../model/lab-canvas-state"
 import {
@@ -7,7 +9,7 @@ import {
   resolveObjectInputValues,
   variantInput,
 } from "../model/lab-object-inputs"
-import { stateVariantFor } from "../model/lab-part-model"
+import { partMetaLabel, stateVariantFor } from "../model/lab-part-model"
 import { LabPreviewBoundary } from "../model/lab-preview-boundary"
 import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import { LAB_BIND_MIME } from "../panels/LabSourcesPanel"
@@ -30,6 +32,7 @@ function parseBind(value: string): { axis: "sourceId"; value: string } | null {
 export function LabDraggablePart({
   instance,
   story,
+  storyMeta,
   byId,
   screen,
   scale,
@@ -41,9 +44,13 @@ export function LabDraggablePart({
   onBind,
   onMove,
   onRemove,
+  onDeleteTake,
+  onPromoteTake,
+  onGenerateTakes,
 }: {
   readonly instance: LabObjectInstance
   readonly story: Story
+  readonly storyMeta?: import("../design-pass/design-pass-model").LabDesignPassStoryMeta
   readonly byId: ReadonlyMap<string, Story>
   readonly screen?: ScreenConfig
   readonly scale: number
@@ -58,6 +65,12 @@ export function LabDraggablePart({
   ) => void
   readonly onMove: (id: string, x: number, y: number) => void
   readonly onRemove: (id: string) => void
+  readonly onDeleteTake?: (storyId: string) => void
+  readonly onPromoteTake?: (storyId: string) => void
+  readonly onGenerateTakes?: (
+    id: string,
+    request: { readonly prompt: string; readonly count: number },
+  ) => void
 }) {
   const { adapter } = useLab()
   const x = instance.x ?? 24
@@ -84,6 +97,9 @@ export function LabDraggablePart({
     Boolean(variant.surface) ||
     variant.layer === "page" ||
     variant.layer === "template"
+  const metaLabel = partMetaLabel(storyMeta)
+  const canDeleteTake = storyMeta?.role === "take"
+  const canPromoteTake = canDeleteTake && storyMeta?.promoted !== true
 
   const renderBody = () => {
     // A binding-capable adapter may render any placed part through the real
@@ -143,6 +159,29 @@ export function LabDraggablePart({
           {story.layer}
         </span>
         <span className="pt-object-title">{story.name}</span>
+        {metaLabel ? <span className="pt-work-badge">{metaLabel}</span> : null}
+        {canPromoteTake ? (
+          <button
+            type="button"
+            className="pt-object-promote"
+            aria-label={`Promote Take ${story.name}`}
+            onPointerDown={event => event.stopPropagation()}
+            onClick={() => onPromoteTake?.(story.id)}
+          >
+            Promote
+          </button>
+        ) : null}
+        {canDeleteTake ? (
+          <button
+            type="button"
+            className="pt-object-remove"
+            aria-label={`Delete Take ${story.name}`}
+            onPointerDown={event => event.stopPropagation()}
+            onClick={() => onDeleteTake?.(story.id)}
+          >
+            <Trash2 size={13} aria-hidden />
+          </button>
+        ) : null}
         <button
           type="button"
           className="pt-object-remove"
@@ -163,6 +202,14 @@ export function LabDraggablePart({
           <LabScreenFrame screen={screen}>{renderBody()}</LabScreenFrame>
         </LabInspectableContent>
       </div>
+      {selected ? (
+        <div className="lab-canvas-ask-slot">
+          <LabCanvasInteractionBar
+            targetName={story.name}
+            onGenerate={request => onGenerateTakes?.(instance.id, request)}
+          />
+        </div>
+      ) : null}
     </fieldset>
   )
 }

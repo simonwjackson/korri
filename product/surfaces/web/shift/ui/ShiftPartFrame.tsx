@@ -12,8 +12,6 @@ import type { ReactNode } from "react"
  */
 export function ShiftPartFrame({
   children,
-  width = 640,
-  height = 360,
 }: {
   readonly children: ReactNode
   readonly width?: number
@@ -27,8 +25,8 @@ export function ShiftPartFrame({
         position: "relative",
         display: "grid",
         placeItems: "center",
-        width,
-        height,
+        width: "100%",
+        height: "100%",
         overflow: "hidden",
       }}
     >

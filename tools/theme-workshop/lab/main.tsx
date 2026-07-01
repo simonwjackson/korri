@@ -9,6 +9,7 @@ import "../workshop.css"
 import "./lab.css"
 import "./lab-chrome.css"
 import "./lab-shell.css"
+import "./lab-concepts.css"
 import { createLabRouter } from "./lab-router"
 
 // Boot the real device-agnostic input engine for the lab, exactly as the

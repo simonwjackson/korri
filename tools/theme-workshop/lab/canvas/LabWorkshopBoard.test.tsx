@@ -16,6 +16,7 @@ import {
 } from "@testing-library/react"
 import { useState } from "react"
 import type { Story } from "../../types"
+import type { LabDesignPassStoryMeta } from "../design-pass/design-pass-model"
 import { LabContext, type LabContextValue } from "../Lab.context"
 import type { LabCanvasObject } from "../model/lab-canvas-object"
 import {
@@ -85,6 +86,9 @@ function Harness({
   pickMode = false,
   onSelect = () => undefined,
   onInnerSelect = () => undefined,
+  designPassMetaById = new Map(),
+  onDeleteTake = () => undefined,
+  onPromoteTake = () => undefined,
 }: {
   readonly initial: readonly LabCanvasObject[]
   readonly command?: LabWorkshopCommandSignal | null
@@ -92,6 +96,9 @@ function Harness({
   readonly pickMode?: boolean
   readonly onSelect?: (id: string | null) => void
   readonly onInnerSelect?: (selection: LabPreviewSelection | null) => void
+  readonly designPassMetaById?: ReadonlyMap<string, LabDesignPassStoryMeta>
+  readonly onDeleteTake?: (storyId: string) => void
+  readonly onPromoteTake?: (storyId: string) => void
 }) {
   const [instances, setInstances] =
     useState<readonly LabCanvasObject[]>(initial)
@@ -100,6 +107,7 @@ function Harness({
       <LabWorkshopBoard
         objects={instances}
         stories={stories}
+        designPassMetaById={designPassMetaById}
         tool="select"
         command={command}
         screenId={null}
@@ -110,6 +118,8 @@ function Harness({
         }
         onSelect={onSelect}
         onInnerSelect={onInnerSelect}
+        onDeleteTake={onDeleteTake}
+        onPromoteTake={onPromoteTake}
         sourceId="dev"
         stateId="ready"
         onObjectsChange={setInstances}
@@ -191,6 +201,110 @@ const anchor = {
   x: VIEWPORT.width / 2 - DEFAULT_CAMERA.x,
   y: VIEWPORT.height / 2 - DEFAULT_CAMERA.y,
 }
+
+describe("LabWorkshopBoard interaction bar", () => {
+  it("attaches the ask controls to the selected placed part", () => {
+    render(
+      <Harness
+        initial={[instance("first", { x: 20, y: 30 })]}
+        selectedId="first"
+      />,
+    )
+
+    expect(screen.getByLabelText("Design with Pill")).toBeTruthy()
+    expect(screen.getByLabelText("Design intent for Pill")).toHaveProperty(
+      "value",
+      "Make this feel less cramped",
+    )
+    expect(screen.getByLabelText("Generate 3 takes for Pill")).toBeTruthy()
+  })
+
+  it("offers true delete only for Take cards", () => {
+    const deleted: string[] = []
+    render(
+      <Harness
+        initial={[instance("first", { x: 20, y: 30 })]}
+        selectedId="first"
+        designPassMetaById={
+          new Map([
+            [
+              "pill",
+              {
+                role: "take",
+                passId: "test-pass",
+                passName: "Test pass",
+              },
+            ],
+          ])
+        }
+        onDeleteTake={storyId => deleted.push(storyId)}
+      />,
+    )
+
+    fireEvent.click(screen.getByLabelText("Delete Take Pill"))
+
+    expect(deleted).toEqual(["pill"])
+  })
+
+  it("promotes Take cards", () => {
+    const promoted: string[] = []
+    render(
+      <Harness
+        initial={[instance("first", { x: 20, y: 30 })]}
+        selectedId="first"
+        designPassMetaById={
+          new Map([
+            [
+              "pill",
+              {
+                role: "take",
+                passId: "test-pass",
+                passName: "Test pass",
+              },
+            ],
+          ])
+        }
+        onPromoteTake={storyId => promoted.push(storyId)}
+      />,
+    )
+
+    fireEvent.click(screen.getByLabelText("Promote Take Pill"))
+
+    expect(promoted).toEqual(["pill"])
+  })
+
+  it("shows promoted Take cards as ordinary part cards", () => {
+    render(
+      <Harness
+        initial={[instance("first", { x: 20, y: 30 })]}
+        selectedId="first"
+        designPassMetaById={
+          new Map([
+            [
+              "pill",
+              {
+                role: "take",
+                passId: "test-pass",
+                passName: "Test pass",
+                promoted: true,
+              },
+            ],
+          ])
+        }
+      />,
+    )
+
+    expect(screen.queryByLabelText("Promote Take Pill")).toBeNull()
+    expect(screen.queryByText("Promoted")).toBeNull()
+    expect(screen.queryByText("Take")).toBeNull()
+  })
+
+  it("hides the ask controls when no placed part is selected", () => {
+    render(<Harness initial={[instance("first", { x: 20, y: 30 })]} />)
+
+    expect(screen.queryByLabelText("Design with Pill")).toBeNull()
+  })
+})
 
 describe("LabWorkshopBoard placement", () => {
   it("continues the grid lattice from the cluster's top-left, on the same row", async () => {

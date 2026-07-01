@@ -1,6 +1,11 @@
 import { surfacePartModules } from "@product/surfaces/web/parts-glob"
 import { createElement, type ReactNode } from "react"
 import type { Story, StoryLayer, WorkshopClassNames } from "../types"
+import { activeDesignPass } from "./design-pass/active-design-pass"
+import {
+  type LabDesignPassStoryMeta,
+  storiesFromDesignPass,
+} from "./design-pass/design-pass-model"
 
 export type PartModule = Record<string, unknown> & {
   readonly default?: unknown
@@ -22,6 +27,11 @@ export interface LabPartsCatalog {
   readonly classNames?: WorkshopClassNames
   readonly rootProps?: Record<string, unknown>
   readonly errors?: readonly PartLoadError[]
+  /** Lab-only context for stories contributed by a design pass. The component
+   * export stays clean; this records how the lab is using it right now. */
+  readonly designPassMetaByStoryId?: Readonly<
+    Record<string, LabDesignPassStoryMeta>
+  >
 }
 
 export interface PartPathInfo {
@@ -72,11 +82,7 @@ export function collectPartsFromModules(
   }
 
   return {
-    stories: stories.sort(
-      (a, b) =>
-        LAYER_ORDER[a.layer] - LAYER_ORDER[b.layer] ||
-        a.name.localeCompare(b.name),
-    ),
+    stories: sortStories(stories),
     classNames,
     rootProps,
   }
@@ -113,7 +119,15 @@ export async function loadSurfacePartsResult(
     }
   }
   const catalog = collectPartsFromModules(loaded, surfaceId)
-  return errors.length ? { ...catalog, errors } : catalog
+  const designPass = storiesFromDesignPass(activeDesignPass, surfaceId)
+  const next: LabPartsCatalog = {
+    ...catalog,
+    stories: sortStories([...catalog.stories, ...designPass.stories]),
+    ...(Object.keys(designPass.metaByStoryId).length
+      ? { designPassMetaByStoryId: designPass.metaByStoryId }
+      : {}),
+  }
+  return errors.length ? { ...next, errors } : next
 }
 
 export function __setPartModulesForTest(
@@ -134,6 +148,14 @@ export function __setPartModulesForTest(
 function partModules(): Record<string, PartLoader> {
   if (injectedModules) return injectedModules
   return surfacePartModules() as Record<string, PartLoader>
+}
+
+function sortStories(stories: readonly Story[]): readonly Story[] {
+  return [...stories].sort(
+    (a, b) =>
+      LAYER_ORDER[a.layer] - LAYER_ORDER[b.layer] ||
+      a.name.localeCompare(b.name),
+  )
 }
 
 function storiesFromModule(

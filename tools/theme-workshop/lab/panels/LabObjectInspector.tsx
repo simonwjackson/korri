@@ -1,5 +1,9 @@
 import type { Story } from "../../types"
 import { LabInputControlField } from "../components/LabInputControlField"
+import {
+  designPassStoryMetaLabel,
+  type LabDesignPassStoryMeta,
+} from "../design-pass/design-pass-model"
 import { useLab } from "../Lab.context"
 import type { LabObjectInstance } from "../model/lab-canvas-state"
 import {
@@ -17,6 +21,7 @@ import type { LabInputValue, LabSourceOption } from "../model/lab-source-state"
 export function LabObjectInspector({
   instance,
   story,
+  storyMeta,
   byId,
   sources,
   onBind,
@@ -24,6 +29,7 @@ export function LabObjectInspector({
 }: {
   readonly instance: LabObjectInstance
   readonly story: Story
+  readonly storyMeta?: LabDesignPassStoryMeta
   readonly byId: ReadonlyMap<string, Story>
   readonly sources: readonly LabSourceOption[]
   readonly onBind: (
@@ -39,6 +45,10 @@ export function LabObjectInspector({
   const { adapter } = useLab()
   const inputs = objectInputsForStory(story, byId, adapter)
   const values = resolveObjectInputValues(inputs, instance.inputValues)
+  const basedOn = storyMeta?.basedOnDesignPartId
+    ? storyByDesignPartId(byId, storyMeta.basedOnDesignPartId)
+    : null
+  const storyMetaLabel = designPassStoryMetaLabel(storyMeta)
 
   return (
     <div className="pt-inspector">
@@ -48,6 +58,19 @@ export function LabObjectInspector({
         </span>
         {story.name}
       </div>
+      {storyMeta ? (
+        <div className="pt-work-context">
+          {storyMetaLabel ? (
+            <span className="pt-work-badge">{storyMetaLabel}</span>
+          ) : null}
+          {basedOn ? (
+            <span className="pt-work-copy">Based on {basedOn.name}</span>
+          ) : null}
+          {storyMeta.prompt ? (
+            <span className="pt-work-copy">“{storyMeta.prompt}”</span>
+          ) : null}
+        </div>
+      ) : null}
       <div className="pt-bind">
         <label className="pt-bind-row">
           <span className="pt-bind-label">Data source</span>
@@ -79,4 +102,14 @@ export function LabObjectInspector({
       </div>
     </div>
   )
+}
+
+function storyByDesignPartId(
+  byId: ReadonlyMap<string, Story>,
+  designPartId: string,
+): Story | null {
+  for (const story of byId.values()) {
+    if (story.designPartId === designPartId) return story
+  }
+  return null
 }

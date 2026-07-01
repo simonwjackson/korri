@@ -29,6 +29,7 @@ export function LabPartsPanel({
     return (
       <LabPartsList
         groups={index.groups}
+        metaById={index.designPassMetaById}
         selectedIds={selectedIds}
         onSelect={onSelect}
         onSelectLayer={onSelectLayer}
