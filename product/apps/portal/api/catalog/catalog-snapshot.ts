@@ -1,9 +1,13 @@
 import { makeLocalEntrySource } from "@platform/api/rpc/entry-source"
+import type { GameAssetRecord } from "@platform/library/config/records/game-asset"
+import type { GameAssetAssignmentRecord } from "@platform/library/config/records/game-asset-assignment"
+import { isGameAssetBlobValid } from "@platform/library/game-assets/game-asset-blob-cache"
 import {
   LibrarySource,
   type LibrarySourceService,
 } from "@platform/library/library-services"
 import { playableEntryFromResolvedGame } from "@platform/library/playable-library"
+import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { logger } from "@platform/logger/logger"
 import {
   type CatalogPeerState,
@@ -127,8 +131,9 @@ export const CatalogSnapshotLive: Layer.Layer<
               value => value + 1,
             )
             const peers = [selfPeer]
+            const hydratedLocal = yield* hydrateCatalogMedia(localTagged)
             return new CatalogSnapshotResponse({
-              entries: localTagged,
+              entries: hydratedLocal,
               peers: peers.map(toPeerSnapshot),
               generation: currentGeneration,
               updatedAt: now,
@@ -193,8 +198,10 @@ export const CatalogSnapshotLive: Layer.Layer<
             presentPeerControlUrls: peerKeys,
           })
 
+          const hydratedEntries = yield* hydrateCatalogMedia(foldedEntries)
+
           return new CatalogSnapshotResponse({
-            entries: foldedEntries,
+            entries: hydratedEntries,
             peers: peerStates.map(toPeerSnapshot),
             generation: currentGeneration,
             updatedAt: now,
@@ -264,6 +271,88 @@ function listLocalEntries(source: LibrarySourceService) {
     : source
         .list()
         .pipe(Effect.map(games => games.map(playableEntryFromResolvedGame)))
+}
+
+function hydrateCatalogMedia(entries: readonly CatalogEntry[]) {
+  const root = process.env.KORRI_LIBRARY_ROOT?.trim()
+  if (!root) return Effect.succeed(entries)
+
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const db = yield* openKorriLibraryDb({ root })
+      const [assets, assignments] = yield* Effect.all(
+        [
+          Effect.promise(() => db["game-assets"].query().runPromise),
+          Effect.promise(() => db["game-asset-assignments"].query().runPromise),
+        ],
+        { concurrency: "unbounded" },
+      )
+      if (assets.length === 0 || assignments.length === 0) return entries
+
+      const assetsById = new Map(
+        (assets as readonly GameAssetRecord[]).map(asset => [asset.id, asset]),
+      )
+      const assignmentsByGame = new Map<
+        string,
+        readonly GameAssetAssignmentRecord[]
+      >()
+      for (const assignment of assignments as readonly GameAssetAssignmentRecord[]) {
+        const existing = assignmentsByGame.get(assignment.gameId) ?? []
+        assignmentsByGame.set(assignment.gameId, [...existing, assignment])
+      }
+
+      return yield* Effect.all(
+        entries.map(entry =>
+          mediaForCatalogEntry(entry, assignmentsByGame, assetsById),
+        ),
+        { concurrency: 8 },
+      )
+    }),
+  ).pipe(
+    Effect.catchCause(cause =>
+      Effect.sync(() => {
+        logger.warn(
+          { error: String(cause) },
+          "app.catalog.snapshot: game-asset hydration skipped",
+        )
+        return entries
+      }),
+    ),
+  )
+}
+
+function mediaForCatalogEntry(
+  entry: CatalogEntry,
+  assignmentsByGame: ReadonlyMap<string, readonly GameAssetAssignmentRecord[]>,
+  assetsById: ReadonlyMap<string, GameAssetRecord>,
+) {
+  return Effect.tryPromise({
+    try: async () => {
+      const hydrated = []
+      const hydratedRoles = new Set<string>()
+      for (const assignment of assignmentsByGame.get(entry.id) ?? []) {
+        const asset = assetsById.get(assignment.assetId)
+        if (!asset) continue
+        if (!(await isGameAssetBlobValid(process.env, asset))) continue
+        hydratedRoles.add(assignment.role)
+        hydrated.push({
+          role: assignment.role,
+          type: asset.type,
+          width: asset.width,
+          height: asset.height,
+          ...(asset.source ? { source: asset.source } : {}),
+          assetId: asset.id,
+          url: `/api/game-assets/${encodeURIComponent(asset.id)}`,
+        })
+      }
+      if (hydrated.length === 0) return entry
+      const existing = (entry.media ?? []).filter(
+        media => !hydratedRoles.has(media.role),
+      )
+      return { ...entry, media: [...existing, ...hydrated] }
+    },
+    catch: error => error,
+  }).pipe(Effect.catch(() => Effect.succeed(entry)))
 }
 
 function localCatalogTimeoutMs(): number {
