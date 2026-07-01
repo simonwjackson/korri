@@ -66,6 +66,41 @@ describe("stream surface discovery and repair", () => {
     ])
   })
 
+  it("default discovery ignores named non-window containers", () => {
+    const tree: SwayNode = {
+      id: 1,
+      type: "root",
+      name: "root",
+      nodes: [
+        {
+          id: 2,
+          type: "workspace",
+          name: "workspace-1",
+          nodes: [
+            {
+              id: 3,
+              app_id: "gamescope",
+              focused: true,
+              fullscreen_mode: 1,
+              name: "Neverball 1.6.0",
+            },
+          ],
+        },
+      ],
+    }
+
+    expect(findStreamSurfaceWindows(tree, {})).toEqual([
+      {
+        id: 3,
+        focused: true,
+        fullscreen: true,
+        appId: "gamescope",
+        title: "Neverball 1.6.0",
+        className: null,
+      },
+    ])
+  })
+
   it("preserves stream surface and containing output rects", () => {
     const tree: SwayNode = {
       id: 1,

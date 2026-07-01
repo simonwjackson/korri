@@ -13,6 +13,9 @@ in
   nixpkgs.overlays = [ (import ./overlay.nix) ];
 
   systemd.user.services.korrid.environment.KORRI_ENABLED_PLUGINS = lib.mkDefault enabledPlugin;
-  services.korri.sessiond.extraEnvironment.KORRI_ENABLED_PLUGINS = lib.mkDefault enabledPlugin;
+  services.korri.sessiond.extraEnvironment = {
+    KORRI_ENABLED_PLUGINS = lib.mkDefault enabledPlugin;
+    KORRI_STREAM_SURFACE_APP_IDS = lib.mkDefault "gamescope";
+  };
   services.korri.gameStream.extraEnvironment.KORRI_ENABLED_PLUGINS = lib.mkDefault enabledPlugin;
 }

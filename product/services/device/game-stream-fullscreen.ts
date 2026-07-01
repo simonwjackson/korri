@@ -344,7 +344,11 @@ function matchesSelector(
   const className = node.window_properties?.class ?? ""
 
   if (appIds.length === 0 && titles.length === 0 && classes.length === 0) {
-    return node.app_id !== undefined || title.length > 0 || className.length > 0
+    return (
+      node.app_id !== undefined ||
+      (node.window_properties?.title?.length ?? 0) > 0 ||
+      className.length > 0
+    )
   }
 
   return (

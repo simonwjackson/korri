@@ -114,6 +114,7 @@ let
     (check "exported source-machine module enables Gamescope plugin runtime path" (
       lib.hasInfix "@korri:gamescope" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
       && lib.hasInfix "@korri:gamescope" (sessiondEnv.KORRI_ENABLED_PLUGINS or "")
+      && sessiondEnv.KORRI_STREAM_SURFACE_APP_IDS == "gamescope"
       && lib.hasInfix "@korri:gamescope" firstAppWrapper
       && hasPackage "gamescope-korri" cfg.systemd.user.services.korri-sessiond.path
       && hasPackage "gamescope-korri" cfg.services.korri.gameStream.path
