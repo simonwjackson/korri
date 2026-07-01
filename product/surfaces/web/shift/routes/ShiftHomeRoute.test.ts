@@ -206,11 +206,48 @@ describe("toCinematicGame", () => {
       genre: "Metroidvania",
       developer: "Team Cherry",
       tileArtUrl: "tile.png",
+      tileArtAspectRatio: "600 / 900",
       wideArtUrl: "hero.png",
       playtimeLabel: "4.5h",
       favorite: true,
     })
     expect(game.lastPlayedLabel).toBe("3h ago")
+  })
+
+  it("prefers portrait poster media for the cinematic rail", () => {
+    const game = toCinematicGame({
+      id: "wario-land-4",
+      itemId: "wario-land-4",
+      title: "Wario Land 4",
+      releases: [{ id: "default", system: "gba", launchable: true }],
+      launchable: true,
+      media: [
+        {
+          role: "tile",
+          type: "image",
+          width: 1024,
+          height: 1024,
+          assetId: "tile",
+          url: "tile-square.png",
+        },
+        {
+          role: "poster",
+          type: "image",
+          width: 600,
+          height: 900,
+          assetId: "poster",
+          url: "poster-portrait.png",
+        },
+      ],
+      source: {
+        hostId: "local",
+        controlUrl: "http://127.0.0.1:3001",
+        isLocal: true,
+      },
+    } satisfies CatalogEntry)
+
+    expect(game.tileArtUrl).toBe("poster-portrait.png")
+    expect(game.tileArtAspectRatio).toBe("600 / 900")
   })
 
   it("formats string last-played values from serialized catalog data", () => {

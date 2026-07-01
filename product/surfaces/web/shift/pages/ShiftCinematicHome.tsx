@@ -39,6 +39,7 @@ export interface ShiftCinematicGame {
   readonly id: string
   readonly title: string
   readonly tileArtUrl: string
+  readonly tileArtAspectRatio?: string
   readonly wideArtUrl: string
   readonly genre?: string
   readonly developer?: string

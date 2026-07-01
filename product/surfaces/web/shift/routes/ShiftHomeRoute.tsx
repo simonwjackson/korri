@@ -8,7 +8,6 @@ import {
 import { launchFailureExitCode } from "@platform/library/launcher"
 import {
   getPlayableDisplayName,
-  getPlayableImageUrl,
   getPlayableWideImageUrl,
 } from "@platform/library/playable-library-ui"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
@@ -312,7 +311,7 @@ export function makeLaunchHandler(
 }
 
 export function toCinematicGame(game: CatalogEntry): ShiftCinematicGame {
-  const tile = getPlayableImageUrl(game)
+  const tile = getPlayableRailImage(game)
   const lastPlayed = dateValue(game.userData?.lastPlayed)
   const playtime = numberValue(game.userData?.playtime)
   const favorite = game.userData?.favorite === true
@@ -320,14 +319,32 @@ export function toCinematicGame(game: CatalogEntry): ShiftCinematicGame {
   return {
     id: game.id,
     title: getPlayableDisplayName(game),
-    tileArtUrl: tile ?? "",
-    wideArtUrl: getPlayableWideImageUrl(game) ?? tile ?? "",
+    tileArtUrl: tile?.url ?? "",
+    ...(tile ? { tileArtAspectRatio: `${tile.width} / ${tile.height}` } : {}),
+    wideArtUrl: getPlayableWideImageUrl(game) ?? tile?.url ?? "",
     ...(game.metadata?.genre?.[0] ? { genre: game.metadata.genre[0] } : {}),
     ...(game.metadata?.developer ? { developer: game.metadata.developer } : {}),
     ...(lastPlayed ? { lastPlayedLabel: relativeLastPlayed(lastPlayed) } : {}),
     ...(playtime ? { playtimeLabel: playtimeLabel(playtime) } : {}),
     ...(favorite ? { favorite: true } : {}),
   }
+}
+
+type CatalogImageMedia = NonNullable<CatalogEntry["media"]>[number]
+
+function getPlayableRailImage(
+  game: CatalogEntry,
+): CatalogImageMedia | undefined {
+  const images = game.media?.filter(media => media.type === "image") ?? []
+  return (
+    images.find(
+      media => media.role === "poster" && media.height > media.width,
+    ) ??
+    images.find(media => media.role === "tile" && media.height > media.width) ??
+    images.find(media => media.role === "poster") ??
+    images.find(media => media.role === "tile") ??
+    images[0]
+  )
 }
 
 function dateValue(value: unknown): Date | undefined {

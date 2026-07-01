@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react"
 import {
   SHIFT_DESIGN_PARTS,
   shiftDesignPartAttrs,
@@ -11,6 +12,7 @@ export interface ShiftCineTileProps {
   readonly index: number
   readonly title: string
   readonly artUrl: string
+  readonly aspectRatio?: string
   readonly focused?: boolean
   readonly renderImage?: boolean
   readonly onFocus: () => void
@@ -21,6 +23,7 @@ export function ShiftCineTile({
   index,
   title,
   artUrl,
+  aspectRatio,
   focused,
   renderImage = true,
   onFocus,
@@ -33,6 +36,7 @@ export function ShiftCineTile({
       data-focused={focused || undefined}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.tile, title)}
       className="shift-cine-tile"
+      style={tileAspectStyle(aspectRatio)}
       aria-label={title}
       onFocus={onFocus}
       onClick={onActivate}
@@ -40,4 +44,11 @@ export function ShiftCineTile({
       {renderImage ? <img src={artUrl} alt="" loading="eager" /> : null}
     </button>
   )
+}
+
+function tileAspectStyle(
+  aspectRatio: string | undefined,
+): CSSProperties | undefined {
+  if (!aspectRatio) return undefined
+  return { "--shift-cine-tile-aspect": aspectRatio } as CSSProperties
 }

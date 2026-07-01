@@ -13,6 +13,7 @@ export interface ShiftCineRailGame {
   readonly id: string
   readonly title: string
   readonly tileArtUrl: string
+  readonly tileArtAspectRatio?: string
 }
 
 /**
@@ -55,6 +56,7 @@ export function ShiftCineRail({
             index={i}
             title={entry.title}
             artUrl={entry.tileArtUrl}
+            aspectRatio={entry.tileArtAspectRatio}
             focused={i === index}
             renderImage={
               !imageWindow || (i >= imageWindow.start && i <= imageWindow.end)
