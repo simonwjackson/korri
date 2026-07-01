@@ -133,6 +133,29 @@ describe("sway repair commands", () => {
 })
 
 describe("sway controller", () => {
+  it("moves windows to a named workspace through the runner", async () => {
+    const calls: string[][] = []
+    const controller = createSwayController({
+      runner: {
+        run: async args => {
+          calls.push([...args])
+          return ""
+        },
+      },
+    })
+
+    await expect(
+      controller.placeWindowsOnWorkspace?.([10, 11], "korri:hub"),
+    ).resolves.toEqual([
+      '[con_id=10] move container to workspace "korri:hub"',
+      '[con_id=11] move container to workspace "korri:hub"',
+    ])
+    expect(calls).toEqual([
+      ['[con_id=10] move container to workspace "korri:hub"'],
+      ['[con_id=11] move container to workspace "korri:hub"'],
+    ])
+  })
+
   it("reads the tree through the runner and applies repair commands", async () => {
     const calls: readonly string[][] = []
     const mutableCalls: string[][] = calls as string[][]

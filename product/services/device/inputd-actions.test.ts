@@ -6,6 +6,7 @@ import {
   defaultKillFilePathFromEnv,
   type InputdActionCommand,
   KORRI_INPUTD_ACTION_IDS,
+  swaymsgEnvironment,
 } from "./inputd-actions"
 
 const tempDirs: string[] = []
@@ -261,6 +262,19 @@ describe("inputd actions", () => {
       "http://korri-sessiond/managed-launch/status",
       "http://korri-sessiond/managed-launch/home-toggle",
     ])
+  })
+
+  it("discovers the user Sway socket for direct Sway commands", async () => {
+    const dir = await tempDir()
+    const olderSocket = join(dir, "sway-ipc.1000.1.sock")
+    const newerSocket = join(dir, "sway-ipc.1000.2.sock")
+    await writeFile(olderSocket, "")
+    await Bun.sleep(10)
+    await writeFile(newerSocket, "")
+
+    await expect(
+      swaymsgEnvironment({ XDG_RUNTIME_DIR: dir } as NodeJS.ProcessEnv),
+    ).resolves.toMatchObject({ SWAYSOCK: newerSocket })
   })
 
   it("routes Home panel to direct Sway Korri launch by default", async () => {

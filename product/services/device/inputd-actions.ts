@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { readdir, readFile, stat } from "node:fs/promises"
 import {
   probeSessiondManagedLaunchStatus,
   type SessiondManagedLaunchClientOptions,
@@ -392,6 +392,7 @@ function commandFromEnv(
 async function runCommand(command: InputdActionCommand): Promise<void> {
   const proc = Bun.spawn({
     cmd: [command.command, ...command.args],
+    env: await environmentForCommand(command),
     stdout: "ignore",
     stderr: "pipe",
   })
@@ -402,4 +403,38 @@ async function runCommand(command: InputdActionCommand): Promise<void> {
   throw new Error(
     `command failed (${exitCode}): ${command.command} ${command.args.join(" ")} ${stderr}`,
   )
+}
+
+async function environmentForCommand(
+  command: InputdActionCommand,
+): Promise<NodeJS.ProcessEnv> {
+  if (command.command !== "swaymsg") return process.env
+  return await swaymsgEnvironment(process.env)
+}
+
+export async function swaymsgEnvironment(
+  env: NodeJS.ProcessEnv,
+): Promise<NodeJS.ProcessEnv> {
+  if (env.SWAYSOCK) return env
+  const runtimeDir = env.XDG_RUNTIME_DIR
+  if (!runtimeDir) return env
+
+  try {
+    const candidates = await Promise.all(
+      (await readdir(runtimeDir))
+        .filter(
+          entry => entry.startsWith("sway-ipc.") && entry.endsWith(".sock"),
+        )
+        .map(async entry => {
+          const path = `${runtimeDir}/${entry}`
+          const metadata = await stat(path)
+          return { path, mtimeMs: metadata.mtimeMs }
+        }),
+    )
+    const latest = candidates.sort((a, b) => b.mtimeMs - a.mtimeMs)[0]
+    if (!latest) return env
+    return { ...env, SWAYSOCK: latest.path }
+  } catch {
+    return env
+  }
 }

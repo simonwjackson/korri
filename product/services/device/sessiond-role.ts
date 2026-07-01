@@ -340,7 +340,19 @@ export function createLaneAwareKioskSessionRole(
     await deps.sway.applyDecisions(
       decisions.filter(decision => decision.kind !== "relaunch-renderer"),
     )
+    await placeHubWindowsOnLane()
     lastReconcile = summary
+  }
+
+  async function placeHubWindowsOnLane() {
+    if (!deps.sway.placeWindowsOnWorkspace) return
+    const hubWorkspace = deps.laneController.snapshot().lanes.hub
+    const hubWindows = await deps.sway.getKorriWindows()
+    if (hubWindows.length === 0) return
+    await deps.sway.placeWindowsOnWorkspace(
+      hubWindows.map(window => window.id),
+      hubWorkspace,
+    )
   }
 
   return {

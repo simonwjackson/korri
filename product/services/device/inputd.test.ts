@@ -626,7 +626,7 @@ B: KEY=40000000
     client.close()
   })
 
-  it("routes Home+D-pad to Sway workspace and output actions", async () => {
+  it("routes Home+D-pad and Home+shoulder to Sway workspace and output actions", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const systemSource = createControllableEventSource()
     const gamepadSource = createControllableEventSource()
@@ -651,12 +651,18 @@ B: KEY=40000000
     gamepadSource.push(evdevEvent(3, ABS_HAT0X, 0))
     gamepadSource.push(evdevEvent(3, ABS_HAT0X, 1))
     gamepadSource.push(evdevEvent(3, ABS_HAT0X, 0))
+    gamepadSource.push(evdevKey(BTN_TL, 1))
+    gamepadSource.push(evdevKey(BTN_TL, 0))
+    gamepadSource.push(evdevKey(BTN_TR, 1))
+    gamepadSource.push(evdevKey(BTN_TR, 0))
     gamepadSource.push(evdevEvent(3, ABS_HAT0Y, -1))
     gamepadSource.push(evdevEvent(3, ABS_HAT0Y, 0))
     gamepadSource.push(evdevEvent(3, ABS_HAT0Y, 1))
 
-    await waitFor(() => actions.length === 4, "sway actions")
+    await waitFor(() => actions.length === 6, "sway actions")
     expect(actions).toEqual([
+      "workspace-prev",
+      "workspace-next",
       "workspace-prev",
       "workspace-next",
       "move-output-up",

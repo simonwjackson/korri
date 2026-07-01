@@ -53,6 +53,12 @@ function makeSway(initialWindows: readonly KorriWindowSnapshot[] = []): {
       events.push(...incoming.map(decision => `sway:${decision.kind}`))
       return []
     },
+    placeWindowsOnWorkspace: async (windowIds, workspace) => {
+      events.push(
+        ...windowIds.map(windowId => `place:${windowId}:${workspace}`),
+      )
+      return []
+    },
   }
   return { sway, events, decisions }
 }
@@ -316,6 +322,25 @@ describe("lane-aware kiosk session role", () => {
 
     expect(rendererEvents).toEqual([])
     expect(role.rendererStatus().pid).toBe(101)
+  })
+
+  it("pins the hub renderer to the hub workspace during lane reconcile", async () => {
+    const { renderer } = makeRecordingRenderer()
+    const { sway, events: swayEvents } = makeSway([
+      { id: 101, focused: true, fullscreen: true },
+    ])
+    const { serviceManager } = makeServiceManager()
+    const { laneController } = makeLaneController()
+    const role = createLaneAwareKioskSessionRole({
+      renderer,
+      sway,
+      serviceManager,
+      laneController,
+    })
+
+    await role.enterIdle()
+
+    expect(swayEvents).toContain("place:101:korri:hub")
   })
 
   it("starts lane capture before the child is spawned", async () => {

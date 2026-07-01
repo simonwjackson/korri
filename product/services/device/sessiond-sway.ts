@@ -42,6 +42,10 @@ export interface SwayController {
   applyDecisions: (
     decisions: readonly HomeInvariantDecision[],
   ) => Promise<readonly string[]>
+  placeWindowsOnWorkspace?: (
+    windowIds: readonly number[],
+    workspace: string,
+  ) => Promise<readonly string[]>
 }
 
 export const DEFAULT_SWAY_SELECTOR: Required<SwayWindowSelector> = {
@@ -114,6 +118,17 @@ export function createSwayController(options: {
 
     async applyDecisions(decisions) {
       const commands = buildSwayCommandsForDecisions(decisions)
+      for (const command of commands) {
+        await options.runner.run([command])
+      }
+      return commands
+    },
+
+    async placeWindowsOnWorkspace(windowIds, workspace) {
+      const commands = windowIds.map(
+        windowId =>
+          `[con_id=${windowId}] move container to workspace ${JSON.stringify(workspace)}`,
+      )
       for (const command of commands) {
         await options.runner.run([command])
       }
