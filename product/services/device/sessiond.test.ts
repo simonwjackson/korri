@@ -334,6 +334,10 @@ describe("korri sessiond", () => {
         afterChildRunning: async () => roleEvents.push("after-child"),
         restoreIdleAfterLaunch: async () => roleEvents.push("restore-idle"),
         reconcileIdle: async () => roleEvents.push("reconcile-idle"),
+        toggleHome: async () => {
+          roleEvents.push("toggle-home")
+          return { status: "focused-hub" }
+        },
         idleReadyEvidence: () => "home-invariant windows=1 satisfied",
         rendererStatus: () => ({ kind: "test-renderer", pid: 101 }),
       },
@@ -372,6 +376,51 @@ describe("korri sessiond", () => {
       "after-child",
       "restore-idle",
     ])
+  })
+
+  it("routes Home lane toggle requests through capable roles", async () => {
+    const roleEvents: string[] = []
+    const { core } = startHarness({
+      role: {
+        id: "kiosk-lanes",
+        idleModeLabel: "home",
+        idleReadyEventName: "home-ready",
+        emitsRendererStopped: false,
+        enterIdle: async () => {},
+        leaveIdle: async () => {},
+        beforeChildLaunch: async () => {},
+        afterChildRunning: async () => {},
+        restoreIdleAfterLaunch: async () => {},
+        reconcileIdle: async () => {},
+        toggleHome: async () => {
+          roleEvents.push("toggle-home")
+          return { status: "no-live-game" }
+        },
+        idleReadyEvidence: () => "home-invariant windows=1 satisfied",
+        rendererStatus: () => ({ kind: "test-renderer", pid: 101 }),
+      },
+    })
+
+    const statusResponse = await request(core, "/managed-launch/status")
+    const status = await statusResponse.json()
+    expect(status.capabilities.laneToggle).toBe(true)
+
+    const response = await request(core, "/managed-launch/home-toggle", {
+      method: "POST",
+    })
+
+    expect(await response.json()).toEqual({ status: "no-live-game" })
+    expect(roleEvents).toEqual(["toggle-home"])
+  })
+
+  it("reports unsupported Home lane toggle when the role has no lane capability", async () => {
+    const { core } = startHarness()
+
+    const response = await request(core, "/managed-launch/home-toggle", {
+      method: "POST",
+    })
+
+    expect(await response.json()).toEqual({ status: "unsupported" })
   })
 
   it("emits SSE heartbeats so a quiet long-running launch keeps the stream alive", async () => {

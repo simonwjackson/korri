@@ -2,9 +2,11 @@ import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fi
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type { LaunchSpec } from "./launcher"
 import {
+  decodeSessiondManagedLaunchHomeToggleResponse,
   decodeSessiondManagedLaunchStartResponse,
   decodeSessiondManagedLaunchStatus,
   decodeSessiondManagedLaunchTerminateResponse,
+  type SessiondManagedLaunchHomeToggleResponse,
   type SessiondManagedLaunchLifecycle,
   type SessiondManagedLaunchStartResponse,
   type SessiondManagedLaunchStatus,
@@ -51,6 +53,13 @@ export type SessiondManagedLaunchTerminateResult =
   | {
       readonly kind: "ok"
       readonly response: SessiondManagedLaunchTerminateResponse
+    }
+  | SessiondManagedLaunchClientFailure
+
+export type SessiondManagedLaunchHomeToggleResult =
+  | {
+      readonly kind: "ok"
+      readonly response: SessiondManagedLaunchHomeToggleResponse
     }
   | SessiondManagedLaunchClientFailure
 
@@ -116,6 +125,25 @@ export async function requestSessiondManagedLaunchStart(
     }
   } catch (error) {
     return invalidPayloadFailure("sessiond start payload invalid", error)
+  }
+}
+
+export async function toggleSessiondHomeLane(
+  options: SessiondManagedLaunchClientOptions,
+): Promise<SessiondManagedLaunchHomeToggleResult> {
+  const response = await requestSessiondManagedLaunchJson(
+    options,
+    "/managed-launch/home-toggle",
+    { method: "POST" },
+  )
+  if (response.kind !== "ok") return response
+  try {
+    return {
+      kind: "ok",
+      response: decodeSessiondManagedLaunchHomeToggleResponse(response.value),
+    }
+  } catch (error) {
+    return invalidPayloadFailure("sessiond Home toggle payload invalid", error)
   }
 }
 

@@ -3,6 +3,7 @@ import {
   probeSessiondManagedLaunchStatus,
   requestSessiondManagedLaunchStart,
   terminateSessiondManagedLaunch,
+  toggleSessiondHomeLane,
 } from "./sessiond-managed-launch-client"
 
 describe("sessiond managed-launch client", () => {
@@ -95,6 +96,29 @@ describe("sessiond managed-launch client", () => {
       },
       wait: { command: "/bin/wait", args: [] },
     })
+  })
+
+  it("posts Home lane toggle requests", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    const result = await toggleSessiondHomeLane({
+      socketPath: "/run/user/1000/korri/sessiond.sock",
+      fetchImpl: async (input, init) => {
+        requests.push({ input, init })
+        return Response.json({ status: "focused-hub" })
+      },
+    })
+
+    expect(result).toEqual({
+      kind: "ok",
+      response: { status: "focused-hub" },
+    })
+    expect(requests[0].input).toBe(
+      "http://korri-sessiond/managed-launch/home-toggle",
+    )
+    expect(requests[0].init?.method).toBe("POST")
+    expect((requests[0].init as RequestInit & { unix?: string }).unix).toBe(
+      "/run/user/1000/korri/sessiond.sock",
+    )
   })
 
   it("posts best-effort per-launch termination requests", async () => {

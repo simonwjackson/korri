@@ -3,6 +3,7 @@ import {
   probeSessiondManagedLaunchStatus,
   type SessiondManagedLaunchClientOptions,
   terminateSessiondManagedLaunch,
+  toggleSessiondHomeLane,
 } from "@platform/library/sessiond-managed-launch-client"
 import { logger as defaultLogger } from "@platform/logger"
 import { buildBottomKeyboardCommand } from "./bottom-keyboard"
@@ -117,6 +118,13 @@ export function createInputdActionDispatcher(
     async dispatch(actionId, context = {}) {
       switch (actionId) {
         case "system-panel":
+          if (
+            await dispatchSessiondHomeToggle({
+              logger,
+              sessiond,
+            })
+          )
+            return
           await runNamedCommand(actionId, commands.systemPanel)
           return
         case "kill-current-game":
@@ -185,6 +193,38 @@ export function createInputdActionDispatcher(
       }
     },
   }
+}
+
+async function dispatchSessiondHomeToggle(options: {
+  readonly logger: InputdActionLogger
+  readonly sessiond: SessiondManagedLaunchClientOptions
+}): Promise<boolean> {
+  const status = await probeSessiondManagedLaunchStatus(options.sessiond)
+  if (status.kind === "not-configured") return false
+  if (status.kind !== "ok") {
+    options.logger.warn(
+      { status },
+      "inputd Home lane toggle unavailable; falling back to legacy command",
+    )
+    return false
+  }
+  if (status.status.capabilities.laneToggle !== true) return false
+
+  const toggled = await toggleSessiondHomeLane(options.sessiond)
+  if (toggled.kind !== "ok") {
+    options.logger.warn(
+      { status: toggled },
+      "inputd Home lane toggle failed; falling back to legacy command",
+    )
+    return false
+  }
+  if (toggled.response.status === "unsupported") return false
+
+  options.logger.info(
+    { response: toggled.response },
+    "inputd routed Home through sessiond lane toggle",
+  )
+  return true
 }
 
 async function dispatchSessiondTerminateActive(options: {

@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import {
   decodeSessiondManagedLaunchEvent,
   decodeSessiondManagedLaunchStatus,
+  decodeSessiondManagedLaunchHomeToggleResponse,
   decodeSessiondManagedLaunchTerminateResponse,
   SessiondManagedLaunchEvent,
   SessiondManagedLaunchStartRequest,
@@ -135,6 +136,33 @@ describe("sessiond managed launch protocol", () => {
     })
 
     expect(status.capabilities.managedLaunch).toBe(false)
+  })
+
+  it("decodes Home lane toggle payloads and capability", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "home",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+        laneToggle: true,
+      },
+      restoreAttempts: 0,
+    })
+
+    expect(status.capabilities.laneToggle).toBe(true)
+    expect(
+      decodeSessiondManagedLaunchHomeToggleResponse({
+        status: "no-live-game",
+      }),
+    ).toEqual({ status: "no-live-game" })
+    expect(() =>
+      decodeSessiondManagedLaunchHomeToggleResponse({
+        status: "focused-hub",
+        extra: true,
+      }),
+    ).toThrow()
   })
 
   it("decodes per-launch termination payloads", () => {

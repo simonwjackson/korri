@@ -102,6 +102,12 @@ export const SessiondManagedLaunchCapabilities = Schema.Struct({
    * sending a session-lifecycle launch the daemon cannot supervise.
    */
   sessionLifecycle: Schema.optional(Schema.Boolean),
+  /**
+   * When true, the daemon accepts Home lane-toggle requests and owns
+   * the hub/game decision. Clients without this capability must keep
+   * using their legacy Home fallback.
+   */
+  laneToggle: Schema.optional(Schema.Boolean),
 })
 export type SessiondManagedLaunchCapabilities = Schema.Schema.Type<
   typeof SessiondManagedLaunchCapabilities
@@ -268,6 +274,16 @@ export type SessiondManagedLaunchTerminateRequest = Schema.Schema.Type<
   typeof SessiondManagedLaunchTerminateRequest
 >
 
+export const SessiondManagedLaunchHomeToggleResponse = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("focused-hub") }),
+  Schema.Struct({ status: Schema.Literal("focused-game") }),
+  Schema.Struct({ status: Schema.Literal("no-live-game") }),
+  Schema.Struct({ status: Schema.Literal("unsupported") }),
+])
+export type SessiondManagedLaunchHomeToggleResponse = Schema.Schema.Type<
+  typeof SessiondManagedLaunchHomeToggleResponse
+>
+
 export const SessiondManagedLaunchTerminateResponse = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("accepted"),
@@ -319,6 +335,14 @@ export const decodeSessiondManagedLaunchTerminateRequest = (
   input: unknown,
 ): SessiondManagedLaunchTerminateRequest =>
   Schema.decodeUnknownSync(SessiondManagedLaunchTerminateRequest)(
+    input,
+    STRICT_DECODE,
+  )
+
+export const decodeSessiondManagedLaunchHomeToggleResponse = (
+  input: unknown,
+): SessiondManagedLaunchHomeToggleResponse =>
+  Schema.decodeUnknownSync(SessiondManagedLaunchHomeToggleResponse)(
     input,
     STRICT_DECODE,
   )

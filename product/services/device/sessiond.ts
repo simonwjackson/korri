@@ -265,6 +265,7 @@ export function createKorriSessiondCore(
         // session-anchored peers. Phase 4B clients omitting the
         // field still negotiate to foreground correctly.
         sessionLifecycle: true,
+        ...(role.toggleHome ? { laneToggle: true } : {}),
       },
     })
   }
@@ -1008,6 +1009,13 @@ export function createKorriSessiondCore(
           url.pathname === "/managed-launch/status"
         ) {
           return json(managedStatus())
+        }
+        if (
+          request.method === "POST" &&
+          url.pathname === "/managed-launch/home-toggle"
+        ) {
+          if (!role.toggleHome) return json({ status: "unsupported" })
+          return json(await role.toggleHome())
         }
         if (
           request.method === "GET" &&

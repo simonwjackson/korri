@@ -1,6 +1,7 @@
 import type { LaunchSpec } from "@platform/library/launcher"
 import type {
   LaunchReadyMode,
+  SessiondManagedLaunchHomeToggleResponse,
   TerminalReadinessEventType,
 } from "@platform/library/sessiond-managed-launch-protocol"
 import type { KorriSessiondServiceManager } from "./sessiond"
@@ -150,6 +151,9 @@ export interface SessionRole {
    * during `enterIdle`. Idempotent.
    */
   reconcileIdle: () => Promise<void>
+
+  /** Optional Home button lane toggle. Roles without it use legacy fallback. */
+  toggleHome?: () => Promise<SessiondManagedLaunchHomeToggleResponse>
 
   /**
    * Structured diagnostic evidence for the terminal readiness event.
@@ -362,6 +366,7 @@ export function createLaneAwareKioskSessionRole(
       await reconcile()
     },
     reconcileIdle: reconcile,
+    toggleHome: deps.laneController.toggleHome,
     idleReadyOutcome: () => ({
       status: "ok",
       evidence: { kind: "home-invariant", ...lastReconcile },

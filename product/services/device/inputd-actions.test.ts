@@ -209,6 +209,41 @@ describe("inputd actions", () => {
     expect(warnings).toHaveLength(1)
   })
 
+  it("routes Home through sessiond when lane toggle is supported", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    const { dispatcher, commands, warnings } = createHarness({
+      sessiond: {
+        socketPath: "/run/user/1000/korri/sessiond.sock",
+        fetchImpl: async (input, init) => {
+          requests.push({ input, init })
+          if (String(input).endsWith("/managed-launch/status")) {
+            return Response.json({
+              schemaVersion: 1,
+              mode: "home",
+              capabilities: {
+                managedLaunch: true,
+                lifecycleEvents: true,
+                perLaunchTermination: true,
+                laneToggle: true,
+              },
+              restoreAttempts: 0,
+            })
+          }
+          return Response.json({ status: "no-live-game" })
+        },
+      },
+    })
+
+    await dispatcher.dispatch("system-panel")
+
+    expect(commands).toEqual([])
+    expect(warnings).toEqual([])
+    expect(requests.map(request => request.input)).toEqual([
+      "http://korri-sessiond/managed-launch/status",
+      "http://korri-sessiond/managed-launch/home-toggle",
+    ])
+  })
+
   it("routes Home panel to direct Sway Korri launch by default", async () => {
     const { dispatcher, commands } = createHarness()
 
