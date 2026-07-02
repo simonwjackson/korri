@@ -17,7 +17,6 @@ import {
   DEFAULT_PICO_POWER_READING,
   type PicoPowerReading,
   picoDeviceStateForPowerReading,
-  picoPowerReadingAtom,
   picoPowerReadingForValue,
 } from "@product/surfaces/web/pico/pico-power-state"
 import { VariantCartridgeShelf } from "@product/surfaces/web/pico/VariantCartridgeShelf"
@@ -138,7 +137,6 @@ function deviceFactSeed(binding: Readonly<Record<string, LabInputValue>>): {
   const powerKey = `power:${JSON.stringify(power)}`
   const initialValues = [
     [deviceStateAtom, picoDeviceStateForPowerReading(power)],
-    [picoPowerReadingAtom, power],
     [picoClockIsoAtom, clock],
     [picoNetworkReadingAtom, network],
   ] as const
@@ -146,7 +144,6 @@ function deviceFactSeed(binding: Readonly<Record<string, LabInputValue>>): {
     initialValues:
       initialValues as unknown as LabSurfacePartMountSpec["initialValues"],
     reseedKeys: [
-      powerKey,
       powerKey,
       `clock:${clock}`,
       `network:${JSON.stringify(network)}`,

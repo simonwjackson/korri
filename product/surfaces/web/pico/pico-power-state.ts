@@ -1,5 +1,4 @@
 import type { DeviceState } from "@platform/device/device-facts"
-import * as Atom from "effect/unstable/reactivity/Atom"
 
 /**
  * Pico's power state: the canonical pico power-reading <-> Korrid device-state
@@ -32,10 +31,6 @@ export const DEFAULT_PICO_POWER_READING: PicoPowerReading = {
   percent: 82,
   charging: false,
 }
-
-export const picoPowerReadingAtom = Atom.make<PicoPowerReading>(
-  DEFAULT_PICO_POWER_READING,
-)
 
 export function picoPowerReadingForValue(value: unknown): PicoPowerReading {
   if (typeof value !== "object" || value === null) {
