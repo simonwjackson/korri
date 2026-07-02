@@ -36,3 +36,17 @@ export function reelWindow(
   }
   return out
 }
+
+/** Signed shortest distance from an index to the centre on the wheel, so a
+ * cover knows how far (and which way) it sits from the hero slot. */
+export function reelOffsetFromCenter(
+  index: number,
+  center: number,
+  length: number,
+): number {
+  const raw = index - center
+  const half = length / 2
+  if (raw > half) return raw - length
+  if (raw < -half) return raw + length
+  return raw
+}

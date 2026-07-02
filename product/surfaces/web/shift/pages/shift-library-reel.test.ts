@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test"
-import { reelIndexFromSteps, reelWindow } from "./shift-library-reel"
+import {
+  reelIndexFromSteps,
+  reelOffsetFromCenter,
+  reelWindow,
+} from "./shift-library-reel"
 
 describe("reelIndexFromSteps", () => {
   it("wraps positive and negative spins onto the wheel", () => {
@@ -24,5 +28,19 @@ describe("reelWindow", () => {
 
   it("never repeats an index on a short reel", () => {
     expect(reelWindow(0, 3, 5)).toEqual([0, 1, 2])
+  })
+})
+
+describe("reelOffsetFromCenter", () => {
+  it("is zero at the centre and signed by direction", () => {
+    expect(reelOffsetFromCenter(2, 2, 6)).toBe(0)
+    expect(reelOffsetFromCenter(3, 2, 6)).toBe(1)
+    expect(reelOffsetFromCenter(1, 2, 6)).toBe(-1)
+  })
+
+  it("takes the shortest way around the wheel", () => {
+    // Index 0 is one notch back from centre 5 on a 6-wide wheel, not five forward.
+    expect(reelOffsetFromCenter(0, 5, 6)).toBe(1)
+    expect(reelOffsetFromCenter(5, 0, 6)).toBe(-1)
   })
 })
