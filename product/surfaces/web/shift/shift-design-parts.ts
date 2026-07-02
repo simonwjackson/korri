@@ -163,12 +163,8 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "molecule",
     name: "Detail Stats",
   },
-  // Home body states + cinematic template.
-  cinematicHome: {
-    id: "shift.cinematic-home",
-    layer: "template",
-    name: "Cinematic Home",
-  },
+  // Home body states (the Home page's non-Ready Data states; tagged so
+  // pick-mode can select the body inside the Home page).
   homeLoading: {
     id: "shift.home-loading",
     layer: "organism",
