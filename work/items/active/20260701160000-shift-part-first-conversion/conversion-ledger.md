@@ -94,6 +94,7 @@ recorded here, revisit when one control model is committed as the route.
 | `pages/ShiftLibraryEmpty` | atom | `message` input | done (static) | `pages/ShiftLibraryEmpty.atom.part.tsx` |
 | `pages/ShiftLibraryGridView` | organism | `games` input | done (static) | `pages/ShiftLibraryGridView.organism.part.tsx` |
 | `pages/ShiftLibraryShelf` | organism | `title` + `games` inputs | done (static) | `pages/ShiftLibraryShelf.organism.part.tsx` |
+| `pages/ShiftLibraryShelfStack` | organism | `sections` input (shared by Shelves + Lens) | done (static) | `pages/ShiftLibraryShelfStack.organism.part.tsx` |
 
 ### Reel internals
 
