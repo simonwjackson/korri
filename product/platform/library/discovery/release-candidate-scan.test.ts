@@ -370,6 +370,149 @@ describe("scanReleaseCandidates", () => {
     expect(parsed.library).toEqual({})
   })
 
+  it("keeps central ambiguous and excluded diagnostics ahead of provider claims", async () => {
+    await using fixture = await withTempRomRoot({
+      "gb/Pokemon.gba": "",
+      "media/Wario.gba": "",
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
+      root: fixture.root,
+      storage: "roms",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.report).toMatchObject({
+      files: 2,
+      candidates: 0,
+      ambiguous: 1,
+      excluded: 1,
+    })
+    expect(result.report.samples).toContainEqual({
+      path: "gb/Pokemon.gba",
+      tag: "Ambiguous",
+      detail: "folder:gb/extension:gba",
+    })
+    expect(result.report.samples).toContainEqual({
+      path: "media/Wario.gba",
+      tag: "Excluded",
+      detail: "path:media",
+    })
+  })
+
+  it("reports same-provider conflicting observations without writing candidates", async () => {
+    await using fixture = await withTempRomRoot({
+      "Metroid Fusion.gba": "",
+    })
+    const conflictingProvider = releaseDiscoveryProvider({
+      id: "@korri:test/conflicting-gba-files",
+      title: "Conflicting GBA files",
+      discover: ({ files }) =>
+        files.flatMap(file => [
+          {
+            kind: "file-release" as const,
+            confidence: "high" as const,
+            source: file,
+            release: {
+              id: "gba",
+              system: "gba",
+              app: "@korri:retroarch/retroarch",
+              runtime: "@korri:retroarch/mgba",
+            },
+          },
+          {
+            kind: "file-release" as const,
+            confidence: "high" as const,
+            source: file,
+            release: {
+              id: "gba",
+              system: "gba",
+              app: "@korri:retroarch/retroarch",
+              runtime: "@korri:other/runtime",
+            },
+          },
+        ]),
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: [conflictingProvider],
+      root: fixture.root,
+      storage: "roms",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.report).toMatchObject({
+      files: 1,
+      candidates: 0,
+      conflicting: 1,
+    })
+    expect(result.report.samples).toContainEqual({
+      path: "Metroid Fusion.gba",
+      tag: "Conflicting",
+      detail: "@korri:test/conflicting-gba-files",
+    })
+  })
+
+  it("reports provider failures and malformed observations without writing candidates", async () => {
+    await using fixture = await withTempRomRoot({
+      "Metroid Fusion.gba": "",
+    })
+    const failingProvider = releaseDiscoveryProvider({
+      id: "@korri:test/failing-gba-files",
+      title: "Failing GBA files",
+      discover: () => {
+        throw new Error("boom")
+      },
+    })
+    const malformedProvider = releaseDiscoveryProvider({
+      id: "@korri:test/malformed-gba-files",
+      title: "Malformed GBA files",
+      discover: ({ files }) =>
+        files.map(file => ({
+          kind: "file-release" as const,
+          confidence: "high" as const,
+          source: file,
+          release: {
+            id: "",
+            system: "gba",
+            app: "@korri:retroarch/retroarch",
+            runtime: "@korri:retroarch/mgba",
+          },
+        })),
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: [failingProvider, malformedProvider],
+      root: fixture.root,
+      storage: "roms",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.report).toMatchObject({
+      files: 1,
+      candidates: 0,
+      unclaimed: 1,
+    })
+    expect(result.report.reasons).toMatchObject({
+      "provider:@korri:test/failing-gba-files:failed": 1,
+      "provider:@korri:test/malformed-gba-files:malformed": 1,
+    })
+    expect(result.report.samples).toContainEqual({
+      path: fixture.root,
+      tag: "ProviderFailed",
+      detail: "@korri:test/failing-gba-files:boom",
+    })
+    expect(result.report.samples).toContainEqual({
+      path: "Metroid Fusion.gba",
+      tag: "Malformed",
+      detail: "@korri:test/malformed-gba-files:missing-release-field",
+    })
+  })
+
   it("renders deterministic YAML for repeated scans with different file creation order", async () => {
     await using first = await withTempRomRoot({
       "gba/Zelda.gba": "",

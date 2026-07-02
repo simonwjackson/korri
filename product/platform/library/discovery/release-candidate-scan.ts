@@ -600,31 +600,53 @@ async function discoverRomCandidates(
 
   const candidates: RomScanCandidate[] = []
   for (const descriptor of descriptors) {
+    const classification = classifyRomScanPath(descriptor.absolutePath, {
+      root: args.root,
+    })
     const providerCandidates = byPath.get(descriptor.relativePath)
-    if (providerCandidates === undefined || providerCandidates.length === 0) {
-      recordClassification(
-        report,
-        classifyRomScanPath(descriptor.absolutePath, { root: args.root }),
-      )
+    if (
+      providerCandidates === undefined ||
+      providerCandidates.length === 0 ||
+      classification._tag === "Excluded" ||
+      classification._tag === "Ambiguous" ||
+      classification._tag === "Unsupported"
+    ) {
+      recordClassification(report, classification)
       continue
     }
 
     report.files += 1
     const uniqueByProvider = new Map<string, RomScanCandidate>()
+    let providerConflict: string | undefined
     for (const providerCandidate of providerCandidates) {
-      if (uniqueByProvider.has(providerCandidate.providerId)) {
-        report.deduplicated += 1
-        addSample(report, {
-          path: descriptor.relativePath,
-          tag: "Deduplicated",
-          detail: `provider-duplicate:${providerCandidate.providerId}`,
-        })
+      const current = uniqueByProvider.get(providerCandidate.providerId)
+      if (current !== undefined) {
+        if (sameRomScanCandidate(current, providerCandidate.candidate)) {
+          report.deduplicated += 1
+          addSample(report, {
+            path: descriptor.relativePath,
+            tag: "Deduplicated",
+            detail: `provider-duplicate:${providerCandidate.providerId}`,
+          })
+          continue
+        }
+        providerConflict = providerCandidate.providerId
         continue
       }
       uniqueByProvider.set(
         providerCandidate.providerId,
         providerCandidate.candidate,
       )
+    }
+
+    if (providerConflict !== undefined) {
+      report.conflicting += 1
+      addSample(report, {
+        path: descriptor.relativePath,
+        tag: "Conflicting",
+        detail: providerConflict,
+      })
+      continue
     }
 
     if (uniqueByProvider.size > 1) {
@@ -646,6 +668,21 @@ async function discoverRomCandidates(
   }
 
   return candidates
+}
+
+function sameRomScanCandidate(
+  left: RomScanCandidate,
+  right: RomScanCandidate,
+): boolean {
+  return (
+    left.path === right.path &&
+    left.system === right.system &&
+    left.confidence === right.confidence &&
+    left.app === right.app &&
+    left.runtime === right.runtime &&
+    (left.releaseId ?? left.system) === (right.releaseId ?? right.system) &&
+    (left.title ?? "") === (right.title ?? "")
+  )
 }
 
 async function collectProviderCandidates(
@@ -735,6 +772,8 @@ function candidateFromObservation(
       confidence: observation.confidence,
       app: release.app,
       runtime: release.runtime,
+      releaseId: release.id,
+      ...(release.title !== undefined ? { title: release.title } : {}),
     },
   }
 }

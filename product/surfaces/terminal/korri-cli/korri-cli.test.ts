@@ -265,6 +265,55 @@ describe("korri CLI", () => {
     }
   })
 
+  it("reports unclaimed GBA files when RetroArch is not enabled for Scout", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-scout-unclaimed-root-"))
+    const configRoot = await mkdtemp(
+      join(tmpdir(), "korri-scout-unclaimed-config-"),
+    )
+    const previousFindBin = process.env.KORRI_FIND_BIN
+    const previousEnabledPlugins = process.env.KORRI_ENABLED_PLUGINS
+    try {
+      const config = join(configRoot, "korri.yaml")
+      await writeFile(join(root, "Metroid Fusion.gba"), "")
+      delete process.env.KORRI_ENABLED_PLUGINS
+      process.env.KORRI_FIND_BIN = resolveFromPath("find")
+
+      const result = await captureCliOutput(() =>
+        Effect.runPromiseExit(
+          runKorriCli([
+            "scout",
+            "scan",
+            "releases",
+            "--root",
+            root,
+            "--storage",
+            "sd-releases",
+            "--config",
+            config,
+          ]),
+        ),
+      )
+
+      expect(result.exitCode).toBe(0)
+      const summary = JSON.parse(result.stdout) as {
+        readonly report: { readonly candidates: number; readonly unclaimed: number }
+        readonly merge: { readonly libraryAdded: number }
+        readonly yaml: string
+      }
+      expect(summary.report).toMatchObject({ candidates: 0, unclaimed: 1 })
+      expect(summary.merge.libraryAdded).toBe(0)
+      expect(summary.yaml).not.toContain("metroid-fusion")
+    } finally {
+      if (previousFindBin === undefined) delete process.env.KORRI_FIND_BIN
+      else process.env.KORRI_FIND_BIN = previousFindBin
+      if (previousEnabledPlugins === undefined)
+        delete process.env.KORRI_ENABLED_PLUGINS
+      else process.env.KORRI_ENABLED_PLUGINS = previousEnabledPlugins
+      await rm(root, { recursive: true, force: true })
+      await rm(configRoot, { recursive: true, force: true })
+    }
+  })
+
   it("deduplicates explicit release scans against an authored config entry", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-scout-dedupe-root-"))
     const configRoot = await mkdtemp(

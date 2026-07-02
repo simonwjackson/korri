@@ -56,15 +56,12 @@ describe("retroarchGbaDiscoveryProvider", () => {
     expect(observations).toHaveLength(1)
   })
 
-  it("does not claim other handheld files, archives, saves, or media paths", async () => {
+  it("does not claim other handheld files, archives, or save files", async () => {
     const files = [
       { ...baseFile, relativePath: "gb/Tetris.gb", name: "Tetris.gb", extension: ".gb" },
       { ...baseFile, relativePath: "gbc/Zelda.gbc", name: "Zelda.gbc", extension: ".gbc" },
       { ...baseFile, relativePath: "gba/rom.zip", name: "rom.zip", extension: ".zip" },
       { ...baseFile, relativePath: "gba/save.sav", name: "save.sav", extension: ".sav" },
-      { ...baseFile, relativePath: "media/Wario.gba", name: "Wario.gba", extension: ".gba" },
-      { ...baseFile, relativePath: "bios/Wario.gba", name: "Wario.gba", extension: ".gba" },
-      { ...baseFile, relativePath: "images/Wario.gba", name: "Wario.gba", extension: ".gba" },
     ]
 
     const observations = await Promise.resolve(

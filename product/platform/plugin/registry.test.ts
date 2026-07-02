@@ -7,6 +7,7 @@ import {
   createPluginRegistry,
   DuplicatePluginId,
   executableResources,
+  InvalidDiscoveryProviderOwner,
   parseEnabledPluginIds,
 } from "./registry"
 
@@ -73,7 +74,7 @@ describe("createPluginRegistry", () => {
 
   it("exposes enabled handler, discovery provider, and generic config contributions", () => {
     const discovery = releaseDiscoveryProvider({
-      id: "@fake:wrapper/test-files",
+      id: "@fake:with-discovery/test-files",
       title: "Test files",
       discover: () => [],
     })
@@ -95,8 +96,25 @@ describe("createPluginRegistry", () => {
       "wrapper.compose",
     ])
     expect(registry.discoveryProviders.map(provider => provider.id)).toEqual([
-      "@fake:wrapper/test-files",
+      "@fake:with-discovery/test-files",
     ])
+  })
+
+  it("rejects discovery providers owned by a different plugin id", () => {
+    const discovery = releaseDiscoveryProvider({
+      id: "@korri:other/test-files",
+      title: "Test files",
+      discover: () => [],
+    })
+    const discoverer = plugin({
+      namespace: "@korri",
+      name: "discoverer",
+      contributes: { discovery: [discovery] },
+    })
+
+    expect(() =>
+      createPluginRegistry([discoverer], { enabledPluginIds: [discoverer.id] }),
+    ).toThrow(InvalidDiscoveryProviderOwner)
   })
 
   it("only exposes discovery providers for enabled plugins", () => {

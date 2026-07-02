@@ -22,6 +22,13 @@ export class DuplicateDiscoveryProviderId extends Data.TaggedError(
   readonly providerId: string
 }> {}
 
+export class InvalidDiscoveryProviderOwner extends Data.TaggedError(
+  "InvalidDiscoveryProviderOwner",
+)<{
+  readonly pluginId: PluginId
+  readonly providerId: string
+}> {}
+
 export interface PluginRegistryOptions {
   readonly enabledPluginIds?: readonly PluginId[]
 }
@@ -186,13 +193,22 @@ function mergeProviderMaps(plugins: readonly KorriPlugin[]): ConfigRecordMap {
 function collectDiscoveryProviders(
   plugins: readonly KorriPlugin[],
 ): readonly ReleaseDiscoveryProvider[] {
-  const providers = plugins.flatMap(plugin => plugin.contributes.discovery ?? [])
+  const providers: ReleaseDiscoveryProvider[] = []
   const seen = new Set<string>()
-  for (const provider of providers) {
-    if (seen.has(provider.id)) {
-      throw new DuplicateDiscoveryProviderId({ providerId: provider.id })
+  for (const plugin of plugins) {
+    for (const provider of plugin.contributes.discovery ?? []) {
+      if (!provider.id.startsWith(`${plugin.id}/`)) {
+        throw new InvalidDiscoveryProviderOwner({
+          pluginId: plugin.id,
+          providerId: provider.id,
+        })
+      }
+      if (seen.has(provider.id)) {
+        throw new DuplicateDiscoveryProviderId({ providerId: provider.id })
+      }
+      seen.add(provider.id)
+      providers.push(provider)
     }
-    seen.add(provider.id)
   }
   return providers
 }

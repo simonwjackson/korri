@@ -37,6 +37,8 @@ export interface RomScanCandidate {
   readonly confidence: "high" | "medium" | "low"
   readonly app: string
   readonly runtime: string
+  readonly releaseId?: string
+  readonly title?: string
 }
 
 export interface RomScanOptions {
@@ -187,17 +189,6 @@ export function classifyRomScanPath(
   return { _tag: "Ignored", path: normalized, reason: `extension:${extension}` }
 }
 
-export function createRomLibraryCandidates(
-  paths: readonly string[],
-  options: CreateRomLibraryCandidatesOptions,
-): readonly RomLibraryCandidate[] {
-  const classifications = paths.flatMap(path => {
-    const classification = classifyRomScanPath(path, { root: options.root })
-    return classification._tag === "Candidate" ? [classification] : []
-  })
-  return createRomLibraryCandidatesFromClassifications(classifications, options)
-}
-
 export function createRomLibraryCandidatesFromClassifications(
   classifications: readonly RomScanCandidate[],
   options: CreateRomLibraryCandidatesOptions,
@@ -210,12 +201,12 @@ export function createRomLibraryCandidatesFromClassifications(
   )) {
     const baseId = playableIdFromPath(classification.path)
     const id = uniqueId(baseId, usedIds)
-    const title = titleFromPath(classification.path)
+    const title = classification.title ?? titleFromPath(classification.path)
     const record: LibraryItemPayload = {
       title,
       releases: [
         {
-          id: classification.system,
+          id: classification.releaseId ?? classification.system,
           system: classification.system,
           target: {
             kind: "file",
