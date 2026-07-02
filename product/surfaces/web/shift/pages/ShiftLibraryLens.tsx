@@ -21,7 +21,7 @@ import { ShiftLensSortOverlay } from "./ShiftLensSortOverlay"
 import { ShiftLibraryEmpty } from "./ShiftLibraryEmpty"
 import { ShiftLibraryGridView } from "./ShiftLibraryGridView"
 import { ShiftLibraryHeader } from "./ShiftLibraryHeader"
-import { ShiftLibraryShelf } from "./ShiftLibraryShelf"
+import { ShiftLibraryShelfStack } from "./ShiftLibraryShelfStack"
 import type { ShiftLibraryGame } from "./shift-library-game"
 import {
   applyShiftLibraryQuery,
@@ -92,16 +92,7 @@ export function ShiftLibraryLens({
       ) : null}
 
       {lens === "genre" ? (
-        <div className="shift-lib-shelf-stack">
-          {genreSections.map(section => (
-            <ShiftLibraryShelf
-              key={section.id}
-              title={section.title}
-              games={section.games}
-              onSelect={onSelect}
-            />
-          ))}
-        </div>
+        <ShiftLibraryShelfStack sections={genreSections} onSelect={onSelect} />
       ) : flat.length > 0 ? (
         <ShiftLibraryGridView games={flat} onSelect={onSelect} />
       ) : (

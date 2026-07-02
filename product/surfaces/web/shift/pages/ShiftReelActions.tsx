@@ -7,17 +7,18 @@
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
 
 export interface ShiftReelActionsProps {
-  readonly onSpin: () => void
+  /** Fling the wheel to a fresh game (random-ish jump). */
+  readonly onFling: () => void
   readonly onPlay: () => void
 }
 
-export function ShiftReelActions({ onSpin, onPlay }: ShiftReelActionsProps) {
+export function ShiftReelActions({ onFling, onPlay }: ShiftReelActionsProps) {
   return (
     <div
       className="shift-lib-reel-actions"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.reelActions)}
     >
-      <button type="button" className="shift-lib-reel-spin" onClick={onSpin}>
+      <button type="button" className="shift-lib-reel-spin" onClick={onFling}>
         🎰 Spin
       </button>
       <button type="button" className="shift-lib-reel-play" onClick={onPlay}>

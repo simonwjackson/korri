@@ -98,6 +98,11 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "organism",
     name: "Library Shelf",
   },
+  libraryShelfStack: {
+    id: "shift.library-shelf-stack",
+    layer: "organism",
+    name: "Library Shelf Stack",
+  },
   // Reel internals.
   reelCover: {
     id: "shift.reel-cover",

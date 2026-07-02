@@ -16,7 +16,7 @@ export default {
       <ShiftReelStage
         games={SHIFT_LIBRARY_GAMES}
         center={0}
-        onSpin={() => undefined}
+        onSpinBy={() => undefined}
       />
     </ShiftPartFrame>
   ),

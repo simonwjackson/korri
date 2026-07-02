@@ -15,8 +15,11 @@ export interface ShiftDeckBleedProps {
 }
 
 export function ShiftDeckBleed({ artUrl, gameId }: ShiftDeckBleedProps) {
+  // The bleed and scrim are absolute-positioned direct children of the deck's
+  // flex column, so they must stay SIBLINGS (no wrapper) or an in-flow wrapper
+  // adds a stray flex gap. The design-part tag rides the bleed node itself.
   return (
-    <div {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.deckBleed)}>
+    <>
       <AnimatePresence>
         <motion.div
           key={`bleed:${gameId}`}
@@ -26,9 +29,10 @@ export function ShiftDeckBleed({ artUrl, gameId }: ShiftDeckBleedProps) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5 }}
+          {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.deckBleed)}
         />
       </AnimatePresence>
       <div className="shift-lib-deck-scrim" />
-    </div>
+    </>
   )
 }

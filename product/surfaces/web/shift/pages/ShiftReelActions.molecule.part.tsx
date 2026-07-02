@@ -11,7 +11,7 @@ export default {
   note: "Reel",
   render: () => (
     <ShiftPartFrame height={100}>
-      <ShiftReelActions onSpin={() => undefined} onPlay={() => undefined} />
+      <ShiftReelActions onFling={() => undefined} onPlay={() => undefined} />
     </ShiftPartFrame>
   ),
 }

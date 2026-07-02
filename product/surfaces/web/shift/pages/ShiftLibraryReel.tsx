@@ -59,12 +59,12 @@ export function ShiftLibraryReel({
       <ShiftReelStage
         games={games}
         center={center}
-        onSpin={spin}
+        onSpinBy={spin}
         onSelect={onSelect}
       />
       <ShiftReelHero title={centerGame.title} genre={centerGame.genre} />
       <ShiftReelActions
-        onSpin={fling}
+        onFling={fling}
         onPlay={() => onSelect?.(centerGame.id)}
       />
     </div>

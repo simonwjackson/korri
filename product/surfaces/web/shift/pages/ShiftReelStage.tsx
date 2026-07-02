@@ -15,7 +15,7 @@ export interface ShiftReelStageProps {
   readonly games: readonly ShiftLibraryGame[]
   readonly center: number
   /** Spin the wheel by a signed number of notches. */
-  readonly onSpin: (delta: number) => void
+  readonly onSpinBy: (delta: number) => void
   readonly onSelect?: (id: string) => void
   readonly radius?: number
 }
@@ -23,7 +23,7 @@ export interface ShiftReelStageProps {
 export function ShiftReelStage({
   games,
   center,
-  onSpin,
+  onSpinBy,
   onSelect,
   radius = 3,
 }: ShiftReelStageProps) {
@@ -44,7 +44,9 @@ export function ShiftReelStage({
             game={game}
             offset={offset}
             isCenter={isCenter}
-            onActivate={() => (isCenter ? onSelect?.(game.id) : onSpin(offset))}
+            onActivate={() =>
+              isCenter ? onSelect?.(game.id) : onSpinBy(offset)
+            }
           />
         )
       })}

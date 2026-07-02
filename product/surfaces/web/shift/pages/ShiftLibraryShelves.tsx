@@ -16,7 +16,7 @@
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { ShiftLibraryEmpty } from "./ShiftLibraryEmpty"
 import { ShiftLibraryHeader } from "./ShiftLibraryHeader"
-import { ShiftLibraryShelf } from "./ShiftLibraryShelf"
+import { ShiftLibraryShelfStack } from "./ShiftLibraryShelfStack"
 import type { ShiftLibrarySection } from "./shift-library-sections"
 
 export interface ShiftLibraryShelvesProps {
@@ -40,16 +40,7 @@ export function ShiftLibraryShelves({
     <div data-shift-library className="shift-lib shift-lib-shelves intrinsic">
       <ShiftLibraryHeader title={title} />
       {sections.length > 0 ? (
-        <div className="shift-lib-shelf-stack">
-          {sections.map(section => (
-            <ShiftLibraryShelf
-              key={section.id}
-              title={section.title}
-              games={section.games}
-              onSelect={onSelect}
-            />
-          ))}
-        </div>
+        <ShiftLibraryShelfStack sections={sections} onSelect={onSelect} />
       ) : (
         <ShiftLibraryEmpty />
       )}
