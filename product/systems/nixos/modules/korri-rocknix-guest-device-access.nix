@@ -126,7 +126,14 @@ let
     SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess", RUN+="${pkgs.acl}/bin/setfacl -m u:${cfg.runtimeUser}:rw /dev/input/%k"
   '';
 
-  generatedUdevRules = drmSeatRule + inputUdevAclRule;
+  videoUdevAclRule = optionalString cfg.enableVideoUdevAcl ''
+    # SM8550 V4L2 codec nodes are host-bound into the guest. Guest and host
+    # numeric device groups can differ, so restate the semantic video group and
+    # grant the runtime user direct access when video nodes are created late.
+    SUBSYSTEM=="video4linux", KERNEL=="video[0-9]*", GROUP="video", MODE="0660", TAG+="uaccess", RUN+="${pkgs.acl}/bin/setfacl -m u:${cfg.runtimeUser}:rw /dev/%k"
+  '';
+
+  generatedUdevRules = drmSeatRule + inputUdevAclRule + videoUdevAclRule;
 in
 {
   key = "korri-rocknix-guest-device-access";
@@ -203,6 +210,12 @@ in
       type = types.bool;
       default = false;
       description = "Emit a udev rule that grants the runtime user access to late-created input event nodes.";
+    };
+
+    enableVideoUdevAcl = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Emit a udev rule that grants the runtime user access to late-created V4L2 video nodes.";
     };
 
     enableBacklightRepair = mkOption {

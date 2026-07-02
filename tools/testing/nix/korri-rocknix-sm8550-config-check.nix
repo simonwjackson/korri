@@ -310,6 +310,7 @@ let
             "drm"
             "input"
             "sound"
+            "video4linux"
           ]
         &&
           (rocknixGuestDeviceAccess.aclNodeGlobs or [ ]) == [
@@ -317,6 +318,7 @@ let
             "/dev/dri/renderD*"
             "/dev/input/event*"
             "/dev/snd/*"
+            "/dev/video*"
             "/dev/tty0"
             "/dev/tty1"
           ]
