@@ -8,6 +8,7 @@
  * same way it drives the cinematic rail. The grid and shelf scopes size it via
  * CSS; the tile itself only declares its portrait aspect.
  */
+import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
 import type { ShiftLibraryGame } from "./shift-library-game"
 
 export interface ShiftLibraryTileProps {
@@ -28,6 +29,7 @@ export function ShiftLibraryTile({
       type="button"
       className="shift-lib-tile"
       aria-label={game.title}
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.libraryTile, game.id)}
       data-favorite={game.favorite || undefined}
       onFocus={() => onFocus?.(game.id)}
       onClick={() => onSelect?.(game.id)}

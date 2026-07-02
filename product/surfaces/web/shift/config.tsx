@@ -216,7 +216,7 @@ const SHIFT_DETAIL_GAMES: readonly ShiftGameDetailView[] = DEV_GAMES.map(
   }),
 )
 
-const SHIFT_LIBRARY_GAMES: readonly ShiftLibraryGame[] = DEV_GAMES.map(
+export const SHIFT_LIBRARY_GAMES: readonly ShiftLibraryGame[] = DEV_GAMES.map(
   ({ media, userData }) => ({
     id: media.id,
     title: media.title,
@@ -233,7 +233,8 @@ const SHIFT_LIBRARY_GAMES: readonly ShiftLibraryGame[] = DEV_GAMES.map(
   }),
 )
 
-const SHIFT_LIBRARY_SECTIONS = buildShiftLibrarySections(SHIFT_LIBRARY_GAMES)
+export const SHIFT_LIBRARY_SECTIONS =
+  buildShiftLibrarySections(SHIFT_LIBRARY_GAMES)
 
 const SHIFT_SCREENS: readonly Screen[] = [
   {

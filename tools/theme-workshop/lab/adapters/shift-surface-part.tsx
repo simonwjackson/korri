@@ -12,6 +12,14 @@ import {
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
+import { ShiftLibraryDeck } from "@product/surfaces/web/shift/pages/ShiftLibraryDeck"
+import { ShiftLibraryFilterBar } from "@product/surfaces/web/shift/pages/ShiftLibraryFilterBar"
+import { ShiftLibraryGrid } from "@product/surfaces/web/shift/pages/ShiftLibraryGrid"
+import { ShiftLibraryLens } from "@product/surfaces/web/shift/pages/ShiftLibraryLens"
+import { ShiftLibraryReel } from "@product/surfaces/web/shift/pages/ShiftLibraryReel"
+import { ShiftLibraryShelves } from "@product/surfaces/web/shift/pages/ShiftLibraryShelves"
+import type { ShiftLibraryGame } from "@product/surfaces/web/shift/pages/shift-library-game"
+import { buildShiftLibrarySections } from "@product/surfaces/web/shift/pages/shift-library-sections"
 import {
   foregroundStateFromAtom,
   ShiftHomeStateView,
@@ -49,6 +57,7 @@ import type { LabInputControl, LabInputValue } from "../model/lab-source-state"
 import {
   shiftCatalogLayerForBinding,
   shiftEntriesForBinding,
+  shiftLibraryGamesForBinding,
 } from "../seed/shift-seed"
 import type { LabSurfacePartMountSpec } from "../surface-registry"
 
@@ -193,6 +202,25 @@ function ShiftStatusBarFromEdges() {
   )
 }
 
+/**
+ * The Library page variants keyed by design-part name: each renders the real
+ * full-screen composition from the chosen fixture library through the real
+ * `games` component input (the variants' data edge — they are prop-driven by
+ * design; the composition root supplies the projection).
+ */
+const SHIFT_LIBRARY_PAGE_RENDERERS: Readonly<
+  Record<string, (games: readonly ShiftLibraryGame[]) => ReactNode>
+> = {
+  "Library — Grid": games => <ShiftLibraryGrid games={games} />,
+  "Library — Shelves": games => (
+    <ShiftLibraryShelves sections={buildShiftLibrarySections(games)} />
+  ),
+  "Library — Lens": games => <ShiftLibraryLens games={games} />,
+  "Library — Filter Bar": games => <ShiftLibraryFilterBar games={games} />,
+  "Library — Deck": games => <ShiftLibraryDeck games={games} />,
+  "Library — Reel": games => <ShiftLibraryReel games={games} />,
+}
+
 export function renderShiftSurfacePart(
   story: Story,
   binding: {
@@ -200,6 +228,18 @@ export function renderShiftSurfacePart(
     readonly inputValues: Readonly<Record<string, LabInputValue>>
   },
 ): ReactNode {
+  const libraryRenderer =
+    story.layer === "page"
+      ? SHIFT_LIBRARY_PAGE_RENDERERS[story.name]
+      : undefined
+  if (libraryRenderer) {
+    return libraryRenderer(
+      story.state === "Empty"
+        ? []
+        : shiftLibraryGamesForBinding(binding.sourceId),
+    )
+  }
+
   if (!isShiftHomeStory(story)) return story.render()
 
   const spec = shiftSurfacePartMount(story, binding)

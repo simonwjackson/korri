@@ -42,6 +42,41 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "molecule",
     name: "Detail Hints",
   },
+  libraryTile: {
+    id: "shift.library-tile",
+    layer: "molecule",
+    name: "Library Tile",
+  },
+  libraryGrid: {
+    id: "shift.library-grid",
+    layer: "page",
+    name: "Library — Grid",
+  },
+  libraryShelves: {
+    id: "shift.library-shelves",
+    layer: "page",
+    name: "Library — Shelves",
+  },
+  libraryLens: {
+    id: "shift.library-lens",
+    layer: "page",
+    name: "Library — Lens",
+  },
+  libraryFilterBar: {
+    id: "shift.library-filterbar",
+    layer: "page",
+    name: "Library — Filter Bar",
+  },
+  libraryDeck: {
+    id: "shift.library-deck",
+    layer: "page",
+    name: "Library — Deck",
+  },
+  libraryReel: {
+    id: "shift.library-reel",
+    layer: "page",
+    name: "Library — Reel",
+  },
 } as const satisfies Record<string, ShiftDesignPart>
 
 export function shiftDesignPartAttrs(

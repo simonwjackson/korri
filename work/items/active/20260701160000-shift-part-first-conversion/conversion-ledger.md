@@ -17,7 +17,7 @@ composing part's state family or bridge) · `to-do`.
 | Home (`routes/ShiftHomeRoute` → `pages/ShiftCinematicHome`) | page | Data axis, Foreground axis, clock input, battery + network events | done (live) | `ShiftHome.page.part.tsx` |
 | Game Detail (`routes/ShiftGameDetailRoute`) | page | action variant input | done (static) — live-mount spec pending (U7) | `ShiftGameDetail.page.part.tsx` |
 | Companion (`routes/ShiftCompanionRoute`) | page | dual-screen session | to-do (U7 decision: part vs device-only screen) | — |
-| Library screens (grid/shelves/lens/filterbar/deck/reel) | page (bridge) | catalog Data | covered — coarse `ShiftScreens` bridge; atomic decomposition is U6 | `ShiftScreens.page.part.tsx` |
+| Library screens (grid/shelves/lens/filterbar/deck/reel) | page | `games` component input (real composition-root projection) | done — dedicated state families replaced the `ShiftScreens` bridge | `pages/ShiftLibrary.page.part.tsx` |
 
 ## Home cinematic family
 
@@ -57,15 +57,24 @@ composing part's state family or bridge) · `to-do`.
 
 ## Library family (U6)
 
+The variants are competing full-screen design explorations (a page-level
+control-model decision is still open), so each converts as a PAGE state
+family, not organisms of one unified Library page. Their data edge is the
+real `games` component input, fed by the composition-root projection
+(`shiftLibraryGameFromCatalogEntry` / config's dev projection); placed parts
+swap fixture libraries at that edge via the source binding. Interaction state
+(filters, lens, sort, deck/reel index) stays local `useState` by design —
+recorded here, revisit when one control model is committed as the route.
+
 | Component | Layer | Real edges | Status | Part file |
 |---|---|---|---|---|
-| `pages/ShiftLibraryTile` | atom | no device edge (game fixture props) | to-do (U6) | — |
-| `pages/ShiftLibraryFilterBar` | molecule | query/filter (local `useState` today; lift decision in U6) | to-do (U6) | — |
-| `pages/ShiftLibraryDeck` | organism | catalog Data; deck index (local) | to-do (U6) | — |
-| `pages/ShiftLibraryGrid` | organism | catalog Data | to-do (U6) | — |
-| `pages/ShiftLibraryLens` | organism | catalog Data; lens/sort (local) | to-do (U6) | — |
-| `pages/ShiftLibraryReel` | organism | catalog Data; reel index (local) | to-do (U6) | — |
-| `pages/ShiftLibraryShelves` | organism | catalog Data | to-do (U6) | — |
+| `pages/ShiftLibraryTile` | molecule | `game` input; favourite state family | done (static) | `pages/ShiftLibraryTile.molecule.part.tsx` |
+| `pages/ShiftLibraryFilterBar` | page | `games` input; filters/sort local | done (static, Ready/Empty) | `pages/ShiftLibrary.page.part.tsx` |
+| `pages/ShiftLibraryDeck` | page | `games` input; deck index local | done (static, Ready/Empty) | `pages/ShiftLibrary.page.part.tsx` |
+| `pages/ShiftLibraryGrid` | page | `games` input | done (static, Ready/Empty) | `pages/ShiftLibrary.page.part.tsx` |
+| `pages/ShiftLibraryLens` | page | `games` input; lens/sort local | done (static, Ready/Empty) | `pages/ShiftLibrary.page.part.tsx` |
+| `pages/ShiftLibraryReel` | page | `games` input; reel index local | done (static, Ready/Empty) | `pages/ShiftLibrary.page.part.tsx` |
+| `pages/ShiftLibraryShelves` | page | `sections` input (built from games) | done (static, Ready/Empty) | `pages/ShiftLibrary.page.part.tsx` |
 
 ## Not parts (helpers / infrastructure)
 

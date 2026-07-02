@@ -316,6 +316,51 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
     expect(container.querySelector(".lucide-battery-low")).toBeNull()
   })
 
+  it("swaps a placed Library variant's data at the real games input", async () => {
+    const libraryGridStory: Story = {
+      id: "shift-library-grid-ready",
+      layer: "page",
+      name: "Library — Grid",
+      surface: true,
+      state: "Ready",
+      render: () => <div>Pre-baked library snapshot</div>,
+    }
+
+    render(
+      <div>
+        {renderShiftSurfacePart(libraryGridStory, {
+          sourceId: "cozy",
+          inputValues: {},
+        })}
+      </div>,
+    )
+
+    expect(screen.queryByText("Pre-baked library snapshot")).toBeNull()
+    expect(await screen.findByText("Aurora Drift")).toBeTruthy()
+  })
+
+  it("renders a Library variant's Empty state through the real component", () => {
+    const emptyStory: Story = {
+      id: "shift-library-grid-empty",
+      layer: "page",
+      name: "Library — Grid",
+      surface: true,
+      state: "Empty",
+      render: () => null,
+    }
+
+    const { container } = render(
+      <div>
+        {renderShiftSurfacePart(emptyStory, {
+          sourceId: "cozy",
+          inputValues: {},
+        })}
+      </div>,
+    )
+
+    expect(container.querySelector(".shift-lib-empty")).toBeTruthy()
+  })
+
   it("exposes battery-only events on the Battery atom and both on Status Bar", () => {
     expect(shiftSurfacePartEvents(batteryStory).map(event => event.id)).toEqual(
       ["battery"],

@@ -11,7 +11,12 @@ import {
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
+import { SHIFT_LIBRARY_GAMES } from "@product/surfaces/web/shift/config"
 import { DEV_GAME_MEDIA } from "@product/surfaces/web/shift/dev-game-media"
+import {
+  type ShiftLibraryGame,
+  shiftLibraryGameFromCatalogEntry,
+} from "@product/surfaces/web/shift/pages/shift-library-game"
 import {
   shiftCatalogFixtureEntries,
   shiftCatalogSourceLayers,
@@ -190,4 +195,18 @@ export function shiftEntriesForBinding(
   sourceId: string,
 ): readonly CatalogEntry[] {
   return SHIFT_FIXTURE_SETS[sourceId] ?? shiftCatalogFixtureEntries
+}
+
+/**
+ * The chosen fixture library projected into the flat library-tile shape via
+ * the real composition-root mapping. Dev keeps the full projection with
+ * synthesised user data (favourites, played times); alternate libraries map
+ * their catalog entries through `shiftLibraryGameFromCatalogEntry`.
+ */
+export function shiftLibraryGamesForBinding(
+  sourceId: string,
+): readonly ShiftLibraryGame[] {
+  const entries = SHIFT_FIXTURE_SETS[sourceId]
+  if (!entries || sourceId === "dev") return SHIFT_LIBRARY_GAMES
+  return entries.map(shiftLibraryGameFromCatalogEntry)
 }

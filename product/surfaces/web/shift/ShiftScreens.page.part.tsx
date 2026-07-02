@@ -8,17 +8,27 @@
  * every configured screen into a page-layer story so the same screens are
  * browsable in the parts view too.
  *
- * Home and Game Detail are excluded here because they have dedicated part files
- * (ShiftHome.page.part.tsx / ShiftGameDetail.page.part.tsx) that expose their
- * switchable state families; this bridge covers the single-state Library
- * variants only.
+ * Every screen with a dedicated part file is excluded here so the parts tree
+ * shows one entry per design part, not two. Today that covers all configured
+ * screens (Home / Game Detail state families, and the Library variants via
+ * ShiftLibrary.page.part.tsx); the bridge remains as the safety net for any
+ * future screen added to the config before its dedicated part exists.
  */
 import type { Story } from "@tools/theme-workshop"
 import { shiftConfig } from "./config"
 
 // Covered by dedicated stateful part files; keep them out of the bridge so the
 // parts tree shows one entry per screen, not two.
-const DEDICATED_STATE_PARTS = new Set(["home", "game-detail"])
+const DEDICATED_STATE_PARTS = new Set([
+  "home",
+  "game-detail",
+  "library-grid",
+  "library-shelves",
+  "library-lens",
+  "library-filterbar",
+  "library-deck",
+  "library-reel",
+])
 
 export const ShiftPageStories = shiftConfig.screens
   .filter(screen => !DEDICATED_STATE_PARTS.has(screen.id))
