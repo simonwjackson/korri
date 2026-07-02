@@ -24,6 +24,13 @@ export const SHIFT_DESIGN_PARTS = {
     name: "Status Bar",
   },
   battery: { id: "shift.battery", layer: "atom", name: "Battery" },
+  clock: { id: "shift.clock", layer: "atom", name: "Clock" },
+  avatar: { id: "shift.avatar", layer: "atom", name: "Avatar" },
+  networkIcon: {
+    id: "shift.network-icon",
+    layer: "atom",
+    name: "Network Icon",
+  },
   hero: { id: "shift.cine-hero", layer: "organism", name: "Hero" },
   legend: {
     id: "shift.cine-legend",
@@ -102,6 +109,31 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "atom",
     name: "Library Empty",
   },
+  libraryHeading: {
+    id: "shift.library-heading",
+    layer: "atom",
+    name: "Library Heading",
+  },
+  libraryCount: {
+    id: "shift.library-count",
+    layer: "atom",
+    name: "Library Count",
+  },
+  libraryShelfTitle: {
+    id: "shift.library-shelf-title",
+    layer: "atom",
+    name: "Library Shelf Title",
+  },
+  libraryTileBadge: {
+    id: "shift.library-tile-badge",
+    layer: "atom",
+    name: "Library Tile Badge",
+  },
+  libraryTileTitle: {
+    id: "shift.library-tile-title",
+    layer: "atom",
+    name: "Library Tile Title",
+  },
   libraryGridView: {
     id: "shift.library-grid-view",
     layer: "organism",
@@ -153,6 +185,19 @@ export const SHIFT_DESIGN_PARTS = {
     name: "Reel Actions",
   },
   // Deck internals.
+  deckTitle: { id: "shift.deck-title", layer: "atom", name: "Deck Title" },
+  deckTags: { id: "shift.deck-tags", layer: "atom", name: "Deck Tags" },
+  deckArrow: { id: "shift.deck-arrow", layer: "atom", name: "Deck Arrow" },
+  deckPlayButton: {
+    id: "shift.deck-play-button",
+    layer: "atom",
+    name: "Deck Play Button",
+  },
+  deckFavoriteButton: {
+    id: "shift.deck-favorite-button",
+    layer: "atom",
+    name: "Deck Favorite Button",
+  },
   deckBleed: {
     id: "shift.deck-bleed",
     layer: "molecule",
@@ -172,6 +217,12 @@ export const SHIFT_DESIGN_PARTS = {
   },
   // Lens internals.
   lensRow: { id: "shift.lens-row", layer: "molecule", name: "Lens Row" },
+  lensTab: { id: "shift.lens-tab", layer: "atom", name: "Lens Tab" },
+  lensSortOption: {
+    id: "shift.lens-sort-option",
+    layer: "atom",
+    name: "Lens Sort Option",
+  },
   lensSortButton: {
     id: "shift.lens-sort-button",
     layer: "atom",
@@ -195,6 +246,36 @@ export const SHIFT_DESIGN_PARTS = {
   },
   // Detail internals.
   detailArt: { id: "shift.detail-art", layer: "atom", name: "Detail Art" },
+  detailTitle: {
+    id: "shift.detail-title",
+    layer: "atom",
+    name: "Detail Title",
+  },
+  detailTags: {
+    id: "shift.detail-tags",
+    layer: "atom",
+    name: "Detail Tags",
+  },
+  detailSynopsis: {
+    id: "shift.detail-synopsis",
+    layer: "atom",
+    name: "Detail Synopsis",
+  },
+  detailButton: {
+    id: "shift.detail-button",
+    layer: "atom",
+    name: "Detail Button",
+  },
+  detailHint: {
+    id: "shift.detail-hint",
+    layer: "atom",
+    name: "Detail Hint",
+  },
+  detailFavoriteBadge: {
+    id: "shift.detail-favorite-badge",
+    layer: "atom",
+    name: "Detail Favorite Badge",
+  },
   detailStats: {
     id: "shift.detail-stats",
     layer: "molecule",

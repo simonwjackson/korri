@@ -5,6 +5,8 @@
  * bleed beneath the card.
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftDeckTags } from "./ShiftDeckTags"
+import { ShiftDeckTitle } from "./ShiftDeckTitle"
 
 export interface ShiftDeckHeroProps {
   readonly title: string
@@ -17,8 +19,8 @@ export function ShiftDeckHero({ title, tags }: ShiftDeckHeroProps) {
       className="shift-lib-deck-hero"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.deckHero)}
     >
-      <h1 className="shift-lib-deck-title">{title}</h1>
-      {tags ? <p className="shift-lib-deck-tags">{tags}</p> : null}
+      <ShiftDeckTitle title={title} />
+      {tags ? <ShiftDeckTags tags={tags} /> : null}
     </div>
   )
 }

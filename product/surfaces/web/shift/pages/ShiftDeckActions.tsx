@@ -5,6 +5,9 @@
  * toggle / next.
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftDeckArrow } from "./ShiftDeckArrow"
+import { ShiftDeckFavoriteButton } from "./ShiftDeckFavoriteButton"
+import { ShiftDeckPlayButton } from "./ShiftDeckPlayButton"
 
 export interface ShiftDeckActionsProps {
   readonly favored: boolean
@@ -26,33 +29,10 @@ export function ShiftDeckActions({
       className="shift-lib-deck-actions"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.deckActions)}
     >
-      <button
-        type="button"
-        className="shift-lib-deck-arrow"
-        aria-label="Previous game"
-        onClick={onPrev}
-      >
-        ‹
-      </button>
-      <button type="button" className="shift-lib-deck-play" onClick={onPlay}>
-        ▶ Play
-      </button>
-      <button
-        type="button"
-        className="shift-lib-deck-fav"
-        aria-pressed={favored}
-        onClick={onToggleFavorite}
-      >
-        {favored ? "★" : "☆"} Favorite
-      </button>
-      <button
-        type="button"
-        className="shift-lib-deck-arrow"
-        aria-label="Next game"
-        onClick={onNext}
-      >
-        ›
-      </button>
+      <ShiftDeckArrow glyph="‹" label="Previous game" onClick={onPrev} />
+      <ShiftDeckPlayButton onClick={onPlay} />
+      <ShiftDeckFavoriteButton favored={favored} onClick={onToggleFavorite} />
+      <ShiftDeckArrow glyph="›" label="Next game" onClick={onNext} />
     </div>
   )
 }
