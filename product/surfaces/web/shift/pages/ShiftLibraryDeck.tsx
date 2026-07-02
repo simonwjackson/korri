@@ -10,12 +10,15 @@
  * device-agnostic. Favourites are widget-local triage, seeded from the data.
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
-import { AnimatePresence, motion } from "framer-motion"
 import { useCallback, useMemo, useState } from "react"
+import { ShiftDeckActions } from "./ShiftDeckActions"
+import { ShiftDeckBleed } from "./ShiftDeckBleed"
+import { ShiftDeckCard } from "./ShiftDeckCard"
+import { ShiftDeckCounter } from "./ShiftDeckCounter"
+import { ShiftDeckHero } from "./ShiftDeckHero"
+import { ShiftLibraryEmpty } from "./ShiftLibraryEmpty"
 import { advanceDeck, deckFlickFromDirection } from "./shift-library-deck"
 import type { ShiftLibraryGame } from "./shift-library-game"
-
-const SPRING = { type: "spring", stiffness: 320, damping: 30 } as const
 
 export interface ShiftLibraryDeckProps {
   readonly games: readonly ShiftLibraryGame[]
@@ -75,7 +78,7 @@ export function ShiftLibraryDeck({
   if (!game) {
     return (
       <div data-shift-library className="shift-lib shift-lib-deck intrinsic">
-        <p className="shift-lib-empty">No games found.</p>
+        <ShiftLibraryEmpty />
       </div>
     )
   }
@@ -84,79 +87,17 @@ export function ShiftLibraryDeck({
 
   return (
     <div data-shift-library className="shift-lib shift-lib-deck intrinsic">
-      <AnimatePresence>
-        <motion.div
-          key={`bleed:${game.id}`}
-          className="shift-lib-deck-bleed"
-          style={{ backgroundImage: `url(${game.artUrl})` }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.5 }}
-        />
-      </AnimatePresence>
-      <div className="shift-lib-deck-scrim" />
-
-      <span className="shift-lib-deck-counter">
-        {index + 1} / {games.length}
-      </span>
-
-      <div className="shift-lib-deck-stage">
-        <AnimatePresence mode="popLayout">
-          <motion.div
-            key={game.id}
-            className="shift-lib-deck-card"
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            onDragEnd={(_event, info) => {
-              if (info.offset.x < -80) riffle("next")
-              else if (info.offset.x > 80) riffle("prev")
-              else if (info.offset.y < -80) play()
-            }}
-            initial={{ opacity: 0, scale: 0.9, y: 24 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: -24 }}
-            transition={SPRING}
-          >
-            <img src={game.artUrl} alt="" draggable={false} />
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      <div className="shift-lib-deck-hero">
-        <h1 className="shift-lib-deck-title">{game.title}</h1>
-        {tags ? <p className="shift-lib-deck-tags">{tags}</p> : null}
-      </div>
-
-      <div className="shift-lib-deck-actions">
-        <button
-          type="button"
-          className="shift-lib-deck-arrow"
-          aria-label="Previous game"
-          onClick={() => riffle("prev")}
-        >
-          ‹
-        </button>
-        <button type="button" className="shift-lib-deck-play" onClick={play}>
-          ▶ Play
-        </button>
-        <button
-          type="button"
-          className="shift-lib-deck-fav"
-          aria-pressed={favored}
-          onClick={toggleFavorite}
-        >
-          {favored ? "★" : "☆"} Favorite
-        </button>
-        <button
-          type="button"
-          className="shift-lib-deck-arrow"
-          aria-label="Next game"
-          onClick={() => riffle("next")}
-        >
-          ›
-        </button>
-      </div>
+      <ShiftDeckBleed artUrl={game.artUrl} gameId={game.id} />
+      <ShiftDeckCounter position={index + 1} total={games.length} />
+      <ShiftDeckCard game={game} onRiffle={riffle} onPlay={play} />
+      <ShiftDeckHero title={game.title} tags={tags} />
+      <ShiftDeckActions
+        favored={favored}
+        onPrev={() => riffle("prev")}
+        onNext={() => riffle("next")}
+        onPlay={play}
+        onToggleFavorite={toggleFavorite}
+      />
     </div>
   )
 }
