@@ -136,7 +136,7 @@ describe("createPluginRegistry", () => {
     expect(registry.discoveryProviders).toEqual([])
   })
 
-  it("collects discovery providers only from explicitly requested plugins", () => {
+  it("collects discovery providers from release-discovery requirements", () => {
     const discovery = releaseDiscoveryProvider({
       id: "@korri:runtime/test-files",
       title: "Test files",
@@ -158,22 +158,44 @@ describe("createPluginRegistry", () => {
       ],
     })
 
-    const autoEnabledRegistry = createPluginRegistry([runtime, game], {
+    const registry = createPluginRegistry([runtime, game], {
       enabledPluginIds: [game.id],
     })
 
-    expect(autoEnabledRegistry.enabledPluginIds.has(runtime.id)).toBe(true)
-    expect(autoEnabledRegistry.discoveryProviders).toEqual([])
+    expect(registry.enabledPluginIds.has(runtime.id)).toBe(true)
+    expect(registry.discoveryProviders.map(provider => provider.id)).toEqual([
+      "@korri:runtime/test-files",
+    ])
+  })
 
-    const explicitlyRequestedRegistry = createPluginRegistry([runtime, game], {
-      enabledPluginIds: [game.id, runtime.id],
+  it("does not collect discovery providers from non-discovery dependencies", () => {
+    const discovery = releaseDiscoveryProvider({
+      id: "@korri:runtime/test-files",
+      title: "Test files",
+      discover: () => [],
+    })
+    const runtime = plugin({
+      namespace: "@korri",
+      name: "runtime",
+      contributes: { discovery: [discovery] },
+    })
+    const game = plugin({
+      namespace: "@korri",
+      name: "game",
+      requires: [
+        {
+          capability: "libretro.app-host",
+          ref: { provider: runtime.id, id: "test-files" },
+        },
+      ],
     })
 
-    expect(
-      explicitlyRequestedRegistry.discoveryProviders.map(
-        provider => provider.id,
-      ),
-    ).toEqual(["@korri:runtime/test-files"])
+    const registry = createPluginRegistry([runtime, game], {
+      enabledPluginIds: [game.id],
+    })
+
+    expect(registry.enabledPluginIds.has(runtime.id)).toBe(true)
+    expect(registry.discoveryProviders).toEqual([])
   })
 
   it("enables explicit plugin requirements as dependency closure", () => {

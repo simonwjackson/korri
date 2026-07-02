@@ -78,16 +78,17 @@ export function createPluginRegistry(
     byId.set(candidate.id, candidate)
   }
 
-  const requestedPluginIds = new Set(options.enabledPluginIds ?? [])
-  const enabledPluginIds = expandRequiredPluginIds(
+  const expansion = expandRequiredPluginIds(
     options.enabledPluginIds ?? [],
     byId,
   )
+  const enabledPluginIds = expansion.enabled
+  const discoveryPluginIds = expansion.discovery
   const enabledPlugins = plugins.filter(candidate =>
     enabledPluginIds.has(candidate.id),
   )
   const discoveryPlugins = enabledPlugins.filter(candidate =>
-    requestedPluginIds.has(candidate.id),
+    discoveryPluginIds.has(candidate.id),
   )
 
   return {
@@ -148,8 +149,12 @@ export function executableResources(
 function expandRequiredPluginIds(
   requestedPluginIds: readonly PluginId[],
   byId: ReadonlyMap<PluginId, KorriPlugin>,
-): ReadonlySet<PluginId> {
+): {
+  readonly enabled: ReadonlySet<PluginId>
+  readonly discovery: ReadonlySet<PluginId>
+} {
   const enabled = new Set<PluginId>(requestedPluginIds)
+  const discovery = new Set<PluginId>(requestedPluginIds)
   const pending = [...requestedPluginIds]
 
   while (pending.length > 0) {
@@ -160,11 +165,13 @@ function expandRequiredPluginIds(
 
     for (const requirement of plugin.requires ?? []) {
       const requiredPluginId = requirement.ref?.provider
-      if (
-        requirement.autoEnable === false ||
-        requiredPluginId === undefined ||
-        enabled.has(requiredPluginId)
-      ) {
+      if (requirement.autoEnable === false || requiredPluginId === undefined) {
+        continue
+      }
+      if (requirement.capability === "release.discovery") {
+        discovery.add(requiredPluginId)
+      }
+      if (enabled.has(requiredPluginId)) {
         continue
       }
       enabled.add(requiredPluginId)
@@ -172,7 +179,7 @@ function expandRequiredPluginIds(
     }
   }
 
-  return enabled
+  return { enabled, discovery }
 }
 
 export function parseEnabledPluginIds(

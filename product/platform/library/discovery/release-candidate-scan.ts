@@ -746,12 +746,23 @@ async function collectProviderCandidates(
     }
 
     for (const observation of observations) {
-      const candidate = candidateFromObservation(
-        provider.id,
-        observation,
-        descriptorByPath,
-        report,
-      )
+      let candidate: ProviderCandidate | undefined
+      try {
+        candidate = candidateFromObservation(
+          provider.id,
+          observation,
+          descriptorByPath,
+          report,
+        )
+      } catch (error) {
+        addSample(report, {
+          path: args.root,
+          tag: "Malformed",
+          detail: `${provider.id}:${errorMessage(error)}`,
+        })
+        bump(report.reasons, `provider:${provider.id}:malformed`)
+        continue
+      }
       if (candidate !== undefined) candidates.push(candidate)
     }
   }

@@ -187,6 +187,10 @@ export function classifyRomScanPath(
   const storagePath = storageRelativePath(path, options.root)
   const normalized = normalizePath(storagePath)
   const segments = normalized.toLowerCase().split("/").filter(Boolean)
+  const rootHint = options.root
+    ? basename(options.root).toLowerCase()
+    : undefined
+  const hintSegments = rootHint ? [rootHint, ...segments] : segments
   const extension = fileExtension(normalized)
   const compoundExtensionSystem = normalized.toLowerCase().endsWith(".p8.png")
     ? "pico8"
@@ -213,7 +217,7 @@ export function classifyRomScanPath(
     }
   }
 
-  const folder = nearestSystemFolder(segments)
+  const folder = nearestSystemFolder(hintSegments)
   const extensionSystem =
     compoundExtensionSystem ?? systemByExtension.get(extension)
   if (
@@ -386,7 +390,7 @@ function fileExtension(path: string): string {
 }
 
 function playableIdFromPath(path: string): string {
-  const withoutExtension = basename(path, extname(path))
+  const withoutExtension = basenameWithoutKnownCompoundExtension(path)
   return slugify(withoutExtension) || "game"
 }
 
@@ -396,12 +400,21 @@ function playableIdFromTitle(title: string): string | undefined {
 }
 
 function titleFromPath(path: string): string {
-  const withoutExtension = basename(path, extname(path))
+  const withoutExtension = basenameWithoutKnownCompoundExtension(path)
   const stripped = stripTitleDecorations(withoutExtension)
   return stripped
     .replace(/[._-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
+}
+
+function basenameWithoutKnownCompoundExtension(path: string): string {
+  const name = basename(path)
+  const lowerName = name.toLowerCase()
+  if (lowerName.endsWith(".p8.png")) {
+    return name.slice(0, -".p8.png".length)
+  }
+  return basename(path, extname(path))
 }
 
 function stripTitleDecorations(value: string): string {

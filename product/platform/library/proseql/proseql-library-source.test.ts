@@ -109,6 +109,89 @@ describe("createProseqlLibrarySource", () => {
     })
   })
 
+  it("resolves targets stored in plugin-contributed storage by registry id", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            yield* db.library.upsert({
+              where: { id: "plugin-storage-game" },
+              create: {
+                id: "plugin-storage-game",
+                releases: [
+                  {
+                    id: "default",
+                    system: "toy",
+                    target: {
+                      kind: "file",
+                      storage: "@korri:toy-host/state",
+                      path: "game.rom",
+                    },
+                    launch: { use: "@korri:toy-host/echo" },
+                  },
+                ],
+              },
+              update: {
+                id: "plugin-storage-game",
+                releases: [
+                  {
+                    id: "default",
+                    system: "toy",
+                    target: {
+                      kind: "file",
+                      storage: "@korri:toy-host/state",
+                      path: "game.rom",
+                    },
+                    launch: { use: "@korri:toy-host/echo" },
+                  },
+                ],
+              },
+            })
+            const registry = createPluginRegistry(
+              [
+                plugin({
+                  namespace: "@korri",
+                  name: "toy-host",
+                  contributes: {
+                    config: {
+                      storage: {
+                        state: { id: "state", root },
+                      },
+                      launchers: {
+                        echo: {
+                          id: "@korri:toy-host/echo",
+                          plugin: "@korri:process",
+                          command: "/bin/echo",
+                          args: ["{target}"],
+                        },
+                      },
+                      systems: {
+                        toy: { id: "toy" },
+                      },
+                    },
+                  },
+                }),
+              ],
+              { enabledPluginIds: ["@korri:toy-host"] },
+            )
+            const source = createProseqlLibrarySource(
+              createLibraryRepository(db, { pluginRegistry: registry }),
+            )
+            return yield* Effect.promise(() =>
+              source.resolveLaunchForGame("plugin-storage-game"),
+            )
+          }),
+        ),
+      )
+
+      expect(result.spec).toEqual({
+        command: "/bin/echo",
+        args: ["game.rom"],
+      })
+    })
+  })
+
   it("resolves GBA launches through RetroArch plugin-provided mGBA records", async () => {
     await withTempRoot(async root => {
       const result = await Effect.runPromise(

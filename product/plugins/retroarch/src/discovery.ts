@@ -144,9 +144,10 @@ export const retroarchDiscoveryProviders = retroarchRules.map(rule =>
   releaseDiscoveryProvider({
     id: `${KORRI_RETROARCH_PLUGIN_ID}/${rule.system}-files`,
     title: `RetroArch ${rule.system} files`,
-    discover: ({ files }) =>
+    discover: ({ files, rootPath }) =>
       files.flatMap(file => {
-        if (!ruleMatchesFile(rule, file.extension, file.relativePath)) return []
+        if (!ruleMatchesFile(rule, file.extension, file.relativePath, rootPath))
+          return []
         const extension = normalizedExtension(file.extension)
         return [
           {
@@ -172,13 +173,24 @@ function ruleMatchesFile(
   rule: RetroarchReleaseRule,
   extension: string,
   relativePath: string,
+  rootPath: string,
 ): boolean {
   const normalized = normalizedExtension(extension)
   if (!rule.extensions.has(normalized)) return false
   if (rule.folderHints === undefined) return true
-  return pathSegments(relativePath).some(segment =>
-    rule.folderHints?.has(segment),
-  )
+  const rootHint = pathSegments(rootPath).at(-1)
+  const segments = [
+    ...(rootHint !== undefined ? [rootHint] : []),
+    ...pathSegments(relativePath),
+  ]
+  if (
+    rule.system === KORRI_RETROARCH_GENESIS_SYSTEM_ID &&
+    normalized === "md" &&
+    !segments.some(segment => segment === "genesis" || segment === "megadrive")
+  ) {
+    return false
+  }
+  return segments.some(segment => rule.folderHints?.has(segment))
 }
 
 function normalizedExtension(extension: string): string {

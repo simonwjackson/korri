@@ -16,7 +16,10 @@ import { openKorriConfigGraph } from "@platform/library/proseql/config-graph-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { releaseDiscoveryProvider } from "@platform/plugin/discovery"
 import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
-import { retroarchReadableLaunchIntegration } from "@product/plugins/retroarch"
+import {
+  retroarchDiscoveryProviders,
+  retroarchReadableLaunchIntegration,
+} from "@product/plugins/retroarch"
 import { Effect } from "effect"
 import { parse } from "yaml"
 import {
@@ -275,6 +278,28 @@ describe("createRomLibraryCandidates", () => {
     )
   })
 
+  it("strips compound PICO-8 PNG cart extensions from ids and titles", () => {
+    const candidates = createRomLibraryCandidatesFromClassifications(
+      [
+        {
+          _tag: "Candidate" as const,
+          path: "pico8/Celeste.p8.png",
+          system: "pico8",
+          confidence: "high" as const,
+          app: "@korri:retroarch/retroarch",
+          runtime: "@korri:pico8/fake08",
+        },
+      ],
+      { storage: "roms", firstSeenAt: "2026-06-29T12:34:56.000Z" },
+    )
+
+    expect(candidates[0]).toMatchObject({
+      id: "celeste",
+      title: "Celeste",
+      record: { title: "Celeste" },
+    })
+  })
+
   it("keeps target paths relative and suffixes duplicate ids globally", () => {
     const candidates = createRomLibraryCandidatesFromClassifications(
       [
@@ -446,6 +471,81 @@ describe("scanReleaseCandidates", () => {
     expect(item.releases[0]?.launch).toEqual({
       use: "@korri:zquest-classic/zplayer",
     })
+  })
+
+  it("uses system-folder scan roots as provider hints", async () => {
+    await using fixture = await withTempRomRoot({
+      "psp/LocoRoco.iso": "",
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: retroarchDiscoveryProviders,
+      root: join(fixture.root, "psp"),
+      storage: "roms",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    const parsed = parse(result.yaml) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(Object.keys(parsed.library)).toEqual(["locoroco"])
+    expect(
+      decodeLibraryItemPayload(parsed.library.locoroco).releases[0],
+    ).toMatchObject({
+      system: "psp",
+      launch: {
+        use: "@korri:retroarch/retroarch",
+        runtime: "@korri:retroarch/ppsspp",
+      },
+    })
+  })
+
+  it("still discovers non-Markdown Mega Drive files under md folders", async () => {
+    await using fixture = await withTempRomRoot({
+      "md/Sonic.bin": "rom",
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: retroarchDiscoveryProviders,
+      root: fixture.root,
+      storage: "roms",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    const parsed = parse(result.yaml) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(Object.keys(parsed.library)).toEqual(["sonic"])
+    expect(
+      decodeLibraryItemPayload(parsed.library.sonic).releases[0],
+    ).toMatchObject({
+      system: "genesis",
+      launch: {
+        use: "@korri:retroarch/retroarch",
+        runtime: "@korri:retroarch/genesis-plus-gx",
+      },
+    })
+  })
+
+  it("does not turn Markdown under md folders into Genesis candidates", async () => {
+    await using fixture = await withTempRomRoot({
+      "md/README.md": "notes",
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: retroarchDiscoveryProviders,
+      root: fixture.root,
+      storage: "roms",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    const parsed = parse(result.yaml) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(parsed.library).toEqual({})
   })
 
   it("renders provider-ref observations as launchable provider targets", async () => {
@@ -755,6 +855,49 @@ describe("scanReleaseCandidates", () => {
       tag: "Malformed",
       detail: "@korri:test/malformed-gba-files:missing-release-field",
     })
+  })
+
+  it("reports structurally malformed provider observations without failing the scan", async () => {
+    await using fixture = await withTempRomRoot({
+      "Metroid Fusion.gba": "",
+    })
+    const malformedProvider = releaseDiscoveryProvider({
+      id: "@korri:test/structurally-malformed-gba-files",
+      title: "Structurally malformed GBA files",
+      discover: () =>
+        [
+          {
+            kind: "file-release",
+            confidence: "high",
+          },
+        ] as never,
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: [malformedProvider],
+      root: fixture.root,
+      storage: "roms",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.report).toMatchObject({
+      files: 1,
+      candidates: 0,
+      unclaimed: 1,
+    })
+    expect(result.report.reasons).toMatchObject({
+      "provider:@korri:test/structurally-malformed-gba-files:malformed": 1,
+    })
+    expect(result.report.samples).toContainEqual(
+      expect.objectContaining({
+        path: fixture.root,
+        tag: "Malformed",
+        detail: expect.stringContaining(
+          "@korri:test/structurally-malformed-gba-files:",
+        ),
+      }),
+    )
   })
 
   it("renders deterministic YAML for repeated scans with different file creation order", async () => {

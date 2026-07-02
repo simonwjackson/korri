@@ -36,7 +36,7 @@ const baseFile = {
   extension: ".gba",
 }
 
-async function discover(file: typeof baseFile) {
+async function discover(file: typeof baseFile, rootPath = "/media/sdcard") {
   return (
     await Promise.all(
       retroarchDiscoveryProviders.map(provider =>
@@ -44,7 +44,7 @@ async function discover(file: typeof baseFile) {
           provider.discover({
             pluginId: "@korri:retroarch",
             storageId: "sdcard",
-            rootPath: "/media/sdcard",
+            rootPath,
             files: [file],
           }),
         ),
@@ -159,6 +159,75 @@ describe("retroarchDiscoveryProviders", () => {
       source: file,
       release: { id: system, system, app: KORRI_RETROARCH_APP_ID, runtime },
     })
+  })
+
+  it("uses the scanned root folder as a system hint", async () => {
+    const file = {
+      ...baseFile,
+      absolutePath: "/media/sdcard/psp/LocoRoco.iso",
+      relativePath: "LocoRoco.iso",
+      name: "LocoRoco.iso",
+      extension: ".iso",
+    }
+
+    const observations = await discover(file, "/media/sdcard/psp")
+
+    expect(observations).toHaveLength(1)
+    expect(observations[0]).toMatchObject({
+      release: {
+        id: KORRI_RETROARCH_PSP_SYSTEM_ID,
+        system: KORRI_RETROARCH_PSP_SYSTEM_ID,
+        runtime: KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
+      },
+    })
+  })
+
+  it("claims non-Markdown Mega Drive files under md folders", async () => {
+    const file = {
+      ...baseFile,
+      absolutePath: "/media/sdcard/md/Sonic.bin",
+      relativePath: "md/Sonic.bin",
+      name: "Sonic.bin",
+      extension: ".bin",
+    }
+
+    const observations = await discover(file)
+
+    expect(observations).toHaveLength(1)
+    expect(observations[0]).toMatchObject({
+      release: {
+        id: KORRI_RETROARCH_GENESIS_SYSTEM_ID,
+        system: KORRI_RETROARCH_GENESIS_SYSTEM_ID,
+        runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+      },
+    })
+  })
+
+  it("does not use parent directories as system root hints", async () => {
+    const observations = await discover(
+      {
+        ...baseFile,
+        absolutePath: "/media/md/roms/Sonic.bin",
+        relativePath: "Sonic.bin",
+        name: "Sonic.bin",
+        extension: ".bin",
+      },
+      "/media/md/roms",
+    )
+
+    expect(observations).toEqual([])
+  })
+
+  it("does not treat md folders as Mega Drive hints for Markdown", async () => {
+    const observations = await discover({
+      ...baseFile,
+      absolutePath: "/media/sdcard/md/README.md",
+      relativePath: "md/README.md",
+      name: "README.md",
+      extension: ".md",
+    })
+
+    expect(observations).toEqual([])
   })
 
   it("only claims ambiguous shared disc extensions with a matching folder hint", async () => {

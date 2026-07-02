@@ -1218,7 +1218,7 @@ function pluginReadableRecords(
       decodeProviderRecord,
     ),
     systems: decodePluginReadableMap(registry.systems, decodeSystemRecord),
-    storage: decodePluginReadableMap(registry.storage, decodeStorageRecord),
+    storage: decodePluginStorageMap(registry.storage),
     launchers: decodePluginReadableMap(registry.launchers, decodeAppRecord),
     runtimes: decodePluginReadableMap(registry.runtimes, decodeRuntimeRecord),
   }
@@ -1231,6 +1231,18 @@ function decodePluginReadableMap<T extends { readonly id: string }>(
   return Object.values(records).flatMap(record => {
     try {
       return [decode(record)]
+    } catch {
+      return []
+    }
+  })
+}
+
+function decodePluginStorageMap(
+  records: ConfigRecordMap,
+): readonly StorageRecord[] {
+  return Object.entries(records).flatMap(([id, record]) => {
+    try {
+      return [{ ...decodeStorageRecord(record), id }]
     } catch {
       return []
     }
