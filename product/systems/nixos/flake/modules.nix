@@ -62,6 +62,7 @@ rec {
       (import ../../../plugins/steam/nix/nixos-module.nix)
     ];
   };
+  korri-rpcs3 = import ../../../plugins/rpcs3/nix/nixos-module.nix;
   korri-login = import ../modules/korri-login.nix;
   korri-client = import ../modules/korri-client.nix { korri = self; };
   korri-web-surface-host = import ../modules/korri-web-surface-host.nix { korri = self; };
@@ -111,6 +112,7 @@ rec {
       korri
       korri-sessiond
       ../../../plugins/gamescope/nix/source-machine-module.nix
+      korri-rpcs3
       ../images/source-machine.nix
     ];
   };
