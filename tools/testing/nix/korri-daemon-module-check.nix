@@ -17,7 +17,7 @@ let
         fsType = "ext4";
       };
       system.stateVersion = "24.11";
-      networking.hostName = "daemon-test";
+      networking.hostName = lib.mkDefault "daemon-test";
     };
 
   evaluateWith =
@@ -32,6 +32,8 @@ let
     }).config;
 
   failedAssertions = cfg: builtins.filter (a: !a.assertion) cfg.assertions;
+  failedAssertionMessages = cfg: map (a: a.message) (failedAssertions cfg);
+  hasFailure = cfg: expected: builtins.any (m: lib.hasInfix expected m) (failedAssertionMessages cfg);
   userUnit = cfg: cfg.systemd.user.services.korrid or { };
   systemUnit = cfg: cfg.systemd.services.korrid or { };
   scoutUnit = cfg: cfg.systemd.services.korri-scout-release-scan or { };
@@ -109,6 +111,29 @@ let
     services.korri.scout.releaseScan = {
       enable = true;
       configPath = "/tmp/korri.yaml";
+    };
+  };
+  shortHttpHostWithoutTailnet = evaluateWith {
+    networking.hostName = "aka";
+    services.korri.daemon = {
+      enable = true;
+      publicApiBaseUrl = "http://aka:3001";
+    };
+  };
+  shortHttpHostWithTailnet = evaluateWith {
+    networking.hostName = "aka";
+    services.korri.tailnet.enable = true;
+    services.korri.daemon = {
+      enable = true;
+      publicApiBaseUrl = "http://aka:3001";
+    };
+  };
+  mismatchedShortHttpHostWithTailnet = evaluateWith {
+    networking.hostName = "aka";
+    services.korri.tailnet.enable = true;
+    services.korri.daemon = {
+      enable = true;
+      publicApiBaseUrl = "http://zao:3001";
     };
   };
   withScoutEscapingLocalRoot = evaluateWith {
@@ -256,13 +281,25 @@ let
     (check "scout release scan waits for removable coldplug when enabled" (
       lib.elem "korri-removable-media-coldplug.service" ((scoutUnit withScoutRemovable).after or [ ])
       && lib.elem "korri-removable-media-coldplug.service" ((scoutUnit withScoutRemovable).wants or [ ])
-      && lib.any (cmd: lib.hasInfix "korri-scout-wait-for-removable-media" cmd) ((scoutUnit withScoutRemovable).serviceConfig.ExecStartPre or [ ])
+      && lib.any (cmd: lib.hasInfix "korri-scout-wait-for-removable-media" cmd) (
+        (scoutUnit withScoutRemovable).serviceConfig.ExecStartPre or [ ]
+      )
       && (scoutEnv withScoutRemovable).KORRI_CONFIG_ROOTS_DIR == "/run/korri/config-roots.d"
     ))
     (check "scout release scan config target assertions reject unsafe paths" (
       failedAssertions withScoutRelativeConfig != [ ]
       && failedAssertions withScoutOutsideLocalRoot != [ ]
       && failedAssertions withScoutEscapingLocalRoot != [ ]
+    ))
+    (check "plain http short hostname requires tailnet posture" (
+      hasFailure shortHttpHostWithoutTailnet "short hostnames over http require services.korri.tailnet.enable"
+    ))
+    (check "tailnet posture permits matching plain http short hostname" (
+      failedAssertions shortHttpHostWithTailnet == [ ]
+      && (env shortHttpHostWithTailnet).KORRI_PUBLIC_API_BASE_URL == "http://aka:3001"
+    ))
+    (check "tailnet short hostname must match server identity" (
+      hasFailure mismatchedShortHttpHostWithTailnet "short hostname must match the Korri server identity"
     ))
     (check "system-mode daemon owns config-root tmpfiles and hardening" (
       lib.elem "d /var/lib/korri/config 0700 korri korri -" systemMode.systemd.tmpfiles.rules

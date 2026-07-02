@@ -40,8 +40,7 @@ let
     };
     services.korri.daemon = {
       serverId = "aka";
-      publicApiBaseUrl = "http://aka.lan:3001";
-      firewallInterfaces = [ "tailscale0" ];
+      publicApiBaseUrl = "http://aka:3001";
     };
   };
 
@@ -69,6 +68,7 @@ let
   hasFailure = cfg: expected: builtins.any (m: lib.hasInfix expected m) (failedAssertionMessages cfg);
   daemonEnv = cfg.systemd.user.services.korrid.environment or { };
   sessiondEnv = cfg.systemd.user.services.korri-sessiond.environment or { };
+  tailnetFlags = cfg.services.tailscale.extraUpFlags or [ ];
   sunshineApps = cfg.services.sunshine.applications.apps or [ ];
   firstAppWrapper =
     if sunshineApps == [ ] then "" else builtins.readFile (builtins.elemAt sunshineApps 0).cmd;
@@ -96,7 +96,9 @@ let
       && daemonEnv.KORRI_SESSIOND_SOCKET == cfg.services.korri.sessiond.socketPath
       && sessiondEnv.KORRI_SESSIOND_SOCKET == cfg.services.korri.sessiond.socketPath
       && sessiondEnv.SWAYSOCK == "${cfg.services.korri.compositor.runtimeDir}/sway-ipc.sock"
-      && cfg.systemd.user.services."korri-compositor".environment.SWAYSOCK == "${cfg.services.korri.compositor.runtimeDir}/sway-ipc.sock"
+      &&
+        cfg.systemd.user.services."korri-compositor".environment.SWAYSOCK
+        == "${cfg.services.korri.compositor.runtimeDir}/sway-ipc.sock"
       && lib.hasInfix "KORRI_SESSIOND_SOCKET" firstAppWrapper
     ))
     (check "exported source-machine module rejects socket drift" (
@@ -110,6 +112,18 @@ let
       && cfg.services.korri.gameStream.enable
       && cfg.services.korri.input.provider.enable
       && cfg.services.korri.sessiond.role == "source-machine"
+    ))
+    (check "exported source-machine module enables Korri tailnet posture" (
+      cfg.services.korri.tailnet.enable
+      && cfg.services.tailscale.enable
+      && builtins.elem "--accept-dns=true" tailnetFlags
+      && builtins.elem "--hostname=aka" tailnetFlags
+      && (daemonEnv.KORRI_PUBLIC_API_BASE_URL or null) == "http://aka:3001"
+    ))
+    (check "exported source-machine module scopes daemon firewall to LAN and tailnet" (
+      cfg.networking.firewall.interfaces.tailscale0.allowedTCPPorts == [ cfg.services.korri.daemon.port ]
+      && cfg.networking.firewall.interfaces.lan0.allowedTCPPorts == [ cfg.services.korri.daemon.port ]
+      && !(builtins.elem "tailscale0" (cfg.networking.firewall.trustedInterfaces or [ ]))
     ))
     (check "exported source-machine module enables Gamescope plugin runtime path" (
       lib.hasInfix "@korri:gamescope" (daemonEnv.KORRI_ENABLED_PLUGINS or "")

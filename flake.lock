@@ -88,16 +88,16 @@
         "nixpkgs-sdl2-classic": "nixpkgs-sdl2-classic"
       },
       "locked": {
-        "lastModified": 1782578642,
-        "narHash": "sha256-ylSfhdb4RkJhoNiUPSzByRnQhWTvpGUre8t/5s5dGqg=",
+        "lastModified": 1782952374,
+        "narHash": "sha256-N1k55Oi5tFth+y8A5DfkoDp+HLDgD7loe1aeHMBg2kk=",
         "owner": "simonwjackson",
         "repo": "nix-on-rocks",
-        "rev": "38d662a585c81862c7f2e93024d78cf6c4bc9850",
+        "rev": "2506ff2a9ea4bba682797541f15bb36f0b00d155",
         "type": "github"
       },
       "original": {
         "owner": "simonwjackson",
-        "ref": "main",
+        "ref": "refactor/korri-owned-tailnet-policy",
         "repo": "nix-on-rocks",
         "type": "github"
       }

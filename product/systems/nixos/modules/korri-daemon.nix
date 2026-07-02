@@ -176,6 +176,14 @@ let
       (publicApiBaseUrlParts.query != null && publicApiBaseUrlParts.query != "")
       || (publicApiBaseUrlParts.fragment != null && publicApiBaseUrlParts.fragment != "")
     );
+  tailnetEnabled = config.services.korri.tailnet.enable or false;
+  publicApiBaseUrlIsShortHostname =
+    publicApiBaseUrlHost != null && builtins.match "^[a-z0-9][a-z0-9-]*$" publicApiBaseUrlHost != null;
+  publicApiBaseUrlMatchesServerIdentity =
+    publicApiBaseUrlHost == lib.toLower serverId
+    || publicApiBaseUrlHost == lib.toLower config.networking.hostName;
+  publicApiBaseUrlIsTailnetHttpHost =
+    tailnetEnabled && publicApiBaseUrlIsShortHostname && publicApiBaseUrlMatchesServerIdentity;
   publicApiBaseUrlIsPrivateHttpHost =
     if publicApiBaseUrlHost == null then
       false
@@ -405,7 +413,8 @@ in
         for production deployments that serve resolved game assets to remote
         clients. Plain http is accepted for loopback (`127.0.0.1`, `localhost`),
         RFC1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`),
-        link-local (`169.254.0.0/16`), and `.local`/`.lan` mDNS hostnames;
+        link-local (`169.254.0.0/16`), `.local`/`.lan` mDNS hostnames,
+        and matching short hostnames when `services.korri.tailnet.enable = true`;
         public hosts require https. Must not contain credentials, query, or
         fragment data.
       '';
@@ -838,10 +847,24 @@ in
           !hasPublicApiBaseUrl
           || publicApiBaseUrlParts == null
           || publicApiBaseUrlParts.scheme != "http"
-          || publicApiBaseUrlIsPrivateHttpHost;
+          || publicApiBaseUrlIsPrivateHttpHost
+          || publicApiBaseUrlIsTailnetHttpHost;
         message = ''
-          services.korri.daemon.publicApiBaseUrl must use https outside loopback or RFC1918 private networks
-          (got "${toString publicApiBaseUrlRaw}").
+          services.korri.daemon.publicApiBaseUrl must use https outside loopback, RFC1918 private networks, or a matching trusted tailnet short hostname
+          (got "${toString publicApiBaseUrlRaw}"). Plain http short hostnames over http require services.korri.tailnet.enable = true.
+        '';
+      }
+      {
+        assertion =
+          !hasPublicApiBaseUrl
+          || publicApiBaseUrlParts == null
+          || publicApiBaseUrlParts.scheme != "http"
+          || !tailnetEnabled
+          || !publicApiBaseUrlIsShortHostname
+          || publicApiBaseUrlMatchesServerIdentity;
+        message = ''
+          services.korri.daemon.publicApiBaseUrl short hostname must match the Korri server identity
+          (got "${toString publicApiBaseUrlRaw}", expected "${serverId}" or "${config.networking.hostName}").
         '';
       }
     ];
@@ -1055,14 +1078,16 @@ in
       after = [
         "korri-setup.service"
         "systemd-tmpfiles-setup.service"
-      ] ++ lib.optional removableMediaEnabled "korri-removable-media-coldplug.service";
+      ]
+      ++ lib.optional removableMediaEnabled "korri-removable-media-coldplug.service";
       wants = lib.optional removableMediaEnabled "korri-removable-media-coldplug.service";
       environment = scoutEnv;
       serviceConfig = {
         Type = "oneshot";
         ExecStartPre = [
           "${pkgs.coreutils}/bin/install -d -m 700 ${configLocalRoot}"
-        ] ++ lib.optional removableMediaEnabled (toString scoutColdplugSettleScript);
+        ]
+        ++ lib.optional removableMediaEnabled (toString scoutColdplugSettleScript);
         ExecStart = toString scoutReleaseScanScript;
         User = runtime.user;
         Group = runtime.group;

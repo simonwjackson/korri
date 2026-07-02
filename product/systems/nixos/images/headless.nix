@@ -26,12 +26,17 @@
 {
   services.korri.login.enable = lib.mkDefault true;
 
+  services.korri.tailnet.enable = lib.mkDefault true;
+
   services.korri.daemon = {
     enable = true;
     serviceMode = "user";
     host = lib.mkDefault "0.0.0.0";
     openFirewall = lib.mkDefault true;
-    firewallInterfaces = lib.mkDefault [ "lan0" ];
+    firewallInterfaces = lib.mkDefault [
+      "tailscale0"
+      "lan0"
+    ];
     # sourceOnly removed in federation v1 (R14 / zero-backwards-compat):
     # every korrid advertises a `caps: ["source"]` baseline by default,
     # so the previous headless-image opt-in is now the default behavior.

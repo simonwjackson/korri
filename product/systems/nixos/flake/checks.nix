@@ -77,6 +77,11 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     korriGameStreamModule = self.nixosModules.korri-game-stream;
   };
+  korri-tailnet-module = import ../../../../tools/testing/nix/korri-tailnet-module-check.nix {
+    inherit pkgs;
+    korriTailnetModule = self.nixosModules.korri-tailnet;
+    korriAggregateModule = self.nixosModules.korri;
+  };
   korri-sessiond-module = import ../../../../tools/testing/nix/korri-sessiond-module-check.nix {
     inherit pkgs;
     korriSessiondModule = self.nixosModules.korri-sessiond;

@@ -411,6 +411,25 @@ in
   ];
 
   services.inputplumber.package = lib.mkForce inputplumberPackage;
+
+  # Korri owns the product tailnet posture. The SM8550 ROCKNIX substrate
+  # currently lacks the MARK/netfilter compatibility modules Tailscale expects
+  # for standard firewall mode, so this adapter carries a temporary bridge:
+  # keep MagicDNS/product hostname behavior from services.korri.tailnet, but run
+  # Tailscale with netfilter management disabled until the substrate exposes
+  # xt_mark/xt_MARK/nft_compat/x_tables/iptable_filter/iptable_nat. While this
+  # bridge exists, daemon firewall openings stay interface-scoped and this
+  # adapter must not advertise subnet routes or exit-node service.
+  services.korri.tailnet.enable = lib.mkDefault true;
+  services.tailscale = {
+    extraUpFlags = [ "--netfilter-mode=off" ];
+    extraSetFlags = [ "--netfilter-mode=off" ];
+  };
+  systemd.services.tailscaled.serviceConfig.AmbientCapabilities = lib.mkAfter [
+    "CAP_NET_ADMIN"
+    "CAP_NET_RAW"
+  ];
+
   services.korri.rocknixGuestProfile = {
     enable = true;
     proofMarkerLabel = "korri-sm8550-kiosk-system";
@@ -714,8 +733,7 @@ in
   #     policy and intentionally not part of standard controller Home handling.
   services.korri.input.inputd.environment = {
     KORRI_INPUTD_KEY_F24_ACTION = "toggle-bottom-screen";
-    KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN =
-      "${korriBandaiBottomKeyboardToggle}/bin/korri-bandai-bottom-keyboard-toggle";
+    KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN = "${korriBandaiBottomKeyboardToggle}/bin/korri-bandai-bottom-keyboard-toggle";
     KORRI_INPUTD_POWER_SUSPEND = "${korriFakesuspendToggle}";
     KORRI_INPUTD_LID_CLOSED = "${korriFakesuspendToggle} suspend";
     KORRI_INPUTD_LID_OPENED = "${korriFakesuspendToggle} resume";

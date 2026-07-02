@@ -115,6 +115,10 @@ let
       inputplumberService = systemServices.inputplumber or { };
       inputplumberEnv = inputplumberService.environment or { };
       inputplumberPackage = cfg.services.inputplumber.package or { };
+      tailnetFlags = cfg.services.tailscale.extraUpFlags or [ ];
+      tailnetSetFlags = cfg.services.tailscale.extraSetFlags or [ ];
+      tailscaledUnit = systemServices.tailscaled or { };
+      tailscaledCapabilities = (tailscaledUnit.serviceConfig or { }).AmbientCapabilities or [ ];
       removableMountUnit = cfg.systemd.services."korri-removable-media-mount@" or { };
       removableUnmountUnit = cfg.systemd.services."korri-removable-media-unmount@" or { };
       removableColdplugUnit = cfg.systemd.services.korri-removable-media-coldplug or { };
@@ -218,6 +222,21 @@ let
         in
         lib.hasInfix "korri-platform-config-root" roots && lib.hasSuffix ":/var/lib/korri/config" roots
       ))
+      (check "${name}: SM8550 owns Korri tailnet posture with MagicDNS" (
+        cfg.services.korri.tailnet.enable
+        && cfg.services.tailscale.enable
+        && builtins.elem "--accept-dns=true" tailnetFlags
+        && builtins.elem "--netfilter-mode=off" tailnetFlags
+        && builtins.elem "--accept-dns=true" tailnetSetFlags
+        && !(builtins.elem "--accept-dns=false" tailnetSetFlags)
+      ))
+      (check "${name}: SM8550 tailnet bridge keeps Tailscale capabilities narrow" (
+        builtins.elem "CAP_NET_ADMIN" tailscaledCapabilities
+        && builtins.elem "CAP_NET_RAW" tailscaledCapabilities
+        && !(builtins.any (flag: lib.hasPrefix "--advertise-routes=" flag) tailnetFlags)
+        && !(builtins.any (flag: lib.hasPrefix "--advertise-exit-node" flag) tailnetFlags)
+        && !(builtins.elem "tailscale0" (cfg.networking.firewall.trustedInterfaces or [ ]))
+      ))
       (check "${name}: sessiond inherits the config-graph roots" (
         (sessiondEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
       ))
@@ -247,7 +266,9 @@ let
       (check "${name}: boot release scan waits for removable media coldplug" (
         builtins.elem "korri-removable-media-coldplug.service" (scoutReleaseScanUnit.after or [ ])
         && builtins.elem "korri-removable-media-coldplug.service" (scoutReleaseScanUnit.wants or [ ])
-        && builtins.any (cmd: lib.hasInfix "korri-scout-wait-for-removable-media" cmd) (scoutReleaseScanUnit.serviceConfig.ExecStartPre or [ ])
+        && builtins.any (cmd: lib.hasInfix "korri-scout-wait-for-removable-media" cmd) (
+          scoutReleaseScanUnit.serviceConfig.ExecStartPre or [ ]
+        )
       ))
       (check "${name}: boot release scan inherits trusted config roots and Nix find" (
         (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
@@ -279,7 +300,7 @@ let
         compositor.runtimeDir == "%t" && compositor.home == "/home/korri"
       ))
       (check "${name}: Bandai DSI panel keeps the known-good rotation" (
-        lib.hasInfix "output DSI-1 transform 270" compositor.sway.extraConfig
+        lib.hasInfix "output DSI-1 transform 90" compositor.sway.extraConfig
       ))
       (check "${name}: RockNIX guest device access module must be enabled" (
         (rocknixGuestDeviceAccess.enable or false) == true
@@ -358,9 +379,10 @@ let
         ))
         && (sessiondEnv.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=%t/bus"
       ))
-      (check "${name}: compositor uses wlroots direct session on host-bound DRM" (
-        (compositor.environment.WLR_SESSION or null) == "direct"
-        && (compositor.environment.LIBSEAT_BACKEND or null) == "builtin"
+      (check "${name}: compositor uses logind for host-bound DRM" (
+        compositor.seatBackend == "logind"
+        && !((compositor.environment or { }) ? WLR_SESSION)
+        && !((compositor.environment or { }) ? LIBSEAT_BACKEND)
       ))
       (check "${name}: compositor does not inherit child display env" (
         builtins.all (name: builtins.elem name (compositorUnit.serviceConfig.UnsetEnvironment or [ ])) [
