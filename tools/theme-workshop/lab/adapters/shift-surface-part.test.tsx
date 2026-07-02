@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { unknownDeviceState } from "@platform/device/device-facts"
+import { deviceStateAtom } from "@platform/react/device/device-atoms"
+import { ShiftPartSurface } from "@product/surfaces/web/shift/mount-shift-part"
 import {
   getShiftLiveLaunch,
   setShiftLiveLaunch,
 } from "@product/surfaces/web/shift/shift-live-coordinate"
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -11,7 +15,16 @@ import {
   waitFor,
 } from "@testing-library/react"
 import type { Story } from "../../types"
-import { renderShiftSurfacePart } from "./shift-surface-part"
+import {
+  clearLabSurfaceRegistries,
+  eachLabSurfaceRegistryForScope,
+} from "../model/lab-surface-registries"
+import { LabPartMount } from "../part-mount/LabPartMount"
+import { shiftSurfacePartEvents } from "./shift-edges"
+import {
+  renderShiftSurfacePart,
+  shiftSurfacePartMount,
+} from "./shift-surface-part"
 
 /**
  * Proves the Workshop's per-object source/state dropdowns swap real data: a
@@ -49,7 +62,27 @@ const statusBarStory: Story = {
   render: () => <div>Pre-baked status bar snapshot</div>,
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  clearLabSurfaceRegistries()
+})
+
+function mountSpec(
+  story: Story,
+  binding: Parameters<typeof shiftSurfacePartMount>[1],
+  scopeId = "object-part",
+) {
+  const spec = shiftSurfacePartMount(story, binding)
+  if (!spec) throw new Error(`Expected a live mount spec for ${story.name}`)
+  return render(
+    <LabPartMount
+      Root={ShiftPartSurface}
+      spec={spec}
+      bindingKey={JSON.stringify(binding)}
+      scopeId={scopeId}
+    />,
+  )
+}
 
 describe("renderShiftSurfacePart (Workshop edge render)", () => {
   it("renders the dev library at Ready", async () => {
@@ -176,60 +209,120 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
     })
   })
 
-  it("feeds Battery power into the real Battery atom instead of using the baked render", () => {
-    const { container } = render(
-      <div>
-        {renderShiftSurfacePart(batteryStory, {
-          sourceId: "dev",
-          inputValues: { power: { percent: 64, charging: true } },
-        })}
-      </div>,
-    )
+  it("drives the isolated Battery atom through the production derivation", () => {
+    const { container } = mountSpec(batteryStory, {
+      sourceId: "dev",
+      inputValues: { power: { percent: 64, charging: true } },
+    })
 
     expect(screen.queryByText("Pre-baked battery snapshot")).toBeNull()
     expect(container.querySelector(".lucide-battery-charging")).toBeTruthy()
   })
 
-  it("feeds Status Bar power through its real Battery child", () => {
-    const { container } = render(
-      <div>
-        {renderShiftSurfacePart(statusBarStory, {
-          sourceId: "dev",
-          inputValues: { power: { percent: 12, charging: false } },
-        })}
-      </div>,
-    )
+  it("hides the isolated Battery when device state is Unknown, like production", () => {
+    const { container } = mountSpec(batteryStory, {
+      sourceId: "dev",
+      inputValues: { power: { percent: 64, charging: false } },
+    })
+    expect(container.querySelector("[class*='lucide-battery']")).toBeTruthy()
+
+    act(() => {
+      eachLabSurfaceRegistryForScope("object-part", ({ registry }) =>
+        registry.set(deviceStateAtom, unknownDeviceState()),
+      )
+    })
+
+    expect(container.querySelector("[class*='lucide-battery']")).toBeNull()
+  })
+
+  it("does not present a Stale device state as a fresh battery", () => {
+    const { container } = mountSpec(batteryStory, {
+      sourceId: "dev",
+      inputValues: { power: { percent: 64, charging: false } },
+    })
+
+    act(() => {
+      eachLabSurfaceRegistryForScope("object-part", ({ registry }) =>
+        registry.set(deviceStateAtom, {
+          observedAt: "2026-07-01T00:00:00.000Z",
+          battery: {
+            _tag: "Stale",
+            lastKnown: {
+              _tag: "Ready",
+              percent: 64,
+              status: "Discharging",
+              charging: false,
+              supplies: [],
+              observedAt: "2026-07-01T00:00:00.000Z",
+            },
+            message: "battery read timed out",
+            observedAt: "2026-07-01T00:00:00.000Z",
+          },
+        }),
+      )
+    })
+
+    // Production hides a stale battery rather than presenting it as fresh.
+    expect(container.querySelector("[class*='lucide-battery']")).toBeNull()
+  })
+
+  it("drives Status Bar power through its real Battery child via device state", () => {
+    const { container } = mountSpec(statusBarStory, {
+      sourceId: "dev",
+      inputValues: { power: { percent: 12, charging: false } },
+    })
 
     expect(screen.queryByText("Pre-baked status bar snapshot")).toBeNull()
     expect(container.querySelector(".lucide-battery-low")).toBeTruthy()
   })
 
-  it("feeds Status Bar clock text through the real Status Bar molecule", () => {
-    render(
-      <div>
-        {renderShiftSurfacePart(statusBarStory, {
-          sourceId: "dev",
-          inputValues: { clock: "2026-06-30T23:08:00.000Z" },
-        })}
-      </div>,
-    )
+  it("drives Status Bar clock text through the real Status Bar molecule", () => {
+    mountSpec(statusBarStory, {
+      sourceId: "dev",
+      inputValues: { clock: "2026-06-30T23:08:00.000Z" },
+    })
 
     expect(screen.queryByText("Pre-baked status bar snapshot")).toBeNull()
     expect(screen.getByText("11:08 PM")).toBeTruthy()
   })
 
-  it("feeds Status Bar network status through the real Status Bar molecule", () => {
-    const { container } = render(
-      <div>
-        {renderShiftSurfacePart(statusBarStory, {
-          sourceId: "dev",
-          inputValues: { network: { _tag: "Disconnected" } },
-        })}
-      </div>,
-    )
+  it("drives Status Bar network status through the real Status Bar molecule", () => {
+    const { container } = mountSpec(statusBarStory, {
+      sourceId: "dev",
+      inputValues: { network: { _tag: "Disconnected" } },
+    })
 
     expect(screen.queryByText("Pre-baked status bar snapshot")).toBeNull()
     expect(container.querySelector(".lucide-wifi-off")).toBeTruthy()
+  })
+
+  it("canonicalizes a malformed battery event payload instead of crashing", () => {
+    const { container } = mountSpec(batteryStory, {
+      sourceId: "dev",
+      inputValues: { power: { percent: 12, charging: false } },
+    })
+    expect(container.querySelector(".lucide-battery-low")).toBeTruthy()
+
+    const battery = shiftSurfacePartEvents(batteryStory).find(
+      event => event.id === "battery",
+    )
+    expect(battery).toBeTruthy()
+    act(() => {
+      battery?.emit("garbage", { scopeId: "object-part" })
+    })
+
+    // Falls back to the canonical default reading (64%, not charging).
+    expect(container.querySelector("[class*='lucide-battery']")).toBeTruthy()
+    expect(container.querySelector(".lucide-battery-low")).toBeNull()
+  })
+
+  it("exposes battery-only events on the Battery atom and both on Status Bar", () => {
+    expect(shiftSurfacePartEvents(batteryStory).map(event => event.id)).toEqual(
+      ["battery"],
+    )
+    expect(
+      shiftSurfacePartEvents(statusBarStory).map(event => event.id),
+    ).toEqual(["battery", "network"])
   })
 
   it("feeds Home power through the full Home page's real Status Bar", async () => {

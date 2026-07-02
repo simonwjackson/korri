@@ -13,7 +13,9 @@ import type { Story } from "../../types"
 import { eachLabTargetRegistry } from "../model/lab-surface-registries"
 import type { LabSurfaceEvent } from "../surface-registry"
 import {
+  isShiftBatteryStory,
   isShiftHomeStory,
+  isShiftStatusBarStory,
   SHIFT_NETWORK_INPUT_CONTROL,
   SHIFT_POWER_INPUT_CONTROL,
 } from "./shift-surface-part"
@@ -62,14 +64,18 @@ export function shiftDeviceEvents(): readonly LabSurfaceEvent[] {
 }
 
 /**
- * Events keyed by part story. Home's real subtree consumes both device facts
- * (its Status Bar reads device-state and network). Battery and Status Bar join
- * when their live-mount derivation hosts land — until then they are driven by
- * held inputs through the static real-input render.
+ * Events keyed by part story — each part exposes exactly the device facts its
+ * real subtree consumes. Home and Status Bar consume battery + network (the
+ * Status Bar renders both); the Battery atom consumes only the battery fact.
  */
 export function shiftSurfacePartEvents(
   story: Story,
 ): readonly LabSurfaceEvent[] {
-  if (isShiftHomeStory(story)) return shiftDeviceEvents()
+  if (isShiftHomeStory(story) || isShiftStatusBarStory(story)) {
+    return shiftDeviceEvents()
+  }
+  if (isShiftBatteryStory(story)) {
+    return shiftDeviceEvents().filter(event => event.id === "battery")
+  }
   return []
 }

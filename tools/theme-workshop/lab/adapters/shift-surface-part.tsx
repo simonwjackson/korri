@@ -33,8 +33,9 @@ import {
 import {
   DEFAULT_SHIFT_POWER_READING,
   type ShiftPowerReading,
-  shiftBatteryPropsForPowerReading,
+  shiftBatteryPropsForPowerDisplay,
   shiftDeviceStateForPowerReading,
+  shiftPowerDisplayForDeviceState,
   shiftPowerReadingAtom,
   shiftPowerReadingForValue,
 } from "@product/surfaces/web/shift/shift-power-state"
@@ -161,32 +162,34 @@ function tagFromInput(
   return typeof value === "string" ? value : fallback
 }
 
-function renderShiftBatteryPart(power: ShiftPowerReading): ReactNode {
-  return (
-    <ShiftPartFrame width={120} height={120}>
-      <ShiftBattery {...shiftBatteryPropsForPowerReading(power)} />
-    </ShiftPartFrame>
+/**
+ * Real derivation hosts for isolated device-fact parts: the SAME
+ * `deviceStateAtom` → `shiftPowerDisplayForDeviceState` → props chain the
+ * Home route runs, mounted directly above the leaf component. Leaf atoms stay
+ * prop-driven (the atomic-layering rule); the event→state derivation lives at
+ * this composing level, so an isolated part reacts to device events exactly
+ * like production — never through hand-set props.
+ */
+function ShiftBatteryFromDeviceState() {
+  const battery = shiftBatteryPropsForPowerDisplay(
+    shiftPowerDisplayForDeviceState(useAtomValue(deviceStateAtom)),
   )
+  return battery ? <ShiftBattery {...battery} /> : null
 }
 
-function renderShiftStatusBarPart({
-  power,
-  clock,
-  network,
-}: {
-  readonly power: ShiftPowerReading
-  readonly clock: string
-  readonly network: ShiftNetworkReading
-}): ReactNode {
+function ShiftStatusBarFromEdges() {
+  const battery = shiftBatteryPropsForPowerDisplay(
+    shiftPowerDisplayForDeviceState(useAtomValue(deviceStateAtom)),
+  )
+  const clockIso = useAtomValue(shiftClockIsoAtom)
+  const network = useAtomValue(shiftNetworkReadingAtom)
   return (
-    <ShiftPartFrame height={140}>
-      <ShiftStatusBar
-        time={shiftClockLabelForIso(clock)}
-        avatarSrc="https://i.pravatar.cc/96?u=korri-shift-user"
-        battery={shiftBatteryPropsForPowerReading(power)}
-        network={network}
-      />
-    </ShiftPartFrame>
+    <ShiftStatusBar
+      time={shiftClockLabelForIso(clockIso)}
+      avatarSrc="https://i.pravatar.cc/96?u=korri-shift-user"
+      battery={battery}
+      network={network}
+    />
   )
 }
 
@@ -197,18 +200,6 @@ export function renderShiftSurfacePart(
     readonly inputValues: Readonly<Record<string, LabInputValue>>
   },
 ): ReactNode {
-  if (isShiftBatteryStory(story)) {
-    return renderShiftBatteryPart(powerFromBinding(binding.inputValues))
-  }
-
-  if (isShiftStatusBarStory(story)) {
-    return renderShiftStatusBarPart({
-      power: powerFromBinding(binding.inputValues),
-      clock: clockFromBinding(binding.inputValues, story.state),
-      network: networkFromBinding(binding.inputValues),
-    })
-  }
-
   if (!isShiftHomeStory(story)) return story.render()
 
   const spec = shiftSurfacePartMount(story, binding)
@@ -237,6 +228,43 @@ export function shiftSurfacePartMount(
     readonly inputValues: Readonly<Record<string, LabInputValue>>
   },
 ): LabSurfacePartMountSpec | null {
+  if (isShiftBatteryStory(story)) {
+    const power = powerFromBinding(binding.inputValues)
+    const initialValues = [
+      [deviceStateAtom, shiftDeviceStateForPowerReading(power)],
+    ] as const
+    return {
+      initialValues:
+        initialValues as unknown as LabSurfacePartMountSpec["initialValues"],
+      node: (
+        <ShiftPartFrame width={120} height={120}>
+          <ShiftBatteryFromDeviceState />
+        </ShiftPartFrame>
+      ),
+    }
+  }
+
+  if (isShiftStatusBarStory(story)) {
+    const power = powerFromBinding(binding.inputValues)
+    const clock = clockFromBinding(binding.inputValues, story.state)
+    const network = networkFromBinding(binding.inputValues)
+    const initialValues = [
+      [deviceStateAtom, shiftDeviceStateForPowerReading(power)],
+      [shiftPowerReadingAtom, power],
+      [shiftClockIsoAtom, clock],
+      [shiftNetworkReadingAtom, network],
+    ] as const
+    return {
+      initialValues:
+        initialValues as unknown as LabSurfacePartMountSpec["initialValues"],
+      node: (
+        <ShiftPartFrame height={140}>
+          <ShiftStatusBarFromEdges />
+        </ShiftPartFrame>
+      ),
+    }
+  }
+
   if (!isShiftHomeStory(story)) return null
 
   const power = powerFromBinding(binding.inputValues)
