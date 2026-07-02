@@ -496,6 +496,22 @@ describe("first-party plugins", () => {
       ),
     ).toBe(true)
 
+    const rpcs3Enabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_RPCS3_PLUGIN_ID,
+    })
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(disabled).some(
+        integration => integration.kind === KORRI_RPCS3_PLUGIN_ID,
+      ),
+    ).toBe(false)
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(rpcs3Enabled).some(
+        integration =>
+          integration.kind === KORRI_RPCS3_PLUGIN_ID &&
+          integration.integration === "rpcs3",
+      ),
+    ).toBe(true)
+
     const steamEnabled = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: KORRI_STEAM_PLUGIN_ID,
     })

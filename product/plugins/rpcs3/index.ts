@@ -1,4 +1,10 @@
 export { rpcs3Ps3DiscFolderDiscoveryProvider } from "./src/discovery"
+export { composeRpcs3LaunchSpec } from "./src/launch-spec"
+export {
+  materializeReadableRpcs3Launch,
+  rpcs3ReadableLaunchIntegration,
+} from "./src/materializer"
+export { decodeRpcs3Policy } from "./src/policy"
 export { rpcs3Plugin } from "./src/plugin"
 export {
   KORRI_RPCS3_APP_ID,
