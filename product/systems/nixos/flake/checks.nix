@@ -233,6 +233,17 @@ pkgs.lib.optionalAttrs isX86Linux {
         hostPackages = self.packages.${system};
         configurations = self.nixosConfigurations;
       };
+  korri-rk3326-kiosk-config =
+    import ../../../../tools/testing/nix/korri-rocknix-rk3326-config-check.nix
+      {
+        inherit pkgs;
+        products = explicitProducts;
+        r36tmaxSystem = self.nixosConfigurations.${explicitProducts.r36tmax.configName};
+        rk3326PlatformAdapterSourceFile = ../../../../product/systems/nixos/images/platforms/rocknix-rk3326.nix;
+        targetPackages = self.packages.aarch64-linux;
+        hostPackages = self.packages.${system};
+        configurations = self.nixosConfigurations;
+      };
   korri-product-payload =
     let
       fixtureRevision = "9f0ed234b4eff39f76801c09daedc9795c8b07fb";

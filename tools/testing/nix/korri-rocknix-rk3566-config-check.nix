@@ -124,6 +124,9 @@ let
       cfg.services.korri.compositor.user == "root"
       && cfg.services.korri.compositor.createUser == false
     ))
+    (check "RG353M compositor uses the canonical logind runtime root" (
+      cfg.services.korri.compositor.runtimeDir == "%t"
+    ))
     (check "RG353M runtime user keeps normalized input group access" (
       builtins.elem "input" (runtimeUser.extraGroups or [ ])
       && hasUdevRuleWith [
