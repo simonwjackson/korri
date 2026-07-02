@@ -1,3 +1,7 @@
+export {
+  KORRI_RETROARCH_GBA_DISCOVERY_PROVIDER_ID,
+  retroarchGbaDiscoveryProvider,
+} from "./src/discovery"
 export { retroarchReadableLaunchIntegration } from "./src/materializer"
 export {
   KORRI_RETROARCH_APP_ID,

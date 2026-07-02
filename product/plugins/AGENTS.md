@@ -160,6 +160,26 @@ Resource/fulfillment rules:
 - Launch resolution should use already fulfilled resources and fail closed if missing.
 - Nix must be an explicit host capability/absolute command, not assumed from `PATH`.
 
+## Release discovery providers
+
+First-party plugins may contribute release discovery providers through `contributes.discovery` when the plugin owns knowledge about how local content becomes a launchable release. Providers emit **candidate observations** only; Korri's scanner owns reconciliation, duplicate suppression, identity backfill, first-seen timestamps, and readable YAML persistence.
+
+Rules:
+
+- Keep provider ids stable and plugin-qualified, e.g. `@korri:retroarch/gba-files`.
+- For file-backed discovery, consume the scanner-supplied normalized file descriptors. Do not run a second recursive filesystem scan inside the provider.
+- Return observations with app/runtime/system ids owned by the plugin; do not write readable config or mutate ProseQL directly.
+- Do not include timestamps such as `firstSeenAt` or `discoveredAt`; the scanner applies scan-time metadata when it renders a candidate.
+- Keep execution bounded and deterministic. Content hashing, title databases, network calls, art scraping, runtime probing, and async background work require a separate scoped plan.
+- Future non-file providers should still emit observations and leave persistence to the host.
+
+RetroArch/mGBA GBA file discovery is the reference implementation:
+
+```text
+product/plugins/retroarch/src/discovery.ts
+product/plugins/retroarch/src/discovery.test.ts
+```
+
 ## Runtime substrate ownership
 
 - `@korri:fex` owns generic FEX substrate facts and defaults. FEX consumers should import default FEX path facts from the FEX runtime plugin or source the `korri-fex-runtime` setup helper; do not import Steam path constants for FEX rootfs defaults.
@@ -247,6 +267,7 @@ Every plugin should have focused tests for:
 - handler operation list;
 - handler input validation;
 - registry exposure if adding new contribution surfaces;
+- discovery-provider behavior if adding `contributes.discovery`;
 - launch/catalog/resource behavior if applicable.
 
 Recommended test locations:

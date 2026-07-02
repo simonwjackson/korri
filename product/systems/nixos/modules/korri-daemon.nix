@@ -93,7 +93,8 @@ let
   }
   // optionalAttrs (effectiveConfigRootsDir != null) {
     KORRI_CONFIG_ROOTS_DIR = effectiveConfigRootsDir;
-  };
+  }
+  // scoutReleaseScan.extraEnvironment;
   desktopAppCommand = pkgs.writeShellScript "korri-sunshine-desktop-app" ''
     set -eu
     echo "korri-sunshine-desktop-app: keeping existing compositor session alive for Moonlight" >&2
@@ -324,6 +325,16 @@ in
       description = ''
         Bounded wait for asynchronously started removable-media mount units
         before boot-time Scout scans configured storage roots.
+      '';
+    };
+
+    extraEnvironment = mkOption {
+      type = types.attrsOf types.str;
+      default = { };
+      description = ''
+        Additional environment variables for the boot-time Scout release scan.
+        Product images use this to pass plugin enablement, for example
+        `KORRI_ENABLED_PLUGINS`, without baking plugin policy into this module.
       '';
     };
   };

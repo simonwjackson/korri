@@ -18,6 +18,7 @@ import { decodeLibraryItemPayload } from "@platform/library/config/records/libra
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { executablePath } from "@platform/plugin/resources"
+import { KORRI_RETROARCH_PLUGIN_ID } from "@product/plugins/retroarch"
 import { KORRI_SRB2_PLUGIN_ID } from "@product/plugins/srb2"
 import { Effect, Exit, Layer } from "effect"
 import { parse } from "yaml"
@@ -56,6 +57,15 @@ async function runCli(
     proc.exited,
   ])
   return { stdout, stderr, exitCode }
+}
+
+function enableRetroarchDiscovery(): () => void {
+  const previous = process.env.KORRI_ENABLED_PLUGINS
+  process.env.KORRI_ENABLED_PLUGINS = KORRI_RETROARCH_PLUGIN_ID
+  return () => {
+    if (previous === undefined) delete process.env.KORRI_ENABLED_PLUGINS
+    else process.env.KORRI_ENABLED_PLUGINS = previous
+  }
 }
 
 function resolveFromPath(command: string): string {
@@ -116,6 +126,7 @@ describe("korri CLI", () => {
     const root = await mkdtemp(join(tmpdir(), "korri-scout-configured-"))
     const previousConfigRoots = process.env.KORRI_CONFIG_ROOTS
     const previousFindBin = process.env.KORRI_FIND_BIN
+    const restorePlugins = enableRetroarchDiscovery()
     try {
       const romRoot = join(root, "roms")
       const config = join(root, "korri.yaml")
@@ -156,6 +167,7 @@ describe("korri CLI", () => {
       else process.env.KORRI_CONFIG_ROOTS = previousConfigRoots
       if (previousFindBin === undefined) delete process.env.KORRI_FIND_BIN
       else process.env.KORRI_FIND_BIN = previousFindBin
+      restorePlugins()
       await rm(root, { recursive: true, force: true })
     }
   })
@@ -166,6 +178,7 @@ describe("korri CLI", () => {
     const previousDataHome = process.env.XDG_DATA_HOME
     const previousConfigRoots = process.env.KORRI_CONFIG_ROOTS
     const previousFindBin = process.env.KORRI_FIND_BIN
+    const restorePlugins = enableRetroarchDiscovery()
     try {
       process.env.XDG_DATA_HOME = dataHome
       process.env.KORRI_FIND_BIN = resolveFromPath("find")
@@ -246,6 +259,7 @@ describe("korri CLI", () => {
       else process.env.KORRI_CONFIG_ROOTS = previousConfigRoots
       if (previousFindBin === undefined) delete process.env.KORRI_FIND_BIN
       else process.env.KORRI_FIND_BIN = previousFindBin
+      restorePlugins()
       await rm(root, { recursive: true, force: true })
       await rm(dataHome, { recursive: true, force: true })
     }
@@ -257,6 +271,7 @@ describe("korri CLI", () => {
       join(tmpdir(), "korri-scout-dedupe-config-"),
     )
     const previousFindBin = process.env.KORRI_FIND_BIN
+    const restorePlugins = enableRetroarchDiscovery()
     try {
       const romRoot = join(root, "roms")
       const config = join(configRoot, "korri.yaml")
@@ -324,6 +339,7 @@ describe("korri CLI", () => {
     } finally {
       if (previousFindBin === undefined) delete process.env.KORRI_FIND_BIN
       else process.env.KORRI_FIND_BIN = previousFindBin
+      restorePlugins()
       await rm(root, { recursive: true, force: true })
       await rm(configRoot, { recursive: true, force: true })
     }
@@ -335,6 +351,7 @@ describe("korri CLI", () => {
       join(tmpdir(), "korri-scout-conflict-config-"),
     )
     const previousFindBin = process.env.KORRI_FIND_BIN
+    const restorePlugins = enableRetroarchDiscovery()
     try {
       const config = join(configRoot, "korri.yaml")
       await writeFile(join(root, "Metroid Fusion.gba"), "")
@@ -374,6 +391,7 @@ describe("korri CLI", () => {
     } finally {
       if (previousFindBin === undefined) delete process.env.KORRI_FIND_BIN
       else process.env.KORRI_FIND_BIN = previousFindBin
+      restorePlugins()
       await rm(root, { recursive: true, force: true })
       await rm(configRoot, { recursive: true, force: true })
     }

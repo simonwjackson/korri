@@ -11,7 +11,9 @@ import {
   writeFile,
 } from "node:fs/promises"
 import {
+  basename,
   dirname,
+  extname,
   isAbsolute,
   join,
   normalize,
@@ -19,6 +21,11 @@ import {
 } from "node:path"
 import type { LibraryItemPayload } from "@platform/library/config/records/library-item"
 import type { StorageRecord } from "@platform/library/config/records/storage"
+import type {
+  FileDiscoveryDescriptor,
+  ReleaseDiscoveryObservation,
+  ReleaseDiscoveryProvider,
+} from "@platform/plugin/discovery"
 import {
   defaultReleaseContentIdentityResolver,
   type ReleaseHashIdentityTag,
@@ -61,6 +68,8 @@ export interface RomScanReport {
   readonly ignored: number
   readonly ambiguous: number
   readonly deduplicated: number
+  readonly unclaimed: number
+  readonly conflicting: number
   readonly bySystem: Readonly<Record<string, number>>
   readonly reasons: Readonly<Record<string, number>>
   readonly samples: readonly RomScanSample[]
@@ -68,7 +77,12 @@ export interface RomScanReport {
 
 export interface RomScanSample {
   readonly path: string
-  readonly tag: RomScanClassification["_tag"] | "Deduplicated"
+  readonly tag:
+    | RomScanClassification["_tag"]
+    | "Deduplicated"
+    | "Conflicting"
+    | "Malformed"
+    | "ProviderFailed"
   readonly detail?: string
 }
 
@@ -80,6 +94,7 @@ interface RomScanArgs {
   readonly reservedLibraryIds?: Set<string>
   readonly now?: () => string
   readonly claimedIndex?: ClaimedContentIndex
+  readonly discoveryProviders?: readonly ReleaseDiscoveryProvider[]
 }
 
 export interface MergeReleaseCandidateConfigArgs {
@@ -107,6 +122,7 @@ export interface ScanConfiguredReleaseCandidatesArgs {
   readonly findBinary?: string
   readonly timeoutMs?: number
   readonly now?: () => string
+  readonly discoveryProviders?: readonly ReleaseDiscoveryProvider[]
 }
 
 export type ConfiguredStorageScanResult =
@@ -164,6 +180,7 @@ export interface ScanAndMergeReleaseCandidatesArgs {
   readonly env?: NodeJS.ProcessEnv
   readonly findBinary?: string
   readonly timeoutMs?: number
+  readonly discoveryProviders?: readonly ReleaseDiscoveryProvider[]
 }
 
 export type ScanAndMergeReleaseCandidatesResult =
@@ -190,6 +207,8 @@ interface MutableReport {
   ignored: number
   ambiguous: number
   deduplicated: number
+  unclaimed: number
+  conflicting: number
   bySystem: Map<string, number>
   reasons: Map<string, number>
   samples: RomScanSample[]
@@ -232,7 +251,7 @@ export async function scanReleaseCandidates(
   args: RomScanArgs,
 ): Promise<RomScanResult> {
   const report = emptyReport()
-  const candidates: RomScanCandidate[] = []
+  const foundPaths: string[] = []
   const findBinary = args.findBinary ?? "find"
   const firstSeenAt = (args.now ?? currentIsoTimestamp)()
   let child: ReturnType<typeof spawn>
@@ -262,11 +281,7 @@ export async function scanReleaseCandidates(
   child.stdout.on("data", (chunk: unknown) => {
     if (!Buffer.isBuffer(chunk)) return
     pending = processChunk(Buffer.concat([pending, chunk]), path => {
-      const classification = classifyRomScanPath(path, { root: args.root })
-      recordClassification(report, classification)
-      if (classification._tag === "Candidate") {
-        candidates.push(classification)
-      }
+      foundPaths.push(path)
     })
   })
   child.stderr.on("data", (chunk: unknown) => {
@@ -293,10 +308,7 @@ export async function scanReleaseCandidates(
     })
   })
   if (pending.length > 0) {
-    const path = pending.toString("utf8")
-    const classification = classifyRomScanPath(path, { root: args.root })
-    recordClassification(report, classification)
-    if (classification._tag === "Candidate") candidates.push(classification)
+    foundPaths.push(pending.toString("utf8"))
   }
 
   if (timedOut) {
@@ -325,6 +337,8 @@ export async function scanReleaseCandidates(
     }
   }
 
+  const descriptors = foundPaths.map(path => fileDescriptorForPath(path, args))
+  const candidates = await discoverRomCandidates(descriptors, args, report)
   const reconciled = await reconcileRomCandidates(candidates, args, report)
   const candidateRecords = createRomLibraryCandidatesFromClassifications(
     reconciled.candidates,
@@ -374,6 +388,7 @@ export async function scanAndMergeReleaseCandidates(
     timeoutMs: args.timeoutMs,
     reservedLibraryIds,
     claimedIndex,
+    discoveryProviders: args.discoveryProviders,
   })
   if (scan.status === "diagnostic") return scan
 
@@ -445,6 +460,7 @@ export async function scanConfiguredReleaseCandidates(
       reservedLibraryIds,
       now: () => firstSeenAt,
       claimedIndex,
+      discoveryProviders: args.discoveryProviders,
     })
     if (scan.status === "diagnostic") {
       results.push({
@@ -541,6 +557,203 @@ async function readConfiguredScanSnapshot(
       }),
     ),
   )
+}
+
+interface ProviderCandidate {
+  readonly providerId: string
+  readonly candidate: RomScanCandidate
+}
+
+function fileDescriptorForPath(
+  path: string,
+  args: Pick<RomScanArgs, "root" | "storage">,
+): FileDiscoveryDescriptor {
+  const diagnosticPath = classifyRomScanPath(path, { root: args.root }).path
+  return {
+    storageId: args.storage,
+    rootPath: args.root,
+    absolutePath: path,
+    relativePath: diagnosticPath,
+    name: basename(diagnosticPath),
+    extension: extname(diagnosticPath).toLowerCase(),
+  }
+}
+
+async function discoverRomCandidates(
+  descriptors: readonly FileDiscoveryDescriptor[],
+  args: RomScanArgs,
+  report: MutableReport,
+): Promise<readonly RomScanCandidate[]> {
+  const providers = args.discoveryProviders ?? []
+  const observations = await collectProviderCandidates(
+    providers,
+    descriptors,
+    args,
+    report,
+  )
+  const byPath = new Map<string, ProviderCandidate[]>()
+  for (const observation of observations) {
+    const current = byPath.get(observation.candidate.path) ?? []
+    current.push(observation)
+    byPath.set(observation.candidate.path, current)
+  }
+
+  const candidates: RomScanCandidate[] = []
+  for (const descriptor of descriptors) {
+    const providerCandidates = byPath.get(descriptor.relativePath)
+    if (providerCandidates === undefined || providerCandidates.length === 0) {
+      recordClassification(
+        report,
+        classifyRomScanPath(descriptor.absolutePath, { root: args.root }),
+      )
+      continue
+    }
+
+    report.files += 1
+    const uniqueByProvider = new Map<string, RomScanCandidate>()
+    for (const providerCandidate of providerCandidates) {
+      if (uniqueByProvider.has(providerCandidate.providerId)) {
+        report.deduplicated += 1
+        addSample(report, {
+          path: descriptor.relativePath,
+          tag: "Deduplicated",
+          detail: `provider-duplicate:${providerCandidate.providerId}`,
+        })
+        continue
+      }
+      uniqueByProvider.set(
+        providerCandidate.providerId,
+        providerCandidate.candidate,
+      )
+    }
+
+    if (uniqueByProvider.size > 1) {
+      report.conflicting += 1
+      addSample(report, {
+        path: descriptor.relativePath,
+        tag: "Conflicting",
+        detail: [...uniqueByProvider.keys()].sort().join(","),
+      })
+      continue
+    }
+
+    const candidate = [...uniqueByProvider.values()][0]
+    if (candidate === undefined) continue
+    report.candidates += 1
+    bump(report.bySystem, candidate.system)
+    addSample(report, { path: candidate.path, tag: "Candidate" })
+    candidates.push(candidate)
+  }
+
+  return candidates
+}
+
+async function collectProviderCandidates(
+  providers: readonly ReleaseDiscoveryProvider[],
+  descriptors: readonly FileDiscoveryDescriptor[],
+  args: RomScanArgs,
+  report: MutableReport,
+): Promise<readonly ProviderCandidate[]> {
+  const candidates: ProviderCandidate[] = []
+  const descriptorByPath = new Map(
+    descriptors.map(
+      descriptor => [descriptor.relativePath, descriptor] as const,
+    ),
+  )
+  for (const provider of providers) {
+    let observations: readonly ReleaseDiscoveryObservation[]
+    try {
+      observations = await normalizePluginResult(
+        provider.discover({
+          pluginId: pluginIdForDiscoveryProvider(provider.id),
+          storageId: args.storage,
+          rootPath: args.root,
+          files: descriptors,
+        }),
+      )
+    } catch (error) {
+      addSample(report, {
+        path: args.root,
+        tag: "ProviderFailed",
+        detail: `${provider.id}:${errorMessage(error)}`,
+      })
+      bump(report.reasons, `provider:${provider.id}:failed`)
+      continue
+    }
+
+    for (const observation of observations) {
+      const candidate = candidateFromObservation(
+        provider.id,
+        observation,
+        descriptorByPath,
+        report,
+      )
+      if (candidate !== undefined) candidates.push(candidate)
+    }
+  }
+  return candidates
+}
+
+function candidateFromObservation(
+  providerId: string,
+  observation: ReleaseDiscoveryObservation,
+  descriptors: ReadonlyMap<string, FileDiscoveryDescriptor>,
+  report: MutableReport,
+): ProviderCandidate | undefined {
+  if (observation.kind !== "file-release") return undefined
+  const descriptor = descriptors.get(observation.source.relativePath)
+  if (descriptor === undefined) {
+    addSample(report, {
+      path: observation.source.relativePath,
+      tag: "Malformed",
+      detail: `${providerId}:source-not-in-scan`,
+    })
+    bump(report.reasons, `provider:${providerId}:malformed`)
+    return undefined
+  }
+  const release = observation.release
+  if (
+    release.id.length === 0 ||
+    release.system.length === 0 ||
+    release.app.length === 0 ||
+    release.runtime.length === 0
+  ) {
+    addSample(report, {
+      path: descriptor.relativePath,
+      tag: "Malformed",
+      detail: `${providerId}:missing-release-field`,
+    })
+    bump(report.reasons, `provider:${providerId}:malformed`)
+    return undefined
+  }
+  return {
+    providerId,
+    candidate: {
+      _tag: "Candidate",
+      path: descriptor.relativePath,
+      system: release.system,
+      confidence: observation.confidence,
+      app: release.app,
+      runtime: release.runtime,
+    },
+  }
+}
+
+async function normalizePluginResult<T>(
+  value: T | PromiseLike<T> | Effect.Effect<T, unknown, never>,
+): Promise<T> {
+  if (Effect.isEffect(value)) return Effect.runPromise(value)
+  if (isPromiseLike(value)) return value
+  return value
+}
+
+function pluginIdForDiscoveryProvider(
+  providerId: string,
+): `@${string}:${string}` {
+  const separator = providerId.indexOf("/")
+  return (
+    separator > 0 ? providerId.slice(0, separator) : providerId
+  ) as `@${string}:${string}`
 }
 
 async function targetLibraryIds(path: string): Promise<readonly string[]> {
@@ -1073,6 +1286,16 @@ function recordClassification(
         detail: classification.reason,
       })
       break
+    case "Unclaimed":
+      report.unclaimed += 1
+      bump(report.bySystem, classification.system)
+      bump(report.reasons, classification.reason)
+      addSample(report, {
+        path: classification.path,
+        tag: classification._tag,
+        detail: classification.reason,
+      })
+      break
     case "Ignored":
       report.ignored += 1
       bump(report.reasons, classification.reason)
@@ -1118,6 +1341,8 @@ function emptyReport(): MutableReport {
     ignored: 0,
     ambiguous: 0,
     deduplicated: 0,
+    unclaimed: 0,
+    conflicting: 0,
     bySystem: new Map(),
     reasons: new Map(),
     samples: [],
@@ -1133,6 +1358,8 @@ function freezeReport(report: MutableReport): RomScanReport {
     ignored: report.ignored,
     ambiguous: report.ambiguous,
     deduplicated: report.deduplicated,
+    unclaimed: report.unclaimed,
+    conflicting: report.conflicting,
     bySystem: Object.fromEntries(sortEntries(report.bySystem)),
     reasons: Object.fromEntries(sortEntries(report.reasons)),
     samples: report.samples,
@@ -1168,6 +1395,15 @@ async function writeFileAtomically(
 
 function currentIsoTimestamp(): string {
   return new Date().toISOString()
+}
+
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "then" in value &&
+    typeof (value as { readonly then?: unknown }).then === "function"
+  )
 }
 
 function errorMessage(error: unknown): string {

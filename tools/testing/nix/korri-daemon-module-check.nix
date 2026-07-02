@@ -85,6 +85,13 @@ let
     services.korri.daemon.enable = true;
     services.korri.scout.releaseScan.enable = true;
   };
+  withScoutExtraEnvironment = evaluateWith {
+    services.korri.daemon.enable = true;
+    services.korri.scout.releaseScan = {
+      enable = true;
+      extraEnvironment.KORRI_ENABLED_PLUGINS = "@korri:retroarch";
+    };
+  };
   withScoutRemovable =
     (evalConfig {
       system = hostSystem;
@@ -277,6 +284,9 @@ let
       (scoutEnv withScout).KORRI_CONFIG_ROOTS == "/var/lib/korri/config"
       && lib.hasInfix "findutils" (scoutEnv withScout).KORRI_FIND_BIN
       && lib.hasSuffix "/bin/find" (scoutEnv withScout).KORRI_FIND_BIN
+    ))
+    (check "scout release scan forwards extra plugin environment" (
+      (scoutEnv withScoutExtraEnvironment).KORRI_ENABLED_PLUGINS == "@korri:retroarch"
     ))
     (check "scout release scan waits for removable coldplug when enabled" (
       lib.elem "korri-removable-media-coldplug.service" ((scoutUnit withScoutRemovable).after or [ ])

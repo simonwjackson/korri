@@ -4,9 +4,6 @@ import {
   type LibraryItemPayload,
 } from "@platform/library/config/records/library-item"
 
-const KORRI_RETROARCH_APP_ID = "@korri:retroarch/retroarch"
-const KORRI_RETROARCH_MGBA_RUNTIME_ID = "@korri:retroarch/mgba"
-
 export type RomScanClassification =
   | RomScanCandidate
   | {
@@ -16,6 +13,12 @@ export type RomScanClassification =
     }
   | {
       readonly _tag: "Unsupported"
+      readonly path: string
+      readonly system: string
+      readonly reason: string
+    }
+  | {
+      readonly _tag: "Unclaimed"
       readonly path: string
       readonly system: string
       readonly reason: string
@@ -30,10 +33,10 @@ export type RomScanClassification =
 export interface RomScanCandidate {
   readonly _tag: "Candidate"
   readonly path: string
-  readonly system: "gba"
-  readonly confidence: "high"
-  readonly app: typeof KORRI_RETROARCH_APP_ID
-  readonly runtime: typeof KORRI_RETROARCH_MGBA_RUNTIME_ID
+  readonly system: string
+  readonly confidence: "high" | "medium" | "low"
+  readonly app: string
+  readonly runtime: string
 }
 
 export interface RomScanOptions {
@@ -161,12 +164,10 @@ export function classifyRomScanPath(
 
   if (extensionSystem === "gba") {
     return {
-      _tag: "Candidate",
+      _tag: "Unclaimed",
       path: normalized,
       system: "gba",
-      confidence: "high",
-      app: KORRI_RETROARCH_APP_ID,
-      runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
+      reason: "unclaimed:gba",
     }
   }
 

@@ -12,6 +12,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { decodeLibraryItemPayload } from "@platform/library/config/records/library-item"
 import { decodeStoragePayload } from "@platform/library/config/records/storage"
+import { releaseDiscoveryProvider } from "@platform/plugin/discovery"
 import { openKorriConfigGraph } from "@platform/library/proseql/config-graph-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
@@ -26,8 +27,29 @@ import {
 } from "./release-candidate-scan"
 import {
   classifyRomScanPath,
-  createRomLibraryCandidates,
+  createRomLibraryCandidatesFromClassifications,
 } from "./rom-scan-classifier"
+
+const testGbaDiscoveryProvider = releaseDiscoveryProvider({
+  id: "@korri:test/gba-files",
+  title: "Test GBA files",
+  discover: ({ files }) =>
+    files
+      .filter(file => file.extension === ".gba")
+      .map(file => ({
+        kind: "file-release",
+        confidence: "high",
+        source: file,
+        release: {
+          id: "gba",
+          system: "gba",
+          app: "@korri:retroarch/retroarch",
+          runtime: "@korri:retroarch/mgba",
+        },
+        evidence: [{ kind: "extension", value: ".gba" }],
+      })),
+})
+const testGbaDiscoveryProviders = [testGbaDiscoveryProvider]
 
 function firstSeenAtForLibraryPayload(item: unknown): string | undefined {
   const target = decodeLibraryItemPayload(item).releases[0]?.target
@@ -36,22 +58,21 @@ function firstSeenAtForLibraryPayload(item: unknown): string | undefined {
 }
 
 describe("classifyRomScanPath", () => {
-  it("classifies GBA files as high-confidence candidates without requiring a system folder", () => {
+  it("reports GBA files as unclaimed without embedding RetroArch launch ids", () => {
     expect(classifyRomScanPath("gba/Metroid Fusion.gba")).toMatchObject({
-      _tag: "Candidate",
+      _tag: "Unclaimed",
       system: "gba",
-      confidence: "high",
-      runtime: "@korri:retroarch/mgba",
+      reason: "unclaimed:gba",
     })
     expect(classifyRomScanPath("Metroid Fusion.gba")).toMatchObject({
-      _tag: "Candidate",
+      _tag: "Unclaimed",
       system: "gba",
-      confidence: "high",
+      reason: "unclaimed:gba",
     })
     expect(classifyRomScanPath("incoming/Metroid Fusion.gba")).toMatchObject({
-      _tag: "Candidate",
+      _tag: "Unclaimed",
       system: "gba",
-      confidence: "high",
+      reason: "unclaimed:gba",
     })
   })
 
@@ -60,13 +81,13 @@ describe("classifyRomScanPath", () => {
       classifyRomScanPath("/run/media/korri/card/roms/gba/Metroid Fusion.gba", {
         root: "/run/media/korri/card/roms",
       }),
-    ).toMatchObject({ _tag: "Candidate", system: "gba" })
+    ).toMatchObject({ _tag: "Unclaimed", system: "gba" })
     expect(
       classifyRomScanPath("/tmp/root/..roms/gba/Game.gba", {
         root: "/tmp/root",
       }),
     ).toMatchObject({
-      _tag: "Candidate",
+      _tag: "Unclaimed",
       path: "..roms/gba/Game.gba",
     })
   })
@@ -135,8 +156,17 @@ describe("classifyRomScanPath", () => {
 
 describe("createRomLibraryCandidates", () => {
   it("renders schema-valid readable-library records", () => {
-    const candidates = createRomLibraryCandidates(
-      ["gba/Metroid Fusion (USA, Australia).gba"],
+    const candidates = createRomLibraryCandidatesFromClassifications(
+      [
+        {
+          _tag: "Candidate",
+          path: "gba/Metroid Fusion (USA, Australia).gba",
+          system: "gba",
+          confidence: "high",
+          app: "@korri:retroarch/retroarch",
+          runtime: "@korri:retroarch/mgba",
+        },
+      ],
       {
         storage: "sd-roms",
         firstSeenAt: "2026-06-29T12:34:56.000Z",
@@ -171,8 +201,17 @@ describe("createRomLibraryCandidates", () => {
   })
 
   it("keeps target paths relative and suffixes duplicate ids globally", () => {
-    const candidates = createRomLibraryCandidates(
-      ["gba/Game.gba", "gba/Game (USA).gba", "gba/Game-2.gba", "gba/Game.gba"],
+    const candidates = createRomLibraryCandidatesFromClassifications(
+      ["gba/Game.gba", "gba/Game (USA).gba", "gba/Game-2.gba", "gba/Game.gba"].map(
+        path => ({
+          _tag: "Candidate" as const,
+          path,
+          system: "gba",
+          confidence: "high" as const,
+          app: "@korri:retroarch/retroarch",
+          runtime: "@korri:retroarch/mgba",
+        }),
+      ),
       { storage: "roms", firstSeenAt: "2026-06-29T12:34:56.000Z" },
     )
 
@@ -180,8 +219,17 @@ describe("createRomLibraryCandidates", () => {
     expect(candidates.map(candidate => candidate.id)).toContain("game")
     expect(candidates.map(candidate => candidate.id)).toContain("game-2")
     expect(candidates.map(candidate => candidate.id)).toContain("game-3")
-    const reversed = createRomLibraryCandidates(
-      ["gba/Game.gba", "gba/Game-2.gba", "gba/Game (USA).gba", "gba/Game.gba"],
+    const reversed = createRomLibraryCandidatesFromClassifications(
+      ["gba/Game.gba", "gba/Game-2.gba", "gba/Game (USA).gba", "gba/Game.gba"].map(
+        path => ({
+          _tag: "Candidate" as const,
+          path,
+          system: "gba",
+          confidence: "high" as const,
+          app: "@korri:retroarch/retroarch",
+          runtime: "@korri:retroarch/mgba",
+        }),
+      ),
       { storage: "roms", firstSeenAt: "2026-06-29T12:34:56.000Z" },
     )
     expect(candidates.map(candidate => candidate.id)).toEqual(
@@ -213,6 +261,7 @@ describe("scanReleaseCandidates", () => {
     })
 
     const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: fixture.root,
       storage: "sd-roms",
       now: () => "2026-06-29T12:34:56.000Z",
@@ -249,6 +298,78 @@ describe("scanReleaseCandidates", () => {
     })
   })
 
+  it("reports unclaimed GBA files when no discovery provider is enabled", async () => {
+    await using fixture = await withTempRomRoot({
+      "Metroid Fusion.gba": "",
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: [],
+      root: fixture.root,
+      storage: "roms",
+      now: () => "2026-06-29T12:34:56.000Z",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.report).toMatchObject({
+      files: 1,
+      candidates: 0,
+      unclaimed: 1,
+      conflicting: 0,
+    })
+    expect(result.report.samples).toContainEqual({
+      path: "Metroid Fusion.gba",
+      tag: "Unclaimed",
+      detail: "unclaimed:gba",
+    })
+    const parsed = parse(result.yaml) as { readonly library: Record<string, unknown> }
+    expect(parsed.library).toEqual({})
+  })
+
+  it("reports conflicting provider observations without writing either candidate", async () => {
+    await using fixture = await withTempRomRoot({
+      "Metroid Fusion.gba": "",
+    })
+    const alternateProvider = releaseDiscoveryProvider({
+      id: "@korri:other/gba-files",
+      title: "Other GBA files",
+      discover: ({ files }) =>
+        files.map(file => ({
+          kind: "file-release",
+          confidence: "high",
+          source: file,
+          release: {
+            id: "gba",
+            system: "gba",
+            app: "@korri:other/app",
+            runtime: "@korri:other/runtime",
+          },
+        })),
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: [testGbaDiscoveryProvider, alternateProvider],
+      root: fixture.root,
+      storage: "roms",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.report).toMatchObject({
+      files: 1,
+      candidates: 0,
+      conflicting: 1,
+    })
+    expect(result.report.samples).toContainEqual({
+      path: "Metroid Fusion.gba",
+      tag: "Conflicting",
+      detail: "@korri:other/gba-files,@korri:test/gba-files",
+    })
+    const parsed = parse(result.yaml) as { readonly library: Record<string, unknown> }
+    expect(parsed.library).toEqual({})
+  })
+
   it("renders deterministic YAML for repeated scans with different file creation order", async () => {
     await using first = await withTempRomRoot({
       "gba/Zelda.gba": "",
@@ -260,11 +381,13 @@ describe("scanReleaseCandidates", () => {
     })
 
     const firstResult = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: first.root,
       storage: "roms",
       now: () => "2026-06-29T12:34:56.000Z",
     })
     const secondResult = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: second.root,
       storage: "roms",
       now: () => "2026-06-29T12:34:56.000Z",
@@ -302,6 +425,7 @@ describe("scanReleaseCandidates", () => {
     await chmod(shim, 0o755)
 
     const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: fixture.root,
       storage: "roms",
       findBinary: shim,
@@ -315,6 +439,7 @@ describe("scanReleaseCandidates", () => {
     await using fixture = await withTempRomRoot({})
 
     const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: fixture.root,
       storage: "roms",
     })
@@ -331,6 +456,7 @@ describe("scanReleaseCandidates", () => {
 
   it("reports missing roots as scanner diagnostics", async () => {
     const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: "/definitely/missing/korri/roms",
       storage: "roms",
     })
@@ -353,6 +479,7 @@ describe("scanReleaseCandidates", () => {
     await chmod(shim, 0o755)
 
     const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: fixture.root,
       storage: "roms",
       findBinary: shim,
@@ -384,6 +511,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     )
 
     const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [{ root: fixture.root, optional: false }],
       findBinary: resolveFromPath("find"),
@@ -433,6 +561,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     )
 
     const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [{ root: fixture.root, optional: false }],
       findBinary: resolveFromPath("find"),
@@ -503,6 +632,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     )
 
     const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [
         { root: join(fixture.root, "platform"), optional: false },
@@ -597,6 +727,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     )
 
     const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [{ root: fixture.root, optional: false }],
       findBinary: resolveFromPath("find"),
@@ -645,6 +776,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     try {
       process.chdir(fixture.root)
       const result = await scanAndMergeReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
         root: join(fixture.root, "roms"),
         storage: "sd-releases",
         configPath: "korri.yaml",
@@ -697,6 +829,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     const outConfig = join(fixture.root, "out", "korri.yaml")
 
     const result = await scanAndMergeReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: join(fixture.root, "roms"),
       storage: "sd-releases",
       configPath: outConfig,
@@ -737,6 +870,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     )
 
     const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [{ root: fixture.root, optional: false }],
       findBinary: resolveFromPath("find"),
@@ -789,6 +923,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     )
 
     const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [{ root: fixture.root, optional: false }],
       findBinary: resolveFromPath("find"),
@@ -844,6 +979,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     )
 
     const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [
         { root: join(fixture.root, "platform"), optional: false },
@@ -868,6 +1004,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     ).toEqual(["2026-06-29T12:34:56.000Z", "2026-06-29T12:34:56.000Z"])
 
     const second = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [
         { root: join(fixture.root, "platform"), optional: false },
@@ -928,6 +1065,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     )
 
     const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [
         { root: localRoot, optional: false },
@@ -977,6 +1115,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     await chmod(failFind, 0o755)
 
     const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [{ root: fixture.root, optional: false }],
       findBinary: failFind,
@@ -1010,6 +1149,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     )
 
     const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       configPath: config,
       roots: [
         {
@@ -1037,6 +1177,7 @@ describe("mergeReleaseCandidateConfig", () => {
     })
     const config = join(fixture.root, "korri.yaml")
     const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: fixture.root,
       storage: "sd-releases",
     })
@@ -1096,6 +1237,7 @@ describe("mergeReleaseCandidateConfig", () => {
       "utf8",
     )
     const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: fixture.root,
       storage: "sd-releases",
     })
@@ -1152,6 +1294,7 @@ describe("mergeReleaseCandidateConfig", () => {
       "utf8",
     )
     const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: fixture.root,
       storage: "sd-releases",
       now: () => "2026-06-29T12:34:56.000Z",
@@ -1186,6 +1329,7 @@ describe("mergeReleaseCandidateConfig", () => {
       "utf8",
     )
     const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: fixture.root,
       storage: "sd-releases",
     })
@@ -1203,6 +1347,7 @@ describe("mergeReleaseCandidateConfig", () => {
     })
     const config = join(fixture.root, "korri.yaml")
     const result = await scanReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
       root: fixture.root,
       storage: "sd-releases",
     })

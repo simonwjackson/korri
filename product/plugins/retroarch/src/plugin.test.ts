@@ -5,6 +5,7 @@ import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
   KORRI_RETROARCH_FUSE_RUNTIME_ID,
+  KORRI_RETROARCH_GBA_DISCOVERY_PROVIDER_ID,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
   KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
   KORRI_RETROARCH_GENESIS_SYSTEM_ID,
@@ -84,6 +85,9 @@ describe("RetroArch plugin", () => {
       path: "/etc/korri/cores/mgba_libretro.so",
       supports: { systems: [KORRI_RETROARCH_GBA_SYSTEM_ID] },
     })
+    expect(retroarchPlugin.contributes.discovery?.map(provider => provider.id)).toEqual([
+      KORRI_RETROARCH_GBA_DISCOVERY_PROVIDER_ID,
+    ])
   })
 
   it("contributes Genesis Plus GX as a RetroArch-owned Genesis runtime", () => {

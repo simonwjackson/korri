@@ -24,6 +24,7 @@ import { KORRI_REMAP_PLUGIN_ID } from "./remap"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
+  KORRI_RETROARCH_GBA_DISCOVERY_PROVIDER_ID,
   KORRI_RETROARCH_FUSE_RUNTIME_ID,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
   KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
@@ -322,6 +323,9 @@ describe("first-party plugins", () => {
       path: "/etc/korri/cores/mgba_libretro.so",
       supports: { systems: [KORRI_RETROARCH_GBA_SYSTEM_ID] },
     })
+    expect(registry.discoveryProviders.map(provider => provider.id)).toContain(
+      KORRI_RETROARCH_GBA_DISCOVERY_PROVIDER_ID,
+    )
     expect(
       registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/genesis`],
     ).toMatchObject({

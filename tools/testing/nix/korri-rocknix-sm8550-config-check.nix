@@ -275,9 +275,10 @@ let
           scoutReleaseScanUnit.serviceConfig.ExecStartPre or [ ]
         )
       ))
-      (check "${name}: boot release scan inherits trusted config roots and Nix find" (
+      (check "${name}: boot release scan inherits trusted config roots, plugins, and Nix find" (
         (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
         && (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS_DIR or null) == "/run/korri/config-roots.d"
+        && lib.hasInfix "@korri:retroarch" (scoutReleaseScanEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "findutils" (scoutReleaseScanEnv.KORRI_FIND_BIN or "")
         && lib.hasSuffix "/bin/find" (scoutReleaseScanEnv.KORRI_FIND_BIN or "")
       ))
