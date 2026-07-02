@@ -1,5 +1,7 @@
 import { mountPico } from "@product/surfaces/web/pico/mount-pico"
+import { PicoPartSurface } from "@product/surfaces/web/pico/mount-pico-part"
 import { usePicoControls } from "@product/surfaces/web/pico/pico-controls"
+import { PICO_DESIGN_PARTS } from "@product/surfaces/web/pico/pico-design-parts"
 import type { RouterHistory } from "@tanstack/history"
 import { createElement, type ReactNode } from "react"
 import type { DeviceConfig, ThemeKnob } from "../../device-lab"
@@ -9,6 +11,11 @@ import {
 } from "../seed/shift-seed"
 import type { LabSurfaceAdapter } from "../surface-registry"
 import { picoAxesForScreen } from "./pico-axes"
+import { picoSurfacePartEvents, picoSurfacePartInputs } from "./pico-edges"
+import {
+  picoSurfacePartMount,
+  renderPicoSurfacePart,
+} from "./pico-surface-part"
 
 // Inlined from product/surfaces/web/pico/config.tsx so the lab does not import
 // the throwaway 100-screen pico gallery; mountPico pulls only the two real
@@ -98,11 +105,23 @@ export const picoLabSurfaceAdapter: LabSurfaceAdapter = {
   knobs: PICO_KNOBS,
   defaultPxPerMm: 6.78,
   screens: [
-    { label: "Home", path: "/" },
-    { label: "Game Detail", path: "/game/hollow-knight" },
+    { label: "Home", path: "/", pagePartId: PICO_DESIGN_PARTS.home.id },
+    {
+      label: "Game Detail",
+      path: "/game/hollow-knight",
+      pagePartId: PICO_DESIGN_PARTS.gameDetail.id,
+    },
   ],
   axesForScreen: picoAxesForScreen,
   useControls: usePicoControls,
+  // Placed parts that read device facts (Status Bar, Home, Game Detail) mount
+  // through the same real registry path a live device uses; every other part
+  // falls back to the static baked render.
+  partRegistryRoot: PicoPartSurface,
+  surfacePartMount: picoSurfacePartMount,
+  renderSurfacePart: renderPicoSurfacePart,
+  surfacePartInputs: picoSurfacePartInputs,
+  surfacePartEvents: picoSurfacePartEvents,
   // Pico sizes everything with container queries against a sized
   // [data-pico].pico-screen.intrinsic (640px design width = 100cqw) and derives
   // its --pico-text-*/space tokens there. An isolated preview therefore needs a
@@ -119,9 +138,10 @@ export const picoLabSurfaceAdapter: LabSurfaceAdapter = {
       children,
     ),
   makeSeedInitialValues,
-  mountSurface: (host, { initialValues, history }) =>
+  mountSurface: (host, { initialValues, history, onRegistry }) =>
     mountPico(host, {
       data: { initialValues: initialValues as SeedInitialValues },
       navigation: history ? { history: history as RouterHistory } : undefined,
+      onRegistry,
     }),
 }

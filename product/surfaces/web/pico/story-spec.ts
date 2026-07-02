@@ -16,5 +16,12 @@ export type StorySpec = {
   readonly note?: string
   /** Full-surface component (overlay/screen) — gets a sized framed canvas. */
   readonly presentation?: "part" | "surface"
+  /** Design-part id this story represents (drives lab pick-mode + the
+   * page-part identity a mounted device screen inherits edges from). */
+  readonly designPartId?: string
+  /** Named state within a multi-state part (e.g. "Ready", "Empty"). */
+  readonly state?: string
+  /** Sibling story ids this state belongs with. */
+  readonly variants?: readonly string[]
   readonly render: () => ReactNode
 }
