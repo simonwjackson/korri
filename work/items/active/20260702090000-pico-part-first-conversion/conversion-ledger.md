@@ -65,3 +65,24 @@ clock edges and are the page parts the adapter's device screens (`/`,
   `pico-surface-part.tsx`; part-first fields wired into `pico.ts`.
 - `tools/theme-workshop/lab/pico-part-first-invariants.test.ts` (6 invariants).
 - Playbook: `docs/solutions/architecture-patterns/pico-parts-are-the-app-2026-07-02.md`.
+
+## Atom-floor pick-coverage pass (2026-07-02, follow-up)
+
+The initial pass tagged kit-part ROOTS but left the bespoke raw HTML inside
+pages, organisms, molecules, routed screens, and chrome undecomposed — so the
+lab picker could not select those regions (e.g. BootSplash content, the
+Achievements toast, ActivityFeed rows). This pass closes that:
+
+- **Coverage scanner + test** (`tools/theme-workshop/lab/pico-pick-coverage.ts`
+  + `.test.ts`): flags any design-bearing raw HTML leaf across the whole pico
+  surface that is neither a kit component nor tagged. The atom floor
+  (`ui/atoms`) and the pure mount frame (`pico-screen`/`intrinsic`) are exempt.
+  The test asserts **0 untagged design leaves** — the objective done-bar.
+- **~560 design leaves tagged** as pickable parts across pages, organisms,
+  molecules, the routed screens (`VariantCartridgeShelf` = Home,
+  `VariantGameDetail`, `VariantInGame/Settings/IconGrid`), `PicoStatusBar`
+  internals, `pico-cart-view`, and templates. Recurring classes reuse the
+  existing kit atom ids (`pc-dim`→dim, `pc-sub`→sub, …); the rest got generated
+  `PICO_DESIGN_PARTS` entries. Registry now holds ~515 parts.
+- Result: `pickViolations(whole surface) === 0`; every rendered design element
+  is a pickable, layered, named part.
