@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
@@ -100,10 +101,93 @@ function labSurfaceStatePlugin() {
   }
 }
 
+// Bridges the browser lab to the dev-only Flue AI workflow in tools/lab-ai. The
+// workflow runs as a one-shot child process (no always-live service): its
+// run-workflow.sh script provisions Node 22 via nix, reuses the local Pi
+// ChatGPT/Codex login, and prints the result JSON to stdout (events go to
+// stderr). Failures return 502 so the client falls back to canned Takes.
+function labDesignTakesPlugin() {
+  const runner = new URL("tools/lab-ai/scripts/run-workflow.sh", repoRootUrl)
+    .pathname
+  return {
+    name: "korri-lab-design-takes",
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const url = new URL(request.url ?? "/", "http://localhost")
+        const match = url.pathname.match(
+          /^\/__lab\/design-takes\/([a-z0-9-]+)$/,
+        )
+        if (!match) {
+          next()
+          return
+        }
+        if (request.method !== "POST") {
+          response.statusCode = 405
+          response.end("Method not allowed")
+          return
+        }
+
+        const surfaceId = match[1]
+        const chunks = []
+        for await (const chunk of request) chunks.push(chunk)
+        let body
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}")
+        } catch {
+          response.statusCode = 400
+          response.end("Invalid JSON")
+          return
+        }
+
+        const input = JSON.stringify({
+          surfaceId,
+          partId: typeof body.partId === "string" ? body.partId : surfaceId,
+          prompt: typeof body.prompt === "string" ? body.prompt : "",
+          count: Math.max(1, Math.min(5, Math.floor(Number(body.count) || 3))),
+        })
+
+        const child = spawn(runner, [input], {
+          cwd: new URL("tools/lab-ai/", repoRootUrl).pathname,
+        })
+        let stdout = ""
+        let stderr = ""
+        child.stdout.on("data", data => {
+          stdout += data
+        })
+        child.stderr.on("data", data => {
+          stderr += data
+        })
+        child.on("error", cause => {
+          response.statusCode = 502
+          response.end(`Design-takes workflow failed to start: ${cause}`)
+        })
+        child.on("close", code => {
+          if (code !== 0) {
+            server.config.logger.warn(
+              `[lab-design-takes] workflow exited ${code}: ${stderr.slice(-500)}`,
+            )
+            response.statusCode = 502
+            response.end("Design-takes workflow failed")
+            return
+          }
+          response.statusCode = 200
+          response.setHeader("Content-Type", "application/json")
+          response.end(stdout.trim())
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig({
   root: new URL(".", import.meta.url).pathname,
   publicDir: false,
-  plugins: [react(), tailwindcss(), labSurfaceStatePlugin()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    labSurfaceStatePlugin(),
+    labDesignTakesPlugin(),
+  ],
   server: { host: true, allowedHosts: true, proxy: artProxy },
   preview: { host: true, allowedHosts: true, proxy: artProxy },
   resolve: {

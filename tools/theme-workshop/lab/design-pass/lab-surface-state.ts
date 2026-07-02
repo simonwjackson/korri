@@ -1,4 +1,7 @@
-import type { LabGeneratedTakeDescriptor } from "./generated-takes"
+import type {
+  LabGeneratedTakeDescriptor,
+  ShiftStatusBarRecipe,
+} from "./generated-takes"
 
 export interface LabSurfaceState {
   readonly version: 1
@@ -100,6 +103,9 @@ function normalizeDescriptor(
     layer: candidate.layer,
     name: candidate.name,
     ...(typeof candidate.note === "string" ? { note: candidate.note } : {}),
+    ...(typeof candidate.summary === "string"
+      ? { summary: candidate.summary }
+      : {}),
     ...(candidate.surface === true ? { surface: true } : {}),
     baseStoryId: candidate.baseStoryId,
     ...(typeof candidate.basedOnDesignPartId === "string"
@@ -107,6 +113,36 @@ function normalizeDescriptor(
       : {}),
     prompt: candidate.prompt,
     variant: candidate.variant,
+    ...(normalizeRecipe(candidate.recipe) !== null
+      ? { recipe: normalizeRecipe(candidate.recipe) as ShiftStatusBarRecipe }
+      : {}),
+  }
+}
+
+const DENSITY = new Set(["airy", "cozy", "compact"])
+const TONE = new Set(["quiet", "neutral", "bold"])
+const EMPHASIS = new Set(["low", "medium", "high"])
+
+function normalizeRecipe(value: unknown): ShiftStatusBarRecipe | null {
+  if (typeof value !== "object" || value === null) return null
+  const candidate = value as Record<string, unknown>
+  if (
+    candidate.kind !== "shift-status-bar-take-v1" ||
+    !DENSITY.has(candidate.density as string) ||
+    !TONE.has(candidate.tone as string) ||
+    !EMPHASIS.has(candidate.batteryEmphasis as string) ||
+    !EMPHASIS.has(candidate.networkEmphasis as string)
+  ) {
+    return null
+  }
+  return {
+    kind: "shift-status-bar-take-v1",
+    density: candidate.density as ShiftStatusBarRecipe["density"],
+    tone: candidate.tone as ShiftStatusBarRecipe["tone"],
+    batteryEmphasis:
+      candidate.batteryEmphasis as ShiftStatusBarRecipe["batteryEmphasis"],
+    networkEmphasis:
+      candidate.networkEmphasis as ShiftStatusBarRecipe["networkEmphasis"],
   }
 }
 

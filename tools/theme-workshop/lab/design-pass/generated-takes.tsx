@@ -18,17 +18,40 @@ export interface LabGeneratedTakeRequest {
   readonly seed: number
 }
 
+/**
+ * Semantic design knobs for the Shift status bar. This is the wire contract the
+ * `generate-design-takes` Flue workflow returns; keep it in sync with the
+ * valibot schema in `tools/lab-ai/src/workflows/generate-design-takes.ts`. The
+ * lab — not the model — owns the mapping from recipe to concrete component
+ * props (see `shiftStatusBarPropsFromRecipe`).
+ */
+export interface ShiftStatusBarRecipe {
+  readonly kind: "shift-status-bar-take-v1"
+  readonly density: "airy" | "cozy" | "compact"
+  readonly tone: "quiet" | "neutral" | "bold"
+  readonly batteryEmphasis: "low" | "medium" | "high"
+  readonly networkEmphasis: "low" | "medium" | "high"
+}
+
+export interface LabDesignTakeRecipeCandidate {
+  readonly name: string
+  readonly summary: string
+  readonly recipe: ShiftStatusBarRecipe
+}
+
 export interface LabGeneratedTakeDescriptor {
   readonly id: string
   readonly designPartId: string
   readonly layer: StoryLayer
   readonly name: string
   readonly note?: string
+  readonly summary?: string
   readonly surface?: boolean
   readonly baseStoryId: string
   readonly basedOnDesignPartId?: string
   readonly prompt: string
   readonly variant: string
+  readonly recipe?: ShiftStatusBarRecipe
 }
 
 export interface LabGeneratedTakeBatch {
@@ -74,6 +97,73 @@ const STATUS_BAR_TAKES = [
     network: { _tag: "Connected", strengthPercent: 38 } as const,
   },
 ] as const
+
+const BATTERY_EMPHASIS = {
+  low: { percent: 24, charging: false },
+  medium: { percent: 62, charging: false },
+  high: { percent: 97, charging: true },
+} as const
+
+const NETWORK_EMPHASIS = {
+  low: { _tag: "Disconnected" },
+  medium: { _tag: "Connected", strengthPercent: 55 },
+  high: { _tag: "Connected", strengthPercent: 96 },
+} as const
+
+/**
+ * Pure mapping from a semantic recipe to the concrete props the real
+ * `ShiftStatusBar` consumes. The status bar only exposes battery, network, and
+ * avatar, so density/tone steer the avatar seed while the emphasis knobs drive
+ * the battery and network readings.
+ */
+export function shiftStatusBarPropsFromRecipe(recipe: ShiftStatusBarRecipe): {
+  readonly avatarSrc: string
+  readonly battery: { readonly percent: number; readonly charging: boolean }
+  readonly network:
+    | { readonly _tag: "Connected"; readonly strengthPercent: number }
+    | { readonly _tag: "Disconnected" }
+} {
+  return {
+    avatarSrc: `https://i.pravatar.cc/96?u=korri-shift-${recipe.tone}-${recipe.density}`,
+    battery: BATTERY_EMPHASIS[recipe.batteryEmphasis],
+    network: NETWORK_EMPHASIS[recipe.networkEmphasis],
+  }
+}
+
+/**
+ * Turn model-authored recipe candidates into the same generated-Take batch the
+ * canned path produces, so promotion, deletion, and persistence treat AI takes
+ * exactly like any other generated Take.
+ */
+export function createRecipeTakeBatch(
+  base: Omit<LabGeneratedTakeRequest, "count">,
+  candidates: readonly LabDesignTakeRecipeCandidate[],
+): LabGeneratedTakeBatch {
+  const { baseStory, baseMeta, prompt, seed } = base
+  const basedOnDesignPartId =
+    baseStory.designPartId ?? baseMeta?.basedOnDesignPartId
+  const descriptors: LabGeneratedTakeDescriptor[] = candidates.map(
+    (candidate, index) => ({
+      id: `generated-take-${seed}-recipe-${index + 1}`,
+      designPartId: `design-pass.generated.${seed}.recipe.${index + 1}`,
+      layer: baseStory.layer,
+      name: candidate.name,
+      note: candidate.summary,
+      summary: candidate.summary,
+      surface: baseStory.surface,
+      baseStoryId: baseStory.id,
+      basedOnDesignPartId,
+      prompt,
+      variant: candidate.recipe.kind,
+      recipe: candidate.recipe,
+    }),
+  )
+
+  return storiesFromGeneratedTakeDescriptors(
+    descriptors,
+    new Map([[baseStory.id, baseStory]]),
+  )
+}
 
 export function createCannedTakeBatch({
   baseStory,
@@ -165,24 +255,43 @@ function storyFromDescriptor(
   descriptor: LabGeneratedTakeDescriptor,
   baseStoriesById: ReadonlyMap<string, Story>,
 ): Story {
+  const isStatusBar =
+    descriptor.basedOnDesignPartId === SHIFT_DESIGN_PARTS.statusBar.id
+  const recipe =
+    descriptor.recipe?.kind === "shift-status-bar-take-v1"
+      ? descriptor.recipe
+      : undefined
   const statusBarTake = STATUS_BAR_TAKES.find(
     take => take.slug === descriptor.variant,
   )
   const render =
-    descriptor.basedOnDesignPartId === SHIFT_DESIGN_PARTS.statusBar.id &&
-    statusBarTake
-      ? () => (
-          <ShiftPartFrame>
-            <ShiftStatusBar
-              time={shiftClockLabelForIso(DEFAULT_SHIFT_CLOCK_ISO)}
-              avatarSrc={statusBarTake.avatar}
-              battery={shiftBatteryPropsForPowerReading(statusBarTake.power)}
-              network={statusBarTake.network}
-            />
-          </ShiftPartFrame>
-        )
-      : (baseStoriesById.get(descriptor.baseStoryId)?.render ??
-        (() => descriptor.name))
+    isStatusBar && recipe
+      ? () => {
+          const props = shiftStatusBarPropsFromRecipe(recipe)
+          return (
+            <ShiftPartFrame>
+              <ShiftStatusBar
+                time={shiftClockLabelForIso(DEFAULT_SHIFT_CLOCK_ISO)}
+                avatarSrc={props.avatarSrc}
+                battery={shiftBatteryPropsForPowerReading(props.battery)}
+                network={props.network}
+              />
+            </ShiftPartFrame>
+          )
+        }
+      : isStatusBar && statusBarTake
+        ? () => (
+            <ShiftPartFrame>
+              <ShiftStatusBar
+                time={shiftClockLabelForIso(DEFAULT_SHIFT_CLOCK_ISO)}
+                avatarSrc={statusBarTake.avatar}
+                battery={shiftBatteryPropsForPowerReading(statusBarTake.power)}
+                network={statusBarTake.network}
+              />
+            </ShiftPartFrame>
+          )
+        : (baseStoriesById.get(descriptor.baseStoryId)?.render ??
+          (() => descriptor.name))
 
   return {
     id: descriptor.id,

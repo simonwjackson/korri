@@ -7,8 +7,9 @@ import { LAB_CONCEPT_DICTATION } from "./lab-concept-model"
 const DEFAULT_COUNT = 3
 
 /** Canvas-attached ask bar for the selected object. It is intentionally not a
- * panel: the selected canvas object is the thing being addressed. Generation is
- * still canned until we wire real Take creation. */
+ * panel: the selected canvas object is the thing being addressed. Generation
+ * calls the dev-lab AI workflow (tools/lab-ai) and falls back to canned Takes
+ * when that endpoint is unavailable. */
 export function LabCanvasInteractionBar({
   targetName,
   onGenerate,

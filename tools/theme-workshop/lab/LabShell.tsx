@@ -17,8 +17,10 @@ import {
   readStoredPresentation,
   viewportPresentation,
 } from "./chrome/lab-presentation"
+import { requestDesignTakes } from "./design-pass/design-takes-client"
 import {
   createCannedTakeBatch,
+  createRecipeTakeBatch,
   type LabGeneratedTakeDescriptor,
   storiesFromGeneratedTakeDescriptors,
 } from "./design-pass/generated-takes"
@@ -512,45 +514,69 @@ export function LabShell() {
     if (!object || !isPlacedPartObject(object)) return
     const story = index.byId.get(object.storyId)
     if (!story) return
+    const baseMeta = index.designPassMetaById.get(story.id)
 
-    generatedTakeSeed.current += 1
-    const batch = createCannedTakeBatch({
-      surfaceId: adapter.id,
-      baseStory: story,
-      baseMeta: index.designPassMetaById.get(story.id),
-      prompt: request.prompt,
-      count: request.count,
-      seed: generatedTakeSeed.current,
-    })
-    const occupied = objects.map(object => objectBounds(object))
-    const origin = {
-      x: (object.x ?? 24) + PLACEMENT_CELL.w + 32,
-      y: object.y ?? 24,
-    }
-    const nextObjects = batch.stories.map(take => {
-      const point = placeNext("grid", occupied, origin, PLACEMENT_CELL)
-      occupied.push({ ...point, ...PLACEMENT_CELL })
-      return createPlacedPartObject(
-        take.id,
-        object.sourceId,
-        object.inputValues,
-        point,
-      )
-    })
+    // Ask the dev-lab AI workflow for recipe Takes; fall back to canned Takes
+    // when the endpoint is unavailable so the lab still works offline/in tests.
+    void (async () => {
+      const candidates = await requestDesignTakes(adapter.id, {
+        partId: story.designPartId,
+        prompt: request.prompt,
+        count: request.count,
+      })
 
-    setGeneratedTakes(prev => ({
-      stories: [...prev.stories, ...batch.stories],
-      metaByStoryId: {
-        ...prev.metaByStoryId,
-        ...batch.metaByStoryId,
-      },
-      descriptors: [...prev.descriptors, ...batch.descriptors],
-    }))
-    setSelectedIds(prev => [
-      ...new Set([...prev, ...batch.stories.map(story => story.id)]),
-    ])
-    setObjects(prev => [...prev, ...nextObjects])
-    setSelectedObjectId(nextObjects[0]?.id ?? objectId)
+      generatedTakeSeed.current += 1
+      const seed = generatedTakeSeed.current
+      const batch = candidates
+        ? createRecipeTakeBatch(
+            {
+              surfaceId: adapter.id,
+              baseStory: story,
+              baseMeta,
+              prompt: request.prompt,
+              seed,
+            },
+            candidates,
+          )
+        : createCannedTakeBatch({
+            surfaceId: adapter.id,
+            baseStory: story,
+            baseMeta,
+            prompt: request.prompt,
+            count: request.count,
+            seed,
+          })
+
+      const occupied = objects.map(object => objectBounds(object))
+      const origin = {
+        x: (object.x ?? 24) + PLACEMENT_CELL.w + 32,
+        y: object.y ?? 24,
+      }
+      const nextObjects = batch.stories.map(take => {
+        const point = placeNext("grid", occupied, origin, PLACEMENT_CELL)
+        occupied.push({ ...point, ...PLACEMENT_CELL })
+        return createPlacedPartObject(
+          take.id,
+          object.sourceId,
+          object.inputValues,
+          point,
+        )
+      })
+
+      setGeneratedTakes(prev => ({
+        stories: [...prev.stories, ...batch.stories],
+        metaByStoryId: {
+          ...prev.metaByStoryId,
+          ...batch.metaByStoryId,
+        },
+        descriptors: [...prev.descriptors, ...batch.descriptors],
+      }))
+      setSelectedIds(prev => [
+        ...new Set([...prev, ...batch.stories.map(story => story.id)]),
+      ])
+      setObjects(prev => [...prev, ...nextObjects])
+      setSelectedObjectId(nextObjects[0]?.id ?? objectId)
+    })()
   }
 
   const switchWorkshopTool = (tool: LabWorkshopTool) => {
