@@ -9,6 +9,7 @@
  * Layout in screens/panels.css (pcPush- / pcPanel-).
  */
 import type { ReactNode } from "react"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import type { Hint } from "./ScreenShell"
 import { ScreenShell } from "./ScreenShell"
 
@@ -28,7 +29,10 @@ export function PanelScreen({
   readonly panel: ReactNode
 }) {
   return (
-    <div className={`pcPush ${side}`}>
+    <div
+      className={`pcPush ${side}`}
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.panelScreen)}
+    >
       <div className="pcPush-page">
         <ScreenShell title={title} hints={hints} className="pad-0">
           {main}

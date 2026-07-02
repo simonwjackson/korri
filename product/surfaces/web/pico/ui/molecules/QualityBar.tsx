@@ -6,6 +6,8 @@
  */
 const SEGMENTS = ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"] as const
 
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
+
 export function QualityBar({
   level,
   max = 5,
@@ -18,7 +20,10 @@ export function QualityBar({
   readonly tag: string
 }) {
   return (
-    <div className="pcIg-quality">
+    <div
+      className="pcIg-quality"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.qualityBar)}
+    >
       <span className="pcIg-quality-label">QUALITY</span>
       <span className={`pcIg-quality-bar ${tone}`}>
         {SEGMENTS.slice(0, max).map((seg, index) => (

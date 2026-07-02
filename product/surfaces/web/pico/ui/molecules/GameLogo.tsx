@@ -6,6 +6,7 @@
  * Spotlight / Last-Played heroes so the fallback rule lives in one place.
  */
 import { PicoArtImage } from "../../PicoArtImage"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 
 export function GameLogo({
   logoUrl,
@@ -29,11 +30,15 @@ export function GameLogo({
         fit="contain"
         scale={scale}
         className={logoClassName}
+        partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.gameLogo)}
       />
     )
   }
   return (
-    <h1 className={`pc-title pc-t${titleSize} ${titleClassName ?? ""}`}>
+    <h1
+      className={`pc-title pc-t${titleSize} ${titleClassName ?? ""}`}
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.gameLogo)}
+    >
       {title}
     </h1>
   )

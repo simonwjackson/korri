@@ -6,10 +6,14 @@
  * component is the other in-session shell).
  */
 import type { ReactNode } from "react"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 
 export function GameOverlay({ children }: { readonly children: ReactNode }) {
   return (
-    <div className="pc-root">
+    <div
+      className="pc-root"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.gameOverlay)}
+    >
       <div className="pc-gamebg" />
       {children}
     </div>

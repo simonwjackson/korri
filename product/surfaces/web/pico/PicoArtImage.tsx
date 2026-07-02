@@ -19,6 +19,7 @@ export function PicoArtImage({
   granularity,
   mode,
   className,
+  partAttrs,
 }: {
   readonly src: string
   /** width / height of the cover-crop box (3/4 = portrait cart). Cover only. */
@@ -32,6 +33,8 @@ export function PicoArtImage({
   /** palette mode override; falls back to the live knob. */
   readonly mode?: PaletteMode
   readonly className?: string
+  /** data-korri part attrs, so a composing molecule can tag this canvas root. */
+  readonly partAttrs?: Record<string, string>
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const liveGranularity = useGranularity()
@@ -90,7 +93,9 @@ export function PicoArtImage({
     image.src = src
   }, [src, ratio, width, fit, palette])
 
-  return <canvas ref={ref} className={`pcArt ${className ?? ""}`} />
+  return (
+    <canvas ref={ref} className={`pcArt ${className ?? ""}`} {...partAttrs} />
+  )
 }
 
 /**

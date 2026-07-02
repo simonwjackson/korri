@@ -3,6 +3,8 @@
  *
  * Horizontal tab strip. Moved from `kit.tsx`.
  */
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
+
 export function Tabs({
   items,
   activeIndex,
@@ -11,7 +13,7 @@ export function Tabs({
   readonly activeIndex: number
 }) {
   return (
-    <div className="pc-tabs">
+    <div className="pc-tabs" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.tabs)}>
       {items.map((item, index) => (
         <span
           key={item}

@@ -8,10 +8,13 @@ export function renderPicoCart({
   game,
   className,
   favoriteMark,
+  partAttrs,
 }: {
   readonly game: PicoGame
   readonly className?: string
   readonly favoriteMark: PicoCartFavoriteMark
+  /** data-korri part attrs from the composing cart molecule. */
+  readonly partAttrs?: Record<string, string>
 }) {
   const art = picoArt(game.id, game.title)
   return (
@@ -22,6 +25,7 @@ export function renderPicoCart({
         color: art.ink,
         backgroundImage: ditherStyle(art.seed, art.fill, art.accent),
       }}
+      {...partAttrs}
     >
       {game.art ? (
         <PicoArtImage src={game.art} className="pico-cart-art" />

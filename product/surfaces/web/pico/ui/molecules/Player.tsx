@@ -10,6 +10,7 @@ import type { PicoPlayer } from "../../fixtures-extra"
 import { PicoArtImage } from "../../PicoArtImage"
 import { PicoIcon } from "../../PicoIcon"
 import { PicoMascot } from "../../PicoMascot"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 
 export type PlayerRep = "mascot" | "tag" | "avatar" | "pad"
 
@@ -47,7 +48,10 @@ export function Player({
   readonly rep?: PlayerRep
 }) {
   return (
-    <span className={`pcPlayer p${player.seat} ${player.status}`}>
+    <span
+      className={`pcPlayer p${player.seat} ${player.status}`}
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.player)}
+    >
       <span className="pcPlayer-mark">{playerMark(player, rep)}</span>
       <span className="pcPlayer-name">
         {player.status === "open" ? "OPEN" : player.name}

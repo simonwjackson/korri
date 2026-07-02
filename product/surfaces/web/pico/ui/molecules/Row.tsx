@@ -4,6 +4,7 @@
  * One list row: icon + label/meta + trailing. Moved from `kit.tsx`.
  */
 import type { ReactNode } from "react"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 
 export function Row({
   icon,
@@ -19,7 +20,10 @@ export function Row({
   readonly state?: "default" | "selected"
 }) {
   return (
-    <div className={`pc-row ${state === "selected" ? "sel" : ""}`}>
+    <div
+      className={`pc-row ${state === "selected" ? "sel" : ""}`}
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.row)}
+    >
       {icon !== undefined ? <span className="pc-row-ico">{icon}</span> : null}
       <span className="pc-row-text">
         <span className="pc-row-label">{label}</span>

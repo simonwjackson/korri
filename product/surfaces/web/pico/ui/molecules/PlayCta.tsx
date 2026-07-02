@@ -6,6 +6,7 @@
  * screen-specific class so styling stays per-surface for now.
  */
 import type { ReactNode } from "react"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Icon } from "../atoms/Icon"
 
 export function PlayCta({
@@ -16,7 +17,10 @@ export function PlayCta({
   readonly className?: string
 }) {
   return (
-    <span className={className}>
+    <span
+      className={className}
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.playCta)}
+    >
       <Icon name="play" /> {label}
     </span>
   )

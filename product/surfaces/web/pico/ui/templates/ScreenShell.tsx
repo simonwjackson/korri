@@ -8,6 +8,7 @@
  */
 import type { ReactNode } from "react"
 import { PicoButtonBar, PicoStatusBar } from "../../PicoStatusBar"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 
 export type Hint = { readonly key: "a" | "b" | "y"; readonly label: string }
 
@@ -25,7 +26,10 @@ export function ScreenShell({
   readonly tone?: "default" | "dim" | "alert"
 }) {
   return (
-    <div className={`pc-root ${tone ? `tone-${tone}` : ""}`}>
+    <div
+      className={`pc-root ${tone ? `tone-${tone}` : ""}`}
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.screenShell)}
+    >
       {title !== undefined ? <PicoStatusBar label={title} /> : null}
       <div className={`pc-main ${className ?? ""}`}>{children}</div>
       {hints ? <PicoButtonBar hints={hints} /> : null}

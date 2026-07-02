@@ -4,6 +4,7 @@
  * A bordered panel card. Moved from `kit.tsx`.
  */
 import type { ReactNode } from "react"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 
 export function Card({
   title,
@@ -15,7 +16,10 @@ export function Card({
   readonly className?: string
 }) {
   return (
-    <div className={`pc-card ${className ?? ""}`}>
+    <div
+      className={`pc-card ${className ?? ""}`}
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.card)}
+    >
       {title !== undefined ? (
         <div className="pc-card-title">{title}</div>
       ) : null}

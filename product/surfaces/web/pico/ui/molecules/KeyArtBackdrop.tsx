@@ -6,6 +6,7 @@
  * `pcLast-bg` markup so every cinematic surface shares one backdrop component.
  */
 import { PicoArtImage } from "../../PicoArtImage"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 
 export function KeyArtBackdrop({
   src,
@@ -29,6 +30,7 @@ export function KeyArtBackdrop({
       ratio={ratio}
       scale={scale}
       className={className}
+      partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.keyArtBackdrop)}
     />
   )
 }
