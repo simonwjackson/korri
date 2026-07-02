@@ -5,10 +5,20 @@
  * (history), and an optional chrome slot. Pico's screens are scoped under
  * [data-pico].pico-screen.intrinsic so its tokens + recipe resolve.
  */
-import { RegistryProvider, useAtomInitialValues } from "@effect/atom-react"
+import {
+  RegistryContext,
+  RegistryProvider,
+  useAtomInitialValues,
+} from "@effect/atom-react"
 import type { RouterHistory } from "@tanstack/history"
 import { RouterProvider } from "@tanstack/react-router"
-import type { CSSProperties, ReactNode } from "react"
+import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
+import {
+  type CSSProperties,
+  type ReactNode,
+  useContext,
+  useEffect,
+} from "react"
 import { createRoot } from "react-dom/client"
 import { createPicoRouter } from "./routes/pico-route-tree"
 import "./pico-prototype.css"
@@ -20,6 +30,22 @@ export interface MountPicoOptions {
   readonly data: { readonly initialValues: AtomInitialValues }
   readonly navigation?: { readonly history?: RouterHistory }
   readonly beforeRouter?: ReactNode
+  readonly onRegistry?: (registry: AtomRegistry.AtomRegistry) => void
+}
+
+/** Reports the surrounding atom registry to a design-tool seam. Shared by the
+ * full-surface mount below and the single-part root in `mount-pico-part.tsx`;
+ * inert in production (nothing passes `onRegistry`). */
+export function PicoRegistryBridge({
+  onRegistry,
+}: {
+  readonly onRegistry: (registry: AtomRegistry.AtomRegistry) => void
+}) {
+  const registry = useContext(RegistryContext)
+  useEffect(() => {
+    onRegistry(registry)
+  }, [registry, onRegistry])
+  return null
 }
 
 export interface MountedPicoSurface {
@@ -37,14 +63,17 @@ export function PicoSurfaceApp({
   initialValues,
   router,
   beforeRouter,
+  onRegistry,
 }: {
   readonly initialValues: AtomInitialValues
   readonly router: PicoRouter
   readonly beforeRouter?: ReactNode
+  readonly onRegistry?: (registry: AtomRegistry.AtomRegistry) => void
 }) {
   useAtomInitialValues(initialValues)
   return (
     <>
+      {onRegistry ? <PicoRegistryBridge onRegistry={onRegistry} /> : null}
       {beforeRouter}
       <div data-pico className="pico-screen intrinsic" style={PICO_FRAME_STYLE}>
         <RouterProvider router={router} />
@@ -66,6 +95,7 @@ export function mountPico(
         initialValues={options.data.initialValues}
         router={router}
         beforeRouter={options.beforeRouter}
+        onRegistry={options.onRegistry}
       />
     </RegistryProvider>,
   )
