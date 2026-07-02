@@ -2,10 +2,10 @@ import {
   bindPlacedPartInput,
   bindPlacedPartObject,
   createPlacedPartObject,
-  nextCanvasObjectId,
-  resetCanvasObjectIdCounterForTest,
   type LabObjectInputValues,
   type LabPlacedPartObject,
+  nextCanvasObjectId,
+  resetCanvasObjectIdCounterForTest,
 } from "./lab-canvas-object"
 import type { LabInputValue } from "./lab-source-state"
 
@@ -149,12 +149,48 @@ export function clampScale(value: number): number {
   return Math.max(0.25, Math.min(2.5, value))
 }
 
+/** One pinch gesture sample: the midpoint between the two touches (board px)
+ * and the distance separating them. */
+export type LabPinchSample = {
+  readonly midpoint: { readonly x: number; readonly y: number }
+  readonly distance: number
+}
+
+/**
+ * Natural two-finger camera: scale by the finger-distance ratio (clamped) and
+ * keep the world point grabbed under the start midpoint pinned under the
+ * moving midpoint — so one gesture both zooms and pans, exactly like a map.
+ * A degenerate start distance (0 / non-finite ratio) is pan-only.
+ */
+export function pinchCamera(
+  start: LabCamera,
+  begin: LabPinchSample,
+  current: LabPinchSample,
+): LabCamera {
+  const ratio =
+    begin.distance > 0 && Number.isFinite(current.distance / begin.distance)
+      ? current.distance / begin.distance
+      : 1
+  const scale = clampScale(start.scale * ratio)
+  const worldX = (begin.midpoint.x - start.x) / start.scale
+  const worldY = (begin.midpoint.y - start.y) / start.scale
+  return {
+    x: current.midpoint.x - worldX * scale,
+    y: current.midpoint.y - worldY * scale,
+    scale,
+  }
+}
+
 export function bindObjectInstance(
   instances: readonly LabObjectInstance[],
   id: string,
   patch: Partial<Pick<LabObjectInstance, "sourceId" | "x" | "y">>,
 ): readonly LabObjectInstance[] {
-  return bindPlacedPartObject(instances, id, patch) as readonly LabObjectInstance[]
+  return bindPlacedPartObject(
+    instances,
+    id,
+    patch,
+  ) as readonly LabObjectInstance[]
 }
 
 export function bindObjectInput(

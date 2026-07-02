@@ -172,6 +172,13 @@ beforeEach(() => {
     configurable: true,
     value: () => undefined,
   })
+  // happy-dom has no pointer-capture implementation; the board's pan path
+  // calls these on real browsers.
+  if (!HTMLElement.prototype.setPointerCapture) {
+    HTMLElement.prototype.setPointerCapture = () => undefined
+    HTMLElement.prototype.releasePointerCapture = () => undefined
+    HTMLElement.prototype.hasPointerCapture = () => false
+  }
   spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
     width: VIEWPORT.width,
     height: VIEWPORT.height,
@@ -388,6 +395,85 @@ describe("LabWorkshopBoard placement", () => {
     const part = dumped().find(item => item.id === "part")
     expect(device?.x).toBeTypeOf("number")
     expect(part?.x).toBeGreaterThanOrEqual((device?.x ?? 0) + 900)
+  })
+})
+
+describe("LabWorkshopBoard pinch zoom", () => {
+  function cam(): HTMLElement {
+    return document.querySelector(".pt-cam") as HTMLElement
+  }
+  function board(): Element {
+    return document.querySelector(".pt-board-free") as Element
+  }
+  function touch(
+    type: "pointerDown" | "pointerMove" | "pointerUp",
+    pointerId: number,
+    clientX: number,
+    clientY: number,
+  ) {
+    fireEvent[type](board(), {
+      pointerId,
+      pointerType: "touch",
+      clientX,
+      clientY,
+    })
+  }
+
+  it("zooms around the pinch midpoint as the fingers spread", () => {
+    render(<Harness initial={[instance("one", { x: 100, y: 40 })]} />)
+
+    touch("pointerDown", 1, 400, 300)
+    touch("pointerDown", 2, 600, 300)
+    // Spread: A moves left, widening the gap to 300px (ratio 1.5) and moving
+    // the midpoint to (450, 300).
+    touch("pointerMove", 1, 300, 300)
+
+    // scale 1.5; world point under the start midpoint (476, 276) pinned under
+    // the moving midpoint: 450 - 476*1.5 = -264, 300 - 276*1.5 = -114.
+    expect(cam().style.zoom).toBe("1.5")
+    expect(cam().style.transform).toBe("translate(-264px, -114px)")
+  })
+
+  it("pans with a two-finger drag without changing scale", () => {
+    render(<Harness initial={[instance("one", { x: 100, y: 40 })]} />)
+
+    touch("pointerDown", 1, 400, 300)
+    touch("pointerDown", 2, 600, 300)
+    touch("pointerMove", 1, 500, 300)
+    touch("pointerMove", 2, 700, 300)
+
+    // Distance is back to 200 (ratio 1); midpoint moved +100 — the camera
+    // projects absolutely from the gesture start, so no drift accumulates.
+    expect(cam().style.zoom).toBe("1")
+    expect(cam().style.transform).toBe("translate(124px, 24px)")
+  })
+
+  it("ends the pinch when a finger lifts", () => {
+    render(<Harness initial={[instance("one", { x: 100, y: 40 })]} />)
+
+    touch("pointerDown", 1, 400, 300)
+    touch("pointerDown", 2, 600, 300)
+    touch("pointerMove", 1, 300, 300)
+    const frozen = cam().style.transform
+    touch("pointerUp", 2, 600, 300)
+
+    touch("pointerMove", 1, 100, 300)
+    expect(cam().style.transform).toBe(frozen)
+    expect(cam().style.zoom).toBe("1.5")
+  })
+
+  it("bails out of the pinch when a third finger lands", () => {
+    render(<Harness initial={[instance("one", { x: 100, y: 40 })]} />)
+
+    touch("pointerDown", 1, 400, 300)
+    touch("pointerDown", 2, 600, 300)
+    touch("pointerDown", 3, 500, 400)
+    touch("pointerMove", 1, 300, 300)
+
+    expect(cam().style.zoom).toBe("1")
+    expect(cam().style.transform).toBe(
+      `translate(${DEFAULT_CAMERA.x}px, ${DEFAULT_CAMERA.y}px)`,
+    )
   })
 })
 

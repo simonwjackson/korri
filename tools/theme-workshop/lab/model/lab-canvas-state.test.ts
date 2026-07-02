@@ -8,6 +8,7 @@ import {
   frameCameraOn,
   isRectFullyVisible,
   lerpCamera,
+  pinchCamera,
   reconcileInstancesWithSelection,
   resetObjectIdCounterForTest,
 } from "./lab-canvas-state"
@@ -93,6 +94,74 @@ describe("lab canvas state", () => {
       sourceId: "default",
       inputValues: {},
     })
+  })
+})
+
+describe("pinch camera", () => {
+  const start = { x: 0, y: 0, scale: 1 }
+
+  it("scales by the distance ratio around the pinch midpoint", () => {
+    const next = pinchCamera(
+      start,
+      { midpoint: { x: 500, y: 300 }, distance: 100 },
+      { midpoint: { x: 500, y: 300 }, distance: 200 },
+    )
+    expect(next.scale).toBe(2)
+    // The world point under the midpoint stays pinned under the midpoint.
+    expect((500 - next.x) / next.scale).toBeCloseTo(500)
+    expect((300 - next.y) / next.scale).toBeCloseTo(300)
+  })
+
+  it("keeps the grabbed world point under the moving midpoint (zoom + pan)", () => {
+    const begin = { midpoint: { x: 400, y: 200 }, distance: 120 }
+    const current = { midpoint: { x: 520, y: 260 }, distance: 180 }
+    const cameraStart = { x: 40, y: -20, scale: 0.8 }
+    const next = pinchCamera(cameraStart, begin, current)
+
+    const world = {
+      x: (begin.midpoint.x - cameraStart.x) / cameraStart.scale,
+      y: (begin.midpoint.y - cameraStart.y) / cameraStart.scale,
+    }
+    expect(next.scale).toBeCloseTo(0.8 * 1.5)
+    expect(next.x + world.x * next.scale).toBeCloseTo(current.midpoint.x)
+    expect(next.y + world.y * next.scale).toBeCloseTo(current.midpoint.y)
+  })
+
+  it("pans without scaling when the finger distance is unchanged", () => {
+    const next = pinchCamera(
+      { x: 10, y: 20, scale: 1.5 },
+      { midpoint: { x: 100, y: 100 }, distance: 90 },
+      { midpoint: { x: 160, y: 140 }, distance: 90 },
+    )
+    expect(next.scale).toBe(1.5)
+    expect(next.x).toBeCloseTo(70)
+    expect(next.y).toBeCloseTo(60)
+  })
+
+  it("clamps the pinch scale to the camera bounds", () => {
+    const zoomedIn = pinchCamera(
+      start,
+      { midpoint: { x: 0, y: 0 }, distance: 10 },
+      { midpoint: { x: 0, y: 0 }, distance: 1000 },
+    )
+    expect(zoomedIn.scale).toBe(2.5)
+
+    const zoomedOut = pinchCamera(
+      start,
+      { midpoint: { x: 0, y: 0 }, distance: 1000 },
+      { midpoint: { x: 0, y: 0 }, distance: 10 },
+    )
+    expect(zoomedOut.scale).toBe(0.25)
+  })
+
+  it("treats a degenerate start distance as pan-only", () => {
+    const next = pinchCamera(
+      start,
+      { midpoint: { x: 100, y: 100 }, distance: 0 },
+      { midpoint: { x: 150, y: 100 }, distance: 80 },
+    )
+    expect(next.scale).toBe(1)
+    expect(next.x).toBeCloseTo(start.x + 50)
   })
 })
 

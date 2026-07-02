@@ -33,9 +33,11 @@ import {
   frameCameraOn,
   isRectFullyVisible,
   type LabCamera,
+  type LabPinchSample,
   type LabWorkshopCommandSignal,
   type LabWorkshopTool,
   lerpCamera,
+  pinchCamera,
 } from "../model/lab-canvas-state"
 import { useLabPlacementPattern } from "../model/lab-placement-store"
 import type { LabPreviewSelection } from "../model/lab-preview-selection"
@@ -128,6 +130,13 @@ export function LabWorkshopBoard({
     readonly y: number
     readonly cx: number
     readonly cy: number
+  } | null>(null)
+  // Active touch points (client px) and the in-flight pinch, keyed off the
+  // gesture's start camera so each move is an absolute projection (no drift).
+  const touchesRef = useRef(new Map<number, { x: number; y: number }>())
+  const pinchRef = useRef<{
+    readonly camera: LabCamera
+    readonly begin: LabPinchSample
   } | null>(null)
 
   // Mirror the live camera in a ref so the rAF tween reads the latest value
@@ -296,6 +305,73 @@ export function LabWorkshopBoard({
     }
   }, [])
 
+  const pinchSampleFromTouches = (): LabPinchSample | null => {
+    const points = [...touchesRef.current.values()]
+    const [a, b] = points
+    if (points.length !== 2 || !a || !b) return null
+    const rect = boardRef.current?.getBoundingClientRect()
+    return {
+      midpoint: {
+        x: (a.x + b.x) / 2 - (rect?.left ?? 0),
+        y: (a.y + b.y) / 2 - (rect?.top ?? 0),
+      },
+      distance: Math.hypot(b.x - a.x, b.y - a.y),
+    }
+  }
+
+  const cancelPan = (board: HTMLDivElement) => {
+    const pan = panRef.current
+    if (!pan) return
+    if (board.hasPointerCapture?.(pan.pointerId)) {
+      board.releasePointerCapture(pan.pointerId)
+    }
+    panRef.current = null
+    setPanning(false)
+  }
+
+  // Two touches anywhere on the board are a pinch: zoom by the finger-distance
+  // ratio while the grabbed world point tracks the moving midpoint (one
+  // natural gesture for zoom + pan). The board's `touch-action: none` keeps
+  // the browser's own page zoom out of the way.
+  const trackTouchDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "touch") return
+    touchesRef.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    })
+    if (touchesRef.current.size === 2) {
+      stopTween()
+      cancelPan(event.currentTarget)
+      const begin = pinchSampleFromTouches()
+      pinchRef.current = begin ? { camera: cameraRef.current, begin } : null
+      return
+    }
+    // A third finger ends the gesture rather than guessing which two to track.
+    if (touchesRef.current.size > 2) pinchRef.current = null
+  }
+
+  const trackTouchMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "touch") return
+    if (!touchesRef.current.has(event.pointerId)) return
+    touchesRef.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    })
+    const pinch = pinchRef.current
+    if (!pinch) return
+    const current = pinchSampleFromTouches()
+    if (!current) return
+    const next = pinchCamera(pinch.camera, pinch.begin, current)
+    cameraRef.current = next
+    setCamera(next)
+  }
+
+  const trackTouchEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "touch") return
+    touchesRef.current.delete(event.pointerId)
+    if (touchesRef.current.size < 2) pinchRef.current = null
+  }
+
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.stopPropagation()
@@ -393,12 +469,19 @@ export function LabWorkshopBoard({
       data-hand={spaceDown || tool === "hand" ? "true" : undefined}
       data-panning={panning ? "true" : undefined}
       onPointerDownCapture={event => {
+        trackTouchDown(event)
         if (isEditableTarget(event.target)) return
+        // A pinch owns the camera; never start a competing pan.
+        if (touchesRef.current.size >= 2) return
         const panButton = event.button === 1
         if (!spaceDown && tool !== "hand" && !panButton) return
         startPan(event)
       }}
+      onPointerMoveCapture={trackTouchMove}
+      onPointerUpCapture={trackTouchEnd}
+      onPointerCancelCapture={trackTouchEnd}
       onPointerDown={event => {
+        if (touchesRef.current.size >= 2) return
         if (event.target !== event.currentTarget) return
         if (pickMode) {
           stopTween()
