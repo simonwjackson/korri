@@ -9,6 +9,9 @@
  * CSS; the tile itself only declares its portrait aspect.
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftCoverArt } from "./ShiftCoverArt"
+import { ShiftLibraryTileBadge } from "./ShiftLibraryTileBadge"
+import { ShiftLibraryTileTitle } from "./ShiftLibraryTileTitle"
 import type { ShiftLibraryGame } from "./shift-library-game"
 
 export interface ShiftLibraryTileProps {
@@ -35,14 +38,10 @@ export function ShiftLibraryTile({
       onClick={() => onSelect?.(game.id)}
     >
       <span className="shift-lib-tile-art">
-        <img src={game.artUrl} alt="" loading="lazy" />
-        {game.favorite ? (
-          <span className="shift-lib-tile-fav" aria-hidden>
-            ★
-          </span>
-        ) : null}
+        <ShiftCoverArt src={game.artUrl} loading="lazy" />
+        {game.favorite ? <ShiftLibraryTileBadge /> : null}
       </span>
-      <span className="shift-lib-tile-title">{game.title}</span>
+      <ShiftLibraryTileTitle title={game.title} />
     </button>
   )
 }

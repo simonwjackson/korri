@@ -6,6 +6,7 @@
  * both map their sections onto this one real part.
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftLibraryShelfTitle } from "./ShiftLibraryShelfTitle"
 import { ShiftLibraryTile } from "./ShiftLibraryTile"
 import type { ShiftLibraryGame } from "./shift-library-game"
 
@@ -25,7 +26,7 @@ export function ShiftLibraryShelf({
       className="shift-lib-shelf"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.libraryShelf)}
     >
-      <h2 className="shift-lib-shelf-title">{title}</h2>
+      <ShiftLibraryShelfTitle title={title} />
       <div className="shift-lib-shelf-track">
         {games.map(game => (
           <ShiftLibraryTile key={game.id} game={game} onSelect={onSelect} />

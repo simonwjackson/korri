@@ -8,6 +8,11 @@
  */
 import type { ReactNode } from "react"
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftLibraryCount, shiftLibraryCountLabel } from "./ShiftLibraryCount"
+import { ShiftLibraryHeading } from "./ShiftLibraryHeading"
+
+// Re-exported for callers that used to import the label from the header.
+export { shiftLibraryCountLabel }
 
 export interface ShiftLibraryHeaderProps {
   readonly title?: string
@@ -15,10 +20,6 @@ export interface ShiftLibraryHeaderProps {
   readonly count?: number
   /** Trailing control slot (e.g. the Lens sort button). */
   readonly children?: ReactNode
-}
-
-export function shiftLibraryCountLabel(count: number): string {
-  return `${count} ${count === 1 ? "game" : "games"}`
 }
 
 export function ShiftLibraryHeader({
@@ -31,10 +32,8 @@ export function ShiftLibraryHeader({
       className="shift-lib-top"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.libraryHeader)}
     >
-      <h1 className="shift-lib-heading">{title}</h1>
-      {count !== undefined ? (
-        <span className="shift-lib-count">{shiftLibraryCountLabel(count)}</span>
-      ) : null}
+      <ShiftLibraryHeading title={title} />
+      {count !== undefined ? <ShiftLibraryCount count={count} /> : null}
       {children}
     </header>
   )
