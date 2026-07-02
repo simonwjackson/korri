@@ -9,7 +9,7 @@
     bun2nix.url = "github:nix-community/bun2nix?ref=2.1.0";
     bun2nix.inputs.nixpkgs.follows = "nixpkgs";
 
-    nix-on-rocks.url = "github:simonwjackson/nix-on-rocks/refactor/korri-owned-tailnet-policy";
+    nix-on-rocks.url = "github:simonwjackson/nix-on-rocks/main";
 
     fake-08-src.url = "git+https://github.com/jtothebell/fake-08?rev=0d26fd59103941e5f95e0ee665c6e0fb8c6b6f03&submodules=1";
     fake-08-src.flake = false;
