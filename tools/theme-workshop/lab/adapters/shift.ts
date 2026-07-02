@@ -2,6 +2,7 @@ import { shiftConfig } from "@product/surfaces/web/shift/config"
 import { mountShift } from "@product/surfaces/web/shift/mount-shift"
 import { ShiftPartSurface } from "@product/surfaces/web/shift/mount-shift-part"
 import { SHIFT_COMPANION_PATH } from "@product/surfaces/web/shift/routes/paths"
+import { SHIFT_DESIGN_PARTS } from "@product/surfaces/web/shift/shift-design-parts"
 import type { RouterHistory } from "@tanstack/history"
 import {
   makeSeedInitialValues,
@@ -29,7 +30,7 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
   id: "shift",
   devices: shiftConfig.devices,
   screens: [
-    { label: "Home", path: "/" },
+    { label: "Home", path: "/", pagePartId: SHIFT_DESIGN_PARTS.home.id },
     { label: "Game Detail", path: "/game/hollow-knight" },
   ],
   knobs: shiftConfig.knobs,

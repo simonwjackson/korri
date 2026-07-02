@@ -30,8 +30,10 @@ export function partEventsForStory(
   return adapter.surfacePartEvents?.(story) ?? []
 }
 
-/** Resolve the page part a screen route composes (screen label ↔ page story
- * name). Returns null when the surface has no matching page part. */
+/** Resolve the page part a screen route composes: by the screen's stable
+ * `pagePartId` (design-part identity) when declared, falling back to screen
+ * label ↔ page story name for surfaces that have not adopted ids. Returns
+ * null when the surface has no matching page part. */
 export function pagePartStoryForScreen(
   adapter: Pick<LabSurfaceAdapter, "screens">,
   surfacePath: string,
@@ -41,10 +43,15 @@ export function pagePartStoryForScreen(
     candidate => candidate.path === surfacePath,
   )
   if (!screen) return null
+  let labelMatch: Story | null = null
   for (const story of stories) {
-    if (story.layer === "page" && story.name === screen.label) return story
+    if (story.layer !== "page") continue
+    if (screen.pagePartId && story.designPartId === screen.pagePartId) {
+      return story
+    }
+    if (labelMatch === null && story.name === screen.label) labelMatch = story
   }
-  return null
+  return labelMatch
 }
 
 /**

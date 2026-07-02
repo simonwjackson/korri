@@ -84,6 +84,11 @@ export type LabPartSeedEntry = readonly [Atom.Atom<unknown>, unknown]
  */
 export interface LabSurfacePartMountSpec {
   readonly initialValues: readonly LabPartSeedEntry[]
+  /** Per-pair change keys aligned with `initialValues`: on a binding edit the
+   * mount re-writes ONLY pairs whose key changed, so editing one input never
+   * rolls back event-driven facts held by unrelated atoms. Omit to re-write
+   * every pair on any binding change. */
+  readonly reseedKeys?: readonly string[]
   readonly node: ReactNode
 }
 
@@ -103,6 +108,10 @@ export interface LabSurfaceDualScreenOptions {
 export interface LabSurfaceScreen {
   readonly label: string
   readonly path: string
+  /** Stable design-part id of the page part this screen composes, so edge
+   * inheritance resolves by identity instead of display text. Falls back to
+   * label ↔ story-name matching when omitted. */
+  readonly pagePartId?: string
 }
 
 export interface LabSurfaceAdapter {

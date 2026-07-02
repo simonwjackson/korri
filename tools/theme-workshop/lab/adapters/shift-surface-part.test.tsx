@@ -86,70 +86,50 @@ function mountSpec(
 
 describe("renderShiftSurfacePart (Workshop edge render)", () => {
   it("renders the dev library at Ready", async () => {
-    render(
-      <div>
-        {renderShiftSurfacePart(homeStory, {
-          sourceId: "dev",
-          inputValues: { variant: "Ready" },
-        })}
-      </div>,
-    )
+    mountSpec(homeStory, {
+      sourceId: "dev",
+      inputValues: { variant: "Ready" },
+    })
     await waitFor(() => {
       expect(screen.queryByText("No games found.")).toBeNull()
     })
   })
 
   it("renders the cozy library swapped in at the edge", async () => {
-    render(
-      <div>
-        {renderShiftSurfacePart(homeStory, {
-          sourceId: "cozy",
-          inputValues: { variant: "Ready" },
-        })}
-      </div>,
-    )
+    mountSpec(homeStory, {
+      sourceId: "cozy",
+      inputValues: { variant: "Ready" },
+    })
     await waitFor(() => {
       expect(screen.getByText("Aurora Drift")).toBeTruthy()
     })
   })
 
   it("renders the retro library swapped in at the edge", async () => {
-    render(
-      <div>
-        {renderShiftSurfacePart(homeStory, {
-          sourceId: "retro",
-          inputValues: { variant: "Ready" },
-        })}
-      </div>,
-    )
+    mountSpec(homeStory, {
+      sourceId: "retro",
+      inputValues: { variant: "Ready" },
+    })
     await waitFor(() => {
       expect(screen.getByText("Pixel Quest")).toBeTruthy()
     })
   })
 
   it("honors the chosen data state (Empty) through the edge", async () => {
-    render(
-      <div>
-        {renderShiftSurfacePart(homeStory, {
-          sourceId: "cozy",
-          inputValues: { variant: "Empty" },
-        })}
-      </div>,
-    )
+    mountSpec(homeStory, {
+      sourceId: "cozy",
+      inputValues: { variant: "Empty" },
+    })
     await waitFor(() => {
       expect(screen.getByText("No games found.")).toBeTruthy()
     })
   })
 
   it("produces launch feedback by pressing Play in a render-only Compose object", async () => {
-    render(
-      <div>
-        {renderShiftSurfacePart(homeStory, {
-          sourceId: "cozy",
-          inputValues: { variant: "Ready" },
-        })}
-      </div>,
-    )
+    mountSpec(homeStory, {
+      sourceId: "cozy",
+      inputValues: { variant: "Ready" },
+    })
 
     const firstGame = await screen.findByRole("button", {
       name: /Aurora Drift/i,
@@ -165,14 +145,10 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
     // A board object renders the real composition but supplies no coordinate
     // owner, so it must not race the capture singleton another surface owns.
     setShiftLiveLaunch("Launching")
-    render(
-      <div>
-        {renderShiftSurfacePart(homeStory, {
-          sourceId: "cozy",
-          inputValues: { variant: "Ready" },
-        })}
-      </div>,
-    )
+    mountSpec(homeStory, {
+      sourceId: "cozy",
+      inputValues: { variant: "Ready" },
+    })
     await waitFor(() => {
       expect(screen.getByText("Aurora Drift")).toBeTruthy()
     })
@@ -196,14 +172,10 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
   })
 
   it("combines Data×Foreground: a busy foreground blocks on the Ready page", async () => {
-    render(
-      <div>
-        {renderShiftSurfacePart(homeStory, {
-          sourceId: "cozy",
-          inputValues: { variant: "Ready", foreground: "Running" },
-        })}
-      </div>,
-    )
+    mountSpec(homeStory, {
+      sourceId: "cozy",
+      inputValues: { variant: "Ready", foreground: "Running" },
+    })
     await waitFor(() => {
       expect(screen.getByText("Another game is running")).toBeTruthy()
     })
@@ -361,6 +333,54 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
     expect(container.querySelector(".shift-lib-empty")).toBeTruthy()
   })
 
+  it("keeps an event-driven battery fact across an unrelated binding edit", () => {
+    const bindingA = {
+      sourceId: "dev",
+      inputValues: { clock: "2026-06-30T09:41:00.000Z" },
+    }
+    const specA = shiftSurfacePartMount(statusBarStory, bindingA)
+    if (!specA) throw new Error("expected status bar spec")
+    const { container, rerender } = render(
+      <LabPartMount
+        Root={ShiftPartSurface}
+        spec={specA}
+        bindingKey={JSON.stringify(bindingA)}
+        scopeId="object-part"
+      />,
+    )
+
+    const battery = shiftSurfacePartEvents(statusBarStory).find(
+      event => event.id === "battery",
+    )
+    act(() => {
+      battery?.emit(
+        { percent: 12, charging: false },
+        { scopeId: "object-part" },
+      )
+    })
+    expect(container.querySelector(".lucide-battery-low")).toBeTruthy()
+
+    // Editing the clock re-seeds ONLY the clock pair; the battery fact the
+    // event delivered must survive, exactly as in production.
+    const bindingB = {
+      sourceId: "dev",
+      inputValues: { clock: "2026-06-30T23:08:00.000Z" },
+    }
+    const specB = shiftSurfacePartMount(statusBarStory, bindingB)
+    if (!specB) throw new Error("expected status bar spec")
+    rerender(
+      <LabPartMount
+        Root={ShiftPartSurface}
+        spec={specB}
+        bindingKey={JSON.stringify(bindingB)}
+        scopeId="object-part"
+      />,
+    )
+
+    expect(screen.getByText("11:08 PM")).toBeTruthy()
+    expect(container.querySelector(".lucide-battery-low")).toBeTruthy()
+  })
+
   it("exposes battery-only events on the Battery atom and both on Status Bar", () => {
     expect(shiftSurfacePartEvents(batteryStory).map(event => event.id)).toEqual(
       ["battery"],
@@ -371,18 +391,14 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
   })
 
   it("feeds Home power through the full Home page's real Status Bar", async () => {
-    const { container } = render(
-      <div>
-        {renderShiftSurfacePart(homeStory, {
-          sourceId: "cozy",
-          inputValues: {
-            variant: "Ready",
-            foreground: "Ready",
-            power: { percent: 64, charging: true },
-          },
-        })}
-      </div>,
-    )
+    const { container } = mountSpec(homeStory, {
+      sourceId: "cozy",
+      inputValues: {
+        variant: "Ready",
+        foreground: "Ready",
+        power: { percent: 64, charging: true },
+      },
+    })
 
     await waitFor(() => {
       expect(screen.getByText("Aurora Drift")).toBeTruthy()
@@ -391,18 +407,14 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
   })
 
   it("feeds Home clock text through the full Home page's real Status Bar", async () => {
-    render(
-      <div>
-        {renderShiftSurfacePart(homeStory, {
-          sourceId: "cozy",
-          inputValues: {
-            variant: "Ready",
-            foreground: "Ready",
-            clock: "2026-06-30T09:41:00.000Z",
-          },
-        })}
-      </div>,
-    )
+    mountSpec(homeStory, {
+      sourceId: "cozy",
+      inputValues: {
+        variant: "Ready",
+        foreground: "Ready",
+        clock: "2026-06-30T09:41:00.000Z",
+      },
+    })
 
     await waitFor(() => {
       expect(screen.getByText("Aurora Drift")).toBeTruthy()
@@ -411,18 +423,14 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
   })
 
   it("feeds Home network status through the full Home page's real Status Bar", async () => {
-    const { container } = render(
-      <div>
-        {renderShiftSurfacePart(homeStory, {
-          sourceId: "cozy",
-          inputValues: {
-            variant: "Ready",
-            foreground: "Ready",
-            network: { _tag: "Disconnected" },
-          },
-        })}
-      </div>,
-    )
+    const { container } = mountSpec(homeStory, {
+      sourceId: "cozy",
+      inputValues: {
+        variant: "Ready",
+        foreground: "Ready",
+        network: { _tag: "Disconnected" },
+      },
+    })
 
     await waitFor(() => {
       expect(screen.getByText("Aurora Drift")).toBeTruthy()

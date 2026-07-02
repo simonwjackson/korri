@@ -37,6 +37,7 @@ export function LabPartMount({
   const registryRef = useRef<AtomRegistry.AtomRegistry | null>(null)
   const unregisterRef = useRef<() => void>(() => {})
   const lastKeyRef = useRef(bindingKey)
+  const lastReseedKeysRef = useRef(spec.reseedKeys)
 
   const handleRegistry = useCallback(
     (registry: AtomRegistry.AtomRegistry) => {
@@ -65,11 +66,19 @@ export function LabPartMount({
     lastKeyRef.current = bindingKey
     const registry = registryRef.current
     if (!registry) return
-    for (const [atom, value] of specRef.current.initialValues) {
+    const next = specRef.current
+    const previousKeys = lastReseedKeysRef.current
+    next.initialValues.forEach(([atom, value], index) => {
+      // Re-write only pairs whose reseed key changed, so a binding edit never
+      // rolls back an event-driven fact held by an unrelated atom. Specs
+      // without keys re-write everything (the pre-keyed behavior).
+      const key = next.reseedKeys?.[index]
+      if (key !== undefined && previousKeys?.[index] === key) return
       // Seed pairs are erased to Atom<unknown>; every seedable atom is a
       // writable source atom (same erasure LabSurfaceMount's seed map uses).
       registry.set(atom as Atom.Writable<unknown, unknown>, value)
-    }
+    })
+    lastReseedKeysRef.current = next.reseedKeys
   }, [bindingKey])
 
   return (

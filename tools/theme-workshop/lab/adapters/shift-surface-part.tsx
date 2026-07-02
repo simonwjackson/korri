@@ -1,4 +1,4 @@
-import { RegistryProvider, useAtomValue } from "@effect/atom-react"
+import { useAtomValue } from "@effect/atom-react"
 import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
 import { makeInMemoryLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
 import {
@@ -12,14 +12,7 @@ import {
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
-import { ShiftLibraryDeck } from "@product/surfaces/web/shift/pages/ShiftLibraryDeck"
-import { ShiftLibraryFilterBar } from "@product/surfaces/web/shift/pages/ShiftLibraryFilterBar"
-import { ShiftLibraryGrid } from "@product/surfaces/web/shift/pages/ShiftLibraryGrid"
-import { ShiftLibraryLens } from "@product/surfaces/web/shift/pages/ShiftLibraryLens"
-import { ShiftLibraryReel } from "@product/surfaces/web/shift/pages/ShiftLibraryReel"
-import { ShiftLibraryShelves } from "@product/surfaces/web/shift/pages/ShiftLibraryShelves"
-import type { ShiftLibraryGame } from "@product/surfaces/web/shift/pages/shift-library-game"
-import { buildShiftLibrarySections } from "@product/surfaces/web/shift/pages/shift-library-sections"
+import { shiftLibraryVariantForStory } from "@product/surfaces/web/shift/pages/shift-library-variants"
 import {
   foregroundStateFromAtom,
   ShiftHomeStateView,
@@ -62,14 +55,15 @@ import {
 import type { LabSurfacePartMountSpec } from "../surface-registry"
 
 /**
- * Render a placed Shift Home page part on the Workshop board through the REAL
- * edges, seeded for the object's chosen fixture source plus Data, Foreground,
- * Power, Clock, and Network values. Home reads the production atoms; swapping
- * any input in the object's inspector re-seeds those atoms.
+ * Live-mount specs and static renders for placed Shift parts. Parts whose
+ * subtree reads real atoms (Home, Battery, Status Bar) get a binding→atoms
+ * projection (`shiftSurfacePartMount`) consumed by `LabPartMount`; pure
+ * prop-driven parts (the Library variants) render through their real `games`
+ * component input.
  */
-export const SHIFT_POWER_INPUT_ID = "power"
+const SHIFT_POWER_INPUT_ID = "power"
 export const SHIFT_CLOCK_INPUT_ID = "clock"
-export const SHIFT_NETWORK_INPUT_ID = "network"
+const SHIFT_NETWORK_INPUT_ID = "network"
 
 export const SHIFT_POWER_INPUT_CONTROL: LabInputControl = {
   kind: "object",
@@ -208,24 +202,12 @@ function ShiftStatusBarFromEdges() {
 }
 
 /**
- * The Library page variants keyed by design-part name: each renders the real
- * full-screen composition from the chosen fixture library through the real
- * `games` component input (the variants' data edge — they are prop-driven by
- * design; the composition root supplies the projection).
+ * Static render path for placed parts that are prop-driven by design: the
+ * Library variants render through their real `games` component input from the
+ * chosen fixture library (one product-owned variant registry —
+ * `shift-library-variants.tsx`). Live-mountable parts never reach this path
+ * (`LabDraggablePart` prefers `surfacePartMount`).
  */
-const SHIFT_LIBRARY_PAGE_RENDERERS: Readonly<
-  Record<string, (games: readonly ShiftLibraryGame[]) => ReactNode>
-> = {
-  "Library — Grid": games => <ShiftLibraryGrid games={games} />,
-  "Library — Shelves": games => (
-    <ShiftLibraryShelves sections={buildShiftLibrarySections(games)} />
-  ),
-  "Library — Lens": games => <ShiftLibraryLens games={games} />,
-  "Library — Filter Bar": games => <ShiftLibraryFilterBar games={games} />,
-  "Library — Deck": games => <ShiftLibraryDeck games={games} />,
-  "Library — Reel": games => <ShiftLibraryReel games={games} />,
-}
-
 export function renderShiftSurfacePart(
   story: Story,
   binding: {
@@ -233,38 +215,26 @@ export function renderShiftSurfacePart(
     readonly inputValues: Readonly<Record<string, LabInputValue>>
   },
 ): ReactNode {
-  const libraryRenderer =
-    story.layer === "page"
-      ? SHIFT_LIBRARY_PAGE_RENDERERS[story.name]
-      : undefined
-  if (libraryRenderer) {
-    return libraryRenderer(
+  const variant =
+    story.layer === "page" ? shiftLibraryVariantForStory(story) : undefined
+  if (variant) {
+    return variant.render(
       story.state === "Empty"
         ? []
         : shiftLibraryGamesForBinding(binding.sourceId),
     )
   }
 
-  if (!isShiftHomeStory(story)) return story.render()
-
-  const spec = shiftSurfacePartMount(story, binding)
-  if (!spec) return story.render()
-  return (
-    <RegistryProvider
-      key={`${binding.sourceId}:${JSON.stringify(binding.inputValues)}`}
-      initialValues={spec.initialValues}
-    >
-      {spec.node}
-    </RegistryProvider>
-  )
+  return story.render()
 }
 
 /**
- * The binding→atoms projection for a placed Home part: every real atom Home's
- * subtree reads, valued for the object's current source/state/input binding.
- * Seeded into a fresh part registry at mount and re-written into the SAME live
- * registry when the binding changes — one source of truth for both the live
- * part mount and the legacy static render above.
+ * The binding→atoms projection for live-mountable placed parts: every real
+ * atom the part's subtree reads, valued for the object's current
+ * source/state/input binding. Seeded into a fresh part registry at mount;
+ * when the binding changes, only pairs whose `reseedKeys` entry changed are
+ * re-written into the SAME live registry — so editing one input never rolls
+ * back event-driven device facts on unrelated atoms.
  */
 export function shiftSurfacePartMount(
   story: Story,
@@ -275,12 +245,14 @@ export function shiftSurfacePartMount(
 ): LabSurfacePartMountSpec | null {
   if (isShiftBatteryStory(story)) {
     const power = powerFromBinding(binding.inputValues)
+    const powerKey = `power:${JSON.stringify(power)}`
     const initialValues = [
       [deviceStateAtom, shiftDeviceStateForPowerReading(power)],
     ] as const
     return {
       initialValues:
         initialValues as unknown as LabSurfacePartMountSpec["initialValues"],
+      reseedKeys: [powerKey],
       node: (
         <ShiftPartFrame width={120} height={120}>
           <ShiftBatteryFromDeviceState />
@@ -293,6 +265,7 @@ export function shiftSurfacePartMount(
     const power = powerFromBinding(binding.inputValues)
     const clock = clockFromBinding(binding.inputValues, story.state)
     const network = networkFromBinding(binding.inputValues)
+    const powerKey = `power:${JSON.stringify(power)}`
     const initialValues = [
       [deviceStateAtom, shiftDeviceStateForPowerReading(power)],
       [shiftPowerReadingAtom, power],
@@ -302,6 +275,12 @@ export function shiftSurfacePartMount(
     return {
       initialValues:
         initialValues as unknown as LabSurfacePartMountSpec["initialValues"],
+      reseedKeys: [
+        powerKey,
+        powerKey,
+        `clock:${clock}`,
+        `network:${JSON.stringify(network)}`,
+      ],
       node: (
         <ShiftPartFrame height={140}>
           <ShiftStatusBarFromEdges />
@@ -326,6 +305,7 @@ export function shiftSurfacePartMount(
     shiftForegroundSourceLayers[
       foregroundTag as keyof typeof shiftForegroundSourceLayers
     ] ?? shiftForegroundSourceLayers.Ready
+  const powerKey = `power:${JSON.stringify(power)}`
   const initialValues = [
     [catalogFactsSourceLayerAtom, catalogLayer],
     [foregroundSessionStatusLayerAtom, makeForeground()],
@@ -345,6 +325,16 @@ export function shiftSurfacePartMount(
   return {
     initialValues:
       initialValues as unknown as LabSurfacePartMountSpec["initialValues"],
+    reseedKeys: [
+      `catalog:${binding.sourceId}:${dataTag}`,
+      `foreground:${foregroundTag}`,
+      powerKey,
+      powerKey,
+      `clock:${clock}`,
+      `network:${JSON.stringify(network)}`,
+      `library:${binding.sourceId}`,
+      "launcher",
+    ],
     node: <ShiftHomeFromEdge />,
   }
 }

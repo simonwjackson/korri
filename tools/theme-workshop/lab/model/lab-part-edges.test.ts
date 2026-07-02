@@ -74,6 +74,16 @@ describe("pagePartStoryForScreen", () => {
     expect(story?.id).toBe(homeStory.id)
   })
 
+  it("resolves by stable design-part id even when the display name drifts", () => {
+    const renamed: Story = {
+      ...homeStory,
+      name: "Cinema Home",
+      designPartId: "shift.home",
+    }
+    const story = pagePartStoryForScreen(shiftLabSurfaceAdapter, "/", [renamed])
+    expect(story?.id).toBe(renamed.id)
+  })
+
   it("returns null when no page part matches the screen", () => {
     expect(
       pagePartStoryForScreen(shiftLabSurfaceAdapter, "/settings", [homeStory]),
