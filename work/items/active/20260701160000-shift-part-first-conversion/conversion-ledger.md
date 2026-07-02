@@ -115,7 +115,7 @@ local `useState` by design. The one shared focusable unit is the Tile:
 |---|---|---|---|---|
 | `pages/ShiftReelCover` | molecule | center/peek state family (offset); composes Cover Art | done (static) | `pages/ShiftReelCover.molecule.part.tsx` |
 | `pages/ShiftReelStage` | organism | `games` + `center` inputs; `reelWindow`/`reelOffsetFromCenter` core | done (static) | `pages/ShiftReelStage.organism.part.tsx` |
-| `pages/ShiftCoverArt` | atom | `src` input (shared; also used by Deck Card) | done (static) | `pages/ShiftCoverArt.atom.part.tsx` |
+| `ui/atoms/ShiftCoverArt` | atom | `src` input (shared: Reel Cover, Deck Card, Library Tile, Cine Tile) | done (static) | `ui/atoms/ShiftCoverArt.atom.part.tsx` |
 | `pages/ShiftReelTitle` | atom | `title` input | done (static) | `pages/ShiftReelTitle.atom.part.tsx` |
 | `pages/ShiftReelTags` | atom | `genre` input | done (static) | `pages/ShiftReelTags.atom.part.tsx` |
 | `pages/ShiftReelSpinButton` | atom | no device edge | done (static) | `pages/ShiftReelSpinButton.atom.part.tsx` |
@@ -147,6 +147,28 @@ local `useState` by design. The one shared focusable unit is the Tile:
 |---|---|---|---|---|
 | `pages/ShiftLibraryFilterChip` | atom | idle/active/genre/sort state family | done (static) | `pages/ShiftLibraryFilterChip.atom.part.tsx` |
 | `pages/ShiftLibraryFilterToolbar` | molecule | `facets`/`sort` inputs | done (static) | `pages/ShiftLibraryFilterToolbar.molecule.part.tsx` |
+
+## Atom floor (leaf atoms)
+
+The leaf atoms extracted so every molecule/organism composes atom parts rather
+than raw styled/interactive/heading/image HTML. Plain unclassed text and an
+atom's own minimal internal markup (chip count span, hint glyph, tile-art
+wrapper) are left inline by design.
+
+| Family | Atoms | Part files |
+|---|---|---|
+| Reel | Cover Art (shared), Reel Title, Reel Tags, Spin Button, Play Button | `ui/atoms/ShiftCoverArt`, `pages/ShiftReel{Title,Tags,SpinButton,PlayButton}.atom.part.tsx` |
+| Deck | Deck Title, Deck Tags, Deck Arrow (prev/next), Deck Play Button, Deck Favorite Button | `pages/ShiftDeck{Title,Tags,Arrow,PlayButton,FavoriteButton}.atom.part.tsx` |
+| Detail | Detail Title, Tags, Synopsis, Button (primary/pressed), Hint, Favorite Badge | `pages/ShiftDetail{Title,Tags,Synopsis,Button,Hint,FavoriteBadge}.atom.part.tsx` |
+| Library shared | Heading, Count, Shelf Title, Tile Badge, Tile Title | `pages/ShiftLibrary{Heading,Count,ShelfTitle,TileBadge,TileTitle}.atom.part.tsx` |
+| Lens | Lens Tab (selected states), Lens Sort Option (active states) | `pages/ShiftLens{Tab,SortOption}.atom.part.tsx` |
+| Status bar | Clock, Avatar, Network Icon (connected states) | `ui/atoms/Shift{Clock,Avatar,NetworkIcon}.atom.part.tsx` |
+
+Composition after the atom-floor pass: every molecule (Reel Cover/Hero/Actions,
+Deck Hero/Actions, Detail Actions/Hints/Stats, Library Header/Shelf/Tile, Lens
+Row/Sort Overlay/Filter Toolbar, Status Bar, Cine Tile) renders atom parts, not
+raw leaf HTML. Filter Chip, Detail Art, Deck Counter, Library Empty, Lens Sort
+Button, and the `ShiftCine*` atoms were already at the floor.
 
 ## Not parts (helpers / infrastructure)
 
