@@ -201,8 +201,18 @@
 	content: "";
 	position: absolute;
 	inset: 0.1em;
-	right: 0.42em; /* leaves a gap at the right ~= depleted portion */
+	/* Charge fill: the right gap is the depleted portion, driven by
+	 * --pico-battery-fill (0..1) so the capsule reflects the live percent. */
+	right: calc(0.1em + (1 - var(--pico-battery-fill, 0.82)) * 1.5em);
 	background: var(--p8-lime);
+}
+/* Charging: the fill goes yellow. */
+.pico-battery[data-charging] i::before {
+	background: var(--p8-yellow);
+}
+/* Disconnected Wi-Fi glyph reads dim. */
+.pico-statusbar-ico.off {
+	opacity: 0.4;
 }
 .pico-battery i::after {
 	content: "";

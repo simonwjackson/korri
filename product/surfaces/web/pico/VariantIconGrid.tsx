@@ -7,7 +7,7 @@ import { useState } from "react"
 import type { PicoGame } from "./fixtures"
 import { PicoCart } from "./PicoCart"
 import { PicoCartUnmarked } from "./PicoCartUnmarked"
-import { PicoStatusBar } from "./PicoStatusBar"
+import { PicoStatusBarLive } from "./PicoStatusBar"
 
 export function VariantIconGrid({
   games,
@@ -21,7 +21,7 @@ export function VariantIconGrid({
 
   return (
     <div className="pcC">
-      <PicoStatusBar label="PICO ▸ HOME" />
+      <PicoStatusBarLive label="PICO ▸ HOME" />
       <div className="pcC-grid">
         {grid.map((game, i) => (
           <button

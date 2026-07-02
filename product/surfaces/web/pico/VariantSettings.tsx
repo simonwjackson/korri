@@ -6,7 +6,7 @@
  * get the richer cartridge (A) and icon-grid (C) treatments instead.
  */
 import { useState } from "react"
-import { PicoButtonBar, PicoStatusBar } from "./PicoStatusBar"
+import { PicoButtonBar, PicoStatusBarLive } from "./PicoStatusBar"
 
 type Control =
   | { readonly kind: "toggle"; readonly state: "on" | "off" }
@@ -99,7 +99,7 @@ export function VariantSettings() {
 
   return (
     <div className="pcB">
-      <PicoStatusBar label="PICO ▸ SETTINGS" />
+      <PicoStatusBarLive label="PICO ▸ SETTINGS" />
       <div className="pcB-body">
         <div className="pcB-list">
           {CATEGORIES.map((category, index) => (

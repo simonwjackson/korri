@@ -7,7 +7,7 @@ import { useState } from "react"
 import type { PicoGame } from "./fixtures"
 import { PicoCart } from "./PicoCart"
 import { PicoCartUnmarked } from "./PicoCartUnmarked"
-import { PicoButtonBar, PicoStatusBar } from "./PicoStatusBar"
+import { PicoButtonBar, PicoStatusBarLive } from "./PicoStatusBar"
 
 export function VariantCartridgeShelf({
   games,
@@ -26,7 +26,7 @@ export function VariantCartridgeShelf({
 
   return (
     <div className="pcA">
-      <PicoStatusBar label="PICO ▸ LIBRARY" />
+      <PicoStatusBarLive label="PICO ▸ LIBRARY" />
       <div className="pcA-stage">
         <div className="pcA-dots">
           {games.slice(0, 12).map((game, i) => (

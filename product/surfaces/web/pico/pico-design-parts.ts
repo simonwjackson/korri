@@ -21,6 +21,8 @@ export const PICO_DESIGN_PARTS = {
   // --- pages (routed, device-mounted) ---
   home: { id: "pico.home", layer: "page", name: "Home" },
   gameDetail: { id: "pico.game-detail", layer: "page", name: "Game Detail" },
+  // --- chrome ---
+  statusBar: { id: "pico.status-bar", layer: "molecule", name: "Status Bar" },
   // --- templates ---
   gameOverlay: {
     id: "pico.game-overlay",

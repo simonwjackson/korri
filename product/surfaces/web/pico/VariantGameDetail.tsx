@@ -9,7 +9,7 @@
 import { useState } from "react"
 import type { PicoGame } from "./fixtures"
 import { PicoCartUnmarked } from "./PicoCartUnmarked"
-import { PicoButtonBar, PicoStatusBar } from "./PicoStatusBar"
+import { PicoButtonBar, PicoStatusBarLive } from "./PicoStatusBar"
 
 export function VariantGameDetail({
   games,
@@ -31,7 +31,7 @@ export function VariantGameDetail({
 
   return (
     <div className="pcD">
-      <PicoStatusBar label="PICO ▸ GAME" />
+      <PicoStatusBarLive label="PICO ▸ GAME" />
       <div className="pcD-body">
         <div className="pcD-art">
           <PicoCartUnmarked game={game} />
