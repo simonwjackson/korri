@@ -1,9 +1,9 @@
 /**
  * Cover Art atom catalog entry — the shared game-cover image.
  */
-import { SHIFT_LIBRARY_GAMES } from "../config"
-import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"
-import { ShiftPartFrame } from "../ui/ShiftPartFrame"
+import { SHIFT_LIBRARY_GAMES } from "../../config"
+import { SHIFT_DESIGN_PARTS } from "../../shift-design-parts"
+import { ShiftPartFrame } from "../ShiftPartFrame"
 import { ShiftCoverArt } from "./ShiftCoverArt"
 
 const game = SHIFT_LIBRARY_GAMES[0] ?? { id: "g", title: "Game", artUrl: "" }

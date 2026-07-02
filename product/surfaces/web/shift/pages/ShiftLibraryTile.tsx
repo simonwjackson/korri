@@ -9,7 +9,7 @@
  * CSS; the tile itself only declares its portrait aspect.
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
-import { ShiftCoverArt } from "./ShiftCoverArt"
+import { ShiftCoverArt } from "../ui/atoms/ShiftCoverArt"
 import { ShiftLibraryTileBadge } from "./ShiftLibraryTileBadge"
 import { ShiftLibraryTileTitle } from "./ShiftLibraryTileTitle"
 import type { ShiftLibraryGame } from "./shift-library-game"

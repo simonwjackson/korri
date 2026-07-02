@@ -8,7 +8,7 @@
  */
 import { motion } from "framer-motion"
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
-import { ShiftCoverArt } from "./ShiftCoverArt"
+import { ShiftCoverArt } from "../ui/atoms/ShiftCoverArt"
 import type { ShiftLibraryGame } from "./shift-library-game"
 
 const SPRING = { type: "spring", stiffness: 220, damping: 26 } as const

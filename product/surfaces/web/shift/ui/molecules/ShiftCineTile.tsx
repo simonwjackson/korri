@@ -1,9 +1,9 @@
 import type { CSSProperties } from "react"
-import { ShiftCoverArt } from "../../pages/ShiftCoverArt"
 import {
   SHIFT_DESIGN_PARTS,
   shiftDesignPartAttrs,
 } from "../../shift-design-parts"
+import { ShiftCoverArt } from "../atoms/ShiftCoverArt"
 
 /** One game tile in the cinematic rail: a native focusable button wrapping the
  * cover art. Focus is driven by the platform focus engine (every input device),

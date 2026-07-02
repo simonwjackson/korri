@@ -5,7 +5,10 @@
  * cover, Deck card, and — via its badge wrapper — the Library Tile). Alt is
  * empty by default because the cover is decorative beside its own title.
  */
-import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import {
+  SHIFT_DESIGN_PARTS,
+  shiftDesignPartAttrs,
+} from "../../shift-design-parts"
 
 export interface ShiftCoverArtProps {
   readonly src: string
