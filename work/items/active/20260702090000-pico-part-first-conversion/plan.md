@@ -58,6 +58,18 @@ Mirror the realized Shift architecture:
 `surfacePartInputs`, `surfacePartEvents`, `sources`, `pagePartId`,
 `makeSeedInitialValuesForBinding`).
 
+## Scope pivot (2026-07-02)
+
+User: pico is no longer throwaway; the standalone prototype gallery is dropped;
+go 100% device lab; salvage anything not already represented. **Finding:** there
+is no separate gallery route — pico already lives entirely in the device lab
+(theme-workshop). All ~74 screens are surfaced as page-layer stories via
+`config.tsx`; every kit part is discovered via `*.part.tsx`. So everything is
+already represented; nothing to bring over. Retired the throwaway apparatus
+(deleted unused `PicoPrototypeSwitcher`, rewrote `NOTES.md`, stripped 274
+'PROTOTYPE — Throwaway' labels). This makes the P3 gallery-default question moot:
+device facts are driven in the lab like Shift.
+
 ## Units
 
 ### P1 — Design-parts registry + tags
