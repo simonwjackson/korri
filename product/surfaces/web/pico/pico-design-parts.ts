@@ -1418,6 +1418,8 @@ export const PICO_DESIGN_PARTS = {
     layer: "atom",
     name: "Pico Cart Notch",
   },
+  pcFutYou: { id: "pico.pcFut-you", layer: "atom", name: "Actor" },
+  pcFutAchName: { id: "pico.pcFut-ach-name", layer: "atom", name: "Ach Name" },
 } as const satisfies Record<string, PicoDesignPart>
 
 export function picoDesignPartAttrs(

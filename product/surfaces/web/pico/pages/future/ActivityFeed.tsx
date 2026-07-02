@@ -83,7 +83,10 @@ export function ActivityFeed() {
                 className="pcFut-feed-line"
                 {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeedLine)}
               >
-                <b className={item.actorKind === "viewer" ? "pcFut-you" : ""}>
+                <b
+                  className={item.actorKind === "viewer" ? "pcFut-you" : ""}
+                  {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutYou)}
+                >
                   {item.actor}
                 </b>{" "}
                 {item.verb}{" "}

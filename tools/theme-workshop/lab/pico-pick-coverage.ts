@@ -84,13 +84,38 @@ function openingTag(src: string, lt: number): { text: string; end: number } {
 }
 
 function classTokens(tag: string): string[] {
-  const m = tag.match(/className=(?:"([^"]*)"|'([^']*)'|\{`([^`]*)`\})/)
-  if (!m) return []
-  const raw = m[1] ?? m[2] ?? m[3] ?? ""
-  return raw
-    .replace(/\$\{[^}]*\}/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
+  const idx = tag.indexOf("className=")
+  if (idx < 0) return []
+  const after = tag.slice(idx + "className=".length)
+  // Plain string attr: className="..." — every token is a class.
+  const plain = after.match(/^(?:"([^"]*)"|'([^']*)')/)
+  if (plain) {
+    return (plain[1] ?? plain[2] ?? "").split(/\s+/).filter(Boolean)
+  }
+  if (after[0] !== "{") return []
+  // Expression attr: className={...} (template, ternary, cn(...), etc.).
+  // Extract string/template literals from the brace-balanced value, but keep
+  // only pico class tokens (start with "pc") so condition strings like
+  // "viewer" in `x === "viewer" ? "pcFut-you" : ""` are not mistaken for classes.
+  let depth = 0
+  let value = ""
+  for (let i = 0; i < after.length; i++) {
+    const c = after[i]
+    if (c === "{") depth++
+    else if (c === "}") {
+      depth--
+      if (depth === 0) {
+        value = after.slice(1, i)
+        break
+      }
+    }
+  }
+  const tokens: string[] = []
+  for (const lm of value.matchAll(/"([^"]*)"|'([^']*)'|`([^`]*)`/g)) {
+    const s = (lm[1] ?? lm[2] ?? lm[3] ?? "").replace(/\$\{[^}]*\}/g, " ")
+    for (const t of s.split(/\s+/)) if (t && /^pc/.test(t)) tokens.push(t)
+  }
+  return tokens
 }
 
 /** Untagged design leaves in one source string, with opening-tag offsets. */

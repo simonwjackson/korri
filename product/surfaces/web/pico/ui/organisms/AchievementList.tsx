@@ -63,7 +63,12 @@ export function AchievementList({
               </span>
             }
             label={
-              <span className={ach.unlocked ? "" : "pc-dim"}>{ach.name}</span>
+              <span
+                className={ach.unlocked ? "" : "pc-dim"}
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutAchName)}
+              >
+                {ach.name}
+              </span>
             }
             meta={ach.unlocked ? ach.desc : `LOCKED · ${ach.desc}`}
             trailing={
