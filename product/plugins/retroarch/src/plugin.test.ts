@@ -3,6 +3,7 @@ import { decodeAppRecord } from "@platform/library/config/records/app"
 import { decodeRuntimeRecord } from "@platform/library/config/records/runtime"
 import {
   KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_BINARY_PATH,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
   KORRI_RETROARCH_FUSE_RUNTIME_ID,
   KORRI_RETROARCH_GBA_DISCOVERY_PROVIDER_ID,
@@ -42,7 +43,7 @@ describe("RetroArch plugin", () => {
     ).toMatchObject({
       id: KORRI_RETROARCH_APP_ID,
       plugin: KORRI_RETROARCH_PLUGIN_ID,
-      command: "retroarch",
+      command: KORRI_RETROARCH_BINARY_PATH,
       settings: {
         plugin: {
           paths: {
@@ -50,7 +51,20 @@ describe("RetroArch plugin", () => {
           },
         },
       },
+      policy: { allowedCommands: [KORRI_RETROARCH_BINARY_PATH] },
     })
+  })
+
+  it("projects an absolute launcher command so streamed launches need no PATH", () => {
+    const launcher = retroarchPlugin.contributes.config.launchers?.retroarch as
+      | { command?: string; policy?: { allowedCommands?: readonly string[] } }
+      | undefined
+    expect(KORRI_RETROARCH_BINARY_PATH).toBe("/etc/korri/bin/retroarch")
+    expect(launcher?.command).toBe(KORRI_RETROARCH_BINARY_PATH)
+    expect(launcher?.command?.startsWith("/")).toBe(true)
+    expect(launcher?.policy?.allowedCommands).toEqual([
+      KORRI_RETROARCH_BINARY_PATH,
+    ])
   })
 
   it("contributes Fuse as a RetroArch-owned ZX Spectrum runtime", () => {

@@ -85,7 +85,7 @@ describe("first-party plugins", () => {
     expect(retroarch?.contributes.config.launchers?.retroarch).toMatchObject({
       id: KORRI_RETROARCH_APP_ID,
       plugin: KORRI_RETROARCH_PLUGIN_ID,
-      command: "retroarch",
+      command: "/etc/korri/bin/retroarch",
     })
   })
 
@@ -654,7 +654,7 @@ describe("first-party plugins", () => {
       kind: "cpu-translation",
     })
     expect(registry.launchers[KORRI_RETROARCH_APP_ID]).toMatchObject({
-      command: "retroarch",
+      command: "/etc/korri/bin/retroarch",
     })
     expect(
       registry.modules[`${KORRI_PORTMASTER_PLUGIN_ID}/portmaster`],

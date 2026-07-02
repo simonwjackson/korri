@@ -259,7 +259,7 @@ describe("createProseqlLibrarySource", () => {
         ),
       )
 
-      expect(result.spec.command).toBe("retroarch")
+      expect(result.spec.command).toBe("/etc/korri/bin/retroarch")
       expect(result.spec.args).toEqual(
         expect.arrayContaining([
           "-L",

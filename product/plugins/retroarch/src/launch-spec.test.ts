@@ -16,7 +16,7 @@ describe("typed RetroArch launch spec rendering", () => {
     })
 
     expect(spec).toEqual({
-      command: "retroarch",
+      command: "/etc/korri/bin/retroarch",
       args: [
         "-c",
         "/tmp/launch/retroarch.cfg",

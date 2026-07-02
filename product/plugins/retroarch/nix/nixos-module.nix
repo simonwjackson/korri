@@ -112,11 +112,19 @@ let
   };
 in
 {
-  config = lib.mkIf config.services.korri.compositor.kiosk.enable {
-    # Stable abs path the plugin-owned readable runtime can reference without
+  # Provision the RetroArch closure wherever a Korri foreground session runs
+  # (kiosk handhelds AND headless source machines), not only kiosk. Both enable
+  # services.korri.compositor; source machines just keep kiosk.enable = false.
+  config = lib.mkIf config.services.korri.compositor.enable {
+    # Stable abs paths the plugin-owned readable runtime can reference without
     # baking a per-build nix store hash into user-authored launch data.
     nixpkgs.config.allowUnfreePredicate =
       pkg: builtins.elem (lib.getName pkg) [ "libretro-genesis-plus-gx" ];
+
+    # Stable absolute path for the RetroArch binary itself, mirroring the cores
+    # and shader dir below. The launcher command (@korri:retroarch) points here,
+    # so both local and streamed launches use a full path with no PATH reliance.
+    environment.etc."korri/bin/retroarch".source = "${retroarchBinary}/bin/retroarch";
 
     environment.etc."korri/cores/fuse_libretro.so".source =
       "${pkgs.libretro.fuse}/lib/retroarch/cores/fuse_libretro.so";

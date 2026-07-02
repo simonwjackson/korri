@@ -7,6 +7,7 @@ import {
   relative,
 } from "node:path"
 import type { LaunchSpec } from "@platform/library/launcher"
+import { KORRI_RETROARCH_BINARY_PATH } from "./ids"
 import type { LaunchSettingValue, RetroArchPolicy } from "./policy"
 import {
   isRetroArchConfigKey,
@@ -14,7 +15,7 @@ import {
   validateNullableRetroArchHttpsUrl,
 } from "./setting-policy"
 
-const DEFAULT_RETROARCH_COMMAND = "retroarch"
+const DEFAULT_RETROARCH_COMMAND = KORRI_RETROARCH_BINARY_PATH
 
 type SafeRetroArchLifecycleDefaults = Required<
   Pick<

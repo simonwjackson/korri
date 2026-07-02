@@ -3,6 +3,7 @@ import { retroarchDiscoveryProviders } from "./discovery"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_APP_LOCAL_ID,
+  KORRI_RETROARCH_BINARY_PATH,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID,
@@ -12,6 +13,7 @@ import {
 export {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_APP_LOCAL_ID,
+  KORRI_RETROARCH_BINARY_PATH,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID,
@@ -75,7 +77,7 @@ export const retroarchPlugin = plugin({
         [KORRI_RETROARCH_APP_LOCAL_ID]: {
           id: KORRI_RETROARCH_APP_ID,
           plugin: KORRI_RETROARCH_PLUGIN_ID,
-          command: "retroarch",
+          command: KORRI_RETROARCH_BINARY_PATH,
           args: [
             "--config",
             "{configPath}",
@@ -90,7 +92,7 @@ export const retroarchPlugin = plugin({
               },
             },
           },
-          policy: { allowedCommands: ["retroarch"] },
+          policy: { allowedCommands: [KORRI_RETROARCH_BINARY_PATH] },
         },
       },
       systems: {
