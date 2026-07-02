@@ -75,7 +75,13 @@ in
         runtime = "@korri:rpcs3/rpcs3";
       };
       launchers."@korri:rpcs3/rpcs3" = {
+        plugin = "@korri:rpcs3";
         command = rpcs3Command;
+        args = [
+          "--no-gui"
+          "{content.path}"
+        ];
+        systems = [ "ps3" ];
         policy.allowedCommands = [ rpcs3Command ];
         settings.plugin = {
           command = rpcs3Command;

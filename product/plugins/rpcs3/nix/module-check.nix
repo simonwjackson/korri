@@ -91,7 +91,10 @@ let
       && sourceDefaults.runtime == "@korri:rpcs3/rpcs3"
     ))
     (check "enabled module renders absolute RPCS3 launch command defaults" (
-      lib.hasPrefix "/" launcherDefaults.command
+      launcherDefaults.plugin == "@korri:rpcs3"
+      && launcherDefaults.args == [ "--no-gui" "{content.path}" ]
+      && launcherDefaults.systems == [ "ps3" ]
+      && lib.hasPrefix "/" launcherDefaults.command
       && lib.hasSuffix "/bin/rpcs3" launcherDefaults.command
       && launcherDefaults.policy.allowedCommands == [ launcherDefaults.command ]
       && pluginDefaults.command == launcherDefaults.command
