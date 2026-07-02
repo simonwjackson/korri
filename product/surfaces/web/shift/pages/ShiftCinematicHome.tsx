@@ -309,7 +309,7 @@ export function ShiftCinematicHome({
     <div
       data-shift-home
       className="shift-cine intrinsic relative h-full w-full overflow-hidden"
-      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.home)}
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.homeTemplate)}
     >
       <ShiftCineBackdrop
         artUrl={backdropArtUrl}

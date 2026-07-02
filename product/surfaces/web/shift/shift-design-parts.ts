@@ -47,35 +47,49 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "molecule",
     name: "Library Tile",
   },
+  // The library variants are source-agnostic layouts (they take `games` as a
+  // slot), so they are TEMPLATES; a library page is a variant bound to a
+  // committed source/route, which is still pending the control-model decision.
   libraryGrid: {
     id: "shift.library-grid",
-    layer: "page",
+    layer: "template",
     name: "Library — Grid",
   },
   libraryShelves: {
     id: "shift.library-shelves",
-    layer: "page",
+    layer: "template",
     name: "Library — Shelves",
   },
   libraryLens: {
     id: "shift.library-lens",
-    layer: "page",
+    layer: "template",
     name: "Library — Lens",
   },
   libraryFilterBar: {
     id: "shift.library-filterbar",
-    layer: "page",
+    layer: "template",
     name: "Library — Filter Bar",
   },
   libraryDeck: {
     id: "shift.library-deck",
-    layer: "page",
+    layer: "template",
     name: "Library — Deck",
   },
   libraryReel: {
     id: "shift.library-reel",
-    layer: "page",
+    layer: "template",
     name: "Library — Reel",
+  },
+  // Page-level layouts arranging organisms around a data slot.
+  homeTemplate: {
+    id: "shift.home-template",
+    layer: "template",
+    name: "Cinematic Home",
+  },
+  detailTemplate: {
+    id: "shift.detail-template",
+    layer: "template",
+    name: "Detail Split",
   },
   // Shared library scaffolding inlined across the variants.
   libraryHeader: {

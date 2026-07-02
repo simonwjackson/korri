@@ -1,5 +1,7 @@
 /**
- * Shift Library — every library layout variant as a page-layer state family.
+ * Shift Library — every library layout variant as a TEMPLATE state family.
+ * Each variant takes `games` as a slot (source-agnostic layout), so it is a
+ * template; a library page would bind it to a committed source/route.
  *
  * The variants are competing design explorations (one control model will be
  * committed as Shift's library route later); each is a real full-screen
@@ -23,7 +25,7 @@ function libraryStates(variant: ShiftLibraryVariant): readonly Story[] {
     {
       id: `shift-${slug}-ready`,
       designPartId: variant.part.id,
-      layer: "page" as const,
+      layer: "template" as const,
       name: variant.part.name,
       note: variant.note,
       surface: true,
@@ -33,7 +35,7 @@ function libraryStates(variant: ShiftLibraryVariant): readonly Story[] {
     {
       id: `shift-${slug}-empty`,
       designPartId: variant.part.id,
-      layer: "page" as const,
+      layer: "template" as const,
       name: variant.part.name,
       note: variant.note,
       surface: true,

@@ -8,7 +8,7 @@ import {
   ShiftLibraryLensStates,
   ShiftLibraryReelStates,
   ShiftLibraryShelvesStates,
-} from "./ShiftLibrary.page.part"
+} from "./ShiftLibrary.template.part"
 import { ShiftLibraryDeck } from "./ShiftLibraryDeck"
 import { ShiftLibraryFilterBar } from "./ShiftLibraryFilterBar"
 import { ShiftLibraryGrid } from "./ShiftLibraryGrid"
@@ -35,7 +35,7 @@ describe("Shift Library page parts", () => {
     for (const [, family] of FAMILIES) {
       expect(family.map(story => story.state)).toEqual(["Ready", "Empty"])
       for (const story of family) {
-        expect(story.layer).toBe("page")
+        expect(story.layer).toBe("template")
         expect(story.surface).toBe(true)
         expect(story.name.startsWith("Library")).toBe(true)
         expect(story.designPartId?.startsWith("shift.library-")).toBe(true)

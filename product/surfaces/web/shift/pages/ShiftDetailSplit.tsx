@@ -8,6 +8,7 @@
  * the balance follows the device shape, not a viewport breakpoint.
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
+import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
 import { ShiftDetailActions } from "./ShiftDetailActions"
 import { ShiftDetailArt } from "./ShiftDetailArt"
 import { ShiftDetailHints } from "./ShiftDetailHints"
@@ -33,7 +34,11 @@ export function ShiftDetailSplit({
   const tags = [game.genre, game.developer].filter(Boolean).join(" · ")
 
   return (
-    <div data-shift-detail className="shift-detail-split intrinsic">
+    <div
+      data-shift-detail
+      className="shift-detail-split intrinsic"
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.detailTemplate)}
+    >
       <ShiftDetailArt artUrl={game.artUrl} />
 
       <div className="shift-detail-split-info">

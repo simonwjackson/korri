@@ -215,8 +215,9 @@ export function renderShiftSurfacePart(
     readonly inputValues: Readonly<Record<string, LabInputValue>>
   },
 ): ReactNode {
-  const variant =
-    story.layer === "page" ? shiftLibraryVariantForStory(story) : undefined
+  // Library variants are templates (source-agnostic layouts); resolve by the
+  // part's identity regardless of layer.
+  const variant = shiftLibraryVariantForStory(story)
   if (variant) {
     return variant.render(
       story.state === "Empty"
