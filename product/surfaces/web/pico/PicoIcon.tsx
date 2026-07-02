@@ -6,6 +6,8 @@
  * 8×8 bitmap (`#` = filled), rendered as crisp SVG in `currentColor` and sized
  * in `em`, so it inherits color + the intrinsic token scale wherever it sits.
  */
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "./pico-design-parts"
+
 const ICONS = {
   play: [
     "........",
@@ -197,7 +199,12 @@ export function PicoIcon({
     }),
   )
   return (
-    <svg className={`pcIcon ${className ?? ""}`} viewBox="0 0 8 8" aria-hidden>
+    <svg
+      className={`pcIcon ${className ?? ""}`}
+      viewBox="0 0 8 8"
+      aria-hidden
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.icon)}
+    >
       <title>{name}</title>
       {cells}
     </svg>
