@@ -50,7 +50,9 @@ in
     alsa.support32Bit = lib.mkDefault true;
     pulse.enable = lib.mkDefault true;
     jack.enable = lib.mkDefault true;
-    wireplumber.enable = lib.mkDefault true;
+    # wireplumber.enable is intentionally left to its nixpkgs default
+    # (services.pipewire.enable) so a host opt-out of PipeWire also drops
+    # WirePlumber instead of stranding its user unit.
   };
   security.rtkit.enable = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 (lib.mkDefault true);
 
@@ -177,6 +179,19 @@ in
         sockets from launched games and Sunshine. Keep runtimeDir = "%t";
         override with lib.mkForce only alongside an explicit audio/session
         bridge plan.
+      '';
+    }
+    {
+      assertion =
+        compositorCfg.sessionBus.mode == "existing"
+        && compositorCfg.sessionBus.address == "unix:path=%t/bus";
+      message = ''
+        Korri source-machine composition shares the normal user session bus so
+        sessiond-launched foreground apps and Sunshine reach the same D-Bus the
+        compositor uses. Keep services.korri.compositor.sessionBus.mode =
+        "existing" with address "unix:path=%t/bus"; a "private"
+        dbus-run-session bus would hide portal/session services from launched
+        apps. Override only alongside an explicit bus bridge plan.
       '';
     }
     {

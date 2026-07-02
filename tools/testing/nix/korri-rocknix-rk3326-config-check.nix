@@ -48,6 +48,12 @@ let
     (check "R36T Max host rootfs package must be exposed" (
       lib.hasAttr r36tmaxProduct.rootfsPackageName hostPackages
     ))
+    (check "R36T Max target system package must be a derivation" (
+      (targetPackages.${r36tmaxProduct.kioskSystemPackageName} or null).drvPath or null != null
+    ))
+    (check "R36T Max host rootfs package must be a derivation" (
+      (hostPackages.${r36tmaxProduct.rootfsPackageName} or null).drvPath or null != null
+    ))
     (check "R36T Max evaluated target system must be aarch64-linux" (targetSystem == "aarch64-linux"))
     (check "R36T Max compositor uses the canonical logind runtime root" (
       compositor.runtimeDir == "%t"

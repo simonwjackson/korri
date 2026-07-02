@@ -163,15 +163,22 @@ let
         == "unix:path=%t/bus"
       && sessiondEnv.DBUS_SESSION_BUS_ADDRESS == "unix:path=%t/bus"
     ))
+    # PipeWire defaults are x86-gated in source-machine.nix, so this assertion
+    # only applies when the module is evaluated for x86_64-linux. On other host
+    # systems the source-machine module intentionally leaves audio to the
+    # substrate, and this check is vacuously satisfied.
     (check "source-machine provides x86 PipeWire audio defaults" (
-      cfg.services.pipewire.enable
-      && cfg.services.pipewire.pulse.enable
-      && cfg.services.pipewire.alsa.enable
-      && cfg.services.pipewire.alsa.support32Bit
-      && cfg.services.pipewire.jack.enable
-      && cfg.services.pipewire.wireplumber.enable
-      && !cfg.services.pulseaudio.enable
-      && cfg.security.rtkit.enable
+      hostSystem != "x86_64-linux"
+      || (
+        cfg.services.pipewire.enable
+        && cfg.services.pipewire.pulse.enable
+        && cfg.services.pipewire.alsa.enable
+        && cfg.services.pipewire.alsa.support32Bit
+        && cfg.services.pipewire.jack.enable
+        && cfg.services.pipewire.wireplumber.enable
+        && !cfg.services.pulseaudio.enable
+        && cfg.security.rtkit.enable
+      )
     ))
   ];
   failures = builtins.filter (c: !c.assertion) checks;
