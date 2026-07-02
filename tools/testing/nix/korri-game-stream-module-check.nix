@@ -154,9 +154,27 @@ let
       hasFailure mismatchedStatusPath "statusPath must live under runtimeDir"
     ))
     (check "sessiond socket: NixOS assertions pass" (failedAssertions sessiondSocket == [ ]))
-    (check "sessiond socket: wrapper exports KORRI_SESSIOND_SOCKET" (
+    (check "user runtime specifier paths: wrapper resolves %t from real user runtime" (
+      lib.hasInfix "korri_user_runtime_dir=\"/run/user/$(id -u)\"" (
+        firstAppWrapper userRuntimeSpecifierPaths
+      )
+      && lib.hasInfix "KORRI_GAME_STREAM_RUNTIME_DIR:=\"$korri_user_runtime_dir/korri-game-stream\"" (
+        firstAppWrapper userRuntimeSpecifierPaths
+      )
+      && lib.hasInfix "KORRI_GAME_STREAM_INTENT_PATH=\"$korri_user_runtime_dir/korri-game-stream/next-launch.json\"" (
+        firstAppWrapper userRuntimeSpecifierPaths
+      )
+      && lib.hasInfix "KORRI_GAME_STREAM_STATUS_PATH=\"$korri_user_runtime_dir/korri-game-stream/status.json\"" (
+        firstAppWrapper userRuntimeSpecifierPaths
+      )
+      && !lib.hasInfix "%t/korri-game-stream" (firstAppWrapper userRuntimeSpecifierPaths)
+    ))
+    (check "sessiond socket: wrapper exports expanded KORRI_SESSIOND_SOCKET" (
       lib.hasInfix "KORRI_SESSIOND_SOCKET" (firstAppWrapper sessiondSocket)
-      && lib.hasInfix "%t/korri/sessiond.sock" (firstAppWrapper sessiondSocket)
+      && lib.hasInfix "KORRI_SESSIOND_SOCKET=\"$korri_user_runtime_dir/korri/sessiond.sock\"" (
+        firstAppWrapper sessiondSocket
+      )
+      && !lib.hasInfix "%t/korri/sessiond.sock" (firstAppWrapper sessiondSocket)
     ))
     (check "sessiond socket: no legacy URL/token env" (
       !lib.hasInfix "KORRI_SESSIOND_URL" (firstAppWrapper sessiondSocket)

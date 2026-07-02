@@ -24,7 +24,7 @@ let
   shellPathExpression =
     path:
     if lib.hasPrefix "%t/" path then
-      ''"$XDG_RUNTIME_DIR/${lib.removePrefix "%t/" path}"''
+      ''"$korri_user_runtime_dir/${lib.removePrefix "%t/" path}"''
     else
       lib.escapeShellArg path;
 
@@ -75,6 +75,13 @@ let
       echo "korri-game-stream: refusing to run as root" >&2
       exit 126
     fi
+
+    # Expand user-manager %t paths against the real per-user runtime root,
+    # not this process' XDG_RUNTIME_DIR. Source-machine Sunshine deliberately
+    # inherits the compositor runtime (e.g. /run/user/1000/korri-compositor)
+    # so it can capture the Wayland socket; stream intent/session sockets live
+    # alongside the user manager under /run/user/$UID.
+    korri_user_runtime_dir="/run/user/$(id -u)"
 
     ${optionalString (cfg.sessionEnvFile != null) ''
       env_file=${lib.escapeShellArg cfg.sessionEnvFile}
@@ -156,7 +163,7 @@ let
 
     ${optionalString (
       cfg.sessiond.socketPath != null
-    ) "export KORRI_SESSIOND_SOCKET=${lib.escapeShellArg cfg.sessiond.socketPath}"}
+    ) "export KORRI_SESSIOND_SOCKET=${shellPathExpression cfg.sessiond.socketPath}"}
 
     ${optionalString (cfg.extraEnvironment != { }) extraEnvironmentExports}
 

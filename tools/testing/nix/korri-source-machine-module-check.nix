@@ -99,7 +99,10 @@ let
       &&
         cfg.systemd.user.services."korri-compositor".environment.SWAYSOCK
         == "${cfg.services.korri.compositor.runtimeDir}/sway-ipc.sock"
-      && lib.hasInfix "KORRI_SESSIOND_SOCKET" firstAppWrapper
+      && lib.hasInfix "KORRI_SESSIOND_SOCKET=\"$korri_user_runtime_dir/korri/sessiond.sock\"" firstAppWrapper
+      && lib.hasInfix "KORRI_GAME_STREAM_RUNTIME_DIR:=\"$korri_user_runtime_dir/korri-game-stream\"" firstAppWrapper
+      && lib.hasInfix "KORRI_GAME_STREAM_STATUS_PATH=\"$korri_user_runtime_dir/korri-game-stream/status.json\"" firstAppWrapper
+      && !lib.hasInfix "%t/korri" firstAppWrapper
     ))
     (check "exported source-machine module rejects socket drift" (
       hasFailure socketDriftCfg "requires sessiond, daemon, and gameStream"
