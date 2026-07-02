@@ -166,18 +166,23 @@ First-party plugins may contribute release discovery providers through `contribu
 
 Rules:
 
-- Keep provider ids stable and plugin-qualified, e.g. `@korri:retroarch/gba-files`.
+- Keep provider ids stable and plugin-qualified, e.g. `@korri:retroarch/gba-files` or `@korri:steam/installed-apps`.
 - For file-backed discovery, consume the scanner-supplied normalized file descriptors. Do not run a second recursive filesystem scan inside the provider.
-- Return observations with app/runtime/system ids owned by the plugin; do not write readable config or mutate ProseQL directly.
-- Do not include timestamps such as `firstSeenAt` or `discoveredAt`; the scanner applies scan-time metadata when it renders a candidate.
+- Use `file-release` observations when the discovered release target is the file itself. These observations must include plugin-owned app/runtime/system ids so the scanner can render a file target and launch policy.
+- Use `provider-ref-release` observations when a local file is evidence for a provider-owned launch identity rather than the launch target. Steam installed-app discovery is the reference shape: the ACF manifest is evidence, but the persisted target is `target: { kind: provider-ref, provider: "@korri:steam", ref: <appid> }`.
+- Read manifest/state evidence through the scanner-supplied `context.readText` helper. Providers must remain read-only: no install requests, config mutation, service restarts, localconfig seeding, or direct readable YAML writes during discovery.
+- Return observations with identities owned by the plugin; do not write readable config or mutate ProseQL directly.
+- Do not include timestamps such as `firstSeenAt` or `discoveredAt`; the scanner applies scan-time metadata when it renders supported candidate metadata. Provider-ref targets currently do not carry first-seen metadata.
 - Keep execution bounded and deterministic. Content hashing, title databases, network calls, art scraping, runtime probing, and async background work require a separate scoped plan.
-- Future non-file providers should still emit observations and leave persistence to the host.
+- Future providers that are not driven by scanner-enumerated evidence files should still emit observations and leave persistence to the host, but may need a separate discovery context/factory plan.
 
-RetroArch/mGBA GBA file discovery is the reference implementation:
+Reference implementations:
 
 ```text
-product/plugins/retroarch/src/discovery.ts
+product/plugins/retroarch/src/discovery.ts       # file-release observations
 product/plugins/retroarch/src/discovery.test.ts
+product/plugins/steam/src/discovery.ts           # provider-ref-release observations
+product/plugins/steam/src/discovery.test.ts
 ```
 
 ## Runtime substrate ownership

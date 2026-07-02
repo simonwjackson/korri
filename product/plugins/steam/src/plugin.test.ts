@@ -5,6 +5,7 @@ import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
 import {
   KORRI_STEAM_APP_ID,
   KORRI_STEAM_APP_LOCAL_ID,
+  KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID,
   KORRI_STEAM_PLUGIN_ID,
   KORRI_STEAM_STORAGE_ID,
   steamPlugin,
@@ -103,6 +104,25 @@ describe("Steam plugin descriptor", () => {
       autoEnable: false,
       reason: "Steam AppID launches run inside Korri's Gamescope companion.",
     })
+  })
+
+  it("contributes installed-app discovery only when Steam is enabled", () => {
+    const disabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: undefined,
+    })
+    const enabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_STEAM_PLUGIN_ID,
+    })
+
+    expect(
+      steamPlugin.contributes.discovery?.map(provider => provider.id),
+    ).toEqual([KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID])
+    expect(
+      disabled.discoveryProviders.map(provider => provider.id),
+    ).not.toContain(KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID)
+    expect(enabled.discoveryProviders.map(provider => provider.id)).toContain(
+      KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID,
+    )
   })
 
   it("is available to first-party composition only when explicitly enabled", () => {

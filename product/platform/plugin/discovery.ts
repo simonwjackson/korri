@@ -16,6 +16,7 @@ export interface ReleaseDiscoveryContext {
   readonly storageId: string
   readonly rootPath: string
   readonly files: readonly FileDiscoveryDescriptor[]
+  readonly readText?: (absolutePath: string) => Promise<string | undefined>
 }
 
 export interface ReleaseDiscoveryEvidence {
@@ -39,7 +40,29 @@ export interface FileReleaseDiscoveryObservation {
   readonly evidence?: readonly ReleaseDiscoveryEvidence[]
 }
 
-export type ReleaseDiscoveryObservation = FileReleaseDiscoveryObservation
+export interface ProviderRefReleaseDiscoveryObservation {
+  readonly kind: "provider-ref-release"
+  readonly confidence: ReleaseDiscoveryConfidence
+  readonly source: FileDiscoveryDescriptor
+  readonly target: {
+    readonly provider: ProviderId
+    readonly ref: string
+  }
+  readonly release: {
+    readonly id: string
+    readonly title?: string
+    readonly system: string
+  }
+  readonly launch: {
+    readonly use: string
+    readonly runtime?: string
+  }
+  readonly evidence?: readonly ReleaseDiscoveryEvidence[]
+}
+
+export type ReleaseDiscoveryObservation =
+  | FileReleaseDiscoveryObservation
+  | ProviderRefReleaseDiscoveryObservation
 
 export interface ReleaseDiscoveryProvider {
   readonly id: ReleaseDiscoveryProviderId

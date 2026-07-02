@@ -1,6 +1,14 @@
 import { plugin } from "@platform/plugin"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
 import { requestSteamAppInstall } from "./app-control/install-trigger"
+import { steamInstalledAppsDiscoveryProvider } from "./discovery"
+import {
+  KORRI_STEAM_APP_ID,
+  KORRI_STEAM_APP_LOCAL_ID,
+  KORRI_STEAM_PLUGIN_ID,
+  KORRI_STEAM_STORAGE_ID,
+  KORRI_STEAM_STORAGE_LOCAL_ID,
+} from "./ids"
 import { collectSteamDiagnostics } from "./observability/diagnostics"
 import { collectSteamInstallStatus } from "./observability/install-api"
 import {
@@ -8,13 +16,13 @@ import {
   openSteamLifecycleCorrelation,
 } from "./observability/lifecycle-api"
 
-export const KORRI_STEAM_PLUGIN_ID = "@korri:steam" as const
-export const KORRI_STEAM_APP_LOCAL_ID = "steam" as const
-export const KORRI_STEAM_APP_ID =
-  `${KORRI_STEAM_PLUGIN_ID}/${KORRI_STEAM_APP_LOCAL_ID}` as const
-export const KORRI_STEAM_STORAGE_LOCAL_ID = "steam" as const
-export const KORRI_STEAM_STORAGE_ID =
-  `${KORRI_STEAM_PLUGIN_ID}/${KORRI_STEAM_STORAGE_LOCAL_ID}` as const
+export {
+  KORRI_STEAM_APP_ID,
+  KORRI_STEAM_APP_LOCAL_ID,
+  KORRI_STEAM_PLUGIN_ID,
+  KORRI_STEAM_STORAGE_ID,
+  KORRI_STEAM_STORAGE_LOCAL_ID,
+} from "./ids"
 
 export const steamRuntimePaths = {
   stateRoot: "/var/lib/korri/steam",
@@ -64,6 +72,7 @@ export const steamPlugin = plugin({
     },
   ],
   contributes: {
+    discovery: [steamInstalledAppsDiscoveryProvider],
     config: {
       storage: {
         [KORRI_STEAM_STORAGE_LOCAL_ID]: {

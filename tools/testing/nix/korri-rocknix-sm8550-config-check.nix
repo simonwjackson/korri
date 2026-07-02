@@ -279,6 +279,7 @@ let
         (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
         && (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS_DIR or null) == "/run/korri/config-roots.d"
         && lib.hasInfix "@korri:retroarch" (scoutReleaseScanEnv.KORRI_ENABLED_PLUGINS or "")
+        && lib.hasInfix "@korri:steam" (scoutReleaseScanEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "findutils" (scoutReleaseScanEnv.KORRI_FIND_BIN or "")
         && lib.hasSuffix "/bin/find" (scoutReleaseScanEnv.KORRI_FIND_BIN or "")
       ))

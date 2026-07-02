@@ -24,6 +24,7 @@ describe("retroarchGbaDiscoveryProvider", () => {
         storageId: "sdcard",
         rootPath: "/media/sdcard",
         files: [baseFile],
+        readText: async () => undefined,
       }),
     )
 
@@ -49,7 +50,15 @@ describe("retroarchGbaDiscoveryProvider", () => {
         pluginId: "@korri:retroarch",
         storageId: "sdcard",
         rootPath: "/media/sdcard",
-        files: [{ ...baseFile, name: "Wario.GBA", relativePath: "Wario.GBA", extension: ".GBA" }],
+        files: [
+          {
+            ...baseFile,
+            name: "Wario.GBA",
+            relativePath: "Wario.GBA",
+            extension: ".GBA",
+          },
+        ],
+        readText: async () => undefined,
       }),
     )
 
@@ -58,10 +67,30 @@ describe("retroarchGbaDiscoveryProvider", () => {
 
   it("does not claim other handheld files, archives, or save files", async () => {
     const files = [
-      { ...baseFile, relativePath: "gb/Tetris.gb", name: "Tetris.gb", extension: ".gb" },
-      { ...baseFile, relativePath: "gbc/Zelda.gbc", name: "Zelda.gbc", extension: ".gbc" },
-      { ...baseFile, relativePath: "gba/rom.zip", name: "rom.zip", extension: ".zip" },
-      { ...baseFile, relativePath: "gba/save.sav", name: "save.sav", extension: ".sav" },
+      {
+        ...baseFile,
+        relativePath: "gb/Tetris.gb",
+        name: "Tetris.gb",
+        extension: ".gb",
+      },
+      {
+        ...baseFile,
+        relativePath: "gbc/Zelda.gbc",
+        name: "Zelda.gbc",
+        extension: ".gbc",
+      },
+      {
+        ...baseFile,
+        relativePath: "gba/rom.zip",
+        name: "rom.zip",
+        extension: ".zip",
+      },
+      {
+        ...baseFile,
+        relativePath: "gba/save.sav",
+        name: "save.sav",
+        extension: ".sav",
+      },
     ]
 
     const observations = await Promise.resolve(
@@ -70,6 +99,7 @@ describe("retroarchGbaDiscoveryProvider", () => {
         storageId: "sdcard",
         rootPath: "/media/sdcard",
         files,
+        readText: async () => undefined,
       }),
     )
 

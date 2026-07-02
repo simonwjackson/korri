@@ -24,8 +24,8 @@ import { KORRI_REMAP_PLUGIN_ID } from "./remap"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
-  KORRI_RETROARCH_GBA_DISCOVERY_PROVIDER_ID,
   KORRI_RETROARCH_FUSE_RUNTIME_ID,
+  KORRI_RETROARCH_GBA_DISCOVERY_PROVIDER_ID,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
   KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
   KORRI_RETROARCH_GENESIS_SYSTEM_ID,
@@ -54,6 +54,7 @@ import { KORRI_SMWCENTRAL_PLUGIN_ID } from "./smwcentral"
 import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
 import {
   KORRI_STEAM_APP_ID,
+  KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID,
   KORRI_STEAM_PLUGIN_ID,
   KORRI_STEAM_STORAGE_ID,
 } from "./steam"
@@ -148,6 +149,9 @@ describe("first-party plugins", () => {
     expect(steam?.contributes.config.launchers?.steam).not.toHaveProperty(
       "launch-options",
     )
+    expect(steam?.contributes.discovery?.map(provider => provider.id)).toEqual([
+      KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID,
+    ])
   })
 
   it("registers Box64 and 3dSen as first-party plugin infrastructure", () => {

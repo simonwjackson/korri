@@ -12,9 +12,9 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { decodeLibraryItemPayload } from "@platform/library/config/records/library-item"
 import { decodeStoragePayload } from "@platform/library/config/records/storage"
-import { releaseDiscoveryProvider } from "@platform/plugin/discovery"
 import { openKorriConfigGraph } from "@platform/library/proseql/config-graph-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
+import { releaseDiscoveryProvider } from "@platform/plugin/discovery"
 import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
 import { retroarchReadableLaunchIntegration } from "@product/plugins/retroarch"
 import { Effect } from "effect"
@@ -50,6 +50,30 @@ const testGbaDiscoveryProvider = releaseDiscoveryProvider({
       })),
 })
 const testGbaDiscoveryProviders = [testGbaDiscoveryProvider]
+
+const testSteamDiscoveryProvider = releaseDiscoveryProvider({
+  id: "@korri:steam/installed-apps",
+  title: "Steam installed apps",
+  discover: async ({ files, readText }) => {
+    const manifest = files.find(
+      file => file.relativePath === "steamapps/appmanifest_1029210.acf",
+    )
+    if (manifest === undefined || readText === undefined) return []
+    const content = await readText(manifest.absolutePath)
+    if (content === undefined) return []
+    return [
+      {
+        kind: "provider-ref-release" as const,
+        confidence: "high" as const,
+        source: manifest,
+        target: { provider: "@korri:steam", ref: "1029210" },
+        release: { id: "steam", title: "30XX", system: "steam" },
+        launch: { use: "@korri:steam/steam" },
+        evidence: [{ kind: "manifest", value: manifest.relativePath }],
+      },
+    ]
+  },
+})
 
 function firstSeenAtForLibraryPayload(item: unknown): string | undefined {
   const target = decodeLibraryItemPayload(item).releases[0]?.target
@@ -202,16 +226,19 @@ describe("createRomLibraryCandidates", () => {
 
   it("keeps target paths relative and suffixes duplicate ids globally", () => {
     const candidates = createRomLibraryCandidatesFromClassifications(
-      ["gba/Game.gba", "gba/Game (USA).gba", "gba/Game-2.gba", "gba/Game.gba"].map(
-        path => ({
-          _tag: "Candidate" as const,
-          path,
-          system: "gba",
-          confidence: "high" as const,
-          app: "@korri:retroarch/retroarch",
-          runtime: "@korri:retroarch/mgba",
-        }),
-      ),
+      [
+        "gba/Game.gba",
+        "gba/Game (USA).gba",
+        "gba/Game-2.gba",
+        "gba/Game.gba",
+      ].map(path => ({
+        _tag: "Candidate" as const,
+        path,
+        system: "gba",
+        confidence: "high" as const,
+        app: "@korri:retroarch/retroarch",
+        runtime: "@korri:retroarch/mgba",
+      })),
       { storage: "roms", firstSeenAt: "2026-06-29T12:34:56.000Z" },
     )
 
@@ -220,16 +247,19 @@ describe("createRomLibraryCandidates", () => {
     expect(candidates.map(candidate => candidate.id)).toContain("game-2")
     expect(candidates.map(candidate => candidate.id)).toContain("game-3")
     const reversed = createRomLibraryCandidatesFromClassifications(
-      ["gba/Game.gba", "gba/Game-2.gba", "gba/Game (USA).gba", "gba/Game.gba"].map(
-        path => ({
-          _tag: "Candidate" as const,
-          path,
-          system: "gba",
-          confidence: "high" as const,
-          app: "@korri:retroarch/retroarch",
-          runtime: "@korri:retroarch/mgba",
-        }),
-      ),
+      [
+        "gba/Game.gba",
+        "gba/Game-2.gba",
+        "gba/Game (USA).gba",
+        "gba/Game.gba",
+      ].map(path => ({
+        _tag: "Candidate" as const,
+        path,
+        system: "gba",
+        confidence: "high" as const,
+        app: "@korri:retroarch/retroarch",
+        runtime: "@korri:retroarch/mgba",
+      })),
       { storage: "roms", firstSeenAt: "2026-06-29T12:34:56.000Z" },
     )
     expect(candidates.map(candidate => candidate.id)).toEqual(
@@ -323,8 +353,131 @@ describe("scanReleaseCandidates", () => {
       tag: "Unclaimed",
       detail: "unclaimed:gba",
     })
-    const parsed = parse(result.yaml) as { readonly library: Record<string, unknown> }
+    const parsed = parse(result.yaml) as {
+      readonly library: Record<string, unknown>
+    }
     expect(parsed.library).toEqual({})
+  })
+
+  it("renders provider-ref observations as launchable provider targets", async () => {
+    await using fixture = await withTempRomRoot({
+      "steamapps/appmanifest_1029210.acf": "acf",
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: [testSteamDiscoveryProvider],
+      root: fixture.root,
+      storage: "@korri:steam/steam",
+      now: () => "2026-06-29T12:34:56.000Z",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.report).toMatchObject({
+      files: 1,
+      candidates: 1,
+      deduplicated: 0,
+      ignored: 0,
+    })
+    const parsed = parse(result.yaml) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(Object.keys(parsed.library)).toEqual(["30xx"])
+    const item = decodeLibraryItemPayload(parsed.library["30xx"])
+    expect(item).toMatchObject({
+      title: "30XX",
+      releases: [
+        {
+          id: "steam",
+          system: "steam",
+          target: {
+            kind: "provider-ref",
+            provider: "@korri:steam",
+            ref: "1029210",
+          },
+          launch: { use: "@korri:steam/steam" },
+        },
+      ],
+    })
+    expect(item.releases[0]?.target).not.toHaveProperty("discovery")
+    expect(result.yaml).not.toContain("path: steamapps/appmanifest_1029210.acf")
+  })
+
+  it("deduplicates duplicate provider-ref observations within one scan", async () => {
+    await using fixture = await withTempRomRoot({
+      "steamapps/appmanifest_1029210.acf": "acf",
+      "steamapps/downloading/appmanifest_1029210.acf": "acf",
+    })
+    const duplicateProvider = releaseDiscoveryProvider({
+      id: "@korri:steam/duplicate-installed-apps",
+      title: "Duplicate Steam installed apps",
+      discover: ({ files }) =>
+        files
+          .filter(file => file.name === "appmanifest_1029210.acf")
+          .map(file => ({
+            kind: "provider-ref-release" as const,
+            confidence: "high" as const,
+            source: file,
+            target: { provider: "@korri:steam", ref: "1029210" },
+            release: { id: "steam", title: "30XX", system: "steam" },
+            launch: { use: "@korri:steam/steam" },
+          })),
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: [duplicateProvider],
+      root: fixture.root,
+      storage: "@korri:steam/steam",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.report).toMatchObject({
+      candidates: 1,
+      deduplicated: 1,
+      conflicting: 0,
+    })
+    const parsed = parse(result.yaml) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(Object.keys(parsed.library)).toEqual(["30xx"])
+  })
+
+  it("reports malformed provider-ref runtime without failing the scan", async () => {
+    await using fixture = await withTempRomRoot({
+      "steamapps/appmanifest_1029210.acf": "acf",
+    })
+    const malformedProvider = releaseDiscoveryProvider({
+      id: "@korri:steam/malformed-installed-apps",
+      title: "Malformed Steam installed apps",
+      discover: ({ files }) =>
+        files.map(file => ({
+          kind: "provider-ref-release" as const,
+          confidence: "high" as const,
+          source: file,
+          target: { provider: "@korri:steam", ref: "1029210" },
+          release: { id: "steam", title: "30XX", system: "steam" },
+          launch: { use: "@korri:steam/steam", runtime: "" },
+        })),
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: [malformedProvider],
+      root: fixture.root,
+      storage: "@korri:steam/steam",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.report).toMatchObject({ candidates: 0, ignored: 1 })
+    expect(result.report.reasons).toMatchObject({
+      "provider:@korri:steam/malformed-installed-apps:malformed": 1,
+    })
+    expect(result.report.samples).toContainEqual({
+      path: "steamapps/appmanifest_1029210.acf",
+      tag: "Malformed",
+      detail: "@korri:steam/malformed-installed-apps:missing-release-field",
+    })
   })
 
   it("reports conflicting provider observations without writing either candidate", async () => {
@@ -366,7 +519,9 @@ describe("scanReleaseCandidates", () => {
       tag: "Conflicting",
       detail: "@korri:other/gba-files,@korri:test/gba-files",
     })
-    const parsed = parse(result.yaml) as { readonly library: Record<string, unknown> }
+    const parsed = parse(result.yaml) as {
+      readonly library: Record<string, unknown>
+    }
     expect(parsed.library).toEqual({})
   })
 
@@ -740,6 +895,55 @@ describe("scanConfiguredReleaseCandidates", () => {
     ).toBe(sha256Artifact("metroid-bytes"))
   })
 
+  it("deduplicates provider-ref candidates against authored provider-ref releases", async () => {
+    await using fixture = await withTempRomRoot({
+      "steam/steamapps/appmanifest_1029210.acf": "acf",
+    })
+    const config = join(fixture.root, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        '  "@korri:steam/steam":',
+        `    root: ${join(fixture.root, "steam")}`,
+        "library:",
+        "  thirty-xx-authored:",
+        "    title: 30XX Authored",
+        "    releases:",
+        "      - id: steam",
+        "        system: steam",
+        "        target:",
+        "          kind: provider-ref",
+        '          provider: "@korri:steam"',
+        '          ref: "1029210"',
+        "        launch:",
+        '          use: "@korri:steam/steam"',
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: [testSteamDiscoveryProvider],
+      configPath: config,
+      roots: [{ root: fixture.root, optional: false }],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.results[0]).toMatchObject({
+      storage: "@korri:steam/steam",
+      status: "scanned",
+      report: { candidates: 1, deduplicated: 1 },
+      merge: { libraryAdded: 0, libraryDeduplicated: 0 },
+    })
+    const parsed = parse(await readFile(config, "utf8")) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(Object.keys(parsed.library)).toEqual(["thirty-xx-authored"])
+  })
+
   it("backfills a cross-root authored release with a full local overlay", async () => {
     await using fixture = await withTempRomRoot({
       "platform/platform.korri.yaml": [
@@ -919,7 +1123,7 @@ describe("scanConfiguredReleaseCandidates", () => {
     try {
       process.chdir(fixture.root)
       const result = await scanAndMergeReleaseCandidates({
-      discoveryProviders: testGbaDiscoveryProviders,
+        discoveryProviders: testGbaDiscoveryProviders,
         root: join(fixture.root, "roms"),
         storage: "sd-releases",
         configPath: "korri.yaml",

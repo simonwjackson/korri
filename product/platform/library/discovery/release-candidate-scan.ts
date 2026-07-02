@@ -21,11 +21,6 @@ import {
 } from "node:path"
 import type { LibraryItemPayload } from "@platform/library/config/records/library-item"
 import type { StorageRecord } from "@platform/library/config/records/storage"
-import type {
-  FileDiscoveryDescriptor,
-  ReleaseDiscoveryObservation,
-  ReleaseDiscoveryProvider,
-} from "@platform/plugin/discovery"
 import {
   defaultReleaseContentIdentityResolver,
   type ReleaseHashIdentityTag,
@@ -36,6 +31,11 @@ import {
   type KorriConfigGraphRoot,
   openKorriConfigGraph,
 } from "@platform/library/proseql/config-graph-db"
+import type {
+  FileDiscoveryDescriptor,
+  ReleaseDiscoveryObservation,
+  ReleaseDiscoveryProvider,
+} from "@platform/plugin/discovery"
 import { Effect } from "effect"
 import { parse, stringify } from "yaml"
 import {
@@ -214,7 +214,11 @@ interface MutableReport {
   samples: RomScanSample[]
 }
 
-type ReleaseMatchKind = "storage-path" | "absolute-path" | "hash"
+type ReleaseMatchKind =
+  | "storage-path"
+  | "absolute-path"
+  | "hash"
+  | "provider-ref"
 
 export interface ClaimedRelease {
   readonly libraryId: string
@@ -230,6 +234,7 @@ interface ClaimedContentIndex {
   readonly byStoragePath: Map<string, ClaimedRelease>
   readonly byAbsolutePath: Map<string, ClaimedRelease>
   readonly byHash: Map<string, ClaimedRelease>
+  readonly byProviderRef: Map<string, ClaimedRelease>
 }
 
 export interface ReleaseIdentityBackfill {
@@ -244,6 +249,7 @@ function createClaimedContentIndex(): ClaimedContentIndex {
     byStoragePath: new Map(),
     byAbsolutePath: new Map(),
     byHash: new Map(),
+    byProviderRef: new Map(),
   }
 }
 
@@ -599,6 +605,7 @@ async function discoverRomCandidates(
   }
 
   const candidates: RomScanCandidate[] = []
+  const claimedProviderRefs = new Set<string>()
   for (const descriptor of descriptors) {
     const classification = classifyRomScanPath(descriptor.absolutePath, {
       root: args.root,
@@ -661,6 +668,22 @@ async function discoverRomCandidates(
 
     const candidate = [...uniqueByProvider.values()][0]
     if (candidate === undefined) continue
+    if (candidate.providerRef !== undefined) {
+      const key = providerRefKey(
+        candidate.providerRef.provider,
+        candidate.providerRef.ref,
+      )
+      if (claimedProviderRefs.has(key)) {
+        report.deduplicated += 1
+        addSample(report, {
+          path: candidate.path,
+          tag: "Deduplicated",
+          detail: `provider-ref:${key}`,
+        })
+        continue
+      }
+      claimedProviderRefs.add(key)
+    }
     report.candidates += 1
     bump(report.bySystem, candidate.system)
     addSample(report, { path: candidate.path, tag: "Candidate" })
@@ -679,9 +702,12 @@ function sameRomScanCandidate(
     left.system === right.system &&
     left.confidence === right.confidence &&
     left.app === right.app &&
-    left.runtime === right.runtime &&
+    (left.runtime ?? "") === (right.runtime ?? "") &&
     (left.releaseId ?? left.system) === (right.releaseId ?? right.system) &&
-    (left.title ?? "") === (right.title ?? "")
+    (left.title ?? "") === (right.title ?? "") &&
+    (left.providerRef?.provider ?? "") ===
+      (right.providerRef?.provider ?? "") &&
+    (left.providerRef?.ref ?? "") === (right.providerRef?.ref ?? "")
   )
 }
 
@@ -706,6 +732,7 @@ async function collectProviderCandidates(
           storageId: args.storage,
           rootPath: args.root,
           files: descriptors,
+          readText: readTextOrUndefined,
         }),
       )
     } catch (error) {
@@ -737,7 +764,6 @@ function candidateFromObservation(
   descriptors: ReadonlyMap<string, FileDiscoveryDescriptor>,
   report: MutableReport,
 ): ProviderCandidate | undefined {
-  if (observation.kind !== "file-release") return undefined
   const descriptor = descriptors.get(observation.source.relativePath)
   if (descriptor === undefined) {
     addSample(report, {
@@ -748,12 +774,48 @@ function candidateFromObservation(
     bump(report.reasons, `provider:${providerId}:malformed`)
     return undefined
   }
+
+  if (observation.kind === "file-release") {
+    const release = observation.release
+    if (
+      release.id.length === 0 ||
+      release.system.length === 0 ||
+      release.app.length === 0 ||
+      release.runtime.length === 0
+    ) {
+      addSample(report, {
+        path: descriptor.relativePath,
+        tag: "Malformed",
+        detail: `${providerId}:missing-release-field`,
+      })
+      bump(report.reasons, `provider:${providerId}:malformed`)
+      return undefined
+    }
+    return {
+      providerId,
+      candidate: {
+        _tag: "Candidate",
+        path: descriptor.relativePath,
+        system: release.system,
+        confidence: observation.confidence,
+        app: release.app,
+        runtime: release.runtime,
+        releaseId: release.id,
+        ...(release.title !== undefined ? { title: release.title } : {}),
+      },
+    }
+  }
+
   const release = observation.release
+  const target = observation.target
+  const launch = observation.launch
   if (
     release.id.length === 0 ||
     release.system.length === 0 ||
-    release.app.length === 0 ||
-    release.runtime.length === 0
+    target.provider.length === 0 ||
+    target.ref.length === 0 ||
+    launch.use.length === 0 ||
+    (launch.runtime !== undefined && launch.runtime.length === 0)
   ) {
     addSample(report, {
       path: descriptor.relativePath,
@@ -770,10 +832,11 @@ function candidateFromObservation(
       path: descriptor.relativePath,
       system: release.system,
       confidence: observation.confidence,
-      app: release.app,
-      runtime: release.runtime,
+      app: launch.use,
+      ...(launch.runtime !== undefined ? { runtime: launch.runtime } : {}),
       releaseId: release.id,
       ...(release.title !== undefined ? { title: release.title } : {}),
+      providerRef: { provider: target.provider, ref: target.ref },
     },
   }
 }
@@ -1021,6 +1084,7 @@ async function reconcileRomCandidates(
       tag: "Deduplicated",
       detail: `${match.kind}:${match.claim.libraryId}/${match.claim.releaseId}`,
     })
+    if (match.kind === "provider-ref") continue
     if (match.claim.identity === undefined) {
       const identity = await resolveFreshFileHash(
         join(args.root, candidate.path),
@@ -1047,6 +1111,14 @@ async function matchCandidate(
   | { readonly kind: ReleaseMatchKind; readonly claim: ClaimedRelease }
   | undefined
 > {
+  if (candidate.providerRef !== undefined) {
+    const claim = index.byProviderRef.get(
+      providerRefKey(candidate.providerRef.provider, candidate.providerRef.ref),
+    )
+    if (claim !== undefined) return { kind: "provider-ref", claim }
+    return undefined
+  }
+
   const storagePath = storagePathKey(args.storage, candidate.path)
   const byStoragePath = index.byStoragePath.get(storagePath)
   if (byStoragePath !== undefined) {
@@ -1078,6 +1150,17 @@ function buildClaimedContentIndex(
   for (const item of items) {
     item.releases.forEach(release => {
       const target = release.target
+      if (target?.kind === "provider-ref") {
+        addProviderRefClaim(index, {
+          libraryId: item.id,
+          releaseId: release.id,
+          storage: "",
+          path: "",
+          effectiveRecord: libraryPayloadFromRecord(item),
+          providerRef: { provider: target.provider, ref: target.ref },
+        })
+        return
+      }
       if (target?.kind !== "file") return
       addClaim(index, {
         libraryId: item.id,
@@ -1107,6 +1190,18 @@ function addClaim(index: ClaimedContentIndex, claim: ClaimedRelease): void {
   }
 }
 
+function addProviderRefClaim(
+  index: ClaimedContentIndex,
+  claim: ClaimedRelease & {
+    readonly providerRef: { readonly provider: string; readonly ref: string }
+  },
+): void {
+  index.byProviderRef.set(
+    providerRefKey(claim.providerRef.provider, claim.providerRef.ref),
+    claim,
+  )
+}
+
 function cloneClaimedContentIndex(
   index: ClaimedContentIndex,
 ): ClaimedContentIndex {
@@ -1114,6 +1209,7 @@ function cloneClaimedContentIndex(
     byStoragePath: new Map(index.byStoragePath),
     byAbsolutePath: new Map(index.byAbsolutePath),
     byHash: new Map(index.byHash),
+    byProviderRef: new Map(index.byProviderRef),
   }
 }
 
@@ -1129,6 +1225,17 @@ function addCandidateYamlClaims(
     const payload = structuredClone(rawPayload) as LibraryItemPayload
     payload.releases?.forEach(release => {
       const target = release.target
+      if (target?.kind === "provider-ref") {
+        addProviderRefClaim(index, {
+          libraryId,
+          releaseId: release.id,
+          storage: "",
+          path: "",
+          effectiveRecord: payload,
+          providerRef: { provider: target.provider, ref: target.ref },
+        })
+        return
+      }
       if (target?.kind !== "file") return
       addClaim(index, {
         libraryId,
@@ -1196,6 +1303,15 @@ async function resolveFreshFileHash(
   }
 }
 
+async function readTextOrUndefined(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8")
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+    throw error
+  }
+}
+
 function libraryPayloadFromRecord(
   record: LibraryItemPayload & { readonly id: string },
 ): LibraryItemPayload {
@@ -1206,6 +1322,10 @@ function libraryPayloadFromRecord(
 
 function storagePathKey(storage: string, path: string): string {
   return `${storage}:${normalizeTargetPath(path)}`
+}
+
+function providerRefKey(provider: string, ref: string): string {
+  return `${provider}:${ref}`
 }
 
 function normalizeTargetPath(path: string): string {

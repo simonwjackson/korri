@@ -36,9 +36,13 @@ export interface RomScanCandidate {
   readonly system: string
   readonly confidence: "high" | "medium" | "low"
   readonly app: string
-  readonly runtime: string
+  readonly runtime?: string
   readonly releaseId?: string
   readonly title?: string
+  readonly providerRef?: {
+    readonly provider: string
+    readonly ref: string
+  }
 }
 
 export interface RomScanOptions {
@@ -197,27 +201,39 @@ export function createRomLibraryCandidatesFromClassifications(
   const candidates: RomLibraryCandidate[] = []
 
   for (const classification of [...classifications].sort((a, b) =>
-    a.path.localeCompare(b.path),
+    candidateSortKey(a).localeCompare(candidateSortKey(b)),
   )) {
-    const baseId = playableIdFromPath(classification.path)
-    const id = uniqueId(baseId, usedIds)
     const title = classification.title ?? titleFromPath(classification.path)
+    const baseId = classification.providerRef
+      ? (playableIdFromTitle(title) ?? playableIdFromPath(classification.path))
+      : playableIdFromPath(classification.path)
+    const id = uniqueId(baseId, usedIds)
+    const target = classification.providerRef
+      ? {
+          kind: "provider-ref" as const,
+          provider: classification.providerRef.provider,
+          ref: classification.providerRef.ref,
+        }
+      : {
+          kind: "file" as const,
+          storage: options.storage,
+          path: classification.path,
+          discovery: { "first-seen-at": options.firstSeenAt },
+        }
+    const launch = {
+      use: classification.app,
+      ...(classification.runtime !== undefined
+        ? { runtime: classification.runtime }
+        : {}),
+    }
     const record: LibraryItemPayload = {
       title,
       releases: [
         {
           id: classification.releaseId ?? classification.system,
           system: classification.system,
-          target: {
-            kind: "file",
-            storage: options.storage,
-            path: classification.path,
-            discovery: { "first-seen-at": options.firstSeenAt },
-          },
-          launch: {
-            use: classification.app,
-            runtime: classification.runtime,
-          },
+          target,
+          launch,
         },
       ],
     }
@@ -226,6 +242,13 @@ export function createRomLibraryCandidatesFromClassifications(
   }
 
   return candidates
+}
+
+function candidateSortKey(candidate: RomScanCandidate): string {
+  if (candidate.providerRef !== undefined) {
+    return `${candidate.providerRef.provider}:${candidate.providerRef.ref}`
+  }
+  return candidate.path
 }
 
 function unsupportedSystemFor(
@@ -296,6 +319,11 @@ function fileExtension(path: string): string {
 function playableIdFromPath(path: string): string {
   const withoutExtension = basename(path, extname(path))
   return slugify(withoutExtension) || "game"
+}
+
+function playableIdFromTitle(title: string): string | undefined {
+  const id = slugify(title)
+  return id.length > 0 ? id : undefined
 }
 
 function titleFromPath(path: string): string {

@@ -1,4 +1,8 @@
 export {
+  KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID,
+  steamInstalledAppsDiscoveryProvider,
+} from "./src/discovery"
+export {
   materializeReadableSteamLaunch,
   steamReadableLaunchIntegration,
 } from "./src/materializer"
