@@ -6,6 +6,7 @@
  * intrinsic token scale. Idles with a bob + blink; states swap its mood. Lives
  * small + peripheral in the shared status bar so it never crowds the content.
  */
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "./pico-design-parts"
 export type PicoMascotState = "idle" | "happy" | "sleep" | "peek"
 
 export function PicoMascot({
@@ -19,6 +20,7 @@ export function PicoMascot({
     <span
       className={`pcMascot pcMascot-${state} ${className ?? ""}`}
       aria-hidden
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMascot)}
     >
       <svg className="pcMascot-svg" viewBox="0 0 10 10">
         <title>Pixl</title>
@@ -39,7 +41,12 @@ export function PicoMascot({
           <rect x="7" y="5" width="1" height="1" />
         </g>
       </svg>
-      <span className="pcMascot-zzz">z</span>
+      <span
+        className="pcMascot-zzz"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMascotZzz)}
+      >
+        z
+      </span>
     </span>
   )
 }

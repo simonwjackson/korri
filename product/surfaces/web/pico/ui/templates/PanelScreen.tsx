@@ -33,15 +33,31 @@ export function PanelScreen({
       className={`pcPush ${side}`}
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.panelScreen)}
     >
-      <div className="pcPush-page">
+      <div
+        className="pcPush-page"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPushPage)}
+      >
         <ScreenShell title={title} hints={hints} className="pad-0">
           {main}
         </ScreenShell>
       </div>
       <aside className={`pcPush-aside ${side}`}>
-        <div className="pcPanel-head">{panelTitle}</div>
-        <div className="pcPanel-body">{panel}</div>
-        <div className="pcPush-foot" />
+        <div
+          className="pcPanel-head"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPanelHead)}
+        >
+          {panelTitle}
+        </div>
+        <div
+          className="pcPanel-body"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPanelBody)}
+        >
+          {panel}
+        </div>
+        <div
+          className="pcPush-foot"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPushFoot)}
+        />
       </aside>
     </div>
   )

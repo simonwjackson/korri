@@ -1,6 +1,7 @@
 import type { PicoGame } from "./fixtures"
 import { PicoArtImage } from "./PicoArtImage"
 import { ditherStyle, picoArt } from "./pico-art"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "./pico-design-parts"
 
 export type PicoCartFavoriteMark = "visible" | "hidden"
 
@@ -30,12 +31,25 @@ export function renderPicoCart({
       {game.art ? (
         <PicoArtImage src={game.art} className="pico-cart-art" />
       ) : null}
-      <span className="pico-cart-notch" />
+      <span
+        className="pico-cart-notch"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoCartNotch)}
+      />
       {favoriteMark === "visible" && game.favorite ? (
-        <span className="pico-fav">★</span>
+        <span
+          className="pico-fav"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoFav)}
+        >
+          ★
+        </span>
       ) : null}
       {game.art ? null : (
-        <span className="pico-cart-initials">{art.initials}</span>
+        <span
+          className="pico-cart-initials"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoCartInitials)}
+        >
+          {art.initials}
+        </span>
       )}
     </div>
   )

@@ -8,6 +8,7 @@ import type { PicoGame } from "./fixtures"
 import { PicoCart } from "./PicoCart"
 import { PicoCartUnmarked } from "./PicoCartUnmarked"
 import { PicoStatusBarLive } from "./PicoStatusBar"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "./pico-design-parts"
 
 export function VariantIconGrid({
   games,
@@ -20,9 +21,12 @@ export function VariantIconGrid({
   if (!sel) return null
 
   return (
-    <div className="pcC">
+    <div className="pcC" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcC)}>
       <PicoStatusBarLive label="PICO ▸ HOME" />
-      <div className="pcC-grid">
+      <div
+        className="pcC-grid"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcCGrid)}
+      >
         {grid.map((game, i) => (
           <button
             type="button"
@@ -30,22 +34,44 @@ export function VariantIconGrid({
             className={`pcC-cell ${i === selected ? "sel" : ""}`}
             onClick={() => setSelected(i)}
             style={cellReset}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcCCell)}
           >
             <PicoCart game={game} />
-            <span className="pcC-name">{game.title}</span>
+            <span
+              className="pcC-name"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcCName)}
+            >
+              {game.title}
+            </span>
           </button>
         ))}
       </div>
-      <div className="pcC-tray">
+      <div
+        className="pcC-tray"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcCTray)}
+      >
         <PicoCartUnmarked game={sel} />
         <div>
-          <h1 className="pico-title-display">{sel.title}</h1>
-          <div className="pcC-traysub">
+          <h1
+            className="pico-title-display"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoTitleDisplay)}
+          >
+            {sel.title}
+          </h1>
+          <div
+            className="pcC-traysub"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcCTraysub)}
+          >
             {sel.genre.toUpperCase()} ·{" "}
             {sel.lastPlayedLabel ? `LAST ${sel.lastPlayedLabel}` : "NEW"}
           </div>
         </div>
-        <span className="pcC-play">▶ PLAY</span>
+        <span
+          className="pcC-play"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcCPlay)}
+        >
+          ▶ PLAY
+        </span>
       </div>
     </div>
   )

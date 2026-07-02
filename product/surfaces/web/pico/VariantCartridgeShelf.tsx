@@ -8,6 +8,7 @@ import type { PicoGame } from "./fixtures"
 import { PicoCart } from "./PicoCart"
 import { PicoCartUnmarked } from "./PicoCartUnmarked"
 import { PicoButtonBar, PicoStatusBarLive } from "./PicoStatusBar"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "./pico-design-parts"
 
 export function VariantCartridgeShelf({
   games,
@@ -25,23 +26,38 @@ export function VariantCartridgeShelf({
   if (!hero || !prev || !next || !next2) return null
 
   return (
-    <div className="pcA">
+    <div className="pcA" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcA)}>
       <PicoStatusBarLive label="PICO ▸ LIBRARY" />
-      <div className="pcA-stage">
-        <div className="pcA-dots">
+      <div
+        className="pcA-stage"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAStage)}
+      >
+        <div
+          className="pcA-dots"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcADots)}
+        >
           {games.slice(0, 12).map((game, i) => (
             <b className={i === index ? "on" : ""} key={game.id} />
           ))}
         </div>
-        <div className="pcA-carts">
+        <div
+          className="pcA-carts"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcACarts)}
+        >
           <PicoCartUnmarked game={prev} className="pcA-cart side" />
           <PicoCart game={hero} className="pcA-cart hero" />
           <PicoCartUnmarked game={next} className="pcA-cart side" />
           <PicoCartUnmarked game={next2} className="pcA-cart side" />
         </div>
-        <div className="pcA-meta">
+        <div
+          className="pcA-meta"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAMeta)}
+        >
           <h1>{hero.title}</h1>
-          <div className="pcA-stats">
+          <div
+            className="pcA-stats"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAStats)}
+          >
             {hero.lastPlayedLabel
               ? `LAST PLAYED ${hero.lastPlayedLabel.toUpperCase()}`
               : "NEVER PLAYED"}

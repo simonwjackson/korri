@@ -14,7 +14,10 @@ export function GameOverlay({ children }: { readonly children: ReactNode }) {
       className="pc-root"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.gameOverlay)}
     >
-      <div className="pc-gamebg" />
+      <div
+        className="pc-gamebg"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcGamebg)}
+      />
       {children}
     </div>
   )

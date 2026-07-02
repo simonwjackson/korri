@@ -47,19 +47,44 @@ export function PicoStatusBar({
       className="pico-statusbar"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.statusBar)}
     >
-      <span className="pico-statusbar-lead">
+      <span
+        className="pico-statusbar-lead"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoStatusbarLead)}
+      >
         <PicoMascot className="pcMascot-bar" />
-        <span className="pico-statusbar-title">{label}</span>
+        <span
+          className="pico-statusbar-title"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoStatusbarTitle)}
+        >
+          {label}
+        </span>
       </span>
-      <span className="pico-statusbar-status">
+      <span
+        className="pico-statusbar-status"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoStatusbarStatus)}
+      >
         <PicoIcon
           name="wifi"
           className={`pico-statusbar-ico ${connected ? "" : "off"}`}
         />
-        <span className="pico-clock">{time}</span>
+        <span
+          className="pico-clock"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoClock)}
+        >
+          {time}
+        </span>
         {batteryPercent !== undefined ? (
-          <span className="pico-battery" data-charging={charging || undefined}>
-            <span className="pico-battery-pct">{batteryPercent}%</span>
+          <span
+            className="pico-battery"
+            data-charging={charging || undefined}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoBattery)}
+          >
+            <span
+              className="pico-battery-pct"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoBatteryPct)}
+            >
+              {batteryPercent}%
+            </span>
             <i style={{ "--pico-battery-fill": fill } as CSSProperties} />
           </span>
         ) : null}
@@ -109,10 +134,20 @@ export function PicoButtonBar({
   }[]
 }) {
   return (
-    <div className="pico-buttonbar">
+    <div
+      className="pico-buttonbar"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoButtonbar)}
+    >
       {hints.map(hint => (
-        <span className="pico-hint" key={hint.key}>
-          <span className={`pico-key ${hint.key}`}>
+        <span
+          className="pico-hint"
+          key={hint.key}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoHint)}
+        >
+          <span
+            className={`pico-key ${hint.key}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.picoKey)}
+          >
             {hint.key.toUpperCase()}
           </span>
           {hint.label}

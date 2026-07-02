@@ -10,6 +10,7 @@ import { useState } from "react"
 import type { PicoGame } from "./fixtures"
 import { PicoCartUnmarked } from "./PicoCartUnmarked"
 import { PicoButtonBar, PicoStatusBarLive } from "./PicoStatusBar"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "./pico-design-parts"
 
 export function VariantGameDetail({
   games,
@@ -30,22 +31,40 @@ export function VariantGameDetail({
   const played = game.lastPlayedLabel !== null
 
   return (
-    <div className="pcD">
+    <div className="pcD" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcD)}>
       <PicoStatusBarLive label="PICO ▸ GAME" />
-      <div className="pcD-body">
-        <div className="pcD-art">
+      <div
+        className="pcD-body"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDBody)}
+      >
+        <div
+          className="pcD-art"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDArt)}
+        >
           <PicoCartUnmarked game={game} />
         </div>
-        <div className="pcD-info">
+        <div
+          className="pcD-info"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDInfo)}
+        >
           <h1>{game.title}</h1>
-          <div className="pcD-tags">
+          <div
+            className="pcD-tags"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDTags)}
+          >
             {game.genre.toUpperCase()} · {game.developer.toUpperCase()}
           </div>
-          <p className="pcD-synopsis">
+          <p
+            className="pcD-synopsis"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDSynopsis)}
+          >
             A {game.genre.toLowerCase()} from {game.developer}. Jump straight
             back into your last save, or start fresh — your call.
           </p>
-          <div className="pcD-stats">
+          <div
+            className="pcD-stats"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDStats)}
+          >
             <span>
               {played
                 ? `LAST PLAYED ${(game.lastPlayedLabel ?? "").toUpperCase()}`
@@ -55,19 +74,40 @@ export function VariantGameDetail({
               <span>{game.playtimeLabel} PLAYED</span>
             ) : null}
             {game.favorite ? (
-              <span className="pcD-favtag">★ FAVORITE</span>
+              <span
+                className="pcD-favtag"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDFavtag)}
+              >
+                ★ FAVORITE
+              </span>
             ) : null}
           </div>
-          <div className="pcD-actions">
-            <button type="button" className="pcD-btn primary" onClick={onPlay}>
+          <div
+            className="pcD-actions"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDActions)}
+          >
+            <button
+              type="button"
+              className="pcD-btn primary"
+              onClick={onPlay}
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDBtn)}
+            >
               ▶ {played ? "CONTINUE" : "PLAY"}
             </button>
             {played ? (
-              <button type="button" className="pcD-btn">
+              <button
+                type="button"
+                className="pcD-btn"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDBtn)}
+              >
                 NEW GAME
               </button>
             ) : null}
-            <button type="button" className="pcD-btn">
+            <button
+              type="button"
+              className="pcD-btn"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDBtn)}
+            >
               ★ FAVORITE
             </button>
           </div>

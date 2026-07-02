@@ -26,6 +26,9 @@ const STRUCTURAL = new Set([
   "pad-0",
   "col",
   "row",
+  // surface mount frame (infra, not a design element)
+  "pico-screen",
+  "intrinsic",
 ])
 
 export interface PickViolation {
@@ -51,6 +54,8 @@ function walk(dir: string): string[] {
     }
     if (!/\.tsx$/.test(path)) continue
     if (/\.(part|story|test|spec)\.tsx$/.test(path)) continue
+    // atoms are the floor (own minimal internal markup allowed inline)
+    if (path.includes("/ui/atoms/")) continue
     out.push(path)
   }
   return out
@@ -107,9 +112,10 @@ export function scanSource(src: string): SourceLeaf[] {
 }
 
 export function picoRoots(base: string): readonly string[] {
-  // atoms are the floor (their own minimal internal markup is allowed inline);
-  // pages, organisms, and molecules must compose pickable parts.
-  return [`${base}/pages`, `${base}/ui/organisms`, `${base}/ui/molecules`]
+  // The whole pico surface must compose pickable parts; walk() exempts the
+  // atom floor (ui/atoms) and STRUCTURAL exempts pure layout/frame classes.
+  // This covers routed screens, chrome, templates, pages, organisms, molecules.
+  return [base]
 }
 
 export function pickViolations(roots: readonly string[]): PickViolation[] {

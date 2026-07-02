@@ -7,6 +7,7 @@
  */
 import { useState } from "react"
 import { PicoButtonBar, PicoStatusBarLive } from "./PicoStatusBar"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "./pico-design-parts"
 
 type Control =
   | { readonly kind: "toggle"; readonly state: "on" | "off" }
@@ -98,10 +99,16 @@ export function VariantSettings() {
   if (!active) return null
 
   return (
-    <div className="pcB">
+    <div className="pcB" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcB)}>
       <PicoStatusBarLive label="PICO ▸ SETTINGS" />
-      <div className="pcB-body">
-        <div className="pcB-list">
+      <div
+        className="pcB-body"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBBody)}
+      >
+        <div
+          className="pcB-list"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBList)}
+        >
           {CATEGORIES.map((category, index) => (
             <button
               type="button"
@@ -112,14 +119,28 @@ export function VariantSettings() {
                 setItem(0)
               }}
               style={rowReset}
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBRow)}
             >
-              <span className="pcB-cursor">▶</span>
+              <span
+                className="pcB-cursor"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBCursor)}
+              >
+                ▶
+              </span>
               <span style={ellipsis}>{category.name}</span>
             </button>
           ))}
         </div>
-        <div className="pcB-detail">
-          <div className="pcB-detail-title">{active.name}</div>
+        <div
+          className="pcB-detail"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBDetail)}
+        >
+          <div
+            className="pcB-detail-title"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBDetailTitle)}
+          >
+            {active.name}
+          </div>
           {active.items.map((setting, index) => (
             <button
               type="button"
@@ -127,8 +148,14 @@ export function VariantSettings() {
               className={`pcB-set ${index === item ? "focused" : ""}`}
               onClick={() => setItem(index)}
               style={rowReset}
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBSet)}
             >
-              <span className="pcB-set-label">{setting.label}</span>
+              <span
+                className="pcB-set-label"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBSetLabel)}
+              >
+                {setting.label}
+              </span>
               <ControlView control={setting.control} />
             </button>
           ))}
@@ -148,7 +175,10 @@ export function VariantSettings() {
 function ControlView({ control }: { readonly control: Control }) {
   if (control.kind === "toggle") {
     return (
-      <span className="pcB-toggle">
+      <span
+        className="pcB-toggle"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBToggle)}
+      >
         <span className={control.state === "on" ? "on" : ""}>ON</span>
         <span className={control.state === "off" ? "on" : ""}>OFF</span>
       </span>
@@ -156,24 +186,55 @@ function ControlView({ control }: { readonly control: Control }) {
   }
   if (control.kind === "option") {
     return (
-      <span className="pcB-opt">
-        <span className="pcB-opt-arr">◂</span>
+      <span
+        className="pcB-opt"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBOpt)}
+      >
+        <span
+          className="pcB-opt-arr"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBOptArr)}
+        >
+          ◂
+        </span>
         {control.value}
-        <span className="pcB-opt-arr">▸</span>
+        <span
+          className="pcB-opt-arr"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBOptArr)}
+        >
+          ▸
+        </span>
       </span>
     )
   }
   if (control.kind === "slider") {
     return (
-      <span className="pcB-bar">
-        <span className="pcB-bar-on">{"█".repeat(control.level)}</span>
-        <span className="pcB-bar-off">
+      <span
+        className="pcB-bar"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBBar)}
+      >
+        <span
+          className="pcB-bar-on"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBBarOn)}
+        >
+          {"█".repeat(control.level)}
+        </span>
+        <span
+          className="pcB-bar-off"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBBarOff)}
+        >
           {"░".repeat(Math.max(0, control.max - control.level))}
         </span>
       </span>
     )
   }
-  return <span className="pcB-info">{control.value}</span>
+  return (
+    <span
+      className="pcB-info"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcBInfo)}
+    >
+      {control.value}
+    </span>
+  )
 }
 
 const rowReset: React.CSSProperties = {
