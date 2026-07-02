@@ -1,6 +1,6 @@
 ---
 title: Pico part-first conversion (the Shift treatment)
-status: planned
+status: completed
 created: 2026-07-02
 ---
 
