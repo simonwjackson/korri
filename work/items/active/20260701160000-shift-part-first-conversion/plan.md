@@ -1,7 +1,7 @@
 ---
 title: "refactor: Shift part-first atomic conversion — parts are the app, devices are mounts"
 type: refactor
-status: active
+status: completed
 date: 2026-07-01
 deepened: 2026-07-01
 verify_command: "bun test tools/theme-workshop product/surfaces/web/shift"
