@@ -38,6 +38,7 @@ import {
   retroarchPlugin,
   retroarchReadableLaunchIntegration,
 } from "./retroarch"
+import { rpcs3Plugin } from "./rpcs3"
 import { ryubingPlugin, ryubingReadableLaunchIntegration } from "./ryubing"
 import { shipwrightPlugin } from "./shipwright"
 import { smbWonderland1987Plugin } from "./smb-wonderland-1987"
@@ -135,6 +136,7 @@ export function firstPartySessionLifecycleHooksForRegistry(
 
 export const firstPartyPlugins = [
   retroarchPlugin,
+  rpcs3Plugin,
   gamescopePlugin,
   webpagePlugin,
   webCanvasPlugin,
