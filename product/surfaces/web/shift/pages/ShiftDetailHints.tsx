@@ -6,6 +6,7 @@
  */
 
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftDetailHint } from "./ShiftDetailHint"
 import { shiftDetailPlayLabel } from "./shift-detail-copy"
 import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
@@ -19,26 +20,9 @@ export function ShiftDetailHints({
       className="shift-detail-buttonbar"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.detailHints)}
     >
-      <Hint glyph="A" label={shiftDetailPlayLabel(game)} />
-      <Hint glyph="Y" label="Favorite" />
-      <Hint glyph="B" label="Back" />
+      <ShiftDetailHint glyph="A" label={shiftDetailPlayLabel(game)} />
+      <ShiftDetailHint glyph="Y" label="Favorite" />
+      <ShiftDetailHint glyph="B" label="Back" />
     </div>
-  )
-}
-
-function Hint({
-  glyph,
-  label,
-}: {
-  readonly glyph: string
-  readonly label: string
-}) {
-  return (
-    <span className="shift-detail-hint">
-      <span className="shift-detail-hint-glyph" aria-hidden>
-        {glyph}
-      </span>
-      <span>{label}</span>
-    </span>
   )
 }

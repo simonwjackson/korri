@@ -13,6 +13,9 @@ import { ShiftDetailActions } from "./ShiftDetailActions"
 import { ShiftDetailArt } from "./ShiftDetailArt"
 import { ShiftDetailHints } from "./ShiftDetailHints"
 import { ShiftDetailStats } from "./ShiftDetailStats"
+import { ShiftDetailSynopsis } from "./ShiftDetailSynopsis"
+import { ShiftDetailTags } from "./ShiftDetailTags"
+import { ShiftDetailTitle } from "./ShiftDetailTitle"
 import { shiftDetailSynopsis } from "./shift-detail-copy"
 import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
@@ -42,9 +45,9 @@ export function ShiftDetailSplit({
       <ShiftDetailArt artUrl={game.artUrl} />
 
       <div className="shift-detail-split-info">
-        <h1 className="shift-detail-title">{game.title}</h1>
-        {tags ? <div className="shift-detail-tags">{tags}</div> : null}
-        <p className="shift-detail-synopsis">{shiftDetailSynopsis(game)}</p>
+        <ShiftDetailTitle title={game.title} />
+        {tags ? <ShiftDetailTags tags={tags} /> : null}
+        <ShiftDetailSynopsis>{shiftDetailSynopsis(game)}</ShiftDetailSynopsis>
         <ShiftDetailStats
           lastPlayedLabel={game.lastPlayedLabel}
           playtimeLabel={game.playtimeLabel}

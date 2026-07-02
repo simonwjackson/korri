@@ -5,6 +5,7 @@
  * for the detail info column.
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftDetailFavoriteBadge } from "./ShiftDetailFavoriteBadge"
 
 export interface ShiftDetailStatsProps {
   readonly lastPlayedLabel?: string
@@ -26,7 +27,7 @@ export function ShiftDetailStats({
         {lastPlayedLabel ? `Last played ${lastPlayedLabel}` : "Never played"}
       </span>
       {playtimeLabel ? <span>{playtimeLabel} played</span> : null}
-      {favorite ? <span className="shift-detail-fav">★ Favorite</span> : null}
+      {favorite ? <ShiftDetailFavoriteBadge /> : null}
     </div>
   )
 }

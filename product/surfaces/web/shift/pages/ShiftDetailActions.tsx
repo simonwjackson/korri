@@ -7,6 +7,7 @@
  */
 
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftDetailButton } from "./ShiftDetailButton"
 import { shiftDetailPlayLabel } from "./shift-detail-copy"
 import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
@@ -28,26 +29,17 @@ export function ShiftDetailActions({
       className="shift-detail-actions"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.detailActions)}
     >
-      <button
-        type="button"
-        className="shift-detail-btn primary"
+      <ShiftDetailButton
+        primary
+        label={`▶ ${shiftDetailPlayLabel(game)}`}
         onClick={() => onPlay?.(game.id)}
-      >
-        ▶ {shiftDetailPlayLabel(game)}
-      </button>
-      {played ? (
-        <button type="button" className="shift-detail-btn">
-          New Game
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="shift-detail-btn"
-        aria-pressed={game.favorite === true}
+      />
+      {played ? <ShiftDetailButton label="New Game" /> : null}
+      <ShiftDetailButton
+        pressed={game.favorite === true}
+        label={game.favorite ? "★ Favorited" : "☆ Favorite"}
         onClick={() => onFavorite?.(game.id)}
-      >
-        {game.favorite ? "★ Favorited" : "☆ Favorite"}
-      </button>
+      />
     </div>
   )
 }
