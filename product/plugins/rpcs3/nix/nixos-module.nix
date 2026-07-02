@@ -67,6 +67,13 @@ in
           root = cfg.stateRoot;
         };
       };
+      sources."@korri:rpcs3/ps3-games" = {
+        title = "RPCS3 PS3 disc folders";
+        kind = [ "files" ];
+        storage = "@korri:rpcs3/ps3-games";
+        app = "@korri:rpcs3/rpcs3";
+        runtime = "@korri:rpcs3/rpcs3";
+      };
       launchers."@korri:rpcs3/rpcs3" = {
         command = rpcs3Command;
         policy.allowedCommands = [ rpcs3Command ];

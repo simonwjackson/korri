@@ -63,6 +63,7 @@ let
   disabled = evaluateWith { };
   platformDefaults = enabled.services.korri.daemon.library.platformDefaults;
   launcherDefaults = platformDefaults.launchers."@korri:rpcs3/rpcs3";
+  sourceDefaults = platformDefaults.sources."@korri:rpcs3/ps3-games";
   pluginDefaults = platformDefaults.host.plugin."@korri:rpcs3";
 
   packageNames = map (package: package.name or "") enabled.environment.systemPackages;
@@ -82,6 +83,12 @@ let
         == "/srv/lakes/towada/gaming/games/sony-playstation-3"
       && platformDefaults.storage."@korri:rpcs3/state".root
         == "/srv/lakes/towada/gaming/games/sony-playstation-3/_dev_hdd0"
+    ))
+    (check "enabled module renders the RPCS3 PS3 game scan source" (
+      sourceDefaults.kind == [ "files" ]
+      && sourceDefaults.storage == "@korri:rpcs3/ps3-games"
+      && sourceDefaults.app == "@korri:rpcs3/rpcs3"
+      && sourceDefaults.runtime == "@korri:rpcs3/rpcs3"
     ))
     (check "enabled module renders absolute RPCS3 launch command defaults" (
       lib.hasPrefix "/" launcherDefaults.command
