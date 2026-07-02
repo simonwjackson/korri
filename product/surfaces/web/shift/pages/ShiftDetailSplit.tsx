@@ -9,7 +9,9 @@
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { ShiftDetailActions } from "./ShiftDetailActions"
+import { ShiftDetailArt } from "./ShiftDetailArt"
 import { ShiftDetailHints } from "./ShiftDetailHints"
+import { ShiftDetailStats } from "./ShiftDetailStats"
 import { shiftDetailSynopsis } from "./shift-detail-copy"
 import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
@@ -32,25 +34,17 @@ export function ShiftDetailSplit({
 
   return (
     <div data-shift-detail className="shift-detail-split intrinsic">
-      <div className="shift-detail-split-art">
-        <img src={game.artUrl} alt="" loading="lazy" />
-      </div>
+      <ShiftDetailArt artUrl={game.artUrl} />
 
       <div className="shift-detail-split-info">
         <h1 className="shift-detail-title">{game.title}</h1>
         {tags ? <div className="shift-detail-tags">{tags}</div> : null}
         <p className="shift-detail-synopsis">{shiftDetailSynopsis(game)}</p>
-        <div className="shift-detail-stats">
-          <span>
-            {game.lastPlayedLabel
-              ? `Last played ${game.lastPlayedLabel}`
-              : "Never played"}
-          </span>
-          {game.playtimeLabel ? <span>{game.playtimeLabel} played</span> : null}
-          {game.favorite ? (
-            <span className="shift-detail-fav">★ Favorite</span>
-          ) : null}
-        </div>
+        <ShiftDetailStats
+          lastPlayedLabel={game.lastPlayedLabel}
+          playtimeLabel={game.playtimeLabel}
+          favorite={game.favorite}
+        />
         <ShiftDetailActions
           game={game}
           onPlay={onPlay}
