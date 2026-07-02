@@ -8,6 +8,7 @@
  */
 import { AnimatePresence, motion } from "framer-motion"
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftCoverArt } from "./ShiftCoverArt"
 import type { ShiftLibraryGame } from "./shift-library-game"
 
 const SPRING = { type: "spring", stiffness: 320, damping: 30 } as const
@@ -40,7 +41,7 @@ export function ShiftDeckCard({ game, onRiffle, onPlay }: ShiftDeckCardProps) {
           exit={{ opacity: 0, scale: 0.9, y: -24 }}
           transition={SPRING}
         >
-          <img src={game.artUrl} alt="" draggable={false} />
+          <ShiftCoverArt src={game.artUrl} />
         </motion.div>
       </AnimatePresence>
     </div>

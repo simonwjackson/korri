@@ -8,6 +8,7 @@
  */
 import { motion } from "framer-motion"
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftCoverArt } from "./ShiftCoverArt"
 import type { ShiftLibraryGame } from "./shift-library-game"
 
 const SPRING = { type: "spring", stiffness: 220, damping: 26 } as const
@@ -43,7 +44,7 @@ export function ShiftReelCover({
       transition={SPRING}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.reelCover, game.id)}
     >
-      <img src={game.artUrl} alt="" loading="lazy" draggable={false} />
+      <ShiftCoverArt src={game.artUrl} loading="lazy" />
     </motion.button>
   )
 }

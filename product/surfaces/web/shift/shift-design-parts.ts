@@ -103,7 +103,25 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "organism",
     name: "Library Shelf Stack",
   },
+  // Shared leaf atoms.
+  coverArt: { id: "shift.cover-art", layer: "atom", name: "Cover Art" },
   // Reel internals.
+  reelTitle: {
+    id: "shift.reel-title",
+    layer: "atom",
+    name: "Reel Title",
+  },
+  reelTags: { id: "shift.reel-tags", layer: "atom", name: "Reel Tags" },
+  reelSpinButton: {
+    id: "shift.reel-spin-button",
+    layer: "atom",
+    name: "Reel Spin Button",
+  },
+  reelPlayButton: {
+    id: "shift.reel-play-button",
+    layer: "atom",
+    name: "Reel Play Button",
+  },
   reelCover: {
     id: "shift.reel-cover",
     layer: "molecule",

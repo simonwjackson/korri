@@ -5,6 +5,8 @@
  * cover currently in the hero slot.
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftReelTags } from "./ShiftReelTags"
+import { ShiftReelTitle } from "./ShiftReelTitle"
 
 export interface ShiftReelHeroProps {
   readonly title: string
@@ -17,8 +19,8 @@ export function ShiftReelHero({ title, genre }: ShiftReelHeroProps) {
       className="shift-lib-reel-hero"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.reelHero)}
     >
-      <h1 className="shift-lib-reel-title">{title}</h1>
-      {genre ? <p className="shift-lib-reel-tags">{genre}</p> : null}
+      <ShiftReelTitle title={title} />
+      {genre ? <ShiftReelTags genre={genre} /> : null}
     </div>
   )
 }

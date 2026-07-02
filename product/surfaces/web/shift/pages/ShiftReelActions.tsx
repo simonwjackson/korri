@@ -5,6 +5,8 @@
  * Play launches the centred one.
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftReelPlayButton } from "./ShiftReelPlayButton"
+import { ShiftReelSpinButton } from "./ShiftReelSpinButton"
 
 export interface ShiftReelActionsProps {
   /** Fling the wheel to a fresh game (random-ish jump). */
@@ -18,12 +20,8 @@ export function ShiftReelActions({ onFling, onPlay }: ShiftReelActionsProps) {
       className="shift-lib-reel-actions"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.reelActions)}
     >
-      <button type="button" className="shift-lib-reel-spin" onClick={onFling}>
-        🎰 Spin
-      </button>
-      <button type="button" className="shift-lib-reel-play" onClick={onPlay}>
-        ▶ Play
-      </button>
+      <ShiftReelSpinButton onClick={onFling} />
+      <ShiftReelPlayButton onClick={onPlay} />
     </div>
   )
 }
