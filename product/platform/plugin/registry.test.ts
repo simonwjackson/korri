@@ -136,7 +136,7 @@ describe("createPluginRegistry", () => {
     expect(registry.discoveryProviders).toEqual([])
   })
 
-  it("enables explicit plugin requirements before collecting discovery providers", () => {
+  it("collects discovery providers only from explicitly requested plugins", () => {
     const discovery = releaseDiscoveryProvider({
       id: "@korri:runtime/test-files",
       title: "Test files",
@@ -158,14 +158,22 @@ describe("createPluginRegistry", () => {
       ],
     })
 
-    const registry = createPluginRegistry([runtime, game], {
+    const autoEnabledRegistry = createPluginRegistry([runtime, game], {
       enabledPluginIds: [game.id],
     })
 
-    expect(registry.enabledPluginIds.has(runtime.id)).toBe(true)
-    expect(registry.discoveryProviders.map(provider => provider.id)).toEqual([
-      "@korri:runtime/test-files",
-    ])
+    expect(autoEnabledRegistry.enabledPluginIds.has(runtime.id)).toBe(true)
+    expect(autoEnabledRegistry.discoveryProviders).toEqual([])
+
+    const explicitlyRequestedRegistry = createPluginRegistry([runtime, game], {
+      enabledPluginIds: [game.id, runtime.id],
+    })
+
+    expect(
+      explicitlyRequestedRegistry.discoveryProviders.map(
+        provider => provider.id,
+      ),
+    ).toEqual(["@korri:runtime/test-files"])
   })
 
   it("enables explicit plugin requirements as dependency closure", () => {

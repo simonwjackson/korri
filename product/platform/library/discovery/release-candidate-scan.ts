@@ -781,7 +781,7 @@ function candidateFromObservation(
       release.id.length === 0 ||
       release.system.length === 0 ||
       release.app.length === 0 ||
-      release.runtime.length === 0
+      (release.runtime !== undefined && release.runtime.length === 0)
     ) {
       addSample(report, {
         path: descriptor.relativePath,
@@ -799,7 +799,7 @@ function candidateFromObservation(
         system: release.system,
         confidence: observation.confidence,
         app: release.app,
-        runtime: release.runtime,
+        ...(release.runtime !== undefined ? { runtime: release.runtime } : {}),
         releaseId: release.id,
         ...(release.title !== undefined ? { title: release.title } : {}),
       },

@@ -13,6 +13,7 @@ import {
   createPluginResourceFulfillerFromEnv,
   PluginLibrarySourceLayerLive,
 } from "./library-source-layer"
+import { KORRI_RYUBING_APP_ID, KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
 import {
   DEFAULT_STEAM_COMPAT_TOOL,
   KORRI_STEAM_APP_ID,
@@ -350,6 +351,36 @@ describe("PluginLibrarySourceLayerLive", () => {
     }
   })
 
+  it("can resolve Ryubing file launches through plugin-contributed app wiring", async () => {
+    const previous = snapshotEnv()
+    const configRoot = await mktemp()
+    const romRoot = await mktemp()
+    await Bun.write(join(romRoot, "zelda.xci"), "game")
+    await seedRyubingLaunchConfig(configRoot, romRoot)
+    process.env.KORRI_CONFIG_ROOTS = configRoot
+    process.env.KORRI_ENABLED_PLUGINS = KORRI_RYUBING_PLUGIN_ID
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const source = yield* LibrarySource
+          const listPlayableEntries = source.listPlayableEntries
+          if (!listPlayableEntries)
+            throw new Error("expected playable list support")
+          const entries = yield* listPlayableEntries()
+          const canResolve = source.canResolveLaunchForGame
+            ? yield* source.canResolveLaunchForGame("zelda")
+            : false
+          return { canResolve, entries }
+        }).pipe(Effect.provide(PluginLibrarySourceLayerLive)),
+      )
+
+      expect(result.canResolve).toBe(true)
+      expect(result.entries.map(entry => entry.id)).toContain("zelda")
+    } finally {
+      restoreEnv(previous)
+    }
+  })
+
   it("resolves enabled Steam AppID launches through the live plugin library source", async () => {
     const previous = snapshotEnv()
     const configRoot = await mktemp()
@@ -669,6 +700,30 @@ async function seedPsychoWaluigiExecutable(stateRoot: string): Promise<void> {
     binary: "psycho-waluigi",
     storeName: "store-psycho-waluigi",
   })
+}
+
+async function seedRyubingLaunchConfig(
+  configRoot: string,
+  romRoot: string,
+): Promise<void> {
+  await mkdir(configRoot, { recursive: true })
+  await Bun.write(
+    join(configRoot, "ryubing.korri.yaml"),
+    [
+      "storage:",
+      "  roms:",
+      `    root: ${JSON.stringify(romRoot)}`,
+      "library:",
+      "  zelda:",
+      "    title: Zelda",
+      "    releases:",
+      "      - id: switch",
+      "        system: switch",
+      "        target: { kind: file, storage: roms, path: zelda.xci }",
+      `        launch: { use: "${KORRI_RYUBING_APP_ID}" }`,
+      "",
+    ].join("\n"),
+  )
 }
 
 async function seedSteamLaunchConfig(

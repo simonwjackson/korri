@@ -136,9 +136,9 @@ describe("classifyRomScanPath", () => {
   })
 
   it("reports unsupported game-like files without making them candidates", () => {
-    expect(classifyRomScanPath("game.nsp")).toMatchObject({
+    expect(classifyRomScanPath("game.nds")).toMatchObject({
       _tag: "Unsupported",
-      system: "switch",
+      system: "nds",
     })
     expect(classifyRomScanPath("game.wua")).toMatchObject({
       _tag: "Unsupported",
@@ -155,6 +155,28 @@ describe("classifyRomScanPath", () => {
     expect(classifyRomScanPath("gba/dkkc3.zip")).toMatchObject({
       _tag: "Unsupported",
       system: "gba",
+    })
+  })
+
+  it("lets plugin-owned systems reach release discovery providers", () => {
+    expect(classifyRomScanPath("game.nsp")).toMatchObject({
+      _tag: "Unclaimed",
+      system: "switch",
+      reason: "unclaimed:switch",
+    })
+    expect(classifyRomScanPath("pico8/Celeste.p8.png")).toMatchObject({
+      _tag: "Unclaimed",
+      system: "pico8",
+      reason: "unclaimed:pico8",
+    })
+    expect(classifyRomScanPath("zelda-classic/Quest.qst")).toMatchObject({
+      _tag: "Unclaimed",
+      system: "zelda-classic",
+      reason: "unclaimed:zelda-classic",
+    })
+    expect(classifyRomScanPath("psx/Castlevania.cue")).toMatchObject({
+      _tag: "Ignored",
+      reason: "extension:cue",
     })
   })
 
@@ -222,6 +244,35 @@ describe("createRomLibraryCandidates", () => {
       },
     })
     expect(() => decodeLibraryItemPayload(candidates[0]?.record)).not.toThrow()
+  })
+
+  it("renders standalone launcher file releases without runtime", () => {
+    const candidates = createRomLibraryCandidatesFromClassifications(
+      [
+        {
+          _tag: "Candidate" as const,
+          path: "zelda-classic/Quest.qst",
+          system: "zelda-classic",
+          confidence: "high" as const,
+          app: "@korri:zquest-classic/zplayer",
+        },
+      ],
+      { storage: "roms", firstSeenAt: "2026-06-29T12:34:56.000Z" },
+    )
+
+    expect(candidates[0]?.record.releases[0]).toMatchObject({
+      id: "zelda-classic",
+      system: "zelda-classic",
+      target: {
+        kind: "file",
+        storage: "roms",
+        path: "zelda-classic/Quest.qst",
+      },
+      launch: { use: "@korri:zquest-classic/zplayer" },
+    })
+    expect(candidates[0]?.record.releases[0]?.launch).not.toHaveProperty(
+      "runtime",
+    )
   })
 
   it("keeps target paths relative and suffixes duplicate ids globally", () => {
@@ -303,7 +354,8 @@ describe("scanReleaseCandidates", () => {
       files: 7,
       candidates: 2,
       excluded: 2,
-      unsupported: 1,
+      unsupported: 0,
+      unclaimed: 1,
       ignored: 1,
       ambiguous: 1,
     })
@@ -357,6 +409,43 @@ describe("scanReleaseCandidates", () => {
       readonly library: Record<string, unknown>
     }
     expect(parsed.library).toEqual({})
+  })
+
+  it("renders standalone file-release observations without runtime", async () => {
+    await using fixture = await withTempRomRoot({
+      "zelda-classic/Quest.qst": "",
+    })
+    const standaloneProvider = releaseDiscoveryProvider({
+      id: "@korri:zquest-classic/quest-files",
+      title: "ZQuest Classic quest files",
+      discover: ({ files }) =>
+        files.map(file => ({
+          kind: "file-release" as const,
+          confidence: "high" as const,
+          source: file,
+          release: {
+            id: "zelda-classic",
+            system: "zelda-classic",
+            app: "@korri:zquest-classic/zplayer",
+          },
+        })),
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: [standaloneProvider],
+      root: fixture.root,
+      storage: "roms",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    const parsed = parse(result.yaml) as {
+      readonly library: Record<string, unknown>
+    }
+    const item = decodeLibraryItemPayload(parsed.library.quest)
+    expect(item.releases[0]?.launch).toEqual({
+      use: "@korri:zquest-classic/zplayer",
+    })
   })
 
   it("renders provider-ref observations as launchable provider targets", async () => {

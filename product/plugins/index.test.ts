@@ -15,7 +15,10 @@ import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "./levelsharesquare"
 import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "./mega-man-arena"
 import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "./mega-man-maker"
 import { KORRI_MIDAS_MACHINE_PLUGIN_ID } from "./midas-machine"
-import { KORRI_PICO8_PLUGIN_ID } from "./pico8"
+import {
+  KORRI_PICO8_CART_DISCOVERY_PROVIDER_ID,
+  KORRI_PICO8_PLUGIN_ID,
+} from "./pico8"
 import { KORRI_PORTMASTER_PLUGIN_ID } from "./portmaster"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
@@ -47,7 +50,12 @@ import {
   KORRI_RETROARCH_TG16_SYSTEM_ID,
   KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
 } from "./retroarch"
-import { KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
+import {
+  KORRI_RYUBING_APP_ID,
+  KORRI_RYUBING_DISCOVERY_PROVIDER_ID,
+  KORRI_RYUBING_PLUGIN_ID,
+  KORRI_RYUBING_STATE_STORAGE_ID,
+} from "./ryubing"
 import { KORRI_SMB_WONDERLAND_1987_PLUGIN_ID } from "./smb-wonderland-1987"
 import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
 import { KORRI_SMWCENTRAL_PLUGIN_ID } from "./smwcentral"
@@ -62,6 +70,7 @@ import { KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID } from "./super-mario-bros-
 import { KORRI_TURNIP_PLUGIN_ID, KORRI_TURNIP_WRAPPER_PACKAGE } from "./turnip"
 import {
   KORRI_ZQUEST_CLASSIC_APP_ID,
+  KORRI_ZQUEST_CLASSIC_DISCOVERY_PROVIDER_ID,
   KORRI_ZQUEST_CLASSIC_PACKAGE,
   KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
   KORRI_ZQUEST_CLASSIC_SYSTEM_ID,
@@ -114,6 +123,15 @@ describe("first-party plugins", () => {
       plugin => plugin.id === KORRI_RYUBING_PLUGIN_ID,
     )
 
+    expect(ryubing?.contributes.config.storage?.state).toMatchObject({
+      id: KORRI_RYUBING_STATE_STORAGE_ID,
+      root: "/var/lib/korri/ryubing",
+    })
+    expect(ryubing?.contributes.config.launchers?.ryubing).toMatchObject({
+      id: KORRI_RYUBING_APP_ID,
+      plugin: KORRI_RYUBING_PLUGIN_ID,
+      command: "Ryujinx",
+    })
     expect(
       ryubing?.contributes.config.modules?.["ryubing-korri-package"],
     ).toMatchObject({
@@ -122,6 +140,9 @@ describe("first-party plugins", () => {
       path: "product/plugins/ryubing/packages/ryubing-korri",
       capabilities: ["package.expose", "launch.runtime"],
     })
+    expect(
+      ryubing?.contributes.discovery?.map(provider => provider.id),
+    ).toEqual([KORRI_RYUBING_DISCOVERY_PROVIDER_ID])
   })
 
   it("registers Steam as a first-party app provider plugin", () => {
@@ -281,6 +302,9 @@ describe("first-party plugins", () => {
       capabilities: ["package.expose", "launch.runtime"],
       binaries: ["zplayer", "zlauncher"],
     })
+    expect(
+      zquestClassic?.contributes.discovery?.map(provider => provider.id),
+    ).toEqual([KORRI_ZQUEST_CLASSIC_DISCOVERY_PROVIDER_ID])
   })
 
   it("exposes the ZQuest Classic readable launch integration when enabled", () => {
@@ -330,6 +354,7 @@ describe("first-party plugins", () => {
     expect(registry.discoveryProviders.map(provider => provider.id)).toContain(
       KORRI_RETROARCH_GBA_DISCOVERY_PROVIDER_ID,
     )
+    expect(registry.discoveryProviders).toHaveLength(11)
     expect(
       registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/genesis`],
     ).toMatchObject({
@@ -597,12 +622,22 @@ describe("first-party plugins", () => {
     })
 
     expect(registry.enabledPluginIds.has(KORRI_RYUBING_PLUGIN_ID)).toBe(true)
+    expect(registry.launchers[KORRI_RYUBING_APP_ID]).toMatchObject({
+      id: KORRI_RYUBING_APP_ID,
+      command: "Ryujinx",
+    })
+    expect(registry.storage[KORRI_RYUBING_STATE_STORAGE_ID]).toMatchObject({
+      root: "/var/lib/korri/ryubing",
+    })
     expect(
       registry.modules[`${KORRI_RYUBING_PLUGIN_ID}/ryubing-korri-package`],
     ).toMatchObject({
       kind: "nix-package",
       package: "ryubing-korri",
     })
+    expect(registry.discoveryProviders.map(provider => provider.id)).toEqual([
+      KORRI_RYUBING_DISCOVERY_PROVIDER_ID,
+    ])
   })
 
   it("enables PortMaster when composition explicitly opts in", () => {
@@ -633,15 +668,18 @@ describe("first-party plugins", () => {
     })
   })
 
-  it("does not auto-enable RetroArch when PICO-8 is requested alone", () => {
+  it("auto-enables RetroArch when PICO-8 discovery is requested", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: KORRI_PICO8_PLUGIN_ID,
     })
 
     expect(registry.enabledPluginIds.has(KORRI_PICO8_PLUGIN_ID)).toBe(true)
-    expect(registry.enabledPluginIds.has(KORRI_RETROARCH_PLUGIN_ID)).toBe(false)
+    expect(registry.enabledPluginIds.has(KORRI_RETROARCH_PLUGIN_ID)).toBe(true)
     expect(registry.systems[`${KORRI_PICO8_PLUGIN_ID}/pico8`]).toBeDefined()
-    expect(registry.launchers[KORRI_RETROARCH_APP_ID]).toBeUndefined()
+    expect(registry.discoveryProviders.map(provider => provider.id)).toEqual([
+      KORRI_PICO8_CART_DISCOVERY_PROVIDER_ID,
+    ])
+    expect(registry.launchers[KORRI_RETROARCH_APP_ID]).toBeDefined()
   })
 
   it("enables Proton-GE only when explicitly requested", () => {

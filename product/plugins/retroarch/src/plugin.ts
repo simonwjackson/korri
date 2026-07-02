@@ -1,5 +1,5 @@
 import { plugin } from "@platform/plugin"
-import { retroarchGbaDiscoveryProvider } from "./discovery"
+import { retroarchDiscoveryProviders } from "./discovery"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_APP_LOCAL_ID,
@@ -8,6 +8,7 @@ import {
   KORRI_RETROARCH_MGBA_RUNTIME_LOCAL_ID,
   KORRI_RETROARCH_PLUGIN_ID,
 } from "./ids"
+
 export {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_APP_LOCAL_ID,
@@ -68,7 +69,7 @@ export const retroarchPlugin = plugin({
   description:
     "Owns the RetroArch app/runtime host integration for libretro core launches.",
   contributes: {
-    discovery: [retroarchGbaDiscoveryProvider],
+    discovery: retroarchDiscoveryProviders,
     config: {
       launchers: {
         [KORRI_RETROARCH_APP_LOCAL_ID]: {

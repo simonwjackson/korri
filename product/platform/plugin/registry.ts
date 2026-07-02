@@ -78,12 +78,16 @@ export function createPluginRegistry(
     byId.set(candidate.id, candidate)
   }
 
+  const requestedPluginIds = new Set(options.enabledPluginIds ?? [])
   const enabledPluginIds = expandRequiredPluginIds(
     options.enabledPluginIds ?? [],
     byId,
   )
   const enabledPlugins = plugins.filter(candidate =>
     enabledPluginIds.has(candidate.id),
+  )
+  const discoveryPlugins = enabledPlugins.filter(candidate =>
+    requestedPluginIds.has(candidate.id),
   )
 
   return {
@@ -103,7 +107,7 @@ export function createPluginRegistry(
     handlers: enabledPlugins.flatMap(
       plugin => plugin.contributes.handlers ?? plugin.handlers,
     ),
-    discoveryProviders: collectDiscoveryProviders(enabledPlugins),
+    discoveryProviders: collectDiscoveryProviders(discoveryPlugins),
     get: pluginId => byId.get(pluginId),
   }
 }

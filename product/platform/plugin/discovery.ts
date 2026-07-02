@@ -35,7 +35,7 @@ export interface FileReleaseDiscoveryObservation {
     readonly title?: string
     readonly system: string
     readonly app: string
-    readonly runtime: string
+    readonly runtime?: string
   }
   readonly evidence?: readonly ReleaseDiscoveryEvidence[]
 }

@@ -4,10 +4,17 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { Effect } from "effect"
-import { materializeReadableRyubingLaunch } from "./materializer"
+import {
+  materializeReadableRyubingLaunch,
+  ryubingReadableLaunchIntegration,
+} from "./materializer"
 import { KORRI_RYUBING_PLUGIN_ID } from "./plugin"
 
 describe("Ryubing plugin materializer", () => {
+  it("registers under the provider-qualified plugin app kind", () => {
+    expect(ryubingReadableLaunchIntegration.kind).toBe(KORRI_RYUBING_PLUGIN_ID)
+  })
+
   it("materializes plugin-owned policy into config and launch spec", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
     try {
@@ -39,6 +46,45 @@ describe("Ryubing plugin materializer", () => {
         await readFile(join(stateRoot, "Config.json"), "utf8"),
       )
       expect(config.input_config).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("substitutes storage-token state roots before materialization", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
+    try {
+      const stateRoot = join(root, "state")
+      await mkdir(join(stateRoot, "system"), { recursive: true })
+      await writeFile(join(stateRoot, "system", "prod.keys"), "keys")
+      const game = join(root, "game.xci")
+      await writeFile(game, "game")
+
+      const result = await Effect.runPromise(
+        materializeReadableRyubingLaunch({
+          context: {
+            ...context({
+              stateRoot,
+              contentPath: game,
+              policy: {
+                state: { root: "{storage:@korri:ryubing/state}" },
+                input: {
+                  controllers: [{ id: "0", mapping: { a: "button-east" } }],
+                },
+              },
+            }),
+            storage: {
+              "@korri:ryubing/state": {
+                id: "@korri:ryubing/state",
+                root: stateRoot,
+              },
+            },
+          },
+        }),
+      )
+
+      expect(result.spec.args).toContain(stateRoot)
+      expect(result.spec.args.at(-1)).toBe(game)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

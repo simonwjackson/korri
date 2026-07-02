@@ -35,7 +35,7 @@ type StorageRoots = Readonly<Record<string, { readonly root?: string }>>
 type JsonObject = Record<string, unknown>
 
 export const ryubingReadableLaunchIntegration: ReadableLaunchIntegration = {
-  kind: "ryubing",
+  kind: KORRI_RYUBING_PLUGIN_ID,
   integration: "ryubing",
   canResolve: context =>
     Boolean(context.content?.path && readPolicy(context).state?.root),

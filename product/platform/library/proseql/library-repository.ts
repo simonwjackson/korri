@@ -52,7 +52,10 @@ import {
   type RuntimeRecord,
 } from "@platform/library/config/records/runtime"
 import type { SourceRecord } from "@platform/library/config/records/source"
-import type { StorageRecord } from "@platform/library/config/records/storage"
+import {
+  decodeStorageRecord,
+  type StorageRecord,
+} from "@platform/library/config/records/storage"
 import {
   decodeSystemRecord,
   type SystemRecord,
@@ -1181,7 +1184,7 @@ function loadReadableSnapshot(
       systems: mergeRecordMaps(plugin.systems, systems),
       providers: mergeRecordMaps(plugin.providers, providers),
       providerLinks: new Map(providerLinks.map(record => [record.id, record])),
-      storage: new Map(storage.map(record => [record.id, record])),
+      storage: mergeRecordMaps(plugin.storage, storage),
       readableLaunchers: mergeRecordMaps(plugin.launchers, persistedLaunchers),
       runtimes: mergeRecordMaps(plugin.runtimes, runtimes),
       profiles: new Map(profiles.map(record => [record.id, record])),
@@ -1193,6 +1196,7 @@ function loadReadableSnapshot(
 interface PluginReadableRecords {
   readonly providers: readonly ProviderRecord[]
   readonly systems: readonly SystemRecord[]
+  readonly storage: readonly StorageRecord[]
   readonly launchers: readonly AppRecord[]
   readonly runtimes: readonly RuntimeRecord[]
 }
@@ -1201,13 +1205,20 @@ function pluginReadableRecords(
   registry: PluginRegistry | undefined,
 ): PluginReadableRecords {
   if (!registry)
-    return { providers: [], systems: [], launchers: [], runtimes: [] }
+    return {
+      providers: [],
+      systems: [],
+      storage: [],
+      launchers: [],
+      runtimes: [],
+    }
   return {
     providers: decodePluginReadableMap(
       registry.providers,
       decodeProviderRecord,
     ),
     systems: decodePluginReadableMap(registry.systems, decodeSystemRecord),
+    storage: decodePluginReadableMap(registry.storage, decodeStorageRecord),
     launchers: decodePluginReadableMap(registry.launchers, decodeAppRecord),
     runtimes: decodePluginReadableMap(registry.runtimes, decodeRuntimeRecord),
   }

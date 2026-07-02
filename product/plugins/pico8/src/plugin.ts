@@ -1,6 +1,7 @@
 import { AcquisitionError } from "@platform/acquisition/errors"
 import type { ProviderId } from "@platform/plugin"
 import { plugin } from "@platform/plugin"
+import { releaseDiscoveryProvider } from "@platform/plugin/discovery"
 import type {
   ProviderClaim,
   ProviderClaimDetails,
@@ -16,7 +17,14 @@ import {
 export const KORRI_PICO8_PLUGIN_ID = "@korri:pico8" as const
 
 const DEFAULT_BBS_BASE_URL = "https://www.lexaloffle.com"
-const PICO8_SYSTEM = "pico8"
+export const KORRI_PICO8_SYSTEM_ID = "pico8" as const
+export const KORRI_PICO8_FAKE08_RUNTIME_LOCAL_ID = "fake08" as const
+export const KORRI_PICO8_FAKE08_RUNTIME_ID =
+  `${KORRI_PICO8_PLUGIN_ID}/${KORRI_PICO8_FAKE08_RUNTIME_LOCAL_ID}` as const
+export const KORRI_PICO8_CART_DISCOVERY_PROVIDER_ID =
+  `${KORRI_PICO8_PLUGIN_ID}/cart-files` as const
+
+const PICO8_SYSTEM = KORRI_PICO8_SYSTEM_ID
 const PICO8_CART_CONTENT_TYPE = "image/png"
 const MAX_SEARCH_RESULTS = 50
 
@@ -29,6 +37,37 @@ interface Pico8Runtime {
   readonly bbsBaseUrl: string
   readonly fetchImpl: typeof fetch
 }
+
+export const pico8CartDiscoveryProvider = releaseDiscoveryProvider({
+  id: KORRI_PICO8_CART_DISCOVERY_PROVIDER_ID,
+  title: "PICO-8 cart files",
+  discover: ({ files }) =>
+    files.flatMap(file => {
+      const normalized = file.relativePath.toLowerCase()
+      if (!normalized.endsWith(".p8") && !normalized.endsWith(".p8.png")) {
+        return []
+      }
+      return [
+        {
+          kind: "file-release" as const,
+          confidence: "high" as const,
+          source: file,
+          release: {
+            id: KORRI_PICO8_SYSTEM_ID,
+            system: KORRI_PICO8_SYSTEM_ID,
+            app: KORRI_RETROARCH_APP_ID,
+            runtime: KORRI_PICO8_FAKE08_RUNTIME_ID,
+          },
+          evidence: [
+            {
+              kind: "extension",
+              value: normalized.endsWith(".p8.png") ? ".p8.png" : ".p8",
+            },
+          ],
+        },
+      ]
+    }),
+})
 
 interface Pico8BbsEntry {
   readonly id: string
@@ -64,15 +103,15 @@ export function createPico8Plugin(options: Pico8PluginOptions = {}) {
       {
         capability: "libretro.app-host",
         ref: { provider: KORRI_RETROARCH_PLUGIN_ID, id: "retroarch" },
-        autoEnable: false,
         reason: "fake-08 launches through the RetroArch libretro app host",
       },
     ],
     contributes: {
+      discovery: [pico8CartDiscoveryProvider],
       config: {
         systems: {
           pico8: {
-            id: "pico8",
+            id: KORRI_PICO8_SYSTEM_ID,
             title: "PICO-8",
           },
         },
@@ -88,7 +127,7 @@ export function createPico8Plugin(options: Pico8PluginOptions = {}) {
         },
         runtimes: {
           fake08: {
-            id: "@korri:pico8/fake08",
+            id: KORRI_PICO8_FAKE08_RUNTIME_ID,
             kind: "libretro-core",
             app: KORRI_RETROARCH_APP_ID,
             path: "/etc/korri/cores/fake08_libretro.so",

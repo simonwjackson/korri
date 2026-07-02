@@ -92,22 +92,92 @@ const excludedExtensions = new Set([
 ])
 
 const systemByExtension = new Map<string, string>([
+  ["cso", "psp"],
+  ["d88", "pc98"],
+  ["fdi", "pc98"],
+  ["fds", "nes"],
   ["gba", "gba"],
   ["gb", "gb"],
   ["gbc", "gbc"],
   ["gcz", "wii"],
+  ["hdi", "pc98"],
+  ["hdm", "pc98"],
   ["iso", "disc-image"],
+  ["n64", "n64"],
   ["nds", "nds"],
   ["nes", "nes"],
+  ["nhd", "pc98"],
   ["nsp", "switch"],
+  ["p8", "pico8"],
+  ["pce", "tg16"],
+  ["qst", "zelda-classic"],
   ["rvz", "wii"],
   ["sfc", "snes"],
+  ["sgx", "tg16"],
   ["smc", "snes"],
+  ["sms", "sms"],
+  ["sna", "zxspectrum"],
+  ["tap", "zxspectrum"],
+  ["tzx", "zxspectrum"],
+  ["v64", "n64"],
   ["wad", "wii"],
   ["wbfs", "wii"],
   ["wua", "wiiu"],
   ["xci", "switch"],
+  ["xdf", "pc98"],
+  ["z64", "n64"],
+  ["z80", "zxspectrum"],
   ["zip", "archive"],
+])
+
+const pluginDiscoverableSystems = new Set([
+  "gba",
+  "genesis",
+  "n64",
+  "nes",
+  "pc98",
+  "pico8",
+  "psp",
+  "psx",
+  "sms",
+  "snes",
+  "switch",
+  "tg16",
+  "zelda-classic",
+  "zxspectrum",
+])
+
+const folderSystemAliases = new Map<string, string>([
+  ["gamegear", "sms"],
+  ["gb", "gb"],
+  ["gba", "gba"],
+  ["gbc", "gbc"],
+  ["genesis", "genesis"],
+  ["mastersystem", "sms"],
+  ["md", "genesis"],
+  ["megadrive", "genesis"],
+  ["n64", "n64"],
+  ["nds", "nds"],
+  ["nes", "nes"],
+  ["pc98", "pc98"],
+  ["pce", "tg16"],
+  ["pcengine", "tg16"],
+  ["pico8", "pico8"],
+  ["playstation", "psx"],
+  ["ps1", "psx"],
+  ["psp", "psp"],
+  ["psx", "psx"],
+  ["sg1000", "sms"],
+  ["sms", "sms"],
+  ["snes", "snes"],
+  ["switch", "switch"],
+  ["tg16", "tg16"],
+  ["turbografx16", "tg16"],
+  ["wii", "wii"],
+  ["wiiu", "wiiu"],
+  ["zelda-classic", "zelda-classic"],
+  ["zeldaclassic", "zelda-classic"],
+  ["zxspectrum", "zxspectrum"],
 ])
 
 export function classifyRomScanPath(
@@ -118,6 +188,9 @@ export function classifyRomScanPath(
   const normalized = normalizePath(storagePath)
   const segments = normalized.toLowerCase().split("/").filter(Boolean)
   const extension = fileExtension(normalized)
+  const compoundExtensionSystem = normalized.toLowerCase().endsWith(".p8.png")
+    ? "pico8"
+    : undefined
 
   const excludedSegment = segments.find(segment =>
     excludedPathSegments.has(segment),
@@ -129,7 +202,10 @@ export function classifyRomScanPath(
       reason: `path:${excludedSegment}`,
     }
   }
-  if (excludedExtensions.has(extension)) {
+  if (
+    excludedExtensions.has(extension) &&
+    compoundExtensionSystem === undefined
+  ) {
     return {
       _tag: "Excluded",
       path: normalized,
@@ -138,7 +214,8 @@ export function classifyRomScanPath(
   }
 
   const folder = nearestSystemFolder(segments)
-  const extensionSystem = systemByExtension.get(extension)
+  const extensionSystem =
+    compoundExtensionSystem ?? systemByExtension.get(extension)
   if (
     folder !== undefined &&
     extensionSystem !== undefined &&
@@ -168,12 +245,15 @@ export function classifyRomScanPath(
     }
   }
 
-  if (extensionSystem === "gba") {
+  if (
+    extensionSystem !== undefined &&
+    pluginDiscoverableSystems.has(extensionSystem)
+  ) {
     return {
       _tag: "Unclaimed",
       path: normalized,
-      system: "gba",
-      reason: "unclaimed:gba",
+      system: extensionSystem,
+      reason: `unclaimed:${extensionSystem}`,
     }
   }
 
@@ -255,7 +335,6 @@ function unsupportedSystemFor(
   folder: string | undefined,
   extension: string,
 ): string | undefined {
-  if (extension === "nsp" || extension === "xci") return "switch"
   if (extension === "wua") return "wiiu"
   if (["gcz", "rvz", "wad", "wbfs"].includes(extension)) return "wii"
   if (folder === "wii" && extension === "iso") return "wii"
@@ -273,18 +352,8 @@ function nearestSystemFolder(segments: readonly string[]): string | undefined {
   for (let index = segments.length - 2; index >= 0; index -= 1) {
     const segment = segments[index]
     if (segment === "roms") break
-    if (
-      segment === "gb" ||
-      segment === "gba" ||
-      segment === "gbc" ||
-      segment === "nds" ||
-      segment === "nes" ||
-      segment === "snes" ||
-      segment === "switch" ||
-      segment === "wii" ||
-      segment === "wiiu"
-    ) {
-      return segment
+    if (folderSystemAliases.has(segment)) {
+      return folderSystemAliases.get(segment)
     }
   }
   return undefined

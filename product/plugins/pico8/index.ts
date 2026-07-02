@@ -1,5 +1,10 @@
 export {
   createPico8Plugin,
+  KORRI_PICO8_CART_DISCOVERY_PROVIDER_ID,
+  KORRI_PICO8_FAKE08_RUNTIME_ID,
+  KORRI_PICO8_FAKE08_RUNTIME_LOCAL_ID,
   KORRI_PICO8_PLUGIN_ID,
+  KORRI_PICO8_SYSTEM_ID,
+  pico8CartDiscoveryProvider,
   pico8Plugin,
 } from "./src/plugin"
