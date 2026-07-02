@@ -5,11 +5,15 @@
  * naming the game. Presentation for the launch screen.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function LaunchTube({ game }: { readonly game: PicoGame | undefined }) {
   return (
-    <div className="pcPer-ritual">
+    <div
+      className="pcPer-ritual"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.launchTube)}
+    >
       <div className="pcPer-tube">
         <div className="pcPer-slot" />
         {game ? (

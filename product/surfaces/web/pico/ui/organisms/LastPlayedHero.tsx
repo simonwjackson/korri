@@ -7,6 +7,7 @@
  * Reuses the same backdrop / logo / CTA molecules as the Spotlight hero.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { GameLogo } from "../molecules/GameLogo"
 import { KeyArtBackdrop } from "../molecules/KeyArtBackdrop"
 import { PlayCta } from "../molecules/PlayCta"
@@ -22,7 +23,12 @@ export function LastPlayedHero({
 }) {
   return (
     <>
-      <KeyArtBackdrop src={backdrop} scale={2.8} className="pcLast-bg" />
+      <KeyArtBackdrop
+        src={backdrop}
+        scale={2.8}
+        className="pcLast-bg"
+        partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.lastPlayedHero)}
+      />
       <div className="pcLast-inner">
         <div className="pcLast-kicker">▸ JUMP BACK IN</div>
         <GameLogo

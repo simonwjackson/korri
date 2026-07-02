@@ -3,6 +3,7 @@
  *
  * The launch-failure kinds, the active one highlighted.
  */
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 export type SessionFailure = {
   readonly kind: string
   readonly title: string
@@ -15,7 +16,10 @@ export function FailureList({
   readonly failures: readonly SessionFailure[]
 }) {
   return (
-    <div className="pcSes-fail-list pc-fill">
+    <div
+      className="pcSes-fail-list pc-fill"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.failureList)}
+    >
       {failures.map(failure => (
         <span
           key={failure.kind}

@@ -5,6 +5,7 @@
  * quality bar, and pause/resume/quit controls.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Badge } from "../atoms/Badge"
 import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
@@ -14,7 +15,10 @@ import { QualityBar } from "../molecules/QualityBar"
 export function StreamPanel({ hero }: { readonly hero: PicoGame | undefined }) {
   return (
     <>
-      <div className="pcIg-stream-head">
+      <div
+        className="pcIg-stream-head"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.streamPanel)}
+      >
         <span className="pcIg-stream-name">{hero?.title ?? "SESSION"}</span>
         <Badge tone="info">STREAM</Badge>
       </div>

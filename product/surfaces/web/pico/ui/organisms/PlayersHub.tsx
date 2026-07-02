@@ -7,6 +7,7 @@
 import type { PicoGame } from "../../fixtures"
 import type { PicoFriend, PicoPlayer } from "../../fixtures-extra"
 import { PicoArtImage } from "../../PicoArtImage"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Btn } from "../atoms/Btn"
 import { Dim } from "../atoms/Dim"
 import { Icon } from "../atoms/Icon"
@@ -25,7 +26,10 @@ export function PlayersHub({
 }) {
   const active = players.filter(player => player.status !== "open")
   return (
-    <div className="pcMp-hub">
+    <div
+      className="pcMp-hub"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.playersHub)}
+    >
       <Card className="pcMp-hub-session">
         {game?.art ? (
           <PicoArtImage src={game.art} className="pcMp-hub-art" />

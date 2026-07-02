@@ -5,6 +5,7 @@
  * first one selected. Stat atom still comes from the kit barrel until it migrates.
  */
 import type { PicoSystem } from "../../data/pico-catalog-service"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Stat } from "../atoms/Stat"
 
 export function SystemGrid({
@@ -13,7 +14,10 @@ export function SystemGrid({
   readonly systems: readonly PicoSystem[]
 }) {
   return (
-    <div className="pcLib-systems">
+    <div
+      className="pcLib-systems"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.systemGrid)}
+    >
       {systems.map((system, index) => (
         <div
           key={system.id}

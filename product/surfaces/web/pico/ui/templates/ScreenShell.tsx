@@ -18,17 +18,20 @@ export function ScreenShell({
   children,
   className,
   tone,
+  partAttrs,
 }: {
   readonly title?: string
   readonly hints?: readonly Hint[]
   readonly children: ReactNode
   readonly className?: string
   readonly tone?: "default" | "dim" | "alert"
+  /** Override the template tag so a composing page/organism claims this root. */
+  readonly partAttrs?: Record<string, string>
 }) {
   return (
     <div
       className={`pc-root ${tone ? `tone-${tone}` : ""}`}
-      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.screenShell)}
+      {...(partAttrs ?? picoDesignPartAttrs(PICO_DESIGN_PARTS.screenShell))}
     >
       {title !== undefined ? <PicoStatusBar label={title} /> : null}
       <div className={`pc-main ${className ?? ""}`}>{children}</div>

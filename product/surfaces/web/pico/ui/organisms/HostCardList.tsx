@@ -5,6 +5,7 @@
  * selected, with a connect CTA.
  */
 import type { PicoHost } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
 import { Stat } from "../atoms/Stat"
@@ -18,7 +19,10 @@ export function HostCardList({
 }) {
   return (
     <>
-      <div className="pcMd-hosts">
+      <div
+        className="pcMd-hosts"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.hostCardList)}
+      >
         {hosts.map((host, index) => (
           <Card
             key={host.id}

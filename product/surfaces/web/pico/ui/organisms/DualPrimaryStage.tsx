@@ -5,6 +5,7 @@
  * focused game with launch-on-TV / launch-here actions.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
 import { Title } from "../atoms/Title"
@@ -13,7 +14,10 @@ import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 export function DualPrimaryStage({ hero }: { readonly hero: PicoGame }) {
   return (
     <>
-      <div className="pcMd-companion-tag">
+      <div
+        className="pcMd-companion-tag"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dualPrimaryStage)}
+      >
         <span className="pcMd-dot" />
         COMPANION CONNECTED · 65" 4K TV
       </div>

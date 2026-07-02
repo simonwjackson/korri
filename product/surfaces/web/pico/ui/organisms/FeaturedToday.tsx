@@ -5,6 +5,7 @@
  * this" thumbnail rail.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Badge } from "../atoms/Badge"
 import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
@@ -19,7 +20,10 @@ export function FeaturedToday({
   readonly more: readonly PicoGame[]
 }) {
   return (
-    <div className="pcFut-feat">
+    <div
+      className="pcFut-feat"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.featuredToday)}
+    >
       <div className="pcFut-feat-top">
         <div className="pc-art pcFut-feat-art">
           <GameCartUnmarked game={hero} />

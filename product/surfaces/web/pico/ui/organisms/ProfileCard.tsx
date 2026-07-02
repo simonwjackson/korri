@@ -5,6 +5,7 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoFriend } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Chip } from "../atoms/Chip"
 import { Progress } from "../atoms/Progress"
 import { Stat } from "../atoms/Stat"
@@ -20,7 +21,10 @@ export function ProfileCard({
 }) {
   return (
     <>
-      <div className="pcFut-prof-head">
+      <div
+        className="pcFut-prof-head"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.profileCard)}
+      >
         <span className="pcFut-prof-ava">PJ</span>
         <div className="pcFut-prof-id">
           <Title size={1}>PIXELJ</Title>

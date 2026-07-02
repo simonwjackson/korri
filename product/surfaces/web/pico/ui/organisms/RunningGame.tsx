@@ -6,11 +6,15 @@
  */
 import type { PicoGame } from "../../fixtures"
 import { PicoArtImage } from "../../PicoArtImage"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 
 export function RunningGame({ game }: { readonly game: PicoGame }) {
   const backdrop = game.heroUrl ?? game.art
   return (
-    <div className="pcNow-stage">
+    <div
+      className="pcNow-stage"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.runningGame)}
+    >
       {backdrop ? (
         <PicoArtImage
           src={backdrop}

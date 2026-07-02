@@ -5,6 +5,7 @@
  */
 import type { ReactNode } from "react"
 import { PicoButtonBar } from "../../PicoStatusBar"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import type { Hint } from "../templates/ScreenShell"
 
 export function Modal({
@@ -17,7 +18,7 @@ export function Modal({
   readonly hints?: readonly Hint[]
 }) {
   return (
-    <div className="pc-root">
+    <div className="pc-root" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.modal)}>
       <div className="pc-gamebg" />
       <div className="pc-modal">
         <div className="pc-modal-panel">

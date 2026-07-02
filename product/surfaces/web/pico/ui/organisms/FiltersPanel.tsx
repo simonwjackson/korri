@@ -4,6 +4,8 @@
  * Filters & collections drawer: systems list + genre chips + sort cycler. Moved
  * from screens/PanelsScreens.tsx.
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Chip } from "../atoms/Chip"
 import { Opt } from "../molecules/Opt"
 
@@ -18,7 +20,10 @@ const SYSTEMS: readonly string[] = [
 
 export function FiltersPanel() {
   return (
-    <div className="pcFil">
+    <div
+      className="pcFil"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.filtersPanel)}
+    >
       <div className="pcFil-section">SYSTEMS</div>
       <div className="pcFil-list">
         {SYSTEMS.map((system, index) => (

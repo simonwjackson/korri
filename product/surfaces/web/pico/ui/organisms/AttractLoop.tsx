@@ -5,6 +5,7 @@
  * hi-score / press-start footer.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function AttractLoop({
@@ -14,7 +15,10 @@ export function AttractLoop({
 }) {
   const carts = games.slice(0, 6)
   return (
-    <div className="pcPer-attract">
+    <div
+      className="pcPer-attract"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.attractLoop)}
+    >
       <div className="pcPer-stars" />
       <div className="pcPer-attract-mid">
         <div className="pcPer-logo">PICO</div>

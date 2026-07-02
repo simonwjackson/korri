@@ -5,6 +5,7 @@
  * full list with rarity tags.
  */
 import type { PicoAchievement } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Badge } from "../atoms/Badge"
 import { Icon } from "../atoms/Icon"
 import { Title } from "../atoms/Title"
@@ -20,7 +21,10 @@ export function AchievementList({
   const total = achievements.length
   return (
     <>
-      <div className="pcFut-ach-summary">
+      <div
+        className="pcFut-ach-summary"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.achievementList)}
+      >
         <Title size={0}>ACHIEVEMENTS</Title>
         <Badge tone="accent">
           {unlocked} / {total}

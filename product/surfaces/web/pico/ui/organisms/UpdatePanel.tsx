@@ -5,6 +5,7 @@
  * update/skip actions.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
 import { Stat } from "../atoms/Stat"
@@ -14,7 +15,10 @@ import { Card } from "../molecules/Card"
 
 export function UpdatePanel({ target }: { readonly target: PicoGame }) {
   return (
-    <div className="pcAcq-update">
+    <div
+      className="pcAcq-update"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.updatePanel)}
+    >
       <Title size={1}>UPDATE AVAILABLE</Title>
       <Sub>{target.title}</Sub>
       <div className="pcAcq-versions">

@@ -6,6 +6,7 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoPlayer } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Badge } from "../atoms/Badge"
 import { Dim } from "../atoms/Dim"
 import { Icon } from "../atoms/Icon"
@@ -22,7 +23,10 @@ export function SessionPlayersHud({
 }) {
   const active = players.filter(player => player.status !== "open")
   return (
-    <div className="pcMp-session">
+    <div
+      className="pcMp-session"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.sessionPlayersHud)}
+    >
       <KeyArtBackdrop src={game?.heroUrl} className="pcMp-backdrop" />
       <div className="pcMp-session-grid">
         {active.map(player => (

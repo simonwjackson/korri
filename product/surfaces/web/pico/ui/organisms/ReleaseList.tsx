@@ -6,6 +6,7 @@
  * atoms (List/Row/Badge) still come from the kit barrel until they migrate.
  */
 import type { PicoRelease } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Badge } from "../atoms/Badge"
 import { List } from "../molecules/List"
 import { Row } from "../molecules/Row"
@@ -16,7 +17,7 @@ export function ReleaseList({
   readonly releases: readonly PicoRelease[]
 }) {
   return (
-    <List>
+    <List partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.releaseList)}>
       {releases.map(release => (
         <Row
           key={release.id}

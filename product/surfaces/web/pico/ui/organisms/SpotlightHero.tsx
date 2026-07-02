@@ -7,6 +7,7 @@
  * stage so their absolute positioning resolves against it.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 import { GameLogo } from "../molecules/GameLogo"
 import { KeyArtBackdrop } from "../molecules/KeyArtBackdrop"
@@ -25,6 +26,7 @@ export function SpotlightHero({
         src={hero.heroUrl}
         imageKey={`bg-${hero.id}`}
         className="pcShow-spot-herobg"
+        partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.spotlightHero)}
       />
       <div className="pcShow-spot-bg" />
       {/* key remounts the hero each rotation so the pop-in re-fires */}

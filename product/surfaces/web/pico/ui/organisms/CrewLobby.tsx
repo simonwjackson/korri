@@ -5,6 +5,7 @@
  * waiting footer.
  */
 import type { PicoPlayer } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Spinner } from "../atoms/Spinner"
 import { Player } from "../molecules/Player"
 
@@ -14,7 +15,10 @@ export function CrewLobby({
   readonly players: readonly PicoPlayer[]
 }) {
   return (
-    <div className="pcMp-crew">
+    <div
+      className="pcMp-crew"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.crewLobby)}
+    >
       <div className="pcMp-crew-marquee">
         <span>★ GATHER YOUR CREW ★ GATHER YOUR CREW ★</span>
       </div>

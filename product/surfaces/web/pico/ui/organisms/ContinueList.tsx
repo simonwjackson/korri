@@ -6,6 +6,7 @@
  * from the kit barrel until they migrate.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Dim } from "../atoms/Dim"
 import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 import { List } from "../molecules/List"
@@ -17,7 +18,7 @@ export function ContinueList({
   readonly games: readonly PicoGame[]
 }) {
   return (
-    <List>
+    <List partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.continueList)}>
       {games.map((game, index) => (
         <Row
           key={game.id}

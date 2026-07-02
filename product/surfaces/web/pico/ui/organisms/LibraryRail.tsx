@@ -6,6 +6,7 @@
  * the Showcase CoverflowRail; generalising the two is a later call.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { GameCart } from "../molecules/GameCart"
 
 export function LibraryRail({
@@ -16,7 +17,10 @@ export function LibraryRail({
   readonly focusedIndex: number
 }) {
   return (
-    <div className="pcLib-coverflow">
+    <div
+      className="pcLib-coverflow"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.libraryRail)}
+    >
       {games.map((game, index) => (
         <div
           key={game.id}

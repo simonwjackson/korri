@@ -5,13 +5,17 @@
  * spinner.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Spinner } from "../atoms/Spinner"
 import { Title } from "../atoms/Title"
 import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function LaunchingStage({ game }: { readonly game: PicoGame }) {
   return (
-    <div className="pcSes-launch">
+    <div
+      className="pcSes-launch"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.launchingStage)}
+    >
       <div className="pc-art">
         <GameCartUnmarked game={game} />
       </div>

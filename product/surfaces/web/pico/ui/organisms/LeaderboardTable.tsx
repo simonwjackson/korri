@@ -5,6 +5,7 @@
  * the "you" row highlighted).
  */
 import type { PicoScoreRow } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Title } from "../atoms/Title"
 import { Tabs } from "../molecules/Tabs"
 
@@ -17,7 +18,10 @@ export function LeaderboardTable({
 }) {
   return (
     <>
-      <div className="pcFut-lb-head">
+      <div
+        className="pcFut-lb-head"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.leaderboardTable)}
+      >
         <Title size={0}>CELESTE · TIME ATTACK</Title>
         <Tabs items={["FRIENDS", "GLOBAL"]} activeIndex={0} />
       </div>

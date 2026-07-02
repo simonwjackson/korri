@@ -5,6 +5,7 @@
  * row across the current players.
  */
 import type { PicoPlayer } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Player, type PlayerRep } from "../molecules/Player"
 
 const ROWS: readonly { readonly label: string; readonly rep: PlayerRep }[] = [
@@ -20,7 +21,10 @@ export function PlayerStyleMatrix({
   readonly players: readonly PicoPlayer[]
 }) {
   return (
-    <div className="pcMp-styles">
+    <div
+      className="pcMp-styles"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.playerStyleMatrix)}
+    >
       {ROWS.map(row => (
         <div className="pcMp-styles-row" key={row.rep}>
           <div className="pcMp-styles-label">{row.label}</div>

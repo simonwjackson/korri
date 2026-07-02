@@ -5,6 +5,7 @@
  * avatar initial + presence dot.
  */
 import type { PicoFriend } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { List } from "../molecules/List"
 import { Row } from "../molecules/Row"
 
@@ -25,7 +26,10 @@ export function FriendsList({
   )
   const offline = friends.filter(friend => friend.status === "offline")
   return (
-    <div className="pcFut-friends">
+    <div
+      className="pcFut-friends"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.friendsList)}
+    >
       {[
         { label: "PLAYING NOW", list: playing },
         { label: "ONLINE", list: online },

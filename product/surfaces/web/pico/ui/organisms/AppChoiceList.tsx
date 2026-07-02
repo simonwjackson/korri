@@ -6,6 +6,7 @@
  * they migrate.
  */
 import type { PicoAppChoice } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Badge } from "../atoms/Badge"
 import { Chip } from "../atoms/Chip"
 import { Card } from "../molecules/Card"
@@ -16,7 +17,10 @@ export function AppChoiceList({
   readonly choices: readonly PicoAppChoice[]
 }) {
   return (
-    <div className="pcDet-choices">
+    <div
+      className="pcDet-choices"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.appChoiceList)}
+    >
       {choices.map((choice, index) => (
         <Card
           key={choice.id}

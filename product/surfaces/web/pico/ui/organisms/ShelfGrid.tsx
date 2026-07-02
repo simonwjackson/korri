@@ -6,6 +6,7 @@
  * carries the focus highlight. The caller builds the shelf list from data.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export type Shelf = {
@@ -15,7 +16,10 @@ export type Shelf = {
 
 export function ShelfGrid({ shelves }: { readonly shelves: readonly Shelf[] }) {
   return (
-    <div className="pcShow-shelves">
+    <div
+      className="pcShow-shelves"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.shelfGrid)}
+    >
       {shelves.map((shelf, row) => (
         <div className="pcShow-shelf" key={shelf.title}>
           <div className="pcShow-shelf-title">{shelf.title}</div>

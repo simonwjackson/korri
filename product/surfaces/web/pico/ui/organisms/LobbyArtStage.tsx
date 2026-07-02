@@ -6,6 +6,7 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoPlayer } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Dim } from "../atoms/Dim"
 import { GameLogo } from "../molecules/GameLogo"
 import { KeyArtBackdrop } from "../molecules/KeyArtBackdrop"
@@ -20,7 +21,10 @@ export function LobbyArtStage({
 }) {
   const active = players.filter(player => player.status !== "open")
   return (
-    <div className="pcMp-lobbyA">
+    <div
+      className="pcMp-lobbyA"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.lobbyArtStage)}
+    >
       <KeyArtBackdrop src={game?.heroUrl} className="pcMp-backdrop" />
       <div className="pcMp-lobbyA-head">
         <GameLogo

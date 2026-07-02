@@ -4,6 +4,8 @@
  * Friends / party rail drawer: presence rows with join/invite CTAs. Moved from
  * screens/PanelsScreens.tsx.
  */
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
+
 const FRIENDS: readonly {
   readonly id: string
   readonly name: string
@@ -19,7 +21,10 @@ const FRIENDS: readonly {
 
 export function FriendsPanel() {
   return (
-    <div className="pcFr">
+    <div
+      className="pcFr"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.friendsPanel)}
+    >
       {FRIENDS.map(friend => (
         <div key={friend.id} className={`pcFr-row ${friend.status}`}>
           <span className={`pcMp-pres ${friend.status}`} />

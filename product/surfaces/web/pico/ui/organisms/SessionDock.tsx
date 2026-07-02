@@ -5,6 +5,7 @@
  * Moved from screens/PanelsScreens.tsx.
  */
 import type { PicoPlayer } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Btn } from "../atoms/Btn"
 import { Stat } from "../atoms/Stat"
 import { Player } from "../molecules/Player"
@@ -22,7 +23,10 @@ const NOW_PLAYERS: readonly PicoPlayer[] = [
 
 export function SessionDock() {
   return (
-    <div className="pcNow-dock">
+    <div
+      className="pcNow-dock"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.sessionDock)}
+    >
       <div className="pcNow-sect">PLAYERS</div>
       <div className="pcNow-players">
         {NOW_PLAYERS.map(player => (

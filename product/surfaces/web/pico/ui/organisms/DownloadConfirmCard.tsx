@@ -5,6 +5,7 @@
  * source / runtime stats, and download/cancel actions.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Btn } from "../atoms/Btn"
 import { Icon } from "../atoms/Icon"
 import { Stat } from "../atoms/Stat"
@@ -22,7 +23,10 @@ export function DownloadConfirmCard({
   readonly runtime: string
 }) {
   return (
-    <div className="pcAcq-confirm">
+    <div
+      className="pcAcq-confirm"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.downloadConfirmCard)}
+    >
       <div className="pc-art">
         <GameCartUnmarked game={target} />
       </div>

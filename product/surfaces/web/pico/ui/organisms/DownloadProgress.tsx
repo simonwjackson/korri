@@ -5,6 +5,7 @@
  * done/speed/eta stats.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Btn } from "../atoms/Btn"
 import { Progress } from "../atoms/Progress"
 import { Spinner } from "../atoms/Spinner"
@@ -14,7 +15,10 @@ import { Title } from "../atoms/Title"
 
 export function DownloadProgress({ target }: { readonly target: PicoGame }) {
   return (
-    <div className="pcAcq-progress">
+    <div
+      className="pcAcq-progress"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.downloadProgress)}
+    >
       <Spinner />
       <Title size={1}>DOWNLOADING</Title>
       <Sub>{target.title}</Sub>

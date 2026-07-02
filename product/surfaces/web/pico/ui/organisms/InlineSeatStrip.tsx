@@ -6,6 +6,7 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoPlayer } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Dim } from "../atoms/Dim"
 import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 import { Player } from "../molecules/Player"
@@ -18,7 +19,10 @@ export function InlineSeatStrip({
   readonly players: readonly PicoPlayer[]
 }) {
   return (
-    <div className="pcMp-inline">
+    <div
+      className="pcMp-inline"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.inlineSeatStrip)}
+    >
       <div className="pcMp-inline-rail">
         {games.slice(0, 5).map((game, index) => (
           <div

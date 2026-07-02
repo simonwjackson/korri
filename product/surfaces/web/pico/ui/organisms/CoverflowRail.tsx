@@ -6,6 +6,7 @@
  * Home variants (Library coverflow uses different classes) is a later pass.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
 export function CoverflowRail({
@@ -16,7 +17,10 @@ export function CoverflowRail({
   readonly activeIndex: number
 }) {
   return (
-    <div className="pcShow-rail">
+    <div
+      className="pcShow-rail"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.coverflowRail)}
+    >
       {games.map((game, index) => (
         <div
           key={game.id}

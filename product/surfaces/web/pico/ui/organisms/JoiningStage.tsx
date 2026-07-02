@@ -4,6 +4,7 @@
  * Joining a session: the host's cart, a connection stepper, and progress.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Dim } from "../atoms/Dim"
 import { Progress } from "../atoms/Progress"
 import { Title } from "../atoms/Title"
@@ -17,7 +18,10 @@ export function JoiningStage({
   readonly game: PicoGame | undefined
 }) {
   return (
-    <div className="pcMp-joining">
+    <div
+      className="pcMp-joining"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.joiningStage)}
+    >
       {game?.art ? (
         <div className="pcMp-joining-art">
           <GameCartUnmarked game={game} />

@@ -4,11 +4,16 @@
  * The minimal in-game HUD: corner readouts (fps/battery/temp/clock) and a
  * transient "saved" toast.
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Icon } from "../atoms/Icon"
 
 export function HudOverlay() {
   return (
-    <div className="pcIg-hud">
+    <div
+      className="pcIg-hud"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.hudOverlay)}
+    >
       <div className="pcIg-hud-corner tl">
         <span className="pcIg-read">
           FPS <b>60</b>

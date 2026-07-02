@@ -4,6 +4,7 @@
  * Storefront: a featured-collection banner over a grid of store tiles.
  */
 import type { PicoStoreItem } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Badge } from "../atoms/Badge"
 import { Chip } from "../atoms/Chip"
 import { Title } from "../atoms/Title"
@@ -18,7 +19,10 @@ export function StoreView({
   return (
     <>
       {featured ? (
-        <div className="pcFut-store-banner">
+        <div
+          className="pcFut-store-banner"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.storeView)}
+        >
           <div className="pcFut-store-banner-text">
             <div className="pc-sub">FEATURED COLLECTION</div>
             <Title size={1}>{featured.title}</Title>

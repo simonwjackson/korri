@@ -5,6 +5,7 @@
  * most loading / error / empty / confirm screens. Moved from `kit.tsx`.
  */
 import type { ReactNode } from "react"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Glyph } from "../atoms/Glyph"
 import { Title } from "../atoms/Title"
 
@@ -24,7 +25,7 @@ export function Hero({
   readonly children?: ReactNode
 }) {
   return (
-    <div className="pc-hero">
+    <div className="pc-hero" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.hero)}>
       {glyph !== undefined ? <Glyph tone={glyphTone}>{glyph}</Glyph> : null}
       {adornment !== undefined ? adornment : null}
       <Title size={1}>{title}</Title>

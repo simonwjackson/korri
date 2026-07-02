@@ -5,6 +5,7 @@
  * CTA (disabled when offline). First row selected.
  */
 import type { PicoFriend } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Dim } from "../atoms/Dim"
 
 export function InviteList({
@@ -13,7 +14,10 @@ export function InviteList({
   readonly friends: readonly PicoFriend[]
 }) {
   return (
-    <div className="pcMp-invite">
+    <div
+      className="pcMp-invite"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.inviteList)}
+    >
       {friends.map((friend, index) => (
         <div
           key={friend.id}

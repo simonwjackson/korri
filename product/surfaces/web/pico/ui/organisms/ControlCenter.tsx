@@ -6,12 +6,16 @@
  */
 import { PicoIcon } from "../../PicoIcon"
 import { PicoMascot } from "../../PicoMascot"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { BlockBar } from "../atoms/BlockBar"
 import { Toggle } from "../atoms/Toggle"
 
 export function ControlCenter() {
   return (
-    <div className="pcCC">
+    <div
+      className="pcCC"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.controlCenter)}
+    >
       <div className="pcCC-profile">
         <PicoMascot state="happy" className="pcCC-pixl" />
         <div className="pcCC-who">

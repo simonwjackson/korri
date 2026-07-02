@@ -4,6 +4,8 @@
  * Controller remap list: action → bound button, with the row currently
  * listening for input spinning.
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Spinner } from "../atoms/Spinner"
 
 type RemapRow =
@@ -33,7 +35,10 @@ const REMAP_ACTIONS: readonly RemapRow[] = [
 
 export function RemapList() {
   return (
-    <div className="pcIg-remap">
+    <div
+      className="pcIg-remap"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.remapList)}
+    >
       {REMAP_ACTIONS.map(row => (
         <div
           key={row.action}

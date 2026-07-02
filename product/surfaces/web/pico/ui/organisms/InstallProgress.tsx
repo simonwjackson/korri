@@ -5,6 +5,7 @@
  * register) with the active one marked, plus a progress bar.
  */
 
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Icon } from "../atoms/Icon"
 import { Progress } from "../atoms/Progress"
 import { Spinner } from "../atoms/Spinner"
@@ -21,7 +22,10 @@ export function InstallProgress({ runtime }: { readonly runtime: string }) {
     { label: "REGISTER", state: "pending" },
   ]
   return (
-    <div className="pcAcq-progress">
+    <div
+      className="pcAcq-progress"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.installProgress)}
+    >
       <Spinner />
       <Title size={1}>INSTALLING</Title>
       <Sub>WARMING UP THE {runtime} RUNTIME</Sub>

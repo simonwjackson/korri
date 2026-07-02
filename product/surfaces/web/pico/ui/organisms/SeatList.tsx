@@ -4,12 +4,13 @@
  * Connected seats/devices with kind, battery (or AC), and active/idle status.
  */
 import type { PicoSeat } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { List } from "../molecules/List"
 import { Row } from "../molecules/Row"
 
 export function SeatList({ seats }: { readonly seats: readonly PicoSeat[] }) {
   return (
-    <List>
+    <List partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.seatList)}>
       {seats.map(seat => (
         <Row
           key={seat.id}

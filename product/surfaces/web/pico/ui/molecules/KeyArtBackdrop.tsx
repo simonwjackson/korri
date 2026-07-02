@@ -14,6 +14,7 @@ export function KeyArtBackdrop({
   scale = 2.6,
   className,
   imageKey,
+  partAttrs,
 }: {
   readonly src: string | null | undefined
   readonly ratio?: number
@@ -21,6 +22,8 @@ export function KeyArtBackdrop({
   readonly className?: string
   /** Forces a remount (e.g. to re-fire a pop-in) when the hero rotates. */
   readonly imageKey?: string
+  /** Override the backdrop tag so a composing hero claims this root. */
+  readonly partAttrs?: Record<string, string>
 }) {
   if (!src) return null
   return (
@@ -30,7 +33,9 @@ export function KeyArtBackdrop({
       ratio={ratio}
       scale={scale}
       className={className}
-      partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.keyArtBackdrop)}
+      partAttrs={
+        partAttrs ?? picoDesignPartAttrs(PICO_DESIGN_PARTS.keyArtBackdrop)
+      }
     />
   )
 }

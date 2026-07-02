@@ -8,6 +8,7 @@
 import type { CSSProperties } from "react"
 import type { PicoGame } from "../../fixtures"
 import { PicoMascot } from "../../PicoMascot"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Dim } from "../atoms/Dim"
 import { GameCartUnmarked } from "../molecules/GameCartUnmarked"
 
@@ -40,7 +41,10 @@ export function ReactiveStage({
 }) {
   const hero = state.hero
   return (
-    <div className="pcPer-react">
+    <div
+      className="pcPer-react"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.reactiveStage)}
+    >
       <div
         className="pcPer-react-pixl"
         style={{ transform: `translateX(${gaze * 16}%)` }}

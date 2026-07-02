@@ -5,6 +5,7 @@
  * badges.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Badge } from "../atoms/Badge"
 import { Progress } from "../atoms/Progress"
 import { Spinner } from "../atoms/Spinner"
@@ -25,7 +26,10 @@ const REPAIR_FILES: readonly {
 
 export function RepairProgress({ target }: { readonly target: PicoGame }) {
   return (
-    <div className="pcAcq-progress">
+    <div
+      className="pcAcq-progress"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.repairProgress)}
+    >
       <Spinner />
       <Title size={1}>VERIFYING FILES</Title>
       <Sub>{target.title}</Sub>

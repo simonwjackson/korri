@@ -8,6 +8,7 @@
 import type { ReactNode } from "react"
 import type { PicoGame } from "../../fixtures"
 import { PicoArtImage } from "../../PicoArtImage"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import type { Hint } from "../templates/ScreenShell"
 import { ScreenShell } from "../templates/ScreenShell"
 
@@ -26,7 +27,12 @@ export function MomentHero({
 }) {
   const backdrop = game.heroUrl ?? game.art
   return (
-    <ScreenShell title={statusTitle} hints={hints} className="pad-0">
+    <ScreenShell
+      title={statusTitle}
+      hints={hints}
+      className="pad-0"
+      partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.momentHero)}
+    >
       <div className="pcM">
         {backdrop ? (
           <PicoArtImage

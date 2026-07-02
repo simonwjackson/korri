@@ -5,6 +5,7 @@
  * kit barrel until they migrate.
  */
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Icon } from "../atoms/Icon"
 import { List } from "../molecules/List"
 import { Row } from "../molecules/Row"
@@ -15,7 +16,7 @@ export function SearchResults({
   readonly games: readonly PicoGame[]
 }) {
   return (
-    <List>
+    <List partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.searchResults)}>
       {games.map(game => (
         <Row
           key={game.id}

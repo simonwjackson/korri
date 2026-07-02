@@ -5,6 +5,7 @@
  */
 import type { PicoGame } from "../../fixtures"
 import type { PicoPlayer } from "../../fixtures-extra"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { KeyArtBackdrop } from "../molecules/KeyArtBackdrop"
 import { Player } from "../molecules/Player"
 
@@ -17,7 +18,10 @@ export function PlayerToast({
 }) {
   const joiner = players[2] ?? players[0]
   return (
-    <div className="pcMp-toastwrap">
+    <div
+      className="pcMp-toastwrap"
+      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.playerToast)}
+    >
       <KeyArtBackdrop src={game?.heroUrl} className="pcMp-backdrop" />
       {joiner ? (
         <div className={`pcMp-toast p${joiner.seat}`}>
