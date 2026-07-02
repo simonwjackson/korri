@@ -130,7 +130,7 @@ pkgs.stdenv.mkDerivation {
         scout_config="$TMPDIR/scout-config/korri.yaml"
         mkdir -p "$scout_root" "$(dirname "$scout_config")"
         touch "$scout_root/Metroid Fusion.gba"
-        if ! env -i HOME="$HOME" XDG_DATA_HOME="$TMPDIR/xdg-data" "$out/bin/korri" scout scan releases --root "$scout_root" --storage scout-smoke --config "$scout_config" > "$TMPDIR/korri-scout-smoke.out" 2> "$TMPDIR/korri-scout-smoke.err"; then
+        if ! env -i HOME="$HOME" XDG_DATA_HOME="$TMPDIR/xdg-data" KORRI_ENABLED_PLUGINS="@korri:retroarch" "$out/bin/korri" scout scan releases --root "$scout_root" --storage scout-smoke --config "$scout_config" > "$TMPDIR/korri-scout-smoke.out" 2> "$TMPDIR/korri-scout-smoke.err"; then
           echo "korri-cli smoke test failed: scout scan releases did not run with isolated environment" >&2
           cat "$TMPDIR/korri-scout-smoke.out" >&2 || true
           cat "$TMPDIR/korri-scout-smoke.err" >&2 || true
@@ -142,7 +142,7 @@ pkgs.stdenv.mkDerivation {
           cat "$scout_config" >&2 || true
           exit 1
         fi
-        if ! env -i HOME="$HOME" XDG_DATA_HOME="$TMPDIR/xdg-data" KORRI_CONFIG_ROOTS="$(dirname "$scout_config")" "$out/bin/korri" scout scan configured --config "$scout_config" > "$TMPDIR/korri-scout-configured-smoke.out" 2> "$TMPDIR/korri-scout-configured-smoke.err"; then
+        if ! env -i HOME="$HOME" XDG_DATA_HOME="$TMPDIR/xdg-data" KORRI_CONFIG_ROOTS="$(dirname "$scout_config")" KORRI_ENABLED_PLUGINS="@korri:retroarch" "$out/bin/korri" scout scan configured --config "$scout_config" > "$TMPDIR/korri-scout-configured-smoke.out" 2> "$TMPDIR/korri-scout-configured-smoke.err"; then
           echo "korri-cli smoke test failed: configured scout scan did not run with isolated environment" >&2
           cat "$TMPDIR/korri-scout-configured-smoke.out" >&2 || true
           cat "$TMPDIR/korri-scout-configured-smoke.err" >&2 || true
