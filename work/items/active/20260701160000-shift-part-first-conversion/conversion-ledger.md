@@ -15,15 +15,15 @@ composing part's state family or bridge) · `to-do`.
 | Component | Layer | Real edges | Status | Part file |
 |---|---|---|---|---|
 | Home (`routes/ShiftHomeRoute` → `pages/ShiftCinematicHome`) | page | Data axis, Foreground axis, clock input, battery + network events | done (live) | `ShiftHome.page.part.tsx` |
-| Game Detail (`routes/ShiftGameDetailRoute`) | page | action variant input | done (static) — live-mount spec pending (U7) | `ShiftGameDetail.page.part.tsx` |
-| Companion (`routes/ShiftCompanionRoute`) | page | dual-screen session | to-do (U7 decision: part vs device-only screen) | — |
+| Game Detail (`routes/ShiftGameDetailRoute`) | page | action variant input (detail view is prop-driven; its part subtree reads no atoms, so no live-mount spec applies) | done (static) | `ShiftGameDetail.page.part.tsx` |
+| Companion (`routes/ShiftCompanionRoute`) | page | dual-screen broadcast session | decided (U7): device-mounted screen role, not a catalog part — it has no standalone design identity outside a multi-screen device's session (`secondaryScreenPath`) | — (by design) |
 | Library screens (grid/shelves/lens/filterbar/deck/reel) | page | `games` component input (real composition-root projection) | done — dedicated state families replaced the `ShiftScreens` bridge | `pages/ShiftLibrary.page.part.tsx` |
 
 ## Home cinematic family
 
 | Component | Layer | Real edges | Status | Part file |
 |---|---|---|---|---|
-| `pages/ShiftCinematicHome` | template | composed by Home page part | covered (standalone template part = U7 decision) | via `ShiftHome.page.part.tsx` |
+| `pages/ShiftCinematicHome` | template | composed by Home page part | covered — decided (U7): a standalone template story would duplicate the Home design part (dedupe rule) | via `ShiftHome.page.part.tsx` |
 | `ui/organisms/ShiftCineHero` | organism | no device edge (fixture props) | done (static) | `ShiftCineHero.organism.part.tsx` |
 | `ui/organisms/ShiftCineRail` | organism | no device edge (fixture props) | done (static) | `ShiftCineRail.organism.part.tsx` |
 | `ui/molecules/ShiftCineBackdrop` | molecule | no device edge | done (static) | `ShiftCineBackdrop.molecule.part.tsx` |
@@ -42,7 +42,7 @@ composing part's state family or bridge) · `to-do`.
 
 | Component | Layer | Real edges | Status | Part file |
 |---|---|---|---|---|
-| `pages/ShiftHomeLoadingBody` | organism | Data axis (Loading) | covered — Home page state family (`Loading`); standalone part = U7 decision | via `ShiftHome.page.part.tsx` |
+| `pages/ShiftHomeLoadingBody` | organism | Data axis (Loading) | covered — decided (U7): body states ARE the Home page's data states; the state family is their catalog form | via `ShiftHome.page.part.tsx` |
 | `pages/ShiftHomeEmptyBody` | organism | Data axis (Empty) | covered — Home page state family (`Empty`) | via `ShiftHome.page.part.tsx` |
 | `pages/ShiftHomeLoadErrorBody` | organism | Data axis (LoadError) | covered — Home page state family (`LoadError`) | via `ShiftHome.page.part.tsx` |
 | `pages/ShiftHomeDefectBody` | organism | Data axis (Defect) | covered — Home page state family (`Defect`) | via `ShiftHome.page.part.tsx` |
