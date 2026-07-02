@@ -101,6 +101,54 @@ describe("stream surface discovery and repair", () => {
     ])
   })
 
+  it("matches anonymous Gamescope Wayland surfaces when enabled", () => {
+    const tree: SwayNode = {
+      id: 1,
+      type: "root",
+      nodes: [
+        {
+          id: 2,
+          type: "output",
+          name: "HDMI-A-1",
+          nodes: [
+            {
+              id: 3,
+              type: "workspace",
+              name: "1",
+              nodes: [
+                {
+                  id: 42,
+                  pid: 498167,
+                  app_id: null,
+                  name: null,
+                  focused: true,
+                  fullscreen_mode: 0,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+
+    expect(
+      findStreamSurfaceWindows(tree, {
+        appIds: ["gamescope"],
+        allowAnonymous: true,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        id: 42,
+        appId: null,
+        title: null,
+        focused: true,
+      }),
+    ])
+    expect(findStreamSurfaceWindows(tree, { appIds: ["gamescope"] })).toEqual(
+      [],
+    )
+  })
+
   it("preserves stream surface and containing output rects", () => {
     const tree: SwayNode = {
       id: 1,

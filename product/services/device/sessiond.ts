@@ -1309,10 +1309,14 @@ function realSourceMachineSurfaceRepair() {
 }
 
 function streamSurfaceSelectorFromEnv(): SwayWindowSelector {
+  const appIds = envList("KORRI_STREAM_SURFACE_APP_IDS")
   return {
-    appIds: envList("KORRI_STREAM_SURFACE_APP_IDS"),
+    appIds,
     titles: envList("KORRI_STREAM_SURFACE_TITLES"),
     classes: envList("KORRI_STREAM_SURFACE_CLASSES"),
+    allowAnonymous:
+      envFlag("KORRI_STREAM_SURFACE_ALLOW_ANONYMOUS") ??
+      appIds.includes("gamescope"),
   }
 }
 
@@ -1353,6 +1357,14 @@ function delay(ms: number): Promise<void> {
 function parsePositiveIntEnv(name: string, fallback: number): number {
   const parsed = Number.parseInt(process.env[name] ?? "", 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function envFlag(name: string): boolean | undefined {
+  const raw = process.env[name]?.trim().toLowerCase()
+  if (!raw) return undefined
+  if (["1", "true", "yes", "on"].includes(raw)) return true
+  if (["0", "false", "no", "off"].includes(raw)) return false
+  return undefined
 }
 
 function envList(name: string): readonly string[] | undefined {

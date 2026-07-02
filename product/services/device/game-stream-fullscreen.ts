@@ -347,14 +347,26 @@ function matchesSelector(
     return (
       node.app_id !== undefined ||
       (node.window_properties?.title?.length ?? 0) > 0 ||
-      className.length > 0
+      className.length > 0 ||
+      (selector.allowAnonymous === true && isAnonymousWindowNode(node))
     )
   }
 
   return (
     (node.app_id ? appIds.includes(node.app_id) : false) ||
     titles.includes(title) ||
-    (className ? classes.includes(className) : false)
+    (className ? classes.includes(className) : false) ||
+    (selector.allowAnonymous === true && isAnonymousWindowNode(node))
+  )
+}
+
+function isAnonymousWindowNode(node: SwayNode): boolean {
+  return (
+    node.pid !== undefined &&
+    node.pid !== null &&
+    !node.app_id &&
+    !(node.window_properties?.title?.length ?? 0) &&
+    !(node.window_properties?.class?.length ?? 0)
   )
 }
 

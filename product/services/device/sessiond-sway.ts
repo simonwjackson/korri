@@ -17,6 +17,7 @@ export interface SwayNode {
   readonly app_id?: string | null
   readonly focused?: boolean
   readonly fullscreen_mode?: number
+  readonly pid?: number | null
   readonly rect?: SwayRect
   readonly window_properties?: {
     readonly class?: string | null
@@ -31,6 +32,8 @@ export interface SwayWindowSelector {
   readonly appIdPrefixes?: readonly string[]
   readonly titles?: readonly string[]
   readonly classes?: readonly string[]
+  /** Match real Sway window containers even when app_id/title/class are absent. */
+  readonly allowAnonymous?: boolean
 }
 
 export interface SwayCommandRunner {
@@ -53,6 +56,7 @@ export const DEFAULT_SWAY_SELECTOR: Required<SwayWindowSelector> = {
   appIdPrefixes: ["chrome-"],
   titles: [],
   classes: ["Chromium", "chromium", "Google-chrome"],
+  allowAnonymous: false,
 }
 
 export function findKorriWindows(
@@ -176,6 +180,17 @@ function matchesSelector(
     (appId ? appIds.includes(appId) : false) ||
     (appId ? appIdPrefixes.some(prefix => appId.startsWith(prefix)) : false) ||
     titles.includes(title) ||
-    (className ? classes.includes(className) : false)
+    (className ? classes.includes(className) : false) ||
+    (selector.allowAnonymous === true && isAnonymousWindowNode(node))
+  )
+}
+
+function isAnonymousWindowNode(node: SwayNode): boolean {
+  return (
+    node.pid !== undefined &&
+    node.pid !== null &&
+    !node.app_id &&
+    !(node.window_properties?.title?.length ?? 0) &&
+    !(node.window_properties?.class?.length ?? 0)
   )
 }
