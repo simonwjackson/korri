@@ -38,11 +38,43 @@ in
     enable32Bit = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 (lib.mkDefault true);
   };
 
+  # x86 source machines own the standard PipeWire audio stack by default so
+  # launched games discover /run/user/<uid>/pulse/native and pipewire-0 at
+  # their canonical paths without host-level hand wiring. mkDefault lets a host
+  # override the topology; the x86 guard keeps ROCKNIX/portable adapters on
+  # their substrate-owned audio graphs.
+  services.pulseaudio.enable = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 (lib.mkDefault false);
+  services.pipewire = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 {
+    enable = lib.mkDefault true;
+    alsa.enable = lib.mkDefault true;
+    alsa.support32Bit = lib.mkDefault true;
+    pulse.enable = lib.mkDefault true;
+    jack.enable = lib.mkDefault true;
+    wireplumber.enable = lib.mkDefault true;
+  };
+  security.rtkit.enable = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 (lib.mkDefault true);
+
   # Compositor up, kiosk client off. Sway alive serves as the idle target
   # the sessiond source-machine role asserts (idle-blank restore).
   services.korri.compositor = {
     enable = true;
     kiosk.enable = false;
+    # Source-machine runs the canonical logind user runtime as
+    # XDG_RUNTIME_DIR ("%t" -> /run/user/<uid>) so launched games, Sunshine,
+    # and sessiond children discover D-Bus, PipeWire, and PulseAudio-compatible
+    # sockets at their standard paths. Korri-owned IPC/state stays under
+    # explicit subdirectories (%t/korri, %t/korri-game-stream); only the
+    # compositor-standard Wayland socket and stable Sway IPC symlink live
+    # directly under the runtime root, matching normal Wayland convention.
+    runtimeDir = lib.mkDefault "%t";
+    # Share the normal user session bus (%t/bus) instead of an isolated
+    # dbus-run-session. Sessiond-launched games and Sunshine are sibling-unit
+    # peers, not Sway children; dbus-run-session would hand them a private bus
+    # and hide portal/session services they expect to reach.
+    sessionBus = {
+      mode = lib.mkDefault "existing";
+      address = lib.mkDefault "unix:path=%t/bus";
+    };
     user = lib.mkDefault runtime.user;
     group = lib.mkDefault runtime.group;
     createUser = lib.mkDefault false;
@@ -106,7 +138,15 @@ in
       SDL_VIDEODRIVER = "wayland,x11";
       GDK_BACKEND = "wayland,x11";
       QT_QPA_PLATFORM = "wayland;xcb";
-    };
+    }
+    // lib.optionalAttrs
+      (compositorCfg.sessionBus.mode == "existing" && compositorCfg.sessionBus.address != null)
+      {
+        # Sessiond-spawned foreground apps are sibling-unit children, not Sway
+        # descendants, so hand them the same session bus address the compositor
+        # uses (mirrors the kiosk renderer env in images/kiosk.nix).
+        DBUS_SESSION_BUS_ADDRESS = compositorCfg.sessionBus.address;
+      };
   };
 
   # Game-stream runner routes lifecycle:"foreground" intents through
@@ -127,6 +167,17 @@ in
     {
       assertion = config.services.korri.sessiond.enable;
       message = "Korri source-machine composition requires services.korri.sessiond.enable = true.";
+    }
+    {
+      assertion = compositorCfg.runtimeDir == "%t";
+      message = ''
+        Korri source-machine composition sets XDG_RUNTIME_DIR from
+        services.korri.compositor.runtimeDir. A private subdirectory such as
+        "%t/korri-compositor" hides PipeWire, PulseAudio-compatible, and D-Bus
+        sockets from launched games and Sunshine. Keep runtimeDir = "%t";
+        override with lib.mkForce only alongside an explicit audio/session
+        bridge plan.
+      '';
     }
     {
       assertion =

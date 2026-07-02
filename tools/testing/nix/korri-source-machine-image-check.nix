@@ -132,6 +132,24 @@ let
       && !cfg.services.korri.client.enable
       && !(lib.attrByPath [ "services" "korri" "webSurfaceHost" "enable" ] false cfg)
     ))
+    (check "source-machine uses the canonical logind runtime root" (
+      cfg.services.korri.compositor.runtimeDir == "%t"
+      && sessiondEnv.XDG_RUNTIME_DIR == "%t"
+      && sessiondEnv.SWAYSOCK == "%t/sway-ipc.sock"
+    ))
+    (check "source-machine shares the existing user session bus" (
+      cfg.services.korri.compositor.sessionBus.mode == "existing"
+      && cfg.services.korri.compositor.sessionBus.address == "unix:path=%t/bus"
+      && sessiondEnv.DBUS_SESSION_BUS_ADDRESS == "unix:path=%t/bus"
+    ))
+    (check "source-machine provides x86 PipeWire audio defaults" (
+      cfg.services.pipewire.enable
+      && cfg.services.pipewire.pulse.enable
+      && cfg.services.pipewire.alsa.support32Bit
+      && cfg.services.pipewire.wireplumber.enable
+      && !cfg.services.pulseaudio.enable
+      && cfg.security.rtkit.enable
+    ))
   ];
   failures = builtins.filter (c: !c.assertion) checks;
 in

@@ -151,6 +151,28 @@ let
       && cfg.services.korri.rpcs3.enable == false
       && !lib.hasInfix "@korri:rpcs3" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
     ))
+    (check "source-machine compositor uses the canonical logind runtime root" (
+      cfg.services.korri.compositor.runtimeDir == "%t"
+      && sessiondEnv.XDG_RUNTIME_DIR == "%t"
+    ))
+    (check "source-machine shares the existing user session bus" (
+      cfg.services.korri.compositor.sessionBus.mode == "existing"
+      && cfg.services.korri.compositor.sessionBus.address == "unix:path=%t/bus"
+      &&
+        cfg.systemd.user.services."korri-compositor".environment.DBUS_SESSION_BUS_ADDRESS
+        == "unix:path=%t/bus"
+      && sessiondEnv.DBUS_SESSION_BUS_ADDRESS == "unix:path=%t/bus"
+    ))
+    (check "source-machine provides x86 PipeWire audio defaults" (
+      cfg.services.pipewire.enable
+      && cfg.services.pipewire.pulse.enable
+      && cfg.services.pipewire.alsa.enable
+      && cfg.services.pipewire.alsa.support32Bit
+      && cfg.services.pipewire.jack.enable
+      && cfg.services.pipewire.wireplumber.enable
+      && !cfg.services.pulseaudio.enable
+      && cfg.security.rtkit.enable
+    ))
   ];
   failures = builtins.filter (c: !c.assertion) checks;
 in
