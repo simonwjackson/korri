@@ -1,3 +1,17 @@
+# Korri runtime identity and the runtime-session contract.
+#
+# Contract: Korri user services run in a normal Linux user session, so
+# `XDG_RUNTIME_DIR` is always the canonical logind/user-manager runtime root
+# (`/run/user/<uid>`, i.e. systemd `%t` in a user unit). Korri never treats
+# `XDG_RUNTIME_DIR` itself as a Korri namespace; it owns only explicit
+# subdirectories beneath it (`%t/korri` for session IPC, `%t/korri-game-stream`
+# for stream state). Standard freedesktop services are therefore discovered by
+# their normal rules: D-Bus at `%t/bus`, PipeWire at `%t/pipewire-0`, and the
+# PulseAudio-compatible socket at `%t/pulse/native`. Explicit `PULSE_SERVER` /
+# `PIPEWIRE_RUNTIME_DIR` / `DBUS_SESSION_BUS_ADDRESS` values are escape hatches
+# for contexts that do not inherit the user manager environment (system-scope
+# services, shell/browser-env launches, root-compositor or cross-user bridges),
+# not the baseline for ordinary user services.
 { config, lib, pkgs, ... }:
 
 let

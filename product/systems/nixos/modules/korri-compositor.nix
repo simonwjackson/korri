@@ -259,7 +259,27 @@ in
     runtimeDir = mkOption {
       type = types.str;
       default = "%t/korri-compositor";
-      description = "Runtime directory exposed to the compositor as XDG_RUNTIME_DIR. The default is a user-manager %t path so RuntimeDirectory creates the same directory that Sway uses for Wayland sockets.";
+      description = ''
+        Runtime directory exposed to the compositor as XDG_RUNTIME_DIR.
+
+        The base module default is the private `%t/korri-compositor`
+        subdirectory, which suits a standalone compositor that wants an
+        isolated runtime root. Korri's product role compositions instead set
+        this to the canonical user runtime root `%t` (source-machine and the
+        ROCKNIX platform adapters already do). That is the Korri
+        runtime-session contract: `XDG_RUNTIME_DIR` is the standard logind
+        user runtime (`/run/user/<uid>`) so launched apps discover D-Bus
+        (`%t/bus`), PipeWire (`%t/pipewire-0`), and PulseAudio-compatible
+        (`%t/pulse/native`) sockets by their normal rules, while Korri-owned
+        IPC/state stays under explicit subdirectories (`%t/korri`,
+        `%t/korri-game-stream`). The compositor-standard Wayland socket and
+        stable Sway IPC symlink intentionally live directly under the runtime
+        root, matching normal Wayland convention.
+
+        When `%t`, no `RuntimeDirectory=` stanza is emitted and the session
+        relies on the logind-created `/run/user/<uid>`; when a `%t/<subdir>`
+        value is used, the compositor owns and creates that subdirectory.
+      '';
     };
 
     stateHome = mkOption {
