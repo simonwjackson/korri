@@ -7,30 +7,14 @@
  * while inspecting the part. Static (no backend, no router).
  */
 import type { Story } from "@tools/theme-workshop"
-import { DEV_GAME_MEDIA } from "./dev-game-media"
 import { ShiftDetailSplit } from "./pages/ShiftDetailSplit"
-import type { ShiftGameDetailView } from "./pages/shift-game-detail-view"
+import {
+  SHIFT_DETAIL_FRESH,
+  SHIFT_DETAIL_PLAYED,
+} from "./pages/shift-detail-fixtures"
 
-function detailFixture(
-  over: Partial<ShiftGameDetailView>,
-): ShiftGameDetailView {
-  const media = DEV_GAME_MEDIA[0]
-  return {
-    id: media?.id ?? "game",
-    title: media?.title ?? "Game",
-    artUrl: media?.gridUrl ?? "",
-    ...(media?.genre ? { genre: media.genre } : {}),
-    ...(media?.developer ? { developer: media.developer } : {}),
-    ...over,
-  }
-}
-
-const played = detailFixture({
-  lastPlayedLabel: "2h ago",
-  playtimeLabel: "12.0h",
-  favorite: true,
-})
-const fresh = detailFixture({})
+const played = SHIFT_DETAIL_PLAYED
+const fresh = SHIFT_DETAIL_FRESH
 
 export const ShiftGameDetailStates = [
   {

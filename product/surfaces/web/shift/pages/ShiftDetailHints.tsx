@@ -5,6 +5,7 @@
  * verb, Y to favourite, B to back. Layouts decide where the bar sits.
  */
 
+import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
 import { shiftDetailPlayLabel } from "./shift-detail-copy"
 import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
@@ -14,7 +15,10 @@ export function ShiftDetailHints({
   readonly game: ShiftGameDetailView
 }) {
   return (
-    <div className="shift-detail-buttonbar">
+    <div
+      className="shift-detail-buttonbar"
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.detailHints)}
+    >
       <Hint glyph="A" label={shiftDetailPlayLabel(game)} />
       <Hint glyph="Y" label="Favorite" />
       <Hint glyph="B" label="Back" />

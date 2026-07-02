@@ -51,9 +51,9 @@ composing part's state family or bridge) · `to-do`.
 
 | Component | Layer | Real edges | Status | Part file |
 |---|---|---|---|---|
-| `pages/ShiftDetailSplit` | organism | detail view data (fixture) | to-do (U5) | — |
-| `pages/ShiftDetailActions` | molecule | action state (Continue/Play, favorite) | to-do (U5) | — |
-| `pages/ShiftDetailHints` | molecule | no device edge | to-do (U5) | — |
+| `pages/ShiftDetailSplit` | page composition | detail view data (fixture) | covered — rendered by the Game Detail page part; a separate organism story would duplicate the design part (dedupe rule) | via `ShiftGameDetail.page.part.tsx` |
+| `pages/ShiftDetailActions` | molecule | action-state variant (Continue/Play from play history, favourite) | done (static) | `pages/ShiftDetailActions.molecule.part.tsx` |
+| `pages/ShiftDetailHints` | molecule | action-state variant (verb follows play history) | done (static) | `pages/ShiftDetailHints.molecule.part.tsx` |
 
 ## Library family (U6)
 

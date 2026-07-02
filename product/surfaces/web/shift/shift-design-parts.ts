@@ -32,6 +32,16 @@ export const SHIFT_DESIGN_PARTS = {
   },
   rail: { id: "shift.cine-rail", layer: "organism", name: "Rail" },
   tile: { id: "shift.cine-tile", layer: "molecule", name: "Tile" },
+  detailActions: {
+    id: "shift.detail-actions",
+    layer: "molecule",
+    name: "Detail Actions",
+  },
+  detailHints: {
+    id: "shift.detail-hints",
+    layer: "molecule",
+    name: "Detail Hints",
+  },
 } as const satisfies Record<string, ShiftDesignPart>
 
 export function shiftDesignPartAttrs(

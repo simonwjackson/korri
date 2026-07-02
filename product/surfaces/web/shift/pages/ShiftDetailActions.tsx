@@ -6,6 +6,7 @@
  * layouts; the layouts only choose where to place it.
  */
 
+import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
 import { shiftDetailPlayLabel } from "./shift-detail-copy"
 import type { ShiftGameDetailView } from "./shift-game-detail-view"
 
@@ -23,7 +24,10 @@ export function ShiftDetailActions({
   const played = Boolean(game.lastPlayedLabel)
 
   return (
-    <div className="shift-detail-actions">
+    <div
+      className="shift-detail-actions"
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.detailActions)}
+    >
       <button
         type="button"
         className="shift-detail-btn primary"
