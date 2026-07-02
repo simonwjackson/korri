@@ -58,6 +58,7 @@ let
 
   evaluated = evaluateWith { };
   cfg = evaluated.config;
+  options = evaluated.options;
   socketDriftCfg =
     (evaluateWith {
       services.korri.daemon.sessiond.socketPath = lib.mkForce "%t/korri/other.sock";
@@ -144,6 +145,11 @@ let
       && hasPackage "gamescope-korri" cfg.services.korri.gameStream.path
       && lib.hasInfix "coreutils" firstAppWrapper
       && lib.hasInfix "util-linux" firstAppWrapper
+    ))
+    (check "exported source-machine module exposes opt-in RPCS3 runtime wiring" (
+      (options.services.korri.rpcs3.enable.isDefined or false)
+      && cfg.services.korri.rpcs3.enable == false
+      && !lib.hasInfix "@korri:rpcs3" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
     ))
   ];
   failures = builtins.filter (c: !c.assertion) checks;

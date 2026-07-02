@@ -51,6 +51,12 @@ import {
   KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
 } from "./retroarch"
 import {
+  KORRI_RPCS3_APP_ID,
+  KORRI_RPCS3_PLUGIN_ID,
+  KORRI_RPCS3_PS3_DISC_DISCOVERY_PROVIDER_ID,
+  KORRI_RPCS3_RUNTIME_ID,
+} from "./rpcs3"
+import {
   KORRI_RYUBING_APP_ID,
   KORRI_RYUBING_DISCOVERY_PROVIDER_ID,
   KORRI_RYUBING_PLUGIN_ID,
@@ -87,6 +93,25 @@ describe("first-party plugins", () => {
       plugin: KORRI_RETROARCH_PLUGIN_ID,
       command: "/etc/korri/bin/retroarch",
     })
+  })
+
+  it("registers RPCS3 as a first-party PS3 app host plugin", () => {
+    const rpcs3 = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_RPCS3_PLUGIN_ID,
+    )
+
+    expect(rpcs3?.contributes.config.launchers?.rpcs3).toMatchObject({
+      id: KORRI_RPCS3_APP_ID,
+      plugin: KORRI_RPCS3_PLUGIN_ID,
+      command: "/run/current-system/sw/bin/rpcs3",
+    })
+    expect(rpcs3?.contributes.config.runtimes?.rpcs3).toMatchObject({
+      id: KORRI_RPCS3_RUNTIME_ID,
+      kind: "emulator",
+    })
+    expect(rpcs3?.contributes.discovery?.map(provider => provider.id)).toEqual([
+      KORRI_RPCS3_PS3_DISC_DISCOVERY_PROVIDER_ID,
+    ])
   })
 
   it("registers Gamescope as a first-party handler/config plugin", () => {
@@ -493,6 +518,22 @@ describe("first-party plugins", () => {
         integration =>
           integration.kind === KORRI_RETROARCH_PLUGIN_ID &&
           integration.integration === "retroarch",
+      ),
+    ).toBe(true)
+
+    const rpcs3Enabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_RPCS3_PLUGIN_ID,
+    })
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(disabled).some(
+        integration => integration.kind === KORRI_RPCS3_PLUGIN_ID,
+      ),
+    ).toBe(false)
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(rpcs3Enabled).some(
+        integration =>
+          integration.kind === KORRI_RPCS3_PLUGIN_ID &&
+          integration.integration === "rpcs3",
       ),
     ).toBe(true)
 
