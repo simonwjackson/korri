@@ -6,6 +6,7 @@
  * competing with the covers.
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftLensTab } from "./ShiftLensTab"
 
 export type ShiftLibraryLens = "all" | "favorites" | "genre"
 
@@ -32,17 +33,12 @@ export function ShiftLensRow({ lens, onSelect }: ShiftLensRowProps) {
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.lensRow)}
     >
       {SHIFT_LIBRARY_LENSES.map(option => (
-        <button
-          type="button"
+        <ShiftLensTab
           key={option.id}
-          role="tab"
-          className="shift-lib-lens-item"
-          aria-selected={lens === option.id}
-          data-active={lens === option.id || undefined}
+          label={option.label}
+          selected={lens === option.id}
           onClick={() => onSelect(option.id)}
-        >
-          {option.label}
-        </button>
+        />
       ))}
     </div>
   )

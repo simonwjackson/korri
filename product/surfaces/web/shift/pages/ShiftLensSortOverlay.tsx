@@ -5,6 +5,7 @@
  * picks one and dismisses itself, so depth appears only while in use.
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+import { ShiftLensSortOption } from "./ShiftLensSortOption"
 import {
   type ShiftLibrarySort,
   shiftLibrarySortLabel,
@@ -29,16 +30,12 @@ export function ShiftLensSortOverlay({
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.lensSortOverlay)}
     >
       {sorts.map(option => (
-        <button
-          type="button"
+        <ShiftLensSortOption
           key={option}
-          className="shift-lib-option"
-          data-active={sort === option || undefined}
-          aria-pressed={sort === option}
+          label={shiftLibrarySortLabel(option)}
+          active={sort === option}
           onClick={() => onPick(option)}
-        >
-          {shiftLibrarySortLabel(option)}
-        </button>
+        />
       ))}
     </div>
   )
