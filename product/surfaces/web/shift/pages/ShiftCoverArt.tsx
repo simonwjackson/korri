@@ -11,6 +11,7 @@ export interface ShiftCoverArtProps {
   readonly src: string
   readonly alt?: string
   readonly loading?: "lazy" | "eager"
+  /** Only emitted when provided, so callers that relied on the default keep it. */
   readonly draggable?: boolean
 }
 
@@ -18,14 +19,14 @@ export function ShiftCoverArt({
   src,
   alt = "",
   loading,
-  draggable = false,
+  draggable,
 }: ShiftCoverArtProps) {
   return (
     <img
       src={src}
       alt={alt}
-      draggable={draggable}
       {...(loading ? { loading } : {})}
+      {...(draggable === undefined ? {} : { draggable })}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.coverArt)}
     />
   )

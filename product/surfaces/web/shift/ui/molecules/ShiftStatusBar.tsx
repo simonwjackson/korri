@@ -4,7 +4,6 @@
  * the battery's state flows through it: the same component the Home renders is
  * the one the dev-lab can drive in isolation.
  */
-import { Wifi, WifiOff } from "lucide-react"
 import {
   SHIFT_DESIGN_PARTS,
   shiftDesignPartAttrs,
@@ -12,9 +11,11 @@ import {
 import {
   DEFAULT_SHIFT_NETWORK_READING,
   type ShiftNetworkReading,
-  shiftNetworkConnected,
 } from "../../shift-network-state"
+import { ShiftAvatar } from "../atoms/ShiftAvatar"
 import { ShiftBattery, type ShiftBatteryProps } from "../atoms/ShiftBattery"
+import { ShiftClock } from "../atoms/ShiftClock"
+import { ShiftNetworkIcon } from "../atoms/ShiftNetworkIcon"
 
 export interface ShiftStatusBarProps {
   readonly time?: string
@@ -30,19 +31,16 @@ export function ShiftStatusBar({
   network = DEFAULT_SHIFT_NETWORK_READING,
   battery,
 }: ShiftStatusBarProps) {
-  const NetworkIcon = shiftNetworkConnected(network) ? Wifi : WifiOff
   return (
     <header
       className="shift-cine-top"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.statusBar)}
     >
-      <span className="shift-cine-clock">{time}</span>
+      <ShiftClock time={time} />
       <span className="shift-cine-status">
-        <NetworkIcon className="shift-cine-status-icon" aria-hidden />
+        <ShiftNetworkIcon network={network} />
         {battery ? <ShiftBattery {...battery} /> : null}
-        {avatarSrc ? (
-          <img className="shift-cine-avatar" src={avatarSrc} alt="" />
-        ) : null}
+        {avatarSrc ? <ShiftAvatar src={avatarSrc} /> : null}
       </span>
     </header>
   )

@@ -44,7 +44,7 @@ export function ShiftReelCover({
       transition={SPRING}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.reelCover, game.id)}
     >
-      <ShiftCoverArt src={game.artUrl} loading="lazy" />
+      <ShiftCoverArt src={game.artUrl} loading="lazy" draggable={false} />
     </motion.button>
   )
 }

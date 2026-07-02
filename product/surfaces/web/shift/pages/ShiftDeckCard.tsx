@@ -41,7 +41,7 @@ export function ShiftDeckCard({ game, onRiffle, onPlay }: ShiftDeckCardProps) {
           exit={{ opacity: 0, scale: 0.9, y: -24 }}
           transition={SPRING}
         >
-          <ShiftCoverArt src={game.artUrl} />
+          <ShiftCoverArt src={game.artUrl} draggable={false} />
         </motion.div>
       </AnimatePresence>
     </div>

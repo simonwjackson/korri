@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react"
+import { ShiftCoverArt } from "../../pages/ShiftCoverArt"
 import {
   SHIFT_DESIGN_PARTS,
   shiftDesignPartAttrs,
@@ -41,7 +42,7 @@ export function ShiftCineTile({
       onFocus={onFocus}
       onClick={onActivate}
     >
-      {renderImage ? <img src={artUrl} alt="" loading="eager" /> : null}
+      {renderImage ? <ShiftCoverArt src={artUrl} loading="eager" /> : null}
     </button>
   )
 }
