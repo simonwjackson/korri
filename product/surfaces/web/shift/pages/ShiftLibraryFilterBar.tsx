@@ -11,14 +11,16 @@
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { useMemo, useState } from "react"
-import { ShiftLibraryTile } from "./ShiftLibraryTile"
+import { ShiftLibraryEmpty } from "./ShiftLibraryEmpty"
+import { ShiftLibraryFilterToolbar } from "./ShiftLibraryFilterToolbar"
+import { ShiftLibraryGridView } from "./ShiftLibraryGridView"
+import { ShiftLibraryHeader } from "./ShiftLibraryHeader"
 import type { ShiftLibraryGame } from "./shift-library-game"
 import {
   applyShiftLibraryQuery,
   deriveShiftLibraryGenres,
   nextShiftLibrarySort,
   type ShiftLibrarySort,
-  shiftLibrarySortLabel,
   toggleGenre,
 } from "./shift-library-query"
 
@@ -49,64 +51,23 @@ export function ShiftLibraryFilterBar({
 
   return (
     <div data-shift-library className="shift-lib shift-lib-filterbar intrinsic">
-      <header className="shift-lib-top">
-        <h1 className="shift-lib-heading">{title}</h1>
-        <span className="shift-lib-count">{countLabel(visible.length)}</span>
-      </header>
-
-      <div
-        className="shift-lib-bar"
-        role="toolbar"
-        aria-label="Filter and sort"
-      >
-        <button
-          type="button"
-          className="shift-lib-chip"
-          data-active={favoriteOnly || undefined}
-          aria-pressed={favoriteOnly}
-          onClick={() => setFavoriteOnly(value => !value)}
-        >
-          ★ Favorites
-        </button>
-
-        {facets.map(facet => (
-          <button
-            type="button"
-            key={facet.value}
-            className="shift-lib-chip"
-            data-active={genres.includes(facet.value) || undefined}
-            aria-pressed={genres.includes(facet.value)}
-            onClick={() =>
-              setGenres(current => toggleGenre(current, facet.value))
-            }
-          >
-            {facet.value}
-            <span className="shift-lib-chip-count">{facet.count}</span>
-          </button>
-        ))}
-
-        <button
-          type="button"
-          className="shift-lib-chip shift-lib-chip-sort"
-          onClick={() => setSort(nextShiftLibrarySort)}
-        >
-          Sort: {shiftLibrarySortLabel(sort)}
-        </button>
-      </div>
-
+      <ShiftLibraryHeader title={title} count={visible.length} />
+      <ShiftLibraryFilterToolbar
+        favoriteOnly={favoriteOnly}
+        onToggleFavorite={() => setFavoriteOnly(value => !value)}
+        facets={facets}
+        selectedGenres={genres}
+        onToggleGenre={genre =>
+          setGenres(current => toggleGenre(current, genre))
+        }
+        sort={sort}
+        onCycleSort={() => setSort(nextShiftLibrarySort)}
+      />
       {visible.length > 0 ? (
-        <div className="shift-lib-grid">
-          {visible.map(game => (
-            <ShiftLibraryTile key={game.id} game={game} onSelect={onSelect} />
-          ))}
-        </div>
+        <ShiftLibraryGridView games={visible} onSelect={onSelect} />
       ) : (
-        <p className="shift-lib-empty">Nothing matches these filters.</p>
+        <ShiftLibraryEmpty message="Nothing matches these filters." />
       )}
     </div>
   )
-}
-
-function countLabel(count: number): string {
-  return `${count} ${count === 1 ? "game" : "games"}`
 }
