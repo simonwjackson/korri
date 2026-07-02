@@ -31,7 +31,29 @@ parent state. Do not use opaque runtime predicates for nesting.
 
 Live-device state dials and screen inputs are shared across live device objects
 for now, matching the mounted surface registry model. Placed part object inputs
-remain object-local.
+are object-local seeds: on a live-mounted part they re-seed its own registered
+registry (no remount), never a props re-render.
+
+## Parts own the edges; a device is a composition
+
+Edges attach to **parts**, keyed by story: held **inputs** via
+`surfacePartInputs`, discrete device **events** via `surfacePartEvents` (both
+in `adapters/shift-edges.ts` for Shift). A live device declares no product
+edges of its own — it INHERITS them from the page part its mounted screen
+composes (`model/lab-part-edges.ts`: `deviceEventsForScreen`,
+`deviceInputsForScreen`, resolved route → page part), dropping any held input
+an axis already covers (the axis is the richer live control for the same
+edge). Legacy `inputsForScreen`/`eventsForScreen` declarations remain only as
+the fallback for surfaces that have not migrated (pico, boxbuster).
+
+Placed parts mount through the SAME real mount + scoped registry path a live
+device uses: `part-mount/LabPartMount.tsx` hosts the surface's part registry
+root (Shift: `product/surfaces/web/shift/mount-shift-part.tsx`) and registers
+the part's registry under the owning canvas object's scope, so part edges
+drive real atoms. Device facts reach an isolated part through its production
+derivation (e.g. battery: `deviceStateAtom` →
+`shiftPowerDisplayForDeviceState` → props) — never hand-set props. See
+`docs/solutions/architecture-patterns/lab-parts-are-the-app-2026-07-01.md`.
 
 A single global **Inspect ⇄ Live** mode is the only difference between a frozen,
 addressable coordinate and the running, navigable surface:

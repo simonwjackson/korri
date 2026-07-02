@@ -194,9 +194,7 @@ describe("objectInputsForStory", () => {
     ).toEqual([
       ["Data", "variant"],
       ["Foreground", "foreground"],
-      ["Power", "power"],
       ["Clock", "clock"],
-      ["Network", "network"],
     ])
     expect(
       objectInputsForStory(detailContinue, byId, shiftLabSurfaceAdapter).map(
@@ -206,21 +204,20 @@ describe("objectInputsForStory", () => {
   })
 
   it("uses the real Shift adapter to expose matching real inputs on parts", () => {
+    // Battery and network are device FACTS delivered as events
+    // (surfacePartEvents), not held inputs — the Battery atom keeps no held
+    // input at all, and the Status Bar holds only the ambient clock.
     expect(
       objectInputsForStory(battery, byId, shiftLabSurfaceAdapter).map(input => [
         input.label,
         input.id,
       ]),
-    ).toEqual([["Power", "power"]])
+    ).toEqual([])
     expect(
       objectInputsForStory(statusBar, byId, shiftLabSurfaceAdapter).map(
         input => [input.label, input.id],
       ),
-    ).toEqual([
-      ["Power", "power"],
-      ["Clock", "clock"],
-      ["Network", "network"],
-    ])
+    ).toEqual([["Clock", "clock"]])
   })
 
   it("can return adapter-owned inputs for a stateless page", () => {

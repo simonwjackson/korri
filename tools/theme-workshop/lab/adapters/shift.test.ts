@@ -32,11 +32,27 @@ import {
 } from "@product/surfaces/web/shift/shift-power-state"
 import type * as Atom from "effect/unstable/reactivity/Atom"
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
+import type { Story } from "../../types"
+import {
+  deviceEventsForScreen,
+  deviceInputsForScreen,
+} from "../model/lab-part-edges"
 import {
   clearLabSurfaceRegistries,
   registerLabSurfaceRegistry,
 } from "../model/lab-surface-registries"
 import { resolveLabSurfaceAdapter } from "../surface-registry"
+
+/** The Home page part a mounted "/" screen composes — the story the device
+ * inherits its edges from. */
+const homePagePart: Story = {
+  id: "shift-home-ready",
+  layer: "page",
+  name: "Home",
+  surface: true,
+  state: "Ready",
+  render: () => null,
+}
 
 describe("shift lab surface adapter", () => {
   it("resolves shift with devices and production-shaped atom initial values", async () => {
@@ -215,8 +231,16 @@ describe("shift home state axes", () => {
   })
 
   it("keeps clock as the only held live input and drives it on the registry", () => {
-    const inputs =
-      resolveLabSurfaceAdapter("shift").inputsForScreen?.("/") ?? []
+    // The device inherits its inputs from the composed Home page part, minus
+    // Foreground (covered by the richer axis) — leaving clock, exactly the
+    // curated screen-scoped set the adapter used to declare.
+    const adapter = resolveLabSurfaceAdapter("shift")
+    const inputs = deviceInputsForScreen(
+      adapter,
+      "/",
+      [homePagePart],
+      adapter.axesForScreen?.("/") ?? [],
+    )
     expect(inputs.map(input => input.id)).toEqual(["clock"])
     const clock = inputs.find(input => input.id === "clock")
     expect(clock?.control.kind).toBe("iso-datetime")
@@ -243,8 +267,11 @@ describe("shift home state axes", () => {
   })
 
   it("drives battery and network device events into the live registry", () => {
-    const events =
-      resolveLabSurfaceAdapter("shift").eventsForScreen?.("/") ?? []
+    const events = deviceEventsForScreen(
+      resolveLabSurfaceAdapter("shift"),
+      "/",
+      [homePagePart],
+    )
     expect(events.map(event => event.id)).toEqual(["battery", "network"])
     const battery = events.find(event => event.id === "battery")
     const network = events.find(event => event.id === "network")
@@ -280,8 +307,11 @@ describe("shift home state axes", () => {
   })
 
   it("scopes battery and network events to one live device registry", () => {
-    const events =
-      resolveLabSurfaceAdapter("shift").eventsForScreen?.("/") ?? []
+    const events = deviceEventsForScreen(
+      resolveLabSurfaceAdapter("shift"),
+      "/",
+      [homePagePart],
+    )
     const battery = events.find(event => event.id === "battery")
     const network = events.find(event => event.id === "network")
 

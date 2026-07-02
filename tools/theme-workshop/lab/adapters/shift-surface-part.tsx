@@ -126,7 +126,12 @@ function ShiftHomeFromEdge() {
 }
 
 export function isShiftHomeStory(story: Story): boolean {
-  return story.layer === "page" && story.name === "Home"
+  // The catalog names Home stories "Home"; generated takes and older fixtures
+  // qualify with a suffix ("Home · Ready"), so match the qualified form too.
+  return (
+    story.layer === "page" &&
+    (story.name === "Home" || story.name.startsWith("Home ·"))
+  )
 }
 
 export function isShiftBatteryStory(story: Story): boolean {

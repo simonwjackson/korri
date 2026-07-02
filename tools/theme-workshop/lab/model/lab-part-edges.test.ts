@@ -4,6 +4,7 @@ import { shiftLabSurfaceAdapter } from "../adapters/shift"
 import type { LabSurfaceAdapter, LabSurfaceEvent } from "../surface-registry"
 import {
   deviceEventsForScreen,
+  deviceInputsForScreen,
   emitScopedEvent,
   pagePartStoryForScreen,
   partEventsForStory,
@@ -88,21 +89,77 @@ describe("deviceEventsForScreen", () => {
     expect(events.map(event => event.id)).toEqual(["battery", "network"])
   })
 
-  it("matches the legacy screen-scoped events for the same screen", () => {
+  it("matches the part's own declared events exactly (no device extras)", () => {
     const inherited = deviceEventsForScreen(shiftLabSurfaceAdapter, "/", [
       homeStory,
     ])
-    const legacy = shiftLabSurfaceAdapter.eventsForScreen?.("/") ?? []
+    const partOwned =
+      shiftLabSurfaceAdapter.surfacePartEvents?.(homeStory) ?? []
     expect(inherited.map(event => event.id)).toEqual(
-      legacy.map(event => event.id),
+      partOwned.map(event => event.id),
     )
   })
 
-  it("falls back to the screen-scoped declaration when no page part resolves", () => {
-    const events = deviceEventsForScreen(shiftLabSurfaceAdapter, "/", [
-      plainAtomStory,
-    ])
-    expect(events.map(event => event.id)).toEqual(["battery", "network"])
+  it("falls back to a legacy screen-scoped declaration for unmigrated surfaces", () => {
+    const legacyEvent: LabSurfaceEvent = {
+      id: "legacy",
+      label: "Legacy",
+      payload: { kind: "boolean" },
+      defaultPayload: false,
+      emit: () => undefined,
+    }
+    const legacyAdapter: LabSurfaceAdapter = {
+      id: "legacy",
+      devices: [],
+      screens: [{ label: "Home", path: "/" }],
+      eventsForScreen: path => (path === "/" ? [legacyEvent] : []),
+      makeSeedInitialValues: async () => ({}),
+      mountSurface: () => ({ router: {}, dispose: () => undefined }),
+    }
+
+    const events = deviceEventsForScreen(legacyAdapter, "/", [plainAtomStory])
+    expect(events.map(event => event.id)).toEqual(["legacy"])
+  })
+})
+
+describe("deviceInputsForScreen", () => {
+  it("inherits the page part's inputs minus those an axis already covers", () => {
+    const axes = shiftLabSurfaceAdapter.axesForScreen?.("/") ?? []
+    expect(axes.some(axis => axis.id === "foreground")).toBe(true)
+
+    const inputs = deviceInputsForScreen(
+      shiftLabSurfaceAdapter,
+      "/",
+      [homeStory],
+      axes,
+    )
+    // Home's held part inputs are Foreground + Clock; the device's Foreground
+    // axis is the richer control for the same edge, so only clock remains.
+    expect(inputs.map(input => input.id)).toEqual(["clock"])
+  })
+
+  it("falls back to a legacy screen-scoped declaration for unmigrated surfaces", () => {
+    const legacyAdapter: LabSurfaceAdapter = {
+      id: "legacy",
+      devices: [],
+      screens: [{ label: "Home", path: "/" }],
+      inputsForScreen: path =>
+        path === "/"
+          ? [
+              {
+                id: "legacy-input",
+                label: "Legacy",
+                defaultValue: false,
+                control: { kind: "boolean" },
+              },
+            ]
+          : [],
+      makeSeedInitialValues: async () => ({}),
+      mountSurface: () => ({ router: {}, dispose: () => undefined }),
+    }
+
+    const inputs = deviceInputsForScreen(legacyAdapter, "/", [], [])
+    expect(inputs.map(input => input.id)).toEqual(["legacy-input"])
   })
 })
 

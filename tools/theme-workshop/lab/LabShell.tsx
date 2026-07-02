@@ -53,6 +53,7 @@ import {
 } from "./model/lab-object-inputs"
 import {
   deviceEventsForScreen,
+  deviceInputsForScreen,
   emitScopedEvent,
   partEventsForStory,
 } from "./model/lab-part-edges"
@@ -265,13 +266,20 @@ export function LabShell() {
   // focused controller so its ordering contract is in one place.
   const { screenAxes, activeByAxis, mode, pinAxis, liveAxis, pinCurrent } =
     useLabAxisController(adapter, selectedLiveObjectId)
+  // A live device inherits its inputs and events from the page part its
+  // screen composes (minus inputs an axis already covers); the legacy
+  // screen-scoped declarations are only the fallback for surfaces that have
+  // not migrated to part-scoped edges.
   const screenInputs = useMemo(
-    () => adapter.inputsForScreen?.(surfacePath) ?? [],
-    [adapter, surfacePath],
+    () =>
+      deviceInputsForScreen(
+        adapter,
+        surfacePath,
+        index.byId.values(),
+        screenAxes,
+      ),
+    [adapter, surfacePath, index, screenAxes],
   )
-  // A live device inherits its events from the page part its screen composes;
-  // the legacy screen-scoped declaration is only the fallback for surfaces
-  // that have not migrated to part-scoped edges.
   const screenEvents = useMemo(
     () => deviceEventsForScreen(adapter, surfacePath, index.byId.values()),
     [adapter, surfacePath, index],

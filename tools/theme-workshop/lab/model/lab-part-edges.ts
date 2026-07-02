@@ -1,6 +1,11 @@
 import type { Story } from "../../types"
-import type { LabSurfaceAdapter, LabSurfaceEvent } from "../surface-registry"
+import type {
+  LabSurfaceAdapter,
+  LabSurfaceEvent,
+  LabSurfacePartInput,
+} from "../surface-registry"
 import { canonicalInputValue, type LabInputValue } from "./lab-source-state"
+import type { LabStateAxis } from "./lab-state-axis"
 
 /**
  * Part-scoped edge resolution: edges (axes / inputs / events) belong to PARTS,
@@ -61,6 +66,40 @@ export function deviceEventsForScreen(
     if (events.length > 0) return events
   }
   return adapter.eventsForScreen?.(surfacePath) ?? []
+}
+
+/** The held product inputs a part's real subtree consumes. */
+export function partInputsForStory(
+  story: Story,
+  adapter: Pick<LabSurfaceAdapter, "surfacePartInputs">,
+): readonly LabSurfacePartInput[] {
+  return adapter.surfacePartInputs?.(story) ?? []
+}
+
+/**
+ * A live device's held inputs, inherited from the page part its mounted
+ * screen composes — minus any input an axis already covers (the axis is the
+ * richer live control for the same edge; a part-scope select is its held
+ * fallback). Falls back to the adapter's legacy screen-scoped declaration
+ * when no page part resolves (not-yet-migrated surfaces keep working).
+ */
+export function deviceInputsForScreen(
+  adapter: Pick<
+    LabSurfaceAdapter,
+    "screens" | "surfacePartInputs" | "inputsForScreen"
+  >,
+  surfacePath: string,
+  stories: Iterable<Story>,
+  axes: readonly LabStateAxis[],
+): readonly LabSurfacePartInput[] {
+  const pagePart = pagePartStoryForScreen(adapter, surfacePath, stories)
+  if (pagePart && adapter.surfacePartInputs) {
+    const inputs = adapter.surfacePartInputs(pagePart)
+    if (inputs.length > 0) {
+      return inputs.filter(input => !axes.some(axis => axis.id === input.id))
+    }
+  }
+  return adapter.inputsForScreen?.(surfacePath) ?? []
 }
 
 /** Canonicalize and dispatch one event into a scope's registered registries.

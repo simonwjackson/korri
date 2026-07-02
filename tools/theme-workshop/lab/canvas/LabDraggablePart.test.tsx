@@ -253,11 +253,11 @@ describe("LabDraggablePart", () => {
       expect(screen.getByText("Aurora Drift")).toBeTruthy()
     })
 
-    // Fire the surface's battery device event scoped to this placed part: it
+    // Fire the part's own battery device event scoped to this placed part: it
     // lands in the part's registered registry and reaches the rendered battery
     // through the real device-state consumption path.
     const battery = shiftLabSurfaceAdapter
-      .eventsForScreen?.("/")
+      .surfacePartEvents?.(homeStory)
       .find(event => event.id === "battery")
     expect(battery).toBeTruthy()
     act(() => {
