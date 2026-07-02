@@ -361,6 +361,13 @@ body {
 	inset: 0;
 	will-change: transform;
 }
+/* Layout-zoom layer under the pan layer: zoom must not share an element with
+   the camera translate, or the translate itself gets zoom-scaled and zoom
+   anchors (pinch midpoint, wheel cursor) drift. */
+.pt-cam-zoom {
+	position: absolute;
+	inset: 0;
+}
 .pt-guide {
 	position: absolute;
 	background: #f0abfc;

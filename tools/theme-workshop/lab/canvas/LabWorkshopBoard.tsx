@@ -515,68 +515,73 @@ export function LabWorkshopBoard({
         setPanning(false)
       }}
     >
+      {/* The camera mapping every gesture assumes is
+          screen = translate + world * scale. Translate and zoom must live on
+          SEPARATE elements: `zoom` multiplies the element's own computed
+          lengths, so a translate on the zoomed element would itself be scaled
+          and every zoom anchor (pinch midpoint, wheel cursor) would land off
+          by the zoom factor. Outer = pan in device px; inner = layout zoom
+          (kept over transform scale so text re-renders at the zoomed size
+          rather than being bitmap-scaled by the compositor). */}
       <div
         className="pt-cam"
-        style={{
-          transform: `translate(${camera.x}px, ${camera.y}px)`,
-          // Use layout zoom instead of transform scale so text is re-rendered at
-          // the zoomed size rather than bitmap-scaled by the compositor.
-          zoom: camera.scale,
-        }}
+        style={{ transform: `translate(${camera.x}px, ${camera.y}px)` }}
       >
-        {objects.map((object, index) => {
-          const positioned =
-            object.x === undefined
-              ? {
-                  ...object,
-                  x: 24 + (index % 3) * PLACEMENT_CELL.w,
-                  y: 24 + Math.floor(index / 3) * PLACEMENT_CELL.h,
-                }
-              : object
-          if (isLiveDeviceObject(positioned)) {
+        <div className="pt-cam-zoom" style={{ zoom: camera.scale }}>
+          {objects.map((object, index) => {
+            const positioned =
+              object.x === undefined
+                ? {
+                    ...object,
+                    x: 24 + (index % 3) * PLACEMENT_CELL.w,
+                    y: 24 + Math.floor(index / 3) * PLACEMENT_CELL.h,
+                  }
+                : object
+            if (isLiveDeviceObject(positioned)) {
+              return (
+                <LabCanvasDevice
+                  key={positioned.id}
+                  object={positioned}
+                  scale={camera.scale}
+                  selected={positioned.id === selectedId}
+                  sourceId={sourceId}
+                  stateId={stateId}
+                  pickMode={pickMode}
+                  innerSelection={innerSelection}
+                  onSelect={handleSelect}
+                  onInnerSelect={onInnerSelect}
+                  onMove={move}
+                  onMeasure={measure}
+                />
+              )
+            }
+            if (!isPlacedPartObject(positioned)) return null
+            const story = stories.get(positioned.storyId)
+            if (!story) return null
             return (
-              <LabCanvasDevice
+              <LabDraggablePart
                 key={positioned.id}
-                object={positioned}
+                instance={positioned}
+                story={story}
+                storyMeta={designPassMetaById.get(story.id)}
+                byId={stories}
+                screen={screen}
                 scale={camera.scale}
                 selected={positioned.id === selectedId}
-                sourceId={sourceId}
-                stateId={stateId}
                 pickMode={pickMode}
                 innerSelection={innerSelection}
                 onSelect={handleSelect}
                 onInnerSelect={onInnerSelect}
+                onBind={bind}
                 onMove={move}
-                onMeasure={measure}
+                onRemove={remove}
+                onDeleteTake={onDeleteTake}
+                onPromoteTake={onPromoteTake}
+                onGenerateTakes={onGenerateTakes ?? (() => undefined)}
               />
             )
-          }
-          if (!isPlacedPartObject(positioned)) return null
-          const story = stories.get(positioned.storyId)
-          if (!story) return null
-          return (
-            <LabDraggablePart
-              key={positioned.id}
-              instance={positioned}
-              story={story}
-              storyMeta={designPassMetaById.get(story.id)}
-              byId={stories}
-              screen={screen}
-              scale={camera.scale}
-              selected={positioned.id === selectedId}
-              pickMode={pickMode}
-              innerSelection={innerSelection}
-              onSelect={handleSelect}
-              onInnerSelect={onInnerSelect}
-              onBind={bind}
-              onMove={move}
-              onRemove={remove}
-              onDeleteTake={onDeleteTake}
-              onPromoteTake={onPromoteTake}
-              onGenerateTakes={onGenerateTakes ?? (() => undefined)}
-            />
-          )
-        })}
+          })}
+        </div>
       </div>
     </div>
   )

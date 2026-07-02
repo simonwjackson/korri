@@ -402,6 +402,9 @@ describe("LabWorkshopBoard pinch zoom", () => {
   function cam(): HTMLElement {
     return document.querySelector(".pt-cam") as HTMLElement
   }
+  function zoomLayer(): HTMLElement {
+    return document.querySelector(".pt-cam-zoom") as HTMLElement
+  }
   function board(): Element {
     return document.querySelector(".pt-board-free") as Element
   }
@@ -430,8 +433,24 @@ describe("LabWorkshopBoard pinch zoom", () => {
 
     // scale 1.5; world point under the start midpoint (476, 276) pinned under
     // the moving midpoint: 450 - 476*1.5 = -264, 300 - 276*1.5 = -114.
-    expect(cam().style.zoom).toBe("1.5")
+    expect(zoomLayer().style.zoom).toBe("1.5")
     expect(cam().style.transform).toBe("translate(-264px, -114px)")
+  })
+
+  it("keeps pan and zoom on separate layers so the anchor math holds", () => {
+    // `zoom` multiplies the element's own computed lengths: if the camera
+    // translate shared the zoomed element, the pan offset itself would be
+    // scaled and every zoom anchor would drift. The translate layer must
+    // carry no zoom, and the zoom layer no transform.
+    render(<Harness initial={[instance("one", { x: 100, y: 40 })]} />)
+
+    touch("pointerDown", 1, 400, 300)
+    touch("pointerDown", 2, 600, 300)
+    touch("pointerMove", 1, 300, 300)
+
+    expect(cam().style.zoom ?? "").toBe("")
+    expect(zoomLayer().style.transform ?? "").toBe("")
+    expect(zoomLayer().parentElement).toBe(cam())
   })
 
   it("pans with a two-finger drag without changing scale", () => {
@@ -444,7 +463,7 @@ describe("LabWorkshopBoard pinch zoom", () => {
 
     // Distance is back to 200 (ratio 1); midpoint moved +100 — the camera
     // projects absolutely from the gesture start, so no drift accumulates.
-    expect(cam().style.zoom).toBe("1")
+    expect(zoomLayer().style.zoom).toBe("1")
     expect(cam().style.transform).toBe("translate(124px, 24px)")
   })
 
@@ -459,7 +478,7 @@ describe("LabWorkshopBoard pinch zoom", () => {
 
     touch("pointerMove", 1, 100, 300)
     expect(cam().style.transform).toBe(frozen)
-    expect(cam().style.zoom).toBe("1.5")
+    expect(zoomLayer().style.zoom).toBe("1.5")
   })
 
   it("bails out of the pinch when a third finger lands", () => {
@@ -470,7 +489,7 @@ describe("LabWorkshopBoard pinch zoom", () => {
     touch("pointerDown", 3, 500, 400)
     touch("pointerMove", 1, 300, 300)
 
-    expect(cam().style.zoom).toBe("1")
+    expect(zoomLayer().style.zoom).toBe("1")
     expect(cam().style.transform).toBe(
       `translate(${DEFAULT_CAMERA.x}px, ${DEFAULT_CAMERA.y}px)`,
     )
