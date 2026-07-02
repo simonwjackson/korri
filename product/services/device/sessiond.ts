@@ -82,6 +82,10 @@ import {
   discoverSwaySocketEnv,
   discoverSwaySocketPath,
 } from "./sessiond-sway-socket"
+import {
+  createSwayLaneEventSupervisor,
+  type SwayLaneEventSupervisor,
+} from "./sessiond-sway-lane-supervisor"
 
 export interface KorriSessiondLogger {
   debug: (input: unknown, message?: string) => void
@@ -1385,9 +1389,7 @@ async function main() {
   )
   const roleId = process.env.KORRI_SESSIOND_ROLE ?? "kiosk"
   const kioskPolicy = process.env.KORRI_SESSIOND_KIOSK_POLICY ?? "legacy"
-  let swayEventSource:
-    | ReturnType<typeof createSessiondSwayEventSource>
-    | undefined
+  let swayLaneSupervisor: SwayLaneEventSupervisor | undefined
   const role: SessionRole | undefined =
     roleId === "source-machine"
       ? createSourceMachineSessionRole({
@@ -1407,34 +1409,27 @@ async function main() {
                   "korri:game:active",
               },
             })
-            let laneToggleAvailable = false
-            const socketPath = discoverSwaySocketPath()
-            if (socketPath) {
-              swayEventSource = createSessiondSwayEventSource({
-                socketPath,
-                onEvent: event => laneController.handleSwayEvent(event),
-                onDiagnostic: diagnostic =>
-                  defaultLogger.warn(
-                    { diagnostic },
-                    "sessiond Sway event diagnostic",
-                  ),
-                onStatus: status => {
-                  laneToggleAvailable = status === "open"
-                },
-              })
-              void swayEventSource.start().catch(error => {
-                laneToggleAvailable = false
+            const supervisor = createSwayLaneEventSupervisor({
+              discover: () => discoverSwaySocketPath(),
+              createSource: ({ socketPath, onStatus }) =>
+                createSessiondSwayEventSource({
+                  socketPath,
+                  onEvent: event => laneController.handleSwayEvent(event),
+                  onDiagnostic: diagnostic =>
+                    defaultLogger.warn(
+                      { diagnostic },
+                      "sessiond Sway event diagnostic",
+                    ),
+                  onStatus,
+                }),
+              onDiagnostic: diagnostic =>
                 defaultLogger.warn(
-                  { err: error },
-                  "sessiond Sway event source failed to start",
-                )
-              })
-            } else {
-              defaultLogger.warn(
-                {},
-                "sessiond lane-aware kiosk policy could not discover Sway socket",
-              )
-            }
+                  { diagnostic },
+                  "sessiond Sway lane supervisor diagnostic",
+                ),
+            })
+            swayLaneSupervisor = supervisor
+            supervisor.start()
             return createLaneAwareKioskSessionRole({
               renderer: realRendererController(),
               sway: createSwayController({
@@ -1443,7 +1438,7 @@ async function main() {
               }),
               serviceManager: realServiceManager(),
               laneController,
-              laneToggleAvailable: () => laneToggleAvailable,
+              laneToggleAvailable: () => supervisor.isAvailable(),
             })
           })()
         : undefined
@@ -1465,7 +1460,7 @@ async function main() {
 
   const shutdown = async (signal: string) => {
     defaultLogger.info({ signal }, "sessiond shutting down")
-    swayEventSource?.stop()
+    swayLaneSupervisor?.stop()
     await handle.stop()
     process.exit(0)
   }
