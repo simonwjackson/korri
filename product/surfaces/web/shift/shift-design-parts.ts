@@ -77,6 +77,118 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "page",
     name: "Library — Reel",
   },
+  // Shared library scaffolding inlined across the variants.
+  libraryHeader: {
+    id: "shift.library-header",
+    layer: "molecule",
+    name: "Library Header",
+  },
+  libraryEmpty: {
+    id: "shift.library-empty",
+    layer: "atom",
+    name: "Library Empty",
+  },
+  libraryGridView: {
+    id: "shift.library-grid-view",
+    layer: "organism",
+    name: "Library Grid View",
+  },
+  libraryShelf: {
+    id: "shift.library-shelf",
+    layer: "organism",
+    name: "Library Shelf",
+  },
+  // Reel internals.
+  reelCover: {
+    id: "shift.reel-cover",
+    layer: "molecule",
+    name: "Reel Cover",
+  },
+  reelStage: {
+    id: "shift.reel-stage",
+    layer: "organism",
+    name: "Reel Stage",
+  },
+  reelHero: { id: "shift.reel-hero", layer: "molecule", name: "Reel Hero" },
+  reelActions: {
+    id: "shift.reel-actions",
+    layer: "molecule",
+    name: "Reel Actions",
+  },
+  // Deck internals.
+  deckBleed: {
+    id: "shift.deck-bleed",
+    layer: "molecule",
+    name: "Deck Bleed",
+  },
+  deckCounter: {
+    id: "shift.deck-counter",
+    layer: "atom",
+    name: "Deck Counter",
+  },
+  deckCard: { id: "shift.deck-card", layer: "molecule", name: "Deck Card" },
+  deckHero: { id: "shift.deck-hero", layer: "molecule", name: "Deck Hero" },
+  deckActions: {
+    id: "shift.deck-actions",
+    layer: "molecule",
+    name: "Deck Actions",
+  },
+  // Lens internals.
+  lensRow: { id: "shift.lens-row", layer: "molecule", name: "Lens Row" },
+  lensSortButton: {
+    id: "shift.lens-sort-button",
+    layer: "atom",
+    name: "Lens Sort Button",
+  },
+  lensSortOverlay: {
+    id: "shift.lens-sort-overlay",
+    layer: "molecule",
+    name: "Lens Sort Overlay",
+  },
+  // Filter-bar internals.
+  filterChip: {
+    id: "shift.filter-chip",
+    layer: "atom",
+    name: "Filter Chip",
+  },
+  filterToolbar: {
+    id: "shift.filter-toolbar",
+    layer: "molecule",
+    name: "Filter Toolbar",
+  },
+  // Detail internals.
+  detailArt: { id: "shift.detail-art", layer: "atom", name: "Detail Art" },
+  detailStats: {
+    id: "shift.detail-stats",
+    layer: "molecule",
+    name: "Detail Stats",
+  },
+  // Home body states + cinematic template.
+  cinematicHome: {
+    id: "shift.cinematic-home",
+    layer: "template",
+    name: "Cinematic Home",
+  },
+  homeLoading: {
+    id: "shift.home-loading",
+    layer: "organism",
+    name: "Home Loading",
+  },
+  homeEmpty: {
+    id: "shift.home-empty",
+    layer: "organism",
+    name: "Home Empty",
+  },
+  homeLoadError: {
+    id: "shift.home-load-error",
+    layer: "organism",
+    name: "Home Load Error",
+  },
+  homeDefect: {
+    id: "shift.home-defect",
+    layer: "organism",
+    name: "Home Defect",
+  },
 } as const satisfies Record<string, ShiftDesignPart>
 
 export function shiftDesignPartAttrs(

@@ -14,7 +14,9 @@
  * by id. It never groups data itself.
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
-import { ShiftLibraryTile } from "./ShiftLibraryTile"
+import { ShiftLibraryEmpty } from "./ShiftLibraryEmpty"
+import { ShiftLibraryHeader } from "./ShiftLibraryHeader"
+import { ShiftLibraryShelf } from "./ShiftLibraryShelf"
 import type { ShiftLibrarySection } from "./shift-library-sections"
 
 export interface ShiftLibraryShelvesProps {
@@ -36,29 +38,20 @@ export function ShiftLibraryShelves({
 
   return (
     <div data-shift-library className="shift-lib shift-lib-shelves intrinsic">
-      <header className="shift-lib-top">
-        <h1 className="shift-lib-heading">{title}</h1>
-      </header>
-
+      <ShiftLibraryHeader title={title} />
       {sections.length > 0 ? (
         <div className="shift-lib-shelf-stack">
           {sections.map(section => (
-            <section key={section.id} className="shift-lib-shelf">
-              <h2 className="shift-lib-shelf-title">{section.title}</h2>
-              <div className="shift-lib-shelf-track">
-                {section.games.map(game => (
-                  <ShiftLibraryTile
-                    key={game.id}
-                    game={game}
-                    onSelect={onSelect}
-                  />
-                ))}
-              </div>
-            </section>
+            <ShiftLibraryShelf
+              key={section.id}
+              title={section.title}
+              games={section.games}
+              onSelect={onSelect}
+            />
           ))}
         </div>
       ) : (
-        <p className="shift-lib-empty">No games found.</p>
+        <ShiftLibraryEmpty />
       )}
     </div>
   )

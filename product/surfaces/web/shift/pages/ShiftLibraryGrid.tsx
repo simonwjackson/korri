@@ -14,7 +14,9 @@
  * supplies the data and decides what selection does (open detail / launch).
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
-import { ShiftLibraryTile } from "./ShiftLibraryTile"
+import { ShiftLibraryEmpty } from "./ShiftLibraryEmpty"
+import { ShiftLibraryGridView } from "./ShiftLibraryGridView"
+import { ShiftLibraryHeader } from "./ShiftLibraryHeader"
 import type { ShiftLibraryGame } from "./shift-library-game"
 
 export interface ShiftLibraryGridProps {
@@ -38,24 +40,12 @@ export function ShiftLibraryGrid({
 
   return (
     <div data-shift-library className="shift-lib intrinsic">
-      <header className="shift-lib-top">
-        <h1 className="shift-lib-heading">{title}</h1>
-        <span className="shift-lib-count">{countLabel(games.length)}</span>
-      </header>
-
+      <ShiftLibraryHeader title={title} count={games.length} />
       {games.length > 0 ? (
-        <div className="shift-lib-grid">
-          {games.map(game => (
-            <ShiftLibraryTile key={game.id} game={game} onSelect={onSelect} />
-          ))}
-        </div>
+        <ShiftLibraryGridView games={games} onSelect={onSelect} />
       ) : (
-        <p className="shift-lib-empty">No games found.</p>
+        <ShiftLibraryEmpty />
       )}
     </div>
   )
-}
-
-function countLabel(count: number): string {
-  return `${count} ${count === 1 ? "game" : "games"}`
 }
