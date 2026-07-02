@@ -55,8 +55,21 @@ or pick a named inner product part inside it, and the Inspector routes from that
 selection. There is no user-facing Device/Compose canvas mode.
 
 Live device objects reuse the same real page renderer and mounted-surface path as
-production. Placed part objects reuse discovered product part/story seams and
-adapter-owned real edge data. There is one product mechanism, not two.
+production. Placed part objects mount through the same real mount + scoped
+registry path (Shift: `LabPartMount` + `mount-shift-part.tsx`), so their edges
+drive real atoms exactly like a device's. There is one product mechanism, not
+two.
+
+**Parts own the edges; a device is a composition.** Axes, held inputs, and
+device events attach to the PART whose real subtree consumes them (keyed by
+story); a live device inherits its edges from the page part its mounted screen
+composes and declares no product edges of its own. Device facts (battery,
+network) reach any part — isolated or composed — through the production
+derivation, never hand-set props. Enforced by
+`lab/part-first-invariants.test.ts`; playbook in
+`docs/solutions/architecture-patterns/lab-parts-are-the-app-2026-07-01.md`.
+Shift is fully migrated; pico and boxbuster still use the legacy screen-scoped
+declarations until their conversion roadmaps run.
 
 ### The one-renderer rule
 
