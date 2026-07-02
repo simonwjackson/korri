@@ -33,10 +33,12 @@
     serviceMode = "user";
     host = lib.mkDefault "0.0.0.0";
     openFirewall = lib.mkDefault true;
-    firewallInterfaces = lib.mkDefault [
-      "tailscale0"
-      "lan0"
-    ];
+    # Federation advertises this daemon to peers by hostname/mDNS. Interface
+    # names are host-specific (`eno1`, `wlan0`, `end0`, ...), so constraining
+    # the default to guessed names silently advertises an unreachable source.
+    # Hosts that need stricter exposure can override `firewallInterfaces` with
+    # their real trusted interface names.
+    firewallInterfaces = lib.mkDefault [ ];
     # sourceOnly removed in federation v1 (R14 / zero-backwards-compat):
     # every korrid advertises a `caps: ["source"]` baseline by default,
     # so the previous headless-image opt-in is now the default behavior.

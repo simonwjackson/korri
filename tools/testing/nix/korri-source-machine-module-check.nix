@@ -123,9 +123,10 @@ let
       && builtins.elem "--hostname=aka" tailnetFlags
       && (daemonEnv.KORRI_PUBLIC_API_BASE_URL or null) == "http://aka:3001"
     ))
-    (check "exported source-machine module scopes daemon firewall to LAN and tailnet" (
-      cfg.networking.firewall.interfaces.tailscale0.allowedTCPPorts == [ cfg.services.korri.daemon.port ]
-      && cfg.networking.firewall.interfaces.lan0.allowedTCPPorts == [ cfg.services.korri.daemon.port ]
+    (check "exported source-machine module opens advertised daemon port" (
+      builtins.elem cfg.services.korri.daemon.port cfg.networking.firewall.allowedTCPPorts
+      && !(cfg.networking.firewall.interfaces ? tailscale0)
+      && !(cfg.networking.firewall.interfaces ? lan0)
       && !(builtins.elem "tailscale0" (cfg.networking.firewall.trustedInterfaces or [ ]))
     ))
     (check "exported source-machine module enables Gamescope plugin runtime path" (
