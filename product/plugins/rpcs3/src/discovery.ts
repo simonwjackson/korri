@@ -24,7 +24,7 @@ export const rpcs3Ps3DiscFolderDiscoveryProvider = releaseDiscoveryProvider({
           confidence: "high" as const,
           source: file,
           release: {
-            id: folderName,
+            id: localReleaseIdFromFolderName(folderName),
             title: folderName,
             system: KORRI_RPCS3_PS3_SYSTEM_ID,
             app: KORRI_RPCS3_APP_ID,
@@ -35,6 +35,16 @@ export const rpcs3Ps3DiscFolderDiscoveryProvider = releaseDiscoveryProvider({
       ]
     }),
 })
+
+function localReleaseIdFromFolderName(folderName: string): string {
+  return (
+    folderName
+      .normalize("NFKD")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "ps3-disc"
+  )
+}
 
 function directChildDiscFolderName(relativePath: string): string | undefined {
   const parts = relativePath.split("/").filter(Boolean)

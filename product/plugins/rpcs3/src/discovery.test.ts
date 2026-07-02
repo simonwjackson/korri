@@ -43,7 +43,7 @@ describe("rpcs3Ps3DiscFolderDiscoveryProvider", () => {
         confidence: "high",
         source: baseFile,
         release: {
-          id: "Skate 3 [BLUS30464]",
+          id: "skate-3-blus30464",
           title: "Skate 3 [BLUS30464]",
           system: KORRI_RPCS3_PS3_SYSTEM_ID,
           app: KORRI_RPCS3_APP_ID,
@@ -73,6 +73,10 @@ describe("rpcs3Ps3DiscFolderDiscoveryProvider", () => {
     )
 
     expect(observations.map(observation => observation.release.id)).toEqual([
+      "skate-3-blus30464",
+      "another-game-test12345",
+    ])
+    expect(observations.map(observation => observation.release.title)).toEqual([
       "Skate 3 [BLUS30464]",
       "Another Game [TEST12345]",
     ])
