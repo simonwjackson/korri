@@ -1,7 +1,7 @@
 ---
 title: refactor: Unify Korri runtime session contract
 type: refactor
-status: active
+status: completed
 date: 2026-07-02
 deepened: 2026-07-02
 verify_command: "nix build .#checks.x86_64-linux.korri-source-machine-module .#checks.x86_64-linux.korri-source-machine-image .#checks.x86_64-linux.korri-sm8550-kiosk-config .#checks.x86_64-linux.korri-rk3566-kiosk-config .#checks.x86_64-linux.korri-rk3326-kiosk-config --no-link"
