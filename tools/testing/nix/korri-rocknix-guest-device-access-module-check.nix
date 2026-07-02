@@ -22,6 +22,7 @@ let
     "/dev/dri/renderD*"
     "/dev/input/event*"
     "/dev/snd/*"
+    "/dev/video*"
     "/dev/tty0"
     "/dev/tty1"
   ];
@@ -68,10 +69,12 @@ let
         "drm"
         "input"
         "sound"
+        "video4linux"
       ];
       aclNodeGlobs = defaultAclNodeGlobs;
       enableDrmSeatTag = true;
       enableInputUdevAcl = true;
+      enableVideoUdevAcl = true;
       enableBacklightRepair = true;
       backlightNodeGlobs = [ "/sys/class/backlight/*/brightness" ];
     };
@@ -253,12 +256,20 @@ let
       )
       && lib.hasInfix "setfacl -m u:test-user:rw /dev/input/%k" (udevRules enabledPolicy)
     ))
+    (check "video udev acl rule uses configured runtime user" (
+      lib.hasInfix ''SUBSYSTEM=="video4linux", KERNEL=="video[0-9]*", GROUP="video", MODE="0660", TAG+="uaccess"'' (
+        udevRules enabledPolicy
+      )
+      && lib.hasInfix "setfacl -m u:test-user:rw /dev/%k" (udevRules enabledPolicy)
+      && !(lib.hasInfix ''SUBSYSTEM=="video4linux", KERNEL=="video[0-9]*"'' (udevRules noBacklightRepair))
+    ))
     (check "setup script applies declared retrigger and acl posture" (
       lib.hasInfix "udevadm control --reload" (triggerScript enabledPolicy)
       && lib.hasInfix "udevadm settle --timeout=5" (triggerScript enabledPolicy)
       && lib.hasInfix "--subsystem-match=drm" (triggerScript enabledPolicy)
       && lib.hasInfix "--subsystem-match=input" (triggerScript enabledPolicy)
       && lib.hasInfix "--subsystem-match=sound" (triggerScript enabledPolicy)
+      && lib.hasInfix "--subsystem-match=video4linux" (triggerScript enabledPolicy)
       && allIn defaultAclNodeGlobs (triggerScript enabledPolicy)
       && lib.hasInfix "setfacl -m m::rw,u:test-user:rw" (triggerScript enabledPolicy)
     ))

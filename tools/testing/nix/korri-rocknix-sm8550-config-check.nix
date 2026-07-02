@@ -328,6 +328,7 @@ let
         && (rocknixGuestDeviceAccess.fallbackRetryDelaySeconds or null) == 1
         && (rocknixGuestDeviceAccess.enableDrmSeatTag or false) == true
         && (rocknixGuestDeviceAccess.enableInputUdevAcl or false) == true
+        && (rocknixGuestDeviceAccess.enableVideoUdevAcl or false) == true
         && (rocknixGuestDeviceAccess.enableBacklightRepair or false) == true
         && (rocknixGuestDeviceAccess.backlightGroup or null) == "video"
         && (rocknixGuestDeviceAccess.backlightNodeGlobs or [ ]) == [ "/sys/class/backlight/*/brightness" ]
@@ -338,6 +339,10 @@ let
       (check "${name}: SM8550 evdev input is readable by Korri inputd" (
         lib.hasInfix ''SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"'' cfg.services.udev.extraRules
         && lib.hasInfix "setfacl -m u:korri:rw /dev/input/%k" cfg.services.udev.extraRules
+      ))
+      (check "${name}: SM8550 V4L2 codec nodes are readable by Moonlight" (
+        lib.hasInfix ''SUBSYSTEM=="video4linux", KERNEL=="video[0-9]*", GROUP="video", MODE="0660", TAG+="uaccess"'' cfg.services.udev.extraRules
+        && lib.hasInfix "setfacl -m u:korri:rw /dev/%k" cfg.services.udev.extraRules
       ))
       (check "${name}: SM8550 DRM/input/tty access is prepared around greetd" (
         cfg.systemd.services ? korri-rocknix-seat-device-trigger

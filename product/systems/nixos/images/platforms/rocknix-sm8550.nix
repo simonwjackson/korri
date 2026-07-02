@@ -459,6 +459,7 @@ in
     fallbackRetryDelaySeconds = 1;
     enableDrmSeatTag = true;
     enableInputUdevAcl = true;
+    enableVideoUdevAcl = true;
     enableBacklightRepair = true;
     backlightGroup = "video";
     backlightNodeGlobs = [ "/sys/class/backlight/*/brightness" ];
