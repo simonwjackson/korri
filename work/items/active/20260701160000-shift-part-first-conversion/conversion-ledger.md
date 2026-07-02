@@ -10,6 +10,14 @@ design and marked **no device edge**.
 Statuses: `done (live)` · `done (static)` · `covered` (represented through a
 composing part's state family or bridge) · `to-do`.
 
+> **Second-pass note (decomposition depth).** The first Library/Detail pass
+> converted only at the variant/page grain (one page part per variant + the
+> shared Tile). A follow-up pass extracted the chrome *inside* each variant
+> into real components + catalog parts (Reel wheel/cover/hero/actions, Deck
+> card/bleed/counter/hero/actions, Lens row/sort, Filter chip/toolbar) and the
+> shared library scaffolding (Header/Empty/Grid View/Shelf), and tagged the
+> Home body states for pick-mode. Those internals are enumerated below.
+
 ## Pages
 
 | Component | Layer | Real edges | Status | Part file |
@@ -42,16 +50,18 @@ composing part's state family or bridge) · `to-do`.
 
 | Component | Layer | Real edges | Status | Part file |
 |---|---|---|---|---|
-| `pages/ShiftHomeLoadingBody` | organism | Data axis (Loading) | covered — decided (U7): body states ARE the Home page's data states; the state family is their catalog form | via `ShiftHome.page.part.tsx` |
-| `pages/ShiftHomeEmptyBody` | organism | Data axis (Empty) | covered — Home page state family (`Empty`) | via `ShiftHome.page.part.tsx` |
-| `pages/ShiftHomeLoadErrorBody` | organism | Data axis (LoadError) | covered — Home page state family (`LoadError`) | via `ShiftHome.page.part.tsx` |
-| `pages/ShiftHomeDefectBody` | organism | Data axis (Defect) | covered — Home page state family (`Defect`) | via `ShiftHome.page.part.tsx` |
+| `pages/ShiftHomeLoadingBody` | organism | Data axis (Loading) | covered + tagged (`shift.home-loading`) — pickable inside the Home page; catalog form is the Home Loading state | via `ShiftHome.page.part.tsx` |
+| `pages/ShiftHomeEmptyBody` | organism | Data axis (Empty) | covered + tagged (`shift.home-empty`) | via `ShiftHome.page.part.tsx` |
+| `pages/ShiftHomeLoadErrorBody` | organism | Data axis (LoadError) | covered + tagged (`shift.home-load-error`) | via `ShiftHome.page.part.tsx` |
+| `pages/ShiftHomeDefectBody` | organism | Data axis (Defect) | covered + tagged (`shift.home-defect`) | via `ShiftHome.page.part.tsx` |
 
 ## Detail family (U5)
 
 | Component | Layer | Real edges | Status | Part file |
 |---|---|---|---|---|
-| `pages/ShiftDetailSplit` | page composition | detail view data (fixture) | covered — rendered by the Game Detail page part; a separate organism story would duplicate the design part (dedupe rule) | via `ShiftGameDetail.page.part.tsx` |
+| `pages/ShiftDetailSplit` | page composition | detail view data (fixture) | covered — rendered by the Game Detail page part; composes the Art/Stats/Actions/Hints parts below | via `ShiftGameDetail.page.part.tsx` |
+| `pages/ShiftDetailArt` | atom | `artUrl` input | done (static) | `pages/ShiftDetailArt.atom.part.tsx` |
+| `pages/ShiftDetailStats` | molecule | played/fresh state family | done (static) | `pages/ShiftDetailStats.molecule.part.tsx` |
 | `pages/ShiftDetailActions` | molecule | action-state variant (Continue/Play from play history, favourite) | done (static) | `pages/ShiftDetailActions.molecule.part.tsx` |
 | `pages/ShiftDetailHints` | molecule | action-state variant (verb follows play history) | done (static) | `pages/ShiftDetailHints.molecule.part.tsx` |
 
@@ -75,6 +85,49 @@ recorded here, revisit when one control model is committed as the route.
 | `pages/ShiftLibraryLens` | page | `games` input; lens/sort local | done (static, Ready/Empty) | `pages/ShiftLibrary.page.part.tsx` |
 | `pages/ShiftLibraryReel` | page | `games` input; reel index local | done (static, Ready/Empty) | `pages/ShiftLibrary.page.part.tsx` |
 | `pages/ShiftLibraryShelves` | page | `sections` input (built from games) | done (static, Ready/Empty) | `pages/ShiftLibrary.page.part.tsx` |
+
+### Shared library scaffolding (composed by the variants)
+
+| Component | Layer | Real edges | Status | Part file |
+|---|---|---|---|---|
+| `pages/ShiftLibraryHeader` | molecule | `title`/`count` inputs + trailing slot | done (static) | `pages/ShiftLibraryHeader.molecule.part.tsx` |
+| `pages/ShiftLibraryEmpty` | atom | `message` input | done (static) | `pages/ShiftLibraryEmpty.atom.part.tsx` |
+| `pages/ShiftLibraryGridView` | organism | `games` input | done (static) | `pages/ShiftLibraryGridView.organism.part.tsx` |
+| `pages/ShiftLibraryShelf` | organism | `title` + `games` inputs | done (static) | `pages/ShiftLibraryShelf.organism.part.tsx` |
+
+### Reel internals
+
+| Component | Layer | Real edges | Status | Part file |
+|---|---|---|---|---|
+| `pages/ShiftReelCover` | molecule | center/peek state family (offset) | done (static) | `pages/ShiftReelCover.molecule.part.tsx` |
+| `pages/ShiftReelStage` | organism | `games` + `center` inputs; `reelWindow`/`reelOffsetFromCenter` core | done (static) | `pages/ShiftReelStage.organism.part.tsx` |
+| `pages/ShiftReelHero` | molecule | `title`/`genre` inputs | done (static) | `pages/ShiftReelHero.molecule.part.tsx` |
+| `pages/ShiftReelActions` | molecule | no device edge | done (static) | `pages/ShiftReelActions.molecule.part.tsx` |
+
+### Deck internals
+
+| Component | Layer | Real edges | Status | Part file |
+|---|---|---|---|---|
+| `pages/ShiftDeckBleed` | molecule | `artUrl` input | done (static) | `pages/ShiftDeckBleed.molecule.part.tsx` |
+| `pages/ShiftDeckCounter` | atom | `position`/`total` inputs | done (static) | `pages/ShiftDeckCounter.atom.part.tsx` |
+| `pages/ShiftDeckCard` | molecule | `game` input; flick gesture | done (static) | `pages/ShiftDeckCard.molecule.part.tsx` |
+| `pages/ShiftDeckHero` | molecule | `title`/`tags` inputs | done (static) | `pages/ShiftDeckHero.molecule.part.tsx` |
+| `pages/ShiftDeckActions` | molecule | unfavorited/favorited state family | done (static) | `pages/ShiftDeckActions.molecule.part.tsx` |
+
+### Lens internals
+
+| Component | Layer | Real edges | Status | Part file |
+|---|---|---|---|---|
+| `pages/ShiftLensRow` | molecule | lens state family (All/Favorites/By Genre) | done (static) | `pages/ShiftLensRow.molecule.part.tsx` |
+| `pages/ShiftLensSortButton` | atom | closed/open state family | done (static) | `pages/ShiftLensSortButton.atom.part.tsx` |
+| `pages/ShiftLensSortOverlay` | molecule | `sort`/`sorts` inputs | done (static) | `pages/ShiftLensSortOverlay.molecule.part.tsx` |
+
+### Filter Bar internals
+
+| Component | Layer | Real edges | Status | Part file |
+|---|---|---|---|---|
+| `pages/ShiftLibraryFilterChip` | atom | idle/active/genre/sort state family | done (static) | `pages/ShiftLibraryFilterChip.atom.part.tsx` |
+| `pages/ShiftLibraryFilterToolbar` | molecule | `facets`/`sort` inputs | done (static) | `pages/ShiftLibraryFilterToolbar.molecule.part.tsx` |
 
 ## Not parts (helpers / infrastructure)
 
