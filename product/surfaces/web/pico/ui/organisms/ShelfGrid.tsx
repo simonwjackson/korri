@@ -21,13 +21,26 @@ export function ShelfGrid({ shelves }: { readonly shelves: readonly Shelf[] }) {
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.shelfGrid)}
     >
       {shelves.map((shelf, row) => (
-        <div className="pcShow-shelf" key={shelf.title}>
-          <div className="pcShow-shelf-title">{shelf.title}</div>
-          <div className="pcShow-shelf-row">
+        <div
+          className="pcShow-shelf"
+          key={shelf.title}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcShowShelf)}
+        >
+          <div
+            className="pcShow-shelf-title"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcShowShelfTitle)}
+          >
+            {shelf.title}
+          </div>
+          <div
+            className="pcShow-shelf-row"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcShowShelfRow)}
+          >
             {shelf.games.map((game, col) => (
               <div
                 key={game.id}
                 className={`pcShow-tile ${row === 0 && col === 0 ? "on" : ""}`}
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcShowTile)}
               >
                 <GameCartUnmarked game={game} />
               </div>

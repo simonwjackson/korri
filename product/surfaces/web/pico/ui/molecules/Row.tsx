@@ -24,15 +24,40 @@ export function Row({
       className={`pc-row ${state === "selected" ? "sel" : ""}`}
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.row)}
     >
-      {icon !== undefined ? <span className="pc-row-ico">{icon}</span> : null}
-      <span className="pc-row-text">
-        <span className="pc-row-label">{label}</span>
+      {icon !== undefined ? (
+        <span
+          className="pc-row-ico"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcRowIco)}
+        >
+          {icon}
+        </span>
+      ) : null}
+      <span
+        className="pc-row-text"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcRowText)}
+      >
+        <span
+          className="pc-row-label"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcRowLabel)}
+        >
+          {label}
+        </span>
         {meta !== undefined ? (
-          <span className="pc-row-meta">{meta}</span>
+          <span
+            className="pc-row-meta"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcRowMeta)}
+          >
+            {meta}
+          </span>
         ) : null}
       </span>
       {trailing !== undefined ? (
-        <span className="pc-row-trail">{trailing}</span>
+        <span
+          className="pc-row-trail"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcRowTrail)}
+        >
+          {trailing}
+        </span>
       ) : null}
     </div>
   )

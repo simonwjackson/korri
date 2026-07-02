@@ -6,6 +6,7 @@
  * CommunityStatPanel.
  */
 import { picoCommunityStatsAtom } from "../../data/pico-detail-atoms"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { Chip } from "../../ui/atoms/Chip"
 import { DetailHead } from "../../ui/molecules/DetailHead"
@@ -26,7 +27,10 @@ export function CommunityStats() {
             ]}
           >
             <DetailHead game={game} tags="COMMUNITY · PORTMASTER">
-              <div className="pcDet-chips">
+              <div
+                className="pcDet-chips"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetChips)}
+              >
                 <Chip>FANGAME</Chip>
                 <Chip>CO-OP</Chip>
                 <Chip>CONTROLLER</Chip>

@@ -26,9 +26,21 @@ export function PlayerStyleMatrix({
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.playerStyleMatrix)}
     >
       {ROWS.map(row => (
-        <div className="pcMp-styles-row" key={row.rep}>
-          <div className="pcMp-styles-label">{row.label}</div>
-          <div className="pcMp-row">
+        <div
+          className="pcMp-styles-row"
+          key={row.rep}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpStylesRow)}
+        >
+          <div
+            className="pcMp-styles-label"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpStylesLabel)}
+          >
+            {row.label}
+          </div>
+          <div
+            className="pcMp-row"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpRow)}
+          >
             {players.map(player => (
               <Player key={player.id} player={player} rep={row.rep} />
             ))}

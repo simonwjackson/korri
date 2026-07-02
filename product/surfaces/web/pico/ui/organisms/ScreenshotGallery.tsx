@@ -22,20 +22,38 @@ export function ScreenshotGallery({
       className="pcDet-gallery"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.screenshotGallery)}
     >
-      <div className="pcDet-shot">
-        <div className="pcDet-shot-art">
+      <div
+        className="pcDet-shot"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetShot)}
+      >
+        <div
+          className="pcDet-shot-art"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetShotArt)}
+        >
           <GameCartUnmarked game={game} />
         </div>
-        <div className="pcDet-shot-cap">
+        <div
+          className="pcDet-shot-cap"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetShotCap)}
+        >
           <Title size={-1}>{game.title}</Title>
-          <span className="pc-dim">SCREENSHOT 2 / 5 · WORLD 1-1</span>
+          <span
+            className="pc-dim"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dim)}
+          >
+            SCREENSHOT 2 / 5 · WORLD 1-1
+          </span>
         </div>
       </div>
-      <div className="pcDet-strip">
+      <div
+        className="pcDet-strip"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetStrip)}
+      >
         {shots.slice(0, 5).map((shot, index) => (
           <div
             key={shot.id}
             className={`pc-art sm pcDet-thumb ${index === 1 ? "sel" : ""}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcArt)}
           >
             <GameCartUnmarked game={shot} />
           </div>

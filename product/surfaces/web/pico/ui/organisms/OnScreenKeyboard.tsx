@@ -20,9 +20,17 @@ export function OnScreenKeyboard() {
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.onScreenKeyboard)}
     >
       {KEY_ROWS.map(row => (
-        <div key={row} className="pcLib-keyrow">
+        <div
+          key={row}
+          className="pcLib-keyrow"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLibKeyrow)}
+        >
           {[...row].map(char => (
-            <span key={char} className="pcLib-key">
+            <span
+              key={char}
+              className="pcLib-key"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLibKey)}
+            >
               {char}
             </span>
           ))}

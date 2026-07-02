@@ -24,9 +24,20 @@ export function FailureList({
         <span
           key={failure.kind}
           className={`pcSes-fail ${failure.kind === "moonlight-failed" ? "active" : ""}`}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSesFail)}
         >
-          <b className="pcSes-fail-title">{failure.title}</b>
-          <span className="pcSes-fail-detail">{failure.detail}</span>
+          <b
+            className="pcSes-fail-title"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSesFailTitle)}
+          >
+            {failure.title}
+          </b>
+          <span
+            className="pcSes-fail-detail"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSesFailDetail)}
+          >
+            {failure.detail}
+          </span>
         </span>
       ))}
     </div>

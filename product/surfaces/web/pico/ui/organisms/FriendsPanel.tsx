@@ -26,16 +26,29 @@ export function FriendsPanel() {
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.friendsPanel)}
     >
       {FRIENDS.map(friend => (
-        <div key={friend.id} className={`pcFr-row ${friend.status}`}>
-          <span className={`pcMp-pres ${friend.status}`} />
-          <div className="pcFr-text">
+        <div
+          key={friend.id}
+          className={`pcFr-row ${friend.status}`}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFrRow)}
+        >
+          <span
+            className={`pcMp-pres ${friend.status}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpPres)}
+          />
+          <div
+            className="pcFr-text"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFrText)}
+          >
             <b>{friend.name}</b>
             <span>
               {friend.playing ? `playing ${friend.playing}` : friend.status}
             </span>
           </div>
           {friend.status !== "offline" ? (
-            <span className="pcFr-cta">
+            <span
+              className="pcFr-cta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFrCta)}
+            >
               {friend.playing ? "JOIN" : "INVITE"}
             </span>
           ) : null}

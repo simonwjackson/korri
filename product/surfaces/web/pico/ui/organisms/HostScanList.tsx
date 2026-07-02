@@ -23,12 +23,15 @@ export function HostScanList({
     >
       <Spinner />
       <Title size={1}>SNIFFING OUT HOSTS…</Title>
-      <div className="pc-sub">poking around 192.168.1.0/24 for friends</div>
+      <div className="pc-sub" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.sub)}>
+        poking around 192.168.1.0/24 for friends
+      </div>
       <List>
         {hosts.slice(0, 2).map((host, index) => (
           <div
             key={host.id}
             className={`pcMd-fade ${index === 0 ? "in" : "in-late"}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdFade)}
           >
             <Row
               icon="▤"

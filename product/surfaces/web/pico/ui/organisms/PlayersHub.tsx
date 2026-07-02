@@ -34,10 +34,16 @@ export function PlayersHub({
         {game?.art ? (
           <PicoArtImage src={game.art} className="pcMp-hub-art" />
         ) : null}
-        <div className="pcMp-hub-session-info">
+        <div
+          className="pcMp-hub-session-info"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpHubSessionInfo)}
+        >
           <Dim>ACTIVE SESSION</Dim>
           <Title size={1}>{game?.title ?? "—"}</Title>
-          <div className="pcMp-row">
+          <div
+            className="pcMp-row"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpRow)}
+          >
             {active.map(player => (
               <Player key={player.id} player={player} rep="avatar" />
             ))}
@@ -48,10 +54,17 @@ export function PlayersHub({
         </div>
       </Card>
 
-      <div className="pcMp-hub-cols">
+      <div
+        className="pcMp-hub-cols"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpHubCols)}
+      >
         <Card title="THIS DEVICE & SEATS" className="pcMp-hub-card">
           {players.map(player => (
-            <div key={player.id} className="pcMp-hub-seat">
+            <div
+              key={player.id}
+              className="pcMp-hub-seat"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpHubSeat)}
+            >
               <Player player={player} rep="pad" />
               <Dim>{player.controller}</Dim>
             </div>
@@ -59,9 +72,21 @@ export function PlayersHub({
         </Card>
         <Card title="FRIENDS ONLINE" className="pcMp-hub-card">
           {friends.slice(0, 4).map(friend => (
-            <div key={friend.id} className="pcMp-friend">
-              <span className={`pcMp-pres ${friend.status}`} />
-              <span className="pcMp-friend-name">{friend.name}</span>
+            <div
+              key={friend.id}
+              className="pcMp-friend"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpFriend)}
+            >
+              <span
+                className={`pcMp-pres ${friend.status}`}
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpPres)}
+              />
+              <span
+                className="pcMp-friend-name"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpFriendName)}
+              >
+                {friend.name}
+              </span>
               <Dim>{friend.playing ?? friend.status}</Dim>
             </div>
           ))}

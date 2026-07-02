@@ -28,12 +28,28 @@ export function HostCardList({
             key={host.id}
             className={`pcMd-host ${index === 0 ? "sel" : ""} ${host.status === "offline" ? "off" : ""}`}
           >
-            <div className="pcMd-host-head">
-              <span className="pcMd-host-name">{host.name}</span>
+            <div
+              className="pcMd-host-head"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdHostHead)}
+            >
+              <span
+                className="pcMd-host-name"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdHostName)}
+              >
+                {host.name}
+              </span>
               <HostBadge status={host.status} />
             </div>
-            <div className="pcMd-host-meta">
-              <span className="pcMd-host-addr">{host.addr}</span>
+            <div
+              className="pcMd-host-meta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdHostMeta)}
+            >
+              <span
+                className="pcMd-host-addr"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdHostAddr)}
+              >
+                {host.addr}
+              </span>
               <Stat
                 label="ms"
                 value={host.latencyMs === null ? "—" : host.latencyMs}
@@ -42,7 +58,10 @@ export function HostCardList({
           </Card>
         ))}
       </div>
-      <div className="pcMd-host-cta">
+      <div
+        className="pcMd-host-cta"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdHostCta)}
+      >
         <Btn kind="primary">
           <Icon name="play" /> CONNECT
         </Btn>

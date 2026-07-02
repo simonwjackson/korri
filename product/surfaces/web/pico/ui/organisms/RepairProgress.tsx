@@ -34,11 +34,22 @@ export function RepairProgress({ target }: { readonly target: PicoGame }) {
       <Title size={1}>VERIFYING FILES</Title>
       <Sub>{target.title}</Sub>
       <Progress pct={80} />
-      <div className="pc-dim">4 / 5 FILES VALIDATED</div>
+      <div className="pc-dim" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dim)}>
+        4 / 5 FILES VALIDATED
+      </div>
       <Card title="FILES" className="pcAcq-checklist">
         {REPAIR_FILES.map(file => (
-          <div key={file.name} className={`pcAcq-file ${file.state}`}>
-            <span className="pcAcq-file-name">{file.name}</span>
+          <div
+            key={file.name}
+            className={`pcAcq-file ${file.state}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqFile)}
+          >
+            <span
+              className="pcAcq-file-name"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqFileName)}
+            >
+              {file.name}
+            </span>
             <Badge tone={file.state === "ok" ? "good" : "bad"}>
               {file.state === "ok" ? "OK" : "REPAIRING"}
             </Badge>

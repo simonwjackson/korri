@@ -20,12 +20,21 @@ export function MiniHome({
       className="pcHome"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.miniHome)}
     >
-      <div className="pcHome-title">CONTINUE</div>
-      <div className="pcHome-grid">
+      <div
+        className="pcHome-title"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcHomeTitle)}
+      >
+        CONTINUE
+      </div>
+      <div
+        className="pcHome-grid"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcHomeGrid)}
+      >
         {games.slice(0, 10).map((game, index) => (
           <div
             key={game.id}
             className={`pcHome-cart ${index === focusIndex ? "on" : ""}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcHomeCart)}
           >
             <PicoCartUnmarked game={game} />
           </div>

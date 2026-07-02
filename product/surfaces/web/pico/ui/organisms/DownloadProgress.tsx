@@ -23,7 +23,10 @@ export function DownloadProgress({ target }: { readonly target: PicoGame }) {
       <Title size={1}>DOWNLOADING</Title>
       <Sub>{target.title}</Sub>
       <Progress pct={62} />
-      <div className="pcAcq-stats">
+      <div
+        className="pcAcq-stats"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqStats)}
+      >
         <Stat label="DONE" value="154 / 248 MB" />
         <Stat label="SPEED" value="6.4 MB/s" />
         <Stat label="ETA" value="0:15" />

@@ -24,21 +24,46 @@ export function FiltersPanel() {
       className="pcFil"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.filtersPanel)}
     >
-      <div className="pcFil-section">SYSTEMS</div>
-      <div className="pcFil-list">
+      <div
+        className="pcFil-section"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFilSection)}
+      >
+        SYSTEMS
+      </div>
+      <div
+        className="pcFil-list"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFilList)}
+      >
         {SYSTEMS.map((system, index) => (
-          <div key={system} className={`pcFil-item ${index === 0 ? "on" : ""}`}>
+          <div
+            key={system}
+            className={`pcFil-item ${index === 0 ? "on" : ""}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFilItem)}
+          >
             {system}
           </div>
         ))}
       </div>
-      <div className="pcFil-section">GENRE</div>
-      <div className="pcFil-chips">
+      <div
+        className="pcFil-section"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFilSection)}
+      >
+        GENRE
+      </div>
+      <div
+        className="pcFil-chips"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFilChips)}
+      >
         {["ACTION", "PUZZLE", "RPG", "RACING", "CO-OP"].map(genre => (
           <Chip key={genre}>{genre}</Chip>
         ))}
       </div>
-      <div className="pcFil-section">SORT</div>
+      <div
+        className="pcFil-section"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFilSection)}
+      >
+        SORT
+      </div>
       <Opt value="RECENT" />
     </div>
   )

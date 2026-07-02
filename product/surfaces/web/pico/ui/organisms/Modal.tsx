@@ -19,11 +19,25 @@ export function Modal({
 }) {
   return (
     <div className="pc-root" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.modal)}>
-      <div className="pc-gamebg" />
-      <div className="pc-modal">
-        <div className="pc-modal-panel">
+      <div
+        className="pc-gamebg"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcGamebg)}
+      />
+      <div
+        className="pc-modal"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcModal)}
+      >
+        <div
+          className="pc-modal-panel"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcModalPanel)}
+        >
           {title !== undefined ? (
-            <div className="pc-modal-title">{title}</div>
+            <div
+              className="pc-modal-title"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcModalTitle)}
+            >
+              {title}
+            </div>
           ) : null}
           {children}
         </div>

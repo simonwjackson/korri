@@ -24,9 +24,15 @@ export function PlayerToast({
     >
       <KeyArtBackdrop src={game?.heroUrl} className="pcMp-backdrop" />
       {joiner ? (
-        <div className={`pcMp-toast p${joiner.seat}`}>
+        <div
+          className={`pcMp-toast p${joiner.seat}`}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpToast)}
+        >
           <Player player={{ ...joiner, status: "ready" }} rep="mascot" />
-          <div className="pcMp-toast-text">
+          <div
+            className="pcMp-toast-text"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpToastText)}
+          >
             <b>
               P{joiner.seat} · {joiner.name}
             </b>

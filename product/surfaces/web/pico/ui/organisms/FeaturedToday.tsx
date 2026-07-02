@@ -24,27 +24,56 @@ export function FeaturedToday({
       className="pcFut-feat"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.featuredToday)}
     >
-      <div className="pcFut-feat-top">
-        <div className="pc-art pcFut-feat-art">
+      <div
+        className="pcFut-feat-top"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeatTop)}
+      >
+        <div
+          className="pc-art pcFut-feat-art"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcArt)}
+        >
           <GameCartUnmarked game={hero} />
         </div>
-        <div className="pcFut-feat-info">
-          <div className="pc-sub">GAME OF THE DAY</div>
+        <div
+          className="pcFut-feat-info"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeatInfo)}
+        >
+          <div
+            className="pc-sub"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.sub)}
+          >
+            GAME OF THE DAY
+          </div>
           <Title size={2}>{hero.title}</Title>
-          <div className="pcFut-feat-tags">
+          <div
+            className="pcFut-feat-tags"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeatTags)}
+          >
             {hero.genre.toUpperCase()} · {hero.developer.toUpperCase()}
           </div>
-          <p className="pcFut-feat-blurb">
+          <p
+            className="pcFut-feat-blurb"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeatBlurb)}
+          >
             Today's pick, hand-dusted just for you. Tight controls, sneaky
             shortcuts, and a soundtrack that lives rent-free in your skull.
           </p>
-          <div className="pcFut-feat-why">
+          <div
+            className="pcFut-feat-why"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeatWhy)}
+          >
             <Badge tone="accent">WHY?</Badge>
-            <span className="pc-dim">
+            <span
+              className="pc-dim"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dim)}
+            >
               3 friends played it this week · trending in PORTMASTER
             </span>
           </div>
-          <div className="pcFut-feat-actions">
+          <div
+            className="pcFut-feat-actions"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeatActions)}
+          >
             <Btn kind="primary" state="selected">
               <Icon name="play" /> PLAY
             </Btn>
@@ -54,11 +83,26 @@ export function FeaturedToday({
           </div>
         </div>
       </div>
-      <div className="pcFut-feat-more">
-        <div className="pcFut-group-h">MORE LIKE THIS</div>
-        <div className="pcFut-feat-rail">
+      <div
+        className="pcFut-feat-more"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeatMore)}
+      >
+        <div
+          className="pcFut-group-h"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutGroupH)}
+        >
+          MORE LIKE THIS
+        </div>
+        <div
+          className="pcFut-feat-rail"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeatRail)}
+        >
           {more.map(game => (
-            <div key={game.id} className="pc-art sm pcFut-feat-thumb">
+            <div
+              key={game.id}
+              className="pc-art sm pcFut-feat-thumb"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcArt)}
+            >
               <GameCartUnmarked game={game} />
             </div>
           ))}

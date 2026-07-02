@@ -27,18 +27,27 @@ export function DownloadConfirmCard({
       className="pcAcq-confirm"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.downloadConfirmCard)}
     >
-      <div className="pc-art">
+      <div className="pc-art" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcArt)}>
         <GameCartUnmarked game={target} />
       </div>
-      <div className="pcAcq-confirm-body">
+      <div
+        className="pcAcq-confirm-body"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqConfirmBody)}
+      >
         <Title size={1}>{target.title}</Title>
         <Sub>{target.genre}</Sub>
-        <div className="pcAcq-meta">
+        <div
+          className="pcAcq-meta"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqMeta)}
+        >
           <Stat label="SIZE" value={size} />
           <Stat label="SOURCE" value="PORTMASTER" />
           <Stat label="RUNTIME" value={runtime} />
         </div>
-        <div className="pc-hero-actions">
+        <div
+          className="pc-hero-actions"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcHeroActions)}
+        >
           <Btn kind="primary" state="selected">
             <Icon name="download" /> DOWNLOAD
           </Btn>

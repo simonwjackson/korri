@@ -19,20 +19,46 @@ export function AttractLoop({
       className="pcPer-attract"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.attractLoop)}
     >
-      <div className="pcPer-stars" />
-      <div className="pcPer-attract-mid">
-        <div className="pcPer-logo">PICO</div>
-        <div className="pcPer-attract-rail">
+      <div
+        className="pcPer-stars"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerStars)}
+      />
+      <div
+        className="pcPer-attract-mid"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerAttractMid)}
+      >
+        <div
+          className="pcPer-logo"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerLogo)}
+        >
+          PICO
+        </div>
+        <div
+          className="pcPer-attract-rail"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerAttractRail)}
+        >
           {[...carts, ...carts].map((game, index) => (
-            <div className="pcPer-attract-cart" key={`${game.id}-${index}`}>
+            <div
+              className="pcPer-attract-cart"
+              key={`${game.id}-${index}`}
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerAttractCart)}
+            >
               <GameCartUnmarked game={game} />
             </div>
           ))}
         </div>
       </div>
-      <div className="pcPer-hiscore">
+      <div
+        className="pcPer-hiscore"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerHiscore)}
+      >
         <span>HI-SCORE 999999</span>
-        <span className="pcPer-press">PRESS START</span>
+        <span
+          className="pcPer-press"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerPress)}
+        >
+          PRESS START
+        </span>
       </div>
     </div>
   )

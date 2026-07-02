@@ -22,16 +22,35 @@ export function InviteList({
         <div
           key={friend.id}
           className={`pcMp-invite-row ${index === 0 ? "sel" : ""} ${friend.status === "offline" ? "off" : ""}`}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpInviteRow)}
         >
-          <span className={`pcMp-pres ${friend.status}`} />
-          <span className="pcMp-invite-name">{friend.name}</span>
+          <span
+            className={`pcMp-pres ${friend.status}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpPres)}
+          />
+          <span
+            className="pcMp-invite-name"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpInviteName)}
+          >
+            {friend.name}
+          </span>
           <Dim>
             {friend.playing ? `playing ${friend.playing}` : friend.status}
           </Dim>
           {friend.status === "offline" ? (
-            <span className="pcMp-invite-cta off">—</span>
+            <span
+              className="pcMp-invite-cta off"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpInviteCta)}
+            >
+              —
+            </span>
           ) : (
-            <span className="pcMp-invite-cta">INVITE</span>
+            <span
+              className="pcMp-invite-cta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpInviteCta)}
+            >
+              INVITE
+            </span>
           )}
         </div>
       ))}

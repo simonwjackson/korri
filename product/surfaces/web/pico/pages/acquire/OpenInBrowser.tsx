@@ -3,6 +3,7 @@
  * Non-final download that needs the browser. Reads `picoAcquireTargetAtom`.
  */
 import { picoAcquireTargetAtom } from "../../data/pico-detail-atoms"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { Badge } from "../../ui/atoms/Badge"
 import { Btn } from "../../ui/atoms/Btn"
@@ -31,7 +32,10 @@ export function OpenInBrowser() {
             <Btn kind="primary" state="selected">
               ↗ OPEN IN BROWSER
             </Btn>
-            <code className="pcAcq-url">
+            <code
+              className="pcAcq-url"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqUrl)}
+            >
               https://portmaster.games/get/{target.id}
             </code>
           </Hero>

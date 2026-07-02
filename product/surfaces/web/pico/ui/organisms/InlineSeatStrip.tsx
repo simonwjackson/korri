@@ -23,19 +23,29 @@ export function InlineSeatStrip({
       className="pcMp-inline"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.inlineSeatStrip)}
     >
-      <div className="pcMp-inline-rail">
+      <div
+        className="pcMp-inline-rail"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpInlineRail)}
+      >
         {games.slice(0, 5).map((game, index) => (
           <div
             key={game.id}
             className={`pcMp-inline-cart ${index === 1 ? "on" : ""}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpInlineCart)}
           >
             <GameCartUnmarked game={game} />
           </div>
         ))}
       </div>
-      <div className="pcMp-strip">
+      <div
+        className="pcMp-strip"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpStrip)}
+      >
         <Dim>IN THIS SESSION</Dim>
-        <div className="pcMp-strip-players">
+        <div
+          className="pcMp-strip-players"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpStripPlayers)}
+        >
           {players.map(player => (
             <Player key={player.id} player={player} rep="mascot" />
           ))}

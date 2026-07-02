@@ -5,6 +5,7 @@
 import { picoHeroAtom } from "../../data/pico-library-atoms"
 import { PicoIcon } from "../../PicoIcon"
 import { PicoMascot } from "../../PicoMascot"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { MomentHero } from "../../ui/organisms/MomentHero"
 
@@ -23,14 +24,23 @@ export function WelcomeBack() {
             game={game}
             kicker="▸ WELCOME BACK"
           >
-            <div className="pcM-greet">
+            <div
+              className="pcM-greet"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMGreet)}
+            >
               <PicoMascot state="happy" className="pcM-greet-pixl" />
               <span>it&apos;s been 3 days — your crew missed you</span>
             </div>
-            <div className="pcM-meta">
+            <div
+              className="pcM-meta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMMeta)}
+            >
               WHILE YOU WERE GONE · 8BITBEN BEAT YOUR SCORE
             </div>
-            <span className="pcM-cta">
+            <span
+              className="pcM-cta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMCta)}
+            >
               <PicoIcon name="play" /> JUMP BACK IN
             </span>
           </MomentHero>

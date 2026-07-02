@@ -4,6 +4,7 @@
  */
 import { picoHeroAtom } from "../../data/pico-library-atoms"
 import { PicoIcon } from "../../PicoIcon"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { MomentHero } from "../../ui/organisms/MomentHero"
 
@@ -22,16 +23,37 @@ export function Resume() {
             game={game}
             kicker="▸ RIGHT WHERE YOU LEFT OFF"
           >
-            <div className="pcM-save">
-              <span className="pcM-slot">SAVE · CITY OF TEARS</span>
-              <span className="pcM-meta">
+            <div
+              className="pcM-save"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMSave)}
+            >
+              <span
+                className="pcM-slot"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMSlot)}
+              >
+                SAVE · CITY OF TEARS
+              </span>
+              <span
+                className="pcM-meta"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMMeta)}
+              >
                 68% · {game.lastPlayedLabel ?? "recently"}
               </span>
             </div>
-            <div className="pcM-progress">
-              <div className="pcM-progress-fill" style={{ width: "68%" }} />
+            <div
+              className="pcM-progress"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMProgress)}
+            >
+              <div
+                className="pcM-progress-fill"
+                style={{ width: "68%" }}
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMProgressFill)}
+              />
             </div>
-            <span className="pcM-cta">
+            <span
+              className="pcM-cta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMCta)}
+            >
               <PicoIcon name="play" /> CONTINUE
             </span>
           </MomentHero>

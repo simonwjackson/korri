@@ -43,10 +43,24 @@ export function RemapList() {
         <div
           key={row.action}
           className={`pcIg-remap-row ${row._tag === "Listening" ? "listen" : ""}`}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgRemapRow)}
         >
-          <span className="pcIg-remap-act">{row.action}</span>
-          <span className="pcIg-remap-arrow">→</span>
-          <span className="pcIg-remap-btn">
+          <span
+            className="pcIg-remap-act"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgRemapAct)}
+          >
+            {row.action}
+          </span>
+          <span
+            className="pcIg-remap-arrow"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgRemapArrow)}
+          >
+            →
+          </span>
+          <span
+            className="pcIg-remap-btn"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgRemapBtn)}
+          >
             {row._tag === "Listening" ? (
               <>
                 press any button… <Spinner />

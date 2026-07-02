@@ -48,13 +48,17 @@ export function ReactiveStage({
       <div
         className="pcPer-react-pixl"
         style={{ transform: `translateX(${gaze * 16}%)` }}
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerReactPixl)}
       >
         <PicoMascot
           state={state._tag === "Launching" ? "happy" : "idle"}
           className="pcMascot-lg"
         />
       </div>
-      <div className="pcPer-react-rail">
+      <div
+        className="pcPer-react-rail"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerReactRail)}
+      >
         {games.map((game, index) => (
           <button
             type="button"
@@ -64,21 +68,40 @@ export function ReactiveStage({
             onFocus={() => onPick(index)}
             onClick={onLaunch}
             style={cartReset}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerReactCart)}
           >
             <GameCartUnmarked game={game} />
           </button>
         ))}
       </div>
-      <div className="pcPer-react-cap">
-        <span className="pcPer-react-name">{hero?.title ?? "—"}</span>
+      <div
+        className="pcPer-react-cap"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerReactCap)}
+      >
+        <span
+          className="pcPer-react-name"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerReactName)}
+        >
+          {hero?.title ?? "—"}
+        </span>
         <Dim>
           {hero ? `${hero.genre} · ${hero.developer}` : ""} — hover a cart
         </Dim>
       </div>
       {state._tag === "Launching" ? (
-        <div className="pcPer-react-crt" key={state.hero.id}>
-          <div className="pcPer-react-crt-line" />
-          <div className="pcPer-react-crt-msg">
+        <div
+          className="pcPer-react-crt"
+          key={state.hero.id}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerReactCrt)}
+        >
+          <div
+            className="pcPer-react-crt-line"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerReactCrtLine)}
+          />
+          <div
+            className="pcPer-react-crt-msg"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerReactCrtMsg)}
+          >
             LAUNCHING {state.hero.title}
           </div>
         </div>

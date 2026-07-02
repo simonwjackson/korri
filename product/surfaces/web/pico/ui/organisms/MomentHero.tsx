@@ -33,7 +33,7 @@ export function MomentHero({
       className="pad-0"
       partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.momentHero)}
     >
-      <div className="pcM">
+      <div className="pcM" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcM)}>
         {backdrop ? (
           <PicoArtImage
             src={backdrop}
@@ -42,8 +42,16 @@ export function MomentHero({
             className="pcM-bg"
           />
         ) : null}
-        <div className="pcM-inner">
-          <div className="pcM-kicker">{kicker}</div>
+        <div
+          className="pcM-inner"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMInner)}
+        >
+          <div
+            className="pcM-kicker"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMKicker)}
+          >
+            {kicker}
+          </div>
           {game.logoUrl ? (
             <PicoArtImage
               src={game.logoUrl}
@@ -52,7 +60,12 @@ export function MomentHero({
               className="pcM-logo"
             />
           ) : (
-            <h1 className="pc-title pc-t3 pcM-title">{game.title}</h1>
+            <h1
+              className="pc-title pc-t3 pcM-title"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.title)}
+            >
+              {game.title}
+            </h1>
           )}
           {children}
         </div>

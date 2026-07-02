@@ -21,19 +21,33 @@ export function UpdatePanel({ target }: { readonly target: PicoGame }) {
     >
       <Title size={1}>UPDATE AVAILABLE</Title>
       <Sub>{target.title}</Sub>
-      <div className="pcAcq-versions">
+      <div
+        className="pcAcq-versions"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqVersions)}
+      >
         <Stat label="CURRENT" value="v1.3.0" />
-        <span className="pcAcq-arrow">▸</span>
+        <span
+          className="pcAcq-arrow"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqArrow)}
+        >
+          ▸
+        </span>
         <Stat label="NEW" value="v1.4.0" />
       </div>
       <Card title="CHANGELOG" className="pcAcq-changelog">
-        <ul className="pcAcq-notes">
+        <ul
+          className="pcAcq-notes"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqNotes)}
+        >
           <li>Fixed FEX crash on level 3 boss</li>
           <li>Added 60 Hz mode + rebindable pause</li>
           <li>Smaller install footprint</li>
         </ul>
       </Card>
-      <div className="pc-hero-actions">
+      <div
+        className="pc-hero-actions"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcHeroActions)}
+      >
         <Btn kind="primary" state="selected">
           <Icon name="download" /> UPDATE
         </Btn>

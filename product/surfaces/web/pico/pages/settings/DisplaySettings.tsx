@@ -1,6 +1,8 @@
 /**
  * pico surface. ATOMIC LAYER: page. Display & video (static).
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { BlockBar } from "../../ui/atoms/BlockBar"
 import { Toggle } from "../../ui/atoms/Toggle"
 import { Opt } from "../../ui/molecules/Opt"
@@ -17,7 +19,10 @@ export function DisplaySettings() {
         { key: "b", label: "BACK" },
       ]}
     >
-      <div className="pcSet-list">
+      <div
+        className="pcSet-list"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSetList)}
+      >
         <SettingRow label="Brightness" state="selected">
           <BlockBar level={6} max={10} />
         </SettingRow>

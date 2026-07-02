@@ -12,8 +12,18 @@ export function SearchQuery({ text }: { readonly text: string }) {
       className="pcLib-query"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.searchQuery)}
     >
-      <span className="pcLib-query-text">{text}</span>
-      <span className="pcLib-caret">▌</span>
+      <span
+        className="pcLib-query-text"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLibQueryText)}
+      >
+        {text}
+      </span>
+      <span
+        className="pcLib-caret"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLibCaret)}
+      >
+        ▌
+      </span>
     </div>
   )
 }

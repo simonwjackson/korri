@@ -8,6 +8,7 @@
  */
 import { picoHeroAtom } from "../../data/pico-library-atoms"
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { LastPlayedHero } from "../../ui/organisms/LastPlayedHero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
@@ -27,7 +28,12 @@ function LastPlayedBody({ game }: { readonly game: PicoGame | undefined }) {
         title="PICO ▸ CONTINUE"
         hints={[{ key: "b", label: "BACK" }]}
       >
-        <div className="pcLast-empty">Nothing played yet.</div>
+        <div
+          className="pcLast-empty"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLastEmpty)}
+        >
+          Nothing played yet.
+        </div>
       </ScreenShell>
     )
   }
@@ -45,7 +51,10 @@ function LastPlayedBody({ game }: { readonly game: PicoGame | undefined }) {
       ]}
       className="pad-0"
     >
-      <div className="pcLast">
+      <div
+        className="pcLast"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLast)}
+      >
         <LastPlayedHero game={game} backdrop={backdrop} meta={meta} />
       </div>
     </ScreenShell>

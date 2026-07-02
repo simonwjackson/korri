@@ -23,8 +23,15 @@ export function RunningGame({ game }: { readonly game: PicoGame }) {
           className="pcNow-bg"
         />
       ) : null}
-      <div className="pcNow-tag">
-        <span className="pcNow-dot" /> RUNNING · {game.title.toUpperCase()}
+      <div
+        className="pcNow-tag"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcNowTag)}
+      >
+        <span
+          className="pcNow-dot"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcNowDot)}
+        />{" "}
+        RUNNING · {game.title.toUpperCase()}
       </div>
     </div>
   )

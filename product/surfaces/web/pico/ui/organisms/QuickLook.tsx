@@ -15,11 +15,22 @@ export function QuickLook({ game }: { readonly game: PicoGame }) {
   return (
     <div className="pcQL" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.quickLook)}>
       {game.art ? <PicoArtImage src={game.art} className="pcQL-art" /> : null}
-      <div className="pcQL-title">{game.title}</div>
-      <div className="pcQL-meta">
+      <div
+        className="pcQL-title"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcQLTitle)}
+      >
+        {game.title}
+      </div>
+      <div
+        className="pcQL-meta"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcQLMeta)}
+      >
         {game.genre.toUpperCase()} · {game.developer.toUpperCase()}
       </div>
-      <div className="pcQL-stats">
+      <div
+        className="pcQL-stats"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcQLStats)}
+      >
         <Stat label="played" value={game.playtimeLabel ?? "—"} />
         <Stat label="last" value={game.lastPlayedLabel ?? "new"} />
       </div>

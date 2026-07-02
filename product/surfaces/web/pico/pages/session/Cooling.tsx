@@ -1,6 +1,8 @@
 /**
  * pico surface. ATOMIC LAYER: page. Cooling down (static).
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
@@ -17,7 +19,12 @@ export function Cooling() {
         title="COOLING DOWN"
         message="The host is catching its breath before the next launch — keeps your streams nice and steady."
       >
-        <div className="pcSes-countdown">READY IN 0:08</div>
+        <div
+          className="pcSes-countdown"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSesCountdown)}
+        >
+          READY IN 0:08
+        </div>
       </Hero>
     </ScreenShell>
   )

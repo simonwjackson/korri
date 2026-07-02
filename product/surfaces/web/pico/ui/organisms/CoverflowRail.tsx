@@ -25,6 +25,7 @@ export function CoverflowRail({
         <div
           key={game.id}
           className={`pcShow-rail-cart ${index === activeIndex ? "on" : ""}`}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcShowRailCart)}
         >
           <GameCartUnmarked game={game} />
         </div>

@@ -21,7 +21,12 @@ export function Card({
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.card)}
     >
       {title !== undefined ? (
-        <div className="pc-card-title">{title}</div>
+        <div
+          className="pc-card-title"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcCardTitle)}
+        >
+          {title}
+        </div>
       ) : null}
       {children}
     </div>

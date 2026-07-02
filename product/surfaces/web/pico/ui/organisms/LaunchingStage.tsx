@@ -16,13 +16,21 @@ export function LaunchingStage({ game }: { readonly game: PicoGame }) {
       className="pcSes-launch"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.launchingStage)}
     >
-      <div className="pc-art">
+      <div className="pc-art" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcArt)}>
         <GameCartUnmarked game={game} />
       </div>
       <Title size={1}>{game.title}</Title>
-      <div className="pcSes-launch-status">
+      <div
+        className="pcSes-launch-status"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSesLaunchStatus)}
+      >
         <Spinner />
-        <span className="pc-sub">SPINNING UP THE STREAM…</span>
+        <span
+          className="pc-sub"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.sub)}
+        >
+          SPINNING UP THE STREAM…
+        </span>
       </div>
     </div>
   )

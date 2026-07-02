@@ -29,8 +29,16 @@ export function LastPlayedHero({
         className="pcLast-bg"
         partAttrs={picoDesignPartAttrs(PICO_DESIGN_PARTS.lastPlayedHero)}
       />
-      <div className="pcLast-inner">
-        <div className="pcLast-kicker">▸ JUMP BACK IN</div>
+      <div
+        className="pcLast-inner"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLastInner)}
+      >
+        <div
+          className="pcLast-kicker"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLastKicker)}
+        >
+          ▸ JUMP BACK IN
+        </div>
         <GameLogo
           logoUrl={game.logoUrl}
           title={game.title}
@@ -39,7 +47,14 @@ export function LastPlayedHero({
           titleClassName="pcLast-title"
           titleSize={3}
         />
-        {meta ? <div className="pcLast-meta">LAST PLAYED {meta}</div> : null}
+        {meta ? (
+          <div
+            className="pcLast-meta"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLastMeta)}
+          >
+            LAST PLAYED {meta}
+          </div>
+        ) : null}
         <PlayCta label="CONTINUE" className="pcLast-cta" />
       </div>
     </>

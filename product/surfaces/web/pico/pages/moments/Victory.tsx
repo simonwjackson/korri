@@ -4,6 +4,7 @@
  */
 import { picoGamesAtom } from "../../data/pico-library-atoms"
 import { PicoIcon } from "../../PicoIcon"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { MomentHero } from "../../ui/organisms/MomentHero"
 
@@ -27,14 +28,30 @@ export function Victory() {
             game={game}
             kicker="★ YOU BEAT IT ★"
           >
-            <div className="pcM-badge">
+            <div
+              className="pcM-badge"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMBadge)}
+            >
               <PicoIcon name="star" /> NO HIT
-              <span className="pcM-rarity">EPIC</span>
+              <span
+                className="pcM-rarity"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMRarity)}
+              >
+                EPIC
+              </span>
             </div>
             {next ? (
-              <div className="pcM-next">NEXT UP · {next.title}</div>
+              <div
+                className="pcM-next"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMNext)}
+              >
+                NEXT UP · {next.title}
+              </div>
             ) : null}
-            <span className="pcM-cta">
+            <span
+              className="pcM-cta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMCta)}
+            >
               <PicoIcon name="play" />{" "}
               {next ? `PLAY ${next.title.toUpperCase()}` : "CONTINUE"}
             </span>

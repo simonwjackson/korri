@@ -1,6 +1,8 @@
 /**
  * pico surface. ATOMIC LAYER: page. Panic / fatal error (static).
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Btn } from "../../ui/atoms/Btn"
 import { Icon } from "../../ui/atoms/Icon"
 import { Card } from "../../ui/molecules/Card"
@@ -21,7 +23,10 @@ export function Panic() {
         message="The session manager hit a fatal error and had to stop. Your saves are safe."
       >
         <Card title="DIAGNOSTIC" className="pcSys-panic-card">
-          <code className="pcSys-code">
+          <code
+            className="pcSys-code"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSysCode)}
+          >
             sessiond: teardown failed (stage=teardown)
             <br />
             code 0x5F · korri-portal 2.4.1

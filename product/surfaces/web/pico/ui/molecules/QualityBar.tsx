@@ -24,13 +24,26 @@ export function QualityBar({
       className="pcIg-quality"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.qualityBar)}
     >
-      <span className="pcIg-quality-label">QUALITY</span>
-      <span className={`pcIg-quality-bar ${tone}`}>
+      <span
+        className="pcIg-quality-label"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgQualityLabel)}
+      >
+        QUALITY
+      </span>
+      <span
+        className={`pcIg-quality-bar ${tone}`}
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgQualityBar)}
+      >
         {SEGMENTS.slice(0, max).map((seg, index) => (
           <i key={seg} className={index < level ? "on" : ""} />
         ))}
       </span>
-      <span className="pcIg-quality-tag">{tag}</span>
+      <span
+        className="pcIg-quality-tag"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgQualityTag)}
+      >
+        {tag}
+      </span>
     </div>
   )
 }

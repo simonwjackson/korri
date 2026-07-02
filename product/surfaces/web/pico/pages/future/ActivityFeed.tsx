@@ -2,6 +2,8 @@
  * pico surface. ATOMIC LAYER: page.
  * Activity feed (static demo data).
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 const FEED: readonly {
@@ -57,25 +59,47 @@ export function ActivityFeed() {
         { key: "b", label: "BACK" },
       ]}
     >
-      <div className="pcFut-feed">
+      <div
+        className="pcFut-feed"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeed)}
+      >
         {FEED.map((item, index) => (
           <div
             key={`${item.actor}-${item.target}`}
             className={`pcFut-feed-row ${index === 0 ? "fresh" : ""}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeedRow)}
           >
             <span
               className={`pcFut-ava ${item.actorKind === "viewer" ? "you" : "on"}`}
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutAva)}
             >
               {item.actor.slice(0, 2)}
             </span>
-            <span className="pcFut-feed-text">
-              <span className="pcFut-feed-line">
+            <span
+              className="pcFut-feed-text"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeedText)}
+            >
+              <span
+                className="pcFut-feed-line"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutFeedLine)}
+              >
                 <b className={item.actorKind === "viewer" ? "pcFut-you" : ""}>
                   {item.actor}
                 </b>{" "}
-                {item.verb} <span className="pcFut-target">{item.target}</span>
+                {item.verb}{" "}
+                <span
+                  className="pcFut-target"
+                  {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutTarget)}
+                >
+                  {item.target}
+                </span>
               </span>
-              <span className="pc-dim pcFut-when">{item.when}</span>
+              <span
+                className="pc-dim pcFut-when"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dim)}
+              >
+                {item.when}
+              </span>
             </span>
           </div>
         ))}

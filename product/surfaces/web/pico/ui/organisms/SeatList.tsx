@@ -17,17 +17,38 @@ export function SeatList({ seats }: { readonly seats: readonly PicoSeat[] }) {
           icon="◉"
           label={seat.name}
           meta={
-            <span className="pcMd-seat-meta">
-              <span className="pcMd-seat-kind">{seat.kind}</span>
+            <span
+              className="pcMd-seat-meta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdSeatMeta)}
+            >
+              <span
+                className="pcMd-seat-kind"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdSeatKind)}
+              >
+                {seat.kind}
+              </span>
               {seat.battery !== null ? (
-                <span className="pcMd-seat-batt">▮ {seat.battery}%</span>
+                <span
+                  className="pcMd-seat-batt"
+                  {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdSeatBatt)}
+                >
+                  ▮ {seat.battery}%
+                </span>
               ) : (
-                <span className="pcMd-seat-batt off">— AC</span>
+                <span
+                  className="pcMd-seat-batt off"
+                  {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdSeatBatt)}
+                >
+                  — AC
+                </span>
               )}
             </span>
           }
           trailing={
-            <span className={`pcMd-active ${seat.active ? "on" : ""}`}>
+            <span
+              className={`pcMd-active ${seat.active ? "on" : ""}`}
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdActive)}
+            >
               {seat.active ? "ACTIVE" : "IDLE"}
             </span>
           }

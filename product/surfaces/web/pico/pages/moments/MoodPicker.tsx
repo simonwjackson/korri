@@ -6,6 +6,7 @@
 import { picoGamesAtom } from "../../data/pico-library-atoms"
 import type { PicoGame } from "../../fixtures"
 import { PicoArtImage } from "../../PicoArtImage"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
@@ -35,17 +36,30 @@ export function MoodPicker() {
             ]}
             className="pad-0"
           >
-            <div className="pcMood">
-              <div className="pcMood-kicker">
+            <div
+              className="pcMood"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMood)}
+            >
+              <div
+                className="pcMood-kicker"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMoodKicker)}
+              >
                 ▸ WHAT ARE YOU IN THE MOOD FOR?
               </div>
-              <div className="pcMood-tiles">
+              <div
+                className="pcMood-tiles"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMoodTiles)}
+              >
                 {tiles.map((tile, index) => (
                   <div
                     key={tile.label}
                     className={`pcMood-tile ${index === 1 ? "on" : ""}`}
+                    {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMoodTile)}
                   >
-                    <div className="pcMood-art">
+                    <div
+                      className="pcMood-art"
+                      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMoodArt)}
+                    >
                       {tile.game.art ? (
                         <PicoArtImage
                           src={tile.game.art}
@@ -53,7 +67,12 @@ export function MoodPicker() {
                         />
                       ) : null}
                     </div>
-                    <div className="pcMood-label">{tile.label}</div>
+                    <div
+                      className="pcMood-label"
+                      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMoodLabel)}
+                    >
+                      {tile.label}
+                    </div>
                   </div>
                 ))}
               </div>

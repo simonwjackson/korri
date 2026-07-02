@@ -5,6 +5,7 @@
  * composes ScreenShell + DetailHead + ReleaseList.
  */
 import { picoReleasePickerAtom } from "../../data/pico-detail-atoms"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { DetailHead } from "../../ui/molecules/DetailHead"
 import { ReleaseList } from "../../ui/organisms/ReleaseList"
@@ -27,7 +28,10 @@ export function ReleasePicker() {
               game={game}
               tags={`${game.genre.toUpperCase()} · ${game.developer.toUpperCase()}`}
             >
-              <p className="pcDet-note">
+              <p
+                className="pcDet-note"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetNote)}
+              >
                 This cart ships in a few flavors — pick the one you want to
                 boot.
               </p>

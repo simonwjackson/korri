@@ -26,7 +26,10 @@ export function LobbyArtStage({
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.lobbyArtStage)}
     >
       <KeyArtBackdrop src={game?.heroUrl} className="pcMp-backdrop" />
-      <div className="pcMp-lobbyA-head">
+      <div
+        className="pcMp-lobbyA-head"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpLobbyAHead)}
+      >
         <GameLogo
           logoUrl={game?.logoUrl}
           title={game?.title ?? "LOBBY"}
@@ -36,7 +39,10 @@ export function LobbyArtStage({
         />
         <Dim>WAITING FOR PLAYERS · {active.length}/4</Dim>
       </div>
-      <div className="pcMp-lobbyA-seats">
+      <div
+        className="pcMp-lobbyA-seats"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpLobbyASeats)}
+      >
         {players.map(player => (
           <Player key={player.id} player={player} rep="avatar" />
         ))}

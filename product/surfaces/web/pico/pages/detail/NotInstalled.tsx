@@ -5,6 +5,7 @@
  * Reads `picoDetailGameAtom` and composes ScreenShell + DetailHead + actions.
  */
 import { picoDetailGameAtom } from "../../data/pico-detail-atoms"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { Badge } from "../../ui/atoms/Badge"
 import { Btn } from "../../ui/atoms/Btn"
@@ -31,15 +32,24 @@ export function NotInstalled() {
               artTone="dim"
               tags={`${game.genre.toUpperCase()} · ${game.developer.toUpperCase()}`}
             >
-              <div className="pcDet-chips">
+              <div
+                className="pcDet-chips"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetChips)}
+              >
                 <Badge tone="info">NOT INSTALLED</Badge>
                 <Chip>104 MB</Chip>
               </div>
-              <p className="pcDet-note">
+              <p
+                className="pcDet-note"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetNote)}
+              >
                 You don't own this cart yet — grab it and it's good to go.
               </p>
             </DetailHead>
-            <div className="pcDet-actions">
+            <div
+              className="pcDet-actions"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetActions)}
+            >
               <Btn kind="primary" state="selected">
                 <Icon name="download" /> DOWNLOAD
               </Btn>

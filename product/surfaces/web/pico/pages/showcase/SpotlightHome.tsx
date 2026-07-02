@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react"
 import { picoGamesAtom } from "../../data/pico-library-atoms"
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { CoverflowRail } from "../../ui/organisms/CoverflowRail"
 import { SpotlightHero } from "../../ui/organisms/SpotlightHero"
@@ -55,7 +56,10 @@ function SpotlightHomeBody({
       ]}
       className="pad-0"
     >
-      <div className="pcShow-spot">
+      <div
+        className="pcShow-spot"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcShowSpot)}
+      >
         <SpotlightHero hero={hero} playState={playState} />
         <CoverflowRail games={games} activeIndex={index} />
       </div>

@@ -27,12 +27,23 @@ export function DetailHead({
       className="pcDet-head"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.detailHead)}
     >
-      <div className={`pc-art sm${artTone === "dim" ? " pcDet-dim" : ""}`}>
+      <div
+        className={`pc-art sm${artTone === "dim" ? " pcDet-dim" : ""}`}
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcArt)}
+      >
         <GameCartUnmarked game={game} />
       </div>
-      <div className="pcDet-head-info">
+      <div
+        className="pcDet-head-info"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetHeadInfo)}
+      >
         <Title size={1}>{game.title}</Title>
-        <div className="pcDet-tags">{tags}</div>
+        <div
+          className="pcDet-tags"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetTags)}
+        >
+          {tags}
+        </div>
         {children}
       </div>
     </div>

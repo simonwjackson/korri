@@ -22,14 +22,35 @@ const PLAYER_SUB: Record<PicoPlayer["status"], string> = {
 }
 
 function playerMark(player: PicoPlayer, rep: PlayerRep): ReactNode {
-  if (player.status === "open") return <span className="pcPlayer-open">+</span>
-  if (rep === "tag") return <span className="pcPlayer-tag">P{player.seat}</span>
+  if (player.status === "open")
+    return (
+      <span
+        className="pcPlayer-open"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPlayerOpen)}
+      >
+        +
+      </span>
+    )
+  if (rep === "tag")
+    return (
+      <span
+        className="pcPlayer-tag"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPlayerTag)}
+      >
+        P{player.seat}
+      </span>
+    )
   if (rep === "pad") return <PicoIcon name="pad" className="pcPlayer-pad" />
   if (rep === "avatar") {
     return player.avatar ? (
       <PicoArtImage src={player.avatar} ratio={1} className="pcPlayer-av" />
     ) : (
-      <span className="pcPlayer-tag">P{player.seat}</span>
+      <span
+        className="pcPlayer-tag"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPlayerTag)}
+      >
+        P{player.seat}
+      </span>
     )
   }
   return (
@@ -52,11 +73,24 @@ export function Player({
       className={`pcPlayer p${player.seat} ${player.status}`}
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.player)}
     >
-      <span className="pcPlayer-mark">{playerMark(player, rep)}</span>
-      <span className="pcPlayer-name">
+      <span
+        className="pcPlayer-mark"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPlayerMark)}
+      >
+        {playerMark(player, rep)}
+      </span>
+      <span
+        className="pcPlayer-name"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPlayerName)}
+      >
         {player.status === "open" ? "OPEN" : player.name}
       </span>
-      <span className="pcPlayer-sub">{PLAYER_SUB[player.status]}</span>
+      <span
+        className="pcPlayer-sub"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPlayerSub)}
+      >
+        {PLAYER_SUB[player.status]}
+      </span>
     </span>
   )
 }

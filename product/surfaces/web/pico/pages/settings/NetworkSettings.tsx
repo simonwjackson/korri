@@ -1,6 +1,8 @@
 /**
  * pico surface. ATOMIC LAYER: page. Network & streaming (static).
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { BlockBar } from "../../ui/atoms/BlockBar"
 import { Toggle } from "../../ui/atoms/Toggle"
 import { Opt } from "../../ui/molecules/Opt"
@@ -17,12 +19,20 @@ export function NetworkSettings() {
         { key: "b", label: "BACK" },
       ]}
     >
-      <div className="pcSet-list">
+      <div
+        className="pcSet-list"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSetList)}
+      >
         <SettingRow label="Wi-Fi" state="selected">
           <Toggle state="on" />
         </SettingRow>
         <SettingRow label="Network">
-          <span className="pcSet-info">PICO-NET</span>
+          <span
+            className="pcSet-info"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSetInfo)}
+          >
+            PICO-NET
+          </span>
         </SettingRow>
         <SettingRow label="Stream Quality">
           <Opt value="BALANCED" />

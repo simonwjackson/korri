@@ -4,6 +4,7 @@
  */
 import { picoHeroAtom } from "../../data/pico-library-atoms"
 import { PicoIcon } from "../../PicoIcon"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { MomentHero } from "../../ui/organisms/MomentHero"
 
@@ -22,13 +23,26 @@ export function FinishIt() {
             game={game}
             kicker="▸ ONE BOSS LEFT"
           >
-            <div className="pcM-meta">
+            <div
+              className="pcM-meta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMMeta)}
+            >
               92% COMPLETE · THE FINAL FIGHT AWAITS
             </div>
-            <div className="pcM-progress">
-              <div className="pcM-progress-fill" style={{ width: "92%" }} />
+            <div
+              className="pcM-progress"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMProgress)}
+            >
+              <div
+                className="pcM-progress-fill"
+                style={{ width: "92%" }}
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMProgressFill)}
+              />
             </div>
-            <span className="pcM-cta">
+            <span
+              className="pcM-cta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMCta)}
+            >
               <PicoIcon name="play" /> FINISH THE FIGHT
             </span>
           </MomentHero>

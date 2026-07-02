@@ -34,16 +34,35 @@ export function SaveSlotGrid({
         <div
           key={slot.index}
           className={`pcIg-slot ${slot._tag === "Empty" ? "empty" : ""} ${index === 0 ? "sel" : ""}`}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgSlot)}
         >
-          <span className="pcIg-slot-no">{slot.index}</span>
-          <span className="pcIg-slot-label">{slot.label}</span>
-          <span className="pcIg-slot-stamp">
+          <span
+            className="pcIg-slot-no"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgSlotNo)}
+          >
+            {slot.index}
+          </span>
+          <span
+            className="pcIg-slot-label"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgSlotLabel)}
+          >
+            {slot.label}
+          </span>
+          <span
+            className="pcIg-slot-stamp"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgSlotStamp)}
+          >
             {slot._tag === "Empty"
               ? "empty — your story goes here"
               : slot.stamp}
           </span>
           {mode === "load" && index === 0 && slot._tag === "Filled" ? (
-            <span className="pcIg-slot-restore">↺ RESTORE</span>
+            <span
+              className="pcIg-slot-restore"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgSlotRestore)}
+            >
+              ↺ RESTORE
+            </span>
           ) : null}
         </div>
       ))}

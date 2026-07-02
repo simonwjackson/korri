@@ -29,9 +29,21 @@ export function Hero({
       {glyph !== undefined ? <Glyph tone={glyphTone}>{glyph}</Glyph> : null}
       {adornment !== undefined ? adornment : null}
       <Title size={1}>{title}</Title>
-      {message !== undefined ? <p className="pc-hero-msg">{message}</p> : null}
+      {message !== undefined ? (
+        <p
+          className="pc-hero-msg"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcHeroMsg)}
+        >
+          {message}
+        </p>
+      ) : null}
       {children !== undefined ? (
-        <div className="pc-hero-actions">{children}</div>
+        <div
+          className="pc-hero-actions"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcHeroActions)}
+        >
+          {children}
+        </div>
       ) : null}
     </div>
   )

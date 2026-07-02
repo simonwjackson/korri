@@ -1,6 +1,8 @@
 /**
  * pico surface. ATOMIC LAYER: page. Launch blocked (static).
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
@@ -31,11 +33,15 @@ export function Blocked() {
         title="LAUNCH BLOCKED"
         message="Another cart's already in the slot. Hang tight — you can launch the moment this host frees up."
       >
-        <div className="pcSes-reasons">
+        <div
+          className="pcSes-reasons"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSesReasons)}
+        >
           {BLOCK_REASONS.map(reason => (
             <span
               key={reason.id}
               className={`pcSes-reason ${reason.id === "running" ? "active" : ""}`}
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSesReason)}
             >
               {reason.label}
             </span>

@@ -25,24 +25,51 @@ export function ProfileCard({
         className="pcFut-prof-head"
         {...picoDesignPartAttrs(PICO_DESIGN_PARTS.profileCard)}
       >
-        <span className="pcFut-prof-ava">PJ</span>
-        <div className="pcFut-prof-id">
+        <span
+          className="pcFut-prof-ava"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutProfAva)}
+        >
+          PJ
+        </span>
+        <div
+          className="pcFut-prof-id"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutProfId)}
+        >
           <Title size={1}>PIXELJ</Title>
-          <div className="pc-sub">LEVEL 24 · ROVING ROMHACKER</div>
-          <div className="pcFut-prof-xp">
+          <div
+            className="pc-sub"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.sub)}
+          >
+            LEVEL 24 · ROVING ROMHACKER
+          </div>
+          <div
+            className="pcFut-prof-xp"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutProfXp)}
+          >
             <Progress pct={68} />
-            <span className="pc-dim">6,820 / 10,000 XP</span>
+            <span
+              className="pc-dim"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dim)}
+            >
+              6,820 / 10,000 XP
+            </span>
           </div>
         </div>
       </div>
-      <div className="pcFut-prof-stats">
+      <div
+        className="pcFut-prof-stats"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutProfStats)}
+      >
         <Stat label="GAMES" value={games.length} />
         <Stat label="PLAYTIME" value="312h" />
         <Stat label="TROPHIES" value="3 / 5" />
         <Stat label="FRIENDS" value={friends.length} />
       </div>
       <Card title="FAVORITE GENRES">
-        <div className="pcFut-prof-chips">
+        <div
+          className="pcFut-prof-chips"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutProfChips)}
+        >
           <Chip>PLATFORMER</Chip>
           <Chip>METROIDVANIA</Chip>
           <Chip>SHMUP</Chip>

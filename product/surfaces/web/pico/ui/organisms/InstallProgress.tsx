@@ -31,8 +31,15 @@ export function InstallProgress({ runtime }: { readonly runtime: string }) {
       <Sub>WARMING UP THE {runtime} RUNTIME</Sub>
       <Card title="STEPS" className="pcAcq-checklist">
         {steps.map(step => (
-          <div key={step.label} className={`pcAcq-step ${step.state}`}>
-            <span className="pcAcq-step-mark">
+          <div
+            key={step.label}
+            className={`pcAcq-step ${step.state}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqStep)}
+          >
+            <span
+              className="pcAcq-step-mark"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqStepMark)}
+            >
               {step.state === "done" ? (
                 <Icon name="check" />
               ) : step.state === "active" ? (
@@ -41,7 +48,12 @@ export function InstallProgress({ runtime }: { readonly runtime: string }) {
                 "·"
               )}
             </span>
-            <span className="pcAcq-step-label">{step.label}</span>
+            <span
+              className="pcAcq-step-label"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcAcqStepLabel)}
+            >
+              {step.label}
+            </span>
           </div>
         ))}
       </Card>

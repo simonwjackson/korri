@@ -3,6 +3,7 @@
  * `picoFailureKindsAtom`.
  */
 import { picoFailureKindsAtom } from "../../data/pico-session-atoms"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { Btn } from "../../ui/atoms/Btn"
 import { Icon } from "../../ui/atoms/Icon"
@@ -21,11 +22,20 @@ export function LaunchFailure() {
             { key: "b", label: "BACK" },
           ]}
         >
-          <div className="pcSes-fail-banner">
-            <span className="pcSes-fail-banner-ico">
+          <div
+            className="pcSes-fail-banner"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSesFailBanner)}
+          >
+            <span
+              className="pcSes-fail-banner-ico"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSesFailBannerIco)}
+            >
               <Icon name="close" />
             </span>
-            <span className="pcSes-fail-banner-text">
+            <span
+              className="pcSes-fail-banner-text"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSesFailBannerText)}
+            >
               <b>STREAM FAILED</b>
               Moonlight never picked up the line — couldn't start or connect.
               Give it another shot, or play locally.

@@ -18,6 +18,7 @@ export function Tabs({
         <span
           key={item}
           className={`pc-tab ${index === activeIndex ? "sel" : ""}`}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcTab)}
         >
           {item}
         </span>

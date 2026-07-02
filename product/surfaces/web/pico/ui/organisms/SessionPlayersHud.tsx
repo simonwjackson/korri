@@ -28,19 +28,37 @@ export function SessionPlayersHud({
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.sessionPlayersHud)}
     >
       <KeyArtBackdrop src={game?.heroUrl} className="pcMp-backdrop" />
-      <div className="pcMp-session-grid">
+      <div
+        className="pcMp-session-grid"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpSessionGrid)}
+      >
         {active.map(player => (
-          <div key={player.id} className={`pcMp-hud p${player.seat}`}>
+          <div
+            key={player.id}
+            className={`pcMp-hud p${player.seat}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpHud)}
+          >
             <Player player={{ ...player, status: "ready" }} rep="tag" />
-            <span className="pcMp-hud-lives">♥♥♥</span>
+            <span
+              className="pcMp-hud-lives"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpHudLives)}
+            >
+              ♥♥♥
+            </span>
             <Stat label="pts" value={(player.seat * 12480).toLocaleString()} />
-            <span className="pcMp-hud-sig">
+            <span
+              className="pcMp-hud-sig"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpHudSig)}
+            >
               <Icon name="wifi" />
             </span>
           </div>
         ))}
       </div>
-      <div className="pcMp-session-foot">
+      <div
+        className="pcMp-session-foot"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpSessionFoot)}
+      >
         <Badge tone="good">CO-OP · {active.length}P</Badge>
         <Dim>{game?.title}</Dim>
       </div>

@@ -18,25 +18,54 @@ export function DualPrimaryStage({ hero }: { readonly hero: PicoGame }) {
         className="pcMd-companion-tag"
         {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dualPrimaryStage)}
       >
-        <span className="pcMd-dot" />
+        <span
+          className="pcMd-dot"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdDot)}
+        />
         COMPANION CONNECTED · 65" 4K TV
       </div>
-      <div className="pcMd-primary">
-        <div className="pcMd-rail">
-          <div className="pc-art sm">
+      <div
+        className="pcMd-primary"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdPrimary)}
+      >
+        <div
+          className="pcMd-rail"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdRail)}
+        >
+          <div
+            className="pc-art sm"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcArt)}
+          >
             <GameCartUnmarked game={hero} />
           </div>
-          <div className="pc-art sm pcMd-rail-side">
+          <div
+            className="pc-art sm pcMd-rail-side"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcArt)}
+          >
             <GameCartUnmarked game={hero} />
           </div>
-          <div className="pc-art sm pcMd-rail-side">
+          <div
+            className="pc-art sm pcMd-rail-side"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcArt)}
+          >
             <GameCartUnmarked game={hero} />
           </div>
         </div>
-        <div className="pcMd-primary-info">
+        <div
+          className="pcMd-primary-info"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdPrimaryInfo)}
+        >
           <Title size={1}>{hero.title}</Title>
-          <div className="pc-sub">{hero.developer}</div>
-          <div className="pcMd-launch-row">
+          <div
+            className="pc-sub"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.sub)}
+          >
+            {hero.developer}
+          </div>
+          <div
+            className="pcMd-launch-row"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdLaunchRow)}
+          >
             <Btn kind="primary">
               <Icon name="play" /> LAUNCH ON TV
             </Btn>

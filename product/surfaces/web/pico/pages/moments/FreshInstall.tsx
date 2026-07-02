@@ -4,6 +4,7 @@
  */
 import { picoGamesAtom } from "../../data/pico-library-atoms"
 import { PicoIcon } from "../../PicoIcon"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { MomentHero } from "../../ui/organisms/MomentHero"
 
@@ -24,12 +25,26 @@ export function FreshInstall() {
             game={game}
             kicker={
               <>
-                <span className="pcM-new">★ NEW</span> READY TO PLAY
+                <span
+                  className="pcM-new"
+                  {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMNew)}
+                >
+                  ★ NEW
+                </span>{" "}
+                READY TO PLAY
               </>
             }
           >
-            <div className="pcM-meta">INSTALLED · 2.4 GB · ALL SET</div>
-            <span className="pcM-cta">
+            <div
+              className="pcM-meta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMMeta)}
+            >
+              INSTALLED · 2.4 GB · ALL SET
+            </div>
+            <span
+              className="pcM-cta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMCta)}
+            >
               <PicoIcon name="play" /> PLAY NOW
             </span>
           </MomentHero>

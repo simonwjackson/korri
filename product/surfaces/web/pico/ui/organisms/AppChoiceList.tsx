@@ -27,11 +27,19 @@ export function AppChoiceList({
           title={choice.name}
           className={`pcDet-choice ${index === 0 ? "sel" : ""}`}
         >
-          <div className="pcDet-choice-meta">
+          <div
+            className="pcDet-choice-meta"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetChoiceMeta)}
+          >
             <Chip>{choice.runtime}</Chip>
             {index === 0 ? <Badge tone="accent">PICK</Badge> : null}
           </div>
-          <span className="pc-dim">{choice.note}</span>
+          <span
+            className="pc-dim"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dim)}
+          >
+            {choice.note}
+          </span>
         </Card>
       ))}
     </div>

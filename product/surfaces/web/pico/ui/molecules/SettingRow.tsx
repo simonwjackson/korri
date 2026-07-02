@@ -21,7 +21,12 @@ export function SettingRow({
       className={`pcSet-row ${state === "selected" ? "sel" : ""}`}
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.settingRow)}
     >
-      <span className="pcSet-label">{label}</span>
+      <span
+        className="pcSet-label"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSetLabel)}
+      >
+        {label}
+      </span>
       {children}
     </div>
   )

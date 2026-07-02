@@ -23,13 +23,24 @@ export function SeatAssignList({
     >
       {players.map(player => (
         <Card key={player.id} className={`pcMp-assign-row p${player.seat}`}>
-          <span className="pcMp-assign-seat">P{player.seat}</span>
+          <span
+            className="pcMp-assign-seat"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpAssignSeat)}
+          >
+            P{player.seat}
+          </span>
           <Player player={player} rep="mascot" />
-          <div className="pcMp-assign-ctrl">
+          <div
+            className="pcMp-assign-ctrl"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpAssignCtrl)}
+          >
             <Icon name="pad" />
             <Dim>{player.controller}</Dim>
           </div>
-          <span className="pcMp-assign-act">
+          <span
+            className="pcMp-assign-act"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpAssignAct)}
+          >
             {player.status === "open" ? "PRESS START" : "SWAP"}
           </span>
         </Card>

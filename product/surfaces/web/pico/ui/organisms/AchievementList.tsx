@@ -30,11 +30,20 @@ export function AchievementList({
           {unlocked} / {total}
         </Badge>
       </div>
-      <div className="pcFut-ach-toast">
-        <span className="pcFut-ach-toast-ico">
+      <div
+        className="pcFut-ach-toast"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutAchToast)}
+      >
+        <span
+          className="pcFut-ach-toast-ico"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutAchToastIco)}
+        >
           <Icon name="star" />
         </span>
-        <span className="pcFut-ach-toast-text">
+        <span
+          className="pcFut-ach-toast-text"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutAchToastText)}
+        >
           <b>UNLOCKED · NIGHT OWL</b>
           Still playing past midnight · just now
         </span>
@@ -48,6 +57,7 @@ export function AchievementList({
             icon={
               <span
                 className={`pcFut-ach-ico ${ach.unlocked ? "got" : "locked"}`}
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutAchIco)}
               >
                 {ach.unlocked ? <Icon name="star" /> : "✦"}
               </span>
@@ -57,7 +67,10 @@ export function AchievementList({
             }
             meta={ach.unlocked ? ach.desc : `LOCKED · ${ach.desc}`}
             trailing={
-              <span className={`pcFut-rarity r-${ach.rarity.toLowerCase()}`}>
+              <span
+                className={`pcFut-rarity r-${ach.rarity.toLowerCase()}`}
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutRarity)}
+              >
                 {ach.rarity}
               </span>
             }

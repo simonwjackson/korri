@@ -25,6 +25,7 @@ export function LibraryRail({
         <div
           key={game.id}
           className={`pcLib-cart ${index === focusedIndex ? "focused" : ""}`}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLibCart)}
         >
           <GameCart game={game} />
         </div>

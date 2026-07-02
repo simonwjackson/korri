@@ -27,27 +27,58 @@ export function SessionDock() {
       className="pcNow-dock"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.sessionDock)}
     >
-      <div className="pcNow-sect">PLAYERS</div>
-      <div className="pcNow-players">
+      <div
+        className="pcNow-sect"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcNowSect)}
+      >
+        PLAYERS
+      </div>
+      <div
+        className="pcNow-players"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcNowPlayers)}
+      >
         {NOW_PLAYERS.map(player => (
           <Player key={player.id} player={player} rep="tag" />
         ))}
       </div>
-      <div className="pcNow-sect">SAVE</div>
-      <div className="pcNow-saves">
+      <div
+        className="pcNow-sect"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcNowSect)}
+      >
+        SAVE
+      </div>
+      <div
+        className="pcNow-saves"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcNowSaves)}
+      >
         {["CITY OF TEARS", "BOSS RUSH", "AUTO"].map((slot, index) => (
-          <div key={slot} className={`pcNow-save ${index === 0 ? "on" : ""}`}>
+          <div
+            key={slot}
+            className={`pcNow-save ${index === 0 ? "on" : ""}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcNowSave)}
+          >
             {slot}
           </div>
         ))}
       </div>
-      <div className="pcNow-sect">PERF</div>
-      <div className="pcNow-stats">
+      <div
+        className="pcNow-sect"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcNowSect)}
+      >
+        PERF
+      </div>
+      <div
+        className="pcNow-stats"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcNowStats)}
+      >
         <Stat label="fps" value="60" />
         <Stat label="°c" value="62" />
         <Stat label="batt" value="82%" />
       </div>
-      <div className="pcNow-actions">
+      <div
+        className="pcNow-actions"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcNowActions)}
+      >
         <Btn kind="primary">RESUME</Btn>
         <Btn kind="danger">QUIT</Btn>
       </div>

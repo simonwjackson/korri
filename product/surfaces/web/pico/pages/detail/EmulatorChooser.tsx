@@ -5,6 +5,7 @@
  * `picoEmulatorChooserAtom` and composes ScreenShell + DetailHead + AppChoiceList.
  */
 import { picoEmulatorChooserAtom } from "../../data/pico-detail-atoms"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { DetailHead } from "../../ui/molecules/DetailHead"
 import { AppChoiceList } from "../../ui/organisms/AppChoiceList"
@@ -24,7 +25,10 @@ export function EmulatorChooser() {
             ]}
           >
             <DetailHead game={game} tags="CHOOSE EMULATOR · GBA">
-              <p className="pcDet-note">
+              <p
+                className="pcDet-note"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetNote)}
+              >
                 A few cores know how to run this one — pick who drives.
               </p>
             </DetailHead>

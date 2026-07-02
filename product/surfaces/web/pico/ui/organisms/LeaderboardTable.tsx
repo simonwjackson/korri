@@ -25,22 +25,57 @@ export function LeaderboardTable({
         <Title size={0}>CELESTE · TIME ATTACK</Title>
         <Tabs items={["FRIENDS", "GLOBAL"]} activeIndex={0} />
       </div>
-      <div className="pcFut-lb">
-        <div className="pcFut-lb-row head">
-          <span className="pcFut-lb-rank">#</span>
-          <span className="pcFut-lb-name">PLAYER</span>
-          <span className="pcFut-lb-score">SCORE</span>
+      <div
+        className="pcFut-lb"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutLb)}
+      >
+        <div
+          className="pcFut-lb-row head"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutLbRow)}
+        >
+          <span
+            className="pcFut-lb-rank"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutLbRank)}
+          >
+            #
+          </span>
+          <span
+            className="pcFut-lb-name"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutLbName)}
+          >
+            PLAYER
+          </span>
+          <span
+            className="pcFut-lb-score"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutLbScore)}
+          >
+            SCORE
+          </span>
         </div>
         {scores.map(row => (
           <div
             key={`${row.rank}-${row.name}`}
             className={`pcFut-lb-row ${row.you ? "you" : ""}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutLbRow)}
           >
-            <span className="pcFut-lb-rank">
+            <span
+              className="pcFut-lb-rank"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutLbRank)}
+            >
               {row.rank <= 3 ? MEDALS[row.rank - 1] : row.rank}
             </span>
-            <span className="pcFut-lb-name">{row.name}</span>
-            <span className="pcFut-lb-score">{row.score}</span>
+            <span
+              className="pcFut-lb-name"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutLbName)}
+            >
+              {row.name}
+            </span>
+            <span
+              className="pcFut-lb-score"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutLbScore)}
+            >
+              {row.score}
+            </span>
           </div>
         ))}
       </div>

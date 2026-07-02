@@ -23,16 +23,23 @@ export function JoiningStage({
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.joiningStage)}
     >
       {game?.art ? (
-        <div className="pcMp-joining-art">
+        <div
+          className="pcMp-joining-art"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpJoiningArt)}
+        >
           <GameCartUnmarked game={game} />
         </div>
       ) : null}
       <Title size={1}>JOINING PIXELPETE’S GAME</Title>
-      <div className="pcMp-steps">
+      <div
+        className="pcMp-steps"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpSteps)}
+      >
         {JOIN_STEPS.map((step, index) => (
           <span
             key={step}
             className={`pcMp-step ${index < 2 ? "done" : ""} ${index === 2 ? "active" : ""}`}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpStep)}
           >
             {step}
           </span>

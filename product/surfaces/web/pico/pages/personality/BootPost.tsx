@@ -4,6 +4,7 @@
  * Voiced boot power-on self-test. Static (no data).
  */
 import { PicoMascot } from "../../PicoMascot"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 
 const BOOT_LINES: readonly string[] = [
@@ -21,20 +22,32 @@ const BOOT_LINES: readonly string[] = [
 export function BootPost() {
   return (
     <ScreenShell hints={[{ key: "a", label: "SKIP" }]} className="pad-0">
-      <div className="pcPer-post">
+      <div
+        className="pcPer-post"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerPost)}
+      >
         <PicoMascot state="idle" className="pcMascot-lg pcPer-post-pixl" />
-        <pre className="pcPer-post-lines">
+        <pre
+          className="pcPer-post-lines"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerPostLines)}
+        >
           {BOOT_LINES.map((line, index) => (
             <span
               className="pcPer-post-line"
               style={{ animationDelay: `${index * 0.28}s` }}
               key={line}
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerPostLine)}
             >
               {line}
             </span>
           ))}
         </pre>
-        <span className="pcPer-post-caret">█</span>
+        <span
+          className="pcPer-post-caret"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcPerPostCaret)}
+        >
+          █
+        </span>
       </div>
     </ScreenShell>
   )

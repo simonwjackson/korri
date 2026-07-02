@@ -2,6 +2,8 @@
  * pico surface. ATOMIC LAYER: page.
  * Nearby devices (static demo data).
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Badge } from "../../ui/atoms/Badge"
 import { Dim } from "../../ui/atoms/Dim"
 import { Glyph } from "../../ui/atoms/Glyph"
@@ -57,10 +59,16 @@ export function Nearby() {
         { key: "b", label: "BACK" },
       ]}
     >
-      <div className="pcMp-nearby-head">
+      <div
+        className="pcMp-nearby-head"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpNearbyHead)}
+      >
         <Spinner /> <Dim>found {DEVICES.length} nearby</Dim>
       </div>
-      <div className="pcMp-nearby">
+      <div
+        className="pcMp-nearby"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpNearby)}
+      >
         {DEVICES.map((device, index) => (
           <Card
             key={device.id}
@@ -69,7 +77,12 @@ export function Nearby() {
             <Glyph tone="info">
               <Icon name={device.icon} />
             </Glyph>
-            <div className="pcMp-dev-name">{device.name}</div>
+            <div
+              className="pcMp-dev-name"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpDevName)}
+            >
+              {device.name}
+            </div>
             <Dim>{device.meta}</Dim>
             {device.proximity === "near" ? (
               <Badge tone="good">NEAR</Badge>

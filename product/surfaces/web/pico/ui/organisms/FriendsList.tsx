@@ -36,10 +36,23 @@ export function FriendsList({
         { label: "OFFLINE", list: offline },
       ].map(group =>
         group.list.length === 0 ? null : (
-          <div key={group.label} className="pcFut-group">
-            <div className="pcFut-group-h">
+          <div
+            key={group.label}
+            className="pcFut-group"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutGroup)}
+          >
+            <div
+              className="pcFut-group-h"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutGroupH)}
+            >
               {group.label}
-              <span className="pc-dim"> · {group.list.length}</span>
+              <span
+                className="pc-dim"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dim)}
+              >
+                {" "}
+                · {group.list.length}
+              </span>
             </div>
             <List>
               {group.list.map((friend, index) => (
@@ -51,7 +64,10 @@ export function FriendsList({
                       : "default"
                   }
                   icon={
-                    <span className={`pcFut-ava ${statusClass(friend.status)}`}>
+                    <span
+                      className={`pcFut-ava ${statusClass(friend.status)}`}
+                      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutAva)}
+                    >
                       {friend.name.slice(0, 2)}
                     </span>
                   }
@@ -66,6 +82,7 @@ export function FriendsList({
                   trailing={
                     <span
                       className={`pcFut-dot ${statusClass(friend.status)}`}
+                      {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcFutDot)}
                     />
                   }
                 />

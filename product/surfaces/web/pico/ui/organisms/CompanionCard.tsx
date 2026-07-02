@@ -14,14 +14,28 @@ export function CompanionCard({ hero }: { readonly hero: PicoGame }) {
       className="pcMd-companion"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.companionCard)}
     >
-      <div className="pcMd-companion-art">
-        <div className="pc-art">
+      <div
+        className="pcMd-companion-art"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdCompanionArt)}
+      >
+        <div
+          className="pc-art"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcArt)}
+        >
           <GameCartUnmarked game={hero} />
         </div>
       </div>
-      <div className="pcMd-companion-overlay">
+      <div
+        className="pcMd-companion-overlay"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdCompanionOverlay)}
+      >
         <Title size={3}>{hero.title}</Title>
-        <div className="pcMd-companion-dev">{hero.developer}</div>
+        <div
+          className="pcMd-companion-dev"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMdCompanionDev)}
+        >
+          {hero.developer}
+        </div>
       </div>
     </div>
   )

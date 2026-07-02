@@ -5,6 +5,7 @@
 import { picoGamesAtom } from "../../data/pico-library-atoms"
 import { PicoArtImage } from "../../PicoArtImage"
 import { PicoIcon } from "../../PicoIcon"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { MomentHero } from "../../ui/organisms/MomentHero"
 
@@ -30,7 +31,10 @@ export function FriendPlaying() {
             game={game}
             kicker="▸ A FRIEND IS PLAYING"
           >
-            <div className="pcM-friend">
+            <div
+              className="pcM-friend"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMFriend)}
+            >
               {avatar ? (
                 <PicoArtImage
                   src={avatar}
@@ -38,12 +42,21 @@ export function FriendPlaying() {
                   className="pcM-friend-av"
                 />
               ) : null}
-              <div className="pcM-friend-text">
-                <span className="pcM-pres" />
+              <div
+                className="pcM-friend-text"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMFriendText)}
+              >
+                <span
+                  className="pcM-pres"
+                  {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMPres)}
+                />
                 <b>{FRIEND.name}</b> · PLAYING NOW
               </div>
             </div>
-            <span className="pcM-cta">
+            <span
+              className="pcM-cta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMCta)}
+            >
               <PicoIcon name="play" /> JOIN GAME
             </span>
           </MomentHero>

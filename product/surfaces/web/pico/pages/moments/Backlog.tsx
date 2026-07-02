@@ -4,6 +4,7 @@
  */
 import { picoGamesAtom } from "../../data/pico-library-atoms"
 import { PicoIcon } from "../../PicoIcon"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { MomentHero } from "../../ui/organisms/MomentHero"
 
@@ -27,12 +28,26 @@ export function Backlog() {
             game={game}
             kicker="▸ STILL IN YOUR BACKLOG"
           >
-            <div className="pcM-meta">ADDED 3 MONTHS AGO · NEVER PLAYED</div>
-            <div className="pcM-actions">
-              <span className="pcM-cta">
+            <div
+              className="pcM-meta"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMMeta)}
+            >
+              ADDED 3 MONTHS AGO · NEVER PLAYED
+            </div>
+            <div
+              className="pcM-actions"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMActions)}
+            >
+              <span
+                className="pcM-cta"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMCta)}
+              >
                 <PicoIcon name="play" /> GIVE IT A SHOT
               </span>
-              <span className="pcM-cta ghost">
+              <span
+                className="pcM-cta ghost"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMCta)}
+              >
                 <PicoIcon name="close" /> NOT TONIGHT
               </span>
             </div>

@@ -30,9 +30,17 @@ export function CommunityStatPanel({
         <Stat label="LIKED" value={`${liked}%`} />
       </div>
       <Card title="DIFFICULTY" className="pcDet-diff">
-        <div className="pcDet-diff-row">
+        <div
+          className="pcDet-diff-row"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDetDiffRow)}
+        >
           <BlockBar level={stats.difficulty} max={10} />
-          <span className="pc-dim">{stats.difficulty} / 10</span>
+          <span
+            className="pc-dim"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dim)}
+          >
+            {stats.difficulty} / 10
+          </span>
         </div>
       </Card>
     </>

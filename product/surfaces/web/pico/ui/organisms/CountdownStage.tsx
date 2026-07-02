@@ -25,9 +25,17 @@ export function CountdownStage({
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.countdownStage)}
     >
       <KeyArtBackdrop src={game?.heroUrl} className="pcMp-backdrop" />
-      <div className="pcMp-count-num">3</div>
+      <div
+        className="pcMp-count-num"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpCountNum)}
+      >
+        3
+      </div>
       <Title size={1}>ALL PLAYERS READY</Title>
-      <div className="pcMp-row pcMp-count-row">
+      <div
+        className="pcMp-row pcMp-count-row"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcMpRow)}
+      >
         {active.map(player => (
           <Player
             key={player.id}

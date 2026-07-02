@@ -5,6 +5,7 @@
  * `picoGamesAtom`, composes ScreenShell + LibraryRail.
  */
 import { picoGamesAtom } from "../../data/pico-library-atoms"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { PicoData } from "../../screens/PicoData"
 import { Sub } from "../../ui/atoms/Sub"
 import { Title } from "../../ui/atoms/Title"
@@ -27,10 +28,16 @@ export function HomeRail() {
             ]}
           >
             <LibraryRail games={rail} focusedIndex={2} />
-            <div className="pcLib-caption">
+            <div
+              className="pcLib-caption"
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLibCaption)}
+            >
               <Title size={1}>{focused.title}</Title>
               <Sub>{focused.genre}</Sub>
-              <div className="pc-dim">
+              <div
+                className="pc-dim"
+                {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dim)}
+              >
                 {focused.lastPlayedLabel
                   ? `LAST PLAYED ${focused.lastPlayedLabel}`
                   : "NEVER PLAYED"}

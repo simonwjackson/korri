@@ -1,6 +1,8 @@
 /**
  * pico surface. ATOMIC LAYER: page. System update (static).
  */
+
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import { Btn } from "../../ui/atoms/Btn"
 import { Icon } from "../../ui/atoms/Icon"
 import { Progress } from "../../ui/atoms/Progress"
@@ -28,9 +30,14 @@ export function SystemUpdate() {
         </Btn>
         <Btn>RELEASE NOTES</Btn>
       </Hero>
-      <div className="pcSys-upd-bar">
+      <div
+        className="pcSys-upd-bar"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcSysUpdBar)}
+      >
         <Progress pct={62} />
-        <div className="pc-dim">DOWNLOADING · 154 / 248 MB</div>
+        <div className="pc-dim" {...picoDesignPartAttrs(PICO_DESIGN_PARTS.dim)}>
+          DOWNLOADING · 154 / 248 MB
+        </div>
       </div>
     </ScreenShell>
   )

@@ -22,8 +22,14 @@ export function SystemGrid({
         <div
           key={system.id}
           className={`pcLib-system ${index === 0 ? "sel" : ""}`}
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLibSystem)}
         >
-          <div className="pcLib-system-name">{system.name}</div>
+          <div
+            className="pcLib-system-name"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcLibSystemName)}
+          >
+            {system.name}
+          </div>
           <Stat label="GAMES" value={system.count} />
         </div>
       ))}

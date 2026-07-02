@@ -14,24 +14,48 @@ export function HudOverlay() {
       className="pcIg-hud"
       {...picoDesignPartAttrs(PICO_DESIGN_PARTS.hudOverlay)}
     >
-      <div className="pcIg-hud-corner tl">
-        <span className="pcIg-read">
+      <div
+        className="pcIg-hud-corner tl"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgHudCorner)}
+      >
+        <span
+          className="pcIg-read"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgRead)}
+        >
           FPS <b>60</b>
         </span>
-        <span className="pcIg-read">
+        <span
+          className="pcIg-read"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgRead)}
+        >
           BAT <b>82%</b>
         </span>
       </div>
-      <div className="pcIg-hud-corner tr">
-        <span className="pcIg-read">
+      <div
+        className="pcIg-hud-corner tr"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgHudCorner)}
+      >
+        <span
+          className="pcIg-read"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgRead)}
+        >
           TEMP <b>48°C</b>
         </span>
-        <span className="pcIg-read">
+        <span
+          className="pcIg-read"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgRead)}
+        >
           <b>14:32</b>
         </span>
       </div>
-      <div className="pcIg-toast">
-        <span className="pcIg-toast-ico">
+      <div
+        className="pcIg-toast"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgToast)}
+      >
+        <span
+          className="pcIg-toast-ico"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgToastIco)}
+        >
           <Icon name="check" />
         </span>
         SAVED &amp; SOUND

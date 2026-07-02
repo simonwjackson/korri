@@ -20,6 +20,7 @@ import {
 } from "../../data/pico-library-atoms"
 import { PicoLibrary } from "../../data/pico-library-service"
 import type { PicoGame } from "../../fixtures"
+import { PICO_DESIGN_PARTS, picoDesignPartAttrs } from "../../pico-design-parts"
 import {
   PicoDataState,
   type PicoDataState as PicoDataStateValue,
@@ -60,13 +61,27 @@ function DataEffectBody() {
         { key: "b", label: "BACK" },
       ]}
     >
-      <div className="pcData">
-        <div className="pcData-bar">
-          <span className="pcData-tag">
+      <div
+        className="pcData"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcData)}
+      >
+        <div
+          className="pcData-bar"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDataBar)}
+        >
+          <span
+            className="pcData-tag"
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDataTag)}
+          >
             LAYER&nbsp;
             <b>{mode === "fixtures" ? "FIXTURES" : "LIVE (sim)"}</b>
           </span>
-          <button type="button" className="pcData-swap" onClick={swap}>
+          <button
+            type="button"
+            className="pcData-swap"
+            onClick={swap}
+            {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDataSwap)}
+          >
             <Icon name="restart" /> SWAP
           </button>
         </div>
@@ -76,7 +91,10 @@ function DataEffectBody() {
         <DataEffectDefect state={state} />
         <DataEffectReady state={state} />
 
-        <p className="pcData-note">
+        <p
+          className="pcData-note"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDataNote)}
+        >
           Same component, no mocks. <b>FIXTURES</b> resolves instantly from
           static data; <b>LIVE</b> simulates the RPC layer (~700ms). The screen
           only reads an atom — the layer is swapped at the boundary.
@@ -96,7 +114,10 @@ function DataEffectLoading({ state }: { readonly state: DataEffectState }) {
     {
       onNone: () => null,
       onSome: () => (
-        <div className="pcData-state">
+        <div
+          className="pcData-state"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDataState)}
+        >
           <Spinner /> <Dim>running list() through the provided layer…</Dim>
         </div>
       ),
@@ -148,9 +169,16 @@ function DataEffectReady({ state }: { readonly state: DataEffectState }) {
     {
       onNone: () => null,
       onSome: ({ value }) => (
-        <div className="pcData-grid">
+        <div
+          className="pcData-grid"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDataGrid)}
+        >
           {value.slice(0, 12).map(game => (
-            <div className="pcData-cart" key={game.id}>
+            <div
+              className="pcData-cart"
+              key={game.id}
+              {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcDataCart)}
+            >
               <GameCartUnmarked game={game} />
             </div>
           ))}

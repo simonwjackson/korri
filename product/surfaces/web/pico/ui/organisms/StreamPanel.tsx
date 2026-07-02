@@ -19,10 +19,18 @@ export function StreamPanel({ hero }: { readonly hero: PicoGame | undefined }) {
         className="pcIg-stream-head"
         {...picoDesignPartAttrs(PICO_DESIGN_PARTS.streamPanel)}
       >
-        <span className="pcIg-stream-name">{hero?.title ?? "SESSION"}</span>
+        <span
+          className="pcIg-stream-name"
+          {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgStreamName)}
+        >
+          {hero?.title ?? "SESSION"}
+        </span>
         <Badge tone="info">STREAM</Badge>
       </div>
-      <div className="pcIg-stream-stats">
+      <div
+        className="pcIg-stream-stats"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgStreamStats)}
+      >
         <Stat label="BITRATE" value="18 Mbps" />
         <Stat label="LATENCY" value="7 ms" />
         <Stat label="FPS" value="59" />
@@ -30,7 +38,10 @@ export function StreamPanel({ hero }: { readonly hero: PicoGame | undefined }) {
         <Stat label="RES" value="1080p" />
       </div>
       <QualityBar level={4} tone="good" tag="GOOD" />
-      <div className="pcIg-stream-ctl">
+      <div
+        className="pcIg-stream-ctl"
+        {...picoDesignPartAttrs(PICO_DESIGN_PARTS.pcIgStreamCtl)}
+      >
         <Btn kind="primary">
           <Icon name="pause" /> PAUSE
         </Btn>
