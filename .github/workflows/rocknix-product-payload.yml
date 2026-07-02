@@ -8,19 +8,6 @@ on:
   push:
     branches:
       - trunk
-    paths:
-      - "flake.nix"
-      - "flake.lock"
-      - "tools/nix/**"
-      - "tools/testing/nix/**"
-      - "product/vendor/**"
-      - "tools/artifacts/**"
-      - "product/apps/**"
-      - "product/services/**"
-      - "product/systems/**"
-      - "product/apps/**"
-      - "product/platform/**"
-      - ".github/workflows/rocknix-product-payload.yml"
   workflow_dispatch:
     inputs:
       product:
@@ -110,10 +97,8 @@ jobs:
         if: ${{ (github.event_name == 'push' || inputs.build_payload) && (github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product) }}
         run: |
           nix build .#packages.aarch64-linux.korri-${{ matrix.product }}-product-payload --out-link result-product-payload
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            mkdir -p out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate
-            cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/
-          fi
+          mkdir -p out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate
+          cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/
 
       - name: Finalize payload metadata
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != '' && (inputs.product == 'all' || inputs.product == matrix.product) }}
@@ -136,7 +121,7 @@ jobs:
             "${branding_args[@]}"
 
       - name: Upload candidate payload
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_payload && (inputs.product == 'all' || inputs.product == matrix.product) }}
+        if: ${{ (github.event_name == 'push' || inputs.build_payload) && (github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product) }}
         uses: actions/upload-artifact@v4
         with:
           name: rocknix-product-payload-${{ matrix.product }}-candidate
