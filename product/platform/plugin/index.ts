@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import type { ReleaseDiscoveryProvider } from "./discovery"
 import type { LaunchMetadata } from "./launch-metadata"
 
 export type ConfigRecord = object
@@ -91,6 +92,7 @@ export interface PluginConfigContributions {
 export interface PluginContributions {
   readonly config?: PluginConfigContributions
   readonly handlers?: readonly PluginHandler[]
+  readonly discovery?: readonly ReleaseDiscoveryProvider[]
 }
 
 export interface PluginDefinitionInput {

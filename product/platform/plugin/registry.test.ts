@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 
 import { plugin, runPluginHandler } from "."
+import { releaseDiscoveryProvider } from "./discovery"
 import {
   createPluginRegistry,
   DuplicatePluginId,
@@ -70,9 +71,19 @@ describe("createPluginRegistry", () => {
     )
   })
 
-  it("exposes enabled handler and generic config contributions", () => {
-    const registry = createPluginRegistry([wrapper], {
-      enabledPluginIds: ["@fake:wrapper"],
+  it("exposes enabled handler, discovery provider, and generic config contributions", () => {
+    const discovery = releaseDiscoveryProvider({
+      id: "@fake:wrapper/test-files",
+      title: "Test files",
+      discover: () => [],
+    })
+    const withDiscovery = plugin({
+      namespace: "@fake",
+      name: "with-discovery",
+      contributes: { discovery: [discovery] },
+    })
+    const registry = createPluginRegistry([wrapper, withDiscovery], {
+      enabledPluginIds: ["@fake:wrapper", "@fake:with-discovery"],
     })
 
     expect(registry.modules["@fake:wrapper/wrapper"]).toEqual({
@@ -82,6 +93,60 @@ describe("createPluginRegistry", () => {
     })
     expect(registry.handlers.map(handler => handler.id)).toEqual([
       "wrapper.compose",
+    ])
+    expect(registry.discoveryProviders.map(provider => provider.id)).toEqual([
+      "@fake:wrapper/test-files",
+    ])
+  })
+
+  it("only exposes discovery providers for enabled plugins", () => {
+    const discovery = releaseDiscoveryProvider({
+      id: "@korri:alpha/test-files",
+      title: "Test files",
+      discover: () => [],
+    })
+    const discoverer = plugin({
+      namespace: "@korri",
+      name: "discoverer",
+      contributes: { discovery: [discovery] },
+    })
+
+    const registry = createPluginRegistry([discoverer, beta], {
+      enabledPluginIds: ["@korri:beta"],
+    })
+
+    expect(registry.discoveryProviders).toEqual([])
+  })
+
+  it("enables explicit plugin requirements before collecting discovery providers", () => {
+    const discovery = releaseDiscoveryProvider({
+      id: "@korri:runtime/test-files",
+      title: "Test files",
+      discover: () => [],
+    })
+    const runtime = plugin({
+      namespace: "@korri",
+      name: "runtime",
+      contributes: { discovery: [discovery] },
+    })
+    const game = plugin({
+      namespace: "@korri",
+      name: "game",
+      requires: [
+        {
+          capability: "release.discovery",
+          ref: { provider: runtime.id, id: "test-files" },
+        },
+      ],
+    })
+
+    const registry = createPluginRegistry([runtime, game], {
+      enabledPluginIds: [game.id],
+    })
+
+    expect(registry.enabledPluginIds.has(runtime.id)).toBe(true)
+    expect(registry.discoveryProviders.map(provider => provider.id)).toEqual([
+      "@korri:runtime/test-files",
     ])
   })
 

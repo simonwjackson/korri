@@ -1,5 +1,6 @@
 import { Data } from "effect"
 
+import type { ReleaseDiscoveryProvider } from "./discovery"
 import type {
   ConfigRecord,
   ConfigRecordMap,
@@ -13,6 +14,12 @@ import { parsePluginRecordId, pluginRecordId } from "./index"
 
 export class DuplicatePluginId extends Data.TaggedError("DuplicatePluginId")<{
   readonly pluginId: PluginId
+}> {}
+
+export class DuplicateDiscoveryProviderId extends Data.TaggedError(
+  "DuplicateDiscoveryProviderId",
+)<{
+  readonly providerId: string
 }> {}
 
 export interface PluginRegistryOptions {
@@ -34,6 +41,7 @@ export interface PluginRegistry {
   readonly profiles: ConfigRecordMap
   readonly catalog: ConfigRecordMap
   readonly handlers: readonly PluginHandler[]
+  readonly discoveryProviders: readonly ReleaseDiscoveryProvider[]
   readonly get: (pluginId: PluginId) => KorriPlugin | undefined
 }
 
@@ -88,6 +96,7 @@ export function createPluginRegistry(
     handlers: enabledPlugins.flatMap(
       plugin => plugin.contributes.handlers ?? plugin.handlers,
     ),
+    discoveryProviders: collectDiscoveryProviders(enabledPlugins),
     get: pluginId => byId.get(pluginId),
   }
 }
@@ -172,6 +181,20 @@ function mergeProviderMaps(plugins: readonly KorriPlugin[]): ConfigRecordMap {
     {},
     ...plugins.map(plugin => plugin.contributes.config.providers),
   )
+}
+
+function collectDiscoveryProviders(
+  plugins: readonly KorriPlugin[],
+): readonly ReleaseDiscoveryProvider[] {
+  const providers = plugins.flatMap(plugin => plugin.contributes.discovery ?? [])
+  const seen = new Set<string>()
+  for (const provider of providers) {
+    if (seen.has(provider.id)) {
+      throw new DuplicateDiscoveryProviderId({ providerId: provider.id })
+    }
+    seen.add(provider.id)
+  }
+  return providers
 }
 
 function mergePluginConfigMaps(
