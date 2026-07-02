@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. Gallery group: FUTURE — migrated to
+ * pico surface. Screen group: FUTURE — migrated to
  * atomic-design pages under pages/future/, composed from
  * ui/{templates,organisms,molecules,atoms}. Thin compatibility barrel so
  * screen-catalog's `Future.*Screen` names keep resolving.

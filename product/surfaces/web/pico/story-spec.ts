@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * The shape a co-located `*.story.tsx` default-exports for the workshop's "parts"
  * catalog. The collector (stories.tsx) infers `layer` from the folder

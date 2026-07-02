@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * The Effect v4 "mount-without-mocking" demo. The SAME page reads `picoGamesAtom`
  * and renders whatever the provided layer yields; SWAP flips `picoLibraryLayerAtom`

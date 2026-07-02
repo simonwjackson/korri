@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Aspirational "future" surfaces Korri does not have yet: friends/presence,
  * achievements, leaderboards, and a storefront. All INVENTED in the

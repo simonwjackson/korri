@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * SHOWCASE moment — ready to play (acquisition payoff). Reads picoGamesAtom.
  */
 import { picoGamesAtom } from "../../data/pico-library-atoms"

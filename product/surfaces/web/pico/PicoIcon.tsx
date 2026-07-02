@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * A cohesive hand-drawn pixel-icon set (same hand as Pixl) to replace borrowed
  * Unicode glyphs (▶ ◐ ⏻ ✕ ⚙ ★ ◂ ▸) with one consistent family. Each icon is an

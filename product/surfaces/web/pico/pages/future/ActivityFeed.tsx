@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Activity feed (static demo data).
  */
 import { ScreenShell } from "../../ui/templates/ScreenShell"

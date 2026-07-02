@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Launch failure. Reads
+ * pico surface. ATOMIC LAYER: page. Launch failure. Reads
  * `picoFailureKindsAtom`.
  */
 import { picoFailureKindsAtom } from "../../data/pico-session-atoms"

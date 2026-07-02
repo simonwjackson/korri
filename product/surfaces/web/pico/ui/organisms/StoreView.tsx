@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Storefront: a featured-collection banner over a grid of store tiles.
  */

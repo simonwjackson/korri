@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Runtime PICO-8 palette remap. Quantizes an ImageData buffer in place to the
  * nearest of the 16 PICO-8 colors. Alpha is preserved so transparent logo art

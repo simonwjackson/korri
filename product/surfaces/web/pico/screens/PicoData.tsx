@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * The one boilerplate seam every data-backed gallery screen mounts through, so
  * the Effect plumbing (isolated registry + AsyncResult conversion) lives in ONE

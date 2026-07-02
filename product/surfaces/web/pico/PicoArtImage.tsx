@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Loads an image, fits it (cover-crop to `ratio`, or contain for transparent
  * logos), point-downsamples to the live granularity (× `scale`), and

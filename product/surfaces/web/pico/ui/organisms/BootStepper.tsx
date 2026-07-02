@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The foreground-session boot stepper: an ordered list of steps with the active
  * one spinning, plus a progress bar.

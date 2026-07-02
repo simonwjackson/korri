@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Community stats: plays / likes / score / difficulty for a game. Reads
  * `picoCommunityStatsAtom` and composes ScreenShell + DetailHead +

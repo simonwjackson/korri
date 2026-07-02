@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * A list of named collections with a count badge, first row selected. Leaf
  * atoms (List/Row/Badge) still come from the kit barrel until they migrate.

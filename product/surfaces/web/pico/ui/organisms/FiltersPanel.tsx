@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Filters & collections drawer: systems list + genre chips + sort cycler. Moved
  * from screens/PanelsScreens.tsx.

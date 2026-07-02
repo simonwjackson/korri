@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Reactive layer over PicoHosts + PicoSeats. Same swap-seam shape as the library
  * atoms. The dual-screen surfaces read the shared library hero atom directly.

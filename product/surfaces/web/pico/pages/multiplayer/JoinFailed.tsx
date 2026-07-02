@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Couldn't connect (static).
  */
 import { PicoIcon } from "../../PicoIcon"

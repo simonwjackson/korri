@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ * pico surface. ATOMIC LAYER: molecule.
  *
  * The shared game-detail header: small cartridge + an info column (title, tags,
  * and whatever the screen puts below — a note paragraph and/or chips). Reused by

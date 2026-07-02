@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Pico's navigation sound, wired into the generic gallery via `config.onCue`.
  * The very first gated gesture fires the boot chime; afterwards each cue plays

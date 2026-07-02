@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  * Variant E — In-Game: the pause / quick-menu overlay shown DURING a session.
  * A session may be local (emulated core) or streamed (remote host), so the
  * SRC badge toggles between the two and the live-stats strip swaps to match.

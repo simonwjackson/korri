@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Reactive layer over PicoSaves. Same swap-seam shape as the library atoms.
  */

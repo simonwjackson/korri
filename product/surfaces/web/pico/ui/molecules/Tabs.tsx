@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ * pico surface. ATOMIC LAYER: molecule.
  *
  * Horizontal tab strip. Moved from `kit.tsx`.
  */

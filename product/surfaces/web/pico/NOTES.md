@@ -1,54 +1,40 @@
-# pico theme — prototype
+# pico surface
 
-**THROWAWAY.** UI prototype (se-prototype). Delete this whole directory and the
-`/pico-prototype` route once a direction wins. The reusable `device-lab/` kit is
-the one part worth graduating, not discarding (see below).
+An 8-bit / pixel-art **pico** theme (PICO-8 palette) for a range of devices —
+handheld (Anbernic RG353M) through larger lean-back panels (Ayn Odin / "Thor"-
+class) — authored with **intrinsic web design**: fluid sizing via container
+queries + `cqi`/`cqh` units + `em`, driven by a small set of generator tokens,
+each screen rendered at its **true physical size in mm**.
 
-## What this is
-
-An exploration of a new 8-bit / pixel-art **pico** theme (PICO-8 palette) for a
-range of devices — handheld (Anbernic RG353M) through larger lean-back panels
-(Ayn Odin / "Thor"-class) — viewed on a **physical-size calibration desk**
-(`device-lab/`).
-
-> **Major reversal worth knowing:** this started "pixel-perfect, locked to
-> 640×480." That was **deliberately abandoned** in favour of **intrinsic web
-> design** — fluid sizing via container queries + `cqi`/`cqh` units + `em`,
-> driven by a small set of generator tokens, with each screen rendered at its
-> **true physical size in mm**. The methodology + rationale live in
-> **`device-lab/AGENTS.md`** — read that first.
+Pico is a real Korri surface, developed and viewed entirely in the **device
+lab** (`tools/theme-workshop/`). There is no separate standalone gallery route;
+the lab is the single home. The methodology + rationale for intrinsic design
+live in **`device-lab/AGENTS.md`** — read that first.
 
 ## How to view
-
-Standalone, no backend (recommended — the full portal stack is flaky here):
 
 ```bash
 just dev-theme-workshop   # serves the workshop viewer; open the printed URL
 ```
 
-The viewer is the dev-only app at `tools/theme-workshop/`; pico is registered
-there via `themes.ts` (it just exports `picoConfig` from `config.tsx`).
+Pico is registered in the lab via `tools/theme-workshop/themes.ts` (it exports
+`picoConfig` from `config.tsx`). Every part — atom → molecule → organism →
+template → page — is discovered by the lab (`*.part.tsx` co-located with each
+component, plus the page screens surfaced through `config.tsx`). Fake data lives
+in `fixtures.ts` + `fixtures-extra.ts`.
 
-### The state gallery
+## Atomic structure
 
-The prototype is now a **max-out state gallery**: ~74 screens covering every
-state the theme can be in — current Korri *and* plausible future — each directly
-reachable, nothing wired into flows. Navigate with the floating bottom bar
-(`◀ / ▶`), the `←/→` arrow keys, the **`M`** key (or the `MAP` button) for the
-grouped **STATE MAP** jump panel, or `?screen=<id>` on the route.
-
-Groups (`screen-catalog.tsx` is the single source of truth): **Library, Detail,
-Acquire, Session, In-Game, Settings, Multi-Device, System, Future.** Each group
-lives in `screens/<Group>Screens.tsx` + `screens/<group>.css`; every screen
-composes from the shared `screens/kit.tsx` (Screen/Title/Btn/List/Row/Card/Modal/
-Progress/Toggle/Tabs/Stat/Badge/Hero/Spinner/…) over the shared `pc-*` CSS atoms.
-Fake data lives in `fixtures.ts` + `fixtures-extra.ts`.
-
-**Adding a screen:** author it in a group file, import it in `screen-catalog.tsx`,
-add a `PicoScreen` entry. Intrinsic-design contract for every screen: type from
-`--pico-text-*`, space from `--pico-space-*`, big art via `min(<cqh>,
-calc(var(--pico-base) * N))` — never inline `font-size`, never a raw runaway
-`cqh`/`cqw` on a leaf, selection state in CSS classes only.
+- `ui/atoms`, `ui/molecules`, `ui/organisms`, `ui/templates` — the reusable kit,
+  each component with a `.part.tsx` catalog entry and a `.story.tsx`.
+- `pages/**` — screens (grouped by feature) that compose the kit; surfaced in the
+  lab as page-layer stories via `config.tsx` / `screen-catalog.tsx`.
+- Every part carries `data-korri-part/layer/name` tags (see `pico-design-parts.ts`)
+  so the lab can pick it. Composed-root parts (`List`, `KeyArtBackdrop`,
+  `ScreenShell`, `PicoArtImage`, `renderPicoCart`) accept a `partAttrs` override so
+  a composing part claims the shared root without adding a wrapper.
+- The routed surface the lab mounts is `VariantCartridgeShelf` (home) +
+  `VariantGameDetail` (game detail), wired against the live catalog atoms.
 
 ## The calibration desk (`device-lab/`)
 
@@ -56,10 +42,9 @@ A reusable, template-agnostic harness. The toggle (top-left gear) opens a tabbed
 panel:
 
 - **Scale** — calibrate the monitor once: drag SCALE until the dashed box
-  matches a real credit card (true px/mm). Card target only shows on this tab.
+  matches a real credit card (true px/mm).
 - **Devices** — each device defined by real **mm** (W×H) + per-device **TEXT** /
-  **PAD** multipliers; add / remove / rename. Seeds: RG353M, THOR, ODIN 2 PORTAL
-  at 6.78 px/mm (calibrated on the dev monitor).
+  **PAD** multipliers. Seeds: RG353M, THOR, ODIN 2 PORTAL at 6.78 px/mm.
 - **Generators** — the theme's scale knobs: **BASE** (cqi anchor), **MIN** /
   **MAX** (clamp bounds), **RATIO** (type scale), **SPACE** (space unit).
 - **export** — copies current values as NDJSON to bake back into the seeds.
@@ -76,55 +61,13 @@ State persists per browser under `pico:lab`; **reset** restores the code seeds.
 - space steps `--pico-space-1 … 4` = `SPACE · n · pad-scale`.
 
 `--pico-text-scale` / `--pico-pad-scale` are set inline per device by the lab
-(the TEXT / PAD sliders). Tailwind v4 `@theme` port is de-risked — see
-`device-lab/spike/`.
-
-## The five pages
-
-- **A — Home** (`VariantCartridgeShelf`): hero cartridge coverflow, big title +
-  stats. Art-forward.
-- **B — Settings** (`VariantSettings`): category list + detail controls.
-- **C — Browse** (`VariantIconGrid`): console "home OS" icon grid + focus tray.
-- **D — Game Detail** (`VariantGameDetail`): the page reached by selecting a
-  game. First real **tier-3 art-direction seam** — one `@container
-  (min-aspect-ratio: 16/10)` flips stacked (handheld) ↔ split hero (lean-back),
-  keyed off the device's true aspect ratio (monitor-calibration independent).
-- **E — In-Game** (`VariantInGame`): pause / quick-menu overlay shown DURING a
-  session. A session may be local or streamed → the SRC badge toggles
-  STREAM⇄LOCAL and the live-stats strip swaps.
-
-## Where we left off (resume here)
-
-- **Cart sizing fix landed on D only.** A raw unbounded `cqh` cart ran away on
-  big screens because the type scale is clamped but the cart wasn't. Fixed by
-  deriving the cart from `--pico-base` (`min(74cqh, calc(var(--pico-base)*12))`),
-  so cart + text share one ceiling. This made **MAX the A↔B dial**: low MAX →
-  content plateaus + whitespace (B); high MAX → scaled-up handheld (A). Verified
-  live (cart 132/264/312 at MAX 200 vs 132/216/216 at MAX 18 across the seeds).
-- **OPEN — propagate the bounded-token fix to A / C / E** (Home & Browse carts
-  almost certainly still have raw `cqh`/`cqw` leaves). Tracked in backlog
-  **task-013**.
-- **OPEN — pick the A vs B character**: dial MAX across the three real devices,
-  decide the sweet spot, `export`, and bake into the CSS fallbacks +
-  `PICO_KNOBS` / `PICO_DEVICES` seeds.
-- **OPEN — pick the winning Home direction** (A / C, possibly steal from each).
-- **THEN — graduate**: fold the winner into a real `product/surfaces/web/pico/`
-  (Tailwind v4 `@theme`), register in `surface-host-registry.ts`. The device lab +
-  workshop already live at the shared dev surface `tools/theme-workshop/`; the
-  graduated theme keeps exporting a `ThemeWorkshopConfig` and stays registered in
-  `tools/theme-workshop/themes.ts`. Delete this prototype dir when done.
-
-## Verdict (fill in after review)
-
-- Home winner: _TBD_
-- A vs B scaling character: _TBD (the MAX sweet spot)_
-- Steal-from-others: _TBD_
+(the TEXT / PAD sliders).
 
 ## Gotchas
 
 - **Inline `style={{...}}` beats class state.** A row's inline `background` /
   `color` overrides its `.sel` highlight — keep button base styles in CSS, not
-  inline (re-hit twice: Settings rows, In-Game menu).
-- **`just typecheck` currently fails** on unrelated pre-existing repo drift
-  (`sessiond` / `foreground-launch` files) — none of it is pico/device-lab.
-  Validate prototype work with `bunx biome lint product/surfaces/web/pico`.
+  inline.
+- Big art must derive from `--pico-base` (`min(<cqh>, calc(var(--pico-base) *
+  N))`), never a raw unbounded `cqh`/`cqw` on a leaf, so art shares the type
+  scale's ceiling.

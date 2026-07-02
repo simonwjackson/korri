@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ * pico surface. ATOMIC LAYER: molecule.
  *
  * A streaming-quality segmented bar with a tone + tag. Shared by the stream
  * overlay (GOOD) and the reconnecting screen (DROPPING).

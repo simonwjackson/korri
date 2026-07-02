@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Download confirmation: cart art beside a body with title/genre, the size /
  * source / runtime stats, and download/cancel actions.

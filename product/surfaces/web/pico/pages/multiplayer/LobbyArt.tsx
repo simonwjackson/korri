@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Art-forward lobby. Reads `picoPartySessionAtom`.
  */
 import { picoPartySessionAtom } from "../../data/pico-party-atoms"

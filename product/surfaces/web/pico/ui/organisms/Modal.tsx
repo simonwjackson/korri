@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * A centered modal / sheet over a dimmed game backdrop. Moved from `kit.tsx`.
  */

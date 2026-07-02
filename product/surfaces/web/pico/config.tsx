@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Assembles the pico theme's `ThemeWorkshopConfig`: device roster, generator
  * knobs, the screen catalog, the skin class names (so pico's existing CSS drives

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ * pico surface. ATOMIC LAYER: molecule.
  *
  * A settings row: a label on the left and a control (toggle / cycler / bar /
  * info) supplied as children. Shared by the display/network/labs/system panes.

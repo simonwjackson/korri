@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: atom.
+ * pico surface. ATOMIC LAYER: atom.
  *
  * Animated 8-bit spinner (three blinking blocks). Moved from `kit.tsx`.
  */

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Playful retro "gather your crew" lobby: a marquee, mascot seat slots, and a
  * waiting footer.

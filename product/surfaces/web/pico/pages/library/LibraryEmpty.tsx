@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Library empty state. Seeds the `empty` behavior layer; `list()` succeeds with
  * no carts and the success branch renders the empty hero.

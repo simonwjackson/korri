@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. Gallery group: MULTI-DEVICE — migrated to
+ * pico surface. Screen group: MULTI-DEVICE — migrated to
  * atomic-design pages under pages/multidevice/, composed from
  * ui/{templates,organisms,molecules,atoms}. Thin compatibility barrel so
  * screen-catalog's `MultiDevice.*Screen` names keep resolving.

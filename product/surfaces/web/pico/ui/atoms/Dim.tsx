@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: atom.
+ * pico surface. ATOMIC LAYER: atom.
  *
  * Dimmed inline text. Moved from `kit.tsx`.
  */

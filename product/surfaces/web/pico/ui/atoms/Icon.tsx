@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: atom.
+ * pico surface. ATOMIC LAYER: atom.
  *
  * The 8-bit glyph icon. The implementation still lives at `../../PicoIcon`
  * (relocating the art primitives is a later pass); this file is its atomic-layer

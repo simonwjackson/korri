@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. Gallery group: IN-GAME — migrated to
+ * pico surface. Screen group: IN-GAME — migrated to
  * atomic-design pages under pages/ingame/, composed from
  * ui/{templates,organisms,molecules,atoms}. Thin compatibility barrel so
  * screen-catalog's `InGame.*Screen` names keep resolving.

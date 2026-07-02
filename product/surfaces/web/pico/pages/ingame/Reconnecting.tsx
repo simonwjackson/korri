@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Stream reconnecting (static). GameOverlay backdrop + a reconnecting hero.
  */
 import { PicoIcon } from "../../PicoIcon"

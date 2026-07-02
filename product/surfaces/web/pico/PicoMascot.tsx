@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * "Pixl" — the console's companion sprite, the OS's little face. A crisp pixel
  * creature (inline SVG, shape-rendering: crispEdges) sized in em so it rides the

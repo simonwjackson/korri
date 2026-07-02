@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  * Gallery group: PANELS — side panels that PUSH the UI aside (not overlay it).
  * The main pane is its own `container-type: size` query container, so when the
  * drawer claims a slice of width the content reflows. Migrated to atomic-design

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Repair / verify readout: progress plus a per-file checklist with OK/REPAIRING
  * badges.

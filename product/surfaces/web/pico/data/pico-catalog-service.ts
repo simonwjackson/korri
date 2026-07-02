@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * The systems/cores catalog. Mirrors `CatalogFactsSource.snapshot`
  * (catalog-facts-source.ts:50) + the `app.catalog.snapshot` RPC

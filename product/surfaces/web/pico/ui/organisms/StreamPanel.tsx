@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The streaming session overlay body: session name, live transport stats, a
  * quality bar, and pause/resume/quit controls.

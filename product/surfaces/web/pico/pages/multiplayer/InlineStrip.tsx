@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Inline seat strip (no-hub placement). Reads `picoInlineStripAtom`.
  */
 import { picoInlineStripAtom } from "../../data/pico-party-atoms"

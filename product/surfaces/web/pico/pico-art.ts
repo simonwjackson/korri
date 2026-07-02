@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * The fixtures ship no box art, which is on-brand for 8-bit: derive a
  * deterministic "cartridge label" (palette + initials + dither seed)

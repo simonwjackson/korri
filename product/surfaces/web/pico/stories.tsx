@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * The workshop's "parts" (component catalog) story list — assembled
  * automatically. Each component co-locates a `<Component>.story.tsx` that

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. Gallery group: LIBRARY — migrated to
+ * pico surface. Screen group: LIBRARY — migrated to
  * atomic-design pages under pages/library/, composed from
  * ui/{templates,organisms,molecules,atoms}. This file is now a thin
  * compatibility barrel so screen-catalog's `Library.*Screen` names keep

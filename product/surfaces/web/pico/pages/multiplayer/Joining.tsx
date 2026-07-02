@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Joining a session. Reads `picoPartyGameAtom`.
  */
 import { picoPartyGameAtom } from "../../data/pico-party-atoms"

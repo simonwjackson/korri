@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Nearby devices (static demo data).
  */
 import { Badge } from "../../ui/atoms/Badge"

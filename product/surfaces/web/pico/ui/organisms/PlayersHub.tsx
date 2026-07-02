@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The art-forward "Players & Devices" hub: an active-session card, a
  * seats + friends two-column block, and a start-new-session action.

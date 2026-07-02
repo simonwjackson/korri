@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The reactive home stage: Pixl gazing toward the focused cart, an interactive
  * cart rail, a caption, and the launch CRT overlay. Presentation only — the page

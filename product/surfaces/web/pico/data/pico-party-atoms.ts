@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Reactive layer over PicoParty, plus the combined atoms the Multiplayer screens
  * read. The session screens anchor on a co-op title (games[4]) and combine it

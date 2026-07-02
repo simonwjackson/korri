@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. First-run welcome (static).
+ * pico surface. ATOMIC LAYER: page. First-run welcome (static).
  */
 import { Title } from "../../ui/atoms/Title"
 import { ScreenShell } from "../../ui/templates/ScreenShell"

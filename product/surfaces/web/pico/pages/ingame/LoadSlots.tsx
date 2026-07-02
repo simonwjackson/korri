@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Load-state slots. Reads `picoSaveSlotsAtom`; Modal is the in-session shell.
  */
 import { picoSaveSlotsAtom } from "../../data/pico-ingame-atoms"

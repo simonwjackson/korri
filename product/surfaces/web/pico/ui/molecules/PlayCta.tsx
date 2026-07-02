@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ * pico surface. ATOMIC LAYER: molecule.
  *
  * The "play / continue" call-to-action: play glyph + label. Visual only. Lifted
  * from the repeated `pcShow-play` / `pcLast-cta` spans; the caller supplies the

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Leaderboard: a friends/global tab header and ranked rows (medals for top 3,
  * the "you" row highlighted).

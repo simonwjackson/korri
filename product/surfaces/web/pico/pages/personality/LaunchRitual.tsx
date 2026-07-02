@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * The launch ritual screen. Reads `picoHeroAtom`, composes ScreenShell +
  * LaunchTube.

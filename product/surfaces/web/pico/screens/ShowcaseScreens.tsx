@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  * Gallery group: SHOWCASE — the "more pop" iteration. Art-forward, content-first
  * (NO system picker, NO A–Z list).
  *

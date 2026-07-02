@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ * pico surface. ATOMIC LAYER: molecule.
  *
  * A game's logo art with a typeset-title fallback when there's no logo. Lifted
  * from the repeated `logoUrl ? <PicoArtImage contain> : <h1>` pattern in the

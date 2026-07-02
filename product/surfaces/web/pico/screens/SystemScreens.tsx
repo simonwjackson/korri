@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. Gallery group: SYSTEM — migrated to
+ * pico surface. Screen group: SYSTEM — migrated to
  * atomic-design pages under pages/system/, composed from ui/{templates,atoms}.
  * Thin compatibility barrel so screen-catalog's `System.*Screen` names keep
  * resolving. All screens are static system chrome.

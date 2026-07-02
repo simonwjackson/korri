@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: template.
+ * pico surface. ATOMIC LAYER: template.
  *
  * Content-agnostic page skeleton: optional status bar (title) + scrolling main +
  * optional button bar (hints). Omit title/hints for full-bleed overlays (boot,

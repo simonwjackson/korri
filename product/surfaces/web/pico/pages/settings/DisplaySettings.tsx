@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Display & video (static).
+ * pico surface. ATOMIC LAYER: page. Display & video (static).
  */
 import { BlockBar } from "../../ui/atoms/BlockBar"
 import { Toggle } from "../../ui/atoms/Toggle"

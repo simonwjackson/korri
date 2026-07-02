@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Not-installed game: dimmed art, a NOT INSTALLED badge, and download actions.
  * Reads `picoDetailGameAtom` and composes ScreenShell + DetailHead + actions.

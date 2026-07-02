@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Non-final download that needs the browser. Reads `picoAcquireTargetAtom`.
  */
 import { picoAcquireTargetAtom } from "../../data/pico-detail-atoms"

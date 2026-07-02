@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Search with the on-screen keyboard + live results. Reads `picoGamesAtom`,
  * composes ScreenShell + SearchQuery + OnScreenKeyboard + SearchResults.

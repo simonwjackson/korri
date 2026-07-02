@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The arcade attract loop: starfield, big logo, a looping cart marquee, and a
  * hi-score / press-start footer.

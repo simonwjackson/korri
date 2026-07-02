@@ -1,4 +1,4 @@
-/** PROTOTYPE — pico theme exploration. Throwaway. */
+/** pico surface. */
 
 import type { PicoGame } from "./fixtures"
 import { renderPicoCart } from "./pico-cart-view"

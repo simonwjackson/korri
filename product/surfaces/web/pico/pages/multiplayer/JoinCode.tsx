@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Join by code / QR (static).
  */
 import { Dim } from "../../ui/atoms/Dim"

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Notification toast (static).
+ * pico surface. ATOMIC LAYER: page. Notification toast (static).
  */
 import { Badge } from "../../ui/atoms/Badge"
 import { Icon } from "../../ui/atoms/Icon"

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Exiting / teardown (static).
+ * pico surface. ATOMIC LAYER: page. Exiting / teardown (static).
  */
 import { Badge } from "../../ui/atoms/Badge"
 import { Spinner } from "../../ui/atoms/Spinner"

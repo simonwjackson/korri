@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Connection negotiation stepper (static).
  */
 import { Progress } from "../../ui/atoms/Progress"

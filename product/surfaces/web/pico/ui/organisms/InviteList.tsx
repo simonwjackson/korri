@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Invite-a-friend list: presence dot, name, what they're playing, and an invite
  * CTA (disabled when offline). First row selected.

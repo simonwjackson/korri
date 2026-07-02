@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * The "woven in + reactive" home: hover/click a cart to focus it, Pixl gazes
  * toward it (and chirps), and selecting fires the launch ritual. Owns the

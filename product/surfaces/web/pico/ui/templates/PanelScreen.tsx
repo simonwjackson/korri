@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: template.
+ * pico surface. ATOMIC LAYER: template.
  *
  * Push-drawer shell for PANELS screens. The drawer is a SIBLING of the whole
  * page (status bar + main + button bar), and the page translates off-viewport by

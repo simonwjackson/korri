@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Horizontal strip of cartridges with one active item highlighted. Styling is
  * the Showcase rail (`pcShow-rail*`) for now; generalising it across the other

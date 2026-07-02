@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Game-detail data: release picker, emulator chooser, resolvable runtimes, and
  * community stats. No real RPC exists for these yet, so they're INVENTED in the

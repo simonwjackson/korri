@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Continue-playing list: recent games as rows with a cart thumbnail, last-played
  * meta, and playtime, first row selected. Leaf atoms (List/Row/Dim) still come

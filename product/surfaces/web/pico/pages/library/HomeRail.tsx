@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Library home: a focused coverflow rail + a caption for the focused cart. Reads
  * `picoGamesAtom`, composes ScreenShell + LibraryRail.

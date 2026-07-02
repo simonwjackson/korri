@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Controller pairing (static).
  */
 import { Glyph } from "../../ui/atoms/Glyph"

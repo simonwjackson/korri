@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. Gallery group: DATA — migrated to the
+ * pico surface. Screen group: DATA — migrated to the
  * atomic-design page under pages/data/, composed from ui/{templates,molecules,
  * atoms}. Thin compatibility barrel so screen-catalog's `DataEffect.*Screen`
  * name keeps resolving.

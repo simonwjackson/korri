@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: atom.
+ * pico surface. ATOMIC LAYER: atom.
  *
  * Display-font heading. Size via `size` -> token step (`--pico-text-*`); the
  * class owns font-size (never inline). Moved from `kit.tsx`; `kit` re-exports.

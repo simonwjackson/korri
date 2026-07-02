@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Adapts the shared game fixtures into a tiny read-only view model the
  * three pico home-screen variants render against. Real theme would read

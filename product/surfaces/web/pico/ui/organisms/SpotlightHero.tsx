@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The Spotlight home's featured-game hero: key-art backdrop + cartridge + an
  * info column (kicker / logo / tags / play CTA). Renders a fragment — the

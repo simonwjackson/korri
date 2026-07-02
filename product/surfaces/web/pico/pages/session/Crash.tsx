@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Crash (static).
+ * pico surface. ATOMIC LAYER: page. Crash (static).
  */
 import { Btn } from "../../ui/atoms/Btn"
 import { Icon } from "../../ui/atoms/Icon"

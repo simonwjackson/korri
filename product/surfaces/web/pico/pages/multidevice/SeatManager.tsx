@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Seat / device manager. Reads `picoSeatsAtom`.
  */
 import { picoSeatsAtom } from "../../data/pico-devices-atoms"

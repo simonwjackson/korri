@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  * Variant D — Game Detail: the page you land on after selecting a game.
  * Art-directed by FORM FACTOR (not viewport px): on a tall/squarish handheld
  * it stacks art over metadata; on a wide lean-back panel it splits into a

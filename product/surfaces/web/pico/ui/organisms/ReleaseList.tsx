@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The list of release "flavors" a cart ships in (app · system · runtime · size),
  * with the recommended one selected and an INSTALLED/GET badge per row. Leaf

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Tiny 8-bit sound engine (WebAudio, no assets). Square/triangle blips with a
  * short gain envelope so navigating the console actually *sounds* like one.

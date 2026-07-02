@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Centered hero state: glyph/adornment + title + message + actions. Reused by
  * most loading / error / empty / confirm screens. Moved from `kit.tsx`.

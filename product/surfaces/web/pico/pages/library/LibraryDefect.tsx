@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Library defect state. Seeds the `defect` behavior layer; `list()` dies and
  * PicoData's `defect` slot renders the unrecoverable hero.

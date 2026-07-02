@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Library loading state. Seeds the `loading-forever` behavior layer so `list()`
  * never resolves and the AsyncResult stays waiting — rendering the loading hero

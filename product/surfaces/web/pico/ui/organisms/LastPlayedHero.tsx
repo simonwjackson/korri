@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The "jump back in" cinematic hero: full-bleed key-art backdrop + an info
  * column (kicker / logo / last-played meta / continue CTA). Renders a fragment so

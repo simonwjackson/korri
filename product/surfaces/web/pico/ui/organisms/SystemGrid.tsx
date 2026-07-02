@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The console / system picker grid: each system with its name + game count, the
  * first one selected. Stat atom still comes from the kit barrel until it migrates.

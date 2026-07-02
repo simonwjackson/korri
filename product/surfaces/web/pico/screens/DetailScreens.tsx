@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  * Gallery group: DETAIL — migrated to atomic-design pages under pages/detail/,
  * composed from ui/{templates,organisms,molecules,atoms}. This file is now a
  * thin compatibility barrel so screen-catalog's `Detail.*Screen` names keep

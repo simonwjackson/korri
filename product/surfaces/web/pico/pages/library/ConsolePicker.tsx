@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Console / system picker. Reads `picoSystemsAtom`, composes ScreenShell +
  * SystemGrid.

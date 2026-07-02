@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Effect v4 "mount-without-mocking" shape, applied to pico. The data dependency
  * is a single Context.Service (PicoLibrary) with its layers CO-LOCATED on the

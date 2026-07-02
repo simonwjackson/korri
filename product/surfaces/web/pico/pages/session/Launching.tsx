@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Launch gate. Reads `picoHeroAtom`.
+ * pico surface. ATOMIC LAYER: page. Launch gate. Reads `picoHeroAtom`.
  */
 import { picoHeroAtom } from "../../data/pico-library-atoms"
 import { PicoData } from "../../screens/PicoData"

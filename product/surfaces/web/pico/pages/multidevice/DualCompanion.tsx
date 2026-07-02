@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Dual-screen companion (full-bleed). Reads `picoHeroAtom`.
  */
 import { picoHeroAtom } from "../../data/pico-library-atoms"

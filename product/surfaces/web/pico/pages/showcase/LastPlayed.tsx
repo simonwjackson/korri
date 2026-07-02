@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Single-game "jump back in" hero: the one game you last played, big and
  * cinematic — the most content-first surface there is (no rails, no list, one

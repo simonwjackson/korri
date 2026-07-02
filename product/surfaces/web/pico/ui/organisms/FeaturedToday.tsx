@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Game of the day: a big featured cart with blurb + actions, and a "more like
  * this" thumbnail rail.

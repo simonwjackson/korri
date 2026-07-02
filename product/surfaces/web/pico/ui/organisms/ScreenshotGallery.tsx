@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Screenshot gallery: one big focused shot + a caption, over a strip of
  * thumbnails with the current one selected. (Carts stand in for shots in the

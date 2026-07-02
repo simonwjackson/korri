@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Extra fake view-models for the max-out state gallery. None of this is wired
  * to real RPC / plugins / sessions — it is fixed-density fixture data so every

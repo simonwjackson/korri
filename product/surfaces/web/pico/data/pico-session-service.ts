@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * The launch gate + foreground-session lifecycle. Highest-fidelity mirror in the
  * prototype: `status()` returns a `PicoSessionGateState` that copies the real

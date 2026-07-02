@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The on-screen 8-bit keyboard: rows of single-character keys you drive with the
  * d-pad. Layout is intrinsic to the keyboard so it lives here.

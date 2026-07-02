@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * The local/remote multiplayer party (players + seats + readiness). Invented in
  * the `LibrarySource` conventions; no real RPC exists yet.

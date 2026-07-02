@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  * Variant A — Cartridge Shelf: one hero cartridge, neighbours peeking,
  * big title + stats underneath. Horizontal coverflow, one game at a time.
  */

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Leaderboards. Reads `picoScoresAtom`.
  */
 import { picoScoresAtom } from "../../data/pico-social-atoms"

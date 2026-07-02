@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Reactive layer over PicoSocial + PicoStore, plus the combined atoms the Future
  * screens read (profile counts, game-of-the-day) via `AsyncResult.all`.

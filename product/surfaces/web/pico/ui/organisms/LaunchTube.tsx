@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The launch ritual: a cartridge dropping into a tube + a CRT power-on strip
  * naming the game. Presentation for the launch screen.

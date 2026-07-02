@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  * Variant C — Icon Grid: a console "home OS" desktop of cartridge icons
  * with a selection box, plus a bottom tray showing the focused game.
  */

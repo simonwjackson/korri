@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Screenshot gallery for a game. Reads `picoMediaGalleryAtom` and composes
  * ScreenShell + ScreenshotGallery.

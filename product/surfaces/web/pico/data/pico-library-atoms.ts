@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * The reactive layer over PicoLibrary. The provided layer is itself an atom
  * (`picoLibraryLayerAtom`) — THIS is the swap seam: set it to `PicoLibrary.Live`

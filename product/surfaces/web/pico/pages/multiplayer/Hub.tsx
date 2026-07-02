@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Players & Devices hub. Reads `picoPartyHubAtom`.
  */
 import { picoPartyHubAtom } from "../../data/pico-party-atoms"

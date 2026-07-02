@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Game quick-look drawer: art + title/meta + stats + continue/releases actions.
  * Moved from screens/PanelsScreens.tsx.

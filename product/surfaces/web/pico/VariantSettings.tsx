@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  * Variant B — Settings: category list on the left, the selected category's
  * controls (toggle / option cycler / slider / info) on the right. The
  * list+detail pattern suits settings far better than a game library, so games

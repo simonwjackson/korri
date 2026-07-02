@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Cloud save conflict (static).
  */
 import { Badge } from "../../ui/atoms/Badge"

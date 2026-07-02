@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Stream hosts + connected seats. `PicoHosts` is a PARTIAL mirror of the catalog
  * peers concept (`CatalogPeerSnapshot` — hostId/displayName/status/…,

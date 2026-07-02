@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Install progress: a checklist of steps (fetch/verify/unpack/prepare-runtime/
  * register) with the active one marked, plus a progress bar.

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Friends / party rail drawer: presence rows with join/invite CTAs. Moved from
  * screens/PanelsScreens.tsx.

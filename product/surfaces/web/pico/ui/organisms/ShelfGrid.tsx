@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Stack of curated, contextual shelves (Continue / Because you played X / Fresh
  * drops), each a titled row of big-art tiles. The first tile of the first shelf

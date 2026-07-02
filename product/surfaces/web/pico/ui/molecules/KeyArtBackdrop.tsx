@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ * pico surface. ATOMIC LAYER: molecule.
  *
  * Full-bleed pixelized key-art backdrop sitting behind a hero. Renders nothing
  * when there's no source. Lifted from the inlined `pcShow-spot-herobg` /

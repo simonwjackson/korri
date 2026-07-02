@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. Gallery group: SETTINGS — migrated to
+ * pico surface. Screen group: SETTINGS — migrated to
  * atomic-design pages under pages/settings/, composed from
  * ui/{templates,molecules,atoms}. Thin compatibility barrel so screen-catalog's
  * `Settings.*Screen` names keep resolving. Shared label+control rows lifted into

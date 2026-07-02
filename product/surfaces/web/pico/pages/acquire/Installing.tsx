@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Runtime install. Reads `picoInstallingAtom`.
  */
 import { picoInstallingAtom } from "../../data/pico-detail-atoms"

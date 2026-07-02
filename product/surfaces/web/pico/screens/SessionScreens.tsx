@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. Gallery group: SESSION — migrated to
+ * pico surface. Screen group: SESSION — migrated to
  * atomic-design pages under pages/session/, composed from
  * ui/{templates,organisms,molecules,atoms}. Thin compatibility barrel so
  * screen-catalog's `Session.*Screen` names keep resolving.

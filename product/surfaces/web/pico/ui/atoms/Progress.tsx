@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: atom.
+ * pico surface. ATOMIC LAYER: atom.
  *
  * Determinate progress bar (0..100). Width is the only inline style (layout,
  * not type), which is allowed. Moved from `kit.tsx`.

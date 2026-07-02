@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Community readout for a game: a strip of stat tiles plus a difficulty meter.
  * Renders a fragment so both blocks sit directly in the detail screen flow. Leaf

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * SHOWCASE moment — curate by feeling, not genre (multi-tile sibling). Reads
  * picoGamesAtom.
  */

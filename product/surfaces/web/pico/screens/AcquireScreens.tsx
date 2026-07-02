@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. Gallery group: ACQUIRE — migrated to
+ * pico surface. Screen group: ACQUIRE — migrated to
  * atomic-design pages under pages/acquire/, composed from
  * ui/{templates,organisms,molecules,atoms}. Thin compatibility barrel so
  * screen-catalog's `Acquire.*Screen` names keep resolving.

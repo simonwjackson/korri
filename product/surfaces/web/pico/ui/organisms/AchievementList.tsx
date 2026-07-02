@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Achievements: an unlocked/total summary, a freshly-unlocked toast, and the
  * full list with rarity tags.

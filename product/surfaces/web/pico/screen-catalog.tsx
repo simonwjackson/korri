@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Single source of truth for the max-out STATE GALLERY: every distinct state
  * the pico theme can be in (current Korri + plausible future), each directly

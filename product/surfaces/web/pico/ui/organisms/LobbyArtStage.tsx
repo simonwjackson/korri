@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Art-forward lobby: big key-art backdrop + logo, players quiet along the
  * bottom. Reuses KeyArtBackdrop + GameLogo.

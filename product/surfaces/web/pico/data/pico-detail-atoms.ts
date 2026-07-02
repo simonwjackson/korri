@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Reactive layer over PicoReleases + PicoStats, plus the per-screen combined
  * atoms the detail/acquire screens read. A detail screen anchors on one game

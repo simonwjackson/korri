@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Boot splash (static).
+ * pico surface. ATOMIC LAYER: page. Boot splash (static).
  */
 import { Spinner } from "../../ui/atoms/Spinner"
 import { ScreenShell } from "../../ui/templates/ScreenShell"

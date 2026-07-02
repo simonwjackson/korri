@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The filter & sort controls: genre chips, a sort cycler, and boolean toggles.
  * Renders a fragment of sections. Leaf atoms (Chip/Opt/Dim/Row/Toggle) still come

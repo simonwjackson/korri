@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * SHOWCASE moment — resume right where you left off. Reads picoHeroAtom.
  */
 import { picoHeroAtom } from "../../data/pico-library-atoms"

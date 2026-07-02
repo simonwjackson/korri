@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Release picker: the flavors a cart ships in. Reads `picoReleasePickerAtom` and
  * composes ScreenShell + DetailHead + ReleaseList.

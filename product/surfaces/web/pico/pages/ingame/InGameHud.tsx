@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Minimal in-game HUD overlay (static).
  */
 import { HudOverlay } from "../../ui/organisms/HudOverlay"

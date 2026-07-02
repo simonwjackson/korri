@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * In-session players HUD: per-player lives/score/signal over the game backdrop,
  * with a co-op footer.

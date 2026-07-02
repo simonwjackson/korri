@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Player style comparison. Reads `picoPlayersAtom`.
  */
 import { picoPlayersAtom } from "../../data/pico-party-atoms"

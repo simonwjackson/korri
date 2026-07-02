@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  * Gallery group: SHOWCASE — single-game "moment" heroes (art-forward,
  * content-first; no rails/lists). Migrated to atomic-design pages under
  * pages/moments/, composed from ui/{templates,organisms,molecules,atoms} around

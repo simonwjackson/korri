@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Power menu (static).
+ * pico surface. ATOMIC LAYER: page. Power menu (static).
  */
 
 import { Icon } from "../../ui/atoms/Icon"

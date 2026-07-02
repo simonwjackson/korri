@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Content-first browse: curated, contextual shelves, each a strip of big art.
  * The anti-pattern this replaces is "choose a system, then an A–Z list". Reads

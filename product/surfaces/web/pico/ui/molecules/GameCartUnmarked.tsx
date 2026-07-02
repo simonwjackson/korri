@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ * pico surface. ATOMIC LAYER: molecule.
  *
  * Cartridge art without the favorite mark. Use this distinct composition where
  * surrounding chrome already owns status badges and the cart should stay quiet.

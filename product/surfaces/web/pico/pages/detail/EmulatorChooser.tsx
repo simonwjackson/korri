@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Emulator / app chooser: which core drives this game. Reads
  * `picoEmulatorChooserAtom` and composes ScreenShell + DetailHead + AppChoiceList.

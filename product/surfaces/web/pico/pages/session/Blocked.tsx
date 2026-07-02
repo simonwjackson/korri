@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Launch blocked (static).
+ * pico surface. ATOMIC LAYER: page. Launch blocked (static).
  */
 import { Hero } from "../../ui/organisms/Hero"
 import { ScreenShell } from "../../ui/templates/ScreenShell"

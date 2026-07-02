@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: template.
+ * pico surface. ATOMIC LAYER: template.
  *
  * Full-bleed in-session overlay: a dimmed running-game backdrop with content
  * floated on top. Used by the HUD and reconnecting screens (the Modal kit

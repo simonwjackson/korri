@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Recovery (static).
+ * pico surface. ATOMIC LAYER: page. Recovery (static).
  */
 import { Badge } from "../../ui/atoms/Badge"
 import { Icon } from "../../ui/atoms/Icon"

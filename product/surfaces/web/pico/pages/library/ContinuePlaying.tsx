@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Continue-playing list. Reads `picoRecentAtom`, composes ScreenShell +
  * ContinueList.

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The minimal in-game HUD: corner readouts (fps/battery/temp/clock) and a
  * transient "saved" toast.

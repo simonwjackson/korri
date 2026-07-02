@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Live knobs for the runtime PICO-8 remap, so directions can be A/B'd in place
  * without rebaking assets:

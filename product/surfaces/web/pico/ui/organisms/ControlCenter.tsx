@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Quick-menu control center drawer: profile + brightness/volume/wifi/airplane +
  * a 2x2 action tile grid. Moved from screens/PanelsScreens.tsx.

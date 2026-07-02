@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Seat & controller assignment: per-seat cards with the player rep, controller,
  * and a swap / press-start action.

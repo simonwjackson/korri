@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * In-session save/load state slots. Invented (no real RPC yet), in the
  * `LibrarySource` conventions; reuses `PicoLibraryError`. `slotsFor(gameId)`

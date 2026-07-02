@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ * pico surface. ATOMIC LAYER: molecule.
  *
  * The cartridge: dithered shell + quantized art (or initials) + fav star. The
  * implementation lives at `../../PicoCart` (art primitive relocation deferred);

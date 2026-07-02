@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Now-playing session dock: players + save slots + perf stats + resume/quit.
  * Moved from screens/PanelsScreens.tsx.

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The discovered stream hosts as cards (name/status/addr/latency), first
  * selected, with a connect CTA.

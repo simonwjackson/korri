@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * PANELS — filters & collections push drawer (left). Reads picoGamesAtom.
  */
 import { picoGamesAtom } from "../../data/pico-library-atoms"

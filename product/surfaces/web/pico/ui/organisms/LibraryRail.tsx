@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The library home coverflow: a row of carts with one focused (scaled up). Note
  * this is the library rail (pcLib-* classes, fav stars shown) — distinct from

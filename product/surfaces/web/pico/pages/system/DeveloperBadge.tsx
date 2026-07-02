@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Developer ISO badge (static).
+ * pico surface. ATOMIC LAYER: page. Developer ISO badge (static).
  */
 import { ScreenShell } from "../../ui/templates/ScreenShell"
 

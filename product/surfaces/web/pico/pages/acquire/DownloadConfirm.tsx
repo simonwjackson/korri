@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Download confirmation. Reads `picoDownloadConfirmAtom`.
  */
 import { picoDownloadConfirmAtom } from "../../data/pico-detail-atoms"

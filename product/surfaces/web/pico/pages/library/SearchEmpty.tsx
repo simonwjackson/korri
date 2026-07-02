@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Search with no matches: the query line over a no-results hero. Composes
  * ScreenShell + SearchQuery + Hero (Hero still from the kit barrel).

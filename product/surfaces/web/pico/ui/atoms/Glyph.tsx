@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: atom.
+ * pico surface. ATOMIC LAYER: atom.
  *
  * A big centered status glyph (e.g. ⚠ ✓ ✕ ⏻). Moved from `kit.tsx`.
  */

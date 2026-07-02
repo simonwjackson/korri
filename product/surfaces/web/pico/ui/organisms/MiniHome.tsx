@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Squeezed-home content: a wrap of carts authored in cqh so it reflows to the
  * narrower main pane when a drawer is open. Moved from screens/PanelsScreens.tsx.

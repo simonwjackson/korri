@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Shared cinematic hero shell for SHOWCASE "moment" screens: full-bleed
  * pixelized key art + scrim + bottom-left kicker/logo/CTA. Layout in

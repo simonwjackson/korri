@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Content-first home: one big featured game that auto-rotates, with a live
  * coverflow strip underneath. Art is the hero; text is a kicker + title + one

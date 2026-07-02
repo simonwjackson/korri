@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  *
  * Library load-error state. Seeds the `fail-list` behavior layer; `list()` fails
  * with PicoLibraryError and PicoData's `error` slot renders the alert hero.

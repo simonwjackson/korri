@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme exploration. Throwaway.
+ * pico surface.
  *
  * Pico's live workshop knobs, DECLARED as data (`WorkshopControl[]`) — the
  * workshop renders them with its own neutral chrome. Pico provides only the knob

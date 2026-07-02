@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * Dual-screen primary surface: a companion-connected tag, a cart rail, and the
  * focused game with launch-on-TV / launch-here actions.

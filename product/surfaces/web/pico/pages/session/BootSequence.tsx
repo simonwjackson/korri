@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. Boot sequence. Reads
+ * pico surface. ATOMIC LAYER: page. Boot sequence. Reads
  * `picoBootStepsAtom`.
  */
 import { picoBootStepsAtom } from "../../data/pico-session-atoms"

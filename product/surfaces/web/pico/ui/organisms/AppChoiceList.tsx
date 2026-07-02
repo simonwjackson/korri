@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: organism.
+ * pico surface. ATOMIC LAYER: organism.
  *
  * The "which core drives this game" chooser: a column of app cards, the first
  * pre-picked. Leaf atoms (Card/Chip/Badge) still come from the kit barrel until

@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: molecule.
+ * pico surface. ATOMIC LAYER: molecule.
  *
  * Player chip with a swappable representation. The four reps let us compare how
  * players should read on screen (recolored Pixl / seat tag / avatar / pad).

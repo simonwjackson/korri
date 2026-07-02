@@ -1,4 +1,4 @@
-/** PROTOTYPE — pico theme exploration. Throwaway. */
+/** pico surface. */
 import { PicoIcon } from "./PicoIcon"
 import { PicoMascot } from "./PicoMascot"
 

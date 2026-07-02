@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page.
+ * pico surface. ATOMIC LAYER: page.
  * Stream host discovery. Reads `picoHostsAtom`.
  */
 import { picoHostsAtom } from "../../data/pico-devices-atoms"

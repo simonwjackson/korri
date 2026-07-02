@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. Gallery group: MULTIPLAYER — migrated to
+ * pico surface. Screen group: MULTIPLAYER — migrated to
  * atomic-design pages under pages/multiplayer/, composed from
  * ui/{templates,organisms,molecules,atoms}. Thin compatibility barrel so
  * screen-catalog's `Multiplayer.*Screen` names keep resolving.

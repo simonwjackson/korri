@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — pico theme. Throwaway. ATOMIC LAYER: page. System panel (static, modal).
+ * pico surface. ATOMIC LAYER: page. System panel (static, modal).
  */
 import { BlockBar } from "../../ui/atoms/BlockBar"
 import { Icon } from "../../ui/atoms/Icon"
