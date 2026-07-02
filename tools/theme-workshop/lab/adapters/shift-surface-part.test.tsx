@@ -125,7 +125,11 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
     })
   })
 
-  it("produces launch feedback by pressing Play in a render-only Compose object", async () => {
+  it("does not turn request acceptance alone into now-playing feedback", async () => {
+    // Pressing Play runs the real in-memory launcher to Accepted; the
+    // authoritative now-playing signal is the foreground session gate, so
+    // acceptance alone must not present as "Now playing" (same contract the
+    // route-level launch tests assert).
     mountSpec(homeStory, {
       sourceId: "cozy",
       inputValues: { variant: "Ready" },
@@ -136,9 +140,11 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
     })
     fireEvent.click(firstGame)
 
-    await waitFor(() => {
-      expect(screen.getByText("Now playing")).toBeTruthy()
-    })
+    await new Promise(resolve => setTimeout(resolve, 25))
+    expect(screen.queryByText("Now playing")).toBeNull()
+    expect(
+      screen.getByRole("button", { name: /Aurora Drift/i }),
+    ).toBeTruthy()
   })
 
   it("does not publish the launch coordinate from a render-only Compose object", async () => {
@@ -171,13 +177,16 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
     expect(screen.queryByRole("button", { name: /Aurora Drift/i })).toBeNull()
   })
 
-  it("combines Data×Foreground: a busy foreground blocks on the Ready page", async () => {
+  it("combines Data×Foreground: a running foreground presents now-playing", async () => {
+    // The foreground session gate is the authoritative running signal: a
+    // Running foreground over the Ready page presents "Now playing" while
+    // launch stays idle (same contract the route-level tests assert).
     mountSpec(homeStory, {
       sourceId: "cozy",
       inputValues: { variant: "Ready", foreground: "Running" },
     })
     await waitFor(() => {
-      expect(screen.getByText("Another game is running")).toBeTruthy()
+      expect(screen.getByText("Now playing")).toBeTruthy()
     })
   })
 
