@@ -346,6 +346,11 @@ let
       settings.plugin = { };
     };
 
+    host.launch."with"."@korri:gamescope" = {
+      enable = true;
+      display.output.preferredConnectors = [ "DSI-2" ];
+    };
+
     host.moonlight = {
       command = "${pkgs.moonlight-embedded}/bin/moonlight";
       environment = moonlightRuntimeSettingsEnvironment // {

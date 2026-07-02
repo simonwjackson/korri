@@ -128,6 +128,11 @@ let
       scoutReleaseScanEnv = scoutReleaseScanUnit.environment or { };
       platformDefaults = cfg.services.korri.daemon.library.platformDefaults or { };
       hostDefaults = platformDefaults.host or { };
+      moonlightGamescopePolicy = lib.attrByPath [
+        "launch"
+        "with"
+        "@korri:gamescope"
+      ] { } hostDefaults;
       retroarchPolicy = (hostDefaults.plugin or { })."@korri:retroarch" or { };
       webCanvasPlatformLauncher = lib.attrByPath [
         "launchers"
@@ -537,6 +542,14 @@ let
       ))
       (check "${name}: YFS platform defaults do not bake presentation settings" (
         yfsLauncherSettings == { }
+      ))
+      (check "${name}: Moonlight remote streams launch through host-level Gamescope" (
+        (moonlightGamescopePolicy.enable or false) == true
+        &&
+          (lib.attrByPath [ "display" "output" "preferredConnectors" ] [ ] moonlightGamescopePolicy) == [
+            "DSI-2"
+          ]
+        && !(hostDefaults.moonlight ? launch)
       ))
       (check "${name}: PICO-8 fake-08 core is exposed at the stable launch path" (
         (cfg.environment.etc."korri/cores/fake08_libretro.so".source or null) == fake08CoreSource
