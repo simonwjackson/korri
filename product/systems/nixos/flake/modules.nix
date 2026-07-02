@@ -111,6 +111,7 @@ rec {
       korri
       korri-sessiond
       ../../../plugins/gamescope/nix/source-machine-module.nix
+      ../../../plugins/retroarch/nix/source-machine-module.nix
       ../images/source-machine.nix
     ];
   };

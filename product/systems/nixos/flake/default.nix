@@ -216,6 +216,7 @@ flake-utils.lib.eachDefaultSystem (
       pluginNixosModules = firstPartyPluginComposition.nixosModules;
       sourceMachinePluginNixosModules = [
         ../../../../product/plugins/gamescope/nix/source-machine-module.nix
+        ../../../../product/plugins/retroarch/nix/source-machine-module.nix
       ];
     };
 

@@ -129,6 +129,12 @@ let
       && !(cfg.networking.firewall.interfaces ? lan0)
       && !(builtins.elem "tailscale0" (cfg.networking.firewall.trustedInterfaces or [ ]))
     ))
+    (check "exported source-machine module provisions the RetroArch closure at stable /etc/korri paths" (
+      (cfg.environment.etc."korri/bin/retroarch".source or null) != null
+      && (cfg.environment.etc."korri/cores/mgba_libretro.so".source or null) != null
+      && (cfg.environment.etc."korri/shaders/slang".source or null) != null
+      && hasPackage "korri-retroarch" cfg.systemd.user.services.korri-sessiond.path
+    ))
     (check "exported source-machine module enables Gamescope plugin runtime path" (
       lib.hasInfix "@korri:gamescope" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
       && lib.hasInfix "@korri:gamescope" (sessiondEnv.KORRI_ENABLED_PLUGINS or "")
