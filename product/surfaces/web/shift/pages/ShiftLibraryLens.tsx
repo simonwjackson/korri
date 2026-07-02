@@ -12,23 +12,22 @@
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { useMemo, useState } from "react"
-import { ShiftLibraryTile } from "./ShiftLibraryTile"
+import {
+  type ShiftLibraryLens as LibraryLens,
+  ShiftLensRow,
+} from "./ShiftLensRow"
+import { ShiftLensSortButton } from "./ShiftLensSortButton"
+import { ShiftLensSortOverlay } from "./ShiftLensSortOverlay"
+import { ShiftLibraryEmpty } from "./ShiftLibraryEmpty"
+import { ShiftLibraryGridView } from "./ShiftLibraryGridView"
+import { ShiftLibraryHeader } from "./ShiftLibraryHeader"
+import { ShiftLibraryShelf } from "./ShiftLibraryShelf"
 import type { ShiftLibraryGame } from "./shift-library-game"
 import {
   applyShiftLibraryQuery,
   type ShiftLibrarySort,
-  shiftLibrarySortLabel,
 } from "./shift-library-query"
 import { buildShiftLibraryGenreSections } from "./shift-library-sections"
-
-type LibraryLens = "all" | "favorites" | "genre"
-
-const LENSES: readonly { readonly id: LibraryLens; readonly label: string }[] =
-  [
-    { id: "all", label: "All" },
-    { id: "favorites", label: "Favorites" },
-    { id: "genre", label: "By Genre" },
-  ]
 
 const SORTS: readonly ShiftLibrarySort[] = ["recent", "title", "playtime"]
 
@@ -71,83 +70,42 @@ export function ShiftLibraryLens({
 
   return (
     <div data-shift-library className="shift-lib shift-lib-lens intrinsic">
-      <header className="shift-lib-top">
-        <h1 className="shift-lib-heading">{title}</h1>
-        <button
-          type="button"
-          className="shift-lib-options-btn"
-          aria-expanded={optionsOpen}
-          onClick={() => setOptionsOpen(open => !open)}
-        >
-          Sort: {shiftLibrarySortLabel(sort)}
-        </button>
-      </header>
+      <ShiftLibraryHeader title={title}>
+        <ShiftLensSortButton
+          sort={sort}
+          open={optionsOpen}
+          onToggle={() => setOptionsOpen(open => !open)}
+        />
+      </ShiftLibraryHeader>
 
-      <div
-        className="shift-lib-lens-row"
-        role="tablist"
-        aria-label="Library lens"
-      >
-        {LENSES.map(option => (
-          <button
-            type="button"
-            key={option.id}
-            role="tab"
-            className="shift-lib-lens-item"
-            aria-selected={lens === option.id}
-            data-active={lens === option.id || undefined}
-            onClick={() => setLens(option.id)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <ShiftLensRow lens={lens} onSelect={setLens} />
 
       {optionsOpen ? (
-        <div className="shift-lib-options" role="toolbar" aria-label="Sort by">
-          {SORTS.map(option => (
-            <button
-              type="button"
-              key={option}
-              className="shift-lib-option"
-              data-active={sort === option || undefined}
-              aria-pressed={sort === option}
-              onClick={() => {
-                setSort(option)
-                setOptionsOpen(false)
-              }}
-            >
-              {shiftLibrarySortLabel(option)}
-            </button>
-          ))}
-        </div>
+        <ShiftLensSortOverlay
+          sort={sort}
+          sorts={SORTS}
+          onPick={next => {
+            setSort(next)
+            setOptionsOpen(false)
+          }}
+        />
       ) : null}
 
       {lens === "genre" ? (
         <div className="shift-lib-shelf-stack">
           {genreSections.map(section => (
-            <section key={section.id} className="shift-lib-shelf">
-              <h2 className="shift-lib-shelf-title">{section.title}</h2>
-              <div className="shift-lib-shelf-track">
-                {section.games.map(game => (
-                  <ShiftLibraryTile
-                    key={game.id}
-                    game={game}
-                    onSelect={onSelect}
-                  />
-                ))}
-              </div>
-            </section>
+            <ShiftLibraryShelf
+              key={section.id}
+              title={section.title}
+              games={section.games}
+              onSelect={onSelect}
+            />
           ))}
         </div>
       ) : flat.length > 0 ? (
-        <div className="shift-lib-grid">
-          {flat.map(game => (
-            <ShiftLibraryTile key={game.id} game={game} onSelect={onSelect} />
-          ))}
-        </div>
+        <ShiftLibraryGridView games={flat} onSelect={onSelect} />
       ) : (
-        <p className="shift-lib-empty">No favorites yet.</p>
+        <ShiftLibraryEmpty message="No favorites yet." />
       )}
     </div>
   )
