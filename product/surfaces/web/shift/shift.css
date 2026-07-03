@@ -231,6 +231,21 @@
 }
 
 /*
+ * Route transition stage — owns the fullscreen frame + overflow clip for the
+ * directional page slide (see ShiftRouteTransition). The background mirrors the
+ * surface chrome so the brief cross-page gap while a page slides in never
+ * flashes the host baseline; --shift-surface is scoped to the surface elements
+ * themselves (this stage is their ancestor), so its value is inlined here.
+ */
+.shift-route-stage {
+	position: relative;
+	width: 100%;
+	height: 100vh;
+	overflow: hidden;
+	background-color: #0b0b0c;
+}
+
+/*
  * Suppress the project-wide :focus / :focus-visible ring on this
  * surface; each Shift atom defines its own focus treatment (lavender
  * halo via box-shadow on pills, ::after border on tiles, glyph halo on

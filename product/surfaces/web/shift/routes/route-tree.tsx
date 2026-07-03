@@ -3,15 +3,15 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-  Outlet,
 } from "@tanstack/react-router"
 import { SHIFT_COMPANION_PATH, SHIFT_LIBRARY_PATH } from "./paths"
 import { ShiftCompanionRoute } from "./ShiftCompanionRoute"
 import { ShiftGameDetailRoute } from "./ShiftGameDetailRoute"
 import { ShiftHomeRoute } from "./ShiftHomeRoute"
 import { ShiftLibraryRoute } from "./ShiftLibraryRoute"
+import { ShiftRouteTransition } from "./ShiftRouteTransition"
 
-const rootRoute = createRootRoute({ component: () => <Outlet /> })
+const rootRoute = createRootRoute({ component: ShiftRouteTransition })
 
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
