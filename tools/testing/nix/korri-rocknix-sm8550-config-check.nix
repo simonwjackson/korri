@@ -340,8 +340,12 @@ let
         && (rocknixGuestDeviceAccess.backlightGroup or null) == "video"
         && (rocknixGuestDeviceAccess.backlightNodeGlobs or [ ]) == [ "/sys/class/backlight/*/brightness" ]
       ))
-      (check "${name}: SM8550 DRM is tagged for logind seats" (
-        lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' cfg.services.udev.extraRules
+      (check "${name}: SM8550 DRM is tagged for logind seats once per boot" (
+        # Idempotent fire-once tag: a DP hotplug 'change' on card0 must not
+        # re-assert master-of-seat (that pauses logind DRM and black-screens all
+        # outputs). See korri-rocknix-guest-device-access.nix.
+        lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{KORRI_DRM_SEAT_TAGGED}!="1", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0", ENV{KORRI_DRM_SEAT_TAGGED}="1"'' cfg.services.udev.extraRules
+        && !(lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' cfg.services.udev.extraRules)
       ))
       (check "${name}: SM8550 evdev input is readable by Korri inputd" (
         lib.hasInfix ''SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"'' cfg.services.udev.extraRules

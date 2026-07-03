@@ -242,13 +242,19 @@ let
       hasNoPlatformOrdering (triggerUnit enabledPolicy)
       && hasNoPlatformOrdering (fallbackUnit enabledPolicy)
     ))
-    (check "drm seat tag rule is emitted only when requested" (
-      lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' (
+    (check "drm seat tag rule is emitted idempotently only when requested" (
+      # Fire-once guard: tag the KMS card on the initial coldplug, then no-op on
+      # later card0 'change' uevents (DP hotplug). Re-asserting master-of-seat on
+      # hotplug makes logind pause the session DRM device and wlroots loses
+      # master, black-screening every output until a compositor restart.
+      lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{KORRI_DRM_SEAT_TAGGED}!="1", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0", ENV{KORRI_DRM_SEAT_TAGGED}="1"'' (
         udevRules enabledPolicy
       )
-      && !(lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat"'' (
-        udevRules noBacklightRepair
+      # Lock out the pre-fix unguarded form that re-fired on every hotplug.
+      && !(lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' (
+        udevRules enabledPolicy
       ))
+      && !(lib.hasInfix "master-of-seat" (udevRules noBacklightRepair))
     ))
     (check "input udev acl rule uses configured runtime user" (
       lib.hasInfix ''SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"'' (

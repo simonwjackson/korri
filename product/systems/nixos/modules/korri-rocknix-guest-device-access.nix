@@ -116,7 +116,17 @@ let
     # Rootless wlroots compositors acquire DRM through logind/libseat, so the
     # KMS card must be attached to seat0 when the guest's device metadata does
     # not already carry systemd's generic seat tags.
-    SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"
+    #
+    # Fire exactly once per boot. The guest inherits card0 from the host and
+    # never sees an 'add' uevent; it is tagged via a change-action coldplug, so
+    # the rule cannot key on ACTION=="add". A DisplayPort hotplug also fires a
+    # 'change' uevent on card0, and re-asserting master-of-seat there makes
+    # logind re-evaluate and pause the active session's DRM device: wlroots
+    # loses DRM master, every atomic commit returns EPERM, and all outputs go
+    # black until korri-compositor is restarted. Guard on a persistent marker
+    # property so the coldplug tags the card once and later 'change' events are
+    # a no-op for logind while the seat tags remain set from the udev database.
+    SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{KORRI_DRM_SEAT_TAGGED}!="1", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0", ENV{KORRI_DRM_SEAT_TAGGED}="1"
   '';
 
   inputUdevAclRule = optionalString cfg.enableInputUdevAcl ''
