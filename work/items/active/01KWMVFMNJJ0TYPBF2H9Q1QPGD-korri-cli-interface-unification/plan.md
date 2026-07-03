@@ -1,7 +1,7 @@
 ---
 title: "refactor: Unify the korri-cli surface and exit-code contract"
 type: refactor
-status: active
+status: completed
 date: 2026-07-03
 verify_command: "just typecheck && just test-unit && just lint"
 ---
