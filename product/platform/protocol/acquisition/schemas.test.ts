@@ -81,7 +81,7 @@ it("decodes representative acquisition protocol payloads", () => {
     Schema.decodeUnknownSync(PluginMetadata)({
       providerId: "@korri:itchio",
       displayName: "itch.io",
-      module: "product/platform/acquisition/plugins/itchio",
+      module: "product/plugins/itchio",
       builtIn: true,
       enabledByDefault: true,
       legalRisk: "medium",

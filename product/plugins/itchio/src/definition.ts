@@ -119,7 +119,7 @@ export function createItchioPluginDefinition(
     metadata: {
       providerId: PROVIDER_ID,
       displayName: DISPLAY_NAME,
-      module: "product/platform/acquisition/plugins/itchio",
+      module: "product/plugins/itchio",
       builtIn: true,
       enabledByDefault: true,
       legalRisk: "medium",
