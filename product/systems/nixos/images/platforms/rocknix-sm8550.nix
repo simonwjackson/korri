@@ -3,6 +3,12 @@
   nixpkgs,
   nix-on-rocks,
   deviceProfile,
+  # DRM/KMS connector name of this device's primary display, declared by the
+  # product (Thor -> "DSI-2", Odin 2 Portal -> "DSI-1"). null for the
+  # by-compatible image, where it is inferred from the resolved deviceProfile
+  # below as a transitional bridge until the substrate exposes a neutral
+  # primary-connector fact (Stage 2).
+  homeOutput ? null,
 }:
 
 {
@@ -91,6 +97,11 @@ let
       builtins.filter (o: !o.powerOnBoot) displayFacts.outputs
     ))
   );
+  # Single resolved primary-connector value used by every output consumer
+  # (compositor lane pin, gamescope preferred output, Steam). The product's
+  # explicit homeOutput wins; otherwise it falls back to the neutral primary
+  # connector exposed by the substrate's display facts.
+  resolvedHomeOutput = if homeOutput != null then homeOutput else displayPrimaryConnector;
   # Neutral substrate capabilities owned by nix-on-rocks. Korri reads
   # these to compose the Moonlight launch environment; it must not
   # hard-code Linux video/audio facts in this platform adapter and must
@@ -406,7 +417,7 @@ let
 
     host.launch."with"."@korri:gamescope" = {
       enable = true;
-      display.output.preferredConnectors = [ displayPrimaryConnector ];
+      display.output.preferredConnectors = [ resolvedHomeOutput ];
     };
 
     host.moonlight = {
@@ -661,7 +672,7 @@ in
     betaChannel = "steamdeck_stable";
     keepWarm = true;
     keepVisibleDuringLaunch = true;
-    gamescopePreferOutput = displayPrimaryConnector;
+    gamescopePreferOutput = resolvedHomeOutput;
     # Steam's Gamepad UI can grab controller focus from the foreground AppID
     # game; keep Steam in the gamescoped service, but launch the desktop client
     # without -gamepadui so control stays with the game window.
@@ -765,6 +776,11 @@ in
     # ACLs). Flip to "logind" to let libseat acquire the guest's
     # systemd-logind seat0; validate on a clean guest reboot.
     seatBackend = "logind";
+
+    # Primary display connector (neutral KMS fact). The compositor module pins
+    # the hub/game lane workspaces to this output so the main panel boots
+    # straight into the hub instead of an empty auto-numbered workspace.
+    homeOutput = resolvedHomeOutput;
 
     environment =
       moonlightCompositorEnvironment

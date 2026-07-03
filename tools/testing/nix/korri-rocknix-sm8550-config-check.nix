@@ -314,6 +314,16 @@ let
         lib.hasInfix "output ${cfg.rocknix.device.display.primaryConnector} transform " compositor.sway.extraConfig
         && lib.hasInfix "input type:touch map_to_output ${cfg.rocknix.device.display.primaryConnector}" compositor.sway.extraConfig
       ))
+      # Stage 1 home-output pin: every SM8550 device declares a primary display
+      # connector so the compositor pins the hub/game lanes to it (no empty
+      # auto-numbered workspace at boot); the lane names are the shared single
+      # source of truth read by sessiond. Per-device rotation/connector values
+      # are locked by the Thor/Sobo checks below.
+      (check "${name}: declares a home output and shared lane names" (
+        compositor.homeOutput != null
+        && compositor.hubWorkspace == "korri:hub"
+        && compositor.gameWorkspace == "korri:game:active"
+      ))
       (check "${name}: RockNIX guest device access module must be enabled" (
         (rocknixGuestDeviceAccess.enable or false) == true
         && (rocknixGuestDeviceAccess.runtimeUser or null) == runtime.user
@@ -557,8 +567,10 @@ let
       (check "${name}: Moonlight remote streams launch through host-level Gamescope" (
         (moonlightGamescopePolicy.enable or false) == true
         &&
+          # Follows the device's declared home output (Thor DSI-2, Odin DSI-1),
+          # not a Thor-only literal.
           (lib.attrByPath [ "display" "output" "preferredConnectors" ] [ ] moonlightGamescopePolicy) == [
-            cfg.rocknix.device.display.primaryConnector
+            compositor.homeOutput
           ]
         && !(hostDefaults.moonlight ? launch)
       ))
@@ -901,6 +913,16 @@ let
     ))
     (check "Sobo (Odin 2 Portal) gamescope/Steam prefer the DSI-1 primary output" (
       soboSystem.config.services.korri.steam.gamescopePreferOutput == "DSI-1"
+    ))
+    # Per-device home-output values (Stage 1). Thor's primary panel is DSI-2;
+    # the Odin 2 Portal (sobo) is single-panel on DSI-1. These lock the
+    # product-declared connector so the compositor lane pin can never silently
+    # regress to a Thor-only literal.
+    (check "Thor home output is DSI-2" (
+      thorSystem.config.services.korri.compositor.homeOutput == "DSI-2"
+    ))
+    (check "Sobo (Odin 2 Portal) home output is DSI-1" (
+      soboSystem.config.services.korri.compositor.homeOutput == "DSI-1"
     ))
   ]
   # NOTE: the first argument is the display label; the second is the system.

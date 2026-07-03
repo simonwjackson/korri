@@ -8,6 +8,13 @@ let
       compatible,
       deviceProfile,
       chipset,
+      # DRM/KMS connector name of this device's primary ("home") display, e.g.
+      # "DSI-2" on Thor or "DSI-1" on the Odin 2 Portal. Neutral hardware fact
+      # (not Sway-specific) consumed by the compositor lane pin and the
+      # gamescope/Steam/Moonlight output selection. null for the by-compatible
+      # image, which resolves its display topology at eval time via the
+      # deviceProfile and keeps the transitional inference in the platform.
+      homeOutput ? null,
     }:
     rec {
       inherit
@@ -16,6 +23,7 @@ let
         compatible
         deviceProfile
         chipset
+        homeOutput
         ;
       substrate = "rocknix";
       configName = "korri-${id}-kiosk";
@@ -32,6 +40,7 @@ let
       compatible = "ayn,thor";
       deviceProfile = nix-on-rocks.nixosModules.thor;
       chipset = "sm8550";
+      homeOutput = "DSI-2";
     };
 
     odin2portal = mkProduct {
@@ -40,6 +49,7 @@ let
       compatible = "ayn,odin2portal";
       deviceProfile = nix-on-rocks.nixosModules.odin2portal;
       chipset = "sm8550";
+      homeOutput = "DSI-1";
     };
 
     rg353m = mkProduct {

@@ -69,6 +69,9 @@ let
       korri = self;
       inherit nixpkgs nix-on-rocks;
       inherit (product) deviceProfile;
+      # null for the by-compatible image; the sm8550 adapter falls back to
+      # inferring the home output from the resolved deviceProfile in that case.
+      homeOutput = product.homeOutput or null;
     };
 
   mkProductSystem =

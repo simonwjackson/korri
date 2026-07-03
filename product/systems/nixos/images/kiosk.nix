@@ -138,8 +138,11 @@ in
     extraEnvironment = {
       XDG_RUNTIME_DIR = compositorCfg.runtimeDir;
       WAYLAND_DISPLAY = "wayland-1";
-      KORRI_SESSIOND_HUB_WORKSPACE = "korri:hub";
-      KORRI_SESSIOND_GAME_WORKSPACE = "korri:game:active";
+      # Single source of truth: the compositor module owns the lane workspace
+      # names and pins them to the home output; sessiond reads the same values
+      # so the sway config and sessiond can never drift on the workspace names.
+      KORRI_SESSIOND_HUB_WORKSPACE = compositorCfg.hubWorkspace;
+      KORRI_SESSIOND_GAME_WORKSPACE = compositorCfg.gameWorkspace;
       KORRI_SWAY_APP_IDS = "chromium,chromium-browser,google-chrome,chrome";
       KORRI_SWAY_APP_ID_PREFIXES = "chrome-";
       KORRI_SWAY_CLASSES = "Chromium,chromium,Google-chrome";

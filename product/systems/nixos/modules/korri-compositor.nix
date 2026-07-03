@@ -168,8 +168,20 @@ let
     bindsym Mod4+e exec ${pkgs.foot}/bin/foot
   '';
 
+  # Appliance lane workspaces pinned to the home output. This makes the primary
+  # display initialize directly on the hub workspace, so Sway never invents an
+  # empty auto-numbered workspace that would show as a blank/black panel at
+  # boot, and it makes sessiond's `workspace <hub>` focus always resolve to the
+  # primary display. Rendered only when a platform declares a homeOutput. The
+  # workspace names are the single source of truth sessiond reads via
+  # KORRI_SESSIOND_{HUB,GAME}_WORKSPACE.
+  homeWorkspacePins = lib.optionalString (cfg.homeOutput != null) ''
+    workspace ${cfg.hubWorkspace} output ${cfg.homeOutput}
+    workspace ${cfg.gameWorkspace} output ${cfg.homeOutput}
+  '';
+
   swayConfig = pkgs.writeText "korri-compositor-sway.conf" (
-    swayConfigPrelude + "\n" + cfg.sway.extraConfig
+    swayConfigPrelude + "\n" + cfg.sway.extraConfig + "\n" + homeWorkspacePins
   );
 
   seatBackendEnvironment =
@@ -319,6 +331,45 @@ in
         ROCKNIX-guest workaround for environments where systemd-logind could
         not own seat0. "logind" emits no session override and lets
         wlroots/libseat acquire the guest's systemd-logind seat0 directly.
+      '';
+    };
+
+    hubWorkspace = mkOption {
+      type = types.str;
+      default = "korri:hub";
+      description = ''
+        Sway workspace name that hosts the Korri hub surface. sessiond reads the
+        same value (exported as KORRI_SESSIOND_HUB_WORKSPACE) to place and focus
+        the hub, so this option is the single source of truth for the hub lane
+        name shared between the compositor config and sessiond.
+      '';
+    };
+
+    gameWorkspace = mkOption {
+      type = types.str;
+      default = "korri:game:active";
+      description = ''
+        Sway workspace name that hosts the active foreground game/stream
+        surface. sessiond reads the same value (exported as
+        KORRI_SESSIOND_GAME_WORKSPACE).
+      '';
+    };
+
+    homeOutput = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "DSI-2";
+      description = ''
+        DRM/KMS connector name of this device's primary ("home") display, e.g.
+        "DSI-2" on Thor or "DSI-1" on the Odin 2 Portal. When set, the compositor
+        pins the hub and game lane workspaces to this output so the primary
+        display initializes directly on the hub workspace (no empty
+        auto-numbered workspace) and lane focus always resolves here.
+
+        This is a neutral hardware fact (a KMS connector name), not a Sway
+        concept; platforms declare it once and every output consumer
+        (compositor lanes, gamescope preferred output, Steam, Moonlight) should
+        read it instead of hardcoding a connector literal.
       '';
     };
 

@@ -3,6 +3,9 @@
   nixpkgs,
   nix-on-rocks,
   deviceProfile,
+  # Accepted for a uniform platform-adapter signature; this chipset does not
+  # yet consume a declared home output.
+  homeOutput ? null,
 }:
 
 {
