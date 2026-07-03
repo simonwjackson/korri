@@ -61,6 +61,27 @@ The protocol-level value rule is deliberately small:
 
 Zero and negative values are invalid. Task-specific product policy may choose a conservative ladder or validated profile list, but those are product policy constraints, not runtime-settings protocol bounds.
 
+## Adaptation and geometry
+
+Two product principles govern how a requested value becomes an applied value. They bind product callers (CLI, adaptation policy, UI); the wire protocol stays a facts-and-controls surface.
+
+### Accept and adapt, do not reject for preference
+
+There is no allowlist of "approved" resolutions, frame rates, or bitrates. A caller may request any positive value, including unusual sizes and aspect ratios. The implementation honors the request as closely as the active encoder/decoder can physically achieve:
+
+- Values are coerced to the nearest achievable setting only for genuine hardware constraints — encoder dimension alignment (for example even or macroblock boundaries) and the encoder's real minimum/maximum. These are physical limits, not policy taste.
+- A coerced result is reported through applied truth: the readback shows the value that actually took effect (for example `1281x721` becomes `1280x720`), so callers can see any adjustment rather than having it hidden.
+- Only genuinely impossible requests (non-positive, or beyond what the encoder can represent after clamping) return a non-success outcome, and that outcome means "could not," not "not allowed."
+
+### Never stretch
+
+Geometry is preserved end to end; the displayed image is never non-uniformly scaled.
+
+- When alignment forces a dimension nudge, both dimensions move together so the requested aspect ratio is preserved.
+- Presentation scales the decoded frame uniformly and letterboxes or pillarboxes any mismatch with the panel; it never fills by stretching.
+
+Recovery (see below) also serves continuity: a change that hangs auto-reverts to the last known-good settings rather than leaving a frozen or stretched picture, and the revert is recorded in state so it is never silent.
+
 ## Capability and compatibility behavior
 
 Normal product behavior fails closed:
