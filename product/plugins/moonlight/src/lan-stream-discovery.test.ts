@@ -7,7 +7,7 @@ import {
   discoverStreamHosts,
   type StreamHostEvent,
   watchStreamHosts,
-} from "@platform/stream/lan-stream-discovery"
+} from "./lan-stream-discovery"
 import type { Service } from "bonjour-service"
 import { Effect, Stream } from "effect"
 

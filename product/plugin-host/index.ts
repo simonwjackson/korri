@@ -33,6 +33,7 @@ import { megaManArenaPlugin } from "@product/plugins/mega-man-arena"
 import { megaManMakerPlugin } from "@product/plugins/mega-man-maker"
 import { megaManRockNRollPlugin } from "@product/plugins/mega-man-rock-n-roll"
 import { midasMachinePlugin } from "@product/plugins/midas-machine"
+import { moonlightPlugin } from "@product/plugins/moonlight"
 import { neverballPlugin } from "@product/plugins/neverball"
 import { pico8Plugin } from "@product/plugins/pico8"
 import { portmasterPlugin } from "@product/plugins/portmaster"
@@ -151,6 +152,7 @@ export const firstPartyPlugins = [
   retroarchPlugin,
   rpcs3Plugin,
   gamescopePlugin,
+  moonlightPlugin,
   webpagePlugin,
   webCanvasPlugin,
   remapPlugin,
