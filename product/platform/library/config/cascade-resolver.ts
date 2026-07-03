@@ -45,6 +45,7 @@ import {
   launchCompanionsFromLaunch,
   type MoonlightPolicy,
   type PluginPolicyMap,
+  type Preferences,
 } from "./inheritable-fields"
 import type { LaunchBlock, LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
@@ -126,6 +127,7 @@ export interface ResolveLocalLauncherPolicyInputs {
 export interface ResolvedLocalLauncherPolicy {
   readonly launchCompanions: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
+  readonly preferences?: Preferences
 }
 
 export interface ResolveReadableLocalLauncherPolicyInputs {
@@ -167,6 +169,7 @@ interface InheritableView {
   readonly inherit?: boolean
   readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
+  readonly preferences?: Preferences
   readonly plugin?: PluginPolicyMap
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
@@ -197,6 +200,7 @@ const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
         settings: g.launch?.settings,
         launchCompanions: launchCompanionsFromLaunch(g),
         moonlight: g.moonlight,
+        preferences: g.preferences,
         plugin: g.plugin,
         env: g.env,
         cwd: g.cwd,
@@ -212,6 +216,7 @@ const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
         inherit: l.inherit,
         launchCompanions: launchCompanionsFromLaunch(l),
         moonlight: l.moonlight,
+        preferences: l.preferences,
         plugin: l.plugin,
         env: l.env,
         cwd: l.cwd,
@@ -229,6 +234,7 @@ const viewOfOverride = (o: EphemeralOverride): InheritableView => ({
   inherit: o.inherit,
   launchCompanions: launchCompanionsFromLaunch(o),
   moonlight: o.moonlight,
+  preferences: o.preferences,
   env: o.env,
   cwd: o.cwd,
   argsAppend: o.argsAppend,
@@ -271,6 +277,7 @@ const foldLayers = (
 
   let launchCompanions: LaunchCompanionMap | undefined
   let moonlight: MoonlightPolicy | undefined
+  let preferences: Preferences | undefined
   let plugin: PluginPolicyMap | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
@@ -303,6 +310,9 @@ const foldLayers = (
     if (merged.moonlight !== undefined) {
       moonlight = foldMoonlight(moonlight, merged.moonlight)
     }
+    if (merged.preferences !== undefined) {
+      preferences = foldPreferences(preferences, merged.preferences)
+    }
     if (merged.plugin !== undefined) {
       plugin = foldPluginPolicies(plugin, merged.plugin)
     }
@@ -331,6 +341,7 @@ const foldLayers = (
   return {
     launchCompanions,
     moonlight,
+    preferences,
     plugin,
     env,
     cwd,
@@ -361,6 +372,9 @@ const mergeByLauncher = (
     moonlight: extra.moonlight
       ? foldMoonlight(base.moonlight, extra.moonlight)
       : base.moonlight,
+    preferences: extra.preferences
+      ? foldPreferences(base.preferences, extra.preferences)
+      : base.preferences,
     plugin: extra.plugin
       ? foldPluginPolicies(base.plugin, extra.plugin)
       : base.plugin,
@@ -567,6 +581,24 @@ const foldMoonlight = (
 ): MoonlightPolicy =>
   mergeMoonlightValue(base ?? {}, extra, []) as MoonlightPolicy
 
+const mergePreferencesValue = (base: unknown, extra: unknown): unknown => {
+  if (extra === undefined) return base
+  if (isPlainPolicyObject(base) && isPlainPolicyObject(extra)) {
+    const merged: Record<string, unknown> = { ...base }
+    for (const [childKey, childValue] of Object.entries(extra)) {
+      merged[childKey] = mergePreferencesValue(merged[childKey], childValue)
+    }
+    return merged
+  }
+  return extra
+}
+
+/** Deep-merge two launch-preferences policies; scalars last-win. */
+const foldPreferences = (
+  base: Preferences | undefined,
+  extra: Preferences,
+): Preferences => mergePreferencesValue(base ?? {}, extra) as Preferences
+
 // ────────────────────────────────────────────────────────────────────
 // Skeleton pass — resolve launcher
 // ────────────────────────────────────────────────────────────────────
@@ -640,6 +672,7 @@ export const resolveLocalLauncherPolicy = (
   return {
     launchCompanions: folded.launchCompanions ?? {},
     ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
+    ...(folded.preferences ? { preferences: folded.preferences } : {}),
   }
 }
 
@@ -749,6 +782,7 @@ export class IncompatibleLaunchSelection extends Data.TaggedError(
 interface ReadableOverride {
   readonly launch?: LaunchPolicy
   readonly moonlight?: MoonlightPolicy
+  readonly preferences?: Preferences
   readonly plugin?: PluginPolicyMap
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
@@ -769,6 +803,7 @@ interface ReadableLayerView {
   readonly launch?: LaunchPolicy
   readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
+  readonly preferences?: Preferences
   readonly plugin?: PluginPolicyMap
   readonly settings?: LaunchSettings
   readonly env?: Readonly<Record<string, string>>
@@ -783,6 +818,7 @@ const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
     ? {
         launchCompanions: launchCompanionsFromLaunch(user),
         moonlight: user.moonlight,
+        preferences: user.preferences,
         plugin: user.plugin,
         env: user.env,
         cwd: user.cwd,
@@ -845,6 +881,7 @@ const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
     ? {
         launchCompanions: launchCompanionsFromLaunch(app),
         moonlight: app.moonlight,
+        preferences: app.preferences,
         plugin: pluginPolicyFromSettings(app.plugin, app.settings),
         settings: app.settings,
         env: app.env,
@@ -1013,6 +1050,7 @@ const readableViewOfRuntime = (
     ? {
         launchCompanions: launchCompanionsFromLaunch(runtime),
         moonlight: runtime.moonlight,
+        preferences: runtime.preferences,
         plugin: runtime.plugin,
         env: runtime.env,
         cwd: runtime.cwd,
@@ -1026,6 +1064,7 @@ const readableViewOfLibraryItem = (
 ): ReadableLayerView => ({
   launchCompanions: launchCompanionsFromLaunch(item),
   moonlight: item.moonlight,
+  preferences: item.preferences,
   plugin: item.plugin,
   env: item.env,
   cwd: item.cwd,
@@ -1038,6 +1077,7 @@ const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
     ? launchCompanionsFromLaunch(entry.contained)
     : undefined,
   moonlight: entry.contained?.moonlight,
+  preferences: entry.contained?.preferences,
   plugin: entry.contained?.plugin,
   env: entry.contained?.env,
   cwd: entry.contained?.cwd,
@@ -1051,6 +1091,7 @@ const readableViewOfRelease = (
 ): ReadableLayerView => ({
   launchCompanions: release.launch?.with,
   moonlight: release.moonlight,
+  preferences: release.preferences,
   plugin: pluginPolicyFromSettings(
     app?.plugin ?? release.launch?.plugin,
     release.launch?.settings,
@@ -1072,6 +1113,7 @@ const readableViewOfProfile = (
     ? {
         launchCompanions: launchCompanionsFromLaunch(profile),
         moonlight: profile.moonlight,
+        preferences: profile.preferences,
         plugin: profile.plugin,
         env: profile.env,
         cwd: profile.cwd,
@@ -1087,6 +1129,7 @@ const readableViewOfOverride = (
     ? {
         launchCompanions: launchCompanionsFromLaunch(override),
         moonlight: override.moonlight,
+        preferences: override.preferences,
         plugin: override.plugin,
         env: override.env,
         cwd: override.cwd,
@@ -1100,6 +1143,7 @@ const mergeReadableLayers = (
 ): ReadableLayerView => {
   let launchCompanions: LaunchCompanionMap | undefined
   let moonlight: MoonlightPolicy | undefined
+  let preferences: Preferences | undefined
   let plugin: PluginPolicyMap | undefined
   let settings: LaunchSettings | undefined
   let env: Record<string, string> | undefined
@@ -1116,6 +1160,9 @@ const mergeReadableLayers = (
     }
     if (layer.moonlight !== undefined) {
       moonlight = foldMoonlight(moonlight, layer.moonlight)
+    }
+    if (layer.preferences !== undefined) {
+      preferences = foldPreferences(preferences, layer.preferences)
     }
     if (layer.plugin !== undefined) {
       plugin = foldPluginPolicies(plugin, layer.plugin)
@@ -1139,6 +1186,7 @@ const mergeReadableLayers = (
   return {
     launchCompanions,
     moonlight,
+    preferences,
     plugin,
     settings,
     env,
@@ -1192,6 +1240,7 @@ export const resolveReadableLocalLauncherPolicy = (
   return {
     launchCompanions: folded.launchCompanions ?? {},
     ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
+    ...(folded.preferences ? { preferences: folded.preferences } : {}),
   }
 }
 
@@ -1322,6 +1371,7 @@ export const resolveReadableLaunchContext = (
       ...(resolvedTarget.content ? { content: resolvedTarget.content } : {}),
       launchCompanions: folded.launchCompanions ?? {},
       ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
+      ...(folded.preferences ? { preferences: folded.preferences } : {}),
       ...(folded.plugin ? { plugin: folded.plugin } : {}),
       ...(folded.settings ? { settings: folded.settings } : {}),
       storage: Object.fromEntries(snapshot.storage),

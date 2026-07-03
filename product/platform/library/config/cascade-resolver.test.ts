@@ -6,6 +6,7 @@ import {
   resolveLocalLauncherCompanionPolicy,
   resolveLocalLauncherPolicy,
 } from "./cascade-resolver"
+import type { Preferences } from "./inheritable-fields"
 import type { EphemeralOverride } from "./ephemeral-override"
 import type { GlobalConfigRecord } from "./records/global"
 import type { LauncherRecord } from "./records/launcher"
@@ -113,5 +114,31 @@ describe("resolveLocalLauncherCompanionPolicy", () => {
         override,
       }),
     ).toEqual({ [frameProvider]: { mode: "override" } })
+  })
+})
+
+describe("launch preferences folding", () => {
+  const withPreferences = <T extends { id: string }>(
+    base: T,
+    preferences: Preferences,
+  ): T => ({ ...base, preferences }) as T
+
+  it("deep-merges launch preferences across layers, scalars last-win", () => {
+    const snap = snapshot({
+      global: withPreferences(globalConfig(undefined), {
+        launch: { video: { fullscreen: true }, audio: { volume: 50 } },
+      }),
+      launchers: [
+        withPreferences(launcher(undefined), {
+          launch: { audio: { volume: 80 } },
+        }),
+      ],
+    })
+
+    expect(
+      resolveLocalLauncherPolicy(snap, { launcherId: "local" }).preferences,
+    ).toEqual({
+      launch: { video: { fullscreen: true }, audio: { volume: 80 } },
+    })
   })
 })

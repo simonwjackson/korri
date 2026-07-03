@@ -26,6 +26,7 @@ import {
   LaunchCompanionMap,
   MoonlightPolicy,
   PluginPolicyMap,
+  Preferences,
 } from "./inheritable-fields"
 import { LaunchSettings } from "./launch-block"
 import { AppRecord } from "./records/app"
@@ -60,6 +61,7 @@ export const ResolvedLaunchContext = Schema.Struct({
   // Resolved inheritable behavior fields (post-merge).
   launchCompanions: Schema.optional(LaunchCompanionMap),
   moonlight: Schema.optional(MoonlightPolicy),
+  preferences: Schema.optional(Preferences),
   plugin: Schema.optional(PluginPolicyMap),
   settings: Schema.optional(LaunchSettings),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -89,6 +91,7 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
   ),
   launchCompanions: Schema.optional(LaunchCompanionMap),
   moonlight: Schema.optional(MoonlightPolicy),
+  preferences: Schema.optional(Preferences),
   plugin: Schema.optional(PluginPolicyMap),
   settings: Schema.optional(LaunchSettings),
   storage: Schema.optional(Schema.Record(Schema.String, StorageRecord)),
