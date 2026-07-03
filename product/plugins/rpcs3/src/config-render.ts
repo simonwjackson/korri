@@ -45,8 +45,6 @@ export interface RenderConfigInput {
   readonly overridesConfig?: LaunchOverrides["config"]
 }
 
-
-
 /**
  * Render the per-launch config.yml text using the read-merge-canonical model
  * proven in U0: start from the operator's canonical config, overlay routed

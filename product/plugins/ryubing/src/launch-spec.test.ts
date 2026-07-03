@@ -103,7 +103,9 @@ describe("typed Ryubing launch spec rendering", () => {
     const spec = composeRyubingLaunchSpec({
       command: "Ryujinx",
       policy: { state: { root: "/state/Ryujinx" } },
-      overrides: { args: { append: ["--root-data-dir", "/operator/override"] } },
+      overrides: {
+        args: { append: ["--root-data-dir", "/operator/override"] },
+      },
       gamePath: "/games/zelda.nsp",
     })
 

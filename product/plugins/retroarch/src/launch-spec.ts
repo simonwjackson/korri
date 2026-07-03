@@ -180,7 +180,9 @@ function renderRetroArchOverrideConfigLines(
   const block =
     config.replace ??
     [config.prepend, config.append]
-      .filter((text): text is string => text !== undefined && text.trim() !== "")
+      .filter(
+        (text): text is string => text !== undefined && text.trim() !== "",
+      )
       .join("\n")
   const lines: string[] = []
   for (const raw of block.split("\n")) {

@@ -44,13 +44,7 @@ describe("applyArgsOverrides", () => {
   it("replace swaps only the routed segment, never leading, middle, or trailing", () => {
     expect(
       applyArgsOverrides({ ...base, overrides: { replace: ["--custom"] } }),
-    ).toEqual([
-      "--no-gui",
-      "--custom",
-      "--config",
-      "/p.yml",
-      "/games/game",
-    ])
+    ).toEqual(["--no-gui", "--custom", "--config", "/p.yml", "/games/game"])
   })
 
   it("composes replace + prepend + append in the correct order", () => {

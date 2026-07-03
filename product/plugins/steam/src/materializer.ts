@@ -1,9 +1,9 @@
 import { stat } from "node:fs/promises"
+import { applyArgsOverrides } from "@platform/library/config/apply-overrides"
 import {
   AppMaterializationFailed,
   type ResolutionError,
 } from "@platform/library/config/errors"
-import { applyArgsOverrides } from "@platform/library/config/apply-overrides"
 import { appRecordKind } from "@platform/library/config/records/app"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
@@ -276,8 +276,7 @@ const materializeReadableSteamResources = (input: {
     )
     const resolvedWrapperArgs = yield* tryMaterialize(
       input.context.app.id,
-      async () =>
-        wrapperArgs.map(arg => resolveStorageTokens(arg, storage)),
+      async () => wrapperArgs.map(arg => resolveStorageTokens(arg, storage)),
     )
     const stateRoot = policy.state?.root
     if (!stateRoot) {
