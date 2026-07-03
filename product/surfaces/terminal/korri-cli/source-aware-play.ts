@@ -9,6 +9,7 @@ import {
   type StreamHostCandidate,
 } from "@platform/stream/lan-stream-discovery"
 import { Cause, Effect, Exit } from "effect"
+import { errorMessage, remoteClientFor } from "./cli-helpers"
 import type { GamePicker } from "./game-picker"
 import { resolveCliMoonlightLaunchPolicy } from "./moonlight-launch-policy"
 import {
@@ -16,10 +17,9 @@ import {
   type MoonlightLaunchOptions,
   type MoonlightLaunchResult,
 } from "./moonlight-launcher"
-import {
-  createRemoteStreamControlClient,
-  type RemotePrepareResult,
-  type RemoteStreamControlClient,
+import type {
+  RemotePrepareResult,
+  RemoteStreamControlClient,
 } from "./remote-stream-control-client"
 import {
   findEntryForChoice,
@@ -57,9 +57,7 @@ export async function runSourceAwarePlayCommand(
   const result = await loadSourceAwareGames({
     localSource: options.librarySource,
     remoteHosts,
-    clientForHost: host =>
-      options.clientForHost?.(host) ??
-      createRemoteStreamControlClient(host.controlUrl),
+    clientForHost: host => remoteClientFor(host, options.clientForHost),
   })
 
   for (const diagnostic of result.diagnostics) {
@@ -170,9 +168,7 @@ async function runRemoteEntry(
     { readonly source: { readonly kind: "remote" } }
   >,
 ): Promise<number> {
-  const client =
-    options.clientForHost?.(entry.source.host) ??
-    createRemoteStreamControlClient(entry.source.host.controlUrl)
+  const client = remoteClientFor(entry.source.host, options.clientForHost)
   const prepare = await client.prepareGame(entry.game.id)
   if (prepare.status === "failed") {
     options.errorOutput(prepare.message)
@@ -223,10 +219,4 @@ function exitCodeForPrepareFailure(
     case "prepare-failed":
       return 6
   }
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (typeof error === "string") return error
-  return String(error)
 }

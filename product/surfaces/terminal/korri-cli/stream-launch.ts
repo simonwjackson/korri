@@ -13,6 +13,7 @@ import {
   type GameStreamLaunchIntentStore,
 } from "@product/services/device/game-stream-launch-intent"
 import { Cause, Effect, Exit } from "effect"
+import { errorMessage } from "./cli-helpers"
 import type { GamePicker } from "./game-picker"
 
 export type StreamLaunchPrepareResult =
@@ -308,8 +309,4 @@ function libraryErrorMessage(error: LibraryError): string {
     case "unavailable":
       return "Library source is unavailable"
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

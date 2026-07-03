@@ -5,6 +5,7 @@ import {
   discoverStreamHosts,
   type StreamHostCandidate,
 } from "@platform/stream/lan-stream-discovery"
+import { errorMessage, remoteClientFor } from "./cli-helpers"
 import type { GamePicker } from "./game-picker"
 import { resolveCliMoonlightLaunchPolicy } from "./moonlight-launch-policy"
 import {
@@ -12,11 +13,10 @@ import {
   type MoonlightLaunchOptions,
   type MoonlightLaunchResult,
 } from "./moonlight-launcher"
-import {
-  createRemoteStreamControlClient,
-  type RemotePrepareResult,
-  type RemoteSourceGame,
-  type RemoteStreamControlClient,
+import type {
+  RemotePrepareResult,
+  RemoteSourceGame,
+  RemoteStreamControlClient,
 } from "./remote-stream-control-client"
 
 export interface RunRemoteStreamLaunchCommandOptions {
@@ -143,10 +143,7 @@ function clientFor(
   options: RunRemoteStreamLaunchCommandOptions,
   host: StreamHostCandidate,
 ): RemoteStreamControlClient {
-  return (
-    options.clientForHost?.(host) ??
-    createRemoteStreamControlClient(host.controlUrl)
-  )
+  return remoteClientFor(host, options.clientForHost)
 }
 
 function remoteChoice(
@@ -185,10 +182,4 @@ function exitCodeForPrepareFailure(
     case "prepare-failed":
       return 6
   }
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (typeof error === "string") return error
-  return String(error)
 }
