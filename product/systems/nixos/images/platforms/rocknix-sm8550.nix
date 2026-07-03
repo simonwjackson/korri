@@ -44,6 +44,53 @@ let
   };
   sm8550 = config.rocknix.sm8550;
   runtime = config.services.korri.runtime;
+  # Neutral display facts owned by nix-on-rocks (rocknix.device.display.*).
+  # Korri renders 100% of the Sway from this hardware data; the substrate
+  # never ships compositor syntax. Mirrors how video/audio expose neutral
+  # facts (decodeBackend, audio.route) that Korri composes.
+  displayFacts = config.rocknix.device.display;
+  displayPrimaryConnector = displayFacts.primaryConnector;
+  # Non-primary connectors are dual-panel secondaries (e.g. Thor's bottom
+  # DSI-1). Single-panel devices (Odin 2 Portal) have none, so bottom-screen
+  # device policy must no-op instead of acting on the only display.
+  displaySecondaryConnectors = map (o: o.connector) (
+    builtins.filter (o: o.connector != displayPrimaryConnector) displayFacts.outputs
+  );
+  displayBottomConnector =
+    if displaySecondaryConnectors == [ ] then null else builtins.head displaySecondaryConnectors;
+  renderSwayOutput =
+    o:
+    lib.concatStringsSep "\n" (
+      [
+        "output ${o.connector} enable"
+        "output ${o.connector} transform ${toString o.transform}"
+        "output ${o.connector} pos ${o.position}"
+        "output ${o.connector} bg ${o.background}"
+      ]
+      ++ lib.optional o.allowTearing "output ${o.connector} allow_tearing yes"
+      ++ lib.optional (o.maxRenderTime != null) "output ${o.connector} max_render_time ${o.maxRenderTime}"
+    );
+  renderSwayTouchDevice =
+    d:
+    lib.concatStringsSep "\n" (
+      [ ''input "${d.match}" map_to_output ${d.connector}'' ]
+      ++ lib.optional (
+        d.calibrationMatrix != null
+      ) ''input "${d.match}" calibration_matrix ${d.calibrationMatrix}''
+    );
+  # Full Sway display fragment rendered from the neutral facts: per-output
+  # transform/pos/bg/tearing, the touch default + per-device maps, then
+  # power-off for any output declared dark-at-boot (Thor's bottom panel).
+  renderSwayDisplay = lib.concatStringsSep "\n" (
+    (map renderSwayOutput displayFacts.outputs)
+    ++ lib.optional (
+      displayFacts.touch.defaultConnector != null
+    ) "input type:touch map_to_output ${displayFacts.touch.defaultConnector}"
+    ++ (map renderSwayTouchDevice displayFacts.touch.devices)
+    ++ (map (o: "output ${o.connector} power off") (
+      builtins.filter (o: !o.powerOnBoot) displayFacts.outputs
+    ))
+  );
   # Neutral substrate capabilities owned by nix-on-rocks. Korri reads
   # these to compose the Moonlight launch environment; it must not
   # hard-code Linux video/audio facts in this platform adapter and must
@@ -183,43 +230,54 @@ let
       sway
       wvkbd
     ];
-    text = ''
-      set -u
+    text =
+      # Bottom-screen keyboard toggle is dual-panel (Thor/Bandai) policy. On
+      # single-panel devices there is no secondary connector, so the action
+      # must no-op rather than power off the only display.
+      if displayBottomConnector == null then
+        ''
+          set -u
+          # Single-panel device: no secondary/bottom screen to toggle.
+          exit 0
+        ''
+      else
+        ''
+          set -u
 
-      runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
-      sock=$(find "$runtime_dir" -maxdepth 1 -name 'sway-ipc.*.sock' -print 2>/dev/null | head -n 1 || true)
-      [ -n "$sock" ] || exit 0
-      export SWAYSOCK="$sock"
+          runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
+          sock=$(find "$runtime_dir" -maxdepth 1 -name 'sway-ipc.*.sock' -print 2>/dev/null | head -n 1 || true)
+          [ -n "$sock" ] || exit 0
+          export SWAYSOCK="$sock"
 
-      bottom_is_on() {
-        swaymsg -t get_outputs \
-          | grep -A30 '"name": "DSI-1"' \
-          | grep -q '"power": true'
-      }
+          bottom_is_on() {
+            swaymsg -t get_outputs \
+              | grep -A30 '"name": "${displayBottomConnector}"' \
+              | grep -q '"power": true'
+          }
 
-      stop_keyboard() {
-        pkill -x wvkbd-mobintl 2>/dev/null || true
-        pkill -x wvkbd 2>/dev/null || true
-      }
+          stop_keyboard() {
+            pkill -x wvkbd-mobintl 2>/dev/null || true
+            pkill -x wvkbd 2>/dev/null || true
+          }
 
-      if bottom_is_on; then
-        stop_keyboard
-        swaymsg 'focus output DSI-2' >/dev/null 2>&1 || true
-        swaymsg 'output DSI-1 power off' >/dev/null 2>&1 || true
-        exit 0
-      fi
+          if bottom_is_on; then
+            stop_keyboard
+            swaymsg 'focus output ${displayPrimaryConnector}' >/dev/null 2>&1 || true
+            swaymsg 'output ${displayBottomConnector} power off' >/dev/null 2>&1 || true
+            exit 0
+          fi
 
-      swaymsg 'output DSI-1 power on' >/dev/null 2>&1 || true
-      swaymsg 'focus output DSI-1' >/dev/null 2>&1 || true
-      swaymsg 'workspace "korri:bottom-keyboard"' >/dev/null 2>&1 || true
+          swaymsg 'output ${displayBottomConnector} power on' >/dev/null 2>&1 || true
+          swaymsg 'focus output ${displayBottomConnector}' >/dev/null 2>&1 || true
+          swaymsg 'workspace "korri:bottom-keyboard"' >/dev/null 2>&1 || true
 
-      if ! pgrep -x wvkbd-mobintl >/dev/null 2>&1; then
-        wvkbd-mobintl -L 360 --fn 'sans 18' >/tmp/korri-bottom-keyboard.log 2>&1 &
-      fi
+          if ! pgrep -x wvkbd-mobintl >/dev/null 2>&1; then
+            wvkbd-mobintl -L 360 --fn 'sans 18' >/tmp/korri-bottom-keyboard.log 2>&1 &
+          fi
 
-      sleep 0.2
-      swaymsg 'focus output DSI-2' >/dev/null 2>&1 || true
-    '';
+          sleep 0.2
+          swaymsg 'focus output ${displayPrimaryConnector}' >/dev/null 2>&1 || true
+        '';
   };
   # The substrate exposes an explicit audio route strategy under
   # rocknix.device.audio.route.*. Korri owns the kiosk user's PipeWire graph,
@@ -348,7 +406,7 @@ let
 
     host.launch."with"."@korri:gamescope" = {
       enable = true;
-      display.output.preferredConnectors = [ "DSI-2" ];
+      display.output.preferredConnectors = [ displayPrimaryConnector ];
     };
 
     host.moonlight = {
@@ -603,7 +661,7 @@ in
     betaChannel = "steamdeck_stable";
     keepWarm = true;
     keepVisibleDuringLaunch = true;
-    gamescopePreferOutput = "DSI-2";
+    gamescopePreferOutput = displayPrimaryConnector;
     # Steam's Gamepad UI can grab controller focus from the foreground AppID
     # game; keep Steam in the gamescoped service, but launch the desktop client
     # without -gamepadui so control stays with the game window.
@@ -719,25 +777,18 @@ in
         USER = runtime.user;
       };
 
+    # Korri renders the entire display fragment from the substrate's neutral
+    # display facts. Per-output transform/power derives from the facts, so
+    # single-panel devices (Odin 2 Portal) keep their validated transform and
+    # never power off their only display, while Thor's bottom DSI-1 is
+    # configured then powered off at boot (powerOnBoot = false).
     sway.extraConfig = ''
-      # ROCKNIX SM8550 display/session fragment supplied by nix-on-rocks.
+      # ROCKNIX SM8550 display/session fragment rendered by Korri from the
+      # substrate's neutral display facts (rocknix.device.display.*).
       seat * hide_cursor 1000
       default_border none
 
-      ${sm8550.display.swayDeviceConfig}
-
-      # Thor's DSI-1 is the unused bottom panel: keep it dark. This only
-      # applies on dual-panel devices (device config references DSI-2). On
-      # single-panel SM8550 devices (Odin 2 Portal) DSI-1 IS the primary
-      # display and the device profile owns its transform/power - the
-      # previous unconditional `transform 90` + `power off` lines clobbered
-      # odin2portal's validated transform 270 (upside-down panel) and powered
-      # off its only display (black screen at boot). Thor's DSI-1/DSI-2
-      # transforms come from the chipset-default swayDeviceConfig, so no
-      # transform needs restating here.
-      ${lib.optionalString (lib.hasInfix "DSI-2" sm8550.display.swayDeviceConfig) ''
-        output DSI-1 power off
-      ''}
+      ${renderSwayDisplay}
     '';
   };
 

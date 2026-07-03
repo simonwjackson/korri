@@ -306,8 +306,13 @@ let
       (check "${name}: compositor uses logind runtime" (
         compositor.runtimeDir == "%t" && compositor.home == "/home/korri"
       ))
-      (check "${name}: Bandai DSI panel keeps the known-good rotation" (
-        lib.hasInfix "output DSI-1 transform 90" compositor.sway.extraConfig
+      (check "${name}: renders the primary output and touch default from neutral facts" (
+        # Korri renders the Sway from rocknix.device.display.* rather than
+        # splicing a substrate Sway string. Assert the primary connector's
+        # transform line and the type:touch default are present; exact
+        # per-device rotation is locked in the top-level Thor/Sobo checks.
+        lib.hasInfix "output ${cfg.rocknix.device.display.primaryConnector} transform " compositor.sway.extraConfig
+        && lib.hasInfix "input type:touch map_to_output ${cfg.rocknix.device.display.primaryConnector}" compositor.sway.extraConfig
       ))
       (check "${name}: RockNIX guest device access module must be enabled" (
         (rocknixGuestDeviceAccess.enable or false) == true
@@ -553,7 +558,7 @@ let
         (moonlightGamescopePolicy.enable or false) == true
         &&
           (lib.attrByPath [ "display" "output" "preferredConnectors" ] [ ] moonlightGamescopePolicy) == [
-            "DSI-2"
+            cfg.rocknix.device.display.primaryConnector
           ]
         && !(hostDefaults.moonlight ? launch)
       ))
@@ -860,9 +865,48 @@ let
       && soboAudioRoute.expectedSink == "alsa_output.platform-sound.HiFi__Speaker__sink"
       && soboAudioRoute.pcm == null
     ))
+    # Per-device display facts and rendered Sway. Korri renders the compositor
+    # config from the substrate's NEUTRAL display facts
+    # (rocknix.device.display.*); the substrate ships no Sway syntax. Thor is
+    # dual-panel (primary DSI-2 landscape @90, bottom DSI-1 configured then
+    # dark at boot); the Odin 2 Portal (Sobo) is single-panel on DSI-1 @270
+    # and must never power off its only display.
+    (check "Thor primary connector is DSI-2" (
+      thorSystem.config.rocknix.device.display.primaryConnector == "DSI-2"
+    ))
+    (check "Sobo (Odin 2 Portal) primary connector is DSI-1" (
+      soboSystem.config.rocknix.device.display.primaryConnector == "DSI-1"
+    ))
+    (check "Thor renders DSI-2 primary @90 and darkens the bottom DSI-1 at boot" (
+      let
+        c = thorSystem.config.services.korri.compositor.sway.extraConfig;
+      in
+      lib.hasInfix "output DSI-2 transform 90" c
+      && lib.hasInfix "output DSI-1 transform 90" c
+      && lib.hasInfix "output DSI-1 power off" c
+    ))
+    (check "Sobo (Odin 2 Portal) renders single DSI-1 @270 with no power-off" (
+      let
+        c = soboSystem.config.services.korri.compositor.sway.extraConfig;
+      in
+      lib.hasInfix "output DSI-1 transform 270" c
+      && !(lib.hasInfix "transform 90" c)
+      && !(lib.hasInfix "power off" c)
+    ))
+    # Output selection (gamescope/Steam) follows the neutral primary
+    # connector, not a Thor-only literal. Sobo previously inherited the
+    # DSI-2 literal, which does not exist on its single DSI-1 panel.
+    (check "Thor gamescope/Steam prefer the DSI-2 primary output" (
+      thorSystem.config.services.korri.steam.gamescopePreferOutput == "DSI-2"
+    ))
+    (check "Sobo (Odin 2 Portal) gamescope/Steam prefer the DSI-1 primary output" (
+      soboSystem.config.services.korri.steam.gamescopePreferOutput == "DSI-1"
+    ))
   ]
-  ++ (checkSystem "Odin 2 Portal" thorSystem)
-  ++ (checkSystem "Sobo" soboSystem);
+  # NOTE: the first argument is the display label; the second is the system.
+  # These were previously swapped ("Odin 2 Portal" paired with thorSystem).
+  ++ (checkSystem "Thor" thorSystem)
+  ++ (checkSystem "Sobo (Odin 2 Portal)" soboSystem);
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in
