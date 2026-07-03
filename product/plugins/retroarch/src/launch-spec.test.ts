@@ -64,7 +64,7 @@ describe("typed RetroArch launch spec rendering", () => {
     expect(config).not.toContain("input_player1_b_btn")
   })
 
-  it("renders typed settings before extraSettings so escape hatches win", () => {
+  it("renders typed settings before overrides.config so escape hatches win", () => {
     const config = renderRetroArchConfig({
       lifecycle: {
         saveOnExit: false,
@@ -130,13 +130,18 @@ describe("typed RetroArch launch spec rendering", () => {
         maxUsers: 4,
         menuToggleGamepadCombo: "start-select",
       },
-      extraSettings: {
-        video_fullscreen: false,
-        menu_driver: "rgui",
-        cache_directory: "/override/cache",
-        notification_show_autoconfig: false,
+    },
+      {
+        config: {
+          append: [
+            'video_fullscreen = "false"',
+            'menu_driver = "rgui"',
+            'cache_directory = "/override/cache"',
+            'notification_show_autoconfig = "false"',
+          ].join("\n"),
+        },
       },
-    })
+    )
 
     expect(config).toContain('show_hidden_files = "true"')
     expect(config).toContain('log_verbosity = "true"')
@@ -232,8 +237,9 @@ describe("typed RetroArch launch spec rendering", () => {
           "2": { libretroDevice: 257, joypadIndex: 1 },
         },
       },
-      extraSettings: { video_frame_delay: 3 },
-    })
+    },
+      { config: { append: "video_frame_delay = 3" } },
+    )
 
     expect(config).toContain("aspect_ratio_index = 20")
     expect(config).toContain("video_aspect_ratio = 1.3333")
@@ -288,8 +294,9 @@ describe("typed RetroArch launch spec rendering", () => {
         buildbotAssetsUrl: "https://updates.example.invalid/assets",
         autoExtractArchive: false,
       },
-      extraSettings: { cheevos_enable: false },
-    })
+    },
+      { config: { append: 'cheevos_enable = "false"' } },
+    )
 
     expect(config).toContain('cheevos_enable = "true"')
     expect(config).toContain('cheevos_username = "player-one"')
@@ -417,8 +424,9 @@ describe("typed RetroArch launch spec rendering", () => {
         preemptiveFrames: { enable: true, frames: 3 },
       },
       video: { sync: { hardSync: true, frameDelay: 2 } },
-      extraSettings: { rewind_buffer_size: 24 },
-    })
+    },
+      { config: { append: "rewind_buffer_size = 24" } },
+    )
 
     expect(config).toContain('menu_driver = "ozone"')
     expect(config).toContain('menu_show_start_screen = "false"')
@@ -476,7 +484,7 @@ describe("typed RetroArch launch spec rendering", () => {
     ).toContain("aspect_ratio_index = 21")
   })
 
-  it("renders typed settings in stable group order before extraSettings", () => {
+  it("renders typed settings in stable group order before overrides.config", () => {
     const config = renderRetroArchConfig({
       lifecycle: {
         saveOnExit: true,
@@ -542,8 +550,9 @@ describe("typed RetroArch launch spec rendering", () => {
         maxUsers: 4,
         menuToggleGamepadCombo: "start-select",
       },
-      extraSettings: { video_fullscreen: false },
-    })
+    },
+      { config: { append: 'video_fullscreen = "false"' } },
+    )
 
     expect(config).toBe(
       [
@@ -628,15 +637,15 @@ describe("typed RetroArch launch spec rendering", () => {
     )
   })
 
-  it("renders logging appendconfig extraArgs and environment unsets", () => {
+  it("renders logging appendconfig overrides.args and environment unsets", () => {
     const spec = composeRetroArchLaunchSpec({
       command: "/run/current-system/sw/bin/retroarch",
       policy: {
         environment: { WAYLAND_DISPLAY: null, SDL_VIDEODRIVER: "x11" },
         logging: { verbose: true, logFile: "retroarch.log" },
         configFile: { append: ["/tmp/a.cfg", "/tmp/b.cfg"] },
-        extraArgs: ["--features"],
       },
+      overrides: { args: { append: ["--features"] } },
       facts: {
         configPath: "/tmp/launch/retroarch.cfg",
         corePath: "/cores/mgba_libretro.so",
@@ -680,7 +689,7 @@ describe("typed RetroArch launch spec rendering", () => {
     ).toThrow(/content path/)
   })
 
-  it("rejects absolute log files and extraArgs log-file duplication", () => {
+  it("rejects absolute log files and overrides.args log-file duplication", () => {
     const facts = {
       configPath: "/tmp/launch/retroarch.cfg",
       corePath: "/cores/mgba_libretro.so",
@@ -707,13 +716,13 @@ describe("typed RetroArch launch spec rendering", () => {
     ).toThrow(/logging\.logFile.*logs/)
     expect(() =>
       composeRetroArchLaunchSpec({
-        policy: { extraArgs: ["--log-file=/tmp/retroarch.log"] },
+        overrides: { args: { append: ["--log-file=/tmp/retroarch.log"] } },
         facts,
       }),
     ).toThrow(/log file/)
     expect(() =>
       composeRetroArchLaunchSpec({
-        policy: { extraArgs: ["--log-file", "/tmp/retroarch.log"] },
+        overrides: { args: { append: ["--log-file", "/tmp/retroarch.log"] } },
         facts,
       }),
     ).toThrow(/log file/)
@@ -726,10 +735,8 @@ describe("typed RetroArch launch spec rendering", () => {
       }),
     ).toThrow(/append.*\|/)
     expect(() =>
-      renderRetroArchConfig({
-        extraSettings: { "video_fullscreen\nauto_overrides_enable": true },
-      }),
-    ).toThrow(/extraSettings key/)
+      renderRetroArchConfig({}, { config: { append: "bad-key = 1" } }),
+    ).toThrow(/overrides.config key/)
     for (const key of [
       "cheevos_password",
       "cheevos_token",
@@ -738,48 +745,55 @@ describe("typed RetroArch launch spec rendering", () => {
       "netplay_spectate_password",
     ]) {
       expect(() =>
-        renderRetroArchConfig({
-          extraSettings: { [key]: "secret" },
-        }),
+        renderRetroArchConfig({}, { config: { append: `${key} = "secret"` } }),
       ).toThrow(/plaintext credential/)
     }
   })
 
-  it("rejects extraArgs that duplicate launch identity", () => {
+  it("rejects overrides.args that duplicate launch identity", () => {
     const facts = {
       configPath: "/tmp/launch/retroarch.cfg",
       corePath: "/cores/mgba_libretro.so",
       contentPath: "/games/gba/SMA.gba",
     }
 
-    for (const extraArgs of [
+    for (const overrideArgs of [
       ["-L", "/other/core.so"],
       ["--libretro"],
       ["--libretro=/other/core.so"],
       ["-L/other/core.so"],
     ]) {
       expect(() =>
-        composeRetroArchLaunchSpec({ policy: { extraArgs }, facts }),
+        composeRetroArchLaunchSpec({
+          overrides: { args: { append: overrideArgs } },
+          facts,
+        }),
       ).toThrow(/core selection/)
     }
 
-    for (const extraArgs of [
+    for (const overrideArgs of [
       ["-c", "/tmp/other.cfg"],
       ["--config"],
       ["--config=/tmp/other.cfg"],
       ["-c/tmp/other.cfg"],
     ]) {
       expect(() =>
-        composeRetroArchLaunchSpec({ policy: { extraArgs }, facts }),
+        composeRetroArchLaunchSpec({
+          overrides: { args: { append: overrideArgs } },
+          facts,
+        }),
       ).toThrow(/config file selection/)
     }
 
-    for (const extraArgs of [
+    for (const overrideArgs of [
       ["--appendconfig"],
       ["--appendconfig=/tmp/a.cfg"],
     ]) {
       expect(() =>
-        composeRetroArchLaunchSpec({ policy: { extraArgs }, facts }),
+        composeRetroArchLaunchSpec({
+          overrides: { args: { append: overrideArgs } },
+          facts,
+        }),
       ).toThrow(/append configs/)
     }
   })

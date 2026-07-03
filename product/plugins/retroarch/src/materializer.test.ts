@@ -50,9 +50,9 @@ const readableContext: ReadableResolvedLaunchContext = {
     [KORRI_RETROARCH_PLUGIN_ID]: {
       configFile: { mode: "generated" },
       video: { aspectRatio: "full" },
-      extraSettings: { video_frame_delay: 0 },
     },
   },
+  overrides: { config: { append: "video_frame_delay = 0" } },
 }
 
 describe("retroarchReadableLaunchIntegration", () => {

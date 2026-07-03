@@ -236,7 +236,7 @@ const materializeReadableRetroArchResources = (
     yield* writeAtomic(
       input.context.app.id,
       configPath,
-      renderRetroArchConfig(policy),
+      renderRetroArchConfig(policy, input.context.overrides),
     )
     paths.configPath = configPath
     if (policy.logging?.logFile) {
@@ -254,6 +254,9 @@ const materializeReadableRetroArchResources = (
         command: input.context.app.command,
         policy,
         facts: { configPath, corePath: corePath ?? "", contentPath },
+        ...(input.context.overrides
+          ? { overrides: input.context.overrides }
+          : {}),
       }),
     )
     return { paths, spec }
@@ -318,48 +321,23 @@ const stageReadableRetroarchPatchLaunch = (input: {
     return { contentPath: stagedContentPath, paths, settings }
   })
 
-const RETROARCH_TYPED_PATH_SETTING_KEYS = {
-  systemDirectory: "system_directory",
-  savefileDirectory: "savefile_directory",
-  savestateDirectory: "savestate_directory",
-  screenshotDirectory: "screenshot_directory",
-  contentDirectory: "content_directory",
-  cacheDirectory: "cache_directory",
-  assetsDirectory: "assets_directory",
-  thumbnailsDirectory: "thumbnails_directory",
-  playlistDirectory: "playlist_directory",
-  libretroDirectory: "libretro_directory",
-  libretroInfoPath: "libretro_info_path",
-  coreAssetsDirectory: "core_assets_directory",
-  coreOptionsPath: "core_options_path",
-  joypadAutoconfigDirectory: "joypad_autoconfig_dir",
-  inputRemappingDirectory: "input_remapping_directory",
-  overlayDirectory: "overlay_directory",
-  videoShaderDirectory: "video_shader_dir",
-  cheatDatabasePath: "cheat_database_path",
-  contentDatabasePath: "content_database_path",
-  recordingOutputDirectory: "recording_output_directory",
-} as const satisfies Partial<
-  Record<keyof NonNullable<RetroArchPolicy["paths"]>, string>
->
-
 const mergeStableRetroArchSettings = (
   policy: RetroArchPolicy,
   settings: Record<string, LaunchSettingValue>,
 ): RetroArchPolicy => {
-  const stableSettings = { ...settings }
-  for (const [field, settingKey] of Object.entries(
-    RETROARCH_TYPED_PATH_SETTING_KEYS,
-  )) {
-    const pathField = field as keyof NonNullable<RetroArchPolicy["paths"]>
-    if (policy.paths?.[pathField] !== undefined) {
-      delete stableSettings[settingKey]
-    }
+  // Inject Korri-owned stable save/state directories into the typed paths
+  // policy (not an escape hatch), leaving any operator-set paths untouched.
+  // stableRetroarchSettingsForIdentity only ever emits these two cfg keys.
+  const savefile = settings.savefile_directory
+  const savestate = settings.savestate_directory
+  const paths = { ...(policy.paths ?? {}) }
+  if (paths.savefileDirectory === undefined && typeof savefile === "string") {
+    paths.savefileDirectory = savefile
   }
-  return {
-    ...policy,
-    extraSettings: { ...stableSettings, ...(policy.extraSettings ?? {}) },
+  if (paths.savestateDirectory === undefined && typeof savestate === "string") {
+    paths.savestateDirectory = savestate
   }
+  return { ...policy, paths }
 }
 
 const stableRetroarchSettingsForIdentity = (input: {

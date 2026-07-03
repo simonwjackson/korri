@@ -6,6 +6,8 @@ import {
   normalize,
   relative,
 } from "node:path"
+import { applyArgsOverrides } from "@platform/library/config/apply-overrides"
+import type { LaunchOverrides } from "@platform/library/config/records/library-item"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { KORRI_RETROARCH_BINARY_PATH } from "./ids"
 import type { LaunchSettingValue, RetroArchPolicy } from "./policy"
@@ -51,6 +53,8 @@ export interface ComposeRetroArchLaunchSpecOptions {
   readonly command?: string
   readonly policy?: RetroArchPolicy
   readonly facts: RetroArchLaunchFacts
+  /** Raw escape hatch, folded from release.launch.overrides. */
+  readonly overrides?: LaunchOverrides
 }
 
 export function composeRetroArchLaunchSpec(
@@ -59,44 +63,147 @@ export function composeRetroArchLaunchSpec(
   const policy = options.policy ?? {}
   validateRetroArchLaunchFacts(options.facts)
   validateRetroArchPolicy(policy)
+  validateRetroArchOverrideArgs(options.overrides?.args)
 
   return applyEnvironmentOverlay(
     {
       command: options.command ?? DEFAULT_RETROARCH_COMMAND,
-      args: renderRetroArchArgs(policy, options.facts),
+      args: renderRetroArchArgs(policy, options.facts, options.overrides?.args),
     },
     policy.environment,
   )
 }
 
-export function renderRetroArchConfig(policy: RetroArchPolicy = {}): string {
+export function renderRetroArchConfig(
+  policy: RetroArchPolicy = {},
+  overrides?: LaunchOverrides,
+): string {
   validateRetroArchPolicy(policy)
   const settings = renderRetroArchSettings(policy)
-  return `${settings
-    .map(([key, value]) => `${key} = ${serializeRetroArchValue(value)}`)
-    .join("\n")}\n`
+  const typedLines = settings.map(
+    ([key, value]) => `${key} = ${serializeRetroArchValue(value)}`,
+  )
+  const overrideLines = renderRetroArchOverrideConfigLines(overrides?.config)
+  return `${[...typedLines, ...overrideLines].join("\n")}\n`
 }
 
 function renderRetroArchArgs(
   policy: RetroArchPolicy,
   facts: RetroArchLaunchFacts,
+  overrides?: LaunchOverrides["args"],
 ): readonly string[] {
-  const args: string[] = []
+  const leading: string[] = []
 
-  if (policy.logging?.verbose === true) args.push("-v")
+  if (policy.logging?.verbose === true) leading.push("-v")
   const logFile = resolveRetroArchLogFile(policy.logging?.logFile, facts)
-  if (logFile) args.push(`--log-file=${logFile}`)
+  if (logFile) leading.push(`--log-file=${logFile}`)
 
-  args.push("-c", facts.configPath)
+  leading.push("-c", facts.configPath)
 
   const append = policy.configFile?.append ?? []
-  if (append.length > 0) args.push(`--appendconfig=${append.join("|")}`)
+  if (append.length > 0) leading.push(`--appendconfig=${append.join("|")}`)
 
-  args.push("-L", facts.corePath)
-  if (policy.extraArgs) args.push(...policy.extraArgs)
-  args.push(facts.contentPath)
+  leading.push("-L", facts.corePath)
 
-  return args
+  // Override args land between the core selection and the content path, the
+  // slot the retired `extraArgs` field occupied. RetroArch has no plugin-routed
+  // argv segment (typed settings go to the cfg file), so `routed` is empty and
+  // prepend/replace/append all render in that slot.
+  return applyArgsOverrides({
+    leading,
+    routed: [],
+    trailing: [facts.contentPath],
+    ...(overrides !== undefined ? { overrides } : {}),
+  })
+}
+
+/**
+ * Validate `overrides.args` against the same structural-flag guards the retired
+ * `extraArgs` field enforced: an override must never re-select the core, config
+ * file, appended configs, or log file — those are Korri-owned launch identity.
+ */
+function validateRetroArchOverrideArgs(
+  overrides: LaunchOverrides["args"] | undefined,
+): void {
+  if (overrides === undefined) return
+  const args = [
+    ...(overrides.prepend ?? []),
+    ...(overrides.replace ?? []),
+    ...(overrides.append ?? []),
+  ]
+  for (const arg of args) {
+    if (
+      DANGEROUS_CORE_ARGS.has(arg) ||
+      arg.startsWith("--libretro=") ||
+      arg.startsWith("-L")
+    ) {
+      throw new Error(
+        `RetroArch overrides.args must not override core selection with ${arg}`,
+      )
+    }
+    if (
+      DANGEROUS_CONFIG_ARGS.has(arg) ||
+      arg.startsWith("--config=") ||
+      arg.startsWith("-c")
+    ) {
+      throw new Error(
+        `RetroArch overrides.args must not override config file selection with ${arg}; use configFile.append for additive config layering`,
+      )
+    }
+    if (
+      DANGEROUS_APPEND_CONFIG_ARGS.has(arg) ||
+      arg.startsWith("--appendconfig=")
+    ) {
+      throw new Error(
+        `RetroArch overrides.args must not add append configs with ${arg}; use configFile.append`,
+      )
+    }
+    if (DANGEROUS_LOG_FILE_ARGS.has(arg) || arg.startsWith("--log-file=")) {
+      throw new Error(
+        `RetroArch overrides.args must not override log file selection with ${arg}; use logging.logFile`,
+      )
+    }
+  }
+}
+
+/**
+ * Render `overrides.config` (plain-text cfg fragments) as trailing cfg lines,
+ * validating every key the way the retired `extraSettings` field did:
+ * `prepend`/`append` accumulate (append wins position), `replace` is
+ * most-specific-wins over that override block. This never replaces the whole
+ * generated cfg — the safe typed lifecycle defaults always render first.
+ */
+function renderRetroArchOverrideConfigLines(
+  config: LaunchOverrides["config"] | undefined,
+): readonly string[] {
+  if (config === undefined) return []
+  const block =
+    config.replace ??
+    [config.prepend, config.append]
+      .filter((text): text is string => text !== undefined && text.trim() !== "")
+      .join("\n")
+  const lines: string[] = []
+  for (const raw of block.split("\n")) {
+    const line = raw.trim()
+    if (line === "" || line.startsWith("#")) continue
+    const separator = line.indexOf("=")
+    if (separator === -1) {
+      throw new Error(
+        `RetroArch overrides.config lines must be 'key = value': ${line}`,
+      )
+    }
+    const key = line.slice(0, separator).trim()
+    if (!isRetroArchConfigKey(key)) {
+      throw new Error(`Invalid RetroArch overrides.config key: ${key}`)
+    }
+    if (isRetroArchPlaintextCredentialSettingKey(key)) {
+      throw new Error(
+        `RetroArch overrides.config must not contain plaintext credential key: ${key}`,
+      )
+    }
+    lines.push(line)
+  }
+  return lines
 }
 
 function renderRetroArchSettings(
@@ -118,15 +225,7 @@ function renderRetroArchSettings(
   appendLatencySettings(writer, policy)
   appendAdvancedSettings(writer, policy)
 
-  const settings = [...writer.settings]
-  // Deliberately bypass the typed-key duplicate guard: extraSettings is the
-  // permanent break-glass layer and renders last so operators can override
-  // typed cfg keys while Korri still validates key shape and secret hazards.
-  for (const [key, value] of Object.entries(policy.extraSettings ?? {})) {
-    settings.push([key, value])
-  }
-
-  return settings
+  return [...writer.settings]
 }
 
 interface TypedSettingsWriter {
@@ -778,49 +877,6 @@ function validateRetroArchPolicy(policy: RetroArchPolicy) {
   ] as const) {
     const error = validateNullableRetroArchHttpsUrl(value, label)
     if (error !== undefined) throw new Error(`RetroArch ${error}`)
-  }
-  for (const key of Object.keys(policy.extraSettings ?? {})) {
-    if (!isRetroArchConfigKey(key)) {
-      throw new Error(`Invalid RetroArch extraSettings key: ${key}`)
-    }
-    if (isRetroArchPlaintextCredentialSettingKey(key)) {
-      throw new Error(
-        `RetroArch extraSettings must not contain plaintext credential key: ${key}`,
-      )
-    }
-  }
-  for (const arg of policy.extraArgs ?? []) {
-    if (
-      DANGEROUS_CORE_ARGS.has(arg) ||
-      arg.startsWith("--libretro=") ||
-      arg.startsWith("-L")
-    ) {
-      throw new Error(
-        `RetroArch extraArgs must not override core selection with ${arg}`,
-      )
-    }
-    if (
-      DANGEROUS_CONFIG_ARGS.has(arg) ||
-      arg.startsWith("--config=") ||
-      arg.startsWith("-c")
-    ) {
-      throw new Error(
-        `RetroArch extraArgs must not override config file selection with ${arg}; use configFile.append for additive config layering`,
-      )
-    }
-    if (
-      DANGEROUS_APPEND_CONFIG_ARGS.has(arg) ||
-      arg.startsWith("--appendconfig=")
-    ) {
-      throw new Error(
-        `RetroArch extraArgs must not add append configs with ${arg}; use configFile.append`,
-      )
-    }
-    if (DANGEROUS_LOG_FILE_ARGS.has(arg) || arg.startsWith("--log-file=")) {
-      throw new Error(
-        `RetroArch extraArgs must not override log file selection with ${arg}; use logging.logFile`,
-      )
-    }
   }
 }
 

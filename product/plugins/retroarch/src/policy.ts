@@ -1,10 +1,6 @@
 import { Schema } from "effect"
 
-import {
-  isRetroArchConfigKey,
-  isRetroArchPlaintextCredentialSettingKey,
-  validateNullableRetroArchHttpsUrl,
-} from "./setting-policy"
+import { validateNullableRetroArchHttpsUrl } from "./setting-policy"
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -291,22 +287,6 @@ const RetroArchAudioPolicy = Schema.Struct({
   ),
 })
 
-const RetroArchExtraSettingKey = Schema.String.check(
-  Schema.makeFilter(value => {
-    if (!isRetroArchConfigKey(value)) {
-      return `Invalid RetroArch extraSettings key: ${value}`
-    }
-    if (isRetroArchPlaintextCredentialSettingKey(value)) {
-      return `RetroArch extraSettings must not contain plaintext credential key: ${value}`
-    }
-    return undefined
-  }),
-)
-const RetroArchExtraSettings = Schema.Record(
-  RetroArchExtraSettingKey,
-  LaunchSettingValue,
-)
-
 const RetroArchInputPortKey = Schema.String.check(
   Schema.isPattern(/^[1-9][0-9]*$/),
 )
@@ -493,8 +473,6 @@ export const RetroArchPolicy = Schema.Struct({
   playlists: Schema.optional(RetroArchPlaylistsPolicy),
   privacy: Schema.optional(RetroArchPrivacyPolicy),
   updater: Schema.optional(RetroArchUpdaterPolicy),
-  extraSettings: Schema.optional(RetroArchExtraSettings),
-  extraArgs: Schema.optional(Schema.Array(Schema.String)),
 })
 export type RetroArchPolicy = Schema.Schema.Type<typeof RetroArchPolicy>
 
