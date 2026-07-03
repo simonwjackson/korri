@@ -1,6 +1,7 @@
 import { AppMaterializationFailed } from "@platform/library/config/errors"
 import { Schema } from "effect"
 import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
+import { Rpcs3InputPolicy } from "./input-policy"
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -188,6 +189,9 @@ export const Rpcs3Policy = Schema.Struct({
   boot: Schema.optional(Rpcs3BootPolicy),
   system: Schema.optional(Rpcs3SystemPolicy),
   core: Schema.optional(Rpcs3CorePolicy),
+  // Per-player pad / keyboard-as-pad authoring (materialized to a separate
+  // input_configs profile, not config.yml). Large schema lives in input-policy.ts.
+  input: Schema.optional(Rpcs3InputPolicy),
 })
 export type Rpcs3Policy = Schema.Schema.Type<typeof Rpcs3Policy>
 
