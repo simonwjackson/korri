@@ -29,14 +29,15 @@ const NonNegativeNumber = (label: string) =>
  */
 const Rpcs3VideoPolicy = Schema.Struct({
   resolution: Schema.optional(Schema.String),
-  aspectRatio: Schema.optional(
-    Schema.Literals(["16:9", "4:3", "16:10", "5:4", "5:3", "21:9"]),
-  ),
+  // RPCS3 video_aspect enum only defines 4:3 and 16:9 (verified against
+  // system_config_types.cpp); no other ratios are accepted.
+  aspectRatio: Schema.optional(Schema.Literals(["16:9", "4:3"])),
   fullscreen: Schema.optional(Schema.Boolean),
+  // RPCS3 frame_limit_type enum: numeric 30/50/60/120 or a named mode.
   frameLimit: Schema.optional(
     Schema.Union([
-      Schema.Number,
-      Schema.Literals(["off", "auto", "native", "infinite"]),
+      Schema.Literals([30, 50, 60, 120]),
+      Schema.Literals(["off", "auto", "native", "infinite", "display"]),
     ]),
   ),
   vsync: Schema.optional(Schema.Boolean),
