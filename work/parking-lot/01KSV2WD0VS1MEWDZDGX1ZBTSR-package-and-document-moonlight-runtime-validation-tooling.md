@@ -45,3 +45,8 @@ Manual validation currently requires running source-tree Bun entrypoints and han
 ## Notes
 
 2026-05-31: Extended after the SM8550 seamless bitrate proof. This item now also owns operator-facing validation tooling/status for shippable live bitrate, while implementation, deployment, guardrails, automated coverage, hardware validation, soak, compatibility, and FFmpeg-helper hardening are split into task-058 through task-065.
+
+2026-07-03 reconciliation: Largely DONE. First-class operator tooling now ships on trunk:
+- `korri stream {show,bitrate,fps,resolution}` (`product/surfaces/terminal/korri-cli/stream-quality.ts`), reusing the shared Moonlight control client, with newest-session socket discovery under `$XDG_RUNTIME_DIR/korri-moonlight/<sessionId>/control.sock` and an optional `--socket` override. Live-verified `show` against bandai (13388 kbps, 60 fps, 1920x1080).
+- `moonlight-runtime-watch` and `stream-control-bench` are also on trunk.
+Remaining piece for this item: the durable operator runbook (host gate setup, client launch env, socket discovery, bitrate/FPS/resolution commands, expected output, rollback/restore, product-vs-diagnostic boundary). Drafted at `docs/korri-stream-live-quality-runbook.md`.

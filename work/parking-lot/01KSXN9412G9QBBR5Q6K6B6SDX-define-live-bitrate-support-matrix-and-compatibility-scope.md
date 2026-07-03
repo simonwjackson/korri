@@ -41,3 +41,5 @@ The validated path should not be overclaimed; users and code need a clear matrix
 ## Notes
 
 This should be kept aligned with product capability gating.
+
+2026-07-03 reconciliation: The committed-default half of this item advanced. SM8550 now ships `host.moonlight.stream.codec = "h264"` and `host.moonlight.control = { enable = true; authority = "controller" }` (rocknix-sm8550.nix), covering bandai (thor) and sobo (odin2portal). This replaces the `force-h264.korri.yaml` device drop-in and means the validated H.264 VAAPI runtime-settings path is the default the matrix should document as supported. Remaining: write the supported/unsupported matrix doc, decide Bandai/Aka-specific vs all-h264_vaapi-hosts scope, and validate a product stream app (not only Desktop).
