@@ -175,6 +175,37 @@ describe("typed Ryubing launch spec rendering", () => {
     ])
   })
 
+  it("overrides.config.replace wins the generated config", () => {
+    const config = renderRyubingConfig(
+      {},
+      {
+        overrides: {
+          config: { replace: '{ "custom_key": true, "version": 99 }' },
+        },
+      },
+    )
+
+    expect(config).toEqual({ custom_key: true, version: 99 })
+  })
+
+  it("overrides.config prepend and append deep-merge with append winning conflicts", () => {
+    const config = renderRyubingConfig(
+      {},
+      {
+        overrides: {
+          config: {
+            prepend: '{ "a": 1, "shared": "pre" }',
+            append: '{ "b": 2, "shared": "post" }',
+          },
+        },
+      },
+    )
+
+    expect(config.a).toBe(1)
+    expect(config.b).toBe(2)
+    expect(config.shared).toBe("post")
+  })
+
   it("defaults audio_backend to OpenAl when policy does not choose one", () => {
     // Ryujinx's SDL2 backend queues samples without dropping them: any
     // sub-realtime stretch (boot, shader compile, slow GPU) accumulates

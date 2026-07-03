@@ -116,4 +116,26 @@ describe("parseConfigFragment", () => {
   it("returns undefined when the fragment is not an object", () => {
     expect(parseConfigFragment("42", JSON.parse)).toBeUndefined()
   })
+
+  it("strips prototype-polluting keys from parsed fragments", () => {
+    const parsed = parseConfigFragment(
+      '{ "__proto__": { "input_config": [{}] }, "version": 70 }',
+      JSON.parse,
+    )
+    expect(parsed).toEqual({ version: 70 })
+    expect(Object.hasOwn(parsed ?? {}, "__proto__")).toBe(false)
+    // The prototype was not mutated.
+    expect(({} as Record<string, unknown>).input_config).toBeUndefined()
+  })
+})
+
+describe("deepMergeConfig prototype safety", () => {
+  it("does not merge prototype-polluting keys into the result", () => {
+    const merged = deepMergeConfig(
+      { a: 1 },
+      JSON.parse('{ "__proto__": { "x": 1 }, "b": 2 }'),
+    )
+    expect(merged).toEqual({ a: 1, b: 2 })
+    expect(({} as Record<string, unknown>).x).toBeUndefined()
+  })
 })

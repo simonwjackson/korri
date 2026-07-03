@@ -676,6 +676,28 @@ describe("typed RetroArch launch spec rendering", () => {
     })
   })
 
+  it("overrides.args.replace preserves the config, core, and content structural args", () => {
+    const spec = composeRetroArchLaunchSpec({
+      command: "/bin/retroarch",
+      overrides: { args: { replace: ["--set-shader", "crt"] } },
+      facts: {
+        configPath: "/tmp/launch/retroarch.cfg",
+        corePath: "/cores/mgba_libretro.so",
+        contentPath: "/games/gba/SMA.gba",
+      },
+    })
+
+    expect(spec.args).toEqual([
+      "-c",
+      "/tmp/launch/retroarch.cfg",
+      "-L",
+      "/cores/mgba_libretro.so",
+      "--set-shader",
+      "crt",
+      "/games/gba/SMA.gba",
+    ])
+  })
+
   it("rejects blank launch facts", () => {
     const facts = {
       configPath: "/tmp/launch/retroarch.cfg",

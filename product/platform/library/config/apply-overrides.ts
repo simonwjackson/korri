@@ -53,13 +53,36 @@ type ConfigObject = Record<string, unknown>
 const isConfigObject = (value: unknown): value is ConfigObject =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-/** Deep-merge `patch` over `base`; nested objects merge, everything else (arrays included) is replaced by `patch`. */
+// Keys that mutate an object's prototype when assigned. Override fragments are
+// release-scoped, lower-trust config on the unauthenticated launch surface, so
+// they must never reach a prototype. Stripping them here protects every
+// object-tree consumer (YAML for RPCS3, JSON for Ryubing) at the parse/merge
+// choke points.
+const PROTOTYPE_POLLUTING_KEYS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+])
+
+const stripPrototypePollutingKeys = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(stripPrototypePollutingKeys)
+  if (!isConfigObject(value)) return value
+  const out: ConfigObject = {}
+  for (const [key, child] of Object.entries(value)) {
+    if (PROTOTYPE_POLLUTING_KEYS.has(key)) continue
+    out[key] = stripPrototypePollutingKeys(child)
+  }
+  return out
+}
+
+/** Deep-merge `patch` over `base`; nested objects merge, everything else (arrays included) is replaced by `patch`. Prototype-polluting keys are skipped. */
 export function deepMergeConfig(
   base: ConfigObject,
   patch: ConfigObject,
 ): ConfigObject {
   const out: ConfigObject = { ...base }
   for (const [key, value] of Object.entries(patch)) {
+    if (PROTOTYPE_POLLUTING_KEYS.has(key)) continue
     const existing = out[key]
     out[key] =
       isConfigObject(existing) && isConfigObject(value)
@@ -69,12 +92,14 @@ export function deepMergeConfig(
   return out
 }
 
-/** Parse a plain-text config fragment (via the caller's format parser) into an object, or `undefined` for empty/non-object input. */
+/** Parse a plain-text config fragment (via the caller's format parser) into an object, or `undefined` for empty/non-object input. Prototype-polluting keys are stripped recursively. */
 export function parseConfigFragment(
   text: string,
   parse: (text: string) => unknown,
 ): ConfigObject | undefined {
   if (text.trim() === "") return undefined
   const parsed = parse(text)
-  return isConfigObject(parsed) ? parsed : undefined
+  return isConfigObject(parsed)
+    ? (stripPrototypePollutingKeys(parsed) as ConfigObject)
+    : undefined
 }

@@ -365,7 +365,11 @@ const validateInputConfig = (
   config: JsonObject,
 ): Effect.Effect<void, ResolutionError> => {
   if (policy.input?.["require-config"] === false) return Effect.void
-  const inputConfig = config.input_config
+  // Own-property check only: an override fragment must not satisfy the gate via
+  // an inherited (prototype-polluted) input_config that JSON.stringify omits.
+  const inputConfig = Object.hasOwn(config, "input_config")
+    ? config.input_config
+    : undefined
   if (Array.isArray(inputConfig) && inputConfig.length > 0) return Effect.void
   return Effect.fail(
     new AppMaterializationFailed({
