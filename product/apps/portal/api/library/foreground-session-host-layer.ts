@@ -1,4 +1,7 @@
-import type { PlayLogStore } from "@platform/library/play-log-store"
+import {
+  type PlayLogStore,
+  sharedPlayLogStore,
+} from "@platform/library/play-log-store"
 import { Context, Layer } from "effect"
 import {
   createLocalForegroundLaunchOwner,
@@ -43,5 +46,5 @@ export function createForegroundSessionHost(
 }
 
 export const ForegroundSessionHostLive = Layer.sync(ForegroundSessionHost)(() =>
-  createForegroundSessionHost(),
+  createForegroundSessionHost({ playLogStore: sharedPlayLogStore() }),
 )

@@ -12,6 +12,7 @@ import {
   type LibrarySourceService,
 } from "./library-services"
 import type { LibrarySource as PlainLibrarySource } from "./library-source"
+import { sharedPlayLogStore } from "./play-log-store"
 import {
   type KorriConfigGraphRoot,
   openKorriConfigGraph,
@@ -31,6 +32,17 @@ import {
 } from "./rocknix/rocknix-source"
 
 type LibrarySourceMode = "proseql" | "rocknix"
+
+// Every readable repository built here derives playStats from the one shared
+// play-log store unless a caller (tests) injects its own.
+function withSharedPlayLogStore(
+  options: CreateLibraryRepositoryOptions | undefined,
+): CreateLibraryRepositoryOptions {
+  return {
+    ...options,
+    playLogStore: options?.playLogStore ?? sharedPlayLogStore(),
+  }
+}
 
 export const LibrarySourceLayerLive = Layer.succeed(
   LibrarySource,
@@ -253,7 +265,7 @@ function withLibraryRepository<T>(
       )
       const db = yield* openKorriConfigGraph({ roots })
       return yield* useRepository(
-        createLibraryRepository(db, repositoryOptions),
+        createLibraryRepository(db, withSharedPlayLogStore(repositoryOptions)),
       )
     }),
   ).pipe(Effect.mapError(toLibraryError))
@@ -266,7 +278,9 @@ function withControllerRepository<T>(
 ): Effect.Effect<T, LibraryError> {
   return controller
     .withActiveDb(db =>
-      useRepository(createLibraryRepository(db, repositoryOptions)),
+      useRepository(
+        createLibraryRepository(db, withSharedPlayLogStore(repositoryOptions)),
+      ),
     )
     .pipe(Effect.mapError(toLibraryError))
 }

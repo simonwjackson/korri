@@ -7,6 +7,7 @@ import type { PlayHistoryKey } from "./config/records/play-log"
 import {
   createFilePlayLogStore,
   createInMemoryPlayLogStore,
+  playLogStoreRoot,
 } from "./play-log-store"
 
 const key = (userId: string, gameId: string): PlayHistoryKey => ({
@@ -64,6 +65,20 @@ describe("in-memory play-log store", () => {
     const store = createInMemoryPlayLogStore()
     expect((await store.load(key("alice", "snes/unknown"))).entries).toHaveLength(
       0,
+    )
+  })
+})
+
+describe("playLogStoreRoot", () => {
+  it("prefers KORRI_PLAY_LOG_DIR, then XDG_STATE_HOME, then HOME", () => {
+    expect(playLogStoreRoot({ KORRI_PLAY_LOG_DIR: "/explicit" })).toBe(
+      "/explicit",
+    )
+    expect(playLogStoreRoot({ XDG_STATE_HOME: "/state" })).toBe(
+      "/state/korri/play-log",
+    )
+    expect(playLogStoreRoot({ HOME: "/home/pat" })).toBe(
+      "/home/pat/.local/state/korri/play-log",
     )
   })
 })

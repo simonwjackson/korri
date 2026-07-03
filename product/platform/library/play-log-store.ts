@@ -10,6 +10,7 @@
  */
 
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import {
@@ -74,6 +75,31 @@ export function createInMemoryPlayLogStore(
       return true
     },
   }
+}
+
+/**
+ * Durable root for the file-backed play-log store. Runtime user-state, so it
+ * lives under the state dir, not the config graph.
+ */
+export function playLogStoreRoot(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (env.KORRI_PLAY_LOG_DIR) return env.KORRI_PLAY_LOG_DIR
+  if (env.XDG_STATE_HOME) return join(env.XDG_STATE_HOME, "korri", "play-log")
+  if (env.HOME) return join(env.HOME, ".local", "state", "korri", "play-log")
+  return join(tmpdir(), "korri", "play-log")
+}
+
+let sharedStore: PlayLogStore | undefined
+
+/**
+ * The single process-wide play-log store. Both the library read projection
+ * (deriving playStats) and the recording coordinator (writing plays) resolve
+ * this one instance, so there is a single source of truth.
+ */
+export function sharedPlayLogStore(): PlayLogStore {
+  if (!sharedStore) sharedStore = createFilePlayLogStore(playLogStoreRoot())
+  return sharedStore
 }
 
 export function createFilePlayLogStore(root: string): PlayLogStore {
