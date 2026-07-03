@@ -47,6 +47,7 @@ import {
   createChordHoldSupervisor,
   type ChordHoldTimers,
 } from "@platform/input/native/chord-hold-supervisor"
+import { createOverlayHoldHandlerFromEnv } from "./overlay-wiring"
 import {
   decodeNativeInputEvent,
   decodeNativeInputSubscription,
@@ -193,11 +194,22 @@ export async function startKorriInputd(
   // releases below the threshold (a tap) and does nothing; holding past the
   // threshold fires exactly once. dispatchAction is hoisted, so the callback can
   // reference it here.
+  // When a renderer binary is provided (device), the hold gesture drives the
+  // overlay: press/progress -> ring, fired -> force-quit, tap -> decision menu.
+  // Otherwise inputd keeps the no-overlay behavior: only fired force-quits.
+  const overlayHoldHandler = createOverlayHoldHandlerFromEnv({
+    env: process.env,
+    forceQuit: () => dispatchAction(KILL_CHORD_ID),
+  })
   const killHoldSupervisor = createChordHoldSupervisor<KorriInputdActionId>({
     holdMs: options.killHoldMs ?? DEFAULT_KILL_HOLD_MS,
     timers: options.holdTimers,
     onUpdate: update => {
-      if (update.phase === "fired") dispatchAction(update.id)
+      if (overlayHoldHandler) {
+        overlayHoldHandler(update)
+      } else if (update.phase === "fired") {
+        dispatchAction(update.id)
+      }
     },
   })
   const clients = new Map<InputdSocket, Set<NativeInputDeviceClass>>()
