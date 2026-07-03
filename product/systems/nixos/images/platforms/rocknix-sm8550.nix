@@ -585,6 +585,14 @@ in
     }
   ];
 
+  # Non-root deploys. Root SSH is disabled above and root's authorized_keys are
+  # migrated onto the runtime user, so nixos-rebuild connects as ${runtime.user}
+  # and activates via that user's NOPASSWD sudo (--use-remote-sudo). For the
+  # closure-copy step to accept unsigned paths built on the remote build host,
+  # the deploy user must be a trusted Nix user; otherwise `nix copy` rejects
+  # them with "cannot add path ... untrusted".
+  nix.settings.trusted-users = [ "root" runtime.user ];
+
   services.korri.steam = {
     enable = true;
     package = korri.packages.${targetSystem}.steam-korri;
