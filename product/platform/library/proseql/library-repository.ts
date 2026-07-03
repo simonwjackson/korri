@@ -60,7 +60,10 @@ import {
   decodeSystemRecord,
   type SystemRecord,
 } from "@platform/library/config/records/system"
-import type { UserRecord } from "@platform/library/config/records/user"
+import {
+  DEFAULT_USER_ID,
+  type UserRecord,
+} from "@platform/library/config/records/user"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { resolveReleaseTarget } from "@platform/library/config/source-target-resolution"
 import { defaultReleaseContentIdentityResolver } from "@platform/library/content-identity/release-content-identity"
@@ -1060,7 +1063,9 @@ function attachPlayStats(
 ): Effect.Effect<readonly PlayableLibraryEntry[], LibraryError> {
   if (!store) return Effect.succeed(entries)
   return Effect.forEach(entries, entry =>
-    Effect.promise(() => store.load(entry.id)).pipe(
+    Effect.promise(() =>
+      store.load({ userId: DEFAULT_USER_ID, gameId: entry.id }),
+    ).pipe(
       Effect.map(log => ({
         ...entry,
         playStats: derivePlayStats(log.entries),

@@ -18,12 +18,28 @@ export const PlayEntry = Schema.Struct({
   occurredAt: Schema.Union([Schema.Date, Schema.DateFromString]),
   /** How long the session lasted, in seconds. */
   durationSeconds: Schema.Number,
+  /**
+   * Release the session was launched from, when known. Provenance only:
+   * aggregate stats ignore it. The release never owns the history.
+   */
+  releaseId: Schema.optional(Schema.String),
 })
 export type PlayEntry = Schema.Schema.Type<typeof PlayEntry>
 
+/**
+ * Identity of a play log: play history is personal, so it is keyed by the
+ * (user, game) pair — never by the game or release alone.
+ */
+export interface PlayHistoryKey {
+  readonly userId: string
+  readonly gameId: string
+}
+
 export const PlayLog = Schema.Struct({
-  /** The playable id this log belongs to. */
-  playableId: Schema.String,
+  /** The user this history belongs to. */
+  userId: Schema.String,
+  /** The game (playable id) this history is about. */
+  gameId: Schema.String,
   /** Append-only list of qualifying sessions. */
   entries: Schema.Array(PlayEntry),
 })
@@ -50,7 +66,8 @@ export const decodePlayEntry = (input: unknown): PlayEntry =>
 export const decodePlayLog = (input: unknown): PlayLog =>
   Schema.decodeUnknownSync(PlayLog)(input, STRICT)
 
-export const emptyPlayLog = (playableId: string): PlayLog => ({
-  playableId,
+export const emptyPlayLog = (key: PlayHistoryKey): PlayLog => ({
+  userId: key.userId,
+  gameId: key.gameId,
   entries: [],
 })

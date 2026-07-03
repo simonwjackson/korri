@@ -1,10 +1,12 @@
 import { describe, expect, it } from "bun:test"
 
+import { DEFAULT_USER_ID } from "@platform/library/config/records/user"
 import { createInMemoryPlayLogStore } from "@platform/library/play-log-store"
 import type { ForegroundSessionState } from "@platform/stream/foreground-session-lifecycle"
 
 import { createPlayRecordingObserver } from "./play-recording-observer"
 
+const gameKey = { userId: DEFAULT_USER_ID, gameId: "snes/f-zero" } as const
 const active = { requestId: "req-1", gameId: "snes/f-zero" } as const
 const running: ForegroundSessionState = { _tag: "Running", active }
 const exitObserved: ForegroundSessionState = { _tag: "ExitObserved", active }
@@ -25,7 +27,7 @@ describe("createPlayRecordingObserver", () => {
     await observer.onStateEntered(running)
     await observer.onStateEntered(exitObserved)
 
-    const log = await store.load("snes/f-zero")
+    const log = await store.load(gameKey)
     expect(log.entries).toHaveLength(1)
     expect(log.entries[0]?.durationSeconds).toBe(1800)
     expect(log.entries[0]?.occurredAt.toISOString()).toBe(
@@ -39,7 +41,7 @@ describe("createPlayRecordingObserver", () => {
 
     await observer.onStateEntered(exitObserved)
 
-    expect((await store.load("snes/f-zero")).entries).toHaveLength(0)
+    expect((await store.load(gameKey)).entries).toHaveLength(0)
   })
 
   it("applies the gate: a sub-threshold session is not recorded", async () => {
@@ -53,6 +55,6 @@ describe("createPlayRecordingObserver", () => {
     await observer.onStateEntered(running)
     await observer.onStateEntered(exitObserved)
 
-    expect((await store.load("snes/f-zero")).entries).toHaveLength(0)
+    expect((await store.load(gameKey)).entries).toHaveLength(0)
   })
 })

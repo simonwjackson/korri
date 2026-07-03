@@ -14,6 +14,7 @@
  * sessiond-side terminal hook — tracked as follow-up.
  */
 
+import { DEFAULT_USER_ID } from "@platform/library/config/records/user"
 import type { PlayLogStore } from "@platform/library/play-log-store"
 import type { ForegroundSessionState } from "@platform/stream/foreground-session-lifecycle"
 
@@ -59,7 +60,7 @@ export function createPlayRecordingObserver(
 
       try {
         await deps.store.record(
-          recordedGameId,
+          { userId: DEFAULT_USER_ID, gameId: recordedGameId },
           { occurredAt, durationSeconds },
           deps.thresholdSeconds !== undefined
             ? { thresholdSeconds: deps.thresholdSeconds }

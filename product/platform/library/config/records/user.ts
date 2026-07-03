@@ -22,6 +22,14 @@ import { PresetMapPayload } from "./preset"
 
 const STRICT = { onExcessProperty: "error" } as const
 
+/**
+ * Stand-in user id used wherever a concrete user is required but no
+ * per-request user is resolved yet (single-user alpha). Play history and
+ * other per-user data are keyed by this until real current-user resolution
+ * lands.
+ */
+export const DEFAULT_USER_ID = "default"
+
 export const UserPayload = Schema.Struct({
   displayName: Schema.optional(Schema.String),
   favorites: Schema.optional(Schema.Array(PlayableId)),

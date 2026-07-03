@@ -16,6 +16,7 @@ import {
   decodePlayLog,
   emptyPlayLog,
   type PlayEntry,
+  type PlayHistoryKey,
   type PlayLog,
 } from "./config/records/play-log"
 import {
@@ -28,20 +29,25 @@ export interface RecordPlayOptions {
 }
 
 export interface PlayLogStore {
-  readonly load: (playableId: string) => Promise<PlayLog>
+  readonly load: (key: PlayHistoryKey) => Promise<PlayLog>
   /**
-   * Append a qualifying entry. Returns `true` when it was recorded, `false`
-   * when the gate rejected it (`durationSeconds` below the threshold).
+   * Append a qualifying entry for a (user, game). Returns `true` when it was
+   * recorded, `false` when the gate rejected it (`durationSeconds` below the
+   * threshold).
    */
   readonly record: (
-    playableId: string,
+    key: PlayHistoryKey,
     entry: PlayEntry,
     options?: RecordPlayOptions,
   ) => Promise<boolean>
 }
 
+const keyString = (key: PlayHistoryKey): string =>
+  `${key.userId}\u0000${key.gameId}`
+
 const appended = (log: PlayLog, entry: PlayEntry): PlayLog => ({
-  playableId: log.playableId,
+  userId: log.userId,
+  gameId: log.gameId,
   entries: [...log.entries, entry],
 })
 
@@ -52,32 +58,37 @@ const admits = (entry: PlayEntry, options?: RecordPlayOptions): boolean =>
   )
 
 export function createInMemoryPlayLogStore(
-  seed?: Iterable<readonly [string, PlayLog]>,
+  seed?: Iterable<PlayLog>,
 ): PlayLogStore {
   const logs = new Map<string, PlayLog>()
-  if (seed) for (const [id, log] of seed) logs.set(id, log)
+  if (seed)
+    for (const log of seed)
+      logs.set(keyString({ userId: log.userId, gameId: log.gameId }), log)
 
   return {
-    load: async playableId => logs.get(playableId) ?? emptyPlayLog(playableId),
-    record: async (playableId, entry, options) => {
+    load: async key => logs.get(keyString(key)) ?? emptyPlayLog(key),
+    record: async (key, entry, options) => {
       if (!admits(entry, options)) return false
-      const current = logs.get(playableId) ?? emptyPlayLog(playableId)
-      logs.set(playableId, appended(current, entry))
+      const current = logs.get(keyString(key)) ?? emptyPlayLog(key)
+      logs.set(keyString(key), appended(current, entry))
       return true
     },
   }
 }
 
 export function createFilePlayLogStore(root: string): PlayLogStore {
-  const pathFor = (id: string) => join(root, `${encodeURIComponent(id)}.json`)
+  const dirFor = (key: PlayHistoryKey) =>
+    join(root, encodeURIComponent(key.userId))
+  const pathFor = (key: PlayHistoryKey) =>
+    join(dirFor(key), `${encodeURIComponent(key.gameId)}.json`)
 
-  const readLog = async (playableId: string): Promise<PlayLog> => {
+  const readLog = async (key: PlayHistoryKey): Promise<PlayLog> => {
     try {
-      const raw = await readFile(pathFor(playableId), "utf8")
+      const raw = await readFile(pathFor(key), "utf8")
       return decodePlayLog(JSON.parse(raw))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return emptyPlayLog(playableId)
+        return emptyPlayLog(key)
       }
       throw error
     }
@@ -85,18 +96,20 @@ export function createFilePlayLogStore(root: string): PlayLogStore {
 
   return {
     load: readLog,
-    record: async (playableId, entry, options) => {
+    record: async (key, entry, options) => {
       if (!admits(entry, options)) return false
-      const next = appended(await readLog(playableId), entry)
-      await mkdir(root, { recursive: true })
+      const next = appended(await readLog(key), entry)
+      await mkdir(dirFor(key), { recursive: true })
       const serialized = {
-        playableId: next.playableId,
+        userId: next.userId,
+        gameId: next.gameId,
         entries: next.entries.map(item => ({
           occurredAt: item.occurredAt.toISOString(),
           durationSeconds: item.durationSeconds,
+          ...(item.releaseId ? { releaseId: item.releaseId } : {}),
         })),
       }
-      const target = pathFor(playableId)
+      const target = pathFor(key)
       const temporary = `${target}.${process.pid}.tmp`
       await writeFile(temporary, `${JSON.stringify(serialized, null, 2)}\n`)
       await rename(temporary, target)

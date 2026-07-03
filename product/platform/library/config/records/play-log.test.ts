@@ -3,25 +3,36 @@ import { describe, expect, it } from "bun:test"
 import { decodePlayEntry, decodePlayLog, emptyPlayLog } from "./play-log"
 
 describe("PlayLog", () => {
-  it("decodes a log with entries, parsing occurredAt from an ISO string", () => {
+  it("decodes a (user, game) log, parsing occurredAt from an ISO string", () => {
     const log = decodePlayLog({
-      playableId: "snes/f-zero",
+      userId: "alice",
+      gameId: "snes/f-zero",
       entries: [
-        { occurredAt: "2026-07-01T20:44:00.000Z", durationSeconds: 5400 },
+        {
+          occurredAt: "2026-07-01T20:44:00.000Z",
+          durationSeconds: 5400,
+          releaseId: "steam",
+        },
         { occurredAt: "2026-06-20T14:02:00.000Z", durationSeconds: 2100 },
       ],
     })
-    expect(log.playableId).toBe("snes/f-zero")
+    expect(log.userId).toBe("alice")
+    expect(log.gameId).toBe("snes/f-zero")
     expect(log.entries).toHaveLength(2)
     expect(log.entries[0]?.occurredAt).toBeInstanceOf(Date)
     expect(log.entries[0]?.occurredAt.toISOString()).toBe(
       "2026-07-01T20:44:00.000Z",
     )
     expect(log.entries[0]?.durationSeconds).toBe(5400)
+    expect(log.entries[0]?.releaseId).toBe("steam")
   })
 
   it("decodes a log with no entries", () => {
-    const log = decodePlayLog({ playableId: "snes/f-zero", entries: [] })
+    const log = decodePlayLog({
+      userId: "alice",
+      gameId: "snes/f-zero",
+      entries: [],
+    })
     expect(log.entries).toHaveLength(0)
   })
 
@@ -35,9 +46,10 @@ describe("PlayLog", () => {
     ).toThrow()
   })
 
-  it("builds an empty log for a playable", () => {
-    expect(emptyPlayLog("snes/f-zero")).toEqual({
-      playableId: "snes/f-zero",
+  it("builds an empty log for a (user, game)", () => {
+    expect(emptyPlayLog({ userId: "alice", gameId: "snes/f-zero" })).toEqual({
+      userId: "alice",
+      gameId: "snes/f-zero",
       entries: [],
     })
   })

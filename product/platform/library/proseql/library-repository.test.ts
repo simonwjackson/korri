@@ -27,6 +27,7 @@ import {
 import { Effect } from "effect"
 import type { LibraryItemRecord } from "../config/records/library-item"
 import { LibraryError } from "../library-services"
+import { DEFAULT_USER_ID } from "../config/records/user"
 import {
   createInMemoryPlayLogStore,
   type PlayLogStore,
@@ -495,10 +496,13 @@ describe("createLibraryRepository — readable playable entries", () => {
         totalPlaytimeSeconds: 0,
       })
 
-      await store.record(target.id, {
-        occurredAt: new Date("2026-07-01T20:44:00.000Z"),
-        durationSeconds: 1800,
-      })
+      await store.record(
+        { userId: DEFAULT_USER_ID, gameId: target.id },
+        {
+          occurredAt: new Date("2026-07-01T20:44:00.000Z"),
+          durationSeconds: 1800,
+        },
+      )
 
       const after = await Effect.runPromise(repo.listPlayableEntries())
       const updated = after.find(candidate => candidate.id === target.id)
