@@ -46,6 +46,7 @@ export const RuntimePayload = Schema.Struct({
 
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
+  preferences: InheritableLayer.fields.preferences,
   plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,

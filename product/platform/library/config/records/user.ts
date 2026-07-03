@@ -40,6 +40,7 @@ export const UserPayload = Schema.Struct({
 
   // Inlined inheritable whitelist.
   moonlight: InheritableLayer.fields.moonlight,
+  preferences: InheritableLayer.fields.preferences,
   plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,

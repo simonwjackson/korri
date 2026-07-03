@@ -170,6 +170,7 @@ export const LibraryReleasePayload = Schema.Struct({
 
   launch: Schema.optional(ReleaseLaunch),
   moonlight: InheritableLayer.fields.moonlight,
+  preferences: InheritableLayer.fields.preferences,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
@@ -251,6 +252,7 @@ export const ContainedPlayablePayload = Schema.Struct({
 
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
+  preferences: InheritableLayer.fields.preferences,
   plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
@@ -292,6 +294,7 @@ export const LibraryItemPayload = Schema.Struct({
 
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
+  preferences: InheritableLayer.fields.preferences,
   plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,

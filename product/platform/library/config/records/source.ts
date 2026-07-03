@@ -50,6 +50,7 @@ export const SourcePayload = Schema.Struct({
   // Source is a cascade layer for origin-specific launch/display policy.
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
+  preferences: InheritableLayer.fields.preferences,
   plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,

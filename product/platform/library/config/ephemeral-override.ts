@@ -141,6 +141,7 @@ const MoonlightOverridePolicy = Schema.Struct({
 const EphemeralInheritableLayer = Schema.Struct({
   launch: Schema.optional(EphemeralLaunchPolicy),
   moonlight: Schema.optional(MoonlightOverridePolicy),
+  preferences: InheritableLayer.fields.preferences,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
@@ -164,6 +165,7 @@ export const EphemeralOverride = Schema.Struct({
   // runtime overrides must not expose command/env/raw-argv/key storage/path
   // process surfaces.
   moonlight: Schema.optional(MoonlightOverridePolicy),
+  preferences: InheritableLayer.fields.preferences,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,

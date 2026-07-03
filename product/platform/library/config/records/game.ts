@@ -131,6 +131,7 @@ const GamePayloadFields = {
   // key on the same struct (Effect Schema's extension helpers don't
   // flatten cleanly for excess-property checking).
   moonlight: InheritableLayer.fields.moonlight,
+  preferences: InheritableLayer.fields.preferences,
   plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,

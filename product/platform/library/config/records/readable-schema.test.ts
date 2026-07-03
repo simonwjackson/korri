@@ -87,6 +87,11 @@ describe("readable library schema records", () => {
         moonlight: { platform: { name: "v4l2m2m" } },
       }).moonlight?.platform?.name,
     ).toBe("v4l2m2m")
+    expect(
+      decodeHostPayload({
+        preferences: { launch: { audio: { volume: 55 } } },
+      }).preferences?.launch?.audio?.volume,
+    ).toBe(55)
     for (const wrapper of [
       { enabled: true },
       { backend: "wayland" },
