@@ -66,6 +66,7 @@ Runtime settings mechanism contract:
 - Runtime settings command timeout is currently 3000 ms; an expired command records `timed-out` with reason `no-ack`, and a later matching ack is treated as stale diagnostic input.
 - Moonlight parses both legacy no-reason mutation acks and additive reason-bearing acks while Sunshine and Moonlight patch payloads transition together.
 - Runtime resolution is a normal runtime-settings operation for the validated Korri profile when operation `0` advertises support.
+- Resolution requests are coerced, not rejected: local control clamps width/height to encoder-safe bounds and rounds to even before dispatch (accept-and-adapt), per the runtime-settings protocol contract's accept-and-adapt and never-stretch principles.
 - Capability-gated dispatch: mutation commands are rejected locally when operation `0` has not advertised support.
 - Operation `3` outcomes distinguish raw Sunshine ack state from caller-visible applied truth: Moonlight records Sunshine `server_applied=1` separately from applied width/height state used by local-control.
 - Local command acceptance is non-terminal; host-applied outcomes or target-client proof arrive later through the runtime-settings mechanism/local-control handoff.

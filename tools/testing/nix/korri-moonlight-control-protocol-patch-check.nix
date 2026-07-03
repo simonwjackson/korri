@@ -96,6 +96,11 @@ let
       && contains "moonlight_local_control_dispatch_runtime_command" patch
       && contains "LiSendSunshineRuntimeSettingsMvp(command_id, operation" patch
     ))
+    (check "Moonlight local control coerces resolution instead of rejecting for shape" (
+      contains "value &= ~1u" patch
+      && contains "secondary_value &= ~1u" patch
+      && !(contains "resolution out of bounds" patch)
+    ))
     (check "Moonlight local control advertises local input touch-bounds command" (
       contains "MOONLIGHT_CONTROL_PROTOCOL_MINOR 1" patch
       && contains "MOONLIGHT_LC_COMMAND_INPUT_SET_TOUCH_BOUNDS \"input.setTouchBounds\"" patch

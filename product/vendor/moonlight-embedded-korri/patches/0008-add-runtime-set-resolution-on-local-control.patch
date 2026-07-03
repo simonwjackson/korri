@@ -81,12 +81,12 @@ secondaryValue=height through the existing dispatcher.
      moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "fps out of bounds", "invalid"));
      return 0;
    }
-+  if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION
-+      && (value < MOONLIGHT_CONTROL_MIN_WIDTH || value > MOONLIGHT_CONTROL_MAX_WIDTH
-+          || secondary_value < MOONLIGHT_CONTROL_MIN_HEIGHT || secondary_value > MOONLIGHT_CONTROL_MAX_HEIGHT
-+          || (value % 2) != 0 || (secondary_value % 2) != 0)) {
-+    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "resolution out of bounds", "invalid"));
-+    return 0;
++  if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION) {
++    if (value < MOONLIGHT_CONTROL_MIN_WIDTH) value = MOONLIGHT_CONTROL_MIN_WIDTH;
++    if (value > MOONLIGHT_CONTROL_MAX_WIDTH) value = MOONLIGHT_CONTROL_MAX_WIDTH;
++    if (secondary_value < MOONLIGHT_CONTROL_MIN_HEIGHT) secondary_value = MOONLIGHT_CONTROL_MIN_HEIGHT;
++    if (secondary_value > MOONLIGHT_CONTROL_MAX_HEIGHT) secondary_value = MOONLIGHT_CONTROL_MAX_HEIGHT;
++    value &= ~1u; secondary_value &= ~1u;
 +  }
  
    uint32_t command_id = moonlight_local_control_next_command_id();
