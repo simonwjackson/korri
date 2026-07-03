@@ -3,6 +3,7 @@ import {
   AppMaterializationFailed,
   type ResolutionError,
 } from "@platform/library/config/errors"
+import { applyArgsOverrides } from "@platform/library/config/apply-overrides"
 import { appRecordKind } from "@platform/library/config/records/app"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
@@ -11,7 +12,11 @@ import type { ReadableLaunchIntegration } from "@platform/library/proseql/librar
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import { Effect } from "effect"
 import { parseSteamAppId } from "./launch-spec"
-import { defaultSteamPluginPolicy, KORRI_STEAM_PLUGIN_ID } from "./plugin"
+import {
+  defaultSteamPluginPolicy,
+  KORRI_STEAM_PLUGIN_ID,
+  STEAM_BASELINE_WRAPPER_ARGS,
+} from "./plugin"
 import { steamLaunchCleanupMetadata } from "./session/lifecycle-hook"
 import {
   materializeSteamDesiredState,
@@ -42,9 +47,6 @@ type StorageRoots = Readonly<Record<string, { readonly root?: string }>>
 interface DecodedSteamPluginPolicy {
   state?: {
     root: string
-  }
-  extra?: {
-    args?: readonly string[]
   }
   "launch-options"?: string
   "compat-tool"?: string
@@ -136,7 +138,6 @@ function readSteamPluginPolicy(
   }
   const policy: DecodedSteamPluginPolicy = {
     state: defaultSteamPluginPolicy.state,
-    extra: defaultSteamPluginPolicy.extra,
     "compat-tool": defaultSteamPluginPolicy["compat-tool"],
     "first-launch": defaultSteamPluginPolicy["first-launch"],
   }
@@ -149,25 +150,6 @@ function readSteamPluginPolicy(
       })
     }
     policy.state = { root: state.root }
-  }
-  const extra = payload.extra
-  if (extra !== undefined) {
-    if (!isRecord(extra)) {
-      throw new AppMaterializationFailed({
-        appId: context.app.id,
-        reason: "Steam plugin policy extra must be an object",
-      })
-    }
-    const args = extra.args
-    if (args !== undefined) {
-      if (!Array.isArray(args) || args.some(arg => typeof arg !== "string")) {
-        throw new AppMaterializationFailed({
-          appId: context.app.id,
-          reason: "Steam plugin policy extra.args must be string array",
-        })
-      }
-      policy.extra = { args }
-    }
   }
   const launchOptions = payload["launch-options"]
   if (launchOptions !== undefined) {
@@ -273,13 +255,29 @@ const materializeReadableSteamResources = (input: {
       catch: error => error as ResolutionError,
     })
     const storage = input.context.storage ?? {}
+    // Baseline Korri wrapper args (silent Big Picture) form the routed segment
+    // that release.launch.overrides.args prepend/append/replace around.
+    const wrapperArgs = applyArgsOverrides({
+      leading: [],
+      routed: [...STEAM_BASELINE_WRAPPER_ARGS],
+      trailing: [],
+      ...(input.context.overrides?.args !== undefined
+        ? { overrides: input.context.overrides.args }
+        : {}),
+    })
     yield* assertSteamStorageTokensAvailable(
       input.context.app.id,
       rawPolicy,
+      wrapperArgs,
       storage,
     )
     const policy = yield* tryMaterialize(input.context.app.id, async () =>
       resolveSteamPolicyPaths(rawPolicy, storage),
+    )
+    const resolvedWrapperArgs = yield* tryMaterialize(
+      input.context.app.id,
+      async () =>
+        wrapperArgs.map(arg => resolveStorageTokens(arg, storage)),
     )
     const stateRoot = policy.state?.root
     if (!stateRoot) {
@@ -301,7 +299,7 @@ const materializeReadableSteamResources = (input: {
         suppressInterstitials:
           policy["first-launch"]?.["suppress-interstitials"],
         acceptEulas: policy["first-launch"]?.["accept-eulas"],
-        extraArgs: policy.extra?.args,
+        extraArgs: resolvedWrapperArgs,
       },
       fs: input.fs,
       lifecycle: input.lifecycle,
@@ -334,18 +332,6 @@ const resolveSteamPolicyPaths = (
         root: resolveStorageTokens(policy.state.root, storage),
       }
     : undefined,
-  extra: policy.extra
-    ? {
-        ...policy.extra,
-        ...(policy.extra.args
-          ? {
-              args: policy.extra.args.map(arg =>
-                resolveStorageTokens(arg, storage),
-              ),
-            }
-          : {}),
-      }
-    : undefined,
 })
 
 const resolveStorageTokens = (value: string, storage: StorageRoots): string =>
@@ -375,12 +361,13 @@ const storageTokensInValue = (value: unknown): readonly string[] => {
 const assertSteamStorageTokensAvailable = (
   appId: string,
   policy: DecodedSteamPluginPolicy,
+  wrapperArgs: readonly string[],
   storage: StorageRoots,
 ): Effect.Effect<void, ResolutionError> =>
   tryMaterialize(appId, async () => {
     for (const storageId of storageTokensInValue({
       state: policy.state,
-      extra: policy.extra,
+      args: wrapperArgs,
     })) {
       const root = storage[storageId]?.root
       if (!root) throw new Error(`storage ${storageId} is not configured`)

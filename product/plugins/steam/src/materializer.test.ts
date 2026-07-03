@@ -90,7 +90,6 @@ const context = (root: string): ReadableResolvedLaunchContext => ({
   plugin: {
     [KORRI_STEAM_PLUGIN_ID]: {
       state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
-      extra: { args: ["-silent", "-gamepadui"] },
       "launch-options": "wrapper -- %command%",
     },
   },
@@ -126,6 +125,28 @@ describe("steamReadableLaunchIntegration", () => {
           launchCompanions: {},
         }),
       ).toBe(true)
+    })
+  })
+
+  it("applies release.launch.overrides.args around the baseline wrapper args", async () => {
+    await withRoot(async root => {
+      await mkdir(root, { recursive: true })
+      const events: string[] = []
+      const { fs } = memoryFs()
+
+      await Effect.runPromise(
+        materializeReadableSteamLaunch({
+          context: {
+            ...context(root),
+            overrides: { args: { append: ["-vgui"] } },
+          },
+          fs,
+          lifecycle: lifecycle(events),
+          lock: inlineLock,
+        }),
+      )
+
+      expect(events).toContain("start:-silent -gamepadui -vgui")
     })
   })
 

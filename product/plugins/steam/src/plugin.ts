@@ -31,12 +31,16 @@ export const steamRuntimePaths = {
 export const DEFAULT_STEAM_COMPAT_TOOL =
   "proton-cachyos-11.0-20260601-slr-arm64" as const
 
+/**
+ * Korri-owned baseline wrapper args always passed to korri-steam-app: launch
+ * Steam silently into Big Picture / gamepad UI. `overrides.args` prepend/append
+ * around this segment; `overrides.args.replace` swaps it.
+ */
+export const STEAM_BASELINE_WRAPPER_ARGS = ["-silent", "-gamepadui"] as const
+
 export interface SteamPluginPolicy {
   readonly state: {
     readonly root: string
-  }
-  readonly extra?: {
-    readonly args?: readonly string[]
   }
   readonly "launch-options"?: string
   readonly "compat-tool"?: string
@@ -49,7 +53,6 @@ export interface SteamPluginPolicy {
 
 export const defaultSteamPluginPolicy = {
   state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
-  extra: { args: ["-silent", "-gamepadui"] },
   "compat-tool": DEFAULT_STEAM_COMPAT_TOOL,
   "first-launch": {
     "suppress-interstitials": true,
