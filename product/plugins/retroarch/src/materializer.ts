@@ -42,6 +42,7 @@ import {
   type LaunchSettingValue,
   type RetroArchPolicy,
 } from "./policy"
+import { resolveRetroarchPolicyInput } from "./preferences-mapping"
 
 const LAUNCH_ARTIFACTS_DIR_ENV = "KORRI_LAUNCH_ARTIFACTS_DIR" as const
 export const STALE_ARTIFACT_RETENTION_MS = 24 * 60 * 60 * 1000
@@ -136,9 +137,14 @@ function decodeRetroArchPluginPolicy(
 function readRetroArchPluginPolicy(
   context: ReadableResolvedLaunchContext,
 ): RetroArchPolicy | undefined {
-  const payload = context.plugin?.[KORRI_RETROARCH_PLUGIN_ID]
-  if (payload === undefined) return undefined
-  const policy = decodeRetroArchPolicy(payload)
+  const input = resolveRetroarchPolicyInput({
+    preferences: context.preferences,
+    plugin: context.plugin?.[KORRI_RETROARCH_PLUGIN_ID] as
+      | Record<string, unknown>
+      | undefined,
+  })
+  if (Object.keys(input).length === 0) return undefined
+  const policy = decodeRetroArchPolicy(input)
   return Object.keys(policy).length > 0 ? policy : undefined
 }
 
