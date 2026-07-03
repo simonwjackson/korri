@@ -17,7 +17,9 @@ export interface ForegroundSessionHostService {
   /**
    * Present when a play-log store is wired. The launch handler seeds a
    * launch's recording context here (`beginLaunch`); the owner completes it
-   * on the direct terminal. Shared instance so seed and completion agree.
+   * when it observes the session terminal (`session.exited`), which covers
+   * both direct and sessiond-managed launches. Shared instance so seed and
+   * completion agree.
    */
   readonly playRecordingCoordinator?: PlayRecordingCoordinator
 }

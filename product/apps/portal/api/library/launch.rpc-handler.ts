@@ -154,8 +154,10 @@ export const handleLaunchLibrary = (
     )
 
     // Seed the launch's recording context (per-user). The owner completes it
-    // on the direct terminal; the managed (sessiond) terminal is completed
-    // separately. No timer — duration is measured at completion.
+    // when it observes the session terminal (`session.exited`), which on
+    // sessiond-managed hosts is sessiond's `child-exited` event — so device
+    // plays record through the same terminal. No timer — duration is measured
+    // at completion.
     foregroundSessionHost.playRecordingCoordinator?.beginLaunch({
       launchId,
       userId: payload.userId ?? DEFAULT_USER_ID,

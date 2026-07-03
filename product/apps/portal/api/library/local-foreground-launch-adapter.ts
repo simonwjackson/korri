@@ -35,11 +35,13 @@ export interface CreateLocalForegroundLaunchOwnerOptions {
    */
   readonly consultExternalIdle?: () => Promise<ForegroundExternalIdleResult>
   /**
-   * Optional recording coordinator. When provided, an owner-observed terminal
+   * Optional recording coordinator. When provided, the owner-observed terminal
    * (`ExitObserved`) completes the launch's pending recording, keyed by the
-   * launch's request id. The direct (owner) terminal for a launch; the
-   * managed (sessiond) terminal is completed from the launch handler. Absent =
-   * no recording (behavior unchanged).
+   * launch's request id (which equals the seeded `launchId`). This terminal
+   * covers both direct child launches and sessiond-managed launches: on
+   * managed hosts `session.exited` is sessiond's `child-exited` event, so the
+   * same `ExitObserved` hook records device plays. Absent = no recording
+   * (behavior unchanged).
    */
   readonly playRecordingCoordinator?: PlayRecordingCoordinator
 }
