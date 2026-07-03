@@ -66,6 +66,8 @@ describe("renderInputConfigYaml", () => {
 
   it("returns undefined when there is nothing to render", () => {
     expect(renderInputConfigYaml(undefined)).toBeUndefined()
-    expect(renderInputConfigYaml(routeInputConfig({ players: [] }))).toBeUndefined()
+    expect(
+      renderInputConfigYaml(routeInputConfig({ players: [] })),
+    ).toBeUndefined()
   })
 })

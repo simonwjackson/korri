@@ -23,7 +23,7 @@ describe("decodeRpcs3Policy — input authoring", () => {
           mouse: { movementMode: "relative", deadzoneX: 60 },
         },
       ],
-    }
+    } as const
     expect(decodeRpcs3Policy({ input })).toEqual({ input })
   })
 
@@ -48,10 +48,10 @@ describe("decodeRpcs3Policy — input authoring", () => {
       "move",
       "sdl",
       "evdev",
-    ]) {
-      expect(
-        decodeRpcs3Policy({ input: { players: [{ handler }] } }),
-      ).toEqual({ input: { players: [{ handler }] } })
+    ] as const) {
+      expect(decodeRpcs3Policy({ input: { players: [{ handler }] } })).toEqual({
+        input: { players: [{ handler }] },
+      })
     }
   })
 
@@ -80,7 +80,9 @@ describe("decodeRpcs3Policy — input authoring", () => {
     expectPolicyError(() =>
       decodeRpcs3Policy({
         input: {
-          players: [{ handler: "evdev", sticks: { left: { multiplier: 500 } } }],
+          players: [
+            { handler: "evdev", sticks: { left: { multiplier: 500 } } },
+          ],
         },
       }),
     )
@@ -101,7 +103,9 @@ describe("decodeRpcs3Policy — input authoring", () => {
   })
 
   it("accepts up to seven players but rejects an eighth (RPCS3 has 7 slots)", () => {
-    const seven = Array.from({ length: 7 }, () => ({ handler: "null" }))
+    const seven = Array.from({ length: 7 }, () => ({
+      handler: "null" as const,
+    }))
     expect(decodeRpcs3Policy({ input: { players: seven } })).toEqual({
       input: { players: seven },
     })
@@ -112,7 +116,9 @@ describe("decodeRpcs3Policy — input authoring", () => {
   it("rejects an invalid mouse movement mode", () => {
     expectPolicyError(() =>
       decodeRpcs3Policy({
-        input: { players: [{ handler: "keyboard", mouse: { movementMode: "warp" } }] },
+        input: {
+          players: [{ handler: "keyboard", mouse: { movementMode: "warp" } }],
+        },
       }),
     )
   })

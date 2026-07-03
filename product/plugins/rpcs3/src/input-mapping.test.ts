@@ -39,7 +39,9 @@ describe("routeInputConfig", () => {
       evdev: "Evdev",
     }
     for (const [clean, rpcs3] of Object.entries(expected)) {
-      const routed = routeInputConfig({ players: [{ handler: clean as never }] })
+      const routed = routeInputConfig({
+        players: [{ handler: clean as never }],
+      })
       expect(routed?.players[0]?.handler).toBe(rpcs3)
     }
   })
@@ -72,7 +74,11 @@ describe("routeInputConfig", () => {
         {
           handler: "keyboard",
           buttons: { leftStickUp: "W", leftStickDown: "S" },
-          mouse: { movementMode: "absolute", deadzoneX: 60, accelerationX: 200 },
+          mouse: {
+            movementMode: "absolute",
+            deadzoneX: 60,
+            accelerationX: 200,
+          },
         },
       ],
     })
@@ -87,7 +93,13 @@ describe("routeInputConfig", () => {
 
   it("carries buddyDevice and yields an empty config for a bare player", () => {
     const routed = routeInputConfig({
-      players: [{ handler: "dualsense", device: "Wireless Controller", buddyDevice: "Edge" }],
+      players: [
+        {
+          handler: "dualsense",
+          device: "Wireless Controller",
+          buddyDevice: "Edge",
+        },
+      ],
     })
     expect(routed).toEqual({
       players: [

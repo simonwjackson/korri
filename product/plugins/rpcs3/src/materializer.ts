@@ -19,9 +19,9 @@ import type { ReadableLaunchIntegration } from "@platform/library/proseql/librar
 import { Effect } from "effect"
 import { renderConfigYaml } from "./config-render"
 import { mergeGuiIni } from "./gui-preseed"
+import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
 import { renderInputConfigYaml } from "./input-config-render"
 import { routeInputConfig } from "./input-mapping"
-import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
 import { composeRpcs3LaunchSpec } from "./launch-spec"
 import { routeSettings } from "./mapping"
 import {
@@ -104,7 +104,11 @@ const materializeReadableRpcs3Resources = (
     const routed = routeSettings(resolvedPolicy)
     const configPath = yield* writeLaunchConfig(context, stateRoot, routed)
     yield* writeGuiPreseed(context, stateRoot, routed.iniEntries)
-    const inputConfig = yield* writeInputConfig(context, stateRoot, resolvedPolicy)
+    const inputConfig = yield* writeInputConfig(
+      context,
+      stateRoot,
+      resolvedPolicy,
+    )
 
     const spec = yield* tryMaterialize(context, () =>
       composeRpcs3LaunchSpec({
@@ -202,7 +206,12 @@ const writeInputConfig = (
     const text = renderInputConfigYaml(routeInputConfig(policy.input))
     if (text === undefined) return undefined
     const name = `korri-${slugReleaseId(context.releaseId)}`
-    const profilePath = join(stateRoot, "input_configs", "global", `${name}.yml`)
+    const profilePath = join(
+      stateRoot,
+      "input_configs",
+      "global",
+      `${name}.yml`,
+    )
     yield* writeAtomic(context, profilePath, text)
     return name
   })
