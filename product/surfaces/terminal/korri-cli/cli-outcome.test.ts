@@ -8,7 +8,7 @@ import {
   renderOutcome,
 } from "./cli-outcome"
 
-const KIND_TO_CODE: ReadonlyArray<readonly [CliFailureKind, number]> = [
+const KIND_TO_CODE: ReadonlyArray<readonly [CliFailureKind, ExitCode]> = [
   ["internal", 1],
   ["usage", 2],
   ["not-found", 3],
