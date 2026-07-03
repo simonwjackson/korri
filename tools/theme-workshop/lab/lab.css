@@ -42,6 +42,7 @@
  * than the browser viewport (e.g. the 65" TV) would only paint its top
  * viewport-height slice. Pin embedded surface frames to their device box.
  */
+.lab-screen .shift-route-stage,
 .lab-screen [data-shift-home-frame],
 .lab-screen [data-shift-detail] {
 	height: 100%;

@@ -37,8 +37,10 @@
 	position: absolute;
 	inset: 0;
 }
-/* Self-scoping surfaces whose root sizes to 100vh (e.g. shift's home/detail)
- * must fill the preview frame instead, mirroring the Surface view's override. */
+/* Self-scoping surfaces whose root sizes to 100vh (e.g. shift's route stage and
+ * home/detail frames) must fill the preview frame instead, mirroring the
+ * Surface view's override. */
+.lab-screen-frame .shift-route-stage,
 .lab-screen-frame [data-shift-home-frame],
 .lab-screen-frame [data-shift-detail] {
 	height: 100%;
