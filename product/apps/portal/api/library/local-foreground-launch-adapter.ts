@@ -1,5 +1,6 @@
 import { cleanupLaunchArtifacts } from "@platform/library/config/app-materializer"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
+import type { PlayLogStore } from "@platform/library/play-log-store"
 import {
   type LaunchResult,
   type LaunchSpec,
@@ -23,6 +24,8 @@ import {
 import type { LaunchLibraryResponse } from "@product/apps/portal/api/library/launch.rpc"
 import { Effect } from "effect"
 
+import { createPlayRecordingObserver } from "./play-recording-observer"
+
 export interface CreateLocalForegroundLaunchOwnerOptions {
   /**
    * Optional override for the sessiond status probe used by the owner's
@@ -31,6 +34,12 @@ export interface CreateLocalForegroundLaunchOwnerOptions {
    * `KORRI_SESSIOND_SOCKET` is configured in `process.env`.
    */
   readonly consultExternalIdle?: () => Promise<ForegroundExternalIdleResult>
+  /**
+   * Optional play-log store. When provided, owner-observed session terminals
+   * record one gated play entry (see `createPlayRecordingObserver`). Absent =
+   * no recording (behavior unchanged).
+   */
+  readonly playLogStore?: PlayLogStore
 }
 
 /**
@@ -102,6 +111,9 @@ export function createLocalForegroundLaunchOwner(
 ) {
   const consultExternalIdle =
     options.consultExternalIdle ?? defaultConsultExternalIdle()
+  const recordingObserver = options.playLogStore
+    ? createPlayRecordingObserver({ store: options.playLogStore })
+    : undefined
   return createForegroundSessionOwner<
     LocalForegroundLaunchRequest,
     PreparedLocalLaunch,
@@ -118,6 +130,9 @@ export function createLocalForegroundLaunchOwner(
       }
     },
     ...(consultExternalIdle ? { consultExternalIdle } : {}),
+    ...(recordingObserver
+      ? { onStateEntered: recordingObserver.onStateEntered }
+      : {}),
     adapter: {
       prepare: async request => ({
         status: "ok",
