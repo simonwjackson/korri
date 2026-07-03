@@ -79,13 +79,13 @@ import {
 } from "./sessiond-sway"
 import { createSessiondSwayEventSource } from "./sessiond-sway-events"
 import {
-  discoverSwaySocketEnv,
-  discoverSwaySocketPath,
-} from "./sessiond-sway-socket"
-import {
   createSwayLaneEventSupervisor,
   type SwayLaneEventSupervisor,
 } from "./sessiond-sway-lane-supervisor"
+import {
+  discoverSwaySocketEnv,
+  discoverSwaySocketPath,
+} from "./sessiond-sway-socket"
 
 export interface KorriSessiondLogger {
   debug: (input: unknown, message?: string) => void
@@ -1320,7 +1320,7 @@ function streamSurfaceSelectorFromEnv(): SwayWindowSelector {
     classes: envList("KORRI_STREAM_SURFACE_CLASSES"),
     allowAnonymous:
       envFlag("KORRI_STREAM_SURFACE_ALLOW_ANONYMOUS") ??
-      appIds.includes("gamescope"),
+      (appIds ?? []).includes("gamescope"),
   }
 }
 

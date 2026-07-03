@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test"
+import { normalizePluginHandlerResult } from "@platform/plugin"
+import { Effect } from "effect"
 
 import {
   KORRI_RPCS3_APP_ID,
@@ -8,6 +10,15 @@ import {
   KORRI_RPCS3_RUNTIME_ID,
   rpcs3Ps3DiscFolderDiscoveryProvider,
 } from ".."
+
+/**
+ * Resolve a discovery provider's `PluginResult` (sync array, promise, or
+ * Effect) the same way production does, yielding the concrete observation
+ * array for assertions.
+ */
+const runDiscover = (
+  result: ReturnType<typeof rpcs3Ps3DiscFolderDiscoveryProvider.discover>,
+) => Effect.runPromise(normalizePluginHandlerResult(result))
 
 const baseFile = {
   storageId: "ps3-games",
@@ -27,7 +38,7 @@ describe("rpcs3Ps3DiscFolderDiscoveryProvider", () => {
   })
 
   it("emits a high-confidence PS3 observation for direct child disc folders", async () => {
-    const observations = await Promise.resolve(
+    const observations = await runDiscover(
       rpcs3Ps3DiscFolderDiscoveryProvider.discover({
         pluginId: KORRI_RPCS3_PLUGIN_ID,
         storageId: "ps3-games",
@@ -55,7 +66,7 @@ describe("rpcs3Ps3DiscFolderDiscoveryProvider", () => {
   })
 
   it("discovers multiple sibling game folders independently", async () => {
-    const observations = await Promise.resolve(
+    const observations = await runDiscover(
       rpcs3Ps3DiscFolderDiscoveryProvider.discover({
         pluginId: KORRI_RPCS3_PLUGIN_ID,
         storageId: "ps3-games",
@@ -117,7 +128,7 @@ describe("rpcs3Ps3DiscFolderDiscoveryProvider", () => {
       },
     ]
 
-    const observations = await Promise.resolve(
+    const observations = await runDiscover(
       rpcs3Ps3DiscFolderDiscoveryProvider.discover({
         pluginId: KORRI_RPCS3_PLUGIN_ID,
         storageId: "ps3-games",
