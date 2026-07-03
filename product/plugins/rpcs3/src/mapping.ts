@@ -14,7 +14,7 @@ import type { Rpcs3Policy } from "./policy"
  * those strings, so version drift is contained to this file.
  */
 
-export type ConfigValue = string | number | boolean
+export type ConfigValue = string | number | boolean | readonly string[]
 export type ConfigEntry = readonly [path: string, value: ConfigValue]
 export type IniEntry = readonly [section: string, key: string, value: boolean]
 

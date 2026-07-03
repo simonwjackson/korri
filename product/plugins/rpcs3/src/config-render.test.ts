@@ -65,6 +65,38 @@ describe("renderConfigYaml", () => {
     expect(parse(text as string)).toEqual({ Video: { "Frame limit": "50" } })
   })
 
+  it("renders a list-valued entry as a YAML sequence that round-trips", () => {
+    const text = renderConfigYaml({
+      entries: [
+        ["Core.Libraries Control", ["libfoo.sprx:lle", "libbar.sprx:hle"]],
+      ],
+    })
+    expect(parse(text as string)).toEqual({
+      Core: { "Libraries Control": ["libfoo.sprx:lle", "libbar.sprx:hle"] },
+    })
+  })
+
+  it("renders an empty list as an empty sequence that round-trips", () => {
+    const text = renderConfigYaml({
+      entries: [["Core.Libraries Control", []]],
+    })
+    expect(parse(text as string)).toEqual({
+      Core: { "Libraries Control": [] },
+    })
+  })
+
+  it("replaces (not element-merges) a canonical list with a routed list", () => {
+    const canonical =
+      "Core:\n  Libraries Control:\n    - liba.sprx:lle\n    - libb.sprx:lle\n"
+    const text = renderConfigYaml({
+      canonical,
+      entries: [["Core.Libraries Control", ["libc.sprx:hle"]]],
+    })
+    expect(parse(text as string)).toEqual({
+      Core: { "Libraries Control": ["libc.sprx:hle"] },
+    })
+  })
+
   it("lets overrides.config.replace win the whole file verbatim", () => {
     const replace = "Core:\n  PPU Decoder: Recompiler (LLVM)\n"
     const text = renderConfigYaml({
