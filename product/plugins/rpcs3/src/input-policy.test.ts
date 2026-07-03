@@ -100,6 +100,15 @@ describe("decodeRpcs3Policy — input authoring", () => {
     )
   })
 
+  it("accepts up to seven players but rejects an eighth (RPCS3 has 7 slots)", () => {
+    const seven = Array.from({ length: 7 }, () => ({ handler: "null" }))
+    expect(decodeRpcs3Policy({ input: { players: seven } })).toEqual({
+      input: { players: seven },
+    })
+    const eight = Array.from({ length: 8 }, () => ({ handler: "null" }))
+    expectPolicyError(() => decodeRpcs3Policy({ input: { players: eight } }))
+  })
+
   it("rejects an invalid mouse movement mode", () => {
     expectPolicyError(() =>
       decodeRpcs3Policy({

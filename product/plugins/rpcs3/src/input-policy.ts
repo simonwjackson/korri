@@ -132,12 +132,23 @@ const Rpcs3InputPlayer = Schema.Struct({
 })
 export type Rpcs3InputPlayer = Schema.Schema.Type<typeof Rpcs3InputPlayer>
 
+/** RPCS3 `cfg_input` exposes exactly 7 player slots (Player 1..7 Input). */
+const RPCS3_MAX_PLAYERS = 7
+
 /**
  * Per-player input authoring. Players are positional (index 0 → Player 1 Input,
  * …); RPCS3 supports up to 7. Unlisted players default to `Handler: "Null"` at
  * render time.
  */
 export const Rpcs3InputPolicy = Schema.Struct({
-  players: Schema.optional(Schema.Array(Rpcs3InputPlayer)),
+  players: Schema.optional(
+    Schema.Array(Rpcs3InputPlayer).check(
+      Schema.makeFilter<readonly Rpcs3InputPlayer[]>(value =>
+        value.length <= RPCS3_MAX_PLAYERS
+          ? undefined
+          : `rpcs3.input.players supports at most ${RPCS3_MAX_PLAYERS} players`,
+      ),
+    ),
+  ),
 })
 export type Rpcs3InputPolicy = Schema.Schema.Type<typeof Rpcs3InputPolicy>
