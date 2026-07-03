@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import type { ControlLaunchResult } from "@platform/control/control-results"
+import type {
+  ControlLaunchResult,
+  ControlSessionStatusResult,
+} from "@platform/control/control-results"
 import type { GameRecord } from "@platform/fixtures/games/game"
 import type { LibrarySourceService } from "@platform/library/library-services"
 import { LibraryError } from "@platform/library/library-services"
@@ -85,6 +88,25 @@ function localSourceWithReleases(
 
 function launchedResult(id: string): ControlLaunchResult {
   return { _tag: "Launched", selection: { id } }
+}
+
+const activeStatus: ControlSessionStatusResult = {
+  _tag: "SessionStatus",
+  configured: true,
+  mode: "game",
+  active: {
+    launchId: "launch-1",
+    mode: "game",
+    gameId: "old/game",
+    title: "Old Game",
+  },
+  restoreAttempts: 0,
+}
+const idleStatus: ControlSessionStatusResult = {
+  _tag: "SessionStatus",
+  configured: true,
+  mode: "idle",
+  restoreAttempts: 0,
 }
 
 function remoteClient(
@@ -353,5 +375,105 @@ describe("unified launch command", () => {
     expect(code).toBe(0)
     expect(launched?.releaseId).toBe("steam")
     expect(prompted).toBe(false)
+  })
+
+  it("does not prompt when nothing is running", async () => {
+    let prompted = false
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      librarySource: localSource([localGame]),
+      launchLocal: async request => launchedResult(request.id),
+      discoverHosts: async () => [],
+      sessionStatus: async () => idleStatus,
+      confirmPrompt: async () => {
+        prompted = true
+        return true
+      },
+      stdinIsTty: true,
+      output: () => {},
+      errorOutput: () => {},
+    })
+    expect(code).toBe(0)
+    expect(prompted).toBe(false)
+  })
+
+  it("launches after confirming termination of a running game", async () => {
+    let prompted = ""
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      librarySource: localSource([localGame]),
+      launchLocal: async request => launchedResult(request.id),
+      discoverHosts: async () => [],
+      sessionStatus: async () => activeStatus,
+      confirmPrompt: async message => {
+        prompted = message
+        return true
+      },
+      stdinIsTty: true,
+      output: () => {},
+      errorOutput: () => {},
+    })
+    expect(code).toBe(0)
+    expect(prompted).toContain("Old Game")
+  })
+
+  it("returns cancelled (130) when the termination prompt is declined", async () => {
+    let launchAttempted = false
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      librarySource: localSource([localGame]),
+      launchLocal: async request => {
+        launchAttempted = true
+        return launchedResult(request.id)
+      },
+      discoverHosts: async () => [],
+      sessionStatus: async () => activeStatus,
+      confirmPrompt: async () => false,
+      stdinIsTty: true,
+      output: () => {},
+      errorOutput: () => {},
+    })
+    expect(code).toBe(130)
+    expect(launchAttempted).toBe(false)
+  })
+
+  it("skips the prompt with --yes", async () => {
+    let prompted = false
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      confirmYes: true,
+      librarySource: localSource([localGame]),
+      launchLocal: async request => launchedResult(request.id),
+      discoverHosts: async () => [],
+      sessionStatus: async () => activeStatus,
+      confirmPrompt: async () => {
+        prompted = true
+        return true
+      },
+      stdinIsTty: true,
+      output: () => {},
+      errorOutput: () => {},
+    })
+    expect(code).toBe(0)
+    expect(prompted).toBe(false)
+  })
+
+  it("requires --yes to replace a running game without a terminal (usage 2)", async () => {
+    let launchAttempted = false
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      librarySource: localSource([localGame]),
+      launchLocal: async request => {
+        launchAttempted = true
+        return launchedResult(request.id)
+      },
+      discoverHosts: async () => [],
+      sessionStatus: async () => activeStatus,
+      stdinIsTty: false,
+      output: () => {},
+      errorOutput: () => {},
+    })
+    expect(code).toBe(2)
+    expect(launchAttempted).toBe(false)
   })
 })

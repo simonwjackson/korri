@@ -1,4 +1,8 @@
-import type { ControlLaunchResult } from "@platform/control/control-results"
+import type {
+  ControlLaunchResult,
+  ControlSessionActive,
+  ControlSessionStatusResult,
+} from "@platform/control/control-results"
 import { releaseChoiceForLaunch } from "@platform/library/launch-state"
 import type { LibrarySourceService } from "@platform/library/library-services"
 import {
@@ -50,10 +54,13 @@ export interface RunLaunchCommandOptions {
   readonly appId?: string
   readonly profileId?: string
   readonly stdinIsTty?: boolean
+  readonly confirmYes?: boolean
   readonly librarySource: LibrarySourceService
   readonly launchLocal: (
     request: LocalLaunchRequest,
   ) => Promise<ControlLaunchResult>
+  readonly sessionStatus?: () => Promise<ControlSessionStatusResult>
+  readonly confirmPrompt?: (message: string) => Promise<boolean>
   readonly gamePicker?: GamePicker
   readonly releasePicker?: (
     releaseIds: readonly string[],
@@ -107,6 +114,18 @@ export async function runLaunchCommand(
 
   const target = await resolveTarget({ ...options, entries })
   if (target._tag === "Failed") return emit(renderOutcome(target.outcome))
+
+  const confirmation = await confirmTermination(options)
+  if (confirmation === "NeedsYes") {
+    return emit(
+      renderOutcome(
+        fail("usage", "A game is currently running; pass --yes to replace it"),
+      ),
+    )
+  }
+  if (confirmation === "Declined") {
+    return emit(renderOutcome(fail("cancelled", "Launch cancelled")))
+  }
 
   if (isLocalEntry(target.entry)) {
     return emit(await launchLocalEntry(options, target.entry))
@@ -299,6 +318,38 @@ function prepareFailureOutcome(
     case "prepare-failed":
       return fail("launch-invalid", result.message)
   }
+}
+
+/**
+ * Prompt before a launch that the session layer says will terminate a running
+ * game. Confirmation follows the consequence, not the verb: when the session
+ * layer reports nothing to terminate (or a future non-terminating outcome), the
+ * prompt never appears.
+ */
+async function confirmTermination(
+  options: RunLaunchCommandOptions,
+): Promise<"Proceed" | "Declined" | "NeedsYes"> {
+  if (options.confirmYes) return "Proceed"
+  if (!options.sessionStatus) return "Proceed"
+
+  const active = terminatingActive(await options.sessionStatus())
+  if (!active) return "Proceed"
+  if (options.stdinIsTty === false || !options.confirmPrompt) return "NeedsYes"
+
+  const confirmed = await options.confirmPrompt(
+    `This closes ${activeLabel(active)}. Continue?`,
+  )
+  return confirmed ? "Proceed" : "Declined"
+}
+
+function terminatingActive(
+  status: ControlSessionStatusResult,
+): ControlSessionActive | undefined {
+  return status._tag === "SessionStatus" ? status.active : undefined
+}
+
+function activeLabel(active: ControlSessionActive): string {
+  return active.title ?? active.gameId ?? active.launchId
 }
 
 function isLocalEntry(
