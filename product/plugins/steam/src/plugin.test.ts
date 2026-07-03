@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { decodeAppRecord } from "@platform/library/config/records/app"
-import { createFirstPartyPluginRegistryFromEnv } from "../.."
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
 import {
   KORRI_STEAM_APP_ID,

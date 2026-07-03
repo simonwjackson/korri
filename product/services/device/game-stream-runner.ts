@@ -20,7 +20,7 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@platform/plugin/registry"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { Effect } from "effect"
 import {
   type RepairStreamSurfaceOptions,

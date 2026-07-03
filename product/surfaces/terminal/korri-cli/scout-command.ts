@@ -4,7 +4,7 @@ import {
   scanAndMergeReleaseCandidates,
   scanConfiguredReleaseCandidates,
 } from "@platform/library/discovery/release-candidate-scan"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 

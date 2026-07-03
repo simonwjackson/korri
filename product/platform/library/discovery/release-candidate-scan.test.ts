@@ -15,7 +15,7 @@ import { decodeStoragePayload } from "@platform/library/config/records/storage"
 import { openKorriConfigGraph } from "@platform/library/proseql/config-graph-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { releaseDiscoveryProvider } from "@platform/plugin/discovery"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import {
   retroarchDiscoveryProviders,
   retroarchReadableLaunchIntegration,

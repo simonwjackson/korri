@@ -1,43 +1,58 @@
 import { describe, expect, it } from "bun:test"
 import { type KorriPlugin, runPluginHandler } from "@platform/plugin"
-import { Effect } from "effect"
-import { createFirstPartyPluginRegistryFromEnv, firstPartyPlugins } from "."
-import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "./acquisition"
 import {
   am2rLauncherPlugin,
   KORRI_AM2RLAUNCHER_PLUGIN_ID,
-} from "./am2rlauncher"
+} from "@product/plugins/am2rlauncher"
 import {
   domeRomantikPlugin,
   KORRI_DOME_ROMANTIK_PLUGIN_ID,
-} from "./dome-romantik"
-import { globebaPlugin, KORRI_GLOBEBA_PLUGIN_ID } from "./globeba"
-import { KORRI_ITCHIO_PLUGIN_ID } from "./itchio"
+} from "@product/plugins/dome-romantik"
+import {
+  globebaPlugin,
+  KORRI_GLOBEBA_PLUGIN_ID,
+} from "@product/plugins/globeba"
+import { KORRI_ITCHIO_PLUGIN_ID } from "@product/plugins/itchio"
 import {
   KORRI_MEGA_MAN_ROCK_N_ROLL_PLUGIN_ID,
   megaManRockNRollPlugin,
-} from "./mega-man-rock-n-roll"
-import { KORRI_SHIPWRIGHT_PLUGIN_ID, shipwrightPlugin } from "./shipwright"
-import { KORRI_SONIC_3_AIR_PLUGIN_ID, sonic3AirPlugin } from "./sonic-3-air"
+} from "@product/plugins/mega-man-rock-n-roll"
+import {
+  KORRI_SHIPWRIGHT_PLUGIN_ID,
+  shipwrightPlugin,
+} from "@product/plugins/shipwright"
+import {
+  KORRI_SONIC_3_AIR_PLUGIN_ID,
+  sonic3AirPlugin,
+} from "@product/plugins/sonic-3-air"
 import {
   KORRI_SONIC_TIME_TWISTED_PLUGIN_ID,
   sonicTimeTwistedPlugin,
-} from "./sonic-time-twisted"
+} from "@product/plugins/sonic-time-twisted"
 import {
   KORRI_SPELUNKY_CLASSIC_HD_PLUGIN_ID,
   spelunkyClassicHdPlugin,
-} from "./spelunky-classic-hd"
-import { KORRI_SRB2KART_PLUGIN_ID, srb2KartPlugin } from "./srb2kart"
+} from "@product/plugins/spelunky-classic-hd"
+import {
+  KORRI_SRB2KART_PLUGIN_ID,
+  srb2KartPlugin,
+} from "@product/plugins/srb2kart"
 import {
   KORRI_STARGROVE_SCRAMBLE_PLUGIN_ID,
   stargroveScramblePlugin,
-} from "./stargrove-scramble"
-import { KORRI_TINY_CRATE_PLUGIN_ID, tinyCratePlugin } from "./tiny-crate"
+} from "@product/plugins/stargrove-scramble"
+import {
+  KORRI_TINY_CRATE_PLUGIN_ID,
+  tinyCratePlugin,
+} from "@product/plugins/tiny-crate"
 import {
   KORRI_TMNT_RESCUE_PALOOZA_PLUGIN_ID,
   tmntRescuePaloozaPlugin,
-} from "./tmnt-rescue-palooza"
-import { KORRI_XJLT_PLUGIN_ID, xjltPlugin } from "./xjlt"
+} from "@product/plugins/tmnt-rescue-palooza"
+import { KORRI_XJLT_PLUGIN_ID, xjltPlugin } from "@product/plugins/xjlt"
+import { Effect } from "effect"
+import { createFirstPartyPluginRegistryFromEnv, firstPartyPlugins } from "."
+import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "./acquisition"
 
 const requestedSourcePlugins = [
   {

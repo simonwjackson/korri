@@ -1,29 +1,26 @@
 import { describe, expect, it } from "bun:test"
 import { executableResources } from "@platform/plugin/registry"
 import {
-  createFirstPartyPluginRegistryFromEnv,
-  firstPartyLaunchIntegrationsForRegistry,
-  firstPartyPlugins,
-  firstPartySessionLifecycleHooksForRegistry,
-} from "."
-import { KORRI_3DSEN_APP_ID, KORRI_3DSEN_PLUGIN_ID } from "./3dsen"
-import { KORRI_BOX64_RUNTIME_PLUGIN_ID } from "./box64-runtime"
-import { KORRI_FEX_PLUGIN_ID } from "./fex-runtime"
-import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
-import { KORRI_GMLOADER_PLUGIN_ID } from "./gmloader"
-import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "./levelsharesquare"
-import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "./mega-man-arena"
-import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "./mega-man-maker"
-import { KORRI_MIDAS_MACHINE_PLUGIN_ID } from "./midas-machine"
+  KORRI_3DSEN_APP_ID,
+  KORRI_3DSEN_PLUGIN_ID,
+} from "@product/plugins/3dsen"
+import { KORRI_BOX64_RUNTIME_PLUGIN_ID } from "@product/plugins/box64-runtime"
+import { KORRI_FEX_PLUGIN_ID } from "@product/plugins/fex-runtime"
+import { KORRI_GAMESCOPE_PLUGIN_ID } from "@product/plugins/gamescope"
+import { KORRI_GMLOADER_PLUGIN_ID } from "@product/plugins/gmloader"
+import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "@product/plugins/levelsharesquare"
+import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "@product/plugins/mega-man-arena"
+import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "@product/plugins/mega-man-maker"
+import { KORRI_MIDAS_MACHINE_PLUGIN_ID } from "@product/plugins/midas-machine"
 import {
   KORRI_PICO8_CART_DISCOVERY_PROVIDER_ID,
   KORRI_PICO8_PLUGIN_ID,
-} from "./pico8"
-import { KORRI_PORTMASTER_PLUGIN_ID } from "./portmaster"
-import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
-import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
-import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
-import { KORRI_REMAP_PLUGIN_ID } from "./remap"
+} from "@product/plugins/pico8"
+import { KORRI_PORTMASTER_PLUGIN_ID } from "@product/plugins/portmaster"
+import { KORRI_PROTON_GE_PLUGIN_ID } from "@product/plugins/proton-ge-runtime"
+import { KORRI_PROTON_PLUGIN_ID } from "@product/plugins/proton-runtime"
+import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "@product/plugins/psycho-waluigi"
+import { KORRI_REMAP_PLUGIN_ID } from "@product/plugins/remap"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
@@ -49,38 +46,47 @@ import {
   KORRI_RETROARCH_SNES_SYSTEM_ID,
   KORRI_RETROARCH_TG16_SYSTEM_ID,
   KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
-} from "./retroarch"
+} from "@product/plugins/retroarch"
 import {
   KORRI_RPCS3_APP_ID,
   KORRI_RPCS3_PLUGIN_ID,
   KORRI_RPCS3_PS3_DISC_DISCOVERY_PROVIDER_ID,
   KORRI_RPCS3_RUNTIME_ID,
-} from "./rpcs3"
+} from "@product/plugins/rpcs3"
 import {
   KORRI_RYUBING_APP_ID,
   KORRI_RYUBING_DISCOVERY_PROVIDER_ID,
   KORRI_RYUBING_PLUGIN_ID,
   KORRI_RYUBING_STATE_STORAGE_ID,
-} from "./ryubing"
-import { KORRI_SMB_WONDERLAND_1987_PLUGIN_ID } from "./smb-wonderland-1987"
-import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
-import { KORRI_SMWCENTRAL_PLUGIN_ID } from "./smwcentral"
-import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
+} from "@product/plugins/ryubing"
+import { KORRI_SMB_WONDERLAND_1987_PLUGIN_ID } from "@product/plugins/smb-wonderland-1987"
+import { KORRI_SMBXGAME_PLUGIN_ID } from "@product/plugins/smbxgame"
+import { KORRI_SMWCENTRAL_PLUGIN_ID } from "@product/plugins/smwcentral"
+import { KORRI_SRB2_PLUGIN_ID } from "@product/plugins/srb2"
 import {
   KORRI_STEAM_APP_ID,
   KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID,
   KORRI_STEAM_PLUGIN_ID,
   KORRI_STEAM_STORAGE_ID,
-} from "./steam"
-import { KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID } from "./super-mario-bros-remastered"
-import { KORRI_TURNIP_PLUGIN_ID, KORRI_TURNIP_WRAPPER_PACKAGE } from "./turnip"
+} from "@product/plugins/steam"
+import { KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID } from "@product/plugins/super-mario-bros-remastered"
+import {
+  KORRI_TURNIP_PLUGIN_ID,
+  KORRI_TURNIP_WRAPPER_PACKAGE,
+} from "@product/plugins/turnip"
 import {
   KORRI_ZQUEST_CLASSIC_APP_ID,
   KORRI_ZQUEST_CLASSIC_DISCOVERY_PROVIDER_ID,
   KORRI_ZQUEST_CLASSIC_PACKAGE,
   KORRI_ZQUEST_CLASSIC_PLUGIN_ID,
   KORRI_ZQUEST_CLASSIC_SYSTEM_ID,
-} from "./zquest-classic"
+} from "@product/plugins/zquest-classic"
+import {
+  createFirstPartyPluginRegistryFromEnv,
+  firstPartyLaunchIntegrationsForRegistry,
+  firstPartyPlugins,
+  firstPartySessionLifecycleHooksForRegistry,
+} from "."
 
 describe("first-party plugins", () => {
   it("registers RetroArch as a first-party app host plugin", () => {

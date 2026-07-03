@@ -4,22 +4,25 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { LibrarySource } from "@platform/library/library-services"
 import { outLinkPath } from "@platform/plugin/resources"
-import { Effect } from "effect"
 import {
   KORRI_GMLOADER_PLUGIN_ID,
   KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
-} from "./gmloader"
+} from "@product/plugins/gmloader"
 import {
-  createPluginResourceFulfillerFromEnv,
-  PluginLibrarySourceLayerLive,
-} from "./library-source-layer"
-import { KORRI_RYUBING_APP_ID, KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
+  KORRI_RYUBING_APP_ID,
+  KORRI_RYUBING_PLUGIN_ID,
+} from "@product/plugins/ryubing"
 import {
   DEFAULT_STEAM_COMPAT_TOOL,
   KORRI_STEAM_APP_ID,
   KORRI_STEAM_PLUGIN_ID,
   KORRI_STEAM_STORAGE_ID,
-} from "./steam"
+} from "@product/plugins/steam"
+import { Effect } from "effect"
+import {
+  createPluginResourceFulfillerFromEnv,
+  PluginLibrarySourceLayerLive,
+} from "./library-source-layer"
 
 describe("PluginLibrarySourceLayerLive", () => {
   it("exposes the enabled Neverball plugin through the live library source", async () => {

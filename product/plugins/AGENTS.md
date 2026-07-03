@@ -242,17 +242,20 @@ Handler rules:
 
 ## Registration
 
+This directory is a pure plugin catalog: each plugin is a folder. The host-side
+first-party registry that aggregates these plugins lives outside the catalog.
+
 Register first-party plugins in:
 
 ```text
-product/plugins/index.ts
+product/plugin-host/index.ts
 ```
 
-Example:
+The registry imports plugins by alias (it no longer sits inside this directory):
 
 ```ts
-import { gamescopePlugin, KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
-import { neverballPlugin } from "./neverball"
+import { gamescopePlugin, KORRI_GAMESCOPE_PLUGIN_ID } from "@product/plugins/gamescope"
+import { neverballPlugin } from "@product/plugins/neverball"
 
 export const firstPartyPlugins = [gamescopePlugin, neverballPlugin] as const
 ```

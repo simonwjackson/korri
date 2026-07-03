@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { runPluginHandler } from "@platform/plugin"
+import { firstPartyPlugins } from "@product/plugin-host"
 import { Effect } from "effect"
-import { firstPartyPlugins } from ".."
 import { KORRI_REMAP_PLUGIN_ID, remapPlugin } from "."
 
 const originalNativeDriver = process.env.KORRI_REMAP_NATIVE_DRIVER

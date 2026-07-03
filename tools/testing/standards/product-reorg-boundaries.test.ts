@@ -79,7 +79,7 @@ function containsPluginOwnedContentPackageName(source: string): boolean {
 }
 
 function isInsideOwnedContentPlugin(file: string): boolean {
-  return /^(?:product\/plugins\/(?:super-mario-bros-remastered|super-mario-127|yoshis-fabrication-station|levelsharesquare)\/|product\/plugins\/index\.ts|product\/plugins\/index\.test\.ts)/.test(
+  return /^(?:product\/plugins\/(?:super-mario-bros-remastered|super-mario-127|yoshis-fabrication-station|levelsharesquare)\/|product\/plugin-host\/index\.ts|product\/plugin-host\/index\.test\.ts)/.test(
     file,
   )
 }
@@ -300,7 +300,7 @@ function importsPrivateProductFromPlatform(
 ): boolean {
   return importSpecifiers(source).some(specifier => {
     if (
-      /^(?:@app\/|@product\/(?:apps|services|systems|themes|plugins)\/|product\/(?:apps|services|systems|themes|plugins)\/|@korri\/products\/app\/)/.test(
+      /^(?:@app\/|@product\/(?:apps|services|systems|themes|plugins|plugin-host)\/|product\/(?:apps|services|systems|themes|plugins|plugin-host)\/|@korri\/products\/app\/)/.test(
         specifier,
       )
     ) {
@@ -310,7 +310,9 @@ function importsPrivateProductFromPlatform(
     if (!specifier.startsWith(".")) return false
 
     const resolved = repoRelative(normalize(join(dirname(fromFile), specifier)))
-    return /^product\/(?:apps|services|systems|themes|plugins)\//.test(resolved)
+    return /^product\/(?:apps|services|systems|themes|plugins|plugin-host)\//.test(
+      resolved,
+    )
   })
 }
 

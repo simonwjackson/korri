@@ -12,22 +12,22 @@ import {
   createNixOutLinkFulfiller,
   createNixOutLinkResolver,
 } from "@platform/plugin/resources"
-import { Effect, Layer } from "effect"
-import {
-  createFirstPartyPluginRegistryFromEnv,
-  firstPartyLaunchIntegrationsForRegistry,
-} from "."
 import {
   defaultGmloaderInstallRoot,
   KORRI_GMLOADER_PLUGIN_ID,
   KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
   withGmloaderInstalledLibrarySource,
-} from "./gmloader"
+} from "@product/plugins/gmloader"
 import {
   defaultPortMasterInstallRoot,
   KORRI_PORTMASTER_PLUGIN_ID,
   withPortMasterInstalledLibrarySource,
-} from "./portmaster"
+} from "@product/plugins/portmaster"
+import { Effect, Layer } from "effect"
+import {
+  createFirstPartyPluginRegistryFromEnv,
+  firstPartyLaunchIntegrationsForRegistry,
+} from "."
 
 const DEFAULT_PLUGIN_RESOURCE_ROOT = "/var/lib/korri/plugins/resources"
 

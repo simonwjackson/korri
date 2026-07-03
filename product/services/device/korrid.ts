@@ -13,7 +13,7 @@ import {
   createFirstPartyPluginRegistryFromEnv,
   firstPartyPluginDaemonsForRegistry,
   type KorriPluginDaemonHandle,
-} from "@product/plugins"
+} from "@product/plugin-host"
 import {
   advertiseStreamHost,
   type StreamAdvertisement,

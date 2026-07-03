@@ -9,8 +9,8 @@ import {
 } from "@platform/library/sessiond-managed-launch-client"
 import type { PluginHandler } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { Effect } from "effect"
-import { createFirstPartyPluginRegistryFromEnv } from "../../../../plugins"
 import { isStreamControlEnabled } from "../stream/control-mode"
 import {
   ProviderLifecycleSummary,

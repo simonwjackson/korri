@@ -8,8 +8,8 @@ import { parsePluginInstallState } from "@platform/library/install-state"
 import { LibrarySource } from "@platform/library/library-services"
 import type { PluginHandler, ProviderId } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { Effect } from "effect"
-import { createFirstPartyPluginRegistryFromEnv } from "../../../../plugins"
 import { requireInstallControl } from "./install-control-authorization"
 import {
   type RequestPluginInstallPayload,

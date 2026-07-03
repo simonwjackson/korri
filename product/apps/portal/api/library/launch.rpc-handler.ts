@@ -27,7 +27,7 @@ import {
   moonlightControlHandleFromOptions,
 } from "@product/apps/portal/stream/moonlight-launcher"
 import type { RemotePrepareResult } from "@product/apps/portal/stream/remote-stream-client"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { Effect } from "effect"
 
 import {

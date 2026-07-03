@@ -6,9 +6,9 @@ import { KorriControlLayerLiveWithPlugins } from "@platform/control/korri-contro
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import { Launcher, LibrarySource } from "@platform/library/library-services"
 import { createKorriControlRpc } from "@product/apps/portal/control/korri-control-rpc"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
-import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugins/acquisition"
-import { PluginLibrarySourceLayerLive } from "@product/plugins/library-source-layer"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
+import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugin-host/acquisition"
+import { PluginLibrarySourceLayerLive } from "@product/plugin-host/library-source-layer"
 import {
   createFileGameStreamLaunchIntentStore,
   defaultGameStreamIntentPath,

@@ -5,8 +5,8 @@ import {
 } from "@platform/api/rpc/errors"
 import type { PluginHandler, ProviderId } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { Effect } from "effect"
-import { createFirstPartyPluginRegistryFromEnv } from "../../../../plugins"
 import {
   type CollectPluginDiagnosticsPayload,
   CollectPluginDiagnosticsResponse,

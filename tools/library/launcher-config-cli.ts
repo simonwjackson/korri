@@ -3,7 +3,7 @@ import { createLibraryRepository } from "@platform/library/proseql/library-repos
 import {
   createFirstPartyPluginRegistryFromEnv,
   firstPartyLaunchIntegrationsForRegistry,
-} from "@product/plugins"
+} from "@product/plugin-host"
 import { Cause, Effect, Exit } from "effect"
 
 export type LauncherConfigValidationResult =

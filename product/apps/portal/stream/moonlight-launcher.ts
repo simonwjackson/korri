@@ -17,7 +17,7 @@ import {
 } from "@platform/plugin/launch-companion"
 import type { PluginRegistry } from "@platform/plugin/registry"
 import { composeMoonlightStreamLaunchSpec } from "@platform/stream/moonlight-launch-spec"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { Effect } from "effect"
 
 const DEFAULT_STARTUP_OBSERVE_MS = 750

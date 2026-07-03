@@ -10,65 +10,77 @@ import type {
   KorriSessionLifecycleHookFactory,
   KorriSessionLifecycleHookFactoryOptions,
 } from "@platform/plugin/session-lifecycle"
-import { threeDSenPlugin, threeDSenReadableLaunchIntegration } from "./3dsen"
-import { fixtureAcquisitionPlugins } from "./acquisition-fixtures"
-import { am2rLauncherPlugin } from "./am2rlauncher"
-import { box64RuntimePlugin } from "./box64-runtime"
-import { communityCatalogPlugin } from "./community-catalog"
-import { domeRomantikPlugin } from "./dome-romantik"
-import { fexRuntimePlugin } from "./fex-runtime"
-import { gamescopePlugin } from "./gamescope"
-import { createGamescopeSessionLifecycleHook } from "./gamescope/src/session/lifecycle-hook"
-import { gmloaderPlugin, gmloaderReadableLaunchIntegration } from "./gmloader"
-import { globebaPlugin } from "./globeba"
-import { itchioPlugin } from "./itchio"
-import { levelShareSquarePlugin } from "./levelsharesquare"
-import { megaManArenaPlugin } from "./mega-man-arena"
-import { megaManMakerPlugin } from "./mega-man-maker"
-import { megaManRockNRollPlugin } from "./mega-man-rock-n-roll"
-import { midasMachinePlugin } from "./midas-machine"
-import { neverballPlugin } from "./neverball"
-import { pico8Plugin } from "./pico8"
-import { portmasterPlugin } from "./portmaster"
-import { protonGeRuntimePlugin } from "./proton-ge-runtime"
-import { protonRuntimePlugin } from "./proton-runtime"
-import { psychoWaluigiPlugin } from "./psycho-waluigi"
-import { remapPlugin } from "./remap"
+import {
+  threeDSenPlugin,
+  threeDSenReadableLaunchIntegration,
+} from "@product/plugins/3dsen"
+import { fixtureAcquisitionPlugins } from "@product/plugins/acquisition-fixtures"
+import { am2rLauncherPlugin } from "@product/plugins/am2rlauncher"
+import { box64RuntimePlugin } from "@product/plugins/box64-runtime"
+import { communityCatalogPlugin } from "@product/plugins/community-catalog"
+import { domeRomantikPlugin } from "@product/plugins/dome-romantik"
+import { fexRuntimePlugin } from "@product/plugins/fex-runtime"
+import { gamescopePlugin } from "@product/plugins/gamescope"
+import { createGamescopeSessionLifecycleHook } from "@product/plugins/gamescope/src/session/lifecycle-hook"
+import { globebaPlugin } from "@product/plugins/globeba"
+import {
+  gmloaderPlugin,
+  gmloaderReadableLaunchIntegration,
+} from "@product/plugins/gmloader"
+import { itchioPlugin } from "@product/plugins/itchio"
+import { levelShareSquarePlugin } from "@product/plugins/levelsharesquare"
+import { megaManArenaPlugin } from "@product/plugins/mega-man-arena"
+import { megaManMakerPlugin } from "@product/plugins/mega-man-maker"
+import { megaManRockNRollPlugin } from "@product/plugins/mega-man-rock-n-roll"
+import { midasMachinePlugin } from "@product/plugins/midas-machine"
+import { neverballPlugin } from "@product/plugins/neverball"
+import { pico8Plugin } from "@product/plugins/pico8"
+import { portmasterPlugin } from "@product/plugins/portmaster"
+import { protonGeRuntimePlugin } from "@product/plugins/proton-ge-runtime"
+import { protonRuntimePlugin } from "@product/plugins/proton-runtime"
+import { psychoWaluigiPlugin } from "@product/plugins/psycho-waluigi"
+import { remapPlugin } from "@product/plugins/remap"
 import {
   retroarchPlugin,
   retroarchReadableLaunchIntegration,
-} from "./retroarch"
-import { rpcs3Plugin, rpcs3ReadableLaunchIntegration } from "./rpcs3"
-import { ryubingPlugin, ryubingReadableLaunchIntegration } from "./ryubing"
-import { shipwrightPlugin } from "./shipwright"
-import { smbWonderland1987Plugin } from "./smb-wonderland-1987"
-import { smbxGamePlugin } from "./smbxgame"
-import { smwCentralPlugin } from "./smwcentral"
-import { sonic3AirPlugin } from "./sonic-3-air"
-import { sonicTimeTwistedPlugin } from "./sonic-time-twisted"
-import { spelunkyClassicHdPlugin } from "./spelunky-classic-hd"
-import { srb2Plugin } from "./srb2"
-import { srb2KartPlugin } from "./srb2kart"
-import { stargroveScramblePlugin } from "./stargrove-scramble"
+} from "@product/plugins/retroarch"
+import {
+  rpcs3Plugin,
+  rpcs3ReadableLaunchIntegration,
+} from "@product/plugins/rpcs3"
+import {
+  ryubingPlugin,
+  ryubingReadableLaunchIntegration,
+} from "@product/plugins/ryubing"
+import { shipwrightPlugin } from "@product/plugins/shipwright"
+import { smbWonderland1987Plugin } from "@product/plugins/smb-wonderland-1987"
+import { smbxGamePlugin } from "@product/plugins/smbxgame"
+import { smwCentralPlugin } from "@product/plugins/smwcentral"
+import { sonic3AirPlugin } from "@product/plugins/sonic-3-air"
+import { sonicTimeTwistedPlugin } from "@product/plugins/sonic-time-twisted"
+import { spelunkyClassicHdPlugin } from "@product/plugins/spelunky-classic-hd"
+import { srb2Plugin } from "@product/plugins/srb2"
+import { srb2KartPlugin } from "@product/plugins/srb2kart"
+import { stargroveScramblePlugin } from "@product/plugins/stargrove-scramble"
 import {
   createSteamLogObserverDaemon,
   createSteamSessionLifecycleHook,
   steamPlugin,
   steamReadableLaunchIntegration,
-} from "./steam"
-import { superMario127Plugin } from "./super-mario-127"
-import { superMarioBrosRemasteredPlugin } from "./super-mario-bros-remastered"
-import { tinyCratePlugin } from "./tiny-crate"
-import { tmntRescuePaloozaPlugin } from "./tmnt-rescue-palooza"
-import { turnipPlugin } from "./turnip"
-import { webCanvasPlugin } from "./web-canvas"
-import { webpagePlugin } from "./webpage"
-import { xjltPlugin } from "./xjlt"
-import { yoshisFabricationStationPlugin } from "./yoshis-fabrication-station"
+} from "@product/plugins/steam"
+import { superMario127Plugin } from "@product/plugins/super-mario-127"
+import { superMarioBrosRemasteredPlugin } from "@product/plugins/super-mario-bros-remastered"
+import { tinyCratePlugin } from "@product/plugins/tiny-crate"
+import { tmntRescuePaloozaPlugin } from "@product/plugins/tmnt-rescue-palooza"
+import { turnipPlugin } from "@product/plugins/turnip"
+import { webCanvasPlugin } from "@product/plugins/web-canvas"
+import { webpagePlugin } from "@product/plugins/webpage"
+import { xjltPlugin } from "@product/plugins/xjlt"
+import { yoshisFabricationStationPlugin } from "@product/plugins/yoshis-fabrication-station"
 import {
   zquestClassicPlugin,
   zquestClassicReadableLaunchIntegration,
-} from "./zquest-classic"
+} from "@product/plugins/zquest-classic"
 
 export const firstPartyLaunchIntegrations = [
   retroarchReadableLaunchIntegration,

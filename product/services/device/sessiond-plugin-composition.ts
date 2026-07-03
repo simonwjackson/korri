@@ -1,7 +1,7 @@
 import {
   createFirstPartyPluginRegistryFromEnv,
   firstPartySessionLifecycleHooksForRegistry,
-} from "@product/plugins"
+} from "@product/plugin-host"
 import type { KorriSessiondLifecycleHook } from "./sessiond"
 
 export function sessionLifecycleHooksFromEnv(

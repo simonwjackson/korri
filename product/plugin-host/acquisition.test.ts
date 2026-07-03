@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test"
+import { KORRI_COMMUNITY_CATALOG_PLUGIN_ID } from "@product/plugins/community-catalog"
+import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "@product/plugins/levelsharesquare"
+import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "@product/plugins/mega-man-maker"
+import { KORRI_PICO8_PLUGIN_ID } from "@product/plugins/pico8"
+import { KORRI_SMBXGAME_PLUGIN_ID } from "@product/plugins/smbxgame"
+import { KORRI_SMWCENTRAL_PLUGIN_ID } from "@product/plugins/smwcentral"
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "./acquisition"
-import { KORRI_COMMUNITY_CATALOG_PLUGIN_ID } from "./community-catalog"
-import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "./levelsharesquare"
-import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "./mega-man-maker"
-import { KORRI_PICO8_PLUGIN_ID } from "./pico8"
-import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
-import { KORRI_SMWCENTRAL_PLUGIN_ID } from "./smwcentral"
 
 const migratedFixtureProviderIds = [
   "@korri:chip8archive",
