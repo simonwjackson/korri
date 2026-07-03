@@ -6,8 +6,8 @@ import {
   resolveLocalLauncherCompanionPolicy,
   resolveLocalLauncherPolicy,
 } from "./cascade-resolver"
-import type { Preferences } from "./inheritable-fields"
 import type { EphemeralOverride } from "./ephemeral-override"
+import type { Preferences } from "./inheritable-fields"
 import type { GlobalConfigRecord } from "./records/global"
 import type { LauncherRecord } from "./records/launcher"
 

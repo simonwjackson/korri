@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test"
+import { decodeRyubingPolicy } from "./policy"
 import {
   resolveRyubingPolicyInput,
   translatePreferencesToRyubing,
 } from "./preferences-mapping"
-import { decodeRyubingPolicy } from "./policy"
 
 describe("translatePreferencesToRyubing", () => {
   it("maps fullscreen and volume to Ryubing's native shape", () => {

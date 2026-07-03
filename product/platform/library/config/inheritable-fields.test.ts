@@ -111,7 +111,9 @@ describe("launch preferences policy", () => {
 
   it("rejects non-positive resolution and empty aspect-ratio", () => {
     expect(() =>
-      decodePreferences({ launch: { video: { resolution: { width: 0, height: 720 } } } }),
+      decodePreferences({
+        launch: { video: { resolution: { width: 0, height: 720 } } },
+      }),
     ).toThrow()
     expect(() =>
       decodePreferences({ launch: { video: { "aspect-ratio": "" } } }),

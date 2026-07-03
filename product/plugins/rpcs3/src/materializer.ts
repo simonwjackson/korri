@@ -22,12 +22,12 @@ import { mergeGuiIni } from "./gui-preseed"
 import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
 import { composeRpcs3LaunchSpec } from "./launch-spec"
 import { routeSettings } from "./mapping"
-import { resolveRpcs3PolicyInput } from "./preferences-mapping"
 import {
   DEFAULT_RPCS3_FIRMWARE_SENTINEL,
   decodeRpcs3Policy,
   type Rpcs3Policy,
 } from "./policy"
+import { resolveRpcs3PolicyInput } from "./preferences-mapping"
 
 const STORAGE_TOKEN_PATTERN = /\{storage:([^}]+)\}/g
 
