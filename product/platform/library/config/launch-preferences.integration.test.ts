@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test"
+import { renderRetroArchConfig } from "@product/plugins/retroarch/src/launch-spec"
+import { decodeRetroArchPolicy } from "@product/plugins/retroarch/src/policy"
+import { resolveRetroarchPolicyInput } from "@product/plugins/retroarch/src/preferences-mapping"
 import type { ConfigValue } from "@product/plugins/rpcs3/src/mapping"
 import { routeSettings } from "@product/plugins/rpcs3/src/mapping"
 import { decodeRpcs3Policy } from "@product/plugins/rpcs3/src/policy"
@@ -18,6 +21,7 @@ import type { UserRecord } from "./records/user"
 
 const RPCS3 = "@korri:rpcs3"
 const RYUBING = "@korri:ryubing"
+const RETROARCH = "@korri:retroarch"
 
 const rpcs3App = {
   id: `${RPCS3}/rpcs3`,
@@ -31,6 +35,13 @@ const ryubingApp = {
   plugin: RYUBING,
   command: "/usr/bin/ryubing",
   systems: ["switch"],
+} as AppRecord
+
+const retroarchApp = {
+  id: `${RETROARCH}/retroarch`,
+  plugin: RETROARCH,
+  command: "/usr/bin/retroarch",
+  systems: ["genesis"],
 } as AppRecord
 
 // The whole point: one shared block, authored once at the user layer.
@@ -76,6 +87,18 @@ const switchGame: LibraryItemRecord = {
   ],
 } as LibraryItemRecord
 
+const genesisGame: LibraryItemRecord = {
+  id: "sonic",
+  releases: [
+    {
+      id: "cart",
+      system: "genesis",
+      target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
+      launch: { use: `${RETROARCH}/retroarch` },
+    },
+  ],
+} as LibraryItemRecord
+
 const snapshotOf = (
   ...items: readonly LibraryItemRecord[]
 ): ReadableConfigSnapshot => ({
@@ -85,6 +108,7 @@ const snapshotOf = (
   readableLaunchers: new Map([
     [rpcs3App.id, rpcs3App],
     [ryubingApp.id, ryubingApp],
+    [retroarchApp.id, retroarchApp],
   ]),
   runtimes: new Map(),
   profiles: new Map(),
@@ -149,6 +173,39 @@ describe("cross-launcher launch preferences (integration)", () => {
     expect(ryubingConfig.start_fullscreen).toBe(true)
     expect(ryubingConfig).not.toHaveProperty("resolution_scale")
     expect(ryubingConfig).not.toHaveProperty("aspect_ratio")
+  })
+
+  it("applies fullscreen + resolution to RetroArch, dropping aspect-ratio and volume", async () => {
+    const snap = snapshotOf(genesisGame)
+
+    const genesisContext = await Effect.runPromise(
+      resolveReadableLaunchContext(snap, {
+        playableId: "sonic",
+        userId: "simon",
+      }),
+    )
+
+    // The shared block reached the RetroArch release too.
+    expect(genesisContext.preferences?.launch?.video?.fullscreen).toBe(true)
+
+    const retroarchConfig = renderRetroArchConfig(
+      decodeRetroArchPolicy(
+        resolveRetroarchPolicyInput({
+          preferences: genesisContext.preferences,
+          plugin: genesisContext.plugin?.[RETROARCH] as
+            | Record<string, unknown>
+            | undefined,
+        }),
+      ),
+    )
+
+    // RetroArch honors fullscreen + resolution.
+    expect(retroarchConfig).toContain('video_fullscreen = "true"')
+    expect(retroarchConfig).toContain("video_fullscreen_x = 1280")
+    expect(retroarchConfig).toContain("video_fullscreen_y = 720")
+    // Aspect-ratio (index-mode) and volume (dB) are dropped for RetroArch.
+    expect(retroarchConfig).not.toContain("aspect_ratio_index")
+    expect(retroarchConfig).not.toContain("audio_volume")
   })
 
   it("lets a launcher-specific release setting override the shared preference (F2/R5)", async () => {

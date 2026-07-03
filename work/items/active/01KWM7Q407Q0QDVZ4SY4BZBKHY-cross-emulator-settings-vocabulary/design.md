@@ -68,10 +68,12 @@ Switch is not a hardcoded exception:
 
 | Preference | RPCS3 (`routeSettings`) | Ryubing (`renderRyubingConfig`) |
 |---|---|---|
-| `video.fullscreen` | `Miscellaneous.Start games in fullscreen mode` + `--fullscreen` | `start_fullscreen` + `--fullscreen` |
-| `audio.volume` | `Audio.Master Volume` | `audio_volume` |
-| `video.aspect-ratio` | `Video.Aspect ratio` (only `16:9`/`4:3`; others dropped) | **dropped** — see deferrals |
-| `video.resolution` | `Video.Resolution` (`"1280x720"`) | **dropped** — no absolute-pixel capability |
+| `video.fullscreen` | `Miscellaneous.Start games in fullscreen mode` + `--fullscreen` | `start_fullscreen` + `--fullscreen` | `video_fullscreen` |
+| `audio.volume` | `Audio.Master Volume` | `audio_volume` | **dropped** — dB, not percent |
+| `video.aspect-ratio` | `Video.Aspect ratio` (only `16:9`/`4:3`; others dropped) | **dropped** — see deferrals | **dropped** — index-mode, not a ratio string |
+| `video.resolution` | `Video.Resolution` (`"1280x720"`) | **dropped** — no absolute-pixel capability | `video_fullscreen_x`/`_y` |
+
+(RetroArch column added in the third-launcher pass. RetroArch honors `fullscreen` + `resolution` cleanly; `aspect-ratio` (RetroArch's native `aspectRatio` is an index-mode enum, not a `"16:9"` string) and `volume` (RetroArch `audio_volume` is decibels, not a 0–100 percent) are dropped pending value-domain design.)
 
 The RPCS3 translator additionally guards *values*: it forwards `aspect-ratio`
 only when RPCS3's native `video_aspect` enum can express it (`16:9`, `4:3`) and
@@ -82,11 +84,11 @@ than a key.
 
 Each launcher owns a small `preferences-mapping.ts`:
 
-- `translatePreferencesToRpcs3` / `translatePreferencesToRyubing` — pure
-  functions producing that launcher's own authoring object.
-- `resolveRpcs3PolicyInput` / `resolveRyubingPolicyInput` — deep-merge the
-  translated preferences under the plugin policy, returning the raw object the
-  launcher already knows how to decode.
+- `translatePreferencesTo{Rpcs3,Ryubing,Retroarch}` — pure functions producing
+  that launcher's own authoring object.
+- `resolve{Rpcs3,Ryubing,Retroarch}PolicyInput` — deep-merge the translated
+  preferences under the plugin policy, returning the raw object the launcher
+  already knows how to decode.
 
 Existing native paths (`routeSettings`, `renderRyubingConfig`) are reused
 unchanged; the neutral→native value logic lives only in the translator.
@@ -107,6 +109,11 @@ unchanged; the neutral→native value logic lives only in the translator.
   launcher-specific under `settings.plugin`.
 - **`preferences.display`** — physical monitor / desktop resolution. Namespace
   reserved, empty in Phase 1.
+- **RetroArch `aspect-ratio` and `volume`** — deferred in the third-launcher
+  pass. `aspect-ratio` needs `"W:H"` → custom-float parsing + RetroArch's
+  `custom` aspect mode; `volume` needs a percent → decibel conversion
+  (`dB = 20·log₁₀(pct/100)`). Both are value-domain decisions left for a later
+  pass, mirroring the Ryubing aspect-ratio deferral.
 
 ## Verification
 
