@@ -18,6 +18,15 @@ const NonNegativeNumber = (label: string) =>
     ),
   )
 
+const IntInRange = (label: string, min: number, max: number) =>
+  Schema.Int.check(
+    Schema.makeFilter<number>(value =>
+      Number.isInteger(value) && value >= min && value <= max
+        ? undefined
+        : `${label} must be an integer in [${min}, ${max}]`,
+    ),
+  )
+
 /**
  * Phase 1 — "everyone has an opinion". Clean, delivery-agnostic names; the
  * value→RPCS3 string translation lives in the mapping table (mapping.ts),
@@ -37,11 +46,74 @@ const Rpcs3VideoPolicy = Schema.Struct({
     ]),
   ),
   vsync: Schema.optional(Schema.Boolean),
+  // Phase 2 — power-user video tweaks.
+  renderer: Schema.optional(Schema.Literals(["vulkan", "opengl", "null"])),
+  resolutionScale: Schema.optional(
+    IntInRange("rpcs3.video.resolutionScale", 25, 800),
+  ),
+  anisotropicFilter: Schema.optional(
+    IntInRange("rpcs3.video.anisotropicFilter", 0, 16),
+  ),
+  shaderMode: Schema.optional(
+    Schema.Literals(["legacy", "async", "async-interpreter", "interpreter"]),
+  ),
 })
 
 const Rpcs3AudioPolicy = Schema.Struct({
   volume: Schema.optional(NonNegativeNumber("rpcs3.audio.volume")),
   device: Schema.optional(Schema.String),
+  // Phase 2 — power-user audio tweaks.
+  backend: Schema.optional(
+    Schema.Literals(["cubeb", "faudio", "xaudio2", "null"]),
+  ),
+  format: Schema.optional(
+    Schema.Literals([
+      "stereo",
+      "surround-5.1",
+      "surround-7.1",
+      "automatic",
+      "manual",
+    ]),
+  ),
+})
+
+/** Phase 2 — system locale/region. */
+const Rpcs3SystemPolicy = Schema.Struct({
+  language: Schema.optional(
+    Schema.Literals([
+      "ja",
+      "en-US",
+      "fr",
+      "es",
+      "de",
+      "it",
+      "nl",
+      "pt-PT",
+      "ru",
+      "ko",
+      "zh-Hant",
+      "zh-Hans",
+      "fi",
+      "sv",
+      "da",
+      "no",
+      "pl",
+      "en-GB",
+      "pt-BR",
+      "tr",
+    ]),
+  ),
+  licenseArea: Schema.optional(
+    Schema.Literals([
+      "japan",
+      "america",
+      "europe",
+      "asia",
+      "korea",
+      "china",
+      "other",
+    ]),
+  ),
 })
 
 /**
@@ -76,6 +148,7 @@ export const Rpcs3Policy = Schema.Struct({
   video: Schema.optional(Rpcs3VideoPolicy),
   audio: Schema.optional(Rpcs3AudioPolicy),
   boot: Schema.optional(Rpcs3BootPolicy),
+  system: Schema.optional(Rpcs3SystemPolicy),
 })
 export type Rpcs3Policy = Schema.Schema.Type<typeof Rpcs3Policy>
 

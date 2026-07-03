@@ -49,6 +49,43 @@ describe("decodeRpcs3Policy", () => {
     })
   })
 
+  it("decodes the Phase 2 power-user tranche", () => {
+    expect(
+      decodeRpcs3Policy({
+        video: {
+          renderer: "vulkan",
+          resolutionScale: 150,
+          anisotropicFilter: 16,
+          shaderMode: "async",
+        },
+        audio: { backend: "faudio", format: "surround-5.1" },
+        system: { language: "en-US", licenseArea: "america" },
+      }),
+    ).toEqual({
+      video: {
+        renderer: "vulkan",
+        resolutionScale: 150,
+        anisotropicFilter: 16,
+        shaderMode: "async",
+      },
+      audio: { backend: "faudio", format: "surround-5.1" },
+      system: { language: "en-US", licenseArea: "america" },
+    })
+  })
+
+  it("rejects invalid Phase 2 enums and out-of-range ints", () => {
+    expectPolicyError(() => decodeRpcs3Policy({ video: { renderer: "metal" } }))
+    expectPolicyError(() =>
+      decodeRpcs3Policy({ video: { resolutionScale: 5 } }),
+    )
+    expectPolicyError(() =>
+      decodeRpcs3Policy({ audio: { backend: "pulseaudio" } }),
+    )
+    expectPolicyError(() =>
+      decodeRpcs3Policy({ system: { language: "en-AU" } }),
+    )
+  })
+
   it("decodes partial trees and an empty policy", () => {
     expect(decodeRpcs3Policy({ video: { fullscreen: false } })).toEqual({
       video: { fullscreen: false },

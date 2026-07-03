@@ -37,6 +37,63 @@ const FRAME_LIMIT_MODE: Readonly<Record<string, string>> = {
   display: "Display",
 }
 
+/** Phase 2 value maps (clean Korri name → RPCS3 enum string). */
+const RENDERER: Readonly<Record<string, string>> = {
+  vulkan: "Vulkan",
+  opengl: "OpenGL",
+  null: "Null",
+}
+const SHADER_MODE: Readonly<Record<string, string>> = {
+  legacy: "Legacy Recompiler (single-threaded)",
+  async: "Async Recompiler (multi-threaded)",
+  "async-interpreter": "Async Recompiler with Shader Interpreter",
+  interpreter: "Shader Interpreter only",
+}
+const AUDIO_BACKEND: Readonly<Record<string, string>> = {
+  cubeb: "Cubeb",
+  faudio: "FAudio",
+  xaudio2: "XAudio2",
+  null: "Null",
+}
+const AUDIO_FORMAT: Readonly<Record<string, string>> = {
+  stereo: "Stereo",
+  "surround-5.1": "Surround 5.1",
+  "surround-7.1": "Surround 7.1",
+  automatic: "Automatic",
+  manual: "Manual",
+}
+const LANGUAGE: Readonly<Record<string, string>> = {
+  ja: "Japanese",
+  "en-US": "English (US)",
+  fr: "French",
+  es: "Spanish",
+  de: "German",
+  it: "Italian",
+  nl: "Dutch",
+  "pt-PT": "Portuguese (Portugal)",
+  ru: "Russian",
+  ko: "Korean",
+  "zh-Hant": "Chinese (Traditional)",
+  "zh-Hans": "Chinese (Simplified)",
+  fi: "Finnish",
+  sv: "Swedish",
+  da: "Danish",
+  no: "Norwegian",
+  pl: "Polish",
+  "en-GB": "English (UK)",
+  "pt-BR": "Portuguese (Brazil)",
+  tr: "Turkish",
+}
+const LICENSE_AREA: Readonly<Record<string, string>> = {
+  japan: "SCEJ",
+  america: "SCEA",
+  europe: "SCEE",
+  asia: "SCEH",
+  korea: "SCEK",
+  china: "SCH",
+  other: "Other",
+}
+
 /** GUI popup toggles live under [main_window] in GuiConfigs/CurrentSettings.ini. */
 export const RPCS3_POPUP_INI_SECTION = "main_window"
 
@@ -92,6 +149,24 @@ export const routeSettings = (policy: Rpcs3Policy): RoutedSettings => {
         video.fullscreen,
       ])
     }
+    if (video.renderer !== undefined) {
+      configEntries.push(["Video.Renderer", RENDERER[video.renderer] ?? video.renderer])
+    }
+    if (video.resolutionScale !== undefined) {
+      configEntries.push(["Video.Resolution Scale", video.resolutionScale])
+    }
+    if (video.anisotropicFilter !== undefined) {
+      configEntries.push([
+        "Video.Anisotropic Filter Override",
+        video.anisotropicFilter,
+      ])
+    }
+    if (video.shaderMode !== undefined) {
+      configEntries.push([
+        "Video.Shader Mode",
+        SHADER_MODE[video.shaderMode] ?? video.shaderMode,
+      ])
+    }
   }
 
   const audio = policy.audio
@@ -101,6 +176,25 @@ export const routeSettings = (policy: Rpcs3Policy): RoutedSettings => {
     }
     if (audio.device !== undefined) {
       configEntries.push(["Audio.Audio Device", audio.device])
+    }
+    if (audio.backend !== undefined) {
+      configEntries.push(["Audio.Renderer", AUDIO_BACKEND[audio.backend] ?? audio.backend])
+    }
+    if (audio.format !== undefined) {
+      configEntries.push(["Audio.Audio Format", AUDIO_FORMAT[audio.format] ?? audio.format])
+    }
+  }
+
+  const system = policy.system
+  if (system) {
+    if (system.language !== undefined) {
+      configEntries.push(["System.Language", LANGUAGE[system.language] ?? system.language])
+    }
+    if (system.licenseArea !== undefined) {
+      configEntries.push([
+        "System.License Area",
+        LICENSE_AREA[system.licenseArea] ?? system.licenseArea,
+      ])
     }
   }
 

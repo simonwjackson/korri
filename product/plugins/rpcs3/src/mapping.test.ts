@@ -75,6 +75,40 @@ describe("routeSettings", () => {
     )
   })
 
+  it("routes Phase 2 power-user settings to their config keys with value maps", () => {
+    expect(
+      routeSettings({
+        video: {
+          renderer: "vulkan",
+          resolutionScale: 150,
+          anisotropicFilter: 16,
+          shaderMode: "async-interpreter",
+        },
+      }).configEntries,
+    ).toEqual([
+      ["Video.Renderer", "Vulkan"],
+      ["Video.Resolution Scale", 150],
+      ["Video.Anisotropic Filter Override", 16],
+      ["Video.Shader Mode", "Async Recompiler with Shader Interpreter"],
+    ])
+
+    expect(
+      routeSettings({ audio: { backend: "faudio", format: "surround-5.1" } })
+        .configEntries,
+    ).toEqual([
+      ["Audio.Renderer", "FAudio"],
+      ["Audio.Audio Format", "Surround 5.1"],
+    ])
+
+    expect(
+      routeSettings({ system: { language: "en-US", licenseArea: "europe" } })
+        .configEntries,
+    ).toEqual([
+      ["System.Language", "English (US)"],
+      ["System.License Area", "SCEE"],
+    ])
+  })
+
   it("contributes nothing for an empty or group-less policy", () => {
     expect(routeSettings({})).toEqual({
       flags: [],
