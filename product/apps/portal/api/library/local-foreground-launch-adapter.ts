@@ -6,7 +6,7 @@ import {
   launchFailureExitCode,
   type ManagedLaunchResult,
 } from "@platform/library/launcher"
-import type { PlayLogStore } from "@platform/library/play-log-store"
+import type { ForegroundSessionState } from "@platform/stream/foreground-session-lifecycle"
 import {
   probeSessiondManagedLaunchStatus,
   type SessiondManagedLaunchStatusResult,
@@ -24,7 +24,7 @@ import {
 import type { LaunchLibraryResponse } from "@product/apps/portal/api/library/launch.rpc"
 import { Effect } from "effect"
 
-import { createPlayRecordingObserver } from "./play-recording-observer"
+import type { PlayRecordingCoordinator } from "./play-recording-coordinator"
 
 export interface CreateLocalForegroundLaunchOwnerOptions {
   /**
@@ -35,11 +35,23 @@ export interface CreateLocalForegroundLaunchOwnerOptions {
    */
   readonly consultExternalIdle?: () => Promise<ForegroundExternalIdleResult>
   /**
-   * Optional play-log store. When provided, owner-observed session terminals
-   * record one gated play entry (see `createPlayRecordingObserver`). Absent =
+   * Optional recording coordinator. When provided, an owner-observed terminal
+   * (`ExitObserved`) completes the launch's pending recording, keyed by the
+   * launch's request id. The direct (owner) terminal for a launch; the
+   * managed (sessiond) terminal is completed from the launch handler. Absent =
    * no recording (behavior unchanged).
    */
-  readonly playLogStore?: PlayLogStore
+  readonly playRecordingCoordinator?: PlayRecordingCoordinator
+}
+
+function completeRecordingOnExit(
+  coordinator: PlayRecordingCoordinator,
+): (state: ForegroundSessionState) => Promise<void> {
+  return async state => {
+    if (state._tag === "ExitObserved") {
+      await coordinator.completeLaunch(state.active.requestId)
+    }
+  }
 }
 
 /**
@@ -111,9 +123,7 @@ export function createLocalForegroundLaunchOwner(
 ) {
   const consultExternalIdle =
     options.consultExternalIdle ?? defaultConsultExternalIdle()
-  const recordingObserver = options.playLogStore
-    ? createPlayRecordingObserver({ store: options.playLogStore })
-    : undefined
+  const coordinator = options.playRecordingCoordinator
   return createForegroundSessionOwner<
     LocalForegroundLaunchRequest,
     PreparedLocalLaunch,
@@ -130,8 +140,8 @@ export function createLocalForegroundLaunchOwner(
       }
     },
     ...(consultExternalIdle ? { consultExternalIdle } : {}),
-    ...(recordingObserver
-      ? { onStateEntered: recordingObserver.onStateEntered }
+    ...(coordinator
+      ? { onStateEntered: completeRecordingOnExit(coordinator) }
       : {}),
     adapter: {
       prepare: async request => ({
