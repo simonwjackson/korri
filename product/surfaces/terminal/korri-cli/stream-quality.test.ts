@@ -143,6 +143,34 @@ describe("parseResolution", () => {
   })
 })
 
+describe("runStreamSet error reporting", () => {
+  test("renders a rejected command reason instead of [object Object]", async () => {
+    const out: string[] = []
+    const err: string[] = []
+    const badIo: StreamQualityIo = {
+      discoverSocket: async () => "/run/user/2000/x/control.sock",
+      connect: async () =>
+        ({
+          state: async () => successResponse(snapshot()),
+          setBitrate: async () =>
+            Promise.reject({
+              code: -32602,
+              message: "bitrate out of bounds",
+              data: "invalid",
+            }),
+          close: () => {},
+        }) as unknown as MoonlightControlClient,
+      write: line => out.push(line),
+      writeError: line => err.push(line),
+      sleep: async () => {},
+    }
+    const code = await runStreamSet({ kind: "bitrate", bitrateKbps: 5 }, badIo)
+    expect(code).toBe(1)
+    expect(err.join("\n")).toContain("bitrate out of bounds")
+    expect(err.join("\n")).not.toContain("[object Object]")
+  })
+})
+
 describe("resolveMoonlightControlRoot", () => {
   test("prefers XDG_RUNTIME_DIR", () => {
     expect(

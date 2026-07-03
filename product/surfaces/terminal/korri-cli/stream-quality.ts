@@ -87,11 +87,34 @@ async function withStream(
     client = await connect(socketPath)
     return await run(client, write)
   } catch (error) {
-    writeError(error instanceof Error ? error.message : String(error))
+    writeError(describeControlError(error))
     return 1
   } finally {
     client?.close()
   }
+}
+
+function describeControlError(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  if (error !== null && typeof error === "object") {
+    const record = error as Record<string, unknown>
+    const message =
+      typeof record.message === "string" ? record.message : undefined
+    const detail =
+      typeof record.data === "string"
+        ? record.data
+        : typeof record.status === "string"
+          ? record.status
+          : undefined
+    if (message) return detail ? `${message} (${detail})` : message
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return String(error)
+    }
+  }
+  return String(error)
 }
 
 async function readSnapshot(
