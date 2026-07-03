@@ -24,13 +24,36 @@ export function createBunRendererSpawner(opts: {
         stderr: "ignore",
         env: opts.env,
       })
+      // Track liveness via the exited promise rather than reading exitCode,
+      // which is a more reliable signal that the child is still up (a flaky
+      // liveness check caused the client to respawn and stack overlays).
+      let dead = false
+      void child.exited.then(
+        () => {
+          dead = true
+        },
+        () => {
+          dead = true
+        },
+      )
       const sink = child.stdin
       return {
         write(data: string) {
-          sink.write(data)
-          sink.flush()
+          try {
+            sink.write(data)
+            sink.flush()
+          } catch {
+            dead = true
+          }
         },
-        alive: () => child.exitCode === null && !child.killed,
+        alive: () => !dead,
+        kill() {
+          try {
+            child.kill()
+          } catch {
+            // already gone
+          }
+        },
       }
     },
   }
@@ -49,11 +72,18 @@ export function createBunInterceptSubprocess(opts: {
       await child.exited
     },
     spawnLines(command, args, onLine) {
-      const child = Bun.spawn([command, ...args], {
-        stdout: "pipe",
-        stderr: "ignore",
-        env: opts.env,
-      })
+      let child: Bun.Subprocess<"ignore", "pipe", "ignore">
+      try {
+        child = Bun.spawn([command, ...args], {
+          stdout: "pipe",
+          stderr: "ignore",
+          env: opts.env,
+        })
+      } catch {
+        // Binary missing / spawn failed (e.g. no gdbus in this environment):
+        // degrade to a no-op subscription rather than throwing at construction.
+        return () => {}
+      }
       const reader = child.stdout.getReader()
       const decoder = new TextDecoder()
       let buffer = ""

@@ -40,6 +40,7 @@ export function encodeMenu(
 export interface RendererProcess {
   readonly write: (data: string) => void
   readonly alive: () => boolean
+  readonly kill?: () => void
 }
 
 export interface RendererProcessSpawner {
@@ -52,7 +53,12 @@ export function createOverlayRendererProcessClient(
   let proc: RendererProcess | null = null
 
   function send(data: string): void {
-    if (!proc || !proc.alive()) proc = spawner.spawn()
+    if (!proc || !proc.alive()) {
+      // Never leave a stale renderer alive; otherwise two overlays can stack
+      // (e.g. an old ring plus a new menu on screen at once).
+      proc?.kill?.()
+      proc = spawner.spawn()
+    }
     proc.write(data)
   }
 

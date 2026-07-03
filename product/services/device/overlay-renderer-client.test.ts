@@ -44,11 +44,16 @@ describe("overlay renderer process client", () => {
   function fakeProc() {
     const writes: string[] = []
     let dead = false
+    let killed = false
     const proc: RendererProcess = {
       write: d => writes.push(d),
       alive: () => !dead,
+      kill: () => {
+        killed = true
+        dead = true
+      },
     }
-    return { proc, writes, kill: () => (dead = true) }
+    return { proc, writes, die: () => (dead = true), wasKilled: () => killed }
   }
 
   it("spawns lazily on first command and reuses the process", () => {
@@ -76,9 +81,23 @@ describe("overlay renderer process client", () => {
       spawn: () => procs[i++]!.proc,
     })
     client.ring(1)
-    a.kill()
+    a.die()
     client.ring(2)
     expect(a.writes).toEqual(["ring 1\n"])
     expect(b.writes).toEqual(["ring 2\n"])
+  })
+
+  it("kills a stale renderer before respawning so overlays can't stack", () => {
+    const a = fakeProc()
+    const b = fakeProc()
+    const procs = [a, b]
+    let i = 0
+    const client = createOverlayRendererProcessClient({
+      spawn: () => procs[i++]!.proc,
+    })
+    client.ring(1)
+    a.die()
+    client.menu([{ id: "x", label: "X" }], 0)
+    expect(a.wasKilled()).toBe(true)
   })
 })

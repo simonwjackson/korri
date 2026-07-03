@@ -48,23 +48,36 @@ export function createOverlayInterceptController(
   port: InputPlumberInterceptPort,
 ): OverlayInterceptController {
   let active = false
-  let unsubscribe: (() => void) | null = null
+  let handler: ((nav: OverlayNav) => void) | null = null
+
+  // Subscribe ONCE, up front, and keep the subscription for the controller's
+  // lifetime. If we subscribed per-activate, the monitor would still be
+  // connecting when intercept goes hot, and the first press after opening the
+  // menu would be dropped. With a persistent monitor there is no startup race:
+  // when intercept is off no events reach the DBus channel anyway, and when it
+  // is on the first event is delivered immediately. We gate delivery on `active`.
+  port.subscribeInputEvents((capability, value) => {
+    if (!active || value !== 1) return // active + press only; ignore release (0)
+    const nav = NAV_BY_CAPABILITY[capability]
+    if (nav && handler) handler(nav)
+  })
 
   return {
     async activate(onNav) {
       if (active) return
       active = true
-      // Subscribe before enabling intercept so no press is missed.
-      unsubscribe = port.subscribeInputEvents((capability, value) => {
-        if (value !== 1) return // press only; ignore release (0)
-        const nav = NAV_BY_CAPABILITY[capability]
-        if (nav) onNav(nav)
-      })
+      handler = onNav
       try {
         await port.setInterceptMode(2)
       } catch (error) {
         // Do not leave the game gated if enabling failed.
-        await this.deactivate()
+        active = false
+        handler = null
+        try {
+          await port.setInterceptMode(0)
+        } catch {
+          // best-effort restore
+        }
         throw error
       }
     },
@@ -72,13 +85,8 @@ export function createOverlayInterceptController(
     async deactivate() {
       if (!active) return
       active = false
-      const stop = unsubscribe
-      unsubscribe = null
-      try {
-        await port.setInterceptMode(0)
-      } finally {
-        stop?.()
-      }
+      handler = null
+      await port.setInterceptMode(0)
     },
 
     isActive: () => active,

@@ -40,15 +40,27 @@ function createFakePort() {
 }
 
 describe("overlay intercept controller", () => {
-  it("enables intercept (mode 2) and subscribes on activate", async () => {
+  it("subscribes once up front and enables intercept (mode 2) on activate", async () => {
     const fake = createFakePort()
     const controller = createOverlayInterceptController(fake.port)
+
+    // Persistent subscription: monitor is live before activate (no startup race).
+    expect(fake.isSubscribed()).toBe(true)
 
     await controller.activate(() => {})
 
     expect(fake.modes).toEqual([2])
-    expect(fake.isSubscribed()).toBe(true)
     expect(controller.isActive()).toBe(true)
+  })
+
+  it("does not deliver nav until active", async () => {
+    const fake = createFakePort()
+    const controller = createOverlayInterceptController(fake.port)
+    const navs: OverlayNav[] = []
+    fake.emit("ui_left", 1) // before activate -> ignored
+    await controller.activate(nav => navs.push(nav))
+    fake.emit("ui_right", 1)
+    expect(navs).toEqual(["right"])
   })
 
   it("maps ui_* presses to nav and ignores releases", async () => {
@@ -80,7 +92,7 @@ describe("overlay intercept controller", () => {
     expect(navs).toEqual([])
   })
 
-  it("disables intercept (mode 0) and unsubscribes on deactivate", async () => {
+  it("disables intercept (mode 0) and stops nav on deactivate", async () => {
     const fake = createFakePort()
     const controller = createOverlayInterceptController(fake.port)
     const navs: OverlayNav[] = []
@@ -89,10 +101,9 @@ describe("overlay intercept controller", () => {
     await controller.deactivate()
 
     expect(fake.modes).toEqual([2, 0])
-    expect(fake.isSubscribed()).toBe(false)
     expect(controller.isActive()).toBe(false)
 
-    fake.emit("ui_left", 1) // no longer delivered
+    fake.emit("ui_left", 1) // gated off; not delivered
     expect(navs).toEqual([])
   })
 
@@ -116,8 +127,7 @@ describe("overlay intercept controller", () => {
     await expect(controller.activate(() => {})).rejects.toThrow("bus error")
 
     expect(controller.isActive()).toBe(false)
-    expect(fake.isSubscribed()).toBe(false)
-    // Recovery path issued a restore-to-0.
+    // Recovery path issued a best-effort restore-to-0.
     expect(fake.modes).toEqual([0])
   })
 })
