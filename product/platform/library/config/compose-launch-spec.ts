@@ -24,6 +24,7 @@
 
 import type { LaunchSpec } from "@platform/library/launcher"
 import { Effect } from "effect"
+import { applyArgsOverrides } from "./apply-overrides"
 import {
   type CompositionError,
   DisallowedCommand,
@@ -199,7 +200,17 @@ export const composeReadableLaunchSpec = (
     for (const arg of app.args ?? []) {
       substitutedArgs.push(yield* substituteReadable(arg, subCtx))
     }
-    const args = [...substitutedArgs, ...(context.argsAppend ?? [])]
+    // Generic (non-plugin) launchers apply overrides.args over the authored
+    // argsAppend tail as the routed segment. overrides.config has no native
+    // config target here and is intentionally ignored.
+    const args = applyArgsOverrides({
+      leading: substitutedArgs,
+      routed: context.argsAppend ?? [],
+      trailing: [],
+      ...(context.overrides?.args !== undefined
+        ? { overrides: context.overrides.args }
+        : {}),
+    })
 
     const allowedCommands = app.policy?.allowedCommands
     if (allowedCommands && !allowedCommands.includes(command)) {

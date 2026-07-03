@@ -66,6 +66,39 @@ describe("composeReadableLaunchSpec", () => {
     })
   })
 
+  it("appends overrides.args after the authored args", async () => {
+    const spec = await Effect.runPromise(
+      composeReadableLaunchSpec(retroarch, {
+        ...context,
+        overrides: { args: { append: ["--verbose"] } },
+      }),
+    )
+
+    expect(spec.args).toEqual([
+      "-L",
+      "/cores/genesis_plus_gx.so",
+      "/games/genesis/Sonic.md",
+      "--verbose",
+    ])
+  })
+
+  it("replaces only the argsAppend tail via overrides.args.replace", async () => {
+    const spec = await Effect.runPromise(
+      composeReadableLaunchSpec(retroarch, {
+        ...context,
+        argsAppend: ["--fast"],
+        overrides: { args: { replace: ["--slow"] } },
+      }),
+    )
+
+    expect(spec.args).toEqual([
+      "-L",
+      "/cores/genesis_plus_gx.so",
+      "/games/genesis/Sonic.md",
+      "--slow",
+    ])
+  })
+
   it("rejects retired placeholder names", async () => {
     for (const args of [
       ["{contentPath}"],
