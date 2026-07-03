@@ -20,6 +20,7 @@ import { Effect } from "effect"
 import { composeRyubingLaunchSpec, renderRyubingConfig } from "./launch-spec"
 import { KORRI_RYUBING_PLUGIN_ID } from "./plugin"
 import { decodeRyubingPolicy, type RyubingPolicy } from "./policy"
+import { resolveRyubingPolicyInput } from "./preferences-mapping"
 
 const STATE_DIRS = [
   "system",
@@ -63,7 +64,14 @@ export const materializeReadableRyubingLaunch = (input: {
   })
 
 const readPolicy = (context: ReadableResolvedLaunchContext): RyubingPolicy =>
-  decodeRyubingPolicy(context.plugin?.[KORRI_RYUBING_PLUGIN_ID] ?? {})
+  decodeRyubingPolicy(
+    resolveRyubingPolicyInput({
+      preferences: context.preferences,
+      plugin: context.plugin?.[KORRI_RYUBING_PLUGIN_ID] as
+        | Record<string, unknown>
+        | undefined,
+    }),
+  )
 
 const materializeReadableRyubingResources = (input: {
   readonly context: ReadableResolvedLaunchContext
