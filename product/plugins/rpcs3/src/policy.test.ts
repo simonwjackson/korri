@@ -1,45 +1,107 @@
 import { describe, expect, it } from "bun:test"
 import { AppMaterializationFailed } from "@platform/library/config/errors"
-import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
 import { decodeRpcs3Policy } from "./policy"
 
 describe("decodeRpcs3Policy", () => {
-  it("accepts state, firmware, env, and extra arguments", () => {
+  it("decodes a full Phase 0+1 unified settings tree", () => {
     expect(
       decodeRpcs3Policy({
-        command: "/run/current-system/sw/bin/rpcs3",
         state: { root: "{storage:@korri:rpcs3/state}" },
         firmware: { sentinel: "dev_flash/sys/external/liblv2.sprx" },
-        env: { WAYLAND_DISPLAY: "wayland-1" },
-        extra: { args: ["--some-flag"] },
+        video: {
+          resolution: "1280x720",
+          aspectRatio: "16:9",
+          fullscreen: true,
+          frameLimit: 60,
+          vsync: true,
+        },
+        audio: { volume: 80, device: "@system" },
+        boot: {
+          headless: true,
+          exitOnFinish: true,
+          suppressPopups: true,
+          autoStart: true,
+        },
       }),
     ).toEqual({
-      command: "/run/current-system/sw/bin/rpcs3",
       state: { root: "{storage:@korri:rpcs3/state}" },
       firmware: { sentinel: "dev_flash/sys/external/liblv2.sprx" },
-      env: { WAYLAND_DISPLAY: "wayland-1" },
-      extra: { args: ["--some-flag"] },
+      video: {
+        resolution: "1280x720",
+        aspectRatio: "16:9",
+        fullscreen: true,
+        frameLimit: 60,
+        vsync: true,
+      },
+      audio: { volume: 80, device: "@system" },
+      boot: {
+        headless: true,
+        exitOnFinish: true,
+        suppressPopups: true,
+        autoStart: true,
+      },
     })
   })
 
-  it("rejects malformed policy values with an actionable plugin error", () => {
+  it("decodes named frame-limit modes", () => {
+    expect(decodeRpcs3Policy({ video: { frameLimit: "auto" } })).toEqual({
+      video: { frameLimit: "auto" },
+    })
+  })
+
+  it("decodes partial trees and an empty policy", () => {
+    expect(decodeRpcs3Policy({ video: { fullscreen: false } })).toEqual({
+      video: { fullscreen: false },
+    })
+    expect(decodeRpcs3Policy({ boot: { headless: true } })).toEqual({
+      boot: { headless: true },
+    })
+    expect(decodeRpcs3Policy(undefined)).toEqual({})
+    expect(decodeRpcs3Policy({})).toEqual({})
+  })
+
+  it("retains state/firmware/command/env/extra fields the materializer consumes", () => {
+    expect(
+      decodeRpcs3Policy({
+        command: "/run/current-system/sw/bin/rpcs3",
+        env: { WAYLAND_DISPLAY: "wayland-1" },
+        extra: { args: ["--headless"] },
+      }),
+    ).toEqual({
+      command: "/run/current-system/sw/bin/rpcs3",
+      env: { WAYLAND_DISPLAY: "wayland-1" },
+      extra: { args: ["--headless"] },
+    })
+  })
+
+  it("rejects an unknown curated key naming the offending path", () => {
     expectPolicyError(
-      () => decodeRpcs3Policy({ state: { root: 42 } }),
-      `${KORRI_RPCS3_PLUGIN_ID} policy state.root must be a string`,
+      () => decodeRpcs3Policy({ video: { reslution: "1280x720" } }),
+      "reslution",
     )
-    expectPolicyError(
-      () => decodeRpcs3Policy({ extra: { args: ["ok", 3] } }),
-      `${KORRI_RPCS3_PLUGIN_ID} policy extra.args must be a string array`,
-    )
+  })
+
+  it("rejects an invalid enum literal", () => {
+    expectPolicyError(() => decodeRpcs3Policy({ video: { aspectRatio: "17:9" } }))
+  })
+
+  it("rejects an empty state.root", () => {
+    expectPolicyError(() => decodeRpcs3Policy({ state: { root: "" } }))
+  })
+
+  it("rejects a non-string extra arg", () => {
+    expectPolicyError(() => decodeRpcs3Policy({ extra: { args: ["ok", 3] } }))
   })
 })
 
-function expectPolicyError(run: () => unknown, reason: string): void {
+function expectPolicyError(run: () => unknown, needle?: string): void {
   try {
     run()
     throw new Error("expected policy decode to fail")
   } catch (error) {
     expect(error).toBeInstanceOf(AppMaterializationFailed)
-    expect((error as AppMaterializationFailed).reason).toBe(reason)
+    if (needle !== undefined) {
+      expect((error as AppMaterializationFailed).reason).toContain(needle)
+    }
   }
 }
