@@ -4,15 +4,11 @@ import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plu
 import { KorriControl } from "@platform/control/korri-control"
 import { KorriControlLayerLiveWithPlugins } from "@platform/control/korri-control-live"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
-import { Launcher, LibrarySource } from "@platform/library/library-services"
+import { LibrarySource } from "@platform/library/library-services"
 import { createKorriControlRpc } from "@product/apps/portal/control/korri-control-rpc"
 import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugin-host/acquisition"
 import { PluginLibrarySourceLayerLive } from "@product/plugin-host/library-source-layer"
-import {
-  createFileGameStreamLaunchIntentStore,
-  defaultGameStreamIntentPath,
-} from "@product/services/device/game-stream-launch-intent"
 import { Effect, Layer, Option } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 import { artifactCommand } from "./artifacts/artifact-import-command"
@@ -21,79 +17,24 @@ import {
   dryRunLaunchExitCode,
   gameFindExitCode,
   gamesListExitCode,
-  launchGameExitCode,
   renderDryRunLaunch,
   renderFindGame,
   renderGamesList,
-  renderLaunchGame,
   renderSessionStatus,
   renderStopSession,
   sessionStatusExitCode,
   sessionStopExitCode,
 } from "./control-renderers"
-import { createEffectGamePicker } from "./game-picker"
-import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"
+import {
+  createEffectConfirmPrompt,
+  createEffectGamePicker,
+  createEffectReleasePicker,
+} from "./game-picker"
+import { runLaunchCommand } from "./launch-command"
 import { scoutCommand } from "./scout-command"
-import { runSourceAwarePlayCommand } from "./source-aware-play"
-import { runStreamLaunchCommand } from "./stream-launch"
 import { parseResolution, runStreamSet, runStreamShow } from "./stream-quality"
 
 const VERSION = "1.0.0"
-
-const streamLaunchCommand = Command.make(
-  "launch",
-  {
-    gameId: Argument.string("game-id").pipe(Argument.optional),
-  },
-  ({ gameId }) =>
-    Effect.gen(function* () {
-      const librarySource = yield* LibrarySource
-      let intentPath: string
-      try {
-        intentPath = defaultGameStreamIntentPath(process.env)
-      } catch (error) {
-        console.error(error instanceof Error ? error.message : String(error))
-        process.exitCode = 6
-        return
-      }
-
-      const exitCode = yield* Effect.promise(() =>
-        runStreamLaunchCommand({
-          gameId: Option.getOrUndefined(gameId),
-          librarySource,
-          intentStore: createFileGameStreamLaunchIntentStore(intentPath),
-          intentPath,
-          gamePicker: createEffectGamePicker(),
-          stdinIsTty: process.stdin.isTTY === true,
-        }),
-      )
-      process.exitCode = exitCode
-    }),
-).pipe(Command.withDescription("Prepare a Korri library game for streaming."))
-
-const streamRemoteLaunchCommand = Command.make(
-  "remote-launch",
-  {
-    host: Flag.string("host").pipe(Flag.optional),
-  },
-  ({ host }) =>
-    Effect.gen(function* () {
-      const librarySource = yield* LibrarySource
-      const exitCode = yield* Effect.promise(() =>
-        runRemoteStreamLaunchCommand({
-          host: Option.getOrUndefined(host),
-          librarySource,
-          gamePicker: createEffectGamePicker(),
-          stdinIsTty: process.stdin.isTTY === true,
-        }),
-      )
-      process.exitCode = exitCode
-    }),
-).pipe(
-  Command.withDescription(
-    "Discover a remote Korri stream host, prepare a game, and open Moonlight.",
-  ),
-)
 
 const streamSocketFlag = Flag.string("socket").pipe(Flag.optional)
 
@@ -178,8 +119,6 @@ const streamResolutionCommand = Command.make(
 const streamCommand = Command.make("stream").pipe(
   Command.withDescription("Manage Korri game streaming."),
   Command.withSubcommands([
-    streamLaunchCommand,
-    streamRemoteLaunchCommand,
     streamShowCommand,
     streamBitrateCommand,
     streamFpsCommand,
@@ -251,26 +190,41 @@ const launchDryRunCommand = Command.make(
 const launchCommand = Command.make(
   "launch",
   {
-    id: Argument.string("game-id"),
+    gameId: Argument.string("game-id").pipe(Argument.optional),
     host: Flag.string("host").pipe(Flag.optional),
-    profileId: Flag.string("profile-id").pipe(Flag.optional),
     releaseId: Flag.string("release-id").pipe(Flag.optional),
     appId: Flag.string("app-id").pipe(Flag.optional),
+    profileId: Flag.string("profile-id").pipe(Flag.optional),
+    yes: Flag.boolean("yes").pipe(Flag.withDefault(false)),
   },
-  ({ id, host, profileId, releaseId, appId }) =>
+  ({ gameId, host, releaseId, appId, profileId, yes }) =>
     Effect.gen(function* () {
-      const control = yield* controlForHost(Option.getOrUndefined(host))
-      const result = yield* control.launchGame({
-        id,
-        ...(Option.isSome(profileId) ? { profileId: profileId.value } : {}),
-        ...(Option.isSome(releaseId) ? { releaseId: releaseId.value } : {}),
-        ...(Option.isSome(appId) ? { appId: appId.value } : {}),
-      })
-      console.log(renderLaunchGame(result))
-      process.exitCode = launchGameExitCode(result)
+      const control = yield* KorriControl
+      const librarySource = yield* LibrarySource
+      const exitCode = yield* Effect.promise(() =>
+        runLaunchCommand({
+          gameId: Option.getOrUndefined(gameId),
+          host: Option.getOrUndefined(host),
+          releaseId: Option.getOrUndefined(releaseId),
+          appId: Option.getOrUndefined(appId),
+          profileId: Option.getOrUndefined(profileId),
+          confirmYes: yes,
+          stdinIsTty: process.stdin.isTTY === true,
+          librarySource,
+          launchLocal: request =>
+            Effect.runPromise(control.launchGame(request)),
+          sessionStatus: () => Effect.runPromise(control.sessionStatus()),
+          gamePicker: createEffectGamePicker(),
+          releasePicker: createEffectReleasePicker(),
+          confirmPrompt: createEffectConfirmPrompt(),
+        }),
+      )
+      process.exitCode = exitCode
     }),
 ).pipe(
-  Command.withDescription("Launch a Korri library game."),
+  Command.withDescription(
+    "Launch a Korri library game locally, or by streaming from another machine.",
+  ),
   Command.withSubcommands([launchDryRunCommand]),
 )
 
@@ -317,32 +271,6 @@ const sessionCommand = Command.make("session").pipe(
   Command.withSubcommands([sessionStatusCommand, sessionStopCommand]),
 )
 
-const playCommand = Command.make(
-  "play",
-  {
-    host: Flag.string("host").pipe(Flag.optional),
-  },
-  ({ host }) =>
-    Effect.gen(function* () {
-      const librarySource = yield* LibrarySource
-      const launcher = yield* Launcher
-      const exitCode = yield* Effect.promise(() =>
-        runSourceAwarePlayCommand({
-          host: Option.getOrUndefined(host),
-          librarySource,
-          launcher,
-          gamePicker: createEffectGamePicker(),
-          stdinIsTty: process.stdin.isTTY === true,
-        }),
-      )
-      process.exitCode = exitCode
-    }),
-).pipe(
-  Command.withDescription(
-    "Choose a local or remote Korri game, then launch locally or stream remotely.",
-  ),
-)
-
 export const korriCommand = Command.make("korri").pipe(
   Command.withDescription("Korri command line interface."),
   Command.withSubcommands([
@@ -350,7 +278,6 @@ export const korriCommand = Command.make("korri").pipe(
     bazzarCommand,
     gamesCommand,
     launchCommand,
-    playCommand,
     scoutCommand,
     sessionCommand,
     streamCommand,

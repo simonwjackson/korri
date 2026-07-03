@@ -42,3 +42,32 @@ export function createEffectGamePicker(): GamePicker {
 export function createStaticGamePicker(gameId: string): GamePicker {
   return async games => games.find(game => game.id === gameId)
 }
+
+export function createEffectReleasePicker(): (
+  releaseIds: readonly string[],
+) => Promise<string | undefined> {
+  return async releaseIds =>
+    await Effect.runPromise(
+      Prompt.run(
+        Prompt.select({
+          message: "Choose a release to launch",
+          choices: releaseIds.map(id => ({ title: id, value: id })),
+        }),
+      ).pipe(
+        Effect.catchIf(Terminal.isQuitError, () => Effect.succeed(undefined)),
+        Effect.provide(BunServices.layer),
+      ),
+    )
+}
+
+export function createEffectConfirmPrompt(): (
+  message: string,
+) => Promise<boolean> {
+  return async message =>
+    await Effect.runPromise(
+      Prompt.run(Prompt.confirm({ message, initial: false })).pipe(
+        Effect.catchIf(Terminal.isQuitError, () => Effect.succeed(false)),
+        Effect.provide(BunServices.layer),
+      ),
+    )
+}
