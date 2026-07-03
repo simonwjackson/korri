@@ -22,6 +22,7 @@ import { mergeGuiIni } from "./gui-preseed"
 import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
 import { composeRpcs3LaunchSpec } from "./launch-spec"
 import { routeSettings } from "./mapping"
+import { resolveRpcs3PolicyInput } from "./preferences-mapping"
 import {
   DEFAULT_RPCS3_FIRMWARE_SENTINEL,
   decodeRpcs3Policy,
@@ -249,9 +250,19 @@ const writeAtomic = (
     }
   })
 
+const rpcs3PolicyInput = (
+  context: ReadableResolvedLaunchContext,
+): Record<string, unknown> =>
+  resolveRpcs3PolicyInput({
+    preferences: context.preferences,
+    plugin: context.plugin?.[KORRI_RPCS3_PLUGIN_ID] as
+      | Record<string, unknown>
+      | undefined,
+  })
+
 function canDecodePolicy(context: ReadableResolvedLaunchContext): boolean {
   try {
-    decodeRpcs3Policy(context.plugin?.[KORRI_RPCS3_PLUGIN_ID] ?? {})
+    decodeRpcs3Policy(rpcs3PolicyInput(context))
     return true
   } catch {
     return false
@@ -262,7 +273,7 @@ const decodePolicy = (
   context: ReadableResolvedLaunchContext,
 ): Effect.Effect<Rpcs3Policy, ResolutionError> =>
   Effect.try({
-    try: () => decodeRpcs3Policy(context.plugin?.[KORRI_RPCS3_PLUGIN_ID] ?? {}),
+    try: () => decodeRpcs3Policy(rpcs3PolicyInput(context)),
     catch: error => error as ResolutionError,
   })
 
