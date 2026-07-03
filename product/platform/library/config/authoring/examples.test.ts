@@ -260,7 +260,9 @@ describe("checked-in readable library example", () => {
       /\bforceXwayland\s*:/,
       /\bKORRI_MOONLIGHT_[A-Z0-9_]+\b/,
       /\baction\s*:/,
-      /\bconfig\s*:/,
+      // Retired top-level `config:` root. Nested `config:` is valid vocabulary
+      // now (e.g. release.launch.overrides.config, launcher configFile).
+      /^config\s*:/m,
       /\bpreset\s*:/,
       /\brequireInputPlumber\s*:/,
       /\bcommands\s*:/,

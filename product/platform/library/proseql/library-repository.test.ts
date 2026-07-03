@@ -1078,8 +1078,10 @@ describe("createLibraryRepository — readable playable entries", () => {
                     video: { aspectRatio: "full", sync: { frameDelay: 0 } },
                     rewind: { enable: true, bufferSizeMb: 20 },
                     achievements: { enable: false },
-                    extraSettings: { notification_show_autoconfig: false },
                   },
+                },
+                overrides: {
+                  config: { append: 'notification_show_autoconfig = "false"' },
                 },
               },
             },

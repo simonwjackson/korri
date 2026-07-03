@@ -189,13 +189,6 @@ launchers:
               frames: 0
           achievements:
             enable: false
-          # Escape hatches for non-secret cfg keys and argv gaps. Prefer typed fields
-          # above when they exist. Plaintext credential keys, netplay, remote command,
-          # secrets, full bind maps, startup argv groups, and package/core wrapper
-          # changes stay deferred to dedicated slices.
-          extraSettings:
-            notification_show_autoconfig: false
-          extraArgs: []
 
 runtimes:
   genesis-plus-gx:
@@ -331,3 +324,9 @@ library:
         launch:
           use: "@korri:retroarch/retroarch"
           runtime: "@korri:retroarch/mgba"
+          # Escape hatch: raw cfg keys/argv gaps the typed surface doesn't model.
+          # Prefer typed fields above when they exist. Release-scoped only.
+          overrides:
+            config:
+              append: |
+                notification_show_autoconfig = "false"

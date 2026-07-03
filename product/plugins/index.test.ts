@@ -182,7 +182,6 @@ describe("first-party plugins", () => {
       settings: {
         plugin: {
           state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
-          extra: { args: ["-silent", "-gamepadui"] },
         },
       },
     })

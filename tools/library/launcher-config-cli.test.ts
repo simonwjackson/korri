@@ -180,10 +180,8 @@ describe("validateLauncherConfig", () => {
             ],
             settings: {
               plugin: {
-                extraSettings: {
-                  video_driver: "glcore",
-                  video_scale_integer: true,
-                },
+                drivers: { video: "glcore" },
+                video: { integerScale: true },
               },
             },
           },

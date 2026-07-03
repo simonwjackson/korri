@@ -35,9 +35,6 @@ launchers:
       plugin:
         state:
           root: "{storage:@korri:steam/steam}"
-        extra:
-          # Steam client startup args. Game args stay inside Steam LaunchOptions.
-          args: [-silent, -gamepadui]
         # Literal Steam syntax; Korri does not substitute inside %command%.
         launch-options: "gamescope --fullscreen -- %command%"
 
