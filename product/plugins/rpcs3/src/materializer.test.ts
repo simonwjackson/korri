@@ -241,6 +241,116 @@ describe("RPCS3 readable launch integration", () => {
     }
   })
 
+  it("authors an input profile and passes --input-config, sparing operator profiles", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-input-"))
+    try {
+      const gameFolder = join(root, "Skate 3 [BLUS30464]")
+      const marker = join(gameFolder, "PS3_DISC.SFB")
+      const stateRoot = join(root, "rpcs3")
+      const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
+      await mkdir(gameFolder, { recursive: true })
+      await writeFile(marker, "disc")
+      await mkdir(join(stateRoot, "dev_flash", "sys", "external"), {
+        recursive: true,
+      })
+      await writeFile(join(stateRoot, firmwareSentinel), "firmware")
+      // An operator-authored profile that Korri must never clobber.
+      await mkdir(join(stateRoot, "input_configs", "global"), {
+        recursive: true,
+      })
+      const operatorProfile = "Player 1 Input:\n  Handler: Evdev\n"
+      await writeFile(
+        join(stateRoot, "input_configs", "global", "Default.yml"),
+        operatorProfile,
+      )
+
+      const result = await Effect.runPromise(
+        materializeReadableRpcs3Launch({
+          context: context({
+            contentPath: marker,
+            policy: {
+              state: { root: stateRoot },
+              firmware: { sentinel: firmwareSentinel },
+              input: {
+                players: [
+                  {
+                    handler: "evdev",
+                    device: "Sunshine X-Box One (virtual) pad",
+                    buttons: { cross: "BTN_SOUTH" },
+                    sticks: { left: { deadzone: 40 } },
+                  },
+                ],
+              },
+            },
+          }),
+        }),
+      )
+
+      const args = result.spec.args
+      const inputIndex = args.indexOf("--input-config")
+      expect(inputIndex).toBeGreaterThanOrEqual(0)
+      expect(args[inputIndex + 1]).toBe("korri-Skate-3-BLUS30464")
+      expect(args.at(-1)).toBe(gameFolder)
+
+      const profilePath = join(
+        stateRoot,
+        "input_configs",
+        "global",
+        "korri-Skate-3-BLUS30464.yml",
+      )
+      const parsed = parse(await readFile(profilePath, "utf8"))
+      expect(parsed["Player 1 Input"]).toEqual({
+        Handler: "Evdev",
+        Device: "Sunshine X-Box One (virtual) pad",
+        Config: { Cross: "BTN_SOUTH", "Left Stick Deadzone": 40 },
+      })
+      expect(parsed["Player 2 Input"]).toEqual({ Handler: "Null" })
+
+      // The operator's Default.yml is left exactly as written.
+      expect(
+        await readFile(
+          join(stateRoot, "input_configs", "global", "Default.yml"),
+          "utf8",
+        ),
+      ).toBe(operatorProfile)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("writes no input profile and no --input-config when input is unset", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-input-noop-"))
+    try {
+      const gameFolder = join(root, "Skate 3 [BLUS30464]")
+      const marker = join(gameFolder, "PS3_DISC.SFB")
+      const stateRoot = join(root, "rpcs3")
+      const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
+      await mkdir(gameFolder, { recursive: true })
+      await writeFile(marker, "disc")
+      await mkdir(join(stateRoot, "dev_flash", "sys", "external"), {
+        recursive: true,
+      })
+      await writeFile(join(stateRoot, firmwareSentinel), "firmware")
+
+      const result = await Effect.runPromise(
+        materializeReadableRpcs3Launch({
+          context: context({
+            contentPath: marker,
+            policy: {
+              state: { root: stateRoot },
+              firmware: { sentinel: firmwareSentinel },
+            },
+          }),
+        }),
+      )
+
+      expect(result.spec.args).not.toContain("--input-config")
+      await expect(stat(join(stateRoot, "input_configs"))).rejects.toThrow()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("resolves storage tokens in policy roots", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-storage-"))
     try {

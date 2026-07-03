@@ -19,6 +19,8 @@ import type { ReadableLaunchIntegration } from "@platform/library/proseql/librar
 import { Effect } from "effect"
 import { renderConfigYaml } from "./config-render"
 import { mergeGuiIni } from "./gui-preseed"
+import { renderInputConfigYaml } from "./input-config-render"
+import { routeInputConfig } from "./input-mapping"
 import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
 import { composeRpcs3LaunchSpec } from "./launch-spec"
 import { routeSettings } from "./mapping"
@@ -102,6 +104,7 @@ const materializeReadableRpcs3Resources = (
     const routed = routeSettings(resolvedPolicy)
     const configPath = yield* writeLaunchConfig(context, stateRoot, routed)
     yield* writeGuiPreseed(context, stateRoot, routed.iniEntries)
+    const inputConfig = yield* writeInputConfig(context, stateRoot, resolvedPolicy)
 
     const spec = yield* tryMaterialize(context, () =>
       composeRpcs3LaunchSpec({
@@ -109,6 +112,7 @@ const materializeReadableRpcs3Resources = (
         gameFolderPath,
         flags: routed.flags,
         ...(configPath !== undefined ? { configPath } : {}),
+        ...(inputConfig !== undefined ? { inputConfig } : {}),
         ...(context.overrides?.args !== undefined
           ? { overridesArgs: context.overrides.args }
           : {}),
@@ -180,6 +184,28 @@ const readCanonicalConfig = (
   stateRoot: string,
 ): Effect.Effect<string | undefined, ResolutionError> =>
   readOptionalFile(context, join(stateRoot, "config.yml"))
+
+/**
+ * Materialize a Korri-owned RPCS3 input profile when `input` is authored.
+ * RPCS3 resolves `--input-config <name>` to `input_configs/global/<name>.yml`
+ * (its override branch wins over per-title/active selection), so we write a
+ * per-release Korri-owned name there and never touch operator profiles such as
+ * `global/Default.yml`. Returns the bare profile name for `--input-config`, or
+ * undefined when nothing is authored.
+ */
+const writeInputConfig = (
+  context: ReadableResolvedLaunchContext,
+  stateRoot: string,
+  policy: Rpcs3Policy,
+): Effect.Effect<string | undefined, ResolutionError> =>
+  Effect.gen(function* () {
+    const text = renderInputConfigYaml(routeInputConfig(policy.input))
+    if (text === undefined) return undefined
+    const name = `korri-${slugReleaseId(context.releaseId)}`
+    const profilePath = join(stateRoot, "input_configs", "global", `${name}.yml`)
+    yield* writeAtomic(context, profilePath, text)
+    return name
+  })
 
 /**
  * Preseed RPCS3's GUI popup toggles (GuiConfigs/CurrentSettings.ini) so
