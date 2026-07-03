@@ -10,9 +10,6 @@ describe("Moonlight plugin descriptor", () => {
     expect(
       moonlightPlugin.contributes.config.modules?.["stream-launch"],
     ).toMatchObject({ kind: "streamer", capabilities: ["stream.launch"] })
-    expect(
-      moonlightPlugin.contributes.config.modules?.["stream-discovery"],
-    ).toMatchObject({ kind: "streamer", capabilities: ["stream.discover"] })
   })
 
   it("exposes the expected operation handlers", () => {

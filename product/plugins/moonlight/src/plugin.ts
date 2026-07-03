@@ -29,11 +29,6 @@ export const moonlightPlugin = plugin({
           kind: "streamer",
           capabilities: ["stream.launch"],
         },
-        "stream-discovery": {
-          id: "stream-discovery",
-          kind: "streamer",
-          capabilities: ["stream.discover"],
-        },
       },
     },
     handlers: [
