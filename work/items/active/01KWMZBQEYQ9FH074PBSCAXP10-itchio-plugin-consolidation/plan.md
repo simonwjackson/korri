@@ -1,7 +1,7 @@
 ---
 title: "refactor: Consolidate itch.io storefront into its plugin folder"
 type: refactor
-status: active
+status: completed
 date: 2026-07-03
 verify_command: "just typecheck && just test-unit"
 ---

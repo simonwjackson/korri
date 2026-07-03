@@ -19,7 +19,7 @@ export function renderGamesList(result: ControlListGamesResult): string {
     .join("\n")
 }
 
-export function gamesListExitCode(result: ControlListGamesResult): number {
+export function gamesListExitCode(result: ControlListGamesResult): ExitCode {
   return result._tag === "ListGamesUnavailable"
     ? ExitCode.hostUnreachable
     : ExitCode.ok
@@ -46,7 +46,7 @@ export function renderFindGame(result: ControlFindGameResult): string {
   }
 }
 
-export function gameFindExitCode(result: ControlFindGameResult): number {
+export function gameFindExitCode(result: ControlFindGameResult): ExitCode {
   switch (result._tag) {
     case "GameFound":
       return ExitCode.ok
@@ -81,7 +81,7 @@ export function renderDryRunLaunch(result: ControlDryRunLaunchResult): string {
 
 export function dryRunLaunchExitCode(
   result: ControlDryRunLaunchResult,
-): number {
+): ExitCode {
   switch (result._tag) {
     case "LaunchDryRunOk":
       return ExitCode.ok
@@ -111,7 +111,7 @@ export function renderLaunchGame(result: ControlLaunchResult): string {
   }
 }
 
-export function launchGameExitCode(result: ControlLaunchResult): number {
+export function launchGameExitCode(result: ControlLaunchResult): ExitCode {
   switch (result._tag) {
     case "Launched":
       return ExitCode.ok
@@ -148,13 +148,15 @@ export function renderSessionStatus(
 
 export function sessionStatusExitCode(
   result: ControlSessionStatusResult,
-): number {
+): ExitCode {
   return result._tag === "HostUnavailable"
     ? ExitCode.hostUnreachable
     : ExitCode.ok
 }
 
-export function sessionStopExitCode(result: ControlStopSessionResult): number {
+export function sessionStopExitCode(
+  result: ControlStopSessionResult,
+): ExitCode {
   switch (result._tag) {
     case "Stopped":
     case "NothingToStop":
