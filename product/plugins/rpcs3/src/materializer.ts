@@ -1,5 +1,13 @@
 import { constants } from "node:fs"
-import { access, stat } from "node:fs/promises"
+import {
+  access,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises"
 import { dirname, isAbsolute, join } from "node:path"
 import type { MaterializedReadableLaunch } from "@platform/library/config/app-materializer"
 import {
@@ -9,7 +17,9 @@ import {
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
 import { Effect } from "effect"
+import { renderConfigYaml } from "./config-render"
 import { composeRpcs3LaunchSpec } from "./launch-spec"
+import { routeSettings } from "./mapping"
 import {
   decodeRpcs3Policy,
   DEFAULT_RPCS3_FIRMWARE_SENTINEL,
@@ -85,15 +95,93 @@ const materializeReadableRpcs3Resources = (
     yield* validateReadableDirectory(context, stateRoot, "state root")
     yield* validateFirmware(context, stateRoot, resolvedPolicy)
 
+    const routed = routeSettings(resolvedPolicy)
+    const configPath = yield* writeLaunchConfig(context, stateRoot, routed)
+
     const spec = yield* tryMaterialize(context, () =>
       composeRpcs3LaunchSpec({
         command,
         gameFolderPath,
-        extraArgs: resolvedPolicy.extra?.args,
+        flags: routed.flags,
+        ...(configPath !== undefined ? { configPath } : {}),
+        ...(context.overrides?.args !== undefined
+          ? { overridesArgs: context.overrides.args }
+          : {}),
         env: mergeEnv(context.env, resolvedPolicy.env),
       }),
     )
     return { spec }
+  })
+
+/**
+ * Materialize the per-launch config.yml under the state root using the
+ * read-merge-canonical model (U0): read the operator's canonical config.yml,
+ * deep-merge routed settings + overrides.config, and write a per-release file
+ * atomically. The operator's canonical config is never clobbered. Returns the
+ * path for --config, or undefined when there is nothing to write.
+ */
+const writeLaunchConfig = (
+  context: ReadableResolvedLaunchContext,
+  stateRoot: string,
+  routed: ReturnType<typeof routeSettings>,
+): Effect.Effect<string | undefined, ResolutionError> =>
+  Effect.gen(function* () {
+    const canonical = yield* readCanonicalConfig(context, stateRoot)
+    const text = renderConfigYaml({
+      ...(canonical !== undefined ? { canonical } : {}),
+      entries: routed.configEntries,
+      ...(context.overrides?.config !== undefined
+        ? { overridesConfig: context.overrides.config }
+        : {}),
+    })
+    if (text === undefined) return undefined
+    const configPath = join(
+      stateRoot,
+      "korri",
+      `config-${slugReleaseId(context.releaseId)}.yml`,
+    )
+    yield* writeAtomic(context, configPath, text)
+    return configPath
+  })
+
+const readCanonicalConfig = (
+  context: ReadableResolvedLaunchContext,
+  stateRoot: string,
+): Effect.Effect<string | undefined, ResolutionError> =>
+  Effect.tryPromise({
+    try: async () => {
+      try {
+        return await readFile(join(stateRoot, "config.yml"), "utf8")
+      } catch {
+        // No canonical config (fresh state root) — render from defaults only.
+        return undefined
+      }
+    },
+    catch: error =>
+      new AppMaterializationFailed({
+        appId: context.app.id,
+        reason: error instanceof Error ? error.message : String(error),
+      }),
+  })
+
+const slugReleaseId = (releaseId: string): string =>
+  releaseId.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "launch"
+
+const writeAtomic = (
+  context: ReadableResolvedLaunchContext,
+  path: string,
+  contents: string,
+): Effect.Effect<void, ResolutionError> =>
+  tryMaterialize(context, async () => {
+    await mkdir(dirname(path), { recursive: true, mode: 0o750 })
+    const temp = `${path}.tmp-${process.pid}-${Date.now()}`
+    try {
+      await writeFile(temp, contents, { mode: 0o640 })
+      await rename(temp, path)
+    } catch (error) {
+      await rm(temp, { force: true }).catch(() => undefined)
+      throw error
+    }
   })
 
 function canDecodePolicy(context: ReadableResolvedLaunchContext): boolean {

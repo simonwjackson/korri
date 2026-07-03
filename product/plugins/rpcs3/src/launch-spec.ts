@@ -1,13 +1,32 @@
-import { isAbsolute } from "node:path"
+import type { LaunchOverrides } from "@platform/library/config/records/library-item"
 import type { LaunchSpec } from "@platform/library/launcher"
+import { isAbsolute } from "node:path"
 
 export interface ComposeRpcs3LaunchSpecOptions {
   readonly command: string
   readonly gameFolderPath: string
-  readonly extraArgs?: readonly string[]
+  /** Routed argv flags from the mapping router (e.g. --fullscreen, --headless). */
+  readonly flags?: readonly string[]
+  /** Per-launch config file passed via --config. */
+  readonly configPath?: string
+  /** Optional named input config passed via --input-config. */
+  readonly inputConfig?: string
+  /** Raw argv escape hatch (overrides.args). */
+  readonly overridesArgs?: LaunchOverrides["args"]
   readonly env?: Readonly<Record<string, string>>
 }
 
+/**
+ * The single argv authority for RPCS3 launches. Order:
+ *
+ *   command --no-gui <prepend> <routedFlags> --config <path>
+ *           [--input-config <name>] <append> <gameFolder>
+ *
+ * `overrides.args.replace` replaces the routed-flags segment ONLY, never
+ * `--no-gui`, `--config`, or the game path. `--fullscreen` is only ever
+ * emitted alongside `--no-gui` (RPCS3 honors it only then), which holds
+ * because `--no-gui` is always present.
+ */
 export function composeRpcs3LaunchSpec(
   options: ComposeRpcs3LaunchSpecOptions,
 ): LaunchSpec {
@@ -18,9 +37,26 @@ export function composeRpcs3LaunchSpec(
     throw new Error("RPCS3 launches require a game folder path")
   }
 
+  const overrides = options.overridesArgs
+  const routedFlags = overrides?.replace ?? options.flags ?? []
+
+  const args = [
+    "--no-gui",
+    ...(overrides?.prepend ?? []),
+    ...routedFlags,
+    ...(options.configPath !== undefined
+      ? ["--config", options.configPath]
+      : []),
+    ...(options.inputConfig !== undefined
+      ? ["--input-config", options.inputConfig]
+      : []),
+    ...(overrides?.append ?? []),
+    options.gameFolderPath,
+  ]
+
   return {
     command: options.command,
-    args: ["--no-gui", ...(options.extraArgs ?? []), options.gameFolderPath],
+    args,
     ...(options.env !== undefined ? { env: options.env } : {}),
   }
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { parse } from "yaml"
 import { AppMaterializationFailed } from "@platform/library/config/errors"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { Cause, Effect, Exit } from "effect"
@@ -61,6 +62,103 @@ describe("RPCS3 readable launch integration", () => {
         command: KORRI_RPCS3_DEFAULT_COMMAND,
         args: ["--no-gui", gameFolder],
       })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("writes a per-launch config and passes --config when settings are present", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-config-"))
+    try {
+      const gameFolder = join(root, "Skate 3 [BLUS30464]")
+      const marker = join(gameFolder, "PS3_DISC.SFB")
+      const stateRoot = join(root, "state")
+      const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
+      await mkdir(gameFolder, { recursive: true })
+      await writeFile(marker, "disc")
+      await mkdir(join(stateRoot, "dev_flash", "sys", "external"), {
+        recursive: true,
+      })
+      await writeFile(join(stateRoot, firmwareSentinel), "firmware")
+
+      const result = await Effect.runPromise(
+        materializeReadableRpcs3Launch({
+          context: context({
+            contentPath: marker,
+            policy: {
+              command: KORRI_RPCS3_DEFAULT_COMMAND,
+              state: { root: stateRoot },
+              firmware: { sentinel: firmwareSentinel },
+              video: { fullscreen: false },
+              boot: { exitOnFinish: true },
+            },
+          }),
+        }),
+      )
+
+      const args = result.spec.args
+      expect(args).not.toContain("--fullscreen")
+      const configIndex = args.indexOf("--config")
+      expect(configIndex).toBeGreaterThanOrEqual(0)
+      const configPath = args[configIndex + 1] as string
+      expect(configPath).toBe(
+        join(stateRoot, "korri", "config-Skate-3-BLUS30464.yml"),
+      )
+      expect(args.at(-1)).toBe(gameFolder)
+
+      expect(parse(await readFile(configPath, "utf8"))).toEqual({
+        Miscellaneous: {
+          "Start games in fullscreen mode": false,
+          "Exit RPCS3 when process finishes": true,
+        },
+      })
+
+      // The operator's canonical config.yml is never created/clobbered.
+      await expect(stat(join(stateRoot, "config.yml"))).rejects.toThrow()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("read-merges the operator canonical config without clobbering it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-merge-"))
+    try {
+      const gameFolder = join(root, "Skate 3 [BLUS30464]")
+      const marker = join(gameFolder, "PS3_DISC.SFB")
+      const stateRoot = join(root, "state")
+      const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
+      await mkdir(gameFolder, { recursive: true })
+      await writeFile(marker, "disc")
+      await mkdir(join(stateRoot, "dev_flash", "sys", "external"), {
+        recursive: true,
+      })
+      await writeFile(join(stateRoot, firmwareSentinel), "firmware")
+      const canonicalText = "Video:\n  Renderer: Vulkan\n  Resolution: 1920x1080\n"
+      await writeFile(join(stateRoot, "config.yml"), canonicalText)
+
+      const result = await Effect.runPromise(
+        materializeReadableRpcs3Launch({
+          context: context({
+            contentPath: marker,
+            policy: {
+              command: KORRI_RPCS3_DEFAULT_COMMAND,
+              state: { root: stateRoot },
+              firmware: { sentinel: firmwareSentinel },
+              video: { resolution: "1280x720" },
+            },
+          }),
+        }),
+      )
+
+      const args = result.spec.args
+      const configPath = args[args.indexOf("--config") + 1] as string
+      expect(parse(await readFile(configPath, "utf8"))).toEqual({
+        Video: { Renderer: "Vulkan", Resolution: "1280x720" },
+      })
+      // Canonical config.yml is left exactly as the operator wrote it.
+      expect(await readFile(join(stateRoot, "config.yml"), "utf8")).toBe(
+        canonicalText,
+      )
     } finally {
       await rm(root, { recursive: true, force: true })
     }
