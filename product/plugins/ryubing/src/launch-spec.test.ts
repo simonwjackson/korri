@@ -99,13 +99,11 @@ describe("typed Ryubing launch spec rendering", () => {
     })
   })
 
-  it("keeps extra args unrestricted before final content path", () => {
+  it("applies overrides.args append before the final content path", () => {
     const spec = composeRyubingLaunchSpec({
       command: "Ryujinx",
-      policy: {
-        state: { root: "/state/Ryujinx" },
-        extra: { args: ["--root-data-dir", "/operator/override"] },
-      },
+      policy: { state: { root: "/state/Ryujinx" } },
+      overrides: { args: { append: ["--root-data-dir", "/operator/override"] } },
       gamePath: "/games/zelda.nsp",
     })
 
@@ -116,24 +114,48 @@ describe("typed Ryubing launch spec rendering", () => {
     ])
   })
 
-  it("applies extra config last and renders typed controller input_config", () => {
-    const config = renderRyubingConfig({
-      input: {
-        "require-config": true,
-        controllers: [
-          {
-            id: "0",
-            name: "Korri Primary Controller",
-            backend: "gamepad-sdl2",
-            player: "player-1",
-            type: "pro-controller",
-            deadzone: { left: 0.1, right: 0.2 },
-            mapping: { a: "button-east", "left-stick-x": "left-x" },
-          },
-        ],
+  it("overrides.args.replace swaps only the typed-flags segment, never structural flags or the game path", () => {
+    const spec = composeRyubingLaunchSpec({
+      command: "Ryujinx",
+      policy: {
+        state: { root: "/state/Ryujinx" },
+        display: { fullscreen: true },
       },
-      extra: { config: { start_fullscreen: false } },
+      overrides: { args: { replace: ["--custom-flag"] } },
+      gamePath: "/games/zelda.nsp",
     })
+
+    expect(spec.args).toEqual([
+      "--no-gui",
+      "--root-data-dir",
+      "/state/Ryujinx",
+      "--use-main-config",
+      "--custom-flag",
+      "/games/zelda.nsp",
+    ])
+    expect(spec.args).not.toContain("--fullscreen")
+  })
+
+  it("applies overrides.config (JSON text) last and renders typed controller input_config", () => {
+    const config = renderRyubingConfig(
+      {
+        input: {
+          "require-config": true,
+          controllers: [
+            {
+              id: "0",
+              name: "Korri Primary Controller",
+              backend: "gamepad-sdl2",
+              player: "player-1",
+              type: "pro-controller",
+              deadzone: { left: 0.1, right: 0.2 },
+              mapping: { a: "button-east", "left-stick-x": "left-x" },
+            },
+          ],
+        },
+      },
+      { overrides: { config: { append: '{ "start_fullscreen": false }' } } },
+    )
 
     expect(config.start_fullscreen).toBe(false)
     expect(config.input_config).toEqual([

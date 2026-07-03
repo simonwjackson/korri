@@ -164,11 +164,6 @@ const RyubingLoggingPolicy = Schema.Struct({
   "filtered-classes": Schema.optional(Schema.Array(Schema.String)),
 })
 
-const RyubingExtraPolicy = Schema.Struct({
-  args: Schema.optional(Schema.Array(Schema.String)),
-  config: Schema.optional(RyubingUnknownRecord),
-})
-
 export const RyubingPolicy = Schema.Struct({
   state: Schema.optional(RyubingStatePolicy),
   env: Schema.optional(RyubingEnv),
@@ -182,7 +177,6 @@ export const RyubingPolicy = Schema.Struct({
   network: Schema.optional(RyubingNetworkPolicy),
   logging: Schema.optional(RyubingLoggingPolicy),
   debug: Schema.optional(RyubingUnknownRecord),
-  extra: Schema.optional(RyubingExtraPolicy),
 })
 export type RyubingPolicy = Schema.Schema.Type<typeof RyubingPolicy>
 

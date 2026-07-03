@@ -111,7 +111,11 @@ const materializeReadableRyubingResources = (input: {
     }
     yield* validateRequiredKeys(input.context.app.id, policy)
 
-    const generated = renderRyubingConfig(policy)
+    const generated = renderRyubingConfig(policy, {
+      ...(input.context.overrides
+        ? { overrides: input.context.overrides }
+        : {}),
+    })
     const configPath = join(
       stateRoot,
       policy.state?.["config-file"] ?? "Config.json",
@@ -146,6 +150,9 @@ const materializeReadableRyubingResources = (input: {
         policy,
         env: resolvedContextEnv,
         gamePath: contentPath,
+        ...(input.context.overrides
+          ? { overrides: input.context.overrides }
+          : {}),
       }),
     )
     return {

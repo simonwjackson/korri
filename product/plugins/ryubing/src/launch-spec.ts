@@ -1,3 +1,4 @@
+import type { LaunchOverrides } from "@platform/library/config/records/library-item"
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { RyubingPolicy } from "./policy"
 
@@ -8,6 +9,8 @@ export interface ComposeRyubingLaunchSpecOptions {
   readonly policy?: RyubingPolicy
   readonly gamePath: string
   readonly env?: Readonly<Record<string, string>>
+  /** Raw argv escape hatch, folded from release.launch.overrides. */
+  readonly overrides?: LaunchOverrides
 }
 
 export type RyubingConfigObject = Readonly<Record<string, unknown>>
@@ -22,13 +25,16 @@ export function composeRyubingLaunchSpec(
   if (!stateRoot) throw new Error("Ryubing launches require state.root")
   if (!options.gamePath) throw new Error("Ryubing launches require a game path")
 
+  const overrideArgs = options.overrides?.args
+  const routed = overrideArgs?.replace ?? renderTypedHeadlessArgs(policy)
   const args = [
     "--no-gui",
     "--root-data-dir",
     stateRoot,
     "--use-main-config",
-    ...renderTypedHeadlessArgs(policy),
-    ...(policy.extra?.args ?? []),
+    ...(overrideArgs?.prepend ?? []),
+    ...routed,
+    ...(overrideArgs?.append ?? []),
     options.gamePath,
   ]
 
@@ -43,7 +49,10 @@ export function composeRyubingLaunchSpec(
 
 export function renderRyubingConfig(
   policy: RyubingPolicy = {},
-  options: { readonly seedVersion?: boolean } = {},
+  options: {
+    readonly seedVersion?: boolean
+    readonly overrides?: LaunchOverrides
+  } = {},
 ): RyubingConfigObject {
   const config: Record<string, unknown> = {}
   if (options.seedVersion !== false) config.version = RYUBING_CONFIG_VERSION
@@ -158,7 +167,39 @@ export function renderRyubingConfig(
   put(config, "ldn_passphrase", policy.network?.["ldn-passphrase"])
   put(config, "ldn_server", policy.network?.["ldn-server"])
 
-  return deepMerge(config, policy.extra?.config ?? {}) as RyubingConfigObject
+  return applyRyubingConfigOverrides(
+    config,
+    options.overrides?.config,
+  ) as RyubingConfigObject
+}
+
+/**
+ * Apply the raw `overrides.config` escape hatch (plain-text JSON fragments) to
+ * the generated Ryubing config. `prepend`/`append` parse and deep-merge onto the
+ * generated object (append wins on conflict); `replace` parses and wins the
+ * whole generated config. Empty/whitespace fragments are no-ops.
+ */
+function applyRyubingConfigOverrides(
+  base: Record<string, unknown>,
+  overrides: LaunchOverrides["config"] | undefined,
+): Record<string, unknown> {
+  if (!overrides) return base
+  if (overrides.replace !== undefined) {
+    return parseJsonObject(overrides.replace) ?? {}
+  }
+  let merged = base
+  for (const fragment of [overrides.prepend, overrides.append]) {
+    if (fragment === undefined || fragment.trim() === "") continue
+    const parsed = parseJsonObject(fragment)
+    if (parsed) merged = deepMerge(merged, parsed) as Record<string, unknown>
+  }
+  return merged
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | undefined {
+  if (text.trim() === "") return undefined
+  const parsed = JSON.parse(text)
+  return isRecord(parsed) ? parsed : undefined
 }
 
 function renderTypedHeadlessArgs(policy: RyubingPolicy): string[] {
