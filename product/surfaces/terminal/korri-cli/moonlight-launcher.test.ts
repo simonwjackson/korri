@@ -380,6 +380,55 @@ describe("moonlight launcher", () => {
     })
   })
 
+  it("keeps the InputPlumber -input device when local control is enabled", async () => {
+    const calls: Array<{
+      readonly argv: string
+      readonly env: Readonly<Record<string, string>> | undefined
+    }> = []
+    const result = await launchMoonlight({
+      host: "192.168.1.117",
+      moonlight: {
+        input: {
+          mappingFile:
+            "/nix/store/moonlight/share/moonlight/gamecontrollerdb.txt",
+        },
+      },
+      requireInputPlumberInput: true,
+      readProcDevices: async () =>
+        readFileSync(
+          join(PROC_FIXTURES_DIR, "bus-input-devices-inputplumber-virtual.txt"),
+          "utf8",
+        ),
+      moonlightControl: {
+        enabled: true,
+        runtimeDir: "/run/user/1000/korri-moonlight/session-1",
+        socketPath: "/run/user/1000/korri-moonlight/session-1/control.sock",
+        sessionId: "session-1",
+        authority: "controller",
+      },
+      runner: {
+        run: async (command, args, options) => {
+          calls.push({
+            argv: [command, ...args].join(" "),
+            env: options?.env,
+          })
+          return { status: "started" }
+        },
+      },
+    })
+
+    expect(result.status).toBe("started")
+    expect(calls).toHaveLength(1)
+    // Input preservation: the resolved InputPlumber device survives control wiring.
+    expect(calls[0]?.argv).toContain("-input /dev/input/event10")
+    // Control env is added alongside input, not instead of it.
+    expect(calls[0]?.env).toMatchObject({
+      MOONLIGHT_LOCAL_CONTROL_AUTHORITY: "controller",
+      MOONLIGHT_LOCAL_CONTROL_SOCKET:
+        "/run/user/1000/korri-moonlight/session-1/control.sock",
+    })
+  })
+
   it("reports both failures without throwing", async () => {
     const result = await launchMoonlight({
       host: "aka.local",
