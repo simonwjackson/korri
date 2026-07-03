@@ -1,7 +1,7 @@
 import type { AcquisitionPluginContext } from "@platform/acquisition/plugin-runtime"
-import { createItchioPluginDefinition } from "@platform/acquisition/plugins/itchio"
 import { plugin } from "@platform/plugin"
 import { Effect } from "effect"
+import { createItchioPluginDefinition } from "./src/definition"
 
 export const KORRI_ITCHIO_PLUGIN_ID = "@korri:itchio" as const
 

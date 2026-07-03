@@ -1,10 +1,13 @@
 import { describe, expect, it } from "bun:test"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
+import { acquireArtifact } from "@platform/acquisition/artifact-acquisition"
+import { createAcquisitionPluginRegistry } from "@platform/acquisition/plugins/registry"
 import { Effect } from "effect"
-import { acquireArtifact } from "../artifact-acquisition"
-import { createItchioPluginDefinition, parseItchioCandidateUrl } from "./itchio"
-import { createAcquisitionPluginRegistry } from "./registry"
+import {
+  createItchioPluginDefinition,
+  parseItchioCandidateUrl,
+} from "./definition"
 
 const checkedAt = "2026-06-18T00:00:00.000Z"
 const context = {

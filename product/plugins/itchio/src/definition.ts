@@ -5,6 +5,10 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createInterface, type Interface } from "node:readline"
 import type { Readable } from "node:stream"
+import { validateOutboundHttpUrl } from "@platform/acquisition/download-resolution/url-policy"
+import { AcquisitionError } from "@platform/acquisition/errors"
+import type { AcquisitionPluginContext } from "@platform/acquisition/plugin-runtime"
+import type { AcquisitionPluginDefinition } from "@platform/acquisition/plugins/registry"
 import type {
   AcquireArtifactRequest,
   PluginAcquireOutput,
@@ -19,10 +23,6 @@ import type {
   ResolveDownloadRequest,
 } from "@platform/protocol/acquisition/download-resolution"
 import { Effect } from "effect"
-import { validateOutboundHttpUrl } from "../download-resolution/url-policy"
-import { AcquisitionError } from "../errors"
-import type { AcquisitionPluginContext } from "../plugin-runtime"
-import type { AcquisitionPluginDefinition } from "./registry"
 
 const PROVIDER_ID = "@korri:itchio"
 const DISPLAY_NAME = "itch.io"
@@ -206,8 +206,6 @@ export function createItchioPluginDefinition(
       }),
   }
 }
-
-export const itchioPluginDefinition = createItchioPluginDefinition()
 
 export function parseItchioCandidateUrl(input: string): string | null {
   const url = parseUrl(input)
