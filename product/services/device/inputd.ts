@@ -44,6 +44,10 @@ import {
   type SystemTapDefinition,
 } from "@platform/input/native/system-shortcut-engine"
 import {
+  createChordHoldSupervisor,
+  type ChordHoldTimers,
+} from "@platform/input/native/chord-hold-supervisor"
+import {
   decodeNativeInputEvent,
   decodeNativeInputSubscription,
   encodeNativeInputEvent,
@@ -84,6 +88,8 @@ export interface KorriInputdOptions {
   readonly shortcuts?: readonly SystemShortcutDefinition<KorriInputdActionId>[]
   readonly systemTaps?: readonly SystemTapDefinition<KorriInputdActionId>[]
   readonly eventNodeExists?: (eventNode: string) => boolean
+  readonly killHoldMs?: number
+  readonly holdTimers?: ChordHoldTimers
 }
 
 export interface KorriInputdHandle {
@@ -148,6 +154,18 @@ const DEFAULT_SHORTCUTS: readonly SystemShortcutDefinition<KorriInputdActionId>[
 const DEFAULT_SYSTEM_TAPS: readonly SystemTapDefinition<KorriInputdActionId>[] =
   [{ id: "system-panel", control: "home" }]
 
+// Quitting a game is destructive, so the kill chord must be a deliberate HOLD
+// rather than an instant press. inputd feeds the chord into a hold supervisor
+// and only dispatches the kill once it has been held past this threshold.
+const DEFAULT_KILL_HOLD_MS = 2_000
+const KILL_CHORD_ID: KorriInputdActionId = "kill-current-game"
+const KILL_CHORD_CONTROLS = new Set<SystemShortcutControl>([
+  "l1",
+  "r1",
+  "start",
+  "select",
+])
+
 export async function startKorriInputd(
   options: KorriInputdOptions = {},
 ): Promise<KorriInputdHandle> {
@@ -170,6 +188,17 @@ export async function startKorriInputd(
   const shortcutEngine = createSystemShortcutEngine({
     shortcuts: options.shortcuts ?? DEFAULT_SHORTCUTS,
     taps: options.systemTaps ?? DEFAULT_SYSTEM_TAPS,
+  })
+  // Hold-to-fire gate for the destructive kill chord. A quick press engages then
+  // releases below the threshold (a tap) and does nothing; holding past the
+  // threshold fires exactly once. dispatchAction is hoisted, so the callback can
+  // reference it here.
+  const killHoldSupervisor = createChordHoldSupervisor<KorriInputdActionId>({
+    holdMs: options.killHoldMs ?? DEFAULT_KILL_HOLD_MS,
+    timers: options.holdTimers,
+    onUpdate: update => {
+      if (update.phase === "fired") dispatchAction(update.id)
+    },
   })
   const clients = new Map<InputdSocket, Set<NativeInputDeviceClass>>()
   const devices = new Map<string, DiscoveredDevice>()
@@ -389,7 +418,23 @@ export async function startKorriInputd(
     })
 
     for (const match of matches) {
-      dispatchAction(match.id)
+      if (match.id === KILL_CHORD_ID) {
+        killHoldSupervisor.engage(KILL_CHORD_ID)
+      } else {
+        dispatchAction(match.id)
+      }
+    }
+
+    // Releasing any chord control before the hold threshold cancels the pending
+    // kill (a tap); releasing after it has fired is a no-op in the supervisor.
+    if (
+      event.type === EV_KEY &&
+      event.value === 0 &&
+      policyControl !== null &&
+      KILL_CHORD_CONTROLS.has(policyControl) &&
+      killHoldSupervisor.isHolding(KILL_CHORD_ID)
+    ) {
+      killHoldSupervisor.release(KILL_CHORD_ID)
     }
 
     if (matches.length > 0) return true
@@ -558,6 +603,7 @@ export async function startKorriInputd(
       clearInterval(pollTimer)
       clients.clear()
       shortcutEngine.reset()
+      killHoldSupervisor.reset()
 
       const pendingStreams = [...streams.values()]
       for (const deviceId of [...streams.keys()]) {

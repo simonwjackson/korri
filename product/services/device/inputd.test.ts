@@ -429,11 +429,12 @@ B: KEY=40000000
     client.close()
   })
 
-  it("dispatches L1+R1+Start+Select kill once without streaming UI-mapped chord inputs", async () => {
+  it("dispatches L1+R1+Start+Select kill once after the hold threshold", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const systemSource = createControllableEventSource()
     const gamepadSource = createControllableEventSource()
     const actions: KorriInputdActionId[] = []
+    const timers = createFakeHoldTimers()
     const handle = await startInputd({
       readProcDevices: async () => proc,
       openEventSource: device =>
@@ -447,6 +448,8 @@ B: KEY=40000000
           actions.push(actionId)
         },
       },
+      killHoldMs: 2_000,
+      holdTimers: timers,
     })
 
     const client = connectClient(handle.port)
@@ -460,14 +463,65 @@ B: KEY=40000000
     gamepadSource.push(evdevKey(BTN_SELECT, 1))
     gamepadSource.push(evdevKey(BTN_SELECT, 2))
 
-    await waitFor(() => actions.length === 1, "kill action")
+    // The chord engages the hold but must NOT fire instantly.
+    await waitFor(() => timers.pending() > 0, "chord engaged")
+    expect(actions).toEqual([])
+
+    // Holding past the threshold fires exactly one kill.
+    timers.advance(2_000)
+    await waitFor(() => actions.length === 1, "kill after hold")
     expect(actions).toEqual(["kill-current-game"])
+
     await Bun.sleep(30)
     const inputs = client.messages
       .map(message => decodeNativeInputEvent(message))
       .filter(message => message.kind === "input")
     expect(inputs.map(input => input.code)).not.toContain(BTN_START)
     expect(inputs.map(input => input.code)).not.toContain(BTN_SELECT)
+
+    client.close()
+  })
+
+  it("does not kill when the chord is released before the hold threshold", async () => {
+    const proc = await loadProcFixture("bus-input-devices-device.txt")
+    const gamepadSource = createControllableEventSource()
+    const actions: KorriInputdActionId[] = []
+    const timers = createFakeHoldTimers()
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event9"
+          ? gamepadSource.open()
+          : createControllableEventSource().open(),
+      actionDispatcher: {
+        dispatch: async actionId => {
+          actions.push(actionId)
+        },
+      },
+      killHoldMs: 2_000,
+      holdTimers: timers,
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    await client.nextMessage()
+
+    gamepadSource.push(evdevKey(BTN_TL, 1))
+    gamepadSource.push(evdevKey(BTN_TR, 1))
+    gamepadSource.push(evdevKey(BTN_START, 1))
+    gamepadSource.push(evdevKey(BTN_SELECT, 1))
+    await waitFor(() => timers.pending() > 0, "chord engaged")
+
+    // Release a chord control before the threshold: this is a tap, not a kill.
+    timers.advance(500)
+    gamepadSource.push(evdevKey(BTN_SELECT, 0))
+    await waitFor(() => timers.pending() === 0, "hold released")
+
+    // Even as more time passes, nothing fires.
+    timers.advance(5_000)
+    await Bun.sleep(30)
+    expect(actions).toEqual([])
 
     client.close()
   })
@@ -978,6 +1032,52 @@ B: KEY=40000000
 
 function evdevKey(code: number, value: number): Uint8Array {
   return evdevEvent(1, code, value)
+}
+
+interface FakeHoldTimers {
+  now: () => number
+  setInterval: (callback: () => void, ms: number) => unknown
+  clearInterval: (handle: unknown) => void
+  pending: () => number
+  advance: (ms: number) => void
+}
+
+function createFakeHoldTimers(): FakeHoldTimers {
+  let now = 0
+  let nextId = 1
+  const timers = new Map<number, { cb: () => void; ms: number; next: number }>()
+  return {
+    now: () => now,
+    setInterval(cb, ms) {
+      const id = nextId++
+      timers.set(id, { cb, ms, next: now + ms })
+      return id
+    },
+    clearInterval(handle) {
+      timers.delete(handle as number)
+    },
+    pending: () => timers.size,
+    advance(ms) {
+      const target = now + ms
+      for (;;) {
+        let due = Number.POSITIVE_INFINITY
+        let dueId = -1
+        for (const [id, timer] of timers) {
+          if (timer.next < due) {
+            due = timer.next
+            dueId = id
+          }
+        }
+        if (dueId === -1 || due > target) break
+        now = due
+        const timer = timers.get(dueId)
+        if (!timer) continue
+        timer.next = now + timer.ms
+        timer.cb()
+      }
+      now = target
+    },
+  }
 }
 
 function evdevEvent(type: number, code: number, value: number): Uint8Array {
