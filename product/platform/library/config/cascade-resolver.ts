@@ -478,9 +478,7 @@ export const foldLaunchOverrides = (
     a: string | undefined,
     b: string | undefined,
   ): string | undefined => {
-    const parts = [a, b].filter(
-      (s): s is string => s !== undefined && s !== "",
-    )
+    const parts = [a, b].filter((s): s is string => s !== undefined && s !== "")
     return parts.length > 0 ? parts.join("\n") : undefined
   }
   const foldArgs = ():
@@ -808,7 +806,9 @@ const pluginPolicyFromSettings = (
   }
   const pluginSettingsRecord = pluginSettings as Record<string, unknown>
   if (options.allowContentPath === false) {
-    return { [launcherPlugin]: stripReleaseScopedRootOverrides(pluginSettingsRecord) }
+    return {
+      [launcherPlugin]: stripReleaseScopedRootOverrides(pluginSettingsRecord),
+    }
   }
   return { [launcherPlugin]: pluginSettingsRecord }
 }

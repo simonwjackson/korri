@@ -117,7 +117,9 @@ describe("decodeRpcs3Policy", () => {
   })
 
   it("rejects an invalid enum literal", () => {
-    expectPolicyError(() => decodeRpcs3Policy({ video: { aspectRatio: "17:9" } }))
+    expectPolicyError(() =>
+      decodeRpcs3Policy({ video: { aspectRatio: "17:9" } }),
+    )
   })
 
   it("rejects an empty state.root", () => {

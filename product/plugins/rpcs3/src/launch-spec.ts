@@ -1,6 +1,6 @@
+import { isAbsolute } from "node:path"
 import type { LaunchOverrides } from "@platform/library/config/records/library-item"
 import type { LaunchSpec } from "@platform/library/launcher"
-import { isAbsolute } from "node:path"
 
 export interface ComposeRpcs3LaunchSpecOptions {
   readonly command: string

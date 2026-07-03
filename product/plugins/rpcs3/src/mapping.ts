@@ -135,10 +135,16 @@ export const routeSettings = (policy: Rpcs3Policy): RoutedSettings => {
       configEntries.push(["Video.Aspect ratio", video.aspectRatio])
     }
     if (video.frameLimit !== undefined) {
-      configEntries.push(["Video.Frame limit", renderFrameLimit(video.frameLimit)])
+      configEntries.push([
+        "Video.Frame limit",
+        renderFrameLimit(video.frameLimit),
+      ])
     }
     if (video.vsync !== undefined) {
-      configEntries.push(["Video.VSync Mode", video.vsync ? VSYNC_ON : VSYNC_OFF])
+      configEntries.push([
+        "Video.VSync Mode",
+        video.vsync ? VSYNC_ON : VSYNC_OFF,
+      ])
     }
     if (video.fullscreen !== undefined) {
       // A flag can only express "on"; false must be written to config to
@@ -150,7 +156,10 @@ export const routeSettings = (policy: Rpcs3Policy): RoutedSettings => {
       ])
     }
     if (video.renderer !== undefined) {
-      configEntries.push(["Video.Renderer", RENDERER[video.renderer] ?? video.renderer])
+      configEntries.push([
+        "Video.Renderer",
+        RENDERER[video.renderer] ?? video.renderer,
+      ])
     }
     if (video.resolutionScale !== undefined) {
       configEntries.push(["Video.Resolution Scale", video.resolutionScale])
@@ -178,17 +187,26 @@ export const routeSettings = (policy: Rpcs3Policy): RoutedSettings => {
       configEntries.push(["Audio.Audio Device", audio.device])
     }
     if (audio.backend !== undefined) {
-      configEntries.push(["Audio.Renderer", AUDIO_BACKEND[audio.backend] ?? audio.backend])
+      configEntries.push([
+        "Audio.Renderer",
+        AUDIO_BACKEND[audio.backend] ?? audio.backend,
+      ])
     }
     if (audio.format !== undefined) {
-      configEntries.push(["Audio.Audio Format", AUDIO_FORMAT[audio.format] ?? audio.format])
+      configEntries.push([
+        "Audio.Audio Format",
+        AUDIO_FORMAT[audio.format] ?? audio.format,
+      ])
     }
   }
 
   const system = policy.system
   if (system) {
     if (system.language !== undefined) {
-      configEntries.push(["System.Language", LANGUAGE[system.language] ?? system.language])
+      configEntries.push([
+        "System.Language",
+        LANGUAGE[system.language] ?? system.language,
+      ])
     }
     if (system.licenseArea !== undefined) {
       configEntries.push([

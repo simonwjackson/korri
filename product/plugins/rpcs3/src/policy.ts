@@ -6,7 +6,9 @@ const STRICT = { onExcessProperty: "error" } as const
 
 const NonEmptyString = (label: string) =>
   Schema.String.pipe(
-    Schema.check(Schema.isMinLength(1, { message: `${label} must be non-empty` })),
+    Schema.check(
+      Schema.isMinLength(1, { message: `${label} must be non-empty` }),
+    ),
   )
 
 const NonNegativeNumber = (label: string) =>

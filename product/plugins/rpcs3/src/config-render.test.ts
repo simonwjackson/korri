@@ -44,7 +44,8 @@ describe("renderConfigYaml", () => {
     const text = renderConfigYaml({
       entries: [["Video.Resolution", "1280x720"]],
       overridesConfig: {
-        append: "Video:\n  Resolution: 1920x1080\n  Anisotropic Filter Override: 16\n",
+        append:
+          "Video:\n  Resolution: 1920x1080\n  Anisotropic Filter Override: 16\n",
       },
     })
     expect(parse(text as string)).toEqual({

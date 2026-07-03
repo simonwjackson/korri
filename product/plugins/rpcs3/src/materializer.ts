@@ -19,14 +19,14 @@ import type { ReadableLaunchIntegration } from "@platform/library/proseql/librar
 import { Effect } from "effect"
 import { renderConfigYaml } from "./config-render"
 import { mergeGuiIni } from "./gui-preseed"
+import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
 import { composeRpcs3LaunchSpec } from "./launch-spec"
 import { routeSettings } from "./mapping"
 import {
-  decodeRpcs3Policy,
   DEFAULT_RPCS3_FIRMWARE_SENTINEL,
+  decodeRpcs3Policy,
   type Rpcs3Policy,
 } from "./policy"
-import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
 
 const STORAGE_TOKEN_PATTERN = /\{storage:([^}]+)\}/g
 
@@ -218,7 +218,8 @@ const readOptionalFile = (
   })
 
 const slugReleaseId = (releaseId: string): string =>
-  releaseId.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "launch"
+  releaseId.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") ||
+  "launch"
 
 const writeAtomic = (
   context: ReadableResolvedLaunchContext,
@@ -340,5 +341,3 @@ const tryMaterialize = <Value>(
         reason: error instanceof Error ? error.message : String(error),
       }),
   })
-
-

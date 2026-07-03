@@ -2,10 +2,10 @@ import { describe, expect, it } from "bun:test"
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { parse } from "yaml"
 import { AppMaterializationFailed } from "@platform/library/config/errors"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { Cause, Effect, Exit } from "effect"
+import { parse } from "yaml"
 import {
   KORRI_RPCS3_APP_ID,
   KORRI_RPCS3_DEFAULT_COMMAND,
@@ -210,7 +210,8 @@ describe("RPCS3 readable launch integration", () => {
         recursive: true,
       })
       await writeFile(join(stateRoot, firmwareSentinel), "firmware")
-      const canonicalText = "Video:\n  Renderer: Vulkan\n  Resolution: 1920x1080\n"
+      const canonicalText =
+        "Video:\n  Renderer: Vulkan\n  Resolution: 1920x1080\n"
       await writeFile(join(stateRoot, "config.yml"), canonicalText)
 
       const result = await Effect.runPromise(
@@ -386,10 +387,9 @@ function context(
       : { content: { path: "/tmp/Skate 3 [BLUS30464]/PS3_DISC.SFB" } }),
     launchCompanions: {},
     plugin: {
-      [KORRI_RPCS3_PLUGIN_ID]:
-        input.policy ?? {
-          state: { root: "/tmp/rpcs3" },
-        },
+      [KORRI_RPCS3_PLUGIN_ID]: input.policy ?? {
+        state: { root: "/tmp/rpcs3" },
+      },
     },
     storage: input.storage,
   }
