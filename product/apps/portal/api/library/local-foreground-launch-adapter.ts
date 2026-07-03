@@ -1,12 +1,12 @@
 import { cleanupLaunchArtifacts } from "@platform/library/config/app-materializer"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
-import type { PlayLogStore } from "@platform/library/play-log-store"
 import {
   type LaunchResult,
   type LaunchSpec,
   launchFailureExitCode,
   type ManagedLaunchResult,
 } from "@platform/library/launcher"
+import type { PlayLogStore } from "@platform/library/play-log-store"
 import {
   probeSessiondManagedLaunchStatus,
   type SessiondManagedLaunchStatusResult,

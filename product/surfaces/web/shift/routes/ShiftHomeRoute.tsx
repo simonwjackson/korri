@@ -11,8 +11,8 @@ import {
   getPlayableWideImageUrl,
 } from "@platform/library/playable-library-ui"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
-import { useOptionalDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 import { deviceStateAtom } from "@platform/react/device/device-atoms"
+import { useOptionalDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 import { foregroundSessionGateStateAtom } from "@platform/react/library/library-atoms"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
@@ -348,4 +348,3 @@ function getPlayableRailImage(
     images[0]
   )
 }
-

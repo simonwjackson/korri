@@ -13,10 +13,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
 import {
+  decodePlayLog,
   emptyPlayLog,
   type PlayEntry,
   type PlayLog,
-  decodePlayLog,
 } from "./config/records/play-log"
 import {
   DEFAULT_PLAY_LOG_THRESHOLD_SECONDS,
