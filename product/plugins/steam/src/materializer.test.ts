@@ -397,6 +397,35 @@ describe("steamReadableLaunchIntegration", () => {
     })
   })
 
+  it("rejects the retired Steam `extra` field instead of ignoring it", async () => {
+    await withRoot(async root => {
+      await mkdir(root, { recursive: true })
+      const { fs, writes } = memoryFs()
+
+      const error = await Effect.runPromise(
+        Effect.flip(
+          materializeReadableSteamLaunch({
+            context: {
+              ...context(root),
+              plugin: {
+                [KORRI_STEAM_PLUGIN_ID]: {
+                  state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
+                  extra: { args: ["-silent"] },
+                },
+              },
+            },
+            fs,
+            lifecycle: lifecycle([]),
+            lock: inlineLock,
+          }),
+        ),
+      )
+
+      expect(errorReason(error)).toContain("`extra` was removed")
+      expect(writes).toEqual([])
+    })
+  })
+
   it("rejects Korri placeholders in LaunchOptions before writing state", async () => {
     await withRoot(async root => {
       await mkdir(root, { recursive: true })

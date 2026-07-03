@@ -51,6 +51,52 @@ describe("Ryubing plugin materializer", () => {
     }
   })
 
+  it("overrides.config.replace wipes the on-disk Config.json instead of blending it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
+    try {
+      const stateRoot = join(root, "state")
+      await mkdir(join(stateRoot, "system"), { recursive: true })
+      await writeFile(join(stateRoot, "system", "prod.keys"), "keys")
+      await writeFile(
+        join(stateRoot, "Config.json"),
+        JSON.stringify({
+          version: 70,
+          stale_key: "should-be-gone",
+          input_config: [{ id: "9" }],
+        }),
+      )
+      const game = join(root, "game.nsp")
+      await writeFile(game, "game")
+
+      await Effect.runPromise(
+        materializeReadableRyubingLaunch({
+          context: {
+            ...context({
+              stateRoot,
+              contentPath: game,
+              policy: { state: { root: stateRoot } },
+            }),
+            overrides: {
+              config: {
+                replace:
+                  '{ "version": 70, "input_config": [{ "id": "0" }], "override_only": true }',
+              },
+            },
+          },
+        }),
+      )
+
+      const config = JSON.parse(
+        await readFile(join(stateRoot, "Config.json"), "utf8"),
+      )
+      expect(config.stale_key).toBeUndefined()
+      expect(config.override_only).toBe(true)
+      expect(config.input_config).toEqual([{ id: "0" }])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("substitutes storage-token state roots before materialization", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
     try {

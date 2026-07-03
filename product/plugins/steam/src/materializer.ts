@@ -136,6 +136,16 @@ function readSteamPluginPolicy(
       reason: "Steam plugin policy must be an object",
     })
   }
+  // The retired `extra` field is gone (converged onto release.launch.overrides).
+  // Reject it loudly rather than silently ignoring, matching the strict decode
+  // the other plugins already enforce — no backwards compatibility.
+  if ("extra" in payload) {
+    throw new AppMaterializationFailed({
+      appId: context.app.id,
+      reason:
+        "Steam plugin policy `extra` was removed; use release.launch.overrides.args",
+    })
+  }
   const policy: DecodedSteamPluginPolicy = {
     state: defaultSteamPluginPolicy.state,
     "compat-tool": defaultSteamPluginPolicy["compat-tool"],

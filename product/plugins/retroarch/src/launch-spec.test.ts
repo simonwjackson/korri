@@ -676,6 +676,15 @@ describe("typed RetroArch launch spec rendering", () => {
     })
   })
 
+  it("rejects overrides.config.replace (it would strip safety settings)", () => {
+    expect(() =>
+      renderRetroArchConfig(
+        {},
+        { config: { replace: 'video_fullscreen = "true"' } },
+      ),
+    ).toThrow(/does not support replace/)
+  })
+
   it("overrides.args.replace preserves the config, core, and content structural args", () => {
     const spec = composeRetroArchLaunchSpec({
       command: "/bin/retroarch",

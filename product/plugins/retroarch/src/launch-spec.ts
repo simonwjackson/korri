@@ -168,22 +168,25 @@ function validateRetroArchOverrideArgs(
 
 /**
  * Render `overrides.config` (plain-text cfg fragments) as trailing cfg lines,
- * validating every key the way the retired `extraSettings` field did:
- * `prepend`/`append` accumulate (append wins position), `replace` is
- * most-specific-wins over that override block. This never replaces the whole
- * generated cfg — the safe typed lifecycle defaults always render first.
+ * validating every key the way the retired `extraSettings` field did.
+ * `prepend`/`append` accumulate (append wins position) and always render after
+ * Korri's safe typed lifecycle defaults. `replace` is rejected: a whole-file
+ * replace would strip those safety settings (auto-overwrite / save-corruption
+ * guards), so RetroArch's config escape hatch is add-only — unlike RPCS3 and
+ * Ryubing where `replace` legitimately wins the whole file.
  */
 function renderRetroArchOverrideConfigLines(
   config: LaunchOverrides["config"] | undefined,
 ): readonly string[] {
   if (config === undefined) return []
-  const block =
-    config.replace ??
-    [config.prepend, config.append]
-      .filter(
-        (text): text is string => text !== undefined && text.trim() !== "",
-      )
-      .join("\n")
+  if (config.replace !== undefined) {
+    throw new Error(
+      "RetroArch overrides.config does not support replace; it would strip Korri's safety settings. Use prepend/append.",
+    )
+  }
+  const block = [config.prepend, config.append]
+    .filter((text): text is string => text !== undefined && text.trim() !== "")
+    .join("\n")
   const lines: string[] = []
   for (const raw of block.split("\n")) {
     const line = raw.trim()

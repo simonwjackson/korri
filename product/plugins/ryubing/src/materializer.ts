@@ -125,6 +125,11 @@ const materializeReadableRyubingResources = (input: {
       configPath,
       generated,
       policy,
+      // `overrides.config.replace` means "use only the authored config" — it must
+      // win the whole file, so skip blending the on-disk Config.json (matching
+      // RPCS3 replace semantics).
+      replaceWholeConfig:
+        input.context.overrides?.config?.replace !== undefined,
     })
     const finalConfig = merged.config
     yield* validateInputConfig(input.context.app.id, policy, finalConfig)
@@ -327,12 +332,15 @@ const mergeExistingConfig = (input: {
   readonly configPath: string
   readonly generated: Readonly<Record<string, unknown>>
   readonly policy: RyubingPolicy
+  readonly replaceWholeConfig: boolean
 }): Effect.Effect<
   { readonly config: JsonObject; readonly diagnostics: readonly string[] },
   ResolutionError
 > =>
   tryMaterialize(input.appId, async () => {
-    const mergeExisting = input.policy.config?.["merge-existing"] !== false
+    const mergeExisting =
+      !input.replaceWholeConfig &&
+      input.policy.config?.["merge-existing"] !== false
     if (!mergeExisting)
       return { config: { ...input.generated }, diagnostics: [] }
     const diagnostics: string[] = []
