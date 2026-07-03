@@ -3,7 +3,7 @@ import {
   createCommunitySourcePlugin,
   normalizedHost,
   normalizedPath,
-} from "../community-source"
+} from "@platform/plugin/community-source"
 
 export const KORRI_TMNT_RESCUE_PALOOZA_PLUGIN_ID =
   "@korri:tmnt-rescue-palooza" as const

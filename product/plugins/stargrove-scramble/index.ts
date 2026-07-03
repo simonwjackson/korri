@@ -2,7 +2,7 @@ import {
   type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   itchioParser,
-} from "../community-source"
+} from "@platform/plugin/community-source"
 import { KORRI_ITCHIO_PLUGIN_ID } from "../itchio"
 
 export const KORRI_STARGROVE_SCRAMBLE_PLUGIN_ID =

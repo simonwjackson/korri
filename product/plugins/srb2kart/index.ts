@@ -2,7 +2,7 @@ import {
   type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   githubRepoParser,
-} from "../community-source"
+} from "@platform/plugin/community-source"
 
 export const KORRI_SRB2KART_PLUGIN_ID = "@korri:srb2kart" as const
 

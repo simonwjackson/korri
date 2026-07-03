@@ -2,7 +2,7 @@ import {
   type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   itchioParser,
-} from "../community-source"
+} from "@platform/plugin/community-source"
 import { KORRI_ITCHIO_PLUGIN_ID } from "../itchio"
 
 export const KORRI_DOME_ROMANTIK_PLUGIN_ID = "@korri:dome-romantik" as const

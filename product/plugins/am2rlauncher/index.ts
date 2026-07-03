@@ -2,7 +2,7 @@ import {
   type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   githubRepoParser,
-} from "../community-source"
+} from "@platform/plugin/community-source"
 
 export const KORRI_AM2RLAUNCHER_PLUGIN_ID = "@korri:am2rlauncher" as const
 

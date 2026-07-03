@@ -2,7 +2,7 @@ import {
   type CommunitySourcePluginEntry,
   createCommunitySourcePlugin,
   githubRepoParser,
-} from "../community-source"
+} from "@platform/plugin/community-source"
 
 export const KORRI_SHIPWRIGHT_PLUGIN_ID = "@korri:shipwright" as const
 
