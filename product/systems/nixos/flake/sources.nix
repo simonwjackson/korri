@@ -19,6 +19,7 @@ let
   sharedRuntime = [
     ../../../../product/platform
     ../../../../product/plugins
+    ../../../../product/plugin-host
   ];
   deviceRuntime = [
     ../../../../product/apps/portal
