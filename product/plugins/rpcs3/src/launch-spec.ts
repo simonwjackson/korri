@@ -1,4 +1,5 @@
 import { isAbsolute } from "node:path"
+import { applyArgsOverrides } from "@platform/library/config/apply-overrides"
 import type { LaunchOverrides } from "@platform/library/config/records/library-item"
 import type { LaunchSpec } from "@platform/library/launcher"
 
@@ -37,22 +38,22 @@ export function composeRpcs3LaunchSpec(
     throw new Error("RPCS3 launches require a game folder path")
   }
 
-  const overrides = options.overridesArgs
-  const routedFlags = overrides?.replace ?? options.flags ?? []
-
-  const args = [
-    "--no-gui",
-    ...(overrides?.prepend ?? []),
-    ...routedFlags,
-    ...(options.configPath !== undefined
-      ? ["--config", options.configPath]
-      : []),
-    ...(options.inputConfig !== undefined
-      ? ["--input-config", options.inputConfig]
-      : []),
-    ...(overrides?.append ?? []),
-    options.gameFolderPath,
-  ]
+  const args = applyArgsOverrides({
+    leading: ["--no-gui"],
+    routed: options.flags ?? [],
+    middle: [
+      ...(options.configPath !== undefined
+        ? ["--config", options.configPath]
+        : []),
+      ...(options.inputConfig !== undefined
+        ? ["--input-config", options.inputConfig]
+        : []),
+    ],
+    trailing: [options.gameFolderPath],
+    ...(options.overridesArgs !== undefined
+      ? { overrides: options.overridesArgs }
+      : {}),
+  })
 
   return {
     command: options.command,

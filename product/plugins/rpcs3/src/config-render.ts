@@ -1,3 +1,7 @@
+import {
+  deepMergeConfig,
+  parseConfigFragment,
+} from "@platform/library/config/apply-overrides"
 import type { LaunchOverrides } from "@platform/library/config/records/library-item"
 import { parse, stringify } from "yaml"
 import type { ConfigEntry } from "./mapping"
@@ -32,19 +36,6 @@ export const buildConfigObject = (
   return root
 }
 
-/** Deep-merge source over target (source wins; non-object values replaced). */
-const deepMerge = (target: YamlObject, source: YamlObject): YamlObject => {
-  const out: YamlObject = { ...target }
-  for (const [key, value] of Object.entries(source)) {
-    const existing = out[key]
-    out[key] =
-      isPlainObject(existing) && isPlainObject(value)
-        ? deepMerge(existing, value)
-        : value
-  }
-  return out
-}
-
 export interface RenderConfigInput {
   /** Operator's canonical config.yml text, used as the read-merge base (U0). */
   readonly canonical?: string
@@ -54,11 +45,7 @@ export interface RenderConfigInput {
   readonly overridesConfig?: LaunchOverrides["config"]
 }
 
-const parseFragment = (text: string): YamlObject | undefined => {
-  if (text.trim() === "") return undefined
-  const parsed = parse(text)
-  return isPlainObject(parsed) ? parsed : undefined
-}
+
 
 /**
  * Render the per-launch config.yml text using the read-merge-canonical model
@@ -90,12 +77,12 @@ export const renderConfigYaml = (
   const canonical =
     input.canonical !== undefined ? parse(input.canonical) : undefined
   let merged: YamlObject = isPlainObject(canonical) ? canonical : {}
-  merged = deepMerge(merged, buildConfigObject(input.entries))
+  merged = deepMergeConfig(merged, buildConfigObject(input.entries))
 
   for (const fragment of [oc?.prepend, oc?.append]) {
     if (fragment === undefined) continue
-    const parsed = parseFragment(fragment)
-    if (parsed !== undefined) merged = deepMerge(merged, parsed)
+    const parsed = parseConfigFragment(fragment, parse)
+    if (parsed !== undefined) merged = deepMergeConfig(merged, parsed)
   }
 
   return stringify(merged)

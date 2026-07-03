@@ -1,3 +1,8 @@
+import {
+  applyArgsOverrides,
+  deepMergeConfig,
+  parseConfigFragment,
+} from "@platform/library/config/apply-overrides"
 import type { LaunchOverrides } from "@platform/library/config/records/library-item"
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { RyubingPolicy } from "./policy"
@@ -25,18 +30,14 @@ export function composeRyubingLaunchSpec(
   if (!stateRoot) throw new Error("Ryubing launches require state.root")
   if (!options.gamePath) throw new Error("Ryubing launches require a game path")
 
-  const overrideArgs = options.overrides?.args
-  const routed = overrideArgs?.replace ?? renderTypedHeadlessArgs(policy)
-  const args = [
-    "--no-gui",
-    "--root-data-dir",
-    stateRoot,
-    "--use-main-config",
-    ...(overrideArgs?.prepend ?? []),
-    ...routed,
-    ...(overrideArgs?.append ?? []),
-    options.gamePath,
-  ]
+  const args = applyArgsOverrides({
+    leading: ["--no-gui", "--root-data-dir", stateRoot, "--use-main-config"],
+    routed: renderTypedHeadlessArgs(policy),
+    trailing: [options.gamePath],
+    ...(options.overrides?.args !== undefined
+      ? { overrides: options.overrides.args }
+      : {}),
+  })
 
   const env = mergeEnv(options.env, policy.env)
 
@@ -185,21 +186,15 @@ function applyRyubingConfigOverrides(
 ): Record<string, unknown> {
   if (!overrides) return base
   if (overrides.replace !== undefined) {
-    return parseJsonObject(overrides.replace) ?? {}
+    return parseConfigFragment(overrides.replace, JSON.parse) ?? {}
   }
   let merged = base
   for (const fragment of [overrides.prepend, overrides.append]) {
-    if (fragment === undefined || fragment.trim() === "") continue
-    const parsed = parseJsonObject(fragment)
-    if (parsed) merged = deepMerge(merged, parsed) as Record<string, unknown>
+    if (fragment === undefined) continue
+    const parsed = parseConfigFragment(fragment, JSON.parse)
+    if (parsed) merged = deepMergeConfig(merged, parsed)
   }
   return merged
-}
-
-function parseJsonObject(text: string): Record<string, unknown> | undefined {
-  if (text.trim() === "") return undefined
-  const parsed = JSON.parse(text)
-  return isRecord(parsed) ? parsed : undefined
 }
 
 function renderTypedHeadlessArgs(policy: RyubingPolicy): string[] {
@@ -336,14 +331,4 @@ function removeUndefined<T extends Record<string, unknown>>(input: T): T {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function deepMerge(base: unknown, extra: unknown): unknown {
-  if (!isRecord(base) || !isRecord(extra))
-    return extra === undefined ? base : extra
-  const merged: Record<string, unknown> = { ...base }
-  for (const [key, value] of Object.entries(extra)) {
-    merged[key] = deepMerge(merged[key], value)
-  }
-  return merged
 }
