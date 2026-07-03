@@ -1,7 +1,7 @@
 ---
 title: "feat: RPCS3 --input-config content authoring (pad/keyboard mappings)"
 type: feat
-status: active
+status: completed
 date: 2026-07-03
 origin: work/items/active/01KWM7Q408P6VW6RWR66SE6R3R-rpcs3-input-config-authoring/item.md
 verify_command: "bun test product/plugins/rpcs3/src"

@@ -23,6 +23,23 @@ Predecessor pattern (input analogue of): `work/items/active/20260702-rpcs3-setti
 ## Progress
 
 - Planned (see `plan.md`).
+- **Implemented (/se-work) on branch `feat/rpcs3-input-config-authoring`** — all
+  units shipped as atomic commits (not pushed, not integrated to trunk):
+  - **U1** — source-verified contract (`input-config-contract.md`).
+  - **U2** — `Rpcs3InputPolicy` per-player Effect Schema, composed into `Rpcs3Policy.input`.
+  - **U2b** — cap authored players at RPCS3's 7 slots.
+  - **U3** — `input-mapping.ts` router + verified value maps (handler enum,
+    `Config` keys, mouse mode).
+  - **U4** — `input-config-render.ts` serialize-once `Player N Input` YAML.
+  - **U5** — materializer writes `input_configs/global/korri-<releaseId>.yml`
+    atomically and passes `--input-config`; operator profiles untouched.
+  - **U6** — README input authoring section.
+  - **U7** — `convergence-note.md` (neutral `preferences.input` sibling +
+    inputplumber boundary).
+  Verification: `bun test product/plugins/rpcs3/src` = 84 pass / 0 fail; my files
+  type-clean (`just typecheck`) and biome-clean. Pre-existing unrelated trunk
+  failures (game.test.ts userData.playtime; ~86 repo-wide TS errors) left as-is.
+  All requirements R1–R5 satisfied.
 - **U1 spike DONE** — RPCS3 input-config contract settled from source + live Aka
   device (`0.0.41-nixpkgs-40e9ee5`). Full findings in `input-config-contract.md`.
   Headlines:
