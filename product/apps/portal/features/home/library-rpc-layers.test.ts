@@ -168,7 +168,6 @@ async function seedLibrary(
               system: "snes",
               contentPath: "/tmp/roms/snes/echo.smc",
               metadata: { name: "RPC Echo" },
-              userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
             },
             launcher: {
               id: "rocknix-retroarch",

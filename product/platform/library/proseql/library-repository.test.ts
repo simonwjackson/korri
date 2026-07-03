@@ -27,6 +27,10 @@ import {
 import { Effect } from "effect"
 import type { LibraryItemRecord } from "../config/records/library-item"
 import { LibraryError } from "../library-services"
+import {
+  createInMemoryPlayLogStore,
+  type PlayLogStore,
+} from "../play-log-store"
 import { openKorriLibraryDb } from "./library-db"
 import { createLibraryRepository } from "./library-repository"
 
@@ -121,6 +125,7 @@ async function seedReadableLibrary(
   options: {
     readonly launchIntegrations?: boolean
     readonly steamLaunchIntegration?: boolean
+    readonly playLogStore?: PlayLogStore
   } = {},
 ) {
   return await Effect.runPromise(
@@ -232,6 +237,9 @@ async function seedReadableLibrary(
                     ? [steamReadableLaunchIntegration]
                     : []),
                 ],
+          ...(options.playLogStore
+            ? { playLogStore: options.playLogStore }
+            : {}),
         })
       }),
     ),
@@ -416,7 +424,6 @@ describe("createLibraryRepository — readable playable entries", () => {
   it("forwards readable metadata and user data onto playable entries", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
-      const lastPlayed = new Date("2026-06-20T12:00:00.000Z")
 
       await Effect.runPromise(
         repo.upsertGame({
@@ -428,11 +435,7 @@ describe("createLibraryRepository — readable playable entries", () => {
             developer: "Nintendo",
             genre: ["Racing"],
           },
-          userData: {
-            lastPlayed,
-            playtime: 270,
-            favorite: true,
-          },
+          userData: { favorite: true },
         }),
       )
 
@@ -445,11 +448,7 @@ describe("createLibraryRepository — readable playable entries", () => {
         developer: "Nintendo",
         genre: ["Racing"],
       })
-      expect(entry?.userData).toEqual({
-        lastPlayed,
-        playtime: 270,
-        favorite: true,
-      })
+      expect(entry?.userData).toEqual({ favorite: true })
     })
   })
 
@@ -482,10 +481,38 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
+  it("projects derived play stats from the injected play-log store", async () => {
+    await withTempRoot(async root => {
+      const store = createInMemoryPlayLogStore()
+      const repo = await seedReadableLibrary(root, { playLogStore: store })
+
+      const before = await Effect.runPromise(repo.listPlayableEntries())
+      const target = before[0]
+      if (!target) throw new Error("expected at least one playable entry")
+      // Every entry is projected; a never-recorded game reads as never played.
+      expect(target.playStats).toEqual({
+        playCount: 0,
+        totalPlaytimeSeconds: 0,
+      })
+
+      await store.record(target.id, {
+        occurredAt: new Date("2026-07-01T20:44:00.000Z"),
+        durationSeconds: 1800,
+      })
+
+      const after = await Effect.runPromise(repo.listPlayableEntries())
+      const updated = after.find(candidate => candidate.id === target.id)
+      expect(updated?.playStats?.playCount).toBe(1)
+      expect(updated?.playStats?.lastPlayed?.toISOString()).toBe(
+        "2026-07-01T20:44:00.000Z",
+      )
+      expect(updated?.playStats?.totalPlaytimeSeconds).toBe(1800)
+    })
+  })
+
   it("forwards readable metadata and user data for contained legacy games", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
-      const lastPlayed = new Date("2026-06-21T12:00:00.000Z")
 
       await Effect.runPromise(
         repo.upsertGame({
@@ -497,11 +524,7 @@ describe("createLibraryRepository — readable playable entries", () => {
             developer: "Nintendo",
             genre: ["Platformer"],
           },
-          userData: {
-            lastPlayed,
-            playtime: 540,
-            favorite: true,
-          },
+          userData: { favorite: true },
         }),
       )
 
@@ -515,19 +538,13 @@ describe("createLibraryRepository — readable playable entries", () => {
         developer: "Nintendo",
         genre: ["Platformer"],
       })
-      expect(entry?.userData).toEqual({
-        lastPlayed,
-        playtime: 540,
-        favorite: true,
-      })
+      expect(entry?.userData).toEqual({ favorite: true })
     })
   })
 
   it("keeps metadata and user data distinct for contained readable entries", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
-      const sonicPlayed = new Date("2026-06-20T12:00:00.000Z")
-      const knucklesPlayed = new Date("2026-06-22T12:00:00.000Z")
 
       await Effect.runPromise(
         repo.upsertLibraryItem({
@@ -536,7 +553,7 @@ describe("createLibraryRepository — readable playable entries", () => {
             sonic: {
               title: "Sonic",
               metadata: { name: "Sonic", developer: "Sega" },
-              userData: { lastPlayed: sonicPlayed, playtime: 120 },
+              userData: { favorite: true },
             },
             knuckles: {
               title: "Knuckles",
@@ -544,7 +561,6 @@ describe("createLibraryRepository — readable playable entries", () => {
                 name: "Knuckles",
                 developer: "Sega Technical Institute",
               },
-              userData: { lastPlayed: knucklesPlayed, playtime: 240 },
             },
           },
           releases: [
@@ -573,11 +589,11 @@ describe("createLibraryRepository — readable playable entries", () => {
       expect(
         entries.find(candidate => candidate.id === "sonic-collection/sonic")
           ?.userData,
-      ).toEqual({ lastPlayed: sonicPlayed, playtime: 120 })
+      ).toEqual({ favorite: true })
       expect(
         entries.find(candidate => candidate.id === "sonic-collection/knuckles")
           ?.userData,
-      ).toEqual({ lastPlayed: knucklesPlayed, playtime: 240 })
+      ).toBeUndefined()
     })
   })
 

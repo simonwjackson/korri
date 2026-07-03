@@ -19,6 +19,7 @@ import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
 import { LaunchBlock } from "../launch-block"
+import { PlayStats } from "./play-log"
 import { PresetMapPayload } from "./preset"
 
 /**
@@ -86,11 +87,12 @@ export const GameMetadata = Schema.Struct({
 )
 export type GameMetadata = Schema.Schema.Type<typeof GameMetadata>
 
+/**
+ * Authored, user-owned facts about a game. Play history is NOT here — it
+ * lives in the play log (`./play-log`) and is exposed as derived `playStats`
+ * on read/wire entries. `favorite` is the only authored user datum.
+ */
 export const GameUserData = Schema.Struct({
-  lastPlayed: Schema.optional(
-    Schema.Union([Schema.Date, Schema.DateFromString]),
-  ),
-  playtime: Schema.optional(Schema.Number),
   favorite: Schema.optional(Schema.Boolean),
 })
 export type GameUserData = Schema.Schema.Type<typeof GameUserData>
@@ -164,6 +166,10 @@ export type GamePayload = Schema.Schema.Type<typeof GamePayload>
 export const GameRecord = Schema.Struct({
   id: Schema.String,
   ...GamePayloadFields,
+  // Derived play history carried on the hydrated runtime record (never on
+  // the authored `GamePayload`). Importers/sources set it; readers project
+  // it onto entries. Authored YAML cannot express it.
+  playStats: Schema.optional(PlayStats),
 }).check(GameContentReferenceFilter)
 export type GameRecord = Schema.Schema.Type<typeof GameRecord>
 

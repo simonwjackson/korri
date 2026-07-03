@@ -312,8 +312,10 @@ export function makeLaunchHandler(
 
 export function toCinematicGame(game: CatalogEntry): ShiftCinematicGame {
   const tile = getPlayableRailImage(game)
-  const lastPlayed = dateValue(game.userData?.lastPlayed)
-  const playtime = numberValue(game.userData?.playtime)
+  const lastPlayed = game.playStats?.lastPlayed
+  const playtimeSeconds = game.playStats?.totalPlaytimeSeconds
+  const playtime =
+    playtimeSeconds !== undefined ? Math.round(playtimeSeconds / 60) : undefined
   const favorite = game.userData?.favorite === true
 
   return {
@@ -347,13 +349,3 @@ function getPlayableRailImage(
   )
 }
 
-function dateValue(value: unknown): Date | undefined {
-  if (value instanceof Date) return value
-  if (typeof value !== "string") return undefined
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed
-}
-
-function numberValue(value: unknown): number | undefined {
-  return typeof value === "number" ? value : undefined
-}

@@ -68,6 +68,8 @@ import { isGameAssetBlobValid } from "@platform/library/game-assets/game-asset-b
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { LibraryError } from "@platform/library/library-services"
+import type { PlayLogStore } from "@platform/library/play-log-store"
+import { derivePlayStats } from "@platform/library/play-stats"
 import type {
   PlayableLibraryEntry,
   PlayableReleaseEntry,
@@ -194,6 +196,12 @@ export interface CreateLibraryRepositoryOptions {
   readonly env?: Record<string, string | undefined>
   readonly launchIntegrations?: readonly ReadableLaunchIntegration[]
   readonly pluginRegistry?: PluginRegistry
+  /**
+   * Optional play-log store. When present, `listPlayableEntries` projects
+   * derived `playStats` onto every entry from the recorded log. Absent =
+   * entries carry no recorded play history (never played).
+   */
+  readonly playLogStore?: PlayLogStore
 }
 
 export interface LibraryRepository {
@@ -320,6 +328,9 @@ export function createLibraryRepository(
         ),
         Effect.flatMap(entries =>
           hydratePlayableMedia(db, entries, _options.env ?? process.env),
+        ),
+        Effect.flatMap(entries =>
+          attachPlayStats(entries, _options.playLogStore),
         ),
       ),
 
@@ -1039,7 +1050,23 @@ function toCompatGameRecord(entry: PlayableLibraryEntry): GameRecord {
     id: entry.id,
     system: release?.system ?? entry.system ?? "unknown",
     metadata: { name: entry.title ?? entry.id },
+    ...(entry.playStats ? { playStats: entry.playStats } : {}),
   }
+}
+
+function attachPlayStats(
+  entries: readonly PlayableLibraryEntry[],
+  store: PlayLogStore | undefined,
+): Effect.Effect<readonly PlayableLibraryEntry[], LibraryError> {
+  if (!store) return Effect.succeed(entries)
+  return Effect.forEach(entries, entry =>
+    Effect.promise(() => store.load(entry.id)).pipe(
+      Effect.map(log => ({
+        ...entry,
+        playStats: derivePlayStats(log.entries),
+      })),
+    ),
+  )
 }
 
 function toPlayableReleaseEntry(

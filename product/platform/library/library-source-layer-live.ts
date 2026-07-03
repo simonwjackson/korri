@@ -533,6 +533,7 @@ function toCompatGameRecord(entry: PlayableLibraryEntry): ResolvedGameRecord {
     id: entry.id,
     system: release?.system ?? "unknown",
     metadata: { name: entry.title ?? entry.id },
+    ...(entry.playStats ? { playStats: entry.playStats } : {}),
   }
 }
 
@@ -562,6 +563,7 @@ function compatGameToPlayableEntry(
     ],
     launchable: game.contentPath !== undefined || game.content !== undefined,
     metadata: game.metadata,
+    ...(game.playStats ? { playStats: game.playStats } : {}),
     ...(game.media !== undefined ? { media: game.media } : {}),
   }
 }

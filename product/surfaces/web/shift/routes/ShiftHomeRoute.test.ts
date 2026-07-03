@@ -170,10 +170,11 @@ describe("toCinematicGame", () => {
         genre: ["Metroidvania"],
         developer: "Team Cherry",
       },
-      userData: {
+      userData: { favorite: true },
+      playStats: {
         lastPlayed: new Date(Date.now() - 3 * 60 * 60_000),
-        playtime: 270,
-        favorite: true,
+        playCount: 1,
+        totalPlaytimeSeconds: 270 * 60,
       },
       media: [
         {
@@ -250,15 +251,17 @@ describe("toCinematicGame", () => {
     expect(game.tileArtAspectRatio).toBe("600 / 900")
   })
 
-  it("formats string last-played values from serialized catalog data", () => {
+  it("formats last-played from catalog play stats", () => {
     const game = toCinematicGame({
       id: "serialized-game",
       itemId: "serialized-game",
       title: "Serialized Game",
       releases: [{ id: "default", system: "unknown", launchable: false }],
       launchable: false,
-      userData: {
-        lastPlayed: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
+      playStats: {
+        lastPlayed: new Date(Date.now() - 2 * 60 * 60_000),
+        playCount: 1,
+        totalPlaytimeSeconds: 0,
       },
       source: {
         hostId: "local",

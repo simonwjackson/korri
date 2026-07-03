@@ -15,10 +15,11 @@ const rawGames: ReadonlyArray<GameRecord> = [
       genre: ["Puzzle"],
       tags: ["chill", "single-player"],
     },
-    userData: {
+    userData: { favorite: true },
+    playStats: {
       lastPlayed: minutesAgo(12),
-      playtime: 480,
-      favorite: true,
+      playCount: 1,
+      totalPlaytimeSeconds: 480,
     },
   },
   {
@@ -33,7 +34,11 @@ const rawGames: ReadonlyArray<GameRecord> = [
       genre: ["Action", "Roguelike"],
       tags: ["fast-paced", "co-op"],
     },
-    userData: { lastPlayed: minutesAgo(60 * 3), playtime: 1280 },
+    playStats: {
+      lastPlayed: minutesAgo(60 * 3),
+      playCount: 1,
+      totalPlaytimeSeconds: 1280,
+    },
   },
   {
     id: "halcyon-orbit",
@@ -45,7 +50,11 @@ const rawGames: ReadonlyArray<GameRecord> = [
       genre: ["Sci-Fi", "Strategy"],
       tags: ["space", "turn-based"],
     },
-    userData: { lastPlayed: minutesAgo(60 * 24), playtime: 90 },
+    playStats: {
+      lastPlayed: minutesAgo(60 * 24),
+      playCount: 1,
+      totalPlaytimeSeconds: 90,
+    },
   },
   {
     id: "midnight-courier",
@@ -67,7 +76,12 @@ const rawGames: ReadonlyArray<GameRecord> = [
       genre: ["Puzzle", "Cozy"],
       tags: ["cozy", "single-player"],
     },
-    userData: { lastPlayed: minutesAgo(60 * 24 * 3), favorite: true },
+    userData: { favorite: true },
+    playStats: {
+      lastPlayed: minutesAgo(60 * 24 * 3),
+      playCount: 1,
+      totalPlaytimeSeconds: 0,
+    },
   },
   {
     id: "tundra-call",
@@ -89,7 +103,11 @@ const rawGames: ReadonlyArray<GameRecord> = [
       genre: ["Simulation"],
       tags: ["cozy"],
     },
-    userData: { lastPlayed: minutesAgo(60 * 24 * 14), playtime: 4400 },
+    playStats: {
+      lastPlayed: minutesAgo(60 * 24 * 14),
+      playCount: 1,
+      totalPlaytimeSeconds: 4400,
+    },
   },
   {
     id: "stargazer-academy",
@@ -121,7 +139,11 @@ const rawGames: ReadonlyArray<GameRecord> = [
       developer: "Vector Walk",
       genre: ["Exploration"],
     },
-    userData: { lastPlayed: minutesAgo(45), playtime: 220 },
+    playStats: {
+      lastPlayed: minutesAgo(45),
+      playCount: 1,
+      totalPlaytimeSeconds: 220,
+    },
   },
   {
     id: "iron-meadow",

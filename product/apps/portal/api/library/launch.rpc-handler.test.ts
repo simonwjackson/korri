@@ -1342,7 +1342,6 @@ async function withTempProseqlLibrary(
             contentPath: "/tmp/roms/snes/echo.smc",
             launch: { app: "rocknix-retroarch" },
             metadata: { name: "Echo" },
-            userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
           })
           yield* repository.upsertSystem({
             id: "snes",

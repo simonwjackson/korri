@@ -200,7 +200,7 @@ function TileArt({ game }: { game: GameRecord }) {
 function Placard({ game }: { game: GameRecord }) {
   const name = getGameDisplayName(game)
   const developer = game.metadata?.developer
-  const lastPlayed = game.userData?.lastPlayed
+  const lastPlayed = game.playStats?.lastPlayed
   const lastPlayedLabel = lastPlayed ? formatRelative(lastPlayed) : undefined
 
   return (

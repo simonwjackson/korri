@@ -1,5 +1,6 @@
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { GameRecord } from "@platform/library/config/records/game"
+import type { PlayStats } from "@platform/library/config/records/play-log"
 import {
   LibraryError,
   type LibrarySourceService,
@@ -38,12 +39,21 @@ const SEED_NOW = Date.UTC(2026, 5, 24, 12, 0, 0)
 const recentMinutes = [12, 95, 300, 1560, 3000, 60 * 24 * 3] as const
 
 function seededUserData(index: number): GameRecord["userData"] {
-  const recent = recentMinutes[index]
   return {
-    lastPlayed:
-      recent === undefined ? undefined : new Date(SEED_NOW - recent * 60_000),
-    playtime: index < 9 ? (index + 1) * 180 + 40 : undefined,
     favorite: index % 4 === 0,
+  }
+}
+
+// Derived play history for the dev-lab seed. Attached onto read entries below
+// (the readable db path stores only authored userData, so play history rides
+// alongside media rather than through the item).
+function seededPlayStats(index: number): PlayStats | undefined {
+  const recent = recentMinutes[index]
+  if (recent === undefined) return undefined
+  return {
+    lastPlayed: new Date(SEED_NOW - recent * 60_000),
+    playCount: 1,
+    totalPlaytimeSeconds: index < 9 ? ((index + 1) * 180 + 40) * 60 : 0,
   }
 }
 
@@ -82,16 +92,23 @@ export async function makeSeededProseqlLibrarySource(
   const mediaById = new Map(
     games.map(game => [game.id, mediaForSeedGame(game)]),
   )
+  const playStatsById = new Map(
+    games.map((game, index) => [game.id, seededPlayStats(index)] as const),
+  )
 
   const listPlayableEntries = () =>
     readSeededEntries(db).pipe(
       Effect.map(entries =>
-        entries.map(entry => ({
-          ...entry,
-          ...(mediaById.has(entry.id)
-            ? { media: mediaById.get(entry.id) }
-            : {}),
-        })),
+        entries.map(entry => {
+          const playStats = playStatsById.get(entry.id)
+          return {
+            ...entry,
+            ...(mediaById.has(entry.id)
+              ? { media: mediaById.get(entry.id) }
+              : {}),
+            ...(playStats ? { playStats } : {}),
+          }
+        }),
       ),
     )
 

@@ -179,8 +179,12 @@ function HeroArt({ game }: { game: GameRecord }) {
 
 function HeroOverlay({ game }: { game: GameRecord }) {
   const name = getGameDisplayName(game)
-  const lastPlayed = formatRelative(game.userData?.lastPlayed)
-  const playtime = formatPlaytime(game.userData?.playtime)
+  const lastPlayed = formatRelative(game.playStats?.lastPlayed)
+  const playtime = formatPlaytime(
+    game.playStats?.totalPlaytimeSeconds !== undefined
+      ? Math.round(game.playStats.totalPlaytimeSeconds / 60)
+      : undefined,
+  )
   const developer = game.metadata?.developer
 
   return (

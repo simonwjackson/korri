@@ -284,9 +284,6 @@ describe("createProseqlLibrarySource", () => {
                 contentPath: "/storage/roms/snes/f-zero.smc",
                 launch: { app: "echo" },
                 metadata: { name: "F-Zero" },
-                userData: {
-                  lastPlayed: new Date("2026-01-01T00:00:00.000Z"),
-                },
               },
               launcher: {
                 id: "echo",

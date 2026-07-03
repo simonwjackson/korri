@@ -131,7 +131,8 @@ function playtimeLabel(minutes: number | undefined): string | null {
 }
 
 export const picoGames: readonly PicoGame[] = games.map((game, index) => {
-  const lastPlayed = game.userData?.lastPlayed
+  const lastPlayed = game.playStats?.lastPlayed
+  const playtimeSeconds = game.playStats?.totalPlaytimeSeconds
   const spike = SPIKE[index]
   return {
     id: game.id,
@@ -141,7 +142,11 @@ export const picoGames: readonly PicoGame[] = games.map((game, index) => {
     favorite: game.userData?.favorite ?? false,
     lastPlayedAt: lastPlayed ? lastPlayed.getTime() : null,
     lastPlayedLabel: lastPlayed ? relativeLabel(lastPlayed) : null,
-    playtimeLabel: playtimeLabel(game.userData?.playtime),
+    playtimeLabel: playtimeLabel(
+      playtimeSeconds !== undefined
+        ? Math.round(playtimeSeconds / 60)
+        : undefined,
+    ),
     art: spike?.art,
     heroUrl: spike?.heroUrl,
     logoUrl: spike?.logoUrl,

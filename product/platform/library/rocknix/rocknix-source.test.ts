@@ -433,9 +433,10 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     const echo = games[0]
     expect(echo?.metadata?.name).toBe("Echo")
     expect(echo?.userData?.favorite).toBe(true)
-    expect(echo?.userData?.lastPlayed).toBeInstanceOf(Date)
-    expect(echo?.userData?.lastPlayed?.toISOString()).toBe(
+    expect(echo?.playStats?.lastPlayed).toBeInstanceOf(Date)
+    expect(echo?.playStats?.lastPlayed?.toISOString()).toBe(
       "2026-01-01T12:00:00.000Z",
     )
+    expect(echo?.playStats?.playCount).toBe(1)
   })
 })

@@ -32,5 +32,6 @@ function toCompatGameRecord(entry: PlayableLibraryEntry): ResolvedGameRecord {
     id: entry.id,
     system: release?.system ?? "unknown",
     metadata: { name: entry.title ?? entry.id },
+    ...(entry.playStats ? { playStats: entry.playStats } : {}),
   }
 }

@@ -29,6 +29,21 @@ export const PlayLog = Schema.Struct({
 })
 export type PlayLog = Schema.Schema.Type<typeof PlayLog>
 
+/**
+ * Derived, read-only view of a game's play history, carried on read/wire
+ * entries. Never authored — always computed from the play log (see
+ * `@platform/library/play-stats`). A game with no entries reads as never
+ * played (`lastPlayed` absent, counts zero).
+ */
+export const PlayStats = Schema.Struct({
+  lastPlayed: Schema.optional(
+    Schema.Union([Schema.Date, Schema.DateFromString]),
+  ),
+  playCount: Schema.Number,
+  totalPlaytimeSeconds: Schema.Number,
+})
+export type PlayStats = Schema.Schema.Type<typeof PlayStats>
+
 export const decodePlayEntry = (input: unknown): PlayEntry =>
   Schema.decodeUnknownSync(PlayEntry)(input, STRICT)
 

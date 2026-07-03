@@ -3,6 +3,7 @@ import {
   type ResolvedGameRecord,
 } from "@platform/fixtures/games/game"
 import { GameMetadata } from "@platform/library/config/records/game"
+import { PlayStats } from "@platform/library/config/records/play-log"
 import { ProviderInstallMetadataSchema } from "@platform/library/install-state"
 import { ArtifactId } from "@platform/protocol/artifact/artifact"
 import { Schema } from "effect"
@@ -93,6 +94,12 @@ export const PlayableLibraryEntry = Schema.Struct({
   userData: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 
   /**
+   * Derived play history (last-played, times-played, total playtime),
+   * projected from the play log at the read seam. Absent = never played.
+   */
+  playStats: Schema.optional(PlayStats),
+
+  /**
    * Temporary display compatibility while UI callers are realigned to title.
    * Readable entries forward persisted metadata when present.
    */
@@ -124,6 +131,7 @@ export function playableEntryFromResolvedGame(
     system: game.system,
     metadata: { name: title, ...game.metadata },
     ...(game.userData ? { userData: game.userData } : {}),
+    ...(game.playStats ? { playStats: game.playStats } : {}),
     media: game.media,
   }
 }

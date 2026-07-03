@@ -27,6 +27,7 @@ import { basename, join } from "node:path"
 
 import { korriDataPath, type XdgPathEnv } from "@platform/config/xdg-paths"
 import type { GameRecord } from "@platform/library/config/records/game"
+import { seedPlayStats } from "@platform/library/play-stats"
 import { logger } from "@platform/logger/logger"
 
 import type { LaunchSpec } from "../launcher"
@@ -320,8 +321,6 @@ function composeGameRecord(
     genre: entry.genre ? [entry.genre] : undefined,
   })
   const userData = stripUndefined({
-    lastPlayed: entry.lastPlayed,
-    playtime: entry.playtimeSeconds,
     favorite: entry.favorite,
   })
 
@@ -331,6 +330,13 @@ function composeGameRecord(
   }
   if (Object.keys(userData).length > 0) {
     Object.assign(record, { userData })
+  }
+  // Seed one historical play entry from the imported last-played date so
+  // day-one recency ordering works; times-played starts at 1 (see plan
+  // Key Decisions). No last-played date -> never played.
+  const playStats = seedPlayStats(entry.lastPlayed, entry.playtimeSeconds)
+  if (playStats) {
+    Object.assign(record, { playStats })
   }
   return record
 }
@@ -399,8 +405,8 @@ function composeLaunchSpec(args: {
 }
 
 function compareByLastPlayedDesc(a: GameRecord, b: GameRecord): number {
-  const ta = a.userData?.lastPlayed
-  const tb = b.userData?.lastPlayed
+  const ta = a.playStats?.lastPlayed
+  const tb = b.playStats?.lastPlayed
   const tt = (x: typeof ta) =>
     x instanceof Date
       ? x.getTime()

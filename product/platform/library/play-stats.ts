@@ -7,7 +7,9 @@
  * never played.
  */
 
-import type { PlayEntry } from "./config/records/play-log"
+import type { PlayEntry, PlayStats } from "./config/records/play-log"
+
+export type { PlayStats }
 
 /**
  * Default gate threshold, in seconds. `0` means any session that ran at all
@@ -15,16 +17,6 @@ import type { PlayEntry } from "./config/records/play-log"
  * raising the threshold later never touches recording logic.
  */
 export const DEFAULT_PLAY_LOG_THRESHOLD_SECONDS = 0
-
-/**
- * Derived, read-only view of play history. Never persisted — always computed
- * from the play log at the read seam.
- */
-export interface PlayStats {
-  readonly lastPlayed?: Date
-  readonly playCount: number
-  readonly totalPlaytimeSeconds: number
-}
 
 export function derivePlayStats(entries: readonly PlayEntry[]): PlayStats {
   if (entries.length === 0) {
@@ -52,4 +44,22 @@ export function qualifiesForPlayLog(
   thresholdSeconds: number = DEFAULT_PLAY_LOG_THRESHOLD_SECONDS,
 ): boolean {
   return durationSeconds >= thresholdSeconds
+}
+
+/**
+ * Seed a derived `PlayStats` from imported/legacy play data (a single
+ * historical session). Used by importers that carry one last-played date and
+ * an optional total playtime; times-played starts at 1. Returns `undefined`
+ * when there is no last-played date (never played).
+ */
+export function seedPlayStats(
+  lastPlayed: Date | undefined,
+  totalPlaytimeSeconds: number | undefined,
+): PlayStats | undefined {
+  if (!lastPlayed) return undefined
+  return {
+    lastPlayed,
+    playCount: 1,
+    totalPlaytimeSeconds: totalPlaytimeSeconds ?? 0,
+  }
 }
