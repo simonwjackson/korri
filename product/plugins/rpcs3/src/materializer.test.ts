@@ -120,6 +120,86 @@ describe("RPCS3 readable launch integration", () => {
     }
   })
 
+  it("preseeds CurrentSettings.ini for suppressPopups and preserves unrelated keys", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-ini-"))
+    try {
+      const gameFolder = join(root, "Skate 3 [BLUS30464]")
+      const marker = join(gameFolder, "PS3_DISC.SFB")
+      const stateRoot = join(root, "state")
+      const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
+      await mkdir(gameFolder, { recursive: true })
+      await writeFile(marker, "disc")
+      await mkdir(join(stateRoot, "dev_flash", "sys", "external"), {
+        recursive: true,
+      })
+      await writeFile(join(stateRoot, firmwareSentinel), "firmware")
+      await mkdir(join(stateRoot, "GuiConfigs"), { recursive: true })
+      await writeFile(
+        join(stateRoot, "GuiConfigs", "CurrentSettings.ini"),
+        "[main_window]\ngeometry=@ByteArray(keep)\n",
+      )
+
+      await Effect.runPromise(
+        materializeReadableRpcs3Launch({
+          context: context({
+            contentPath: marker,
+            policy: {
+              command: KORRI_RPCS3_DEFAULT_COMMAND,
+              state: { root: stateRoot },
+              firmware: { sentinel: firmwareSentinel },
+              boot: { suppressPopups: true },
+            },
+          }),
+        }),
+      )
+
+      const ini = await readFile(
+        join(stateRoot, "GuiConfigs", "CurrentSettings.ini"),
+        "utf8",
+      )
+      expect(ini).toContain("geometry=@ByteArray(keep)")
+      expect(ini).toContain("confirmationBoxExitGame=false")
+      expect(ini).toContain("infoBoxEnabledWelcome=false")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("leaves CurrentSettings.ini untouched when suppression is absent", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-ini-noop-"))
+    try {
+      const gameFolder = join(root, "Skate 3 [BLUS30464]")
+      const marker = join(gameFolder, "PS3_DISC.SFB")
+      const stateRoot = join(root, "state")
+      const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
+      await mkdir(gameFolder, { recursive: true })
+      await writeFile(marker, "disc")
+      await mkdir(join(stateRoot, "dev_flash", "sys", "external"), {
+        recursive: true,
+      })
+      await writeFile(join(stateRoot, firmwareSentinel), "firmware")
+
+      await Effect.runPromise(
+        materializeReadableRpcs3Launch({
+          context: context({
+            contentPath: marker,
+            policy: {
+              command: KORRI_RPCS3_DEFAULT_COMMAND,
+              state: { root: stateRoot },
+              firmware: { sentinel: firmwareSentinel },
+            },
+          }),
+        }),
+      )
+
+      await expect(
+        stat(join(stateRoot, "GuiConfigs", "CurrentSettings.ini")),
+      ).rejects.toThrow()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("read-merges the operator canonical config without clobbering it", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-merge-"))
     try {

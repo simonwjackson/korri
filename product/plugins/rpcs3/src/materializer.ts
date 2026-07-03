@@ -18,6 +18,7 @@ import type { ReadableResolvedLaunchContext } from "@platform/library/config/res
 import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
 import { Effect } from "effect"
 import { renderConfigYaml } from "./config-render"
+import { mergeGuiIni } from "./gui-preseed"
 import { composeRpcs3LaunchSpec } from "./launch-spec"
 import { routeSettings } from "./mapping"
 import {
@@ -97,6 +98,7 @@ const materializeReadableRpcs3Resources = (
 
     const routed = routeSettings(resolvedPolicy)
     const configPath = yield* writeLaunchConfig(context, stateRoot, routed)
+    yield* writeGuiPreseed(context, stateRoot, routed.iniEntries)
 
     const spec = yield* tryMaterialize(context, () =>
       composeRpcs3LaunchSpec({
@@ -148,12 +150,35 @@ const readCanonicalConfig = (
   context: ReadableResolvedLaunchContext,
   stateRoot: string,
 ): Effect.Effect<string | undefined, ResolutionError> =>
+  readOptionalFile(context, join(stateRoot, "config.yml"))
+
+/**
+ * Preseed RPCS3's GUI popup toggles (GuiConfigs/CurrentSettings.ini) so
+ * unattended launches don't stall on confirmation boxes. No-op when there are
+ * no routed ini entries; otherwise merges into any existing file so unrelated
+ * GUI state is preserved.
+ */
+const writeGuiPreseed = (
+  context: ReadableResolvedLaunchContext,
+  stateRoot: string,
+  iniEntries: ReturnType<typeof routeSettings>["iniEntries"],
+): Effect.Effect<void, ResolutionError> =>
+  Effect.gen(function* () {
+    if (iniEntries.length === 0) return
+    const iniPath = join(stateRoot, "GuiConfigs", "CurrentSettings.ini")
+    const existing = yield* readOptionalFile(context, iniPath)
+    yield* writeAtomic(context, iniPath, mergeGuiIni(existing, iniEntries))
+  })
+
+const readOptionalFile = (
+  context: ReadableResolvedLaunchContext,
+  path: string,
+): Effect.Effect<string | undefined, ResolutionError> =>
   Effect.tryPromise({
     try: async () => {
       try {
-        return await readFile(join(stateRoot, "config.yml"), "utf8")
+        return await readFile(path, "utf8")
       } catch {
-        // No canonical config (fresh state root) — render from defaults only.
         return undefined
       }
     },
