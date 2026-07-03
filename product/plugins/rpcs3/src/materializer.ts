@@ -206,8 +206,13 @@ const readOptionalFile = (
     try: async () => {
       try {
         return await readFile(path, "utf8")
-      } catch {
-        return undefined
+      } catch (error) {
+        // A genuinely-absent file is expected (fresh state root). Any other
+        // read failure (e.g. permissions) must NOT be swallowed: silently
+        // dropping an unreadable canonical config would discard operator
+        // settings the read-merge model promises to preserve.
+        if (isNodeErrorCode(error, "ENOENT")) return undefined
+        throw error
       }
     },
     catch: error =>
@@ -216,6 +221,12 @@ const readOptionalFile = (
         reason: error instanceof Error ? error.message : String(error),
       }),
   })
+
+const isNodeErrorCode = (error: unknown, code: string): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  (error as { readonly code?: unknown }).code === code
 
 const slugReleaseId = (releaseId: string): string =>
   releaseId.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") ||

@@ -322,6 +322,41 @@ describe("RPCS3 readable launch integration", () => {
     }
   })
 
+  it("surfaces a non-ENOENT canonical config read error instead of dropping it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-cfgerr-"))
+    try {
+      const gameFolder = join(root, "Skate 3 [BLUS30464]")
+      const marker = join(gameFolder, "PS3_DISC.SFB")
+      const stateRoot = join(root, "rpcs3")
+      const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
+      await mkdir(gameFolder, { recursive: true })
+      await writeFile(marker, "disc")
+      await mkdir(join(stateRoot, "dev_flash", "sys", "external"), {
+        recursive: true,
+      })
+      await writeFile(join(stateRoot, firmwareSentinel), "firmware")
+      // A directory where config.yml is expected makes readFile throw EISDIR
+      // (a non-ENOENT error) that must NOT be silently swallowed.
+      await mkdir(join(stateRoot, "config.yml"), { recursive: true })
+
+      const exit = await Effect.runPromiseExit(
+        materializeReadableRpcs3Launch({
+          context: context({
+            contentPath: marker,
+            policy: {
+              state: { root: stateRoot },
+              firmware: { sentinel: firmwareSentinel },
+              video: { resolution: "1280x720" },
+            },
+          }),
+        }),
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("rejects a state.root whose basename is not rpcs3", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-basename-"))
     try {
