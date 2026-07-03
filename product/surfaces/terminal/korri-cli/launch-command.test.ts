@@ -60,6 +60,29 @@ function localSource(games: readonly GameRecord[]): LibrarySourceService {
   }
 }
 
+function localSourceWithReleases(
+  games: readonly GameRecord[],
+  releaseIds: readonly string[],
+): LibrarySourceService {
+  return {
+    ...localSource(games),
+    listPlayableEntries: () =>
+      Effect.succeed(
+        games.map(game => ({
+          id: game.id,
+          itemId: game.id,
+          title: game.metadata?.name ?? game.id,
+          launchable: true,
+          releases: releaseIds.map(id => ({
+            id,
+            system: "fixture",
+            launchable: true,
+          })),
+        })),
+      ),
+  }
+}
+
 function launchedResult(id: string): ControlLaunchResult {
   return { _tag: "Launched", selection: { id } }
 }
@@ -273,5 +296,62 @@ describe("unified launch command", () => {
     })
     expect(code).toBe(10)
     expect(lines.join("\n")).toContain("exit=7")
+  })
+
+  it("prompts for a release when the game requires one", async () => {
+    let launched: LocalLaunchRequest | undefined
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      librarySource: localSourceWithReleases([localGame], ["genesis", "steam"]),
+      launchLocal: async request => {
+        launched = request
+        return launchedResult(request.id)
+      },
+      discoverHosts: async () => [],
+      releasePicker: async ids => ids[1],
+      stdinIsTty: true,
+      output: () => {},
+      errorOutput: () => {},
+    })
+    expect(code).toBe(0)
+    expect(launched?.releaseId).toBe("steam")
+  })
+
+  it("returns ambiguous (4) when a release is required and there is no terminal", async () => {
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      librarySource: localSourceWithReleases([localGame], ["genesis", "steam"]),
+      launchLocal: async request => launchedResult(request.id),
+      discoverHosts: async () => [],
+      stdinIsTty: false,
+      output: () => {},
+      errorOutput: () => {},
+    })
+    expect(code).toBe(4)
+  })
+
+  it("passes --release-id through without prompting", async () => {
+    let launched: LocalLaunchRequest | undefined
+    let prompted = false
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      releaseId: "steam",
+      librarySource: localSourceWithReleases([localGame], ["genesis", "steam"]),
+      launchLocal: async request => {
+        launched = request
+        return launchedResult(request.id)
+      },
+      discoverHosts: async () => [],
+      releasePicker: async () => {
+        prompted = true
+        return "genesis"
+      },
+      stdinIsTty: true,
+      output: () => {},
+      errorOutput: () => {},
+    })
+    expect(code).toBe(0)
+    expect(launched?.releaseId).toBe("steam")
+    expect(prompted).toBe(false)
   })
 })

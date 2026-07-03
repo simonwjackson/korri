@@ -1,10 +1,12 @@
 import type { ControlLaunchResult } from "@platform/control/control-results"
+import { releaseChoiceForLaunch } from "@platform/library/launch-state"
 import type { LibrarySourceService } from "@platform/library/library-services"
 import {
   type DiscoverStreamHostsOptions,
   discoverStreamHosts,
   type StreamHostCandidate,
 } from "@platform/stream/lan-stream-discovery"
+import { Effect, Exit } from "effect"
 import { remoteClientFor } from "./cli-helpers"
 import {
   type CliOutcome,
@@ -53,6 +55,9 @@ export interface RunLaunchCommandOptions {
     request: LocalLaunchRequest,
   ) => Promise<ControlLaunchResult>
   readonly gamePicker?: GamePicker
+  readonly releasePicker?: (
+    releaseIds: readonly string[],
+  ) => Promise<string | undefined>
   readonly discoverHosts?: (
     options: DiscoverStreamHostsOptions,
   ) => Promise<readonly StreamHostCandidate[]>
@@ -186,9 +191,12 @@ async function launchLocalEntry(
   options: RunLaunchCommandOptions,
   entry: SourceAwareEntry,
 ): Promise<RenderedOutcome> {
+  const release = await resolveLocalRelease(options, entry.game.id)
+  if (release._tag === "Failed") return renderOutcome(release.outcome)
+
   const result = await options.launchLocal({
     id: entry.game.id,
-    ...(options.releaseId ? { releaseId: options.releaseId } : {}),
+    ...(release.releaseId ? { releaseId: release.releaseId } : {}),
     ...(options.appId ? { appId: options.appId } : {}),
     ...(options.profileId ? { profileId: options.profileId } : {}),
   })
@@ -196,6 +204,54 @@ async function launchLocalEntry(
     text: renderLaunchGame(result).split("\n"),
     code: launchGameExitCode(result),
   }
+}
+
+/**
+ * Resolve which release a local launch should use. `--release-id` wins; when a
+ * game legitimately requires a release choice, prompt for it (or report
+ * ambiguous with no terminal). App and profile have no required-signal today,
+ * so they only pass through as flags.
+ */
+async function resolveLocalRelease(
+  options: RunLaunchCommandOptions,
+  gameId: string,
+): Promise<
+  | { readonly _tag: "Ready"; readonly releaseId?: string }
+  | { readonly _tag: "Failed"; readonly outcome: CliOutcome }
+> {
+  if (options.releaseId) return { _tag: "Ready", releaseId: options.releaseId }
+
+  const listPlayable = options.librarySource.listPlayableEntries
+  if (!listPlayable) return { _tag: "Ready" }
+
+  const exit = await Effect.runPromiseExit(listPlayable())
+  if (Exit.isFailure(exit)) return { _tag: "Ready" }
+  const entry = exit.value.find(candidate => candidate.id === gameId)
+  if (!entry) return { _tag: "Ready" }
+
+  const choice = releaseChoiceForLaunch(entry, undefined)
+  if (choice._tag !== "ReleaseRequired") return { _tag: "Ready" }
+
+  if (options.stdinIsTty === false) {
+    return {
+      _tag: "Failed",
+      outcome: fail(
+        "ambiguous",
+        `Game ${gameId} needs a release; pass --release-id`,
+      ),
+    }
+  }
+  if (!options.releasePicker) {
+    return {
+      _tag: "Failed",
+      outcome: fail("usage", "Interactive release selection is unavailable"),
+    }
+  }
+  const chosen = await options.releasePicker(choice.releaseIds)
+  if (!chosen) {
+    return { _tag: "Failed", outcome: fail("cancelled", "Launch cancelled") }
+  }
+  return { _tag: "Ready", releaseId: chosen }
 }
 
 async function launchRemoteEntry(
