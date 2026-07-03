@@ -68,16 +68,27 @@ function setup(kind: "local" | "stream" = "local") {
 }
 
 describe("overlay orchestrator", () => {
-  it("shows and fills the ring on press/progress", () => {
+  it("fills the ring on progress but shows nothing on press (buffer)", () => {
     const { renderer, orchestrator } = setup()
     orchestrator.onHoldUpdate(hold("press"))
+    expect(renderer.calls).toEqual([]) // buffer: no ring on press
     orchestrator.onHoldUpdate(hold("progress", 0.5))
     orchestrator.onHoldUpdate(hold("progress", 0.99))
     expect(renderer.calls).toEqual([
-      { kind: "ring", pct: 0 },
       { kind: "ring", pct: 50 },
       { kind: "ring", pct: 99 },
     ])
+  })
+
+  it("cancel abandons the gesture: hides and ungates, no action", () => {
+    const { renderer, intercept, actions, orchestrator } = setup()
+    orchestrator.onHoldUpdate(hold("press"))
+    orchestrator.onHoldUpdate(hold("progress", 0.5))
+    orchestrator.onHoldUpdate(hold("cancel", 0.5))
+    expect(actions.forceQuit).toBe(0)
+    expect(actions.closeRemoteGame).toBe(0)
+    expect(intercept.isActive()).toBe(false)
+    expect(renderer.calls.at(-1)).toEqual({ kind: "hide" })
   })
 
   it("hides and force-quits on fired", () => {
@@ -101,7 +112,7 @@ describe("overlay orchestrator", () => {
     const { intercept, renderer, orchestrator } = setup()
     orchestrator.onHoldUpdate(hold("press"))
     intercept.nav("left") // no menu yet -> ignored
-    expect(renderer.calls).toEqual([{ kind: "ring", pct: 0 }])
+    expect(renderer.calls).toEqual([]) // nothing drawn on press
   })
 
   it("opens the menu on tap and gates the game", () => {

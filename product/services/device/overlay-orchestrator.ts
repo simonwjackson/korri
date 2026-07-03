@@ -111,8 +111,10 @@ export function createOverlayOrchestrator(deps: {
     onHoldUpdate(update) {
       switch (update.phase) {
         case "press":
+          // Gate immediately (so the chord never leaks to the game), but show
+          // nothing during the tap/buffer window: a quick tap must never flash
+          // the ring, and the ring and menu must never be on screen together.
           ensureGated()
-          deps.renderer.ring(0)
           return
         case "progress":
           deps.renderer.ring(Math.round(update.progress * 100))
@@ -124,6 +126,11 @@ export function createOverlayOrchestrator(deps: {
           return
         case "tap":
           openMenu()
+          return
+        case "cancel":
+          // Released mid-hold: abandon the whole gesture, back to the game.
+          deps.renderer.hide()
+          ungate()
           return
       }
     },

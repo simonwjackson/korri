@@ -1,30 +1,26 @@
 /**
- * Adds a time dimension to an already-assembled button chord.
+ * Adds a time dimension to an already-assembled button chord, with three
+ * outcomes decided purely by how long the chord is held:
  *
- * The system-shortcut and button-chord engines are purely press/release: a
- * chord "fires" the instant all of its controls are down. That is the correct
- * primitive for momentary shortcuts, but a destructive action (quitting a
- * game) should be a *deliberate* act, not an accident. This supervisor turns a
- * single chord into a held gesture:
+ *   engage(id) -> "press"
+ *     released within tapMs                 -> "tap"    (a quick press: open menu)
+ *     released after tapMs, before holdMs    -> "cancel" (back to the game)
+ *     held to holdMs                         -> "fired"  (quit)
  *
- *   engage(id)  -> "press" (progress 0)
- *               -> "progress" ticks (0 -> 1) while the chord stays held
- *               -> "fired"    once the hold passes the threshold
- *   release(id) before the threshold -> "tap" (the chord was a quick press)
- *   release(id) after "fired"        -> nothing (the act already committed)
+ * The ring only fills AFTER the tap window (a buffer), emitted as "progress"
+ * from 0 at tapMs to 1 at holdMs. So a quick tap never flashes the ring, and the
+ * ring and the menu are never on screen at the same time.
  *
- * It owns no input plumbing and no rendering: callers translate real evdev
- * chord begin/break into engage/release, and consumers (an overlay ring, a
- * force-quit action) subscribe to the emitted updates. Timers are injected so
- * the whole state machine is deterministic under test.
+ * It owns no input plumbing and no rendering. Timers are injected so the whole
+ * state machine is deterministic under test.
  */
 
-export type ChordHoldPhase = "press" | "progress" | "fired" | "tap"
+export type ChordHoldPhase = "press" | "progress" | "fired" | "tap" | "cancel"
 
 export interface ChordHoldUpdate<Id extends string = string> {
   readonly id: Id
   readonly phase: ChordHoldPhase
-  /** 0 at press, 1 at fire; the fraction reached at release for a tap. */
+  /** Ring fill 0..1 across the post-buffer window (0 at tapMs, 1 at holdMs). */
   readonly progress: number
   readonly elapsedMs: number
 }
@@ -36,13 +32,9 @@ export interface ChordHoldTimers {
 }
 
 export interface ChordHoldSupervisor<Id extends string = string> {
-  /** The chord became fully held. Starts the hold timer. */
   readonly engage: (id: Id) => void
-  /** The chord was broken (a required control released). */
   readonly release: (id: Id) => void
-  /** True if the given id (or any id) is currently held. */
   readonly isHolding: (id?: Id) => boolean
-  /** Cancel every in-flight hold without firing. */
   readonly reset: () => void
 }
 
@@ -53,14 +45,14 @@ interface HoldState {
 }
 
 const DEFAULT_HOLD_MS = 2000
+const DEFAULT_TAP_MS = 250
 const DEFAULT_TICK_MS = 50
 
 const defaultTimers: ChordHoldTimers = {
   now: () => Date.now(),
   setInterval: (callback, ms) => setInterval(callback, ms),
   clearInterval: handle => {
-    if (handle !== undefined)
-      clearInterval(handle as ReturnType<typeof setInterval>)
+    if (handle !== undefined) clearInterval(handle as ReturnType<typeof setInterval>)
   },
 }
 
@@ -72,14 +64,21 @@ function clamp01(value: number): number {
 
 export function createChordHoldSupervisor<const Id extends string>(options: {
   readonly holdMs?: number
+  readonly tapMs?: number
   readonly tickMs?: number
   readonly onUpdate: (update: ChordHoldUpdate<Id>) => void
   readonly timers?: ChordHoldTimers
 }): ChordHoldSupervisor<Id> {
   const holdMs = options.holdMs ?? DEFAULT_HOLD_MS
+  const tapMs = Math.min(options.tapMs ?? DEFAULT_TAP_MS, holdMs)
   const tickMs = options.tickMs ?? DEFAULT_TICK_MS
   const timers = options.timers ?? defaultTimers
   const holds = new Map<Id, HoldState>()
+  const span = Math.max(1, holdMs - tapMs)
+
+  function fillFor(elapsedMs: number): number {
+    return clamp01((elapsedMs - tapMs) / span)
+  }
 
   function stop(id: Id): void {
     const state = holds.get(id)
@@ -100,11 +99,12 @@ export function createChordHoldSupervisor<const Id extends string>(options: {
       options.onUpdate({ id, phase: "fired", progress: 1, elapsedMs })
       return
     }
-
+    // Buffer: nothing is shown until the tap window has passed.
+    if (elapsedMs < tapMs) return
     options.onUpdate({
       id,
       phase: "progress",
-      progress: clamp01(elapsedMs / holdMs),
+      progress: fillFor(elapsedMs),
       elapsedMs,
     })
   }
@@ -112,36 +112,35 @@ export function createChordHoldSupervisor<const Id extends string>(options: {
   return {
     engage(id) {
       if (holds.has(id)) return
-
       const startedAt = timers.now()
       const state: HoldState = { startedAt, fired: false, handle: undefined }
       holds.set(id, state)
       options.onUpdate({ id, phase: "press", progress: 0, elapsedMs: 0 })
-
       if (holdMs <= 0) {
         state.fired = true
         options.onUpdate({ id, phase: "fired", progress: 1, elapsedMs: 0 })
         return
       }
-
       state.handle = timers.setInterval(() => tick(id), tickMs)
     },
 
     release(id) {
       const state = holds.get(id)
       if (!state) return
-
       const fired = state.fired
       const elapsedMs = timers.now() - state.startedAt
       stop(id)
       if (fired) return
-
-      options.onUpdate({
-        id,
-        phase: "tap",
-        progress: clamp01(elapsedMs / holdMs),
-        elapsedMs,
-      })
+      if (elapsedMs < tapMs) {
+        options.onUpdate({ id, phase: "tap", progress: 0, elapsedMs })
+      } else {
+        options.onUpdate({
+          id,
+          phase: "cancel",
+          progress: fillFor(elapsedMs),
+          elapsedMs,
+        })
+      }
     },
 
     isHolding(id) {
