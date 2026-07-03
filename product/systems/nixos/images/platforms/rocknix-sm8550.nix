@@ -726,11 +726,18 @@ in
 
       ${sm8550.display.swayDeviceConfig}
 
-      # Bandai/Sobo's DSI panel is physically mounted rotated. Keep the
-      # operator-validated right-side-up transform explicit here so product
-      # redeploys cannot regress the kiosk back to the substrate default.
-      output DSI-1 transform 90
-      output DSI-1 power off
+      # Thor's DSI-1 is the unused bottom panel: keep it dark. This only
+      # applies on dual-panel devices (device config references DSI-2). On
+      # single-panel SM8550 devices (Odin 2 Portal) DSI-1 IS the primary
+      # display and the device profile owns its transform/power - the
+      # previous unconditional `transform 90` + `power off` lines clobbered
+      # odin2portal's validated transform 270 (upside-down panel) and powered
+      # off its only display (black screen at boot). Thor's DSI-1/DSI-2
+      # transforms come from the chipset-default swayDeviceConfig, so no
+      # transform needs restating here.
+      ${lib.optionalString (lib.hasInfix "DSI-2" sm8550.display.swayDeviceConfig) ''
+        output DSI-1 power off
+      ''}
     '';
   };
 
