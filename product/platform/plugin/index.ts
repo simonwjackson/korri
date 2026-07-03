@@ -21,6 +21,8 @@ export type PluginOperation =
   | "launch.prepare"
   | "launch.compose"
   | "runtime.resolve"
+  | "stream.launch"
+  | "stream.discover"
   | "stream-control.apply"
   | "stream-control.describe"
   | "session.cleanup"
