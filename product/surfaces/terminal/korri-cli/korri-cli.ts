@@ -36,6 +36,7 @@ import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"
 import { scoutCommand } from "./scout-command"
 import { runSourceAwarePlayCommand } from "./source-aware-play"
 import { runStreamLaunchCommand } from "./stream-launch"
+import { parseResolution, runStreamSet, runStreamShow } from "./stream-quality"
 
 const VERSION = "1.0.0"
 
@@ -94,9 +95,96 @@ const streamRemoteLaunchCommand = Command.make(
   ),
 )
 
+const streamSocketFlag = Flag.string("socket").pipe(Flag.optional)
+
+const streamShowCommand = Command.make(
+  "show",
+  { socket: streamSocketFlag },
+  ({ socket }) =>
+    Effect.gen(function* () {
+      const exitCode = yield* Effect.promise(() =>
+        runStreamShow(streamQualityIo(socket)),
+      )
+      process.exitCode = exitCode
+    }),
+).pipe(
+  Command.withDescription(
+    "Show the running stream's current bitrate, FPS, and resolution.",
+  ),
+)
+
+const streamBitrateCommand = Command.make(
+  "bitrate",
+  { kbps: Argument.integer("kbps"), socket: streamSocketFlag },
+  ({ kbps, socket }) =>
+    Effect.gen(function* () {
+      if (kbps <= 0) {
+        console.error("bitrate must be a positive number of kbps")
+        process.exitCode = 2
+        return
+      }
+      const exitCode = yield* Effect.promise(() =>
+        runStreamSet(
+          { kind: "bitrate", bitrateKbps: kbps },
+          streamQualityIo(socket),
+        ),
+      )
+      process.exitCode = exitCode
+    }),
+).pipe(Command.withDescription("Set the running stream's bitrate in kbps."))
+
+const streamFpsCommand = Command.make(
+  "fps",
+  { fps: Argument.integer("fps"), socket: streamSocketFlag },
+  ({ fps, socket }) =>
+    Effect.gen(function* () {
+      if (fps <= 0) {
+        console.error("fps must be a positive number")
+        process.exitCode = 2
+        return
+      }
+      const exitCode = yield* Effect.promise(() =>
+        runStreamSet({ kind: "fps", fps }, streamQualityIo(socket)),
+      )
+      process.exitCode = exitCode
+    }),
+).pipe(Command.withDescription("Set the running stream's frame rate."))
+
+const streamResolutionCommand = Command.make(
+  "resolution",
+  { size: Argument.string("WIDTHxHEIGHT"), socket: streamSocketFlag },
+  ({ size, socket }) =>
+    Effect.gen(function* () {
+      const parsed = parseResolution(size)
+      if (!parsed) {
+        console.error("resolution must be WIDTHxHEIGHT, e.g. 1280x720")
+        process.exitCode = 2
+        return
+      }
+      const exitCode = yield* Effect.promise(() =>
+        runStreamSet(
+          { kind: "resolution", width: parsed.width, height: parsed.height },
+          streamQualityIo(socket),
+        ),
+      )
+      process.exitCode = exitCode
+    }),
+).pipe(
+  Command.withDescription(
+    "Set the running stream's resolution, e.g. 1280x720.",
+  ),
+)
+
 const streamCommand = Command.make("stream").pipe(
   Command.withDescription("Manage Korri game streaming."),
-  Command.withSubcommands([streamLaunchCommand, streamRemoteLaunchCommand]),
+  Command.withSubcommands([
+    streamLaunchCommand,
+    streamRemoteLaunchCommand,
+    streamShowCommand,
+    streamBitrateCommand,
+    streamFpsCommand,
+    streamResolutionCommand,
+  ]),
 )
 
 const gamesListCommand = Command.make(
@@ -292,6 +380,10 @@ const runtimeLayer = Layer.mergeAll(
 function controlForHost(host: string | undefined) {
   if (host) return Effect.succeed(createKorriControlRpc(host))
   return KorriControl
+}
+
+function streamQualityIo(socket: Option.Option<string>) {
+  return Option.isSome(socket) ? { socketPath: socket.value } : {}
 }
 
 export function runKorriCli(argv: readonly string[]) {
