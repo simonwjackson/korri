@@ -1,7 +1,7 @@
 ---
 title: "feat: Cross-launcher launch preferences (Phase 1)"
 type: feat
-status: active
+status: completed
 date: 2026-07-03
 origin: work/items/active/01KWM7Q407Q0QDVZ4SY4BZBKHY-cross-emulator-settings-vocabulary/item.md
 verify_command: "just typecheck && just test-unit"
