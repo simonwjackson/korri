@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test"
+import { parse } from "yaml"
+import { renderConfigYaml } from "./config-render"
 import {
   RPCS3_POPUP_INI_KEYS,
   RPCS3_POPUP_INI_SECTION,
@@ -107,6 +109,71 @@ describe("routeSettings", () => {
       ["System.Language", "English (US)"],
       ["System.License Area", "SCEE"],
     ])
+  })
+
+  it("routes Phase 3 core accuracy settings with verified value maps", () => {
+    expect(
+      routeSettings({
+        core: {
+          ppuDecoder: "llvm-recompiler",
+          spuDecoder: "asmjit-recompiler",
+          spuBlockSize: "mega",
+          spuXFloatAccuracy: "approximate",
+          preferredSpuThreads: 2,
+          clocksScale: 150,
+          librariesControl: ["libfoo.sprx:lle"],
+        },
+      }).configEntries,
+    ).toEqual([
+      ["Core.PPU Decoder", "Recompiler (LLVM)"],
+      ["Core.SPU Decoder", "Recompiler (ASMJIT)"],
+      ["Core.SPU Block Size", "Mega"],
+      ["Core.SPU XFloat Accuracy", "Approximate"],
+      ["Core.Preferred SPU Threads", 2],
+      ["Core.Clocks scale", 150],
+      ["Core.Libraries Control", ["libfoo.sprx:lle"]],
+    ])
+  })
+
+  it("routes Phase 3 GPU accuracy toggles as booleans and MSAA via value map", () => {
+    expect(
+      routeSettings({
+        video: {
+          writeColorBuffers: true,
+          writeDepthBuffer: false,
+          readColorBuffers: true,
+          strictRendering: true,
+          disableZcull: false,
+          msaa: "disabled",
+        },
+      }).configEntries,
+    ).toEqual([
+      ["Video.Write Color Buffers", true],
+      ["Video.Write Depth Buffer", false],
+      ["Video.Read Color Buffers", true],
+      ["Video.Strict Rendering Mode", true],
+      ["Video.Disable ZCull Occlusion Queries", false],
+      ["Video.MSAA", "Disabled"],
+    ])
+  })
+
+  it("round-trips a mixed core+video policy through renderConfigYaml", () => {
+    const routed = routeSettings({
+      core: {
+        spuBlockSize: "giga",
+        librariesControl: ["liblv2.sprx:lle", "libsysmodule.sprx:hle"],
+      },
+      video: { strictRendering: true },
+    })
+    expect(
+      parse(renderConfigYaml({ entries: routed.configEntries }) as string),
+    ).toEqual({
+      Core: {
+        "SPU Block Size": "Giga",
+        "Libraries Control": ["liblv2.sprx:lle", "libsysmodule.sprx:hle"],
+      },
+      Video: { "Strict Rendering Mode": true },
+    })
   })
 
   it("contributes nothing for an empty or group-less policy", () => {

@@ -34,9 +34,36 @@ settings:
         fullscreen: true           # flag + config, both materialized
         frameLimit: 60             # 30 | 50 | 60 | 120 | off | auto | native | infinite | display
         vsync: true                # true -> "Full", false -> "Disabled"
+        # Phase 2 — power-user video
+        renderer: vulkan           # vulkan | opengl | null
+        resolutionScale: 100       # 25–800 (percent)
+        anisotropicFilter: 0       # 0–16 (0 = auto)
+        shaderMode: async          # legacy | async | async-interpreter | interpreter
+        # Phase 3 — per-game GPU accuracy
+        writeColorBuffers: false
+        writeDepthBuffer: false
+        readColorBuffers: false
+        strictRendering: false
+        disableZcull: false
+        msaa: auto                 # disabled | auto
       audio:
         volume: 80                 # Master Volume, 0-200
         device: "@@@default@@@"    # RPCS3 Audio Device string
+        # Phase 2 — power-user audio
+        backend: cubeb             # cubeb | faudio | xaudio2 | null (Audio Renderer)
+        format: stereo             # stereo | surround-5.1 | surround-7.1 | automatic | manual
+      system:                      # Phase 2 — locale / region
+        language: en-US            # one of 20 PS3 locales
+        licenseArea: america       # japan|america|europe|asia|korea|china|other
+      core:                        # Phase 3 — per-game CPU/SPU accuracy
+        ppuDecoder: llvm-recompiler     # interpreter-static | llvm-recompiler
+        spuDecoder: asmjit-recompiler   # interpreter-static | asmjit-recompiler | llvm-recompiler
+        spuBlockSize: safe              # safe | mega | giga
+        spuXFloatAccuracy: approximate  # accurate | approximate | relaxed | inaccurate
+        preferredSpuThreads: 0          # 0 (auto) – 6
+        clocksScale: 100                # 10 – 3000 (percent)
+        librariesControl:               # LLE selection (renders as a YAML list)
+          - liblv2.sprx:lle
       # Phase 0 — headless-boot essentials
       boot:
         headless: false            # --headless (no render window)

@@ -94,6 +94,32 @@ const LICENSE_AREA: Readonly<Record<string, string>> = {
   other: "Other",
 }
 
+/** Phase 3 value maps (clean Korri name → RPCS3 enum string). */
+const PPU_DECODER: Readonly<Record<string, string>> = {
+  "interpreter-static": "Interpreter (static)",
+  "llvm-recompiler": "Recompiler (LLVM)",
+}
+const SPU_DECODER: Readonly<Record<string, string>> = {
+  "interpreter-static": "Interpreter (static)",
+  "asmjit-recompiler": "Recompiler (ASMJIT)",
+  "llvm-recompiler": "Recompiler (LLVM)",
+}
+const SPU_BLOCK_SIZE: Readonly<Record<string, string>> = {
+  safe: "Safe",
+  mega: "Mega",
+  giga: "Giga",
+}
+const SPU_XFLOAT: Readonly<Record<string, string>> = {
+  accurate: "Accurate",
+  approximate: "Approximate",
+  relaxed: "Relaxed",
+  inaccurate: "Inaccurate",
+}
+const MSAA: Readonly<Record<string, string>> = {
+  disabled: "Disabled",
+  auto: "Auto",
+}
+
 /** GUI popup toggles live under [main_window] in GuiConfigs/CurrentSettings.ini. */
 export const RPCS3_POPUP_INI_SECTION = "main_window"
 
@@ -176,6 +202,28 @@ export const routeSettings = (policy: Rpcs3Policy): RoutedSettings => {
         SHADER_MODE[video.shaderMode] ?? video.shaderMode,
       ])
     }
+    // Phase 3 — GPU accuracy toggles (booleans written verbatim to config).
+    if (video.writeColorBuffers !== undefined) {
+      configEntries.push(["Video.Write Color Buffers", video.writeColorBuffers])
+    }
+    if (video.writeDepthBuffer !== undefined) {
+      configEntries.push(["Video.Write Depth Buffer", video.writeDepthBuffer])
+    }
+    if (video.readColorBuffers !== undefined) {
+      configEntries.push(["Video.Read Color Buffers", video.readColorBuffers])
+    }
+    if (video.strictRendering !== undefined) {
+      configEntries.push(["Video.Strict Rendering Mode", video.strictRendering])
+    }
+    if (video.disableZcull !== undefined) {
+      configEntries.push([
+        "Video.Disable ZCull Occlusion Queries",
+        video.disableZcull,
+      ])
+    }
+    if (video.msaa !== undefined) {
+      configEntries.push(["Video.MSAA", MSAA[video.msaa] ?? video.msaa])
+    }
   }
 
   const audio = policy.audio
@@ -213,6 +261,46 @@ export const routeSettings = (policy: Rpcs3Policy): RoutedSettings => {
         "System.License Area",
         LICENSE_AREA[system.licenseArea] ?? system.licenseArea,
       ])
+    }
+  }
+
+  const core = policy.core
+  if (core) {
+    if (core.ppuDecoder !== undefined) {
+      configEntries.push([
+        "Core.PPU Decoder",
+        PPU_DECODER[core.ppuDecoder] ?? core.ppuDecoder,
+      ])
+    }
+    if (core.spuDecoder !== undefined) {
+      configEntries.push([
+        "Core.SPU Decoder",
+        SPU_DECODER[core.spuDecoder] ?? core.spuDecoder,
+      ])
+    }
+    if (core.spuBlockSize !== undefined) {
+      configEntries.push([
+        "Core.SPU Block Size",
+        SPU_BLOCK_SIZE[core.spuBlockSize] ?? core.spuBlockSize,
+      ])
+    }
+    if (core.spuXFloatAccuracy !== undefined) {
+      configEntries.push([
+        "Core.SPU XFloat Accuracy",
+        SPU_XFLOAT[core.spuXFloatAccuracy] ?? core.spuXFloatAccuracy,
+      ])
+    }
+    if (core.preferredSpuThreads !== undefined) {
+      configEntries.push([
+        "Core.Preferred SPU Threads",
+        core.preferredSpuThreads,
+      ])
+    }
+    if (core.clocksScale !== undefined) {
+      configEntries.push(["Core.Clocks scale", core.clocksScale])
+    }
+    if (core.librariesControl !== undefined) {
+      configEntries.push(["Core.Libraries Control", core.librariesControl])
     }
   }
 
