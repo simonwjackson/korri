@@ -7,6 +7,7 @@ import {
 } from "@platform/stream/lan-stream-discovery"
 import { errorMessage, remoteClientFor } from "./cli-helpers"
 import type { GamePicker } from "./game-picker"
+import { pickGameChoice } from "./interactive-pick"
 import { resolveCliMoonlightLaunchPolicy } from "./moonlight-launch-policy"
 import {
   launchMoonlight,
@@ -82,23 +83,24 @@ export async function runRemoteStreamLaunchCommand(
     errorOutput("No remote streamable games were found")
     return 5
   }
-  if (options.stdinIsTty === false) {
+  const picked = await pickGameChoice({
+    choices: choices.map(choice => choice.choice),
+    stdinIsTty: options.stdinIsTty,
+    gamePicker: options.gamePicker,
+  })
+  if (picked._tag === "NoTty") {
     errorOutput("Interactive remote game selection requires a terminal")
     return 2
   }
-  if (!options.gamePicker) {
+  if (picked._tag === "NoPicker") {
     errorOutput("Interactive remote game selection is unavailable")
     return 2
   }
-
-  const selected = await options.gamePicker(
-    choices.map(choice => choice.choice),
-  )
-  if (!selected) {
+  if (picked._tag === "Cancelled") {
     errorOutput("Remote stream launch cancelled")
     return 130
   }
-  const remote = choices.find(choice => choice.choice.id === selected.id)
+  const remote = choices.find(choice => choice.choice.id === picked.choice.id)
   if (!remote) {
     errorOutput("Selected remote game is no longer available")
     return 6

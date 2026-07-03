@@ -11,6 +11,7 @@ import {
 import { Cause, Effect, Exit } from "effect"
 import { errorMessage, remoteClientFor } from "./cli-helpers"
 import type { GamePicker } from "./game-picker"
+import { pickGameChoice } from "./interactive-pick"
 import { resolveCliMoonlightLaunchPolicy } from "./moonlight-launch-policy"
 import {
   launchMoonlight,
@@ -68,24 +69,25 @@ export async function runSourceAwarePlayCommand(
     errorOutput("No playable local or remote games were found")
     return 5
   }
-  if (options.stdinIsTty === false) {
+  const picked = await pickGameChoice({
+    choices: result.entries.map(entry => entry.choice),
+    stdinIsTty: options.stdinIsTty,
+    gamePicker: options.gamePicker,
+  })
+  if (picked._tag === "NoTty") {
     errorOutput("Interactive local/remote game selection requires a terminal")
     return 2
   }
-  if (!options.gamePicker) {
+  if (picked._tag === "NoPicker") {
     errorOutput("Interactive local/remote game selection is unavailable")
     return 2
   }
-
-  const selected = await options.gamePicker(
-    result.entries.map(entry => entry.choice),
-  )
-  if (!selected) {
+  if (picked._tag === "Cancelled") {
     errorOutput("Local/remote game selection cancelled")
     return 130
   }
 
-  const entry = findEntryForChoice(result.entries, selected)
+  const entry = findEntryForChoice(result.entries, picked.choice)
   if (!entry) {
     errorOutput("Selected game is no longer available")
     return 6
