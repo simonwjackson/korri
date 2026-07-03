@@ -4,7 +4,7 @@ slug: wire-moonlight-local-control-into-remote-product-launches
 title: Wire Moonlight local-control into remote product launches
 origin: parked
 legacy: task-117
-status: To Do
+status: Done
 priority: high
 labels:
   - runtime-settings
