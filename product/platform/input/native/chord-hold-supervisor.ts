@@ -59,7 +59,8 @@ const defaultTimers: ChordHoldTimers = {
   now: () => Date.now(),
   setInterval: (callback, ms) => setInterval(callback, ms),
   clearInterval: handle => {
-    if (handle !== undefined) clearInterval(handle as ReturnType<typeof setInterval>)
+    if (handle !== undefined)
+      clearInterval(handle as ReturnType<typeof setInterval>)
   },
 }
 

@@ -142,9 +142,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
 
     await new Promise(resolve => setTimeout(resolve, 25))
     expect(screen.queryByText("Now playing")).toBeNull()
-    expect(
-      screen.getByRole("button", { name: /Aurora Drift/i }),
-    ).toBeTruthy()
+    expect(screen.getByRole("button", { name: /Aurora Drift/i })).toBeTruthy()
   })
 
   it("does not publish the launch coordinate from a render-only Compose object", async () => {
