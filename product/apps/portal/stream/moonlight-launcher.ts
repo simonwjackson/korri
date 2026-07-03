@@ -16,7 +16,10 @@ import {
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
 import type { PluginRegistry } from "@platform/plugin/registry"
-import { composeMoonlightStreamLaunchSpec } from "@platform/stream/moonlight-launch-spec"
+import {
+  dispatchStreamLaunch,
+  type StreamLaunchRequest,
+} from "@platform/stream/streamer-client"
 import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { Effect } from "effect"
 
@@ -146,14 +149,17 @@ export async function launchMoonlight(
     }
   }
 
-  const bareFallbackMoonlight = composeMoonlightStreamLaunchSpec({
-    policy: { ...policy, command: "moonlight" },
-    facts: {
-      host: options.host ?? "",
-      ...(inputDevice.path ? { inputDevices: [inputDevice.path] } : {}),
-      ...(environment ? { environment } : {}),
+  const bareFallbackMoonlight = await dispatchStreamLaunch(
+    resolveStreamRegistry(options),
+    {
+      policy: { ...policy, command: "moonlight" },
+      facts: {
+        host: options.host ?? "",
+        ...(inputDevice.path ? { inputDevices: [inputDevice.path] } : {}),
+        ...(environment ? { environment } : {}),
+      },
     },
-  })
+  )
   const fallbackSpec = await composeLaunchSpecWithCompanions(
     {
       command: "nix",
@@ -200,17 +206,26 @@ type MoonlightSpecCompositionResult =
     }
 
 async function composeMoonlightWithLaunchCompanions(
-  input: Parameters<typeof composeMoonlightStreamLaunchSpec>[0],
+  input: StreamLaunchRequest,
   options: MoonlightLaunchOptions,
 ): Promise<MoonlightSpecCompositionResult> {
   try {
-    return await composeLaunchSpecWithCompanions(
-      composeMoonlightStreamLaunchSpec(input),
-      options,
+    const spec = await dispatchStreamLaunch(
+      resolveStreamRegistry(options),
+      input,
     )
+    return await composeLaunchSpecWithCompanions(spec, options)
   } catch (error) {
     return { _tag: "failed", status: "failed", message: errorMessage(error) }
   }
+}
+
+function resolveStreamRegistry(
+  options: Pick<MoonlightLaunchOptions, "pluginRegistry">,
+): PluginRegistry {
+  return (
+    options.pluginRegistry ?? createFirstPartyPluginRegistryFromEnv(process.env)
+  )
 }
 
 async function composeLaunchSpecWithCompanions(

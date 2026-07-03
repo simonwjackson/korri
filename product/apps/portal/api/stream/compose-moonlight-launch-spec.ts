@@ -3,7 +3,8 @@ import { parseProcBusInputDevices } from "@platform/input/native/discover-device
 import { resolveInputPlumberVirtualGamepad } from "@platform/input/native/inputplumber-virtual-gamepad"
 import type { MoonlightPolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchFailureKind, LaunchSpec } from "@platform/library/launcher"
-import { composeMoonlightStreamLaunchSpec } from "@platform/stream/moonlight-launch-spec"
+import { dispatchStreamLaunch } from "@platform/stream/streamer-client"
+import type { PluginRegistry } from "@platform/plugin/registry"
 
 /**
  * Build a Moonlight `LaunchSpec` for `moonlight stream -app "Korri Stream" <host>`.
@@ -18,6 +19,8 @@ export interface ComposeMoonlightLaunchSpecOptions {
   readonly inputDevices?: readonly string[]
   /** Launch env allocated by caller preflight, for example local-control socket facts. */
   readonly environment?: Readonly<Record<string, string>>
+  /** Plugin registry used to dispatch the streamer capability. */
+  readonly registry: Pick<PluginRegistry, "enabledPlugins">
 }
 
 export type MoonlightLaunchInputDeviceResolution =
@@ -70,11 +73,11 @@ export async function resolveMoonlightLaunchInputDevice(
   }
 }
 
-export function composeMoonlightLaunchSpec(
+export async function composeMoonlightLaunchSpec(
   options: ComposeMoonlightLaunchSpecOptions,
-): LaunchSpec {
-  return composeMoonlightStreamLaunchSpec({
-    policy: options.moonlight,
+): Promise<LaunchSpec> {
+  return await dispatchStreamLaunch(options.registry, {
+    ...(options.moonlight ? { policy: options.moonlight } : {}),
     facts: {
       host: options.host,
       ...(options.inputDevices ? { inputDevices: options.inputDevices } : {}),

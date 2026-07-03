@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
+import { createPluginRegistry } from "@platform/plugin/registry"
+import { moonlightPlugin } from "@product/plugins/moonlight"
 
 import {
   composeMoonlightLaunchSpec,
@@ -10,77 +12,51 @@ import {
 
 const FIXTURES_DIR = join(process.cwd(), "tools/testing/fixtures/proc")
 
+// The exhaustive Moonlight arg-composition coverage lives in the plugin
+// (product/plugins/moonlight/src/moonlight-launch-spec.test.ts). Here we verify
+// the portal wrapper dispatches the streamer capability through the registry
+// and surfaces the composed spec / fails closed.
+const streamRegistry = createPluginRegistry([moonlightPlugin], {
+  enabledPluginIds: [moonlightPlugin.id],
+})
+const emptyRegistry = createPluginRegistry([], {})
+
 describe("composeMoonlightLaunchSpec", () => {
-  it("returns a bare Moonlight LaunchSpec; companion wrapping happens through plugin dispatch", () => {
-    const spec = composeMoonlightLaunchSpec({ host: "aka.local" })
+  it("dispatches the streamer capability and returns the composed spec", async () => {
+    const spec = await composeMoonlightLaunchSpec({
+      host: "aka.local",
+      registry: streamRegistry,
+      inputDevices: ["/dev/input/event8"],
+      moonlight: { platform: { name: "sdl" } },
+    })
 
     expect(spec).toEqual({
       command: "moonlight",
-      args: ["stream", "-app", "Korri Stream", "aka.local"],
+      args: [
+        "stream",
+        "-platform",
+        "sdl",
+        "-input",
+        "/dev/input/event8",
+        "-app",
+        "Korri Stream",
+        "aka.local",
+      ],
       // Korri always disables Moonlight's built-in gamepad quit combo.
       env: { KORRI_MOONLIGHT_DISABLE_GAMEPAD_QUIT: "1" },
     })
   })
 
-  it("uses typed Moonlight policy rather than KORRI_MOONLIGHT_* env fallbacks", () => {
-    process.env.KORRI_MOONLIGHT_COMMAND = "/ignored/moonlight"
-    process.env.KORRI_MOONLIGHT_PLATFORM = "ignored"
-    process.env.KORRI_MOONLIGHT_MAPPING_FILE = "/ignored/mapping.txt"
-
-    const spec = composeMoonlightLaunchSpec({
-      host: "aka.local",
-      moonlight: {
-        command: "/run/current-system/sw/bin/moonlight",
-        platform: { name: "sdl" },
-        input: {
-          mappingFile: "/nix/store/mapping.txt",
-          touch: {
-            absolute: true,
-            requireBounds: true,
-            bounds: { x: 0, y: 0, w: 1080, h: 1920 },
-          },
-        },
-        window: { autoResize: true },
-      },
-    })
-
-    expect(spec.command).toBe("/run/current-system/sw/bin/moonlight")
-    expect(spec.args).toEqual([
-      "stream",
-      "-platform",
-      "sdl",
-      "-mapping",
-      "/nix/store/mapping.txt",
-      "-absolutetouch",
-      "-absolutetouchrequirebounds",
-      "-absolutetouchbounds",
-      "0,0,1080,1920",
-      "-autowindowresize",
-      "-app",
-      "Korri Stream",
-      "aka.local",
-    ])
+  it("fails closed when no streamer plugin is enabled", async () => {
+    await expect(
+      composeMoonlightLaunchSpec({ host: "aka.local", registry: emptyRegistry }),
+    ).rejects.toThrow(/streamer capability/)
   })
 
-  it("passes resolved input devices from caller preflight", () => {
-    const spec = composeMoonlightLaunchSpec({
+  it("always sets the gamepad-quit-disable env; caller env wins on collision", async () => {
+    const spec = await composeMoonlightLaunchSpec({
       host: "aka.local",
-      inputDevices: ["/dev/input/event8"],
-    })
-
-    expect(spec.args).toEqual([
-      "stream",
-      "-input",
-      "/dev/input/event8",
-      "-app",
-      "Korri Stream",
-      "aka.local",
-    ])
-  })
-
-  it("maps nullable policy environment to env and envUnset", () => {
-    const spec = composeMoonlightLaunchSpec({
-      host: "aka.local",
+      registry: streamRegistry,
       environment: { MOONLIGHT_LOCAL_CONTROL_SOCKET: "/run/m.sock" },
       moonlight: {
         environment: {
@@ -98,13 +74,10 @@ describe("composeMoonlightLaunchSpec", () => {
     expect(spec.envUnset).toEqual(["OLD_MOONLIGHT_STATE_HOME"])
   })
 
-  it("passes IPv6 host through unchanged (caller is responsible for bracket-stripping)", () => {
-    const spec = composeMoonlightLaunchSpec({ host: "::1" })
-    expect(spec.args).toEqual(["stream", "-app", "Korri Stream", "::1"])
-  })
-
-  it("throws when host is empty", () => {
-    expect(() => composeMoonlightLaunchSpec({ host: "" })).toThrow(/host/i)
+  it("rejects an empty host through the streamer handler", async () => {
+    await expect(
+      composeMoonlightLaunchSpec({ host: "", registry: streamRegistry }),
+    ).rejects.toThrow(/host/i)
   })
 })
 

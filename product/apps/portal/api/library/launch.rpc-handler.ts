@@ -523,11 +523,13 @@ function handleRemoteSourceLaunch(
         ),
       catch: error => toDataError(toLibraryError(error)),
     })
-    const moonlightSpecResult = yield* Effect.try({
+    const streamRegistry = createFirstPartyPluginRegistryFromEnv(process.env)
+    const moonlightSpecResult = yield* Effect.tryPromise({
       try: () =>
         composeMoonlightLaunchSpec({
           host,
           moonlight: localPolicy.moonlight,
+          registry: streamRegistry,
           ...(inputDevice.path ? { inputDevices: [inputDevice.path] } : {}),
           ...(moonlightControl
             ? { environment: moonlightControlEnvForHandle(moonlightControl) }
@@ -555,7 +557,7 @@ function handleRemoteSourceLaunch(
     const specResult = yield* composeLaunchCompanions({
       spec: moonlightSpecResult.spec,
       launchCompanions: localPolicy.launchCompanions,
-      registry: createFirstPartyPluginRegistryFromEnv(process.env),
+      registry: streamRegistry,
       options: { launchId },
     })
     if (specResult._tag === "LaunchCompanionDiagnostics") {

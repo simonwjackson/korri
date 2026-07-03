@@ -11,11 +11,17 @@ import { join, resolve } from "node:path"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { plugin } from "@platform/plugin"
 import { createPluginRegistry } from "@platform/plugin/registry"
+import { moonlightPlugin } from "@product/plugins/moonlight"
 import {
   type CommandRunner,
   launchMoonlight,
   type ManagedMoonlightSessionHandle,
 } from "./moonlight-launcher"
+
+// launchMoonlight now dispatches the streamer capability through the registry.
+// Calls without an explicit pluginRegistry fall back to the env registry, so
+// enable the Moonlight streamer there for those cases.
+process.env.KORRI_ENABLED_PLUGINS = "@korri:moonlight"
 
 const PROC_FIXTURES_DIR = join(process.cwd(), "tools/testing/fixtures/proc")
 const wrapperProvider = "@example:wrapper"
@@ -58,8 +64,9 @@ const wrapperRegistry = createPluginRegistry(
         ],
       },
     }),
+    moonlightPlugin,
   ],
-  { enabledPluginIds: [wrapperProvider] },
+  { enabledPluginIds: [wrapperProvider, moonlightPlugin.id] },
 )
 
 const wrapperOptions = (

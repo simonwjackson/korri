@@ -71,6 +71,8 @@ async function layerForFakeGame(exitCode: number): Promise<{
   cleanups.push(lib.cleanup)
   process.env.KORRI_LIBRARY_ROOT = lib.root
   process.env.KORRI_CONFIG_ROOTS = lib.root
+  // Remote-source launches dispatch the Moonlight streamer through the registry.
+  process.env.KORRI_ENABLED_PLUGINS = "@korri:moonlight"
 
   const realLauncher = createShellLauncher()
   const launcherLayer = Layer.succeed(Launcher)({
@@ -551,6 +553,8 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
   })
 
   it("propagates session-busy when the foreground session owner rejects a remote launch", async () => {
+    // Remote launches dispatch the Moonlight streamer through the registry.
+    process.env.KORRI_ENABLED_PLUGINS = "@korri:moonlight"
     const control = makeInMemoryLauncherLayer.createManagedControl()
     const host = createForegroundSessionHost()
     const remoteSource = new EntrySource({
@@ -1216,6 +1220,8 @@ function remoteSourceTestLayer(options: {
   }) => void
   readonly localPolicy?: ResolvedLocalLauncherPolicy
 }) {
+  // Remote-source launches dispatch the Moonlight streamer through the registry.
+  process.env.KORRI_ENABLED_PLUGINS = "@korri:moonlight"
   const sourceLayer = Layer.succeed(LibrarySource)({
     list: () =>
       Effect.succeed([
