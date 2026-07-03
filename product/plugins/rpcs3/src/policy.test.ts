@@ -86,6 +86,74 @@ describe("decodeRpcs3Policy", () => {
     )
   })
 
+  it("decodes the Phase 3 per-game accuracy tranche", () => {
+    expect(
+      decodeRpcs3Policy({
+        core: {
+          ppuDecoder: "llvm-recompiler",
+          spuDecoder: "asmjit-recompiler",
+          spuBlockSize: "mega",
+          spuXFloatAccuracy: "approximate",
+          preferredSpuThreads: 2,
+          clocksScale: 150,
+          librariesControl: ["libfoo.sprx:lle", "libbar.sprx:hle"],
+        },
+        video: {
+          writeColorBuffers: true,
+          writeDepthBuffer: false,
+          readColorBuffers: true,
+          strictRendering: true,
+          disableZcull: false,
+          msaa: "disabled",
+        },
+      }),
+    ).toEqual({
+      core: {
+        ppuDecoder: "llvm-recompiler",
+        spuDecoder: "asmjit-recompiler",
+        spuBlockSize: "mega",
+        spuXFloatAccuracy: "approximate",
+        preferredSpuThreads: 2,
+        clocksScale: 150,
+        librariesControl: ["libfoo.sprx:lle", "libbar.sprx:hle"],
+      },
+      video: {
+        writeColorBuffers: true,
+        writeDepthBuffer: false,
+        readColorBuffers: true,
+        strictRendering: true,
+        disableZcull: false,
+        msaa: "disabled",
+      },
+    })
+  })
+
+  it("accepts boundary and empty Phase 3 values", () => {
+    expect(
+      decodeRpcs3Policy({ core: { preferredSpuThreads: 0, clocksScale: 10 } }),
+    ).toEqual({ core: { preferredSpuThreads: 0, clocksScale: 10 } })
+    expect(decodeRpcs3Policy({ core: { librariesControl: [] } })).toEqual({
+      core: { librariesControl: [] },
+    })
+  })
+
+  it("rejects invalid Phase 3 enums, out-of-range ints, and excess keys", () => {
+    expectPolicyError(() => decodeRpcs3Policy({ core: { ppuDecoder: "fast" } }))
+    // The legacy dynamic SPU interpreter is intentionally not surfaced.
+    expectPolicyError(() =>
+      decodeRpcs3Policy({ core: { spuDecoder: "interpreter-dynamic" } }),
+    )
+    expectPolicyError(() =>
+      decodeRpcs3Policy({ core: { preferredSpuThreads: 7 } }),
+    )
+    expectPolicyError(() => decodeRpcs3Policy({ core: { clocksScale: 5 } }))
+    expectPolicyError(() => decodeRpcs3Policy({ video: { msaa: "4x" } }))
+    expectPolicyError(
+      () => decodeRpcs3Policy({ core: { bogus: true } }),
+      "bogus",
+    )
+  })
+
   it("decodes partial trees and an empty policy", () => {
     expect(decodeRpcs3Policy({ video: { fullscreen: false } })).toEqual({
       video: { fullscreen: false },

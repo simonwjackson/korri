@@ -59,6 +59,13 @@ const Rpcs3VideoPolicy = Schema.Struct({
   shaderMode: Schema.optional(
     Schema.Literals(["legacy", "async", "async-interpreter", "interpreter"]),
   ),
+  // Phase 3 — per-game GPU accuracy toggles (Video-node booleans + MSAA).
+  writeColorBuffers: Schema.optional(Schema.Boolean),
+  writeDepthBuffer: Schema.optional(Schema.Boolean),
+  readColorBuffers: Schema.optional(Schema.Boolean),
+  strictRendering: Schema.optional(Schema.Boolean),
+  disableZcull: Schema.optional(Schema.Boolean),
+  msaa: Schema.optional(Schema.Literals(["disabled", "auto"])),
 })
 
 const Rpcs3AudioPolicy = Schema.Struct({
@@ -139,6 +146,35 @@ const Rpcs3FirmwarePolicy = Schema.Struct({
 })
 
 /**
+ * Phase 3 — per-game CPU/SPU accuracy tuning. Clean, delivery-agnostic names;
+ * the value→RPCS3 string translation lives in the mapping table. Enum sets and
+ * ranges verified against RPCS3 system_config.h / system_config_types.cpp
+ * (build 0.0.41-nixpkgs-40e9ee5): the legacy SPU "Interpreter (dynamic)" is
+ * intentionally omitted from the authored surface.
+ */
+const Rpcs3CorePolicy = Schema.Struct({
+  ppuDecoder: Schema.optional(
+    Schema.Literals(["interpreter-static", "llvm-recompiler"]),
+  ),
+  spuDecoder: Schema.optional(
+    Schema.Literals([
+      "interpreter-static",
+      "asmjit-recompiler",
+      "llvm-recompiler",
+    ]),
+  ),
+  spuBlockSize: Schema.optional(Schema.Literals(["safe", "mega", "giga"])),
+  spuXFloatAccuracy: Schema.optional(
+    Schema.Literals(["accurate", "approximate", "relaxed", "inaccurate"]),
+  ),
+  preferredSpuThreads: Schema.optional(
+    IntInRange("rpcs3.core.preferredSpuThreads", 0, 6),
+  ),
+  clocksScale: Schema.optional(IntInRange("rpcs3.core.clocksScale", 10, 3000)),
+  librariesControl: Schema.optional(Schema.Array(Schema.String)),
+})
+
+/**
  * The authoring surface is delivery-agnostic and free of launcher plumbing:
  * `command` is the app-record field, `env` is the standard `context.env`, and
  * raw argv/config passthrough is the settled `overrides` escape hatch. None of
@@ -151,6 +187,7 @@ export const Rpcs3Policy = Schema.Struct({
   audio: Schema.optional(Rpcs3AudioPolicy),
   boot: Schema.optional(Rpcs3BootPolicy),
   system: Schema.optional(Rpcs3SystemPolicy),
+  core: Schema.optional(Rpcs3CorePolicy),
 })
 export type Rpcs3Policy = Schema.Schema.Type<typeof Rpcs3Policy>
 
