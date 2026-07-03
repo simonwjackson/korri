@@ -428,6 +428,11 @@ let
         XDG_CACHE_HOME = "${runtime.home}/.cache";
       };
       platform.name = substrateVideoDecodeBackend;
+      # Default to H.264 so live runtime stream-settings (bitrate/FPS/resolution)
+      # are offered on the connection point. The runtime-settings apply path is
+      # validated on H.264 VAAPI only; leaving codec at "auto" negotiates H.265,
+      # which does not advertise the runtime quality controls.
+      stream.codec = "h264";
       input = {
         mappingFile = "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
         touch = {
