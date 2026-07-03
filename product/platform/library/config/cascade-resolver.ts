@@ -61,6 +61,7 @@ import type { GlobalConfigRecord } from "./records/global"
 import type { HostRecord } from "./records/host"
 import type { LauncherRecord } from "./records/launcher"
 import type {
+  LaunchOverrides,
   LibraryItemRecord,
   LibraryReleasePayload,
 } from "./records/library-item"
@@ -453,6 +454,84 @@ export const foldPluginPolicies = (
 ): PluginPolicyMap =>
   mergePluginPolicyValue(base ?? {}, extra, []) as PluginPolicyMap
 
+/**
+ * Fold two `LaunchOverrides` in inheritance order (base = less specific).
+ * `args.prepend`/`args.append` and `config.prepend`/`config.append`
+ * **accumulate** (arrays concatenate, config text joins with a newline);
+ * `replace` is most-specific-wins. This mirrors the `argsAppend` concat
+ * convention and the field names (`prepend`/`append` imply accumulation).
+ * How `replace` suppresses generated fragments is an application concern
+ * handled by each launcher materializer, not by this merge.
+ */
+export const foldLaunchOverrides = (
+  base: LaunchOverrides | undefined,
+  extra: LaunchOverrides,
+): LaunchOverrides => {
+  const concatArr = (
+    a: readonly string[] | undefined,
+    b: readonly string[] | undefined,
+  ): readonly string[] | undefined =>
+    a !== undefined || b !== undefined
+      ? [...(a ?? []), ...(b ?? [])]
+      : undefined
+  const concatStr = (
+    a: string | undefined,
+    b: string | undefined,
+  ): string | undefined => {
+    const parts = [a, b].filter(
+      (s): s is string => s !== undefined && s !== "",
+    )
+    return parts.length > 0 ? parts.join("\n") : undefined
+  }
+  const foldArgs = ():
+    | {
+        prepend?: readonly string[]
+        append?: readonly string[]
+        replace?: readonly string[]
+      }
+    | undefined => {
+    const ba = base?.args
+    const ea = extra.args
+    if (ba === undefined && ea === undefined) return undefined
+    const prepend = concatArr(ba?.prepend, ea?.prepend)
+    const append = concatArr(ba?.append, ea?.append)
+    const replace = ea?.replace ?? ba?.replace
+    const out: {
+      prepend?: readonly string[]
+      append?: readonly string[]
+      replace?: readonly string[]
+    } = {}
+    if (prepend !== undefined) out.prepend = prepend
+    if (append !== undefined) out.append = append
+    if (replace !== undefined) out.replace = replace
+    return Object.keys(out).length > 0 ? out : undefined
+  }
+  const foldConfig = ():
+    | { prepend?: string; append?: string; replace?: string }
+    | undefined => {
+    const bc = base?.config
+    const ec = extra.config
+    if (bc === undefined && ec === undefined) return undefined
+    const prepend = concatStr(bc?.prepend, ec?.prepend)
+    const append = concatStr(bc?.append, ec?.append)
+    const replace = ec?.replace ?? bc?.replace
+    const out: { prepend?: string; append?: string; replace?: string } = {}
+    if (prepend !== undefined) out.prepend = prepend
+    if (append !== undefined) out.append = append
+    if (replace !== undefined) out.replace = replace
+    return Object.keys(out).length > 0 ? out : undefined
+  }
+  const args = foldArgs()
+  const config = foldConfig()
+  const result: {
+    args?: LaunchOverrides["args"]
+    config?: LaunchOverrides["config"]
+  } = {}
+  if (args !== undefined) result.args = args
+  if (config !== undefined) result.config = config
+  return result
+}
+
 const mergeMoonlightValue = (
   base: unknown,
   extra: unknown,
@@ -698,6 +777,7 @@ interface ReadableLayerView {
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
   readonly patches?: readonly string[]
+  readonly overrides?: LaunchOverrides
 }
 
 const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
@@ -728,25 +808,36 @@ const pluginPolicyFromSettings = (
   }
   const pluginSettingsRecord = pluginSettings as Record<string, unknown>
   if (options.allowContentPath === false) {
-    return { [launcherPlugin]: stripContentPathOverride(pluginSettingsRecord) }
+    return { [launcherPlugin]: stripReleaseScopedRootOverrides(pluginSettingsRecord) }
   }
   return { [launcherPlugin]: pluginSettingsRecord }
 }
 
-const stripContentPathOverride = (
+/**
+ * Strip operator-owned, filesystem-root-redirecting keys from
+ * release-scoped plugin settings. A release payload (often lower-trust
+ * library data) must not redirect where a launcher reads/writes:
+ * `content.path` (content root), `state` (emulator state root), or
+ * `firmware` (firmware sentinel path). These are sourced from
+ * app/runtime/operator layers only. Relevant to the unauthenticated
+ * `app.library.launch` surface on trusted-LAN deployments.
+ */
+const stripReleaseScopedRootOverrides = (
   pluginSettings: Record<string, unknown>,
 ): Record<string, unknown> => {
-  const content = pluginSettings.content
+  const result = { ...pluginSettings }
+  const content = result.content
   if (
-    typeof content !== "object" ||
-    content === null ||
-    Array.isArray(content)
+    typeof content === "object" &&
+    content !== null &&
+    !Array.isArray(content) &&
+    "path" in content
   ) {
-    return pluginSettings
+    delete result.content
   }
-  if (!("path" in content)) return pluginSettings
-  const { content: _content, ...safeSettings } = pluginSettings
-  return safeSettings
+  delete result.state
+  delete result.firmware
+  return result
 }
 
 const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
@@ -970,6 +1061,8 @@ const readableViewOfRelease = (
   cwd: release.launch?.cwd ?? release.cwd,
   argsAppend: release.launch?.argsAppend ?? release.argsAppend,
   patches: release.patches,
+  // Raw escape hatch — release-scoped only (never the ephemeral layer).
+  overrides: release.launch?.overrides,
 })
 
 const readableViewOfProfile = (
@@ -1013,6 +1106,7 @@ const mergeReadableLayers = (
   let cwd: string | undefined
   let argsAppend: string[] | undefined
   let patches: string[] | undefined
+  let overrides: LaunchOverrides | undefined
 
   for (const layer of layers) {
     const layerCompanions =
@@ -1037,6 +1131,9 @@ const mergeReadableLayers = (
     if (layer.patches !== undefined) {
       patches = [...(patches ?? []), ...layer.patches]
     }
+    if (layer.overrides !== undefined) {
+      overrides = foldLaunchOverrides(overrides, layer.overrides)
+    }
   }
 
   return {
@@ -1048,6 +1145,7 @@ const mergeReadableLayers = (
     cwd,
     argsAppend,
     patches,
+    overrides,
   }
 }
 
@@ -1231,5 +1329,6 @@ export const resolveReadableLaunchContext = (
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
       ...(folded.argsAppend ? { argsAppend: folded.argsAppend } : {}),
       ...(folded.patches ? { patches: folded.patches } : {}),
+      ...(folded.overrides ? { overrides: folded.overrides } : {}),
     }
   })

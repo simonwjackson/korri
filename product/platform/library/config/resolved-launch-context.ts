@@ -29,6 +29,7 @@ import {
 } from "./inheritable-fields"
 import { LaunchSettings } from "./launch-block"
 import { AppRecord } from "./records/app"
+import { LaunchOverrides } from "./records/library-item"
 import { RuntimeRecord } from "./records/runtime"
 import { StorageRecord } from "./records/storage"
 
@@ -95,6 +96,12 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
   cwd: Schema.optional(Schema.String),
   argsAppend: Schema.optional(Schema.Array(Schema.String)),
   patches: Schema.optional(Schema.Array(Schema.String)),
+  /**
+   * Raw launch escape hatch, folded from the persisted
+   * `release.launch.overrides` layer only (never the unauthenticated
+   * ephemeral override layer). Consumed by launcher materializers.
+   */
+  overrides: Schema.optional(LaunchOverrides),
 })
 export type ReadableResolvedLaunchContext = Schema.Schema.Type<
   typeof ReadableResolvedLaunchContext

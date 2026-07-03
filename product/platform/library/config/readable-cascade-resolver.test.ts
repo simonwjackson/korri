@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 
 import {
+  foldLaunchOverrides,
   foldPluginPolicies,
   type ReadableConfigSnapshot,
   resolveReadableLaunchContext,
@@ -332,6 +333,44 @@ const steamReadableSnapshot = (
   ]),
 })
 
+describe("foldLaunchOverrides", () => {
+  it("concatenates args.prepend/append and config text across layers", () => {
+    expect(
+      foldLaunchOverrides(
+        {
+          args: { prepend: ["--a"], append: ["--x"] },
+          config: { append: "Base: 1" },
+        },
+        {
+          args: { prepend: ["--b"], append: ["--y"] },
+          config: { append: "More: 2" },
+        },
+      ),
+    ).toEqual({
+      args: { prepend: ["--a", "--b"], append: ["--x", "--y"] },
+      config: { append: "Base: 1\nMore: 2" },
+    })
+  })
+
+  it("lets the more-specific replace win over the base replace", () => {
+    expect(
+      foldLaunchOverrides(
+        { args: { replace: ["--base"] }, config: { replace: "base" } },
+        { args: { replace: ["--top"] }, config: { replace: "top" } },
+      ),
+    ).toEqual({
+      args: { replace: ["--top"] },
+      config: { replace: "top" },
+    })
+  })
+
+  it("carries a single side through unchanged", () => {
+    expect(
+      foldLaunchOverrides(undefined, { args: { append: ["--only"] } }),
+    ).toEqual({ args: { append: ["--only"] } })
+  })
+})
+
 describe("foldPluginPolicies", () => {
   it("deep-merges provider-scoped maps and concatenates arrays", () => {
     expect(
@@ -362,6 +401,107 @@ describe("foldPluginPolicies", () => {
 })
 
 describe("resolveReadableLaunchContext", () => {
+  it("surfaces release-scoped launch overrides on the context", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        {
+          ...snapshot(),
+          library: new Map([
+            [
+              "sonic-the-hedgehog",
+              {
+                ...sonic,
+                releases: [
+                  {
+                    id: "genesis",
+                    system: "genesis",
+                    target: {
+                      kind: "file",
+                      storage: "roms",
+                      path: "genesis/Sonic.md",
+                    },
+                    launch: {
+                      use: "@korri:retroarch/retroarch",
+                      runtime: "genesis-plus-gx",
+                      overrides: {
+                        args: { append: ["--raw"] },
+                        config: { append: "Video:\n  Foo: 1" },
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          ]),
+        },
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    expect(context.overrides).toEqual({
+      args: { append: ["--raw"] },
+      config: { append: "Video:\n  Foo: 1" },
+    })
+  })
+
+  it("leaves overrides undefined when none are authored", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(snapshot(), {
+        playableId: "sonic-the-hedgehog",
+      }),
+    )
+
+    expect(context.overrides).toBeUndefined()
+  })
+
+  it("does not fold release-scoped plugin state-root overrides", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        {
+          ...snapshot(),
+          library: new Map([
+            [
+              "sonic-the-hedgehog",
+              {
+                ...sonic,
+                releases: [
+                  {
+                    id: "genesis",
+                    system: "genesis",
+                    target: {
+                      kind: "file",
+                      storage: "roms",
+                      path: "genesis/Sonic.md",
+                    },
+                    launch: {
+                      use: "@korri:retroarch/retroarch",
+                      runtime: "genesis-plus-gx",
+                      settings: {
+                        plugin: {
+                          state: { root: "/outside/state" },
+                          firmware: { sentinel: "/outside/fw" },
+                          extraArgs: ["--safe"],
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          ]),
+        },
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    const retroarchPolicy = context.plugin?.[retroarchProvider] as
+      | { readonly extraArgs?: readonly string[] }
+      | undefined
+    expect(retroarchPolicy?.extraArgs).toContain("--safe")
+    expect(context.plugin?.[retroarchProvider]).not.toHaveProperty("state")
+    expect(context.plugin?.[retroarchProvider]).not.toHaveProperty("firmware")
+  })
+
   it("carries release launch settings for readable app env substitution", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(snapshot(), {

@@ -115,7 +115,7 @@ const LaunchInput = Schema.Struct({
   roles: Schema.optional(Schema.Array(NonEmptyString)),
 })
 
-const LaunchOverrides = Schema.Struct({
+export const LaunchOverrides = Schema.Struct({
   args: Schema.optional(
     Schema.Struct({
       prepend: Schema.optional(Schema.Array(Schema.String)),
@@ -131,6 +131,7 @@ const LaunchOverrides = Schema.Struct({
     }),
   ),
 })
+export type LaunchOverrides = Schema.Schema.Type<typeof LaunchOverrides>
 
 const ReleaseLaunch = Schema.Struct({
   use: Schema.optional(NonEmptyString),
