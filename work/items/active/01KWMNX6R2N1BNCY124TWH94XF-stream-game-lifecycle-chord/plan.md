@@ -80,6 +80,22 @@ press never quits; a 2 s hold closes the foreground (local game or stream).
 ---
 
 ## Phase 1 — decision surface (overlay + intercept nav)
+
+### Progress (branch feat/decision-overlay)
+Logic core + adapters built and tested (531/531 device+input tests green):
+- DONE overlay-intercept.ts — intercept controller (gate + ui_* -> nav), 6 tests
+- DONE overlay-menu.ts — menu model + local/stream option composition, 6 tests
+- DONE overlay-orchestrator.ts — press/progress ring, fired quit, tap menu -> action, 8 tests
+- DONE overlay-renderer/renderer.c + package.nix — native layer-shell renderer (ring+menu), compiles (~37 KB)
+- DONE overlay-renderer-client.ts — protocol encoders + lazy-spawn process client, 6 tests
+- DONE overlay-intercept-live.ts — busctl + gdbus port, parser tested, 5 tests
+
+Remaining integration (device-coupled):
+- [ ] Concrete Bun.spawn glue: InterceptSubprocess + RendererProcessSpawner (real processes).
+- [ ] inputd wiring: construct the orchestrator with live ports + actions (forceQuit = existing kill; closeRemoteGame = source stop) + sessionKind provider; route the hold supervisor onUpdate into orchestrator.onHoldUpdate (replacing the Phase 0 fired-only path).
+- [ ] Flake/image: expose korri-overlay-renderer; put the renderer + busctl + gdbus on inputd PATH; give inputd the compositor wayland env (WAYLAND_DISPLAY/XDG_RUNTIME_DIR); set KORRI_OVERLAY_RENDERER_BIN.
+- [ ] Deploy to Bandai (note: the korri-scout-release-scan runaway, 01KWN0HSZV, blocks activation — stop it mid-switch) + by-eye validation.
+- [ ] sessionKind detection (local vs stream); first cut may default to local.
 - **P1.1 — native renderer component.**
   - Promote the validated C layer-shell client to a real package: `overlay` layer,
     shm/software, content-sized surface, allocate-on-show. Dumb view driven over a
