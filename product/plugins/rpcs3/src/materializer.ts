@@ -52,7 +52,10 @@ export const materializeReadableRpcs3Launch = (input: {
 
 const materializeReadableRpcs3Resources = (
   context: ReadableResolvedLaunchContext,
-): Effect.Effect<{ readonly spec: MaterializedReadableLaunch["spec"] }, ResolutionError> =>
+): Effect.Effect<
+  { readonly spec: MaterializedReadableLaunch["spec"] },
+  ResolutionError
+> =>
   Effect.gen(function* () {
     const policy = yield* decodePolicy(context)
     const resolvedPolicy = yield* resolvePolicyStorageTokens(context, policy)
@@ -66,7 +69,10 @@ const materializeReadableRpcs3Resources = (
 
     const command = resolvedPolicy.command ?? context.app.command
     if (command === undefined || !isAbsolute(command)) {
-      return yield* fail(context, "RPCS3 launches require an absolute RPCS3 command")
+      return yield* fail(
+        context,
+        "RPCS3 launches require an absolute RPCS3 command",
+      )
     }
 
     const gameFolderPath = dirname(contentPath)

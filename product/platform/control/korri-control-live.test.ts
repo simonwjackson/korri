@@ -198,7 +198,8 @@ describe("KorriControl live implementation", () => {
             id: "companion.launch-compose",
             operation: "launch.compose",
             capabilities: ["launch.compose"],
-            run: context => (context.input as { readonly spec: LaunchSpec }).spec,
+            run: context =>
+              (context.input as { readonly spec: LaunchSpec }).spec,
           },
         ],
       },

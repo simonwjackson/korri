@@ -97,7 +97,10 @@ describe("Remap launch companion policy", () => {
       "preset",
     ]) {
       expect(() =>
-        decodeRemapPolicy({ bindings: { "p1.dpad.down": "key.down" }, [key]: true }),
+        decodeRemapPolicy({
+          bindings: { "p1.dpad.down": "key.down" },
+          [key]: true,
+        }),
       ).toThrow()
     }
   })
@@ -105,7 +108,9 @@ describe("Remap launch companion policy", () => {
   it("rejects arbitrary controller ids and undefined explicit controllers", () => {
     expect(() =>
       decodeRemapPolicy({
-        controllers: { "player-one": { source: "inputplumber-virtual-gamepad" } },
+        controllers: {
+          "player-one": { source: "inputplumber-virtual-gamepad" },
+        },
         bindings: { "p1.dpad.down": "key.down" },
       }),
     ).toThrow(/player slot/)

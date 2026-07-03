@@ -1,14 +1,13 @@
 /**
- * Shift library — Variant C: lens + on-demand sort (progressive disclosure).
+ * Shift library — Variant C: lens + standing placard sort.
  *
- * The depth-with-restraint take: covers stay the hero, and the only standing
- * control is a single "lens" row that reframes the SAME games — All, Favorites,
- * or By Genre. Sorting is depth you summon: an Options button reveals the sort
- * choices, then gets out of the way, so no sort/filter chrome competes with the
- * games until you ask for it. By Genre renders the shared shelves; the flat
+ * The depth-with-restraint take: covers stay the hero. Two standing controls
+ * reframe the SAME games without competing with the art — a "lens" row (All,
+ * Favorites, By Genre) and a quiet "placard" sort caption (Recent → A–Z →
+ * Playtime, cycled in place). By Genre renders the shared shelves; the flat
  * frames render the additive grid. All ordering/filtering is the shared pure
  * query core — this page only owns the control surface and its widget-local UI
- * state (which lens, which sort, overlay open).
+ * state (which lens, which sort).
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { useMemo, useState } from "react"
@@ -16,8 +15,7 @@ import {
   type ShiftLibraryLens as LibraryLens,
   ShiftLensRow,
 } from "./ShiftLensRow"
-import { ShiftLensSortButton } from "./ShiftLensSortButton"
-import { ShiftLensSortOverlay } from "./ShiftLensSortOverlay"
+import { ShiftLensSort } from "./ShiftLensSort"
 import { ShiftLibraryEmpty } from "./ShiftLibraryEmpty"
 import { ShiftLibraryGridView } from "./ShiftLibraryGridView"
 import { ShiftLibraryHeader } from "./ShiftLibraryHeader"
@@ -28,8 +26,6 @@ import {
   type ShiftLibrarySort,
 } from "./shift-library-query"
 import { buildShiftLibraryGenreSections } from "./shift-library-sections"
-
-const SORTS: readonly ShiftLibrarySort[] = ["recent", "title", "playtime"]
 
 export interface ShiftLibraryLensProps {
   readonly games: readonly ShiftLibraryGame[]
@@ -46,7 +42,6 @@ export function ShiftLibraryLens({
 }: ShiftLibraryLensProps) {
   const [lens, setLens] = useState<LibraryLens>("all")
   const [sort, setSort] = useState<ShiftLibrarySort>("recent")
-  const [optionsOpen, setOptionsOpen] = useState(false)
 
   const flat = useMemo(
     () =>
@@ -62,34 +57,15 @@ export function ShiftLibraryLens({
     [games],
   )
 
-  // `back` closes the summoned options first, then leaves the library.
-  useInputAction("back", () => {
-    if (optionsOpen) setOptionsOpen(false)
-    else onBack?.()
-  })
+  useInputAction("back", () => onBack?.())
 
   return (
     <div data-shift-library className="shift-lib shift-lib-lens intrinsic">
       <ShiftLibraryHeader title={title}>
-        <ShiftLensSortButton
-          sort={sort}
-          open={optionsOpen}
-          onToggle={() => setOptionsOpen(open => !open)}
-        />
+        <ShiftLensSort sort={sort} onChange={setSort} />
       </ShiftLibraryHeader>
 
       <ShiftLensRow lens={lens} onSelect={setLens} />
-
-      {optionsOpen ? (
-        <ShiftLensSortOverlay
-          sort={sort}
-          sorts={SORTS}
-          onPick={next => {
-            setSort(next)
-            setOptionsOpen(false)
-          }}
-        />
-      ) : null}
 
       {lens === "genre" ? (
         <ShiftLibraryShelfStack sections={genreSections} onSelect={onSelect} />

@@ -51,9 +51,9 @@ describe("native Remap sink isolation", () => {
     expect(() =>
       assertNativeIsolationProbe({ ...base, normalUserReceived: true }),
     ).toThrow(/normal user/)
-    expect(() => assertNativeIsolationProbe({ ...base, swaySawDevices: true })).toThrow(
-      /Sway/,
-    )
+    expect(() =>
+      assertNativeIsolationProbe({ ...base, swaySawDevices: true }),
+    ).toThrow(/Sway/)
   })
 
   it("fails closed when cleanup cannot be proven", () => {

@@ -296,7 +296,10 @@ describe("korri CLI", () => {
 
       expect(result.exitCode).toBe(0)
       const summary = JSON.parse(result.stdout) as {
-        readonly report: { readonly candidates: number; readonly unclaimed: number }
+        readonly report: {
+          readonly candidates: number
+          readonly unclaimed: number
+        }
         readonly merge: { readonly libraryAdded: number }
         readonly yaml: string
       }

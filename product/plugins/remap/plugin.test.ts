@@ -7,7 +7,8 @@ import { KORRI_REMAP_PLUGIN_ID, remapPlugin } from "."
 const originalNativeDriver = process.env.KORRI_REMAP_NATIVE_DRIVER
 
 afterEach(() => {
-  if (originalNativeDriver === undefined) delete process.env.KORRI_REMAP_NATIVE_DRIVER
+  if (originalNativeDriver === undefined)
+    delete process.env.KORRI_REMAP_NATIVE_DRIVER
   else process.env.KORRI_REMAP_NATIVE_DRIVER = originalNativeDriver
 })
 
@@ -22,14 +23,16 @@ describe("Remap plugin", () => {
       candidate => candidate.id === KORRI_REMAP_PLUGIN_ID,
     )
 
-    expect(plugin?.contributes.config.modules?.["launch-wrapper"]).toMatchObject({
+    expect(
+      plugin?.contributes.config.modules?.["launch-wrapper"],
+    ).toMatchObject({
       id: "launch-wrapper",
       kind: "launch-wrapper",
       capabilities: ["launch.compose", "launch.wrapper", "input.remap"],
     })
-    expect(plugin?.contributes.handlers?.map(handler => handler.operation)).toContain(
-      "diagnostics.collect",
-    )
+    expect(
+      plugin?.contributes.handlers?.map(handler => handler.operation),
+    ).toContain("diagnostics.collect")
   })
 
   it("reports unavailable diagnostics until the native driver is enabled", async () => {

@@ -27,7 +27,8 @@ export function decodeRpcs3Policy(input: unknown): Rpcs3Policy {
   const policy: Rpcs3Policy = {}
   const command = input.command
   if (command !== undefined) {
-    if (typeof command !== "string") throw policyError("policy command must be a string")
+    if (typeof command !== "string")
+      throw policyError("policy command must be a string")
     Object.assign(policy, { command })
   }
 
@@ -55,7 +56,8 @@ export function decodeRpcs3Policy(input: unknown): Rpcs3Policy {
 
   const env = input.env
   if (env !== undefined) {
-    if (!isStringRecord(env)) throw policyError("policy env must be a string map")
+    if (!isStringRecord(env))
+      throw policyError("policy env must be a string map")
     Object.assign(policy, { env })
   }
 
@@ -86,7 +88,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-function isStringRecord(value: unknown): value is Readonly<Record<string, string>> {
+function isStringRecord(
+  value: unknown,
+): value is Readonly<Record<string, string>> {
   if (!isRecord(value)) return false
   return Object.values(value).every(item => typeof item === "string")
 }

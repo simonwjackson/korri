@@ -95,7 +95,9 @@ describe("GMLoader runtime resolver", () => {
 
     expect(exit._tag).toBe("Failure")
     if (exit._tag === "Failure") {
-      expect(String(exit.cause)).toContain("runtime fulfillment is not configured")
+      expect(String(exit.cause)).toContain(
+        "runtime fulfillment is not configured",
+      )
     }
   })
 

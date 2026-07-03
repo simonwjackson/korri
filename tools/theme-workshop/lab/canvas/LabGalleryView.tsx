@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react"
 import type { Story } from "../../types"
 import {
   type LabStoryIndex,
@@ -19,12 +20,14 @@ export function LabGalleryView({
   selectedIds,
   onSelect,
   onSelectLayer,
+  onDeleteAiTake,
 }: {
   readonly catalog: LabPartsCatalog | null
   readonly index: LabStoryIndex
   readonly selectedIds: readonly string[]
   readonly onSelect: (storyId: string) => void
   readonly onSelectLayer?: (stories: readonly Story[]) => void
+  readonly onDeleteAiTake?: (slug: string) => void
 }) {
   if (!catalog) return <div className="lab-empty-state">Discovering parts…</div>
   if (catalog.stories.length === 0 && !catalog.errors?.length) {
@@ -70,26 +73,55 @@ export function LabGalleryView({
                   key={story.id}
                   role="button"
                   tabIndex={0}
-                  aria-label={`Open ${story.name}`}
-                  className={`pt-card${selectedIds.includes(story.id) ? " is-sel" : ""}`}
-                  onClick={() => onSelect(story.id)}
+                  aria-label={
+                    story.pending ? "Generating a Take" : `Open ${story.name}`
+                  }
+                  className={`pt-card${selectedIds.includes(story.id) ? " is-sel" : ""}${story.pending ? " is-pending" : ""}`}
+                  onClick={() => {
+                    if (!story.pending) onSelect(story.id)
+                  }}
                   onKeyDown={event => {
-                    if (event.key === "Enter" || event.key === " ") {
+                    if (
+                      !story.pending &&
+                      (event.key === "Enter" || event.key === " ")
+                    ) {
                       event.preventDefault()
                       onSelect(story.id)
                     }
                   }}
                 >
                   <div className="pt-card-stage">
-                    <LabPartPreview story={story} fill />
+                    {story.pending ? (
+                      <div className="pt-card-generating" aria-hidden />
+                    ) : (
+                      <LabPartPreview story={story} fill />
+                    )}
                   </div>
                   <div className="pt-card-foot">
                     <span className={`pt-layer-tag layer-${story.layer}`}>
                       {story.layer}
                     </span>
                     <span className="pt-card-name">{partLabel(story)}</span>
-                    {metaLabel ? (
+                    {story.pending ? (
+                      <span className="pt-work-badge is-pending">Take</span>
+                    ) : story.aiTakeSlug ? (
+                      <span className="pt-work-badge">Take</span>
+                    ) : metaLabel ? (
                       <span className="pt-work-badge">{metaLabel}</span>
+                    ) : null}
+                    {story.aiTakeSlug && !story.pending && onDeleteAiTake ? (
+                      <button
+                        type="button"
+                        className="pt-card-delete"
+                        aria-label={`Delete Take ${story.name}`}
+                        onPointerDown={event => event.stopPropagation()}
+                        onClick={event => {
+                          event.stopPropagation()
+                          onDeleteAiTake(story.aiTakeSlug ?? "")
+                        }}
+                      >
+                        <Trash2 size={13} aria-hidden />
+                      </button>
                     ) : null}
                   </div>
                 </div>

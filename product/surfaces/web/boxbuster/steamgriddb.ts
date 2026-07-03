@@ -6,7 +6,6 @@ import { boxbusterOfflineArt } from "./art-mode"
 const API = "/sgdb/api"
 const CDN_RE = /^https?:\/\/cdn[0-9]*\.steamgriddb\.com/
 
-
 const proxied = (url: string) => url.replace(CDN_RE, "/sgdb/cdn")
 
 async function searchGameId(title: string): Promise<number | null> {

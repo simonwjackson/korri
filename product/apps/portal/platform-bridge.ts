@@ -86,7 +86,9 @@ export function createPortalPlatformBridge({
     device: {
       status: async () => {
         const response = await appRpc("app.device.status", {})
-        return isDeviceStatusResponse(response) ? response.state : unknownDeviceState()
+        return isDeviceStatusResponse(response)
+          ? response.state
+          : unknownDeviceState()
       },
       refresh: async () => {
         await appRpc("app.device.refresh", {})

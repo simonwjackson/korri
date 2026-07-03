@@ -109,7 +109,8 @@ async function waitForStdout(
   let buffered = ""
   while (!buffered.includes(needle)) {
     const next = await reader.read()
-    if (next.done) throw new Error(`process exited before stdout contained ${needle}`)
+    if (next.done)
+      throw new Error(`process exited before stdout contained ${needle}`)
     buffered += decoder.decode(next.value)
   }
   reader.releaseLock()

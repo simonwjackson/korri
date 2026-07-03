@@ -59,7 +59,11 @@ export const DENSITY = {
 
 /** Tiny libraries also use fewer shelf rows, so they read as small, not bare. */
 export function levelsFor(n: number): number[] {
-  return n < 16 ? ALL_LEVELS.slice(0, 2) : n < 40 ? ALL_LEVELS.slice(0, 3) : ALL_LEVELS
+  return n < 16
+    ? ALL_LEVELS.slice(0, 2)
+    : n < 40
+      ? ALL_LEVELS.slice(0, 3)
+      : ALL_LEVELS
 }
 
 export function computeLayout(gameCount: number, density: number): StoreLayout {

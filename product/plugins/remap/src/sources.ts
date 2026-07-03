@@ -18,7 +18,11 @@ export type RemapControllerSourceResolution =
     }
   | {
       readonly status: "failed"
-      readonly reason: "missing" | "ambiguous" | "duplicate" | "unsupported-source"
+      readonly reason:
+        | "missing"
+        | "ambiguous"
+        | "duplicate"
+        | "unsupported-source"
       readonly player: RemapPlayerSlot
       readonly message: string
       readonly devices?: readonly DiscoveredDevice[]
@@ -28,17 +32,23 @@ export interface ResolveRemapControllerSourcesOptions {
   readonly inputRoot?: string
 }
 
-const DEFAULT_CONTROLLERS: Partial<Record<RemapPlayerSlot, RemapControllerPolicy>> = {
+const DEFAULT_CONTROLLERS: Partial<
+  Record<RemapPlayerSlot, RemapControllerPolicy>
+> = {
   p1: { source: "inputplumber-virtual-gamepad" },
 }
 
 export function resolveRemapControllerSources(
   devices: readonly DiscoveredDevice[],
-  controllers: Partial<Record<RemapPlayerSlot, RemapControllerPolicy>> = DEFAULT_CONTROLLERS,
+  controllers: Partial<
+    Record<RemapPlayerSlot, RemapControllerPolicy>
+  > = DEFAULT_CONTROLLERS,
   options: ResolveRemapControllerSourcesOptions = {},
 ): RemapControllerSourceResolution {
   const candidates = devices.filter(isInputPlumberVirtualGamepad)
-  const resolved: Partial<Record<RemapPlayerSlot, RemapResolvedControllerSource>> = {}
+  const resolved: Partial<
+    Record<RemapPlayerSlot, RemapResolvedControllerSource>
+  > = {}
   const usedEventNodes = new Set<string>()
 
   for (const [player, policy] of Object.entries(controllers) as [

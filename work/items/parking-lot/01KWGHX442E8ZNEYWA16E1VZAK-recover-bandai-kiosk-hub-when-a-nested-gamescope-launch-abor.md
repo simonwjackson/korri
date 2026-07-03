@@ -3,7 +3,7 @@ id: 01KWGHX442E8ZNEYWA16E1VZAK
 slug: recover-bandai-kiosk-hub-when-a-nested-gamescope-launch-abor
 title: Recover Bandai kiosk hub when a nested gamescope launch aborts
 origin: parked
-status: To Do
+status: In Progress
 priority: high
 labels:
   - korri

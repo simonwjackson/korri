@@ -5,7 +5,6 @@ import { boxbusterOfflineArt } from "./art-mode"
 const API = "/steam/api"
 const CDN_RE = /^https?:\/\/[a-z0-9.]*steamstatic\.com/
 
-
 const proxied = (url: string) => url.replace(CDN_RE, "/steam/cdn")
 
 function loadImage(src: string): Promise<HTMLImageElement> {

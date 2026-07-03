@@ -26,5 +26,6 @@ if [ -f "$auth_file" ]; then
 fi
 
 export LAB_AI_MODEL="${LAB_AI_MODEL:-openai-codex/gpt-5.5}"
+workflow="${LAB_WORKFLOW:-generate-design-takes}"
 
-exec npx flue run generate-design-takes --input "$input"
+exec npx flue run "$workflow" --input "$input"

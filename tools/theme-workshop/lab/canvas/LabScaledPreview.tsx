@@ -1,4 +1,10 @@
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react"
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 
 /**
  * Fits an arbitrarily-sized part preview into its stage. Real discovered parts
@@ -28,7 +34,9 @@ export function LabScaledPreview({
   const stageRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
-  const [scaledHeight, setScaledHeight] = useState<number | undefined>(undefined)
+  const [scaledHeight, setScaledHeight] = useState<number | undefined>(
+    undefined,
+  )
 
   useEffect(() => {
     const stage = stageRef.current
@@ -51,10 +59,15 @@ export function LabScaledPreview({
     return () => observer.disconnect()
   }, [maxScale])
 
-  const stageStyle: CSSProperties = fill || scaledHeight === undefined ? {} : { height: scaledHeight }
+  const stageStyle: CSSProperties =
+    fill || scaledHeight === undefined ? {} : { height: scaledHeight }
   return (
     <div ref={stageRef} className="lab-scale-stage" style={stageStyle}>
-      <div ref={contentRef} className="lab-scale-content" style={{ transform: `scale(${scale})` }}>
+      <div
+        ref={contentRef}
+        className="lab-scale-content"
+        style={{ transform: `scale(${scale})` }}
+      >
         {children}
       </div>
     </div>

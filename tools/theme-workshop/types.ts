@@ -57,6 +57,13 @@ export interface Story {
   readonly state?: string
   /** Optional IDs of related stories from the same discovered module. */
   readonly variants?: readonly string[]
+  /** Set for a part authored by the dev-lab AI workflow (a file under a
+   * surface's `ai-takes/` dir). Carries the file slug so the lab can badge it
+   * and delete the underlying file. */
+  readonly aiTakeSlug?: string
+  /** Placeholder for an AI part that is still being generated: rendered as a
+   * skeleton in the Parts panel and not selectable until it resolves. */
+  readonly pending?: boolean
   readonly render: () => ReactNode
 }
 

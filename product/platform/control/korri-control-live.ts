@@ -603,7 +603,11 @@ function runResolvedLaunch(
 function launchExtrasForResolvedLaunch(
   resolved: ResolvedLaunch,
 ): ResolvedLaunch["extras"] | undefined {
-  if (!resolved.extras && !resolved.launchMetadata && !resolved.launchCompanions)
+  if (
+    !resolved.extras &&
+    !resolved.launchMetadata &&
+    !resolved.launchCompanions
+  )
     return undefined
   return {
     ...(resolved.extras ?? {}),

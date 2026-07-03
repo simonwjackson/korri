@@ -65,7 +65,9 @@ export interface RawBatterySnapshot {
   readonly supplies: readonly DevicePowerSupply[]
 }
 
-export function unknownDeviceState(observedAt = new Date().toISOString()): DeviceState {
+export function unknownDeviceState(
+  observedAt = new Date().toISOString(),
+): DeviceState {
   return { observedAt, battery: { _tag: "Unknown", observedAt } }
 }
 
@@ -105,7 +107,9 @@ export function failedBatteryReadState(
 }
 
 export function deviceStatesEqual(a: DeviceState, b: DeviceState): boolean {
-  return JSON.stringify(stripObservedAt(a)) === JSON.stringify(stripObservedAt(b))
+  return (
+    JSON.stringify(stripObservedAt(a)) === JSON.stringify(stripObservedAt(b))
+  )
 }
 
 export function batteryReadyForStreamControl(
@@ -120,7 +124,9 @@ export function batteryReadyForStreamControl(
   }
 }
 
-function lastKnownReady(state: DeviceBatteryState): DeviceBatteryReady | undefined {
+function lastKnownReady(
+  state: DeviceBatteryState,
+): DeviceBatteryReady | undefined {
   if (state._tag === "Ready") return state
   if (state._tag === "Stale") return state.lastKnown
   return undefined

@@ -928,9 +928,7 @@
  * the layout, not the styling.
  * -------------------------------------------------------------------------- */
 
-[data-shift-library] .shift-lib-options-btn,
-[data-shift-library] .shift-lib-chip,
-[data-shift-library] .shift-lib-option {
+[data-shift-library] .shift-lib-chip {
 	cursor: pointer;
 	font: inherit;
 	font-size: var(--shift-text-fine);
@@ -948,18 +946,14 @@
 		color 140ms ease;
 }
 
-[data-shift-library]
-	.shift-lib-options-btn:is(:focus, [data-korri-active-focus]),
 [data-shift-library] .shift-lib-chip:is(:focus, [data-korri-active-focus]),
-[data-shift-library] .shift-lib-option:is(:focus, [data-korri-active-focus]),
-[data-shift-library]
-	.shift-lib-lens-item:is(:focus, [data-korri-active-focus]) {
+[data-shift-library] .shift-lib-lens-item:is(:focus, [data-korri-active-focus]),
+[data-shift-library] .shift-lib-sort:is(:focus, [data-korri-active-focus]) {
 	box-shadow: 0 0 0 3px var(--shift-focus-glow);
 }
 
-/* Active (selected) pill: accent fill. */
-[data-shift-library] .shift-lib-chip[data-active],
-[data-shift-library] .shift-lib-option[data-active] {
+/* Active (selected) filter chip: accent fill. */
+[data-shift-library] .shift-lib-chip[data-active] {
 	color: var(--shift-on-accent);
 	background: var(--shift-accent);
 	border-color: transparent;
@@ -992,16 +986,50 @@
 	border-bottom-color: var(--shift-accent);
 }
 
-/* The summoned sort options — appear only when the Options button is pressed,
- * so no sort chrome competes with the games by default. */
-[data-shift-library] .shift-lib-options {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--shift-space-2);
-	padding: var(--shift-space-2) var(--shift-space-3);
-	border-radius: var(--shift-radius-panel);
-	background: var(--shift-surface-raised);
-	border: 1px solid var(--shift-rule);
+/* The placard sort caption — a chrome-less "museum placard": a wide-tracked
+ * eyebrow over the active sort's name, so sorting reads as a quiet caption the
+ * cover art sits beside, not a control competing with the games. */
+[data-shift-library] .shift-lib-sort {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.1em;
+	cursor: pointer;
+	font: inherit;
+	text-align: left;
+	background: transparent;
+	border: 0;
+	padding: 0;
+	outline: none;
+}
+
+[data-shift-library] .shift-lib-sort-eyebrow {
+	font-size: var(--shift-text-fine);
+	text-transform: uppercase;
+	letter-spacing: 0.2em;
+	font-weight: 700;
+	color: var(--shift-ink-faint);
+	transition: color 160ms ease;
+}
+
+[data-shift-library] .shift-lib-sort-value {
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	color: var(--shift-ink-dim);
+	transition: color 160ms ease;
+}
+
+[data-shift-library]
+	.shift-lib-sort:is(:focus, [data-korri-active-focus])
+	.shift-lib-sort-eyebrow {
+	color: var(--shift-accent);
+}
+
+[data-shift-library]
+	.shift-lib-sort:is(:focus, [data-korri-active-focus])
+	.shift-lib-sort-value {
+	color: var(--shift-ink);
 }
 
 /* ── Filter-bar variant: every control standing ───────────────────────────── */

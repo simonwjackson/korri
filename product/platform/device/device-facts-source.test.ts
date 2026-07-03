@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test"
 import { Effect } from "effect"
-import { DeviceFactsSource, makeStaticDeviceFactsSourceLayer } from "./device-facts-source"
+import {
+  DeviceFactsSource,
+  makeStaticDeviceFactsSourceLayer,
+} from "./device-facts-source"
 import { unknownDeviceState } from "./device-facts"
 
 describe("DeviceFactsSource", () => {

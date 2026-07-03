@@ -5,7 +5,10 @@ import { join } from "node:path"
 import { deflateRawSync } from "node:zlib"
 import { ZIP_STORED } from "@platform/archive/zip"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
-import { runPluginHandler, type ExecutablePluginResource } from "@platform/plugin"
+import {
+  runPluginHandler,
+  type ExecutablePluginResource,
+} from "@platform/plugin"
 import type {
   PluginExecutableResourceResolver,
   ResolvedExecutableResource,
@@ -65,8 +68,14 @@ describe("GMLoader path-run flow", () => {
     expect(first.payloadStatus).toBe("materialized")
     expect(first.runtimeStatus).toBe("cache-hit")
     expect(first.envelope.spec.command).toBe(runtime.command)
-    expect(first.envelope.spec.args).toEqual(["-c", first.manifest.run.configPath])
-    expect(second.diagnostics).toEqual(["payload-cache-hit", "runtime-cache-hit"])
+    expect(first.envelope.spec.args).toEqual([
+      "-c",
+      first.manifest.run.configPath,
+    ])
+    expect(second.diagnostics).toEqual([
+      "payload-cache-hit",
+      "runtime-cache-hit",
+    ])
     expect(second.spec.command).toBe(runtime.command)
     expect(second.spec.args).toEqual(first.envelope.spec.args)
   })
@@ -74,12 +83,19 @@ describe("GMLoader path-run flow", () => {
 
 interface PathRunResult {
   readonly manifest: { readonly run: { readonly configPath: string } }
-  readonly envelope: { readonly spec: { readonly command: string; readonly args: readonly string[] } }
+  readonly envelope: {
+    readonly spec: {
+      readonly command: string
+      readonly args: readonly string[]
+    }
+  }
   readonly payloadStatus: string
   readonly runtimeStatus: string
 }
 
-function context(input: { readonly sourcePath: string }): ReadableResolvedLaunchContext {
+function context(input: {
+  readonly sourcePath: string
+}): ReadableResolvedLaunchContext {
   return {
     playableId: "gmloader-e2e",
     itemId: "gmloader-e2e",

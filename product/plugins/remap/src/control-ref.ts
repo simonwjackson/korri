@@ -1,6 +1,12 @@
 export type RemapPlayerSlot = "p1" | "p2" | "p3" | "p4"
 export type RemapDirection = "up" | "down" | "left" | "right"
-export type RemapButton = "north" | "south" | "east" | "west" | "start" | "select"
+export type RemapButton =
+  | "north"
+  | "south"
+  | "east"
+  | "west"
+  | "start"
+  | "select"
 export type RemapStick = "left" | "right"
 
 export type RemapControllerControl =
@@ -51,7 +57,10 @@ export function parseControlRef(ref: string): RemapControlRef {
   throw new Error(`Unknown Remap control ref namespace: ${namespace ?? ""}`)
 }
 
-function parseKeyboardRef(ref: string, parts: readonly string[]): RemapKeyboardRef {
+function parseKeyboardRef(
+  ref: string,
+  parts: readonly string[],
+): RemapKeyboardRef {
   if (parts.length !== 2 || !parts[1]) {
     throw new Error(`Malformed Remap keyboard ref: ${ref}`)
   }
@@ -68,7 +77,9 @@ function parseControllerRef(
 ): RemapControllerRef {
   const player = parts[0]
   if (!PLAYER_SLOTS.has(player ?? "")) {
-    throw new Error(`Remap controller player slot must be p1, p2, p3, or p4: ${ref}`)
+    throw new Error(
+      `Remap controller player slot must be p1, p2, p3, or p4: ${ref}`,
+    )
   }
   if (parts[1] === "dpad") {
     if (parts.length !== 3 || !DIRECTIONS.has(parts[2] ?? "")) {
@@ -114,6 +125,8 @@ function parseControllerRef(
   throw new Error(`Malformed Remap controller ref: ${ref}`)
 }
 
-export function isControllerRef(ref: RemapControlRef): ref is RemapControllerRef {
+export function isControllerRef(
+  ref: RemapControlRef,
+): ref is RemapControllerRef {
   return ref.kind === "controller"
 }

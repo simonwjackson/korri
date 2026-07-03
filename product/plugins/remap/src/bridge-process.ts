@@ -17,7 +17,9 @@ export interface RemapEngine {
   readonly releaseAll: () => void
 }
 
-export function createRemapEngine(options: CreateRemapEngineOptions): RemapEngine {
+export function createRemapEngine(
+  options: CreateRemapEngineOptions,
+): RemapEngine {
   validateSinkCapabilities(
     options.sink,
     options.bindings.flatMap(binding => [...binding.targets]),
@@ -81,7 +83,9 @@ export function createRemapEngine(options: CreateRemapEngineOptions): RemapEngin
     }
   }
 
-  const releaseActiveStickPeerDirections = (source: RemapControllerRef): void => {
+  const releaseActiveStickPeerDirections = (
+    source: RemapControllerRef,
+  ): void => {
     const group = stickGroup(source)
     if (!group) return
     for (const activeSource of [...activeSources]) {

@@ -3,7 +3,10 @@ import { LabDeviceCluster } from "../components/LabDeviceCluster"
 import { useLab } from "../Lab.context"
 import type { LabLiveDeviceObject } from "../model/lab-canvas-object"
 import type { LabPreviewSelection } from "../model/lab-preview-selection"
-import { initialValuesForBinding, type LabInputValue } from "../model/lab-source-state"
+import {
+  initialValuesForBinding,
+  type LabInputValue,
+} from "../model/lab-source-state"
 import { LabInspectableSurfaceMount } from "./LabInspectableSurfaceMount"
 import { useLabFitHeight } from "./useLabFitHeight"
 
@@ -39,7 +42,10 @@ export function LabCanvasDevice({
   readonly onSelect: (id: string) => void
   readonly onInnerSelect: (selection: LabPreviewSelection | null) => void
   readonly onMove: (id: string, x: number, y: number) => void
-  readonly onMeasure: (id: string, size: { readonly w: number; readonly h: number }) => void
+  readonly onMeasure: (
+    id: string,
+    size: { readonly w: number; readonly h: number },
+  ) => void
 }) {
   const {
     adapter,

@@ -104,13 +104,20 @@ describe("RPCS3 readable launch integration", () => {
 
   it("fails before spawn when content, command, or firmware is missing", async () => {
     const missingContent = await Effect.runPromiseExit(
-      materializeReadableRpcs3Launch({ context: context({ contentPath: undefined }) }),
+      materializeReadableRpcs3Launch({
+        context: context({ contentPath: undefined }),
+      }),
     )
-    expectFailureReason(missingContent, "require a resolved PS3 disc marker path")
+    expectFailureReason(
+      missingContent,
+      "require a resolved PS3 disc marker path",
+    )
 
     const relativeCommand = await Effect.runPromiseExit(
       materializeReadableRpcs3Launch({
-        context: context({ policy: { command: "rpcs3", state: { root: "/tmp" } } }),
+        context: context({
+          policy: { command: "rpcs3", state: { root: "/tmp" } },
+        }),
       }),
     )
     expectFailureReason(relativeCommand, "require an absolute RPCS3 command")
@@ -174,11 +181,10 @@ function context(
       : { content: { path: "/tmp/Skate 3 [BLUS30464]/PS3_DISC.SFB" } }),
     launchCompanions: {},
     plugin: {
-      [KORRI_RPCS3_PLUGIN_ID]:
-        input.policy ?? {
-          command: KORRI_RPCS3_DEFAULT_COMMAND,
-          state: { root: "/tmp/rpcs3" },
-        },
+      [KORRI_RPCS3_PLUGIN_ID]: input.policy ?? {
+        command: KORRI_RPCS3_DEFAULT_COMMAND,
+        state: { root: "/tmp/rpcs3" },
+      },
     },
     storage: input.storage,
   }

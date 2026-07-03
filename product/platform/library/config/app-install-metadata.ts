@@ -41,7 +41,10 @@ export function installMetadataAllowed(
 function steamAppIdFromTarget(
   target: LibraryReleasePayload["target"],
 ): string | undefined {
-  if (target?.kind === "provider-ref" && target.provider === STEAM_PROVIDER_ID) {
+  if (
+    target?.kind === "provider-ref" &&
+    target.provider === STEAM_PROVIDER_ID
+  ) {
     return /^\d+$/.test(target.ref) ? target.ref : undefined
   }
 

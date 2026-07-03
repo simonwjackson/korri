@@ -32,9 +32,7 @@ describe("Steam plugin Nix module", () => {
       'korri-steam-guest -console +app_install "$appid"',
     )
     expect(moduleSource).toContain("KORRI_STEAM_APP_INSTALL_HELPER")
-    expect(moduleSource).toContain(
-      "environment.KORRI_STEAM_APP_INSTALL_HELPER",
-    )
+    expect(moduleSource).toContain("environment.KORRI_STEAM_APP_INSTALL_HELPER")
   })
 
   it("keeps Steam visible only through an explicit launch-debug switch", () => {
@@ -50,7 +48,9 @@ describe("Steam plugin Nix module", () => {
   })
 
   it("routes all managed Steam launches through the gamescoped Deck client", () => {
-    expect(moduleSource).toContain('service_name="korri-steam-gamescope.service"')
+    expect(moduleSource).toContain(
+      'service_name="korri-steam-gamescope.service"',
+    )
     expect(moduleSource).not.toContain("KORRI_STEAM_SERVICE")
     expect(moduleSource).toContain("systemd.services.korri-steam-gamescope")
     expect(moduleSource).not.toMatch(/systemd\.services\.korri-steam\s*=/)
@@ -69,7 +69,7 @@ describe("Steam plugin Nix module", () => {
   it("keeps Gamescope output selection device-configurable", () => {
     expect(moduleSource).toContain("gamescopePreferOutput")
     expect(moduleSource).toContain("types.nullOr types.str")
-    expect(moduleSource).toContain('cfg.gamescopePreferOutput != null')
+    expect(moduleSource).toContain("cfg.gamescopePreferOutput != null")
     expect(moduleSource).toContain('"-O"')
     expect(moduleSource).not.toContain("-O DSI-")
     expect(moduleSource).not.toContain("focus output")
@@ -108,10 +108,14 @@ describe("Steam plugin Nix module", () => {
   it("treats cold and warm gamescoped Steam startup as one idempotent ensure", () => {
     expect(moduleSource).toContain("request_steam_service_start()")
     expect(moduleSource).toContain("service_start_attempted_at=0")
-    expect(moduleSource).toContain("systemctl reset-failed korri-steam-gamescope.service")
-    expect(moduleSource).toContain("systemctl --user restart korri-steam-warm.service")
-    expect(moduleSource).not.toContain('overridden service $service_name')
-    expect(moduleSource).toContain('inactive)')
+    expect(moduleSource).toContain(
+      "systemctl reset-failed korri-steam-gamescope.service",
+    )
+    expect(moduleSource).toContain(
+      "systemctl --user restart korri-steam-warm.service",
+    )
+    expect(moduleSource).not.toContain("overridden service $service_name")
+    expect(moduleSource).toContain("inactive)")
     expect(moduleSource).toContain("if ! request_steam_service_start; then")
     expect(moduleSource).toContain("RemainAfterExit = false")
   })
@@ -133,9 +137,7 @@ describe("Steam plugin Nix module", () => {
 
   it("bounds AppID URL forwarding before launch observation", () => {
     expect(moduleSource).toContain("KORRI_STEAM_APP_FORWARD_TIMEOUT")
-    expect(moduleSource).toContain(
-      "timed out forwarding AppID $appid to Steam",
-    )
+    expect(moduleSource).toContain("timed out forwarding AppID $appid to Steam")
   })
 
   it("accepts existing readiness evidence for prewarmed gamescoped Steam", () => {
@@ -158,7 +160,11 @@ describe("Steam plugin Nix module", () => {
     )
     expect(moduleSource).toContain("set -- \"''" + "$" + '{filtered[@]}"')
     expect(moduleSource).toContain(
-      'ExecStart = "' + "$" + "{pkgs.gamescope}/bin/gamescope " + "$" + "{gamescopeArgs}",
+      'ExecStart = "' +
+        "$" +
+        "{pkgs.gamescope}/bin/gamescope " +
+        "$" +
+        "{gamescopeArgs}",
     )
   })
 
@@ -173,30 +179,40 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain(
       "steam_client_${cfg.betaChannel}_linuxarm64.installed",
     )
-    expect(moduleSource).not.toContain("-name 'steam_client_*_linuxarm64.installed'")
+    expect(moduleSource).not.toContain(
+      "-name 'steam_client_*_linuxarm64.installed'",
+    )
   })
 
   it("does not run Steam-owned runtime prep in normal launch ordering", () => {
     expect(moduleSource).not.toContain("systemd.paths.korri-steam-runtime-prep")
     expect(moduleSource).not.toContain('"korri-steam-runtime-prep.service"')
     expect(moduleSource).not.toContain("steam-guest-runtime-prep --apply")
-    expect(moduleSource).not.toContain("SteamLinuxRuntime_sniper/pressure-vessel")
+    expect(moduleSource).not.toContain(
+      "SteamLinuxRuntime_sniper/pressure-vessel",
+    )
   })
 
   it("exposes a backup-first Steam recovery helper", () => {
-    expect(moduleSource).toContain('pkgs.writeShellScriptBin "korri-steam-recover"')
+    expect(moduleSource).toContain(
+      'pkgs.writeShellScriptBin "korri-steam-recover"',
+    )
     expect(moduleSource).toContain("steam_client_${cfg.betaChannel}_linuxarm64")
     expect(moduleSource).toContain("must run as root")
-    expect(moduleSource).toContain("refusing package repair while $service is $state")
-    expect(moduleSource).toContain("cp -a \"$package_dir\" \"$backup_dir\"")
-    expect(moduleSource).toContain("rm -f \"$pending_marker\"")
-    expect(moduleSource).toContain("u${toString runtime.uid}-ValveIPCSharedObj-Steam")
+    expect(moduleSource).toContain(
+      "refusing package repair while $service is $state",
+    )
+    expect(moduleSource).toContain('cp -a "$package_dir" "$backup_dir"')
+    expect(moduleSource).toContain('rm -f "$pending_marker"')
+    expect(moduleSource).toContain(
+      "u${toString runtime.uid}-ValveIPCSharedObj-Steam",
+    )
     expect(moduleSource).not.toContain("/dev/shm/u*-ValveIPCSharedObj-Steam")
   })
 
   it("makes Steam update relaunch exits explicit and restartable", () => {
-    expect(moduleSource).toContain('RestartForceExitStatus = [ 42 ]')
-    expect(moduleSource).toContain('startLimitBurst = 30')
+    expect(moduleSource).toContain("RestartForceExitStatus = [ 42 ]")
+    expect(moduleSource).toContain("startLimitBurst = 30")
     expect(moduleSource).toContain("startLimitIntervalSec = 300")
   })
 

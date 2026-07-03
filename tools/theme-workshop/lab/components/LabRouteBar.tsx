@@ -13,7 +13,8 @@ export function LabRouteBar() {
   )
   const switcherScreens = useMemo(
     () =>
-      hasSurfaceParts(themeId) && !screens.some(screen => screen.path === "/parts")
+      hasSurfaceParts(themeId) &&
+      !screens.some(screen => screen.path === "/parts")
         ? [...screens, { label: "Parts", path: "/parts" }]
         : screens,
     [screens, themeId],

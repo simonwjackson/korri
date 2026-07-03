@@ -9,6 +9,67 @@ export interface LabDesignTakesRequest {
   readonly count: number
 }
 
+export interface LabGeneratedPart {
+  readonly name: string
+  readonly slug: string
+}
+
+/**
+ * Ask the dev-lab server to author real new part files for a surface. The
+ * server runs a Flue workflow whose agent writes complete `.part.tsx` files
+ * into the surface's `ai-takes/` scratch dir; Vite then discovers them as new
+ * pickable parts. Returns the written parts, or `null` when unavailable
+ * (static preview, tests, or a workflow failure).
+ */
+export async function requestGeneratedParts(
+  surfaceId: string,
+  request: LabDesignTakesRequest,
+): Promise<readonly LabGeneratedPart[] | null> {
+  if (!shouldUseDesignTakesApi()) return null
+  try {
+    const response = await fetch(generatePartsUrl(surfaceId), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(request),
+    })
+    if (!response.ok) return null
+    const parsed = JSON.parse(await response.text()) as {
+      written?: readonly LabGeneratedPart[]
+    }
+    return Array.isArray(parsed.written) ? parsed.written : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Delete an AI-authored part file from a surface's `ai-takes/` dir. Returns true
+ * when the server removed it (or it was already gone). Returns false when the
+ * endpoint is unavailable so callers can no-op gracefully.
+ */
+export async function deleteGeneratedPart(
+  surfaceId: string,
+  slug: string,
+): Promise<boolean> {
+  if (!shouldUseDesignTakesApi()) return false
+  try {
+    const response = await fetch(
+      `${generatePartsUrl(surfaceId)}/${encodeURIComponent(slug)}`,
+      { method: "DELETE" },
+    )
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+function generatePartsUrl(surfaceId: string): string {
+  return `/__lab/generate-parts/${encodeURIComponent(surfaceId)}`
+}
+
 /**
  * Ask the dev-lab server to generate design Takes for a part. The server runs a
  * Flue workflow (`tools/lab-ai`) that returns recipe candidates as strict JSON.

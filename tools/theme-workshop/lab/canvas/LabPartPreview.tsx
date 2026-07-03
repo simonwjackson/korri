@@ -16,7 +16,15 @@ const FRAME_WIDTH = 900
  *     so their fill/flex layout resolves instead of collapsing.
  *  3. Scales the result to fit its stage and catches render errors.
  */
-export function LabPartPreview({ story, label, fill = false }: { readonly story: Story; readonly label?: string; readonly fill?: boolean }) {
+export function LabPartPreview({
+  story,
+  label,
+  fill = false,
+}: {
+  readonly story: Story
+  readonly label?: string
+  readonly fill?: boolean
+}) {
   const { adapter } = useLab()
   const node = story.render()
 
@@ -25,12 +33,16 @@ export function LabPartPreview({ story, label, fill = false }: { readonly story:
   if (adapter.previewScope) {
     return (
       <LabScaledPreview fill={fill}>
-        <LabPreviewBoundary label={label ?? story.name}>{adapter.previewScope(node)}</LabPreviewBoundary>
+        <LabPreviewBoundary label={label ?? story.name}>
+          {adapter.previewScope(node)}
+        </LabPreviewBoundary>
       </LabScaledPreview>
     )
   }
 
-  const boundary = <LabPreviewBoundary label={label ?? story.name}>{node}</LabPreviewBoundary>
+  const boundary = (
+    <LabPreviewBoundary label={label ?? story.name}>{node}</LabPreviewBoundary>
+  )
   if (!story.surface) {
     return <LabScaledPreview fill={fill}>{boundary}</LabScaledPreview>
   }
@@ -38,11 +50,17 @@ export function LabPartPreview({ story, label, fill = false }: { readonly story:
   // Self-scoping surfaces (e.g. shift) still need a definite, device-shaped box
   // so their full-screen parts lay out instead of collapsing.
   const device = adapter.devices[0]
-  const ratio = device && device.heightMm > 0 ? device.widthMm / device.heightMm : 16 / 10
-  const frameStyle: CSSProperties = { width: FRAME_WIDTH, height: Math.round(FRAME_WIDTH / ratio) }
+  const ratio =
+    device && device.heightMm > 0 ? device.widthMm / device.heightMm : 16 / 10
+  const frameStyle: CSSProperties = {
+    width: FRAME_WIDTH,
+    height: Math.round(FRAME_WIDTH / ratio),
+  }
   return (
     <LabScaledPreview fill={fill}>
-      <div className="lab-screen-frame" style={frameStyle}>{boundary}</div>
+      <div className="lab-screen-frame" style={frameStyle}>
+        {boundary}
+      </div>
     </LabScaledPreview>
   )
 }

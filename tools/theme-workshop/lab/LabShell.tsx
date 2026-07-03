@@ -17,7 +17,12 @@ import {
   readStoredPresentation,
   viewportPresentation,
 } from "./chrome/lab-presentation"
-import { requestDesignTakes } from "./design-pass/design-takes-client"
+import { loadAiPartStories } from "./design-pass/ai-parts-loader"
+import {
+  deleteGeneratedPart,
+  requestDesignTakes,
+  requestGeneratedParts,
+} from "./design-pass/design-takes-client"
 import {
   createCannedTakeBatch,
   createRecipeTakeBatch,
@@ -122,6 +127,14 @@ export function LabShell() {
   >([])
   const [promotedTakesHydrated, setPromotedTakesHydrated] = useState(false)
   const generatedTakeSeed = useRef(0)
+  // AI-authored parts load at runtime (no page reload); pending placeholders
+  // render as skeletons in the Parts panel while a generation is in flight.
+  const [aiPartStories, setAiPartStories] = useState<
+    readonly import("../types").Story[]
+  >([])
+  const [pendingAiStories, setPendingAiStories] = useState<
+    readonly import("../types").Story[]
+  >([])
   const [catalogError, setCatalogError] = useState<Error | null>(null)
   const [dockWidth, setDockWidth] = useState<number>(readStoredDockWidth)
   // One adaptive chrome: position defaults from the viewport and is overridable
@@ -175,14 +188,22 @@ export function LabShell() {
     )
     return {
       ...catalog,
-      stories: [...catalog.stories, ...generatedTakes.stories].filter(
-        story => !deleted.has(story.id),
-      ),
+      stories: [
+        ...catalog.stories,
+        ...generatedTakes.stories,
+        ...aiPartStories,
+      ].filter(story => !deleted.has(story.id)),
       ...(Object.keys(designPassMetaByStoryId).length
         ? { designPassMetaByStoryId }
         : {}),
     }
-  }, [catalog, generatedTakes, deletedTakeStoryIds, promotedTakeStoryIds])
+  }, [
+    catalog,
+    generatedTakes,
+    aiPartStories,
+    deletedTakeStoryIds,
+    promotedTakeStoryIds,
+  ])
   const partsCatalog = useMemo<LabPartsCatalog | null>(() => {
     if (!catalog) return null
     const deleted = new Set(deletedTakeStoryIds)
@@ -209,12 +230,21 @@ export function LabShell() {
       stories: [
         ...catalog.stories.filter(story => !deleted.has(story.id)),
         ...promotedStories,
+        ...aiPartStories,
+        ...pendingAiStories,
       ],
       ...(Object.keys(designPassMetaByStoryId).length
         ? { designPassMetaByStoryId }
         : {}),
     }
-  }, [catalog, generatedTakes, deletedTakeStoryIds, promotedTakeStoryIds])
+  }, [
+    catalog,
+    generatedTakes,
+    aiPartStories,
+    pendingAiStories,
+    deletedTakeStoryIds,
+    promotedTakeStoryIds,
+  ])
   const index = useMemo(
     () => buildStoryIndex(catalogWithGenerated),
     [catalogWithGenerated],
@@ -353,6 +383,8 @@ export function LabShell() {
     let cancelled = false
     setCatalog(null)
     setGeneratedTakes({ stories: [], metaByStoryId: {}, descriptors: [] })
+    setAiPartStories([])
+    setPendingAiStories([])
     setDeletedTakeStoryIds([])
     setPromotedTakeStoryIds([])
     setPromotedTakesHydrated(false)
@@ -374,6 +406,10 @@ export function LabShell() {
         setPromotedTakeStoryIds(restored.stories.map(story => story.id))
         setPromotedTakesHydrated(true)
         setCatalog(next)
+        // Load AI-authored parts on demand (separate from the compile-time
+        // glob) so writing them never reloads the app.
+        const ai = await loadAiPartStories(adapter.id)
+        if (!cancelled) setAiPartStories(ai)
       })
       .catch(cause => {
         if (!cancelled)
@@ -516,9 +552,38 @@ export function LabShell() {
     if (!story) return
     const baseMeta = index.designPassMetaById.get(story.id)
 
-    // Ask the dev-lab AI workflow for recipe Takes; fall back to canned Takes
-    // when the endpoint is unavailable so the lab still works offline/in tests.
+    // Primary path: ask the dev-lab AI workflow to author REAL new part files,
+    // then load them on demand (no page reload). Skeleton placeholders show in
+    // the Parts panel while the model works. Falls back to recipe/canned canvas
+    // Takes when the endpoint is unavailable (static preview / tests / failure).
+    const batchId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const pendingCount = Math.max(1, Math.min(3, Math.floor(request.count)))
+    const placeholders = Array.from({ length: pendingCount }, (_, i) => ({
+      id: `pending-${batchId}-${i}`,
+      layer: "molecule" as const,
+      name: "Generating\u2026",
+      pending: true,
+      render: () => null,
+    }))
+    const clearBatch = () =>
+      setPendingAiStories(prev =>
+        prev.filter(part => !part.id.startsWith(`pending-${batchId}-`)),
+      )
+    setPendingAiStories(prev => [...prev, ...placeholders])
+
     void (async () => {
+      const written = await requestGeneratedParts(adapter.id, {
+        partId: story.designPartId,
+        prompt: request.prompt,
+        count: request.count,
+      })
+      if (written && written.length > 0) {
+        setAiPartStories(await loadAiPartStories(adapter.id))
+        clearBatch()
+        return
+      }
+      clearBatch()
+
       const candidates = await requestDesignTakes(adapter.id, {
         partId: story.designPartId,
         prompt: request.prompt,
@@ -594,6 +659,15 @@ export function LabShell() {
   const partsAction = (
     <LabPartsViewToggle mode={partsView} onChange={choosePartsView} />
   )
+  // Deleting an AI-authored part removes its file, then reloads the runtime AI
+  // part list so it drops out of the catalog — no page reload.
+  const deleteAiTake = (slug: string) => {
+    if (!slug) return
+    void (async () => {
+      const ok = await deleteGeneratedPart(adapter.id, slug)
+      if (ok) setAiPartStories(await loadAiPartStories(adapter.id))
+    })()
+  }
   const partsPanel = () => (
     <LabPartsPanel
       mode={partsView}
@@ -602,6 +676,7 @@ export function LabShell() {
       selectedIds={selectedIds}
       onSelect={selectStory}
       onSelectLayer={selectLayer}
+      onDeleteAiTake={deleteAiTake}
     />
   )
   useEffect(() => {

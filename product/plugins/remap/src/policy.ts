@@ -26,7 +26,9 @@ export type RemapPolicy =
   | { readonly enable: false }
   | {
       readonly enable: true
-      readonly controllers?: Partial<Record<RemapPlayerSlot, RemapControllerPolicy>>
+      readonly controllers?: Partial<
+        Record<RemapPlayerSlot, RemapControllerPolicy>
+      >
       readonly bindings: readonly RemapBinding[]
     }
 
@@ -67,7 +69,9 @@ export function decodeRemapPolicy(input: unknown): RemapPolicy {
   }
 }
 
-export function normalizeRemapPolicy(policy: RemapPolicy): NormalizedRemapPolicy {
+export function normalizeRemapPolicy(
+  policy: RemapPolicy,
+): NormalizedRemapPolicy {
   if (policy.enable === false) {
     throw new Error("Disabled Remap policy cannot be normalized for launch")
   }
@@ -96,7 +100,9 @@ function decodeControllers(
   const decoded: Partial<Record<RemapPlayerSlot, RemapControllerPolicy>> = {}
   for (const [slot, controller] of Object.entries(value)) {
     if (!PLAYER_SLOTS.has(slot)) {
-      throw new Error(`Remap controller id must be a fixed player slot p1-p4: ${slot}`)
+      throw new Error(
+        `Remap controller id must be a fixed player slot p1-p4: ${slot}`,
+      )
     }
     decoded[slot as RemapPlayerSlot] = decodeControllerPolicy(slot, controller)
   }
@@ -143,7 +149,9 @@ function decodePreference(
 
 function assertBindingsUseDefinedControllers(
   bindings: readonly RemapBinding[],
-  controllers: Partial<Record<RemapPlayerSlot, RemapControllerPolicy>> | undefined,
+  controllers:
+    | Partial<Record<RemapPlayerSlot, RemapControllerPolicy>>
+    | undefined,
 ): void {
   const defined = new Set<RemapPlayerSlot>(
     Object.keys(controllers ?? { p1: DEFAULT_CONTROLLER }) as RemapPlayerSlot[],
@@ -170,7 +178,8 @@ function assertNoExcessKeys(
   allowed: ReadonlySet<string>,
 ): void {
   for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) throw new Error(`${label} has unsupported field ${key}`)
+    if (!allowed.has(key))
+      throw new Error(`${label} has unsupported field ${key}`)
   }
 }
 

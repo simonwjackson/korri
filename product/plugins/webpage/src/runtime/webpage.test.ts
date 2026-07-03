@@ -56,7 +56,11 @@ describe("webpage launch plumbing", () => {
     listeners.get("SIGTERM")?.()
 
     expect(await proc.exited).not.toBeNull()
-    for (let attempt = 0; attempt < 20 && exitCode === undefined; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < 20 && exitCode === undefined;
+      attempt += 1
+    ) {
       await Bun.sleep(10)
     }
     expect(exitCode).toBe(143)

@@ -28,10 +28,18 @@ function battery(percent: number) {
 
 describe("app.device RPC handlers", () => {
   it("registers device RPC tags on app and server groups", () => {
-    expect(Array.from(appRpcGroup.requests.keys())).toContain("app.device.status")
-    expect(Array.from(appRpcGroup.requests.keys())).toContain("app.device.refresh")
-    expect(Array.from(serverRpcGroup.requests.keys())).toContain("app.device.status")
-    expect(Array.from(serverRpcGroup.requests.keys())).toContain("app.device.refresh")
+    expect(Array.from(appRpcGroup.requests.keys())).toContain(
+      "app.device.status",
+    )
+    expect(Array.from(appRpcGroup.requests.keys())).toContain(
+      "app.device.refresh",
+    )
+    expect(Array.from(serverRpcGroup.requests.keys())).toContain(
+      "app.device.status",
+    )
+    expect(Array.from(serverRpcGroup.requests.keys())).toContain(
+      "app.device.refresh",
+    )
   })
 
   it("returns the current device state snapshot", async () => {

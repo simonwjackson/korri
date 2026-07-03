@@ -7,7 +7,9 @@ import { deviceEventForState } from "./events.rpc"
 const encoder = new TextEncoder()
 
 function sseData(value: unknown): Uint8Array {
-  return encoder.encode(`event: device.state\ndata: ${JSON.stringify(value)}\n\n`)
+  return encoder.encode(
+    `event: device.state\ndata: ${JSON.stringify(value)}\n\n`,
+  )
 }
 
 export function createDeviceEventsStream(
@@ -37,7 +39,9 @@ export function createDeviceEventsStream(
 
       fiber = Effect.runFork(
         Stream.runForEach(service.changes, state =>
-          Effect.sync(() => controller.enqueue(sseData(deviceEventForState(state)))),
+          Effect.sync(() =>
+            controller.enqueue(sseData(deviceEventForState(state))),
+          ),
         ).pipe(
           Effect.ensuring(
             Effect.sync(() => signal?.removeEventListener("abort", close)),
@@ -56,9 +60,13 @@ export function createDeviceEventsStream(
 
 export async function handleDeviceEvents(c: Context): Promise<Response> {
   const service = await getLiveDeviceStateService()
-  return c.newResponse(createDeviceEventsStream(service, c.req.raw.signal), 200, {
-    "content-type": "text/event-stream",
-    "cache-control": "no-cache",
-    connection: "keep-alive",
-  })
+  return c.newResponse(
+    createDeviceEventsStream(service, c.req.raw.signal),
+    200,
+    {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+    },
+  )
 }

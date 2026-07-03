@@ -119,7 +119,9 @@ describe("createSwayLaneEventSupervisor", () => {
     const supervisor = createSwayLaneEventSupervisor({
       discover: () => {
         discoverCalls++
-        return discoverCalls >= 3 ? "/run/user/2000/sway-ipc.100.sock" : undefined
+        return discoverCalls >= 3
+          ? "/run/user/2000/sway-ipc.100.sock"
+          : undefined
       },
       createSource: factory.createSource,
       retryDelayMs: 1000,

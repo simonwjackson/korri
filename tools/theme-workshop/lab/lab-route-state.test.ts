@@ -33,9 +33,9 @@ describe("lab route state", () => {
       ids: [],
     })
     expect(selectedDevicesForSegment("none", knownDevices)).toEqual([])
-    expect(deviceSegmentForSelection({ kind: "set", ids: [] }, knownDevices)).toBe(
-      "none",
-    )
+    expect(
+      deviceSegmentForSelection({ kind: "set", ids: [] }, knownDevices),
+    ).toBe("none")
   })
 
   it("normalizes duplicate and unknown device ids to known selected ids", () => {

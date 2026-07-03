@@ -143,12 +143,17 @@ describe("GMLoader readable launch materializer", () => {
       }),
     ).toBe(false)
     expect(
-      integration.canResolve({ ...context({ sourcePath: "/game.apk" }), content: undefined }),
+      integration.canResolve({
+        ...context({ sourcePath: "/game.apk" }),
+        content: undefined,
+      }),
     ).toBe(false)
   })
 })
 
-function context(input: { readonly sourcePath: string }): ReadableResolvedLaunchContext {
+function context(input: {
+  readonly sourcePath: string
+}): ReadableResolvedLaunchContext {
   return {
     playableId: "gmloader-readable",
     itemId: "gmloader-readable",

@@ -121,7 +121,9 @@ function WithMutableLibrary({
 
 function DeviceBatteryPercent() {
   const state = useAtomValue(deviceStateAtom)
-  return <div>{state.battery._tag === "Ready" ? state.battery.percent : "none"}</div>
+  return (
+    <div>{state.battery._tag === "Ready" ? state.battery.percent : "none"}</div>
+  )
 }
 
 function LibraryTitles() {

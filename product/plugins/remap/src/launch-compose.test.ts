@@ -39,7 +39,8 @@ describe("Remap launch.compose", () => {
         env: { DISPLAY: ":0" },
       },
     })
-    if (result._tag !== "LaunchCompanionsComposed") throw new Error("not composed")
+    if (result._tag !== "LaunchCompanionsComposed")
+      throw new Error("not composed")
     expect(result.spec.args.slice(0, 6)).toEqual([
       "--launch-id",
       "launch-remap-1",

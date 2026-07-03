@@ -33,7 +33,8 @@ const Input = v.object({
   count: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(5)),
 })
 
-const model = process.env.LAB_AI_MODEL ?? "openrouter/anthropic/claude-haiku-4.5"
+const model =
+  process.env.LAB_AI_MODEL ?? "openrouter/anthropic/claude-haiku-4.5"
 
 const instructionsFor = (input: v.InferOutput<typeof Input>): string => `
 You are a design assistant for the Korri "Shift" home screen. The user is

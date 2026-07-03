@@ -25,7 +25,9 @@ export const defaultGmloaderRuntimeResource: ExecutablePluginResource = {
 export function createDefaultGmloaderRuntimeResolver(
   env: XdgPathEnv,
 ): PluginExecutableResourceResolver {
-  return createNixOutLinkResolver({ stateRoot: gmloaderPluginResourceRoot(env) })
+  return createNixOutLinkResolver({
+    stateRoot: gmloaderPluginResourceRoot(env),
+  })
 }
 
 export function createDefaultGmloaderRuntimeFulfiller(

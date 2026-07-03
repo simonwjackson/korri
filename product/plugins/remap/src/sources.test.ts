@@ -61,7 +61,9 @@ describe("Remap controller sources", () => {
   })
 
   it("fails when a preferred controller is missing or two slots select the same node", async () => {
-    const devices = await loadDevices("bus-input-devices-inputplumber-ambiguous.txt")
+    const devices = await loadDevices(
+      "bus-input-devices-inputplumber-ambiguous.txt",
+    )
 
     expect(
       resolveRemapControllerSources(devices, {

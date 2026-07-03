@@ -34,19 +34,17 @@ describe("ShiftLibraryLens", () => {
     expect(screen.queryByRole("button", { name: "Platformer" })).toBeNull()
   })
 
-  it("keeps sort hidden until summoned, then reorders", () => {
+  it("cycles the sort in place via the standing placard", () => {
     render(<ShiftLibraryLens games={games} />)
 
-    // Sort options are progressive disclosure — not present until summoned.
-    expect(screen.queryByRole("button", { name: "A–Z" })).toBeNull()
+    // No summon step: the sort is a standing placard showing the active sort.
+    expect(
+      screen.getByRole("button", { name: /^Sorted by Recent/ }),
+    ).toBeDefined()
 
-    fireEvent.click(screen.getByRole("button", { name: /^Sort:/ }))
-    expect(screen.getByRole("button", { name: "A–Z" })).toBeDefined()
-
-    // Choosing a sort applies it and dismisses the options again.
-    fireEvent.click(screen.getByRole("button", { name: "A–Z" }))
-    expect(screen.queryByRole("button", { name: "A–Z" })).toBeNull()
-    expect(screen.getByRole("button", { name: /^Sort: A–Z/ })).toBeDefined()
+    // Pressing it cycles to the next sort in place.
+    fireEvent.click(screen.getByRole("button", { name: /^Sorted by Recent/ }))
+    expect(screen.getByRole("button", { name: /^Sorted by A–Z/ })).toBeDefined()
   })
 
   it("groups into genre shelves under the By Genre lens", () => {

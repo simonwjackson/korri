@@ -316,7 +316,11 @@ describe("LabRoot", () => {
     const view = render(
       <LabRoot
         adapters={[adapter]}
-        routeState={{ devicesSegment: "none", themeId: "test", surfacePath: "/" }}
+        routeState={{
+          devicesSegment: "none",
+          themeId: "test",
+          surfacePath: "/",
+        }}
         navigation={{
           setDevicesSegment: mock(() => undefined),
           setThemeId: mock(() => undefined),
@@ -410,12 +414,16 @@ describe("LabRoot", () => {
     await waitFor(() => {
       expect(view.container.querySelector(".pt-grid")).toBeTruthy()
     })
-    expect(view.container.querySelector(".pt-tree:not(.pt-device-list)")).toBeNull()
+    expect(
+      view.container.querySelector(".pt-tree:not(.pt-device-list)"),
+    ).toBeNull()
 
     fireEvent.click(screen.getByRole("tab", { name: "List" }))
 
     await waitFor(() => {
-      expect(view.container.querySelector(".pt-tree:not(.pt-device-list)")).toBeTruthy()
+      expect(
+        view.container.querySelector(".pt-tree:not(.pt-device-list)"),
+      ).toBeTruthy()
     })
     expect(view.container.querySelector(".pt-grid")).toBeNull()
   })

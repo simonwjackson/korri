@@ -12,7 +12,11 @@ export interface RemapSinkCapabilities {
 }
 
 export type RemapSinkEvent =
-  | { readonly type: "keyboard"; readonly action: "press" | "release"; readonly key: string }
+  | {
+      readonly type: "keyboard"
+      readonly action: "press" | "release"
+      readonly key: string
+    }
   | {
       readonly type: "gamepad"
       readonly action: "press" | "release"
@@ -70,10 +74,14 @@ export function validateSinkCapabilities(
 ): void {
   for (const target of targets) {
     if (target.kind === "keyboard" && sink.capabilities.keyboard !== true) {
-      throw new Error(`Remap keyboard target ${target.ref} is not supported by sink`)
+      throw new Error(
+        `Remap keyboard target ${target.ref} is not supported by sink`,
+      )
     }
     if (target.kind === "controller" && sink.capabilities.gamepad !== true) {
-      throw new Error(`Remap gamepad target ${target.ref} is not supported by sink`)
+      throw new Error(
+        `Remap gamepad target ${target.ref} is not supported by sink`,
+      )
     }
   }
 }

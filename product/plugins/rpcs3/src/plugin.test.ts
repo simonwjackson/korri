@@ -44,13 +44,17 @@ describe("RPCS3 plugin", () => {
     expect(KORRI_RPCS3_GAMES_STORAGE_ID).toBe("@korri:rpcs3/ps3-games")
     expect(KORRI_RPCS3_STATE_STORAGE_ID).toBe("@korri:rpcs3/state")
     expect(
-      rpcs3Plugin.contributes.config.storage?.[KORRI_RPCS3_GAMES_STORAGE_LOCAL_ID],
+      rpcs3Plugin.contributes.config.storage?.[
+        KORRI_RPCS3_GAMES_STORAGE_LOCAL_ID
+      ],
     ).toMatchObject({
       id: KORRI_RPCS3_GAMES_STORAGE_LOCAL_ID,
       root: "/srv/lakes/towada/gaming/games/sony-playstation-3",
     })
     expect(
-      rpcs3Plugin.contributes.config.storage?.[KORRI_RPCS3_STATE_STORAGE_LOCAL_ID],
+      rpcs3Plugin.contributes.config.storage?.[
+        KORRI_RPCS3_STATE_STORAGE_LOCAL_ID
+      ],
     ).toMatchObject({
       id: KORRI_RPCS3_STATE_STORAGE_LOCAL_ID,
       root: "/var/lib/korri/rpcs3",
@@ -71,8 +75,8 @@ describe("RPCS3 plugin", () => {
   })
 
   it("attaches the PS3 disc folder discovery provider", () => {
-    expect(rpcs3Plugin.contributes.discovery?.map(provider => provider.id)).toEqual([
-      KORRI_RPCS3_PS3_DISC_DISCOVERY_PROVIDER_ID,
-    ])
+    expect(
+      rpcs3Plugin.contributes.discovery?.map(provider => provider.id),
+    ).toEqual([KORRI_RPCS3_PS3_DISC_DISCOVERY_PROVIDER_ID])
   })
 })

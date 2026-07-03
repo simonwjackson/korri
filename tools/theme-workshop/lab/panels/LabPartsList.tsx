@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react"
 import type { Story } from "../../types"
 import {
   type LabStoryGroup,
@@ -16,12 +17,14 @@ export function LabPartsList({
   selectedIds,
   onSelect,
   onSelectLayer,
+  onDeleteAiTake,
 }: {
   readonly groups: readonly LabStoryGroup[]
   readonly metaById: LabStoryIndex["designPassMetaById"]
   readonly selectedIds: readonly string[]
   readonly onSelect: (storyId: string) => void
   readonly onSelectLayer: (stories: readonly Story[]) => void
+  readonly onDeleteAiTake?: (slug: string) => void
 }) {
   return (
     <div className="pt-tree">
@@ -42,20 +45,38 @@ export function LabPartsList({
             const on = selectedIds.includes(story.id)
             const metaLabel = partMetaLabel(metaById.get(story.id))
             return (
-              <button
-                key={story.id}
-                type="button"
-                className={`pt-tree-item${on ? " is-sel" : ""}`}
-                onClick={() => onSelect(story.id)}
-              >
-                <span className="pt-tree-check" aria-hidden>
-                  {on ? "◉" : "○"}
-                </span>
-                <span className="pt-tree-name">{partLabel(story)}</span>
-                {metaLabel ? (
-                  <span className="pt-work-badge">{metaLabel}</span>
+              <div key={story.id} className="pt-tree-row">
+                <button
+                  type="button"
+                  className={`pt-tree-item${on ? " is-sel" : ""}${story.pending ? " is-pending" : ""}`}
+                  disabled={story.pending}
+                  onClick={() => {
+                    if (!story.pending) onSelect(story.id)
+                  }}
+                >
+                  <span className="pt-tree-check" aria-hidden>
+                    {story.pending ? "◌" : on ? "◉" : "○"}
+                  </span>
+                  <span className="pt-tree-name">{partLabel(story)}</span>
+                  {story.pending ? (
+                    <span className="pt-work-badge is-pending">Take</span>
+                  ) : story.aiTakeSlug ? (
+                    <span className="pt-work-badge">Take</span>
+                  ) : metaLabel ? (
+                    <span className="pt-work-badge">{metaLabel}</span>
+                  ) : null}
+                </button>
+                {story.aiTakeSlug && !story.pending && onDeleteAiTake ? (
+                  <button
+                    type="button"
+                    className="pt-card-delete"
+                    aria-label={`Delete Take ${story.name}`}
+                    onClick={() => onDeleteAiTake(story.aiTakeSlug ?? "")}
+                  >
+                    <Trash2 size={13} aria-hidden />
+                  </button>
                 ) : null}
-              </button>
+              </div>
             )
           })}
         </div>

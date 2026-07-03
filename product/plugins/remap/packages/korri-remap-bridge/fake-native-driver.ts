@@ -8,7 +8,9 @@ const child = Bun.spawn(childArgv, {
   stdout: "inherit",
   stderr: "inherit",
   env: Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("KORRI_REMAP_")),
+    Object.entries(process.env).filter(
+      ([key]) => !key.startsWith("KORRI_REMAP_"),
+    ),
   ) as Record<string, string>,
 })
 

@@ -44,13 +44,21 @@ describe("device facts battery normalization", () => {
   it("reports charging only for the Charging kernel status", () => {
     expect(
       normalizeBatterySnapshot(
-        { percent: 82, status: "Charging", supplies: [supply({ status: "Charging" })] },
+        {
+          percent: 82,
+          status: "Charging",
+          supplies: [supply({ status: "Charging" })],
+        },
         observedAt,
       ),
     ).toMatchObject({ _tag: "Ready", charging: true })
     expect(
       normalizeBatterySnapshot(
-        { percent: 100, status: "Full", supplies: [supply({ status: "Full" })] },
+        {
+          percent: 100,
+          status: "Full",
+          supplies: [supply({ status: "Full" })],
+        },
         observedAt,
       ),
     ).toMatchObject({ _tag: "Ready", charging: false })
@@ -58,7 +66,11 @@ describe("device facts battery normalization", () => {
 
   it("treats power supplies without batteries as a normal no-battery state", () => {
     const state = normalizeBatterySnapshot(
-      { percent: null, status: null, supplies: [supply({ name: "AC", type: "Mains", capacity: null })] },
+      {
+        percent: null,
+        status: null,
+        supplies: [supply({ name: "AC", type: "Mains", capacity: null })],
+      },
       observedAt,
     )
 
@@ -67,7 +79,11 @@ describe("device facts battery normalization", () => {
 
   it("keeps malformed or missing capacity as an unknown ready percent", () => {
     const state = normalizeBatterySnapshot(
-      { percent: Number.NaN, status: null, supplies: [supply({ capacity: null, status: null })] },
+      {
+        percent: Number.NaN,
+        status: null,
+        supplies: [supply({ capacity: null, status: null })],
+      },
       observedAt,
     )
 
@@ -101,11 +117,17 @@ describe("device facts battery normalization", () => {
 
   it("compares device state by facts rather than observation timestamp", () => {
     const first = deviceStateFromBattery(
-      normalizeBatterySnapshot({ percent: 82, status: "Discharging", supplies: [supply({})] }, "t1"),
+      normalizeBatterySnapshot(
+        { percent: 82, status: "Discharging", supplies: [supply({})] },
+        "t1",
+      ),
       "t1",
     )
     const second = deviceStateFromBattery(
-      normalizeBatterySnapshot({ percent: 82, status: "Discharging", supplies: [supply({})] }, "t2"),
+      normalizeBatterySnapshot(
+        { percent: 82, status: "Discharging", supplies: [supply({})] },
+        "t2",
+      ),
       "t2",
     )
 

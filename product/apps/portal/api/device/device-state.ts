@@ -7,7 +7,15 @@ import {
   unknownDeviceState,
   type DeviceState as DeviceStateValue,
 } from "@platform/device/device-facts"
-import { Context, Duration, Effect, Layer, Scope, Stream, SubscriptionRef } from "effect"
+import {
+  Context,
+  Duration,
+  Effect,
+  Layer,
+  Scope,
+  Stream,
+  SubscriptionRef,
+} from "effect"
 import {
   createDeviceControlService,
   type BatterySnapshot,
@@ -25,9 +33,10 @@ export interface DeviceStateService {
   readonly refresh: () => Effect.Effect<DeviceStateRefreshResult>
 }
 
-export class DeviceState extends Context.Service<DeviceState, DeviceStateService>()(
-  "DeviceState",
-) {}
+export class DeviceState extends Context.Service<
+  DeviceState,
+  DeviceStateService
+>()("DeviceState") {}
 
 export interface DeviceStateLayerOptions {
   readonly readBattery?: () => Promise<BatterySnapshot>
@@ -38,9 +47,7 @@ export interface DeviceStateLayerOptions {
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000
 
-export function makeDeviceStateLayer(
-  options: DeviceStateLayerOptions = {},
-) {
+export function makeDeviceStateLayer(options: DeviceStateLayerOptions = {}) {
   return Layer.effect(DeviceState)(makeDeviceStateService(options))
 }
 
@@ -83,15 +90,21 @@ function makeDeviceStateService(options: DeviceStateLayerOptions) {
           catch: error => error,
         }).pipe(
           Effect.match({
-            onSuccess: snapshot => normalizeBatterySnapshot(snapshot, observedAt),
-            onFailure: error => failedBatteryReadState(previous.battery, error, observedAt),
+            onSuccess: snapshot =>
+              normalizeBatterySnapshot(snapshot, observedAt),
+            onFailure: error =>
+              failedBatteryReadState(previous.battery, error, observedAt),
           }),
         )
         const next = deviceStateFromBattery(battery, observedAt)
         if (!deviceStatesEqual(previous, next)) {
           yield* SubscriptionRef.set(ref, next)
         }
-        return { accepted: true as const, fact: "battery" as const, state: next }
+        return {
+          accepted: true as const,
+          fact: "battery" as const,
+          state: next,
+        }
       })
 
     let refreshTail = Promise.resolve()

@@ -277,7 +277,9 @@ export async function repairStreamSurface(
 
 export function isTransientMissingSurfaceCommandError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
-  return message.includes("No matching node") || message.includes("swaymsg exited 2")
+  return (
+    message.includes("No matching node") || message.includes("swaymsg exited 2")
+  )
 }
 
 async function remainingOwnedSurfaceIds(

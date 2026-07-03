@@ -25,7 +25,9 @@ export function assertNativeIsolationProbe(
     )
   }
   if (!probe.targetUserReceived) {
-    throw new Error("Remap native sink target user did not receive remapped output")
+    throw new Error(
+      "Remap native sink target user did not receive remapped output",
+    )
   }
   if (probe.korriUserReceived) {
     throw new Error("Remap native sink leaked output to Korri UI identity")

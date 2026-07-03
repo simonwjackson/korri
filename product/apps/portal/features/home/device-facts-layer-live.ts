@@ -12,8 +12,7 @@ export const DeviceFactsLayerLive = Layer.effect(DeviceFactsSource)(
         client["app.device.status"]({}).pipe(
           Effect.map(response => response.state),
         ),
-      refresh: () =>
-        client["app.device.refresh"]({}).pipe(Effect.asVoid),
+      refresh: () => client["app.device.refresh"]({}).pipe(Effect.asVoid),
       subscribe: (listener: (state: DeviceState) => void) =>
         Effect.gen(function* () {
           if (typeof EventSource === "undefined") {

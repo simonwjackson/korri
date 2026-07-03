@@ -353,7 +353,9 @@ describe("stream surface discovery and repair", () => {
           if (args.includes("get_tree")) {
             treeReads += 1
             return JSON.stringify(
-              treeReads === 1 ? treeWithFirstSurface : treeWithReplacementSurface,
+              treeReads === 1
+                ? treeWithFirstSurface
+                : treeWithReplacementSurface,
             )
           }
           if (args[0]?.includes("con_id=42")) {
@@ -385,7 +387,8 @@ describe("stream surface discovery and repair", () => {
       runner: {
         run: async args => {
           calls.push([...args])
-          if (args.includes("get_tree")) return JSON.stringify(streamSurfaceTree)
+          if (args.includes("get_tree"))
+            return JSON.stringify(streamSurfaceTree)
           throw new Error('"error": "No matching node."')
         },
       },
@@ -393,7 +396,9 @@ describe("stream surface discovery and repair", () => {
 
     expect(result.windowId).toBe(42)
     expect(result.commands).toContain("[con_id=42] focus")
-    expect(calls.filter(call => call.includes("get_tree")).length).toBeGreaterThan(1)
+    expect(
+      calls.filter(call => call.includes("get_tree")).length,
+    ).toBeGreaterThan(1)
   })
 
   it("ignores pre-existing stream surfaces while waiting for a new one", async () => {

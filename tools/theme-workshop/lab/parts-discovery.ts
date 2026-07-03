@@ -76,6 +76,9 @@ export function collectPartsFromModules(
   for (const [path, mod] of Object.entries(modules)) {
     const parsed = parsePartPath(path)
     if (!parsed || parsed.surfaceId !== surfaceId) continue
+    // AI-authored parts under ai-takes/ load at runtime, not via the
+    // compile-time glob, so the dev server never reloads when they are written.
+    if (path.includes("/ai-takes/")) continue
     classNames ??= mod.classNames
     rootProps ??= mod.rootProps
     stories.push(...storiesFromModule(path, parsed, mod))
@@ -109,6 +112,7 @@ export async function loadSurfacePartsResult(
   for (const [path, load] of Object.entries(partModules())) {
     const parsed = parsePartPath(path)
     if (parsed?.surfaceId !== surfaceId) continue
+    if (path.includes("/ai-takes/")) continue
     try {
       loaded[path] = await load()
     } catch (cause) {

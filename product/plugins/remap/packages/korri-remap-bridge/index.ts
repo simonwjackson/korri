@@ -12,9 +12,12 @@ const runnerUser =
   process.env.KORRI_REMAP_RUNNER_USER
 const childCommand = separator >= 0 ? process.argv[separator + 1] : undefined
 const childArgs = separator >= 0 ? process.argv.slice(separator + 2) : []
-const terminateGraceMs = Number(process.env.KORRI_REMAP_TERMINATE_GRACE_MS ?? "2000")
+const terminateGraceMs = Number(
+  process.env.KORRI_REMAP_TERMINATE_GRACE_MS ?? "2000",
+)
 const nativeDriverPath = process.env.KORRI_REMAP_NATIVE_DRIVER_PATH
-const nativeDriverPython = process.env.KORRI_REMAP_NATIVE_DRIVER_PYTHON ?? "python3"
+const nativeDriverPython =
+  process.env.KORRI_REMAP_NATIVE_DRIVER_PYTHON ?? "python3"
 
 if (!launchId) fail("missing --launch-id")
 if (!childCommand) fail("missing child command after --")

@@ -52,7 +52,11 @@ export function LabWorkspaceToolStrip({
   readonly onClear: () => void
 }) {
   return (
-    <div className="pt-overlay-tools" role="toolbar" aria-label="Workspace tools">
+    <div
+      className="pt-overlay-tools"
+      role="toolbar"
+      aria-label="Workspace tools"
+    >
       {TOOLS.map(candidate => (
         <button
           key={candidate.id}

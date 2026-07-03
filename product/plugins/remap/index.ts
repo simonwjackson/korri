@@ -133,7 +133,9 @@ if (remapPlugin.id !== KORRI_REMAP_PLUGIN_ID) {
   throw new Error("Remap plugin id mismatch")
 }
 
-function remapDiagnosticsFromEnv(env: NodeJS.ProcessEnv): RemapPluginDiagnostic {
+function remapDiagnosticsFromEnv(
+  env: NodeJS.ProcessEnv,
+): RemapPluginDiagnostic {
   if (env.KORRI_REMAP_NATIVE_DRIVER === "enabled") {
     return {
       provider: KORRI_REMAP_PLUGIN_ID,
@@ -149,7 +151,9 @@ function remapDiagnosticsFromEnv(env: NodeJS.ProcessEnv): RemapPluginDiagnostic 
   }
 }
 
-function decodeRemapLaunchComposeInput(input: unknown): RemapLaunchComposeInput {
+function decodeRemapLaunchComposeInput(
+  input: unknown,
+): RemapLaunchComposeInput {
   if (!isRecord(input)) {
     throw new Error("Remap launch.compose input must be an object")
   }
@@ -166,7 +170,9 @@ function decodeRemapLaunchComposeInput(input: unknown): RemapLaunchComposeInput 
 }
 
 function remapBridgeCommandFromEnv(env: NodeJS.ProcessEnv): string {
-  const command = env.KORRI_REMAP_BRIDGE_COMMAND?.trim() || "/run/wrappers/bin/korri-remap-bridge"
+  const command =
+    env.KORRI_REMAP_BRIDGE_COMMAND?.trim() ||
+    "/run/wrappers/bin/korri-remap-bridge"
   if (!isAbsolute(command)) {
     throw new Error("Remap bridge command must be an absolute path")
   }

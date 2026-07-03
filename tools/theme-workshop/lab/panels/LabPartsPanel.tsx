@@ -17,6 +17,7 @@ export function LabPartsPanel({
   selectedIds,
   onSelect,
   onSelectLayer,
+  onDeleteAiTake,
 }: {
   readonly mode: LabPartsView
   readonly catalog: LabPartsCatalog | null
@@ -24,6 +25,7 @@ export function LabPartsPanel({
   readonly selectedIds: readonly string[]
   readonly onSelect: (storyId: string) => void
   readonly onSelectLayer: (stories: readonly Story[]) => void
+  readonly onDeleteAiTake?: (slug: string) => void
 }) {
   if (mode === "list")
     return (
@@ -33,6 +35,7 @@ export function LabPartsPanel({
         selectedIds={selectedIds}
         onSelect={onSelect}
         onSelectLayer={onSelectLayer}
+        onDeleteAiTake={onDeleteAiTake}
       />
     )
   return (
@@ -42,6 +45,7 @@ export function LabPartsPanel({
       selectedIds={selectedIds}
       onSelect={onSelect}
       onSelectLayer={onSelectLayer}
+      onDeleteAiTake={onDeleteAiTake}
     />
   )
 }

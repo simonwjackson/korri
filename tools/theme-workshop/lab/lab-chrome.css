@@ -753,6 +753,71 @@ body {
 	text-overflow: ellipsis;
 }
 
+/* Generating placeholder: a shimmering skeleton where the preview will land. */
+.pt-card.is-pending {
+	opacity: 0.85;
+}
+.pt-card-generating {
+	width: 100%;
+	height: 100%;
+	min-height: 64px;
+	border-radius: 8px;
+	background: linear-gradient(
+		100deg,
+		rgba(255, 255, 255, 0.04) 30%,
+		rgba(255, 255, 255, 0.12) 50%,
+		rgba(255, 255, 255, 0.04) 70%
+	);
+	background-size: 200% 100%;
+	animation: pt-shimmer 1.2s ease-in-out infinite;
+}
+.pt-work-badge.is-pending {
+	opacity: 0.6;
+	animation: pt-badge-pulse 1.2s ease-in-out infinite;
+}
+.pt-tree-item.is-pending {
+	opacity: 0.6;
+	cursor: default;
+}
+@keyframes pt-shimmer {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+@keyframes pt-badge-pulse {
+	0%,
+	100% {
+		opacity: 0.35;
+	}
+	50% {
+		opacity: 0.8;
+	}
+}
+
+/* Delete affordance on AI-authored part cards; pushed to the trailing edge. */
+.pt-card-delete {
+	margin-left: auto;
+	display: grid;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	border: 1px solid var(--pt-line, rgba(255, 255, 255, 0.14));
+	border-radius: 6px;
+	background: transparent;
+	color: var(--pt-ink-dim, #b7b7c2);
+	font-size: 14px;
+	line-height: 1;
+	cursor: pointer;
+}
+.pt-card-delete:hover {
+	color: #fca5a5;
+	border-color: rgba(248, 113, 113, 0.55);
+}
+
 /* ----------------------------------------------------- component boards */
 
 .pt-board {
@@ -1879,6 +1944,15 @@ body {
 }
 .pt-tree-item.is-sel .pt-tree-check {
 	color: var(--pt-accent);
+}
+.pt-tree-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+.pt-tree-row .pt-tree-item {
+	flex: 1 1 auto;
+	width: auto;
 }
 .pt-tree-item {
 	display: flex;

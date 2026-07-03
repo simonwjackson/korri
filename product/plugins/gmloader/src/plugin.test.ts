@@ -4,7 +4,10 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { deflateRawSync } from "node:zlib"
 import { ZIP_STORED } from "@platform/archive/zip"
-import { runPluginHandler, type ExecutablePluginResource } from "@platform/plugin"
+import {
+  runPluginHandler,
+  type ExecutablePluginResource,
+} from "@platform/plugin"
 import {
   executablePath,
   type PluginExecutableResourceResolver,
@@ -94,9 +97,9 @@ describe("GMLoader plugin", () => {
       (result as { readonly envelope: { readonly spec: { command: string } } })
         .envelope.spec.command,
     ).toBe(runtime.command)
-    expect((result as { readonly diagnostics: readonly string[] }).diagnostics).toContain(
-      "payload-materialized",
-    )
+    expect(
+      (result as { readonly diagnostics: readonly string[] }).diagnostics,
+    ).toContain("payload-materialized")
   })
 
   it("prepares local payload launches through default runtime resource wiring", async () => {
@@ -129,12 +132,15 @@ describe("GMLoader plugin", () => {
       )
 
       expect(
-        (result as { readonly envelope: { readonly spec: { command: string } } })
-          .envelope.spec.command,
+        (
+          result as {
+            readonly envelope: { readonly spec: { command: string } }
+          }
+        ).envelope.spec.command,
       ).toBe(command)
-      expect((result as { readonly diagnostics: readonly string[] }).diagnostics).toContain(
-        "runtime-cache-hit",
-      )
+      expect(
+        (result as { readonly diagnostics: readonly string[] }).diagnostics,
+      ).toContain("runtime-cache-hit")
     } finally {
       if (previous === undefined) delete process.env.KORRI_PLUGIN_RESOURCE_ROOT
       else process.env.KORRI_PLUGIN_RESOURCE_ROOT = previous

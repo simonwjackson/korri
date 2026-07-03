@@ -21,14 +21,19 @@ export function decodeRemapBindings(input: unknown): readonly RemapBinding[] {
   return entries.map(([sourceRef, targetValue]) => {
     const source = parseControlRef(sourceRef)
     if (!isControllerRef(source)) {
-      throw new Error(`Remap binding source must be a controller ref: ${sourceRef}`)
+      throw new Error(
+        `Remap binding source must be a controller ref: ${sourceRef}`,
+      )
     }
     const targets = decodeTargets(targetValue, sourceRef)
     return { source, targets }
   })
 }
 
-function decodeTargets(value: unknown, sourceRef: string): readonly RemapControlRef[] {
+function decodeTargets(
+  value: unknown,
+  sourceRef: string,
+): readonly RemapControlRef[] {
   const refs = Array.isArray(value) ? value : [value]
   if (refs.length === 0) {
     throw new Error(`Remap binding ${sourceRef} requires at least one target`)

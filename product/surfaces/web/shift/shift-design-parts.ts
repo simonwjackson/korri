@@ -218,21 +218,7 @@ export const SHIFT_DESIGN_PARTS = {
   // Lens internals.
   lensRow: { id: "shift.lens-row", layer: "molecule", name: "Lens Row" },
   lensTab: { id: "shift.lens-tab", layer: "atom", name: "Lens Tab" },
-  lensSortOption: {
-    id: "shift.lens-sort-option",
-    layer: "atom",
-    name: "Lens Sort Option",
-  },
-  lensSortButton: {
-    id: "shift.lens-sort-button",
-    layer: "atom",
-    name: "Lens Sort Button",
-  },
-  lensSortOverlay: {
-    id: "shift.lens-sort-overlay",
-    layer: "molecule",
-    name: "Lens Sort Overlay",
-  },
+  lensSort: { id: "shift.lens-sort", layer: "atom", name: "Lens Sort" },
   // Filter-bar internals.
   filterChip: {
     id: "shift.filter-chip",

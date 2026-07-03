@@ -116,7 +116,10 @@ export function parseYfsLaunchCli(
       Object.assign(settings, parseYfsSettingsJson(readValue(args, index, arg)))
       index += 1
     } else if (arg.startsWith("--settings-json=")) {
-      Object.assign(settings, parseYfsSettingsJson(arg.slice("--settings-json=".length)))
+      Object.assign(
+        settings,
+        parseYfsSettingsJson(arg.slice("--settings-json=".length)),
+      )
     } else if (arg === "--audio") settings.audio = "on"
     else if (arg === "--no-audio") settings.audio = "off"
     else if (arg.startsWith("--audio=")) {

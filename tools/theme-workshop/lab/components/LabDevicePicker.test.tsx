@@ -71,9 +71,13 @@ describe("LabDevicePicker", () => {
     renderPicker({ selection: { kind: "all" } })
 
     expect(screen.getByRole("list", { name: "Live devices" })).toBeTruthy()
-    expect(screen.queryByRole("combobox", { name: "Device selection" })).toBeNull()
     expect(
-      screen.getByRole("button", { name: "RG353M" }).getAttribute("aria-pressed"),
+      screen.queryByRole("combobox", { name: "Device selection" }),
+    ).toBeNull()
+    expect(
+      screen
+        .getByRole("button", { name: "RG353M" })
+        .getAttribute("aria-pressed"),
     ).toBe("true")
     expect(
       screen

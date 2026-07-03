@@ -19,7 +19,10 @@ import {
   defaultGmloaderRuntimeResource,
 } from "./runtime-defaults"
 
-export { KORRI_GMLOADER_PLUGIN_ID, KORRI_GMLOADER_RUNTIME_RESOURCE_ID } from "./ids"
+export {
+  KORRI_GMLOADER_PLUGIN_ID,
+  KORRI_GMLOADER_RUNTIME_RESOURCE_ID,
+} from "./ids"
 
 export interface GmloaderPluginOptions {
   readonly installRoot?: string
