@@ -11,6 +11,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ManagedLaunchResult } from "@platform/library/launcher"
 import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
+import { createInMemoryPlayLogStore } from "@platform/library/play-log-store"
 import {
   Launcher,
   type LauncherService,
@@ -22,6 +23,7 @@ import {
   externalIdleFromSessiondProbe,
   launchLocalForegroundSession,
 } from "./local-foreground-launch-adapter"
+import { createPlayRecordingCoordinator } from "./play-recording-coordinator"
 
 const spec = { command: "/bin/game", args: ["rom"] }
 
@@ -839,6 +841,175 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
     })
   })
 })
+
+describe("local foreground launch adapter > managed-terminal recording", () => {
+  // Regression cover: on the sessiond-managed path the owner's terminal
+  // (`session.exited`, which is sessiond's `child-exited` event) already
+  // drives `ExitObserved`, and the existing `completeRecordingOnExit` hook
+  // records the play keyed by `launchId` — no separate managed wiring is
+  // needed. Uses the real coordinator + in-memory store; the recording seam
+  // is never mocked.
+
+  it("records one gated per-user play when a managed session.exited resolves", async () => {
+    const { store, coordinator } = recordingCoordinatorWithStore()
+    coordinator.beginLaunch({
+      launchId: "rec-managed-1",
+      userId: "default",
+      gameId: "game",
+      releaseId: "release-x",
+      startedAt: new Date("2026-07-03T00:00:00.000Z"),
+    })
+    const owner = createLocalForegroundLaunchOwner({
+      playRecordingCoordinator: coordinator,
+    })
+    const exited = deferred<{ readonly exitCode: number | null }>()
+
+    const launch = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      launchId: "rec-managed-1",
+      spawn: spawnManagedSession({
+        exited: exited.promise,
+        ready: Promise.resolve({ status: "ok" as const }),
+      }),
+    })
+    await waitForOwnerState(owner, "Running")
+    exited.resolve({ exitCode: 0 })
+    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
+    await owner.whenIdle()
+    await flushDetachedHooks()
+
+    const log = await store.load({ userId: "default", gameId: "game" })
+    expect(log.entries).toHaveLength(1)
+    expect(log.entries[0]).toMatchObject({ releaseId: "release-x" })
+  })
+
+  it("records nothing when the managed spawn fails", async () => {
+    const { store, coordinator } = recordingCoordinatorWithStore()
+    coordinator.beginLaunch({
+      launchId: "rec-fail-1",
+      userId: "default",
+      gameId: "game",
+      startedAt: new Date("2026-07-03T00:00:00.000Z"),
+    })
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({
+        behavior: { kind: "fail", exitCode: 125, stderrTail: "unsupported" },
+      }),
+    )
+    const owner = createLocalForegroundLaunchOwner({
+      playRecordingCoordinator: coordinator,
+    })
+
+    const result = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      launchId: "rec-fail-1",
+      spawn: () => spawnWith(launcher),
+    })
+    expect(result._tag).toBe("LaunchFailed")
+    await flushDetachedHooks()
+
+    const log = await store.load({ userId: "default", gameId: "game" })
+    expect(log.entries).toHaveLength(0)
+  })
+
+  it("leaves a coordinator-less managed launch unchanged", async () => {
+    const owner = createLocalForegroundLaunchOwner()
+    const exited = deferred<{ readonly exitCode: number | null }>()
+
+    const launch = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      launchId: "rec-none-1",
+      spawn: spawnManagedSession({
+        exited: exited.promise,
+        ready: Promise.resolve({ status: "ok" as const }),
+      }),
+    })
+    await waitForOwnerState(owner, "Running")
+    exited.resolve({ exitCode: 0 })
+    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
+    await owner.whenIdle()
+    expect(owner.status().state._tag).toBe("IdleReady")
+  })
+
+  it("holds the gate for a sub-threshold managed session", async () => {
+    const { store, coordinator } = recordingCoordinatorWithStore({
+      now: () => new Date("2026-07-03T00:00:30.000Z"),
+      thresholdSeconds: 60,
+    })
+    coordinator.beginLaunch({
+      launchId: "rec-gate-1",
+      userId: "default",
+      gameId: "game",
+      startedAt: new Date("2026-07-03T00:00:00.000Z"),
+    })
+    const owner = createLocalForegroundLaunchOwner({
+      playRecordingCoordinator: coordinator,
+    })
+    const exited = deferred<{ readonly exitCode: number | null }>()
+
+    const launch = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      launchId: "rec-gate-1",
+      spawn: spawnManagedSession({
+        exited: exited.promise,
+        ready: Promise.resolve({ status: "ok" as const }),
+      }),
+    })
+    await waitForOwnerState(owner, "Running")
+    exited.resolve({ exitCode: 0 })
+    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
+    await owner.whenIdle()
+    await flushDetachedHooks()
+
+    const log = await store.load({ userId: "default", gameId: "game" })
+    expect(log.entries).toHaveLength(0)
+  })
+})
+
+function recordingCoordinatorWithStore(options?: {
+  readonly now?: () => Date
+  readonly thresholdSeconds?: number
+}) {
+  const store = createInMemoryPlayLogStore()
+  const coordinator = createPlayRecordingCoordinator({
+    store,
+    ...(options?.now ? { now: options.now } : {}),
+    ...(options?.thresholdSeconds !== undefined
+      ? { thresholdSeconds: options.thresholdSeconds }
+      : {}),
+  })
+  return { store, coordinator }
+}
+
+function spawnManagedSession(session: {
+  readonly exited: Promise<{ readonly exitCode: number | null }>
+  readonly ready?: Promise<{ readonly status: "ok" }>
+  readonly id?: string
+}): () => Promise<ManagedLaunchResult> {
+  return async () => ({
+    status: "started",
+    result: session.exited.then(({ exitCode }) =>
+      exitCode === 0 || exitCode === null
+        ? { status: "launched" as const }
+        : { status: "failed" as const, exitCode },
+    ),
+    session: {
+      id: session.id ?? "sessiond:rec-1",
+      exited: session.exited,
+      ...(session.ready ? { ready: session.ready } : {}),
+      terminate: () => {},
+      terminateNow: () => {},
+    },
+  })
+}
+
+async function flushDetachedHooks() {
+  await new Promise(resolve => setTimeout(resolve, 5))
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void
