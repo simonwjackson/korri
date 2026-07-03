@@ -13,6 +13,7 @@ import {
   LibrarySource,
   type ResolvedLaunch,
 } from "@platform/library/library-services"
+import { DEFAULT_USER_ID } from "@platform/library/config/records/user"
 import { logger } from "@platform/logger/logger"
 import type { PluginHandler, ProviderId } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
@@ -151,6 +152,17 @@ export const handleLaunchLibrary = (
         onSuccess: () => Effect.void,
       }),
     )
+
+    // Seed the launch's recording context (per-user). The owner completes it
+    // on the direct terminal; the managed (sessiond) terminal is completed
+    // separately. No timer — duration is measured at completion.
+    foregroundSessionHost.playRecordingCoordinator?.beginLaunch({
+      launchId,
+      userId: payload.userId ?? DEFAULT_USER_ID,
+      gameId: payload.id,
+      ...(payload.releaseId ? { releaseId: payload.releaseId } : {}),
+      startedAt: new Date(),
+    })
 
     const result = yield* Effect.tryPromise({
       try: () =>
