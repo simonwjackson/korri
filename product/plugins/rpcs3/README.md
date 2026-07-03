@@ -117,3 +117,60 @@ swaps only the routed-flags segment and never removes `--no-gui`, `--config`, or
 the game path. The escape hatch also insulates you from RPCS3 version drift: the
 curated value maps target a pinned RPCS3 build, and any renamed/removed key
 remains reachable as raw config.
+
+## Input authoring (pad / keyboard mappings)
+
+RPCS3 stores input profiles **separately** from `config.yml`, under
+`<state.root>/input_configs/global/<name>.yml`, as a per-player YAML schema.
+Declare mappings under `settings.plugin."@korri:rpcs3".input.players` in the
+same delivery-agnostic spirit as the settings surface — clean Korri names only;
+the plugin translates them to RPCS3's exact `Handler` / `Config` strings.
+
+```yaml
+settings:
+  plugin:
+    "@korri:rpcs3":
+      input:
+        players:                       # positional: index 0 -> Player 1 Input (max 7)
+          - handler: evdev             # null|keyboard|ds3|ds4|dualsense|skateboard|move|sdl|evdev
+            device: "Sunshine X-Box One (virtual) pad"
+            buttons:                   # binding tokens are handler-specific strings
+              cross: BTN_SOUTH
+              circle: BTN_EAST
+            sticks:
+              left: { deadzone: 40, multiplier: 100 }   # 0–1000000 / 0–200
+              right: { deadzone: 30 }
+            triggers:
+              l2: { threshold: 20 }    # 0–1000000
+          - handler: keyboard          # keyboard-as-pad: bind keys to buttons/sticks
+            device: "Keyboard"
+            buttons:
+              cross: Return
+              leftStickUp: W
+            mouse:
+              movementMode: relative   # relative | absolute
+              deadzoneX: 60            # 0–255
+```
+
+### How input is delivered
+
+When `input` is authored, the plugin materializes a **Korri-owned** profile at
+`<state.root>/input_configs/global/korri-<releaseId>.yml` and passes its bare
+name via `--input-config`. RPCS3's `--input-config` override branch resolves
+`<name>` under `input_configs/global/` and wins over per-title / active-profile
+selection, so this one flag fully binds input. The per-player `Handler` lives in
+the profile itself, so **no `config.yml` companion is required** for pad
+selection.
+
+Korri only ever writes `korri-*.yml` — operator-authored profiles (including
+`global/Default.yml`) are never read or clobbered. Unlisted players default to
+`Handler: "Null"`, and any `cfg_pad` key you don't author falls back to RPCS3's
+built-in default, so partial profiles are valid.
+
+Only the common subset is modeled (handler/device, buttons, stick
+deadzone/multiplier, trigger thresholds, keyboard/mouse-as-pad basics). The deep
+`cfg_pad` tail (motion sensors, LEDs, vibration, lerp, squircling, device
+identity) and exotic handlers stay reachable via the escape hatch. Handler and
+`Config` strings are verified against RPCS3 `pad_config.h` /
+`pad_config_types.cpp` at the pinned build; `xinput`/`mm` are Windows-only and
+intentionally omitted.
