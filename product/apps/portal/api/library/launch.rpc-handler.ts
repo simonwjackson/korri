@@ -1,5 +1,6 @@
 import type { EntrySource } from "@platform/api/rpc/entry-source"
 import { DataError, NotFoundError } from "@platform/api/rpc/errors"
+import { DEFAULT_USER_ID } from "@platform/library/config/records/user"
 import {
   type LaunchExtras,
   type LaunchFailureKind,
@@ -13,7 +14,6 @@ import {
   LibrarySource,
   type ResolvedLaunch,
 } from "@platform/library/library-services"
-import { DEFAULT_USER_ID } from "@platform/library/config/records/user"
 import { logger } from "@platform/logger/logger"
 import type { PluginHandler, ProviderId } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"

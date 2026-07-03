@@ -81,9 +81,7 @@ export function createInMemoryPlayLogStore(
  * Durable root for the file-backed play-log store. Runtime user-state, so it
  * lives under the state dir, not the config graph.
  */
-export function playLogStoreRoot(
-  env: NodeJS.ProcessEnv = process.env,
-): string {
+export function playLogStoreRoot(env: NodeJS.ProcessEnv = process.env): string {
   if (env.KORRI_PLAY_LOG_DIR) return env.KORRI_PLAY_LOG_DIR
   if (env.XDG_STATE_HOME) return join(env.XDG_STATE_HOME, "korri", "play-log")
   if (env.HOME) return join(env.HOME, ".local", "state", "korri", "play-log")

@@ -63,9 +63,9 @@ describe("in-memory play-log store", () => {
 
   it("reads an empty log for a never-played (user, game)", async () => {
     const store = createInMemoryPlayLogStore()
-    expect((await store.load(key("alice", "snes/unknown"))).entries).toHaveLength(
-      0,
-    )
+    expect(
+      (await store.load(key("alice", "snes/unknown"))).entries,
+    ).toHaveLength(0)
   })
 })
 
@@ -89,7 +89,10 @@ describe("file-backed play-log store", () => {
     try {
       const writer = createFilePlayLogStore(root)
       await writer.record(alice, entry("2026-07-01T20:44:00.000Z", 90))
-      await writer.record(alice, entry("2026-07-02T10:00:00.000Z", 600, "steam"))
+      await writer.record(
+        alice,
+        entry("2026-07-02T10:00:00.000Z", 600, "steam"),
+      )
 
       const reader = createFilePlayLogStore(root)
       const log = await reader.load(alice)

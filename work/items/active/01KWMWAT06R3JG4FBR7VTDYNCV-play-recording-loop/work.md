@@ -23,4 +23,23 @@ which keys history by game only and observes the direct-launch terminal.
 
 ## Progress
 
-- Planned (see `plan.md`).
+- **U1+U2 DONE** — play history keyed by `(user, game)` + `DEFAULT_USER_ID`;
+  `PlayEntry.releaseId` provenance; per-user read projection (default user);
+  catalog stays history-free.
+- **U3 DONE** — event-driven `play-recording-coordinator` (`beginLaunch`/
+  `completeLaunch`, idempotent per launchId, no timer) replaces the observer;
+  owner `ExitObserved` completes the direct path.
+- **U4 DONE** — foreground session host builds the coordinator from the store
+  and exposes it; launch handler seeds `beginLaunch` (user, game, release,
+  start). Direct launches record per-user end-to-end.
+- **U5 DONE** — `sharedPlayLogStore()` threaded into the host (write) and the
+  live source-layer repositories (read): one source of truth.
+
+## Remaining (backlogged)
+
+- Managed-path terminal completion (sessiond hands off after readiness, so the
+  owner never fires ExitObserved) — backlog `01KWMXG8YNPXR54EETWD6KS0K9`. This
+  is the last wire before device plays record.
+
+Verification: zero new whole-repo typecheck errors; all touched-area suites
+green; biome clean on changed files.

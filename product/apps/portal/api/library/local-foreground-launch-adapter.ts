@@ -6,12 +6,12 @@ import {
   launchFailureExitCode,
   type ManagedLaunchResult,
 } from "@platform/library/launcher"
-import type { ForegroundSessionState } from "@platform/stream/foreground-session-lifecycle"
 import {
   probeSessiondManagedLaunchStatus,
   type SessiondManagedLaunchStatusResult,
 } from "@platform/library/sessiond-managed-launch-client"
 import { isLaunchReadyMode } from "@platform/library/sessiond-managed-launch-protocol"
+import type { ForegroundSessionState } from "@platform/stream/foreground-session-lifecycle"
 import {
   createForegroundSessionOwner,
   type ForegroundExternalIdleResult,

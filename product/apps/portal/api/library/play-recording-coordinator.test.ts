@@ -7,9 +7,13 @@ import { createPlayRecordingCoordinator } from "./play-recording-coordinator"
 
 const key = (gameId: string) => ({ userId: DEFAULT_USER_ID, gameId })
 
-const context = (over: Partial<Parameters<
-  ReturnType<typeof createPlayRecordingCoordinator>["beginLaunch"]
->[0]> = {}) => ({
+const context = (
+  over: Partial<
+    Parameters<
+      ReturnType<typeof createPlayRecordingCoordinator>["beginLaunch"]
+    >[0]
+  > = {},
+) => ({
   launchId: "launch-1",
   userId: DEFAULT_USER_ID,
   gameId: "snes/f-zero",
@@ -64,7 +68,10 @@ describe("createPlayRecordingCoordinator", () => {
     const store = createInMemoryPlayLogStore()
     const coordinator = createPlayRecordingCoordinator({ store })
     coordinator.beginLaunch(context())
-    await coordinator.completeLaunch("launch-1", new Date("2026-07-01T20:10:00.000Z"))
+    await coordinator.completeLaunch(
+      "launch-1",
+      new Date("2026-07-01T20:10:00.000Z"),
+    )
     const second = await coordinator.completeLaunch(
       "launch-1",
       new Date("2026-07-01T20:20:00.000Z"),
