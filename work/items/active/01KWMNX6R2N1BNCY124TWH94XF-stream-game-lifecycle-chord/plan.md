@@ -52,34 +52,30 @@ controller → InputPlumber → virtual pad → game / Moonlight
 
 ---
 
-## Phase 0 — hold-to-quit + decoupling (NO overlay, NO intercept)
+## Phase 0 — hold-to-quit (NO overlay, NO intercept)
 Ships the safety win with pure logic. Holding needs no navigation.
 
 - **P0.1 — hold-timing supervisor. ✅ DONE** (`chord-hold-supervisor.ts`, commit `348b909a`).
-- **P0.2 — wire hold-to-fire into inputd (local).**
-  - Feed the `kill-current-game` chord into the supervisor: on chord match →
-    `engage`; on any required-control release → `release`; on `fired` → dispatch the
-    existing kill; `tap` → no-op (Phase 0).
-  - Files: `product/services/device/inputd.ts` (+ `inputd.test.ts`).
-  - Test-first: quick press does NOT kill; holding ≥2000 ms kills exactly once;
-    releasing before threshold cancels.
-  - Risk: existing tests assume instant kill — update them; behaviour change on device.
-- **P0.3 — decoupling guard.**
-  - Guarantee incidental stream-end (Moonlight client death, lid, crash, restart)
-    does NOT stop the remote game. Largely already true (orphan) — codify + test.
-  - Files: client stream teardown path (`product/apps/portal/stream/moonlight-launcher.ts`
-    / sessiond client role) + a regression test asserting no source-stop on client exit.
-- **P0.4 — force-quit on a stream (deliberate teardown).**
-  - When the foreground is a stream, `fired` calls the source's `app.session.stop`
-    (client → source), then local Moonlight collapses as a side effect.
-  - Decision needed: does inputd dispatch this, or does it hand off to the stream
-    client that holds the source address? (see Open Questions).
-- **P0.5 — short-chord placeholder.**
-  - Until the decision menu exists, a quick chord during a stream detaches the local
-    stream and leaves the remote game running (design's interim "close stream").
+- **P0.2 — wire hold-to-fire into inputd. ✅ DONE** (commit `50082d52`).
+  - `kill-current-game` chord → supervisor `engage`; required-control release →
+    `release`; `fired` → existing kill; `tap` → no-op. `killHoldMs`=2000, injectable
+    timers. Tests: quick press does NOT kill; hold ≥2000 ms kills once; early release
+    cancels. 26/26 inputd tests green.
+- **P0.3 — decoupling (already holds; confirm on device).**
+  - The kill action terminates the active *sessiond launch*. On a stream the
+    foreground launch is Moonlight, so a hold **closes the stream and leaves the
+    remote game running** (observed orphan) — the safe "close stream" default.
+  - Incidental stream-ends (client death, lid, crash, restart) already never signal
+    the source to stop; no client→source stop path exists → decoupling holds by
+    construction. No code change.
 
-Phase 0 acceptance: incidental disconnects leave the game running; a 2 s hold is the
-only thing that stops a game (local kill or remote stop); quick press never nukes.
+**Scope correction:** a *blind* 2 s hold must not silently kill the remote game — that
+choice (close stream vs close game) needs the decision menu, so remote force-quit and
+the short-chord-detach move to **Phase 1**. Phase 0 = hold-closes-foreground
+(local game dies; stream closes, remote lives). Complete with P0.1 + P0.2.
+
+Phase 0 acceptance: incidental disconnects leave the remote game running; a quick
+press never quits; a 2 s hold closes the foreground (local game or stream).
 
 ---
 
@@ -101,10 +97,11 @@ only thing that stops a game (local kill or remote stop); quick press never nuke
 - **P1.4 — hold ring feedback.**
   - Wire supervisor `progress` → renderer ring (the filling countdown). Spawn/show
     renderer on chord `press`, not just tap.
-- **P1.5 — actions wired to choices.**
-  - close stream (detach, game lives) / close game (P0.4 force-quit) / keep playing.
-  - Verbiage: local = "Quit game" / "Keep playing"; stream = "Close stream" /
-    "Close game on aka" / "Keep playing".
+- **P1.5 — actions wired to choices (incl. remote force-quit, moved from P0).**
+  - close stream (terminate local Moonlight, remote lives) / close game on source
+    (client → source `app.session.stop`; Moonlight+gamescope collapse as a side
+    effect) / keep playing. Local: "Quit game" / "Keep playing".
+  - Open question #1 (dispatch owner: inputd intent vs stream-client) applies here.
 - **P1.6 — abstract overlay-request seam.**
   - inputd emits an "overlay request"; a trivial resolver routes to the floor renderer
     today (future: offer active web surface first). Keeps `01KWMQ7DXZ` additive.
