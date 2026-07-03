@@ -11,7 +11,6 @@ import {
   LibrarySource,
   type LibrarySourceService,
 } from "./library-services"
-import type { LibrarySource as PlainLibrarySource } from "./library-source"
 import { sharedPlayLogStore } from "./play-log-store"
 import {
   type KorriConfigGraphRoot,
@@ -23,15 +22,6 @@ import {
   createLibraryRepository,
   type LibraryRepository,
 } from "./proseql/library-repository"
-import {
-  createRocknixSource,
-  DEFAULT_ROCKNIX_ES_SYSTEMS_PATH,
-  DEFAULT_ROCKNIX_GAMELIST_ROOTS,
-  defaultRocknixMediaRoot,
-  type RocknixConfig,
-} from "./rocknix/rocknix-source"
-
-type LibrarySourceMode = "proseql" | "rocknix"
 
 // Every readable repository built here derives playStats from the one shared
 // play-log store unless a caller (tests) injects its own.
@@ -58,72 +48,49 @@ export function createLiveLibrarySourceService(
 ): LibrarySourceService {
   return {
     list: () =>
-      selectedLibrarySourceMode() === "rocknix"
-        ? withRocknixSource(source => source.list(), "list")
-        : withLibraryRepository(
-            repository =>
-              repository
-                .listPlayableEntries()
-                .pipe(Effect.map(entries => entries.map(toCompatGameRecord))),
-            "list",
-            options.repositoryOptions,
-          ),
+      withLibraryRepository(
+        repository =>
+          repository
+            .listPlayableEntries()
+            .pipe(Effect.map(entries => entries.map(toCompatGameRecord))),
+        "list",
+        options.repositoryOptions,
+      ),
     listPlayableEntries: () =>
-      selectedLibrarySourceMode() === "rocknix"
-        ? withRocknixSource(
-            source =>
-              source.list().then(games => games.map(compatGameToPlayableEntry)),
-            "listPlayableEntries",
-          )
-        : withLibraryRepository(
-            repository => repository.listPlayableEntries(),
-            "listPlayableEntries",
-            options.repositoryOptions,
-          ),
+      withLibraryRepository(
+        repository => repository.listPlayableEntries(),
+        "listPlayableEntries",
+        options.repositoryOptions,
+      ),
     launchSpecFor: (id, releaseId) =>
-      selectedLibrarySourceMode() === "rocknix"
-        ? withRocknixSource(source => source.launchSpecFor(id), "launchSpecFor")
-        : withLibraryRepository(
-            repository =>
-              repository
-                .resolveLaunchForPlayable(id, { releaseId })
-                .pipe(Effect.map(resolved => resolved.spec)),
-            "launchSpecFor",
-            options.repositoryOptions,
-          ).pipe(
-            Effect.matchEffect({
-              onSuccess: spec => Effect.succeed(spec),
-              onFailure: (error: LibraryError) =>
-                error.reason === "config"
-                  ? Effect.succeed(undefined)
-                  : Effect.fail(error),
-            }),
-          ),
+      withLibraryRepository(
+        repository =>
+          repository
+            .resolveLaunchForPlayable(id, { releaseId })
+            .pipe(Effect.map(resolved => resolved.spec)),
+        "launchSpecFor",
+        options.repositoryOptions,
+      ).pipe(
+        Effect.matchEffect({
+          onSuccess: spec => Effect.succeed(spec),
+          onFailure: (error: LibraryError) =>
+            error.reason === "config"
+              ? Effect.succeed(undefined)
+              : Effect.fail(error),
+        }),
+      ),
     canResolveLaunchForGame: (id, inputs) =>
-      selectedLibrarySourceMode() === "rocknix"
-        ? withRocknixSource(
-            source =>
-              source.canResolveLaunchForGame
-                ? source.canResolveLaunchForGame(id, inputs)
-                : source.launchSpecFor(id).then(spec => spec !== undefined),
-            "canResolveLaunchForGame",
-          )
-        : withLibraryRepository(
-            repository => repository.canResolveLaunchForPlayable(id, inputs),
-            "canResolveLaunchForGame",
-            options.repositoryOptions,
-          ),
+      withLibraryRepository(
+        repository => repository.canResolveLaunchForPlayable(id, inputs),
+        "canResolveLaunchForGame",
+        options.repositoryOptions,
+      ),
     resolveLaunchForGame: (id, inputs) =>
-      selectedLibrarySourceMode() === "rocknix"
-        ? withRocknixSource(
-            source => source.resolveLaunchForGame(id, inputs),
-            "resolveLaunchForGame",
-          )
-        : withLibraryRepository(
-            repository => repository.resolveLaunchForPlayable(id, inputs),
-            "resolveLaunchForGame",
-            options.repositoryOptions,
-          ),
+      withLibraryRepository(
+        repository => repository.resolveLaunchForPlayable(id, inputs),
+        "resolveLaunchForGame",
+        options.repositoryOptions,
+      ),
     resolveLocalLauncherPolicy: (launcherId, inputs) =>
       withLibraryRepository(
         repository => repository.resolveLocalLauncherPolicy(launcherId, inputs),
@@ -144,72 +111,49 @@ export function createControllerBackedLibrarySourceService(
   const { controller, repositoryOptions } = options
   return {
     list: () =>
-      selectedLibrarySourceMode() === "rocknix"
-        ? withRocknixSource(source => source.list(), "list")
-        : withControllerRepository(
-            controller,
-            repository =>
-              repository
-                .listPlayableEntries()
-                .pipe(Effect.map(entries => entries.map(toCompatGameRecord))),
-            repositoryOptions,
-          ),
+      withControllerRepository(
+        controller,
+        repository =>
+          repository
+            .listPlayableEntries()
+            .pipe(Effect.map(entries => entries.map(toCompatGameRecord))),
+        repositoryOptions,
+      ),
     listPlayableEntries: () =>
-      selectedLibrarySourceMode() === "rocknix"
-        ? withRocknixSource(
-            source =>
-              source.list().then(games => games.map(compatGameToPlayableEntry)),
-            "listPlayableEntries",
-          )
-        : withControllerRepository(
-            controller,
-            repository => repository.listPlayableEntries(),
-            repositoryOptions,
-          ),
+      withControllerRepository(
+        controller,
+        repository => repository.listPlayableEntries(),
+        repositoryOptions,
+      ),
     launchSpecFor: (id, releaseId) =>
-      selectedLibrarySourceMode() === "rocknix"
-        ? withRocknixSource(source => source.launchSpecFor(id), "launchSpecFor")
-        : withControllerRepository(
-            controller,
-            repository =>
-              repository
-                .resolveLaunchForPlayable(id, { releaseId })
-                .pipe(Effect.map(resolved => resolved.spec)),
-            repositoryOptions,
-          ).pipe(
-            Effect.matchEffect({
-              onSuccess: spec => Effect.succeed(spec),
-              onFailure: (error: LibraryError) =>
-                error.reason === "config"
-                  ? Effect.succeed(undefined)
-                  : Effect.fail(error),
-            }),
-          ),
+      withControllerRepository(
+        controller,
+        repository =>
+          repository
+            .resolveLaunchForPlayable(id, { releaseId })
+            .pipe(Effect.map(resolved => resolved.spec)),
+        repositoryOptions,
+      ).pipe(
+        Effect.matchEffect({
+          onSuccess: spec => Effect.succeed(spec),
+          onFailure: (error: LibraryError) =>
+            error.reason === "config"
+              ? Effect.succeed(undefined)
+              : Effect.fail(error),
+        }),
+      ),
     canResolveLaunchForGame: (id, inputs) =>
-      selectedLibrarySourceMode() === "rocknix"
-        ? withRocknixSource(
-            source =>
-              source.canResolveLaunchForGame
-                ? source.canResolveLaunchForGame(id, inputs)
-                : source.launchSpecFor(id).then(spec => spec !== undefined),
-            "canResolveLaunchForGame",
-          )
-        : withControllerRepository(
-            controller,
-            repository => repository.canResolveLaunchForPlayable(id, inputs),
-            repositoryOptions,
-          ),
+      withControllerRepository(
+        controller,
+        repository => repository.canResolveLaunchForPlayable(id, inputs),
+        repositoryOptions,
+      ),
     resolveLaunchForGame: (id, inputs) =>
-      selectedLibrarySourceMode() === "rocknix"
-        ? withRocknixSource(
-            source => source.resolveLaunchForGame(id, inputs),
-            "resolveLaunchForGame",
-          )
-        : withControllerRepository(
-            controller,
-            repository => repository.resolveLaunchForPlayable(id, inputs),
-            repositoryOptions,
-          ),
+      withControllerRepository(
+        controller,
+        repository => repository.resolveLaunchForPlayable(id, inputs),
+        repositoryOptions,
+      ),
     resolveLocalLauncherPolicy: (launcherId, inputs) =>
       withControllerRepository(
         controller,
@@ -217,34 +161,6 @@ export function createControllerBackedLibrarySourceService(
         repositoryOptions,
       ),
   }
-}
-
-function withRocknixSource<T>(
-  useSource: (source: PlainLibrarySource) => Promise<T>,
-  operation: string,
-): Effect.Effect<T, LibraryError> {
-  return Effect.try({
-    try: buildRocknixConfigFromEnv,
-    catch: toLibraryError,
-  }).pipe(
-    Effect.flatMap(config => {
-      logger.info(
-        {
-          sourceKind: "rocknix",
-          operation,
-          gamelistRoots: config.gamelistRoots,
-          esSystemsPath: config.esSystemsPath,
-          allowMissingEsSystems: config.allowMissingEsSystems,
-        },
-        "library-source-layer-live: opening ROCKNIX gamelists",
-      )
-
-      return Effect.tryPromise({
-        try: () => useSource(createRocknixSource(config)),
-        catch: toLibraryError,
-      })
-    }),
-  )
 }
 
 function withLibraryRepository<T>(
@@ -283,29 +199,6 @@ function withControllerRepository<T>(
       ),
     )
     .pipe(Effect.mapError(toLibraryError))
-}
-
-function selectedLibrarySourceMode(): LibrarySourceMode {
-  const explicit = process.env.KORRI_LIBRARY_SOURCE?.trim().toLowerCase()
-  if (explicit === "rocknix" || explicit === "proseql") return explicit
-
-  return "proseql"
-}
-
-function buildRocknixConfigFromEnv(): RocknixConfig {
-  return {
-    gamelistRoots:
-      parseListEnv(process.env.KORRI_ROCKNIX_GAMELIST_ROOTS) ??
-      DEFAULT_ROCKNIX_GAMELIST_ROOTS,
-    esSystemsPath:
-      optionalEnv(process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH) ??
-      DEFAULT_ROCKNIX_ES_SYSTEMS_PATH,
-    launchCommand: optionalEnv(process.env.KORRI_ROCKNIX_LAUNCH_COMMAND),
-    mediaRoot:
-      optionalEnv(process.env.KORRI_ROCKNIX_MEDIA_ROOT) ??
-      defaultRocknixMediaRoot(process.env),
-    allowMissingEsSystems: true,
-  }
 }
 
 function parseListEnv(
@@ -548,36 +441,5 @@ function toCompatGameRecord(entry: PlayableLibraryEntry): ResolvedGameRecord {
     system: release?.system ?? "unknown",
     metadata: { name: entry.title ?? entry.id },
     ...(entry.playStats ? { playStats: entry.playStats } : {}),
-  }
-}
-
-function compatGameToPlayableEntry(
-  game: ResolvedGameRecord,
-): PlayableLibraryEntry {
-  return {
-    id: game.id,
-    itemId: game.id,
-    title: game.metadata?.name ?? game.id,
-    releases: [
-      {
-        id: "default",
-        system: game.system,
-        launchable:
-          game.contentPath !== undefined || game.content !== undefined,
-        ...(game.contentPath !== undefined
-          ? {
-              target: {
-                kind: "file" as const,
-                storage: "legacy",
-                path: game.contentPath,
-              },
-            }
-          : {}),
-      },
-    ],
-    launchable: game.contentPath !== undefined || game.content !== undefined,
-    metadata: game.metadata,
-    ...(game.playStats ? { playStats: game.playStats } : {}),
-    ...(game.media !== undefined ? { media: game.media } : {}),
   }
 }

@@ -22,7 +22,6 @@ let
   isSocketPath = path: isAbsolutePath path || lib.hasPrefix "%t/" path;
   launchArtifactsDir = cfg.launchArtifactsDir;
   daemonLibraryRoot = lib.attrByPath [ "services" "korri" "daemon" "library" "root" ] null config;
-  daemonLibrarySource = lib.attrByPath [ "services" "korri" "daemon" "library" "source" ] null config;
   # Inherit the rendered ordered config-graph roots from the korrid unit so
   # foreground session surfaces read the same effective config as the daemon.
   daemonKorridEnv =
@@ -264,9 +263,6 @@ in
       })
       // (lib.optionalAttrs (daemonLibraryRoot != null) {
         KORRI_LIBRARY_ROOT = daemonLibraryRoot;
-      })
-      // (lib.optionalAttrs (daemonLibrarySource != null) {
-        KORRI_LIBRARY_SOURCE = daemonLibrarySource;
       })
       // (lib.optionalAttrs (cfg.sunshineRuntimeStatusPath != null) {
         KORRI_GAME_STREAM_STATUS_PATH = cfg.sunshineRuntimeStatusPath;

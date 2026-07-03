@@ -174,7 +174,6 @@ stdenv.mkDerivation rec {
       --unset KORRI_KIOSK
       --unset KORRI_LAUNCH_ARTIFACTS_DIR
       --unset KORRI_LIBRARY_ROOT
-      --unset KORRI_LIBRARY_SOURCE
       --unset KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER
       --unset KORRI_NATIVE_BRIDGE_URL
       --unset KORRI_SESSIOND_ESSWAY_CONTROL

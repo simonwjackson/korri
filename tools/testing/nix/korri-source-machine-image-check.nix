@@ -101,7 +101,6 @@ let
     ))
     (check "sessiond inherits Korri product library root" (
       sessiondEnv.KORRI_LIBRARY_ROOT == "/var/lib/korri/library"
-      && sessiondEnv.KORRI_LIBRARY_SOURCE == cfg.services.korri.daemon.library.source
     ))
     (check "daemon uses sessiond socket" (daemonEnv.KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"))
     (check "gameStream uses sessiond socket" (

@@ -227,7 +227,6 @@ let
     KORRI_STREAM_ADVERTISE_CAPABILITIES = lib.concatStringsSep "," cfg.advertise.capabilities;
     KORRI_STREAM_CONTROL_ENABLED = if cfg.streamControl.enable then "1" else "0";
     # KORRI_HEADLESS_SOURCE_ONLY retired in federation v1 (R14).
-    KORRI_LIBRARY_SOURCE = cfg.library.source;
     # Ordered config-graph roots are the runtime read contract. KORRI_LIBRARY_ROOT
     # is retained only as the (deferred) write-target anchor for game-asset /
     # artifact sidecars, not as a config read path.
@@ -442,15 +441,6 @@ in
     };
 
     library = {
-      source = mkOption {
-        type = types.enum [
-          "proseql"
-          "rocknix"
-        ];
-        default = "proseql";
-        description = "Korri library source exposed through the server catalog RPC.";
-      };
-
       root = mkOption {
         type = types.str;
         default = "${config.services.korri.runtime.stateRoot}/library";
