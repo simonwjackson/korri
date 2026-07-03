@@ -51,12 +51,15 @@ export function createOverlayOrchestrator(deps: {
 }): OverlayOrchestrator {
   let menu: OverlayMenu | null = null
   let menuOptions: readonly OverlayMenuOption[] = []
+  let gated = false
 
-  function openMenu(): void {
-    const kind = deps.sessionKind()
-    menuOptions = overlayMenuOptionsFor(kind)
-    menu = createOverlayMenu(menuOptions, safeDefaultIndex(menuOptions))
-    deps.renderer.menu(menuOptions, menu.state().selected)
+  // Gate as soon as the chord engages (on press), not only when the menu opens.
+  // The chord buttons otherwise leak to the foreground game/stream and can
+  // trigger its own exit hotkey (observed: a stream quitting immediately). While
+  // gated, input is routed to us; nav is ignored until a menu is actually open.
+  function ensureGated(): void {
+    if (gated) return
+    gated = true
     void deps.intercept.activate(nav => {
       if (!menu) return
       const result = menu.handle(nav)
@@ -68,10 +71,24 @@ export function createOverlayOrchestrator(deps: {
     })
   }
 
+  function ungate(): void {
+    if (!gated) return
+    gated = false
+    void deps.intercept.deactivate()
+  }
+
+  function openMenu(): void {
+    ensureGated()
+    const kind = deps.sessionKind()
+    menuOptions = overlayMenuOptionsFor(kind)
+    menu = createOverlayMenu(menuOptions, safeDefaultIndex(menuOptions))
+    deps.renderer.menu(menuOptions, menu.state().selected)
+  }
+
   function closeMenu(chosenId: string | null): void {
     menu = null
-    void deps.intercept.deactivate()
     deps.renderer.hide()
+    ungate()
     if (chosenId) performChoice(chosenId)
   }
 
@@ -94,6 +111,7 @@ export function createOverlayOrchestrator(deps: {
     onHoldUpdate(update) {
       switch (update.phase) {
         case "press":
+          ensureGated()
           deps.renderer.ring(0)
           return
         case "progress":
@@ -102,6 +120,7 @@ export function createOverlayOrchestrator(deps: {
         case "fired":
           deps.renderer.hide()
           void deps.actions.forceQuit()
+          ungate()
           return
         case "tap":
           openMenu()

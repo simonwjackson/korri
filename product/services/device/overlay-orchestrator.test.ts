@@ -87,6 +87,23 @@ describe("overlay orchestrator", () => {
     expect(actions.forceQuit).toBe(1)
   })
 
+  it("gates input on press and ungates on fired (chord never leaks to the game)", () => {
+    const { intercept, orchestrator } = setup()
+    orchestrator.onHoldUpdate(hold("press"))
+    expect(intercept.isActive()).toBe(true) // gated from the first press
+    orchestrator.onHoldUpdate(hold("progress", 0.5))
+    expect(intercept.isActive()).toBe(true)
+    orchestrator.onHoldUpdate(hold("fired", 1))
+    expect(intercept.isActive()).toBe(false) // restored after quit
+  })
+
+  it("ignores nav while gated but before a menu is open", () => {
+    const { intercept, renderer, orchestrator } = setup()
+    orchestrator.onHoldUpdate(hold("press"))
+    intercept.nav("left") // no menu yet -> ignored
+    expect(renderer.calls).toEqual([{ kind: "ring", pct: 0 }])
+  })
+
   it("opens the menu on tap and gates the game", () => {
     const { renderer, intercept, orchestrator } = setup("local")
     orchestrator.onHoldUpdate(hold("tap"))
