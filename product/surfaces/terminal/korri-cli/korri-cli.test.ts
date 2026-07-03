@@ -568,11 +568,11 @@ describe("korri CLI", () => {
       ),
     )
 
-    expect(result.exitCode).toBe(124)
+    expect(result.exitCode).toBe(5)
     expect(result.stdout).toContain("games unavailable: offline")
   })
 
-  it("renders ambiguous find results as a usage failure", async () => {
+  it("renders ambiguous find results as an ambiguous failure", async () => {
     const result = await captureCliOutput(() =>
       Effect.runPromiseExit(
         runKorriCliWithLayer(
@@ -592,7 +592,7 @@ describe("korri CLI", () => {
       ),
     )
 
-    expect(result.exitCode).toBe(64)
+    expect(result.exitCode).toBe(4)
     expect(result.stdout).toContain("ambiguous game query: echo")
     expect(result.stdout).toContain("snes/echo-2.smc")
   })

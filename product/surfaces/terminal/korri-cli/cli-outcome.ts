@@ -5,7 +5,7 @@
  * into text plus a number. No command invents its own exit codes.
  *
  * Codes live in the shell-safe zone: 0/1/2/130 reuse universal conventions,
- * 3-10 are free application codes, and nothing touches the reserved 126-165 or
+ * 3-11 are free application codes, and nothing touches the reserved 126-165 or
  * 255 range.
  */
 export const ExitCode = {
@@ -20,6 +20,7 @@ export const ExitCode = {
   launchInvalid: 8,
   hostRefused: 9,
   launchFailed: 10,
+  stopPending: 11,
   cancelled: 130,
 } as const
 
@@ -37,6 +38,7 @@ export type CliFailureKind =
   | "launch-invalid"
   | "host-refused"
   | "launch-failed"
+  | "stop-pending"
   | "cancelled"
 
 const FAILURE_CODES: Record<CliFailureKind, ExitCode> = {
@@ -50,6 +52,7 @@ const FAILURE_CODES: Record<CliFailureKind, ExitCode> = {
   "launch-invalid": ExitCode.launchInvalid,
   "host-refused": ExitCode.hostRefused,
   "launch-failed": ExitCode.launchFailed,
+  "stop-pending": ExitCode.stopPending,
   cancelled: ExitCode.cancelled,
 }
 

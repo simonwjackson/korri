@@ -7,6 +7,7 @@ import type {
   ControlSessionStatusResult,
   ControlStopSessionResult,
 } from "@platform/control/control-results"
+import { ExitCode } from "./cli-outcome"
 
 export function renderGamesList(result: ControlListGamesResult): string {
   if (result._tag === "ListGamesUnavailable") {
@@ -19,7 +20,9 @@ export function renderGamesList(result: ControlListGamesResult): string {
 }
 
 export function gamesListExitCode(result: ControlListGamesResult): number {
-  return result._tag === "ListGamesUnavailable" ? 124 : 0
+  return result._tag === "ListGamesUnavailable"
+    ? ExitCode.hostUnreachable
+    : ExitCode.ok
 }
 
 export function renderFindGame(result: ControlFindGameResult): string {
@@ -46,14 +49,15 @@ export function renderFindGame(result: ControlFindGameResult): string {
 export function gameFindExitCode(result: ControlFindGameResult): number {
   switch (result._tag) {
     case "GameFound":
-      return 0
+      return ExitCode.ok
     case "MissingQuery":
+      return ExitCode.usage
     case "AmbiguousGame":
-      return 64
+      return ExitCode.ambiguous
     case "GameNotFound":
-      return 2
+      return ExitCode.notFound
     case "HostUnavailable":
-      return 124
+      return ExitCode.hostUnreachable
   }
 }
 
@@ -80,13 +84,13 @@ export function dryRunLaunchExitCode(
 ): number {
   switch (result._tag) {
     case "LaunchDryRunOk":
-      return 0
+      return ExitCode.ok
     case "LaunchConfigFailed":
-      return 78
+      return ExitCode.launchInvalid
     case "HostUnavailable":
-      return 124
+      return ExitCode.hostUnreachable
     case "GameNotFound":
-      return 2
+      return ExitCode.notFound
   }
 }
 
@@ -110,18 +114,18 @@ export function renderLaunchGame(result: ControlLaunchResult): string {
 export function launchGameExitCode(result: ControlLaunchResult): number {
   switch (result._tag) {
     case "Launched":
-      return 0
+      return ExitCode.ok
     case "GameNotFound":
-      return 2
+      return ExitCode.notFound
     case "HostUnavailable":
-      return 124
+      return ExitCode.hostUnreachable
     case "LaunchConfigFailed":
-      return 78
+      return ExitCode.launchInvalid
     case "PreflightRejected":
     case "DaemonRejected":
-      return 121
+      return ExitCode.hostRefused
     case "LaunchFailed":
-      return result.exitCode
+      return ExitCode.launchFailed
   }
 }
 
@@ -145,22 +149,24 @@ export function renderSessionStatus(
 export function sessionStatusExitCode(
   result: ControlSessionStatusResult,
 ): number {
-  return result._tag === "HostUnavailable" ? 124 : 0
+  return result._tag === "HostUnavailable"
+    ? ExitCode.hostUnreachable
+    : ExitCode.ok
 }
 
 export function sessionStopExitCode(result: ControlStopSessionResult): number {
   switch (result._tag) {
     case "Stopped":
     case "NothingToStop":
-      return 0
+      return ExitCode.ok
     case "StopPending":
-      return 75
+      return ExitCode.stopPending
     case "HostUnavailable":
-      return 124
+      return ExitCode.hostUnreachable
     case "ConfirmationRequired":
-      return 64
+      return ExitCode.usage
     case "SessiondNotConfigured":
-      return 2
+      return ExitCode.notConfigured
   }
 }
 

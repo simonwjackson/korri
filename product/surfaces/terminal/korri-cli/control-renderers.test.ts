@@ -36,7 +36,7 @@ describe("control renderers", () => {
       renderGamesList({ _tag: "ListGamesUnavailable", message: "offline" }),
     ).toBe("games unavailable: offline")
     expect(gamesListExitCode({ _tag: "GamesListed", games: [] })).toBe(0)
-    expect(gamesListExitCode({ _tag: "ListGamesUnavailable" })).toBe(124)
+    expect(gamesListExitCode({ _tag: "ListGamesUnavailable" })).toBe(5)
   })
 
   it("renders find-game variants and exit codes", () => {
@@ -66,18 +66,18 @@ describe("control renderers", () => {
     expect(gameFindExitCode({ _tag: "GameFound", game, match: "title" })).toBe(
       0,
     )
-    expect(gameFindExitCode({ _tag: "MissingQuery" })).toBe(64)
+    expect(gameFindExitCode({ _tag: "MissingQuery" })).toBe(2)
     expect(
       gameFindExitCode({ _tag: "AmbiguousGame", query: "e", candidates: [] }),
-    ).toBe(64)
+    ).toBe(4)
     expect(
       gameFindExitCode({
         _tag: "GameNotFound",
         query: "missing",
         candidates: [],
       }),
-    ).toBe(2)
-    expect(gameFindExitCode({ _tag: "HostUnavailable" })).toBe(124)
+    ).toBe(3)
+    expect(gameFindExitCode({ _tag: "HostUnavailable" })).toBe(5)
   })
 
   it("renders dry-run launch variants and exit codes", () => {
@@ -131,15 +131,15 @@ describe("control renderers", () => {
         selection: { id: game.id },
         message: "bad config",
       }),
-    ).toBe(78)
-    expect(dryRunLaunchExitCode({ _tag: "HostUnavailable" })).toBe(124)
+    ).toBe(8)
+    expect(dryRunLaunchExitCode({ _tag: "HostUnavailable" })).toBe(5)
     expect(
       dryRunLaunchExitCode({
         _tag: "GameNotFound",
         query: "missing",
         candidates: [],
       }),
-    ).toBe(2)
+    ).toBe(3)
   })
 
   it("renders launch variants and exit codes", () => {
@@ -198,35 +198,35 @@ describe("control renderers", () => {
         query: "missing",
         candidates: [],
       }),
-    ).toBe(2)
+    ).toBe(3)
     expect(
       launchGameExitCode({
         _tag: "LaunchConfigFailed",
         selection: { id: game.id },
         message: "bad config",
       }),
-    ).toBe(78)
+    ).toBe(8)
     expect(
       launchGameExitCode({
         _tag: "PreflightRejected",
         selection: { id: game.id },
         message: "busy",
       }),
-    ).toBe(121)
+    ).toBe(9)
     expect(
       launchGameExitCode({
         _tag: "HostUnavailable",
         selection: { id: game.id },
         message: "offline",
       }),
-    ).toBe(124)
+    ).toBe(5)
     expect(
       launchGameExitCode({
         _tag: "LaunchFailed",
         selection: { id: game.id },
         exitCode: 7,
       }),
-    ).toBe(7)
+    ).toBe(10)
   })
 
   it("renders session status variants", () => {
@@ -265,7 +265,7 @@ describe("control renderers", () => {
       }),
     ).toBe(0)
     expect(sessionStatusExitCode({ _tag: "SessiondNotConfigured" })).toBe(0)
-    expect(sessionStatusExitCode({ _tag: "HostUnavailable" })).toBe(124)
+    expect(sessionStatusExitCode({ _tag: "HostUnavailable" })).toBe(5)
   })
 
   it("renders stop-session variants", () => {
@@ -325,14 +325,14 @@ describe("control renderers", () => {
         launchId: "launch-1",
         force: false,
       }),
-    ).toBe(75)
-    expect(sessionStopExitCode({ _tag: "HostUnavailable" })).toBe(124)
+    ).toBe(11)
+    expect(sessionStopExitCode({ _tag: "HostUnavailable" })).toBe(5)
     expect(
       sessionStopExitCode({
         _tag: "ConfirmationRequired",
         action: "stop-session",
       }),
-    ).toBe(64)
-    expect(sessionStopExitCode({ _tag: "SessiondNotConfigured" })).toBe(2)
+    ).toBe(2)
+    expect(sessionStopExitCode({ _tag: "SessiondNotConfigured" })).toBe(7)
   })
 })

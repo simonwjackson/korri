@@ -19,6 +19,7 @@ const KIND_TO_CODE: ReadonlyArray<readonly [CliFailureKind, number]> = [
   ["launch-invalid", 8],
   ["host-refused", 9],
   ["launch-failed", 10],
+  ["stop-pending", 11],
   ["cancelled", 130],
 ]
 
@@ -35,10 +36,10 @@ describe("exit-code table", () => {
   })
 
   it("never emits a code in the reserved 126-165 or 255 range", () => {
-    const allowed = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 130])
+    const allowed = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 130])
     for (const code of Object.values(ExitCode)) {
       expect(allowed.has(code)).toBe(true)
-      expect(code === 130 || (code >= 0 && code <= 10)).toBe(true)
+      expect(code === 130 || (code >= 0 && code <= 11)).toBe(true)
     }
   })
 })
