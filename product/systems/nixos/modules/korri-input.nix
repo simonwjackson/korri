@@ -126,6 +126,13 @@ let
     '';
   };
 
+  # Featherweight Wayland layer-shell overlay renderer that inputd spawns for the
+  # hold ring + decision menu. inputd already runs with the compositor wayland
+  # environment, so it owns the renderer directly.
+  overlayRenderer = import ../../../services/device/overlay-renderer/package.nix {
+    inherit pkgs;
+  };
+
   isInputplumber = cfg.provider.enable && cfg.provider.name == "inputplumber";
 
   inherit (lib)
@@ -274,8 +281,16 @@ in
         environment = {
           KORRI_INPUTD_BRIGHTNESS_UP = lib.mkDefault "korri-backlight-step +5";
           KORRI_INPUTD_BRIGHTNESS_DOWN = lib.mkDefault "korri-backlight-step -5";
+          # Decision overlay: inputd spawns this renderer for the hold ring and
+          # the tap decision menu (drives it over stdin; gates the game via the
+          # InputPlumber intercept). Override/unset to disable the overlay.
+          KORRI_OVERLAY_RENDERER_BIN =
+            lib.mkDefault "${overlayRenderer}/bin/korri-overlay-renderer";
         };
-        path = [ korriBacklightStep ];
+        path = [
+          korriBacklightStep
+          pkgs.glib # gdbus, for the InputPlumber intercept ui_* event stream
+        ];
       };
     })
 
