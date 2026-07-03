@@ -1,6 +1,6 @@
-import { foregroundSessionGateStateFromSnapshot } from "@platform/stream/foreground-session-gate-state"
-import type { ForegroundSessionStatusSnapshot } from "@platform/stream/foreground-session-status"
-import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
+import { foregroundSessionGateStateFromSnapshot } from "@platform/session/foreground-session-gate-state"
+import type { ForegroundSessionStatusSnapshot } from "@platform/session/foreground-session-status"
+import { ForegroundSessionStatusSource } from "@platform/session/foreground-session-status-source"
 import { Effect, Layer } from "effect"
 
 export const idleForegroundSessionStatusSnapshot = {

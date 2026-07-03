@@ -7,8 +7,8 @@ import {
   LibrarySource,
 } from "@platform/library/library-services"
 import { loadingForeverLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
-import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
-import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
+import type { ForegroundSessionGateState } from "@platform/session/foreground-session-gate-state"
+import { ForegroundSessionStatusSource } from "@platform/session/foreground-session-status-source"
 import { Duration, Effect, Layer } from "effect"
 import * as Atom from "effect/unstable/reactivity/Atom"
 

@@ -22,7 +22,7 @@ import {
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
-import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
+import { ForegroundSessionStatusSource } from "@platform/session/foreground-session-status-source"
 import type {
   KorriPlatformBridge,
   KorriSurfaceEntrypoint,

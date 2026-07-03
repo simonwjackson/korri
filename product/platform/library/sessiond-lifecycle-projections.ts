@@ -1,4 +1,4 @@
-import type { ForegroundSessionStatusSnapshot } from "@platform/stream/foreground-session-status"
+import type { ForegroundSessionStatusSnapshot } from "@platform/session/foreground-session-status"
 import type {
   SessiondManagedLaunchCapabilities,
   SessiondManagedLaunchMode,

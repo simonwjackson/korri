@@ -6,10 +6,10 @@ import {
 import type {
   ForegroundSessionGateState,
   ProviderLifecycleGateSummary,
-} from "@platform/stream/foreground-session-gate-state"
-import { foregroundSessionGateStateFromSnapshot } from "@platform/stream/foreground-session-gate-state"
-import type { ForegroundSessionStatusSnapshot } from "@platform/stream/foreground-session-status"
-import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
+} from "@platform/session/foreground-session-gate-state"
+import { foregroundSessionGateStateFromSnapshot } from "@platform/session/foreground-session-gate-state"
+import type { ForegroundSessionStatusSnapshot } from "@platform/session/foreground-session-status"
+import { ForegroundSessionStatusSource } from "@platform/session/foreground-session-status-source"
 import { serverRpcGroup } from "@product/apps/portal/api/server/rpc-group"
 import type {
   ProviderLifecycleSummary,

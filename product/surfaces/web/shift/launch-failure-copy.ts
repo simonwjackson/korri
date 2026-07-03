@@ -9,7 +9,7 @@
  */
 import type { LaunchState } from "@platform/library/launch-state"
 import type { LaunchFailureKind } from "@platform/library/launcher"
-import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import type { ForegroundSessionGateState } from "@platform/session/foreground-session-gate-state"
 
 export type LaunchStatusTone =
   | "launching"

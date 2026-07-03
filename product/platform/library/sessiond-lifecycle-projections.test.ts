@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { foregroundSessionGateStateFromSnapshot } from "@platform/stream/foreground-session-gate-state"
+import { foregroundSessionGateStateFromSnapshot } from "@platform/session/foreground-session-gate-state"
 import {
   projectForegroundSessionStatusSnapshot,
   projectManagedLaunchStatus,

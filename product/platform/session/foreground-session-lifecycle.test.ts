@@ -149,7 +149,7 @@ describe("foreground session lifecycle", () => {
     const source = readFileSync(
       join(
         process.cwd(),
-        "product/platform/stream/foreground-session-lifecycle.ts",
+        "product/platform/session/foreground-session-lifecycle.ts",
       ),
       "utf8",
     )

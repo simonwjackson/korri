@@ -15,7 +15,7 @@ import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-l
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { createShellLauncher } from "@platform/library/shell-launcher"
-import type { ForegroundSessionState } from "@platform/stream/foreground-session-lifecycle"
+import type { ForegroundSessionState } from "@platform/session/foreground-session-lifecycle"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import {
   createSteamLogObserver,

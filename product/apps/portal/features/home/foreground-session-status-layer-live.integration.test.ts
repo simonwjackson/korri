@@ -6,7 +6,7 @@ import {
   foregroundSessionGateStateAtom,
   foregroundSessionStatusLayerAtom,
 } from "@platform/react/library/library-atoms"
-import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
+import { ForegroundSessionStatusSource } from "@platform/session/foreground-session-status-source"
 import { createHonoApp } from "@product/apps/portal/api/hono-app"
 import { ForegroundSessionStatusLayerLive } from "@product/apps/portal/features/home/foreground-session-status-layer-live"
 import { Effect } from "effect"

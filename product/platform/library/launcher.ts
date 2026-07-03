@@ -16,7 +16,7 @@
 
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
-import type { ForegroundManagedSessionHandle } from "@platform/stream/foreground-session-owner"
+import type { ForegroundManagedSessionHandle } from "@platform/session/foreground-session-owner"
 import { Schema } from "effect"
 
 /**

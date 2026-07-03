@@ -4,8 +4,8 @@
  * singletons: inert in production because only the lab sets it.
  */
 
-import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
-import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
+import type { ForegroundSessionGateState } from "@platform/session/foreground-session-gate-state"
+import { ForegroundSessionStatusSource } from "@platform/session/foreground-session-status-source"
 import { Effect, Layer } from "effect"
 import { useSyncExternalStore } from "react"
 

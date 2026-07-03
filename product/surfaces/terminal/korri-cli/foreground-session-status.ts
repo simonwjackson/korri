@@ -1,4 +1,4 @@
-import { decodeForegroundSessionStatusSnapshot } from "@platform/stream/foreground-session-status"
+import { decodeForegroundSessionStatusSnapshot } from "@platform/session/foreground-session-status"
 
 const DEFAULT_STATUS_URL =
   process.env.KORRI_FOREGROUND_SESSION_STATUS_URL ??

@@ -25,9 +25,9 @@ import {
   type ForegroundSessionState,
   foregroundSessionState,
   foregroundSessionTransition,
-} from "@platform/stream/foreground-session-lifecycle"
+} from "@platform/session/foreground-session-lifecycle"
 
-export type { ForegroundSessionEvidence } from "@platform/stream/foreground-session-lifecycle"
+export type { ForegroundSessionEvidence } from "@platform/session/foreground-session-lifecycle"
 
 /**
  * Result of an external idle-authority check (typically sessiond).

@@ -19,7 +19,7 @@
  */
 import type { LaunchState } from "@platform/library/launch-state"
 import { useInputAction } from "@platform/react/input/use-input-action"
-import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import type { ForegroundSessionGateState } from "@platform/session/foreground-session-gate-state"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { launchStatusView } from "../launch-failure-copy"
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"

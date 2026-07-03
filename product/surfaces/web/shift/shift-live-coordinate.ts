@@ -7,7 +7,7 @@
  * mounted route most recently resolved so "Pin current" can capture it.
  */
 import type { LaunchState } from "@platform/library/launch-state"
-import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import type { ForegroundSessionGateState } from "@platform/session/foreground-session-gate-state"
 import type { ShiftCatalogState } from "./catalog/shift-catalog-state"
 import type { ShiftClockIso } from "./shift-clock-state"
 import type { ShiftNetworkReading } from "./shift-network-state"

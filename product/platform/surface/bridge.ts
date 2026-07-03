@@ -2,7 +2,7 @@ import type { EntrySource } from "@platform/api/rpc/entry-source"
 import type { InputListener } from "@platform/input/types"
 import type { LaunchAlternative } from "@platform/library/launch-alternative"
 import type { DeviceState } from "@platform/device/device-facts"
-import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import type { ForegroundSessionGateState } from "@platform/session/foreground-session-gate-state"
 
 export interface KorriLibraryLaunchInput {
   readonly id: string

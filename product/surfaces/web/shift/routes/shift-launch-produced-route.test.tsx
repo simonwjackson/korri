@@ -8,7 +8,7 @@ import {
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
-import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import type { ForegroundSessionGateState } from "@platform/session/foreground-session-gate-state"
 import {
   cleanup,
   fireEvent,

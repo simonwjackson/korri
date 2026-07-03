@@ -1,4 +1,4 @@
-import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import type { ForegroundSessionGateState } from "@platform/session/foreground-session-gate-state"
 import type { LaunchState } from "./launch-state"
 
 export type LaunchActionBlockedReason =

@@ -10,7 +10,7 @@
  * a design tool calls it.
  */
 import type { LaunchState } from "@platform/library/launch-state"
-import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import type { ForegroundSessionGateState } from "@platform/session/foreground-session-gate-state"
 import type { ShiftCatalogState } from "./catalog/shift-catalog-state"
 import { DEFAULT_SHIFT_CLOCK_ISO } from "./shift-clock-state"
 import {

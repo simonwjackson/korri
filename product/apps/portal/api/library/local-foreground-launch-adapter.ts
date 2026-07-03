@@ -11,7 +11,7 @@ import {
   type SessiondManagedLaunchStatusResult,
 } from "@platform/library/sessiond-managed-launch-client"
 import { isLaunchReadyMode } from "@platform/library/sessiond-managed-launch-protocol"
-import type { ForegroundSessionState } from "@platform/stream/foreground-session-lifecycle"
+import type { ForegroundSessionState } from "@platform/session/foreground-session-lifecycle"
 import {
   createForegroundSessionOwner,
   type ForegroundExternalIdleResult,
@@ -20,7 +20,7 @@ import {
   type ForegroundSessionOwnerLaunchResult,
   type ForegroundSessionReadinessInput,
   type ForegroundSessionStageResult,
-} from "@platform/stream/foreground-session-owner"
+} from "@platform/session/foreground-session-owner"
 import type { LaunchLibraryResponse } from "@product/apps/portal/api/library/launch.rpc"
 import { Effect } from "effect"
 
