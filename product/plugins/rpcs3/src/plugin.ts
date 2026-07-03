@@ -75,8 +75,11 @@ export const rpcs3Plugin = plugin({
           systems: [KORRI_RPCS3_PS3_SYSTEM_ID],
           settings: {
             plugin: {
-              command: "",
               state: { root: `{storage:${KORRI_RPCS3_STATE_STORAGE_ID}}` },
+              // Unattended-boot defaults so RPCS3 runs without a human:
+              // suppress GUI confirmation/info boxes and exit when the game
+              // process finishes. `command` stays the app-record field above.
+              boot: { suppressPopups: true, exitOnFinish: true },
             },
           },
           policy: { allowedCommands: [KORRI_RPCS3_DEFAULT_COMMAND] },

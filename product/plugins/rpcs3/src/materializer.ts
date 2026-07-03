@@ -8,7 +8,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises"
-import { dirname, isAbsolute, join } from "node:path"
+import { basename, dirname, isAbsolute, join } from "node:path"
 import type { MaterializedReadableLaunch } from "@platform/library/config/app-materializer"
 import {
   AppMaterializationFailed,
@@ -78,7 +78,7 @@ const materializeReadableRpcs3Resources = (
       )
     }
 
-    const command = resolvedPolicy.command ?? context.app.command
+    const command = context.app.command
     if (command === undefined || !isAbsolute(command)) {
       return yield* fail(
         context,
@@ -96,6 +96,8 @@ const materializeReadableRpcs3Resources = (
     yield* validateReadableDirectory(context, stateRoot, "state root")
     yield* validateFirmware(context, stateRoot, resolvedPolicy)
 
+    const launchEnv = yield* buildLaunchEnv(context, stateRoot)
+
     const routed = routeSettings(resolvedPolicy)
     const configPath = yield* writeLaunchConfig(context, stateRoot, routed)
     yield* writeGuiPreseed(context, stateRoot, routed.iniEntries)
@@ -109,10 +111,36 @@ const materializeReadableRpcs3Resources = (
         ...(context.overrides?.args !== undefined
           ? { overridesArgs: context.overrides.args }
           : {}),
-        env: mergeEnv(context.env, resolvedPolicy.env),
+        env: launchEnv,
       }),
     )
     return { spec }
+  })
+
+/**
+ * Build the launch env: consume the standard `context.env` and add the
+ * plugin-produced RPCS3 state-dir vars. `state.root` **is** the RPCS3 config
+ * dir (where dev_flash/config.yml live), which RPCS3 resolves as
+ * `$XDG_CONFIG_HOME/rpcs3`; so XDG_CONFIG_HOME/HOME point at its parent and we
+ * assert the state root is actually an `.../rpcs3` dir.
+ */
+const buildLaunchEnv = (
+  context: ReadableResolvedLaunchContext,
+  stateRoot: string,
+): Effect.Effect<Readonly<Record<string, string>>, ResolutionError> =>
+  Effect.gen(function* () {
+    if (basename(stateRoot) !== "rpcs3") {
+      return yield* fail(
+        context,
+        `RPCS3 state.root must be an rpcs3 config dir (its basename must be "rpcs3"): ${stateRoot}`,
+      )
+    }
+    const parent = dirname(stateRoot)
+    return {
+      ...(context.env ?? {}),
+      XDG_CONFIG_HOME: parent,
+      HOME: parent,
+    }
   })
 
 /**
@@ -235,14 +263,6 @@ const resolvePolicyStorageTokens = (
     state: policy.state
       ? { root: resolveStorageTokens(policy.state.root, context.storage ?? {}) }
       : undefined,
-    env: policy.env
-      ? Object.fromEntries(
-          Object.entries(policy.env).map(([key, value]) => [
-            key,
-            resolveStorageTokens(value, context.storage ?? {}),
-          ]),
-        )
-      : undefined,
   }))
 
 const resolveStorageTokens = (value: string, storage: StorageRoots): string =>
@@ -321,10 +341,4 @@ const tryMaterialize = <Value>(
       }),
   })
 
-const mergeEnv = (
-  contextEnv: Readonly<Record<string, string>> | undefined,
-  policyEnv: Readonly<Record<string, string>> | undefined,
-): Readonly<Record<string, string>> | undefined => {
-  const merged = { ...(contextEnv ?? {}), ...(policyEnv ?? {}) }
-  return Object.keys(merged).length > 0 ? merged : undefined
-}
+

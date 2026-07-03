@@ -36,7 +36,7 @@ describe("RPCS3 readable launch integration", () => {
     try {
       const gameFolder = join(root, "Skate 3 [BLUS30464]")
       const marker = join(gameFolder, "PS3_DISC.SFB")
-      const stateRoot = join(root, "state")
+      const stateRoot = join(root, "rpcs3")
       const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
       await mkdir(gameFolder, { recursive: true })
       await writeFile(marker, "disc")
@@ -50,7 +50,6 @@ describe("RPCS3 readable launch integration", () => {
           context: context({
             contentPath: marker,
             policy: {
-              command: KORRI_RPCS3_DEFAULT_COMMAND,
               state: { root: stateRoot },
               firmware: { sentinel: firmwareSentinel },
             },
@@ -61,6 +60,7 @@ describe("RPCS3 readable launch integration", () => {
       expect(result.spec).toEqual({
         command: KORRI_RPCS3_DEFAULT_COMMAND,
         args: ["--no-gui", gameFolder],
+        env: { XDG_CONFIG_HOME: root, HOME: root },
       })
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -72,7 +72,7 @@ describe("RPCS3 readable launch integration", () => {
     try {
       const gameFolder = join(root, "Skate 3 [BLUS30464]")
       const marker = join(gameFolder, "PS3_DISC.SFB")
-      const stateRoot = join(root, "state")
+      const stateRoot = join(root, "rpcs3")
       const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
       await mkdir(gameFolder, { recursive: true })
       await writeFile(marker, "disc")
@@ -86,7 +86,6 @@ describe("RPCS3 readable launch integration", () => {
           context: context({
             contentPath: marker,
             policy: {
-              command: KORRI_RPCS3_DEFAULT_COMMAND,
               state: { root: stateRoot },
               firmware: { sentinel: firmwareSentinel },
               video: { fullscreen: false },
@@ -125,7 +124,7 @@ describe("RPCS3 readable launch integration", () => {
     try {
       const gameFolder = join(root, "Skate 3 [BLUS30464]")
       const marker = join(gameFolder, "PS3_DISC.SFB")
-      const stateRoot = join(root, "state")
+      const stateRoot = join(root, "rpcs3")
       const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
       await mkdir(gameFolder, { recursive: true })
       await writeFile(marker, "disc")
@@ -144,7 +143,6 @@ describe("RPCS3 readable launch integration", () => {
           context: context({
             contentPath: marker,
             policy: {
-              command: KORRI_RPCS3_DEFAULT_COMMAND,
               state: { root: stateRoot },
               firmware: { sentinel: firmwareSentinel },
               boot: { suppressPopups: true },
@@ -170,7 +168,7 @@ describe("RPCS3 readable launch integration", () => {
     try {
       const gameFolder = join(root, "Skate 3 [BLUS30464]")
       const marker = join(gameFolder, "PS3_DISC.SFB")
-      const stateRoot = join(root, "state")
+      const stateRoot = join(root, "rpcs3")
       const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
       await mkdir(gameFolder, { recursive: true })
       await writeFile(marker, "disc")
@@ -184,7 +182,6 @@ describe("RPCS3 readable launch integration", () => {
           context: context({
             contentPath: marker,
             policy: {
-              command: KORRI_RPCS3_DEFAULT_COMMAND,
               state: { root: stateRoot },
               firmware: { sentinel: firmwareSentinel },
             },
@@ -205,7 +202,7 @@ describe("RPCS3 readable launch integration", () => {
     try {
       const gameFolder = join(root, "Skate 3 [BLUS30464]")
       const marker = join(gameFolder, "PS3_DISC.SFB")
-      const stateRoot = join(root, "state")
+      const stateRoot = join(root, "rpcs3")
       const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
       await mkdir(gameFolder, { recursive: true })
       await writeFile(marker, "disc")
@@ -221,7 +218,6 @@ describe("RPCS3 readable launch integration", () => {
           context: context({
             contentPath: marker,
             policy: {
-              command: KORRI_RPCS3_DEFAULT_COMMAND,
               state: { root: stateRoot },
               firmware: { sentinel: firmwareSentinel },
               video: { resolution: "1280x720" },
@@ -249,7 +245,7 @@ describe("RPCS3 readable launch integration", () => {
     try {
       const gameFolder = join(root, "games", "Skate 3 [BLUS30464]")
       const marker = join(gameFolder, "PS3_DISC.SFB")
-      const stateRoot = join(root, "state")
+      const stateRoot = join(root, "rpcs3")
       const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
       await mkdir(gameFolder, { recursive: true })
       await writeFile(marker, "disc")
@@ -266,7 +262,6 @@ describe("RPCS3 readable launch integration", () => {
               "@korri:rpcs3/state": { id: "state", root: stateRoot },
             },
             policy: {
-              command: KORRI_RPCS3_DEFAULT_COMMAND,
               state: { root: "{storage:@korri:rpcs3/state}" },
               firmware: { sentinel: firmwareSentinel },
             },
@@ -294,7 +289,8 @@ describe("RPCS3 readable launch integration", () => {
     const relativeCommand = await Effect.runPromiseExit(
       materializeReadableRpcs3Launch({
         context: context({
-          policy: { command: "rpcs3", state: { root: "/tmp" } },
+          appCommand: "rpcs3",
+          policy: { state: { root: "/tmp/rpcs3" } },
         }),
       }),
     )
@@ -304,7 +300,7 @@ describe("RPCS3 readable launch integration", () => {
     try {
       const gameFolder = join(root, "Skate 3 [BLUS30464]")
       const marker = join(gameFolder, "PS3_DISC.SFB")
-      const stateRoot = join(root, "state")
+      const stateRoot = join(root, "rpcs3")
       await mkdir(gameFolder, { recursive: true })
       await writeFile(marker, "disc")
       await mkdir(stateRoot, { recursive: true })
@@ -314,7 +310,6 @@ describe("RPCS3 readable launch integration", () => {
           context: context({
             contentPath: marker,
             policy: {
-              command: KORRI_RPCS3_DEFAULT_COMMAND,
               state: { root: stateRoot },
             },
           }),
@@ -325,11 +320,43 @@ describe("RPCS3 readable launch integration", () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  it("rejects a state.root whose basename is not rpcs3", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-basename-"))
+    try {
+      const gameFolder = join(root, "Skate 3 [BLUS30464]")
+      const marker = join(gameFolder, "PS3_DISC.SFB")
+      const stateRoot = join(root, "weird")
+      const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
+      await mkdir(gameFolder, { recursive: true })
+      await writeFile(marker, "disc")
+      await mkdir(join(stateRoot, "dev_flash", "sys", "external"), {
+        recursive: true,
+      })
+      await writeFile(join(stateRoot, firmwareSentinel), "firmware")
+
+      const exit = await Effect.runPromiseExit(
+        materializeReadableRpcs3Launch({
+          context: context({
+            contentPath: marker,
+            policy: {
+              state: { root: stateRoot },
+              firmware: { sentinel: firmwareSentinel },
+            },
+          }),
+        }),
+      )
+      expectFailureReason(exit, "must be an rpcs3 config dir")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
 
 function context(
   input: {
     readonly appPlugin?: string
+    readonly appCommand?: string
     readonly contentPath?: string
     readonly policy?: unknown
     readonly storage?: ReadableResolvedLaunchContext["storage"]
@@ -344,7 +371,7 @@ function context(
     app: {
       id: KORRI_RPCS3_APP_ID,
       plugin: input.appPlugin ?? KORRI_RPCS3_PLUGIN_ID,
-      command: KORRI_RPCS3_DEFAULT_COMMAND,
+      command: input.appCommand ?? KORRI_RPCS3_DEFAULT_COMMAND,
       policy: { allowedCommands: [KORRI_RPCS3_DEFAULT_COMMAND] },
     },
     runtime: {
@@ -359,10 +386,10 @@ function context(
       : { content: { path: "/tmp/Skate 3 [BLUS30464]/PS3_DISC.SFB" } }),
     launchCompanions: {},
     plugin: {
-      [KORRI_RPCS3_PLUGIN_ID]: input.policy ?? {
-        command: KORRI_RPCS3_DEFAULT_COMMAND,
-        state: { root: "/tmp/rpcs3" },
-      },
+      [KORRI_RPCS3_PLUGIN_ID]:
+        input.policy ?? {
+          state: { root: "/tmp/rpcs3" },
+        },
     },
     storage: input.storage,
   }

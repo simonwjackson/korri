@@ -32,8 +32,8 @@ describe("RPCS3 plugin", () => {
       args: ["--no-gui", "{content.path}"],
       settings: {
         plugin: {
-          command: "",
           state: { root: `{storage:${KORRI_RPCS3_STATE_STORAGE_ID}}` },
+          boot: { suppressPopups: true, exitOnFinish: true },
         },
       },
       policy: { allowedCommands: ["/run/current-system/sw/bin/rpcs3"] },

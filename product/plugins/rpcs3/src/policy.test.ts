@@ -60,18 +60,16 @@ describe("decodeRpcs3Policy", () => {
     expect(decodeRpcs3Policy({})).toEqual({})
   })
 
-  it("retains state/firmware/command/env/extra fields the materializer consumes", () => {
-    expect(
-      decodeRpcs3Policy({
-        command: "/run/current-system/sw/bin/rpcs3",
-        env: { WAYLAND_DISPLAY: "wayland-1" },
-        extra: { args: ["--headless"] },
-      }),
-    ).toEqual({
-      command: "/run/current-system/sw/bin/rpcs3",
-      env: { WAYLAND_DISPLAY: "wayland-1" },
-      extra: { args: ["--headless"] },
-    })
+  it("rejects retired launcher-plumbing keys (command/env/extra)", () => {
+    // These moved off the authoring surface: command -> app record,
+    // env -> context.env, extra -> overrides escape hatch.
+    expectPolicyError(() =>
+      decodeRpcs3Policy({ command: "/run/current-system/sw/bin/rpcs3" }),
+    )
+    expectPolicyError(() =>
+      decodeRpcs3Policy({ env: { WAYLAND_DISPLAY: "wayland-1" } }),
+    )
+    expectPolicyError(() => decodeRpcs3Policy({ extra: { args: ["--x"] } }))
   })
 
   it("rejects an unknown curated key naming the offending path", () => {
@@ -87,10 +85,6 @@ describe("decodeRpcs3Policy", () => {
 
   it("rejects an empty state.root", () => {
     expectPolicyError(() => decodeRpcs3Policy({ state: { root: "" } }))
-  })
-
-  it("rejects a non-string extra arg", () => {
-    expectPolicyError(() => decodeRpcs3Policy({ extra: { args: ["ok", 3] } }))
   })
 })
 

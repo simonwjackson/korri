@@ -4,10 +4,6 @@ import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
 
 const STRICT = { onExcessProperty: "error" } as const
 
-const EnvironmentKey = Schema.String.check(
-  Schema.isPattern(/^[A-Za-z_][A-Za-z0-9_]*$/),
-)
-
 const NonEmptyString = (label: string) =>
   Schema.String.pipe(
     Schema.check(Schema.isMinLength(1, { message: `${label} must be non-empty` })),
@@ -69,23 +65,17 @@ const Rpcs3FirmwarePolicy = Schema.Struct({
 })
 
 /**
- * Retained transitional fields the materializer still reads. U7 migrates
- * `command` to the app record, `env` to `context.env`, and `extra.args` to
- * the `overrides` escape hatch, after which these leave the authoring surface.
+ * The authoring surface is delivery-agnostic and free of launcher plumbing:
+ * `command` is the app-record field, `env` is the standard `context.env`, and
+ * raw argv/config passthrough is the settled `overrides` escape hatch. None of
+ * those appear here.
  */
-const Rpcs3ExtraPolicy = Schema.Struct({
-  args: Schema.optional(Schema.Array(Schema.String)),
-})
-
 export const Rpcs3Policy = Schema.Struct({
   state: Schema.optional(Rpcs3StatePolicy),
   firmware: Schema.optional(Rpcs3FirmwarePolicy),
   video: Schema.optional(Rpcs3VideoPolicy),
   audio: Schema.optional(Rpcs3AudioPolicy),
   boot: Schema.optional(Rpcs3BootPolicy),
-  command: Schema.optional(Schema.String),
-  env: Schema.optional(Schema.Record(EnvironmentKey, Schema.String)),
-  extra: Schema.optional(Rpcs3ExtraPolicy),
 })
 export type Rpcs3Policy = Schema.Schema.Type<typeof Rpcs3Policy>
 
