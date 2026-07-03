@@ -73,14 +73,26 @@ There is no allowlist of "approved" resolutions, frame rates, or bitrates. A cal
 - A coerced result is reported through applied truth: the readback shows the value that actually took effect (for example `1281x721` becomes `1280x720`), so callers can see any adjustment rather than having it hidden.
 - Only genuinely impossible requests (non-positive, or beyond what the encoder can represent after clamping) return a non-success outcome, and that outcome means "could not," not "not allowed."
 
-### Never stretch
+### Scale only, never stretch
 
-Geometry is preserved end to end; the displayed image is never non-uniformly scaled.
+Adaptive changes only SCALE the resolution along the stream's fixed aspect ratio
+(same shape, fewer or more pixels). The stream aspect ratio is never changed.
+Requesting a different aspect ratio is not a supported operation: it would
+stretch the game (the game is not told to re-render at a new shape), so it is
+rejected, never stretched or reshaped.
 
-- When alignment forces a dimension nudge, both dimensions move together so the requested aspect ratio is preserved.
-- Presentation scales the decoded frame uniformly and letterboxes or pillarboxes any mismatch with the panel; it never fills by stretching.
+- Same-ratio scaling is accepted, including resolutions that match the stream
+  ratio only within even-integer rounding tolerance (for example `854x480` on a
+  16:9 stream). Genuinely different aspect ratios are rejected.
+- When alignment forces a dimension nudge, both dimensions move together so the
+  stream aspect ratio is preserved.
+- The client presents the fixed-aspect stream on the physical panel with uniform
+  scaling; where the panel's own shape differs it may pad with bars, but it never
+  fills by stretching and never reshapes the stream.
 
-Recovery (see below) also serves continuity: a change that hangs auto-reverts to the last known-good settings rather than leaving a frozen or stretched picture, and the revert is recorded in state so it is never silent.
+Recovery (see below) also serves continuity: a change that hangs auto-reverts to
+the last known-good settings rather than leaving a frozen or stretched picture,
+and the revert is recorded in state so it is never silent.
 
 ## Capability and compatibility behavior
 
