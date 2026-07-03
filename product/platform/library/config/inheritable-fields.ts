@@ -18,6 +18,9 @@
  *                         → deep merge, arrays concatenate in inheritance order,
  *                         → scalars last-win
  * - `moonlight`          → deep merge per nested key; scalars last-wins
+ * - `preferences`        → deep merge per nested key; scalars last-wins
+ *                         (launcher-neutral launch preferences; each plugin
+ *                         translates them into its own native config)
  * - `moonlight.input.devices` / `moonlight.extraArgs`
  *                         → list concat in inheritance order
  * - `moonlight.environment`
@@ -217,9 +220,54 @@ export const MoonlightPolicy = Schema.Struct({
 })
 export type MoonlightPolicy = Schema.Schema.Type<typeof MoonlightPolicy>
 
+/**
+ * Launcher-neutral launch preferences — declared once at any cascade layer
+ * under `preferences.launch`, folded like `moonlight`, and translated into
+ * each launcher's native config by that launcher's own mapping. Values are
+ * neutral; no emulator-specific strings appear here. The `preferences`
+ * namespace reserves room for future siblings (e.g. `preferences.display`
+ * for physical monitor / desktop resolution).
+ */
+const LaunchResolutionPreferences = Schema.Struct({
+  width: PositiveInteger("preferences.launch.video.resolution.width"),
+  height: PositiveInteger("preferences.launch.video.resolution.height"),
+})
+
+const LaunchVideoPreferences = Schema.Struct({
+  fullscreen: Schema.optional(Schema.Boolean),
+  resolution: Schema.optional(LaunchResolutionPreferences),
+  "aspect-ratio": Schema.optional(
+    NonEmptyString("preferences.launch.video.aspect-ratio"),
+  ),
+})
+
+const LaunchAudioPreferences = Schema.Struct({
+  volume: Schema.optional(
+    Schema.Number.check(
+      Schema.makeFilter<number>(value =>
+        Number.isFinite(value) && value >= 0 && value <= 100
+          ? undefined
+          : "preferences.launch.audio.volume must be in [0, 100]",
+      ),
+    ),
+  ),
+})
+
+export const LaunchPreferences = Schema.Struct({
+  video: Schema.optional(LaunchVideoPreferences),
+  audio: Schema.optional(LaunchAudioPreferences),
+})
+export type LaunchPreferences = Schema.Schema.Type<typeof LaunchPreferences>
+
+export const Preferences = Schema.Struct({
+  launch: Schema.optional(LaunchPreferences),
+})
+export type Preferences = Schema.Schema.Type<typeof Preferences>
+
 export const InheritableLayer = Schema.Struct({
   launch: Schema.optional(LaunchPolicy),
   moonlight: Schema.optional(MoonlightPolicy),
+  preferences: Schema.optional(Preferences),
   plugin: Schema.optional(PluginPolicyMap),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
@@ -233,6 +281,9 @@ export type ByLauncherPayload = Schema.Schema.Type<typeof ByLauncherPayload>
 
 export const decodeMoonlightPolicy = (input: unknown): MoonlightPolicy =>
   Schema.decodeUnknownSync(MoonlightPolicy)(input, STRICT)
+
+export const decodePreferences = (input: unknown): Preferences =>
+  Schema.decodeUnknownSync(Preferences)(input, STRICT)
 
 export const decodeInheritableLayer = (input: unknown): InheritableLayer =>
   Schema.decodeUnknownSync(InheritableLayer)(input, STRICT)
