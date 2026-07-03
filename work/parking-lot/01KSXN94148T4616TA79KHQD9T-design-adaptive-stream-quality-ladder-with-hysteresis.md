@@ -42,3 +42,13 @@ For heavy network fluctuations, bitrate is the bandwidth lever while FPS and res
 ## Notes
 
 Mental model captured from testing: setting FPS 120→30 at the same bitrate changed frame pacing but left bitrateKbps unchanged; to reduce bandwidth, lower bitrate explicitly. Resolution scaling should be a tertiary lever that makes low bitrate more watchable by reducing pixels/sec, not a substitute for bitrate control.
+
+2026-07-03 direction correction (user north star): this is NOT a hard list of predetermined rungs. The intended design is a continuous, math-driven controller that computes the best combination of bitrate/FPS/resolution for the measured network conditions in the moment, and scales settings up and down continuously to meet them. Requirements:
+
+- No fixed table of blessed quality levels. The controller derives targets mathematically from live measurements (throughput, latency, loss). Any internal ladder is at most a damping/fallback representation, not the source of allowed values.
+- Objective-parametrized: optimize for a chosen goal on a latency-versus-throughput/quality axis. The objective is a tunable bias, later surfaceable as a slider (GUI, deferred to the end), defaulting to fully automatic under the hood.
+- Triggered by changing conditions, including mobility/roaming (on the road, network changes) and general network fluctuation, continuously — not only at discrete thresholds.
+- Depends on accept-and-adapt: the controller emits arbitrary computed values, so the mechanism must accept any value and coerce to the nearest achievable (clamp + even-round + host letterbox), never reject for not matching a preset. Accept-and-adapt work (resolution coercion shipped; bitrate/FPS clamp 01KWN2KEGT3NGTJZ6SHDRJ3YEG; host arbitrary-ratio + letterbox 01KWN5M3AQR7TVMDDB0FHQ29GA) is the foundation this controller sits on.
+- Damping/hysteresis still applies, but around a continuous setpoint (avoid oscillation/flapping), not by snapping between named rungs.
+
+The word "ladder" in this item's title is legacy; treat the deliverable as a continuous adaptive controller with an objective bias, not a preset ladder.
