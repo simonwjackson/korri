@@ -28,11 +28,13 @@ import {
   type ShiftCineHintSpec,
   ShiftCineLegend,
 } from "../ui/molecules/ShiftCineLegend"
+import { ShiftCineLibraryTile } from "../ui/molecules/ShiftCineLibraryTile"
 import {
   ShiftStatusBar,
   type ShiftStatusBarProps,
 } from "../ui/molecules/ShiftStatusBar"
 import { ShiftCineHero } from "../ui/organisms/ShiftCineHero"
+import { ShiftCineLibraryHero } from "../ui/organisms/ShiftCineLibraryHero"
 import { ShiftCineRail } from "../ui/organisms/ShiftCineRail"
 
 export interface ShiftCinematicGame {
@@ -121,6 +123,10 @@ export interface ShiftCinematicHomeProps {
   readonly onRetry?: () => void
   /** Dismiss the launch feedback and return to browsing (B). */
   readonly onDismiss?: () => void
+  /** Open the library. When provided, a trailing "Library" affordance is
+   * appended to the rail as a distinct non-game entry; confirming it fires this.
+   * Omitted in standalone/prototype usage (no library entry). */
+  readonly onOpenLibrary?: () => void
 }
 
 export function ShiftCinematicHome({
@@ -135,6 +141,7 @@ export function ShiftCinematicHome({
   foregroundState,
   onRetry,
   onDismiss,
+  onOpenLibrary,
 }: ShiftCinematicHomeProps) {
   const [index, setIndex] = useState(0)
   const [trackX, setTrackX] = useState(0)
@@ -143,9 +150,21 @@ export function ShiftCinematicHome({
   const preloadedImageUrlsRef = useRef<Set<string>>(new Set())
   const game = games[index]
   const gameId = game?.id
+  // The rail's trailing entry is the Library affordance when a host wires
+  // `onOpenLibrary`. It is a distinct non-game slot at `games.length`, so the
+  // focus index runs one past the games when it is active.
+  const hasLibrary = Boolean(onOpenLibrary)
+  const libraryIndex = hasLibrary ? games.length : -1
+  const libraryActive = index === libraryIndex
   const [backdropArtUrl, setBackdropArtUrl] = useState(
     () => game?.wideArtUrl ?? "",
   )
+  // Focusing the Library keeps the last game's art as an ambient backdrop
+  // instead of clearing it, so the scene stays cinematic while browsing off the
+  // games.
+  const focusBackdropUrl = libraryActive
+    ? backdropArtUrl
+    : (game?.wideArtUrl ?? "")
   const tileImageWindow = useMemo(
     () =>
       shiftImageWindow({
@@ -177,7 +196,7 @@ export function ShiftCinematicHome({
   }, [preloadImageUrls])
 
   useEffect(() => {
-    const nextArtUrl = game?.wideArtUrl ?? ""
+    const nextArtUrl = focusBackdropUrl
     if (!nextArtUrl) {
       setBackdropArtUrl("")
       return
@@ -202,7 +221,7 @@ export function ShiftCinematicHome({
     return () => {
       cancelled = true
     }
-  }, [game?.wideArtUrl, backdropArtUrl])
+  }, [focusBackdropUrl, backdropArtUrl])
 
   // The scene reacts to the launch lifecycle in place — no modal. When a status
   // is showing, the hero + legend morph and the buttons remap (A = Retry / B =
@@ -215,13 +234,19 @@ export function ShiftCinematicHome({
     status?.tone === "failed" || status?.tone === "unavailable"
 
   const confirm = useCallback(() => {
+    // The Library slot owns its confirm regardless of any lingering launch
+    // status, so focusing it and pressing A always opens the library.
+    if (libraryActive) {
+      onOpenLibrary?.()
+      return
+    }
     if (status) {
       if (status.canRetry) onRetry?.()
       return
     }
     const focused = games[index]
     if (focused) onLaunch?.(focused.id)
-  }, [status, onRetry, games, index, onLaunch])
+  }, [libraryActive, onOpenLibrary, status, onRetry, games, index, onLaunch])
 
   const dismiss = useCallback(() => {
     if (showActions) onDismiss?.()
@@ -284,26 +309,30 @@ export function ShiftCinematicHome({
       ?.focus({ preventScroll: true })
   }, [])
 
-  if (!game) return null
-  const resuming = Boolean(game.lastPlayedLabel)
+  // With the Library affordance a game may not sit under focus (the trailing
+  // slot has no game); only bail when neither a game nor the Library is active.
+  if (!game && !libraryActive) return null
+  const resuming = Boolean(game?.lastPlayedLabel)
 
-  // The legend's hint set changes with launch state: browsing shows
-  // Play/Options/Favorite; a shown failure shows Retry/Back; a non-actionable
-  // status (launching/launched) shows none.
-  const legendHints: readonly ShiftCineHintSpec[] | null = status
-    ? showActions
-      ? [
-          ...(status.canRetry
-            ? [{ glyph: "A", label: "Retry", primary: true }]
-            : []),
-          { glyph: "B", label: "Back", primary: !status.canRetry },
+  // The legend's hint set changes with focus and launch state: the Library slot
+  // shows a single Open; browsing shows Play/Options/Favorite; a shown failure
+  // shows Retry/Back; a non-actionable status (launching/launched) shows none.
+  const legendHints: readonly ShiftCineHintSpec[] | null = libraryActive
+    ? [{ glyph: "A", label: "Open", primary: true }]
+    : status
+      ? showActions
+        ? [
+            ...(status.canRetry
+              ? [{ glyph: "A", label: "Retry", primary: true }]
+              : []),
+            { glyph: "B", label: "Back", primary: !status.canRetry },
+          ]
+        : null
+      : [
+          { glyph: "A", label: resuming ? "Continue" : "Play", primary: true },
+          { glyph: "X", label: "Options" },
+          { glyph: "Y", label: "Favorite" },
         ]
-      : null
-    : [
-        { glyph: "A", label: resuming ? "Continue" : "Play", primary: true },
-        { glyph: "X", label: "Options" },
-        { glyph: "Y", label: "Favorite" },
-      ]
 
   return (
     <div
@@ -313,7 +342,7 @@ export function ShiftCinematicHome({
     >
       <ShiftCineBackdrop
         artUrl={backdropArtUrl}
-        cooled={status?.tone === "failed"}
+        cooled={!libraryActive && status?.tone === "failed"}
       />
 
       <ShiftStatusBar
@@ -325,7 +354,11 @@ export function ShiftCinematicHome({
 
       <div className="shift-cine-stage" ref={stageRef}>
         <div className="shift-cine-midrow">
-          <ShiftCineHero game={game} status={status} resuming={resuming} />
+          {libraryActive ? (
+            <ShiftCineLibraryHero />
+          ) : game ? (
+            <ShiftCineHero game={game} status={status} resuming={resuming} />
+          ) : null}
         </div>
 
         {/* Button hints — their own right-aligned row above the rail, so they
@@ -340,6 +373,16 @@ export function ShiftCinematicHome({
           imageWindow={tileImageWindow}
           onTileFocus={setIndex}
           onTileActivate={activate}
+          cap={
+            hasLibrary ? (
+              <ShiftCineLibraryTile
+                index={games.length}
+                focused={libraryActive}
+                onFocus={() => setIndex(games.length)}
+                onActivate={() => activate(games.length)}
+              />
+            ) : undefined
+          }
         />
       </div>
     </div>

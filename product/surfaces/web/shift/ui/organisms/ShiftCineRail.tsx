@@ -1,5 +1,5 @@
 import { motion } from "framer-motion"
-import type { Ref } from "react"
+import type { ReactNode, Ref } from "react"
 import {
   SHIFT_DESIGN_PARTS,
   shiftDesignPartAttrs,
@@ -20,7 +20,10 @@ export interface ShiftCineRailGame {
  * The Switch-style rail: tiles laid in a track that the owner shifts so the
  * focused tile stays centered (`trackX`, spring-animated). The rail is
  * presentational — focus and centering live in the owning screen; it forwards
- * `trackRef` for the centering math and reports tile focus/activation up.
+ * `trackRef` for the centering math and reports tile focus/activation up. An
+ * optional `cap` renders after the game tiles for a trailing non-game entry
+ * (e.g. the Library affordance); it is a self-contained focusable node, so the
+ * rail stays purely presentational.
  */
 export function ShiftCineRail({
   games,
@@ -30,6 +33,7 @@ export function ShiftCineRail({
   imageWindow,
   onTileFocus,
   onTileActivate,
+  cap,
 }: {
   readonly games: readonly ShiftCineRailGame[]
   readonly index: number
@@ -38,6 +42,7 @@ export function ShiftCineRail({
   readonly imageWindow?: { readonly start: number; readonly end: number }
   readonly onTileFocus: (index: number) => void
   readonly onTileActivate: (index: number) => void
+  readonly cap?: ReactNode
 }) {
   return (
     <div
@@ -65,6 +70,7 @@ export function ShiftCineRail({
             onActivate={() => onTileActivate(i)}
           />
         ))}
+        {cap}
       </motion.div>
     </div>
   )

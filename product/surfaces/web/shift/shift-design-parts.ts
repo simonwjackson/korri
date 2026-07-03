@@ -13,6 +13,7 @@ export interface ShiftDesignPart {
 
 export const SHIFT_DESIGN_PARTS = {
   home: { id: "shift.home", layer: "page", name: "Home" },
+  library: { id: "shift.library", layer: "page", name: "Library" },
   backdrop: {
     id: "shift.cine-backdrop",
     layer: "molecule",
@@ -39,6 +40,16 @@ export const SHIFT_DESIGN_PARTS = {
   },
   rail: { id: "shift.cine-rail", layer: "organism", name: "Rail" },
   tile: { id: "shift.cine-tile", layer: "molecule", name: "Tile" },
+  cineLibraryTile: {
+    id: "shift.cine-library-tile",
+    layer: "molecule",
+    name: "Library Rail Tile",
+  },
+  cineLibraryHero: {
+    id: "shift.cine-library-hero",
+    layer: "organism",
+    name: "Library Rail Hero",
+  },
   detailActions: {
     id: "shift.detail-actions",
     layer: "molecule",

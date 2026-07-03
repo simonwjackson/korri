@@ -135,6 +135,29 @@ describe("ShiftCinematicHome onLaunch", () => {
   })
 })
 
+describe("ShiftCinematicHome library affordance", () => {
+  it("appends a trailing Library entry and opens it on confirm", () => {
+    const onOpenLibrary = mock(() => undefined)
+    render(<ShiftCinematicHome games={games} onOpenLibrary={onOpenLibrary} />)
+
+    const libraryTile = screen.getByRole("button", { name: "Library" })
+    // Mount focus sits on Game A, so the first activation only focuses the
+    // trailing slot (it does not open).
+    fireEvent.click(libraryTile)
+    expect(onOpenLibrary).not.toHaveBeenCalled()
+    expect(screen.getByText("Browse every game")).toBeTruthy()
+
+    // Confirming the focused Library slot opens the library.
+    fireEvent.click(libraryTile)
+    expect(onOpenLibrary).toHaveBeenCalledTimes(1)
+  })
+
+  it("omits the Library entry when no handler is provided", () => {
+    render(<ShiftCinematicHome games={games} />)
+    expect(screen.queryByRole("button", { name: "Library" })).toBeNull()
+  })
+})
+
 describe("ShiftCinematicHome image windows", () => {
   it("selects a bounded image window around focus", () => {
     expect(shiftImageWindow({ index: 0, total: 30, radius: 9 })).toEqual({

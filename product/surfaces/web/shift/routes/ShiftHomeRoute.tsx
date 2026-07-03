@@ -16,6 +16,7 @@ import { useOptionalDualScreenSession } from "@platform/react/display/dual-scree
 import { foregroundSessionGateStateAtom } from "@platform/react/library/library-atoms"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import { useNavigate } from "@tanstack/react-router"
 import { Option } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import {
@@ -227,6 +228,7 @@ function NavigatingReadyBody({
 }) {
   const ready = useShiftCatalogCase("Ready")
   const launch = useLibraryLaunchController()
+  const navigate = useNavigate()
   const deviceState = useAtomValue(deviceStateAtom)
   const clockIso = useAtomValue(shiftClockIsoAtom)
   const network = useAtomValue(shiftNetworkReadingAtom)
@@ -290,6 +292,7 @@ function NavigatingReadyBody({
           onLaunch={makeLaunchHandler(games, launch.start)}
           onRetry={launch.retry}
           onDismiss={() => setAcked(true)}
+          onOpenLibrary={() => navigate({ to: "/library" })}
         />
       ) : null,
   })

@@ -685,6 +685,52 @@
 	}
 }
 
+/* The rail's trailing Library affordance: same tile frame + focus lift, but a
+ * quiet gradient panel with a library motif instead of cover art, so it reads
+ * as a destination rather than a game. */
+[data-shift-home] .shift-cine-tile-library {
+	opacity: 0.62;
+	background: linear-gradient(
+		155deg,
+		color-mix(in srgb, var(--shift-accent) 22%, rgba(255, 255, 255, 0.04)),
+		rgba(255, 255, 255, 0.04)
+	);
+}
+
+[data-shift-home] .shift-cine-tile-library[data-focused] {
+	opacity: 1;
+}
+
+[data-shift-home] .shift-cine-tile-library-inner {
+	display: flex;
+	height: 100%;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--shift-space-2);
+	color: var(--shift-ink);
+}
+
+[data-shift-home] .shift-cine-tile-library-icon {
+	width: 42%;
+	height: auto;
+	stroke-width: 1.5;
+	opacity: 0.92;
+}
+
+[data-shift-home] .shift-cine-tile-library-label {
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+[data-shift-home] .shift-cine-library-blurb {
+	margin: 0;
+	font-size: var(--shift-text-body);
+	color: var(--shift-ink-dim);
+	text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
+}
+
 /* ----- Cinematic launch feedback (in-scene; see launch-failure-copy.ts) ----- */
 [data-shift-home] {
 	--shift-danger: #ff7a78;
