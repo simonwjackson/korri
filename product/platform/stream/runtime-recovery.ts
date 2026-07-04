@@ -13,17 +13,36 @@
 // reducer is intentionally NOT an external poller of screen state; it only
 // consumes command outcomes that already flow over local-control.
 
-import type {
-  MoonlightControlCommandMethod,
-  MoonlightControlRequestId,
-  MoonlightControlRuntimeSettingsStatus,
-} from "./moonlight-control-protocol"
+// Protocol-status types used by this reducer are defined locally below rather
+// than imported from the Moonlight plugin, so the platform recovery policy stays
+// streamer-agnostic. A streamer adapter maps its own wire types onto these.
 
 /** Mutation commands carry a value we may need to restore. IDR does not. */
 export type RuntimeMutationCommand =
   | "runtime.setBitrate"
   | "runtime.setFps"
   | "runtime.setResolution"
+
+/** Runtime control command methods carried on the local-control channel. */
+export type RuntimeControlCommandMethod =
+  | RuntimeMutationCommand
+  | "runtime.requestIdr"
+
+/** JSON-RPC request id (string or number) — the native mutation identifier. */
+export type RuntimeRecoveryRequestId = string | number
+
+/** Terminal (and the non-terminal "accepted") status for a runtime command. */
+export type RuntimeCommandStatus =
+  | "accepted"
+  | "applied"
+  | "failed"
+  | "invalid"
+  | "disabled"
+  | "unsupported"
+  | "timed-out"
+  | "not-streaming"
+  | "unauthorized"
+  | "conflict"
 
 /** The value a mutation applied: a scalar (bitrate/FPS) or a resolution. */
 export type RuntimeSettingValue =
@@ -58,8 +77,8 @@ export const initialRuntimeRecoveryState: RuntimeRecoveryState = {
 /** A command we dispatched (after its command.accepted returned a requestId). */
 export interface RuntimeRecoverySentInput {
   readonly kind: "sent"
-  readonly requestId: MoonlightControlRequestId
-  readonly command: MoonlightControlCommandMethod
+  readonly requestId: RuntimeRecoveryRequestId
+  readonly command: RuntimeControlCommandMethod
   readonly value: RuntimeSettingValue
   /** Set when replaying a revert so a failed revert does not re-revert. */
   readonly isRevert?: boolean
@@ -68,9 +87,9 @@ export interface RuntimeRecoverySentInput {
 /** A terminal runtime.commandResult outcome for a previously-sent command. */
 export interface RuntimeRecoveryResultInput {
   readonly kind: "result"
-  readonly requestId: MoonlightControlRequestId
-  readonly command: MoonlightControlCommandMethod
-  readonly status: MoonlightControlRuntimeSettingsStatus
+  readonly requestId: RuntimeRecoveryRequestId
+  readonly command: RuntimeControlCommandMethod
+  readonly status: RuntimeCommandStatus
 }
 
 export type RuntimeRecoveryInput =
@@ -110,7 +129,7 @@ export interface RuntimeRecoveryStep {
 }
 
 function isMutationCommand(
-  command: MoonlightControlCommandMethod,
+  command: RuntimeControlCommandMethod,
 ): command is RuntimeMutationCommand {
   return (
     command === "runtime.setBitrate" ||
@@ -120,7 +139,7 @@ function isMutationCommand(
 }
 
 function isStall(
-  status: MoonlightControlRuntimeSettingsStatus,
+  status: RuntimeCommandStatus,
 ): status is "failed" | "timed-out" {
   return status === "failed" || status === "timed-out"
 }
