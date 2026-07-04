@@ -83,14 +83,15 @@ in
         ];
         systems = [ "ps3" ];
         policy.allowedCommands = [ rpcs3Command ];
+        # `command` is intentionally NOT rendered into settings.plugin: the
+        # Rpcs3Policy authoring surface is delivery-agnostic (command is the
+        # app-record field above) and the daemon rejects unexpected policy keys.
         settings.plugin = {
-          command = rpcs3Command;
           state.root = "{storage:@korri:rpcs3/state}";
           firmware.sentinel = cfg.firmwareSentinel;
         };
       };
       host.plugin."@korri:rpcs3" = {
-        command = rpcs3Command;
         state.root = "{storage:@korri:rpcs3/state}";
         firmware.sentinel = cfg.firmwareSentinel;
       };
