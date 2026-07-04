@@ -267,7 +267,9 @@ describe("korri CLI", () => {
     try {
       const config = join(configRoot, "korri.yaml")
       await writeFile(join(root, "Metroid Fusion.gba"), "")
-      delete process.env.KORRI_ENABLED_PLUGINS
+      // With KORRI_ENABLED_PLUGINS unset, the interactive CLI enables the full
+      // first-party set; disabling RetroArch for Scout must be explicit.
+      process.env.KORRI_ENABLED_PLUGINS = "@korri:gamescope"
       process.env.KORRI_FIND_BIN = resolveFromPath("find")
 
       const result = await captureCliOutput(() =>

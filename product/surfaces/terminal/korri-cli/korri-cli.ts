@@ -6,7 +6,7 @@ import { KorriControlLayerLiveWithPlugins } from "@platform/control/korri-contro
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import { LibrarySource } from "@platform/library/library-services"
 import { createKorriControlRpc } from "@product/apps/portal/control/korri-control-rpc"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
+import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugin-host/acquisition"
 import { PluginLibrarySourceLayerLive } from "@product/plugin-host/library-source-layer"
 import { Effect, Layer, Option } from "effect"
@@ -291,7 +291,7 @@ const AcquisitionLayerLive = makeLiveAcquisitionLayer({
 })
 
 const KorriControlInfrastructureLive = KorriControlLayerLiveWithPlugins(
-  createFirstPartyPluginRegistryFromEnv(process.env),
+  createInteractiveFirstPartyPluginRegistry(process.env),
 ).pipe(
   Layer.provideMerge(
     Layer.mergeAll(PluginLibrarySourceLayerLive, LauncherLayerLive),

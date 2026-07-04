@@ -18,7 +18,7 @@ import {
   dispatchStreamLaunch,
   type StreamLaunchRequest,
 } from "@platform/stream/streamer-client"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
+import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
 import { Effect } from "effect"
 
 const DEFAULT_STARTUP_OBSERVE_MS = 750
@@ -240,7 +240,7 @@ function resolveStreamRegistry(
   options: Pick<MoonlightLaunchOptions, "pluginRegistry">,
 ): PluginRegistry {
   return (
-    options.pluginRegistry ?? createFirstPartyPluginRegistryFromEnv(process.env)
+    options.pluginRegistry ?? createInteractiveFirstPartyPluginRegistry(process.env)
   )
 }
 
@@ -254,7 +254,7 @@ async function composeLaunchSpecWithCompanions(
       launchCompanions: options.launchCompanions,
       registry:
         options.pluginRegistry ??
-        createFirstPartyPluginRegistryFromEnv(process.env),
+        createInteractiveFirstPartyPluginRegistry(process.env),
       options: { launchId: "moonlight-compose" },
     }),
   )
