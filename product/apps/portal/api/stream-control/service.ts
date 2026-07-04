@@ -12,6 +12,7 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@platform/plugin/registry"
+import type { ActiveStreamControlSessionRegistry } from "@platform/stream/stream-session"
 import {
   type StreamControlCapability,
   streamControlCapabilities,
@@ -58,6 +59,7 @@ export interface StreamControlDependencies {
   readonly writeFile?: (path: string, content: string) => Promise<void>
   readonly now?: () => Date
   readonly deviceState?: DeviceStateService
+  readonly activeStreamControlSessionRegistry?: ActiveStreamControlSessionRegistry
 }
 
 export interface StreamControlService {
@@ -91,6 +93,7 @@ interface Runtime {
   readonly record: (event: unknown) => Promise<void>
   readonly deviceControl: DeviceControlService
   readonly deviceState?: DeviceStateService
+  readonly activeStreamControlSessionRegistry?: ActiveStreamControlSessionRegistry
 }
 
 interface PluginStreamControlDescription {
@@ -177,6 +180,12 @@ function createRuntime(
     pluginRegistry: deps.pluginRegistry ?? createPluginRegistry([]),
     deviceControl,
     ...(deps.deviceState ? { deviceState: deps.deviceState } : {}),
+    ...(deps.activeStreamControlSessionRegistry
+      ? {
+          activeStreamControlSessionRegistry:
+            deps.activeStreamControlSessionRegistry,
+        }
+      : {}),
     record: createStreamControlEventRecorder({
       artifactDir: options.artifactDir,
       mkdir: mkdirImpl,
@@ -235,7 +244,11 @@ function applyAction(
   return runPluginHandler(handler, {
     operation: "stream-control.apply",
     provider: ref.provider,
-    input: { action, payload: requested },
+    input: {
+      action,
+      payload: requested,
+      ...activeStreamControlSocketInput(runtime),
+    },
   }).pipe(
     Effect.map(response =>
       recordCommandOutcome(
@@ -451,7 +464,7 @@ async function describePluginStreamControls(runtime: Runtime): Promise<
         runPluginHandler(handler, {
           operation: "stream-control.describe",
           provider: plugin.id,
-          input: {},
+          input: activeStreamControlSocketInput(runtime),
         }) as Effect.Effect<PluginStreamControlDescription, unknown>,
       )
       descriptions.push({ provider: plugin.id, description })
@@ -474,6 +487,15 @@ function streamControlHandler(
   operation: "stream-control.describe" | "stream-control.apply",
 ): PluginHandler | undefined {
   return plugin.handlers.find(handler => handler.operation === operation)
+}
+
+function activeStreamControlSocketInput(runtime: Runtime): {
+  readonly socketPath?: string
+} {
+  const socketPath = runtime.activeStreamControlSessionRegistry
+    ?.current()
+    ?.socketPath.trim()
+  return socketPath ? { socketPath } : {}
 }
 
 function numericPayloadField(

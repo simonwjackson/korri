@@ -6,6 +6,7 @@ import { ValidationError } from "@platform/api/rpc/errors"
 import { unknownDeviceState } from "@platform/device/device-facts"
 import { plugin, pluginRecordId } from "@platform/plugin"
 import { createPluginRegistry } from "@platform/plugin/registry"
+import { createActiveStreamControlSessionRegistry } from "@platform/stream/stream-session"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import { moonlightPlugin } from "@product/plugins/moonlight"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
@@ -143,6 +144,43 @@ describe("app.stream-control RPC handlers", () => {
           outcome: { kind: "single", status: "pending" },
         })
         expect(requests.map(request => request.method)).toEqual([
+          "runtime.setBitrate",
+        ])
+      } finally {
+        delete process.env.MOONLIGHT_LOCAL_CONTROL_SOCKET
+      }
+    })
+  })
+
+  it("uses the active stream session socket instead of stale env socket", async () => {
+    await withMoonlightControlServer(async active => {
+      const staleSocket = join(
+        tmpdir(),
+        `korri-stale-moonlight-control-${crypto.randomUUID()}.sock`,
+      )
+      process.env.MOONLIGHT_LOCAL_CONTROL_SOCKET = staleSocket
+      try {
+        const registry = createActiveStreamControlSessionRegistry()
+        registry.register({
+          sessionId: "stream-1",
+          socketPath: active.socketPath,
+        })
+        const service = createStreamControlService(
+          {},
+          {
+            pluginRegistry: moonlightRegistry(),
+            activeStreamControlSessionRegistry: registry,
+          },
+        )
+
+        await Effect.runPromise(
+          service.applyAction({
+            action: "@korri:moonlight/bitrate.set",
+            payload: { bitrateKbps: 7_000 },
+          }),
+        )
+
+        expect(active.requests.map(request => request.method)).toEqual([
           "runtime.setBitrate",
         ])
       } finally {
