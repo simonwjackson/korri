@@ -1,5 +1,7 @@
-import type { MoonlightControlClient } from "@platform/stream/moonlight-control-client"
-import type { MoonlightControlTouchBounds } from "@platform/stream/moonlight-control-protocol"
+import type {
+  StreamControlSession,
+  StreamControlTouchBounds,
+} from "@platform/stream-control/stream-control-session"
 import type { CurrentStreamSurfaceGeometry } from "./game-stream-fullscreen"
 import {
   type ContentModeFacts,
@@ -28,8 +30,32 @@ export interface TouchBoundsCoordinatorHandle {
   readonly lastFailure: () => TouchBoundsCoordinatorFailure | undefined
 }
 
+/**
+ * Local structural views of the control session's opaque hello/state responses.
+ * The coordinator reads only capability + calibration fields, so it needs no
+ * streamer-module import (keeps the plugin removable).
+ */
+interface ControlHelloView {
+  readonly result?: {
+    readonly _tag?: string
+    readonly capabilities?: { readonly commands?: readonly string[] }
+  }
+}
+
+interface ControlStateView {
+  readonly result?: {
+    readonly _tag?: string
+    readonly input?: {
+      readonly absoluteTouch?: {
+        readonly enabled?: boolean
+        readonly absRange?: TouchAbsRange
+      }
+    }
+  }
+}
+
 export interface TouchBoundsCoordinatorOptions {
-  readonly moonlight: MoonlightControlClient
+  readonly moonlight: StreamControlSession
   readonly readGeometry: () => Promise<CurrentStreamSurfaceGeometry>
   readonly readContentMode?: () => Promise<ContentModeFacts | undefined>
   readonly scalingPolicy?: TouchBoundsScalingPolicy
@@ -71,22 +97,24 @@ export async function startTouchBoundsCoordinator(
   return handle
 
   async function initialize(): Promise<void> {
-    const hello = await options.moonlight.hello()
-    if (hello.result._tag !== "protocol.hello") {
+    const hello = (await options.moonlight.hello()) as ControlHelloView
+    if (hello.result?._tag !== "protocol.hello") {
       lastFailure = { reason: "missing-capability", message: "hello failed" }
       return
     }
-    if (!hello.result.capabilities.commands.includes("input.setTouchBounds")) {
+    if (
+      !hello.result.capabilities?.commands?.includes("input.setTouchBounds")
+    ) {
       lastFailure = { reason: "missing-capability" }
       return
     }
 
-    const state = await options.moonlight.state()
-    if (state.result._tag !== "state.snapshot") {
+    const state = (await options.moonlight.state()) as ControlStateView
+    if (state.result?._tag !== "state.snapshot") {
       lastFailure = { reason: "missing-calibration", message: "state failed" }
       return
     }
-    const absoluteTouch = state.result.input.absoluteTouch
+    const absoluteTouch = state.result.input?.absoluteTouch
     if (!absoluteTouch?.enabled) {
       lastFailure = { reason: "absolute-touch-disabled" }
       return
@@ -150,6 +178,6 @@ function sameBounds(a: TouchBounds | undefined, b: TouchBounds): boolean {
   return !!a && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h
 }
 
-function toMoonlightBounds(bounds: TouchBounds): MoonlightControlTouchBounds {
+function toMoonlightBounds(bounds: TouchBounds): StreamControlTouchBounds {
   return { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }
 }
