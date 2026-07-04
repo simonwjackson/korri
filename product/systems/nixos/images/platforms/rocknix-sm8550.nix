@@ -665,7 +665,10 @@ in
   # closure-copy step to accept unsigned paths built on the remote build host,
   # the deploy user must be a trusted Nix user; otherwise `nix copy` rejects
   # them with "cannot add path ... untrusted".
-  nix.settings.trusted-users = [ "root" runtime.user ];
+  nix.settings.trusted-users = [
+    "root"
+    runtime.user
+  ];
 
   services.korri.steam = {
     enable = true;
@@ -865,6 +868,11 @@ in
         DISPLAY = ":0";
         GDK_BACKEND = "x11";
         PULSE_SERVER = korriPulseServer;
+        # Headless stream adaptation is wired but remains off until the
+        # device-validation gate confirms recovery timing and visual geometry.
+        KORRI_STREAM_ADAPTIVE_ENABLED = "0";
+        KORRI_STREAM_ADAPTIVE_OBJECTIVE_BIAS = "0.5";
+        KORRI_STREAM_ADAPTIVE_TICK_MS = "5000";
       };
   };
 

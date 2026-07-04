@@ -145,12 +145,35 @@ check `host.moonlight.control.authority` for that host/game in the config graph.
 
 ---
 
+## Runtime recovery and headless adaptation
+
+Korri-launched Moonlight sessions now start a session-scoped runtime supervisor
+on the same per-session local-control socket used by `korri stream show`. The
+supervisor subscribes once, starts the in-client health monitor, seeds
+known-good runtime settings from applied state, and exposes the safe dispatch
+path used by the adaptive controller. It closes with the managed Moonlight
+session, so a later stream cannot accidentally reuse an old socket.
+
+Automatic adaptation is **off by default** on SM8550 until device validation is
+complete:
+
+- `KORRI_STREAM_ADAPTIVE_ENABLED=0` (default/off)
+- `KORRI_STREAM_ADAPTIVE_OBJECTIVE_BIAS=0.5` (0 = latency-biased, 1 = quality-biased)
+- `KORRI_STREAM_ADAPTIVE_TICK_MS=5000`
+
+When enabled for validation, the controller consumes fresh `quality.sample`
+summaries and dispatches at most one setting family per tick through recovery:
+bitrate first, FPS second, same-aspect resolution third. It pauses on stale or
+missing samples, pending mutations, and non-live sessions. Adaptive and recovery
+decisions are logged with `korri stream adaptive:` / `korri stream recovery:`
+prefixes in the launching unit journal.
+
 ## Rollback / restore
 
-There is no protocol auto-rollback. Restore is a normal explicit command back
-to the launch baseline. `korri stream show` reports current applied values;
-send explicit `bitrate`/`fps`/`resolution` commands to return to the baseline
-the stream launched with.
+For operator-driven CLI changes, restore remains a normal explicit command back
+to the launch baseline. `korri stream show` reports current applied values; send
+explicit `bitrate`/`fps`/`resolution` commands to return to the baseline the
+stream launched with.
 
 ```
 ssh bandai korri stream bitrate 13388
@@ -160,10 +183,33 @@ ssh bandai korri stream resolution 1920x1080
 
 ---
 
+## Device validation matrix for enabling adaptation
+
+Keep `KORRI_STREAM_ADAPTIVE_ENABLED=0` until a human validates these on the
+screen with the patched client and host builds:
+
+1. **Fresh telemetry:** `korri stream show` displays fresh `quality.sample`
+   values while a stream is live; samples go stale after stopping.
+2. **Decode-stall/recovery:** a failed or timed-out adaptive resolution change
+   emits a structured recovery event and returns to the last known-good setting.
+3. **Never-stretch geometry:** same-aspect resolutions such as `854x480` and
+   `1280x720` render without stretching; different-aspect requests remain
+   rejected or coerced only when they preserve the fixed ratio.
+4. **Bandwidth collapse/recovery:** constrained bandwidth lowers bitrate first
+   and later raises it gradually when delivery recovers.
+5. **Jitter/loss bursts:** transient RTT/loss spikes do not cause rapid
+   oscillation; pending mutations pause later ticks.
+6. **AP roam/link flap:** stale/no-data periods make the controller dormant;
+   it resumes only after fresh samples return.
+7. **Disconnect/reconnect:** old sessions close their runtime supervisor; the
+   next launch owns a new active socket and fresh known-good baseline.
+
 ## Support boundary
 
 - Product-supported: patched `sunshine-korri` + `moonlight-embedded-korri`
   series, H.264 VAAPI host path, validated Korri client/device profile.
+- Automatic adaptation is validation-gated and off by default until the matrix
+  above passes on target hardware.
 - Other encoders, codecs, clients, host builds, and launch modes are not
   product-supported until separately validated. Diagnostic probes are labeled
   diagnostic, not support claims.
