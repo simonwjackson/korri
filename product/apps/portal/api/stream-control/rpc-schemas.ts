@@ -1,4 +1,4 @@
-import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "@platform/stream/moonlight-control-protocol"
+import { STREAM_CONTROL_LIMITS } from "@platform/stream-control/limits"
 import { Schema } from "effect"
 
 const numberRange = (min: number, max: number, label: string) =>
@@ -10,23 +10,23 @@ const numberRange = (min: number, max: number, label: string) =>
 
 export const RuntimeBitrateKbps = Schema.Number.check(
   numberRange(
-    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps.min,
-    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps.max,
+    STREAM_CONTROL_LIMITS.bitrateKbps.min,
+    STREAM_CONTROL_LIMITS.bitrateKbps.max,
     "bitrateKbps",
   ),
 )
 export const RuntimeFps = Schema.Number.check(numberRange(30, 120, "fps"))
 export const RuntimeMoonlightResolutionWidth = Schema.Number.check(
   numberRange(
-    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.width.min,
-    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.width.max,
+    STREAM_CONTROL_LIMITS.resolution.width.min,
+    STREAM_CONTROL_LIMITS.resolution.width.max,
     "width",
   ),
 )
 export const RuntimeMoonlightResolutionHeight = Schema.Number.check(
   numberRange(
-    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.min,
-    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.max,
+    STREAM_CONTROL_LIMITS.resolution.height.min,
+    STREAM_CONTROL_LIMITS.resolution.height.max,
     "height",
   ),
 )

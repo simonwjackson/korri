@@ -13,14 +13,14 @@ import {
   type PluginRegistry,
 } from "@platform/plugin/registry"
 import {
-  connectMoonlightControl,
-  type MoonlightControlClient,
-} from "@platform/stream/moonlight-control-client"
-import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "@platform/stream/moonlight-control-protocol"
-import {
   type StreamControlCapability,
   streamControlCapabilities,
 } from "@platform/stream-control/control-contract"
+import { STREAM_CONTROL_LIMITS } from "@platform/stream-control/limits"
+import {
+  connectStreamControlSession,
+  type StreamControlSession,
+} from "@platform/stream-control/stream-control-session"
 import {
   closeClient,
   createStreamControlEventRecorder,
@@ -61,7 +61,7 @@ export interface StreamControlDependencies {
   readonly pluginRegistry?: PluginRegistry
   readonly connectMoonlight?: (
     socketPath: string,
-  ) => Promise<MoonlightControlClient>
+  ) => Promise<StreamControlSession>
   readonly appendFile?: (path: string, content: string) => Promise<void>
   readonly mkdir?: (
     path: string,
@@ -123,7 +123,7 @@ interface Runtime {
   readonly pluginRegistry: PluginRegistry
   readonly connectMoonlight: (
     socketPath: string,
-  ) => Promise<MoonlightControlClient>
+  ) => Promise<StreamControlSession>
   readonly record: (event: unknown) => Promise<void>
   readonly deviceControl: DeviceControlService
   readonly deviceState?: DeviceStateService
@@ -176,8 +176,8 @@ export function createStreamControlService(
       range(
         "bitrateKbps",
         payload.bitrateKbps,
-        MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps.min,
-        MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps.max,
+        STREAM_CONTROL_LIMITS.bitrateKbps.min,
+        STREAM_CONTROL_LIMITS.bitrateKbps.max,
       ).pipe(
         Effect.flatMap(() =>
           runMoonlight(runtime, "moonlight.bitrate", payload, client =>
@@ -243,7 +243,11 @@ function createRuntime(
     pluginRegistry: deps.pluginRegistry ?? createPluginRegistry([]),
     connectMoonlight:
       deps.connectMoonlight ??
-      ((socketPath: string) => connectMoonlightControl({ socketPath })),
+      ((socketPath: string) =>
+        connectStreamControlSession(
+          deps.pluginRegistry ?? createPluginRegistry([]),
+          { socketPath },
+        )),
     deviceControl,
     ...(deps.deviceState ? { deviceState: deps.deviceState } : {}),
     record: createStreamControlEventRecorder({
@@ -356,7 +360,7 @@ function runMoonlight(
   runtime: Runtime,
   action: string,
   requested: StreamControlRequestedPayload,
-  run: (client: MoonlightControlClient) => Promise<unknown>,
+  run: (client: StreamControlSession) => Promise<unknown>,
 ) {
   return runSocketAction({
     socketPath: runtime.options.moonlightSocketPath,
@@ -676,15 +680,15 @@ function moonlightResolution(payload: {
   return range(
     "width",
     payload.width,
-    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.width.min,
-    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.width.max,
+    STREAM_CONTROL_LIMITS.resolution.width.min,
+    STREAM_CONTROL_LIMITS.resolution.width.max,
   ).pipe(
     Effect.andThen(
       range(
         "height",
         payload.height,
-        MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.min,
-        MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.max,
+        STREAM_CONTROL_LIMITS.resolution.height.min,
+        STREAM_CONTROL_LIMITS.resolution.height.max,
       ),
     ),
   )
