@@ -159,14 +159,14 @@ pkgs.lib.optionalAttrs isX86Linux {
         readmePath = ../../../../product/vendor/sunshine-korri/README.md;
         sunshinePackagePath = ../../../../product/vendor/sunshine-korri/package.nix;
         moonlightPatchPaths = [
-          ../../../../product/vendor/moonlight-embedded-korri/patches/0005a-add-sunshine-runtime-settings-protocol-sender.patch
-          ../../../../product/vendor/moonlight-embedded-korri/patches/0005b-track-sunshine-runtime-settings-command-outcomes.patch
-          ../../../../product/vendor/moonlight-embedded-korri/patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
-          ../../../../product/vendor/moonlight-embedded-korri/patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
-          ../../../../product/vendor/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
-          ../../../../product/vendor/moonlight-embedded-korri/patches/0011-reset-sdl-presenter-on-output-size-change.patch
+          ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0005a-add-sunshine-runtime-settings-protocol-sender.patch
+          ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0005b-track-sunshine-runtime-settings-command-outcomes.patch
+          ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
+          ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
+          ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
+          ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0011-reset-sdl-presenter-on-output-size-change.patch
         ];
-        moonlightReadmePath = ../../../../product/vendor/moonlight-embedded-korri/README.md;
+        moonlightReadmePath = ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/README.md;
         sunshinePackage = self.packages.${system}.sunshine-korri;
         moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
       };
@@ -175,13 +175,13 @@ pkgs.lib.optionalAttrs isX86Linux {
       {
         inherit pkgs;
         patchPaths = [
-          ../../../../product/vendor/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch
-          ../../../../product/vendor/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch
-          ../../../../product/vendor/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
-          ../../../../product/vendor/moonlight-embedded-korri/patches/0012-add-runtime-touch-bounds-control.patch
+          ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch
+          ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch
+          ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
+          ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0012-add-runtime-touch-bounds-control.patch
         ];
-        absoluteTouchPatchPath = ../../../../product/vendor/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
-        readmePath = ../../../../product/vendor/moonlight-embedded-korri/README.md;
+        absoluteTouchPatchPath = ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
+        readmePath = ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/README.md;
         moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
       };
   korri-retroarch-xdelta = import ../../../../tools/testing/nix/korri-retroarch-xdelta-check.nix {

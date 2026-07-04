@@ -11,7 +11,7 @@
 
 final: prev:
 let
-  moonlightEmbeddedKorri = final.callPackage ../../../vendor/moonlight-embedded-korri/package.nix {
+  moonlightEmbeddedKorri = final.callPackage ../../../plugins/moonlight/packages/moonlight-embedded-korri/package.nix {
     inherit nix-on-rocks;
   };
 

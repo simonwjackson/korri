@@ -21,7 +21,7 @@ let
   gamescopeNix = import ../../../../plugins/gamescope/nix/platform-environments.nix { inherit pkgs; };
   gamescopePackage = korri.packages.${targetSystem}.gamescope-korri;
   gamescopeRuntimeEnvironment = gamescopeNix.rk3566RuntimeEnvironment;
-  enabledFirstPartyPlugins = "@korri:gamescope,@korri:neverball";
+  enabledFirstPartyPlugins = "@korri:gamescope,@korri:moonlight,@korri:neverball";
   runtime = config.services.korri.runtime;
   rk3326RuntimeDir = "/run/user/${toString runtime.uid}";
   rk3326PulseServer = "unix:${rk3326RuntimeDir}/pulse/native";

@@ -35,6 +35,13 @@ export const moonlightPlugin = plugin({
           kind: "control-surface",
           capabilities: ["stream-control.connect"],
         },
+        "moonlight-embedded-korri-package": {
+          id: "moonlight-embedded-korri-package",
+          kind: "nix-package",
+          package: "moonlight-embedded-korri",
+          path: "product/plugins/moonlight/packages/moonlight-embedded-korri",
+          capabilities: ["package.expose"],
+        },
       },
     },
     handlers: [

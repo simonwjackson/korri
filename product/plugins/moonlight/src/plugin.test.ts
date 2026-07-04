@@ -16,6 +16,15 @@ describe("Moonlight plugin descriptor", () => {
       kind: "control-surface",
       capabilities: ["stream-control.connect"],
     })
+    expect(
+      moonlightPlugin.contributes.config.modules?.[
+        "moonlight-embedded-korri-package"
+      ],
+    ).toMatchObject({
+      kind: "nix-package",
+      package: "moonlight-embedded-korri",
+      path: "product/plugins/moonlight/packages/moonlight-embedded-korri",
+    })
   })
 
   it("exposes the expected operation handlers", () => {
