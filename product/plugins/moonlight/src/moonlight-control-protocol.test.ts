@@ -102,6 +102,21 @@ describe("moonlight local control protocol", () => {
             fps: 60,
             width: 1280,
             height: 720,
+            sample: {
+              seq: 12,
+              sampledAtMs: 1700,
+              rttMs: 20,
+              rttVarianceMs: 5,
+              lossFraction: 0.02,
+              deliveredBitrateKbps: 17_500,
+              requestedBitrateKbps: 18_000,
+              deliveredFps: 59,
+              requestedFps: 60,
+              framesDropped: 1,
+              decodeTimeMs: 7,
+              queueDepth: 1,
+              firstFrameMs: 91,
+            },
           },
           runtimeSettings: {
             appliedBitrateKbps: 18_000,
@@ -137,6 +152,7 @@ describe("moonlight local control protocol", () => {
     if (decoded.result._tag === "state.snapshot") {
       expect(decoded.result.seq).toBe(17)
       expect(decoded.result.streamQuality.bitrateKbps).toBe(18_000)
+      expect(decoded.result.streamQuality.sample?.rttMs).toBe(20)
       expect(decoded.result.input.status).toBe("available")
       expect(decoded.result.input.absoluteTouch?.activeBounds).toEqual({
         x: 120,
@@ -148,6 +164,30 @@ describe("moonlight local control protocol", () => {
         "input.setTouchBounds",
       )
     }
+  })
+
+  it("rejects invalid stream health samples in snapshots", () => {
+    expect(() =>
+      decodeMoonlightControlResponse({
+        jsonrpc: "2.0",
+        id: "bad-snapshot-sample",
+        result: {
+          _tag: "state.snapshot",
+          seq: 18,
+          session: { sessionId: "session-abc", state: "streaming" },
+          streamQuality: {
+            connection: "okay",
+            sample: { seq: 13, sampledAtMs: 1800, lossFraction: -0.1 },
+          },
+          runtimeSettings: {},
+          input: {
+            route: "moonlight-embedded",
+            status: "available",
+            capabilities: [],
+          },
+        },
+      }),
+    ).toThrow()
   })
 
   it("decodes an event subscription response", () => {
@@ -188,6 +228,79 @@ describe("moonlight local control protocol", () => {
     expect(first.params.seq).toBeLessThan(second.params.seq)
     expect(first.params.event.name).toBe("lifecycle.streaming")
     expect(second.params.event.name).toBe("quality.connection")
+  })
+
+  it("decodes stream health sample events", () => {
+    const decoded = decodeMoonlightControlMessage({
+      jsonrpc: "2.0",
+      method: "moonlight.event",
+      params: {
+        seq: 3,
+        monotonicMs: 1250,
+        event: {
+          name: "quality.sample",
+          sample: {
+            seq: 44,
+            sampledAtMs: 1250,
+            rttMs: 18,
+            rttVarianceMs: 4,
+            lossFraction: 0.015,
+            deliveredBitrateKbps: 11_800,
+            requestedBitrateKbps: 13_000,
+            deliveredFps: 58,
+            requestedFps: 60,
+            framesDropped: 3,
+            decodeTimeMs: 6,
+            queueDepth: 2,
+            firstFrameMs: 83,
+          },
+        },
+      },
+    }) as MoonlightControlEventEnvelope
+
+    expect(decoded.params.event.name).toBe("quality.sample")
+    if (decoded.params.event.name === "quality.sample") {
+      expect(decoded.params.event.sample.lossFraction).toBe(0.015)
+      expect(decoded.params.event.sample.deliveredFps).toBe(58)
+    }
+  })
+
+  it("decodes partial stream health samples", () => {
+    const decoded = decodeMoonlightControlMessage({
+      jsonrpc: "2.0",
+      method: "moonlight.event",
+      params: {
+        seq: 4,
+        monotonicMs: 1300,
+        event: {
+          name: "quality.sample",
+          sample: { seq: 45, sampledAtMs: 1300, rttMs: 19, lossFraction: 0 },
+        },
+      },
+    }) as MoonlightControlEventEnvelope
+
+    expect(decoded.params.event.name).toBe("quality.sample")
+    if (decoded.params.event.name === "quality.sample") {
+      expect(decoded.params.event.sample.rttMs).toBe(19)
+      expect(decoded.params.event.sample.decodeTimeMs).toBeUndefined()
+    }
+  })
+
+  it("rejects invalid stream health samples for known quality.sample events", () => {
+    expect(() =>
+      decodeMoonlightControlMessage({
+        jsonrpc: "2.0",
+        method: "moonlight.event",
+        params: {
+          seq: 5,
+          monotonicMs: 1400,
+          event: {
+            name: "quality.sample",
+            sample: { seq: 46, sampledAtMs: 1400, lossFraction: 1.2 },
+          },
+        },
+      }),
+    ).toThrow()
   })
 
   it("preserves unknown event names instead of rejecting the stream", () => {

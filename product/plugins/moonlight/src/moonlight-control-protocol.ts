@@ -225,6 +225,25 @@ const RuntimeSettingsSnapshot = Schema.StructWithRest(
   [AdditiveFields],
 )
 
+const StreamHealthSample = Schema.StructWithRest(
+  Schema.Struct({
+    seq: sequenceSchema(),
+    sampledAtMs: nonNegativeInt("sampledAtMs"),
+    rttMs: Schema.optional(nonNegativeInt("rttMs")),
+    rttVarianceMs: Schema.optional(nonNegativeInt("rttVarianceMs")),
+    lossFraction: Schema.optional(fractionSchema("lossFraction")),
+    deliveredBitrateKbps: Schema.optional(bitrateKbpsSchema()),
+    requestedBitrateKbps: Schema.optional(bitrateKbpsSchema()),
+    deliveredFps: Schema.optional(fpsSchema()),
+    requestedFps: Schema.optional(fpsSchema()),
+    framesDropped: Schema.optional(nonNegativeInt("framesDropped")),
+    decodeTimeMs: Schema.optional(nonNegativeNumber("decodeTimeMs")),
+    queueDepth: Schema.optional(nonNegativeInt("queueDepth")),
+    firstFrameMs: Schema.optional(nonNegativeInt("firstFrameMs")),
+  }),
+  [AdditiveFields],
+)
+
 const StreamQualitySnapshot = Schema.StructWithRest(
   Schema.Struct({
     connection: ConnectionQuality,
@@ -232,6 +251,7 @@ const StreamQualitySnapshot = Schema.StructWithRest(
     fps: Schema.optional(fpsSchema()),
     width: Schema.optional(resolutionWidthSchema()),
     height: Schema.optional(resolutionHeightSchema()),
+    sample: Schema.optional(StreamHealthSample),
   }),
   [AdditiveFields],
 )
@@ -391,6 +411,7 @@ export interface MoonlightControlStateSnapshotResult extends AdditiveObject {
     readonly fps?: number
     readonly width?: number
     readonly height?: number
+    readonly sample?: MoonlightControlStreamHealthSample
   }
   readonly runtimeSettings: AdditiveObject & {
     readonly appliedBitrateKbps?: number
@@ -421,6 +442,22 @@ export interface MoonlightControlStateSnapshotResult extends AdditiveObject {
       }
     }
   }
+}
+
+export interface MoonlightControlStreamHealthSample extends AdditiveObject {
+  readonly seq: number
+  readonly sampledAtMs: number
+  readonly rttMs?: number
+  readonly rttVarianceMs?: number
+  readonly lossFraction?: number
+  readonly deliveredBitrateKbps?: number
+  readonly requestedBitrateKbps?: number
+  readonly deliveredFps?: number
+  readonly requestedFps?: number
+  readonly framesDropped?: number
+  readonly decodeTimeMs?: number
+  readonly queueDepth?: number
+  readonly firstFrameMs?: number
 }
 
 export interface MoonlightControlTouchBounds {
@@ -653,6 +690,13 @@ const KnownEvent = Schema.Union([
   ),
   Schema.StructWithRest(
     Schema.Struct({
+      name: Schema.Literal("quality.sample"),
+      sample: StreamHealthSample,
+    }),
+    [AdditiveFields],
+  ),
+  Schema.StructWithRest(
+    Schema.Struct({
       name: Schema.Literal("runtime.commandResult"),
       requestId: JsonRpcId,
       command: CommandMethod,
@@ -695,6 +739,10 @@ export type MoonlightControlKnownEvent =
   | (AdditiveObject & {
       readonly name: "quality.connection"
       readonly connection: MoonlightControlConnectionQuality
+    })
+  | (AdditiveObject & {
+      readonly name: "quality.sample"
+      readonly sample: MoonlightControlStreamHealthSample
     })
   | (AdditiveObject & {
       readonly name: "runtime.commandResult"
@@ -813,11 +861,32 @@ function decodeMoonlightControlEvent(value: unknown): MoonlightControlEvent {
     return Schema.decodeUnknownSync(KnownEvent)(
       event,
     ) as MoonlightControlKnownEvent
-  } catch {
+  } catch (error) {
+    if (isKnownEventName(event.name)) throw error
     const { name, ...payload } = event
     return { _tag: "unknown.event", name, payload }
   }
 }
+
+function isKnownEventName(name: string): boolean {
+  return KNOWN_EVENT_NAMES.has(name)
+}
+
+const KNOWN_EVENT_NAMES = new Set([
+  "lifecycle.starting",
+  "lifecycle.connecting",
+  "lifecycle.connected",
+  "lifecycle.controlReady",
+  "lifecycle.streaming",
+  "lifecycle.disconnecting",
+  "lifecycle.exited",
+  "lifecycle.failed",
+  "quality.connection",
+  "quality.sample",
+  "runtime.commandResult",
+  "input.route",
+  "input.commandResult",
+])
 
 function bitrateKbpsSchema() {
   return boundedInt(
@@ -885,6 +954,26 @@ function touchBoundsHeightSchema() {
 
 function sequenceSchema() {
   return boundedInt("seq", 0, Number.MAX_SAFE_INTEGER)
+}
+
+function nonNegativeInt(name: string) {
+  return boundedInt(name, 0, Number.MAX_SAFE_INTEGER)
+}
+
+function nonNegativeNumber(name: string) {
+  return Schema.Number.check(
+    Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }).annotate({
+      identifier: name,
+    }),
+  )
+}
+
+function fractionSchema(name: string) {
+  return Schema.Number.check(
+    Schema.isBetween({ minimum: 0, maximum: 1 }).annotate({
+      identifier: name,
+    }),
+  )
 }
 
 function boundedInt(name: string, minimum: number, maximum: number) {
