@@ -11,6 +11,7 @@ import { join, resolve } from "node:path"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { plugin } from "@platform/plugin"
 import { createPluginRegistry } from "@platform/plugin/registry"
+import { activeStreamControlSessionRegistry } from "@platform/stream/stream-session"
 import { moonlightPlugin } from "@product/plugins/moonlight"
 import {
   type CommandRunner,
@@ -385,6 +386,40 @@ describe("moonlight launcher", () => {
       MOONLIGHT_LOCAL_CONTROL_SOCKET:
         "/run/user/1000/korri-moonlight/session-1/control.sock",
     })
+  })
+
+  it("registers the local control socket while the managed session is active", async () => {
+    activeStreamControlSessionRegistry.unregister("session-1")
+    const calls: string[] = []
+    const session: ManagedMoonlightSessionHandle = {
+      id: "managed-session-1",
+      exited: new Promise(() => {}),
+      terminate: () => calls.push("terminate"),
+      terminateNow: () => calls.push("terminateNow"),
+    }
+
+    const result = await launchMoonlight({
+      host: "aka.local",
+      moonlightControl: {
+        enabled: true,
+        runtimeDir: "/run/user/1000/korri-moonlight/session-1",
+        socketPath: "/run/user/1000/korri-moonlight/session-1/control.sock",
+        sessionId: "session-1",
+        authority: "controller",
+      },
+      runner: {
+        run: async () => ({ status: "started", session }),
+      },
+    })
+
+    expect(result.status).toBe("started")
+    expect(activeStreamControlSessionRegistry.current()).toMatchObject({
+      sessionId: "session-1",
+      socketPath: "/run/user/1000/korri-moonlight/session-1/control.sock",
+    })
+    if (result.status === "started") result.session?.terminate()
+    expect(activeStreamControlSessionRegistry.current()).toBeUndefined()
+    expect(calls).toEqual(["terminate"])
   })
 
   it("keeps the InputPlumber -input device when local control is enabled", async () => {

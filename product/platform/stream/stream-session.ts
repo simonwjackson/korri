@@ -67,6 +67,9 @@ export function createActiveStreamControlSessionRegistry(): ActiveStreamControlS
   }
 }
 
+export const activeStreamControlSessionRegistry =
+  createActiveStreamControlSessionRegistry()
+
 export async function startStreamRuntimeSession(
   options: StartStreamRuntimeSessionOptions,
 ): Promise<StreamRuntimeSession> {

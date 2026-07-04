@@ -12,7 +12,10 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@platform/plugin/registry"
-import type { ActiveStreamControlSessionRegistry } from "@platform/stream/stream-session"
+import {
+  type ActiveStreamControlSessionRegistry,
+  activeStreamControlSessionRegistry,
+} from "@platform/stream/stream-session"
 import {
   type StreamControlCapability,
   streamControlCapabilities,
@@ -180,12 +183,9 @@ function createRuntime(
     pluginRegistry: deps.pluginRegistry ?? createPluginRegistry([]),
     deviceControl,
     ...(deps.deviceState ? { deviceState: deps.deviceState } : {}),
-    ...(deps.activeStreamControlSessionRegistry
-      ? {
-          activeStreamControlSessionRegistry:
-            deps.activeStreamControlSessionRegistry,
-        }
-      : {}),
+    activeStreamControlSessionRegistry:
+      deps.activeStreamControlSessionRegistry ??
+      activeStreamControlSessionRegistry,
     record: createStreamControlEventRecorder({
       artifactDir: options.artifactDir,
       mkdir: mkdirImpl,

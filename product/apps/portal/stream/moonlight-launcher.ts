@@ -14,6 +14,7 @@ import {
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
 import type { PluginRegistry } from "@platform/plugin/registry"
+import { activeStreamControlSessionRegistry } from "@platform/stream/stream-session"
 import {
   dispatchStreamLaunch,
   type StreamLaunchRequest,
@@ -240,7 +241,8 @@ function resolveStreamRegistry(
   options: Pick<MoonlightLaunchOptions, "pluginRegistry">,
 ): PluginRegistry {
   return (
-    options.pluginRegistry ?? createInteractiveFirstPartyPluginRegistry(process.env)
+    options.pluginRegistry ??
+    createInteractiveFirstPartyPluginRegistry(process.env)
   )
 }
 
@@ -273,13 +275,51 @@ function startedMoonlightResult(input: {
   readonly moonlightControl?: MoonlightControlLaunchHandle
   readonly session?: ManagedMoonlightSessionHandle
 }): MoonlightLaunchResult {
+  const session =
+    input.moonlightControl && input.session
+      ? registerMoonlightControlSession(input.moonlightControl, input.session)
+      : input.session
   return {
     status: "started",
     command: input.command,
     ...(input.moonlightControl
       ? { moonlightControl: input.moonlightControl }
       : {}),
-    ...(input.session ? { session: input.session } : {}),
+    ...(session ? { session } : {}),
+  }
+}
+
+function registerMoonlightControlSession(
+  control: MoonlightControlLaunchHandle,
+  session: ManagedMoonlightSessionHandle,
+): ManagedMoonlightSessionHandle {
+  let unregistering = false
+  activeStreamControlSessionRegistry.register({
+    sessionId: control.sessionId,
+    socketPath: control.socketPath,
+    close: () => {
+      if (!unregistering) session.terminate()
+    },
+  })
+  const unregister = () => {
+    unregistering = true
+    try {
+      activeStreamControlSessionRegistry.unregister(control.sessionId)
+    } finally {
+      unregistering = false
+    }
+  }
+  void session.exited.finally(unregister)
+  return {
+    ...session,
+    terminate: () => {
+      session.terminate()
+      unregister()
+    },
+    terminateNow: () => {
+      session.terminateNow()
+      unregister()
+    },
   }
 }
 
