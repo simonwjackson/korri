@@ -5,6 +5,7 @@ import {
   encodeHide,
   encodeMenu,
   encodeRing,
+  parseRendererTouchLine,
   type RendererProcess,
 } from "./overlay-renderer-client"
 
@@ -99,5 +100,44 @@ describe("overlay renderer process client", () => {
     a.die()
     client.menu([{ id: "x", label: "X" }], 0)
     expect(a.wasKilled()).toBe(true)
+  })
+
+  it("forwards renderer touch reports to onTouch", () => {
+    const a = fakeProc()
+    let captured: ((line: string) => void) | undefined
+    const seen: number[] = []
+    const client = createOverlayRendererProcessClient(
+      {
+        spawn: onLine => {
+          captured = onLine
+          return a.proc
+        },
+      },
+      { onTouch: index => seen.push(index) },
+    )
+    client.menu([{ id: "x", label: "X" }], 0)
+    captured?.("touch 1")
+    captured?.("touch-cancel")
+    captured?.("garbage")
+    expect(seen).toEqual([1, -1])
+  })
+})
+
+describe("parseRendererTouchLine", () => {
+  it("parses a touch index", () => {
+    expect(parseRendererTouchLine("touch 0")).toBe(0)
+    expect(parseRendererTouchLine("touch 2")).toBe(2)
+    expect(parseRendererTouchLine("  touch 3  ")).toBe(3)
+  })
+
+  it("parses touch-cancel as -1", () => {
+    expect(parseRendererTouchLine("touch-cancel")).toBe(-1)
+  })
+
+  it("returns null for unrelated lines", () => {
+    expect(parseRendererTouchLine("ring 50")).toBeNull()
+    expect(parseRendererTouchLine("touch")).toBeNull()
+    expect(parseRendererTouchLine("touch x")).toBeNull()
+    expect(parseRendererTouchLine("")).toBeNull()
   })
 })

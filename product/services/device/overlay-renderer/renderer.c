@@ -36,6 +36,8 @@ static struct zwlr_layer_shell_v1 *layer_shell;
 static struct wl_surface *surface;
 static struct zwlr_layer_surface_v1 *layer_surface;
 static struct wl_buffer *buffer;
+static struct wl_seat *seat;
+static struct wl_touch *touch;
 
 static const int WIDTH = 760, HEIGHT = 320;
 static int stride, configured = 0, running = 1;
@@ -46,6 +48,54 @@ static int g_ring_pct = 0;
 static int g_menu_selected = 0, g_menu_count = 0, g_menu_pending = 0;
 static char g_labels[MAX_OPTIONS][MAX_LABEL];
 static int g_danger[MAX_OPTIONS];
+// Rects of the drawn option buttons, in surface-local coords, for touch
+// hit-testing. Populated by draw_menu; read by the wl_touch down handler.
+static double g_opt_x[MAX_OPTIONS], g_opt_y[MAX_OPTIONS];
+static double g_opt_w[MAX_OPTIONS], g_opt_h[MAX_OPTIONS];
+
+// ---- touch input ----
+// The renderer hit-tests taps against the option rects it drew and reports the
+// result to inputd on stdout. inputd owns the decision; the renderer only says
+// "the user touched option i" (or cancelled).
+static void report_touch(double x, double y) {
+  if (g_mode != MODE_MENU || g_menu_count <= 0) return;
+  for (int i = 0; i < g_menu_count; i++) {
+    if (x >= g_opt_x[i] && x <= g_opt_x[i] + g_opt_w[i] &&
+        y >= g_opt_y[i] && y <= g_opt_y[i] + g_opt_h[i]) {
+      printf("touch %d\n", i);
+      fflush(stdout);
+      return;
+    }
+  }
+  printf("touch-cancel\n");
+  fflush(stdout);
+}
+
+static void touch_down(void *d, struct wl_touch *t, uint32_t serial,
+                       uint32_t time, struct wl_surface *surf, int32_t id,
+                       wl_fixed_t x, wl_fixed_t y) {
+  report_touch(wl_fixed_to_double(x), wl_fixed_to_double(y));
+}
+static void touch_up(void *d, struct wl_touch *t, uint32_t serial,
+                     uint32_t time, int32_t id) {}
+static void touch_motion(void *d, struct wl_touch *t, uint32_t time, int32_t id,
+                         wl_fixed_t x, wl_fixed_t y) {}
+static void touch_frame(void *d, struct wl_touch *t) {}
+static void touch_cancel(void *d, struct wl_touch *t) {}
+static const struct wl_touch_listener touch_listener = {
+    touch_down, touch_up, touch_motion, touch_frame, touch_cancel};
+
+static void seat_caps(void *d, struct wl_seat *s, uint32_t caps) {
+  if ((caps & WL_SEAT_CAPABILITY_TOUCH) && !touch) {
+    touch = wl_seat_get_touch(s);
+    wl_touch_add_listener(touch, &touch_listener, NULL);
+  } else if (!(caps & WL_SEAT_CAPABILITY_TOUCH) && touch) {
+    wl_touch_release(touch);
+    touch = NULL;
+  }
+}
+static void seat_name(void *d, struct wl_seat *s, const char *name) {}
+static const struct wl_seat_listener seat_listener = {seat_caps, seat_name};
 
 // ---- wayland globals ----
 static void reg_global(void *d, struct wl_registry *r, uint32_t name,
@@ -56,6 +106,10 @@ static void reg_global(void *d, struct wl_registry *r, uint32_t name,
     shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
   else if (!strcmp(iface, zwlr_layer_shell_v1_interface.name))
     layer_shell = wl_registry_bind(r, name, &zwlr_layer_shell_v1_interface, 1);
+  else if (!strcmp(iface, wl_seat_interface.name)) {
+    seat = wl_registry_bind(r, name, &wl_seat_interface, ver < 5 ? ver : 5);
+    wl_seat_add_listener(seat, &seat_listener, NULL);
+  }
 }
 static void reg_remove(void *d, struct wl_registry *r, uint32_t name) {}
 static const struct wl_registry_listener reg_listener = {reg_global, reg_remove};
@@ -116,6 +170,12 @@ static void draw_menu(cairo_t *cr) {
   double bw = (pw - 52 - gap * (n - 1)) / n;
   for (int i = 0; i < n; i++) {
     double x = bx + i * (bw + gap);
+    if (i < MAX_OPTIONS) {
+      g_opt_x[i] = x;
+      g_opt_y[i] = by;
+      g_opt_w[i] = bw;
+      g_opt_h[i] = bh;
+    }
     int sel = (i == g_menu_selected);
     if (sel) {
       if (g_danger[i]) cairo_set_source_rgb(cr, 0.757, 0.329, 0.247);
@@ -154,9 +214,20 @@ static void render(void) {
   cairo_surface_destroy(cs);
 }
 
+// Claim touch input only while a menu is shown; otherwise keep an empty input
+// region so taps fall through to the game/stream beneath the overlay.
+static void update_input_region(void) {
+  struct wl_region *region = wl_compositor_create_region(compositor);
+  if (g_mode == MODE_MENU)
+    wl_region_add(region, 0, 0, WIDTH, HEIGHT);
+  wl_surface_set_input_region(surface, region);
+  wl_region_destroy(region);
+}
+
 static void commit_frame(void) {
   if (!configured) return;
   render();
+  update_input_region();
   wl_surface_attach(surface, buffer, 0, 0);
   wl_surface_damage(surface, 0, 0, WIDTH, HEIGHT);
   wl_surface_commit(surface);
@@ -232,6 +303,8 @@ int main(void) {
   zwlr_layer_surface_v1_set_anchor(layer_surface, 0);
   zwlr_layer_surface_v1_set_keyboard_interactivity(layer_surface, 0);
   zwlr_layer_surface_v1_add_listener(layer_surface, &ls_listener, NULL);
+  // Start with an empty input region: hidden/transparent must not eat touches.
+  update_input_region();
   wl_surface_commit(surface);
   wl_display_roundtrip(dpy);
 

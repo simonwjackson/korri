@@ -44,20 +44,43 @@ export interface RendererProcess {
 }
 
 export interface RendererProcessSpawner {
-  readonly spawn: () => RendererProcess
+  /**
+   * Spawn the renderer. `onLine` receives the renderer's stdout, line by line
+   * (touch reports); it is optional so non-touch callers can ignore it.
+   */
+  readonly spawn: (onLine?: (line: string) => void) => RendererProcess
+}
+
+/**
+ * Parse a renderer -> inputd touch report. `touch <index>` selects/confirms an
+ * option by index; `touch-cancel` dismisses the menu (returns -1). Returns null
+ * for any other line.
+ */
+export function parseRendererTouchLine(line: string): number | null {
+  const trimmed = line.trim()
+  if (trimmed === "touch-cancel") return -1
+  const match = trimmed.match(/^touch\s+(\d+)$/)
+  if (!match) return null
+  return Number(match[1])
 }
 
 export function createOverlayRendererProcessClient(
   spawner: RendererProcessSpawner,
+  opts: { readonly onTouch?: (index: number) => void } = {},
 ): OverlayRendererClient {
   let proc: RendererProcess | null = null
+
+  function handleLine(line: string): void {
+    const index = parseRendererTouchLine(line)
+    if (index !== null) opts.onTouch?.(index)
+  }
 
   function send(data: string): void {
     if (!proc || !proc.alive()) {
       // Never leave a stale renderer alive; otherwise two overlays can stack
       // (e.g. an old ring plus a new menu on screen at once).
       proc?.kill?.()
-      proc = spawner.spawn()
+      proc = spawner.spawn(handleLine)
     }
     proc.write(data)
   }

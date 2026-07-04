@@ -17,13 +17,34 @@ export function createBunRendererSpawner(opts: {
   readonly env: Env
 }): RendererProcessSpawner {
   return {
-    spawn(): RendererProcess {
+    spawn(onLine?: (line: string) => void): RendererProcess {
       const child = Bun.spawn([opts.bin], {
         stdin: "pipe",
-        stdout: "ignore",
+        stdout: onLine ? "pipe" : "ignore",
         stderr: "ignore",
         env: opts.env,
       })
+      if (onLine && child.stdout) {
+        const reader = (child.stdout as ReadableStream<Uint8Array>).getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+        void (async () => {
+          try {
+            for (;;) {
+              const { done, value } = await reader.read()
+              if (done) break
+              buffer += decoder.decode(value, { stream: true })
+              let idx: number
+              while ((idx = buffer.indexOf("\n")) >= 0) {
+                onLine(buffer.slice(0, idx))
+                buffer = buffer.slice(idx + 1)
+              }
+            }
+          } catch {
+            // reader cancelled on child exit; ignore.
+          }
+        })()
+      }
       // Track liveness via the exited promise rather than reading exitCode,
       // which is a more reliable signal that the child is still up (a flaky
       // liveness check caused the client to respawn and stack overlays).

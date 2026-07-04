@@ -47,7 +47,10 @@ function hold(phase: ChordHoldUpdate["phase"], progress = 0): ChordHoldUpdate {
   return { id: "kill-current-game", phase, progress, elapsedMs: 0 }
 }
 
-function setup(kind: "local" | "stream" = "local") {
+function setup(
+  kind: "local" | "stream" = "local",
+  opts: { readonly sessionActive?: () => boolean } = {},
+) {
   const renderer = createFakeRenderer()
   const intercept = createFakeIntercept()
   const actions = { forceQuit: 0, closeRemoteGame: 0 }
@@ -63,6 +66,7 @@ function setup(kind: "local" | "stream" = "local") {
       },
     },
     sessionKind: () => kind,
+    isSessionActive: opts.sessionActive ?? (() => true),
   })
   return { renderer, intercept, actions, orchestrator }
 }
@@ -181,5 +185,73 @@ describe("overlay orchestrator", () => {
     intercept.nav("accept")
     expect(actions.closeRemoteGame).toBe(1)
     expect(actions.forceQuit).toBe(0)
+  })
+
+  describe("session scoping", () => {
+    it("renders nothing and never quits when no session is active", () => {
+      const { renderer, intercept, actions, orchestrator } = setup("local", {
+        sessionActive: () => false,
+      })
+      orchestrator.onHoldUpdate(hold("press"))
+      orchestrator.onHoldUpdate(hold("progress", 0.5))
+      orchestrator.onHoldUpdate(hold("tap"))
+      orchestrator.onHoldUpdate(hold("fired", 1))
+      // hide() is the only permitted render; no ring, no menu.
+      expect(renderer.calls.some(c => c.kind === "ring")).toBe(false)
+      expect(renderer.calls.some(c => c.kind === "menu")).toBe(false)
+      expect(actions.forceQuit).toBe(0)
+      expect(intercept.isActive()).toBe(false)
+      expect(orchestrator.isMenuOpen()).toBe(false)
+    })
+
+    it("tears down an open menu when the session ends mid-gesture", () => {
+      const active = { value: true }
+      const { renderer, intercept, orchestrator } = setup("local", {
+        sessionActive: () => active.value,
+      })
+      orchestrator.onHoldUpdate(hold("tap"))
+      expect(orchestrator.isMenuOpen()).toBe(true)
+      active.value = false
+      orchestrator.onHoldUpdate(hold("progress", 0.2))
+      expect(orchestrator.isMenuOpen()).toBe(false)
+      expect(intercept.isActive()).toBe(false)
+      expect(renderer.calls.at(-1)).toEqual({ kind: "hide" })
+    })
+  })
+
+  describe("touch selection", () => {
+    it("confirms the tapped option directly (a tap acts)", () => {
+      const { actions, orchestrator } = setup("local")
+      orchestrator.onHoldUpdate(hold("tap"))
+      // local options: [quit-game(0, danger), keep-playing(1)]
+      orchestrator.onTouchSelect(0)
+      expect(actions.forceQuit).toBe(1)
+      expect(orchestrator.isMenuOpen()).toBe(false)
+    })
+
+    it("cancels the menu on a negative touch index", () => {
+      const { actions, intercept, orchestrator } = setup("local")
+      orchestrator.onHoldUpdate(hold("tap"))
+      orchestrator.onTouchSelect(-1)
+      expect(actions.forceQuit).toBe(0)
+      expect(orchestrator.isMenuOpen()).toBe(false)
+      expect(intercept.isActive()).toBe(false)
+    })
+
+    it("ignores touch when no menu is open", () => {
+      const { actions, orchestrator } = setup("local")
+      orchestrator.onTouchSelect(0)
+      expect(actions.forceQuit).toBe(0)
+      expect(orchestrator.isMenuOpen()).toBe(false)
+    })
+
+    it("stream close-game via touch stops the remote", () => {
+      const { actions, orchestrator } = setup("stream")
+      orchestrator.onHoldUpdate(hold("tap"))
+      // stream options: [close-stream(0), close-game(1), keep-playing(2)]
+      orchestrator.onTouchSelect(1)
+      expect(actions.closeRemoteGame).toBe(1)
+      expect(actions.forceQuit).toBe(0)
+    })
   })
 })

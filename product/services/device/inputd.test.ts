@@ -81,6 +81,14 @@ function createControllableEventSource() {
   }
 }
 
+function activeSessionProbe() {
+  return {
+    refresh: async () => {},
+    isActive: () => true,
+    isStream: () => false,
+  }
+}
+
 async function startInputd(options: Parameters<typeof startKorriInputd>[0]) {
   const handle = await startKorriInputd({
     port: 0,
@@ -450,6 +458,7 @@ B: KEY=40000000
       },
       killHoldMs: 2_000,
       holdTimers: timers,
+      sessionProbe: activeSessionProbe(),
     })
 
     const client = connectClient(handle.port)
@@ -462,6 +471,7 @@ B: KEY=40000000
     gamepadSource.push(evdevKey(BTN_START, 1))
     gamepadSource.push(evdevKey(BTN_SELECT, 1))
     gamepadSource.push(evdevKey(BTN_SELECT, 2))
+    void activeSessionProbe
 
     // The chord engages the hold but must NOT fire instantly.
     await waitFor(() => timers.pending() > 0, "chord engaged")
@@ -500,6 +510,7 @@ B: KEY=40000000
       },
       killHoldMs: 2_000,
       holdTimers: timers,
+      sessionProbe: activeSessionProbe(),
     })
 
     const client = connectClient(handle.port)
@@ -519,6 +530,51 @@ B: KEY=40000000
     await waitFor(() => timers.pending() === 0, "hold released")
 
     // Even as more time passes, nothing fires.
+    timers.advance(5_000)
+    await Bun.sleep(30)
+    expect(actions).toEqual([])
+
+    client.close()
+  })
+
+  it("does not engage the kill chord when no session is active (hub)", async () => {
+    const proc = await loadProcFixture("bus-input-devices-device.txt")
+    const gamepadSource = createControllableEventSource()
+    const actions: KorriInputdActionId[] = []
+    const timers = createFakeHoldTimers()
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event9"
+          ? gamepadSource.open()
+          : createControllableEventSource().open(),
+      actionDispatcher: {
+        dispatch: async actionId => {
+          actions.push(actionId)
+        },
+      },
+      killHoldMs: 2_000,
+      holdTimers: timers,
+      sessionProbe: {
+        refresh: async () => {},
+        isActive: () => false,
+        isStream: () => false,
+      },
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    await client.nextMessage()
+
+    gamepadSource.push(evdevKey(BTN_TL, 1))
+    gamepadSource.push(evdevKey(BTN_TR, 1))
+    gamepadSource.push(evdevKey(BTN_START, 1))
+    gamepadSource.push(evdevKey(BTN_SELECT, 1))
+
+    // With no active session the chord must not arm the hold at all.
+    await Bun.sleep(30)
+    expect(timers.pending()).toBe(0)
     timers.advance(5_000)
     await Bun.sleep(30)
     expect(actions).toEqual([])

@@ -60,6 +60,8 @@ import {
   type InputdActionDispatcher,
   type KorriInputdActionId,
 } from "./inputd-actions"
+import { createLiveOverlaySessionProbe } from "./overlay-session-state-live"
+import type { OverlaySessionProbe } from "./overlay-session-state"
 
 export interface KorriInputdEventSource extends AsyncIterable<Uint8Array> {
   close?: () => void
@@ -91,6 +93,7 @@ export interface KorriInputdOptions {
   readonly eventNodeExists?: (eventNode: string) => boolean
   readonly killHoldMs?: number
   readonly holdTimers?: ChordHoldTimers
+  readonly sessionProbe?: OverlaySessionProbe
 }
 
 export interface KorriInputdHandle {
@@ -194,12 +197,18 @@ export async function startKorriInputd(
   // releases below the threshold (a tap) and does nothing; holding past the
   // threshold fires exactly once. dispatchAction is hoisted, so the callback can
   // reference it here.
+  // The quit chord is scoped to an actual game/stream session: on the hub (no
+  // active launch) the chord must do nothing. inputd polls this probe on its
+  // existing interval and reads it synchronously from the hot input path.
+  const sessionProbe = options.sessionProbe ?? createLiveOverlaySessionProbe({})
   // When a renderer binary is provided (device), the hold gesture drives the
   // overlay: press/progress -> ring, fired -> force-quit, tap -> decision menu.
   // Otherwise inputd keeps the no-overlay behavior: only fired force-quits.
   const overlayHoldHandler = createOverlayHoldHandlerFromEnv({
     env: process.env,
     forceQuit: () => dispatchAction(KILL_CHORD_ID),
+    isSessionActive: () => sessionProbe.isActive(),
+    sessionKind: () => (sessionProbe.isStream() ? "stream" : "local"),
   })
   const killHoldSupervisor = createChordHoldSupervisor<KorriInputdActionId>({
     holdMs: options.killHoldMs ?? DEFAULT_KILL_HOLD_MS,
@@ -431,7 +440,11 @@ export async function startKorriInputd(
 
     for (const match of matches) {
       if (match.id === KILL_CHORD_ID) {
-        killHoldSupervisor.engage(KILL_CHORD_ID)
+        // Scope the destructive quit chord to an active game/stream session.
+        // On the hub the chord must not arm the hold/overlay at all.
+        if (sessionProbe.isActive()) {
+          killHoldSupervisor.engage(KILL_CHORD_ID)
+        }
       } else {
         dispatchAction(match.id)
       }
@@ -598,9 +611,14 @@ export async function startKorriInputd(
 
   const actualPort = server.port ?? options.port ?? DEFAULT_PORT
 
+  await sessionProbe.refresh().catch(() => {})
+
   const pollTimer = setInterval(() => {
     refreshDevices().catch(error => {
       logger.warn({ err: error }, "inputd: device refresh failed")
+    })
+    sessionProbe.refresh().catch(error => {
+      logger.warn({ err: error }, "inputd: session probe refresh failed")
     })
   }, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS)
 

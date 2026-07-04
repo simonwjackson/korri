@@ -23,12 +23,17 @@ export function createOverlayHoldHandlerFromEnv(deps: {
   readonly forceQuit: () => void | Promise<void>
   readonly closeRemoteGame?: () => void | Promise<void>
   readonly sessionKind?: () => OverlaySessionKind
+  readonly isSessionActive?: () => boolean
 }): ((update: ChordHoldUpdate) => void) | null {
   const bin = deps.env.KORRI_OVERLAY_RENDERER_BIN
   if (!bin) return null
 
+  // Late-bound so the renderer's touch reports can reach the orchestrator, which
+  // is constructed after the renderer (it depends on it).
+  let orchestrator: ReturnType<typeof createOverlayOrchestrator> | null = null
   const renderer = createOverlayRendererProcessClient(
     createBunRendererSpawner({ bin, env: deps.env }),
+    { onTouch: index => orchestrator?.onTouchSelect(index) },
   )
   const intercept = createOverlayInterceptController(
     createLiveInterceptPort({
@@ -37,7 +42,7 @@ export function createOverlayHoldHandlerFromEnv(deps: {
       gdbus: deps.env.KORRI_GDBUS_BIN,
     }),
   )
-  const orchestrator = createOverlayOrchestrator({
+  orchestrator = createOverlayOrchestrator({
     renderer,
     intercept,
     actions: {
@@ -45,6 +50,8 @@ export function createOverlayHoldHandlerFromEnv(deps: {
       closeRemoteGame: deps.closeRemoteGame ?? (() => {}),
     },
     sessionKind: deps.sessionKind ?? (() => "local"),
+    isSessionActive: deps.isSessionActive ?? (() => true),
   })
-  return update => orchestrator.onHoldUpdate(update)
+  const activeOrchestrator = orchestrator
+  return update => activeOrchestrator.onHoldUpdate(update)
 }

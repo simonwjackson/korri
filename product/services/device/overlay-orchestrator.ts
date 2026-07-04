@@ -40,6 +40,12 @@ export interface OverlayActions {
 
 export interface OverlayOrchestrator {
   readonly onHoldUpdate: (update: ChordHoldUpdate) => void
+  /**
+   * Touch selection reported by the renderer (which owns the on-screen layout).
+   * A non-negative index selects and confirms that option directly (a tap acts);
+   * a negative index cancels an open menu. Ignored when no menu is open.
+   */
+  readonly onTouchSelect: (index: number) => void
   readonly isMenuOpen: () => boolean
 }
 
@@ -48,6 +54,8 @@ export function createOverlayOrchestrator(deps: {
   readonly intercept: OverlayInterceptController
   readonly actions: OverlayActions
   readonly sessionKind: () => OverlaySessionKind
+  /** A foreground game/stream session is active. The overlay is a no-op otherwise. */
+  readonly isSessionActive: () => boolean
 }): OverlayOrchestrator {
   let menu: OverlayMenu | null = null
   let menuOptions: readonly OverlayMenuOption[] = []
@@ -107,8 +115,35 @@ export function createOverlayOrchestrator(deps: {
     }
   }
 
+  function dismissForNoSession(): void {
+    // Scope guard: if no game/stream session is active (e.g. on the hub, or the
+    // session ended mid-gesture), the overlay must show nothing and hold no
+    // input. Tear down anything in flight.
+    if (menu) {
+      menu = null
+    }
+    deps.renderer.hide()
+    ungate()
+  }
+
   return {
+    onTouchSelect(index) {
+      if (!deps.isSessionActive()) {
+        dismissForNoSession()
+        return
+      }
+      if (!menu) return
+      if (index < 0 || index >= menuOptions.length) {
+        closeMenu(null)
+        return
+      }
+      closeMenu(menuOptions[index].id)
+    },
     onHoldUpdate(update) {
+      if (!deps.isSessionActive()) {
+        dismissForNoSession()
+        return
+      }
       switch (update.phase) {
         case "press":
           // Buffer: show nothing yet, and do NOT gate here. inputd reads the
