@@ -17,6 +17,25 @@ source: se-work
 
 # Add active frozen/black-screen watchdog with auto-revert to last known-good
 
+## Progress (2026-07-04): policy core landed test-first
+
+The Korri-side decision core is implemented and unit-tested (commit 5551ca4f,
+`product/platform/stream/runtime-recovery.ts`, 8 tests): known-good bookkeeping,
+revert-on-stall, no-oscillation (isRevert guard), no spurious revert on pre-apply
+rejections, and never-silent (every stall yields a revert or a record). It is a
+pure I/O-free reducer over command outcomes — not an external poller.
+
+Remaining, for the device session:
+
+1. Native (client): decode-confirmed applied-truth for resolution — arm a
+   first-frame timer on the decoder reopen (paths 0009/0010), emit `failed`
+   (decode-stall) when no frame decodes in the window. This is the moonlight
+   patch-export half and needs real decode signals.
+2. Live wiring (supervisor): subscribe to the control socket, feed sent commands
+   and runtime.commandResult outcomes into the reducer, and issue the reducer's
+   revert action via the control client; surface record-unrecoverable.
+3. Tune the single device-only constant: the first-frame wait window.
+
 ## Framing (2026-07-04, user-confirmed): decode-truth, not a watcher tool
 
 This is NOT a watchdog process that watches other tools. Build it as in-client
