@@ -12,6 +12,23 @@ import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
  * unknown); this view types only the fields the quality display uses, so the
  * command needs no streamer-module import (keeps the plugin removable).
  */
+interface StreamHealthSampleView {
+  readonly seq: number
+  readonly sampledAtMs: number
+  readonly rttMs?: number
+  readonly rttVarianceMs?: number
+  readonly lossFraction?: number
+  readonly deliveredBitrateKbps?: number
+  readonly requestedBitrateKbps?: number
+  readonly deliveredFps?: number
+  readonly requestedFps?: number
+  readonly framesDropped?: number
+  readonly decodeTimeMs?: number
+  readonly queueDepth?: number
+  readonly firstFrameMs?: number
+  readonly freshness?: "fresh" | "stale" | "no-data"
+}
+
 interface StreamStateSnapshotView {
   readonly _tag?: string
   readonly session: { readonly state: string; readonly sessionId: string }
@@ -20,6 +37,7 @@ interface StreamStateSnapshotView {
     readonly fps?: number
     readonly width?: number
     readonly height?: number
+    readonly sample?: StreamHealthSampleView
   }
   readonly runtimeSettings: {
     readonly lastCommand?: { readonly command: string; readonly status: string }
@@ -201,6 +219,7 @@ export function formatState(
     `session:      ${snapshot.session.state} (${snapshot.session.sessionId})`,
     `stream now:   ${quality(snapshot)}`,
     `applied:      ${applied(snapshot)}`,
+    ...formatHealth(snapshot.streamQuality.sample),
   ]
   const last = snapshot.runtimeSettings.lastCommand
   if (last) lines.push(`last change:  ${last.command} -> ${last.status}`)
@@ -261,6 +280,97 @@ function describeCoercion(
 function quality(snapshot: StreamStateSnapshotView): string {
   const q = snapshot.streamQuality
   return settingsLine(q.bitrateKbps, q.fps, q.width, q.height)
+}
+
+function formatHealth(sample: StreamHealthSampleView | undefined): string[] {
+  if (!sample) return ["health:       not yet reported"]
+
+  const rtt =
+    sample.rttMs === undefined
+      ? undefined
+      : `rtt ${sample.rttMs} ms${
+          sample.rttVarianceMs === undefined
+            ? ""
+            : ` ±${sample.rttVarianceMs} ms`
+        }`
+  const healthParts = [
+    rtt,
+    sample.lossFraction === undefined
+      ? undefined
+      : `loss ${percent(sample.lossFraction, 1)}`,
+  ].filter(isString)
+  const lines = [
+    `health:       ${healthParts.length > 0 ? healthParts.join(", ") : "not yet reported"}`,
+  ]
+
+  const deliveryParts = [
+    deliveryRatio(
+      "bitrate",
+      sample.deliveredBitrateKbps,
+      sample.requestedBitrateKbps,
+      formatMbpsValue,
+      " Mbps",
+    ),
+    deliveryRatio(
+      "fps",
+      sample.deliveredFps,
+      sample.requestedFps,
+      formatPlain,
+    ),
+  ].filter(isString)
+  if (deliveryParts.length > 0) {
+    lines.push(`delivery:     ${deliveryParts.join(", ")}`)
+  }
+
+  const decodeParts = [
+    sample.framesDropped === undefined
+      ? undefined
+      : `dropped ${sample.framesDropped} frames`,
+    sample.decodeTimeMs === undefined
+      ? undefined
+      : `decode ${sample.decodeTimeMs} ms`,
+    sample.queueDepth === undefined ? undefined : `queue ${sample.queueDepth}`,
+    sample.firstFrameMs === undefined
+      ? undefined
+      : `first frame ${sample.firstFrameMs} ms`,
+  ].filter(isString)
+  if (decodeParts.length > 0) {
+    lines.push(`decode:       ${decodeParts.join(", ")}`)
+  }
+
+  if (sample.freshness === "stale") {
+    lines[0] = `${lines[0]} (stale)`
+  }
+  return lines
+}
+
+function deliveryRatio(
+  label: string,
+  delivered: number | undefined,
+  requested: number | undefined,
+  formatValue: (value: number) => string,
+  suffix = "",
+): string | undefined {
+  if (delivered === undefined || requested === undefined || requested <= 0) {
+    return undefined
+  }
+  return `${label} ${formatValue(delivered)}/${formatValue(requested)}${suffix} (${percent(delivered / requested, 0)})`
+}
+
+function formatMbpsValue(kbps: number): string {
+  return (kbps / 1000).toFixed(1)
+}
+
+function formatPlain(value: number): string {
+  return String(value)
+}
+
+function percent(value: number, digits: number): string {
+  return `${(value * 100).toFixed(digits)}%`
+}
+
+function isString(value: string | undefined): value is string {
+  return value !== undefined
 }
 
 function applied(snapshot: StreamStateSnapshotView): string {

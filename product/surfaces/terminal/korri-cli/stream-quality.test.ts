@@ -28,6 +28,7 @@ function snapshot(
     streamFps: number
     width: number
     height: number
+    sample: MoonlightControlStateSnapshotResult["streamQuality"]["sample"]
   }> = {},
 ): MoonlightControlStateSnapshotResult {
   return {
@@ -40,6 +41,7 @@ function snapshot(
       fps: overrides.streamFps,
       width: overrides.width,
       height: overrides.height,
+      sample: overrides.sample,
     },
     runtimeSettings: {
       appliedBitrateKbps: overrides.appliedBitrateKbps,
@@ -248,7 +250,50 @@ describe("formatState", () => {
       }),
     )
     expect(text).toContain("20000 kbps, 60 fps, 1920x1080")
+    expect(text).toContain("health:       not yet reported")
     expect(text).toContain("last change:  runtime.setBitrate -> applied")
+  })
+
+  test("renders full stream health samples with units and ratios", () => {
+    const text = formatState(
+      snapshot({
+        streamBitrateKbps: 13000,
+        streamFps: 60,
+        width: 1280,
+        height: 720,
+        sample: {
+          seq: 9,
+          sampledAtMs: 2000,
+          rttMs: 18,
+          rttVarianceMs: 4,
+          lossFraction: 0.015,
+          deliveredBitrateKbps: 11800,
+          requestedBitrateKbps: 13000,
+          deliveredFps: 58,
+          requestedFps: 60,
+          framesDropped: 3,
+          decodeTimeMs: 6,
+          queueDepth: 2,
+          firstFrameMs: 83,
+        },
+      }),
+    )
+
+    expect(text).toContain("health:       rtt 18 ms ±4 ms, loss 1.5%")
+    expect(text).toContain("delivery:     bitrate 11.8/13.0 Mbps (91%), fps 58/60 (97%)")
+    expect(text).toContain("decode:       dropped 3 frames, decode 6 ms, queue 2, first frame 83 ms")
+  })
+
+  test("renders partial stream health samples without placeholder noise", () => {
+    const text = formatState(
+      snapshot({
+        sample: { seq: 10, sampledAtMs: 3000, rttMs: 22, lossFraction: 0 },
+      }),
+    )
+
+    expect(text).toContain("health:       rtt 22 ms, loss 0.0%")
+    expect(text).not.toContain("undefined")
+    expect(text).not.toContain("[object Object]")
   })
 })
 
