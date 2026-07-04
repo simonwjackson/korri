@@ -78,7 +78,7 @@ describe("GamePayload", () => {
       system: "snes",
       contentPath: "/x.smc",
       metadata: { name: "F-Zero", developer: "Nintendo" },
-      userData: { favorite: true, playtime: 3600 },
+      userData: { favorite: true },
     })
     expect(game.metadata?.name).toBe("F-Zero")
     expect(game.userData?.favorite).toBe(true)
