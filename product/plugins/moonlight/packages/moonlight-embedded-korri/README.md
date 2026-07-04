@@ -174,3 +174,21 @@ Crops Venus/iris coded-alignment padding out of the presented frame:
   a hint only when the coded dimension exceeds it by no more than the hardware
   alignment slack (127/31). The 16:9 guess remains only as a last resort for
   streams with no known target size.
+
+### `0016-add-stream-health-sampling.patch`
+
+Adds Layer 4 Senses telemetry to the local-control protocol:
+
+- The local-control thread samples stream health every second and emits a
+  `quality.sample` event to subscribers, while `state.snapshot.streamQuality`
+  carries the latest sample for late attachers and `korri stream show`.
+- RTT and RTT variance come from moonlight-common-c
+  `LiGetEstimatedRttInfo()`; video packet loss is derived from
+  `LiGetRTPVideoStats()` counters. This stays in-client and does not spawn an
+  external watcher, pinger, or bandwidth probe.
+- The active SM8550 v4l2m2m decode path records delivered encoded bitrate,
+  delivered FPS, display-frame drops, decode submit timing, one-frame display
+  queue depth, and first-frame timing after decoder open/reopen.
+- The coarse `streamQuality.connection` field is now backed by the
+  moonlight-common-c connection status callback (`okay`/`poor`) instead of the
+  prior hardcoded `unknown` placeholder.

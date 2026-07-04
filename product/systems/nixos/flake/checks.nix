@@ -180,6 +180,7 @@ pkgs.lib.optionalAttrs isX86Linux {
           ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
           ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0012-add-runtime-touch-bounds-control.patch
         ];
+        healthPatchPath = ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0016-add-stream-health-sampling.patch;
         absoluteTouchPatchPath = ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
         readmePath = ../../../../product/plugins/moonlight/packages/moonlight-embedded-korri/README.md;
         moonlightPackage = self.packages.${system}.moonlight-embedded-korri;

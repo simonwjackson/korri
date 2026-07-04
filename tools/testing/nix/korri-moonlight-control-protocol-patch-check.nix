@@ -2,6 +2,7 @@
   pkgs,
   patchPath ? null,
   patchPaths ? [ patchPath ],
+  healthPatchPath ? null,
   absoluteTouchPatchPath,
   readmePath,
   moonlightPackage,
@@ -12,6 +13,7 @@ let
   check = message: assertion: { inherit message assertion; };
 
   patch = lib.concatStringsSep "\n" (map builtins.readFile patchPaths);
+  healthPatch = if healthPatchPath == null then "" else builtins.readFile healthPatchPath;
   absoluteTouchPatch = builtins.readFile absoluteTouchPatchPath;
   readme = builtins.readFile readmePath;
   contains = needle: haystack: lib.hasInfix needle haystack;
@@ -182,6 +184,30 @@ let
     (check "Moonlight local control protocol documents local-only non-remote scope" (
       contains "Linux-only local IPC" readme
       && contains "LAN, HTTP, mDNS, Tailscale, browser-facing APIs" readme
+    ))
+    (check "Moonlight local control emits in-client stream health samples" (
+      contains "quality.sample" healthPatch
+      && contains "moonlight_local_control_maybe_emit_health_sample" healthPatch
+      && contains "moonlight_local_control_health_sample_locked" healthPatch
+      && contains "MOONLIGHT_CONTROL_HEALTH_SAMPLE_INTERVAL_MS 1000" healthPatch
+    ))
+    (check "Moonlight stream health samples use Moonlight decode and RTP facts" (
+      contains "LiGetEstimatedRttInfo" healthPatch
+      && contains "LiGetRTPVideoStats" healthPatch
+      && contains "moonlight_local_control_record_video_decode" healthPatch
+      && contains "deliveredBitrateKbps" healthPatch
+      && contains "firstFrameMs" healthPatch
+    ))
+    (check "Moonlight stream health samples stay on the local control path" (
+      contains "moonlight_local_control_record_video_decode" healthPatch
+      && contains "LiGetEstimatedRttInfo" healthPatch
+      && contains "LiGetRTPVideoStats" healthPatch
+      && contains "This stays in-client and does not spawn an" readme
+    ))
+    (check "Moonlight stream health sampling is documented" (
+      contains "0016-add-stream-health-sampling.patch" readme
+      && contains "in-client" readme
+      && contains "quality.sample" readme
     ))
     (check "Moonlight local control does not add a quality-profile command" (
       !(contains "qualityProfile" patch)

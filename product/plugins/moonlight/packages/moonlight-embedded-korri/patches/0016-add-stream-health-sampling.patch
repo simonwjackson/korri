@@ -1,0 +1,383 @@
+diff --git a/src/connection.c b/src/connection.c
+index a64628d..c0edd1f 100644
+--- a/src/connection.c
++++ b/src/connection.c
+@@ -18,6 +18,7 @@
+  */
+ 
+ #include "connection.h"
++#include "local_control.h"
+ 
+ #include <stdio.h>
+ #include <stdarg.h>
+@@ -173,6 +174,8 @@ static void runtime_settings_mvp_connection_status_update(int status) {
+       return;
+   }
+ 
++  moonlight_local_control_update_connection_status(status_label);
++
+   if (spike_guard == NULL || strcmp(spike_guard, "1") != 0) {
+     fprintf(stderr, "live-settings-mvp: connection-status adaptation spike-only disabled status=%s\n", status_label);
+     return;
+diff --git a/src/local_control.c b/src/local_control.c
+index e8f533f..349cac1 100644
+--- a/src/local_control.c
++++ b/src/local_control.c
+@@ -30,6 +30,7 @@
+ #define MOONLIGHT_CONTROL_MAX_CLIENTS 4
+ #define MOONLIGHT_CONTROL_EVENT_HISTORY 256
+ #define MOONLIGHT_CONTROL_MIN_COMMAND_INTERVAL_MS 250
++#define MOONLIGHT_CONTROL_HEALTH_SAMPLE_INTERVAL_MS 1000
+ #define MOONLIGHT_CONTROL_MIN_BITRATE_KBPS 500
+ #define MOONLIGHT_CONTROL_MAX_BITRATE_KBPS 150000
+ #define MOONLIGHT_CONTROL_MIN_FPS 15
+@@ -89,6 +90,27 @@ struct moonlight_local_control_state {
+   int height;
+   int fps;
+   int bitrate_kbps;
++  char connection[16];
++  int has_health_sample;
++  uint64_t health_sample_seq;
++  uint64_t health_sampled_at_ms;
++  uint64_t health_last_emit_at_ms;
++  uint32_t health_rtt_ms;
++  uint32_t health_rtt_variance_ms;
++  double health_loss_fraction;
++  uint32_t health_delivered_bitrate_kbps;
++  uint32_t health_delivered_fps;
++  uint32_t health_last_video_packets;
++  uint32_t health_last_video_losses;
++  uint64_t health_video_bytes_since_sample;
++  uint32_t health_video_frames_since_sample;
++  uint32_t health_video_dropped_since_sample;
++  uint32_t health_last_frames_dropped;
++  uint32_t health_last_decode_time_ms;
++  uint32_t health_decode_time_total_ms;
++  uint32_t health_decode_time_samples;
++  uint32_t health_display_queue_depth;
++  uint32_t health_first_frame_ms;
+   int has_runtime_capability;
+   uint32_t supported_operations;
+   uint32_t proof_gated_operations;
+@@ -130,6 +152,8 @@ static struct json_object* moonlight_local_control_hello_locked(void);
+ static struct json_object* moonlight_local_control_error(struct json_object* id, int code, const char* message, const char* tag);
+ static struct json_object* moonlight_local_control_success(struct json_object* id, struct json_object* result);
+ static struct json_object* moonlight_local_control_event_locked(const char* name);
++static struct json_object* moonlight_local_control_health_sample_locked(void);
++static void moonlight_local_control_maybe_emit_health_sample(void);
+ static struct json_object* moonlight_local_control_runtime_command_event(uint64_t seq, uint32_t request_id, const char* command, const char* status, uint16_t reason);
+ static int moonlight_local_control_dispatch_runtime_command(struct json_object* id, struct json_object* request, const char* method_name, int client_fd);
+ static int moonlight_local_control_dispatch_input_command(struct json_object* id, struct json_object* request, const char* method_name, int client_fd);
+@@ -218,6 +242,27 @@ void moonlight_local_control_start_from_env(const char* initial_state, int width
+   control.height = height;
+   control.fps = fps;
+   control.bitrate_kbps = bitrate_kbps;
++  snprintf(control.connection, sizeof(control.connection), "%s", "unknown");
++  control.has_health_sample = 0;
++  control.health_sample_seq = 0;
++  control.health_sampled_at_ms = 0;
++  control.health_last_emit_at_ms = 0;
++  control.health_rtt_ms = 0;
++  control.health_rtt_variance_ms = 0;
++  control.health_loss_fraction = 0.0;
++  control.health_delivered_bitrate_kbps = 0;
++  control.health_delivered_fps = 0;
++  control.health_last_video_packets = 0;
++  control.health_last_video_losses = 0;
++  control.health_video_bytes_since_sample = 0;
++  control.health_video_frames_since_sample = 0;
++  control.health_video_dropped_since_sample = 0;
++  control.health_last_frames_dropped = 0;
++  control.health_last_decode_time_ms = 0;
++  control.health_decode_time_total_ms = 0;
++  control.health_decode_time_samples = 0;
++  control.health_display_queue_depth = 0;
++  control.health_first_frame_ms = 0;
+   control.has_runtime_capability = 0;
+   control.supported_operations = 0;
+   control.proof_gated_operations = 0;
+@@ -277,6 +322,48 @@ void moonlight_local_control_update_lifecycle(const char* state) {
+   pthread_mutex_unlock(&control.lock);
+ }
+ 
++void moonlight_local_control_update_connection_status(const char* connection) {
++  if (connection == NULL)
++    return;
++
++  struct json_object* event = NULL;
++  pthread_mutex_lock(&control.lock);
++  if (control.enabled) {
++    snprintf(control.connection, sizeof(control.connection), "%s", connection);
++    control.seq++;
++    control.moonlight_local_control_event_history[control.seq % MOONLIGHT_CONTROL_EVENT_HISTORY].seq = control.seq;
++    snprintf(control.moonlight_local_control_event_history[control.seq % MOONLIGHT_CONTROL_EVENT_HISTORY].name, sizeof(control.moonlight_local_control_event_history[0].name), "%s", "quality.connection");
++    event = moonlight_local_control_event_locked("quality.connection");
++    struct json_object* params = NULL;
++    struct json_object* payload = NULL;
++    if (json_object_object_get_ex(event, "params", &params)
++        && json_object_object_get_ex(params, "event", &payload)) {
++      json_object_object_add(payload, "connection", json_object_new_string(control.connection));
++    }
++  }
++  pthread_mutex_unlock(&control.lock);
++
++  if (event != NULL)
++    moonlight_local_control_emit_event(event);
++}
++
++void moonlight_local_control_record_video_decode(uint32_t encoded_bytes, uint32_t decoded_frames, uint32_t dropped_frames, uint32_t decode_time_ms, uint32_t queue_depth, uint32_t first_frame_ms) {
++  pthread_mutex_lock(&control.lock);
++  if (control.enabled) {
++    control.health_video_bytes_since_sample += encoded_bytes;
++    control.health_video_frames_since_sample += decoded_frames;
++    control.health_video_dropped_since_sample += dropped_frames;
++    if (decoded_frames > 0) {
++      control.health_decode_time_total_ms += decode_time_ms;
++      control.health_decode_time_samples += 1;
++    }
++    control.health_display_queue_depth = queue_depth;
++    if (first_frame_ms > 0)
++      control.health_first_frame_ms = first_frame_ms;
++  }
++  pthread_mutex_unlock(&control.lock);
++}
++
+ void moonlight_local_control_stop(void) {
+   int enabled;
+   int fd;
+@@ -321,6 +408,7 @@ static void* moonlight_local_control_thread(void* arg) {
+ 
+     struct pollfd poll_fd = { .fd = fd, .events = POLLIN };
+     int ready = poll(&poll_fd, 1, 250);
++    moonlight_local_control_maybe_emit_health_sample();
+     if (ready <= 0)
+       continue;
+ 
+@@ -647,11 +735,13 @@ static struct json_object* moonlight_local_control_snapshot_locked(void) {
+   json_object_object_add(result, "session", session);
+ 
+   struct json_object* stream_quality = json_object_new_object();
+-  json_object_object_add(stream_quality, "connection", json_object_new_string("unknown"));
++  json_object_object_add(stream_quality, "connection", json_object_new_string(control.connection[0] == '\0' ? "unknown" : control.connection));
+   json_object_object_add(stream_quality, "bitrateKbps", json_object_new_int(control.bitrate_kbps));
+   json_object_object_add(stream_quality, "fps", json_object_new_int(control.fps));
+   json_object_object_add(stream_quality, "width", json_object_new_int(control.width));
+   json_object_object_add(stream_quality, "height", json_object_new_int(control.height));
++  if (control.has_health_sample)
++    json_object_object_add(stream_quality, "sample", moonlight_local_control_health_sample_locked());
+   json_object_object_add(result, "streamQuality", stream_quality);
+ 
+   struct json_object* runtime_settings = json_object_new_object();
+@@ -710,6 +800,85 @@ static struct json_object* moonlight_local_control_snapshot_locked(void) {
+   return result;
+ }
+ 
++static struct json_object* moonlight_local_control_health_sample_locked(void) {
++  struct json_object* sample = json_object_new_object();
++  json_object_object_add(sample, "seq", json_object_new_int64((int64_t) control.health_sample_seq));
++  json_object_object_add(sample, "sampledAtMs", json_object_new_int64((int64_t) control.health_sampled_at_ms));
++  json_object_object_add(sample, "rttMs", json_object_new_int((int) control.health_rtt_ms));
++  json_object_object_add(sample, "rttVarianceMs", json_object_new_int((int) control.health_rtt_variance_ms));
++  json_object_object_add(sample, "lossFraction", json_object_new_double(control.health_loss_fraction));
++  json_object_object_add(sample, "deliveredBitrateKbps", json_object_new_int((int) control.health_delivered_bitrate_kbps));
++  json_object_object_add(sample, "requestedBitrateKbps", json_object_new_int(control.bitrate_kbps));
++  json_object_object_add(sample, "deliveredFps", json_object_new_int((int) control.health_delivered_fps));
++  json_object_object_add(sample, "requestedFps", json_object_new_int(control.fps));
++  json_object_object_add(sample, "framesDropped", json_object_new_int((int) control.health_last_frames_dropped));
++  json_object_object_add(sample, "decodeTimeMs", json_object_new_int((int) control.health_last_decode_time_ms));
++  json_object_object_add(sample, "queueDepth", json_object_new_int((int) control.health_display_queue_depth));
++  if (control.health_first_frame_ms > 0)
++    json_object_object_add(sample, "firstFrameMs", json_object_new_int((int) control.health_first_frame_ms));
++  return sample;
++}
++
++static void moonlight_local_control_maybe_emit_health_sample(void) {
++  uint64_t now = moonlight_local_control_monotonic_ms();
++  uint32_t rtt = 0;
++  uint32_t rtt_var = 0;
++  (void) LiGetEstimatedRttInfo(&rtt, &rtt_var);
++  const RTP_VIDEO_STATS* video_stats = LiGetRTPVideoStats();
++
++  struct json_object* event = NULL;
++  pthread_mutex_lock(&control.lock);
++  if (!control.enabled || !control.running || now == 0 || (control.health_last_emit_at_ms != 0 && now - control.health_last_emit_at_ms < MOONLIGHT_CONTROL_HEALTH_SAMPLE_INTERVAL_MS)) {
++    pthread_mutex_unlock(&control.lock);
++    return;
++  }
++
++  uint64_t elapsed_ms = control.health_last_emit_at_ms == 0 ? MOONLIGHT_CONTROL_HEALTH_SAMPLE_INTERVAL_MS : now - control.health_last_emit_at_ms;
++  uint32_t video_packets = video_stats == NULL ? control.health_last_video_packets : video_stats->packetCountVideo;
++  uint32_t video_losses = video_stats == NULL ? control.health_last_video_losses : (video_stats->packetCountFecFailed + video_stats->packetCountOOS + video_stats->packetCountInvalid + video_stats->packetCountFecInvalid);
++  uint32_t packet_delta = video_packets >= control.health_last_video_packets ? video_packets - control.health_last_video_packets : 0;
++  uint32_t loss_delta = video_losses >= control.health_last_video_losses ? video_losses - control.health_last_video_losses : 0;
++
++  control.health_sample_seq++;
++  control.health_sampled_at_ms = now;
++  control.health_last_emit_at_ms = now;
++  control.health_rtt_ms = rtt;
++  control.health_rtt_variance_ms = rtt_var;
++  control.health_loss_fraction = packet_delta == 0 ? 0.0 : (double) loss_delta / (double) packet_delta;
++  if (control.health_loss_fraction > 1.0)
++    control.health_loss_fraction = 1.0;
++  control.health_last_frames_dropped = control.health_video_dropped_since_sample;
++  control.health_last_decode_time_ms = control.health_decode_time_samples == 0 ? 0 : control.health_decode_time_total_ms / control.health_decode_time_samples;
++  control.health_last_video_packets = video_packets;
++  control.health_last_video_losses = video_losses;
++  if (elapsed_ms > 0) {
++    control.health_delivered_bitrate_kbps = (uint32_t) ((control.health_video_bytes_since_sample * 8u) / elapsed_ms);
++    control.health_delivered_fps = (uint32_t) ((control.health_video_frames_since_sample * 1000u) / elapsed_ms);
++  }
++  control.has_health_sample = 1;
++  control.seq++;
++  control.moonlight_local_control_event_history[control.seq % MOONLIGHT_CONTROL_EVENT_HISTORY].seq = control.seq;
++  snprintf(control.moonlight_local_control_event_history[control.seq % MOONLIGHT_CONTROL_EVENT_HISTORY].name, sizeof(control.moonlight_local_control_event_history[0].name), "%s", "quality.sample");
++
++  event = moonlight_local_control_event_locked("quality.sample");
++  struct json_object* params = NULL;
++  struct json_object* payload = NULL;
++  if (json_object_object_get_ex(event, "params", &params)
++      && json_object_object_get_ex(params, "event", &payload)) {
++    json_object_object_add(payload, "sample", moonlight_local_control_health_sample_locked());
++  }
++
++  control.health_video_bytes_since_sample = 0;
++  control.health_video_frames_since_sample = 0;
++  control.health_video_dropped_since_sample = 0;
++  control.health_decode_time_total_ms = 0;
++  control.health_decode_time_samples = 0;
++  pthread_mutex_unlock(&control.lock);
++
++  if (event != NULL)
++    moonlight_local_control_emit_event(event);
++}
++
+ static struct json_object* moonlight_local_control_event_locked(const char* name) {
+   struct json_object* event = json_object_new_object();
+   json_object_object_add(event, "jsonrpc", json_object_new_string("2.0"));
+diff --git a/src/local_control.h b/src/local_control.h
+index f51c82e..7cda684 100644
+--- a/src/local_control.h
++++ b/src/local_control.h
+@@ -4,6 +4,8 @@
+ void moonlight_local_control_start_from_env(const char* initial_state, int width, int height, int fps, int bitrate_kbps);
+ void moonlight_local_control_query_runtime_capabilities(void);
+ void moonlight_local_control_update_lifecycle(const char* state);
++void moonlight_local_control_update_connection_status(const char* connection);
++void moonlight_local_control_record_video_decode(unsigned int encoded_bytes, unsigned int decoded_frames, unsigned int dropped_frames, unsigned int decode_time_ms, unsigned int queue_depth, unsigned int first_frame_ms);
+ void moonlight_local_control_stop(void);
+ #else
+ static inline void moonlight_local_control_start_from_env(const char* initial_state, int width, int height, int fps, int bitrate_kbps) {
+@@ -17,5 +19,16 @@ static inline void moonlight_local_control_query_runtime_capabilities(void) {}
+ static inline void moonlight_local_control_update_lifecycle(const char* state) {
+   (void) state;
+ }
++static inline void moonlight_local_control_update_connection_status(const char* connection) {
++  (void) connection;
++}
++static inline void moonlight_local_control_record_video_decode(unsigned int encoded_bytes, unsigned int decoded_frames, unsigned int dropped_frames, unsigned int decode_time_ms, unsigned int queue_depth, unsigned int first_frame_ms) {
++  (void) encoded_bytes;
++  (void) decoded_frames;
++  (void) dropped_frames;
++  (void) decode_time_ms;
++  (void) queue_depth;
++  (void) first_frame_ms;
++}
+ static inline void moonlight_local_control_stop(void) {}
+ #endif
+diff --git a/src/video/v4l2m2m.c b/src/video/v4l2m2m.c
+index e78d44b..649942f 100644
+--- a/src/video/v4l2m2m.c
++++ b/src/video/v4l2m2m.c
+@@ -30,6 +30,7 @@
+  * but the active presentation path is SDL NV12.
+  */
+ #include "video.h"
++#include "../local_control.h"
+ #include "../util.h"
+ 
+ #include <stdio.h>
+@@ -80,6 +81,8 @@ static int            stream_height = 0;
+ static int            stream_output_width = 0;
+ static int            stream_output_height = 0;
+ static int            stream_decoder_epoch = 0;
++static uint64_t       stream_decoder_epoch_started_us = 0;
++static int            stream_decoder_first_frame_reported_epoch = -1;
+ 
+ /* Experimental Plan C path: bypass FFmpeg's v4l2_m2m wrapper and own
+  * the stateful V4L2 decoder directly. Enabled only when
+@@ -847,6 +850,8 @@ static int open_v4l2m2m_decoder_context(int videoFormat, int width, int height,
+     return -1;
+   }
+ 
++  stream_decoder_epoch_started_us = monotonic_us();
++  stream_decoder_first_frame_reported_epoch = -1;
+   return 0;
+ }
+ 
+@@ -1853,6 +1858,8 @@ static int v4l2m2m_setup(int videoFormat, int width, int height,
+     stream_output_height = 0;
+     stream_seen_output_frame = false;
+     stream_decoder_epoch = 0;
++    stream_decoder_epoch_started_us = 0;
++    stream_decoder_first_frame_reported_epoch = -1;
+ 
+     pkt = av_packet_alloc();
+     if (!pkt) {
+@@ -1978,6 +1985,8 @@ static void v4l2m2m_cleanup(void) {
+   stream_output_width = 0;
+   stream_output_height = 0;
+   stream_decoder_epoch = 0;
++  stream_decoder_epoch_started_us = 0;
++  stream_decoder_first_frame_reported_epoch = -1;
+   if (codec_ctx)  avcodec_free_context(&codec_ctx);
+   if (nal_buf)    { free(nal_buf); nal_buf = NULL; nal_size = 0; }
+ }
+@@ -2035,11 +2044,14 @@ static int v4l2m2m_submit(PDECODE_UNIT du) {
+   if (!f)
+     return DR_OK;
+ 
++  uint64_t submit_started_us = monotonic_us();
+   int ret;
+   bool request_recovery_idr_after_submit = false;
+   int reopen_width_after_submit = 0;
+   int reopen_height_after_submit = 0;
+   int received_frames = 0;
++  int dropped_display_frames = 0;
++  uint32_t first_frame_ms = 0;
+   while ((ret = avcodec_receive_frame(codec_ctx, f)) == 0) {
+     if (++received_frames > 8) {
+       LOG("submit: decoder receive frame cap reached epoch=%d; yielding video receive thread", stream_decoder_epoch);
+@@ -2055,6 +2067,11 @@ static int v4l2m2m_submit(PDECODE_UNIT du) {
+           f->format == AV_PIX_FMT_DRM_PRIME ? "YES" : "no");
+       logged_first_frame_epoch = stream_decoder_epoch;
+     }
++    if (stream_decoder_first_frame_reported_epoch != stream_decoder_epoch && stream_decoder_epoch_started_us != 0) {
++      uint64_t now_us = monotonic_us();
++      first_frame_ms = (uint32_t) ((now_us - stream_decoder_epoch_started_us) / 1000u);
++      stream_decoder_first_frame_reported_epoch = stream_decoder_epoch;
++    }
+ 
+     if (stream_seen_output_frame &&
+         (f->width != stream_output_width || f->height != stream_output_height)) {
+@@ -2095,6 +2112,7 @@ static int v4l2m2m_submit(PDECODE_UNIT du) {
+           if (++pending_drop_count <= 5 || pending_drop_count % 120 == 0)
+             LOG("pacing: replaced pending display frame count=%d", pending_drop_count);
+           av_frame_free(&disp_pending);  /* drop if display lagging */
++          dropped_display_frames++;
+         }
+         disp_pending = clone;
+         disp_pending_queued_us = monotonic_us();
+@@ -2106,6 +2124,13 @@ static int v4l2m2m_submit(PDECODE_UNIT du) {
+   }
+   av_frame_free(&f);
+ 
++  uint32_t decode_time_ms = (uint32_t) ((monotonic_us() - submit_started_us) / 1000u);
++  uint32_t queue_depth = 0;
++  pthread_mutex_lock(&disp_mtx);
++  queue_depth = disp_pending ? 1u : 0u;
++  pthread_mutex_unlock(&disp_mtx);
++  moonlight_local_control_record_video_decode((uint32_t) du->fullLength, (uint32_t) received_frames, (uint32_t) dropped_display_frames, decode_time_ms, queue_depth, first_frame_ms);
++
+   if (request_recovery_idr_after_submit) {
+     drop_pending_display_frame();
+     stream_seen_output_frame = false;

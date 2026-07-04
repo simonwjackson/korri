@@ -75,6 +75,7 @@ let
     ./patches/0013-add-auto-window-resize-flag.patch
     ./patches/0014-disable-gamepad-quit-combo.patch
     ./patches/0015-crop-coded-alignment-padding-on-present.patch
+    ./patches/0016-add-stream-health-sampling.patch
   ];
 in
 stdenv.mkDerivation rec {
