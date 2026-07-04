@@ -64,4 +64,39 @@ describe("ShiftLibraryLens", () => {
 
     expect(onSelect).toHaveBeenCalledWith("plat")
   })
+
+  it("reflects a controlled lens and reports changes instead of owning state", () => {
+    const onLensChange = mock(() => undefined)
+    render(
+      <ShiftLibraryLens
+        games={games}
+        lens="favorites"
+        onLensChange={onLensChange}
+      />,
+    )
+
+    // Controlled to Favorites: only the favorite game renders.
+    expect(screen.getByRole("button", { name: "RPG One" })).toBeDefined()
+    expect(screen.queryByRole("button", { name: "Platformer" })).toBeNull()
+
+    // Selecting a lens reports up; it does not flip local state.
+    fireEvent.click(screen.getByRole("tab", { name: "All" }))
+    expect(onLensChange).toHaveBeenCalledWith("all")
+    // Still Favorites because the parent owns the value.
+    expect(screen.queryByRole("button", { name: "Platformer" })).toBeNull()
+  })
+
+  it("reflects a controlled sort and reports changes", () => {
+    const onSortChange = mock(() => undefined)
+    render(
+      <ShiftLibraryLens games={games} sort="title" onSortChange={onSortChange} />,
+    )
+
+    // Controlled sort shows its placard label (title = A\u2013Z).
+    expect(screen.getByRole("button", { name: /^Sorted by A\u2013Z/ })).toBeDefined()
+
+    fireEvent.click(screen.getByRole("button", { name: /^Sorted by A\u2013Z/ }))
+    // title cycles to playtime, reported up.
+    expect(onSortChange).toHaveBeenCalledWith("playtime")
+  })
 })

@@ -20,6 +20,7 @@ import { useNavigate, useRouter, useSearch } from "@tanstack/react-router"
 import { Option } from "effect"
 import type { ComponentProps } from "react"
 import type { ShiftLibraryLens as LibraryLens } from "../pages/ShiftLensRow"
+import type { ShiftLibrarySort } from "../pages/shift-library-query"
 import {
   ShiftCatalogStateRoot,
   useShiftCatalogCase,
@@ -73,6 +74,8 @@ export function ShiftLibraryStateView({
   onRetry,
   lens,
   onLensChange,
+  sort,
+  onSortChange,
 }: {
   readonly result: ComponentProps<typeof ShiftCatalogStateRoot>["result"]
   readonly onSelect?: (id: string) => void
@@ -80,6 +83,8 @@ export function ShiftLibraryStateView({
   readonly onRetry?: () => void
   readonly lens?: LibraryLens
   readonly onLensChange?: (lens: LibraryLens) => void
+  readonly sort?: ShiftLibrarySort
+  readonly onSortChange?: (sort: ShiftLibrarySort) => void
 }) {
   return (
     <ShiftCatalogStateRoot result={result}>
@@ -92,6 +97,8 @@ export function ShiftLibraryStateView({
         onBack={onBack}
         lens={lens}
         onLensChange={onLensChange}
+        sort={sort}
+        onSortChange={onSortChange}
       />
     </ShiftCatalogStateRoot>
   )
@@ -102,11 +109,15 @@ function LibraryReadyBody({
   onBack,
   lens,
   onLensChange,
+  sort,
+  onSortChange,
 }: {
   readonly onSelect?: (id: string) => void
   readonly onBack?: () => void
   readonly lens?: LibraryLens
   readonly onLensChange?: (lens: LibraryLens) => void
+  readonly sort?: ShiftLibrarySort
+  readonly onSortChange?: (sort: ShiftLibrarySort) => void
 }) {
   const ready = useShiftCatalogCase("Ready")
   return Option.match(ready, {
@@ -118,6 +129,8 @@ function LibraryReadyBody({
         onBack={onBack}
         lens={lens}
         onLensChange={onLensChange}
+        sort={sort}
+        onSortChange={onSortChange}
       />
     ),
   })
@@ -128,16 +141,25 @@ export function ShiftLibraryRoute() {
   const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
   const navigate = useNavigate()
   const router = useRouter()
-  // SPIKE: read `lens` from typed URL search; changing it navigates search.
-  const search = useSearch({ strict: false }) as { readonly lens?: LibraryLens }
+  // Read the addressable view-state (lens, sort) from the route's typed search;
+  // each control navigates the search, preserving the other axis.
+  const search = useSearch({ strict: false }) as {
+    readonly lens?: LibraryLens
+    readonly sort?: ShiftLibrarySort
+  }
   const lens = search.lens ?? "all"
+  const sort = search.sort ?? "recent"
   return (
     <ShiftLibraryStateView
       result={live}
       onRetry={refreshSnapshot}
       lens={lens}
       onLensChange={next =>
-        navigate({ to: "/library", search: { lens: next } })
+        navigate({ to: "/library", search: { lens: next, sort } })
+      }
+      sort={sort}
+      onSortChange={next =>
+        navigate({ to: "/library", search: { lens, sort: next } })
       }
       onSelect={id => navigate({ to: "/game/$id", params: { id } })}
       onBack={() => router.history.back()}

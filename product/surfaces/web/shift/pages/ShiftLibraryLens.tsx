@@ -32,10 +32,16 @@ export interface ShiftLibraryLensProps {
   readonly title?: string
   readonly onSelect?: (id: string) => void
   readonly onBack?: () => void
-  // SPIKE: optional controlled `lens` (from URL search). Absent = local state,
-  // so existing tests and lab variants keep working unchanged.
+  /**
+   * Controlled lens/sort, sourced from the route's typed URL search. When a
+   * value is provided the parent owns it (deep-linkable, reproducible); when
+   * absent the component keeps its own local state, so tests and lab variants
+   * that render it without props are unaffected.
+   */
   readonly lens?: LibraryLens
   readonly onLensChange?: (lens: LibraryLens) => void
+  readonly sort?: ShiftLibrarySort
+  readonly onSortChange?: (sort: ShiftLibrarySort) => void
 }
 
 export function ShiftLibraryLens({
@@ -45,11 +51,15 @@ export function ShiftLibraryLens({
   onBack,
   lens: controlledLens,
   onLensChange,
+  sort: controlledSort,
+  onSortChange,
 }: ShiftLibraryLensProps) {
   const [localLens, setLocalLens] = useState<LibraryLens>("all")
+  const [localSort, setLocalSort] = useState<ShiftLibrarySort>("recent")
   const lens = controlledLens ?? localLens
   const setLens = onLensChange ?? setLocalLens
-  const [sort, setSort] = useState<ShiftLibrarySort>("recent")
+  const sort = controlledSort ?? localSort
+  const setSort = onSortChange ?? setLocalSort
 
   const flat = useMemo(
     () =>

@@ -5,6 +5,7 @@ import {
   createRouter,
 } from "@tanstack/react-router"
 import type { ShiftLibraryLens } from "../pages/ShiftLensRow"
+import type { ShiftLibrarySort } from "../pages/shift-library-query"
 import { SHIFT_COMPANION_PATH, SHIFT_LIBRARY_PATH } from "./paths"
 import { ShiftCompanionRoute } from "./ShiftCompanionRoute"
 import { ShiftGameDetailRoute } from "./ShiftGameDetailRoute"
@@ -29,12 +30,18 @@ const detailRoute = createRoute({
 const libraryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: SHIFT_LIBRARY_PATH,
-  // SPIKE: typed search axis for `lens` — probes URL round-trip in app + lab.
+  // The library's addressable view-state: `lens` and `sort` live in typed URL
+  // search so a space like /library?lens=favorites&sort=title is deep-linkable
+  // and reproduced on cold load. Unknown/missing values normalize to defaults.
   validateSearch: (
     search: Record<string, unknown>,
-  ): { readonly lens: ShiftLibraryLens } => {
+  ): { readonly lens: ShiftLibraryLens; readonly sort: ShiftLibrarySort } => {
     const lens = search.lens
-    return { lens: lens === "favorites" || lens === "genre" ? lens : "all" }
+    const sort = search.sort
+    return {
+      lens: lens === "favorites" || lens === "genre" ? lens : "all",
+      sort: sort === "title" || sort === "playtime" ? sort : "recent",
+    }
   },
   component: ShiftLibraryRoute,
 })
