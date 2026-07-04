@@ -1,7 +1,7 @@
 ---
 title: "refactor: Extract Moonlight streaming into a fully removable plugin"
 type: refactor
-status: active
+status: completed
 date: 2026-07-03
 deepened: 2026-07-03
 branch: refactor/moonlight-plugin
