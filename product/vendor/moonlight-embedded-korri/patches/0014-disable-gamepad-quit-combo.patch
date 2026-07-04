@@ -1,0 +1,30 @@
+--- source-link/src/input/evdev.c	2026-07-03 20:26:49.938935584 -0600
++++ src/src/input/evdev.c	2026-07-03 20:26:49.940935568 -0600
+@@ -132,6 +132,12 @@
+ 
+ static bool waitingToExitOnModifiersUp = false;
+ 
++// Korri: when set (via KORRI_MOONLIGHT_DISABLE_GAMEPAD_QUIT) the built-in
++// gamepad quit combo is neutralized. Korri owns quit through a deliberate
++// held chord + decision overlay; the instant Start+Select+L1+R1 exit would
++// otherwise fire the moment the chord is pressed and tear the stream down.
++static bool korriGamepadQuitDisabled = false;
++
+ int evdev_gamepads = 0;
+ 
+ #define ACTION_MODIFIERS (MODIFIER_SHIFT|MODIFIER_ALT|MODIFIER_CTRL)
+@@ -701,7 +707,8 @@
+     }
+   }
+ 
+-  if (gamepadModified && (dev->buttonFlags & QUIT_BUTTONS) == QUIT_BUTTONS) {
++  if (!korriGamepadQuitDisabled && gamepadModified &&
++      (dev->buttonFlags & QUIT_BUTTONS) == QUIT_BUTTONS) {
+     LiSendMultiControllerEvent(dev->controllerId, assignedControllerIds, 0, 0, 0, 0, 0, 0, 0);
+     return false;
+   }
+@@ -1099,3 +1106,4 @@
+   handler = evdev_handle_event;
+   mouseEmulationEnabled = mouse_emulation_enabled;
++  korriGamepadQuitDisabled = getenv("KORRI_MOONLIGHT_DISABLE_GAMEPAD_QUIT") != NULL;
+   pthread_mutex_lock(&absoluteTouchBoundsLock);

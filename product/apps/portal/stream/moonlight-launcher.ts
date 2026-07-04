@@ -101,9 +101,14 @@ export async function launchMoonlight(
     options.moonlightControl,
     policy.control,
   )
-  const environment = moonlightControl
-    ? moonlightControlEnvForHandle(moonlightControl)
-    : undefined
+  const environment: Record<string, string | null> = {
+    // Korri owns quit through the held chord + decision overlay. Disable
+    // Moonlight's built-in Start+Select+L1+R1 instant-quit combo (which is our
+    // exact chord) so pressing the chord can never tear the stream down before
+    // the deliberate hold completes. Read by the 0014 vendor patch.
+    KORRI_MOONLIGHT_DISABLE_GAMEPAD_QUIT: "1",
+    ...(moonlightControl ? moonlightControlEnvForHandle(moonlightControl) : {}),
+  }
 
   const installedSpec = await composeMoonlightWithLaunchCompanions(
     {

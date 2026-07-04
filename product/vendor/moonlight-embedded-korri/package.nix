@@ -73,6 +73,7 @@ let
     ./patches/0011-reset-sdl-presenter-on-output-size-change.patch
     ./patches/0012-add-runtime-touch-bounds-control.patch
     ./patches/0013-add-auto-window-resize-flag.patch
+    ./patches/0014-disable-gamepad-quit-combo.patch
   ];
 in
 stdenv.mkDerivation rec {
