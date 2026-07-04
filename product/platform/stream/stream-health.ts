@@ -51,6 +51,7 @@ export interface StreamHealthSummary {
   readonly bitrateDeliveryRatio?: number
   readonly fpsDeliveryRatio?: number
   readonly framesDropped: CounterTotalSummary
+  readonly frameDropFraction?: number
 }
 
 const DEFAULT_MAX_SAMPLES = 30
@@ -116,6 +117,7 @@ export function summarizeStreamHealth(
       window.samples,
       sample => sample.framesDropped,
     ),
+    frameDropFraction: frameDropFraction(window.samples),
   }
 }
 
@@ -163,6 +165,19 @@ function summarizeCounterTotal(
   const values = samples.map(pick).filter(isNumber)
   if (values.length === 0) return {}
   return { total: values.reduce((sum, value) => sum + value, 0) }
+}
+
+function frameDropFraction(
+  samples: readonly StreamHealthSample[],
+): number | undefined {
+  let delivered = 0
+  let dropped = 0
+  for (const sample of samples) {
+    if (isNumber(sample.deliveredFps)) delivered += sample.deliveredFps
+    if (isNumber(sample.framesDropped)) dropped += sample.framesDropped
+  }
+  const total = delivered + dropped
+  return delivered > 0 && total > 0 ? dropped / total : undefined
 }
 
 function trendOf(values: readonly number[]): StreamHealthTrend {

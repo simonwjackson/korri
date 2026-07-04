@@ -102,6 +102,29 @@ describe("stream health rolling summary", () => {
     expect(summarizeStreamHealth(window, 3_100).framesDropped.total).toBe(7)
   })
 
+  it("derives a bounded frame-drop fraction for controller input", () => {
+    const window = [
+      sample(1, 1_000, { deliveredFps: 58, framesDropped: 2 }),
+      sample(2, 2_000, { deliveredFps: 57, framesDropped: 3 }),
+    ].reduce(ingestStreamHealthSample, createStreamHealthWindow())
+
+    // 5 dropped out of roughly 120 delivered+dropped frames.
+    expect(summarizeStreamHealth(window, 2_100).frameDropFraction).toBeCloseTo(
+      5 / 120,
+    )
+  })
+
+  it("leaves frame-drop fraction undefined when delivery data is absent", () => {
+    const window = [
+      sample(1, 1_000, { deliveredFps: undefined, framesDropped: 2 }),
+      sample(2, 2_000, { deliveredFps: undefined, framesDropped: 3 }),
+    ].reduce(ingestStreamHealthSample, createStreamHealthWindow())
+
+    expect(
+      summarizeStreamHealth(window, 2_100).frameDropFraction,
+    ).toBeUndefined()
+  })
+
   it("reports RTT trend across the retained window", () => {
     const rising = [
       sample(1, 1_000, { rttMs: 10 }),
