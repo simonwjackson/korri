@@ -158,3 +158,19 @@ Adds the local input command path for dynamic absolute-touch geometry:
 - `state.snapshot.input.absoluteTouch` reports whether absolute touch is enabled, whether bounds are required before sending touches, the active bounds, the primary touchscreen ABS range, and the latest input command result.
 - `-absolutetouchrequirebounds` enables managed fail-closed behavior: absolute-touch events are ignored until startup fallback bounds or the first runtime bounds update is active.
 - Bounds are stored as one synchronized evdev snapshot instead of independent globals so local-control updates cannot expose partially-updated rectangles to the evdev input loop.
+
+### `0015-crop-coded-alignment-padding-on-present.patch`
+
+Crops Venus/iris coded-alignment padding out of the presented frame:
+
+- The SM8550 decoder exposes coded frame dimensions aligned to 128 (width) and
+  32 (height) without crop metadata; the padding is uninitialized chroma that
+  renders as solid green bars on the right/bottom for any resolution that is
+  not already aligned (854x480, 960x540, 1486x836, ...).
+- `local_control.c` publishes the host-applied runtime resolution
+  (`runtime.commandResult` applied width/height) to the video layer.
+- `frame_visible_width/height` prefer explicit frame crop metadata, then the
+  host-applied runtime resolution, then the configured stream size — accepting
+  a hint only when the coded dimension exceeds it by no more than the hardware
+  alignment slack (127/31). The 16:9 guess remains only as a last resort for
+  streams with no known target size.

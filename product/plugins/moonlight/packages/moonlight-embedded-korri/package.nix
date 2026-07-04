@@ -74,6 +74,7 @@ let
     ./patches/0012-add-runtime-touch-bounds-control.patch
     ./patches/0013-add-auto-window-resize-flag.patch
     ./patches/0014-disable-gamepad-quit-combo.patch
+    ./patches/0015-crop-coded-alignment-padding-on-present.patch
   ];
 in
 stdenv.mkDerivation rec {

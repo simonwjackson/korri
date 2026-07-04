@@ -1,0 +1,87 @@
+--- a/src/local_control.c
++++ b/src/local_control.c
+@@ -145,6 +145,14 @@
+ static void moonlight_local_control_evict_slow_subscriber(int fd);
+ static void moonlight_local_control_emit_event(struct json_object* event);
+ static void moonlight_local_control_emit_runtime_command_result(uint32_t request_id, uint16_t operation, uint16_t status, uint16_t reason, uint32_t value, uint32_t secondary_value);
++
++/* Host-applied runtime stream resolution, published for the video layer.
++ * The v4l2m2m presenter uses this as the visible-size fallback when the
++ * decoder exposes coded/aligned frame dimensions without crop metadata
++ * (Venus/iris pads width to 128 and height to 32; the padding is
++ * uninitialized chroma that renders as green bars). */
++int moonlight_lc_applied_stream_width = 0;
++int moonlight_lc_applied_stream_height = 0;
+ static void moonlight_local_control_runtime_settings_observer(const SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT* event, void* context);
+ 
+ void moonlight_local_control_start_from_env(const char* initial_state, int width, int height, int fps, int bitrate_kbps) {
+@@ -1023,6 +1031,8 @@
+   if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION && status == MOONLIGHT_LC_STATUS_APPLIED) {
+     control.width = (int) value;
+     control.height = (int) secondary_value;
++    moonlight_lc_applied_stream_width = (int) value;
++    moonlight_lc_applied_stream_height = (int) secondary_value;
+   }
+   control.moonlight_local_control_event_history[seq % MOONLIGHT_CONTROL_EVENT_HISTORY].seq = seq;
+   snprintf(control.moonlight_local_control_event_history[seq % MOONLIGHT_CONTROL_EVENT_HISTORY].name, sizeof(control.moonlight_local_control_event_history[0].name), "%s", "runtime.commandResult");
+--- a/src/video/v4l2m2m.c
++++ b/src/video/v4l2m2m.c
+@@ -867,9 +867,33 @@
+   pthread_mutex_unlock(&disp_mtx);
+ }
+ 
++/* Host-applied runtime resolution published by local_control.c. */
++extern int moonlight_lc_applied_stream_width;
++extern int moonlight_lc_applied_stream_height;
++
++/* Accept a known visible dimension as the crop target when the decoder's
++ * coded dimension only exceeds it by hardware alignment padding. Venus/iris
++ * aligns coded width to 128 and coded height to 32. */
++static int visible_from_hint(int coded, int hint, int max_pad) {
++  return (hint > 0 && hint <= coded && coded - hint <= max_pad) ? hint : 0;
++}
++
+ static int frame_visible_width(const AVFrame *frame) {
+   int cropped = frame->width - (int)frame->crop_left - (int)frame->crop_right;
+-  return cropped > 0 ? cropped : frame->width;
++  if (cropped > 0 && cropped != frame->width)
++    return cropped;
++
++  /* Venus/iris exposes 128-aligned coded widths (854 -> 896, 960 -> 1024)
++   * without crop metadata; the padding is uninitialized chroma that renders
++   * as green columns. Crop to the size the stream actually carries: the
++   * host-applied runtime resolution, else the configured stream size. */
++  int hinted = visible_from_hint(frame->width, moonlight_lc_applied_stream_width, 127);
++  if (!hinted)
++    hinted = visible_from_hint(frame->width, stream_width, 127);
++  if (hinted)
++    return hinted;
++
++  return frame->width;
+ }
+ 
+ static int frame_visible_height(const AVFrame *frame) {
+@@ -877,12 +901,17 @@
+   if (cropped > 0 && cropped != frame->height)
+     return cropped;
+ 
+-  /* The iris v4l2m2m H.264 path can expose coded/aligned heights after a
+-   * mid-stream SPS size change (1280x736 for a visible 1280x720 stream,
+-   * 1920x1088 for 1920x1080). FFmpeg does not populate crop_bottom on
+-   * those recovery frames, so crop the common 16:9 padding ourselves.
+-   * Runtime resolution changes are validated to preserve the launch
+-   * aspect ratio on the Sunshine side. */
++  /* Same as width: Venus/iris exposes 32-aligned coded heights
++   * (1080 -> 1088, 540 -> 544) without crop metadata. */
++  int hinted = visible_from_hint(frame->height, moonlight_lc_applied_stream_height, 31);
++  if (!hinted)
++    hinted = visible_from_hint(frame->height, stream_height, 31);
++  if (hinted)
++    return hinted;
++
++  /* Last resort for streams with no known target size: crop the common
++   * 16:9 padding (1280x736 for a visible 1280x720 stream, 1920x1088 for
++   * 1920x1080). */
+   int visible_16_9 = (frame->width * 9 + 8) / 16;
+   visible_16_9 &= ~1;
+   if (visible_16_9 > 0 && visible_16_9 < frame->height &&
