@@ -1,24 +1,28 @@
 /**
- * Shift store — Variant E: curated source shelves with summoned search.
+ * Shift store — Shelves: curated per-source bands fronted by the compact finder.
  *
  * The storefront front page: results are grouped into per-source shelves ("From
  * itch.io", "From Community"), each a scrollable row of selectable cover tiles.
- * Browsing is the default; there is no standing search bar. A single search
- * affordance in the header flips the surface into a flat, filtered grid; `back`
- * returns to the shelves. As everywhere in this set, a tile OPENS detail — no
- * per-item acquire chrome.
+ * A tile OPENS detail — no per-item acquire chrome. Search + filtering live in
+ * one compact `ShiftStoreFinder` pill in the header; a query flattens the
+ * shelves into a filtered grid, and selecting sources narrows which shelves
+ * show. Opening the filter fans chips out as an overlay, never pushing content.
+ *
+ * Still an EXPLORATION — marked with `data-proto` so the design tooling knows
+ * it is a take to promote/decompose, not a committed surface.
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { useMemo, useState } from "react"
 import { ShiftStoreBrowseTile } from "./ShiftStoreBrowseTile"
 import { ShiftStoreEmpty } from "./ShiftStoreEmpty"
-import { ShiftStoreSearchField } from "./ShiftStoreSearchField"
-import { ShiftStoreSearchTrigger } from "./ShiftStoreSearchTrigger"
+import { ShiftStoreFinder } from "./ShiftStoreFinder"
 import { ShiftStoreShelf } from "./ShiftStoreShelf"
 import type { ShiftStoreEntry } from "./shift-store-entry"
 import {
   applyShiftStoreQuery,
+  deriveShiftStoreSources,
   groupShiftStoreBySource,
+  toggleSource,
 } from "./shift-store-query"
 
 export interface ShiftStoreShelvesProps {
@@ -34,39 +38,49 @@ export function ShiftStoreShelves({
   onOpen,
   onBack,
 }: ShiftStoreShelvesProps) {
-  const [searching, setSearching] = useState(false)
   const [text, setText] = useState("")
+  const [sources, setSources] = useState<readonly string[]>([])
 
-  const shelves = useMemo(() => groupShiftStoreBySource(entries), [entries])
+  const searching = text.trim().length > 0
+
+  const facets = useMemo(() => deriveShiftStoreSources(entries), [entries])
+  const shelves = useMemo(() => {
+    const all = groupShiftStoreBySource(entries)
+    return sources.length === 0
+      ? all
+      : all.filter(shelf => sources.includes(shelf.source))
+  }, [entries, sources])
   const results = useMemo(
-    () =>
-      applyShiftStoreQuery(entries, { text, sources: [], sort: "relevance" }),
-    [entries, text],
+    () => applyShiftStoreQuery(entries, { text, sources, sort: "relevance" }),
+    [entries, text, sources],
   )
 
-  const exitSearch = () => {
-    setSearching(false)
-    setText("")
-  }
+  useInputAction("back", () => onBack?.())
 
-  useInputAction("back", () => {
-    if (searching) exitSearch()
-    else onBack?.()
-  })
+  const finder = (
+    <ShiftStoreFinder
+      text={text}
+      onText={setText}
+      facets={facets}
+      selected={sources}
+      onToggleSource={source =>
+        setSources(current => toggleSource(current, source))
+      }
+    />
+  )
 
-  if (searching) {
-    return (
-      <div
-        data-shift-store
-        className="shift-store shift-store-shelves intrinsic"
-      >
-        <ShiftStoreSearchField
-          autoFocus
-          value={text}
-          onChange={setText}
-          onClose={exitSearch}
-        />
-        {results.length > 0 ? (
+  return (
+    <div
+      data-shift-store
+      data-proto="store-shelves"
+      className="shift-store shift-store-shelves intrinsic"
+    >
+      <header className="shift-store-top">
+        <h2 className="shift-store-heading">{title}</h2>
+        {finder}
+      </header>
+      {searching ? (
+        results.length > 0 ? (
           <div className="shift-store-tiles">
             {results.map(entry => (
               <ShiftStoreBrowseTile
@@ -78,18 +92,8 @@ export function ShiftStoreShelves({
           </div>
         ) : (
           <ShiftStoreEmpty />
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div data-shift-store className="shift-store shift-store-shelves intrinsic">
-      <header className="shift-store-top">
-        <h2 className="shift-store-heading">{title}</h2>
-        <ShiftStoreSearchTrigger onActivate={() => setSearching(true)} />
-      </header>
-      {shelves.length > 0 ? (
+        )
+      ) : shelves.length > 0 ? (
         <div className="shift-store-shelf-stack">
           {shelves.map(shelf => (
             <ShiftStoreShelf

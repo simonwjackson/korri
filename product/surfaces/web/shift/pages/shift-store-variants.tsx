@@ -5,18 +5,18 @@
  * screen catalog consume this registry, so adding, renaming, or rewiring a
  * variant happens in exactly one place.
  *
- * The store models a console storefront, but there is no purchase. Two families
- * of exploration live here: an action-forward set (A–C) where each result
- * carries a Get/Play affordance, and a browse-first set (D–F) where a result is
- * a navigation target that opens detail and search is summoned rather than
- * standing. The dev-lab shows both so the control model can be judged.
+ * The store models a console storefront, but there is no purchase. Every variant
+ * here is browse-first: a result is a navigation target that opens detail, there
+ * is no in-place acquire chrome, and search + filtering share one compact
+ * `Store Finder` pill whose filter fans out as an overlay (never pushing the
+ * results down). Variants differ only in how results are laid out. All are
+ * EXPLORATIONS (takes) marked with `data-proto`.
  */
 import type { ReactNode } from "react"
 import { SHIFT_DESIGN_PARTS, type ShiftDesignPart } from "../shift-design-parts"
 import { ShiftStoreBrowse } from "./ShiftStoreBrowse"
-import { ShiftStoreGrid } from "./ShiftStoreGrid"
+import { ShiftStoreDrawer } from "./ShiftStoreDrawer"
 import { ShiftStoreIndex } from "./ShiftStoreIndex"
-import { ShiftStoreList } from "./ShiftStoreList"
 import { ShiftStoreShelves } from "./ShiftStoreShelves"
 import { ShiftStoreSpotlight } from "./ShiftStoreSpotlight"
 import type { ShiftStoreEntry } from "./shift-store-entry"
@@ -29,36 +29,29 @@ export interface ShiftStoreVariant {
 
 export const SHIFT_STORE_VARIANTS: readonly ShiftStoreVariant[] = [
   {
-    part: SHIFT_DESIGN_PARTS.storeGrid,
-    note: "Variant A: search + additive result grid",
-    render: entries => <ShiftStoreGrid entries={entries} />,
-  },
-  {
     part: SHIFT_DESIGN_PARTS.storeSpotlight,
-    note: "Variant B: search-forward spotlight hero + rail",
+    note: "Featured hero + rail; compact finder pill",
     render: entries => <ShiftStoreSpotlight entries={entries} />,
   },
   {
-    part: SHIFT_DESIGN_PARTS.storeList,
-    note: "Variant C: dense search-results list",
-    render: entries => <ShiftStoreList entries={entries} />,
-  },
-  // Second set — browse-first: a result opens detail (no per-item action), and
-  // search is summoned, not standing.
-  {
     part: SHIFT_DESIGN_PARTS.storeBrowse,
-    note: "Variant D: browse grid, tiles open detail, summoned search",
+    note: "Browse grid, tiles open detail; compact finder pill",
     render: entries => <ShiftStoreBrowse entries={entries} />,
   },
   {
     part: SHIFT_DESIGN_PARTS.storeShelves,
-    note: "Variant E: curated source shelves, summoned search",
+    note: "Curated source shelves; compact finder pill",
     render: entries => <ShiftStoreShelves entries={entries} />,
   },
   {
     part: SHIFT_DESIGN_PARTS.storeIndex,
-    note: "Variant F: alphabetical index rows, summoned search",
+    note: "Alphabetical index rows; compact finder pill",
     render: entries => <ShiftStoreIndex entries={entries} />,
+  },
+  {
+    part: SHIFT_DESIGN_PARTS.storeDrawer,
+    note: "Browse grid; maxed-out side panel (search, sort, every facet)",
+    render: entries => <ShiftStoreDrawer entries={entries} />,
   },
 ]
 

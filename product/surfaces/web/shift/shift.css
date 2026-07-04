@@ -1471,7 +1471,7 @@
 /* ── Header ───────────────────────────────────────────────────────────────── */
 [data-shift-store] .shift-store-top {
 	display: flex;
-	align-items: baseline;
+	align-items: center;
 	justify-content: space-between;
 	gap: var(--shift-space-3);
 }
@@ -1485,60 +1485,7 @@
 	color: var(--shift-ink);
 }
 
-[data-shift-store] .shift-store-count {
-	font-size: var(--shift-text-fine);
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
-	color: var(--shift-ink-faint);
-}
-
-/* ── Search field ─────────────────────────────────────────────────────────── */
-[data-shift-store] .shift-store-search {
-	display: flex;
-	align-items: center;
-	gap: var(--shift-space-3);
-	padding: var(--shift-space-2) var(--shift-space-4);
-	background: var(--shift-surface-raised);
-	border: 1px solid var(--shift-rule);
-	border-radius: 9999px;
-	transition: box-shadow 140ms ease;
-}
-
-[data-shift-store] .shift-store-search:focus-within {
-	box-shadow: 0 0 0 3px var(--shift-focus-glow);
-}
-
-[data-shift-store] .shift-store-search-glyph {
-	flex: 0 0 auto;
-	width: 1.3em;
-	height: 1.3em;
-	color: var(--shift-ink-faint);
-}
-
-[data-shift-store] .shift-store-search-input {
-	flex: 1 1 auto;
-	min-width: 0;
-	font: inherit;
-	font-size: var(--shift-text-body);
-	color: var(--shift-ink);
-	background: transparent;
-	border: 0;
-	outline: none;
-	padding: 0;
-}
-
-[data-shift-store] .shift-store-search-input::placeholder {
-	color: var(--shift-ink-faint);
-}
-
-/* ── Source / sort chips ──────────────────────────────────────────────────── */
-[data-shift-store] .shift-store-chips {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: var(--shift-space-2);
-}
-
+/* ── Source chip (shared: the finder fan) ──────────────────────────── */
 [data-shift-store] .shift-store-chip {
 	display: inline-flex;
 	align-items: center;
@@ -1572,47 +1519,542 @@
 	opacity: 0.7;
 }
 
-[data-shift-store] .shift-store-chip-sort {
-	margin-left: auto;
-}
-
 [data-shift-store] .shift-store-chip:is(:focus, [data-korri-active-focus]) {
 	box-shadow: 0 0 0 3px var(--shift-focus-glow);
 }
 
-/* ── Acquire button (Get / Getting… / Play) ───────────────────────────────── */
-[data-shift-store] .shift-store-get {
+/* ── Chip variants (candidates under exploration) ─────────────────────── *
+ * All are chrome-less (no pill, no fill); selection is a single small accent
+ * signal. Each refine group wears the variant matching its semantics. */
+
+/* underline — view-lens tabs (pick one). */
+[data-shift-store] .shift-store-chip[data-variant="underline"] {
+	background: transparent;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	border-radius: 0;
+	padding: var(--shift-space-1) var(--shift-space-1) var(--shift-space-2);
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-store] .shift-store-chip[data-variant="underline"][data-active] {
+	background: transparent;
+	color: var(--shift-ink);
+	border-bottom-color: var(--shift-accent);
+}
+
+/* dot — checklist rows (multi-select); the LED is the selection. */
+[data-shift-store] .shift-store-chip[data-variant="dot"] {
+	background: transparent;
+	border: 0;
+	border-radius: calc(var(--intrinsic-base) * 0.3);
+	padding: var(--shift-space-1) var(--shift-space-2);
+	gap: 0.55em;
+	color: var(--shift-ink-dim);
+}
+
+[data-shift-store] .shift-store-chip[data-variant="dot"]::before {
+	content: "";
+	flex: 0 0 auto;
+	width: 0.5em;
+	height: 0.5em;
+	border-radius: 9999px;
+	background: rgba(255, 255, 255, 0.22);
+}
+
+[data-shift-store] .shift-store-chip[data-variant="dot"][data-active] {
+	background: transparent;
+	color: var(--shift-ink);
+}
+
+[data-shift-store] .shift-store-chip[data-variant="dot"][data-active]::before {
+	background: var(--shift-accent);
+	box-shadow: 0 0 8px color-mix(in srgb, var(--shift-accent) 70%, transparent);
+}
+
+/* kicker — uppercase eyebrow caps for tiny fixed sets. */
+[data-shift-store] .shift-store-chip[data-variant="kicker"] {
+	background: transparent;
+	border: 0;
+	padding: var(--shift-space-1) 0;
+	font-weight: 800;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-store] .shift-store-chip[data-variant="kicker"][data-active] {
+	background: transparent;
+	color: var(--shift-accent);
+}
+
+[data-shift-store]
+	.shift-store-chip[data-variant="kicker"][data-active]::before {
+	content: "✓";
+}
+
+[data-shift-store]
+	.shift-store-chip[data-variant="kicker"]
+	.shift-store-chip-count {
+	letter-spacing: 0;
+	font-weight: 600;
+}
+
+/* cursor — console-menu caret for pick-one options; the slot is reserved so
+ * labels never shift as the selection moves. */
+[data-shift-store] .shift-store-chip[data-variant="cursor"] {
+	background: transparent;
+	border: 0;
+	padding: var(--shift-space-1) 0;
+	color: var(--shift-ink-dim);
+}
+
+[data-shift-store] .shift-store-chip[data-variant="cursor"]::before {
+	content: "▸";
+	width: 0.7em;
+	font-weight: 800;
+	color: var(--shift-accent);
+	opacity: 0;
+}
+
+[data-shift-store] .shift-store-chip[data-variant="cursor"][data-active] {
+	background: transparent;
+	color: var(--shift-ink);
+}
+
+[data-shift-store]
+	.shift-store-chip[data-variant="cursor"][data-active]::before {
+	opacity: 1;
+	text-shadow: 0 0 8px color-mix(in srgb, var(--shift-accent) 55%, transparent);
+}
+
+/* type — pure typography for facet clouds; nothing drawn that isn't text. */
+[data-shift-store] .shift-store-chip[data-variant="type"] {
+	background: transparent;
+	border: 0;
+	padding: var(--shift-space-1) 0;
+	font-weight: 500;
+	letter-spacing: 0.01em;
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-store] .shift-store-chip[data-variant="type"][data-active] {
+	background: transparent;
+	font-weight: 800;
+	letter-spacing: 0;
+	color: var(--shift-ink);
+}
+
+[data-shift-store]
+	.shift-store-chip[data-variant="type"][data-active]
+	.shift-store-chip-count {
+	color: var(--shift-accent);
+	opacity: 1;
+}
+
+/* ── Finder: one compact search + filter pill ───────────────────────── *
+ * The filter is a segment ATTACHED to the left of the search segment; each is a
+ * glyph until opened, so nothing is a standing bar. Opening the filter fans the
+ * source chips out as an overlay anchored under the pill — the results never
+ * move. */
+/* The finder is a flex row [strip][bar]; the bar (pill) is pinned right and the
+ * chip strip expands horizontally to its left when the filter opens. */
+[data-shift-store] .shift-store-finder {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-2);
+	flex: 0 1 auto;
+	min-width: 0;
+}
+
+[data-shift-store] .shift-store-finder-bar {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: stretch;
+	background: var(--shift-pill-bg);
+	border: 1px solid var(--shift-rule);
+	border-radius: 9999px;
+}
+
+[data-shift-store] .shift-store-finder-filter,
+[data-shift-store] .shift-store-finder-open,
+[data-shift-store] .shift-store-finder-search {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-1);
+	font: inherit;
+	font-size: var(--shift-text-body);
+	color: var(--shift-pill-fg);
+	background: transparent;
+	border: 0;
+	outline: none;
+	cursor: pointer;
+	padding: var(--shift-space-1) var(--shift-space-3);
+}
+
+/* The filter segment carries the left rounding + a divider to the search. */
+[data-shift-store] .shift-store-finder-filter {
+	border-radius: 9999px 0 0 9999px;
+	border-right: 1px solid var(--shift-rule);
+}
+
+[data-shift-store] .shift-store-finder-open,
+[data-shift-store] .shift-store-finder-search {
+	border-radius: 0 9999px 9999px 0;
+}
+
+[data-shift-store] .shift-store-finder-search {
+	cursor: text;
+}
+
+[data-shift-store]
+	.shift-store-finder[data-filter-open]
+	.shift-store-finder-filter {
+	color: var(--shift-on-accent);
+	background: var(--shift-accent);
+	border-right-color: transparent;
+}
+
+[data-shift-store]
+	.shift-store-finder-filter:is(:focus, [data-korri-active-focus]),
+[data-shift-store]
+	.shift-store-finder-open:is(:focus, [data-korri-active-focus]),
+[data-shift-store] .shift-store-finder-search:focus-within {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+[data-shift-store] .shift-store-finder-glyph {
+	flex: 0 0 auto;
+	width: 1.2em;
+	height: 1.2em;
+}
+
+/* Active-filter count badge on the filter segment. */
+[data-shift-store] .shift-store-finder-dot {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1.4em;
+	height: 1.4em;
+	padding: 0 0.35em;
+	border-radius: 9999px;
+	font-size: 0.72em;
+	font-weight: 800;
+	line-height: 1;
+	color: var(--shift-on-accent);
+	background: var(--shift-accent);
+}
+
+[data-shift-store]
+	.shift-store-finder[data-filter-open]
+	.shift-store-finder-dot {
+	color: var(--shift-accent);
+	background: var(--shift-on-accent);
+}
+
+[data-shift-store] .shift-store-finder-input {
+	min-width: 0;
+	width: min(34cqi, 12em);
+	font: inherit;
+	font-size: var(--shift-text-body);
+	color: var(--shift-ink);
+	background: transparent;
+	border: 0;
+	outline: none;
+	padding: 0;
+}
+
+[data-shift-store] .shift-store-finder-input::placeholder {
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-store] .shift-store-finder-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	cursor: pointer;
+	color: var(--shift-ink-faint);
+	background: transparent;
+	border: 0;
+	padding: 0;
+	outline: none;
+}
+
+[data-shift-store] .shift-store-finder-close svg {
+	width: 1.1em;
+	height: 1.1em;
+}
+
+[data-shift-store]
+	.shift-store-finder-close:is(:focus, [data-korri-active-focus]) {
+	color: var(--shift-ink);
+}
+
+/* Inline presentation: the source chips expand HORIZONTALLY out of the pill
+ * into the header's spare width, as a scrollable strip to the left of the bar.
+ * No overlay, no vertical reflow — the wasted row space becomes the filter UI. */
+[data-shift-store] .shift-store-finder-strip {
+	flex: 0 1 auto;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: var(--shift-space-2);
+	max-width: min(52cqi, 34em);
+	overflow-x: auto;
+	overflow-y: visible;
+	padding: var(--shift-space-1) 0;
+	scrollbar-width: none;
+}
+
+[data-shift-store] .shift-store-finder-strip::-webkit-scrollbar {
+	display: none;
+}
+
+[data-shift-store] .shift-store-finder-strip .shift-store-chip {
+	flex: 0 0 auto;
+	animation: shift-store-slide 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+[data-shift-store] .shift-store-finder-strip .shift-store-chip:nth-child(2) {
+	animation-delay: 40ms;
+}
+
+[data-shift-store] .shift-store-finder-strip .shift-store-chip:nth-child(3) {
+	animation-delay: 80ms;
+}
+
+[data-shift-store]
+	.shift-store-finder-strip
+	.shift-store-chip:nth-child(n + 4) {
+	animation-delay: 120ms;
+}
+
+@keyframes shift-store-slide {
+	from {
+		opacity: 0;
+		transform: translateX(12px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* Drawer presentation: a right-edge side sheet. It is anchored to the surface
+ * (which becomes a fixed box with an inner scroll region), so it stays pinned
+ * while the results scroll under it. */
+[data-shift-store].shift-store-drawer {
+	position: relative;
+	overflow: hidden;
+	padding: 0;
+}
+
+[data-shift-store] .shift-store-drawer-scroll {
+	height: 100%;
+	overflow-y: auto;
+	overflow-x: hidden;
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-4);
+	padding: var(--shift-space-5) var(--shift-space-5) var(--shift-space-6);
+}
+
+/* The header affordance that opens the panel: same pill vocabulary as the
+ * finder (both glyphs = search AND filters live inside). */
+[data-shift-store] .shift-store-panel-trigger {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-1);
 	cursor: pointer;
 	font: inherit;
 	font-size: var(--shift-text-body);
-	font-weight: 700;
 	color: var(--shift-pill-fg);
 	background: var(--shift-pill-bg);
 	border: 1px solid var(--shift-rule);
 	border-radius: 9999px;
-	padding: var(--shift-space-2) var(--shift-space-4);
+	padding: var(--shift-space-1) var(--shift-space-3);
 	outline: none;
-	white-space: nowrap;
 	transition:
 		box-shadow 140ms ease,
-		transform 140ms ease,
 		background 140ms ease;
 }
 
-[data-shift-store] .shift-store-get[data-primary] {
-	color: var(--shift-on-accent);
-	background: var(--shift-accent);
-	border-color: transparent;
-}
-
-[data-shift-store] .shift-store-get[data-status="acquiring"] {
-	cursor: default;
-	opacity: 0.6;
-}
-
-[data-shift-store] .shift-store-get:is(:focus, [data-korri-active-focus]) {
+[data-shift-store]
+	.shift-store-panel-trigger:is(:focus, [data-korri-active-focus]) {
 	box-shadow: 0 0 0 3px var(--shift-focus-glow);
-	transform: translateY(-1px);
+}
+
+/* The maxed-out search + filter side sheet. */
+[data-shift-store] .shift-store-panel {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 30;
+	width: min(84cqi, 24em);
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-3);
+	padding: var(--shift-space-5) var(--shift-space-4);
+	background: var(--shift-surface-raised);
+	border-left: 1px solid var(--shift-rule);
+	box-shadow: -20px 0 46px rgba(0, 0, 0, 0.5);
+	overflow-y: auto;
+	animation: shift-store-panel-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+[data-shift-store] .shift-store-panel-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--shift-space-2);
+}
+
+[data-shift-store] .shift-store-panel-title {
+	font-size: var(--shift-text-fine);
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--shift-ink-dim);
+}
+
+[data-shift-store] .shift-store-panel-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	color: var(--shift-ink-faint);
+	background: transparent;
+	border: 0;
+	padding: var(--shift-space-1);
+	border-radius: 9999px;
+	outline: none;
+	transition: color 140ms ease;
+}
+
+[data-shift-store] .shift-store-panel-close svg {
+	width: 1.2em;
+	height: 1.2em;
+}
+
+[data-shift-store]
+	.shift-store-panel-close:is(:focus, [data-korri-active-focus]) {
+	color: var(--shift-ink);
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+[data-shift-store] .shift-store-panel-search {
+	font: inherit;
+	font-size: var(--shift-text-body);
+	color: var(--shift-ink);
+	background: var(--shift-surface-sunk);
+	border: 1px solid var(--shift-rule);
+	border-radius: 9999px;
+	padding: var(--shift-space-2) var(--shift-space-4);
+	outline: none;
+	transition: box-shadow 140ms ease;
+}
+
+[data-shift-store] .shift-store-panel-search::placeholder {
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-store]
+	.shift-store-panel-search:is(:focus, [data-korri-active-focus]) {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+[data-shift-store] .shift-store-panel-meta {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--shift-space-2);
+}
+
+[data-shift-store] .shift-store-panel-count {
+	font-size: var(--shift-text-fine);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-store] .shift-store-panel-clear {
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-fine);
+	font-weight: 700;
+	color: var(--shift-accent);
+	background: transparent;
+	border: 0;
+	padding: 0;
+	outline: none;
+}
+
+[data-shift-store]
+	.shift-store-panel-clear:is(:focus, [data-korri-active-focus]) {
+	text-decoration: underline;
+}
+
+[data-shift-store] .shift-store-panel-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+}
+
+[data-shift-store] .shift-store-panel-group-title {
+	font-size: var(--shift-text-fine);
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-store] .shift-store-panel-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--shift-space-2) var(--shift-space-3);
+}
+
+/* Pick-one rows (sort, availability): inline, roomier gaps. */
+[data-shift-store] .shift-store-panel-inline {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--shift-space-2) var(--shift-space-3);
+}
+
+/* Checklist rows (sources): stacked; the count sits on the right edge. */
+[data-shift-store] .shift-store-panel-rows {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: var(--shift-space-1);
+}
+
+[data-shift-store] .shift-store-panel-rows .shift-store-chip {
+	width: 100%;
+}
+
+[data-shift-store] .shift-store-panel-rows .shift-store-chip-count {
+	margin-left: auto;
+}
+
+@keyframes shift-store-panel-in {
+	from {
+		transform: translateX(100%);
+	}
+	to {
+		transform: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	[data-shift-store] .shift-store-finder-strip .shift-store-chip,
+	[data-shift-store] .shift-store-panel {
+		animation: none;
+	}
 }
 
 /* ── Empty state ──────────────────────────────────────────────────────────── */
@@ -1622,82 +2064,34 @@
 	color: var(--shift-ink-dim);
 }
 
-/* ── Variant A: additive result-card grid ─────────────────────────────────── */
-[data-shift-store] .shift-store-cards {
-	display: grid;
-	/* Additive: auto-fill adds columns as width allows; the min track is
-	 * base-relative so card size tracks the device scale, not viewport px. */
-	grid-template-columns: repeat(
-			auto-fill,
-			minmax(calc(var(--intrinsic-base) * 6), 1fr)
-		);
-	gap: var(--shift-space-4) var(--shift-space-3);
-}
-
-/* ── Shared result card ───────────────────────────────────────────────────── */
-[data-shift-store] .shift-store-card {
-	display: flex;
-	flex-direction: column;
-	gap: var(--shift-space-2);
-	padding: var(--shift-space-3);
-	background: var(--shift-surface-raised);
-	border-radius: var(--shift-radius-panel);
-	min-width: 0;
-}
-
-[data-shift-store] .shift-store-card-art {
-	position: relative;
-	display: block;
-	aspect-ratio: 3 / 4;
-	border-radius: calc(var(--intrinsic-base) * 0.4);
-	overflow: hidden;
-	background: var(--shift-surface-sunk);
-	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-}
-
-[data-shift-store] .shift-store-card-art img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-[data-shift-store] .shift-store-card-body {
-	display: flex;
-	flex-direction: column;
-	gap: var(--shift-space-1);
-	min-width: 0;
-}
-
-[data-shift-store] .shift-store-card-title {
-	font-size: var(--shift-text-body);
-	font-weight: 700;
-	line-height: 1.2;
-	color: var(--shift-ink);
-	/* Clamp to two lines so a long title never reflows the grid row. */
-	display: -webkit-box;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	overflow: hidden;
-}
-
-[data-shift-store] .shift-store-card .shift-store-get {
-	text-align: center;
-}
-
-/* ── Variant B: search-forward spotlight ──────────────────────────────────── */
+/* ── Spotlight: featured hero + rail ──────────────────────────────────────── */
 [data-shift-store].shift-store-spotlight {
 	gap: var(--shift-space-4);
 }
 
+/* The hero is a navigation target (opens detail), so it is a native button with
+ * its chrome reset and the shared focus ring. */
 [data-shift-store] .shift-store-hero {
 	position: relative;
 	flex: 0 0 auto;
 	min-height: min(46cqh, calc(var(--intrinsic-base) * 15));
 	display: flex;
+	width: 100%;
+	border: 0;
 	border-radius: var(--shift-radius-panel);
 	overflow: hidden;
 	background: var(--shift-surface-sunk);
+	cursor: pointer;
+	text-align: left;
+	color: inherit;
+	font: inherit;
+	padding: 0;
+	outline: none;
+	transition: box-shadow 160ms ease;
+}
+
+[data-shift-store] .shift-store-hero:is(:focus, [data-korri-active-focus]) {
+	box-shadow: inset 0 0 0 3px var(--shift-accent);
 }
 
 [data-shift-store] .shift-store-hero-bleed {
@@ -1741,6 +2135,7 @@
 }
 
 [data-shift-store] .shift-store-hero-kicker {
+	display: block;
 	font-size: var(--shift-text-fine);
 	font-weight: 800;
 	letter-spacing: 0.18em;
@@ -1750,7 +2145,7 @@
 }
 
 [data-shift-store] .shift-store-hero-title {
-	margin: 0;
+	display: block;
 	font-size: var(--shift-text-display);
 	font-weight: 800;
 	line-height: 1.04;
@@ -1759,18 +2154,12 @@
 }
 
 [data-shift-store] .shift-store-hero-meta {
-	margin: 0;
+	display: block;
 	font-size: var(--shift-text-body);
 	color: var(--shift-on-media-ink-dim);
 }
 
-[data-shift-store] .shift-store-hero-actions {
-	display: flex;
-	gap: var(--shift-space-3);
-	margin-top: var(--shift-space-1);
-}
-
-/* The spotlight rail: the remaining results as horizontally scrolled cards. */
+/* The spotlight rail: the remaining results as horizontally scrolled tiles. */
 [data-shift-store] .shift-store-rail {
 	display: flex;
 	gap: var(--shift-space-3);
@@ -1785,137 +2174,13 @@
 	display: none;
 }
 
-[data-shift-store] .shift-store-rail .shift-store-card {
+[data-shift-store] .shift-store-rail .shift-store-tile {
 	flex: 0 0 auto;
-	width: calc(var(--intrinsic-base) * 7);
+	width: calc(var(--intrinsic-base) * 6);
 	scroll-snap-align: start;
 }
 
-/* ── Variant C: dense results list ────────────────────────────────────────── */
-[data-shift-store] .shift-store-rows {
-	display: flex;
-	flex-direction: column;
-	gap: var(--shift-space-2);
-}
-
-[data-shift-store] .shift-store-row {
-	display: flex;
-	align-items: center;
-	gap: var(--shift-space-3);
-	padding: var(--shift-space-2) var(--shift-space-3);
-	background: var(--shift-surface-raised);
-	border-radius: var(--shift-radius-panel);
-}
-
-[data-shift-store] .shift-store-row-thumb {
-	flex: 0 0 auto;
-	width: calc(var(--intrinsic-base) * 2.4);
-	aspect-ratio: 3 / 4;
-	border-radius: calc(var(--intrinsic-base) * 0.3);
-	overflow: hidden;
-	background: var(--shift-surface-sunk);
-}
-
-[data-shift-store] .shift-store-row-thumb img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-[data-shift-store] .shift-store-row-body {
-	flex: 1 1 auto;
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 0.1em;
-}
-
-[data-shift-store] .shift-store-row-title {
-	font-size: var(--shift-text-body);
-	font-weight: 700;
-	line-height: 1.2;
-	color: var(--shift-ink);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-[data-shift-store] .shift-store-row-meta {
-	font-size: var(--shift-text-fine);
-	color: var(--shift-ink-faint);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-[data-shift-store] .shift-store-row .shift-store-get {
-	flex: 0 0 auto;
-}
-
-/* ── Summoned search (browse-first variants D–F) ──────────────────────────── *
- * Search is not a standing bar here: a quiet trigger in the header flips the
- * surface into the search field. The trigger and the field share the store's
- * pill vocabulary so entering/leaving search reads as one control changing
- * state, not two different chromes.
- * -------------------------------------------------------------------------- */
-[data-shift-store] .shift-store-search-trigger {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--shift-space-2);
-	cursor: pointer;
-	font: inherit;
-	font-size: var(--shift-text-body);
-	font-weight: 600;
-	color: var(--shift-pill-fg);
-	background: var(--shift-pill-bg);
-	border: 1px solid var(--shift-rule);
-	border-radius: 9999px;
-	padding: var(--shift-space-1) var(--shift-space-3);
-	outline: none;
-	transition:
-		box-shadow 140ms ease,
-		background 140ms ease;
-}
-
-[data-shift-store]
-	.shift-store-search-trigger:is(:focus, [data-korri-active-focus]) {
-	box-shadow: 0 0 0 3px var(--shift-focus-glow);
-}
-
-[data-shift-store] .shift-store-search-trigger-glyph {
-	width: 1.2em;
-	height: 1.2em;
-	color: var(--shift-ink-faint);
-}
-
-[data-shift-store] .shift-store-search-close {
-	flex: 0 0 auto;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
-	color: var(--shift-ink-faint);
-	background: transparent;
-	border: 0;
-	border-radius: 9999px;
-	padding: var(--shift-space-1);
-	outline: none;
-	transition: color 140ms ease;
-}
-
-[data-shift-store] .shift-store-search-close svg {
-	width: 1.2em;
-	height: 1.2em;
-}
-
-[data-shift-store]
-	.shift-store-search-close:is(:focus, [data-korri-active-focus]) {
-	color: var(--shift-ink);
-	box-shadow: 0 0 0 3px var(--shift-focus-glow);
-}
-
-/* ── Variant D: additive browse-tile grid ─────────────────────────────────── *
+/* ── Browse-tile grid (additive) ─────────────────────────────────── *
  * The tile is the action (it opens detail), so it is a bare cover + caption
  * with no panel or button chrome. The grid is additive (auto-fill + a
  * base-relative min track) so a wider frame gains columns.
@@ -2003,7 +2268,7 @@
 	}
 }
 
-/* ── Variant E: curated source shelves ────────────────────────────────────── */
+/* ── Source shelves ────────────────────────────────────── */
 [data-shift-store] .shift-store-shelf-stack {
 	display: flex;
 	flex-direction: column;
@@ -2038,7 +2303,7 @@
 	scroll-snap-align: start;
 }
 
-/* ── Variant F: alphabetical index rows ───────────────────────────────────── *
+/* ── Alphabetical index rows ───────────────────────────────────── *
  * The whole row is the navigation target; a quiet trailing chevron is the only
  * "view" cue — no filled button.
  * -------------------------------------------------------------------------- */

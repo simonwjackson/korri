@@ -49,9 +49,8 @@ function familyFor(name: string): readonly Story[] {
   return storeStates(variant)
 }
 
-export const ShiftStoreGridStates = familyFor("Store — Grid")
 export const ShiftStoreSpotlightStates = familyFor("Store — Spotlight")
-export const ShiftStoreListStates = familyFor("Store — List")
 export const ShiftStoreBrowseStates = familyFor("Store — Browse")
 export const ShiftStoreShelvesStates = familyFor("Store — Shelves")
 export const ShiftStoreIndexStates = familyFor("Store — Index")
+export const ShiftStoreDrawerStates = familyFor("Store — Drawer")

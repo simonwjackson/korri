@@ -280,51 +280,23 @@ export const SHIFT_DESIGN_PARTS = {
   },
   // Store — remote-catalog search variants (source-agnostic layouts taking an
   // `entries` slot, so they are TEMPLATES) and their shared leaf parts. Models
-  // a console store, but every item is ACQUIRED (free), never purchased.
-  storeGrid: {
-    id: "shift.store-grid",
-    layer: "template",
-    name: "Store — Grid",
-  },
+  // a console store, but every item is ACQUIRED (free), never purchased. These
+  // layouts are EXPLORATIONS (takes) — each variant root carries `data-proto` so
+  // the design tooling knows what to promote/decompose.
   storeSpotlight: {
     id: "shift.store-spotlight",
     layer: "template",
     name: "Store — Spotlight",
   },
-  storeList: {
-    id: "shift.store-list",
-    layer: "template",
-    name: "Store — List",
-  },
-  storeHeader: {
-    id: "shift.store-header",
+  storeFinder: {
+    id: "shift.store-finder",
     layer: "molecule",
-    name: "Store Header",
-  },
-  storeSearch: {
-    id: "shift.store-search",
-    layer: "molecule",
-    name: "Store Search",
+    name: "Store Finder",
   },
   storeChip: {
     id: "shift.store-chip",
     layer: "atom",
     name: "Store Source Chip",
-  },
-  storeCard: {
-    id: "shift.store-card",
-    layer: "molecule",
-    name: "Store Card",
-  },
-  storeGetButton: {
-    id: "shift.store-get-button",
-    layer: "atom",
-    name: "Store Get Button",
-  },
-  storeResultRow: {
-    id: "shift.store-result-row",
-    layer: "molecule",
-    name: "Store Result Row",
   },
   storeSpotlightHero: {
     id: "shift.store-spotlight-hero",
@@ -336,10 +308,10 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "atom",
     name: "Store Empty",
   },
-  // Store — browse-first variants. Here items are NAVIGATION targets (focus →
-  // open a detail page where the acquire action lives), not action buttons, and
-  // search is SUMMONED (an affordance flips into the field), never a standing
-  // bar. A second family of explorations alongside the action-forward set.
+  // Store — browse-first variants. Items are NAVIGATION targets (focus → open a
+  // detail page where the acquire action lives), not action buttons. Search and
+  // filtering share one compact `Store Finder` pill; the filter fans out as an
+  // overlay, so opening it never pushes the results down.
   storeBrowse: {
     id: "shift.store-browse",
     layer: "template",
@@ -355,10 +327,17 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "template",
     name: "Store — Index",
   },
-  storeSearchTrigger: {
-    id: "shift.store-search-trigger",
-    layer: "atom",
-    name: "Store Search Trigger",
+  // Alternate refine presentation: a right-edge side sheet carrying the FULL
+  // search + filter control set (maxed out to design around, then cut).
+  storeDrawer: {
+    id: "shift.store-drawer",
+    layer: "template",
+    name: "Store — Drawer",
+  },
+  storePanel: {
+    id: "shift.store-panel",
+    layer: "organism",
+    name: "Store Panel",
   },
   storeBrowseTile: {
     id: "shift.store-browse-tile",

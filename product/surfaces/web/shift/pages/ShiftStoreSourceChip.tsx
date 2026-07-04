@@ -1,22 +1,32 @@
 /**
- * Shift store — a source filter chip (atom).
+ * Shift store — a filter chip (atom).
  *
- * The toggle that narrows results to one remote source, and the sort-cycle chip
- * that shares its pill vocabulary. Toggles reflect selection through both
- * `aria-pressed` and `data-active`; the sort chip carries no pressed state (it
- * advances a cycle rather than toggling one facet).
+ * The one selectable filter unit the store's refine surfaces stamp out. It
+ * reflects selection through both `aria-pressed` and `data-active`, carries an
+ * optional count badge, and exposes a `variant` family — the chip candidates
+ * under exploration — so each refine group can wear the presentation that fits
+ * its semantics (a caret for pick-one sorts, an underline for view lenses, an
+ * LED dot for checklist rows, pure type or kicker caps for facet clouds).
  */
 import { SHIFT_DESIGN_PARTS, shiftDesignPartAttrs } from "../shift-design-parts"
+
+export type ShiftStoreChipVariant =
+  | "pill"
+  | "underline"
+  | "dot"
+  | "kicker"
+  | "cursor"
+  | "type"
 
 export interface ShiftStoreSourceChipProps {
   readonly label: string
   readonly onClick: () => void
-  /** Toggle state; omitted for the sort chip (a cycle, not a toggle). */
+  /** Selected state. */
   readonly active?: boolean
-  /** Optional count badge (source chips). */
+  /** Optional count badge. */
   readonly count?: number
-  /** Render as the sort-cycle chip rather than a source toggle. */
-  readonly sort?: boolean
+  /** Presentation family. Default "pill" (the finder strip's look). */
+  readonly variant?: ShiftStoreChipVariant
 }
 
 export function ShiftStoreSourceChip({
@@ -24,18 +34,19 @@ export function ShiftStoreSourceChip({
   onClick,
   active,
   count,
-  sort = false,
+  variant = "pill",
 }: ShiftStoreSourceChipProps) {
   return (
     <button
       type="button"
-      className={`shift-store-chip${sort ? " shift-store-chip-sort" : ""}`}
-      data-active={!sort && active ? true : undefined}
-      aria-pressed={sort ? undefined : Boolean(active)}
+      className="shift-store-chip"
+      data-variant={variant}
+      data-active={active ? true : undefined}
+      aria-pressed={Boolean(active)}
       onClick={onClick}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.storeChip)}
     >
-      {label}
+      <span className="shift-store-chip-label">{label}</span>
       {count !== undefined ? (
         <span className="shift-store-chip-count">{count}</span>
       ) : null}

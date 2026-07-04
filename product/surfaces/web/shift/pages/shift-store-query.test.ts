@@ -3,10 +3,14 @@ import type { ShiftStoreEntry } from "./shift-store-entry"
 import {
   applyShiftStoreQuery,
   deriveShiftStoreSources,
+  deriveShiftStoreStatuses,
+  deriveShiftStoreValues,
   groupShiftStoreBySource,
   nextShiftStoreSort,
   SHIFT_STORE_DEFAULT_QUERY,
   type ShiftStoreQuery,
+  shiftStoreAvailabilityLabel,
+  shiftStoreAvailabilityStatuses,
   shiftStoreSortLabel,
   toggleSource,
 } from "./shift-store-query"
@@ -125,6 +129,83 @@ describe("applyShiftStoreQuery — source facet", () => {
       { value: "Community", count: 2 },
       { value: "itch.io", count: 1 },
     ])
+  })
+})
+
+describe("applyShiftStoreQuery — facet filters", () => {
+  const entries = [
+    entry("a", {
+      title: "Alpha",
+      genre: "Platformer",
+      platform: "Linux",
+      developer: "Maddy",
+      status: "ready",
+    }),
+    entry("b", {
+      title: "Bravo",
+      genre: "Roguelike",
+      platform: "Windows",
+      developer: "Supergiant",
+    }),
+    entry("c", { title: "Charlie" }), // no metadata at all
+  ]
+
+  it("filters by genre, platform, developer, and status", () => {
+    expect(
+      ids(applyShiftStoreQuery(entries, query({ genres: ["Roguelike"] }))),
+    ).toEqual(["b"])
+    expect(
+      ids(applyShiftStoreQuery(entries, query({ platforms: ["Linux"] }))),
+    ).toEqual(["a"])
+    expect(
+      ids(applyShiftStoreQuery(entries, query({ developers: ["Maddy"] }))),
+    ).toEqual(["a"])
+    expect(
+      ids(applyShiftStoreQuery(entries, query({ statuses: ["ready"] }))),
+    ).toEqual(["a"])
+  })
+
+  it("an entry with no value for a filtered field never matches it", () => {
+    expect(
+      ids(
+        applyShiftStoreQuery(
+          entries,
+          query({ genres: ["Platformer", "Roguelike"] }),
+        ),
+      ),
+    ).toEqual(["a", "b"])
+  })
+
+  it("derives generic value facets by weight then name", () => {
+    expect(deriveShiftStoreValues(entries, e => e.genre)).toEqual([
+      { value: "Platformer", count: 1 },
+      { value: "Roguelike", count: 1 },
+    ])
+  })
+
+  it("derives status facets in lifecycle order, dropping empty ones", () => {
+    expect(deriveShiftStoreStatuses(entries)).toEqual([
+      { value: "available", count: 2 },
+      { value: "ready", count: 1 },
+    ])
+  })
+})
+
+describe("availability lens", () => {
+  it("maps each lens onto the status filter, folding acquiring into\
+ not-acquired", () => {
+    expect(shiftStoreAvailabilityStatuses("all")).toEqual([])
+    expect(shiftStoreAvailabilityStatuses("available")).toEqual([
+      "available",
+      "acquiring",
+    ])
+    expect(shiftStoreAvailabilityStatuses("ready")).toEqual(["ready"])
+  })
+
+  it("labels every lens in store language", () => {
+    expect(shiftStoreAvailabilityLabel("all")).toBe("All")
+    expect(shiftStoreAvailabilityLabel("available")).toBe("Not acquired")
+    expect(shiftStoreAvailabilityLabel("ready")).toBe("Ready to play")
   })
 })
 

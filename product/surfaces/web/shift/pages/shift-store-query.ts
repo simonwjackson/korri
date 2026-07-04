@@ -8,9 +8,19 @@
  * testable. A missing sortable value sinks to the bottom and ties break on
  * title, so order never depends on input order.
  */
-import type { ShiftStoreEntry } from "./shift-store-entry"
+import type {
+  ShiftStoreEntry,
+  ShiftStoreEntryStatus,
+} from "./shift-store-entry"
 
 export type ShiftStoreSort = "relevance" | "title" | "source"
+
+/** Every sort, in cycle/display order — the single source of truth for sort UI. */
+export const SHIFT_STORE_SORTS: readonly ShiftStoreSort[] = [
+  "relevance",
+  "title",
+  "source",
+]
 
 export interface ShiftStoreQuery {
   /** Free-text search; empty matches everything. */
@@ -18,6 +28,11 @@ export interface ShiftStoreQuery {
   /** Selected source facets; empty means every source. */
   readonly sources: readonly string[]
   readonly sort: ShiftStoreSort
+  /** Optional facet filters; absent or empty means "no filter". */
+  readonly genres?: readonly string[]
+  readonly platforms?: readonly string[]
+  readonly developers?: readonly string[]
+  readonly statuses?: readonly ShiftStoreEntryStatus[]
 }
 
 export const SHIFT_STORE_DEFAULT_QUERY: ShiftStoreQuery = {
@@ -40,6 +55,10 @@ export function applyShiftStoreQuery(
     entry =>
       (query.sources.length === 0 ||
         entry.sources.some(source => query.sources.includes(source))) &&
+      matchesValue(query.genres, entry.genre) &&
+      matchesValue(query.platforms, entry.platform) &&
+      matchesValue(query.developers, entry.developer) &&
+      matchesValue(query.statuses, entry.status) &&
       (text.length === 0 || matchesText(entry, text)),
   )
   return [...filtered].sort(comparatorFor(query.sort, text))
@@ -90,6 +109,84 @@ export function toggleSource(
     : [...sources, source]
 }
 
+/** Facets over any single-valued entry field (genre, platform, developer),
+ * counted and ordered like the source facets: weight first, then name. */
+export function deriveShiftStoreValues(
+  entries: readonly ShiftStoreEntry[],
+  pick: (entry: ShiftStoreEntry) => string | undefined,
+): readonly ShiftStoreSourceFacet[] {
+  const counts = new Map<string, number>()
+  for (const entry of entries) {
+    const value = pick(entry)
+    if (value === undefined) continue
+    counts.set(value, (counts.get(value) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
+}
+
+/**
+ * The store's availability LENS — a pick-one view, not a multi-select facet.
+ * "Getting" (acquiring) is a transient moment, so it folds into "Not acquired"
+ * rather than standing as its own filter.
+ */
+export type ShiftStoreAvailability = "all" | "available" | "ready"
+
+export const SHIFT_STORE_AVAILABILITIES: readonly ShiftStoreAvailability[] = [
+  "all",
+  "available",
+  "ready",
+]
+
+export function shiftStoreAvailabilityLabel(
+  availability: ShiftStoreAvailability,
+): string {
+  switch (availability) {
+    case "all":
+      return "All"
+    case "available":
+      return "Not acquired"
+    case "ready":
+      return "Ready to play"
+  }
+}
+
+/** Map the lens onto the low-level status filter the query core applies. */
+export function shiftStoreAvailabilityStatuses(
+  availability: ShiftStoreAvailability,
+): readonly ShiftStoreEntryStatus[] {
+  switch (availability) {
+    case "all":
+      return []
+    case "available":
+      return ["available", "acquiring"]
+    case "ready":
+      return ["ready"]
+  }
+}
+
+/** Status facets in the model's own lifecycle order (not by weight), because
+ * "available → acquiring → ready" is a progression, not a popularity list. */
+export function deriveShiftStoreStatuses(
+  entries: readonly ShiftStoreEntry[],
+): readonly {
+  readonly value: ShiftStoreEntryStatus
+  readonly count: number
+}[] {
+  const order: readonly ShiftStoreEntryStatus[] = [
+    "available",
+    "acquiring",
+    "ready",
+  ]
+  return order
+    .map(value => ({
+      value,
+      count: entries.filter(entry => entry.status === value).length,
+    }))
+    .filter(facet => facet.count > 0)
+}
+
 const SORT_CYCLE: readonly ShiftStoreSort[] = ["relevance", "title", "source"]
 
 export function nextShiftStoreSort(sort: ShiftStoreSort): ShiftStoreSort {
@@ -106,6 +203,15 @@ export function shiftStoreSortLabel(sort: ShiftStoreSort): string {
     case "source":
       return "Source"
   }
+}
+
+/** True when the filter is absent/empty, or the entry's value is selected. */
+function matchesValue(
+  selected: readonly string[] | undefined,
+  value: string | undefined,
+): boolean {
+  if (!selected || selected.length === 0) return true
+  return value !== undefined && selected.includes(value)
 }
 
 function matchesText(entry: ShiftStoreEntry, text: string): boolean {

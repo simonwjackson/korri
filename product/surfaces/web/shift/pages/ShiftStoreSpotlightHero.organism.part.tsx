@@ -1,6 +1,6 @@
 /**
  * Store Spotlight Hero organism catalog entry — the featured, art-forward
- * banner the Spotlight variant leads with, from the real store fixture.
+ * navigation panel (no acquire button) the Spotlight variant leads with.
  */
 import { SHIFT_STORE_ENTRIES } from "../config"
 import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"

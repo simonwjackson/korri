@@ -32,9 +32,8 @@ import { ShiftLibraryLens } from "./pages/ShiftLibraryLens"
 import { ShiftLibraryReel } from "./pages/ShiftLibraryReel"
 import { ShiftLibraryShelves } from "./pages/ShiftLibraryShelves"
 import { ShiftStoreBrowse } from "./pages/ShiftStoreBrowse"
-import { ShiftStoreGrid } from "./pages/ShiftStoreGrid"
+import { ShiftStoreDrawer } from "./pages/ShiftStoreDrawer"
 import { ShiftStoreIndex } from "./pages/ShiftStoreIndex"
-import { ShiftStoreList } from "./pages/ShiftStoreList"
 import { ShiftStoreShelves } from "./pages/ShiftStoreShelves"
 import { ShiftStoreSpotlight } from "./pages/ShiftStoreSpotlight"
 import type { ShiftGameDetailView } from "./pages/shift-game-detail-view"
@@ -275,6 +274,10 @@ function syntheticStoreSources(index: number): readonly string[] {
   return [...new Set(sources)]
 }
 
+// Platforms the acquisition protocol reports on claims; synthesised per entry
+// so the store's platform facet has data to design around.
+const SHIFT_STORE_PLATFORMS = ["Linux", "Windows", "Browser"] as const
+
 export const SHIFT_STORE_ENTRIES: readonly ShiftStoreEntry[] = DEV_GAMES.map(
   ({ media }, index) => ({
     id: media.id,
@@ -283,6 +286,7 @@ export const SHIFT_STORE_ENTRIES: readonly ShiftStoreEntry[] = DEV_GAMES.map(
     sources: syntheticStoreSources(index),
     genre: media.genre,
     developer: media.developer,
+    platform: SHIFT_STORE_PLATFORMS[index % SHIFT_STORE_PLATFORMS.length],
     status: syntheticStoreStatus(index),
   }),
 )
@@ -343,46 +347,39 @@ const SHIFT_SCREENS: readonly Screen[] = [
     render: () => <ShiftLibraryReel games={SHIFT_LIBRARY_GAMES} />,
   },
   {
-    id: "store-grid",
-    group: "Store",
-    name: "Store — Grid",
-    note: "Variant A: search + additive result grid",
-    render: () => <ShiftStoreGrid entries={SHIFT_STORE_ENTRIES} />,
-  },
-  {
     id: "store-spotlight",
     group: "Store",
     name: "Store — Spotlight",
-    note: "Variant B: search-forward spotlight hero + rail",
+    note: "Featured hero + rail; compact finder pill",
     render: () => <ShiftStoreSpotlight entries={SHIFT_STORE_ENTRIES} />,
-  },
-  {
-    id: "store-list",
-    group: "Store",
-    name: "Store — List",
-    note: "Variant C: dense search-results list",
-    render: () => <ShiftStoreList entries={SHIFT_STORE_ENTRIES} />,
   },
   {
     id: "store-browse",
     group: "Store",
     name: "Store — Browse",
-    note: "Variant D: browse grid, tiles open detail, summoned search",
+    note: "Browse grid, tiles open detail; compact finder pill",
     render: () => <ShiftStoreBrowse entries={SHIFT_STORE_ENTRIES} />,
   },
   {
     id: "store-shelves",
     group: "Store",
     name: "Store — Shelves",
-    note: "Variant E: curated source shelves, summoned search",
+    note: "Curated source shelves; compact finder pill",
     render: () => <ShiftStoreShelves entries={SHIFT_STORE_ENTRIES} />,
   },
   {
     id: "store-index",
     group: "Store",
     name: "Store — Index",
-    note: "Variant F: alphabetical index rows, summoned search",
+    note: "Alphabetical index rows; compact finder pill",
     render: () => <ShiftStoreIndex entries={SHIFT_STORE_ENTRIES} />,
+  },
+  {
+    id: "store-drawer",
+    group: "Store",
+    name: "Store — Drawer",
+    note: "Browse grid; maxed-out side panel (search, sort, every facet)",
+    render: () => <ShiftStoreDrawer entries={SHIFT_STORE_ENTRIES} />,
   },
   {
     id: "game-detail",

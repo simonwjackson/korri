@@ -1,20 +1,27 @@
 /**
- * Shift store — Variant F: alphabetical index with summoned search.
+ * Shift store — Index: an alphabetical list fronted by the compact finder.
  *
  * The scan-first take: a plain vertical index of rows, alphabetical by default,
- * each row the full-width navigation target that opens detail. This is the one
- * variant where a "view" cue reads naturally, so each row carries a quiet
- * trailing chevron rather than a button. Search is summoned from the header, not
- * standing; `back` leaves search before it leaves the store.
+ * each row the full-width navigation target that opens detail with a quiet
+ * trailing chevron. Search + filtering live in one compact `ShiftStoreFinder`
+ * pill in the header; opening the filter fans chips out as an overlay so the
+ * list never gets pushed down. When a query is present the rows re-rank by
+ * relevance.
+ *
+ * Still an EXPLORATION — marked with `data-proto` so the design tooling knows
+ * it is a take to promote/decompose, not a committed surface.
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { useMemo, useState } from "react"
 import { ShiftStoreEmpty } from "./ShiftStoreEmpty"
+import { ShiftStoreFinder } from "./ShiftStoreFinder"
 import { ShiftStoreIndexRow } from "./ShiftStoreIndexRow"
-import { ShiftStoreSearchField } from "./ShiftStoreSearchField"
-import { ShiftStoreSearchTrigger } from "./ShiftStoreSearchTrigger"
 import type { ShiftStoreEntry } from "./shift-store-entry"
-import { applyShiftStoreQuery } from "./shift-store-query"
+import {
+  applyShiftStoreQuery,
+  deriveShiftStoreSources,
+  toggleSource,
+} from "./shift-store-query"
 
 export interface ShiftStoreIndexProps {
   readonly entries: readonly ShiftStoreEntry[]
@@ -29,44 +36,40 @@ export function ShiftStoreIndex({
   onOpen,
   onBack,
 }: ShiftStoreIndexProps) {
-  const [searching, setSearching] = useState(false)
   const [text, setText] = useState("")
+  const [sources, setSources] = useState<readonly string[]>([])
 
+  const facets = useMemo(() => deriveShiftStoreSources(entries), [entries])
   const visible = useMemo(
     () =>
       applyShiftStoreQuery(entries, {
-        text: searching ? text : "",
-        sources: [],
-        sort: searching ? "relevance" : "title",
+        text,
+        sources,
+        sort: text.trim().length > 0 ? "relevance" : "title",
       }),
-    [entries, searching, text],
+    [entries, text, sources],
   )
 
-  const exitSearch = () => {
-    setSearching(false)
-    setText("")
-  }
-
-  useInputAction("back", () => {
-    if (searching) exitSearch()
-    else onBack?.()
-  })
+  useInputAction("back", () => onBack?.())
 
   return (
-    <div data-shift-store className="shift-store shift-store-index intrinsic">
-      {searching ? (
-        <ShiftStoreSearchField
-          autoFocus
-          value={text}
-          onChange={setText}
-          onClose={exitSearch}
+    <div
+      data-shift-store
+      data-proto="store-index"
+      className="shift-store shift-store-index intrinsic"
+    >
+      <header className="shift-store-top">
+        <h2 className="shift-store-heading">{title}</h2>
+        <ShiftStoreFinder
+          text={text}
+          onText={setText}
+          facets={facets}
+          selected={sources}
+          onToggleSource={source =>
+            setSources(current => toggleSource(current, source))
+          }
         />
-      ) : (
-        <header className="shift-store-top">
-          <h2 className="shift-store-heading">{title}</h2>
-          <ShiftStoreSearchTrigger onActivate={() => setSearching(true)} />
-        </header>
-      )}
+      </header>
       {visible.length > 0 ? (
         <div className="shift-store-index-rows">
           {visible.map(entry => (
