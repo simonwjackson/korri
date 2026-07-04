@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test"
 import {
   createStreamHealthWindow,
   ingestStreamHealthSample,
-  summarizeStreamHealth,
   type StreamHealthSample,
+  summarizeStreamHealth,
 } from "./stream-health"
 
 const sample = (
@@ -31,7 +31,10 @@ describe("stream health rolling summary", () => {
     const window = [
       sample(1, 1_000, { rttMs: 20, lossFraction: 0.01, framesDropped: 1 }),
       sample(2, 2_000, { rttMs: 30, lossFraction: 0.03, framesDropped: 3 }),
-    ].reduce(ingestStreamHealthSample, createStreamHealthWindow({ maxSamples: 8 }))
+    ].reduce(
+      ingestStreamHealthSample,
+      createStreamHealthWindow({ maxSamples: 8 }),
+    )
 
     const summary = summarizeStreamHealth(window, 2_500)
 
@@ -47,7 +50,11 @@ describe("stream health rolling summary", () => {
   })
 
   it("keeps a bounded ring and summarizes only retained samples", () => {
-    const window = [sample(1, 1_000), sample(2, 2_000), sample(3, 3_000)].reduce(
+    const window = [
+      sample(1, 1_000),
+      sample(2, 2_000),
+      sample(3, 3_000),
+    ].reduce(
       ingestStreamHealthSample,
       createStreamHealthWindow({ maxSamples: 2 }),
     )

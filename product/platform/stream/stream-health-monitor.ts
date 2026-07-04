@@ -1,15 +1,17 @@
 import {
   createStreamHealthWindow,
   ingestStreamHealthSample,
-  summarizeStreamHealth,
   type StreamHealthSample,
   type StreamHealthSummary,
   type StreamHealthWindow,
   type StreamHealthWindowOptions,
+  summarizeStreamHealth,
 } from "./stream-health"
 
 export interface StreamHealthSamplePort {
-  readonly onSample: (listener: (sample: StreamHealthSample) => void) => () => void
+  readonly onSample: (
+    listener: (sample: StreamHealthSample) => void,
+  ) => () => void
 }
 
 export interface StreamHealthMonitorOptions {

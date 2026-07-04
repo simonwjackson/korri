@@ -191,9 +191,7 @@ function applyChange(
   }
 }
 
-function resultOf(
-  response: unknown,
-): { readonly _tag: string } | undefined {
+function resultOf(response: unknown): { readonly _tag: string } | undefined {
   const result = (response as { readonly result?: unknown }).result as
     | { readonly _tag?: string }
     | undefined
@@ -212,9 +210,7 @@ export function parseResolution(
   return width > 0 && height > 0 ? { width, height } : undefined
 }
 
-export function formatState(
-  snapshot: StreamStateSnapshotView,
-): string {
+export function formatState(snapshot: StreamStateSnapshotView): string {
   const lines = [
     `session:      ${snapshot.session.state} (${snapshot.session.sessionId})`,
     `stream now:   ${quality(snapshot)}`,
@@ -311,12 +307,7 @@ function formatHealth(sample: StreamHealthSampleView | undefined): string[] {
       formatMbpsValue,
       " Mbps",
     ),
-    deliveryRatio(
-      "fps",
-      sample.deliveredFps,
-      sample.requestedFps,
-      formatPlain,
-    ),
+    deliveryRatio("fps", sample.deliveredFps, sample.requestedFps, formatPlain),
   ].filter(isString)
   if (deliveryParts.length > 0) {
     lines.push(`delivery:     ${deliveryParts.join(", ")}`)

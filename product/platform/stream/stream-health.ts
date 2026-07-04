@@ -161,13 +161,17 @@ function summarizeCounterDelta(
   pick: (sample: StreamHealthSample) => number | undefined,
 ): CounterDeltaSummary {
   const values = samples.map(pick).filter(isNumber)
-  if (values.length < 2) return {}
-  return { delta: Math.max(0, values.at(-1)! - values[0]!) }
+  const first = values[0]
+  const last = values.at(-1)
+  if (first === undefined || last === undefined) return {}
+  return { delta: Math.max(0, last - first) }
 }
 
 function trendOf(values: readonly number[]): StreamHealthTrend {
-  if (values.length < 2) return "unknown"
-  const delta = values.at(-1)! - values[0]!
+  const first = values[0]
+  const last = values.at(-1)
+  if (first === undefined || last === undefined) return "unknown"
+  const delta = last - first
   if (Math.abs(delta) < 0.000_001) return "flat"
   return delta > 0 ? "rising" : "falling"
 }

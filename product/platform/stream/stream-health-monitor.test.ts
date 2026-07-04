@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test"
+import type { StreamHealthSample } from "./stream-health"
 import {
   createStreamHealthMonitor,
   type StreamHealthSamplePort,
 } from "./stream-health-monitor"
-import type { StreamHealthSample } from "./stream-health"
 
 function makePort() {
   const listeners: ((sample: StreamHealthSample) => void)[] = []

@@ -962,9 +962,11 @@ function nonNegativeInt(name: string) {
 
 function nonNegativeNumber(name: string) {
   return Schema.Number.check(
-    Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }).annotate({
-      identifier: name,
-    }),
+    Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }).annotate(
+      {
+        identifier: name,
+      },
+    ),
   )
 }
 

@@ -280,8 +280,12 @@ describe("formatState", () => {
     )
 
     expect(text).toContain("health:       rtt 18 ms ±4 ms, loss 1.5%")
-    expect(text).toContain("delivery:     bitrate 11.8/13.0 Mbps (91%), fps 58/60 (97%)")
-    expect(text).toContain("decode:       dropped 3 frames, decode 6 ms, queue 2, first frame 83 ms")
+    expect(text).toContain(
+      "delivery:     bitrate 11.8/13.0 Mbps (91%), fps 58/60 (97%)",
+    )
+    expect(text).toContain(
+      "decode:       dropped 3 frames, decode 6 ms, queue 2, first frame 83 ms",
+    )
   })
 
   test("renders partial stream health samples without placeholder noise", () => {
