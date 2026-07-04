@@ -78,8 +78,8 @@ secondaryValue=height through the existing dispatcher.
    if (raw_value == NULL || json_object_get_type(raw_value) != json_type_int) {
      moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "invalid command value", "invalid"));
 @@ -719,9 +740,16 @@
-     moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "fps out of bounds", "invalid"));
-     return 0;
+     if (value < MOONLIGHT_CONTROL_MIN_FPS) value = MOONLIGHT_CONTROL_MIN_FPS;
+     if (value > max_fps) value = max_fps;
    }
 +  if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION) {
 +    if (value < MOONLIGHT_CONTROL_MIN_WIDTH) value = MOONLIGHT_CONTROL_MIN_WIDTH;

@@ -101,6 +101,12 @@ let
       && contains "secondary_value &= ~1u" patch
       && !(contains "resolution out of bounds" patch)
     ))
+    (check "Moonlight local control clamps bitrate and FPS instead of rejecting" (
+      !(contains "bitrate out of bounds" patch)
+      && !(contains "fps out of bounds" patch)
+      && contains "if (value < min_bitrate) value = min_bitrate" patch
+      && contains "if (value < MOONLIGHT_CONTROL_MIN_FPS) value = MOONLIGHT_CONTROL_MIN_FPS" patch
+    ))
     (check "Moonlight local control advertises local input touch-bounds command" (
       contains "MOONLIGHT_CONTROL_PROTOCOL_MINOR 1" patch
       && contains "MOONLIGHT_LC_COMMAND_INPUT_SET_TOUCH_BOUNDS \"input.setTouchBounds\"" patch

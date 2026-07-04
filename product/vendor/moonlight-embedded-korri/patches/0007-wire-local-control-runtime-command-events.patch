@@ -397,13 +397,13 @@
 +    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32000, "runtime command interval conflict", "conflict"));
 +    return 0;
 +  }
-+  if (operation == MOONLIGHT_LC_OPERATION_SET_BITRATE_KBPS && (value < min_bitrate || value > max_bitrate)) {
-+    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "bitrate out of bounds", "invalid"));
-+    return 0;
++  if (operation == MOONLIGHT_LC_OPERATION_SET_BITRATE_KBPS) {
++    if (value < min_bitrate) value = min_bitrate;
++    if (value > max_bitrate) value = max_bitrate;
 +  }
-+  if (operation == MOONLIGHT_LC_OPERATION_SET_FPS && (value < MOONLIGHT_CONTROL_MIN_FPS || value > max_fps)) {
-+    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "fps out of bounds", "invalid"));
-+    return 0;
++  if (operation == MOONLIGHT_LC_OPERATION_SET_FPS) {
++    if (value < MOONLIGHT_CONTROL_MIN_FPS) value = MOONLIGHT_CONTROL_MIN_FPS;
++    if (value > max_fps) value = max_fps;
 +  }
 +
 +  uint32_t command_id = moonlight_local_control_next_command_id();
