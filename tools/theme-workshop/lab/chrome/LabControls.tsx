@@ -9,6 +9,7 @@ import type {
 import { LabWorkspaceToolStrip } from "./LabWorkspaceToolStrip"
 import { LabPresentationToggle } from "./LabPresentationToggle"
 import { LabPreviewPickToggle } from "./LabPreviewPickToggle"
+import { LabSyncToggle } from "./LabSyncToggle"
 import type { LabPresentation } from "./lab-presentation"
 
 /**
@@ -73,6 +74,7 @@ export function LabControls({
         />
       ) : null}
       <span className="pt-controls-spacer" />
+      <LabSyncToggle />
       <LabPresentationToggle
         presentation={presentation}
         onChange={onPresentationChange}

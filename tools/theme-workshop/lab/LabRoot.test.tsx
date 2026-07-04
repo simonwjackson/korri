@@ -263,6 +263,62 @@ describe("LabRoot", () => {
     expect(mountCounts.get("odin2portal")).toBe(1)
   })
 
+  it("stops mirroring when sync is turned off, so frames diverge", async () => {
+    const { adapter, histories, mountCounts } = makeAdapter()
+    const surfaceWrites: string[] = []
+
+    function Harness() {
+      const [state, setState] = useState<LabRouteState>({
+        devicesSegment: "rg353m,odin2portal",
+        themeId: "test",
+        surfacePath: "/",
+      })
+      return (
+        <LabRoot
+          adapters={[adapter]}
+          routeState={state}
+          navigation={{
+            setDevicesSegment: devicesSegment =>
+              setState(prev => ({ ...prev, devicesSegment })),
+            setThemeId: themeId => setState(prev => ({ ...prev, themeId })),
+            setSurfacePath: surfacePath => {
+              surfaceWrites.push(surfacePath)
+              setState(prev => ({ ...prev, surfacePath }))
+            },
+          }}
+        />
+      )
+    }
+
+    const view = render(<Harness />)
+
+    await waitFor(() => {
+      expect(view.getByTestId("surface-rg353m").textContent).toBe("/")
+      expect(view.getByTestId("surface-odin2portal").textContent).toBe("/")
+    })
+
+    // Turn route sync off; each frame now owns its own route.
+    fireEvent.click(screen.getAllByRole("button", { name: "Sync frames" })[0]!)
+
+    act(() => {
+      histories.get("rg353m")?.push("/game/hollow-knight")
+    })
+
+    await waitFor(() => {
+      expect(view.getByTestId("surface-rg353m").textContent).toBe(
+        "/game/hollow-knight",
+      )
+    })
+
+    // The sibling frame stayed put — no mirror while un-synced, and nothing
+    // bubbled to the shared surface route.
+    expect(view.getByTestId("surface-odin2portal").textContent).toBe("/")
+    expect(surfaceWrites).toEqual([])
+    // No remounts from toggling sync.
+    expect(mountCounts.get("rg353m")).toBe(1)
+    expect(mountCounts.get("odin2portal")).toBe(1)
+  })
+
   it("unmounts only removed device frames and keeps surviving frames mounted", async () => {
     const { adapter, mountCounts, dispose } = makeAdapter()
     const noopNavigation = {

@@ -19,6 +19,12 @@ export interface LabContextValue {
   readonly setDevicesSegment: (devicesSegment: string) => void
   readonly setThemeId: (themeId: string) => void
   readonly setSurfacePath: (surfacePath: string) => void
+  /** When true (default) a frame's navigation mirrors to every frame (one
+   * screen everywhere). When false each frame owns its own route, so devices
+   * can sit in different spaces side by side. Optional so harness doubles that
+   * predate the toggle keep working — consumers default to synced. */
+  readonly synced?: boolean
+  readonly setSynced?: (synced: boolean) => void
 }
 
 export const LabContext = createContext<LabContextValue | null>(null)

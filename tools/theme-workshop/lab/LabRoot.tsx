@@ -55,6 +55,10 @@ export function LabRoot({
     null,
   )
   const [error, setError] = useState<Error | null>(null)
+  // Route sync across frames. Default preserves the completed multi-device
+  // lab's "one screen everywhere" behavior; un-syncing lets each frame own its
+  // own route for side-by-side state comparison.
+  const [synced, setSynced] = useState(true)
 
   useEffect(() => {
     if (!adapter) {
@@ -196,6 +200,8 @@ export function LabRoot({
       setThemeId: navigation.setThemeId,
       setSurfacePath: (surfacePath: string) =>
         navigation.setSurfacePath(normalizeSurfacePath(surfacePath)),
+      synced,
+      setSynced,
     }
   }, [
     adapter,
@@ -209,6 +215,7 @@ export function LabRoot({
     routeState,
     setKnob,
     setPxPerMm,
+    synced,
   ])
 
   if (error) {

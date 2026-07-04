@@ -10,6 +10,8 @@ import {
 import { LabInspectableSurfaceMount } from "./LabInspectableSurfaceMount"
 import { useLabFitHeight } from "./useLabFitHeight"
 
+const NO_MIRROR = () => {}
+
 let fallbackLabDeviceSessionId = 0
 
 function createLabDeviceSessionId(): string {
@@ -53,6 +55,7 @@ export function LabCanvasDevice({
     initialValues,
     surfacePath,
     setSurfacePath,
+    synced,
     pxPerMm,
   } = useLab()
   const device = devices.find(candidate => candidate.id === object.deviceId)
@@ -166,7 +169,10 @@ export function LabCanvasDevice({
                 adapter={adapter}
                 initialValues={boundValues}
                 surfacePath={surfacePath}
-                onNavigate={setSurfacePath}
+                // Synced (default): a frame's navigation bubbles up and mirrors
+                // to every frame. Un-synced: it stays local to this frame, so
+                // devices can diverge.
+                onNavigate={synced === false ? NO_MIRROR : setSurfacePath}
                 pickMode={pickMode}
                 selection={innerSelection}
                 onSelect={onInnerSelect}
