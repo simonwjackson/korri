@@ -6,6 +6,11 @@ import {
 } from "@tanstack/react-router"
 import type { ShiftLibraryLens } from "../pages/ShiftLensRow"
 import type { ShiftLibrarySort } from "../pages/shift-library-query"
+import {
+  type ShiftRouteAxis,
+  type ShiftRouteManifest,
+  shiftRouteManifest,
+} from "./route-axis-manifest"
 import { SHIFT_COMPANION_PATH, SHIFT_LIBRARY_PATH } from "./paths"
 import { ShiftCompanionRoute } from "./ShiftCompanionRoute"
 import { ShiftGameDetailRoute } from "./ShiftGameDetailRoute"
@@ -18,12 +23,19 @@ const rootRoute = createRootRoute({ component: ShiftRouteTransition })
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
+  staticData: { axes: [{ name: "data", kind: "data" }] },
   component: ShiftHomeRoute,
 })
 
 const detailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/game/$id",
+  staticData: {
+    axes: [
+      { name: "id", kind: "param" },
+      { name: "data", kind: "data" },
+    ],
+  },
   component: ShiftGameDetailRoute,
 })
 
@@ -43,6 +55,15 @@ const libraryRoute = createRoute({
       sort: sort === "title" || sort === "playtime" ? sort : "recent",
     }
   },
+  // Axis manifest for tooling: `lens`/`sort` are the addressable (search) axes
+  // handled by validateSearch above; `data` is the seeded catalog axis.
+  staticData: {
+    axes: [
+      { name: "lens", kind: "search" },
+      { name: "sort", kind: "search" },
+      { name: "data", kind: "data" },
+    ],
+  },
   component: ShiftLibraryRoute,
 })
 
@@ -58,6 +79,25 @@ export const shiftRouteTree = rootRoute.addChildren([
   libraryRoute,
   companionRoute,
 ])
+
+/**
+ * The declared axis manifest for each committed route, read from `staticData`.
+ * The lab consumes this to enumerate a route's axes uniformly (see the
+ * route-first panel and the manifest-driven `axesForScreen`).
+ */
+export function shiftRouteManifests(): readonly ShiftRouteManifest[] {
+  const readAxes = (route: {
+    readonly options: { readonly staticData?: unknown }
+  }) =>
+    (route.options.staticData ?? {}) as {
+      readonly axes?: readonly ShiftRouteAxis[]
+    }
+  return [
+    shiftRouteManifest("/", readAxes(homeRoute)),
+    shiftRouteManifest(SHIFT_LIBRARY_PATH, readAxes(libraryRoute)),
+    shiftRouteManifest("/game/$id", readAxes(detailRoute)),
+  ]
+}
 
 export interface CreateShiftRouterOptions {
   readonly history?: RouterHistory
