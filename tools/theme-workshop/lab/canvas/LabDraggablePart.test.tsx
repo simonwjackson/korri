@@ -116,6 +116,8 @@ describe("LabDraggablePart", () => {
           onInnerSelect={() => undefined}
           onBind={() => undefined}
           onMove={() => undefined}
+          onFrameResize={mock(() => undefined)}
+          onFrameDevice={mock(() => undefined)}
           onRemove={mock(() => undefined)}
         />
       </LabContext.Provider>,
@@ -151,6 +153,8 @@ describe("LabDraggablePart", () => {
           onInnerSelect={() => undefined}
           onBind={() => undefined}
           onMove={() => undefined}
+          onFrameResize={mock(() => undefined)}
+          onFrameDevice={mock(() => undefined)}
           onRemove={mock(() => undefined)}
         />
       </LabContext.Provider>,
@@ -191,6 +195,8 @@ describe("LabDraggablePart", () => {
           onInnerSelect={() => undefined}
           onBind={() => undefined}
           onMove={() => undefined}
+          onFrameResize={mock(() => undefined)}
+          onFrameDevice={mock(() => undefined)}
           onRemove={mock(() => undefined)}
         />
       </LabContext.Provider>,
@@ -244,6 +250,8 @@ describe("LabDraggablePart", () => {
           onInnerSelect={() => undefined}
           onBind={() => undefined}
           onMove={() => undefined}
+          onFrameResize={mock(() => undefined)}
+          onFrameDevice={mock(() => undefined)}
           onRemove={mock(() => undefined)}
         />
       </LabContext.Provider>,
@@ -313,6 +321,8 @@ describe("LabDraggablePart", () => {
           }}
           onBind={() => undefined}
           onMove={() => undefined}
+          onFrameResize={mock(() => undefined)}
+          onFrameDevice={mock(() => undefined)}
           onRemove={mock(() => undefined)}
         />
       </LabContext.Provider>,

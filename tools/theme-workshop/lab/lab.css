@@ -48,6 +48,31 @@
 	height: 100%;
 }
 
+/*
+ * Systemic: no scrollbars inside any lab-mounted surface. A live device screen
+ * (.lab-screen) and a placed-part frame (.lab-compose-screen) both host the
+ * REAL surface, whose scroll containers otherwise paint a WebKit/Firefox
+ * scrollbar that breaks the physical-fidelity look. This is a lab-only concern
+ * (these hosts exist only in the lab), applied to the host AND everything inside
+ * it for every surface — never edit product surface CSS for this. Content still
+ * scrolls (wheel/touch/keys); only the bar is hidden.
+ */
+.lab-screen,
+.lab-screen *,
+.lab-compose-screen,
+.lab-compose-screen * {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+.lab-screen::-webkit-scrollbar,
+.lab-screen *::-webkit-scrollbar,
+.lab-compose-screen::-webkit-scrollbar,
+.lab-compose-screen *::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+	display: none;
+}
+
 /* Surface control bar — fixed, above the fixed stage. */
 .lab-controlbar {
 	position: fixed;

@@ -18,6 +18,9 @@ import {
   type LabCanvasObject,
   moveCanvasObject,
   objectBounds,
+  resizeAllPlacedPartFrames,
+  resizePlacedPartFrame,
+  setPlacedPartFrameDevice,
   updateLiveDeviceObjectSize,
 } from "../model/lab-canvas-object"
 import {
@@ -40,6 +43,7 @@ import {
   pinchCamera,
 } from "../model/lab-canvas-state"
 import { useLabPlacementPattern } from "../model/lab-placement-store"
+import { framePhysicalSize } from "../model/lab-preview-frame"
 import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import { LabCanvasDevice } from "./LabCanvasDevice"
 import { LabDraggablePart } from "./LabDraggablePart"
@@ -68,10 +72,6 @@ function zoomAtPoint(
     y: point.y - worldY * nextScale,
     scale: nextScale,
   }
-}
-
-function fallbackRect(object: LabCanvasObject): Rect {
-  return objectBounds(object)
 }
 
 export function LabWorkshopBoard({
@@ -116,10 +116,33 @@ export function LabWorkshopBoard({
   ) => void
 }) {
   const pattern = useLabPlacementPattern()
-  const { selectedDevices } = useLab()
+  const { selectedDevices, devices, pxPerMm } = useLab()
   const activeDevice = selectedDevices[0]
   const screens = activeDevice ? deviceScreens(activeDevice) : []
   const screen = screens.find(s => s.id === screenId) ?? screens[0]
+  // Real canvas bounds: a placed part is sized by its own physical frame
+  // (device mm × pxPerMm, or its custom size), never the nominal cell — so
+  // auto-placement never lands two parts on top of each other.
+  const logicalW = screen?.widthMm ?? 156
+  const logicalH = screen?.heightMm ?? 85
+  const boundsFor = useCallback(
+    (object: LabCanvasObject): Rect => {
+      if (object.kind !== "placed-part") return objectBounds(object)
+      const device = object.frameDeviceId
+        ? (devices.find(candidate => candidate.id === object.frameDeviceId) ??
+          null)
+        : null
+      const frame = framePhysicalSize({
+        device,
+        logical: { widthMm: logicalW, heightMm: logicalH },
+        pxPerMm,
+        customWidth: object.frameWidth,
+        customHeight: object.frameHeight,
+      })
+      return objectBounds(object, { w: frame.width, h: frame.height })
+    },
+    [devices, pxPerMm, logicalW, logicalH],
+  )
   const [camera, setCamera] = useState<LabCamera>(DEFAULT_CAMERA)
   const boardRef = useRef<HTMLDivElement | null>(null)
   const [spaceDown, setSpaceDown] = useState(false)
@@ -218,6 +241,19 @@ export function LabWorkshopBoard({
   }
   const remove = (id: string) =>
     onObjectsChange(prev => prev.filter(object => object.id !== id))
+  const frameResize = (
+    id: string,
+    width: number,
+    height: number,
+    broadcast: boolean,
+  ) =>
+    onObjectsChange(prev =>
+      broadcast
+        ? resizeAllPlacedPartFrames(prev, width, height)
+        : resizePlacedPartFrame(prev, id, width, height),
+    )
+  const frameDevice = (id: string, deviceId: string | null) =>
+    onObjectsChange(prev => setPlacedPartFrameDevice(prev, id, deviceId))
   const measure = useCallback(
     (id: string, size: { readonly w: number; readonly h: number }) =>
       onObjectsChange(prev => updateLiveDeviceObjectSize(prev, id, size)),
@@ -233,13 +269,13 @@ export function LabWorkshopBoard({
     if (pending.length === 0) return
     const occupied: Rect[] = objects
       .filter(object => object.x !== undefined)
-      .map(fallbackRect)
+      .map(boundsFor)
     // Spiral rings around the existing cluster's centre (stable as the camera
     // follows placements); grid/empty place where the user is looking.
     const anchor = placementAnchor(pattern, occupied, worldAnchor())
     const placements = new Map<string, { x: number; y: number }>()
     for (const object of pending) {
-      const size = objectBounds(object)
+      const size = boundsFor(object)
       const point = placeNext(pattern, occupied, anchor, {
         w: size.w,
         h: size.h,
@@ -261,7 +297,7 @@ export function LabWorkshopBoard({
     const last = pending[pending.length - 1]
     const point = last ? placements.get(last.id) : undefined
     if (last && point) {
-      const size = objectBounds(last)
+      const size = boundsFor(last)
       animateTo(
         frameCameraOn(
           cameraRef.current,
@@ -270,7 +306,15 @@ export function LabWorkshopBoard({
         ),
       )
     }
-  }, [objects, pattern, onObjectsChange, worldAnchor, viewport, animateTo])
+  }, [
+    objects,
+    pattern,
+    onObjectsChange,
+    worldAnchor,
+    viewport,
+    animateTo,
+    boundsFor,
+  ])
 
   // Frame the selected object only when it isn't already fully on screen, so
   // clicking a visible card to drag it never yanks the camera. Depends only on
@@ -280,7 +324,7 @@ export function LabWorkshopBoard({
     if (!selectedId) return
     const object = objects.find(item => item.id === selectedId)
     if (!object || object.x === undefined) return
-    const rect = objectBounds(object)
+    const rect = boundsFor(object)
     const view = viewport()
     if (isRectFullyVisible(cameraRef.current, rect, view, 24)) return
     animateTo(frameCameraOn(cameraRef.current, rect, view))
@@ -392,7 +436,7 @@ export function LabWorkshopBoard({
     onObjectsChange(prev => {
       const occupied: Rect[] = []
       return prev.map(object => {
-        const size = objectBounds(object)
+        const size = boundsFor(object)
         const point = placeNext(pattern, occupied, anchor, {
           w: size.w,
           h: size.h,
@@ -401,7 +445,7 @@ export function LabWorkshopBoard({
         return { ...object, ...point }
       })
     })
-  }, [onObjectsChange, pattern, worldAnchor])
+  }, [onObjectsChange, pattern, worldAnchor, boundsFor])
   const tidyRef = useRef(tidy)
 
   useEffect(() => {
@@ -574,6 +618,8 @@ export function LabWorkshopBoard({
                 onInnerSelect={onInnerSelect}
                 onBind={bind}
                 onMove={move}
+                onFrameResize={frameResize}
+                onFrameDevice={frameDevice}
                 onRemove={remove}
                 onDeleteTake={onDeleteTake}
                 onPromoteTake={onPromoteTake}

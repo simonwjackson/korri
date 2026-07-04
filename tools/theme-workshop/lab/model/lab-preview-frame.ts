@@ -1,97 +1,27 @@
 /**
- * Preview-frame sizing for the Compose board.
+ * Physical frame sizing for Compose placed parts.
  *
- * The board frame used to be locked to one fixed width at the first device's
- * aspect (RG353M), so every placed part was stuck at that shape. This is the
- * shared, persisted control behind a resizable frame: a chosen device whose
- * aspect the frame takes (or "fit" = the part's own logical screen aspect) plus
- * an arbitrary width the user drags. It is a tiny external store rather than
- * React state so every placed part's frame reads and writes ONE setting — resize
- * or switch device once, and all previews follow.
+ * Each placed part owns its own frame: a chosen device (per part, NOT shared
+ * across the canvas) whose real physical size (millimetres × the calibrated
+ * pxPerMm) the frame takes — exactly like a live device — plus an optional
+ * custom width/height set by dragging the corner handle. These are pure helpers;
+ * the per-part device id and custom size live on the placed-part object.
  */
-import { useSyncExternalStore } from "react"
 import type { DeviceConfig } from "../../device-lab"
 
-export interface LabPreviewFrame {
-  /** Device id whose aspect the frame takes; null = fit the part's own screen. */
-  readonly deviceId: string | null
-  /** Frame width in layout px (height derives from the aspect). */
-  readonly width: number
-}
-
-const STORAGE_KEY = "lab-preview-frame"
-const DEFAULT_FRAME: LabPreviewFrame = { deviceId: null, width: 520 }
-
-export const LAB_FRAME_MIN_WIDTH = 220
-export const LAB_FRAME_MAX_WIDTH = 1600
+export const LAB_FRAME_MIN_WIDTH = 120
+export const LAB_FRAME_MAX_WIDTH = 8000
 
 export function clampFrameWidth(width: number): number {
-  if (!Number.isFinite(width)) return DEFAULT_FRAME.width
+  if (!Number.isFinite(width)) return LAB_FRAME_MIN_WIDTH
   return Math.max(
     LAB_FRAME_MIN_WIDTH,
     Math.min(LAB_FRAME_MAX_WIDTH, Math.round(width)),
   )
 }
 
-let current = readStoredFrame()
-const listeners = new Set<() => void>()
-
-function readStoredFrame(): LabPreviewFrame {
-  if (typeof window === "undefined") return DEFAULT_FRAME
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return DEFAULT_FRAME
-    const parsed = JSON.parse(raw) as Partial<LabPreviewFrame>
-    return {
-      deviceId: typeof parsed.deviceId === "string" ? parsed.deviceId : null,
-      width: clampFrameWidth(Number(parsed.width)),
-    }
-  } catch {
-    return DEFAULT_FRAME
-  }
-}
-
-export function getPreviewFrame(): LabPreviewFrame {
-  return current
-}
-
-export function setPreviewFrame(patch: Partial<LabPreviewFrame>): void {
-  const next: LabPreviewFrame = {
-    deviceId: patch.deviceId !== undefined ? patch.deviceId : current.deviceId,
-    width:
-      patch.width !== undefined ? clampFrameWidth(patch.width) : current.width,
-  }
-  if (next.deviceId === current.deviceId && next.width === current.width) return
-  current = next
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-    } catch {
-      // Ignore storage failures (private mode/quota); the size just won't persist.
-    }
-  }
-  for (const listener of listeners) listener()
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
-
-export function useLabPreviewFrame(): LabPreviewFrame {
-  return useSyncExternalStore(subscribe, getPreviewFrame, () => DEFAULT_FRAME)
-}
-
-/** Reset for tests so a persisted value never leaks between cases. */
-export function resetPreviewFrameForTest(): void {
-  current = DEFAULT_FRAME
-  for (const listener of listeners) listener()
-}
-
-/** The screen a device's aspect should come from: its primary panel (or the
- * device itself for a single-screen device), never a secondary/companion. */
+/** The screen a device's aspect/size should come from: its primary panel (or
+ * the device itself for a single-screen device), never a secondary/companion. */
 function primaryFace(device: DeviceConfig): {
   readonly widthMm: number
   readonly heightMm: number
@@ -107,12 +37,40 @@ export function deviceAspect(device: DeviceConfig): number {
   return face.heightMm > 0 ? face.widthMm / face.heightMm : 16 / 10
 }
 
-/** A device-shaped default width: normalise on a common height so switching
- * device presets reads as a change of shape (a TV is wide, a handheld square-ish)
- * rather than every device landing at the same width. Still freely resizable. */
-export function devicePresetWidth(device: DeviceConfig): number {
-  const TARGET_HEIGHT = 380
-  return clampFrameWidth(Math.round(TARGET_HEIGHT * deviceAspect(device)))
+export interface LabFramePx {
+  readonly width: number
+  readonly height: number
+}
+
+/**
+ * Physical pixel size for a placed-part frame — the same millimetres × pxPerMm
+ * math a live device uses, so choosing the device actually resizes the frame
+ * (a TV is much bigger than a handheld) instead of only changing its aspect.
+ *
+ * - a custom width AND height set (drag-to-resize): those win verbatim, so the
+ *   frame can be resized freely like any rectangle (no aspect constraint).
+ * - a device selected: the device's primary face, millimetres × pxPerMm.
+ * - otherwise: the part's own logical screen, millimetres × pxPerMm.
+ */
+export function framePhysicalSize(options: {
+  readonly device: DeviceConfig | null
+  readonly logical: { readonly widthMm: number; readonly heightMm: number }
+  readonly pxPerMm: number
+  readonly customWidth?: number
+  readonly customHeight?: number
+}): LabFramePx {
+  const { device, logical, pxPerMm, customWidth, customHeight } = options
+  if (customWidth !== undefined && customHeight !== undefined) {
+    return {
+      width: clampFrameWidth(customWidth),
+      height: clampFrameWidth(customHeight),
+    }
+  }
+  const face = device ? primaryFace(device) : logical
+  return {
+    width: Math.max(1, Math.round(face.widthMm * pxPerMm)),
+    height: Math.max(1, Math.round(face.heightMm * pxPerMm)),
+  }
 }
 
 export function deviceFaceLabel(device: DeviceConfig): string {

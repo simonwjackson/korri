@@ -1,4 +1,3 @@
-import { Trash2 } from "lucide-react"
 import type { ScreenConfig } from "../../device-lab"
 import type { Story } from "../../types"
 import { LabCanvasInteractionBar } from "../concepts/LabCanvasInteractionBar"
@@ -11,11 +10,15 @@ import {
 } from "../model/lab-object-inputs"
 import { partMetaLabel, stateVariantFor } from "../model/lab-part-model"
 import { LabPreviewBoundary } from "../model/lab-preview-boundary"
+import { framePhysicalSize } from "../model/lab-preview-frame"
 import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import { LAB_BIND_MIME } from "../panels/LabSourcesPanel"
 import { LabPartMount } from "../part-mount/LabPartMount"
 import { LabInspectableContent } from "./LabInspectableContent"
+import { LabObjectControls } from "./LabObjectControls"
 import { LabScreenFrame } from "./LabScreenFrame"
+
+const DEFAULT_SCREEN = { widthMm: 156, heightMm: 85 }
 
 function parseBind(value: string): { axis: "sourceId"; value: string } | null {
   const [axis, id] = value.split(":")
@@ -24,11 +27,11 @@ function parseBind(value: string): { axis: "sourceId"; value: string } | null {
 }
 
 /**
- * One placed part on the Compose board: the part rendered inside a single
- * logical screen frame with a drag bar carrying only identity, drag, and
- * remove. Its bindings (data source plus product inputs) are edited in the
- * selection-scoped Inspector, which scales to any number of inputs. Compose is
- * device-agnostic: the selected screen contributes aspect ratio only.
+ * One placed part on the Compose board: an idle part is only its content frame
+ * floating in space. When active, a floating dock next to the part carries all
+ * chrome — identity, frame device, resolution, take actions, close, and the AI
+ * ask bar — and its grip is the part's drag handle. Bindings (data source plus
+ * product inputs) are edited in the selection-scoped Inspector.
  */
 export function LabDraggablePart({
   instance,
@@ -44,6 +47,8 @@ export function LabDraggablePart({
   onInnerSelect,
   onBind,
   onMove,
+  onFrameResize,
+  onFrameDevice,
   onRemove,
   onDeleteTake,
   onPromoteTake,
@@ -65,6 +70,13 @@ export function LabDraggablePart({
     patch: Partial<Pick<LabObjectInstance, "sourceId">>,
   ) => void
   readonly onMove: (id: string, x: number, y: number) => void
+  readonly onFrameResize: (
+    id: string,
+    width: number,
+    height: number,
+    broadcast: boolean,
+  ) => void
+  readonly onFrameDevice: (id: string, deviceId: string | null) => void
   readonly onRemove: (id: string) => void
   readonly onDeleteTake?: (storyId: string) => void
   readonly onPromoteTake?: (storyId: string) => void
@@ -73,9 +85,38 @@ export function LabDraggablePart({
     request: { readonly prompt: string; readonly count: number },
   ) => void
 }) {
-  const { adapter } = useLab()
+  const { adapter, devices, pxPerMm } = useLab()
   const x = instance.x ?? 24
   const y = instance.y ?? 24
+  const logical = screen ?? DEFAULT_SCREEN
+  const activeDevice = instance.frameDeviceId
+    ? (devices.find(device => device.id === instance.frameDeviceId) ?? null)
+    : null
+  const size = framePhysicalSize({
+    device: activeDevice,
+    logical,
+    pxPerMm,
+    customWidth: instance.frameWidth,
+    customHeight: instance.frameHeight,
+  })
+  const startMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const start = { x: event.clientX, y: event.clientY, ox: x, oy: y }
+    const target = event.currentTarget
+    target.setPointerCapture(event.pointerId)
+    const move = (next: PointerEvent) =>
+      onMove(
+        instance.id,
+        start.ox + (next.clientX - start.x) / scale,
+        start.oy + (next.clientY - start.y) / scale,
+      )
+    const up = (next: PointerEvent) => {
+      target.releasePointerCapture(next.pointerId)
+      target.removeEventListener("pointermove", move)
+      target.removeEventListener("pointerup", up)
+    }
+    target.addEventListener("pointermove", move)
+    target.addEventListener("pointerup", up)
+  }
   const inputs = objectInputsForStory(story, byId, adapter)
   const inputValues = resolveObjectInputValues(inputs, instance.inputValues)
   const selectedVariantInput = variantInput(inputs)
@@ -160,64 +201,6 @@ export function LabDraggablePart({
         if (bind) onBind(instance.id, { [bind.axis]: bind.value })
       }}
     >
-      <header
-        className="pt-object-bar"
-        onPointerDown={event => {
-          const start = { x: event.clientX, y: event.clientY, ox: x, oy: y }
-          const target = event.currentTarget
-          target.setPointerCapture(event.pointerId)
-          const move = (next: PointerEvent) =>
-            onMove(
-              instance.id,
-              start.ox + (next.clientX - start.x) / scale,
-              start.oy + (next.clientY - start.y) / scale,
-            )
-          const up = (next: PointerEvent) => {
-            target.releasePointerCapture(next.pointerId)
-            target.removeEventListener("pointermove", move)
-            target.removeEventListener("pointerup", up)
-          }
-          target.addEventListener("pointermove", move)
-          target.addEventListener("pointerup", up)
-        }}
-      >
-        <span className={`pt-layer-tag layer-${story.layer}`}>
-          {story.layer}
-        </span>
-        <span className="pt-object-title">{story.name}</span>
-        {metaLabel ? <span className="pt-work-badge">{metaLabel}</span> : null}
-        {canPromoteTake ? (
-          <button
-            type="button"
-            className="pt-object-promote"
-            aria-label={`Promote Take ${story.name}`}
-            onPointerDown={event => event.stopPropagation()}
-            onClick={() => onPromoteTake?.(story.id)}
-          >
-            Promote
-          </button>
-        ) : null}
-        {canDeleteTake ? (
-          <button
-            type="button"
-            className="pt-object-remove"
-            aria-label={`Delete Take ${story.name}`}
-            onPointerDown={event => event.stopPropagation()}
-            onClick={() => onDeleteTake?.(story.id)}
-          >
-            <Trash2 size={13} aria-hidden />
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="pt-object-remove"
-          aria-label={`Remove ${story.name}`}
-          onPointerDown={event => event.stopPropagation()}
-          onClick={() => onRemove(instance.id)}
-        >
-          ×
-        </button>
-      </header>
       <div className="pt-object-body">
         <LabInspectableContent
           scopeId={instance.id}
@@ -225,11 +208,36 @@ export function LabDraggablePart({
           selection={innerSelection}
           onSelect={onInnerSelect}
         >
-          <LabScreenFrame screen={screen}>{renderBody()}</LabScreenFrame>
+          <LabScreenFrame
+            width={size.width}
+            height={size.height}
+            screenId={screen?.id ?? "compose-screen"}
+            onResize={(width, height, broadcast) =>
+              onFrameResize(instance.id, width, height, broadcast)
+            }
+          >
+            {renderBody()}
+          </LabScreenFrame>
         </LabInspectableContent>
       </div>
       {selected ? (
-        <div className="lab-canvas-ask-slot">
+        <div className="lab-object-dock">
+          <LabObjectControls
+            name={story.name}
+            layer={story.layer}
+            meta={metaLabel}
+            deviceId={instance.frameDeviceId}
+            devices={devices}
+            width={size.width}
+            height={size.height}
+            canPromote={canPromoteTake}
+            canDelete={canDeleteTake}
+            onStartMove={startMove}
+            onDeviceChange={next => onFrameDevice(instance.id, next)}
+            onPromote={() => onPromoteTake?.(story.id)}
+            onDelete={() => onDeleteTake?.(story.id)}
+            onRemove={() => onRemove(instance.id)}
+          />
           <LabCanvasInteractionBar
             targetName={story.name}
             onGenerate={request => onGenerateTakes?.(instance.id, request)}

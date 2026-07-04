@@ -16,6 +16,15 @@ export type LabPlacedPartObject = LabCanvasObjectBase & {
   readonly sourceId: string
   /** Placed-object input values keyed by independent input id. */
   readonly inputValues: LabObjectInputValues
+  /** This part's own frame device id (per part, not shared); null/undefined =
+   * fit the part's own logical screen. */
+  readonly frameDeviceId?: string | null
+  /** Custom frame width (layout px) from dragging this part's resize handle.
+   * Set together with frameHeight; undefined = the device's physical size. */
+  readonly frameWidth?: number
+  /** Custom frame height (layout px). Free-resize sets it independently of
+   * width; Shift-resize keeps it locked to the aspect. */
+  readonly frameHeight?: number
 }
 
 export type LabLiveDeviceObject = LabCanvasObjectBase & {
@@ -103,11 +112,64 @@ export function removeCanvasObject(
 export function bindPlacedPartObject(
   objects: readonly LabCanvasObject[],
   id: string,
-  patch: Partial<Pick<LabPlacedPartObject, "sourceId" | "x" | "y">>,
+  patch: Partial<
+    Pick<
+      LabPlacedPartObject,
+      "sourceId" | "x" | "y" | "frameDeviceId" | "frameWidth" | "frameHeight"
+    >
+  >,
 ): readonly LabCanvasObject[] {
   return objects.map(object =>
     object.id === id && object.kind === "placed-part"
       ? { ...object, ...patch }
+      : object,
+  )
+}
+
+/** Choose one placed part's frame device, clearing any custom size so the frame
+ * snaps to that device's real physical size. */
+export function setPlacedPartFrameDevice(
+  objects: readonly LabCanvasObject[],
+  id: string,
+  frameDeviceId: string | null,
+): readonly LabCanvasObject[] {
+  return objects.map(object =>
+    object.id === id && object.kind === "placed-part"
+      ? {
+          ...object,
+          frameDeviceId,
+          frameWidth: undefined,
+          frameHeight: undefined,
+        }
+      : object,
+  )
+}
+
+/** Resize one placed part's frame to an explicit width × height. */
+export function resizePlacedPartFrame(
+  objects: readonly LabCanvasObject[],
+  id: string,
+  frameWidth: number,
+  frameHeight: number,
+): readonly LabCanvasObject[] {
+  return objects.map(object =>
+    object.id === id && object.kind === "placed-part"
+      ? { ...object, frameWidth, frameHeight }
+      : object,
+  )
+}
+
+/** Broadcast one frame size to every placed part (Alt-resize): resize
+ * everything to match the part the user is dragging. Live device objects are
+ * untouched. */
+export function resizeAllPlacedPartFrames(
+  objects: readonly LabCanvasObject[],
+  frameWidth: number,
+  frameHeight: number,
+): readonly LabCanvasObject[] {
+  return objects.map(object =>
+    object.kind === "placed-part"
+      ? { ...object, frameWidth, frameHeight }
       : object,
   )
 }
@@ -199,12 +261,19 @@ export function liveDeviceObjectSize(
   }
 }
 
-export function objectBounds(object: LabCanvasObject, liveSize?: Size): Rect {
+/**
+ * Canvas bounds for an object. Callers pass the object's real rendered `size`
+ * so placement/overlap uses true dimensions: a placed part's physical frame
+ * size (device millimetres × pxPerMm, or its custom size) and a live device's
+ * measured/cluster size. Falls back to the nominal cell / default only when the
+ * caller has no size yet.
+ */
+export function objectBounds(object: LabCanvasObject, size?: Size): Rect {
   const x = object.x ?? 0
   const y = object.y ?? 0
   if (object.kind === "placed-part") {
-    return { x, y, w: PLACEMENT_CELL.w, h: PLACEMENT_CELL.h }
+    return { x, y, ...(size ?? PLACEMENT_CELL) }
   }
-  const size = liveSize ?? object.measuredSize ?? DEFAULT_LIVE_DEVICE_SIZE
-  return { x, y, ...size }
+  const resolved = size ?? object.measuredSize ?? DEFAULT_LIVE_DEVICE_SIZE
+  return { x, y, ...resolved }
 }

@@ -184,7 +184,12 @@ export function pinchCamera(
 export function bindObjectInstance(
   instances: readonly LabObjectInstance[],
   id: string,
-  patch: Partial<Pick<LabObjectInstance, "sourceId" | "x" | "y">>,
+  patch: Partial<
+    Pick<
+      LabObjectInstance,
+      "sourceId" | "x" | "y" | "frameDeviceId" | "frameWidth" | "frameHeight"
+    >
+  >,
 ): readonly LabObjectInstance[] {
   return bindPlacedPartObject(
     instances,

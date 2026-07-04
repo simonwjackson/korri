@@ -5,14 +5,12 @@ import { LabDraggablePart } from "../canvas/LabDraggablePart"
 import { LabPartPreview } from "../canvas/LabPartPreview"
 import { LabContext, type LabContextValue } from "../Lab.context"
 import type { LabCalibrationController } from "../model/lab-calibration-state"
-import { resetPreviewFrameForTest } from "../model/lab-preview-frame"
 import { clearLabSurfaceRegistries } from "../model/lab-surface-registries"
 import { shiftLabSurfaceAdapter } from "./shift"
 
 afterEach(() => {
   cleanup()
   clearLabSurfaceRegistries()
-  resetPreviewFrameForTest()
 })
 
 const calibration: LabCalibrationController = {
@@ -67,6 +65,8 @@ describe("Store — Spotlight in the lab", () => {
           onInnerSelect={() => undefined}
           onBind={() => undefined}
           onMove={() => undefined}
+          onFrameResize={() => undefined}
+          onFrameDevice={() => undefined}
           onRemove={() => undefined}
         />
       </LabContext.Provider>,

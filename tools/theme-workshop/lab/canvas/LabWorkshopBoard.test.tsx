@@ -20,8 +20,8 @@ import type { LabDesignPassStoryMeta } from "../design-pass/design-pass-model"
 import { LabContext, type LabContextValue } from "../Lab.context"
 import type { LabCanvasObject } from "../model/lab-canvas-object"
 import {
-  PLACEMENT_CELL,
   placeNext,
+  rectsOverlap,
   repackPositions,
 } from "../model/lab-canvas-placement"
 import {
@@ -38,6 +38,11 @@ import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import { LabWorkshopBoard } from "./LabWorkshopBoard"
 
 const VIEWPORT = { width: 1000, height: 600 }
+
+// A placed "pill" has no frame device, so its real physical size is the default
+// logical screen (156×85mm) × pxPerMm 1 — the bounds placement now uses so parts
+// never overlap.
+const PART_SIZE = { w: 156, h: 85 }
 
 const pill: Story = {
   id: "pill",
@@ -331,9 +336,9 @@ describe("LabWorkshopBoard placement", () => {
     // card lands one column to the right on the SAME row — no diagonal drift.
     const expected = placeNext(
       "grid",
-      [{ x: 0, y: 0, w: PLACEMENT_CELL.w, h: PLACEMENT_CELL.h }],
+      [{ x: 0, y: 0, w: PART_SIZE.w, h: PART_SIZE.h }],
       { x: 0, y: 0 },
-      PLACEMENT_CELL,
+      PART_SIZE,
     )
     const added = dumped().find(item => item.id === "new")
     expect({ x: added?.x, y: added?.y }).toEqual(expected)
@@ -358,7 +363,7 @@ describe("LabWorkshopBoard placement", () => {
       />,
     )
 
-    const expected = repackPositions("spiral", 2, anchor, PLACEMENT_CELL)
+    const expected = repackPositions("spiral", 2, anchor, PART_SIZE)
     await waitFor(() => {
       expect(dumped().find(item => item.id === "a")?.x).toBe(expected[0]?.x)
     })
@@ -394,7 +399,16 @@ describe("LabWorkshopBoard placement", () => {
     const device = dumped().find(item => item.id === "device")
     const part = dumped().find(item => item.id === "part")
     expect(device?.x).toBeTypeOf("number")
-    expect(part?.x).toBeGreaterThanOrEqual((device?.x ?? 0) + 900)
+    // Real sizes: the 900×480 device and the small part are laid out without
+    // overlapping — the part wraps to a free slot, never on top of the device.
+    const deviceRect = { x: device?.x ?? 0, y: device?.y ?? 0, w: 900, h: 480 }
+    const partRect = {
+      x: part?.x ?? 0,
+      y: part?.y ?? 0,
+      w: PART_SIZE.w,
+      h: PART_SIZE.h,
+    }
+    expect(rectsOverlap(deviceRect, partRect, 0)).toBe(false)
   })
 })
 
@@ -512,7 +526,7 @@ describe("LabWorkshopBoard selection framing", () => {
 
     const target = frameCameraOn(
       DEFAULT_CAMERA,
-      { x: 2000, y: 2000, w: PLACEMENT_CELL.w, h: PLACEMENT_CELL.h },
+      { x: 2000, y: 2000, w: PART_SIZE.w, h: PART_SIZE.h },
       { w: VIEWPORT.width, h: VIEWPORT.height },
     )
     await waitFor(() => {
