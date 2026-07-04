@@ -32,3 +32,20 @@ The gamescope-korri 3.16.23 nested compositor wrapping Moonlight intermittently 
 - `product/vendor/moonlight-embedded-korri/package.nix`
 - `product/systems/nixos/images/platforms/rocknix-sm8550.nix`
 - `product/plugins/gamescope`
+
+## Evidence 2026-07-04 (bandai, gba-anguna remote launch)
+
+- Reproduced with **explicit `-codec h264`** at 1920x1080 — contradicts the earlier
+  note that forced-h264 runs had not reproduced it. Codec is not the discriminator.
+- Strong teardown-race correlation: fired ~1.1s after spawn on a launch made
+  moments after quitting a previous stream session. The dying session still held
+  X11 sockets (`X0`/`X1` bind failed → new Xwayland took `:2`); abort followed
+  right after Xwayland/xkb init. Two earlier attempts in the same minute were
+  rejected `session-busy` (121) — same stale-foreground window.
+- Moonlight itself was fully up before the abort (local-control socket listening,
+  v4l2m2m attached to iris, stream=1920x1080) — the wrapper died, not the client.
+- Full stderr captured in bandai system journal Jul 04 02:48:51 (sessiond
+  shell-launcher failed entry, exitCode=134); host side (aka sunshine):
+  CLIENT CONNECTED 00:48:50 MT, DISCONNECTED :56, Initial Ping Timeout.
+- Repro suggestion: quit an active stream and immediately relaunch another
+  remote game; the race window appears to be the previous session's teardown.

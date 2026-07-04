@@ -35,3 +35,14 @@ Post-deploy policy materialization works, but controller-safe steam-gamescope ex
 ## Notes
 
 Direct dry-run/materialization passes and uses proton-cachyos. steam-gamescope command /var/lib/korri/bin/steam-gamescope-session fails after Steam reports Client beta changed from publicbeta to steamdeck_stable and Failed to load steamui.so.
+
+## Evidence 2026-07-04 (bandai)
+
+- `korri-steam-gamescope.service` started at 02:48:53 and held DSI-2 fullscreen
+  with Steam `-silent` — solid black screen, no UI, no device-side recovery.
+- sessiond reported `mode=stopped active=none` the whole time (system unit is
+  invisible to it — the ownership gap 01KV3A5RNC covers).
+- `steam-runtime-launcher-service: not found` → "possible problem, disabling" —
+  Steam came up degraded.
+- Recovery used: `sudo systemctl stop korri-steam-gamescope.service` returned
+  the kiosk to the hub.
