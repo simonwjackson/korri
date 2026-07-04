@@ -143,6 +143,37 @@ describe("parseResolution", () => {
   })
 })
 
+describe("formatSetOutcome coercion note", () => {
+  test("names coercion when applied bitrate differs from requested", () => {
+    const out = formatSetOutcome(
+      { kind: "bitrate", bitrateKbps: 5 },
+      undefined,
+      snapshot({ appliedBitrateKbps: 500 }),
+    )
+    expect(out).toContain("coerced to:")
+    expect(out).toContain("500 kbps")
+  })
+
+  test("no coercion note when applied matches requested", () => {
+    const out = formatSetOutcome(
+      { kind: "bitrate", bitrateKbps: 500 },
+      undefined,
+      snapshot({ appliedBitrateKbps: 500 }),
+    )
+    expect(out).not.toContain("coerced to:")
+  })
+
+  test("names coercion when applied resolution differs from requested", () => {
+    const out = formatSetOutcome(
+      { kind: "resolution", width: 1281, height: 721 },
+      undefined,
+      snapshot({ appliedResolution: { width: 1280, height: 720 } }),
+    )
+    expect(out).toContain("coerced to:")
+    expect(out).toContain("1280x720")
+  })
+})
+
 describe("runStreamSet error reporting", () => {
   test("renders a rejected command reason instead of [object Object]", async () => {
     const out: string[] = []

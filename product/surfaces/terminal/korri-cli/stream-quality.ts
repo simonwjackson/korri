@@ -186,12 +186,46 @@ export function formatSetOutcome(
   const outcome = last
     ? `${last.command} -> ${last.status}`
     : "no terminal result yet"
+  const coercion = describeCoercion(change, after)
   return [
     `requested:    ${describeChange(change)}`,
     `now applied:  ${applied(after)}`,
+    ...(coercion ? [`coerced to:   ${coercion}`] : []),
     `device says:  ${outcome}`,
     ...(before ? [`was applied:  ${applied(before)}`] : []),
   ].join("\n")
+}
+
+// When the mechanism coerces a request to the nearest value the hardware can
+// deliver (clamp to encoder min/max, round to even, same-ratio rounding), name
+// the applied value so accept-and-adapt is visible rather than a silent swap.
+function describeCoercion(
+  change: StreamQualityChange,
+  after: MoonlightControlStateSnapshotResult,
+): string | undefined {
+  const suffix = "(nearest the hardware allows)"
+  const r = after.runtimeSettings
+  switch (change.kind) {
+    case "bitrate": {
+      const value = r.appliedBitrateKbps
+      return value !== undefined && value !== change.bitrateKbps
+        ? `${value} kbps ${suffix}`
+        : undefined
+    }
+    case "fps": {
+      const value = r.appliedFps
+      return value !== undefined && value !== change.fps
+        ? `${value} fps ${suffix}`
+        : undefined
+    }
+    case "resolution": {
+      const value = r.appliedResolution
+      return value &&
+        (value.width !== change.width || value.height !== change.height)
+        ? `${value.width}x${value.height} ${suffix}`
+        : undefined
+    }
+  }
 }
 
 function quality(snapshot: MoonlightControlStateSnapshotResult): string {
