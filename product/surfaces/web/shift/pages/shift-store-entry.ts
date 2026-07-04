@@ -20,8 +20,13 @@ export interface ShiftStoreEntry {
   readonly id: string
   readonly title: string
   readonly artUrl: string
-  /** Human-readable remote source the entry was discovered from. */
-  readonly source: string
+  /**
+   * Human-readable remote sources this release can be acquired from. A grouped
+   * release has MANY (the same game mirrored across providers); a plain one has
+   * a single entry. Provenance is only surfaced where there is room to show it
+   * (list rows, the spotlight hero, detail) — never on small cards.
+   */
+  readonly sources: readonly string[]
   readonly genre?: string
   readonly developer?: string
   readonly platform?: string
@@ -72,8 +77,20 @@ export function shiftStoreEntryFromClaim(
     id: claim.id,
     title: claim.title,
     artUrl: claim.thumbnailUrl ?? "",
-    source: shiftStoreSourceLabel(claim.providerId),
+    sources: [shiftStoreSourceLabel(claim.providerId)],
     ...(claim.platform ? { platform: claim.platform } : {}),
     status: "available",
   }
+}
+
+/**
+ * Compact provenance label for the roomy areas that surface where a release
+ * comes from. A single source shows its name; a grouped release collapses to a
+ * count ("3 sources") so the exact mirrors are a detail-page concern, not a
+ * browse-row one. No sources yields an empty string (render nothing).
+ */
+export function shiftStoreSourcesLabel(sources: readonly string[]): string {
+  if (sources.length === 0) return ""
+  if (sources.length === 1) return sources[0]
+  return `${sources.length} sources`
 }

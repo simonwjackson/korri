@@ -38,7 +38,8 @@ export function applyShiftStoreQuery(
   const text = query.text.trim().toLowerCase()
   const filtered = entries.filter(
     entry =>
-      (query.sources.length === 0 || query.sources.includes(entry.source)) &&
+      (query.sources.length === 0 ||
+        entry.sources.some(source => query.sources.includes(source))) &&
       (text.length === 0 || matchesText(entry, text)),
   )
   return [...filtered].sort(comparatorFor(query.sort, text))
@@ -49,11 +50,35 @@ export function deriveShiftStoreSources(
 ): readonly ShiftStoreSourceFacet[] {
   const counts = new Map<string, number>()
   for (const entry of entries) {
-    counts.set(entry.source, (counts.get(entry.source) ?? 0) + 1)
+    for (const source of entry.sources) {
+      counts.set(source, (counts.get(source) ?? 0) + 1)
+    }
   }
   return [...counts.entries()]
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
+}
+
+export interface ShiftStoreSourceShelf {
+  readonly source: string
+  readonly entries: readonly ShiftStoreEntry[]
+}
+
+/**
+ * Group entries into per-source shelves for the storefront browse view. Shelf
+ * order follows facet weight (busiest source first, then name); entries within
+ * a shelf are alphabetical, so a curated front page is stable and never depends
+ * on input order.
+ */
+export function groupShiftStoreBySource(
+  entries: readonly ShiftStoreEntry[],
+): readonly ShiftStoreSourceShelf[] {
+  return deriveShiftStoreSources(entries).map(facet => ({
+    source: facet.value,
+    entries: entries
+      .filter(entry => entry.sources.includes(facet.value))
+      .sort(byTitle),
+  }))
 }
 
 export function toggleSource(
@@ -99,7 +124,8 @@ function comparatorFor(
     case "title":
       return byTitle
     case "source":
-      return (a, b) => a.source.localeCompare(b.source) || byTitle(a, b)
+      return (a, b) =>
+        primarySource(a).localeCompare(primarySource(b)) || byTitle(a, b)
     case "relevance":
       // With a query, a title that STARTS with the text ranks above a mere
       // substring match; without one, relevance is just alphabetical.
@@ -108,6 +134,12 @@ function comparatorFor(
           ? byTitle(a, b)
           : rank(b, text) - rank(a, text) || byTitle(a, b)
   }
+}
+
+/** The alphabetically-first source, used only to give the source sort a total,
+ * stable order for grouped releases. */
+function primarySource(entry: ShiftStoreEntry): string {
+  return [...entry.sources].sort()[0] ?? ""
 }
 
 function rank(entry: ShiftStoreEntry, text: string): number {

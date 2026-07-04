@@ -48,7 +48,8 @@
 
 [data-shift-home],
 [data-shift-detail],
-[data-shift-library] {
+[data-shift-library],
+[data-shift-store] {
 	/* ── Intrinsic generator knobs ─────────────────────────────────────────
 	 * Shift instantiates @korri/intrinsic-design against its OWN container.
 	 * The surface element carries the `intrinsic` class so --intrinsic-text-* /
@@ -254,7 +255,9 @@
 [data-shift-home] :focus,
 [data-shift-home] :focus-visible,
 [data-shift-detail] :focus,
-[data-shift-detail] :focus-visible {
+[data-shift-detail] :focus-visible,
+[data-shift-store] :focus,
+[data-shift-store] :focus-visible {
 	outline: none;
 }
 
@@ -1436,4 +1439,690 @@
 		flex-basis: 54%;
 		justify-content: center;
 	}
+}
+
+/* ========================================================================== *
+ * STORE (remote-catalog search surface)
+ *
+ * The console-store analogue: search remote sources and acquire the results.
+ * There is NO purchase — every action is Get (acquire) or Play (already
+ * acquired), so a source badge stands where a price would. Three variants share
+ * one scope and one search core:
+ *   - Variant A (.shift-store-grid): search + an ADDITIVE result-card grid.
+ *   - Variant B (.shift-store-spotlight): a featured hero + a trailing rail.
+ *   - Variant C (.shift-store-list): a dense vertical run of result rows.
+ * Every action is a native <button>; the focus ring is the shared
+ * :focus / [data-korri-active-focus] seam the rest of Shift uses.
+ * ========================================================================== */
+
+[data-shift-store].shift-store {
+	height: 100%;
+	overflow-y: auto;
+	overflow-x: hidden;
+	background-color: var(--shift-surface);
+	color: var(--shift-ink);
+	font-family: "Geist Variable", system-ui, sans-serif;
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-4);
+	padding: var(--shift-space-5) var(--shift-space-5) var(--shift-space-6);
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+[data-shift-store] .shift-store-top {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--shift-space-3);
+}
+
+[data-shift-store] .shift-store-heading {
+	margin: 0;
+	font-size: var(--shift-text-heading);
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	line-height: 1.05;
+	color: var(--shift-ink);
+}
+
+[data-shift-store] .shift-store-count {
+	font-size: var(--shift-text-fine);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--shift-ink-faint);
+}
+
+/* ── Search field ─────────────────────────────────────────────────────────── */
+[data-shift-store] .shift-store-search {
+	display: flex;
+	align-items: center;
+	gap: var(--shift-space-3);
+	padding: var(--shift-space-2) var(--shift-space-4);
+	background: var(--shift-surface-raised);
+	border: 1px solid var(--shift-rule);
+	border-radius: 9999px;
+	transition: box-shadow 140ms ease;
+}
+
+[data-shift-store] .shift-store-search:focus-within {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+[data-shift-store] .shift-store-search-glyph {
+	flex: 0 0 auto;
+	width: 1.3em;
+	height: 1.3em;
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-store] .shift-store-search-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	color: var(--shift-ink);
+	background: transparent;
+	border: 0;
+	outline: none;
+	padding: 0;
+}
+
+[data-shift-store] .shift-store-search-input::placeholder {
+	color: var(--shift-ink-faint);
+}
+
+/* ── Source / sort chips ──────────────────────────────────────────────────── */
+[data-shift-store] .shift-store-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--shift-space-2);
+}
+
+[data-shift-store] .shift-store-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-1);
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-fine);
+	font-weight: 600;
+	color: var(--shift-pill-fg);
+	background: var(--shift-pill-bg);
+	border: 1px solid var(--shift-rule);
+	border-radius: 9999px;
+	padding: var(--shift-space-1) var(--shift-space-3);
+	outline: none;
+	white-space: nowrap;
+	transition:
+		box-shadow 140ms ease,
+		background 140ms ease,
+		color 140ms ease;
+}
+
+[data-shift-store] .shift-store-chip[data-active] {
+	color: var(--shift-on-accent);
+	background: var(--shift-accent);
+	border-color: transparent;
+}
+
+[data-shift-store] .shift-store-chip-count {
+	font-size: 0.85em;
+	font-weight: 700;
+	opacity: 0.7;
+}
+
+[data-shift-store] .shift-store-chip-sort {
+	margin-left: auto;
+}
+
+[data-shift-store] .shift-store-chip:is(:focus, [data-korri-active-focus]) {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+/* ── Acquire button (Get / Getting… / Play) ───────────────────────────────── */
+[data-shift-store] .shift-store-get {
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	color: var(--shift-pill-fg);
+	background: var(--shift-pill-bg);
+	border: 1px solid var(--shift-rule);
+	border-radius: 9999px;
+	padding: var(--shift-space-2) var(--shift-space-4);
+	outline: none;
+	white-space: nowrap;
+	transition:
+		box-shadow 140ms ease,
+		transform 140ms ease,
+		background 140ms ease;
+}
+
+[data-shift-store] .shift-store-get[data-primary] {
+	color: var(--shift-on-accent);
+	background: var(--shift-accent);
+	border-color: transparent;
+}
+
+[data-shift-store] .shift-store-get[data-status="acquiring"] {
+	cursor: default;
+	opacity: 0.6;
+}
+
+[data-shift-store] .shift-store-get:is(:focus, [data-korri-active-focus]) {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+	transform: translateY(-1px);
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+[data-shift-store] .shift-store-empty {
+	margin: 0;
+	font-size: var(--shift-text-body);
+	color: var(--shift-ink-dim);
+}
+
+/* ── Variant A: additive result-card grid ─────────────────────────────────── */
+[data-shift-store] .shift-store-cards {
+	display: grid;
+	/* Additive: auto-fill adds columns as width allows; the min track is
+	 * base-relative so card size tracks the device scale, not viewport px. */
+	grid-template-columns: repeat(
+			auto-fill,
+			minmax(calc(var(--intrinsic-base) * 6), 1fr)
+		);
+	gap: var(--shift-space-4) var(--shift-space-3);
+}
+
+/* ── Shared result card ───────────────────────────────────────────────────── */
+[data-shift-store] .shift-store-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-2);
+	padding: var(--shift-space-3);
+	background: var(--shift-surface-raised);
+	border-radius: var(--shift-radius-panel);
+	min-width: 0;
+}
+
+[data-shift-store] .shift-store-card-art {
+	position: relative;
+	display: block;
+	aspect-ratio: 3 / 4;
+	border-radius: calc(var(--intrinsic-base) * 0.4);
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+[data-shift-store] .shift-store-card-art img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+[data-shift-store] .shift-store-card-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+	min-width: 0;
+}
+
+[data-shift-store] .shift-store-card-title {
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	line-height: 1.2;
+	color: var(--shift-ink);
+	/* Clamp to two lines so a long title never reflows the grid row. */
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+}
+
+[data-shift-store] .shift-store-card .shift-store-get {
+	text-align: center;
+}
+
+/* ── Variant B: search-forward spotlight ──────────────────────────────────── */
+[data-shift-store].shift-store-spotlight {
+	gap: var(--shift-space-4);
+}
+
+[data-shift-store] .shift-store-hero {
+	position: relative;
+	flex: 0 0 auto;
+	min-height: min(46cqh, calc(var(--intrinsic-base) * 15));
+	display: flex;
+	border-radius: var(--shift-radius-panel);
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+}
+
+[data-shift-store] .shift-store-hero-bleed {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	background-size: cover;
+	background-position: center;
+}
+
+[data-shift-store] .shift-store-hero-scrim {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	pointer-events: none;
+	background:
+		linear-gradient(
+			to top,
+			rgba(4, 4, 8, 0.92) 0%,
+			rgba(4, 4, 8, 0.42) 46%,
+			rgba(4, 4, 8, 0.06) 78%
+		),
+		linear-gradient(
+			to right,
+			rgba(4, 4, 8, 0.66) 0%,
+			rgba(4, 4, 8, 0.1) 56%,
+			transparent 78%
+		);
+}
+
+[data-shift-store] .shift-store-hero-inner {
+	position: relative;
+	z-index: 2;
+	align-self: flex-end;
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-2);
+	max-width: 60cqi;
+	padding: var(--shift-space-5);
+	color: var(--shift-on-media-ink);
+}
+
+[data-shift-store] .shift-store-hero-kicker {
+	font-size: var(--shift-text-fine);
+	font-weight: 800;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--shift-accent);
+	text-shadow: 0 1px 12px rgba(0, 0, 0, 0.55);
+}
+
+[data-shift-store] .shift-store-hero-title {
+	margin: 0;
+	font-size: var(--shift-text-display);
+	font-weight: 800;
+	line-height: 1.04;
+	letter-spacing: -0.02em;
+	text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6);
+}
+
+[data-shift-store] .shift-store-hero-meta {
+	margin: 0;
+	font-size: var(--shift-text-body);
+	color: var(--shift-on-media-ink-dim);
+}
+
+[data-shift-store] .shift-store-hero-actions {
+	display: flex;
+	gap: var(--shift-space-3);
+	margin-top: var(--shift-space-1);
+}
+
+/* The spotlight rail: the remaining results as horizontally scrolled cards. */
+[data-shift-store] .shift-store-rail {
+	display: flex;
+	gap: var(--shift-space-3);
+	overflow-x: auto;
+	overflow-y: visible;
+	scroll-snap-type: x proximity;
+	padding-bottom: var(--shift-space-2);
+	scrollbar-width: none;
+}
+
+[data-shift-store] .shift-store-rail::-webkit-scrollbar {
+	display: none;
+}
+
+[data-shift-store] .shift-store-rail .shift-store-card {
+	flex: 0 0 auto;
+	width: calc(var(--intrinsic-base) * 7);
+	scroll-snap-align: start;
+}
+
+/* ── Variant C: dense results list ────────────────────────────────────────── */
+[data-shift-store] .shift-store-rows {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-2);
+}
+
+[data-shift-store] .shift-store-row {
+	display: flex;
+	align-items: center;
+	gap: var(--shift-space-3);
+	padding: var(--shift-space-2) var(--shift-space-3);
+	background: var(--shift-surface-raised);
+	border-radius: var(--shift-radius-panel);
+}
+
+[data-shift-store] .shift-store-row-thumb {
+	flex: 0 0 auto;
+	width: calc(var(--intrinsic-base) * 2.4);
+	aspect-ratio: 3 / 4;
+	border-radius: calc(var(--intrinsic-base) * 0.3);
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+}
+
+[data-shift-store] .shift-store-row-thumb img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+[data-shift-store] .shift-store-row-body {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.1em;
+}
+
+[data-shift-store] .shift-store-row-title {
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	line-height: 1.2;
+	color: var(--shift-ink);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+[data-shift-store] .shift-store-row-meta {
+	font-size: var(--shift-text-fine);
+	color: var(--shift-ink-faint);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+[data-shift-store] .shift-store-row .shift-store-get {
+	flex: 0 0 auto;
+}
+
+/* ── Summoned search (browse-first variants D–F) ──────────────────────────── *
+ * Search is not a standing bar here: a quiet trigger in the header flips the
+ * surface into the search field. The trigger and the field share the store's
+ * pill vocabulary so entering/leaving search reads as one control changing
+ * state, not two different chromes.
+ * -------------------------------------------------------------------------- */
+[data-shift-store] .shift-store-search-trigger {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-2);
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 600;
+	color: var(--shift-pill-fg);
+	background: var(--shift-pill-bg);
+	border: 1px solid var(--shift-rule);
+	border-radius: 9999px;
+	padding: var(--shift-space-1) var(--shift-space-3);
+	outline: none;
+	transition:
+		box-shadow 140ms ease,
+		background 140ms ease;
+}
+
+[data-shift-store]
+	.shift-store-search-trigger:is(:focus, [data-korri-active-focus]) {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+[data-shift-store] .shift-store-search-trigger-glyph {
+	width: 1.2em;
+	height: 1.2em;
+	color: var(--shift-ink-faint);
+}
+
+[data-shift-store] .shift-store-search-close {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	color: var(--shift-ink-faint);
+	background: transparent;
+	border: 0;
+	border-radius: 9999px;
+	padding: var(--shift-space-1);
+	outline: none;
+	transition: color 140ms ease;
+}
+
+[data-shift-store] .shift-store-search-close svg {
+	width: 1.2em;
+	height: 1.2em;
+}
+
+[data-shift-store]
+	.shift-store-search-close:is(:focus, [data-korri-active-focus]) {
+	color: var(--shift-ink);
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+/* ── Variant D: additive browse-tile grid ─────────────────────────────────── *
+ * The tile is the action (it opens detail), so it is a bare cover + caption
+ * with no panel or button chrome. The grid is additive (auto-fill + a
+ * base-relative min track) so a wider frame gains columns.
+ * -------------------------------------------------------------------------- */
+[data-shift-store] .shift-store-tiles {
+	display: grid;
+	grid-template-columns: repeat(
+			auto-fill,
+			minmax(calc(var(--intrinsic-base) * 4.5), 1fr)
+		);
+	gap: var(--shift-space-4) var(--shift-space-3);
+}
+
+[data-shift-store] .shift-store-tile {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	outline: none;
+	text-align: left;
+	min-width: 0;
+	color: inherit;
+}
+
+[data-shift-store] .shift-store-tile-art {
+	position: relative;
+	display: block;
+	aspect-ratio: 3 / 4;
+	border-radius: var(--shift-radius-panel);
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+	transform: scale(1);
+	transition:
+		transform 200ms ease,
+		box-shadow 200ms ease;
+}
+
+[data-shift-store] .shift-store-tile-art img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+[data-shift-store] .shift-store-tile-body {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15em;
+	min-width: 0;
+}
+
+[data-shift-store] .shift-store-tile-title {
+	font-size: var(--shift-text-fine);
+	font-weight: 600;
+	line-height: 1.2;
+	color: var(--shift-ink-dim);
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+}
+
+[data-shift-store]
+	.shift-store-tile:is(:focus, [data-korri-active-focus])
+	.shift-store-tile-art {
+	transform: scale(1.04);
+	box-shadow:
+		0 18px 46px rgba(0, 0, 0, 0.55),
+		0 0 0 3px var(--shift-accent);
+}
+
+[data-shift-store]
+	.shift-store-tile:is(:focus, [data-korri-active-focus])
+	.shift-store-tile-title {
+	color: var(--shift-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	[data-shift-store] .shift-store-tile-art {
+		transition: none;
+	}
+}
+
+/* ── Variant E: curated source shelves ────────────────────────────────────── */
+[data-shift-store] .shift-store-shelf-stack {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-5);
+}
+
+[data-shift-store] .shift-store-shelf-title {
+	margin: 0 0 var(--shift-space-2);
+	font-size: var(--shift-text-title);
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	color: var(--shift-ink);
+}
+
+[data-shift-store] .shift-store-shelf-track {
+	display: flex;
+	gap: var(--shift-space-3);
+	overflow-x: auto;
+	overflow-y: visible;
+	scroll-snap-type: x proximity;
+	padding: var(--shift-space-2) var(--shift-space-1) var(--shift-space-3);
+	scrollbar-width: none;
+}
+
+[data-shift-store] .shift-store-shelf-track::-webkit-scrollbar {
+	display: none;
+}
+
+[data-shift-store] .shift-store-shelf-track .shift-store-tile {
+	flex: 0 0 auto;
+	width: calc(var(--intrinsic-base) * 5);
+	scroll-snap-align: start;
+}
+
+/* ── Variant F: alphabetical index rows ───────────────────────────────────── *
+ * The whole row is the navigation target; a quiet trailing chevron is the only
+ * "view" cue — no filled button.
+ * -------------------------------------------------------------------------- */
+[data-shift-store] .shift-store-index-rows {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-2);
+}
+
+[data-shift-store] .shift-store-index-row {
+	display: flex;
+	align-items: center;
+	gap: var(--shift-space-3);
+	width: 100%;
+	cursor: pointer;
+	text-align: left;
+	color: inherit;
+	background: var(--shift-surface-raised);
+	border: 1px solid transparent;
+	border-radius: var(--shift-radius-panel);
+	padding: var(--shift-space-2) var(--shift-space-3);
+	outline: none;
+	transition:
+		box-shadow 140ms ease,
+		border-color 140ms ease;
+}
+
+[data-shift-store] .shift-store-index-thumb {
+	flex: 0 0 auto;
+	width: calc(var(--intrinsic-base) * 2.2);
+	aspect-ratio: 3 / 4;
+	border-radius: calc(var(--intrinsic-base) * 0.3);
+	overflow: hidden;
+	background: var(--shift-surface-sunk);
+}
+
+[data-shift-store] .shift-store-index-thumb img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+[data-shift-store] .shift-store-index-body {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.1em;
+}
+
+[data-shift-store] .shift-store-index-title {
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	line-height: 1.2;
+	color: var(--shift-ink);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+[data-shift-store] .shift-store-index-meta {
+	font-size: var(--shift-text-fine);
+	color: var(--shift-ink-faint);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+[data-shift-store] .shift-store-index-chevron {
+	flex: 0 0 auto;
+	width: 1.3em;
+	height: 1.3em;
+	color: var(--shift-ink-faint);
+	transition: color 140ms ease;
+}
+
+[data-shift-store]
+	.shift-store-index-row:is(:focus, [data-korri-active-focus]) {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+[data-shift-store]
+	.shift-store-index-row:is(:focus, [data-korri-active-focus])
+	.shift-store-index-chevron {
+	color: var(--shift-accent);
 }

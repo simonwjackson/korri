@@ -321,11 +321,6 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "atom",
     name: "Store Get Button",
   },
-  storeSourceBadge: {
-    id: "shift.store-source-badge",
-    layer: "atom",
-    name: "Store Source Badge",
-  },
   storeResultRow: {
     id: "shift.store-result-row",
     layer: "molecule",
@@ -340,6 +335,45 @@ export const SHIFT_DESIGN_PARTS = {
     id: "shift.store-empty",
     layer: "atom",
     name: "Store Empty",
+  },
+  // Store — browse-first variants. Here items are NAVIGATION targets (focus →
+  // open a detail page where the acquire action lives), not action buttons, and
+  // search is SUMMONED (an affordance flips into the field), never a standing
+  // bar. A second family of explorations alongside the action-forward set.
+  storeBrowse: {
+    id: "shift.store-browse",
+    layer: "template",
+    name: "Store — Browse",
+  },
+  storeShelves: {
+    id: "shift.store-shelves",
+    layer: "template",
+    name: "Store — Shelves",
+  },
+  storeIndex: {
+    id: "shift.store-index",
+    layer: "template",
+    name: "Store — Index",
+  },
+  storeSearchTrigger: {
+    id: "shift.store-search-trigger",
+    layer: "atom",
+    name: "Store Search Trigger",
+  },
+  storeBrowseTile: {
+    id: "shift.store-browse-tile",
+    layer: "molecule",
+    name: "Store Browse Tile",
+  },
+  storeShelf: {
+    id: "shift.store-shelf",
+    layer: "organism",
+    name: "Store Shelf",
+  },
+  storeIndexRow: {
+    id: "shift.store-index-row",
+    layer: "molecule",
+    name: "Store Index Row",
   },
   // Home body states (the Home page's non-Ready Data states; tagged so
   // pick-mode can select the body inside the Home page).

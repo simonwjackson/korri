@@ -3,6 +3,7 @@ import type { ShiftStoreEntry } from "./shift-store-entry"
 import {
   applyShiftStoreQuery,
   deriveShiftStoreSources,
+  groupShiftStoreBySource,
   nextShiftStoreSort,
   SHIFT_STORE_DEFAULT_QUERY,
   type ShiftStoreQuery,
@@ -17,7 +18,7 @@ const entry = (
   id,
   title: id.toUpperCase(),
   artUrl: `${id}.png`,
-  source: "Community",
+  sources: ["Community"],
   status: "available",
   ...extra,
 })
@@ -62,9 +63,9 @@ describe("applyShiftStoreQuery — text search", () => {
 
 describe("applyShiftStoreQuery — sort", () => {
   const entries = [
-    entry("a", { title: "Hades", source: "itch.io" }),
-    entry("b", { title: "Hollow Knight", source: "Community" }),
-    entry("c", { title: "Halo", source: "Community" }),
+    entry("a", { title: "Hades", sources: ["itch.io"] }),
+    entry("b", { title: "Hollow Knight", sources: ["Community"] }),
+    entry("c", { title: "Halo", sources: ["Community"] }),
   ]
 
   it("relevance ranks a title prefix-match above a substring match", () => {
@@ -94,9 +95,9 @@ describe("applyShiftStoreQuery — sort", () => {
 
 describe("applyShiftStoreQuery — source facet", () => {
   const entries = [
-    entry("a", { title: "Alpha", source: "itch.io" }),
-    entry("b", { title: "Bravo", source: "Community" }),
-    entry("c", { title: "Charlie", source: "Community" }),
+    entry("a", { title: "Alpha", sources: ["itch.io"] }),
+    entry("b", { title: "Bravo", sources: ["Community"] }),
+    entry("c", { title: "Charlie", sources: ["Community"] }),
   ]
 
   it("filters to the selected sources", () => {
@@ -105,11 +106,51 @@ describe("applyShiftStoreQuery — source facet", () => {
     ).toEqual(["b", "c"])
   })
 
-  it("derives source facets by count desc then name", () => {
-    expect(deriveShiftStoreSources(entries)).toEqual([
+  it("matches a grouped release when any of its sources is selected", () => {
+    const grouped = [
+      entry("a", { title: "Alpha", sources: ["itch.io", "Community"] }),
+      entry("b", { title: "Bravo", sources: ["SMW Central"] }),
+    ]
+    expect(
+      ids(applyShiftStoreQuery(grouped, query({ sources: ["Community"] }))),
+    ).toEqual(["a"])
+  })
+
+  it("derives source facets counting every source of a grouped release", () => {
+    const grouped = [
+      entry("a", { sources: ["Community", "itch.io"] }),
+      entry("b", { sources: ["Community"] }),
+    ]
+    expect(deriveShiftStoreSources(grouped)).toEqual([
       { value: "Community", count: 2 },
       { value: "itch.io", count: 1 },
     ])
+  })
+})
+
+describe("groupShiftStoreBySource", () => {
+  it("groups into shelves by facet weight, entries alphabetical", () => {
+    const entries = [
+      entry("a", { title: "Bravo", sources: ["Community"] }),
+      entry("b", { title: "Alpha", sources: ["Community"] }),
+      entry("c", { title: "Zulu", sources: ["itch.io"] }),
+    ]
+    const shelves = groupShiftStoreBySource(entries)
+    expect(shelves.map(shelf => shelf.source)).toEqual(["Community", "itch.io"])
+    expect(shelves[0].entries.map(e => e.id)).toEqual(["b", "a"])
+    expect(shelves[1].entries.map(e => e.id)).toEqual(["c"])
+  })
+
+  it("places a grouped release on every one of its source shelves", () => {
+    const entries = [
+      entry("a", { title: "Alpha", sources: ["Community", "itch.io"] }),
+    ]
+    const shelves = groupShiftStoreBySource(entries)
+    expect(shelves.map(shelf => shelf.source).sort()).toEqual([
+      "Community",
+      "itch.io",
+    ])
+    expect(shelves.every(shelf => shelf.entries[0]?.id === "a")).toBe(true)
   })
 })
 

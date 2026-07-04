@@ -31,9 +31,19 @@ import { ShiftLibraryGrid } from "./pages/ShiftLibraryGrid"
 import { ShiftLibraryLens } from "./pages/ShiftLibraryLens"
 import { ShiftLibraryReel } from "./pages/ShiftLibraryReel"
 import { ShiftLibraryShelves } from "./pages/ShiftLibraryShelves"
+import { ShiftStoreBrowse } from "./pages/ShiftStoreBrowse"
+import { ShiftStoreGrid } from "./pages/ShiftStoreGrid"
+import { ShiftStoreIndex } from "./pages/ShiftStoreIndex"
+import { ShiftStoreList } from "./pages/ShiftStoreList"
+import { ShiftStoreShelves } from "./pages/ShiftStoreShelves"
+import { ShiftStoreSpotlight } from "./pages/ShiftStoreSpotlight"
 import type { ShiftGameDetailView } from "./pages/shift-game-detail-view"
 import type { ShiftLibraryGame } from "./pages/shift-library-game"
 import { buildShiftLibrarySections } from "./pages/shift-library-sections"
+import type {
+  ShiftStoreEntry,
+  ShiftStoreEntryStatus,
+} from "./pages/shift-store-entry"
 import "./shift.css"
 
 const SHIFT_DEFAULT_PX_PER_MM = 6.78
@@ -236,6 +246,47 @@ export const SHIFT_LIBRARY_GAMES: readonly ShiftLibraryGame[] = DEV_GAMES.map(
 export const SHIFT_LIBRARY_SECTIONS =
   buildShiftLibrarySections(SHIFT_LIBRARY_GAMES)
 
+// ── Remote-catalog store fixture ──────────────────────────────────────────
+// The store searches remote sources and normalizes results the engine can
+// acquire without knowing their origin; the lab fixture stands in for that by
+// tagging each real game with a synthetic source + acquisition status so all
+// three Get-button states (Get / Getting… / Play) appear without a backend.
+const SHIFT_STORE_SOURCES = [
+  "itch.io",
+  "Community",
+  "SteamGridDB",
+  "SMW Central",
+] as const
+
+function syntheticStoreStatus(index: number): ShiftStoreEntryStatus {
+  if (index === 1) return "acquiring"
+  if (index % 4 === 0) return "ready"
+  return "available"
+}
+
+// A release may be grouped — mirrored across several download sources. Vary the
+// count deterministically so the fixture exercises single-source and grouped
+// ("N sources") entries, and so grouped ones land in multiple source shelves.
+function syntheticStoreSources(index: number): readonly string[] {
+  const len = SHIFT_STORE_SOURCES.length
+  const sources = [SHIFT_STORE_SOURCES[index % len]]
+  if (index % 3 === 0) sources.push(SHIFT_STORE_SOURCES[(index + 1) % len])
+  if (index % 5 === 0) sources.push(SHIFT_STORE_SOURCES[(index + 2) % len])
+  return [...new Set(sources)]
+}
+
+export const SHIFT_STORE_ENTRIES: readonly ShiftStoreEntry[] = DEV_GAMES.map(
+  ({ media }, index) => ({
+    id: media.id,
+    title: media.title,
+    artUrl: media.gridUrl,
+    sources: syntheticStoreSources(index),
+    genre: media.genre,
+    developer: media.developer,
+    status: syntheticStoreStatus(index),
+  }),
+)
+
 const SHIFT_SCREENS: readonly Screen[] = [
   {
     id: "home",
@@ -292,6 +343,48 @@ const SHIFT_SCREENS: readonly Screen[] = [
     render: () => <ShiftLibraryReel games={SHIFT_LIBRARY_GAMES} />,
   },
   {
+    id: "store-grid",
+    group: "Store",
+    name: "Store — Grid",
+    note: "Variant A: search + additive result grid",
+    render: () => <ShiftStoreGrid entries={SHIFT_STORE_ENTRIES} />,
+  },
+  {
+    id: "store-spotlight",
+    group: "Store",
+    name: "Store — Spotlight",
+    note: "Variant B: search-forward spotlight hero + rail",
+    render: () => <ShiftStoreSpotlight entries={SHIFT_STORE_ENTRIES} />,
+  },
+  {
+    id: "store-list",
+    group: "Store",
+    name: "Store — List",
+    note: "Variant C: dense search-results list",
+    render: () => <ShiftStoreList entries={SHIFT_STORE_ENTRIES} />,
+  },
+  {
+    id: "store-browse",
+    group: "Store",
+    name: "Store — Browse",
+    note: "Variant D: browse grid, tiles open detail, summoned search",
+    render: () => <ShiftStoreBrowse entries={SHIFT_STORE_ENTRIES} />,
+  },
+  {
+    id: "store-shelves",
+    group: "Store",
+    name: "Store — Shelves",
+    note: "Variant E: curated source shelves, summoned search",
+    render: () => <ShiftStoreShelves entries={SHIFT_STORE_ENTRIES} />,
+  },
+  {
+    id: "store-index",
+    group: "Store",
+    name: "Store — Index",
+    note: "Variant F: alphabetical index rows, summoned search",
+    render: () => <ShiftStoreIndex entries={SHIFT_STORE_ENTRIES} />,
+  },
+  {
     id: "game-detail",
     group: "Detail",
     name: "Game Detail",
@@ -306,5 +399,5 @@ export const shiftConfig: ThemeWorkshopConfig = {
   knobs: SHIFT_KNOBS,
   defaultPxPerMm: SHIFT_DEFAULT_PX_PER_MM,
   screens: SHIFT_SCREENS,
-  groups: ["Home", "Library", "Detail"],
+  groups: ["Home", "Library", "Store", "Detail"],
 }
