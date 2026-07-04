@@ -98,21 +98,24 @@ describe("overlay orchestrator", () => {
     expect(actions.forceQuit).toBe(1)
   })
 
-  it("gates input on press and ungates on fired (chord never leaks to the game)", () => {
+  it("does not gate during the hold (inputd keeps reading the chord)", () => {
     const { intercept, orchestrator } = setup()
     orchestrator.onHoldUpdate(hold("press"))
-    expect(intercept.isActive()).toBe(true) // gated from the first press
+    expect(intercept.isActive()).toBe(false)
     orchestrator.onHoldUpdate(hold("progress", 0.5))
-    expect(intercept.isActive()).toBe(true)
+    expect(intercept.isActive()).toBe(false)
     orchestrator.onHoldUpdate(hold("fired", 1))
-    expect(intercept.isActive()).toBe(false) // restored after quit
+    expect(intercept.isActive()).toBe(false)
   })
 
-  it("ignores nav while gated but before a menu is open", () => {
-    const { intercept, renderer, orchestrator } = setup()
-    orchestrator.onHoldUpdate(hold("press"))
-    intercept.nav("left") // no menu yet -> ignored
-    expect(renderer.calls).toEqual([]) // nothing drawn on press
+  it("a second tap dismisses an open menu", () => {
+    const { intercept, orchestrator } = setup()
+    orchestrator.onHoldUpdate(hold("tap")) // open
+    expect(orchestrator.isMenuOpen()).toBe(true)
+    expect(intercept.isActive()).toBe(true)
+    orchestrator.onHoldUpdate(hold("tap")) // repeat -> close
+    expect(orchestrator.isMenuOpen()).toBe(false)
+    expect(intercept.isActive()).toBe(false)
   })
 
   it("opens the menu on tap and gates the game", () => {

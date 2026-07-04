@@ -111,10 +111,11 @@ export function createOverlayOrchestrator(deps: {
     onHoldUpdate(update) {
       switch (update.phase) {
         case "press":
-          // Gate immediately (so the chord never leaks to the game), but show
-          // nothing during the tap/buffer window: a quick tap must never flash
-          // the ring, and the ring and menu must never be on screen together.
-          ensureGated()
+          // Buffer: show nothing yet, and do NOT gate here. inputd reads the
+          // emulated pad to time the hold; enabling the intercept now would make
+          // InputPlumber release the held chord buttons on that pad, so inputd
+          // would see an instant release and the hold would collapse to a tap.
+          // Gating happens only once the menu opens.
           return
         case "progress":
           deps.renderer.ring(Math.round(update.progress * 100))
@@ -125,10 +126,13 @@ export function createOverlayOrchestrator(deps: {
           ungate()
           return
         case "tap":
-          openMenu()
+          // A second tap while the menu is open dismisses it (repeat the motion
+          // to cancel); otherwise open it.
+          if (menu) closeMenu(null)
+          else openMenu()
           return
         case "cancel":
-          // Released mid-hold: abandon the whole gesture, back to the game.
+          // Released mid-hold: abandon the gesture, back to the game.
           deps.renderer.hide()
           ungate()
           return
