@@ -387,6 +387,11 @@ export default defineConfig({
     allowedHosts: true,
     proxy: artProxy,
     watch: { ignored: ["**/ai-takes/**"] },
+    // On-device viewing (LAB_NO_HMR=1): disable the HMR client so that
+    // backgrounding the tab and returning does not trigger Vite's
+    // reconnect-driven full-page reload. The surface-state / AI-takes /
+    // generate-parts middlewares are configureServer hooks and keep working.
+    ...(process.env.LAB_NO_HMR === "1" ? { hmr: false } : {}),
   },
   preview: { host: true, allowedHosts: true, proxy: artProxy },
   resolve: {
@@ -395,5 +400,27 @@ export default defineConfig({
       "@platform": `${repoRoot}product/platform`,
       "@tools": `${repoRoot}tools`,
     },
+    // The lab renders product React components pulled across the @product /
+    // @platform alias boundaries; force ONE React instance so a subtree can
+    // never resolve a second copy (whose dispatcher is null → "Cannot read
+    // properties of null (reading 'useState')").
+    dedupe: ["react", "react-dom"],
+  },
+  // Pre-bundle the shared React/Effect/router stack (mirrors the portal config's
+  // R3F include) so first-loading a surface's parts — e.g. the Shift store, with
+  // its own module graph and lucide icons — does NOT trigger a mid-session Vite
+  // dep re-optimization + reload. That reload is what briefly leaves React's
+  // dispatcher null and crashes a freshly (re)loaded part preview.
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+      "effect",
+      "@effect/atom-react",
+      "@tanstack/react-router",
+      "lucide-react",
+    ],
   },
 })

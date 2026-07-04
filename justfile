@@ -26,6 +26,12 @@ dev-theme-workshop port="3130":
 dev-lab port="3130":
   bun run vite --config tools/theme-workshop/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
 
+# Design lab for on-device viewing (phone/tablet). HMR is disabled so that
+# backgrounding the browser and returning does NOT trigger Vite's reconnect
+# full-page reload. No live-reload-on-save; use dev-lab for desktop editing.
+dev-lab-device port="3130":
+  LAB_NO_HMR=1 bun run vite --config tools/theme-workshop/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
+
 # Dev-only seed proof: render the REAL Shift home from an in-memory seed (no API/device).
 dev-seed-proof port="3120":
   bun run vite --config tools/seed-proof/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
