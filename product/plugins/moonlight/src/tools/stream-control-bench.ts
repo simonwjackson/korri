@@ -3,7 +3,7 @@ import {
   type StreamControlApiDependencies,
   type StreamControlApiOptions,
   streamControlApiOptionsFromEnv,
-} from "@platform/stream-control/stream-control-api-routes"
+} from "./stream-control-api-routes"
 import { Hono } from "hono"
 
 const DEFAULT_HOST = "0.0.0.0"

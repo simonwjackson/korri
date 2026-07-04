@@ -3,8 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "@platform/stream/moonlight-control-protocol"
-import { decodeMoonlightRuntimeWatchArtifact } from "@platform/stream/moonlight-runtime-watch-artifact"
+import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "../moonlight-control-protocol"
+import { decodeMoonlightRuntimeWatchArtifact } from "../moonlight-runtime-watch-artifact"
 import { runMoonlightRuntimeWatchCommand } from "./moonlight-runtime-watch"
 
 describe("moonlight-runtime-watch cli", () => {

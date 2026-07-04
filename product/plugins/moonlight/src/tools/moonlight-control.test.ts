@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test"
-import type { MoonlightControlClient } from "@platform/stream/moonlight-control-client"
+import type { MoonlightControlClient } from "../moonlight-control-client"
 import {
   MOONLIGHT_CONTROL_PROTOCOL,
   MOONLIGHT_CONTROL_PROTOCOL_LIMITS,
-} from "@platform/stream/moonlight-control-protocol"
+} from "../moonlight-control-protocol"
 import { runMoonlightControlCommand } from "./moonlight-control"
 
 describe("moonlight-control cli", () => {

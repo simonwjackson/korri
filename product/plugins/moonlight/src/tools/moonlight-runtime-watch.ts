@@ -7,7 +7,7 @@ import {
   type MoonlightControlClientOptions,
   type MoonlightControlEventDelivery,
   type MoonlightControlSequenceGap,
-} from "@platform/stream/moonlight-control-client"
+} from "../moonlight-control-client"
 import {
   MOONLIGHT_CONTROL_PROTOCOL_LIMITS,
   type MoonlightControlAnyCommandMethod,
@@ -16,7 +16,7 @@ import {
   type MoonlightControlResponseResult,
   type MoonlightControlStateSnapshotResult,
   type MoonlightControlSuccessResponse,
-} from "@platform/stream/moonlight-control-protocol"
+} from "../moonlight-control-protocol"
 import {
   MOONLIGHT_RUNTIME_WATCH_ARTIFACT_SCHEMA,
   MOONLIGHT_RUNTIME_WATCH_ARTIFACT_VERSION,
@@ -24,7 +24,7 @@ import {
   type MoonlightRuntimeWatchProof,
   type MoonlightRuntimeWatchScenario,
   type MoonlightRuntimeWatchTerminalResult,
-} from "@platform/stream/moonlight-runtime-watch-artifact"
+} from "../moonlight-runtime-watch-artifact"
 
 const runtimeWatchArtifactPath =
   "out/artifacts/moonlight-runtime-watch" as const

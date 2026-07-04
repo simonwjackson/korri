@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { type ProviderId, pluginRecordId } from "@platform/plugin"
-import type { MoonlightControlClient } from "@platform/stream/moonlight-control-client"
-import type { GenericControlProvider } from "@platform/stream-control/stream-control-api-routes"
+import type { MoonlightControlClient } from "../moonlight-control-client"
+import type { GenericControlProvider } from "./stream-control-api-routes"
 import {
   createStreamControlBenchApp,
   runStreamControlBenchCommand,

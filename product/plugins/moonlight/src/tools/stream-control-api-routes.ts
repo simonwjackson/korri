@@ -2,7 +2,7 @@ import { appendFile, mkdir } from "node:fs/promises"
 import {
   connectMoonlightControl,
   type MoonlightControlClient,
-} from "@platform/stream/moonlight-control-client"
+} from "../moonlight-control-client"
 import {
   type StreamControlCapability,
   streamControlCapabilities,
