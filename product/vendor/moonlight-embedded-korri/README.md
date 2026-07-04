@@ -62,7 +62,7 @@ Runtime settings mechanism contract:
 - Moonlight records launch baseline bitrate, FPS, and resolution separately from current applied values when parsing capability acks.
 - Restore is explicit: callers send normal set commands back to the launch baseline values; Moonlight does not auto-restore from network or command outcomes.
 - Operations `1`, `2`, and `3` remain bitrate, FPS, and resolution mutation requests.
-- Moonlight keeps bounded per-operation command state, rejects same-family in-flight commands with `conflict`, and records terminal `host-applied`, `host-rejected`, `timed-out`, `stale-ack-observed`, and `stream-ended` outcomes.
+- Moonlight keeps bounded per-operation command state and serializes mutations globally: a new bitrate/FPS/resolution command is rejected with `conflict` while any mutation of any family is in flight, so a bitrate change cannot race a resolution encoder rebuild. The capability query (operation `0`) stays per-family and is exempt in both directions, so an in-flight mutation never blocks startup capability learning and vice versa. Moonlight records terminal `host-applied`, `host-rejected`, `timed-out`, `stale-ack-observed`, and `stream-ended` outcomes.
 - Runtime settings command timeout is currently 3000 ms; an expired command records `timed-out` with reason `no-ack`, and a later matching ack is treated as stale diagnostic input.
 - Moonlight parses both legacy no-reason mutation acks and additive reason-bearing acks while Sunshine and Moonlight patch payloads transition together.
 - Runtime resolution is a normal runtime-settings operation for the validated Korri profile when operation `0` advertises support.

@@ -132,7 +132,7 @@
 
      return 0;
  }
-@@ -697,88 +794,261 @@
+@@ -697,88 +794,267 @@
 
  static bool sendMessageAndForget(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData);
 
@@ -175,10 +175,16 @@
 +    PltUnlockMutex(&runtime_settings_mvp_mutex);
 +}
 +
++// Mutations (bitrate/FPS/resolution) serialize globally: only one mutation of any
++// family may be in flight, so a bitrate change cannot race a resolution encoder
++// rebuild. The capability query (operation 0) stays per-family and is exempt in
++// both directions, so startup capability learning is never starved by a mutation.
 +static bool runtime_settings_mvp_has_inflight_family_locked(uint16_t family) {
++    bool mutation = family != SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES;
 +    for (int i = 0; i <= SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX; i++) {
 +        SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE* state = &runtime_settings_mvp_command_state[i];
-+        if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT && state->family == family) {
++        bool other_mutation = state->family != SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES;
++        if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT && (mutation ? other_mutation : state->family == family)) {
 +            return true;
 +        }
      }

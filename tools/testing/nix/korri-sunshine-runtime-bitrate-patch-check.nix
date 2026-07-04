@@ -268,6 +268,12 @@ let
       && contains "pre-drain, async teardown, skip-drain, and packet-drop alternatives" readme
       && !(contains "disable_flush_on_destroy" patch)
     ))
+    (check "Moonlight runtime settings serializes mutations globally and exempts the capability query" (
+      contains "bool mutation = family != SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES" moonlightPatch
+      && contains "bool other_mutation = state->family != SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES" moonlightPatch
+      && contains "mutation ? other_mutation : state->family == family" moonlightPatch
+      && contains "reason=conflict" moonlightPatch
+    ))
     (check "Moonlight runtime settings sender can query Sunshine capabilities" (
       contains "SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES 0" moonlightPatch
       && contains "runtime_settings_mvp_query_capabilities" moonlightPatch
