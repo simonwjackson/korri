@@ -1,35 +1,5 @@
-import { STREAM_CONTROL_LIMITS } from "@platform/stream-control/limits"
 import { Schema } from "effect"
 
-const numberRange = (min: number, max: number, label: string) =>
-  Schema.makeFilter<number>(value =>
-    Number.isFinite(value) && value >= min && value <= max
-      ? undefined
-      : `${label} between ${min} and ${max} required`,
-  )
-
-export const RuntimeBitrateKbps = Schema.Number.check(
-  numberRange(
-    STREAM_CONTROL_LIMITS.bitrateKbps.min,
-    STREAM_CONTROL_LIMITS.bitrateKbps.max,
-    "bitrateKbps",
-  ),
-)
-export const RuntimeFps = Schema.Number.check(numberRange(30, 120, "fps"))
-export const RuntimeMoonlightResolutionWidth = Schema.Number.check(
-  numberRange(
-    STREAM_CONTROL_LIMITS.resolution.width.min,
-    STREAM_CONTROL_LIMITS.resolution.width.max,
-    "width",
-  ),
-)
-export const RuntimeMoonlightResolutionHeight = Schema.Number.check(
-  numberRange(
-    STREAM_CONTROL_LIMITS.resolution.height.min,
-    STREAM_CONTROL_LIMITS.resolution.height.max,
-    "height",
-  ),
-)
 export const RuntimeBrightnessPercent = Schema.Number.check(
   Schema.makeFilter<number>(value =>
     Number.isInteger(value) && value >= 0 && value <= 100
@@ -43,7 +13,6 @@ export const EmptyPayloadFields = {}
 const PluginConfigEntry = Schema.Struct({ enabled: Schema.Boolean })
 
 export const StreamControlConfigResponseFields = {
-  moonlight: Schema.Struct({ enabled: Schema.Boolean }),
   brightness: Schema.Struct({ enabled: Schema.Boolean }),
   battery: Schema.Struct({ enabled: Schema.Boolean }),
   plugins: Schema.Record(Schema.String, PluginConfigEntry),
@@ -109,17 +78,6 @@ export type StreamControlControlsResponseData = Schema.Schema.Type<
   typeof StreamControlControlsResponseSchema
 >
 
-const ResolutionReadback = Schema.Struct({
-  width: Schema.Number,
-  height: Schema.Number,
-})
-
-const MoonlightStateReadback = Schema.Struct({
-  bitrateKbps: Schema.Union([Schema.Number, Schema.Null]),
-  fps: Schema.Union([Schema.Number, Schema.Null]),
-  resolution: Schema.Union([ResolutionReadback, Schema.Null]),
-})
-
 const BrightnessDeviceReadback = Schema.Struct({
   name: Schema.String,
   brightness: Schema.Number,
@@ -161,14 +119,6 @@ const UnknownOkStateEntry = Schema.Struct({
 })
 
 export const StreamControlStateResponseFields = {
-  moonlight: Schema.Union([
-    DisabledStateEntry,
-    Schema.Struct({
-      status: Schema.Literal("ok"),
-      readback: MoonlightStateReadback,
-    }),
-    ErrorStateEntry,
-  ]),
   brightness: Schema.Union([
     DisabledStateEntry,
     Schema.Struct({

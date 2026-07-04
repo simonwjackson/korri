@@ -42,37 +42,6 @@ export function createEvierStreamControlRpcClient(): StreamControlClient {
           ),
         ),
       ),
-    setMoonlightBitrate: payload =>
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.stream-control.moonlight-bitrate.set"]({
-              bitrateKbps: payload.bitrateKbps,
-            }),
-          ),
-        ),
-      ),
-    setMoonlightFps: payload =>
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.stream-control.moonlight-fps.set"]({
-              fps: payload.fps,
-            }),
-          ),
-        ),
-      ),
-    setMoonlightResolution: payload =>
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.stream-control.moonlight-resolution.set"]({
-              width: payload.width,
-              height: payload.height,
-            }),
-          ),
-        ),
-      ),
   }
 }
 

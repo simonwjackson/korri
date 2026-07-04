@@ -72,7 +72,7 @@ export function brightnessDeviceSpec(
 const moonlightBitrateSpecBase: SliderSpec = {
   id: "evier-moonlight-bitrate",
   label: "Moonlight bitrate",
-  action: "app.stream-control.moonlight-bitrate.set",
+  action: "@korri:moonlight/bitrate.set",
   initial: 12_000,
   min: 500,
   max: 150_000,
@@ -91,7 +91,7 @@ export const moonlightBitrateSpec: SliderSpec = {
 export const moonlightFpsSpec: SliderSpec = {
   id: "evier-moonlight-fps",
   label: "Moonlight FPS",
-  action: "app.stream-control.moonlight-fps.set",
+  action: "@korri:moonlight/fps.set",
   initial: 3,
   min: 0,
   max: FPS_STEPS.length - 1,
@@ -106,7 +106,7 @@ export const moonlightFpsSpec: SliderSpec = {
 export const moonlightResolutionSpec: SliderSpec = {
   id: "evier-moonlight-resolution",
   label: "Moonlight resolution",
-  action: "app.stream-control.moonlight-resolution.set",
+  action: "@korri:moonlight/resolution.set",
   initial: RESOLUTION_STEPS.length - 1,
   min: 0,
   max: RESOLUTION_STEPS.length - 1,

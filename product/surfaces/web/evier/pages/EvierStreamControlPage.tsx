@@ -26,6 +26,11 @@ export type {
   StreamControlClient,
 } from "@platform/stream-control/stream-control-client"
 
+// Provider id as UI data (not a plugin import): the page renders a dedicated
+// Moonlight card and reads its readbacks from the generic plugins map. With the
+// plugin removed, these readbacks report unavailable and the card degrades.
+const MOONLIGHT_PROVIDER = "@korri:moonlight"
+
 export function EvierStreamControlPage({
   controller,
 }: {
@@ -42,7 +47,11 @@ export function EvierStreamControlPage({
     schedule,
   } = useEvierControlState(controller)
   const pluginControls = useMemo(
-    () => controls.filter(control => Boolean(control.provider)),
+    () =>
+      controls.filter(
+        control =>
+          Boolean(control.provider) && control.provider !== MOONLIGHT_PROVIDER,
+      ),
     [controls],
   )
 
@@ -65,17 +74,24 @@ export function EvierStreamControlPage({
           <EvierSliderControl
             spec={moonlightBitrateSpec}
             schedule={schedule}
-            readbackValue={knownValue(surface.moonlight.bitrate)}
+            readbackValue={knownValue(
+              surface.pluginReadback(MOONLIGHT_PROVIDER, "bitrate"),
+            )}
           />
           <EvierSliderControl
             spec={moonlightFpsSpec}
             schedule={schedule}
-            readbackValue={knownStepIndex(surface.moonlight.fps, FPS_STEPS)}
+            readbackValue={knownStepIndex(
+              surface.pluginReadback(MOONLIGHT_PROVIDER, "fps"),
+              FPS_STEPS,
+            )}
           />
           <EvierSliderControl
             spec={moonlightResolutionSpec}
             schedule={schedule}
-            readbackValue={knownValue(surface.moonlight.resolution)}
+            readbackValue={knownValue(
+              surface.pluginReadback(MOONLIGHT_PROVIDER, "resolution"),
+            )}
             wide
           />
         </div>

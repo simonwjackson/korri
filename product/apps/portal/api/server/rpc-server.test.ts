@@ -99,6 +99,8 @@ describe("headless server RPC group", () => {
       "app.acquisition.search",
       "app.acquisition.validate-providers",
       "app.catalog.snapshot",
+      "app.device.refresh",
+      "app.device.status",
       "app.game-assets.assign",
       "app.game-assets.candidates.list",
       "app.game-assets.unassign",
@@ -118,9 +120,6 @@ describe("headless server RPC group", () => {
       "app.stream-control.action.set",
       "app.stream-control.config.get",
       "app.stream-control.controls.get",
-      "app.stream-control.moonlight-bitrate.set",
-      "app.stream-control.moonlight-fps.set",
-      "app.stream-control.moonlight-resolution.set",
       "app.stream-control.state.get",
       "app.stream.prepare",
     ])

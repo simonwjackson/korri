@@ -1,9 +1,5 @@
 import { appendFile, mkdir } from "node:fs/promises"
 import {
-  connectMoonlightControl,
-  type MoonlightControlClient,
-} from "../moonlight-control-client"
-import {
   type StreamControlCapability,
   streamControlCapabilities,
 } from "@platform/stream-control/control-contract"
@@ -14,10 +10,14 @@ import {
   readControlState,
   recordStateSnapshot,
 } from "@platform/stream-control/runtime-support"
-import { normalizeMoonlightState } from "@platform/stream-control/state-normalizer"
 import { isRecord } from "@platform/stream-control/utils"
 import type { Context } from "hono"
 import { Hono } from "hono"
+import {
+  connectMoonlightControl,
+  type MoonlightControlClient,
+} from "../moonlight-control-client"
+import { normalizeMoonlightState } from "../stream-control/handlers"
 
 export interface StreamControlApiOptions {
   readonly moonlightSocketPath?: string

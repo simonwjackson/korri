@@ -1,9 +1,9 @@
 import { appRpcGroup } from "./app-rpc-group"
 import { handleCatalogSnapshot } from "./catalog/snapshot.rpc-handler"
-import { handleAssignGameAsset } from "./game-assets/assign.rpc-handler"
-import { handleListGameAssetCandidates } from "./game-assets/list-candidates.rpc-handler"
 import { handleDeviceRefresh } from "./device/refresh.rpc-handler"
 import { handleDeviceStatus } from "./device/status.rpc-handler"
+import { handleAssignGameAsset } from "./game-assets/assign.rpc-handler"
+import { handleListGameAssetCandidates } from "./game-assets/list-candidates.rpc-handler"
 import { handleUnassignGameAsset } from "./game-assets/unassign.rpc-handler"
 import { handleGetHello } from "./hello/rpc-handler"
 import { handleLaunchLibrary } from "./library/launch.rpc-handler"
@@ -18,9 +18,6 @@ import { handleGetStreamControlControls } from "./stream-control/get-controls.rp
 import { handleGetStreamControlState } from "./stream-control/get-state.rpc-handler"
 import { handleSetStreamControlAction } from "./stream-control/set-action.rpc-handler"
 import { handleSetBrightness } from "./stream-control/set-brightness.rpc-handler"
-import { handleSetMoonlightBitrate } from "./stream-control/set-moonlight-bitrate.rpc-handler"
-import { handleSetMoonlightFps } from "./stream-control/set-moonlight-fps.rpc-handler"
-import { handleSetMoonlightResolution } from "./stream-control/set-moonlight-resolution.rpc-handler"
 
 export const HandlersLive = appRpcGroup.toLayer(
   appRpcGroup.of({
@@ -42,9 +39,6 @@ export const HandlersLive = appRpcGroup.toLayer(
     "app.stream-control.controls.get": handleGetStreamControlControls,
     "app.stream-control.state.get": handleGetStreamControlState,
     "app.stream-control.brightness.set": handleSetBrightness,
-    "app.stream-control.moonlight-bitrate.set": handleSetMoonlightBitrate,
-    "app.stream-control.moonlight-fps.set": handleSetMoonlightFps,
-    "app.stream-control.moonlight-resolution.set": handleSetMoonlightResolution,
     "app.stream-control.action.set": handleSetStreamControlAction,
   }),
 )

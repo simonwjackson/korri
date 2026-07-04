@@ -16,22 +16,12 @@ import {
   type StreamControlCapability,
   streamControlCapabilities,
 } from "@platform/stream-control/control-contract"
-import { STREAM_CONTROL_LIMITS } from "@platform/stream-control/limits"
 import {
-  connectStreamControlSession,
-  type StreamControlSession,
-} from "@platform/stream-control/stream-control-session"
-import {
-  closeClient,
   createStreamControlEventRecorder,
   errorMessage,
-  readControlState,
   recordStateSnapshot,
 } from "@platform/stream-control/runtime-support"
-import {
-  normalizeMoonlightState,
-  rpcResult,
-} from "@platform/stream-control/state-normalizer"
+import { rpcResult } from "@platform/stream-control/state-normalizer"
 import { Context, Effect, Layer } from "effect"
 import {
   DeviceState,
@@ -51,7 +41,6 @@ import type {
 } from "./rpc-schemas"
 
 export interface StreamControlOptions {
-  readonly moonlightSocketPath?: string
   readonly artifactDir?: string
   readonly backlightDir?: string
   readonly powerSupplyDir?: string
@@ -59,9 +48,6 @@ export interface StreamControlOptions {
 
 export interface StreamControlDependencies {
   readonly pluginRegistry?: PluginRegistry
-  readonly connectMoonlight?: (
-    socketPath: string,
-  ) => Promise<StreamControlSession>
   readonly appendFile?: (path: string, content: string) => Promise<void>
   readonly mkdir?: (
     path: string,
@@ -92,25 +78,6 @@ export interface StreamControlService {
     StreamControlCommandResponseData,
     DataError | ValidationError
   >
-  readonly setMoonlightBitrate: (payload: {
-    readonly bitrateKbps: number
-  }) => Effect.Effect<
-    StreamControlCommandResponseData,
-    DataError | ValidationError
-  >
-  readonly setMoonlightFps: (payload: {
-    readonly fps: number
-  }) => Effect.Effect<
-    StreamControlCommandResponseData,
-    DataError | ValidationError
-  >
-  readonly setMoonlightResolution: (payload: {
-    readonly width: number
-    readonly height: number
-  }) => Effect.Effect<
-    StreamControlCommandResponseData,
-    DataError | ValidationError
-  >
 }
 
 export class StreamControl extends Context.Service<
@@ -121,9 +88,6 @@ export class StreamControl extends Context.Service<
 interface Runtime {
   readonly options: StreamControlOptions
   readonly pluginRegistry: PluginRegistry
-  readonly connectMoonlight: (
-    socketPath: string,
-  ) => Promise<StreamControlSession>
   readonly record: (event: unknown) => Promise<void>
   readonly deviceControl: DeviceControlService
   readonly deviceState?: DeviceStateService
@@ -139,7 +103,6 @@ function streamControlOptionsFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): StreamControlOptions {
   return {
-    moonlightSocketPath: env.MOONLIGHT_LOCAL_CONTROL_SOCKET,
     artifactDir:
       env.KORRI_EVIER_ARTIFACT_DIR ?? env.KORRI_CONTROL_BENCH_ARTIFACT_DIR,
     backlightDir: env.KORRI_BACKLIGHT_DIR ?? "/sys/class/backlight",
@@ -169,35 +132,6 @@ export function createStreamControlService(
             payload,
             payload.percent,
             payload.device,
-          ),
-        ),
-      ),
-    setMoonlightBitrate: payload =>
-      range(
-        "bitrateKbps",
-        payload.bitrateKbps,
-        STREAM_CONTROL_LIMITS.bitrateKbps.min,
-        STREAM_CONTROL_LIMITS.bitrateKbps.max,
-      ).pipe(
-        Effect.flatMap(() =>
-          runMoonlight(runtime, "moonlight.bitrate", payload, client =>
-            client.setBitrate(payload),
-          ),
-        ),
-      ),
-    setMoonlightFps: payload =>
-      range("fps", payload.fps, 30, 120).pipe(
-        Effect.flatMap(() =>
-          runMoonlight(runtime, "moonlight.fps", payload, client =>
-            client.setFps(payload),
-          ),
-        ),
-      ),
-    setMoonlightResolution: payload =>
-      moonlightResolution(payload).pipe(
-        Effect.flatMap(() =>
-          runMoonlight(runtime, "moonlight.resolution", payload, client =>
-            client.setResolution(payload),
           ),
         ),
       ),
@@ -241,13 +175,6 @@ function createRuntime(
   return {
     options,
     pluginRegistry: deps.pluginRegistry ?? createPluginRegistry([]),
-    connectMoonlight:
-      deps.connectMoonlight ??
-      ((socketPath: string) =>
-        connectStreamControlSession(
-          deps.pluginRegistry ?? createPluginRegistry([]),
-          { socketPath },
-        )),
     deviceControl,
     ...(deps.deviceState ? { deviceState: deps.deviceState } : {}),
     record: createStreamControlEventRecorder({
@@ -280,38 +207,6 @@ function applyAction(
           percent,
           typeof requested.device === "string" ? requested.device : undefined,
         ),
-      ),
-    )
-  }
-  if (action === "app.stream-control.moonlight-bitrate.set") {
-    return numericPayloadField(requested, "bitrateKbps").pipe(
-      Effect.flatMap(bitrateKbps =>
-        createStreamControlService(runtime.options, {
-          pluginRegistry: runtime.pluginRegistry,
-          connectMoonlight: runtime.connectMoonlight,
-        }).setMoonlightBitrate({ bitrateKbps }),
-      ),
-    )
-  }
-  if (action === "app.stream-control.moonlight-fps.set") {
-    return numericPayloadField(requested, "fps").pipe(
-      Effect.flatMap(fps =>
-        createStreamControlService(runtime.options, {
-          pluginRegistry: runtime.pluginRegistry,
-          connectMoonlight: runtime.connectMoonlight,
-        }).setMoonlightFps({ fps }),
-      ),
-    )
-  }
-  if (action === "app.stream-control.moonlight-resolution.set") {
-    return numericPayloadField(requested, "width").pipe(
-      Effect.bindTo("width"),
-      Effect.bind("height", () => numericPayloadField(requested, "height")),
-      Effect.flatMap(({ width, height }) =>
-        createStreamControlService(runtime.options, {
-          pluginRegistry: runtime.pluginRegistry,
-          connectMoonlight: runtime.connectMoonlight,
-        }).setMoonlightResolution({ width, height }),
       ),
     )
   }
@@ -354,23 +249,6 @@ function applyAction(
         new DataError({ reason: "Unavailable", message: errorMessage(error) }),
     ),
   )
-}
-
-function runMoonlight(
-  runtime: Runtime,
-  action: string,
-  requested: StreamControlRequestedPayload,
-  run: (client: StreamControlSession) => Promise<unknown>,
-) {
-  return runSocketAction({
-    socketPath: runtime.options.moonlightSocketPath,
-    disabledError: "moonlight socket disabled",
-    connect: runtime.connectMoonlight,
-    action,
-    requested,
-    record: runtime.record,
-    run,
-  })
 }
 
 function runBrightness(
@@ -432,43 +310,6 @@ function commandOutcome(response: unknown): CommandOutcomeData {
     : { kind: "single", status: target.status }
 }
 
-function runSocketAction<TClient>(input: {
-  readonly socketPath: string | undefined
-  readonly disabledError: string
-  readonly connect: (socketPath: string) => Promise<TClient>
-  readonly action: string
-  readonly requested: StreamControlRequestedPayload
-  readonly record: (event: unknown) => Promise<void>
-  readonly run: (client: TClient) => Promise<unknown>
-}): Effect.Effect<
-  StreamControlCommandResponseData,
-  DataError | ValidationError
-> {
-  const socketPath = input.socketPath
-  if (!socketPath) {
-    return Effect.fail(
-      new DataError({ reason: "Unavailable", message: input.disabledError }),
-    )
-  }
-
-  return Effect.tryPromise({
-    try: async () => {
-      let client: TClient | undefined
-      try {
-        client = await input.connect(socketPath)
-        return await recordCommandOutcome(input, await input.run(client))
-      } finally {
-        closeClient(client)
-      }
-    },
-    catch: error =>
-      new DataError({
-        reason: "Unavailable",
-        message: errorMessage(error),
-      }),
-  })
-}
-
 async function recordCommandOutcome(
   input: {
     readonly action: string
@@ -494,20 +335,12 @@ async function recordCommandOutcome(
 async function readState(
   runtime: Runtime,
 ): Promise<StreamControlStateResponseData> {
-  const [moonlight, brightness, battery, pluginDescriptions] =
-    await Promise.all([
-      readControlState(
-        runtime.options.moonlightSocketPath,
-        runtime.connectMoonlight,
-        client => client.state(),
-        normalizeMoonlightState,
-      ),
-      readBrightnessState(runtime),
-      readBatteryState(runtime),
-      describePluginStreamControls(runtime),
-    ])
+  const [brightness, battery, pluginDescriptions] = await Promise.all([
+    readBrightnessState(runtime),
+    readBatteryState(runtime),
+    describePluginStreamControls(runtime),
+  ])
   const result = {
-    moonlight,
     brightness,
     battery,
     plugins: Object.fromEntries(
@@ -579,7 +412,6 @@ async function configPayload(
 ): Promise<StreamControlConfigResponseData> {
   const pluginDescriptions = await describePluginStreamControls(runtime)
   return {
-    moonlight: { enabled: Boolean(runtime.options.moonlightSocketPath) },
     brightness: { enabled: true },
     battery: { enabled: true },
     plugins: Object.fromEntries(
@@ -599,11 +431,7 @@ async function controlsPayload(
     description => description.description.controls ?? [],
   )
   return streamControlCapabilities(
-    {
-      moonlight: Boolean(runtime.options.moonlightSocketPath),
-      brightness: true,
-      battery: true,
-    },
+    { brightness: true, battery: true },
     pluginControls,
   )
 }
@@ -671,27 +499,6 @@ function range(
           message: `${label} between ${min} and ${max} required`,
         }),
       )
-}
-
-function moonlightResolution(payload: {
-  readonly width: number
-  readonly height: number
-}): Effect.Effect<void, ValidationError> {
-  return range(
-    "width",
-    payload.width,
-    STREAM_CONTROL_LIMITS.resolution.width.min,
-    STREAM_CONTROL_LIMITS.resolution.width.max,
-  ).pipe(
-    Effect.andThen(
-      range(
-        "height",
-        payload.height,
-        STREAM_CONTROL_LIMITS.resolution.height.min,
-        STREAM_CONTROL_LIMITS.resolution.height.max,
-      ),
-    ),
-  )
 }
 
 function validateBacklightDeviceName(

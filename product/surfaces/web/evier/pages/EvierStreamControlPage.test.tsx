@@ -171,7 +171,7 @@ describe("EvierStreamControlPage", () => {
     })
 
     await waitFor(() => expect(screen.getByText(/readbackError/)).toBeTruthy())
-    expect(screen.getByText(/setMoonlightBitrate/)).toBeTruthy()
+    expect(screen.getByText(/bitrate\.set/)).toBeTruthy()
     expect(screen.queryByText(/"error"/)).toBeNull()
   })
 })
@@ -188,15 +188,15 @@ function stateSnapshot({
   readonly height?: number
 } = {}) {
   return {
-    moonlight: {
-      status: "ok",
-      readback: {
-        bitrateKbps,
-        fps,
-        resolution: { width, height },
-      },
-    },
     plugins: {
+      "@korri:moonlight": {
+        status: "ok",
+        readback: {
+          bitrate: bitrateKbps,
+          fps,
+          resolution: { width, height },
+        },
+      },
       [provider]: {
         status: "ok",
         readback: {
@@ -295,8 +295,5 @@ function recordingController(calls: unknown[] = []): StreamControlClient {
     },
     applyAction: record("applyAction"),
     setBrightness: record("setBrightness"),
-    setMoonlightBitrate: record("setMoonlightBitrate"),
-    setMoonlightFps: record("setMoonlightFps"),
-    setMoonlightResolution: record("setMoonlightResolution"),
   }
 }

@@ -1,18 +1,20 @@
 import { describe, expect, it } from "bun:test"
+import { createServer, type Server } from "node:net"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { ValidationError } from "@platform/api/rpc/errors"
+import { unknownDeviceState } from "@platform/device/device-facts"
 import { plugin, pluginRecordId } from "@platform/plugin"
 import { createPluginRegistry } from "@platform/plugin/registry"
-import type { MoonlightControlClient } from "@product/plugins/moonlight/src/moonlight-control-client"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
+import { moonlightPlugin } from "@product/plugins/moonlight"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { handleGetStreamControlConfig } from "./get-config.rpc-handler"
 import { handleGetStreamControlControls } from "./get-controls.rpc-handler"
 import { handleGetStreamControlState } from "./get-state.rpc-handler"
-import { unknownDeviceState } from "@platform/device/device-facts"
 import { createStreamControlService, StreamControl } from "./service"
 import { handleSetStreamControlAction } from "./set-action.rpc-handler"
 import { handleSetBrightness } from "./set-brightness.rpc-handler"
-import { handleSetMoonlightBitrate } from "./set-moonlight-bitrate.rpc-handler"
 
 const providerOne = "@example:presentation" as const
 const providerTwo = "@example:audio" as const
@@ -25,10 +27,12 @@ describe("app.stream-control RPC handlers", () => {
     expect(tags).toContain("app.stream-control.controls.get")
     expect(tags).toContain("app.stream-control.state.get")
     expect(tags).toContain("app.stream-control.brightness.set")
-    expect(tags).toContain("app.stream-control.moonlight-bitrate.set")
-    expect(tags).toContain("app.stream-control.moonlight-fps.set")
-    expect(tags).toContain("app.stream-control.moonlight-resolution.set")
     expect(tags).toContain("app.stream-control.action.set")
+    // Moonlight controls flow through the generic action path; the dedicated
+    // endpoints are retired.
+    expect(tags).not.toContain("app.stream-control.moonlight-bitrate.set")
+    expect(tags).not.toContain("app.stream-control.moonlight-fps.set")
+    expect(tags).not.toContain("app.stream-control.moonlight-resolution.set")
     expect(tags).not.toContain("app.stream-control.presentation-fps.set")
   })
 
@@ -112,63 +116,68 @@ describe("app.stream-control RPC handlers", () => {
     expect(writes).toEqual([])
   })
 
-  it("applies Moonlight bitrate through the typed control service", async () => {
-    const calls: unknown[] = []
-
-    const response = await Effect.runPromise(
-      handleSetMoonlightBitrate({ bitrateKbps: 12_000 }).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService(
-              { moonlightSocketPath: "/run/moonlight.sock" },
-              {
-                connectMoonlight: async socketPath =>
-                  recordingMoonlightClient(calls, socketPath),
-              },
+  it("applies Moonlight bitrate through the generic action path and the real plugin", async () => {
+    await withMoonlightControlServer(async ({ socketPath, requests }) => {
+      process.env.MOONLIGHT_LOCAL_CONTROL_SOCKET = socketPath
+      try {
+        const response = await Effect.runPromise(
+          handleSetStreamControlAction({
+            action: "@korri:moonlight/bitrate.set",
+            payload: { bitrateKbps: 12_000 },
+          }).pipe(
+            Effect.provide(
+              Layer.succeed(
+                StreamControl,
+                createStreamControlService(
+                  {},
+                  { pluginRegistry: moonlightRegistry() },
+                ),
+              ),
             ),
           ),
-        ),
-      ),
-    )
+        )
 
-    expect(response).toMatchObject({
-      action: "moonlight.bitrate",
-      requested: { bitrateKbps: 12_000 },
-      outcome: { kind: "single", status: "pending" },
+        expect(response).toMatchObject({
+          action: "@korri:moonlight/bitrate.set",
+          requested: { bitrateKbps: 12_000 },
+          outcome: { kind: "single", status: "pending" },
+        })
+        expect(requests.map(request => request.method)).toEqual([
+          "runtime.setBitrate",
+        ])
+      } finally {
+        delete process.env.MOONLIGHT_LOCAL_CONTROL_SOCKET
+      }
     })
-    expect(calls).toEqual([
-      { socketPath: "/run/moonlight.sock" },
-      { method: "setBitrate", params: { bitrateKbps: 12_000 } },
-      { method: "close" },
-    ])
   })
 
-  it("rejects zero bitrate before touching Moonlight", async () => {
-    const calls: unknown[] = []
-
-    const exit = await Effect.runPromiseExit(
-      handleSetMoonlightBitrate({ bitrateKbps: 0 }).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService(
-              { moonlightSocketPath: "/run/moonlight.sock" },
-              {
-                connectMoonlight: async socketPath =>
-                  recordingMoonlightClient(calls, socketPath),
-              },
+  it("rejects zero bitrate in the plugin before touching the socket", async () => {
+    await withMoonlightControlServer(async ({ socketPath, requests }) => {
+      process.env.MOONLIGHT_LOCAL_CONTROL_SOCKET = socketPath
+      try {
+        const exit = await Effect.runPromiseExit(
+          handleSetStreamControlAction({
+            action: "@korri:moonlight/bitrate.set",
+            payload: { bitrateKbps: 0 },
+          }).pipe(
+            Effect.provide(
+              Layer.succeed(
+                StreamControl,
+                createStreamControlService(
+                  {},
+                  { pluginRegistry: moonlightRegistry() },
+                ),
+              ),
             ),
           ),
-        ),
-      ),
-    )
+        )
 
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      expect(Cause.squash(exit.cause)).toBeInstanceOf(ValidationError)
-    }
-    expect(calls).toEqual([])
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(requests).toEqual([])
+      } finally {
+        delete process.env.MOONLIGHT_LOCAL_CONTROL_SOCKET
+      }
+    })
   })
 
   it("reports product-accessible stream-control capabilities from fake providers", async () => {
@@ -177,10 +186,7 @@ describe("app.stream-control RPC handlers", () => {
         Effect.provide(
           Layer.succeed(
             StreamControl,
-            createStreamControlService(
-              { moonlightSocketPath: "/run/moonlight.sock" },
-              { pluginRegistry: fakeRegistry() },
-            ),
+            createStreamControlService({}, { pluginRegistry: fakeRegistry() }),
           ),
         ),
       ),
@@ -217,15 +223,10 @@ describe("app.stream-control RPC handlers", () => {
 
   it("reports generic config and state data", async () => {
     const service = createStreamControlService(
-      { moonlightSocketPath: "/run/moonlight.sock", artifactDir: "/tmp/evier" },
+      { artifactDir: "/tmp/evier" },
       {
         pluginRegistry: fakeRegistry(),
         readdir: async () => [],
-        connectMoonlight: async () =>
-          ({
-            state: async () => ({ result: { streamQuality: {} } }),
-            close: () => undefined,
-          }) as unknown as MoonlightControlClient,
       },
     )
 
@@ -241,7 +242,6 @@ describe("app.stream-control RPC handlers", () => {
     )
 
     expect(config).toMatchObject({
-      moonlight: { enabled: true },
       brightness: { enabled: true },
       battery: { enabled: true },
       plugins: {
@@ -459,42 +459,62 @@ function fakeAudioPlugin() {
   })
 }
 
-function commandAccepted(command: string): Promise<never> {
-  return Promise.resolve({
-    jsonrpc: "2.0" as const,
-    id: "test",
-    result: {
-      _tag: "command.accepted",
-      requestId: "request",
-      command,
-      status: "applied",
-      requested: {},
-      applied: {},
-    },
-  } as never)
+function moonlightRegistry() {
+  return createPluginRegistry([moonlightPlugin], {
+    enabledPluginIds: [moonlightPlugin.id],
+  })
 }
 
-function recordingMoonlightClient(
-  calls: unknown[],
-  socketPath: string,
-): MoonlightControlClient {
-  calls.push({ socketPath })
-  return {
-    setBitrate: (params: { readonly bitrateKbps: number }) => {
-      calls.push({ method: "setBitrate", params })
-      return commandAccepted("runtime.setBitrate")
-    },
-    setFps: (params: { readonly fps: number }) => {
-      calls.push({ method: "setFps", params })
-      return commandAccepted("runtime.setFps")
-    },
-    setResolution: (params: {
-      readonly width: number
-      readonly height: number
-    }) => {
-      calls.push({ method: "setResolution", params })
-      return commandAccepted("runtime.setResolution")
-    },
-    close: () => calls.push({ method: "close" }),
-  } as unknown as MoonlightControlClient
+interface ControlServerRequest {
+  readonly id: unknown
+  readonly method: string
+  readonly params?: unknown
+}
+
+/**
+ * Minimal real Moonlight local-control server on a unix socket: accepts
+ * newline-framed JSON-RPC and answers every request with command.accepted.
+ */
+async function withMoonlightControlServer(
+  run: (harness: {
+    readonly socketPath: string
+    readonly requests: ControlServerRequest[]
+  }) => Promise<void>,
+): Promise<void> {
+  const socketPath = join(
+    tmpdir(),
+    `korri-moonlight-control-${crypto.randomUUID()}.sock`,
+  )
+  const requests: ControlServerRequest[] = []
+  const server: Server = createServer(socket => {
+    let pending = ""
+    socket.on("data", chunk => {
+      pending += chunk.toString("utf8")
+      while (pending.includes("\n")) {
+        const index = pending.indexOf("\n")
+        const line = pending.slice(0, index)
+        pending = pending.slice(index + 1)
+        if (line === "") continue
+        const request = JSON.parse(line) as ControlServerRequest
+        requests.push(request)
+        socket.write(
+          `${JSON.stringify({
+            jsonrpc: "2.0",
+            id: request.id,
+            result: {
+              _tag: "command.accepted",
+              requestId: request.id,
+              command: request.method,
+            },
+          })}\n`,
+        )
+      }
+    })
+  })
+  await new Promise<void>(resolve => server.listen(socketPath, resolve))
+  try {
+    await run({ socketPath, requests })
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()))
+  }
 }

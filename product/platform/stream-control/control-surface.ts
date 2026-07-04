@@ -19,11 +19,6 @@ export type UnifiedReadback<T> =
   | { readonly _tag: "mixed"; readonly values: readonly T[] }
 
 export interface StreamControlSurfaceState {
-  readonly moonlight: {
-    readonly bitrate: ControlReadback<number>
-    readonly fps: ControlReadback<number>
-    readonly resolution: ControlReadback<number>
-  }
   readonly brightness: {
     readonly unified: UnifiedReadback<number>
     readonly devices: readonly BrightnessDeviceReadback[]
@@ -35,6 +30,15 @@ export interface StreamControlSurfaceState {
   readonly readControl: (
     control: StreamControlCapability,
   ) => ControlReadback<number | string>
+  /**
+   * Read a provider-contributed readback value from the generic plugins map
+   * (`state.plugins[provider].readback[key]`). Resolution-shaped records are
+   * mapped to their RESOLUTION_STEPS index.
+   */
+  readonly pluginReadback: (
+    provider: string,
+    key: string,
+  ) => ControlReadback<number | string>
 }
 
 export interface BrightnessDeviceReadback {
@@ -44,18 +48,7 @@ export interface BrightnessDeviceReadback {
 
 export const StreamControlSurface = {
   fromState(state: unknown): StreamControlSurfaceState {
-    const moonlightStatus = subsystemStatus(state, "moonlight")
-
     const surface = {
-      moonlight: {
-        bitrate: ifAvailable(moonlightStatus, () =>
-          readMoonlightBitrate(state),
-        ),
-        fps: ifAvailable(moonlightStatus, () => readMoonlightFps(state)),
-        resolution: ifAvailable(moonlightStatus, () =>
-          readMoonlightResolution(state),
-        ),
-      },
       brightness: readBrightness(state),
       battery: readBattery(state),
     }
@@ -63,6 +56,8 @@ export const StreamControlSurface = {
     return {
       ...surface,
       readControl: control => readControlValue(state, control, surface),
+      pluginReadback: (provider, key) =>
+        readPluginReadback(state, provider, key),
     }
   },
 }
@@ -79,13 +74,6 @@ function unavailable<T>(reason: string): ControlReadback<T> {
   return { _tag: "unavailable", reason }
 }
 
-function ifAvailable<T>(
-  status: { readonly unavailable?: string },
-  read: () => ControlReadback<T>,
-): ControlReadback<T> {
-  return status.unavailable ? unavailable(status.unavailable) : read()
-}
-
 function subsystemStatus(
   state: unknown,
   key: string,
@@ -99,26 +87,6 @@ function subsystemStatus(
     }
   }
   return {}
-}
-
-function readMoonlightBitrate(state: unknown): ControlReadback<number> {
-  return numberReadback(
-    numberField(okReadback(state, "moonlight"), "bitrateKbps"),
-  )
-}
-
-function readMoonlightFps(state: unknown): ControlReadback<number> {
-  return numberReadback(numberField(okReadback(state, "moonlight"), "fps"))
-}
-
-function readMoonlightResolution(state: unknown): ControlReadback<number> {
-  const resolution = recordField(okReadback(state, "moonlight"), "resolution")
-  return numberReadback(
-    resolutionIndex(
-      numberField(resolution, "width"),
-      numberField(resolution, "height"),
-    ),
-  )
 }
 
 function readBrightness(
@@ -184,11 +152,6 @@ function readControlValue(
   if (control.status === "unsupported") {
     return unavailable(control.unavailableReason ?? "unsupported")
   }
-  if (control.readback === "moonlight.bitrate") return surface.moonlight.bitrate
-  if (control.readback === "moonlight.fps") return surface.moonlight.fps
-  if (control.readback === "moonlight.resolution") {
-    return surface.moonlight.resolution
-  }
   if (control.readback === "brightness.unified") {
     const unified = surface.brightness.unified
     return unified._tag === "mixed" ? unknown() : unified
@@ -197,14 +160,22 @@ function readControlValue(
 
   const pluginRef = parsePluginRecordId(control.readback)
   if (!pluginRef) return unknown()
+  return readPluginReadback(state, pluginRef.provider, pluginRef.id)
+}
+
+function readPluginReadback(
+  state: unknown,
+  provider: string,
+  key: string,
+): ControlReadback<number | string> {
   const pluginEntry = recordField(
     recordField(state as object, "plugins"),
-    pluginRef.provider,
+    provider,
   )
   const status = pluginStateStatus(pluginEntry)
   if (status.unavailable) return unavailable(status.unavailable)
   const readback = recordField(pluginEntry, "readback")
-  const value = readback?.[pluginRef.id]
+  const value = readback?.[key]
   if (typeof value === "number" || typeof value === "string") {
     return known(value)
   }

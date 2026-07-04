@@ -54,9 +54,6 @@ import { handleGetStreamControlControls } from "../stream-control/get-controls.r
 import { handleGetStreamControlState } from "../stream-control/get-state.rpc-handler"
 import { StreamControlLayerLiveWithPlugins } from "../stream-control/service"
 import { handleSetStreamControlAction } from "../stream-control/set-action.rpc-handler"
-import { handleSetMoonlightBitrate } from "../stream-control/set-moonlight-bitrate.rpc-handler"
-import { handleSetMoonlightFps } from "../stream-control/set-moonlight-fps.rpc-handler"
-import { handleSetMoonlightResolution } from "../stream-control/set-moonlight-resolution.rpc-handler"
 import { handleServerPrepareStream } from "./prepare.rpc-handler"
 import { serverRpcGroup } from "./rpc-group"
 import { handleServerStatus } from "./status.rpc-handler"
@@ -160,9 +157,6 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.stream-control.config.get": handleGetStreamControlConfig,
     "app.stream-control.controls.get": handleGetStreamControlControls,
     "app.stream-control.state.get": handleGetStreamControlState,
-    "app.stream-control.moonlight-bitrate.set": handleSetMoonlightBitrate,
-    "app.stream-control.moonlight-fps.set": handleSetMoonlightFps,
-    "app.stream-control.moonlight-resolution.set": handleSetMoonlightResolution,
     "app.stream-control.action.set": handleSetStreamControlAction,
   }),
 )

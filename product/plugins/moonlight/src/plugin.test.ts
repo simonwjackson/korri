@@ -14,7 +14,11 @@ describe("Moonlight plugin descriptor", () => {
       moonlightPlugin.contributes.config.modules?.["stream-control"],
     ).toMatchObject({
       kind: "control-surface",
-      capabilities: ["stream-control.connect"],
+      capabilities: [
+        "stream-control.apply",
+        "stream-control.describe",
+        "stream-control.connect",
+      ],
     })
     expect(
       moonlightPlugin.contributes.config.modules?.[
@@ -32,6 +36,8 @@ describe("Moonlight plugin descriptor", () => {
       moonlightPlugin.contributes.handlers?.map(handler => handler.operation),
     ).toEqual([
       "stream.launch",
+      "stream-control.describe",
+      "stream-control.apply",
       "stream-control.connect",
       "diagnostics.collect",
     ])

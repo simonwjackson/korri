@@ -162,7 +162,7 @@ describe("stream control bench", () => {
     expect(body.moonlight).toMatchObject({
       status: "ok",
       readback: {
-        bitrateKbps: 12_000,
+        bitrate: 12_000,
         fps: 60,
         resolution: { width: 1920, height: 1080 },
       },

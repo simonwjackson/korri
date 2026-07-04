@@ -88,13 +88,11 @@ export function useEvierControlState(controller: StreamControlClient) {
     recovering.current = true
     setIsRecovering(true)
     try {
-      await run("app.stream-control.moonlight-bitrate.set", {
-        bitrateKbps: 12_000,
-      })
+      await run("@korri:moonlight/bitrate.set", { bitrateKbps: 12_000 })
       await sleepWhileMounted(700, mounted)
-      await run("app.stream-control.moonlight-fps.set", { fps: 60 })
+      await run("@korri:moonlight/fps.set", { fps: 60 })
       await sleepWhileMounted(700, mounted)
-      await run("app.stream-control.moonlight-resolution.set", {
+      await run("@korri:moonlight/resolution.set", {
         width: 1920,
         height: 1080,
       })
@@ -136,20 +134,6 @@ async function runScheduledAction(
     return controller.setBrightness({
       percent: Number(body.percent),
       ...(typeof body.device === "string" ? { device: body.device } : {}),
-    })
-  }
-  if (action === "app.stream-control.moonlight-bitrate.set") {
-    return controller.setMoonlightBitrate({
-      bitrateKbps: Number(body.bitrateKbps),
-    })
-  }
-  if (action === "app.stream-control.moonlight-fps.set") {
-    return controller.setMoonlightFps({ fps: Number(body.fps) })
-  }
-  if (action === "app.stream-control.moonlight-resolution.set") {
-    return controller.setMoonlightResolution({
-      width: Number(body.width),
-      height: Number(body.height),
     })
   }
   return controller.applyAction({ action, payload: body })

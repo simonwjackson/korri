@@ -1,49 +1,20 @@
 import { describe, expect, it } from "bun:test"
-import { normalizeMoonlightState } from "./state-normalizer"
+import { rpcResult } from "./state-normalizer"
 
+// Streamer-specific readback normalization moved to the owning plugin
+// (product/plugins/moonlight/src/stream-control/handlers.test.ts). The platform
+// keeps only the generic JSON-RPC result reader.
 describe("stream-control state normalizer", () => {
-  it("prefers Moonlight runtime settings over stream quality fallbacks", () => {
+  it("extracts the result record from a JSON-RPC response", () => {
     expect(
-      normalizeMoonlightState({
-        jsonrpc: "2.0",
-        id: "state",
-        result: {
-          streamQuality: {
-            bitrateKbps: 12_000,
-            fps: 60,
-            width: 1920,
-            height: 1080,
-          },
-          runtimeSettings: {
-            appliedBitrateKbps: 10_000,
-            appliedFps: 45,
-            appliedResolution: { width: 1280, height: 720 },
-          },
-        },
-      }),
-    ).toEqual({
-      bitrateKbps: 10_000,
-      fps: 45,
-      resolution: { width: 1280, height: 720 },
-    })
+      rpcResult({ jsonrpc: "2.0", id: "state", result: { fps: 60 } }),
+    ).toEqual({ fps: 60 })
   })
 
-  it("falls back to Moonlight stream quality when runtime settings are absent", () => {
-    expect(
-      normalizeMoonlightState({
-        result: {
-          streamQuality: {
-            bitrateKbps: 12_000,
-            fps: 60,
-            width: 1920,
-            height: 1080,
-          },
-        },
-      }),
-    ).toEqual({
-      bitrateKbps: 12_000,
-      fps: 60,
-      resolution: { width: 1920, height: 1080 },
-    })
+  it("returns undefined for malformed or non-record responses", () => {
+    expect(rpcResult(undefined)).toBeUndefined()
+    expect(rpcResult("nope")).toBeUndefined()
+    expect(rpcResult({ result: 42 })).toBeUndefined()
+    expect(rpcResult([{ result: {} }])).toBeUndefined()
   })
 })

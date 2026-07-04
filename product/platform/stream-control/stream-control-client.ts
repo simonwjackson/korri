@@ -9,16 +9,6 @@ export interface StreamControlClient {
     readonly percent: number
     readonly device?: string
   }) => Promise<unknown>
-  readonly setMoonlightBitrate: (payload: {
-    readonly bitrateKbps: number
-  }) => Promise<unknown>
-  readonly setMoonlightFps: (payload: {
-    readonly fps: number
-  }) => Promise<unknown>
-  readonly setMoonlightResolution: (payload: {
-    readonly width: number
-    readonly height: number
-  }) => Promise<unknown>
 }
 
 export type StreamControlAction = string

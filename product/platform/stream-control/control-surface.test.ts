@@ -14,15 +14,15 @@ describe("StreamControlSurface", () => {
     const fpsControl = providerControl("fps", "fps")
     const filterControl = providerControl("filter", "filter")
     const surface = StreamControlSurface.fromState({
-      moonlight: {
-        status: "ok",
-        readback: {
-          bitrateKbps: 12_000,
-          fps: 60,
-          resolution: { width: 1920, height: 1080 },
-        },
-      },
       plugins: {
+        "@korri:moonlight": {
+          status: "ok",
+          readback: {
+            bitrate: 12_000,
+            fps: 60,
+            resolution: { width: 1920, height: 1080 },
+          },
+        },
         [provider]: {
           status: "ok",
           readback: {
@@ -57,8 +57,11 @@ describe("StreamControlSurface", () => {
       },
     })
 
-    expect(surface.moonlight.bitrate).toEqual({ _tag: "known", value: 12_000 })
-    expect(surface.moonlight.resolution).toEqual({
+    expect(surface.pluginReadback("@korri:moonlight", "bitrate")).toEqual({
+      _tag: "known",
+      value: 12_000,
+    })
+    expect(surface.pluginReadback("@korri:moonlight", "resolution")).toEqual({
       _tag: "known",
       value: RESOLUTION_STEPS.findIndex(step => step.width === 1920),
     })
@@ -79,8 +82,10 @@ describe("StreamControlSurface", () => {
 
   it("keeps unavailable subsystems distinct from missing readback", () => {
     const surface = StreamControlSurface.fromState({
-      moonlight: { status: "error", error: "socket refused" },
-      plugins: { [provider]: { status: "disabled" } },
+      plugins: {
+        "@korri:moonlight": { status: "error", error: "socket refused" },
+        [provider]: { status: "disabled" },
+      },
       brightness: { status: "ok", readback: { devices: [], percent: null } },
       battery: {
         status: "ok",
@@ -88,7 +93,7 @@ describe("StreamControlSurface", () => {
       },
     })
 
-    expect(surface.moonlight.fps).toEqual({
+    expect(surface.pluginReadback("@korri:moonlight", "fps")).toEqual({
       _tag: "unavailable",
       reason: "socket refused",
     })
@@ -102,7 +107,6 @@ describe("StreamControlSurface", () => {
 
   it("reports mixed brightness when display readbacks differ", () => {
     const surface = StreamControlSurface.fromState({
-      moonlight: { status: "disabled" },
       plugins: {},
       brightness: {
         status: "ok",

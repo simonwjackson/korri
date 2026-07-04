@@ -28,9 +28,6 @@ import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "../strea
 import { GetStreamControlControlsRpc as appStreamControlControlsGet } from "../stream-control/get-controls.rpc"
 import { GetStreamControlStateRpc as appStreamControlStateGet } from "../stream-control/get-state.rpc"
 import { SetStreamControlActionRpc as appStreamControlActionSet } from "../stream-control/set-action.rpc"
-import { SetMoonlightBitrateRpc as appStreamControlMoonlightBitrateSet } from "../stream-control/set-moonlight-bitrate.rpc"
-import { SetMoonlightFpsRpc as appStreamControlMoonlightFpsSet } from "../stream-control/set-moonlight-fps.rpc"
-import { SetMoonlightResolutionRpc as appStreamControlMoonlightResolutionSet } from "../stream-control/set-moonlight-resolution.rpc"
 import { ServerPrepareStreamRpc as appServerStreamPrepare } from "./prepare.rpc"
 import { ServerStatusRpc as appServerStatus } from "./status.rpc"
 
@@ -63,9 +60,6 @@ export const serverRpcGroup = RpcGroup.make(
   appStreamControlConfigGet,
   appStreamControlControlsGet,
   appStreamControlStateGet,
-  appStreamControlMoonlightBitrateSet,
-  appStreamControlMoonlightFpsSet,
-  appStreamControlMoonlightResolutionSet,
   appStreamControlActionSet,
 )
   .middleware(FeatureGatesMiddleware)

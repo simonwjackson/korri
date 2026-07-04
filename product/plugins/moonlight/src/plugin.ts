@@ -1,11 +1,15 @@
-import type { MoonlightPolicy } from "./config/policy"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { plugin } from "@platform/plugin"
+import type { MoonlightPolicy } from "./config/policy"
 import {
-  composeMoonlightStreamLaunchSpec,
   type ComposeMoonlightStreamLaunchSpecOptions,
+  composeMoonlightStreamLaunchSpec,
   type MoonlightLaunchFacts,
 } from "./moonlight-launch-spec"
+import {
+  applyMoonlightStreamControl,
+  describeMoonlightStreamControl,
+} from "./stream-control/handlers"
 import { connectMoonlightStreamControlSession } from "./stream-control/session"
 
 export const KORRI_MOONLIGHT_PLUGIN_ID = "@korri:moonlight" as const
@@ -33,7 +37,11 @@ export const moonlightPlugin = plugin({
         "stream-control": {
           id: "stream-control",
           kind: "control-surface",
-          capabilities: ["stream-control.connect"],
+          capabilities: [
+            "stream-control.apply",
+            "stream-control.describe",
+            "stream-control.connect",
+          ],
         },
         "moonlight-embedded-korri-package": {
           id: "moonlight-embedded-korri-package",
@@ -53,6 +61,33 @@ export const moonlightPlugin = plugin({
           composeMoonlightStreamLaunchSpec(
             decodeStreamLaunchInput(context.input),
           ),
+      },
+      {
+        id: "moonlight.stream-control-describe",
+        operation: "stream-control.describe",
+        capabilities: ["stream-control.describe"],
+        run: context =>
+          describeMoonlightStreamControl({
+            provider: context.provider,
+            ...(isRecord(context.input) &&
+            typeof context.input.socketPath === "string"
+              ? { socketPath: context.input.socketPath }
+              : {}),
+          }),
+      },
+      {
+        id: "moonlight.stream-control-apply",
+        operation: "stream-control.apply",
+        capabilities: ["stream-control.apply"],
+        run: context => {
+          const input = decodeApplyInput(context.input)
+          return applyMoonlightStreamControl({
+            provider: context.provider,
+            action: input.action,
+            payload: input.payload,
+            ...(input.socketPath ? { socketPath: input.socketPath } : {}),
+          })
+        },
       },
       {
         id: "moonlight.stream-control-connect",
@@ -94,6 +129,26 @@ function decodeLaunchFacts(value: unknown): MoonlightLaunchFacts {
     )
   }
   return value as unknown as MoonlightLaunchFacts
+}
+
+function decodeApplyInput(input: unknown): {
+  readonly action: string
+  readonly payload: Record<string, unknown>
+  readonly socketPath?: string
+} {
+  if (!isRecord(input) || typeof input.action !== "string") {
+    throw new Error("Moonlight stream-control.apply input.action is required")
+  }
+  if (!isRecord(input.payload)) {
+    throw new Error("Moonlight stream-control.apply input.payload is required")
+  }
+  return {
+    action: input.action,
+    payload: input.payload,
+    ...(typeof input.socketPath === "string"
+      ? { socketPath: input.socketPath }
+      : {}),
+  }
 }
 
 function decodeConnectInput(input: unknown): { readonly socketPath: string } {

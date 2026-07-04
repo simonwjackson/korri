@@ -12,11 +12,7 @@ export const RESOLUTION_STEPS = [
   { label: "1080p", width: 1920, height: 1080 },
 ] as const
 
-export type StreamControlSubsystem =
-  | "moonlight"
-  | "brightness"
-  | "battery"
-  | (string & {})
+export type StreamControlSubsystem = "brightness" | "battery" | (string & {})
 
 export type StreamControlAccess = "read-write" | "read-only"
 export type StreamControlSupportStatus = "supported" | "unsupported"
@@ -50,40 +46,12 @@ export type StreamControlCapability = StreamControlDefinition & {
 }
 
 export interface StreamControlAvailability {
-  readonly moonlight: boolean
   readonly brightness: boolean
   readonly battery: boolean
 }
 
 export const STREAM_CONTROL_BUILT_IN_DEFINITIONS: readonly StreamControlDefinition[] =
   [
-    {
-      id: "moonlight.bitrate",
-      label: "Bitrate",
-      subsystem: "moonlight",
-      access: "read-write",
-      action: "app.stream-control.moonlight-bitrate.set",
-      readback: "moonlight.bitrate",
-      value: { kind: "range", min: 500, max: 150_000, step: 500 },
-    },
-    {
-      id: "moonlight.fps",
-      label: "Moonlight FPS",
-      subsystem: "moonlight",
-      access: "read-write",
-      action: "app.stream-control.moonlight-fps.set",
-      readback: "moonlight.fps",
-      value: { kind: "steps", values: FPS_STEPS },
-    },
-    {
-      id: "moonlight.resolution",
-      label: "Moonlight resolution",
-      subsystem: "moonlight",
-      access: "read-write",
-      action: "app.stream-control.moonlight-resolution.set",
-      readback: "moonlight.resolution",
-      value: { kind: "resolutions", values: RESOLUTION_STEPS },
-    },
     {
       id: "brightness.percent",
       label: "Display brightness",

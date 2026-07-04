@@ -32,17 +32,6 @@ function createBridgeStreamControlClient({
         percent: payload.percent,
         ...(payload.device ? { device: payload.device } : {}),
       }),
-    setMoonlightBitrate: payload =>
-      rpc(api, "app.stream-control.moonlight-bitrate.set", {
-        bitrateKbps: payload.bitrateKbps,
-      }),
-    setMoonlightFps: payload =>
-      rpc(api, "app.stream-control.moonlight-fps.set", { fps: payload.fps }),
-    setMoonlightResolution: payload =>
-      rpc(api, "app.stream-control.moonlight-resolution.set", {
-        width: payload.width,
-        height: payload.height,
-      }),
     applyAction: payload =>
       rpc(api, "app.stream-control.action.set", {
         action: payload.action,
