@@ -6,6 +6,7 @@ import {
   type ComposeMoonlightStreamLaunchSpecOptions,
   type MoonlightLaunchFacts,
 } from "./moonlight-launch-spec"
+import { connectMoonlightStreamControlSession } from "./stream-control/session"
 
 export const KORRI_MOONLIGHT_PLUGIN_ID = "@korri:moonlight" as const
 
@@ -29,6 +30,11 @@ export const moonlightPlugin = plugin({
           kind: "streamer",
           capabilities: ["stream.launch"],
         },
+        "stream-control": {
+          id: "stream-control",
+          kind: "control-surface",
+          capabilities: ["stream-control.connect"],
+        },
       },
     },
     handlers: [
@@ -39,6 +45,15 @@ export const moonlightPlugin = plugin({
         run: context =>
           composeMoonlightStreamLaunchSpec(
             decodeStreamLaunchInput(context.input),
+          ),
+      },
+      {
+        id: "moonlight.stream-control-connect",
+        operation: "stream-control.connect",
+        capabilities: ["stream-control.connect"],
+        run: context =>
+          connectMoonlightStreamControlSession(
+            decodeConnectInput(context.input),
           ),
       },
       {
@@ -72,6 +87,15 @@ function decodeLaunchFacts(value: unknown): MoonlightLaunchFacts {
     )
   }
   return value as unknown as MoonlightLaunchFacts
+}
+
+function decodeConnectInput(input: unknown): { readonly socketPath: string } {
+  if (!isRecord(input) || typeof input.socketPath !== "string") {
+    throw new Error(
+      "Moonlight stream-control.connect input requires a string socketPath",
+    )
+  }
+  return { socketPath: input.socketPath }
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

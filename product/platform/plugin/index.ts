@@ -25,6 +25,7 @@ export type PluginOperation =
   | "stream.discover"
   | "stream-control.apply"
   | "stream-control.describe"
+  | "stream-control.connect"
   | "session.cleanup"
   | "package.expose"
   | "cli.expose"

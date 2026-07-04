@@ -10,12 +10,22 @@ describe("Moonlight plugin descriptor", () => {
     expect(
       moonlightPlugin.contributes.config.modules?.["stream-launch"],
     ).toMatchObject({ kind: "streamer", capabilities: ["stream.launch"] })
+    expect(
+      moonlightPlugin.contributes.config.modules?.["stream-control"],
+    ).toMatchObject({
+      kind: "control-surface",
+      capabilities: ["stream-control.connect"],
+    })
   })
 
   it("exposes the expected operation handlers", () => {
     expect(
       moonlightPlugin.contributes.handlers?.map(handler => handler.operation),
-    ).toEqual(["stream.launch", "diagnostics.collect"])
+    ).toEqual([
+      "stream.launch",
+      "stream-control.connect",
+      "diagnostics.collect",
+    ])
   })
 
   it("stream.launch composes the same LaunchSpec as calling directly", async () => {
