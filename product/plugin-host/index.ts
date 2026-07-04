@@ -207,6 +207,25 @@ export function createFirstPartyPluginRegistryFromEnv(
   })
 }
 
+/**
+ * Registry for interactive first-party surfaces (the on-device `korri` CLI).
+ * KORRI_ENABLED_PLUGINS is unit-level composition: login shells do not inherit
+ * it, and an interactive operator tool must not silently do less than the
+ * shipped product because of that. When the variable is absent, the full
+ * first-party set is enabled; when present, it stays authoritative (including
+ * narrowing). Daemons keep using createFirstPartyPluginRegistryFromEnv.
+ */
+export function createInteractiveFirstPartyPluginRegistry(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+) {
+  const configured = env.KORRI_ENABLED_PLUGINS?.trim()
+  return configured
+    ? createFirstPartyPluginRegistryFromEnv(env)
+    : createPluginRegistry(firstPartyPlugins, {
+        enabledPluginIds: firstPartyPlugins.map(plugin => plugin.id),
+      })
+}
+
 const enabledFirstPartyPluginIds = (
   enabledPlugins: string | undefined,
 ): readonly PluginId[] => [...new Set(parseEnabledPluginIds(enabledPlugins))]

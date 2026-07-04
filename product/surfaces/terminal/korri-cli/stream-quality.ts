@@ -4,7 +4,7 @@ import {
   connectStreamControlSession,
   type StreamControlSession,
 } from "@platform/stream-control/stream-control-session"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
+import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
 
 /**
  * Local structural view of the stream state snapshot this CLI reads back. The
@@ -98,7 +98,7 @@ async function withStream(
     io.connect ??
     (path =>
       connectStreamControlSession(
-        createFirstPartyPluginRegistryFromEnv(process.env),
+        createInteractiveFirstPartyPluginRegistry(process.env),
         { socketPath: path },
       ))
 
