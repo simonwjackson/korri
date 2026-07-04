@@ -337,49 +337,107 @@ body {
 }
 
 /* ---- User-sized preview frame: device picker + drag-resize handle -------- */
-.lab-frame-shell {
+/* ---- Active-part floating dock ------------------------------------------- *
+ * An idle part is only its content frame. When active, this dock floats just
+ * below the part carrying all chrome (identity, frame device, resolution, take
+ * actions, close) above the AI ask bar. The grip is the part's drag handle. */
+.lab-object-dock {
+	position: absolute;
+	left: 50%;
+	top: calc(100% + 10px);
+	z-index: 6;
+	transform: translateX(-50%);
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
-	width: max-content;
-	max-width: 100%;
+	align-items: center;
+	gap: 8px;
+	pointer-events: auto;
 }
-.lab-frame-toolbar {
+.lab-object-controls {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	padding: 4px 2px;
-	font-size: 11px;
-	color: var(--pt-ink-dim);
+	gap: 8px;
+	max-width: 92vw;
+	padding: 5px 8px 5px 5px;
+	background: var(--pt-panel);
+	border: 1px solid var(--pt-line);
+	border-radius: 999px;
+	backdrop-filter: blur(10px);
+	box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+	white-space: nowrap;
 }
-.lab-frame-device {
+.lab-object-grip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 0;
+	border-radius: 7px;
+	color: var(--pt-ink-dim);
+	background: transparent;
+	cursor: grab;
+	touch-action: none;
+}
+.lab-object-grip:hover {
+	color: var(--pt-ink);
+	background: rgba(255, 255, 255, 0.06);
+}
+.lab-object-grip:active {
+	cursor: grabbing;
+}
+.lab-object-title {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--pt-ink);
+	max-width: 22ch;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.lab-object-divider {
+	width: 1px;
+	align-self: stretch;
+	margin: 2px;
+	background: var(--pt-line);
+}
+.lab-object-device {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
+	font-size: 11px;
+	color: var(--pt-ink-dim);
 }
-.lab-frame-device-caption {
+.lab-object-device-caption {
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
 	font-weight: 600;
 	opacity: 0.7;
 }
-.lab-frame-device select {
+.lab-object-device select {
 	font: inherit;
 	font-size: 11px;
 	color: var(--pt-ink);
-	background: var(--pt-panel);
+	background: #14161d;
 	border: 1px solid var(--pt-line);
 	border-radius: 7px;
 	padding: 3px 6px;
 	cursor: pointer;
 	outline: none;
 }
-.lab-frame-device select:focus-visible {
+.lab-object-device select:focus-visible {
 	border-color: var(--pt-accent);
 }
-.lab-frame-width {
+.lab-object-res {
 	font-variant-numeric: tabular-nums;
-	opacity: 0.7;
+	font-size: 11px;
+	color: var(--pt-ink-dim);
+}
+.lab-object-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: 2px;
 }
 .lab-frame-box {
 	position: relative;
@@ -2871,4 +2929,17 @@ body {
 	font-size: 12px;
 	line-height: 1.45;
 	color: var(--pt-ink-dim);
+}
+
+/* Per-frame route identity shown in a device header when frames are un-synced
+ * (see LabFrameIdentity). Route-only address so each device advertises where it
+ * sits without leaning on the shared coordinate. */
+.lab-frame-identity {
+	margin-left: auto;
+	font-size: 11px;
+	opacity: 0.7;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 60%;
 }

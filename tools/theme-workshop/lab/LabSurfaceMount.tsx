@@ -14,6 +14,7 @@ export function LabSurfaceMount({
   initialValues,
   surfacePath,
   onNavigate,
+  onLocationChange,
   dualScreen,
   scopeId,
 }: {
@@ -21,6 +22,12 @@ export function LabSurfaceMount({
   readonly initialValues: unknown
   readonly surfacePath: string
   readonly onNavigate: (surfacePath: string) => void
+  /** Reports this frame's live location (path + search) so chrome can show a
+   * per-frame route identity. Fires on mount and on every navigation. */
+  readonly onLocationChange?: (location: {
+    readonly path: string
+    readonly search: string
+  }) => void
   readonly dualScreen?: LabSurfaceDualScreenOptions
   readonly scopeId?: string
 }) {
@@ -33,10 +40,12 @@ export function LabSurfaceMount({
   const canonicalPathRef = useRef(normalizeSurfacePath(surfacePath))
   const initialValuesRef = useRef(initialValues)
   const onNavigateRef = useRef(onNavigate)
+  const onLocationChangeRef = useRef(onLocationChange)
   const dualScreenRef = useRef(dualScreen)
 
   initialValuesRef.current = initialValues
   onNavigateRef.current = onNavigate
+  onLocationChangeRef.current = onLocationChange
   dualScreenRef.current = dualScreen
   canonicalPathRef.current = normalizeSurfacePath(surfacePath)
 
@@ -49,8 +58,18 @@ export function LabSurfaceMount({
     const initialPath = canonicalPathRef.current
     const history = createMemoryHistory({ initialEntries: [initialPath] })
     historyRef.current = history
+    onLocationChangeRef.current?.({
+      path: history.location.pathname,
+      search: history.location.search,
+    })
 
     const unsubscribe = history.subscribe(({ location }) => {
+      // Report the full location (including search) for the per-frame identity
+      // before the path-only mirror logic decides whether to bubble.
+      onLocationChangeRef.current?.({
+        path: location.pathname,
+        search: location.search,
+      })
       const nextPath = normalizeSurfacePath(location.pathname)
       if (suppressPathRef.current === nextPath) {
         suppressPathRef.current = null

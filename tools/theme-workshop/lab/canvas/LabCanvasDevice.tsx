@@ -1,6 +1,8 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react"
 import { LabDeviceCluster } from "../components/LabDeviceCluster"
 import { useLab } from "../Lab.context"
+import { normalizeSurfacePath } from "../lab-route-state"
+import { LabFrameIdentity } from "./LabFrameIdentity"
 import type { LabLiveDeviceObject } from "../model/lab-canvas-object"
 import type { LabPreviewSelection } from "../model/lab-preview-selection"
 import {
@@ -60,6 +62,10 @@ export function LabCanvasDevice({
   } = useLab()
   const device = devices.find(candidate => candidate.id === object.deviceId)
   const [viewSessionId] = useState(createLabDeviceSessionId)
+  const [frameRoute, setFrameRoute] = useState<{
+    readonly path: string
+    readonly search: string
+  }>(() => ({ path: normalizeSurfacePath(surfacePath), search: "" }))
   const maxHeightPx = useLabFitHeight()
   const [boundValues, setBoundValues] = useState<unknown | null>(initialValues)
   const [error, setError] = useState<Error | null>(null)
@@ -149,6 +155,9 @@ export function LabCanvasDevice({
       >
         <span className="pt-layer-tag layer-page">device</span>
         <span className="pt-object-title">{device.name}</span>
+        {synced === false ? (
+          <LabFrameIdentity path={frameRoute.path} search={frameRoute.search} />
+        ) : null}
       </header>
       <div className="pt-object-body lab-canvas-device-body">
         {error ? (
@@ -173,6 +182,7 @@ export function LabCanvasDevice({
                 // to every frame. Un-synced: it stays local to this frame, so
                 // devices can diverge.
                 onNavigate={synced === false ? NO_MIRROR : setSurfacePath}
+                onLocationChange={setFrameRoute}
                 pickMode={pickMode}
                 selection={innerSelection}
                 onSelect={onInnerSelect}

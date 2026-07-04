@@ -314,6 +314,12 @@ describe("LabRoot", () => {
     // bubbled to the shared surface route.
     expect(view.getByTestId("surface-odin2portal").textContent).toBe("/")
     expect(surfaceWrites).toEqual([])
+    // Each frame advertises its own route identity while un-synced.
+    const identities = screen
+      .getAllByLabelText("Frame route")
+      .map(element => element.textContent)
+    expect(identities).toContain("/game/hollow-knight")
+    expect(identities).toContain("/")
     // No remounts from toggling sync.
     expect(mountCounts.get("rg353m")).toBe(1)
     expect(mountCounts.get("odin2portal")).toBe(1)

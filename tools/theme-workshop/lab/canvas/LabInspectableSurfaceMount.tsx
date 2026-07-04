@@ -12,6 +12,7 @@ export function LabInspectableSurfaceMount({
   initialValues,
   surfacePath,
   onNavigate,
+  onLocationChange,
   dualScreen,
   pickMode,
   selection,
@@ -22,6 +23,10 @@ export function LabInspectableSurfaceMount({
   readonly initialValues: unknown
   readonly surfacePath: string
   readonly onNavigate: (surfacePath: string) => void
+  readonly onLocationChange?: (location: {
+    readonly path: string
+    readonly search: string
+  }) => void
   readonly dualScreen?: LabSurfaceDualScreenOptions
   readonly pickMode: boolean
   readonly selection: LabPreviewSelection | null
@@ -40,6 +45,7 @@ export function LabInspectableSurfaceMount({
         initialValues={initialValues}
         surfacePath={surfacePath}
         onNavigate={onNavigate}
+        onLocationChange={onLocationChange}
         dualScreen={dualScreen}
       />
     </LabInspectableContent>
