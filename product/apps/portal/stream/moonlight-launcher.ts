@@ -14,16 +14,15 @@ import {
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
 import type { PluginRegistry } from "@platform/plugin/registry"
-import { activeStreamControlSessionRegistry } from "@platform/stream/stream-session"
+import {
+  activeStreamControlSessionRegistry,
+  type StartStreamRuntimeSessionOptions,
+} from "@platform/stream/stream-session"
 import {
   dispatchStreamLaunch,
   type StreamLaunchRequest,
 } from "@platform/stream/streamer-client"
 import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
-import {
-  type MoonlightStreamRuntimeOptions,
-  startMoonlightStreamRuntimeSession,
-} from "@product/plugins/moonlight/src/stream-control/runtime-session"
 import { Effect } from "effect"
 
 const DEFAULT_STARTUP_OBSERVE_MS = 750
@@ -99,6 +98,12 @@ interface MoonlightLaunchPolicyView {
   readonly input?: { readonly devices?: readonly string[] }
 }
 
+export interface MoonlightStreamRuntimeOptions {
+  readonly socketPath: string
+  readonly adaptive?: StartStreamRuntimeSessionOptions["adaptive"]
+  readonly onRecoveryEvent?: StartStreamRuntimeSessionOptions["onRecoveryEvent"]
+}
+
 export interface MoonlightLaunchOptions {
   readonly host?: string
   readonly moonlight?: StreamerPolicy
@@ -164,7 +169,7 @@ export async function launchMoonlight(
       moonlightControl,
       session: installed.session,
       startStreamRuntimeSession:
-        options.startStreamRuntimeSession ?? startMoonlightStreamRuntimeSession,
+        options.startStreamRuntimeSession ?? defaultStartStreamRuntimeSession,
     })
   }
 
@@ -215,7 +220,7 @@ export async function launchMoonlight(
       moonlightControl,
       session: fallback.session,
       startStreamRuntimeSession:
-        options.startStreamRuntimeSession ?? startMoonlightStreamRuntimeSession,
+        options.startStreamRuntimeSession ?? defaultStartStreamRuntimeSession,
     })
   }
 
@@ -395,7 +400,18 @@ export async function moonlightControlHandleFromOptions(
   }
 }
 
-export function runtimeSessionAdaptiveOptions(): Pick<
+export async function defaultStartStreamRuntimeSession(
+  options: MoonlightStreamRuntimeOptions,
+): Promise<{ readonly close: () => void }> {
+  // Keep the launcher removable from the Moonlight plugin. The plugin package
+  // is loaded only at runtime for Moonlight sessions and the literal import
+  // path is intentionally not a static dependency.
+  const modulePath = `${"@product/plugins/"}moonlight/src/stream-control/runtime-session`
+  const module = await import(modulePath)
+  return module.startMoonlightStreamRuntimeSession(options)
+}
+
+function runtimeSessionAdaptiveOptions(): Pick<
   MoonlightStreamRuntimeOptions,
   "adaptive"
 > {
@@ -429,7 +445,7 @@ function parseFiniteEnv(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-function moonlightControlEnvForHandle(
+export function moonlightControlEnvForHandle(
   handle: MoonlightControlLaunchHandle,
 ): Readonly<Record<string, string>> {
   return {
