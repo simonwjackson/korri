@@ -37,6 +37,7 @@ interface StreamStateSnapshotView {
     readonly fps?: number
     readonly width?: number
     readonly height?: number
+    readonly connection?: "unknown" | "poor" | "okay" | "good"
     readonly sample?: StreamHealthSampleView
   }
   readonly runtimeSettings: {
@@ -215,6 +216,7 @@ export function formatState(snapshot: StreamStateSnapshotView): string {
     `session:      ${snapshot.session.state} (${snapshot.session.sessionId})`,
     `stream now:   ${quality(snapshot)}`,
     `applied:      ${applied(snapshot)}`,
+    ...formatConnection(snapshot.streamQuality.connection),
     ...formatHealth(snapshot.streamQuality.sample),
   ]
   const last = snapshot.runtimeSettings.lastCommand
@@ -278,6 +280,12 @@ function quality(snapshot: StreamStateSnapshotView): string {
   return settingsLine(q.bitrateKbps, q.fps, q.width, q.height)
 }
 
+function formatConnection(
+  connection: StreamStateSnapshotView["streamQuality"]["connection"],
+): string[] {
+  return connection === undefined ? [] : [`connection:   ${connection}`]
+}
+
 function formatHealth(sample: StreamHealthSampleView | undefined): string[] {
   if (!sample) return ["health:       not yet reported"]
 
@@ -316,7 +324,7 @@ function formatHealth(sample: StreamHealthSampleView | undefined): string[] {
   const decodeParts = [
     sample.framesDropped === undefined
       ? undefined
-      : `dropped ${sample.framesDropped} frames`,
+      : `dropped ${sample.framesDropped} frames/sample`,
     sample.decodeTimeMs === undefined
       ? undefined
       : `decode ${sample.decodeTimeMs} ms`,

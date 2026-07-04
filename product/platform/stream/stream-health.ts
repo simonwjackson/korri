@@ -34,8 +34,8 @@ export interface NumericSummary {
   readonly trend: StreamHealthTrend
 }
 
-export interface CounterDeltaSummary {
-  readonly delta?: number
+export interface CounterTotalSummary {
+  readonly total?: number
 }
 
 export interface StreamHealthSummary {
@@ -50,7 +50,7 @@ export interface StreamHealthSummary {
   readonly firstFrameMs: NumericSummary
   readonly bitrateDeliveryRatio?: number
   readonly fpsDeliveryRatio?: number
-  readonly framesDropped: CounterDeltaSummary
+  readonly framesDropped: CounterTotalSummary
 }
 
 const DEFAULT_MAX_SAMPLES = 30
@@ -112,7 +112,7 @@ export function summarizeStreamHealth(
       sample => sample.deliveredFps,
       sample => sample.requestedFps,
     ),
-    framesDropped: summarizeCounterDelta(
+    framesDropped: summarizeCounterTotal(
       window.samples,
       sample => sample.framesDropped,
     ),
@@ -156,15 +156,13 @@ function meanRatio(
   return ratios.reduce((sum, value) => sum + value, 0) / ratios.length
 }
 
-function summarizeCounterDelta(
+function summarizeCounterTotal(
   samples: readonly StreamHealthSample[],
   pick: (sample: StreamHealthSample) => number | undefined,
-): CounterDeltaSummary {
+): CounterTotalSummary {
   const values = samples.map(pick).filter(isNumber)
-  const first = values[0]
-  const last = values.at(-1)
-  if (first === undefined || last === undefined) return {}
-  return { delta: Math.max(0, last - first) }
+  if (values.length === 0) return {}
+  return { total: values.reduce((sum, value) => sum + value, 0) }
 }
 
 function trendOf(values: readonly number[]): StreamHealthTrend {

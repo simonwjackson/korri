@@ -38,7 +38,9 @@ describe("streamHealthSamplePortFromSession", () => {
   it("forwards quality.sample events into the stream health monitor", () => {
     const harness = makeSession()
     const monitor = createStreamHealthMonitor({
-      port: streamHealthSamplePortFromSession(harness.session),
+      port: streamHealthSamplePortFromSession(harness.session, {
+        nowMs: () => 5_000,
+      }),
     })
 
     harness.emit({
@@ -46,7 +48,45 @@ describe("streamHealthSamplePortFromSession", () => {
       sample: { seq: 1, sampledAtMs: 1000, rttMs: 20, lossFraction: 0.01 },
     })
 
-    expect(monitor.latestSummary(1100).rttMs.mean).toBe(20)
+    const summary = monitor.latestSummary(5_100)
+    expect(summary.rttMs.mean).toBe(20)
+    expect(summary.freshness).toBe("fresh")
+  })
+
+  it("maps the full quality.sample payload into the monitor summary", () => {
+    const harness = makeSession()
+    const monitor = createStreamHealthMonitor({
+      port: streamHealthSamplePortFromSession(harness.session, {
+        nowMs: () => 5_000,
+      }),
+    })
+
+    harness.emit({
+      name: "quality.sample",
+      sample: {
+        seq: 1,
+        sampledAtMs: 1_000,
+        rttMs: 20,
+        rttVarianceMs: 4,
+        lossFraction: 0.02,
+        deliveredBitrateKbps: 9_000,
+        requestedBitrateKbps: 10_000,
+        deliveredFps: 54,
+        requestedFps: 60,
+        framesDropped: 3,
+        decodeTimeMs: 7,
+        queueDepth: 2,
+        firstFrameMs: 80,
+      },
+    })
+
+    const summary = monitor.latestSummary(5_100)
+    expect(summary.bitrateDeliveryRatio).toBe(0.9)
+    expect(summary.fpsDeliveryRatio).toBe(0.9)
+    expect(summary.framesDropped.total).toBe(3)
+    expect(summary.decodeTimeMs.mean).toBe(7)
+    expect(summary.queueDepth.mean).toBe(2)
+    expect(summary.firstFrameMs.mean).toBe(80)
   })
 
   it("ignores non-sample and malformed sample events", () => {

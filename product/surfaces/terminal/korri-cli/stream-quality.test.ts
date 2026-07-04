@@ -250,6 +250,7 @@ describe("formatState", () => {
       }),
     )
     expect(text).toContain("20000 kbps, 60 fps, 1920x1080")
+    expect(text).toContain("connection:   good")
     expect(text).toContain("health:       not yet reported")
     expect(text).toContain("last change:  runtime.setBitrate -> applied")
   })
@@ -284,8 +285,24 @@ describe("formatState", () => {
       "delivery:     bitrate 11.8/13.0 Mbps (91%), fps 58/60 (97%)",
     )
     expect(text).toContain(
-      "decode:       dropped 3 frames, decode 6 ms, queue 2, first frame 83 ms",
+      "decode:       dropped 3 frames/sample, decode 6 ms, queue 2, first frame 83 ms",
     )
+  })
+
+  test("marks stale stream health samples", () => {
+    const text = formatState(
+      snapshot({
+        sample: {
+          seq: 10,
+          sampledAtMs: 3000,
+          rttMs: 22,
+          lossFraction: 0,
+          freshness: "stale",
+        },
+      }),
+    )
+
+    expect(text).toContain("health:       rtt 22 ms, loss 0.0% (stale)")
   })
 
   test("renders partial stream health samples without placeholder noise", () => {

@@ -193,6 +193,8 @@ let
     ))
     (check "Moonlight stream health samples use Moonlight decode and RTP facts" (
       contains "LiGetEstimatedRttInfo" healthPatch
+      && contains "health_has_rtt" healthPatch
+      && !(contains "(void) LiGetEstimatedRttInfo" healthPatch)
       && contains "LiGetRTPVideoStats" healthPatch
       && contains "moonlight_local_control_record_video_decode" healthPatch
       && contains "deliveredBitrateKbps" healthPatch
@@ -230,6 +232,7 @@ else
 
     test -x ${moonlightPackage}/bin/moonlight
     test -f ${moonlightPackage}/nix-support/moonlight-embedded-korri/manifest.txt
+    grep -q '0016-add-stream-health-sampling.patch' ${moonlightPackage}/nix-support/moonlight-embedded-korri/manifest.txt
 
     cat > "$out/summary.txt" <<'EOF'
     Korri Moonlight local control protocol patch invariants passed and patched package built.

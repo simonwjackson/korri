@@ -44,7 +44,7 @@ describe("stream health rolling summary", () => {
     expect(summary.lossFraction.mean).toBe(0.02)
     expect(summary.bitrateDeliveryRatio).toBe(0.9)
     expect(summary.fpsDeliveryRatio).toBe(0.9)
-    expect(summary.framesDropped.delta).toBe(2)
+    expect(summary.framesDropped.total).toBe(4)
     expect(summary.decodeTimeMs.mean).toBe(6)
     expect(summary.queueDepth.mean).toBe(2)
   })
@@ -90,6 +90,16 @@ describe("stream health rolling summary", () => {
 
     expect(summary.decodeTimeMs.mean).toBe(10)
     expect(summary.queueDepth.mean).toBe(4)
+  })
+
+  it("sums per-sample dropped-frame counts across the retained window", () => {
+    const window = [
+      sample(1, 1_000, { framesDropped: 5 }),
+      sample(2, 2_000, { framesDropped: 0 }),
+      sample(3, 3_000, { framesDropped: 2 }),
+    ].reduce(ingestStreamHealthSample, createStreamHealthWindow())
+
+    expect(summarizeStreamHealth(window, 3_100).framesDropped.total).toBe(7)
   })
 
   it("reports RTT trend across the retained window", () => {

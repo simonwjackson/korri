@@ -31,7 +31,7 @@ index e8f533f..349cac1 100644
  #define MOONLIGHT_CONTROL_MIN_BITRATE_KBPS 500
  #define MOONLIGHT_CONTROL_MAX_BITRATE_KBPS 150000
  #define MOONLIGHT_CONTROL_MIN_FPS 15
-@@ -89,6 +90,27 @@ struct moonlight_local_control_state {
+@@ -89,6 +90,28 @@ struct moonlight_local_control_state {
    int height;
    int fps;
    int bitrate_kbps;
@@ -40,6 +40,7 @@ index e8f533f..349cac1 100644
 +  uint64_t health_sample_seq;
 +  uint64_t health_sampled_at_ms;
 +  uint64_t health_last_emit_at_ms;
++  bool health_has_rtt;
 +  uint32_t health_rtt_ms;
 +  uint32_t health_rtt_variance_ms;
 +  double health_loss_fraction;
@@ -68,7 +69,7 @@ index e8f533f..349cac1 100644
  static struct json_object* moonlight_local_control_runtime_command_event(uint64_t seq, uint32_t request_id, const char* command, const char* status, uint16_t reason);
  static int moonlight_local_control_dispatch_runtime_command(struct json_object* id, struct json_object* request, const char* method_name, int client_fd);
  static int moonlight_local_control_dispatch_input_command(struct json_object* id, struct json_object* request, const char* method_name, int client_fd);
-@@ -218,6 +242,27 @@ void moonlight_local_control_start_from_env(const char* initial_state, int width
+@@ -218,6 +242,28 @@ void moonlight_local_control_start_from_env(const char* initial_state, int width
    control.height = height;
    control.fps = fps;
    control.bitrate_kbps = bitrate_kbps;
@@ -77,6 +78,7 @@ index e8f533f..349cac1 100644
 +  control.health_sample_seq = 0;
 +  control.health_sampled_at_ms = 0;
 +  control.health_last_emit_at_ms = 0;
++  control.health_has_rtt = false;
 +  control.health_rtt_ms = 0;
 +  control.health_rtt_variance_ms = 0;
 +  control.health_loss_fraction = 0.0;
@@ -168,7 +170,7 @@ index e8f533f..349cac1 100644
    json_object_object_add(result, "streamQuality", stream_quality);
  
    struct json_object* runtime_settings = json_object_new_object();
-@@ -710,6 +800,85 @@ static struct json_object* moonlight_local_control_snapshot_locked(void) {
+@@ -710,6 +800,88 @@ static struct json_object* moonlight_local_control_snapshot_locked(void) {
    return result;
  }
  
@@ -176,8 +178,10 @@ index e8f533f..349cac1 100644
 +  struct json_object* sample = json_object_new_object();
 +  json_object_object_add(sample, "seq", json_object_new_int64((int64_t) control.health_sample_seq));
 +  json_object_object_add(sample, "sampledAtMs", json_object_new_int64((int64_t) control.health_sampled_at_ms));
-+  json_object_object_add(sample, "rttMs", json_object_new_int((int) control.health_rtt_ms));
-+  json_object_object_add(sample, "rttVarianceMs", json_object_new_int((int) control.health_rtt_variance_ms));
++  if (control.health_has_rtt) {
++    json_object_object_add(sample, "rttMs", json_object_new_int((int) control.health_rtt_ms));
++    json_object_object_add(sample, "rttVarianceMs", json_object_new_int((int) control.health_rtt_variance_ms));
++  }
 +  json_object_object_add(sample, "lossFraction", json_object_new_double(control.health_loss_fraction));
 +  json_object_object_add(sample, "deliveredBitrateKbps", json_object_new_int((int) control.health_delivered_bitrate_kbps));
 +  json_object_object_add(sample, "requestedBitrateKbps", json_object_new_int(control.bitrate_kbps));
@@ -195,7 +199,7 @@ index e8f533f..349cac1 100644
 +  uint64_t now = moonlight_local_control_monotonic_ms();
 +  uint32_t rtt = 0;
 +  uint32_t rtt_var = 0;
-+  (void) LiGetEstimatedRttInfo(&rtt, &rtt_var);
++  bool has_rtt = LiGetEstimatedRttInfo(&rtt, &rtt_var);
 +  const RTP_VIDEO_STATS* video_stats = LiGetRTPVideoStats();
 +
 +  struct json_object* event = NULL;
@@ -214,6 +218,7 @@ index e8f533f..349cac1 100644
 +  control.health_sample_seq++;
 +  control.health_sampled_at_ms = now;
 +  control.health_last_emit_at_ms = now;
++  control.health_has_rtt = has_rtt;
 +  control.health_rtt_ms = rtt;
 +  control.health_rtt_variance_ms = rtt_var;
 +  control.health_loss_fraction = packet_delta == 0 ? 0.0 : (double) loss_delta / (double) packet_delta;

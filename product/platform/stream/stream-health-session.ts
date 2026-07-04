@@ -2,14 +2,20 @@ import type { StreamControlSession } from "@platform/stream-control/stream-contr
 import type { StreamHealthSample } from "./stream-health"
 import type { StreamHealthSamplePort } from "./stream-health-monitor"
 
+export interface StreamHealthSamplePortFromSessionOptions {
+  readonly nowMs?: () => number
+}
+
 export function streamHealthSamplePortFromSession(
   session: Pick<StreamControlSession, "onEvent">,
+  options: StreamHealthSamplePortFromSessionOptions = {},
 ): StreamHealthSamplePort {
+  const nowMs = options.nowMs ?? (() => Date.now())
   return {
     onSample: listener =>
       session.onEvent(delivery => {
         const sample = streamHealthSampleFromEvent(delivery.event)
-        if (sample) listener(sample)
+        if (sample) listener({ ...sample, sampledAtMs: nowMs() })
       }),
   }
 }
