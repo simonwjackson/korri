@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import {
+  currentRuntimeRecoveryKnownGood,
+  hasPendingRuntimeRecoveryCommand,
   initialRuntimeRecoveryState,
   type RuntimeRecoveryInput,
   type RuntimeRecoveryState,
@@ -296,6 +298,59 @@ describe("reduceRuntimeRecovery", () => {
       command: "runtime.setResolution",
       value: res(1024, 576),
       isRevert: false,
+    })
+  })
+
+  it("reports pending state and known-good snapshot for autonomous callers", () => {
+    const { state } = run([
+      {
+        kind: "sent",
+        requestId: 1,
+        command: "runtime.setBitrate",
+        value: scalar(10_000),
+      },
+    ])
+
+    expect(hasPendingRuntimeRecoveryCommand(state)).toBe(true)
+    expect(currentRuntimeRecoveryKnownGood(state)).toEqual({})
+
+    const applied = reduceRuntimeRecovery(state, {
+      kind: "result",
+      requestId: 1,
+      command: "runtime.setBitrate",
+      status: "applied",
+    }).state
+
+    expect(hasPendingRuntimeRecoveryCommand(applied)).toBe(false)
+    expect(currentRuntimeRecoveryKnownGood(applied)).toEqual({
+      "runtime.setBitrate": scalar(10_000),
+    })
+  })
+
+  it("returns a read-only known-good snapshot copy", () => {
+    const { state } = run([
+      {
+        kind: "sent",
+        requestId: 1,
+        command: "runtime.setFps",
+        value: scalar(60),
+      },
+      {
+        kind: "result",
+        requestId: 1,
+        command: "runtime.setFps",
+        status: "applied",
+      },
+    ])
+
+    const snapshot = currentRuntimeRecoveryKnownGood(state) as Record<
+      string,
+      RuntimeSettingValue | undefined
+    >
+    snapshot["runtime.setFps"] = scalar(30)
+
+    expect(currentRuntimeRecoveryKnownGood(state)).toEqual({
+      "runtime.setFps": scalar(60),
     })
   })
 })

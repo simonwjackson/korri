@@ -14,6 +14,8 @@
 // frame — lives in the native client, not here.
 
 import {
+  currentRuntimeRecoveryKnownGood,
+  hasPendingRuntimeRecoveryCommand,
   initialRuntimeRecoveryState,
   reduceRuntimeRecovery,
   type RuntimeCommandStatus,
@@ -94,6 +96,8 @@ export interface RuntimeRecoverySupervisor {
   readonly setBitrate: (bitrateKbps: number) => Promise<void>
   readonly setFps: (fps: number) => Promise<void>
   readonly setResolution: (width: number, height: number) => Promise<void>
+  readonly hasPending: () => boolean
+  readonly knownGood: () => RuntimeRecoveryState["knownGood"]
   readonly close: () => void
 }
 
@@ -205,6 +209,8 @@ export function createRuntimeRecoverySupervisor(
         { kind: "resolution", width, height },
         false,
       ),
+    hasPending: () => hasPendingRuntimeRecoveryCommand(state),
+    knownGood: () => currentRuntimeRecoveryKnownGood(state),
     close: () => unsubscribe(),
   }
 }

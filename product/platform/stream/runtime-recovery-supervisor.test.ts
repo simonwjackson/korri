@@ -306,4 +306,51 @@ describe("createRuntimeRecoverySupervisor", () => {
     // Only the two user commands; no revert.
     expect(harness.calls).toHaveLength(2)
   })
+
+  it("exposes pending and known-good readback for autonomous dispatch guards", async () => {
+    const harness = makePort()
+    const sup = createRuntimeRecoverySupervisor({
+      port: harness.port,
+      onEvent: () => {},
+    })
+
+    expect(sup.hasPending()).toBe(false)
+    expect(sup.knownGood()).toEqual({})
+
+    await sup.setFps(60)
+    expect(sup.hasPending()).toBe(true)
+
+    harness.emit({
+      requestId: "req-1",
+      command: "runtime.setFps",
+      status: "applied",
+    })
+
+    expect(sup.hasPending()).toBe(false)
+    expect(sup.knownGood()).toEqual({
+      "runtime.setFps": { kind: "scalar", value: 60 },
+    })
+  })
+
+  it("returns a known-good snapshot copy", async () => {
+    const harness = makePort()
+    const sup = createRuntimeRecoverySupervisor({
+      port: harness.port,
+      onEvent: () => {},
+    })
+
+    await sup.setBitrate(10_000)
+    harness.emit({
+      requestId: "req-1",
+      command: "runtime.setBitrate",
+      status: "applied",
+    })
+
+    const snapshot = sup.knownGood() as Record<string, unknown>
+    snapshot["runtime.setBitrate"] = { kind: "scalar", value: 500 }
+
+    expect(sup.knownGood()).toEqual({
+      "runtime.setBitrate": { kind: "scalar", value: 10_000 },
+    })
+  })
 })

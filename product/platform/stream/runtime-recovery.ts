@@ -74,6 +74,18 @@ export const initialRuntimeRecoveryState: RuntimeRecoveryState = {
   pending: {},
 }
 
+export function hasPendingRuntimeRecoveryCommand(
+  state: RuntimeRecoveryState,
+): boolean {
+  return Object.keys(state.pending).length > 0
+}
+
+export function currentRuntimeRecoveryKnownGood(
+  state: RuntimeRecoveryState,
+): RuntimeRecoveryState["knownGood"] {
+  return { ...state.knownGood }
+}
+
 /** A command we dispatched (after its command.accepted returned a requestId). */
 export interface RuntimeRecoverySentInput {
   readonly kind: "sent"
