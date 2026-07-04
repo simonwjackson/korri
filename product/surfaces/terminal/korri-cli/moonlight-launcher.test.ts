@@ -410,6 +410,10 @@ describe("moonlight launcher", () => {
       runner: {
         run: async () => ({ status: "started", session }),
       },
+      startStreamRuntimeSession: async options => {
+        calls.push(`runtime:${options.socketPath}`)
+        return { close: () => calls.push("runtime.close") }
+      },
     })
 
     expect(result.status).toBe("started")
@@ -417,9 +421,14 @@ describe("moonlight launcher", () => {
       sessionId: "session-1",
       socketPath: "/run/user/1000/korri-moonlight/session-1/control.sock",
     })
+    await Promise.resolve()
     if (result.status === "started") result.session?.terminate()
     expect(activeStreamControlSessionRegistry.current()).toBeUndefined()
-    expect(calls).toEqual(["terminate"])
+    expect(calls).toEqual([
+      "runtime:/run/user/1000/korri-moonlight/session-1/control.sock",
+      "terminate",
+      "runtime.close",
+    ])
   })
 
   it("keeps the InputPlumber -input device when local control is enabled", async () => {

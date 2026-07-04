@@ -20,6 +20,10 @@ import {
   type StreamLaunchRequest,
 } from "@platform/stream/streamer-client"
 import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
+import {
+  type MoonlightStreamRuntimeOptions,
+  startMoonlightStreamRuntimeSession,
+} from "@product/plugins/moonlight/src/stream-control/runtime-session"
 import { Effect } from "effect"
 
 const DEFAULT_STARTUP_OBSERVE_MS = 750
@@ -107,6 +111,9 @@ export interface MoonlightLaunchOptions {
   readonly readProcDevices?: () => Promise<string>
   readonly runner?: CommandRunner
   readonly moonlightControl?: MoonlightControlLaunchOptions | false
+  readonly startStreamRuntimeSession?: (
+    options: MoonlightStreamRuntimeOptions,
+  ) => Promise<{ readonly close: () => void }>
 }
 
 export async function launchMoonlight(
@@ -156,6 +163,8 @@ export async function launchMoonlight(
       command: installedSpec.command,
       moonlightControl,
       session: installed.session,
+      startStreamRuntimeSession:
+        options.startStreamRuntimeSession ?? startMoonlightStreamRuntimeSession,
     })
   }
 
@@ -205,6 +214,8 @@ export async function launchMoonlight(
       command: fallbackSpec.command,
       moonlightControl,
       session: fallback.session,
+      startStreamRuntimeSession:
+        options.startStreamRuntimeSession ?? startMoonlightStreamRuntimeSession,
     })
   }
 
@@ -274,10 +285,17 @@ function startedMoonlightResult(input: {
   readonly command: string
   readonly moonlightControl?: MoonlightControlLaunchHandle
   readonly session?: ManagedMoonlightSessionHandle
+  readonly startStreamRuntimeSession: (
+    options: MoonlightStreamRuntimeOptions,
+  ) => Promise<{ readonly close: () => void }>
 }): MoonlightLaunchResult {
   const session =
     input.moonlightControl && input.session
-      ? registerMoonlightControlSession(input.moonlightControl, input.session)
+      ? registerMoonlightControlSession(
+          input.moonlightControl,
+          input.session,
+          input.startStreamRuntimeSession,
+        )
       : input.session
   return {
     status: "started",
@@ -292,18 +310,46 @@ function startedMoonlightResult(input: {
 function registerMoonlightControlSession(
   control: MoonlightControlLaunchHandle,
   session: ManagedMoonlightSessionHandle,
+  startStreamRuntimeSession: (
+    options: MoonlightStreamRuntimeOptions,
+  ) => Promise<{ readonly close: () => void }>,
 ): ManagedMoonlightSessionHandle {
   let unregistering = false
+  let runtimeClosed = false
+  let runtimeSession: { readonly close: () => void } | undefined
+  const closeRuntimeSession = () => {
+    if (runtimeClosed) return
+    runtimeClosed = true
+    runtimeSession?.close()
+  }
+  const runtimeSessionPromise = startStreamRuntimeSession({
+    socketPath: control.socketPath,
+    ...runtimeSessionAdaptiveOptions(),
+    onRecoveryEvent: event => {
+      console.warn("korri stream recovery:", JSON.stringify(event))
+    },
+  }).then(runtime => {
+    runtimeSession = runtime
+    return runtime
+  })
+  void runtimeSessionPromise.catch(error => {
+    console.warn(
+      "korri stream runtime session failed:",
+      error instanceof Error ? error.message : String(error),
+    )
+  })
   activeStreamControlSessionRegistry.register({
     sessionId: control.sessionId,
     socketPath: control.socketPath,
     close: () => {
+      closeRuntimeSession()
       if (!unregistering) session.terminate()
     },
   })
   const unregister = () => {
     unregistering = true
     try {
+      closeRuntimeSession()
       activeStreamControlSessionRegistry.unregister(control.sessionId)
     } finally {
       unregistering = false
@@ -349,7 +395,41 @@ export async function moonlightControlHandleFromOptions(
   }
 }
 
-export function moonlightControlEnvForHandle(
+export function runtimeSessionAdaptiveOptions(): Pick<
+  MoonlightStreamRuntimeOptions,
+  "adaptive"
+> {
+  const env = globalThis.Bun?.env ?? process.env
+  const enabled = env.KORRI_STREAM_ADAPTIVE_ENABLED
+  if (enabled !== "1" && enabled !== "true") return {}
+  const objectiveBias = parseFiniteEnv(
+    env.KORRI_STREAM_ADAPTIVE_OBJECTIVE_BIAS,
+    0.5,
+  )
+  const tickIntervalMs = parseFiniteEnv(
+    env.KORRI_STREAM_ADAPTIVE_TICK_MS,
+    5_000,
+  )
+  return {
+    adaptive: {
+      enabled: true,
+      objectiveBias,
+      tickIntervalMs,
+      isStreaming: () => true,
+      onEvent: event => {
+        console.info("korri stream adaptive:", JSON.stringify(event))
+      },
+    },
+  }
+}
+
+function parseFiniteEnv(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === "") return fallback
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function moonlightControlEnvForHandle(
   handle: MoonlightControlLaunchHandle,
 ): Readonly<Record<string, string>> {
   return {
