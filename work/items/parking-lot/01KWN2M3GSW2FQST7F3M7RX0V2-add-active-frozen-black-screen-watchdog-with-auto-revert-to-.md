@@ -17,23 +17,42 @@ source: se-work
 
 # Add active frozen/black-screen watchdog with auto-revert to last known-good
 
-## Progress (2026-07-04): policy core landed test-first
+## Progress: the machine-verifiable half of U-B is complete
 
-The Korri-side decision core is implemented and unit-tested (commit 5551ca4f,
-`product/platform/stream/runtime-recovery.ts`, 8 tests): known-good bookkeeping,
-revert-on-stall, no-oscillation (isRevert guard), no spurious revert on pre-apply
-rejections, and never-silent (every stall yields a revert or a record). It is a
-pure I/O-free reducer over command outcomes — not an external poller.
+Per the scope doc, U-B's machine part is "unit-test the known-good bookkeeping,
+the revert path, and the recorded event"; the device session is the native
+decode-confirm mechanism + window tuning. The machine part is now done:
 
-Remaining, for the device session:
+- Policy core (commit 5551ca4f, `product/platform/stream/runtime-recovery.ts`,
+  8 tests): known-good bookkeeping, revert-on-stall, no-oscillation (isRevert
+  guard), no spurious revert on pre-apply rejections, never-silent. Pure reducer.
+- Reducer refactor fix (commit 4f723450): the reducer type-imported the Moonlight
+  protocol from `./moonlight-control-protocol`, which the plugin refactor
+  relocated; the import was dangling (erased at runtime, would fail tsc). The
+  reducer now owns local protocol-status types so platform stays plugin-agnostic.
+- Live supervisor (commit d0d18af3,
+  `product/platform/stream/runtime-recovery-supervisor.ts`, 8 tests): drives
+  runtime mutations through a streamer-agnostic port, learns each command's native
+  requestId, feeds every terminal outcome to the reducer, issues the revert to
+  last known-good (or a seeded launch baseline), and surfaces every decision
+  through a required never-silent sink. It already reverts on any failed/timed-out
+  outcome, so it will handle the native decode-stall the instant that signal
+  exists. Outcomes for commands it did not issue are ignored (manual CLI changes
+  are the user's own).
+
+Remaining — the device session (genuinely needs a human + screen):
 
 1. Native (client): decode-confirmed applied-truth for resolution — arm a
    first-frame timer on the decoder reopen (paths 0009/0010), emit `failed`
-   (decode-stall) when no frame decodes in the window. This is the moonlight
+   (decode-stall) when no frame decodes in the window. Cross-thread (the command
+   handler that emits the outcome and the decode loop that reopens run on
+   different threads), so it is not written blind; it is the moonlight
    patch-export half and needs real decode signals.
-2. Live wiring (supervisor): subscribe to the control socket, feed sent commands
-   and runtime.commandResult outcomes into the reducer, and issue the reducer's
-   revert action via the control client; surface record-unrecoverable.
+2. Wire the supervisor at session start: a thin adapter maps the Moonlight
+   control client onto `RuntimeRecoveryControlPort` (setters return the
+   command.accepted requestId; onResult filters runtime.commandResult), seeded
+   with the launch baseline. Trivial mapping, but activation must be verified on
+   the running device.
 3. Tune the single device-only constant: the first-frame wait window.
 
 ## Framing (2026-07-04, user-confirmed): decode-truth, not a watcher tool
@@ -65,8 +84,10 @@ task-100. Phase-1 continuity guarantee: if a live change hangs, times out, or le
 
 ## Acceptance Criteria
 
-- [ ] A change that produces no decoded frames within a bounded window triggers an automatic revert to the last known-good settings.
-- [ ] The revert is recorded in local-control state so it is observable (never silent), consumable by korri stream / runtime-watch.
+- [x] A stalled change (failed/timed-out) triggers an automatic revert to the last known-good settings — implemented + unit-tested in the supervisor (d0d18af3).
+- [x] The revert decision is surfaced through a required never-silent sink; every stall yields a revert or a recorded unrecoverable — unit-tested.
+- [ ] A resolution change that produces no decoded frames within a bounded window is turned into a `failed` (decode-stall) outcome by the native client (device session).
+- [ ] The supervisor is wired into the live session via the Moonlight client adapter and observed reverting a real frozen/black case on-device.
 - [ ] Watchdog thresholds validated on-device against a real frozen/black case.
 - [ ] Recovery policy placement respects the contract (Korri-side or client no-frames safety, not fork auto-adaptation).
 
