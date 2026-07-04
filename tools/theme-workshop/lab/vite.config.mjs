@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
@@ -369,6 +369,157 @@ function labGeneratePartsPlugin() {
   }
 }
 
+// On-device viewing (LAB_DEVICE=1): Vite's HMR client does a full page reload
+// whenever its WebSocket reconnects after a disconnect (see the
+// `vite:ws:disconnect` handler in vite/dist/client/client.mjs). On a phone,
+// merely switching away from and back to the browser drops the socket, so every
+// return triggers a disruptive full reload. This transform keeps HMR intact but
+// swaps that reconnect-driven `location.reload()` for a silent in-place
+// transport reconnect, so returning to the tab resumes HMR without reloading.
+// It mirrors the client's own top-level `transport.connect(createHMRHandler(
+// handleMessage))` call, so the injected identifiers are guaranteed in scope.
+// Trade-off: edits made while the tab was backgrounded are not retro-applied;
+// the next edit (or a manual refresh) brings them in. Serve-only + desktop
+// `dev-lab` is unaffected because the plugin is gated on LAB_DEVICE.
+function labDeviceHmrKeepAlivePlugin() {
+  return {
+    name: "korri-lab-device-hmr-keepalive",
+    apply: "serve",
+    enforce: "post",
+    transform(code, id) {
+      if (!id.includes("vite/dist/client/client.mjs")) return
+      const patched = code.replace(
+        /(await waitForSuccessfulPing\([^)]*\);\s*)location\.reload\(\);/,
+        '$1try { await transport.connect(createHMRHandler(handleMessage)); console.info("[lab] HMR reconnected in place (no full reload)"); } catch (reconnectError) { console.warn("[lab] HMR reconnect failed; falling back to reload", reconnectError); location.reload(); }',
+      )
+      if (patched === code) {
+        this.warn(
+          "korri-lab-device-hmr-keepalive: reconnect-reload pattern not found; the Vite client may have changed",
+        )
+      }
+      return patched
+    },
+  }
+}
+
+// On-device viewing (LAB_DEVICE=1): make the lab an installable, fullscreen PWA
+// over plain-HTTP LAN. publicDir is false, so the manifest, service worker, and
+// icons are served from ./pwa via middleware, and the manifest link + service
+// worker registration are injected into index.html. Pairs with the phone-side
+// chrome://flags/#unsafely-treat-insecure-origin-as-secure allowlist so the LAN
+// origin is a secure context (service workers require one; HTTPS is not the
+// only way to get it). display:fullscreen + viewport-fit=cover on index.html
+// give edge-to-edge fullscreen with no display-cutout black bar.
+function labPwaPlugin() {
+  const pwaDir = new URL("pwa/", import.meta.url)
+  const assets = {
+    "/manifest.webmanifest": {
+      file: "manifest.webmanifest",
+      type: "application/manifest+json",
+    },
+    "/sw.js": { file: "sw.js", type: "text/javascript" },
+    // On-phone install diagnostic: open /pwa-check to see which installability
+    // check is failing (secure context, SW, manifest, current display mode).
+    "/pwa-check": { file: "check.html", type: "text/html; charset=utf-8" },
+    "/pwa/icon-192.png": { file: "icon-192.png", type: "image/png" },
+    "/pwa/icon-512.png": { file: "icon-512.png", type: "image/png" },
+  }
+  return {
+    name: "korri-lab-pwa",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const url = new URL(request.url ?? "/", "http://localhost")
+        const asset = assets[url.pathname]
+        if (!asset) {
+          next()
+          return
+        }
+        try {
+          const body = await readFile(new URL(asset.file, pwaDir))
+          response.statusCode = 200
+          response.setHeader("Content-Type", asset.type)
+          response.setHeader("Cache-Control", "no-cache")
+          // Allow a root-scoped service worker even though it is served by a
+          // middleware rather than sitting physically at the web root.
+          if (url.pathname === "/sw.js") {
+            response.setHeader("Service-Worker-Allowed", "/")
+          }
+          response.end(body)
+        } catch (cause) {
+          server.config.logger.warn(
+            `[lab-pwa] failed to serve ${url.pathname}: ${cause}`,
+          )
+          response.statusCode = 500
+          response.end("PWA asset unavailable")
+        }
+      })
+    },
+    transformIndexHtml() {
+      return [
+        {
+          tag: "link",
+          attrs: { rel: "manifest", href: "/manifest.webmanifest" },
+          injectTo: "head",
+        },
+        {
+          tag: "meta",
+          attrs: { name: "theme-color", content: "#14161d" },
+          injectTo: "head",
+        },
+        {
+          tag: "link",
+          attrs: { rel: "apple-touch-icon", href: "/pwa/icon-192.png" },
+          injectTo: "head",
+        },
+        {
+          tag: "meta",
+          attrs: { name: "mobile-web-app-capable", content: "yes" },
+          injectTo: "head",
+        },
+        {
+          tag: "meta",
+          attrs: { name: "apple-mobile-web-app-capable", content: "yes" },
+          injectTo: "head",
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "apple-mobile-web-app-status-bar-style",
+            content: "black-translucent",
+          },
+          injectTo: "head",
+        },
+        {
+          tag: "script",
+          children:
+            "if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(error){console.warn('[lab] service worker registration failed',error)})})}",
+          injectTo: "body",
+        },
+      ]
+    },
+  }
+}
+
+// On-device viewing (LAB_DEVICE=1): serve HTTPS when a locally-trusted cert is
+// present, so the phone gets a REAL secure context and the PWA installs as a
+// stable fullscreen WebAPK with no chrome://flags. Certs are auto-detected at
+// pwa/.certs (gitignored; mint them with pwa/make-cert.sh) and can be overridden
+// with LAB_TLS_CERT / LAB_TLS_KEY. Absent certs fall back to plain HTTP.
+function labDeviceTls() {
+  if (process.env.LAB_DEVICE !== "1") return undefined
+  const certPath =
+    process.env.LAB_TLS_CERT ??
+    new URL("pwa/.certs/dev-cert.pem", import.meta.url).pathname
+  const keyPath =
+    process.env.LAB_TLS_KEY ??
+    new URL("pwa/.certs/dev-key.pem", import.meta.url).pathname
+  if (!existsSync(certPath) || !existsSync(keyPath)) return undefined
+  return { cert: readFileSync(certPath), key: readFileSync(keyPath) }
+}
+
+const labTls = labDeviceTls()
+
 export default defineConfig({
   root: new URL(".", import.meta.url).pathname,
   publicDir: false,
@@ -378,6 +529,9 @@ export default defineConfig({
     labSurfaceStatePlugin(),
     labDesignTakesPlugin(),
     labGeneratePartsPlugin(),
+    ...(process.env.LAB_DEVICE === "1"
+      ? [labDeviceHmrKeepAlivePlugin(), labPwaPlugin()]
+      : []),
   ],
   // Keep the file watcher off AI-authored parts: they are written at runtime
   // and loaded on demand, so the dev server must not reload the whole app when
@@ -387,11 +541,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: artProxy,
     watch: { ignored: ["**/ai-takes/**"] },
-    // On-device viewing (LAB_NO_HMR=1): disable the HMR client so that
-    // backgrounding the tab and returning does not trigger Vite's
-    // reconnect-driven full-page reload. The surface-state / AI-takes /
-    // generate-parts middlewares are configureServer hooks and keep working.
-    ...(process.env.LAB_NO_HMR === "1" ? { hmr: false } : {}),
+    ...(labTls ? { https: labTls } : {}),
   },
   preview: { host: true, allowedHosts: true, proxy: artProxy },
   resolve: {

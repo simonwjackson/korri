@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Korri Lab — PWA check</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #14161d;
+        color: #e7e8ec;
+        padding: 24px;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      p.sub {
+        margin: 0 0 16px;
+        color: #9a9faa;
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 10px 0;
+        border-bottom: 1px solid #272a32;
+      }
+      .k {
+        flex: 0 0 auto;
+        width: 22px;
+        font-size: 16px;
+      }
+      .name {
+        color: #9a9faa;
+        font-size: 13px;
+      }
+      .detail {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        word-break: break-all;
+      }
+      .pass {
+        color: #86efac;
+      }
+      .fail {
+        color: #fca5a5;
+      }
+      .warn {
+        color: #f0abfc;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Korri Lab — PWA install check</h1>
+    <p class="sub">
+      Any ❌ below is why Android installs a browser shortcut instead of a
+      fullscreen app.
+    </p>
+    <div id="out"></div>
+    <script>
+      const out = document.getElementById("out")
+      function row(ok, name, detail) {
+        const mark = ok === true ? "✅" : ok === false ? "❌" : "⚠️"
+        const cls = ok === true ? "pass" : ok === false ? "fail" : "warn"
+        const el = document.createElement("div")
+        el.className = "row"
+        const k = document.createElement("div")
+        k.className = "k " + cls
+        k.textContent = mark
+        const v = document.createElement("div")
+        const n = document.createElement("div")
+        n.className = "name"
+        n.textContent = name
+        const d = document.createElement("div")
+        d.className = "detail"
+        d.textContent = detail
+        v.appendChild(n)
+        v.appendChild(d)
+        el.appendChild(k)
+        el.appendChild(v)
+        out.appendChild(el)
+      }
+
+      row(
+        window.isSecureContext,
+        "Secure context (required for install + service worker)",
+        "isSecureContext = " + window.isSecureContext,
+      )
+      row(
+        null,
+        "This origin must EXACTLY match your chrome://flags entry",
+        location.origin,
+      )
+      const mode =
+        ["fullscreen", "standalone", "minimal-ui"].find(
+          m => matchMedia("(display-mode: " + m + ")").matches,
+        ) || "browser"
+      row(
+        mode !== "browser",
+        "Display mode right now",
+        mode === "browser"
+          ? "browser (opened as a tab / shortcut)"
+          : mode + " (installed app)",
+      )
+      const hasSW = "serviceWorker" in navigator
+      row(
+        hasSW,
+        "Service worker API available",
+        hasSW
+          ? "navigator.serviceWorker present"
+          : "missing — almost always means this is not a secure context",
+      )
+
+      ;(async () => {
+        try {
+          const r = await fetch("/manifest.webmanifest", { cache: "no-store" })
+          const ct = r.headers.get("content-type") || ""
+          row(r.ok, "Manifest reachable", r.status + " " + ct)
+          const m = await r.json()
+          const has = s =>
+            Array.isArray(m.icons) &&
+            m.icons.some(i => String(i.sizes).includes(s))
+          const valid = Boolean(m.name && m.display && has("192") && has("512"))
+          row(
+            valid,
+            "Manifest valid (name, display, 192 + 512 icons)",
+            "name=" +
+              m.name +
+              " display=" +
+              m.display +
+              " 192=" +
+              has("192") +
+              " 512=" +
+              has("512"),
+          )
+        } catch (e) {
+          row(false, "Manifest fetch/parse failed", String(e))
+        }
+
+        if (hasSW) {
+          try {
+            const reg = await navigator.serviceWorker.register("/sw.js")
+            row(true, "Service worker registered", "scope " + reg.scope)
+          } catch (e) {
+            row(false, "Service worker registration failed", String(e))
+          }
+        }
+      })()
+    </script>
+  </body>
+</html>
