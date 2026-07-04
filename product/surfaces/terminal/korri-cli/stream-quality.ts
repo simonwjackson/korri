@@ -1,13 +1,36 @@
 import { readdir, stat } from "node:fs/promises"
 import { join } from "node:path"
 import {
-  connectMoonlightControl,
-  type MoonlightControlClient,
-} from "@platform/stream/moonlight-control-client"
-import type {
-  MoonlightControlStateSnapshotResult,
-  MoonlightControlSuccessResponse,
-} from "@platform/stream/moonlight-control-protocol"
+  connectStreamControlSession,
+  type StreamControlSession,
+} from "@platform/stream-control/stream-control-session"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
+
+/**
+ * Local structural view of the stream state snapshot this CLI reads back. The
+ * streamer's wire snapshot is opaque at this layer (session.state() returns
+ * unknown); this view types only the fields the quality display uses, so the
+ * command needs no streamer-module import (keeps the plugin removable).
+ */
+interface StreamStateSnapshotView {
+  readonly _tag?: string
+  readonly session: { readonly state: string; readonly sessionId: string }
+  readonly streamQuality: {
+    readonly bitrateKbps?: number
+    readonly fps?: number
+    readonly width?: number
+    readonly height?: number
+  }
+  readonly runtimeSettings: {
+    readonly lastCommand?: { readonly command: string; readonly status: string }
+    readonly appliedBitrateKbps?: number
+    readonly appliedFps?: number
+    readonly appliedResolution?: {
+      readonly width?: number
+      readonly height?: number
+    }
+  }
+}
 
 /**
  * `korri stream` live quality controls. Connects to the active Moonlight
@@ -30,7 +53,7 @@ export type StreamQualityChange =
 export interface StreamQualityIo {
   readonly socketPath?: string
   readonly discoverSocket?: () => Promise<string | undefined>
-  readonly connect?: (socketPath: string) => Promise<MoonlightControlClient>
+  readonly connect?: (socketPath: string) => Promise<StreamControlSession>
   readonly write?: (line: string) => void
   readonly writeError?: (line: string) => void
   readonly sleep?: (ms: number) => Promise<void>
@@ -64,7 +87,7 @@ export async function runStreamSet(
 async function withStream(
   io: StreamQualityIo,
   run: (
-    client: MoonlightControlClient,
+    client: StreamControlSession,
     write: (line: string) => void,
   ) => Promise<number>,
 ): Promise<number> {
@@ -72,7 +95,12 @@ async function withStream(
   const writeError = io.writeError ?? (line => console.error(line))
   const discover = io.discoverSocket ?? (() => discoverMoonlightControlSocket())
   const connect =
-    io.connect ?? (path => connectMoonlightControl({ socketPath: path }))
+    io.connect ??
+    (path =>
+      connectStreamControlSession(
+        createFirstPartyPluginRegistryFromEnv(process.env),
+        { socketPath: path },
+      ))
 
   const socketPath = io.socketPath ?? (await discover())
   if (!socketPath) {
@@ -82,7 +110,7 @@ async function withStream(
     return 1
   }
 
-  let client: MoonlightControlClient | undefined
+  let client: StreamControlSession | undefined
   try {
     client = await connect(socketPath)
     return await run(client, write)
@@ -118,18 +146,18 @@ function describeControlError(error: unknown): string {
 }
 
 async function readSnapshot(
-  client: MoonlightControlClient,
-): Promise<MoonlightControlStateSnapshotResult> {
+  client: StreamControlSession,
+): Promise<StreamStateSnapshotView> {
   const response = await client.state()
   const result = resultOf(response)
   if (result?._tag !== "state.snapshot") {
     throw new Error("device did not return a stream state snapshot")
   }
-  return result as MoonlightControlStateSnapshotResult
+  return result as unknown as StreamStateSnapshotView
 }
 
 function applyChange(
-  client: MoonlightControlClient,
+  client: StreamControlSession,
   change: StreamQualityChange,
 ): Promise<unknown> {
   switch (change.kind) {
@@ -146,9 +174,11 @@ function applyChange(
 }
 
 function resultOf(
-  response: MoonlightControlSuccessResponse,
+  response: unknown,
 ): { readonly _tag: string } | undefined {
-  const result = response.result as { readonly _tag?: string } | undefined
+  const result = (response as { readonly result?: unknown }).result as
+    | { readonly _tag?: string }
+    | undefined
   return result && typeof result._tag === "string"
     ? (result as { readonly _tag: string })
     : undefined
@@ -165,7 +195,7 @@ export function parseResolution(
 }
 
 export function formatState(
-  snapshot: MoonlightControlStateSnapshotResult,
+  snapshot: StreamStateSnapshotView,
 ): string {
   const lines = [
     `session:      ${snapshot.session.state} (${snapshot.session.sessionId})`,
@@ -179,8 +209,8 @@ export function formatState(
 
 export function formatSetOutcome(
   change: StreamQualityChange,
-  before: MoonlightControlStateSnapshotResult | undefined,
-  after: MoonlightControlStateSnapshotResult,
+  before: StreamStateSnapshotView | undefined,
+  after: StreamStateSnapshotView,
 ): string {
   const last = after.runtimeSettings.lastCommand
   const outcome = last
@@ -201,7 +231,7 @@ export function formatSetOutcome(
 // the applied value so accept-and-adapt is visible rather than a silent swap.
 function describeCoercion(
   change: StreamQualityChange,
-  after: MoonlightControlStateSnapshotResult,
+  after: StreamStateSnapshotView,
 ): string | undefined {
   const suffix = "(nearest the hardware allows)"
   const r = after.runtimeSettings
@@ -228,12 +258,12 @@ function describeCoercion(
   }
 }
 
-function quality(snapshot: MoonlightControlStateSnapshotResult): string {
+function quality(snapshot: StreamStateSnapshotView): string {
   const q = snapshot.streamQuality
   return settingsLine(q.bitrateKbps, q.fps, q.width, q.height)
 }
 
-function applied(snapshot: MoonlightControlStateSnapshotResult): string {
+function applied(snapshot: StreamStateSnapshotView): string {
   const r = snapshot.runtimeSettings
   return settingsLine(
     r.appliedBitrateKbps,
