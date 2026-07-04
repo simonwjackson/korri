@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test"
 import type {
   MoonlightControlClient,
   MoonlightControlEventDelivery,
-} from "@platform/stream/moonlight-control-client"
+} from "@product/plugins/moonlight/src/moonlight-control-client"
 import type {
   MoonlightControlStateSnapshotResult,
   MoonlightControlSuccessResponse,
-} from "@platform/stream/moonlight-control-protocol"
+} from "@product/plugins/moonlight/src/moonlight-control-protocol"
 import {
   formatSetOutcome,
   formatState,
