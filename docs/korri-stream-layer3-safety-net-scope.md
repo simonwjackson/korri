@@ -54,30 +54,54 @@ Layer 2 makes any computed value *land*. Layer 3 makes it *safe to try*.
 - **Risk**: low–medium. Mostly self-verifiable; only the op-0 non-deadlock needs
   the device.
 
-### U-B — Frozen/black-screen watchdog with auto-revert · `01KWN2M3GSW2FQST7F3M7RX0V2` (task-100)
+### U-B — Decode-confirmed applied-truth with auto-revert · `01KWN2M3GSW2FQST7F3M7RX0V2` (task-100)
 
-- **Problem**: a resolution change the host *applies* but the client can't
-  *decode* strands the user on black. A passive timeout doesn't catch
-  "applied-but-undecodable" — the ack says success.
-- **Change**: an active detector. No decoded frames within a bounded window after
-  a change → auto-revert to last known-good and record the revert in
-  local-control state so it is observable (never silent), consumable by
-  `korri stream` / runtime-watch.
-- **Design questions (device-dependent)**:
-  - **Signal for "no frames"**: decoder frame counter, presenter callback, or SDL
-    present timestamps — pick the cheapest reliable source.
-  - **Window + threshold**: must be tuned on real hardware; cannot be guessed.
-    Long enough to not trip on normal renegotiation, short enough to rescue fast.
-  - **Last known-good**: the last *applied* (readback-confirmed) settings, falling
-    back to the launch baseline — never the last merely-*requested* value.
-  - **Placement**: Korri-side recovery policy / client no-frames safety, **not**
-    fork auto-adaptation (contract boundary: forks expose mechanism, Korri owns
-    policy).
+**Framing (2026-07-04, user-confirmed): this is NOT a watchdog process that
+watches other tools.** It is decode-truth reported by the one component that
+already has it — the Moonlight client's decoder — plus an ordinary revert
+command. No new process, no polling, no screen-scraping, no parsing another
+tool's output.
+
+- **Problem**: a resolution change the host *applies* (its ack is truthful — it
+  re-encoded) but the client cannot *decode* strands the user on black. Host
+  truth and the actual screen disagree, and a passive host-ack timeout does not
+  catch "applied-but-undecodable" — the ack says success.
+- **Core idea — finish the definition of "applied"**: the contract already says
+  accepted != applied and applied must be observable. For resolution, "applied"
+  must mean the host applied it AND the client decoded a frame at the new size.
+- **Change (mechanism, in the client)**:
+  - On a resolution change the client reopens its decoder for the new size (the
+    reopen path already exists — patches 0009/0010) and watches its own decode
+    loop for the first frame at the new size.
+  - This is a timer armed ONLY during a change and cancelled the instant a frame
+    decodes — a timeout, not a standing monitor.
+  - Frame decodes → report `applied` (the existing outcome). No frame in the
+    window → report `failed`, reason `decode-stall`, over the SAME outcome/event
+    channel that already carries `host-applied` / `timed-out`.
+- **Change (policy, in Korri)**: on `decode-stall` (or any failed/timed-out
+  change), restore the last known-good settings by sending a normal set command
+  back to those values, and record the revert so it is never silent.
+- **Explicit non-goal / anti-pattern (do NOT build)**: a separate process that
+  polls `korri stream show` / runtime-watch, infers "the screen looks black", or
+  screen-captures to guess state, then issues commands. That is
+  tools-watching-tools: out-of-band, laggy, guessy, and it cannot actually see
+  decode state. If the design starts to look like an external poller inferring
+  screen state, that is the smell that we have drifted — stop and re-anchor on
+  in-client decode-truth.
+- **Contract line stays clean**: the decode fact lives in the client
+  (mechanism); the revert decision lives in Korri (policy). Forks expose
+  mechanism/facts; Korri owns adaptation/recovery policy.
+- **Last known-good**: the last *applied* (decode-confirmed) settings, falling
+  back to the launch baseline — never the last merely-*requested* value.
+- **The one genuinely device-tuned number**: the wait window for that first
+  decoded frame. Long enough to not trip on normal renegotiation, short enough to
+  rescue fast. This single constant is the entire reason U-B needs a device
+  session — it is not a watching apparatus.
 - **Verification**: unit-test the known-good bookkeeping, the revert path, and the
   recorded event (machine). One device session to induce a real frozen/black case
   and tune the window (genuinely needs a human + screen).
-- **Risk**: medium–high. Inherently needs device signals; threshold tuning is the
-  biggest unknown.
+- **Risk**: medium. The mechanism reuses existing decode/outcome/command paths;
+  the only real unknown is the timeout constant.
 
 ## Open questions to settle before/while building
 
@@ -87,9 +111,10 @@ Layer 2 makes any computed value *land*. Layer 3 makes it *safe to try*.
   per-family behavior. Leaning: reject now, revisit queueing when Layer 5 exists.
 - **Q2 — revert depth**: revert one step (to the immediately-prior applied state)
   or all the way to launch baseline? Leaning: prior-applied, baseline as fallback.
-- **Q3 — watchdog scope**: resolution-only (the mode most likely to be
-  undecodable) or all families? Leaning: arm on any change, since a bad bitrate/
-  FPS can also stall decode.
+- **Q3 — decode-confirm scope**: resolution is where decode-stall lives (only
+  resolution reopens the decoder); bitrate/FPS do not change decode geometry.
+  Leaning: decode-confirm resolution changes; leave bitrate/FPS on the existing
+  host-ack truth unless a device case shows they can also stall decode.
 
 ## Sequencing
 
@@ -113,8 +138,10 @@ Layer 2 makes any computed value *land*. Layer 3 makes it *safe to try*.
 ## Definition of done for Layer 3
 
 - Global latch enforced; op-0 capability learning unaffected (device-confirmed).
-- Watchdog auto-reverts a real frozen/black case within a tuned window and records
-  the revert observably.
+- Resolution "applied" means host-applied AND client-decoded; a decode-stall
+  auto-reverts to last known-good within a tuned window and records the revert
+  observably — implemented as in-client decode-truth plus an ordinary revert
+  command, with no external poller.
 - Contract §Sequencing and §Recovery move from "mandated" to "implemented +
   verified."
 - No regression to input passthrough or applied-truth.
