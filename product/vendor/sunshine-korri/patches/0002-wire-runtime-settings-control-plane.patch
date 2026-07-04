@@ -139,7 +139,7 @@
    int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
      if (!session->control.peer) {
        BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
-@@ -1023,6 +1133,136 @@
+@@ -1023,6 +1133,144 @@
        session->video.idr_events->raise(true);
      });
 
@@ -209,9 +209,17 @@
 +      } else if (operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
 +        const auto launch_width = session->control.runtime_settings_launch_width;
 +        const auto launch_height = session->control.runtime_settings_launch_height;
++        // Accept same-ratio scaled resolutions within the sub-pixel delta that
++        // rounding both axes to even integers introduces (e.g. 854x480 on 16:9);
++        // reject genuinely different aspect ratios so the game is never stretched.
++        const auto aspect_cross_delta =
++          (std::int64_t) ((std::uint64_t) requested_width * (std::uint64_t) launch_height) -
++          (std::int64_t) ((std::uint64_t) requested_height * (std::uint64_t) launch_width);
++        const auto aspect_abs_delta = aspect_cross_delta < 0 ? -aspect_cross_delta : aspect_cross_delta;
++        const auto aspect_tolerance =
++          (std::int64_t) 2 * ((std::int64_t) launch_width + (std::int64_t) launch_height);
 +        const auto same_aspect = requested_width != 0 && requested_height != 0 &&
-+                                 (std::uint64_t) requested_width * (std::uint64_t) launch_height ==
-+                                   (std::uint64_t) requested_height * (std::uint64_t) launch_width;
++                                 aspect_abs_delta <= aspect_tolerance;
 +        if (payload.size() < sizeof(control_runtime_settings_resolution_request_t)) {
 +          accepted = false;
 +          rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;

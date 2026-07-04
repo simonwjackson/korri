@@ -165,6 +165,11 @@ let
         && contains "Runtime resolution is a normal runtime-settings operation for the validated Korri profile" readme
       )
     )
+    (check "Sunshine accepts same-ratio resolutions within even-rounding tolerance" (
+      contains "aspect_tolerance" patch
+      && contains "aspect_abs_delta <= aspect_tolerance" patch
+      && contains "reject genuinely different aspect ratios so the game is never stretched" patch
+    ))
     (check "Moonlight runtime resolution local-control fails closed on supported capability" (
       contains "proofGatedOperations" moonlightPatch
       && contains "runtime_settings_mvp_settings_state.proofGatedOperations" moonlightPatch
