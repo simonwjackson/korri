@@ -1,4 +1,4 @@
-import type { MoonlightPolicy } from "@platform/library/config/inheritable-fields"
+import type { MoonlightPolicy } from "./config/policy"
 import type { LaunchSpec } from "@platform/library/launcher"
 
 const DEFAULT_MOONLIGHT_COMMAND = "moonlight"

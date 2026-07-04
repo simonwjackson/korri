@@ -16,12 +16,7 @@
 
 import { Schema } from "effect"
 
-import {
-  InheritableLayer,
-  MoonlightCodec,
-  MoonlightControlAuthority,
-  MoonlightRotation,
-} from "./inheritable-fields"
+import { InheritableLayer } from "./inheritable-fields"
 import { LaunchBlock } from "./launch-block"
 
 const STRICT = { onExcessProperty: "error" } as const
@@ -62,6 +57,18 @@ const EphemeralLaunchBlock = Schema.Struct({
 const EphemeralLaunchPolicy = Schema.Struct({
   with: Schema.optional(EphemeralLaunchWithPolicy),
 })
+
+// Streamer control-value enums are duplicated locally (not imported from a
+// streamer plugin) so this unauthenticated-runtime-override whitelist stays a
+// platform-owned security boundary independent of any streamer plugin.
+const MoonlightCodec = Schema.Literals(["auto", "h264", "h265"])
+const MoonlightRotation = Schema.Union([
+  Schema.Literal(0),
+  Schema.Literal(90),
+  Schema.Literal(180),
+  Schema.Literal(270),
+])
+const MoonlightControlAuthority = Schema.Literals(["observer", "controller"])
 
 const MoonlightOverrideResolutionPolicy = Schema.Struct({
   width: Schema.optional(PositiveInteger("stream.resolution.width")),

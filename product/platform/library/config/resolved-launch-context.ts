@@ -24,10 +24,10 @@ import { Schema } from "effect"
 
 import {
   LaunchCompanionMap,
-  MoonlightPolicy,
   PluginPolicyMap,
   Preferences,
 } from "./inheritable-fields"
+import { StreamerPolicy } from "./streamer-policy"
 import { LaunchSettings } from "./launch-block"
 import { AppRecord } from "./records/app"
 import { LaunchOverrides } from "./records/library-item"
@@ -60,7 +60,7 @@ export const ResolvedLaunchContext = Schema.Struct({
 
   // Resolved inheritable behavior fields (post-merge).
   launchCompanions: Schema.optional(LaunchCompanionMap),
-  moonlight: Schema.optional(MoonlightPolicy),
+  moonlight: Schema.optional(StreamerPolicy),
   preferences: Schema.optional(Preferences),
   plugin: Schema.optional(PluginPolicyMap),
   settings: Schema.optional(LaunchSettings),
@@ -90,7 +90,7 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
     }),
   ),
   launchCompanions: Schema.optional(LaunchCompanionMap),
-  moonlight: Schema.optional(MoonlightPolicy),
+  moonlight: Schema.optional(StreamerPolicy),
   preferences: Schema.optional(Preferences),
   plugin: Schema.optional(PluginPolicyMap),
   settings: Schema.optional(LaunchSettings),

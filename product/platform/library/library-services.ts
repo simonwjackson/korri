@@ -4,8 +4,8 @@ import type { AppIntegrationKind } from "@platform/library/config/app-integratio
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import type {
   LaunchCompanionMap,
-  MoonlightPolicy,
 } from "@platform/library/config/inheritable-fields"
+import type { StreamerPolicy } from "@platform/library/config/streamer-policy"
 import type { LaunchAlternative } from "@platform/library/launch-alternative"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type {
@@ -66,7 +66,7 @@ export interface ResolveLaunchInputs {
 
 export interface ResolvedLocalLauncherPolicy {
   readonly launchCompanions: LaunchCompanionMap
-  readonly moonlight?: MoonlightPolicy
+  readonly moonlight?: StreamerPolicy
 }
 
 export interface ResolvedLaunch {

@@ -6,10 +6,8 @@ import {
   type InputPlumberVirtualGamepadResolution,
   resolveInputPlumberVirtualGamepad,
 } from "@platform/input/native/inputplumber-virtual-gamepad"
-import type {
-  LaunchCompanionMap,
-  MoonlightPolicy,
-} from "@platform/library/config/inheritable-fields"
+import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
+import type { StreamerPolicy } from "@platform/library/config/streamer-policy"
 import { type LaunchSpec, launchEnvironment } from "@platform/library/launcher"
 import {
   composeLaunchCompanions,
@@ -78,9 +76,27 @@ export interface MoonlightControlLaunchOptions {
   readonly allowRootPeers?: boolean
 }
 
+/**
+ * Local structural views of the streamer policy fields this launcher reads. The
+ * platform carries the policy opaquely (StreamerPolicy); the plugin owns full
+ * validation. These views keep the launcher removable — no streamer-schema
+ * import — while typing the handful of fields it inspects.
+ */
+interface MoonlightControlPolicyView {
+  readonly enable?: boolean
+  readonly authority?: "observer" | "controller"
+  readonly allowRootPeers?: boolean
+}
+
+interface MoonlightLaunchPolicyView {
+  readonly command?: string
+  readonly control?: MoonlightControlPolicyView
+  readonly input?: { readonly devices?: readonly string[] }
+}
+
 export interface MoonlightLaunchOptions {
   readonly host?: string
-  readonly moonlight?: MoonlightPolicy
+  readonly moonlight?: StreamerPolicy
   readonly allowNixFallback?: boolean
   readonly startupObserveMs?: number
   readonly inputDevice?: string
@@ -99,7 +115,7 @@ export async function launchMoonlight(
   const inputDevice = await moonlightInputDevice(options)
   if (inputDevice.status === "failed") return inputDevice
 
-  const policy = options.moonlight ?? {}
+  const policy = (options.moonlight ?? {}) as MoonlightLaunchPolicyView
   const moonlightControl = await moonlightControlHandleFromOptions(
     options.moonlightControl,
     policy.control,
@@ -269,7 +285,7 @@ function startedMoonlightResult(input: {
 
 export async function moonlightControlHandleFromOptions(
   options: MoonlightControlLaunchOptions | false | undefined,
-  policy: MoonlightPolicy["control"] | undefined = undefined,
+  policy: MoonlightControlPolicyView | undefined = undefined,
 ): Promise<MoonlightControlLaunchHandle | undefined> {
   if (options === false) return undefined
   const enabled = options?.enabled ?? policy?.enable ?? false
@@ -317,7 +333,10 @@ async function moonlightInputDevice(options: MoonlightLaunchOptions): Promise<
 > {
   const explicitInput = options.inputDevice
   if (explicitInput?.trim()) return { status: "ok", path: explicitInput.trim() }
-  if ((options.moonlight?.input?.devices?.length ?? 0) > 0)
+  if (
+    ((options.moonlight as MoonlightLaunchPolicyView | undefined)?.input
+      ?.devices?.length ?? 0) > 0
+  )
     return { status: "ok" }
 
   const required = options.requireInputPlumberInput ?? false

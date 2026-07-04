@@ -344,24 +344,19 @@ describe("readable library schema records", () => {
     ).toThrow()
   })
 
-  it("rejects retired Moonlight launch-policy vocabulary in readable records", () => {
-    const retiredMoonlightPolicies = [
-      { KORRI_MOONLIGHT_COMMAND: "/bin/moonlight" },
-      { KORRI_MOONLIGHT_PLATFORM: "v4l2m2m" },
-      { action: "stream" },
-      { app: { name: "Korri Stream", host: "aka.local" } },
-      { config: { load: "/tmp/moonlight.conf", save: true } },
-      { stream: { resolution: { preset: "720" } } },
-      { platform: { source: "nixos" } },
-      { input: { requireInputPlumber: true } },
-      { control: { commands: { setBitrate: true } } },
-      { control: { runtimeDir: "/run/korri/moonlight" } },
-      { runtimeSettings: { oneShot: { enable: true } } },
-      { runtimeSettings: { adaptationSpike: { enable: true } } },
+  it("carries the streamer (moonlight) policy opaquely; the plugin validates it", () => {
+    // The platform no longer types the streamer policy (it is removable plugin
+    // config). Strict vocabulary rejection now lives in the plugin's
+    // decodeMoonlightPolicy; the readable schema accepts the field as opaque
+    // passthrough data.
+    const streamerPolicies = [
+      { stream: { resolution: { width: 1920, height: 1080 }, fps: 60 } },
+      { control: { enable: true, authority: "controller" } },
+      { input: { devices: ["/dev/input/event10"] } },
     ]
 
-    for (const moonlight of retiredMoonlightPolicies) {
-      expect(() => decodeHostPayload({ moonlight })).toThrow()
+    for (const moonlight of streamerPolicies) {
+      expect(() => decodeHostPayload({ moonlight })).not.toThrow()
     }
   })
 

@@ -43,10 +43,10 @@ import {
   type LaunchCompanionMap,
   type LaunchPolicy,
   launchCompanionsFromLaunch,
-  type MoonlightPolicy,
   type PluginPolicyMap,
   type Preferences,
 } from "./inheritable-fields"
+import type { StreamerPolicy } from "./streamer-policy"
 import type { LaunchBlock, LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
 import {
@@ -126,7 +126,7 @@ export interface ResolveLocalLauncherPolicyInputs {
 
 export interface ResolvedLocalLauncherPolicy {
   readonly launchCompanions: LaunchCompanionMap
-  readonly moonlight?: MoonlightPolicy
+  readonly moonlight?: StreamerPolicy
   readonly preferences?: Preferences
 }
 
@@ -168,7 +168,7 @@ export type ApplicablePresets = ReadonlyMap<
 interface InheritableView {
   readonly inherit?: boolean
   readonly launchCompanions?: LaunchCompanionMap
-  readonly moonlight?: MoonlightPolicy
+  readonly moonlight?: StreamerPolicy
   readonly preferences?: Preferences
   readonly plugin?: PluginPolicyMap
   readonly env?: Readonly<Record<string, string>>
@@ -276,7 +276,7 @@ const foldLayers = (
   }
 
   let launchCompanions: LaunchCompanionMap | undefined
-  let moonlight: MoonlightPolicy | undefined
+  let moonlight: StreamerPolicy | undefined
   let preferences: Preferences | undefined
   let plugin: PluginPolicyMap | undefined
   let env: Record<string, string> | undefined
@@ -308,7 +308,7 @@ const foldLayers = (
       )
     }
     if (merged.moonlight !== undefined) {
-      moonlight = foldMoonlight(moonlight, merged.moonlight)
+      moonlight = foldStreamerPolicy(moonlight, merged.moonlight)
     }
     if (merged.preferences !== undefined) {
       preferences = foldPreferences(preferences, merged.preferences)
@@ -370,7 +370,7 @@ const mergeByLauncher = (
         ? foldLaunchCompanions(baseCompanions, extraCompanions)
         : baseCompanions,
     moonlight: extra.moonlight
-      ? foldMoonlight(base.moonlight, extra.moonlight)
+      ? foldStreamerPolicy(base.moonlight, extra.moonlight)
       : base.moonlight,
     preferences: extra.preferences
       ? foldPreferences(base.preferences, extra.preferences)
@@ -544,42 +544,19 @@ export const foldLaunchOverrides = (
   return result
 }
 
-const mergeMoonlightValue = (
-  base: unknown,
-  extra: unknown,
-  path: readonly string[],
-): unknown => {
-  if (extra === undefined) return base
-  const key = path.join(".")
-  if (key === "extraArgs" || key === "input.devices") {
-    return Array.isArray(extra)
-      ? [...(Array.isArray(base) ? base : []), ...extra]
-      : extra
-  }
-  if (key === "environment") {
-    return isPlainPolicyObject(extra)
-      ? { ...(isPlainPolicyObject(base) ? base : {}), ...extra }
-      : extra
-  }
-  if (isPlainPolicyObject(base) && isPlainPolicyObject(extra)) {
-    const merged: Record<string, unknown> = { ...base }
-    for (const [childKey, childValue] of Object.entries(extra)) {
-      merged[childKey] = mergeMoonlightValue(merged[childKey], childValue, [
-        ...path,
-        childKey,
-      ])
-    }
-    return merged
-  }
-  return extra
-}
 
-/** Deep-merge two Moonlight policies; input.devices/extraArgs concat, scalars last-win. */
-const foldMoonlight = (
-  base: MoonlightPolicy | undefined,
-  extra: MoonlightPolicy,
-): MoonlightPolicy =>
-  mergeMoonlightValue(base ?? {}, extra, []) as MoonlightPolicy
+/**
+ * Deep-merge two opaque streamer policies generically: arrays concat, objects
+ * deep-merge, scalars last-win. The platform does not know the streamer's schema
+ * (that lives in the streamer plugin); this generic fold reproduces the previous
+ * Moonlight fold for any valid policy (its only arrays are extraArgs/input.devices,
+ * both concat; environment is an object and merges).
+ */
+const foldStreamerPolicy = (
+  base: StreamerPolicy | undefined,
+  extra: StreamerPolicy,
+): StreamerPolicy =>
+  mergePluginPolicyValue(base ?? {}, extra, []) as StreamerPolicy
 
 const mergePreferencesValue = (base: unknown, extra: unknown): unknown => {
   if (extra === undefined) return base
@@ -781,7 +758,7 @@ export class IncompatibleLaunchSelection extends Data.TaggedError(
 
 interface ReadableOverride {
   readonly launch?: LaunchPolicy
-  readonly moonlight?: MoonlightPolicy
+  readonly moonlight?: StreamerPolicy
   readonly preferences?: Preferences
   readonly plugin?: PluginPolicyMap
   readonly env?: Readonly<Record<string, string>>
@@ -802,7 +779,7 @@ export interface ResolveReadableLaunchInputs {
 interface ReadableLayerView {
   readonly launch?: LaunchPolicy
   readonly launchCompanions?: LaunchCompanionMap
-  readonly moonlight?: MoonlightPolicy
+  readonly moonlight?: StreamerPolicy
   readonly preferences?: Preferences
   readonly plugin?: PluginPolicyMap
   readonly settings?: LaunchSettings
@@ -1142,7 +1119,7 @@ const mergeReadableLayers = (
   layers: readonly ReadableLayerView[],
 ): ReadableLayerView => {
   let launchCompanions: LaunchCompanionMap | undefined
-  let moonlight: MoonlightPolicy | undefined
+  let moonlight: StreamerPolicy | undefined
   let preferences: Preferences | undefined
   let plugin: PluginPolicyMap | undefined
   let settings: LaunchSettings | undefined
@@ -1159,7 +1136,7 @@ const mergeReadableLayers = (
       launchCompanions = foldLaunchCompanions(launchCompanions, layerCompanions)
     }
     if (layer.moonlight !== undefined) {
-      moonlight = foldMoonlight(moonlight, layer.moonlight)
+      moonlight = foldStreamerPolicy(moonlight, layer.moonlight)
     }
     if (layer.preferences !== undefined) {
       preferences = foldPreferences(preferences, layer.preferences)

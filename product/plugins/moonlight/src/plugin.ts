@@ -1,4 +1,4 @@
-import type { MoonlightPolicy } from "@platform/library/config/inheritable-fields"
+import type { MoonlightPolicy } from "./config/policy"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { plugin } from "@platform/plugin"
 import {

@@ -18,8 +18,8 @@ import type { ResolutionError } from "@platform/library/config/errors"
 import {
   type LaunchCompanionMap,
   launchCompanionsFromLaunch,
-  type MoonlightPolicy,
 } from "@platform/library/config/inheritable-fields"
+import type { StreamerPolicy } from "@platform/library/config/streamer-policy"
 import {
   listPlayableEntries as derivePlayableEntries,
   launchableReleases,
@@ -100,7 +100,7 @@ export interface ResolvedLaunchOutput {
   readonly spec: LaunchSpec
   readonly launchCompanions?: LaunchCompanionMap
   readonly launchMetadata?: LaunchMetadata
-  readonly moonlight?: MoonlightPolicy
+  readonly moonlight?: StreamerPolicy
   readonly app: {
     readonly id: string
     readonly integration: AppIntegrationKind

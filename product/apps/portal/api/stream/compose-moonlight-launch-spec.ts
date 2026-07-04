@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises"
 import { parseProcBusInputDevices } from "@platform/input/native/discover-devices"
 import { resolveInputPlumberVirtualGamepad } from "@platform/input/native/inputplumber-virtual-gamepad"
-import type { MoonlightPolicy } from "@platform/library/config/inheritable-fields"
+import type { StreamerPolicy } from "@platform/library/config/streamer-policy"
 import type { LaunchFailureKind, LaunchSpec } from "@platform/library/launcher"
 import { dispatchStreamLaunch } from "@platform/stream/streamer-client"
 import type { PluginRegistry } from "@platform/plugin/registry"
@@ -14,7 +14,7 @@ export interface ComposeMoonlightLaunchSpecOptions {
   /** Peer hostname or IP (IPv6 callers must strip brackets — see `moonlightHostFromControlUrl`). */
   readonly host: string
   /** Folded readable Moonlight policy. */
-  readonly moonlight?: MoonlightPolicy
+  readonly moonlight?: StreamerPolicy
   /** Resolved input devices from caller preflight. */
   readonly inputDevices?: readonly string[]
   /** Launch env allocated by caller preflight, for example local-control socket facts. */

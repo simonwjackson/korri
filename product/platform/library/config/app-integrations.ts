@@ -9,8 +9,8 @@ import {
 import {
   type LaunchCompanionMap,
   launchCompanionsFromLaunch,
-  type MoonlightPolicy,
 } from "./inheritable-fields"
+import type { StreamerPolicy } from "./streamer-policy"
 import type { LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
 import { type AppKind, type AppRecord, appRecordKind } from "./records/app"
@@ -38,7 +38,7 @@ export interface AppDescriptor {
   readonly settings?: LaunchSettings
   readonly knownSettings?: readonly string[]
   readonly launchCompanions?: LaunchCompanionMap
-  readonly moonlight?: MoonlightPolicy
+  readonly moonlight?: StreamerPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
