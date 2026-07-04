@@ -78,7 +78,14 @@ export function composeMoonlightLaunchSpec(
     facts: {
       host: options.host,
       ...(options.inputDevices ? { inputDevices: options.inputDevices } : {}),
-      ...(options.environment ? { environment: options.environment } : {}),
+      // Korri owns quit through the held chord + decision overlay, so Moonlight's
+      // built-in instant Start+Select+L1+R1 quit combo (our exact chord) must be
+      // disabled or it tears the stream down the moment the chord is pressed.
+      // Read by vendor patch 0014. Caller-provided env wins on key collisions.
+      environment: {
+        KORRI_MOONLIGHT_DISABLE_GAMEPAD_QUIT: "1",
+        ...(options.environment ?? {}),
+      },
     },
   })
 }

@@ -17,6 +17,8 @@ describe("composeMoonlightLaunchSpec", () => {
     expect(spec).toEqual({
       command: "moonlight",
       args: ["stream", "-app", "Korri Stream", "aka.local"],
+      // Korri always disables Moonlight's built-in gamepad quit combo.
+      env: { KORRI_MOONLIGHT_DISABLE_GAMEPAD_QUIT: "1" },
     })
   })
 
@@ -89,6 +91,7 @@ describe("composeMoonlightLaunchSpec", () => {
     })
 
     expect(spec.env).toEqual({
+      KORRI_MOONLIGHT_DISABLE_GAMEPAD_QUIT: "1",
       MOONLIGHT_LOCAL_CONTROL_SOCKET: "/run/m.sock",
       SDL_AUDIODRIVER: "pipewire",
     })
