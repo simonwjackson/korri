@@ -1,0 +1,170 @@
+import type { RuntimeRecoverySupervisor } from "./runtime-recovery-supervisor"
+import {
+  computeStreamAdaptiveDecision,
+  type StreamAdaptiveSettings,
+  type StreamAdaptiveTarget,
+} from "./stream-adaptive-controller"
+import type { StreamHealthMonitor } from "./stream-health-monitor"
+
+export type StreamAdaptiveRunnerDormantReason =
+  | "disabled"
+  | "pending"
+  | "not-streaming"
+  | "stale"
+  | "no-data"
+  | "within-hysteresis"
+
+export type StreamAdaptiveRunnerEvent =
+  | {
+      readonly kind: "dormant"
+      readonly reason: StreamAdaptiveRunnerDormantReason
+    }
+  | {
+      readonly kind: "dispatched"
+      readonly command:
+        | "runtime.setBitrate"
+        | "runtime.setFps"
+        | "runtime.setResolution"
+      readonly target: StreamAdaptiveTarget
+    }
+  | {
+      readonly kind: "dispatch-failed"
+      readonly command:
+        | "runtime.setBitrate"
+        | "runtime.setFps"
+        | "runtime.setResolution"
+      readonly message: string
+    }
+
+export interface StreamAdaptiveRunnerOptions {
+  readonly enabled: boolean
+  readonly monitor: StreamHealthMonitor
+  readonly recovery: RuntimeRecoverySupervisor
+  readonly initialSettings: StreamAdaptiveSettings
+  readonly objectiveBias: number
+  readonly isStreaming: () => boolean
+  readonly onEvent: (event: StreamAdaptiveRunnerEvent) => void
+  readonly nowMs?: () => number
+  readonly tickIntervalMs?: number
+}
+
+export interface StreamAdaptiveRunner {
+  readonly tick: () => Promise<void>
+  readonly close: () => void
+}
+
+export function createStreamAdaptiveRunner(
+  options: StreamAdaptiveRunnerOptions,
+): StreamAdaptiveRunner {
+  const nowMs = options.nowMs ?? (() => Date.now())
+  let closed = false
+  const interval =
+    options.tickIntervalMs !== undefined
+      ? setInterval(() => {
+          void tick()
+        }, options.tickIntervalMs)
+      : undefined
+
+  async function tick(): Promise<void> {
+    if (closed) return
+    if (!options.enabled) {
+      options.onEvent({ kind: "dormant", reason: "disabled" })
+      return
+    }
+    if (!options.isStreaming()) {
+      options.onEvent({ kind: "dormant", reason: "not-streaming" })
+      return
+    }
+    if (options.recovery.hasPending()) {
+      options.onEvent({ kind: "dormant", reason: "pending" })
+      return
+    }
+
+    const summary = options.monitor.latestSummary(nowMs())
+    const decision = computeStreamAdaptiveDecision({
+      summary,
+      current: currentSettings(options.recovery, options.initialSettings),
+      objectiveBias: options.objectiveBias,
+    })
+
+    if (decision.kind === "dormant") {
+      options.onEvent({ kind: "dormant", reason: decision.reason })
+      return
+    }
+
+    await dispatchFirstTarget(decision.target)
+  }
+
+  async function dispatchFirstTarget(
+    target: StreamAdaptiveTarget,
+  ): Promise<void> {
+    if (target.bitrateKbps !== undefined) {
+      await dispatch("runtime.setBitrate", target, () =>
+        options.recovery.setBitrate(target.bitrateKbps as number),
+      )
+      return
+    }
+    if (target.fps !== undefined) {
+      await dispatch("runtime.setFps", target, () =>
+        options.recovery.setFps(target.fps as number),
+      )
+      return
+    }
+    if (target.resolution !== undefined) {
+      await dispatch("runtime.setResolution", target, () =>
+        options.recovery.setResolution(
+          target.resolution?.width as number,
+          target.resolution?.height as number,
+        ),
+      )
+    }
+  }
+
+  async function dispatch(
+    command: "runtime.setBitrate" | "runtime.setFps" | "runtime.setResolution",
+    target: StreamAdaptiveTarget,
+    run: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await run()
+      if (!closed) options.onEvent({ kind: "dispatched", command, target })
+    } catch (error) {
+      if (!closed) {
+        options.onEvent({
+          kind: "dispatch-failed",
+          command,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+  }
+
+  return {
+    tick,
+    close: () => {
+      if (closed) return
+      closed = true
+      if (interval !== undefined) clearInterval(interval)
+    },
+  }
+}
+
+function currentSettings(
+  recovery: RuntimeRecoverySupervisor,
+  initial: StreamAdaptiveSettings,
+): StreamAdaptiveSettings {
+  const knownGood = recovery.knownGood()
+  const bitrate = knownGood["runtime.setBitrate"]
+  const fps = knownGood["runtime.setFps"]
+  const resolution = knownGood["runtime.setResolution"]
+  return {
+    ...initial,
+    bitrateKbps:
+      bitrate?.kind === "scalar" ? bitrate.value : initial.bitrateKbps,
+    fps: fps?.kind === "scalar" ? fps.value : initial.fps,
+    resolution:
+      resolution?.kind === "resolution"
+        ? { width: resolution.width, height: resolution.height }
+        : initial.resolution,
+  }
+}
