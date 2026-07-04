@@ -65,18 +65,20 @@ export function createOverlayOrchestrator(deps: {
   // The chord buttons otherwise leak to the foreground game/stream and can
   // trigger its own exit hotkey (observed: a stream quitting immediately). While
   // gated, input is routed to us; nav is ignored until a menu is actually open.
-  function ensureGated(): void {
-    if (gated) return
+  function ensureGated(): Promise<void> {
+    if (gated) return Promise.resolve()
     gated = true
-    void deps.intercept.activate(nav => {
-      if (!menu) return
-      const result = menu.handle(nav)
-      if (!result) {
-        deps.renderer.menu(menuOptions, menu.state().selected)
-        return
-      }
-      closeMenu(result.kind === "chosen" ? result.id : null)
-    })
+    return Promise.resolve(
+      deps.intercept.activate(nav => {
+        if (!menu) return
+        const result = menu.handle(nav)
+        if (!result) {
+          deps.renderer.menu(menuOptions, menu.state().selected)
+          return
+        }
+        closeMenu(result.kind === "chosen" ? result.id : null)
+      }),
+    )
   }
 
   function ungate(): void {
@@ -86,11 +88,19 @@ export function createOverlayOrchestrator(deps: {
   }
 
   function openMenu(): void {
-    ensureGated()
     const kind = deps.sessionKind()
     menuOptions = overlayMenuOptionsFor(kind)
     menu = createOverlayMenu(menuOptions, safeDefaultIndex(menuOptions))
-    deps.renderer.menu(menuOptions, menu.state().selected)
+    const opened = menu
+    // Draw the menu only AFTER the intercept is confirmed hot (InterceptMode 2).
+    // Enabling intercept spawns a busctl round-trip (~100-300ms); if we drew the
+    // menu first, a fast accept press would race that window and leak to the pad
+    // instead of the menu -- the "first press didn't register" double-press. The
+    // menu model exists synchronously so any nav that does arrive is handled; we
+    // just defer the visible frame until input is actually routed to us.
+    void ensureGated().then(() => {
+      if (menu === opened) deps.renderer.menu(menuOptions, opened.state().selected)
+    })
   }
 
   function closeMenu(chosenId: string | null): void {

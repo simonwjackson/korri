@@ -122,11 +122,13 @@ describe("overlay orchestrator", () => {
     expect(intercept.isActive()).toBe(false)
   })
 
-  it("opens the menu on tap and gates the game", () => {
+  it("opens the menu on tap and gates the game", async () => {
     const { renderer, intercept, orchestrator } = setup("local")
     orchestrator.onHoldUpdate(hold("tap"))
     expect(orchestrator.isMenuOpen()).toBe(true)
     expect(intercept.isActive()).toBe(true)
+    // The menu frame is drawn only after the intercept is confirmed hot.
+    await Promise.resolve()
     const first = renderer.calls[0]
     expect(first.kind).toBe("menu")
     if (first.kind === "menu") {
