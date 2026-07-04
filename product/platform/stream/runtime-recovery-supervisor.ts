@@ -16,8 +16,6 @@
 import {
   currentRuntimeRecoveryKnownGood,
   hasPendingRuntimeRecoveryCommand,
-  initialRuntimeRecoveryState,
-  reduceRuntimeRecovery,
   type RuntimeCommandStatus,
   type RuntimeControlCommandMethod,
   type RuntimeMutationCommand,
@@ -25,6 +23,7 @@ import {
   type RuntimeRecoveryRequestId,
   type RuntimeRecoveryState,
   type RuntimeSettingValue,
+  reduceRuntimeRecovery,
 } from "./runtime-recovery"
 
 /** A normalized terminal/accepted outcome for a runtime command. */
@@ -32,6 +31,7 @@ export interface RuntimeRecoveryResult {
   readonly requestId: RuntimeRecoveryRequestId
   readonly command: RuntimeControlCommandMethod
   readonly status: RuntimeCommandStatus
+  readonly reason?: string
 }
 
 /**

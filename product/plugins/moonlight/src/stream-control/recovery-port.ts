@@ -52,7 +52,7 @@ function recoveryResultFromEvent(
   if (!isRecord(event) || event.name !== "runtime.commandResult") {
     return undefined
   }
-  const { requestId, command, status } = event
+  const { requestId, command, status, reason } = event
   if (
     !isRequestId(requestId) ||
     !isRuntimeCommand(command) ||
@@ -60,7 +60,12 @@ function recoveryResultFromEvent(
   ) {
     return undefined
   }
-  return { requestId, command, status }
+  return {
+    requestId,
+    command,
+    status,
+    ...(typeof reason === "string" ? { reason } : {}),
+  }
 }
 
 function isRequestId(value: unknown): value is RuntimeRecoveryRequestId {

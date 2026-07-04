@@ -701,6 +701,7 @@ const KnownEvent = Schema.Union([
       requestId: JsonRpcId,
       command: CommandMethod,
       status: RuntimeSettingsStatus,
+      reason: Schema.optional(Schema.String),
     }),
     [AdditiveFields],
   ),
@@ -749,6 +750,7 @@ export type MoonlightControlKnownEvent =
       readonly requestId: MoonlightControlRequestId
       readonly command: MoonlightControlCommandMethod
       readonly status: MoonlightControlRuntimeSettingsStatus
+      readonly reason?: string
     })
   | (AdditiveObject & {
       readonly name: "input.route"

@@ -322,6 +322,29 @@ describe("moonlight local control protocol", () => {
     expect(decoded.params.event.payload).toEqual({ decoderQueueDepth: 3 })
   })
 
+  it("decodes runtime command result events with optional diagnostic reasons", () => {
+    const decoded = decodeMoonlightControlMessage({
+      jsonrpc: "2.0",
+      method: "moonlight.event",
+      params: {
+        seq: 1,
+        monotonicMs: 100,
+        event: {
+          name: "runtime.commandResult",
+          requestId: "cmd-1",
+          command: "runtime.setResolution",
+          status: "failed",
+          reason: "decode-stall",
+        },
+      },
+    }) as MoonlightControlEventEnvelope
+
+    expect(decoded.params.event.name).toBe("runtime.commandResult")
+    if (decoded.params.event.name === "runtime.commandResult") {
+      expect(decoded.params.event.reason).toBe("decode-stall")
+    }
+  })
+
   it("decodes runtime command result events for all caller-visible statuses", () => {
     const statuses = [
       "accepted",

@@ -120,6 +120,7 @@ describe("moonlightRecoveryControlPortFromClient", () => {
         requestId: "resolution-1",
         command: "runtime.setResolution",
         status: "failed",
+        reason: "decode-stall",
       },
     ])
   })
