@@ -24,21 +24,25 @@ function createFakeRenderer() {
 
 function createFakeIntercept() {
   let onNav: ((nav: OverlayNav) => void) | null = null
+  let onChord: (() => void) | null = null
   let active = false
   const controller: OverlayInterceptController = {
-    async activate(cb) {
+    async activate(cb, chordCb) {
       active = true
       onNav = cb
+      onChord = chordCb ?? null
     },
     async deactivate() {
       active = false
       onNav = null
+      onChord = null
     },
     isActive: () => active,
   }
   return {
     controller,
     nav: (n: OverlayNav) => onNav?.(n),
+    chord: () => onChord?.(),
     isActive: () => active,
   }
 }
@@ -110,6 +114,17 @@ describe("overlay orchestrator", () => {
     expect(intercept.isActive()).toBe(false)
     orchestrator.onHoldUpdate(hold("fired", 1))
     expect(intercept.isActive()).toBe(false)
+  })
+
+  it("the dismiss chord (re-pressed while gated) closes an open menu", () => {
+    const { intercept, actions, orchestrator } = setup("local")
+    orchestrator.onHoldUpdate(hold("tap")) // open
+    expect(orchestrator.isMenuOpen()).toBe(true)
+    intercept.chord() // same chord again, surfaced from dbus0 while gated
+    expect(orchestrator.isMenuOpen()).toBe(false)
+    expect(intercept.isActive()).toBe(false)
+    expect(actions.forceQuit).toBe(0)
+    expect(actions.closeRemoteGame).toBe(0)
   })
 
   it("a second tap dismisses an open menu", () => {

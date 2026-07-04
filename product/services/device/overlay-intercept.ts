@@ -28,8 +28,17 @@ export interface InputPlumberInterceptPort {
 }
 
 export interface OverlayInterceptController {
-  /** Gate the game and start delivering nav events. Idempotent. */
-  readonly activate: (onNav: (nav: OverlayNav) => void) => Promise<void>
+  /**
+   * Gate the game and start delivering nav events. Idempotent. `onChord` fires
+   * when the dismiss chord (the same L1+R1+Start+Select the overlay opened with)
+   * is pressed again while gated — the game's chord is routed to us as
+   * ui_l1+ui_r1+ui_select+ui_option, so the player can close the menu with the
+   * exact gesture that opened it.
+   */
+  readonly activate: (
+    onNav: (nav: OverlayNav) => void,
+    onChord?: () => void,
+  ) => Promise<void>
   /** Restore input to the game and stop nav events. Always safe to call. */
   readonly deactivate: () => Promise<void>
   readonly isActive: () => boolean
@@ -44,11 +53,25 @@ const NAV_BY_CAPABILITY: Readonly<Record<string, OverlayNav>> = {
   ui_back: "back",
 }
 
+// While gated (InterceptMode 2), the physical quit chord (L1+R1+Start+Select) is
+// routed to us as these DBus capabilities. When all four are held at once we
+// treat it as "dismiss" so the player closes the menu with the same gesture that
+// opened it (verified on Bandai's InputPlumber profile).
+const DISMISS_CHORD_CAPABILITIES: readonly string[] = [
+  "ui_l1",
+  "ui_r1",
+  "ui_select",
+  "ui_option",
+]
+
 export function createOverlayInterceptController(
   port: InputPlumberInterceptPort,
 ): OverlayInterceptController {
   let active = false
   let handler: ((nav: OverlayNav) => void) | null = null
+  let chordHandler: (() => void) | null = null
+  const chordHeld = new Set<string>()
+  let chordFired = false
 
   // Subscribe ONCE, up front, and keep the subscription for the controller's
   // lifetime. If we subscribed per-activate, the monitor would still be
@@ -57,22 +80,44 @@ export function createOverlayInterceptController(
   // when intercept is off no events reach the DBus channel anyway, and when it
   // is on the first event is delivered immediately. We gate delivery on `active`.
   port.subscribeInputEvents((capability, value) => {
+    // Dismiss-chord tracking runs on both press and release so we can detect the
+    // full combo and re-arm cleanly. Only fires once per chord press.
+    if (DISMISS_CHORD_CAPABILITIES.includes(capability)) {
+      if (value === 1) chordHeld.add(capability)
+      else chordHeld.delete(capability)
+      if (
+        active &&
+        !chordFired &&
+        chordHeld.size === DISMISS_CHORD_CAPABILITIES.length
+      ) {
+        chordFired = true
+        chordHandler?.()
+      }
+      if (chordHeld.size < DISMISS_CHORD_CAPABILITIES.length) chordFired = false
+    }
+
     if (!active || value !== 1) return // active + press only; ignore release (0)
     const nav = NAV_BY_CAPABILITY[capability]
     if (nav && handler) handler(nav)
   })
 
   return {
-    async activate(onNav) {
+    async activate(onNav, onChord) {
       if (active) return
       active = true
       handler = onNav
+      chordHandler = onChord ?? null
+      chordHeld.clear()
+      chordFired = false
       try {
         await port.setInterceptMode(2)
       } catch (error) {
         // Do not leave the game gated if enabling failed.
         active = false
         handler = null
+        chordHandler = null
+        chordHeld.clear()
+        chordFired = false
         try {
           await port.setInterceptMode(0)
         } catch {
@@ -86,6 +131,9 @@ export function createOverlayInterceptController(
       if (!active) return
       active = false
       handler = null
+      chordHandler = null
+      chordHeld.clear()
+      chordFired = false
       await port.setInterceptMode(0)
     },
 

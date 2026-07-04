@@ -69,15 +69,24 @@ export function createOverlayOrchestrator(deps: {
     if (gated) return Promise.resolve()
     gated = true
     return Promise.resolve(
-      deps.intercept.activate(nav => {
-        if (!menu) return
-        const result = menu.handle(nav)
-        if (!result) {
-          deps.renderer.menu(menuOptions, menu.state().selected)
-          return
-        }
-        closeMenu(result.kind === "chosen" ? result.id : null)
-      }),
+      deps.intercept.activate(
+        nav => {
+          if (!menu) return
+          const result = menu.handle(nav)
+          if (!result) {
+            deps.renderer.menu(menuOptions, menu.state().selected)
+            return
+          }
+          closeMenu(result.kind === "chosen" ? result.id : null)
+        },
+        () => {
+          // The same quit chord, pressed again while the menu is open, dismisses
+          // it -- equivalent to "keep playing". This is the gated counterpart to
+          // the second-tap dismiss (inputd can't see the chord on the pad while
+          // gated, so the intercept surfaces it from dbus0).
+          if (menu) closeMenu(null)
+        },
+      ),
     )
   }
 

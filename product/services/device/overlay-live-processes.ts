@@ -93,40 +93,62 @@ export function createBunInterceptSubprocess(opts: {
       await child.exited
     },
     spawnLines(command, args, onLine) {
-      let child: Bun.Subprocess<"ignore", "pipe", "ignore">
-      try {
-        child = Bun.spawn([command, ...args], {
-          stdout: "pipe",
-          stderr: "ignore",
-          env: opts.env,
-        })
-      } catch {
-        // Binary missing / spawn failed (e.g. no gdbus in this environment):
-        // degrade to a no-op subscription rather than throwing at construction.
-        return () => {}
-      }
-      const reader = child.stdout.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ""
-      void (async () => {
+      // The monitor (gdbus) is long-lived and load-bearing: if it dies, nav goes
+      // silent forever. Respawn it on unexpected exit (with a short backoff) so
+      // the overlay's input channel self-heals; stop() disables respawning.
+      let stopped = false
+      let current: Bun.Subprocess<"ignore", "pipe", "ignore"> | null = null
+
+      const start = (): void => {
+        if (stopped) return
+        let child: Bun.Subprocess<"ignore", "pipe", "ignore">
         try {
-          for (;;) {
-            const { done, value } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            let idx: number
-            while ((idx = buffer.indexOf("\n")) >= 0) {
-              onLine(buffer.slice(0, idx))
-              buffer = buffer.slice(idx + 1)
-            }
-          }
+          child = Bun.spawn([command, ...args], {
+            stdout: "pipe",
+            stderr: "ignore",
+            env: opts.env,
+          })
         } catch {
-          // reader cancelled on stop(); ignore.
+          // Spawn failed (e.g. binary missing): back off and retry rather than
+          // degrading to a permanently dead subscription.
+          if (!stopped) setTimeout(start, 1_000)
+          return
         }
-      })()
+        current = child
+        const reader = child.stdout.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+        void (async () => {
+          try {
+            for (;;) {
+              const { done, value } = await reader.read()
+              if (done) break
+              buffer += decoder.decode(value, { stream: true })
+              let idx: number
+              while ((idx = buffer.indexOf("\n")) >= 0) {
+                onLine(buffer.slice(0, idx))
+                buffer = buffer.slice(idx + 1)
+              }
+            }
+          } catch {
+            // reader cancelled on stop() or child exit; ignore.
+          }
+        })()
+        void child.exited.then(
+          () => {
+            if (!stopped) setTimeout(start, 1_000)
+          },
+          () => {
+            if (!stopped) setTimeout(start, 1_000)
+          },
+        )
+      }
+
+      start()
       return () => {
+        stopped = true
         try {
-          child.kill()
+          current?.kill()
         } catch {
           // already gone
         }

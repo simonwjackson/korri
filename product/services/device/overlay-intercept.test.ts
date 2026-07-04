@@ -92,6 +92,59 @@ describe("overlay intercept controller", () => {
     expect(navs).toEqual([])
   })
 
+  it("fires onChord once when the full dismiss chord is held while active", async () => {
+    const fake = createFakePort()
+    const controller = createOverlayInterceptController(fake.port)
+    let chords = 0
+    await controller.activate(
+      () => {},
+      () => {
+        chords++
+      },
+    )
+    // Partial chord does nothing.
+    fake.emit("ui_l1", 1)
+    fake.emit("ui_r1", 1)
+    fake.emit("ui_select", 1)
+    expect(chords).toBe(0)
+    // The fourth capability completes the chord -> fires exactly once.
+    fake.emit("ui_option", 1)
+    expect(chords).toBe(1)
+    fake.emit("ui_option", 1) // still held, not re-fired
+    expect(chords).toBe(1)
+    // Release one and re-press to complete again -> re-arms and fires again.
+    fake.emit("ui_option", 0)
+    fake.emit("ui_option", 1)
+    expect(chords).toBe(2)
+  })
+
+  it("does not fire onChord before activate or after deactivate", async () => {
+    const fake = createFakePort()
+    const controller = createOverlayInterceptController(fake.port)
+    let chords = 0
+    const hold = () => {
+      fake.emit("ui_l1", 1)
+      fake.emit("ui_r1", 1)
+      fake.emit("ui_select", 1)
+      fake.emit("ui_option", 1)
+    }
+    hold() // before activate -> ignored
+    expect(chords).toBe(0)
+    await controller.activate(
+      () => {},
+      () => {
+        chords++
+      },
+    )
+    await controller.deactivate()
+    fake.emit("ui_l1", 0)
+    fake.emit("ui_r1", 0)
+    fake.emit("ui_select", 0)
+    fake.emit("ui_option", 0)
+    hold() // after deactivate -> ignored
+    expect(chords).toBe(0)
+  })
+
   it("disables intercept (mode 0) and stops nav on deactivate", async () => {
     const fake = createFakePort()
     const controller = createOverlayInterceptController(fake.port)
