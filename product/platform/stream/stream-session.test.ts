@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import type { StreamControlSession } from "@platform/stream-control/stream-control-session"
 import type { RuntimeRecoveryControlPort } from "./runtime-recovery-supervisor"
+import type { StreamAdaptiveRunnerEvent } from "./stream-adaptive-runner"
 import {
   createActiveStreamControlSessionRegistry,
   type StreamRuntimeSettings,
@@ -48,7 +49,8 @@ function makeSession(options: { readonly failSubscribe?: boolean } = {}) {
   }
 }
 
-function makeRecoveryPort(): RuntimeRecoveryControlPort {
+function makeRecoveryPort() {
+  const calls: string[] = []
   const listeners: ((
     result: Parameters<RuntimeRecoveryControlPort["onResult"]>[0] extends (
       arg: infer R,
@@ -56,18 +58,29 @@ function makeRecoveryPort(): RuntimeRecoveryControlPort {
       ? R
       : never,
   ) => void)[] = []
-  return {
-    setBitrate: async () => "bitrate-1",
-    setFps: async () => "fps-1",
-    setResolution: async () => "resolution-1",
+  const port: RuntimeRecoveryControlPort = {
+    setBitrate: async ({ bitrateKbps }) => {
+      calls.push(`bitrate:${bitrateKbps}`)
+      return "bitrate-1"
+    },
+    setFps: async ({ fps }) => {
+      calls.push(`fps:${fps}`)
+      return "fps-1"
+    },
+    setResolution: async ({ width, height }) => {
+      calls.push(`resolution:${width}x${height}`)
+      return "resolution-1"
+    },
     onResult: listener => {
       listeners.push(listener)
       return () => {
+        calls.push("recovery.unsubscribe")
         const index = listeners.indexOf(listener)
         if (index >= 0) listeners.splice(index, 1)
       }
     },
   }
+  return { port, calls }
 }
 
 const settings: StreamRuntimeSettings = {
@@ -112,7 +125,7 @@ describe("startStreamRuntimeSession", () => {
     const runtime = await startStreamRuntimeSession({
       session: harness.session,
       settingsFromState: () => settings,
-      recoveryPort: makeRecoveryPort(),
+      recoveryPort: makeRecoveryPort().port,
       onRecoveryEvent: event => events.push(event),
     })
 
@@ -127,7 +140,7 @@ describe("startStreamRuntimeSession", () => {
     const runtime = await startStreamRuntimeSession({
       session: harness.session,
       settingsFromState: () => settings,
-      recoveryPort: makeRecoveryPort(),
+      recoveryPort: makeRecoveryPort().port,
       onRecoveryEvent: () => {},
     })
 
@@ -147,7 +160,7 @@ describe("startStreamRuntimeSession", () => {
       startStreamRuntimeSession({
         session: harness.session,
         settingsFromState: () => settings,
-        recoveryPort: makeRecoveryPort(),
+        recoveryPort: makeRecoveryPort().port,
         onRecoveryEvent: () => {},
       }),
     ).rejects.toThrow("subscribe failed")
@@ -161,7 +174,7 @@ describe("startStreamRuntimeSession", () => {
     const runtime = await startStreamRuntimeSession({
       session: harness.session,
       settingsFromState: () => settings,
-      recoveryPort: makeRecoveryPort(),
+      recoveryPort: makeRecoveryPort().port,
       onRecoveryEvent: event => events.push(event),
     })
 
@@ -170,5 +183,67 @@ describe("startStreamRuntimeSession", () => {
       "runtime.setFps": { kind: "scalar", value: 60 },
       "runtime.setResolution": { kind: "resolution", width: 1280, height: 720 },
     })
+    runtime.close()
+  })
+
+  it("starts the adaptive runner only when recovery and complete baseline are ready", async () => {
+    const harness = makeSession()
+    const recovery = makeRecoveryPort()
+    const adaptiveEvents: StreamAdaptiveRunnerEvent[] = []
+    const runtime = await startStreamRuntimeSession({
+      session: harness.session,
+      settingsFromState: () => settings,
+      recoveryPort: recovery.port,
+      onRecoveryEvent: () => {},
+      adaptive: {
+        enabled: true,
+        objectiveBias: 0.5,
+        isStreaming: () => true,
+        onEvent: event => adaptiveEvents.push(event),
+      },
+    })
+
+    harness.emit({
+      name: "quality.sample",
+      sample: {
+        seq: 1,
+        sampledAtMs: 1_000,
+        rttMs: 120,
+        incomingBitrateKbps: 8_000,
+        requestedBitrateKbps: 20_000,
+      },
+    })
+
+    await runtime.adaptive?.tick()
+
+    expect(recovery.calls[0]).toMatch(/^bitrate:/)
+    expect(adaptiveEvents).toContainEqual(
+      expect.objectContaining({
+        kind: "dispatched",
+        command: "runtime.setBitrate",
+      }),
+    )
+    runtime.close()
+    expect(recovery.calls).toContain("recovery.unsubscribe")
+  })
+
+  it("does not start adaptive control without a recovery port", async () => {
+    const harness = makeSession()
+    const adaptiveEvents: StreamAdaptiveRunnerEvent[] = []
+
+    const runtime = await startStreamRuntimeSession({
+      session: harness.session,
+      settingsFromState: () => settings,
+      adaptive: {
+        enabled: true,
+        objectiveBias: 0.5,
+        isStreaming: () => true,
+        onEvent: event => adaptiveEvents.push(event),
+      },
+    })
+
+    expect(runtime.adaptive).toBeUndefined()
+    expect(adaptiveEvents).toEqual([{ kind: "dormant", reason: "not-ready" }])
+    runtime.close()
   })
 })

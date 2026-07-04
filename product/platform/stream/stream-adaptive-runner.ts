@@ -12,6 +12,7 @@ export type StreamAdaptiveRunnerDormantReason =
   | "not-streaming"
   | "stale"
   | "no-data"
+  | "not-ready"
   | "within-hysteresis"
 
 export type StreamAdaptiveRunnerEvent =
