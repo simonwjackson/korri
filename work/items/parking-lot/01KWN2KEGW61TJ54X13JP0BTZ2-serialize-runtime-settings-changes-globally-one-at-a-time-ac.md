@@ -18,6 +18,18 @@ source: se-work
 
 # Serialize runtime settings changes globally (one-at-a-time across families)
 
+## Status: code-complete, device gate pending (2026-07-04)
+
+Implemented as Layer 3 U-A (commit 05a25ee1). runtime_settings_mvp_has_inflight_family_locked
+now conflicts mutations against any in-flight mutation of any family, while the
+capability query (operation 0) stays per-family and is exempt in both directions
+(no op-0 deadlock). A Nix invariant asserts the global-mutation markers and the
+conflict reason; the full moonlight control-protocol build (patch apply + compile)
+passes EXIT 0. Remaining acceptance is device-only and pairs with the Gate-A
+session: confirm startup capability learning still completes, and exercise a live
+cross-family conflict over the control socket. Not yet deployed to bandai (needs a
+rebuild + switch).
+
 ## Why it matters
 
 The runtime-settings protocol contract mandates a single global mutation queue: only one bitrate/FPS/resolution change in flight at a time, so a bitrate change cannot race a resolution encoder rebuild. Today the in-flight latch is per-family (runtime_settings_mvp_has_inflight_family_locked only blocks the same family) plus a 250ms min-interval. Making it global is a small native change, but it must not deadlock the operation-0 capability query (which also passes through the sent path), so it needs the patch-export workflow plus device validation of startup capability learning. Until then, the per-family latch + min-interval protect the common case.
