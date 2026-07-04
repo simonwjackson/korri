@@ -278,6 +278,69 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "molecule",
     name: "Detail Stats",
   },
+  // Store — remote-catalog search variants (source-agnostic layouts taking an
+  // `entries` slot, so they are TEMPLATES) and their shared leaf parts. Models
+  // a console store, but every item is ACQUIRED (free), never purchased.
+  storeGrid: {
+    id: "shift.store-grid",
+    layer: "template",
+    name: "Store — Grid",
+  },
+  storeSpotlight: {
+    id: "shift.store-spotlight",
+    layer: "template",
+    name: "Store — Spotlight",
+  },
+  storeList: {
+    id: "shift.store-list",
+    layer: "template",
+    name: "Store — List",
+  },
+  storeHeader: {
+    id: "shift.store-header",
+    layer: "molecule",
+    name: "Store Header",
+  },
+  storeSearch: {
+    id: "shift.store-search",
+    layer: "molecule",
+    name: "Store Search",
+  },
+  storeChip: {
+    id: "shift.store-chip",
+    layer: "atom",
+    name: "Store Source Chip",
+  },
+  storeCard: {
+    id: "shift.store-card",
+    layer: "molecule",
+    name: "Store Card",
+  },
+  storeGetButton: {
+    id: "shift.store-get-button",
+    layer: "atom",
+    name: "Store Get Button",
+  },
+  storeSourceBadge: {
+    id: "shift.store-source-badge",
+    layer: "atom",
+    name: "Store Source Badge",
+  },
+  storeResultRow: {
+    id: "shift.store-result-row",
+    layer: "molecule",
+    name: "Store Result Row",
+  },
+  storeSpotlightHero: {
+    id: "shift.store-spotlight-hero",
+    layer: "organism",
+    name: "Store Spotlight Hero",
+  },
+  storeEmpty: {
+    id: "shift.store-empty",
+    layer: "atom",
+    name: "Store Empty",
+  },
   // Home body states (the Home page's non-Ready Data states; tagged so
   // pick-mode can select the body inside the Home page).
   homeLoading: {

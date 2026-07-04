@@ -32,6 +32,10 @@ export interface ShiftLibraryLensProps {
   readonly title?: string
   readonly onSelect?: (id: string) => void
   readonly onBack?: () => void
+  // SPIKE: optional controlled `lens` (from URL search). Absent = local state,
+  // so existing tests and lab variants keep working unchanged.
+  readonly lens?: LibraryLens
+  readonly onLensChange?: (lens: LibraryLens) => void
 }
 
 export function ShiftLibraryLens({
@@ -39,8 +43,12 @@ export function ShiftLibraryLens({
   title = "Library",
   onSelect,
   onBack,
+  lens: controlledLens,
+  onLensChange,
 }: ShiftLibraryLensProps) {
-  const [lens, setLens] = useState<LibraryLens>("all")
+  const [localLens, setLocalLens] = useState<LibraryLens>("all")
+  const lens = controlledLens ?? localLens
+  const setLens = onLensChange ?? setLocalLens
   const [sort, setSort] = useState<ShiftLibrarySort>("recent")
 
   const flat = useMemo(

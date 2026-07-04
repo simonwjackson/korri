@@ -16,9 +16,10 @@ import {
   getPlayableImageUrl,
 } from "@platform/library/playable-library-ui"
 import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
-import { useNavigate, useRouter } from "@tanstack/react-router"
+import { useNavigate, useRouter, useSearch } from "@tanstack/react-router"
 import { Option } from "effect"
 import type { ComponentProps } from "react"
+import type { ShiftLibraryLens as LibraryLens } from "../pages/ShiftLensRow"
 import {
   ShiftCatalogStateRoot,
   useShiftCatalogCase,
@@ -70,11 +71,15 @@ export function ShiftLibraryStateView({
   onSelect,
   onBack,
   onRetry,
+  lens,
+  onLensChange,
 }: {
   readonly result: ComponentProps<typeof ShiftCatalogStateRoot>["result"]
   readonly onSelect?: (id: string) => void
   readonly onBack?: () => void
   readonly onRetry?: () => void
+  readonly lens?: LibraryLens
+  readonly onLensChange?: (lens: LibraryLens) => void
 }) {
   return (
     <ShiftCatalogStateRoot result={result}>
@@ -82,7 +87,12 @@ export function ShiftLibraryStateView({
       <ShiftHomeLoadErrorBody onRetry={onRetry ?? noop} />
       <ShiftHomeDefectBody />
       <ShiftHomeEmptyBody />
-      <LibraryReadyBody onSelect={onSelect} onBack={onBack} />
+      <LibraryReadyBody
+        onSelect={onSelect}
+        onBack={onBack}
+        lens={lens}
+        onLensChange={onLensChange}
+      />
     </ShiftCatalogStateRoot>
   )
 }
@@ -90,9 +100,13 @@ export function ShiftLibraryStateView({
 function LibraryReadyBody({
   onSelect,
   onBack,
+  lens,
+  onLensChange,
 }: {
   readonly onSelect?: (id: string) => void
   readonly onBack?: () => void
+  readonly lens?: LibraryLens
+  readonly onLensChange?: (lens: LibraryLens) => void
 }) {
   const ready = useShiftCatalogCase("Ready")
   return Option.match(ready, {
@@ -102,6 +116,8 @@ function LibraryReadyBody({
         games={games.map(shiftLibraryGameFromCatalog)}
         onSelect={onSelect}
         onBack={onBack}
+        lens={lens}
+        onLensChange={onLensChange}
       />
     ),
   })
@@ -112,10 +128,17 @@ export function ShiftLibraryRoute() {
   const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
   const navigate = useNavigate()
   const router = useRouter()
+  // SPIKE: read `lens` from typed URL search; changing it navigates search.
+  const search = useSearch({ strict: false }) as { readonly lens?: LibraryLens }
+  const lens = search.lens ?? "all"
   return (
     <ShiftLibraryStateView
       result={live}
       onRetry={refreshSnapshot}
+      lens={lens}
+      onLensChange={next =>
+        navigate({ to: "/library", search: { lens: next } })
+      }
       onSelect={id => navigate({ to: "/game/$id", params: { id } })}
       onBack={() => router.history.back()}
     />

@@ -4,6 +4,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router"
+import type { ShiftLibraryLens } from "../pages/ShiftLensRow"
 import { SHIFT_COMPANION_PATH, SHIFT_LIBRARY_PATH } from "./paths"
 import { ShiftCompanionRoute } from "./ShiftCompanionRoute"
 import { ShiftGameDetailRoute } from "./ShiftGameDetailRoute"
@@ -28,6 +29,13 @@ const detailRoute = createRoute({
 const libraryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: SHIFT_LIBRARY_PATH,
+  // SPIKE: typed search axis for `lens` — probes URL round-trip in app + lab.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { readonly lens: ShiftLibraryLens } => {
+    const lens = search.lens
+    return { lens: lens === "favorites" || lens === "genre" ? lens : "all" }
+  },
   component: ShiftLibraryRoute,
 })
 
