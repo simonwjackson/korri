@@ -40,6 +40,8 @@ export function createOverlayHoldHandlerFromEnv(deps: {
       subprocess: createBunInterceptSubprocess({ env: deps.env }),
       busctl: deps.env.KORRI_BUSCTL_BIN,
       gdbus: deps.env.KORRI_GDBUS_BIN,
+      stdbuf: deps.env.KORRI_STDBUF_BIN,
+      debug: deps.env.KORRI_OVERLAY_DEBUG === "1",
     }),
   )
   orchestrator = createOverlayOrchestrator({

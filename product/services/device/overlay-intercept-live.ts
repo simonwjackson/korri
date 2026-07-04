@@ -51,10 +51,16 @@ export function createLiveInterceptPort(
     readonly subprocess: InterceptSubprocess
     readonly busctl?: string
     readonly gdbus?: string
+    /** Path to coreutils `stdbuf`, used to force line-buffered monitor output. */
+    readonly stdbuf?: string
+    /** When true, log every received monitor line to stderr for diagnosis. */
+    readonly debug?: boolean
   },
 ): InputPlumberInterceptPort {
   const busctl = deps.busctl ?? "busctl"
   const gdbus = deps.gdbus ?? "gdbus"
+  const stdbuf = deps.stdbuf ?? "stdbuf"
+  const debug = deps.debug ?? false
   return {
     async setInterceptMode(mode: InterceptMode) {
       await deps.subprocess.run(busctl, [
@@ -69,10 +75,29 @@ export function createLiveInterceptPort(
       ])
     },
     subscribeInputEvents(onEvent) {
+      // gdbus block-buffers stdout when it is a pipe (not a tty), so inputd
+      // received intercepted events in delayed batches -- the first press of a
+      // burst sat in gdbus's buffer until later output flushed it, which looked
+      // like a dropped first press. Wrap the monitor in `stdbuf -oL` to force
+      // line-buffered output so every event is delivered immediately.
       return deps.subprocess.spawnLines(
-        gdbus,
-        ["monitor", "--system", "--dest", BUS_NAME, "--object-path", DBUS0],
+        stdbuf,
+        [
+          "-oL",
+          gdbus,
+          "monitor",
+          "--system",
+          "--dest",
+          BUS_NAME,
+          "--object-path",
+          DBUS0,
+        ],
         line => {
+          if (debug && line.includes("InputEvent")) {
+            process.stderr.write(
+              `[overlay-intercept] ${Date.now()} recv: ${line}\n`,
+            )
+          }
           const parsed = parseInputEventLine(line)
           if (parsed) onEvent(parsed.capability, parsed.value)
         },
