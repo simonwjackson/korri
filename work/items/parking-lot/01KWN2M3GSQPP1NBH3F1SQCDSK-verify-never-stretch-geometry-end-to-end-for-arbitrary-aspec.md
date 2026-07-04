@@ -18,6 +18,15 @@ source: se-work
 
 # Verify same-ratio scaling never distorts the image on device
 
+## Status (2026-07-04): ready to verify on device
+
+The mechanism is now live on hardware: U1 (moonlight clamp) on bandai and U2
+(sunshine same-ratio tolerance) on aka. Same-ratio scale-downs apply and genuine
+off-ratio requests are rejected at the host. This item is now purely the
+device-visual Gate-A pass: confirm scaling along the ratio never distorts and an
+off-ratio request is cleanly refused (not stretched). No further code is expected
+unless the on-screen check shows distortion.
+
 ## Scope correction (2026-07-03)
 
 We only scale resolution along the stream's fixed aspect ratio; we never reshape

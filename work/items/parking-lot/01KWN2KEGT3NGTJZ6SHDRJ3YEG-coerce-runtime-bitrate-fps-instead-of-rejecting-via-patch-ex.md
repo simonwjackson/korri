@@ -3,7 +3,7 @@ id: 01KWN2KEGT3NGTJZ6SHDRJ3YEG
 slug: coerce-runtime-bitrate-fps-instead-of-rejecting-via-patch-ex
 title: Coerce runtime bitrate/FPS instead of rejecting (via patch-export workflow)
 origin: parked
-status: To Do
+status: Done
 priority: low
 labels:
   - runtime-settings
@@ -16,6 +16,17 @@ source: se-work
 ---
 
 # Coerce runtime bitrate/FPS instead of rejecting (via patch-export workflow)
+
+## Status: Done (2026-07-04)
+
+Implemented as accept-and-adapt Layer 2, U1 (commit d6b9c68a). The local-control
+runtime handler now clamps bitrate/FPS into the advertised [min, max] instead of
+rejecting; the clamped value is dispatched so applied-truth readback reports it.
+Coupled patches 0007/0008 were kept in sync (line counts unchanged), a Nix
+invariant asserts the reject strings are gone and the clamp markers present, and
+the full nix build (patch apply + compile) passed. Deployed to bandai. The
+real-world effect (bitrate 5 -> ~500, fps 10 -> min) is confirmed on device by
+the Gate-A on-screen pass.
 
 ## Why it matters
 

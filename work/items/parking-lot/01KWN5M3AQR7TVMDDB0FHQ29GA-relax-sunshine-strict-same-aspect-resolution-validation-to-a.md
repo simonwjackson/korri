@@ -3,7 +3,7 @@ id: 01KWN5M3AQR7TVMDDB0FHQ29GA
 slug: relax-sunshine-strict-same-aspect-resolution-validation-to-a
 title: Tolerate integer-rounding aspect deltas so same-ratio scaled resolutions apply
 origin: parked
-status: To Do
+status: Done
 priority: high
 labels:
   - runtime-settings
@@ -17,6 +17,17 @@ source: user
 ---
 
 # Tolerate integer-rounding aspect deltas so same-ratio scaled resolutions apply
+
+## Status: Done (2026-07-04)
+
+Implemented as accept-and-adapt Layer 2, U2 (commit 1f22f1bd). Sunshine's runtime
+resolution gate replaced the exact aspect equality with a bounded tolerance
+(cross-product delta within 2*(launch_width+launch_height)), so same-ratio
+scale-downs like 854x480 on a 16:9 stream are accepted while genuinely different
+ratios (e.g. 640x480 4:3) still exceed the tolerance and are rejected. A Nix
+invariant guards the tolerance markers; the full nix build of sunshine-korri
+(patch apply + compile) passed. Deployed to aka. Confirmed on device by the
+Gate-A on-screen pass (854x480 applies; 640x480 rejected).
 
 ## Scope correction (2026-07-03)
 
