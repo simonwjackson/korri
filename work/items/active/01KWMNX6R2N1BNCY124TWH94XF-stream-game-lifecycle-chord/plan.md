@@ -143,3 +143,44 @@ P1.1 → P1.2 → P1.3/P1.4 → P1.5 → P1.6.
 Unit tests (`bun:test`) for supervisor, inputd wiring, intercept client. On-device:
 by-eye (grim can't capture over a stream) — hold shows ring + quits; tap shows menu;
 nav moves selection; game gated; incidental disconnect leaves game running.
+
+---
+
+## Session update — four reported issues (scoping, touch, stream instant-kill, double-press)
+
+Live on Bandai (closure `7s77isbf`, inputd `ikgw7gp8`, korrid carries the moonlight
+quit-disable env, moonlight-embedded rebuilt with patch 0014). All on trunk.
+
+### Shipped
+- **Session scoping** (was: overlay armed on the hub). inputd polls a session probe
+  (`overlay-session-state{,-live}.ts`: sessiond managed-launch status + a `/proc` scan
+  for a moonlight client) and only engages the quit chord when a game/stream session is
+  active. Orchestrator tears down any in-flight ring/menu if the session ends mid-gesture.
+  The probe also classifies local vs stream so the menu shows the right options.
+- **Touch on the menu** (`renderer.c` + `overlay-renderer-client`/`overlay-live-processes`
+  + orchestrator `onTouchSelect`). Renderer binds `wl_seat`/`wl_touch`, claims an input
+  region only while a menu is shown (empty otherwise → taps fall through to the game),
+  hit-tests a tap against the option rects, and reports `touch <i>`/`touch-cancel` on
+  stdout; inputd treats a tap as absolute select-and-confirm. Works on hub + local.
+- **Stream instant-kill fixed** (Moonlight vendor patch 0014 + `composeMoonlightLaunchSpec`
+  env). Moonlight-embedded's `QUIT_BUTTONS` == our exact chord (Start+Select+L1+R1) and
+  quit with no hold. Patch gates it behind `KORRI_MOONLIGHT_DISABLE_GAMEPAD_QUIT`, always
+  set on the device stream launch path. Hold-to-quit now runs; the chord no longer tears
+  the stream down instantly.
+- **Double-press fix** (`overlay-orchestrator`): draw the menu only after InterceptMode 2
+  is confirmed. Enabling intercept spawns a busctl round-trip (~100–300ms); drawing the
+  menu first let a fast accept press race that window and leak to the pad.
+
+### Determined — no code needed for stream touch
+Bandai's stream policy passes only the InputPlumber virtual gamepad to Moonlight's
+`-input`; moonlight-embedded disables udev auto-grab when `-input` is given, so Moonlight
+never EVIOCGRABs the ft5x06 panels (event4/event5). The compositor keeps them, so the
+Push A `wl_touch` renderer should receive touch during a stream (Spike B proved the
+overlay renders above the fullscreen stream). No Moonlight input-suspend surgery needed.
+
+### Pending device validation (backlog 01KWNHE95J) — needs hands
+1. Stream touch works by finger on a live stream. If not: `fuser /dev/input/event4,event5`
+   during a stream to confirm grabs, then implement Moonlight `input.suspend/resume`.
+2. Single accept press registers (no double-press) on local + stream. If it persists:
+   InputPlumber first-event-drop on 0→2; prime via `CompositeDevice0.SendEvent`, or adopt
+   `SetInterceptActivation`.
