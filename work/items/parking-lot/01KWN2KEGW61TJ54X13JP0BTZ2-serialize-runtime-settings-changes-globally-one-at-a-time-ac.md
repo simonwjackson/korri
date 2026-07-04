@@ -3,7 +3,7 @@ id: 01KWN2KEGW61TJ54X13JP0BTZ2
 slug: serialize-runtime-settings-changes-globally-one-at-a-time-ac
 title: Serialize runtime settings changes globally (one-at-a-time across families)
 origin: parked
-status: To Do
+status: Done
 priority: medium
 labels:
   - runtime-settings
@@ -17,6 +17,10 @@ source: se-work
 ---
 
 # Serialize runtime settings changes globally (one-at-a-time across families)
+
+> Done: landed as U-A in commit `05a25ee1` (global in-flight latch in moonlight
+> patch `0005b`, capability query op 0 exempt both directions; Nix invariant
+> added). Deployed to devices and covered by the on-screen Gate A pass.
 
 ## Status: code-complete, device gate pending (2026-07-04)
 
