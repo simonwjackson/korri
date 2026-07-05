@@ -1,4 +1,7 @@
-import type { DeviceState } from "@platform/device/device-facts"
+import {
+  type DeviceState,
+  deviceStateFromBattery,
+} from "@platform/device/device-facts"
 import * as Atom from "effect/unstable/reactivity/Atom"
 import type { ShiftBatteryProps } from "./ui/atoms/ShiftBattery"
 
@@ -66,9 +69,8 @@ export function shiftDeviceStateForPowerReading(
   reading: ShiftPowerReading,
   observedAt: string = new Date().toISOString(),
 ): DeviceState {
-  return {
-    observedAt,
-    battery: {
+  return deviceStateFromBattery(
+    {
       _tag: "Ready",
       percent: reading.percent,
       status: reading.charging ? "Charging" : "Discharging",
@@ -76,7 +78,8 @@ export function shiftDeviceStateForPowerReading(
       supplies: [],
       observedAt,
     },
-  }
+    observedAt,
+  )
 }
 
 export function shiftPowerDisplayForDeviceState(

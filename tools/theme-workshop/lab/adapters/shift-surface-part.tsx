@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react"
+import { deviceStateFromFacts } from "@platform/device/device-facts"
 import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
 import { makeInMemoryLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
 import {
@@ -28,6 +29,7 @@ import { shiftForegroundSourceLayers } from "@product/surfaces/web/shift/shift-f
 import {
   DEFAULT_SHIFT_NETWORK_READING,
   type ShiftNetworkReading,
+  shiftDeviceNetworkStateForNetworkReading,
   shiftNetworkReadingAtom,
   shiftNetworkReadingForValue,
 } from "@product/surfaces/web/shift/shift-network-state"
@@ -163,6 +165,19 @@ function networkFromBinding(
   return shiftNetworkReadingForValue(binding[SHIFT_NETWORK_INPUT_ID])
 }
 
+function deviceStateForPowerAndNetwork(
+  power: ShiftPowerReading,
+  network: ShiftNetworkReading,
+) {
+  const observedAt = new Date().toISOString()
+  const powerState = shiftDeviceStateForPowerReading(power, observedAt)
+  return deviceStateFromFacts({
+    battery: powerState.battery,
+    network: shiftDeviceNetworkStateForNetworkReading(network, observedAt),
+    observedAt,
+  })
+}
+
 function tagFromInput(
   value: LabInputValue | undefined,
   fallback: string,
@@ -268,7 +283,7 @@ export function shiftSurfacePartMount(
     const network = networkFromBinding(binding.inputValues)
     const powerKey = `power:${JSON.stringify(power)}`
     const initialValues = [
-      [deviceStateAtom, shiftDeviceStateForPowerReading(power)],
+      [deviceStateAtom, deviceStateForPowerAndNetwork(power, network)],
       [shiftPowerReadingAtom, power],
       [shiftClockIsoAtom, clock],
       [shiftNetworkReadingAtom, network],
@@ -311,7 +326,7 @@ export function shiftSurfacePartMount(
     [catalogFactsSourceLayerAtom, catalogLayer],
     [foregroundSessionStatusLayerAtom, makeForeground()],
     [shiftPowerReadingAtom, power],
-    [deviceStateAtom, shiftDeviceStateForPowerReading(power)],
+    [deviceStateAtom, deviceStateForPowerAndNetwork(power, network)],
     [shiftClockIsoAtom, clock],
     [shiftNetworkReadingAtom, network],
     [

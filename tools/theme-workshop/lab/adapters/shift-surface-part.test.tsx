@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { unknownDeviceState } from "@platform/device/device-facts"
+import {
+  deviceStateFromFacts,
+  unknownDeviceState,
+} from "@platform/device/device-facts"
 import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import { ShiftPartSurface } from "@product/surfaces/web/shift/mount-shift-part"
 import {
@@ -222,22 +225,29 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
 
     act(() => {
       eachLabSurfaceRegistryForScope("object-part", ({ registry }) =>
-        registry.set(deviceStateAtom, {
-          observedAt: "2026-07-01T00:00:00.000Z",
-          battery: {
-            _tag: "Stale",
-            lastKnown: {
-              _tag: "Ready",
-              percent: 64,
-              status: "Discharging",
-              charging: false,
-              supplies: [],
+        registry.set(
+          deviceStateAtom,
+          deviceStateFromFacts({
+            observedAt: "2026-07-01T00:00:00.000Z",
+            battery: {
+              _tag: "Stale",
+              lastKnown: {
+                _tag: "Ready",
+                percent: 64,
+                status: "Discharging",
+                charging: false,
+                supplies: [],
+                observedAt: "2026-07-01T00:00:00.000Z",
+              },
+              message: "battery read timed out",
               observedAt: "2026-07-01T00:00:00.000Z",
             },
-            message: "battery read timed out",
-            observedAt: "2026-07-01T00:00:00.000Z",
-          },
-        }),
+            network: {
+              _tag: "Unknown",
+              observedAt: "2026-07-01T00:00:00.000Z",
+            },
+          }),
+        ),
       )
     })
 
