@@ -1,11 +1,10 @@
-// Exploration (not final): Rail segmentation · Headers.
-//
-// Instead of one flat A–Z-ish rail, the rail is grouped into labeled sections
-// (Continue / Favorites / Fresh), each with a small caption header above its
-// tiles; the section you're in lights its label in the accent. A static still to
-// judge the *look* of segmentation — composed from the real ShiftCineTile +
-// tokens, with the new segment bits as token-scoped styles so production is
-// untouched. Delete this file to drop the exploration.
+// Exploration plumbing (not shipped, not a catalog entry): the shared cinematic
+// scene for the rail-segmentation header studies. Each `*.template.part.tsx`
+// variant imports this and only swaps how a segment's header renders, so every
+// study is judged against an identical home (backdrop / status / hero / legend /
+// segmented rail) built from the real ShiftCine primitives + tokens. Static
+// still; no production component is touched.
+import type { ReactNode } from "react"
 import { SHIFT_CINEMATIC_GAMES } from "./config"
 import type { ShiftCinematicGame } from "./pages/ShiftCinematicHome"
 import { ShiftCineBackdrop } from "./ui/molecules/ShiftCineBackdrop"
@@ -27,17 +26,17 @@ const freshPicks = SHIFT_CINEMATIC_GAMES.filter(
   game => !game.lastPlayedLabel && !game.favorite,
 )
 
-interface SegmentTile {
+export interface RailSegmentTile {
   readonly game: ShiftCinematicGame
   readonly index: number
 }
-interface Segment {
+export interface RailSegment {
   readonly id: string
   readonly label: string
-  readonly tiles: readonly SegmentTile[]
+  readonly tiles: readonly RailSegmentTile[]
 }
 
-const SEGMENTS: readonly Segment[] = (() => {
+export const RAIL_SEGMENTS: readonly RailSegment[] = (() => {
   const source = [
     { id: "continue", label: "Continue", games: recents.slice(0, 3) },
     { id: "favorites", label: "Favorites", games: favorites.slice(0, 3) },
@@ -51,7 +50,8 @@ const SEGMENTS: readonly Segment[] = (() => {
   })
 })()
 
-const FOCUSED = SEGMENTS[0]?.tiles[0]?.game ?? SHIFT_CINEMATIC_GAMES[0]
+const FOCUSED_GAME =
+  RAIL_SEGMENTS[0]?.tiles[0]?.game ?? SHIFT_CINEMATIC_GAMES[0]
 
 const HINTS: readonly ShiftCineHintSpec[] = [
   { glyph: "A", label: "Play", primary: true },
@@ -59,64 +59,67 @@ const HINTS: readonly ShiftCineHintSpec[] = [
   { glyph: "Y", label: "Favorite" },
 ]
 
-// Segment scaffolding: a caption header above each group, the active group's
-// label in the accent. Token-only; scoped to this take via data-proto.
-const css = `
-[data-proto="rail-seg-headers"] .shift-cine-track {
+// Shared layout for every study: the grouped track and per-group column. Scoped
+// to `[data-rail-seg]` so it never touches the real home rail. Header-specific
+// styling is layered on per variant via `headerCss`.
+const BASE_CSS = `
+[data-rail-seg] .shift-cine-track {
   align-items: flex-end;
   gap: calc(var(--cine-tile) * 0.44);
 }
-[data-proto="rail-seg-headers"] .rail-seg {
+[data-rail-seg] .rail-seg {
   display: flex;
   flex-direction: column;
   gap: var(--shift-space-2);
 }
-[data-proto="rail-seg-headers"] .rail-seg-label {
-  padding-left: var(--shift-space-1);
-  font-size: var(--shift-text-fine);
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--shift-ink-dim);
-}
-[data-proto="rail-seg-headers"] .rail-seg[data-active] .rail-seg-label {
-  color: var(--shift-accent);
-}
-[data-proto="rail-seg-headers"] .rail-seg-tiles {
+[data-rail-seg] .rail-seg-tiles {
   display: flex;
   gap: var(--shift-space-3);
   align-items: flex-end;
 }
 `
 
-export default {
-  name: "Rail segmentation · Headers",
-  note: "exploration · section captions",
-  render: () => (
+/**
+ * Render one rail-segmentation study. `renderHeader` draws a segment's header
+ * (the studies differ only here); `headerCss` carries that header's token-scoped
+ * styles; `proto` scopes them to this study so several can render side by side.
+ * The first segment is marked active (as if focus sits on its first tile).
+ */
+export function RailSegmentsScene({
+  proto,
+  headerCss,
+  renderHeader,
+}: {
+  readonly proto: string
+  readonly headerCss: string
+  readonly renderHeader: (segment: RailSegment, active: boolean) => ReactNode
+}) {
+  return (
     <div
       data-shift-home
-      data-proto="rail-seg-headers"
+      data-rail-seg
+      data-proto={proto}
       className="shift-cine intrinsic relative h-full w-full overflow-hidden"
     >
-      <style>{css}</style>
-      <ShiftCineBackdrop artUrl={FOCUSED?.wideArtUrl ?? ""} />
+      <style>{`${BASE_CSS}${headerCss}`}</style>
+      <ShiftCineBackdrop artUrl={FOCUSED_GAME?.wideArtUrl ?? ""} />
       <ShiftStatusBar time="4:24 PM" avatarSrc={AVATAR} />
       <div className="shift-cine-stage">
         <div className="shift-cine-midrow">
-          {FOCUSED ? (
-            <ShiftCineHero game={FOCUSED} status={null} resuming />
+          {FOCUSED_GAME ? (
+            <ShiftCineHero game={FOCUSED_GAME} status={null} resuming />
           ) : null}
         </div>
         <ShiftCineLegend hints={HINTS} />
         <div className="shift-cine-rail">
           <div className="shift-cine-track">
-            {SEGMENTS.map((segment, si) => (
+            {RAIL_SEGMENTS.map((segment, si) => (
               <div
                 key={segment.id}
                 className="rail-seg"
                 data-active={si === 0 || undefined}
               >
-                <div className="rail-seg-label">{segment.label}</div>
+                {renderHeader(segment, si === 0)}
                 <div className="rail-seg-tiles">
                   {segment.tiles.map(tile => (
                     <ShiftCineTile
@@ -136,5 +139,5 @@ export default {
         </div>
       </div>
     </div>
-  ),
+  )
 }
