@@ -27,7 +27,7 @@ A screen in Shift is `route × state`, but today only the route is addressable. 
 - R3. The lab supports a **sync toggle**: *synced* (all frames mirror one route — today's behavior, default) or *un-synced* (each frame drives its own route independently).
 - R4. In un-synced mode each frame shows its **own route identity** (path + search), read from that frame's own router — not from any shared/global coordinate.
 - R5. `lens`/`sort` become part of the frame's readable route identity, closing the lab's current silent drop of those axes on capture.
-- R6. A **route-first axis panel**: selecting a route presents that route's manifest axes as selectors whose options derive from the axis state machines; composing a selection navigates the active frame to that space. Param axes (detail `id`) derive their options from the data axis (cascade).
+- R6. A **route-first panel** that live-mirrors a **clicked-to-select** screen: it shows that screen's current page + on-page settings and edits are two-way (editing the panel navigates the screen; navigating the screen updates the panel). It drives navigation only — page + on-page settings (search/params) — not the loading/empty/error data-state control. It targets the active screen when un-synced and every screen when synced. Detail `id` options are read from the currently loaded games; empty/missing combinations are reachable and render their real state.
 - R7. The axis-manifest reading path is surface-agnostic: `LabSurfaceAdapter` derives a screen's addressable axes from the route manifest rather than hand-authored per-surface wiring, proven on Shift so any surface with a route tree + manifests can adopt it.
 
 ---
@@ -45,6 +45,8 @@ A screen in Shift is `route × state`, but today only the route is addressable. 
 - **Fixing `ShiftLibraryDeck.favorites`** (persistent userData faked in local `useState`; wrong seam — belongs at the catalog/library atom + RPC): separate data-seam follow-up. Capture via `se-backlog`.
 - **Non-URL surface serialization** (terminal/voice/agent) and any **NavigationIntent / RPC / CLI trigger** layer for jumping to a space from outside a surface.
 - **Nodes-and-edges transition view, a saved "named spaces" gallery, and a capture-fidelity indicator panel** — DevLab presentation polish.
+- **Folding the loading/empty/error data-state control into the route panel** — the panel handles page + on-page settings only this round; unifying the two controls is a follow-up.
+- **Merging the quick page-tabs into the route panel** — both coexist this round (tabs for quick hops, panel for page + settings).
 
 ---
 
@@ -82,6 +84,15 @@ A screen in Shift is `route × state`, but today only the route is addressable. 
 - **Per-frame identity reads the frame's own router location (path + search).** This is per-frame by construction and avoids the `shift-live-coordinate` module-global singleton — which is exactly why full-coordinate identity is Tier 3, deferred.
 - **Default preserves the completed lab's invariant.** Synced is the default; un-synced is opt-in. The completed multi-device lab is consumed as the host, its "same screen everywhere" behavior intact unless the toggle is flipped.
 
+### Phase 3 product decisions (aligned with the user)
+
+- **The route panel live-mirrors the selected screen (two-way), not a one-way form.** It always reflects where the active screen is and edits both ways. The read side reuses U4's location reporting; the write side is a new per-frame navigate channel.
+- **The panel drives navigation only — page + on-page settings (search/params).** The loading/empty/error data-state control stays separate this round, so the two mechanisms (navigate vs. data-swap) stay cleanly apart. The detail `id` dropdown *reads* the currently loaded games to offer options, but selecting one navigates (a param) — it does not swap data.
+- **Active screen = click-to-select.** One active screen at a time. The panel targets the active screen when un-synced and every screen when synced (a synced edit reaches all frames via the panel's channel, not the path-only mirror).
+- **Permissive, not guarded.** Any combination is reachable; empty/missing spots render their real empty/not-found state — a feature, not an error.
+- **Generic mechanism, proven on Shift only.** The panel reads routes + their page-settings from the product-declared manifest so any surface adopts it, but only Shift is wired and tested this round.
+- **Keep the existing quick page-tabs.** They stay for fast page hops; the panel is the richer "page + settings" tool. Merging them is deferred.
+
 ---
 
 ## Open Questions
@@ -96,7 +107,9 @@ A screen in Shift is `route × state`, but today only the route is addressable. 
 
 - Exact `validateSearch` shape (plain normalizer fn vs. an `effect` `Schema`) and where the manifest's option lists are sourced (expected: the existing `stateMachine` `.tags`).
 - Un-synced **outer-URL** behavior — freeze the surface-path splat vs. reduce to device+theme only. Decide when U3 touches `buildLabPath`.
-- How the route-first panel picks the **active frame** it targets in un-synced mode (minimal active-frame concept vs. broadcast-to-all). Decide when U5 lands.
+- Exact suppression mechanism so panel-driven navigation and click-through navigation do not double-fire (expected: reuse the `suppressPathRef` pattern). Decide when U5's navigate channel lands.
+
+*(Resolved as Phase 3 product decisions above: active screen = click-to-select; panel targets the active screen un-synced / all screens synced; page + on-page settings only; permissive; keep the quick tabs.)*
 
 ---
 
@@ -258,72 +271,81 @@ A screen in Shift is `route × state`, but today only the route is addressable. 
 
 ---
 
-### U5. Route-first axis panel
+### U5. Route-first panel (live-mirror, page + on-page settings)
 
-**Goal:** A DevLab panel where selecting a route presents its manifest axes as selectors; composing a selection navigates the active frame, with the detail `id` axis deriving options from the data axis.
+**Goal:** A DevLab panel that live-mirrors a clicked-to-select active screen: it shows that screen's current page + on-page settings and edits both ways (editing the panel navigates the screen; navigating the screen updates the panel). It drives navigation only — page + search + params — via a new per-frame navigate channel, targeting the active screen when un-synced and every screen when synced. The loading/empty/error data-state control stays separate. Any combination is reachable; empty/missing render their real state.
 
 **Requirements:** R6
 
-**Dependencies:** U2 (manifest), U3/U4 (frames own routes + identity)
+**Dependencies:** U2 (manifest → routes + page-settings axes), U4 (frame location reporting — the live-mirror read side)
 
 **Files:**
-- Create: `tools/theme-workshop/lab/panels/LabRoutePanel.tsx` (route picker → axis selectors → compose/navigate)
-- Modify: `tools/theme-workshop/lab/surface-registry.ts` (adapter exposes enumerable routes + manifest access), `tools/theme-workshop/lab/adapters/shift.ts`
+- Create: `tools/theme-workshop/lab/panels/LabRoutePanel.tsx` (reflects + drives the active screen)
+- Create: a per-frame **navigate channel** exposing each mounted frame's `navigate({ to, params, search })` to chrome, keyed by frame — mirrors the atom-registry channel (e.g. `tools/theme-workshop/lab/model/lab-frame-navigation.ts`), registered from `tools/theme-workshop/lab/LabSurfaceMount.tsx`
+- Modify: `tools/theme-workshop/lab/surface-registry.ts` (adapter exposes routes + their page-settings axes from the manifest, and how to build a navigate target), `tools/theme-workshop/lab/adapters/shift.ts`
+- Modify: reuse the existing screen selection (`tools/theme-workshop/lab/canvas/LabCanvasDevice.tsx` `selected`/`onSelect`) as the active-screen source
 - Test: `tools/theme-workshop/lab/panels/LabRoutePanel.test.tsx`
 
 **Approach:**
-- Enumerate routes from the surface route tree (via the adapter). On route select, read the manifest (U2): render one selector per axis, options from the axis state-machine `.tags`; search axes compose into the navigation `search`, param axes into `params`.
-- The `id` param axis is a **dependent axis**: its option list comes from the currently seeded data axis (the catalog scenario). Pick data scenario → `id` options populate → compose.
-- "Compose" navigates the active frame's router (search-backed axes drive the router, distinct from the atom-registry `pin` used by data axes).
+- Click a screen → it is the active target (reuse existing object selection).
+- The panel enumerates routes (from the manifest via the adapter) and reflects the active screen's current page + on-page settings live, read from the frame's reported location (U4).
+- Editing a setting or picking a page navigates the target screen(s) via the per-frame navigate channel with `{ to, params, search }` — the active screen when un-synced, every screen when synced. This bypasses the path-only `setSurfacePath` mirror so a synced edit carries search to all frames.
+- The `id` param dropdown reads the currently loaded games to offer options (a dependent list). Selecting one navigates (a param); it does **not** swap the data-state.
+- Permissive: no combination is blocked; empty/missing render their real state. The data-state control (loading/empty/error) is untouched.
 
-**Technical design:** *(directional)* selector values → `{ to: routePath, params, search }` → active frame `router.navigate`. Data/foreground axes continue to drive via `registry.set` (existing `pin`); only search/param axes drive the router.
+**Execution note:** Build the per-frame navigate channel test-first (drive one frame's page + search from outside), then the panel on top.
+
+**Technical design:** *(directional)* panel selection → `{ to, params, search }` → target frame(s) navigate via the channel, with the frame's path-only bubble suppressed so panel-driven and click-through navigation don't double-fire. Read side: the active frame's reported location → panel selectors.
 
 **Patterns to follow:**
-- `tools/theme-workshop/lab/adapters/shift-axes.tsx` (`axisOptionsFromTags`, axis shape); existing lab panels under `tools/theme-workshop/lab/panels/`.
+- U4's `onLocationChange` (read side) and `registerLabSurfaceRegistry` (the per-frame channel-registration precedent); `axisOptionsFromTags` for selector options; existing panels under `tools/theme-workshop/lab/panels/`.
 
 **Test scenarios:**
-- Happy path: `Covers R6.` selecting `/library` lists `lens`,`sort`,`data`; choosing values composes and navigates the active frame to `/library?lens=…&sort=…`.
-- Happy path: selecting `/game/$id` lists `id` (dependent) + `data`; the `id` options equal the current data scenario's game ids.
-- Integration: changing the data axis re-populates the `id` options (cascade).
-- Edge case: a route with only a data axis (home) composes with no search.
+- Happy path: `Covers R6.` selecting a screen then choosing `/library` + `lens=favorites` navigates that screen to `/library?lens=favorites`; the panel reflects it.
+- Happy path (live-mirror read): navigating inside the active screen updates the panel's selectors to match.
+- Happy path (synced): with screens synced, a panel edit reaches every frame (carries search, not just path).
+- Integration (cascade): selecting `/game/$id` offers `id` options from the currently loaded games; changing the loaded set repopulates them.
+- Edge case (permissive): composing a spot with no results navigates and shows the real empty/not-found state.
+- Edge case: panel-driven navigation does not double-fire with the click-through path mirror.
 
 **Verification:**
-- Picking a route + axis values lands the active frame on exactly that space; the detail `id` selector reflects the seeded catalog.
+- Clicking a screen and composing a page + settings lands that screen there, and the panel stays in lockstep as you navigate the screen; synced edits reach all frames; the data-state control is unaffected.
 
 ---
 
-### U6. Derive `axesForScreen` from route manifests (generalization)
+### U6. Serve the panel's routes + page-settings from the manifest (generalization)
 
-**Goal:** `LabSurfaceAdapter.axesForScreen` derives a screen's addressable axes from the route manifest instead of hand-authored per-surface wiring, proven on Shift.
+**Goal:** The route panel's routes and their page-settings axes come from the product-declared manifest (U2) via a generic adapter accessor rather than hand-authored per-surface wiring, so any surface with a manifest gets the panel; proven on Shift. The existing data-state axis mechanism (`axesForScreen` `pin`/`release`) is untouched (decision 5 keeps the data-swap control separate).
 
 **Requirements:** R7
 
 **Dependencies:** U2, U5
 
 **Files:**
-- Modify: `tools/theme-workshop/lab/surface-registry.ts` (manifest-driven `axesForScreen` contract), `tools/theme-workshop/lab/adapters/shift-axes.tsx` / `adapters/shift.ts` (read manifest; keep atom-axis `pin`/`release`)
-- Test: `tools/theme-workshop/lab/adapters/shift.test.ts` (or a focused axes test)
+- Modify: `tools/theme-workshop/lab/surface-registry.ts` (adapter accessor: routes + their search/param axes derived from the manifest), `tools/theme-workshop/lab/adapters/shift.ts` (wire to `shiftRouteManifests()`)
+- Test: `tools/theme-workshop/lab/adapters/shift.test.ts` (or a focused test)
 
 **Approach:**
-- `axesForScreen(path)` composes: search/param axes from the route manifest (U2) + data/env axes from `staticData` bound to their harness drive mechanism (the existing `pin`/`release` registry swaps). Remove hand-authored search-axis wiring for committed routes.
-- The atom-axis mechanism is unchanged; only the **source of the axis list** moves from hand-authoring to the manifest — so any surface exposing a manifest participates without new lab code.
+- The panel's route list + each route's page-settings axes (search/param) are read from the product manifest, not hand-authored in the shift adapter.
+- The data-state axis mechanism (`shift-axes.tsx` `pin`/`release`) is unchanged — the data-swap control stays separate.
+- Because the list comes from the product declaration, a surface participates in the panel by declaring a manifest, with no new lab code.
 
 **Patterns to follow:**
-- Existing `shiftLibraryAxis` `pin`/`release`; `captureCoordinate` axis list derivation.
+- `product/surfaces/web/shift/routes/route-axis-manifest.ts` (`shiftRouteManifests`); existing adapter shape in `tools/theme-workshop/lab/adapters/shift.ts`.
 
 **Test scenarios:**
-- Happy path: `axesForScreen("/library")` derives `lens`,`sort` (search) + `data` (declared) from the manifest.
-- Happy path: `axesForScreen("/game/$id")` derives the `id` param axis + `data`.
-- Edge case: no committed-route search axis remains hand-authored in the shift adapter.
+- Happy path: the adapter's panel routes for Shift include `/library` (with `lens`,`sort`) and `/game/$id` (with `id`), derived from the manifest.
+- Edge case: no committed-route page-settings axis is hand-authored in the shift adapter — they all come from the manifest.
+- Edge case: a route with no page-settings (home) contributes a page entry with no on-page settings.
 
 **Verification:**
-- The shift adapter's per-route axis list comes from manifests; adding a search axis to a route surfaces it in the lab with no adapter edit.
+- Adding a search param to a committed route surfaces it in the panel with no adapter edit; the data-state control is unchanged.
 
 ---
 
 ## System-Wide Impact
 
-- **Interaction graph:** the sync toggle touches the lab's navigation mirror (`LabSurfaceMount` ↔ `lab-router`); the route-first panel drives the *active frame's* router while data axes still drive the atom registry — two distinct drive paths that must not cross-fire.
+- **Interaction graph:** the sync toggle touches the lab's navigation mirror (`LabSurfaceMount` ↔ `lab-router`); the route panel drives frames through a new per-frame navigate channel (page + search/params) while the separate data-state control still drives the atom registry — two distinct mechanisms that must not cross-fire, and panel-driven navigation must not double-fire with the click-through path mirror.
 - **State lifecycle risks:** un-synced outer-URL handling must avoid a stale surface-path splat or a navigation loop when frames diverge; the sync toggle must not remount surviving frames.
 - **API surface parity:** `ShiftLibraryLens` gains controlled props — its lab variants and tests must keep working via the local-state fallback (U1).
 - **Unchanged invariants:** the completed multi-device lab's synced behavior is the default and is preserved; production surface mounting (`mountShift`), the shared route tree contract, and the atom-axis `pin`/`release` mechanism are not changed in shape — only extended (search axes added, axis list sourced from manifests).
@@ -337,7 +359,9 @@ A screen in Shift is `route × state`, but today only the route is addressable. 
 | Un-syncing reopens the completed lab's "one screen everywhere" invariant | Toggle-gated with synced as default; characterize synced behavior before gating (U3) |
 | `validateSearch` schema options may not be introspectable | Axis options sourced from state-machine `.tags`, not the schema (Key Decisions) |
 | Full per-frame coordinate identity blocked by `shift-live-coordinate` module-global | Scope per-frame identity to **route** (router-owned, per-frame); defer full coordinate to Tier 3 |
-| Two drive paths (router-backed search axes vs atom-backed data axes) could cross-fire | Keep mechanisms separate; search/param axes navigate the router, data axes `registry.set` only (U5/U6) |
+| Two mechanisms (panel navigation vs data-state swap) could cross-fire | Keep them separate; the panel drives navigation (page + search/params) only, the data-state control drives `registry.set` only (decision 5) |
+| Panel-driven navigation double-fires with the click-through path mirror | Suppress the frame's path-only bubble on panel-driven navigations (reuse `suppressPathRef`); U5 builds the channel test-first |
+| A synced panel edit would carry only the path via the existing mirror, dropping search | When synced, the panel drives every frame directly via its channel, bypassing the path-only mirror (decision 3) |
 | Depends on the completed `01KVXF5CGMQXZRAE27TZ3QHXRC` lab | That work is `completed`; consumed as host, not modified in its synced path |
 
 ---
@@ -351,7 +375,7 @@ A screen in Shift is `route × state`, but today only the route is addressable. 
 - U3 (sync toggle, Tier 1), U4 (per-frame route identity, Tier 2). Ships side-by-side divergent frames with visible identities.
 
 ### Phase 3 — Route-first panel + generalization
-- U5 (route-first axis panel), U6 (manifest-driven `axesForScreen`). Ships the compose-a-space panel and the surface-agnostic seam.
+- U5 (live-mirror route panel over a clicked-to-select screen; page + on-page settings only, via a new per-frame navigate channel), U6 (panel routes + page-settings served from the product manifest, proven on Shift). The loading/empty/error control and the tab-merge stay separate (deferred).
 
 ---
 
