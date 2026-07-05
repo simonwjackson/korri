@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { Effect } from "effect"
-import { createDeviceEventsStream } from "./events"
 import { DeviceState, makeDeviceStateLayer } from "./device-state"
+import { createDeviceEventsStream } from "./events"
 
 function battery(percent: number) {
   return {

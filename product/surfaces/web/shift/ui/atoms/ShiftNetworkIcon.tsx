@@ -26,7 +26,7 @@ export function ShiftNetworkIcon({
 
   const Icon = shiftNetworkConnected(network) ? Wifi : WifiOff
   return (
-    <span aria-label={shiftNetworkDisplayLabel(network)}>
+    <span role="img" aria-label={shiftNetworkDisplayLabel(network)}>
       <Icon
         className="shift-cine-status-icon"
         aria-hidden

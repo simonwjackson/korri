@@ -1,14 +1,13 @@
 import { describe, expect, it } from "bun:test"
 import {
-  deviceStateFromBattery,
-  deviceStatesEqual,
+  type DevicePowerSupply,
   deviceStateFromFacts,
+  deviceStatesEqual,
   failedBatteryReadState,
   failedNetworkReadState,
   normalizeBatterySnapshot,
   normalizeNetworkSnapshot,
   unknownDeviceState,
-  type DevicePowerSupply,
 } from "./device-facts"
 
 const observedAt = "2026-07-01T00:00:00.000Z"

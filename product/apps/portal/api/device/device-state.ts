@@ -1,27 +1,27 @@
-import { errorMessage } from "@platform/stream-control/runtime-support"
 import {
+  type DeviceState as DeviceStateValue,
   deviceStateFromFacts,
   deviceStatesEqual,
   failedBatteryReadState,
   failedNetworkReadState,
   normalizeBatterySnapshot,
   normalizeNetworkSnapshot,
-  unknownDeviceState,
-  type DeviceState as DeviceStateValue,
   type RawNetworkSnapshot,
+  unknownDeviceState,
 } from "@platform/device/device-facts"
+import { errorMessage } from "@platform/stream-control/runtime-support"
 import {
   Context,
   Duration,
   Effect,
   Layer,
   Scope,
-  Stream,
+  type Stream,
   SubscriptionRef,
 } from "effect"
 import {
-  createDeviceControlService,
   type BatterySnapshot,
+  createDeviceControlService,
 } from "../stream-control/device-control-service"
 import { createDeviceNetworkReader } from "./device-network-reader"
 

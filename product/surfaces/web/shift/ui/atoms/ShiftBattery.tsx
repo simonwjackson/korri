@@ -43,6 +43,7 @@ export function ShiftBattery({
   return (
     <span
       className="shift-cine-battery"
+      role="img"
       aria-label={label}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.battery)}
     >
