@@ -23,10 +23,21 @@ source: user
 
 On device (bandai), switching resolution mid-stream causes a brief micro-freeze, while bitrate and FPS changes are seamless. That asymmetry is expected: bitrate/FPS are live parameters on a running pipeline, but a resolution change reconfigures the whole encode/decode pipeline — Sunshine rebuilds the encode session + emits a keyframe, the SM8550 v4l2m2m decoder reinitializes for the new size, and the SDL presenter recreates its texture/surface (patch 0011). Since resolution is a lever the adaptive controller will use to reclaim/shed pixels, this hitch is user-visible during automatic scaling. Need to isolate the dominant stall stage and reduce it, and keep resolution a last-resort lever so it is rarely felt.
 
+## Device evidence (2026-07-05)
+
+Measured on-device with `KORRI_RESW_TRACE` (patches 0017 + new 0018). Full write-up: `docs/korri-stream-resolution-switch-seamlessness-findings-2026-07-05.md`.
+
+- Client-side pipeline per switch is only **~50-100 ms** (720->540 ~50, 540->720 ~75, 720->360 ~63). Breakdown: decoder reopen **~30-34 ms (fixed)**, keyframe fetch+decode 20-42 ms, presenter reset 5-11 ms.
+- **The keyframe wait is NOT the bottleneck** — the host emits a prompt IDR (first-frame 20-42 ms). Earlier "frozen waiting for keyframe" hypothesis disproved.
+- **10x rapid 360<->720 stress: robust** — 62-99 ms/switch, 0 dropped frames, no crash/drift. Resolution can be switched frequently without harm.
+- **The ~30 ms decoder reopen is LOAD-BEARING.** Patch 0010 deliberately replaced 0009's in-place size-change handling with a full context reopen because the iris FFmpeg-`v4l2m2m` path corrupts frames when the same context continues across a resolution change. So the SOURCE_CHANGE / in-place criterion below is a **correctness-sensitive rewrite of the "Plan C" direct-V4L2 path**, not a quick swap — reverting to in-place on the FFmpeg wrapper reintroduces corruption.
+- **Host gap is still unmeasured** (trace starts when new-size frames arrive). Patch 0018 adds a `command-received` stamp so `command-received -> size-change-detected` measures the host encoder-reconfig gap. **This number is the next gate** and decides host-bound vs client-bound.
+
 ## Acceptance Criteria
 
 - [ ] Profiling isolates the dominant stall stage: host encoder restart vs client v4l2m2m decoder reinit vs SDL presenter surface recreate.
-- [ ] Client uses the V4L2 dynamic-resolution-change (SOURCE_CHANGE) path — renegotiate CAPTURE buffers only — instead of full decoder destroy/recreate, where the SM8550 decoder supports it.
+- [ ] Measure the host gap first (patch 0018: `command-received -> size-change-detected`); only pursue client work if the host gap is small.
+- [ ] Client uses the V4L2 dynamic-resolution-change (SOURCE_CHANGE) path — renegotiate CAPTURE buffers only — instead of full decoder destroy/recreate. NOTE: this must be done in the direct-V4L2 ("Plan C") path and validated on the iris driver; the FFmpeg-wrapper in-place path is known to corrupt frames (see patch 0010), which is why the current reopen exists.
 - [ ] Presenter resizes without a black flash and holds the last good frame across the swap (no black/frozen gap beyond a single frame).
 - [ ] Host encoder path minimizes restart cost and emits a prompt IDR at the new size.
 - [ ] On device, a same-ratio resolution step shows at most a single-frame hitch, not a multi-hundred-ms freeze.
@@ -34,6 +45,9 @@ On device (bandai), switching resolution mid-stream causes a brief micro-freeze,
 
 ## Related
 
-- `product/vendor/moonlight-embedded-korri/patches/0011-reset-sdl-presenter-on-output-size-change.patch`
+- `docs/korri-stream-resolution-switch-seamlessness-findings-2026-07-05.md`
+- `product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0018-trace-resolution-command-received-stage.patch`
+- `product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0010-reopen-v4l2m2m-context-on-output-size-change.patch` (why the reopen is load-bearing)
+- `product/plugins/moonlight/packages/moonlight-embedded-korri/patches/0011-reset-sdl-presenter-on-output-size-change.patch`
 - `product/platform/stream/stream-adaptive-controller.ts`
 - `docs/acceptance/runtime-settings-protocol-contract.md`
