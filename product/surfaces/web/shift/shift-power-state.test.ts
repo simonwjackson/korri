@@ -32,6 +32,10 @@ describe("shiftDeviceStateForPowerReading", () => {
         supplies: [],
         observedAt: "2026-07-01T00:00:00.000Z",
       },
+      network: {
+        _tag: "Unknown",
+        observedAt: "2026-07-01T00:00:00.000Z",
+      },
     })
   })
 
