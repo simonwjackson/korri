@@ -49,3 +49,27 @@ The gamescope-korri 3.16.23 nested compositor wrapping Moonlight intermittently 
   CLIENT CONNECTED 00:48:50 MT, DISCONNECTED :56, Initial Ping Timeout.
 - Repro suggestion: quit an active stream and immediately relaunch another
   remote game; the race window appears to be the previous session's teardown.
+
+## Evidence 2026-07-05 (bandai, Skate 3 / ps3-disc remote launch)
+
+- Reproduced again post-pairing; full failed shell-launcher stderr in bandai
+  system journal Jul 05 14:01:59 (exitCode 134). Sharper ordering marker: the
+  abort fires IMMEDIATELY AFTER the second Xwayland/xkb compile that logs
+  "Unsupported maximum keycode 709, clipping. X11 cannot support keycodes above
+  255" (+ duplicate virtual-modifier Hyper/ScrollLock warnings) on the fallback
+  `:1` Xwayland. Moonlight was fully up first (control socket listening,
+  h264_v4l2m2m on /dev/video0 iris, stream=1280x720) -> aka encodes -> fans spin.
+- Ruled OUT the X0 collision as the discriminator: `/tmp/.X11-unix/X0` is held by
+  the OUTER kiosk compositor's Xwayland at all times (created at session start,
+  owner korri), so "Failed to bind X0 -> fall back to :1" happens on EVERY nested
+  launch, success or fail. The teardown-race framing should be re-centered on the
+  `:1` Xwayland/xkb + input keymap path (keycode 709 device), not X0.
+- Next probe: identify the input device exposing max keycode 709 (likely the
+  `-input /dev/input/eventNN` controller mapped with high keycodes or libei), and
+  whether removing/remapping it changes crash rate; capture which fd HUPs via
+  gamescope verbose / strace on the `:1` Xwayland.
+- Reproduction transport note: the `korri launch` CLI uses a "via nix" dev path
+  that spawns a bare moonlight-embedded (NOT the kiosk gamescope wrapper) and does
+  NOT reproduce this crash. The failing path is the renderer/daemon
+  `app.library.launch` -> sessiond shell-launcher -> nested gamescope. Trigger it
+  from the UI or the app RPC group, not the CLI.
