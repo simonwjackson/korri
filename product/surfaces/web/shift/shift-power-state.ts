@@ -100,6 +100,15 @@ export function shiftPowerDisplayForDeviceState(
   }
 }
 
+export function shiftPowerReadingForDeviceState(
+  state: DeviceState,
+): ShiftPowerReading {
+  const display = shiftPowerDisplayForDeviceState(state)
+  return display._tag === "Ready" || display._tag === "Stale"
+    ? { percent: display.percent, charging: display.charging }
+    : DEFAULT_SHIFT_POWER_READING
+}
+
 export function shiftBatteryPropsForPowerDisplay(
   display: ShiftPowerDisplay,
 ): ShiftBatteryProps | undefined {

@@ -1,8 +1,9 @@
 /**
  * Shift — the status-bar connectivity icon (atom).
  *
- * Owns the Wifi / WifiOff choice from the network reading, so the status bar
- * just hands it the reading.
+ * Owns the Wifi / WifiOff / omitted choice from the network reading, so the
+ * status bar just hands it the reading. Unknown readings intentionally render
+ * nothing instead of falling back to the fixture default connected state.
  */
 import { Wifi, WifiOff } from "lucide-react"
 import {
@@ -13,6 +14,7 @@ import {
   DEFAULT_SHIFT_NETWORK_READING,
   type ShiftNetworkReading,
   shiftNetworkConnected,
+  shiftNetworkDisplayLabel,
 } from "../../shift-network-state"
 
 export function ShiftNetworkIcon({
@@ -20,12 +22,16 @@ export function ShiftNetworkIcon({
 }: {
   readonly network?: ShiftNetworkReading
 }) {
+  if (network._tag === "Unknown") return null
+
   const Icon = shiftNetworkConnected(network) ? Wifi : WifiOff
   return (
-    <Icon
-      className="shift-cine-status-icon"
-      aria-hidden
-      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.networkIcon)}
-    />
+    <span aria-label={shiftNetworkDisplayLabel(network)}>
+      <Icon
+        className="shift-cine-status-icon"
+        aria-hidden
+        {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.networkIcon)}
+      />
+    </span>
   )
 }

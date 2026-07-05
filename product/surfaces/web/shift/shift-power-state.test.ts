@@ -4,10 +4,15 @@ import {
   shiftBatteryPropsForPowerDisplay,
   shiftDeviceStateForPowerReading,
   shiftPowerDisplayForDeviceState,
+  shiftPowerReadingForDeviceState,
 } from "./shift-power-state"
 
 function state(battery: DeviceState["battery"]): DeviceState {
-  return { observedAt: "2026-07-01T00:00:00.000Z", battery }
+  return {
+    observedAt: "2026-07-01T00:00:00.000Z",
+    battery,
+    network: { _tag: "Unknown", observedAt: "2026-07-01T00:00:00.000Z" },
+  }
 }
 
 describe("shiftDeviceStateForPowerReading", () => {
@@ -56,6 +61,18 @@ describe("Shift power state from device facts", () => {
       level: "full",
       charging: true,
     })
+    expect(
+      shiftPowerReadingForDeviceState(
+        state({
+          _tag: "Ready",
+          percent: 82,
+          status: "Charging",
+          charging: true,
+          supplies: [],
+          observedAt: "2026-07-01T00:00:00.000Z",
+        }),
+      ),
+    ).toEqual({ percent: 82, charging: true })
   })
 
   it("does not render default battery props for no-battery or unknown states", () => {

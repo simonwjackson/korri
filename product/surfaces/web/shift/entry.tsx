@@ -32,6 +32,7 @@ import { Effect, Layer } from "effect"
 import { useEffect } from "react"
 import { mountShift } from "./mount-shift"
 import { ShiftClockBridge } from "./ShiftClockBridge"
+import { ShiftDeviceBridge } from "./ShiftDeviceBridge"
 
 export const shiftTheme: KorriSurfaceEntrypoint = {
   id: "shift",
@@ -59,6 +60,7 @@ export const shiftTheme: KorriSurfaceEntrypoint = {
       ...(dualScreen ? { dualScreen } : {}),
       beforeRouter: (
         <ShiftBridgeRuntimeChrome
+          device={bridge.device}
           liveUsbArtifact={runtimeConfig.liveUsbArtifact}
         />
       ),
@@ -73,14 +75,17 @@ export default shiftTheme
 type LiveUsbArtifact = "product" | "developer"
 
 function ShiftBridgeRuntimeChrome({
+  device,
   liveUsbArtifact,
 }: {
+  readonly device?: KorriPlatformBridge["device"]
   readonly liveUsbArtifact?: LiveUsbArtifact
 }) {
   useLibraryRefreshOnConfigChanged()
   return (
     <>
       <ShiftClockBridge />
+      <ShiftDeviceBridge device={device} />
       <LiveUsbArtifactNotice artifact={liveUsbArtifact} />
     </>
   )
