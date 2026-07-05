@@ -73,3 +73,21 @@ The gamescope-korri 3.16.23 nested compositor wrapping Moonlight intermittently 
   NOT reproduce this crash. The failing path is the renderer/daemon
   `app.library.launch` -> sessiond shell-launcher -> nested gamescope. Trigger it
   from the UI or the app RPC group, not the CLI.
+
+## Input-device pinning 2026-07-05 (strong lead, not yet causally confirmed)
+
+- The keycode-709 source is `/dev/input/event11` = the virtual "Microsoft X-Box
+  360 pad" (ID_INPUT_JOYSTICK=1), which Moonlight is launched with via `-input
+  /dev/input/event11`. Its KEY capability bitmask is 12 words wide (covers evdev
+  codes up to ~767, including BTN_TRIGGER_HAPPY6 = 709); the keyboard (event9) is
+  only 4 words (<=255). So this pad's >255 button codes are what make the nested
+  Xwayland xkb compile log "Unsupported maximum keycode 709, clipping" right
+  before the IWaitable abort.
+- Disabling Xwayland is NOT a viable fix: moonlight-embedded links libX11 +
+  libva-x11 (SDL2/X11 + VAAPI-X11), so the nested gamescope must keep Xwayland.
+  The gamescope wrapper does expose `--xwayland-count` and an Xwayland mode
+  control (GAMESCOPE_XWAYLAND_MODE_CONTROL=1), so the Xwayland path is
+  configurable, but the fix must address the gamepad keymap, not remove Xwayland.
+- Causation still unconfirmed: needs a controlled harness (run the nested
+  gamescope+moonlight with vs without `-input event11`) to prove the pad triggers
+  it. Deferred while operator is away (harness could wedge the kiosk).
