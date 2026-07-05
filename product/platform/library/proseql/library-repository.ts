@@ -1,4 +1,5 @@
 import { relative, sep } from "node:path"
+import { makeLocalEntrySource } from "@platform/api/rpc/entry-source"
 import {
   createArtifactImportService,
   createProseqlArtifactRepository,
@@ -1006,9 +1007,16 @@ function hydratePlayableMedia(
       assignmentsByGame.set(assignment.gameId, list)
     }
 
+    const assetBaseUrl = makeLocalEntrySource(env).controlUrl
     const hydrated = yield* Effect.all(
       entries.map(entry =>
-        mediaForPlayable(entry.id, assignmentsByGame, assetsById, env).pipe(
+        mediaForPlayable(
+          entry.id,
+          assignmentsByGame,
+          assetsById,
+          env,
+          assetBaseUrl,
+        ).pipe(
           Effect.map(media => (media.length > 0 ? { ...entry, media } : entry)),
         ),
       ),
@@ -1023,6 +1031,7 @@ function mediaForPlayable(
   assignmentsByGame: ReadonlyMap<string, readonly GameAssetAssignmentRecord[]>,
   assetsById: ReadonlyMap<string, GameAssetRecord>,
   env: Record<string, string | undefined>,
+  assetBaseUrl: string,
 ) {
   return Effect.tryPromise({
     try: async () => {
@@ -1038,13 +1047,21 @@ function mediaForPlayable(
           height: asset.height,
           ...(asset.source ? { source: asset.source } : {}),
           assetId: asset.id,
-          url: `/api/game-assets/${encodeURIComponent(asset.id)}`,
+          url: gameAssetUrl(assetBaseUrl, asset.id),
         })
       }
       return media
     },
     catch: toLibraryIoError,
   })
+}
+
+function gameAssetUrl(baseUrl: string, assetId: string): string {
+  return `${stripTrailingSlash(baseUrl)}/api/game-assets/${encodeURIComponent(assetId)}`
+}
+
+function stripTrailingSlash(url: string): string {
+  return url.endsWith("/") ? url.slice(0, -1) : url
 }
 
 function toCompatGameRecord(entry: PlayableLibraryEntry): GameRecord {

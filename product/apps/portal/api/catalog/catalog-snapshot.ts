@@ -342,7 +342,7 @@ function mediaForCatalogEntry(
           height: asset.height,
           ...(asset.source ? { source: asset.source } : {}),
           assetId: asset.id,
-          url: `/api/game-assets/${encodeURIComponent(asset.id)}`,
+          url: gameAssetUrl(entry.source.controlUrl, asset.id),
         })
       }
       if (hydrated.length === 0) return entry
@@ -353,6 +353,14 @@ function mediaForCatalogEntry(
     },
     catch: error => error,
   }).pipe(Effect.catch(() => Effect.succeed(entry)))
+}
+
+function gameAssetUrl(controlUrl: string, assetId: string): string {
+  return `${stripTrailingSlash(controlUrl)}/api/game-assets/${encodeURIComponent(assetId)}`
+}
+
+function stripTrailingSlash(url: string): string {
+  return url.endsWith("/") ? url.slice(0, -1) : url
 }
 
 function localCatalogTimeoutMs(): number {

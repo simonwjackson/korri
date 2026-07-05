@@ -33,6 +33,17 @@ describe("PeerSourceFetcherLive", () => {
         ],
         launchable: true,
         metadata: { name: "Celeste" },
+        media: [
+          {
+            role: "tile",
+            type: "image",
+            width: 512,
+            height: 512,
+            assetId:
+              "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            url: "http://sobo.invalid:3001/api/game-assets/sha256%3Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          },
+        ],
         source: {
           hostId: "sobo",
           controlUrl: "http://sobo.invalid:3001",
@@ -62,6 +73,9 @@ describe("PeerSourceFetcherLive", () => {
       },
     })
     expect(entries[0]?.metadata?.name).toBe("Celeste")
+    expect(entries[0]?.media?.[0]?.url).toBe(
+      "http://sobo.invalid:3001/api/game-assets/sha256%3Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
   })
 
   it("returns [] when the peer client throws (partial failure tolerance)", async () => {

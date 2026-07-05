@@ -109,12 +109,10 @@ describe("game-assets end-to-end integration", () => {
       role: "tile",
       type: "image",
       assetId: expectedAssetId,
-      url: `/api/game-assets/${encodeURIComponent(expectedAssetId)}`,
+      url: `${server.url}/api/game-assets/${encodeURIComponent(expectedAssetId)}`,
     })
 
-    const imageResponse = await fetch(
-      new URL(resolvedMedia?.url ?? "", server.url),
-    )
+    const imageResponse = await fetch(resolvedMedia?.url ?? "")
     expect(imageResponse.status).toBe(200)
     expect(imageResponse.headers.get("content-type")).toBe("image/png")
     expect(Buffer.from(await imageResponse.arrayBuffer())).toEqual(validPng)
