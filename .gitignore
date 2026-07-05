@@ -39,3 +39,6 @@ product/surfaces/web/*/ai-takes/
 
 # Dev-lab on-device HTTPS certs (locally-trusted, machine-specific; not committed)
 tools/theme-workshop/lab/pwa/.certs/
+
+# Tool-downloaded CI/GitHub Actions artifacts (rootfs images etc.; never committed)
+github-artifacts/
