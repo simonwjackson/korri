@@ -47,7 +47,17 @@ export type HomeInvariantDecision =
 
 export type HomeInvariantRepair = "focus" | "fullscreen"
 
-const MAX_RESTORE_ATTEMPTS = 3
+/**
+ * How many times sessiond re-attempts restoring the idle/home UI after a
+ * managed launch before giving up to "stopped". A crashed nested compositor
+ * (e.g. a Moonlight gamescope SIGABRT) transiently takes sway and the renderer
+ * down for several seconds; restore must keep trying across that window so a
+ * bad launch self-heals back to home instead of stranding the device on a
+ * black screen. Paired with RESTORE_RETRY_DELAY_MS (~1s) in sessiond.ts for a
+ * multi-second recovery window. Previously 3 x 250ms (~750ms) which expired
+ * inside the post-crash sway-recovery window and left sessiond mode=stopped.
+ */
+export const MAX_RESTORE_ATTEMPTS = 12
 
 export const initialKorriSessionState: KorriSessionState = {
   mode: "stopped",

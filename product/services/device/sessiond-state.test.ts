@@ -7,6 +7,7 @@ import {
   failKorriRestore,
   initialKorriSessionState,
   korriSessionActiveLaunch,
+  MAX_RESTORE_ATTEMPTS,
   markKorriGameRunning,
   markKorriHome,
   shouldEnforceHomeInvariant,
@@ -81,8 +82,15 @@ describe("korri session state", () => {
     })
     expect(shouldStopAfterRestoreFailure(state)).toBe(false)
 
+    // Keep failing up to the give-up threshold; sessiond must NOT stop before
+    // then, so a crashed launch's several-second sway/renderer recovery window
+    // is covered (self-heal to home instead of stranding on a black screen).
+    while (state.restoreAttempts < MAX_RESTORE_ATTEMPTS - 1) {
+      state = failKorriRestore(state, "renderer missing")
+      expect(shouldStopAfterRestoreFailure(state)).toBe(false)
+    }
     state = failKorriRestore(state, "renderer missing")
-    state = failKorriRestore(state, "renderer missing")
+    expect(state.restoreAttempts).toBe(MAX_RESTORE_ATTEMPTS)
     expect(shouldStopAfterRestoreFailure(state)).toBe(true)
   })
 

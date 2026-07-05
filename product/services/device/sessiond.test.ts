@@ -21,6 +21,7 @@ import {
 } from "./sessiond"
 import type { SessionRole } from "./sessiond-role"
 import type { KorriWindowSnapshot } from "./sessiond-state"
+import { MAX_RESTORE_ATTEMPTS } from "./sessiond-state"
 import type {
   SessiondLifecycleSnapshot,
   StatusSidecar,
@@ -55,6 +56,7 @@ function startHarness(
     }>
     readonly sessionHooks?: readonly KorriSessiondLifecycleHook[]
     readonly managedStopGraceMs?: number
+    readonly restoreRetryDelayMs?: number
     readonly heartbeatIntervalMs?: number
     readonly role?: SessionRole
   } = {},
@@ -140,6 +142,7 @@ function startHarness(
     ...(options.managedStopGraceMs !== undefined
       ? { managedStopGraceMs: options.managedStopGraceMs }
       : {}),
+    restoreRetryDelayMs: options.restoreRetryDelayMs ?? 1,
     ...(options.heartbeatIntervalMs !== undefined
       ? { heartbeatIntervalMs: options.heartbeatIntervalMs }
       : {}),
@@ -1234,7 +1237,9 @@ describe("korri sessiond", () => {
     )
     const lifecycle = parseSseEvents(await stream.text())
 
-    expect(events.filter(event => event === "launch-renderer")).toHaveLength(4)
+    expect(events.filter(event => event === "launch-renderer")).toHaveLength(
+      MAX_RESTORE_ATTEMPTS + 1,
+    )
     expect(lifecycle.map(event => event.type)).toContain("recovering")
     expect(lifecycle.map(event => event.type)).not.toContain("home-ready")
   })

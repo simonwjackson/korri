@@ -147,6 +147,8 @@ export interface KorriSessiondOptions {
   readonly heartbeatIntervalMs?: number
   /** Grace window after graceful managed-launch termination before force escalation. */
   readonly managedStopGraceMs?: number
+  /** Delay between idle-restore retries after a managed launch. Default 1s. */
+  readonly restoreRetryDelayMs?: number
   readonly logger?: KorriSessiondLogger
 }
 
@@ -170,7 +172,11 @@ export interface KorriSessiondCore {
 
 const DEFAULT_PORT = 3003
 const DEFAULT_HOSTNAME = "127.0.0.1"
-const RESTORE_RETRY_DELAY_MS = 250
+// Spaced ~1s so MAX_RESTORE_ATTEMPTS spans several seconds of retries -- long
+// enough for sway and the renderer to recover after a crashed nested launch
+// before sessiond gives up (self-heal back to home instead of a stranded black
+// screen).
+const RESTORE_RETRY_DELAY_MS = 1000
 const DEFAULT_MANAGED_STOP_GRACE_MS = 1500
 const KORRI_REMAP_PLUGIN_ID = "@korri:remap"
 const KORRI_REMAP_DIRTY_CLEANUP_EXIT_CODE = 120
@@ -194,6 +200,8 @@ export function createKorriSessiondCore(
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 5_000
   const managedStopGraceMs =
     options.managedStopGraceMs ?? DEFAULT_MANAGED_STOP_GRACE_MS
+  const restoreRetryDelayMs =
+    options.restoreRetryDelayMs ?? RESTORE_RETRY_DELAY_MS
   const heartbeatPayload = new TextEncoder().encode(": hb\n\n")
   const lifecycleSubscribers = new Set<{
     readonly launchId: string
@@ -655,7 +663,7 @@ export function createKorriSessiondCore(
           noteKorriRestoreAttemptFailure(state, message),
         )
         emitStatusSidecar("restoring")
-        await delay(RESTORE_RETRY_DELAY_MS)
+        await delay(restoreRetryDelayMs)
       }
     }
 
