@@ -53,8 +53,59 @@ export const DeviceBatteryState = Schema.Union([
 ])
 export type DeviceBatteryState = Schema.Schema.Type<typeof DeviceBatteryState>
 
+export const DeviceNetworkKind = Schema.Union([
+  Schema.Literal("wifi"),
+  Schema.Literal("ethernet"),
+  Schema.Literal("unknown"),
+])
+export type DeviceNetworkKind = Schema.Schema.Type<typeof DeviceNetworkKind>
+
+export const DeviceNetworkConnected = Schema.Struct({
+  _tag: Schema.Literal("Connected"),
+  kind: DeviceNetworkKind,
+  strengthPercent: Schema.Union([Schema.Number, Schema.Null]),
+  observedAt: Schema.String,
+})
+export type DeviceNetworkConnected = Schema.Schema.Type<
+  typeof DeviceNetworkConnected
+>
+
+export const DeviceNetworkDisconnected = Schema.Struct({
+  _tag: Schema.Literal("Disconnected"),
+  observedAt: Schema.String,
+})
+export type DeviceNetworkDisconnected = Schema.Schema.Type<
+  typeof DeviceNetworkDisconnected
+>
+
+export const DeviceNetworkUnknown = Schema.Struct({
+  _tag: Schema.Literal("Unknown"),
+  observedAt: Schema.String,
+})
+export const DeviceNetworkReadError = Schema.Struct({
+  _tag: Schema.Literal("ReadError"),
+  message: Schema.String,
+  observedAt: Schema.String,
+})
+export const DeviceNetworkStale = Schema.Struct({
+  _tag: Schema.Literal("Stale"),
+  lastKnown: Schema.Union([DeviceNetworkConnected, DeviceNetworkDisconnected]),
+  message: Schema.String,
+  observedAt: Schema.String,
+})
+
+export const DeviceNetworkState = Schema.Union([
+  DeviceNetworkUnknown,
+  DeviceNetworkConnected,
+  DeviceNetworkDisconnected,
+  DeviceNetworkStale,
+  DeviceNetworkReadError,
+])
+export type DeviceNetworkState = Schema.Schema.Type<typeof DeviceNetworkState>
+
 export const DeviceStateSchema = Schema.Struct({
   battery: DeviceBatteryState,
+  network: DeviceNetworkState,
   observedAt: Schema.String,
 })
 export type DeviceState = Schema.Schema.Type<typeof DeviceStateSchema>
@@ -65,10 +116,20 @@ export interface RawBatterySnapshot {
   readonly supplies: readonly DevicePowerSupply[]
 }
 
+export interface RawNetworkSnapshot {
+  readonly connected: boolean | null
+  readonly kind: DeviceNetworkKind | null
+  readonly strengthPercent: number | null
+}
+
 export function unknownDeviceState(
   observedAt = new Date().toISOString(),
 ): DeviceState {
-  return { observedAt, battery: { _tag: "Unknown", observedAt } }
+  return {
+    observedAt,
+    battery: { _tag: "Unknown", observedAt },
+    network: { _tag: "Unknown", observedAt },
+  }
 }
 
 export function normalizeBatterySnapshot(
@@ -88,11 +149,45 @@ export function normalizeBatterySnapshot(
   }
 }
 
+export function normalizeNetworkSnapshot(
+  snapshot: RawNetworkSnapshot,
+  observedAt = new Date().toISOString(),
+): DeviceNetworkState {
+  if (snapshot.connected === null) return { _tag: "Unknown", observedAt }
+  if (!snapshot.connected) return { _tag: "Disconnected", observedAt }
+  return {
+    _tag: "Connected",
+    kind: snapshot.kind ?? "unknown",
+    strengthPercent: normalizePercent(snapshot.strengthPercent),
+    observedAt,
+  }
+}
+
 export function deviceStateFromBattery(
   battery: DeviceBatteryState,
   observedAt = battery.observedAt,
 ): DeviceState {
-  return { observedAt, battery }
+  return {
+    observedAt,
+    battery,
+    network: { _tag: "Unknown", observedAt },
+  }
+}
+
+export function deviceStateFromFacts({
+  battery,
+  network,
+  observedAt,
+}: {
+  readonly battery: DeviceBatteryState
+  readonly network: DeviceNetworkState
+  readonly observedAt?: string
+}): DeviceState {
+  return {
+    observedAt: observedAt ?? battery.observedAt,
+    battery,
+    network,
+  }
 }
 
 export function failedBatteryReadState(
@@ -101,7 +196,18 @@ export function failedBatteryReadState(
   observedAt = new Date().toISOString(),
 ): DeviceBatteryState {
   const message = errorMessage(error)
-  const lastKnown = lastKnownReady(previous)
+  const lastKnown = lastKnownReadyBattery(previous)
+  if (lastKnown) return { _tag: "Stale", lastKnown, message, observedAt }
+  return { _tag: "ReadError", message, observedAt }
+}
+
+export function failedNetworkReadState(
+  previous: DeviceNetworkState,
+  error: unknown,
+  observedAt = new Date().toISOString(),
+): DeviceNetworkState {
+  const message = errorMessage(error)
+  const lastKnown = lastKnownReadyNetwork(previous)
   if (lastKnown) return { _tag: "Stale", lastKnown, message, observedAt }
   return { _tag: "ReadError", message, observedAt }
 }
@@ -115,7 +221,7 @@ export function deviceStatesEqual(a: DeviceState, b: DeviceState): boolean {
 export function batteryReadyForStreamControl(
   state: DeviceBatteryState,
 ): RawBatterySnapshot | undefined {
-  const ready = lastKnownReady(state)
+  const ready = lastKnownReadyBattery(state)
   if (!ready) return undefined
   return {
     percent: ready.percent,
@@ -124,10 +230,18 @@ export function batteryReadyForStreamControl(
   }
 }
 
-function lastKnownReady(
+function lastKnownReadyBattery(
   state: DeviceBatteryState,
 ): DeviceBatteryReady | undefined {
   if (state._tag === "Ready") return state
+  if (state._tag === "Stale") return state.lastKnown
+  return undefined
+}
+
+function lastKnownReadyNetwork(
+  state: DeviceNetworkState,
+): DeviceNetworkConnected | DeviceNetworkDisconnected | undefined {
+  if (state._tag === "Connected" || state._tag === "Disconnected") return state
   if (state._tag === "Stale") return state.lastKnown
   return undefined
 }

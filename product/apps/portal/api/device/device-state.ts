@@ -1,11 +1,14 @@
 import { errorMessage } from "@platform/stream-control/runtime-support"
 import {
-  deviceStateFromBattery,
+  deviceStateFromFacts,
   deviceStatesEqual,
   failedBatteryReadState,
+  failedNetworkReadState,
   normalizeBatterySnapshot,
+  normalizeNetworkSnapshot,
   unknownDeviceState,
   type DeviceState as DeviceStateValue,
+  type RawNetworkSnapshot,
 } from "@platform/device/device-facts"
 import {
   Context,
@@ -20,10 +23,13 @@ import {
   createDeviceControlService,
   type BatterySnapshot,
 } from "../stream-control/device-control-service"
+import { createDeviceNetworkReader } from "./device-network-reader"
+
+export type DeviceStateRefreshFact = "battery" | "network"
 
 export interface DeviceStateRefreshResult {
   readonly accepted: true
-  readonly fact: "battery"
+  readonly facts: readonly DeviceStateRefreshFact[]
   readonly state: DeviceStateValue
 }
 
@@ -40,6 +46,7 @@ export class DeviceState extends Context.Service<
 
 export interface DeviceStateLayerOptions {
   readonly readBattery?: () => Promise<BatterySnapshot>
+  readonly readNetwork?: () => Promise<RawNetworkSnapshot>
   readonly now?: () => Date
   readonly startBackground?: boolean
   readonly pollIntervalMs?: number
@@ -77,6 +84,15 @@ function makeDeviceStateService(options: DeviceStateLayerOptions) {
           powerSupplyDir:
             process.env.KORRI_POWER_SUPPLY_DIR ?? "/sys/class/power_supply",
         }).readBattery())
+    const readNetwork =
+      options.readNetwork ??
+      (() =>
+        createDeviceNetworkReader({
+          netDir: process.env.KORRI_NET_IFACE_DIR ?? "/sys/class/net",
+          ...(process.env.KORRI_NET_IFACE
+            ? { iface: process.env.KORRI_NET_IFACE }
+            : {}),
+        }).readNetwork())
     const ref = yield* SubscriptionRef.make<DeviceStateValue>(
       unknownDeviceState(now().toISOString()),
     )
@@ -90,19 +106,28 @@ function makeDeviceStateService(options: DeviceStateLayerOptions) {
           catch: error => error,
         }).pipe(
           Effect.match({
-            onSuccess: snapshot =>
-              normalizeBatterySnapshot(snapshot, observedAt),
+            onSuccess: snapshot => normalizeBatterySnapshot(snapshot, observedAt),
             onFailure: error =>
               failedBatteryReadState(previous.battery, error, observedAt),
           }),
         )
-        const next = deviceStateFromBattery(battery, observedAt)
+        const network = yield* Effect.tryPromise({
+          try: () => readNetwork(),
+          catch: error => error,
+        }).pipe(
+          Effect.match({
+            onSuccess: snapshot => normalizeNetworkSnapshot(snapshot, observedAt),
+            onFailure: error =>
+              failedNetworkReadState(previous.network, error, observedAt),
+          }),
+        )
+        const next = deviceStateFromFacts({ battery, network, observedAt })
         if (!deviceStatesEqual(previous, next)) {
           yield* SubscriptionRef.set(ref, next)
         }
         return {
           accepted: true as const,
-          fact: "battery" as const,
+          facts: ["battery", "network"] as const,
           state: next,
         }
       })
@@ -125,13 +150,14 @@ function makeDeviceStateService(options: DeviceStateLayerOptions) {
       Effect.catch(error =>
         SubscriptionRef.set(
           ref,
-          deviceStateFromBattery(
-            failedBatteryReadState(
+          deviceStateFromFacts({
+            battery: failedBatteryReadState(
               unknownDeviceState(now().toISOString()).battery,
               errorMessage(error),
               now().toISOString(),
             ),
-          ),
+            network: { _tag: "Unknown", observedAt: now().toISOString() },
+          }),
         ),
       ),
     )

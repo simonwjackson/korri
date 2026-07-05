@@ -23,6 +23,14 @@ function battery(percent: number) {
   }
 }
 
+function connectedWifi() {
+  return {
+    connected: true,
+    kind: "wifi" as const,
+    strengthPercent: 66,
+  }
+}
+
 describe("device event stream", () => {
   it("delivers current device state as the first SSE event", async () => {
     const event = await Effect.runPromise(
@@ -41,6 +49,7 @@ describe("device event stream", () => {
             makeDeviceStateLayer({
               startBackground: false,
               readBattery: async () => battery(88),
+              readNetwork: async () => connectedWifi(),
             }),
           ),
         ),
@@ -50,5 +59,7 @@ describe("device event stream", () => {
     expect(event).toContain("event: device.state")
     expect(event).toContain('"percent":88')
     expect(event).toContain('"charging":true')
+    expect(event).toContain('"network"')
+    expect(event).toContain('"strengthPercent":66')
   })
 })

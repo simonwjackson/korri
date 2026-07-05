@@ -2,8 +2,11 @@ import { describe, expect, it } from "bun:test"
 import {
   deviceStateFromBattery,
   deviceStatesEqual,
+  deviceStateFromFacts,
   failedBatteryReadState,
+  failedNetworkReadState,
   normalizeBatterySnapshot,
+  normalizeNetworkSnapshot,
   unknownDeviceState,
   type DevicePowerSupply,
 } from "./device-facts"
@@ -24,6 +27,64 @@ function supply(overrides: Partial<DevicePowerSupply>): DevicePowerSupply {
     ...overrides,
   }
 }
+
+describe("device facts network normalization", () => {
+  it("maps connected wifi with signal to ready network state", () => {
+    expect(
+      normalizeNetworkSnapshot(
+        { connected: true, kind: "wifi", strengthPercent: 82 },
+        observedAt,
+      ),
+    ).toEqual({
+      _tag: "Connected",
+      kind: "wifi",
+      strengthPercent: 82,
+      observedAt,
+    })
+  })
+
+  it("maps disconnected network to disconnected state", () => {
+    expect(
+      normalizeNetworkSnapshot(
+        { connected: false, kind: "ethernet", strengthPercent: null },
+        observedAt,
+      ),
+    ).toEqual({ _tag: "Disconnected", observedAt })
+  })
+
+  it("keeps unknown connectivity distinct from disconnected", () => {
+    expect(
+      normalizeNetworkSnapshot(
+        { connected: null, kind: null, strengthPercent: null },
+        observedAt,
+      ),
+    ).toEqual({ _tag: "Unknown", observedAt })
+  })
+
+  it("clamps malformed signal strength", () => {
+    expect(
+      normalizeNetworkSnapshot(
+        { connected: true, kind: "wifi", strengthPercent: 140 },
+        observedAt,
+      ),
+    ).toMatchObject({ _tag: "Connected", strengthPercent: 100 })
+  })
+
+  it("turns failures after a known value into stale network state", () => {
+    const ready = normalizeNetworkSnapshot(
+      { connected: true, kind: "wifi", strengthPercent: 70 },
+      observedAt,
+    )
+    const state = failedNetworkReadState(ready, new Error("net busy"), "later")
+
+    expect(state).toMatchObject({
+      _tag: "Stale",
+      message: "net busy",
+      observedAt: "later",
+      lastKnown: { _tag: "Connected", strengthPercent: 70 },
+    })
+  })
+})
 
 describe("device facts battery normalization", () => {
   it("maps a battery supply with capacity to ready battery state", () => {
@@ -116,20 +177,28 @@ describe("device facts battery normalization", () => {
   })
 
   it("compares device state by facts rather than observation timestamp", () => {
-    const first = deviceStateFromBattery(
-      normalizeBatterySnapshot(
+    const first = deviceStateFromFacts({
+      battery: normalizeBatterySnapshot(
         { percent: 82, status: "Discharging", supplies: [supply({})] },
         "t1",
       ),
-      "t1",
-    )
-    const second = deviceStateFromBattery(
-      normalizeBatterySnapshot(
+      network: normalizeNetworkSnapshot(
+        { connected: true, kind: "wifi", strengthPercent: 82 },
+        "t1",
+      ),
+      observedAt: "t1",
+    })
+    const second = deviceStateFromFacts({
+      battery: normalizeBatterySnapshot(
         { percent: 82, status: "Discharging", supplies: [supply({})] },
         "t2",
       ),
-      "t2",
-    )
+      network: normalizeNetworkSnapshot(
+        { connected: true, kind: "wifi", strengthPercent: 82 },
+        "t2",
+      ),
+      observedAt: "t2",
+    })
 
     expect(deviceStatesEqual(first, second)).toBe(true)
   })

@@ -26,6 +26,14 @@ function battery(percent: number) {
   }
 }
 
+function connectedWifi() {
+  return {
+    connected: true,
+    kind: "wifi" as const,
+    strengthPercent: 82,
+  }
+}
+
 describe("app.device RPC handlers", () => {
   it("registers device RPC tags on app and server groups", () => {
     expect(Array.from(appRpcGroup.requests.keys())).toContain(
@@ -49,12 +57,14 @@ describe("app.device RPC handlers", () => {
           makeDeviceStateLayer({
             startBackground: false,
             readBattery: async () => battery(73),
+            readNetwork: async () => connectedWifi(),
           }),
         ),
       ),
     )
 
     expect(response.state.battery).toMatchObject({ _tag: "Ready", percent: 73 })
+    expect(response.state.network).toMatchObject({ _tag: "Connected" })
   })
 
   it("acknowledges refresh and updates DeviceState", async () => {
@@ -70,6 +80,7 @@ describe("app.device RPC handlers", () => {
           makeDeviceStateLayer({
             startBackground: false,
             readBattery: async () => battery(percent),
+            readNetwork: async () => connectedWifi(),
           }),
         ),
       ),
@@ -77,8 +88,11 @@ describe("app.device RPC handlers", () => {
 
     expect(response).toMatchObject({
       accepted: true,
-      fact: "battery",
-      state: { battery: { _tag: "Ready", percent: 21 } },
+      facts: ["battery", "network"],
+      state: {
+        battery: { _tag: "Ready", percent: 21 },
+        network: { _tag: "Connected" },
+      },
     })
   })
 })

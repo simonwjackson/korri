@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import { DeviceState, makeDeviceStateLayer } from "./device-state"
 
 async function waitUntil(predicate: () => boolean) {
@@ -30,8 +30,16 @@ function battery(percent: number) {
   }
 }
 
+function connectedWifi(strengthPercent = 82) {
+  return {
+    connected: true,
+    kind: "wifi" as const,
+    strengthPercent,
+  }
+}
+
 describe("DeviceState service", () => {
-  it("seeds current state from the startup battery probe", async () => {
+  it("seeds current state from the startup device probes", async () => {
     const result = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -43,6 +51,7 @@ describe("DeviceState service", () => {
               startBackground: false,
               now: () => new Date("2026-07-01T00:00:00.000Z"),
               readBattery: async () => battery(82),
+              readNetwork: async () => connectedWifi(76),
             }),
           ),
         ),
@@ -50,6 +59,11 @@ describe("DeviceState service", () => {
     )
 
     expect(result.battery).toMatchObject({ _tag: "Ready", percent: 82 })
+    expect(result.network).toMatchObject({
+      _tag: "Connected",
+      kind: "wifi",
+      strengthPercent: 76,
+    })
   })
 
   it("delivers current state first on the changes stream", async () => {
@@ -63,16 +77,19 @@ describe("DeviceState service", () => {
             makeDeviceStateLayer({
               startBackground: false,
               readBattery: async () => battery(64),
+              readNetwork: async () => connectedWifi(),
             }),
           ),
         ),
       ),
     )
 
-    expect(Array.from(events)[0]?.battery).toMatchObject({
+    const first = Array.from(events)[0]
+    expect(first?.battery).toMatchObject({
       _tag: "Ready",
       percent: 64,
     })
+    expect(first?.network).toMatchObject({ _tag: "Connected" })
   })
 
   it("routes refresh through the same state update pipeline", async () => {
@@ -90,13 +107,17 @@ describe("DeviceState service", () => {
             makeDeviceStateLayer({
               startBackground: false,
               readBattery: async () => battery(percent),
+              readNetwork: async () => connectedWifi(),
             }),
           ),
         ),
       ),
     )
 
-    expect(result.refresh).toMatchObject({ accepted: true, fact: "battery" })
+    expect(result.refresh).toMatchObject({
+      accepted: true,
+      facts: ["battery", "network"],
+    })
     expect(result.current.battery).toMatchObject({ _tag: "Ready", percent: 51 })
   })
 
@@ -125,6 +146,7 @@ describe("DeviceState service", () => {
           Effect.provide(
             makeDeviceStateLayer({
               startBackground: false,
+              readNetwork: async () => connectedWifi(),
               readBattery: async () => {
                 readCount += 1
                 if (readCount === 1) return battery(50)
@@ -154,6 +176,7 @@ describe("DeviceState service", () => {
           Effect.provide(
             makeDeviceStateLayer({
               startBackground: false,
+              readNetwork: async () => connectedWifi(),
               readBattery: async () => {
                 if (fail) throw new Error("power supply busy")
                 return battery(77)
@@ -168,6 +191,37 @@ describe("DeviceState service", () => {
       _tag: "Stale",
       message: "power supply busy",
       lastKnown: { percent: 77 },
+    })
+  })
+
+  it("preserves last-known network as stale after transient read failure", async () => {
+    let fail = false
+    const state = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const service = yield* DeviceState
+          fail = true
+          yield* service.refresh()
+          return yield* service.current()
+        }).pipe(
+          Effect.provide(
+            makeDeviceStateLayer({
+              startBackground: false,
+              readBattery: async () => battery(77),
+              readNetwork: async () => {
+                if (fail) throw new Error("network busy")
+                return connectedWifi(68)
+              },
+            }),
+          ),
+        ),
+      ),
+    )
+
+    expect(state.network).toMatchObject({
+      _tag: "Stale",
+      message: "network busy",
+      lastKnown: { _tag: "Connected", strengthPercent: 68 },
     })
   })
 })
