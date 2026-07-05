@@ -5,6 +5,13 @@ the viewer, or — if physics forbids — decide that resolution is the *last* l
 an adaptive controller should touch. Measured on-device (bandai client ↔ aka
 host) using the `KORRI_RESW_TRACE` instrumentation (patches 0017 + 0018).
 
+## Status update (2026-07-05, later)
+
+- **bandai is deployed on latest trunk** (system `n9pfrc39`): new sessiond (`pkxdnm45`, with the self-heal fix) and new moonlight (`pm4bad2r`) carrying patch **0018** (command-received stamp) and patch **0019** (clamp resolution to launch ceiling). Verified: 0018 is in the moonlight manifest and the current config points at that build; hub is up; `KORRI_RESW_TRACE` armed.
+- **aka is up and healthy** (Sunshine serving on 47984/47989/47990/48010; VAAPI on the 7900 XT).
+- **BLOCKER for the host-gap measurement:** the bandai<->aka **Korri federation is currently disconnected** -- aka is not a ready peer from bandai (`stream-control: disabled`, catalog cache stale, `app.library.launch` dry-run returns `PlayableNotFound`). aka's korrid is reachable from bandai (network is fine), so this is a source-registration/pairing-state issue, not connectivity. **No aka game can be launched, so no stream can be started, so the host gap cannot be measured yet.** Reconnecting aka as a source is the normal UI/pairing flow (deliberately not automated here to avoid wedging the device while unattended).
+- **To unblock (operator):** reconnect aka as a stream source from the bandai UI (re-pair if prompted), launch any aka-sourced game (e.g. Skate 3 `ps3-disc`), then run the host-gap capture below. Everything else (0018 stamp, drop-in, armed trace) is already in place.
+
 ## Method
 
 `KORRI_RESW_TRACE=/run/user/2000/korri-resw.trace` is set on `korri-sessiond`
