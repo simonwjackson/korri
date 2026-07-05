@@ -1,0 +1,71 @@
+From f7c3012cce10b450bfa9668456b333b4b9622781 Mon Sep 17 00:00:00 2001
+From: "Simon W. Jackson" <simon@simonwjackson.io>
+Date: Sun, 5 Jul 2026 09:41:12 -0600
+Subject: [PATCH] Trace resolution-switch stage timings for freeze measurement
+
+---
+ src/video/v4l2m2m.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/src/video/v4l2m2m.c b/src/video/v4l2m2m.c
+index 649942f..5917a20 100644
+--- a/src/video/v4l2m2m.c
++++ b/src/video/v4l2m2m.c
+@@ -219,6 +219,22 @@ static uint64_t monotonic_us(void) {
+   return (uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL;
+ }
+ 
++/* Korri resolution-switch timing trace. Sparse (a handful of appends per
++ * resolution change), gated by KORRI_RESW_TRACE=<path>; a no-op when unset so
++ * it is safe to ship disabled. Shares monotonic_us() with the decoder epoch
++ * timers so stage deltas line up. Measurement aid for the live
++ * resolution-switch micro-freeze investigation. */
++static void korri_resw_trace(const char *stage) {
++  const char *path = getenv("KORRI_RESW_TRACE");
++  if (!path || !*path)
++    return;
++  FILE *f = fopen(path, "a");
++  if (!f)
++    return;
++  fprintf(f, "%llu %s\n", (unsigned long long) monotonic_us(), stage);
++  fclose(f);
++}
++
+ static bool env_enabled(const char *name) {
+   const char *value = getenv(name);
+   return value && *value && strcmp(value, "0") != 0 &&
+@@ -1660,6 +1676,7 @@ static int reset_sdl_renderer_after_resolution_change(int frame_w, int frame_h)
+   LOG("SDL presenter reset: %s window and renderer for video=%dx%d output=%dx%d target=%dx%d",
+       auto_resize ? "resized" : "preserved", frame_w, frame_h, out_w, out_h,
+       target_w, target_h);
++  korri_resw_trace("presenter-reset");
+   return 0;
+ }
+ 
+@@ -2065,6 +2082,7 @@ static int v4l2m2m_submit(PDECODE_UNIT du) {
+           stream_decoder_epoch,
+           av_get_pix_fmt_name(f->format), f->width, f->height,
+           f->format == AV_PIX_FMT_DRM_PRIME ? "YES" : "no");
++      korri_resw_trace("first-frame-decoded");
+       logged_first_frame_epoch = stream_decoder_epoch;
+     }
+     if (stream_decoder_first_frame_reported_epoch != stream_decoder_epoch && stream_decoder_epoch_started_us != 0) {
+@@ -2081,6 +2099,7 @@ static int v4l2m2m_submit(PDECODE_UNIT du) {
+       int visible_height = frame_visible_height(f);
+       LOG("submit: decoder output size changed %dx%d -> %dx%d visible=%dx%d; skipping transition frame, reopening decoder, resetting presenter, and requesting IDR",
+           stream_output_width, stream_output_height, new_width, new_height, visible_width, visible_height);
++      korri_resw_trace("size-change-detected");
+       reopen_width_after_submit = visible_width;
+       reopen_height_after_submit = visible_height;
+       sdl_presenter_reset_requested = true;
+@@ -2143,6 +2162,7 @@ static int v4l2m2m_submit(PDECODE_UNIT du) {
+     } else {
+       LOG("submit: reopened decoder after output size change %dx%d epoch=%d; requesting IDR",
+           reopen_width_after_submit, reopen_height_after_submit, stream_decoder_epoch);
++      korri_resw_trace("decoder-reopened");
+     }
+     return DR_NEED_IDR;
+   }
+-- 
+2.51.2
+

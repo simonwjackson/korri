@@ -76,6 +76,7 @@ let
     ./patches/0014-disable-gamepad-quit-combo.patch
     ./patches/0015-crop-coded-alignment-padding-on-present.patch
     ./patches/0016-add-stream-health-sampling.patch
+    ./patches/0017-trace-resolution-switch-stage-timings.patch
   ];
 in
 stdenv.mkDerivation rec {
