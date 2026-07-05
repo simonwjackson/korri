@@ -106,7 +106,8 @@ function makeDeviceStateService(options: DeviceStateLayerOptions) {
           catch: error => error,
         }).pipe(
           Effect.match({
-            onSuccess: snapshot => normalizeBatterySnapshot(snapshot, observedAt),
+            onSuccess: snapshot =>
+              normalizeBatterySnapshot(snapshot, observedAt),
             onFailure: error =>
               failedBatteryReadState(previous.battery, error, observedAt),
           }),
@@ -116,7 +117,8 @@ function makeDeviceStateService(options: DeviceStateLayerOptions) {
           catch: error => error,
         }).pipe(
           Effect.match({
-            onSuccess: snapshot => normalizeNetworkSnapshot(snapshot, observedAt),
+            onSuccess: snapshot =>
+              normalizeNetworkSnapshot(snapshot, observedAt),
             onFailure: error =>
               failedNetworkReadState(previous.network, error, observedAt),
           }),

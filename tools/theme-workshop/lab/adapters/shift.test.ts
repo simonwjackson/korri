@@ -76,9 +76,9 @@ describe("shift lab surface adapter", () => {
     expect(atoms).toContain(deviceStateAtom)
     expect(atoms).toContain(shiftClockIsoAtom)
     expect(atoms).toContain(shiftNetworkReadingAtom)
-    expect(initialValues.find(([atom]) => atom === deviceStateAtom)?.[1]).toMatchObject(
-      { network: { _tag: "Connected" } },
-    )
+    expect(
+      initialValues.find(([atom]) => atom === deviceStateAtom)?.[1],
+    ).toMatchObject({ network: { _tag: "Connected" } })
   })
 
   it("reports unknown surface adapters clearly", () => {

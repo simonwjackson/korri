@@ -1,4 +1,7 @@
-import type { DeviceNetworkState, DeviceState } from "@platform/device/device-facts"
+import type {
+  DeviceNetworkState,
+  DeviceState,
+} from "@platform/device/device-facts"
 import * as Atom from "effect/unstable/reactivity/Atom"
 
 export type ShiftNetworkReading =

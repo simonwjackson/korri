@@ -61,7 +61,9 @@ describe("Shift power state from device facts", () => {
       level: "full",
       charging: true,
     })
-    expect(shiftBatteryPropsForPowerDisplay(display, { showPercent: true })).toEqual({
+    expect(
+      shiftBatteryPropsForPowerDisplay(display, { showPercent: true }),
+    ).toEqual({
       level: "full",
       charging: true,
       percent: 82,

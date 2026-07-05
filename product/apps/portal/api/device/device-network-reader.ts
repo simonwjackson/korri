@@ -1,6 +1,9 @@
 import { readdir, readFile, stat } from "node:fs/promises"
 import { join } from "node:path"
-import type { DeviceNetworkKind, RawNetworkSnapshot } from "@platform/device/device-facts"
+import type {
+  DeviceNetworkKind,
+  RawNetworkSnapshot,
+} from "@platform/device/device-facts"
 
 export interface DeviceNetworkReaderOptions {
   readonly netDir?: string
@@ -11,7 +14,9 @@ export interface DeviceNetworkReaderOptions {
 export interface DeviceNetworkReaderDependencies {
   readonly readdir?: (path: string) => Promise<readonly string[]>
   readonly readFile?: (path: string, encoding: "utf8") => Promise<string>
-  readonly stat?: (path: string) => Promise<{ readonly isDirectory: () => boolean }>
+  readonly stat?: (
+    path: string,
+  ) => Promise<{ readonly isDirectory: () => boolean }>
 }
 
 export interface DeviceNetworkReader {
@@ -73,9 +78,13 @@ async function readNetworkSnapshot({
   readonly iface?: string
   readonly readdirImpl: (path: string) => Promise<readonly string[]>
   readonly readFileImpl: (path: string, encoding: "utf8") => Promise<string>
-  readonly statImpl: (path: string) => Promise<{ readonly isDirectory: () => boolean }>
+  readonly statImpl: (
+    path: string,
+  ) => Promise<{ readonly isDirectory: () => boolean }>
 }): Promise<RawNetworkSnapshot> {
-  const names = iface ? [iface] : await discoverInterfaceNames(netDir, readdirImpl)
+  const names = iface
+    ? [iface]
+    : await discoverInterfaceNames(netDir, readdirImpl)
   if (names.length === 0) {
     return { connected: null, kind: null, strengthPercent: null }
   }
@@ -107,7 +116,11 @@ async function readNetworkSnapshot({
   }
 
   if (known.length > 0) {
-    return { connected: false, kind: known[0]?.kind ?? null, strengthPercent: null }
+    return {
+      connected: false,
+      kind: known[0]?.kind ?? null,
+      strengthPercent: null,
+    }
   }
 
   return { connected: null, kind: null, strengthPercent: null }
@@ -134,15 +147,25 @@ async function readInterfaceSnapshot({
   readonly procNetWirelessPath: string
   readonly name: string
   readonly readFileImpl: (path: string, encoding: "utf8") => Promise<string>
-  readonly statImpl: (path: string) => Promise<{ readonly isDirectory: () => boolean }>
+  readonly statImpl: (
+    path: string,
+  ) => Promise<{ readonly isDirectory: () => boolean }>
 }): Promise<NetworkInterfaceSnapshot> {
   const base = join(netDir, name)
-  const kind: DeviceNetworkKind = (await isDirectory(join(base, "wireless"), statImpl))
+  const kind: DeviceNetworkKind = (await isDirectory(
+    join(base, "wireless"),
+    statImpl,
+  ))
     ? "wifi"
     : "ethernet"
-  const operstate = await readOptionalText(join(base, "operstate"), readFileImpl)
+  const operstate = await readOptionalText(
+    join(base, "operstate"),
+    readFileImpl,
+  )
   const carrier =
-    operstate === "down" ? null : await readOptionalCarrier(join(base, "carrier"), readFileImpl)
+    operstate === "down"
+      ? null
+      : await readOptionalCarrier(join(base, "carrier"), readFileImpl)
   const connected = connectedForOperstate(operstate, carrier)
   const strengthPercent =
     kind === "wifi"

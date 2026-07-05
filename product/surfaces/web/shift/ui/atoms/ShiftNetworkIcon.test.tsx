@@ -4,7 +4,9 @@ import { ShiftNetworkIcon } from "./ShiftNetworkIcon"
 
 describe("ShiftNetworkIcon", () => {
   it("renders a connected label with signal when connected", () => {
-    render(<ShiftNetworkIcon network={{ _tag: "Connected", strengthPercent: 82 }} />)
+    render(
+      <ShiftNetworkIcon network={{ _tag: "Connected", strengthPercent: 82 }} />,
+    )
 
     expect(screen.getByLabelText("Strong Wi-Fi (82%)")).toBeTruthy()
   })
@@ -16,7 +18,9 @@ describe("ShiftNetworkIcon", () => {
   })
 
   it("renders nothing for unknown network state", () => {
-    const { container } = render(<ShiftNetworkIcon network={{ _tag: "Unknown" }} />)
+    const { container } = render(
+      <ShiftNetworkIcon network={{ _tag: "Unknown" }} />,
+    )
 
     expect(container.textContent).toBe("")
     expect(container.querySelector("svg")).toBeNull()

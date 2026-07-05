@@ -771,7 +771,8 @@
 	text-transform: uppercase;
 	color: var(--shift-on-accent);
 	background: var(--shift-accent);
-	box-shadow: 0 2px 10px color-mix(in srgb, var(--shift-accent) 45%, transparent);
+	box-shadow: 0 2px 10px
+		color-mix(in srgb, var(--shift-accent) 45%, transparent);
 }
 
 [data-shift-home] .shift-cine-affordance-blurb {

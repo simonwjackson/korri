@@ -1,4 +1,7 @@
-import { deviceStateFromFacts, unknownDeviceState } from "@platform/device/device-facts"
+import {
+  deviceStateFromFacts,
+  unknownDeviceState,
+} from "@platform/device/device-facts"
 import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import {
   DEFAULT_SHIFT_CLOCK_ISO,

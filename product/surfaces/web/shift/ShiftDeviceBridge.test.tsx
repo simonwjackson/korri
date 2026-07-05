@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { RegistryProvider, useAtomValue } from "@effect/atom-react"
-import { deviceStateFromFacts, unknownDeviceState } from "@platform/device/device-facts"
+import {
+  deviceStateFromFacts,
+  unknownDeviceState,
+} from "@platform/device/device-facts"
 import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import type { KorriPlatformBridge } from "@platform/surface/bridge"
 import { cleanup, render, screen } from "@testing-library/react"

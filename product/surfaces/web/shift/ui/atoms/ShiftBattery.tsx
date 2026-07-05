@@ -61,6 +61,7 @@ function batteryLabel({
 }: Required<Pick<ShiftBatteryProps, "level" | "charging">> & {
   readonly percent?: number
 }): string {
-  const prefix = percent === undefined ? `Battery ${level}` : `Battery ${percent}%`
+  const prefix =
+    percent === undefined ? `Battery ${level}` : `Battery ${percent}%`
   return charging ? `${prefix}, charging` : prefix
 }

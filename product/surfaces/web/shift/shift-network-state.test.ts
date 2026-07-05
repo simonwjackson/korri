@@ -61,9 +61,9 @@ describe("shift network state", () => {
   })
 
   it("keeps null strength as connected without fake precision", () => {
-    expect(shiftNetworkDisplayLabel({ _tag: "Connected", strengthPercent: null })).toBe(
-      "Connected",
-    )
+    expect(
+      shiftNetworkDisplayLabel({ _tag: "Connected", strengthPercent: null }),
+    ).toBe("Connected")
   })
 
   it("parses unknown network readings from lab values", () => {

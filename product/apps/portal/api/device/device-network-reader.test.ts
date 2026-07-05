@@ -10,7 +10,8 @@ type Files = Record<string, string>
 function deps(files: Files, dirs: readonly string[] = []) {
   return {
     readdir: async (path: string) => {
-      if (path !== netDir) throw Object.assign(new Error(path), { code: "ENOENT" })
+      if (path !== netDir)
+        throw Object.assign(new Error(path), { code: "ENOENT" })
       return Object.keys(files)
         .filter(file => file.startsWith(`${netDir}/`))
         .map(file => file.slice(`${netDir}/`.length).split("/")[0])
@@ -18,11 +19,13 @@ function deps(files: Files, dirs: readonly string[] = []) {
     },
     readFile: async (path: string) => {
       const value = files[path]
-      if (value === undefined) throw Object.assign(new Error(path), { code: "ENOENT" })
+      if (value === undefined)
+        throw Object.assign(new Error(path), { code: "ENOENT" })
       return value
     },
     stat: async (path: string) => {
-      if (!dirs.includes(path)) throw Object.assign(new Error(path), { code: "ENOENT" })
+      if (!dirs.includes(path))
+        throw Object.assign(new Error(path), { code: "ENOENT" })
       return { isDirectory: () => true }
     },
   }
@@ -40,7 +43,8 @@ describe("createDeviceNetworkReader", () => {
         {
           [iface("wlan0", "operstate")]: "up\n",
           [iface("wlan0", "carrier")]: "1\n",
-          [wirelessPath]: "Inter-| sta-| Quality | Discarded\n wlan0: 0000 70. -60. -95. 0 0 0\n",
+          [wirelessPath]:
+            "Inter-| sta-| Quality | Discarded\n wlan0: 0000 70. -60. -95. 0 0 0\n",
         },
         [iface("wlan0", "wireless")],
       ),
