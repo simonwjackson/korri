@@ -1,0 +1,75 @@
+Clamp live resolution requests down to the launch resolution ceiling.
+
+The host encoder surface is fixed at the negotiated launch resolution, so
+Sunshine rejects any live runtime.setResolution request larger than the launch
+size -- surfacing on the client as an opaque "runtime command dispatch failed".
+On device (2026-07-05), requesting 1920x1080 on a 1280x720-launched stream
+failed this way with no reason.
+
+Capture the launch resolution as a ceiling in the local-control state and clamp
+incoming resolution requests down to it, exactly as bitrate/FPS clamp to their
+maxima (accept-and-adapt). Clamping each dimension independently preserves the
+aspect ratio for same-ratio requests -- both dimensions scale by the same factor
+to the launch size, so e.g. 1920x1080 coerces to 1280x720 -- while genuinely
+off-ratio requests remain off-ratio and are still rejected by Sunshine's aspect
+check (no stretch). Only requests above the ceiling change; within-ceiling
+requests are untouched, so no working request regresses. This matters for the
+adaptive controller, which emits arbitrary target values and must have them
+coerced rather than rejected.
+
+Compile-verified via the moonlight control-protocol patch-check. Runtime
+verification (that an above-ceiling request now coerces instead of failing)
+pending on-device when a stream is available.
+
+diff --git a/src/local_control.c b/src/local_control.c
+index 9cb4d24..38b60ba 100644
+--- a/src/local_control.c
++++ b/src/local_control.c
+@@ -119,6 +119,8 @@ struct moonlight_local_control_state {
+   uint32_t min_bitrate_kbps;
+   uint32_t max_bitrate_kbps;
+   uint32_t max_fps;
++  uint32_t launch_max_width;
++  uint32_t launch_max_height;
+   int has_last_command;
+   uint32_t last_request_id;
+   char last_command[32];
+@@ -272,6 +274,13 @@ void moonlight_local_control_start_from_env(const char* initial_state, int width
+   control.min_bitrate_kbps = MOONLIGHT_CONTROL_MIN_BITRATE_KBPS;
+   control.max_bitrate_kbps = MOONLIGHT_CONTROL_MAX_BITRATE_KBPS;
+   control.max_fps = MOONLIGHT_CONTROL_MAX_FPS;
++  /* The host encoder surface is fixed at the launch resolution, so the launch
++   * size is the hard ceiling for live resolution requests -- Sunshine rejects
++   * anything larger with an opaque dispatch failure. Capture it once so
++   * requests can be clamped down to it (accept-and-adapt), like bitrate/FPS
++   * clamp to their maxima. width/height here are the launch resolution. */
++  control.launch_max_width = width > 0 ? (uint32_t) width : 0;
++  control.launch_max_height = height > 0 ? (uint32_t) height : 0;
+   control.has_last_command = 0;
+   control.has_last_input_command = 0;
+   memset(control.subscribers, 0, sizeof(control.subscribers));
+@@ -990,6 +999,8 @@ static int moonlight_local_control_dispatch_runtime_command(struct json_object*
+   uint32_t min_bitrate = control.min_bitrate_kbps;
+   uint32_t max_bitrate = control.max_bitrate_kbps;
+   uint32_t max_fps = control.max_fps;
++  uint32_t launch_max_width = control.launch_max_width;
++  uint32_t launch_max_height = control.launch_max_height;
+   uint64_t last_command_at = control.last_command_at_ms;
+   pthread_mutex_unlock(&control.lock);
+ 
+@@ -1022,6 +1033,15 @@ static int moonlight_local_control_dispatch_runtime_command(struct json_object*
+     if (value > MOONLIGHT_CONTROL_MAX_WIDTH) value = MOONLIGHT_CONTROL_MAX_WIDTH;
+     if (secondary_value < MOONLIGHT_CONTROL_MIN_HEIGHT) secondary_value = MOONLIGHT_CONTROL_MIN_HEIGHT;
+     if (secondary_value > MOONLIGHT_CONTROL_MAX_HEIGHT) secondary_value = MOONLIGHT_CONTROL_MAX_HEIGHT;
++    /* Clamp down to the launch resolution ceiling (the fixed host encoder
++     * surface). Clamping each dimension independently preserves the aspect
++     * ratio for same-ratio requests -- both dimensions scale by the same
++     * factor to the launch size -- so an above-ceiling same-ratio request
++     * coerces exactly to the launch resolution instead of failing opaquely,
++     * while genuinely off-ratio requests stay off-ratio and are still rejected
++     * by Sunshine's aspect check. */
++    if (launch_max_width > 0 && value > launch_max_width) value = launch_max_width;
++    if (launch_max_height > 0 && secondary_value > launch_max_height) secondary_value = launch_max_height;
+     value &= ~1u; secondary_value &= ~1u;
+   }
+ 

@@ -78,6 +78,7 @@ let
     ./patches/0016-add-stream-health-sampling.patch
     ./patches/0017-trace-resolution-switch-stage-timings.patch
     ./patches/0018-trace-resolution-command-received-stage.patch
+    ./patches/0019-clamp-runtime-resolution-to-launch-ceiling.patch
   ];
 in
 stdenv.mkDerivation rec {
