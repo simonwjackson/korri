@@ -1,0 +1,64 @@
+Trace the resolution command-received stage for host-gap measurement.
+
+The existing KORRI_RESW_TRACE instrumentation in src/video/v4l2m2m.c only sees a
+resolution switch once new-size frames arrive from the host (size-change-detected
+onward). That leaves the host encoder-reconfiguration gap -- the interval between
+requesting a resolution change and the host emitting the first new-size frame --
+invisible. Device measurements show the visible client-side pipeline is only
+~50-100ms (dominated by the ~30ms decoder reopen, which patch 0010 made
+load-bearing for frame correctness on the iris v4l2m2m path), yet the perceived
+freeze can be larger, so the host gap must be quantified before deciding whether
+any client-side work can make the switch seamless.
+
+Add a self-contained command-received stamp in the local-control dispatcher,
+emitted the instant a runtime.setResolution request is handed to the host
+(before LiSendSunshineRuntimeSettingsMvp). It shares the same CLOCK_MONOTONIC
+microsecond timeline as the decoder-side stamps, so command-received ->
+size-change-detected measures the host gap directly. No-op unless
+KORRI_RESW_TRACE is set, so it is safe to ship enabled.
+
+diff --git a/src/local_control.c b/src/local_control.c
+index 0f04ca0..9cb4d24 100644
+--- a/src/local_control.c
++++ b/src/local_control.c
+@@ -918,6 +918,28 @@ static struct json_object* moonlight_local_control_runtime_command_event(uint64_
+   return event;
+ }
+ 
++/* Korri resolution-switch timing trace -- host-gap measurement leg. Mirrors the
++ * sparse KORRI_RESW_TRACE appender in video/v4l2m2m.c (same CLOCK_MONOTONIC
++ * microsecond timeline) so the command-received stamp emitted here and the
++ * decoder-side stamps there share one clock: command-received ->
++ * size-change-detected measures the host encoder-reconfiguration gap that the
++ * decoder-side trace cannot see. No-op unless KORRI_RESW_TRACE is set, so it is
++ * safe to ship enabled. */
++static void korri_resw_trace_command(const char* stage) {
++  const char* path = getenv("KORRI_RESW_TRACE");
++  if (!path || !*path)
++    return;
++  struct timespec ts;
++  clock_gettime(CLOCK_MONOTONIC, &ts);
++  unsigned long long now = (unsigned long long) ts.tv_sec * 1000000ULL
++                         + (unsigned long long) ts.tv_nsec / 1000ULL;
++  FILE* f = fopen(path, "a");
++  if (!f)
++    return;
++  fprintf(f, "%llu %s\n", now, stage);
++  fclose(f);
++}
++
+ static int moonlight_local_control_dispatch_runtime_command(struct json_object* id, struct json_object* request, const char* method_name, int client_fd) {
+   struct json_object* params = NULL;
+   json_object_object_get_ex(request, "params", &params);
+@@ -1004,6 +1026,11 @@ static int moonlight_local_control_dispatch_runtime_command(struct json_object*
+   }
+ 
+   uint32_t command_id = moonlight_local_control_next_command_id();
++  /* Stamp the instant we hand the resolution request to the host, before the
++   * wire send. Paired with the decoder-side size-change-detected stamp, the
++   * delta is the host encoder-reconfiguration gap. */
++  if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION)
++    korri_resw_trace_command("command-received");
+   int send_result = LiSendSunshineRuntimeSettingsMvp(command_id, operation, value, secondary_value);
+   if (send_result != 0) {
+     const char* tag = send_result == -5 ? "conflict" : (send_result == -6 ? "unsupported" : "failed");

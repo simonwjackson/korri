@@ -77,6 +77,7 @@ let
     ./patches/0015-crop-coded-alignment-padding-on-present.patch
     ./patches/0016-add-stream-health-sampling.patch
     ./patches/0017-trace-resolution-switch-stage-timings.patch
+    ./patches/0018-trace-resolution-command-received-stage.patch
   ];
 in
 stdenv.mkDerivation rec {
