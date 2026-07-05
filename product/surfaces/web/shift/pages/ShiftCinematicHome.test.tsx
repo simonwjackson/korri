@@ -158,6 +158,57 @@ describe("ShiftCinematicHome library affordance", () => {
   })
 })
 
+describe("ShiftCinematicHome surprise affordance", () => {
+  it("appends a trailing Surprise entry and picks on confirm", () => {
+    const onSurprise = mock(() => undefined)
+    const onOpenLibrary = mock(() => undefined)
+    render(
+      <ShiftCinematicHome
+        games={games}
+        onSurprise={onSurprise}
+        onOpenLibrary={onOpenLibrary}
+      />,
+    )
+
+    const surpriseTile = screen.getByRole("button", { name: "Surprise me" })
+    // Mount focus sits on Game A, so the first activation only focuses the slot.
+    fireEvent.click(surpriseTile)
+    expect(onSurprise).not.toHaveBeenCalled()
+    expect(screen.getByText("Jump into something at random")).toBeTruthy()
+
+    // Confirming the focused Surprise slot fires the random pick.
+    fireEvent.click(surpriseTile)
+    expect(onSurprise).toHaveBeenCalledTimes(1)
+    expect(onOpenLibrary).not.toHaveBeenCalled()
+  })
+
+  it("omits the Surprise entry when no handler is provided", () => {
+    render(<ShiftCinematicHome games={games} onOpenLibrary={() => undefined} />)
+    expect(screen.queryByRole("button", { name: "Surprise me" })).toBeNull()
+  })
+})
+
+describe("ShiftCinematicHome fresh marker", () => {
+  it("marks a fresh game's tile and leads its hero with a reason chip", () => {
+    const freshGames: readonly ShiftCinematicGame[] = [
+      { id: "a", title: "Game A", tileArtUrl: "a.png", wideArtUrl: "aw.png" },
+      {
+        id: "b",
+        title: "Game B",
+        tileArtUrl: "b.png",
+        wideArtUrl: "bw.png",
+        fresh: true,
+      },
+    ]
+    render(<ShiftCinematicHome games={freshGames} />)
+
+    const freshTile = screen.getByRole("button", { name: "Game B" })
+    expect(freshTile.querySelector(".shift-cine-tile-fresh")).toBeTruthy()
+    fireEvent.focus(freshTile)
+    expect(screen.getByText("Fresh pick")).toBeTruthy()
+  })
+})
+
 describe("ShiftCinematicHome image windows", () => {
   it("selects a bounded image window around focus", () => {
     expect(shiftImageWindow({ index: 0, total: 30, radius: 9 })).toEqual({

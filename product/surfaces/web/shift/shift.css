@@ -703,10 +703,10 @@
 	}
 }
 
-/* The rail's trailing Library affordance: same tile frame + focus lift, but a
- * quiet gradient panel with a library motif instead of cover art, so it reads
- * as a destination rather than a game. */
-[data-shift-home] .shift-cine-tile-library {
+/* The rail's trailing non-game affordances (Library, Surprise): the same tile
+ * frame + focus lift, but a quiet accent-gradient panel with a motif instead of
+ * cover art, so they read as destinations rather than games. */
+[data-shift-home] .shift-cine-tile-affordance {
 	opacity: 0.62;
 	background: linear-gradient(
 		155deg,
@@ -715,11 +715,11 @@
 	);
 }
 
-[data-shift-home] .shift-cine-tile-library[data-focused] {
+[data-shift-home] .shift-cine-tile-affordance[data-focused] {
 	opacity: 1;
 }
 
-[data-shift-home] .shift-cine-tile-library-inner {
+[data-shift-home] .shift-cine-tile-affordance-inner {
 	display: flex;
 	height: 100%;
 	flex-direction: column;
@@ -729,20 +729,39 @@
 	color: var(--shift-ink);
 }
 
-[data-shift-home] .shift-cine-tile-library-icon {
+[data-shift-home] .shift-cine-tile-affordance-icon {
 	width: 42%;
 	height: auto;
 	stroke-width: 1.5;
 	opacity: 0.92;
 }
 
-[data-shift-home] .shift-cine-tile-library-label {
+[data-shift-home] .shift-cine-tile-affordance-label {
 	font-size: var(--shift-text-body);
 	font-weight: 700;
 	letter-spacing: 0.02em;
 }
 
-[data-shift-home] .shift-cine-library-blurb {
+/* "Fresh" marker: a small accent pill in a game tile's top-left corner, flagging
+ * a discovery/recommended pick at a glance in the rail; the hero's reason chip
+ * explains why once the tile is focused. */
+[data-shift-home] .shift-cine-tile-fresh {
+	position: absolute;
+	top: var(--shift-space-1);
+	left: var(--shift-space-1);
+	z-index: 2;
+	padding: 0.1em 0.5em;
+	border-radius: 999px;
+	font-size: var(--shift-text-fine);
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--shift-on-accent);
+	background: var(--shift-accent);
+	box-shadow: 0 2px 10px color-mix(in srgb, var(--shift-accent) 45%, transparent);
+}
+
+[data-shift-home] .shift-cine-affordance-blurb {
 	margin: 0;
 	font-size: var(--shift-text-body);
 	color: var(--shift-ink-dim);

@@ -31,14 +31,14 @@ export function ShiftCineLibraryTile({
       data-cine-index={index}
       data-focused={focused || undefined}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.cineLibraryTile)}
-      className="shift-cine-tile shift-cine-tile-library"
+      className="shift-cine-tile shift-cine-tile-affordance"
       aria-label="Library"
       onFocus={onFocus}
       onClick={onActivate}
     >
-      <span className="shift-cine-tile-library-inner">
-        <LibraryBig className="shift-cine-tile-library-icon" aria-hidden />
-        <span className="shift-cine-tile-library-label">Library</span>
+      <span className="shift-cine-tile-affordance-inner">
+        <LibraryBig className="shift-cine-tile-affordance-icon" aria-hidden />
+        <span className="shift-cine-tile-affordance-label">Library</span>
       </span>
     </button>
   )

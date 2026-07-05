@@ -29,6 +29,7 @@ import {
   ShiftCineLegend,
 } from "../ui/molecules/ShiftCineLegend"
 import { ShiftCineLibraryTile } from "../ui/molecules/ShiftCineLibraryTile"
+import { ShiftCineSurpriseTile } from "../ui/molecules/ShiftCineSurpriseTile"
 import {
   ShiftStatusBar,
   type ShiftStatusBarProps,
@@ -36,6 +37,7 @@ import {
 import { ShiftCineHero } from "../ui/organisms/ShiftCineHero"
 import { ShiftCineLibraryHero } from "../ui/organisms/ShiftCineLibraryHero"
 import { ShiftCineRail } from "../ui/organisms/ShiftCineRail"
+import { ShiftCineSurpriseHero } from "../ui/organisms/ShiftCineSurpriseHero"
 
 export interface ShiftCinematicGame {
   readonly id: string
@@ -48,6 +50,14 @@ export interface ShiftCinematicGame {
   readonly lastPlayedLabel?: string
   readonly playtimeLabel?: string
   readonly favorite?: boolean
+  /** Discovery/recommended pick — draws a "Fresh" tile marker + hero reason chip. */
+  readonly fresh?: boolean
+}
+
+/** A trailing non-game rail entry (a "destination"): Surprise or Library. */
+type RailAffordance = {
+  readonly kind: "surprise" | "library"
+  readonly onConfirm: () => void
 }
 
 export interface ShiftImageWindow {
@@ -127,6 +137,9 @@ export interface ShiftCinematicHomeProps {
    * appended to the rail as a distinct non-game entry; confirming it fires this.
    * Omitted in standalone/prototype usage (no library entry). */
   readonly onOpenLibrary?: () => void
+  /** Pick a random game. When provided, a trailing "Surprise" affordance is
+   * appended to the rail (before Library); confirming it fires this. */
+  readonly onSurprise?: () => void
 }
 
 export function ShiftCinematicHome({
@@ -142,6 +155,7 @@ export function ShiftCinematicHome({
   onRetry,
   onDismiss,
   onOpenLibrary,
+  onSurprise,
 }: ShiftCinematicHomeProps) {
   const [index, setIndex] = useState(0)
   const [trackX, setTrackX] = useState(0)
@@ -150,19 +164,30 @@ export function ShiftCinematicHome({
   const preloadedImageUrlsRef = useRef<Set<string>>(new Set())
   const game = games[index]
   const gameId = game?.id
-  // The rail's trailing entry is the Library affordance when a host wires
-  // `onOpenLibrary`. It is a distinct non-game slot at `games.length`, so the
-  // focus index runs one past the games when it is active.
-  const hasLibrary = Boolean(onOpenLibrary)
-  const libraryIndex = hasLibrary ? games.length : -1
-  const libraryActive = index === libraryIndex
+  // The rail's trailing entries are non-game "destination" affordances: Surprise
+  // (a random pick) first, then Library (browse everything) as the escape hatch.
+  // Each occupies one focus slot past the games, in order, so the focus index
+  // runs past `games.length` when an affordance is active.
+  const affordances = useMemo<readonly RailAffordance[]>(
+    () => [
+      ...(onSurprise
+        ? [{ kind: "surprise" as const, onConfirm: onSurprise }]
+        : []),
+      ...(onOpenLibrary
+        ? [{ kind: "library" as const, onConfirm: onOpenLibrary }]
+        : []),
+    ],
+    [onSurprise, onOpenLibrary],
+  )
+  const activeAffordance =
+    index >= games.length ? affordances[index - games.length] : undefined
   const [backdropArtUrl, setBackdropArtUrl] = useState(
     () => game?.wideArtUrl ?? "",
   )
-  // Focusing the Library keeps the last game's art as an ambient backdrop
+  // Focusing an affordance keeps the last game's art as an ambient backdrop
   // instead of clearing it, so the scene stays cinematic while browsing off the
   // games.
-  const focusBackdropUrl = libraryActive
+  const focusBackdropUrl = activeAffordance
     ? backdropArtUrl
     : (game?.wideArtUrl ?? "")
   const tileImageWindow = useMemo(
@@ -234,10 +259,10 @@ export function ShiftCinematicHome({
     status?.tone === "failed" || status?.tone === "unavailable"
 
   const confirm = useCallback(() => {
-    // The Library slot owns its confirm regardless of any lingering launch
-    // status, so focusing it and pressing A always opens the library.
-    if (libraryActive) {
-      onOpenLibrary?.()
+    // An affordance slot owns its confirm regardless of any lingering launch
+    // status, so focusing it and pressing A always fires its action.
+    if (activeAffordance) {
+      activeAffordance.onConfirm()
       return
     }
     if (status) {
@@ -246,7 +271,7 @@ export function ShiftCinematicHome({
     }
     const focused = games[index]
     if (focused) onLaunch?.(focused.id)
-  }, [libraryActive, onOpenLibrary, status, onRetry, games, index, onLaunch])
+  }, [activeAffordance, status, onRetry, games, index, onLaunch])
 
   const dismiss = useCallback(() => {
     if (showActions) onDismiss?.()
@@ -309,16 +334,22 @@ export function ShiftCinematicHome({
       ?.focus({ preventScroll: true })
   }, [])
 
-  // With the Library affordance a game may not sit under focus (the trailing
-  // slot has no game); only bail when neither a game nor the Library is active.
-  if (!game && !libraryActive) return null
+  // With a trailing affordance a game may not sit under focus (the slot has no
+  // game); only bail when neither a game nor an affordance is active.
+  if (!game && !activeAffordance) return null
   const resuming = Boolean(game?.lastPlayedLabel)
 
   // The legend's hint set changes with focus and launch state: the Library slot
   // shows a single Open; browsing shows Play/Options/Favorite; a shown failure
   // shows Retry/Back; a non-actionable status (launching/launched) shows none.
-  const legendHints: readonly ShiftCineHintSpec[] | null = libraryActive
-    ? [{ glyph: "A", label: "Open", primary: true }]
+  const legendHints: readonly ShiftCineHintSpec[] | null = activeAffordance
+    ? [
+        {
+          glyph: "A",
+          label: activeAffordance.kind === "surprise" ? "Shuffle" : "Open",
+          primary: true,
+        },
+      ]
     : status
       ? showActions
         ? [
@@ -342,7 +373,7 @@ export function ShiftCinematicHome({
     >
       <ShiftCineBackdrop
         artUrl={backdropArtUrl}
-        cooled={!libraryActive && status?.tone === "failed"}
+        cooled={!activeAffordance && status?.tone === "failed"}
       />
 
       <ShiftStatusBar
@@ -354,7 +385,9 @@ export function ShiftCinematicHome({
 
       <div className="shift-cine-stage" ref={stageRef}>
         <div className="shift-cine-midrow">
-          {libraryActive ? (
+          {activeAffordance?.kind === "surprise" ? (
+            <ShiftCineSurpriseHero />
+          ) : activeAffordance?.kind === "library" ? (
             <ShiftCineLibraryHero />
           ) : game ? (
             <ShiftCineHero game={game} status={status} resuming={resuming} />
@@ -374,14 +407,29 @@ export function ShiftCinematicHome({
           onTileFocus={setIndex}
           onTileActivate={activate}
           cap={
-            hasLibrary ? (
-              <ShiftCineLibraryTile
-                index={games.length}
-                focused={libraryActive}
-                onFocus={() => setIndex(games.length)}
-                onActivate={() => activate(games.length)}
-              />
-            ) : undefined
+            affordances.length > 0
+              ? affordances.map((affordance, i) => {
+                  const slot = games.length + i
+                  const affordanceFocused = index === slot
+                  return affordance.kind === "surprise" ? (
+                    <ShiftCineSurpriseTile
+                      key="surprise"
+                      index={slot}
+                      focused={affordanceFocused}
+                      onFocus={() => setIndex(slot)}
+                      onActivate={() => activate(slot)}
+                    />
+                  ) : (
+                    <ShiftCineLibraryTile
+                      key="library"
+                      index={slot}
+                      focused={affordanceFocused}
+                      onFocus={() => setIndex(slot)}
+                      onActivate={() => activate(slot)}
+                    />
+                  )
+                })
+              : undefined
           }
         />
       </div>

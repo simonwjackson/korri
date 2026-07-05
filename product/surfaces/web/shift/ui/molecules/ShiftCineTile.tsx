@@ -16,6 +16,8 @@ export interface ShiftCineTileProps {
   readonly aspectRatio?: string
   readonly focused?: boolean
   readonly renderImage?: boolean
+  /** Flags a discovery/recommended pick — draws a small "Fresh" corner marker. */
+  readonly fresh?: boolean
   readonly onFocus: () => void
   readonly onActivate: () => void
 }
@@ -27,6 +29,7 @@ export function ShiftCineTile({
   aspectRatio,
   focused,
   renderImage = true,
+  fresh,
   onFocus,
   onActivate,
 }: ShiftCineTileProps) {
@@ -43,6 +46,7 @@ export function ShiftCineTile({
       onClick={onActivate}
     >
       {renderImage ? <ShiftCoverArt src={artUrl} loading="eager" /> : null}
+      {fresh ? <span className="shift-cine-tile-fresh">Fresh</span> : null}
     </button>
   )
 }

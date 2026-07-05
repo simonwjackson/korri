@@ -80,6 +80,7 @@ export function ShiftCineHero({
                 lastPlayedLabel={game.lastPlayedLabel}
                 playtimeLabel={game.playtimeLabel}
                 favorite={game.favorite}
+                fresh={game.fresh}
               />
             </>
           )}

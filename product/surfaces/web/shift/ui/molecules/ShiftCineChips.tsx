@@ -9,6 +9,8 @@ export interface ShiftCineChipsProps {
   readonly lastPlayedLabel?: string
   readonly playtimeLabel?: string
   readonly favorite?: boolean
+  /** Marks a fresh/recommended pick — leads the row with a reason chip. */
+  readonly fresh?: boolean
 }
 
 export function ShiftCineChips({
@@ -17,9 +19,11 @@ export function ShiftCineChips({
   lastPlayedLabel,
   playtimeLabel,
   favorite,
+  fresh,
 }: ShiftCineChipsProps) {
   return (
     <div className="shift-cine-chips">
+      {fresh ? <ShiftCineChip tone="reason">Fresh pick</ShiftCineChip> : null}
       {genre ? <ShiftCineChip>{genre}</ShiftCineChip> : null}
       {developer ? <ShiftCineChip>{developer}</ShiftCineChip> : null}
       {lastPlayedLabel ? (

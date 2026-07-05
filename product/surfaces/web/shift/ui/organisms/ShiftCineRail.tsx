@@ -14,6 +14,8 @@ export interface ShiftCineRailGame {
   readonly title: string
   readonly tileArtUrl: string
   readonly tileArtAspectRatio?: string
+  /** Discovery/recommended pick — surfaces a "Fresh" marker on the tile. */
+  readonly fresh?: boolean
 }
 
 /**
@@ -62,6 +64,7 @@ export function ShiftCineRail({
             title={entry.title}
             artUrl={entry.tileArtUrl}
             aspectRatio={entry.tileArtAspectRatio}
+            fresh={entry.fresh}
             focused={i === index}
             renderImage={
               !imageWindow || (i >= imageWindow.start && i <= imageWindow.end)
