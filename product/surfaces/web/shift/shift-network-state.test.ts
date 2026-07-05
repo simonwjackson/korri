@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { deviceStateFromFacts } from "@platform/device/device-facts"
 import {
+  shiftDeviceNetworkStateForNetworkReading,
   shiftNetworkDisplayLabel,
   shiftNetworkReadingForDeviceState,
   shiftNetworkReadingForValue,
@@ -69,5 +70,22 @@ describe("shift network state", () => {
     expect(shiftNetworkReadingForValue({ _tag: "Unknown" })).toEqual({
       _tag: "Unknown",
     })
+  })
+
+  it("maps lab network readings into device network facts", () => {
+    expect(
+      shiftDeviceNetworkStateForNetworkReading(
+        { _tag: "Connected", strengthPercent: 44 },
+        "now",
+      ),
+    ).toEqual({
+      _tag: "Connected",
+      kind: "wifi",
+      strengthPercent: 44,
+      observedAt: "now",
+    })
+    expect(
+      shiftDeviceNetworkStateForNetworkReading({ _tag: "Disconnected" }, "now"),
+    ).toEqual({ _tag: "Disconnected", observedAt: "now" })
   })
 })

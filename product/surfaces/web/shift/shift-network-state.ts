@@ -1,4 +1,4 @@
-import type { DeviceState } from "@platform/device/device-facts"
+import type { DeviceNetworkState, DeviceState } from "@platform/device/device-facts"
 import * as Atom from "effect/unstable/reactivity/Atom"
 
 export type ShiftNetworkReading =
@@ -43,6 +43,25 @@ export function shiftNetworkReadingForValue(
     }
   }
   return DEFAULT_SHIFT_NETWORK_READING
+}
+
+export function shiftDeviceNetworkStateForNetworkReading(
+  reading: ShiftNetworkReading,
+  observedAt = new Date().toISOString(),
+): DeviceNetworkState {
+  switch (reading._tag) {
+    case "Connected":
+      return {
+        _tag: "Connected",
+        kind: "wifi",
+        strengthPercent: reading.strengthPercent,
+        observedAt,
+      }
+    case "Disconnected":
+      return { _tag: "Disconnected", observedAt }
+    case "Unknown":
+      return { _tag: "Unknown", observedAt }
+  }
 }
 
 export function shiftNetworkReadingForDeviceState(

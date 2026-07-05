@@ -76,6 +76,9 @@ describe("shift lab surface adapter", () => {
     expect(atoms).toContain(deviceStateAtom)
     expect(atoms).toContain(shiftClockIsoAtom)
     expect(atoms).toContain(shiftNetworkReadingAtom)
+    expect(initialValues.find(([atom]) => atom === deviceStateAtom)?.[1]).toMatchObject(
+      { network: { _tag: "Connected" } },
+    )
   })
 
   it("reports unknown surface adapters clearly", () => {
@@ -297,9 +300,13 @@ describe("shift home state axes", () => {
         percent: 12,
         charging: true,
       })
-      expect(registry.get(shiftNetworkReadingAtom)).toEqual({
+      expect(registry.get(deviceStateAtom).network).toEqual({
         _tag: "Disconnected",
+        observedAt: expect.any(String),
       })
+      expect(registry.get(shiftNetworkReadingAtom)).toEqual(
+        DEFAULT_SHIFT_NETWORK_READING,
+      )
     } finally {
       unregister()
       registry.dispose()
@@ -343,10 +350,16 @@ describe("shift home state axes", () => {
         _tag: "Ready",
         percent: 9,
       })
-      expect(registryA.get(shiftNetworkReadingAtom)).toEqual({
+      expect(registryA.get(deviceStateAtom).network).toMatchObject({
         _tag: "Disconnected",
       })
+      expect(registryA.get(shiftNetworkReadingAtom)).toEqual(
+        DEFAULT_SHIFT_NETWORK_READING,
+      )
       expect(registryB.get(deviceStateAtom).battery).toMatchObject({
+        _tag: "Unknown",
+      })
+      expect(registryB.get(deviceStateAtom).network).toMatchObject({
         _tag: "Unknown",
       })
       expect(registryB.get(shiftNetworkReadingAtom)).toEqual(

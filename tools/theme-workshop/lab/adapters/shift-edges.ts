@@ -1,3 +1,4 @@
+import { deviceStateFromFacts, unknownDeviceState } from "@platform/device/device-facts"
 import { deviceStateAtom } from "@platform/react/device/device-atoms"
 import {
   DEFAULT_SHIFT_CLOCK_ISO,
@@ -6,7 +7,7 @@ import {
 import { FOREGROUND_SESSION_GATE_STATE_TAGS } from "@product/surfaces/web/shift/shift-foreground-preview"
 import {
   DEFAULT_SHIFT_NETWORK_READING,
-  shiftNetworkReadingAtom,
+  shiftDeviceNetworkStateForNetworkReading,
   shiftNetworkReadingForValue,
 } from "@product/surfaces/web/shift/shift-network-state"
 import {
@@ -50,9 +51,17 @@ export function shiftDeviceEvents(): readonly LabSurfaceEvent[] {
       const state = shiftDeviceStateForPowerReading(
         shiftPowerReadingForValue(payload),
       )
-      eachLabTargetRegistry(context?.scopeId, ({ registry }) =>
-        registry.set(deviceStateAtom, state),
-      )
+      eachLabTargetRegistry(context?.scopeId, ({ registry }) => {
+        const current = registry.get(deviceStateAtom) ?? unknownDeviceState()
+        registry.set(
+          deviceStateAtom,
+          deviceStateFromFacts({
+            battery: state.battery,
+            network: current.network,
+            observedAt: state.observedAt,
+          }),
+        )
+      })
     },
   }
   const network: LabSurfaceEvent = {
@@ -62,9 +71,18 @@ export function shiftDeviceEvents(): readonly LabSurfaceEvent[] {
     defaultPayload: DEFAULT_SHIFT_NETWORK_READING,
     emit: (payload, context) => {
       const reading = shiftNetworkReadingForValue(payload)
-      eachLabTargetRegistry(context?.scopeId, ({ registry }) =>
-        registry.set(shiftNetworkReadingAtom, reading),
-      )
+      const network = shiftDeviceNetworkStateForNetworkReading(reading)
+      eachLabTargetRegistry(context?.scopeId, ({ registry }) => {
+        const current = registry.get(deviceStateAtom) ?? unknownDeviceState()
+        registry.set(
+          deviceStateAtom,
+          deviceStateFromFacts({
+            battery: current.battery,
+            network,
+            observedAt: network.observedAt,
+          }),
+        )
+      })
     },
   }
   return [battery, network]

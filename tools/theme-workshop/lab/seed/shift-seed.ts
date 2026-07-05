@@ -1,4 +1,5 @@
 import { EntrySource } from "@platform/api/rpc/entry-source-core"
+import { deviceStateFromFacts } from "@platform/device/device-facts"
 import { catalogFactsFromLibrarySourceLayer } from "@platform/catalog/catalog-facts-from-library"
 import type { CatalogEntry } from "@platform/catalog/catalog-facts-source"
 import { makeCatalogStateSourceLayers } from "@platform/catalog/catalog-state-samples"
@@ -28,6 +29,7 @@ import {
 import { shiftForegroundSourceLayers } from "@product/surfaces/web/shift/shift-foreground-preview"
 import {
   DEFAULT_SHIFT_NETWORK_READING,
+  shiftDeviceNetworkStateForNetworkReading,
   shiftNetworkReadingAtom,
 } from "@product/surfaces/web/shift/shift-network-state"
 import {
@@ -71,10 +73,21 @@ export async function makeSeedInitialValues() {
 /** Resting battery device-fact the lab seeds so live Home shows a battery before
  * any battery event is fired (production seeds this from the device-state
  * stream's current-state-first delivery). */
-const SHIFT_SEED_DEVICE_STATE = shiftDeviceStateForPowerReading(
+const SHIFT_SEED_OBSERVED_AT = "2026-07-01T00:00:00.000Z"
+
+const SHIFT_SEED_POWER_STATE = shiftDeviceStateForPowerReading(
   DEFAULT_SHIFT_POWER_READING,
-  "2026-07-01T00:00:00.000Z",
+  SHIFT_SEED_OBSERVED_AT,
 )
+
+const SHIFT_SEED_DEVICE_STATE = deviceStateFromFacts({
+  battery: SHIFT_SEED_POWER_STATE.battery,
+  network: shiftDeviceNetworkStateForNetworkReading(
+    DEFAULT_SHIFT_NETWORK_READING,
+    SHIFT_SEED_OBSERVED_AT,
+  ),
+  observedAt: SHIFT_SEED_OBSERVED_AT,
+})
 
 export type SeedInitialValues = Awaited<
   ReturnType<typeof makeSeedInitialValues>
