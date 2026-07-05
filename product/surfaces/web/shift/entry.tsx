@@ -31,6 +31,7 @@ import { createHashHistory } from "@tanstack/history"
 import { Effect, Layer } from "effect"
 import { useEffect } from "react"
 import { mountShift } from "./mount-shift"
+import { ShiftClockBridge } from "./ShiftClockBridge"
 
 export const shiftTheme: KorriSurfaceEntrypoint = {
   id: "shift",
@@ -77,7 +78,12 @@ function ShiftBridgeRuntimeChrome({
   readonly liveUsbArtifact?: LiveUsbArtifact
 }) {
   useLibraryRefreshOnConfigChanged()
-  return <LiveUsbArtifactNotice artifact={liveUsbArtifact} />
+  return (
+    <>
+      <ShiftClockBridge />
+      <LiveUsbArtifactNotice artifact={liveUsbArtifact} />
+    </>
+  )
 }
 
 export function readDualScreenConfig(target: Window):

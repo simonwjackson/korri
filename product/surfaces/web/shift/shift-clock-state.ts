@@ -33,6 +33,22 @@ export function shiftClockIsoForValue(
     : date.toISOString()
 }
 
+/**
+ * Encode a real instant as the Shift clock's display value. The status-bar
+ * label reads UTC accessors (see `shiftClockLabelForIso`), and the presets
+ * follow the same convention: they carry the intended *displayed* wall-clock in
+ * the ISO's UTC fields (e.g. `16:24Z` renders "4:24 PM"). A live reading must
+ * match, so we shift the instant by the local timezone offset — the resulting
+ * ISO's UTC hours/minutes equal the device's local wall-clock, and the single
+ * UTC formatting path keeps rendering the right time.
+ */
+export function shiftClockIsoForInstant(
+  now: Date,
+  offsetMinutes: number = now.getTimezoneOffset(),
+): ShiftClockIso {
+  return new Date(now.getTime() - offsetMinutes * 60_000).toISOString()
+}
+
 export function shiftClockLabelForIso(value: string | undefined): string {
   const date = new Date(shiftClockIsoForValue(value))
   const hour = date.getUTCHours()
