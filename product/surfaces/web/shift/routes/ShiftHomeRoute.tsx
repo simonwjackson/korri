@@ -235,6 +235,7 @@ function NavigatingReadyBody({
   const network = shiftNetworkReadingForDeviceState(deviceState)
   const battery = shiftBatteryPropsForPowerDisplay(
     shiftPowerDisplayForDeviceState(deviceState),
+    { showPercent: true },
   )
   const liveForeground = foregroundStateFromAtom(
     useAtomValue(foregroundSessionGateStateAtom),

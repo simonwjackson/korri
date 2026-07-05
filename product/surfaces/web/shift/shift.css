@@ -471,6 +471,19 @@
 	height: 1.3em;
 }
 
+[data-shift-home] .shift-cine-battery {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-1);
+	white-space: nowrap;
+}
+
+[data-shift-home] .shift-cine-battery-percent {
+	font-size: var(--shift-text-fine);
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
 [data-shift-home] .shift-cine-avatar {
 	width: 2.1em;
 	height: 2.1em;

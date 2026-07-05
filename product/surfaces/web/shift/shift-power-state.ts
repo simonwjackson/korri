@@ -111,11 +111,13 @@ export function shiftPowerReadingForDeviceState(
 
 export function shiftBatteryPropsForPowerDisplay(
   display: ShiftPowerDisplay,
+  options: { readonly showPercent?: boolean } = {},
 ): ShiftBatteryProps | undefined {
   if (display._tag !== "Ready") return undefined
   return {
     level: batteryLevelForPercent(display.percent),
     charging: display.charging,
+    ...(options.showPercent ? { percent: display.percent } : {}),
   }
 }
 
