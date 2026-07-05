@@ -91,3 +91,17 @@ The gamescope-korri 3.16.23 nested compositor wrapping Moonlight intermittently 
 - Causation still unconfirmed: needs a controlled harness (run the nested
   gamescope+moonlight with vs without `-input event11`) to prove the pad triggers
   it. Deferred while operator is away (harness could wedge the kiosk).
+
+## Hypothesis DISPROVEN 2026-07-05 (standalone harness)
+
+Ran the exact nested gamescope + moonlight command STANDALONE (WAYLAND_DISPLAY=wayland-1,
+hub still up, no sessiond handoff): `-app "Korri Stream" -input /dev/input/event11 -codec
+h264 -platform v4l2m2m`. It reached the decode stage (v4l2m2m stream=1280x720), logged the
+SAME "Unsupported maximum keycode 709, clipping" warning, and did NOT abort — it streamed
+cleanly for the full 35s until timeout, then cleaned up gracefully. So the keycode-709 /
+Xbox-pad (event11) is NOT the trigger; that xkb warning is benign as stated. The crash is a
+kiosk-path TEARDOWN/HANDOFF RACE (renderer-stop + nested gamescope spawn, and/or the real
+launch's `-O DSI-2` physical-output grab colliding with the outer compositor), which the
+clean standalone harness does not exercise. Re-centers the fix on launch sequencing /
+serializing the hub->stream handoff, matching the original teardown-race note. Next: capture
+a real UI launch's timing (renderer-stop vs gamescope-spawn vs X-socket release).
