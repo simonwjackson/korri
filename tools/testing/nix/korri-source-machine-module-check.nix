@@ -117,6 +117,10 @@ let
       && cfg.services.korri.input.provider.enable
       && cfg.services.korri.sessiond.role == "source-machine"
     ))
+    (check "exported source-machine module enables stream-control source RPCs" (
+      cfg.services.korri.daemon.streamControl.enable
+      && daemonEnv.KORRI_STREAM_CONTROL_ENABLED == "1"
+    ))
     (check "exported source-machine module enables Korri tailnet posture" (
       cfg.services.korri.tailnet.enable
       && cfg.services.tailscale.enable

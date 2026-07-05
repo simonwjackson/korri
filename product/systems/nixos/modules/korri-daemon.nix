@@ -481,7 +481,7 @@ in
       enable = mkOption {
         type = types.bool;
         default = false;
-        description = "Enable known-game stream prepare RPCs. Keep disabled unless the host is intentionally exposed on a trusted LAN/VPN.";
+        description = "Enable known-game stream prepare RPCs. Defaults on for streaming hosts; keep disabled unless the host is intentionally exposed on a trusted LAN/VPN.";
       };
     };
 
@@ -652,6 +652,8 @@ in
   };
 
   config = mkIf cfg.enable {
+    services.korri.daemon.streamControl.enable = lib.mkDefault cfg.streaming.enable;
+
     assertions = [
       {
         assertion = !scoutReleaseScan.enable || isAbsolutePath scoutConfigPath;
