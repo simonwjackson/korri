@@ -1,4 +1,7 @@
-import type { DeviceState } from "@platform/device/device-facts"
+import {
+  type DeviceState,
+  deviceStateFromBattery,
+} from "@platform/device/device-facts"
 
 /**
  * Pico's power state: the canonical pico power-reading <-> Korrid device-state
@@ -57,9 +60,8 @@ export function picoDeviceStateForPowerReading(
   reading: PicoPowerReading,
   observedAt: string = new Date().toISOString(),
 ): DeviceState {
-  return {
-    observedAt,
-    battery: {
+  return deviceStateFromBattery(
+    {
       _tag: "Ready",
       percent: reading.percent,
       status: reading.charging ? "Charging" : "Discharging",
@@ -67,7 +69,8 @@ export function picoDeviceStateForPowerReading(
       supplies: [],
       observedAt,
     },
-  }
+    observedAt,
+  )
 }
 
 export function picoPowerDisplayForDeviceState(

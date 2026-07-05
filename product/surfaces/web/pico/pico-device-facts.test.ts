@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import type { DeviceState } from "@platform/device/device-facts"
+import {
+  type DeviceState,
+  deviceStateFromBattery,
+} from "@platform/device/device-facts"
 import {
   DEFAULT_PICO_CLOCK_ISO,
   picoClockIsoForValue,
@@ -33,22 +36,19 @@ describe("pico power state", () => {
   })
 
   it("maps a Stale battery to its last-known reading", () => {
-    const state: DeviceState = {
-      observedAt: OBSERVED,
-      battery: {
-        _tag: "Stale",
-        lastKnown: {
-          _tag: "Ready",
-          percent: 30,
-          status: "Discharging",
-          charging: false,
-          supplies: [],
-          observedAt: OBSERVED,
-        },
-        message: "stale",
+    const state: DeviceState = deviceStateFromBattery({
+      _tag: "Stale",
+      lastKnown: {
+        _tag: "Ready",
+        percent: 30,
+        status: "Discharging",
+        charging: false,
+        supplies: [],
         observedAt: OBSERVED,
       },
-    }
+      message: "stale",
+      observedAt: OBSERVED,
+    })
     expect(picoPowerDisplayForDeviceState(state)).toEqual({
       _tag: "Stale",
       percent: 30,
@@ -57,14 +57,16 @@ describe("pico power state", () => {
   })
 
   it("hides on NoBattery and is Unknown on ReadError", () => {
-    const noBattery: DeviceState = {
+    const noBattery: DeviceState = deviceStateFromBattery({
+      _tag: "NoBattery",
+      supplies: [],
       observedAt: OBSERVED,
-      battery: { _tag: "NoBattery", supplies: [], observedAt: OBSERVED },
-    }
-    const readError: DeviceState = {
+    })
+    const readError: DeviceState = deviceStateFromBattery({
+      _tag: "ReadError",
+      message: "boom",
       observedAt: OBSERVED,
-      battery: { _tag: "ReadError", message: "boom", observedAt: OBSERVED },
-    }
+    })
     expect(picoPowerDisplayForDeviceState(noBattery)).toEqual({
       _tag: "Hidden",
     })
