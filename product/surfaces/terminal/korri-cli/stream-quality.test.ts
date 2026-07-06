@@ -15,6 +15,7 @@ import {
   resolveMoonlightControlRoot,
   runStreamAdaptiveSet,
   runStreamAdaptiveShow,
+  runStreamAdaptiveWatch,
   runStreamSet,
   runStreamShow,
   type StreamQualityIo,
@@ -464,6 +465,47 @@ describe("runStreamAdaptiveShow", () => {
     expect(code).toBe(0)
     expect(out.join("\n")).toContain("adaptive:    enabled")
     expect(out.join("\n")).toContain("bitrate=..12000")
+  })
+
+  test("prints JSON adaptive state for scripts", async () => {
+    const out: string[] = []
+    const code = await runStreamAdaptiveShow({
+      json: true,
+      client: {
+        getState: async () => ({ adaptive: { status: "disabled" } }),
+        applyAction: async () => ({}),
+        setBrightness: async () => ({}),
+      },
+      write: line => out.push(line),
+    })
+
+    expect(code).toBe(0)
+    expect(JSON.parse(out.join("\n"))).toEqual({ adaptive: { status: "disabled" } })
+  })
+})
+
+describe("runStreamAdaptiveWatch", () => {
+  test("polls adaptive state", async () => {
+    const out: string[] = []
+    let reads = 0
+    const code = await runStreamAdaptiveWatch({
+      intervalMs: 0,
+      iterations: 2,
+      client: {
+        getState: async () => {
+          reads += 1
+          return { adaptive: { status: "disabled" } }
+        },
+        applyAction: async () => ({}),
+        setBrightness: async () => ({}),
+      },
+      write: line => out.push(line),
+      sleep: async () => {},
+    })
+
+    expect(code).toBe(0)
+    expect(reads).toBe(2)
+    expect(out.join("\n")).toContain("adaptive:    disabled")
   })
 })
 

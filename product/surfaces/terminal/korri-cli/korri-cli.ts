@@ -37,6 +37,7 @@ import {
   parseResolution,
   runStreamAdaptiveSet,
   runStreamAdaptiveShow,
+  runStreamAdaptiveWatch,
   runStreamSet,
   runStreamShow,
 } from "./stream-quality"
@@ -53,6 +54,8 @@ const streamAdaptiveFlags = {
   maxLatency: Flag.string("max-latency").pipe(Flag.optional),
   minFps: Flag.string("min-fps").pipe(Flag.optional),
   dryRun: Flag.boolean("dry-run").pipe(Flag.withDefault(false)),
+  watch: Flag.boolean("watch").pipe(Flag.withDefault(false)),
+  json: Flag.boolean("json").pipe(Flag.withDefault(false)),
 }
 
 const streamShowCommand = Command.make(
@@ -136,14 +139,16 @@ const streamResolutionCommand = Command.make(
 const streamCommand = Command.make(
   "stream",
   { socket: streamSocketFlag, ...streamAdaptiveFlags },
-  ({ socket: _socket, dryRun, ...flags }) =>
+  ({ socket: _socket, dryRun, watch, json, ...flags }) =>
     Effect.gen(function* () {
       const args = streamAdaptiveArgs(flags)
       const client = createEvierStreamControlRpcClient()
       const exitCode = yield* Effect.promise(() =>
         args.length > 0
-          ? runStreamAdaptiveSet(args, { client, dryRun })
-          : runStreamAdaptiveShow({ client }),
+          ? runStreamAdaptiveSet(args, { client, dryRun, json })
+          : watch
+            ? runStreamAdaptiveWatch({ client, json })
+            : runStreamAdaptiveShow({ client, json }),
       )
       process.exitCode = exitCode
     }),

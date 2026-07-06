@@ -77,8 +77,12 @@ export type StreamQualityChange =
 export interface StreamAdaptiveCliIo {
   readonly client?: StreamControlClient
   readonly dryRun?: boolean
+  readonly json?: boolean
+  readonly intervalMs?: number
+  readonly iterations?: number
   readonly write?: (line: string) => void
   readonly writeError?: (line: string) => void
+  readonly sleep?: (ms: number) => Promise<void>
 }
 
 export interface StreamQualityIo {
@@ -137,7 +141,34 @@ export async function runStreamAdaptiveShow(
     return 1
   }
   try {
-    write(formatAdaptiveState(await client.getState()))
+    const state = await client.getState()
+    write(io.json ? JSON.stringify(state) : formatAdaptiveState(state))
+    return 0
+  } catch (error) {
+    writeError(describeControlError(error))
+    return 1
+  }
+}
+
+export async function runStreamAdaptiveWatch(
+  io: StreamAdaptiveCliIo = {},
+): Promise<number> {
+  const write = io.write ?? (line => console.log(line))
+  const writeError = io.writeError ?? (line => console.error(line))
+  const sleep = io.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)))
+  const client = io.client
+  if (!client) {
+    writeError("stream-control RPC client is not available")
+    return 1
+  }
+  const iterations = io.iterations ?? Number.POSITIVE_INFINITY
+  const intervalMs = io.intervalMs ?? 1_000
+  try {
+    for (let i = 0; i < iterations; i += 1) {
+      const state = await client.getState()
+      write(io.json ? JSON.stringify(state) : formatAdaptiveState(state))
+      if (i + 1 < iterations) await sleep(intervalMs)
+    }
     return 0
   } catch (error) {
     writeError(describeControlError(error))
