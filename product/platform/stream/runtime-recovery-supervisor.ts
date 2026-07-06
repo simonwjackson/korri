@@ -77,6 +77,12 @@ export type RuntimeRecoveryEvent =
       readonly reason: "failed" | "timed-out"
       readonly detail: "no-known-good" | "revert-failed"
     }
+  | {
+      readonly kind: "assumed-applied"
+      readonly command: RuntimeMutationCommand
+      readonly value: RuntimeSettingValue
+      readonly reason: "result-timeout"
+    }
 
 export interface RuntimeRecoverySupervisorOptions {
   readonly port: RuntimeRecoveryControlPort
@@ -90,6 +96,13 @@ export interface RuntimeRecoverySupervisorOptions {
   readonly baseline?: Readonly<
     Partial<Record<RuntimeMutationCommand, RuntimeSettingValue>>
   >
+  /**
+   * Some Moonlight builds apply accepted scalar commands but do not emit the
+   * terminal command-result event. Do not let adaptive deadlock forever in that
+   * state: after this window, promote the accepted value and surface that the
+   * result was assumed rather than confirmed.
+   */
+  readonly pendingResultTimeoutMs?: number
 }
 
 export interface RuntimeRecoverySupervisor {
@@ -110,6 +123,7 @@ export interface RuntimeRecoverySupervisor {
  * are ignored — the supervisor only recovers changes it drove.
  */
 const MAX_EARLY_RESULTS = 32
+const DEFAULT_PENDING_RESULT_TIMEOUT_MS = 5_000
 
 function trimEarlyResults(results: Map<string, RuntimeRecoveryResult>): void {
   while (results.size > MAX_EARLY_RESULTS) {
@@ -128,6 +142,9 @@ export function createRuntimeRecoverySupervisor(
     knownGood: { ...(baseline ?? {}) },
   }
   const earlyResults = new Map<string, RuntimeRecoveryResult>()
+  const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const pendingResultTimeoutMs =
+    options.pendingResultTimeoutMs ?? DEFAULT_PENDING_RESULT_TIMEOUT_MS
 
   const advance = (
     input: Parameters<typeof reduceRuntimeRecovery>[1],
@@ -193,17 +210,52 @@ export function createRuntimeRecoverySupervisor(
     const requestId = await issue(command, value)
     if (requestId !== undefined) {
       advance({ kind: "sent", requestId, command, value, isRevert })
-      const earlyResult = earlyResults.get(String(requestId))
+      const key = String(requestId)
+      const earlyResult = earlyResults.get(key)
       if (earlyResult) {
-        earlyResults.delete(String(requestId))
-        advance({
-          kind: "result",
-          requestId: earlyResult.requestId,
-          command: earlyResult.command,
-          status: earlyResult.status,
-        })
+        earlyResults.delete(key)
+        applyResult(earlyResult)
+      } else {
+        armPendingTimeout(key, requestId, command, value)
       }
     }
+  }
+
+  function armPendingTimeout(
+    key: string,
+    requestId: RuntimeRecoveryRequestId,
+    command: RuntimeMutationCommand,
+    value: RuntimeSettingValue,
+  ): void {
+    if (pendingResultTimeoutMs <= 0) return
+    const timer = setTimeout(() => {
+      pendingTimers.delete(key)
+      if (!(key in state.pending)) return
+      onEvent({
+        kind: "assumed-applied",
+        command,
+        value,
+        reason: "result-timeout",
+      })
+      advance({ kind: "result", requestId, command, status: "applied" })
+    }, pendingResultTimeoutMs)
+    timer.unref?.()
+    pendingTimers.set(key, timer)
+  }
+
+  function applyResult(result: RuntimeRecoveryResult): void {
+    const key = String(result.requestId)
+    const timer = pendingTimers.get(key)
+    if (timer) {
+      clearTimeout(timer)
+      pendingTimers.delete(key)
+    }
+    advance({
+      kind: "result",
+      requestId: result.requestId,
+      command: result.command,
+      status: result.status,
+    })
   }
 
   const unsubscribe = port.onResult(result => {
@@ -213,12 +265,7 @@ export function createRuntimeRecoverySupervisor(
       trimEarlyResults(earlyResults)
       return
     }
-    advance({
-      kind: "result",
-      requestId: result.requestId,
-      command: result.command,
-      status: result.status,
-    })
+    applyResult(result)
   })
 
   return {
@@ -238,6 +285,10 @@ export function createRuntimeRecoverySupervisor(
       ),
     hasPending: () => hasPendingRuntimeRecoveryCommand(state),
     knownGood: () => currentRuntimeRecoveryKnownGood(state),
-    close: () => unsubscribe(),
+    close: () => {
+      unsubscribe()
+      for (const timer of pendingTimers.values()) clearTimeout(timer)
+      pendingTimers.clear()
+    },
   }
 }

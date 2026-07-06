@@ -109,6 +109,34 @@ describe("createRuntimeRecoverySupervisor", () => {
     expect(events).toEqual([])
   })
 
+  it("assumes an accepted command applied when no terminal result arrives", async () => {
+    const events: RuntimeRecoveryEvent[] = []
+    const harness = makePort()
+    const sup = createRuntimeRecoverySupervisor({
+      port: harness.port,
+      onEvent: e => events.push(e),
+      pendingResultTimeoutMs: 1,
+    })
+
+    await sup.setBitrate(12_000)
+    expect(sup.hasPending()).toBe(true)
+    await new Promise(resolve => setTimeout(resolve, 5))
+
+    expect(sup.hasPending()).toBe(false)
+    expect(sup.knownGood()["runtime.setBitrate"]).toEqual({
+      kind: "scalar",
+      value: 12_000,
+    })
+    expect(events).toEqual([
+      {
+        kind: "assumed-applied",
+        command: "runtime.setBitrate",
+        value: { kind: "scalar", value: 12_000 },
+        reason: "result-timeout",
+      },
+    ])
+  })
+
   it("auto-reverts a stalled change to the last applied known-good", async () => {
     const events: RuntimeRecoveryEvent[] = []
     const harness = makePort()
