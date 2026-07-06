@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import type { StreamBoundaries } from "./stream-adaptive-boundaries"
 import type { RuntimeRecoverySupervisor } from "./runtime-recovery-supervisor"
 import { createStreamAdaptiveRunner } from "./stream-adaptive-runner"
 import type { StreamHealthSummary } from "./stream-health"
@@ -40,6 +41,7 @@ function makeHarness(
     readonly streaming?: boolean
     readonly enabled?: boolean
     readonly rejectSet?: boolean
+    readonly boundaries?: StreamBoundaries
   } = {},
 ) {
   const events: unknown[] = []
@@ -80,6 +82,7 @@ function makeHarness(
       baselineResolution: { width: 1920, height: 1080 },
     },
     objectiveBias: 0.5,
+    boundaries: input.boundaries,
     isStreaming: () => input.streaming ?? true,
     nowMs: () => 1_500,
     onEvent: event => events.push(event),
@@ -126,13 +129,13 @@ describe("createStreamAdaptiveRunner", () => {
     expect(events).toContainEqual({ kind: "dormant", reason: "not-streaming" })
   })
 
-  it("dispatches only bitrate first when multiple dimensions are targeted", async () => {
+  it("dispatches all targeted dimensions from one decision tick", async () => {
     const { runner, calls, events } = makeHarness({
       health: summary({
-        bitrateDeliveryRatio: 0.65,
-        lossFraction: numeric(0.06),
-        rttMs: numeric(120, "rising"),
-        queueDepth: numeric(8),
+        bitrateDeliveryRatio: 0.25,
+        lossFraction: numeric(0.12, "rising"),
+        rttMs: numeric(140, "rising"),
+        queueDepth: numeric(9, "rising"),
         decodeTimeMs: numeric(35),
         frameDropFraction: 0.12,
       }),
@@ -140,11 +143,12 @@ describe("createStreamAdaptiveRunner", () => {
 
     await runner.tick()
 
-    expect(calls).toHaveLength(1)
-    expect(calls[0]).toStartWith("bitrate:")
-    expect(
-      events.find(event => (event as { kind?: string }).kind === "dispatched"),
-    ).toBeTruthy()
+    expect(calls.some(call => call.startsWith("bitrate:"))).toBe(true)
+    expect(calls.some(call => call.startsWith("fps:"))).toBe(true)
+    expect(calls.some(call => call.startsWith("resolution:"))).toBe(true)
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "decision", mode: "shed" }),
+    )
   })
 
   it("emits an error event when dispatch rejects", async () => {
@@ -160,6 +164,27 @@ describe("createStreamAdaptiveRunner", () => {
       command: "runtime.setBitrate",
       message: "dispatch failed",
     })
+  })
+
+  it("honors pinned boundaries before dispatch", async () => {
+    const { runner, calls, events } = makeHarness({
+      health: summary({
+        bitrateDeliveryRatio: 0.25,
+        lossFraction: numeric(0.12, "rising"),
+      }),
+      boundaries: {
+        levers: { bitrate: { floor: 20_000, ceiling: 20_000, pinned: 20_000 } },
+        outcomes: {},
+        lean: 0.5,
+      },
+    })
+
+    await runner.tick()
+
+    expect(calls.some(call => call.startsWith("bitrate:"))).toBe(false)
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "decision", mode: "shed" }),
+    )
   })
 
   it("ignores ticks after close", async () => {

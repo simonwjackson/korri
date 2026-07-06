@@ -1,6 +1,10 @@
+import type { StreamBoundaries } from "./stream-adaptive-boundaries"
 import type { RuntimeRecoverySupervisor } from "./runtime-recovery-supervisor"
 import {
   computeStreamAdaptiveDecision,
+  type StreamAdaptiveBindingConstraint,
+  type StreamAdaptiveControllerMode,
+  type StreamAdaptivePressure,
   type StreamAdaptiveSettings,
   type StreamAdaptiveTarget,
 } from "./stream-adaptive-controller"
@@ -19,6 +23,13 @@ export type StreamAdaptiveRunnerEvent =
   | {
       readonly kind: "dormant"
       readonly reason: StreamAdaptiveRunnerDormantReason
+    }
+  | {
+      readonly kind: "decision"
+      readonly target: StreamAdaptiveTarget
+      readonly pressure: StreamAdaptivePressure
+      readonly mode: StreamAdaptiveControllerMode
+      readonly bindingConstraint?: StreamAdaptiveBindingConstraint
     }
   | {
       readonly kind: "dispatched"
@@ -43,6 +54,7 @@ export interface StreamAdaptiveRunnerOptions {
   readonly recovery: RuntimeRecoverySupervisor
   readonly initialSettings: StreamAdaptiveSettings
   readonly objectiveBias: number
+  readonly boundaries?: StreamBoundaries
   readonly isStreaming: () => boolean
   readonly onEvent: (event: StreamAdaptiveRunnerEvent) => void
   readonly nowMs?: () => number
@@ -86,6 +98,7 @@ export function createStreamAdaptiveRunner(
       summary,
       current: currentSettings(options.recovery, options.initialSettings),
       objectiveBias: options.objectiveBias,
+      boundaries: options.boundaries,
     })
 
     if (decision.kind === "dormant") {
@@ -93,23 +106,29 @@ export function createStreamAdaptiveRunner(
       return
     }
 
-    await dispatchFirstTarget(decision.target)
+    if (!closed) {
+      options.onEvent({
+        kind: "decision",
+        target: decision.target,
+        pressure: decision.pressure,
+        mode: decision.mode,
+        bindingConstraint: decision.bindingConstraint,
+      })
+    }
+
+    await dispatchTarget(decision.target)
   }
 
-  async function dispatchFirstTarget(
-    target: StreamAdaptiveTarget,
-  ): Promise<void> {
+  async function dispatchTarget(target: StreamAdaptiveTarget): Promise<void> {
     if (target.bitrateKbps !== undefined) {
       await dispatch("runtime.setBitrate", target, () =>
         options.recovery.setBitrate(target.bitrateKbps as number),
       )
-      return
     }
     if (target.fps !== undefined) {
       await dispatch("runtime.setFps", target, () =>
         options.recovery.setFps(target.fps as number),
       )
-      return
     }
     if (target.resolution !== undefined) {
       await dispatch("runtime.setResolution", target, () =>

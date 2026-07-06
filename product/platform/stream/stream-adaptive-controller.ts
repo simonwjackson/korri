@@ -214,7 +214,11 @@ function applySteadyStateDecision(
     )
   }
 
-  if ((objectiveBias < 0.5 && pressure.latency > 0.3) || latencyClampBinding) {
+  if (
+    mode === "shed" ||
+    (objectiveBias < 0.5 && pressure.latency > 0.3) ||
+    latencyClampBinding
+  ) {
     const proposed = lowerFpsStep(current.fps, fpsCeiling(boundaries, params))
     if (proposed !== undefined) {
       maybeSetFps(target, current, proposed, boundaries, params, mode === "shed")
