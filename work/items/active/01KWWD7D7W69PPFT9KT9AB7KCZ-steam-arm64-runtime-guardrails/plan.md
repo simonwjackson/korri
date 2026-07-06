@@ -3,7 +3,7 @@ title: fix: Build Steam ARM64 Proton runtime guardrails
 type: fix
 status: active
 date: 2026-07-06
-verify_command: "bun test product/plugins/steam/src/state-materializer.test.ts product/plugins/steam/src/materializer.test.ts product/plugins/steam/nix/nixos-module.test.ts && nix-instantiate --parse product/plugins/steam/nix/nixos-module.nix"
+deepened: 2026-07-06
 ---
 
 # fix: Build Steam ARM64 Proton runtime guardrails
@@ -31,6 +31,7 @@ Make SM8550 Steam launches explicitly product-owned around ARM64 Steam + ARM64 C
 - R7. Preserve Steam self-update behavior; do not add update suppressors as a product fix.
 - R8. Provide deterministic verification for 30XX install/launch recovery without long ad-hoc SSH scripts.
 - R9. Make failures operator-readable: missing ARM64 Proton payload, missing FEX rootfs, broken helper trampolines, and Gamepad UI guard exits should fail with clear diagnostics.
+- R10. Treat a real, non-placeholder ARM64 CachyOS Proton payload as a prerequisite for shipping this path; a placeholder vendor tree must fail during package/image validation.
 
 ---
 
@@ -49,7 +50,7 @@ Make SM8550 Steam launches explicitly product-owned around ARM64 Steam + ARM64 C
 - Generalize `repair_game_audio` beyond the current 30XX-specific PipeWire process match.
 - Add a first-class install-control UX/API path so `app.plugin.install.request` and `app.plugin.install.status` can be used without bypass helper SSH.
 - Investigate per-game ARM64 Proton fixes for 30XX shader compiler, Vector video/codec, and Axiom Verge 2 Unity exits after the core runtime path is stable.
-- Decide whether to vendor a newer `proton-cachyos-11.0-20260602` payload after the current payload-readiness checks are in place.
+- Decide whether to upgrade from the validated payload to a newer `proton-cachyos-11.0-20260602` payload after the real-payload readiness gate exists.
 
 ---
 
@@ -92,6 +93,7 @@ Make SM8550 Steam launches explicitly product-owned around ARM64 Steam + ARM64 C
 | ARM64 Steam + ARM64 CachyOS Proton remains the SM8550 primary path | Prior Bandai evidence shows the x86 Proton + FEX + pressure-vessel path hits a structural GL wall on Adreno, while ARM64 Proton keeps GL/audio/native libraries on ARM | Implementation should strengthen default compat-tool materialization, not make x86 Steam the default |
 | FEX remains required, but only at explicit architecture boundaries | Windows game code is still x86/x64; pressure-vessel helpers may also be x86 Linux binaries | The plan distinguishes FEX-for-game-code from FEX trampolines for Steam runtime helpers |
 | Runtime-helper repair is explicit, not a startup side effect | Broad startup repair previously caused Steam file verification/self-update loops | Safety net runs from install/launch/recovery gates with diagnostics, never as unconditional Steam service startup mutation |
+| Managed install/recovery owns post-install mutation | Steam install completion is the moment runtime sidecars appear, but mutation must happen after Steam is stopped | The bounded install helper should detect completed install state, stop the managed service, run helper repair if check mode says it is needed, and leave launch preflight as a check/error path for externally installed runtimes |
 | `SteamLinuxRuntime_4` is a first-class target | The observed 30XX failure and current Steam/Proton 11 direction involve Runtime 4 paths, while older tests focused on sniper | Checks and fixtures must glob or enumerate runtime versions rather than hardcoding sniper only |
 | Runtime classification precedes repair policy | It is not yet settled whether the selected CachyOS ARM64 path invokes pressure-vessel for 30XX or whether Steam fell into an official fallback path | The first implementation unit that touches live behavior should classify the active launch chain before making repair automatic |
 | Steam-specific repair stays in `@korri:steam` | Pressure-vessel, AppID install, Steam self-update, and Gamescope service state are Steam lifecycle concerns | Do not move wrapper repair into generic `@korri:fex`; consume FEX path facts instead |
@@ -148,7 +150,7 @@ This plan mostly modifies existing modules and scripts. New verifier/test files 
 
 ```text
 tools/testing/steam/
-  observe-bandai-steam-runtime.ts        # optional new deterministic launch-chain observer
+  observe-bandai-steam-runtime.ts        # required deterministic launch-chain observer
 product/plugins/steam/packages/steam-korri/tests/
   steam-guest-runtime-prep-smoke.sh      # extend or add runtime-helper fixtures
 ```
@@ -178,7 +180,7 @@ flowchart TB
 
 **Goal:** Ensure Korri can only materialize the SM8550 default compat policy when the ARM64 CachyOS Proton payload is real, registered, executable, and free of `require_tool_appid`.
 
-**Requirements:** R1, R2, R3, R7, R9
+**Requirements:** R1, R2, R3, R7, R9, R10
 
 **Dependencies:** None
 
@@ -188,6 +190,7 @@ flowchart TB
 - Modify: `product/plugins/steam/src/state-materializer.test.ts`
 - Modify: `product/plugins/steam/src/materializer.test.ts`
 - Modify: `product/plugins/proton-runtime/packages/proton-cachyos-arm64/default.nix`
+- Modify: `product/plugins/proton-runtime/packages/proton-cachyos-arm64/vendor/`
 - Modify: `product/plugins/steam/packages/steam-korri/check.nix`
 - Modify: `product/plugins/steam/packages/steam-korri/scripts/steam-arm64-seed`
 - Test: `product/plugins/steam/src/state-materializer.test.ts`
@@ -196,6 +199,7 @@ flowchart TB
 **Approach:**
 - Keep `DEFAULT_STEAM_COMPAT_TOOL` as the product default for SM8550.
 - Strengthen validation around the packaged `compatibilitytools.d` tool so a stub or placeholder Proton payload fails before Steam tries to launch a game.
+- Treat replacement or acquisition of a real ARM64 CachyOS Proton payload as part of this unit, not as optional follow-up; later version upgrades remain separate.
 - Preserve the existing `require_tool_appid` rejection because Korri intentionally runs CachyOS Proton directly inside the Steam FHS rather than asking Steam to resolve an unavailable runtime tool AppID.
 - Ensure AppID install/launch materialization cannot silently fall back to official Proton Experimental when the default tool is missing; failure should identify the missing/broken compat tool.
 
@@ -212,6 +216,7 @@ flowchart TB
 - Error path: `proton` exists but is not executable; materialization fails before writing config and reports the broken tool.
 - Error path: `toolmanifest.vdf` contains `require_tool_appid`; materialization fails before writing config and reports that the tool is not eligible for Korri’s direct ARM64 path.
 - Error path: packaged Proton payload is a known placeholder/stub; package checks reject it before image build or seed completion.
+- Error path: package derivation strips `require_tool_appid` but the resulting payload is still not runnable; package checks reject it as an invalid product artifact.
 - Integration: `steam-arm64-seed` still creates the expected symlink into `compatibilitytools.d` and does not replace Steam-owned Proton trees.
 
 **Verification:**
@@ -259,7 +264,7 @@ flowchart TB
 
 ### U3. Narrow runtime-helper check and repair to Steam pressure-vessel helpers
 
-**Goal:** Make `steam-guest-runtime-prep` accurately check and explicitly repair `SteamLinuxRuntime_*` pressure-vessel helpers, including Runtime 4, without broad Proton/Wine mutation in the normal safety-net path.
+**Goal:** Make `steam-guest-runtime-prep` accurately check and explicitly repair an allowlisted set of `SteamLinuxRuntime_*` pressure-vessel helpers, including Runtime 4, without broad Proton/Wine or unrelated runtime mutation in the normal safety-net path.
 
 **Requirements:** R2, R4, R5, R7, R9
 
@@ -272,10 +277,11 @@ flowchart TB
 - Test: `product/plugins/steam/packages/steam-korri/tests/steam-guest-runtime-prep-smoke.sh`
 
 **Approach:**
-- Split or clarify modes so the safety net can check/repair pressure-vessel helper executables without also treating Steam-managed Proton/Wine payloads as normal startup targets.
+- Split or clarify modes so the safety net can check/repair only allowlisted pressure-vessel helper executables without also treating Steam-managed Proton/Wine payloads as normal startup targets.
+- Start the allowlist with `pressure-vessel-wrap`, `pv-adverb`, and `srt-bwrap`; add other runtime executables only when U2 proves they are launch-critical x86 helpers.
 - Make check mode enumerate `SteamLinuxRuntime*/pressure-vessel` rather than hardcoding only `SteamLinuxRuntime_sniper`.
 - Preserve existing FEX trampoline properties: original x86 helper backed up as `.x86_64`, wrapper invokes `/usr/bin/FEX`, and `srt-bwrap` resolves bwrap from `FEX_ROOTFS` while prefixing host PATH.
-- Keep `.uuid` font marker repair only if it is still necessary for pressure-vessel startup and can be scoped to runtime helper recovery.
+- Keep `.uuid` font marker repair out of the narrow safety-net mode unless U2 proves it is launch-critical for the current Runtime 4 path; broad font-tree mutation should remain legacy/explicit.
 - Improve partial-failure behavior so anchor/patch failures are visible to callers instead of being swallowed as successful repair.
 
 **Patterns to follow:**
@@ -288,6 +294,8 @@ flowchart TB
 - Happy path: fake `srt-bwrap` is x86_64; repair produces a wrapper that references `FEX_ROOTFS` bwrap, prefixes host PATH, and invokes `/usr/bin/FEX` explicitly.
 - Edge case: helper is already a FEX wrapper; repair is idempotent and does not stack another wrapper.
 - Edge case: helper is ARM64-native; check mode reports no FEX wrapper required and repair leaves it untouched.
+- Edge case: runtime contains unrelated executable helpers outside the allowlist; safety-net mode reports or ignores them without mutation unless later classified as launch-critical.
+- Regression: safety-net mode does not touch Proton/Wine payloads, font marker trees, Python symlinks, or unrelated runtime executables.
 - Error path: `FEX_ROOTFS` is missing or lacks x86_64 bwrap; check mode fails with a clear FEX-rootfs diagnostic.
 - Error path: runtime directory is absent; check mode distinguishes “runtime not installed yet” from “runtime installed but broken.”
 - Integration: check and apply cover both `SteamLinuxRuntime_4` and `SteamLinuxRuntime_sniper` fixtures with the same mode.
@@ -317,8 +325,8 @@ flowchart TB
 **Approach:**
 - Keep existing tests that forbid runtime prep in normal `korri-steam-gamescope.service` startup.
 - Add a stopped-Steam explicit repair path for runtime helpers and make operator output distinguish “checked,” “repaired,” “not installed,” and “failed.”
-- For install helpers, after Steam finishes downloading/installing an AppID and any runtime sidecars, stop the managed Steam service before invoking repair if check mode indicates x86 helpers need wrapping.
-- For launch helpers, run a fast check before launching an AppID when the relevant runtime exists. If broken and auto-repair would require stopping Steam, either perform the explicit stopped-Steam recovery path or fail with a clear recovery instruction, depending on the chosen implementation posture.
+- Make the bounded install helper the owner of post-install repair timing: once it detects the AppID has completed install state, it should stop the managed Steam service and run the explicit runtime-helper repair only if check mode says installed x86 helpers need wrapping.
+- Keep launch helpers as preflight/check surfaces. If launch sees installed-but-broken runtime helpers from an external/manual Steam install, it should either invoke the same stopped-Steam recovery path or fail with a clear recovery instruction; it should not mutate while Steam is running.
 - Ensure broad process killing remains forbidden; any stop/restart actions target the managed service or exact PIDs already owned by the service wrapper.
 
 **Patterns to follow:**
@@ -329,10 +337,11 @@ flowchart TB
 **Test scenarios:**
 - Happy path: module source still contains no normal-startup `steam-guest-runtime-prep --apply` invocation.
 - Happy path: explicit recovery helper invokes pressure-vessel-only repair with Steam stopped and reports success.
-- Happy path: install helper preserves managed Steam args and runs runtime-helper check after install completion.
+- Happy path: install helper preserves managed Steam args, detects completed install state, stops the managed service, and runs runtime-helper repair only when check mode says repair is needed.
 - Edge case: runtime helpers are absent because Steam has not installed runtime sidecars yet; launch proceeds without false failure.
 - Edge case: check reports ARM64-native Runtime 4 helpers; repair is skipped and launch proceeds.
 - Error path: check reports broken x86 helper while Steam is running; helper stops the managed service before mutation or fails with a clear “stop/recover required” diagnostic.
+- Error path: install completion cannot be determined within the bounded install helper; no mutation is attempted and the output says launch preflight/recovery still needs to run.
 - Error path: explicit repair fails; service is not left in an ambiguous state and the error identifies the failed helper.
 - Regression: service startup remains free of path watchers and full `--apply` repair.
 
@@ -355,9 +364,12 @@ flowchart TB
 - Modify: `product/plugins/steam/nix/nixos-module.test.ts`
 - Modify: `product/systems/nixos/images/platforms/rocknix-sm8550.nix`
 - Modify: `tools/testing/nix/korri-rocknix-sm8550-config-check.nix`
+- Modify: `packages/pi-korrid-tools/src/korrid-tools.ts`
+- Modify: `packages/pi-korrid-tools/tests/korrid-tools.test.ts`
 - Test: `product/plugins/steam/nix/module-check.nix`
 - Test: `product/plugins/steam/nix/nixos-module.test.ts`
 - Test: `tools/testing/nix/korri-rocknix-sm8550-config-check.nix`
+- Test: `packages/pi-korrid-tools/tests/korrid-tools.test.ts`
 
 **Approach:**
 - Preserve Gamescope presentation mode for SM8550 and desktop Steam persona arguments.
@@ -376,6 +388,7 @@ flowchart TB
 - Happy path: composed SM8550 config uses Gamescope presentation and desktop persona args.
 - Happy path: Steam child env unsets Gamescope/libei hints while Gamescope still owns the display container.
 - Happy path: `uimode=7` is accepted and `uimode=4` remains a guard failure.
+- Regression: read-only runtime verifier expectations align with the new contract: Runtime 4-aware check/repair, no startup path watchers, and no requirement that full `--apply` be wired into the service.
 - Regression: no Gamepad/Big Picture flags reappear in managed service, install helper, or AppID helper args.
 - Regression: no update suppressor flags are passed through managed helpers.
 - Error path: FEX rootfs is missing or wrong architecture; runtime-helper check reports a rootfs diagnostic instead of an opaque launch failure.
@@ -387,19 +400,19 @@ flowchart TB
 
 ### U6. Validate 30XX end-to-end on Bandai with deterministic verifiers
 
-**Goal:** Prove the combined design fixes the observed failure mode on the live device without regressing Steam UI mode, workspace isolation, service stability, or controller-input prerequisites.
+**Goal:** Prove the combined design fixes the observed failure mode on the live device without regressing Steam UI mode, workspace isolation, service stability, or controller-input prerequisites. This unit is verification-only; reusable observer/classifier changes belong in U2.
 
 **Requirements:** R1, R2, R5, R6, R8, R9
 
 **Dependencies:** U2, U4, U5
 
 **Files:**
-- Modify: `tools/testing/steam/verify-bandai-steam-state.ts`
-- Modify: `tools/testing/steam/inspect-bandai-steam-restart.ts`
-- Modify: `tools/testing/steam/retry-bandai-steam-install.ts`
-- Modify: `packages/pi-korrid-tools/src/korrid-tools.ts`
-- Modify: `packages/pi-korrid-tools/tests/korrid-tools.test.ts`
-- Test: `packages/pi-korrid-tools/tests/korrid-tools.test.ts`
+- Use: `tools/testing/steam/verify-bandai-steam-state.ts`
+- Use: `tools/testing/steam/inspect-bandai-steam-restart.ts`
+- Use: `tools/testing/steam/retry-bandai-steam-install.ts`
+- Use: `tools/testing/steam/observe-bandai-steam-runtime.ts`
+- Use: `packages/pi-korrid-tools/src/korrid-tools.ts`
+- Use: `packages/pi-korrid-tools/tests/korrid-tools.test.ts`
 
 **Approach:**
 - Use deterministic scripts/verifiers rather than long inline SSH probes.
@@ -414,6 +427,7 @@ flowchart TB
 - Read-only launch classification in `packages/pi-korrid-tools/src/korrid-tools.ts`.
 
 **Test scenarios:**
+- Test expectation: none -- this unit consumes the verifier/classifier coverage from U2-U5 and records live-device outcomes rather than adding new product behavior.
 - Happy path: observer sees 30XX launch through CachyOS ARM64 Proton or a classified expected runtime path and reports no `Exec format error`.
 - Happy path: service remains active or exits through expected managed lifecycle, with no systemd restart evidence in the observation window.
 - Happy path: Steam UI mode remains `uimode=7`; no `uimode=4` process is observed.
