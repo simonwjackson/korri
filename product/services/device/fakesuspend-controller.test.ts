@@ -21,7 +21,9 @@ async function tempRoot() {
   return path
 }
 
-async function makeHarness(options: { readonly createRequestDir?: boolean } = {}) {
+async function makeHarness(
+  options: { readonly createRequestDir?: boolean } = {},
+) {
   const root = await tempRoot()
   const runtimeDir = join(root, "runtime")
   const requestDir = join(root, "requests")
@@ -61,9 +63,13 @@ describe("fake suspend controller", () => {
         env: { SWAYSOCK: join(runtimeDir, "sway-ipc.100.sock") },
       },
     ])
-    expect(await readFile(join(runtimeDir, "korri-fakesuspend", "active"), "utf8")).toContain("suspended")
+    expect(
+      await readFile(join(runtimeDir, "korri-fakesuspend", "active"), "utf8"),
+    ).toContain("suspended")
     expect(await readFile(join(requestDir, "enter.request"), "utf8")).toBe("")
-    expect((await stat(join(runtimeDir, "korri-fakesuspend"))).mode & 0o777).toBe(0o700)
+    expect(
+      (await stat(join(runtimeDir, "korri-fakesuspend"))).mode & 0o777,
+    ).toBe(0o700)
   })
 
   it("does not write exit.request when resume is requested without an active marker", async () => {
@@ -76,11 +82,16 @@ describe("fake suspend controller", () => {
   })
 
   it("does not create the substrate request directory when it is missing", async () => {
-    const { requestDir, controller } = await makeHarness({ createRequestDir: false })
+    const { requestDir, controller } = await makeHarness({
+      createRequestDir: false,
+    })
 
     const result = await controller.run("suspend")
 
-    expect(result).toEqual({ status: "degraded", reason: "request-dir-missing" })
+    expect(result).toEqual({
+      status: "degraded",
+      reason: "request-dir-missing",
+    })
     await expect(stat(requestDir)).rejects.toThrow()
   })
 

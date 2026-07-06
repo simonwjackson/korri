@@ -210,7 +210,8 @@ export function createKorriSessiondCore(
   const restoreRetryDelayMs =
     options.restoreRetryDelayMs ?? RESTORE_RETRY_DELAY_MS
   const fakeSuspendActiveMarkerPath =
-    options.fakeSuspendActiveMarkerPath ?? process.env.KORRI_FAKESUSPEND_ACTIVE_MARKER
+    options.fakeSuspendActiveMarkerPath ??
+    process.env.KORRI_FAKESUSPEND_ACTIVE_MARKER
   const heartbeatPayload = new TextEncoder().encode(": hb\n\n")
   const lifecycleSubscribers = new Set<{
     readonly launchId: string

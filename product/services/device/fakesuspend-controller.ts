@@ -1,4 +1,13 @@
-import { readdir, readFile, rename, stat, writeFile, mkdir, chmod, rm } from "node:fs/promises"
+import {
+  readdir,
+  readFile,
+  rename,
+  stat,
+  writeFile,
+  mkdir,
+  chmod,
+  rm,
+} from "node:fs/promises"
 import { join } from "node:path"
 import {
   probeSessiondManagedLaunchStatus,
@@ -48,7 +57,8 @@ export function createFakeSuspendController(
   options: FakeSuspendControllerOptions = {},
 ): FakeSuspendController {
   const env = options.env ?? process.env
-  const runtimeDir = options.runtimeDir ?? env.XDG_RUNTIME_DIR ?? "/run/user/2000"
+  const runtimeDir =
+    options.runtimeDir ?? env.XDG_RUNTIME_DIR ?? "/run/user/2000"
   const requestDir =
     options.requestDir ??
     env.KORRI_FAKESUSPEND_REQUEST_DIR ??
@@ -102,7 +112,8 @@ export function createFakeSuspendController(
   }
 
   async function resume(): Promise<FakeSuspendResult> {
-    if (!(await exists(activeMarker))) return { status: "noop", reason: "not-suspended" }
+    if (!(await exists(activeMarker)))
+      return { status: "noop", reason: "not-suspended" }
     if (!(await directoryExists(requestDir))) {
       return { status: "degraded", reason: "request-dir-missing" }
     }
@@ -120,7 +131,10 @@ export function createFakeSuspendController(
     const active = status.status.active
     if (!active) return
     if (isStreamActive(active.launchMetadata)) {
-      await terminateSessiondManagedLaunch({ launchId: active.launchId }, sessiond)
+      await terminateSessiondManagedLaunch(
+        { launchId: active.launchId },
+        sessiond,
+      )
     }
   }
 
@@ -134,7 +148,9 @@ export function createFakeSuspendController(
     })
   }
 
-  async function requestResult(action: "enter" | "exit"): Promise<FakeSuspendResult> {
+  async function requestResult(
+    action: "enter" | "exit",
+  ): Promise<FakeSuspendResult> {
     const deadline = now() + ackTimeoutMs
     do {
       const ack = await readLastRequestAck()
@@ -150,7 +166,11 @@ export function createFakeSuspendController(
   }
 
   async function readLastRequestAck(): Promise<
-    | { readonly action?: string; readonly status?: string; readonly result?: string }
+    | {
+        readonly action?: string
+        readonly status?: string
+        readonly result?: string
+      }
     | undefined
   > {
     try {
@@ -191,7 +211,9 @@ function isStreamActive(metadata: unknown): boolean {
   return Object.keys(annotations).some(key => key === "@korri:stream")
 }
 
-async function firstSwaySocket(runtimeDir: string): Promise<string | undefined> {
+async function firstSwaySocket(
+  runtimeDir: string,
+): Promise<string | undefined> {
   try {
     const entries = await readdir(runtimeDir)
     const socket = entries.find(
@@ -243,12 +265,16 @@ async function runCommand(command: FakeSuspendCommand): Promise<void> {
 async function main(argv: readonly string[]): Promise<number> {
   const action = (argv[2] ?? "toggle") as FakeSuspendAction
   if (!["toggle", "suspend", "resume"].includes(action)) {
-    console.error("korri-fakesuspend-toggle: usage: korri-fakesuspend-toggle [toggle|suspend|resume]")
+    console.error(
+      "korri-fakesuspend-toggle: usage: korri-fakesuspend-toggle [toggle|suspend|resume]",
+    )
     return 64
   }
   const controller = createFakeSuspendController()
   const result = await controller.run(action)
-  console.error(`korri-fakesuspend-toggle: ${result.status}${"reason" in result ? ` (${result.reason})` : ""}`)
+  console.error(
+    `korri-fakesuspend-toggle: ${result.status}${"reason" in result ? ` (${result.reason})` : ""}`,
+  )
   return result.status === "degraded" ? 2 : 0
 }
 
