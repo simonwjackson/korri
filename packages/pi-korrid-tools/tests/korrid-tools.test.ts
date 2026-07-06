@@ -533,6 +533,43 @@ GAME_PID=216880
     })
   })
 
+  it("classifies official Steam Runtime 4 fallback separately from CachyOS ARM64", () => {
+    const result = classifySteamLaunchTranscript(
+      `/run/current-system/sw/bin/gamescope -f -- /run/current-system/sw/bin/korri-steam-guest -nobigpicture
+SteamLaunch AppId=1029210
+/var/lib/korri/steam/steamapps/common/SteamLinuxRuntime_4/_v2-entry-point --verb=waitforexitandrun
+/var/lib/korri/steam/steamapps/common/Proton - Experimental/proton waitforexitandrun 30XX.exe
+`,
+      { appId: "1029210", expectedGameExe: "30XX.exe" },
+    )
+
+    expect(result).toMatchObject({
+      launchChain: "official_runtime4_fallback",
+      signals: {
+        steamLinuxRuntime4: true,
+        officialProtonFallback: true,
+        realProtonCachyos: false,
+      },
+    })
+  })
+
+  it("classifies Runtime 4 pressure-vessel exec-format failures", () => {
+    const result = classifySteamLaunchTranscript(
+      `/var/lib/korri/steam/steamapps/common/SteamLinuxRuntime_4/pressure-vessel/bin/pressure-vessel-unruntime: line 108: /var/lib/korri/steam/steamapps/common/SteamLinuxRuntime_4/pressure-vessel/bin/pressure-vessel-wrap: cannot execute binary file: Exec format error
+`,
+      { appId: "1029210", expectedGameExe: "30XX.exe" },
+    )
+
+    expect(result).toMatchObject({
+      outcome: "failed_exec_format",
+      launchChain: "runtime4_helper_failure",
+      signals: {
+        steamLinuxRuntime4: true,
+        runtimeHelperExecFormat: true,
+      },
+    })
+  })
+
   it("does not accept gamescoped Steam without proton-cachyos proof", () => {
     const result = classifySteamLaunchTranscript(
       `/run/current-system/sw/bin/gamescope -e -- /run/current-system/sw/bin/korri-steam-guest -gamepadui

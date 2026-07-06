@@ -850,6 +850,10 @@ export function classifySteamLaunchTranscript(
     /compatibilitytools\.d\/proton-cachyos-11\.0-20260601-slr-arm64\/proton/.test(
       transcript,
     )
+  const steamLinuxRuntime4 = /SteamLinuxRuntime_4\//.test(transcript)
+  const steamLinuxRuntimeSniper = /SteamLinuxRuntime_sniper\//.test(transcript)
+  const officialProtonFallback =
+    /steamapps\/common\/Proton(?:\s|-)/.test(transcript) && !realProtonCachyos
   const waitingForUser = /waiting for user response/.test(transcript)
   const firstRunSetup =
     /Upgrading prefix|Successfully registered DLL|ProcessingInstallScript/.test(
@@ -862,6 +866,15 @@ export function classifySteamLaunchTranscript(
   const execFormat = /Exec format error|cannot execute binary file/.test(
     transcript,
   )
+  const runtimeHelperExecFormat =
+    execFormat && /pressure-vessel|pv-adverb|srt-bwrap/.test(transcript)
+  const launchChain = classifySteamLaunchChain({
+    realProtonCachyos,
+    steamLinuxRuntime4,
+    steamLinuxRuntimeSniper,
+    officialProtonFallback,
+    runtimeHelperExecFormat,
+  })
   const protonFailure =
     /Assertion failed|Unhandled exception|wine:.*failed|Proton:.*failed/i.test(
       transcript,
@@ -879,9 +892,14 @@ export function classifySteamLaunchTranscript(
     firstRunSetup,
     fexMissing,
     execFormat,
+    runtimeHelperExecFormat,
     protonFailure,
     gamescopedSteam,
     realProtonCachyos,
+    steamLinuxRuntime4,
+    steamLinuxRuntimeSniper,
+    officialProtonFallback,
+    launchChain,
     validGamescopedProtonProof:
       gameRunning && gamescopedSteam && realProtonCachyos,
     appId: options.appId,
@@ -909,7 +927,33 @@ export function classifySteamLaunchTranscript(
   else if (firstRunSetup) outcome = "first_run_setup"
   else outcome = "no_launch_observed"
 
-  return { outcome, signals }
+  return { outcome, launchChain, signals }
+}
+
+type SteamLaunchChain =
+  | "intended_cachyos_arm64"
+  | "official_runtime4_fallback"
+  | "legacy_sniper_runtime"
+  | "runtime4_helper_failure"
+  | "sniper_helper_failure"
+  | "no_runtime_observed"
+
+function classifySteamLaunchChain(input: {
+  readonly realProtonCachyos: boolean
+  readonly steamLinuxRuntime4: boolean
+  readonly steamLinuxRuntimeSniper: boolean
+  readonly officialProtonFallback: boolean
+  readonly runtimeHelperExecFormat: boolean
+}): SteamLaunchChain {
+  if (input.runtimeHelperExecFormat && input.steamLinuxRuntime4)
+    return "runtime4_helper_failure"
+  if (input.runtimeHelperExecFormat && input.steamLinuxRuntimeSniper)
+    return "sniper_helper_failure"
+  if (input.realProtonCachyos) return "intended_cachyos_arm64"
+  if (input.officialProtonFallback && input.steamLinuxRuntime4)
+    return "official_runtime4_fallback"
+  if (input.steamLinuxRuntimeSniper) return "legacy_sniper_runtime"
+  return "no_runtime_observed"
 }
 
 type RuntimeVerifyOptions = {
