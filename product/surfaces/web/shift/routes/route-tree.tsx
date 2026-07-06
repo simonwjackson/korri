@@ -11,12 +11,17 @@ import {
   type ShiftRouteManifest,
   shiftRouteManifest,
 } from "./route-axis-manifest"
-import { SHIFT_COMPANION_PATH, SHIFT_LIBRARY_PATH } from "./paths"
+import {
+  SHIFT_COMPANION_PATH,
+  SHIFT_LIBRARY_PATH,
+  SHIFT_STORE_PATH,
+} from "./paths"
 import { ShiftCompanionRoute } from "./ShiftCompanionRoute"
 import { ShiftGameDetailRoute } from "./ShiftGameDetailRoute"
 import { ShiftHomeRoute } from "./ShiftHomeRoute"
 import { ShiftLibraryRoute } from "./ShiftLibraryRoute"
 import { ShiftRouteTransition } from "./ShiftRouteTransition"
+import { ShiftStoreRoute } from "./ShiftStoreRoute"
 
 const rootRoute = createRootRoute({ component: ShiftRouteTransition })
 
@@ -67,6 +72,25 @@ const libraryRoute = createRoute({
   component: ShiftLibraryRoute,
 })
 
+const storeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: SHIFT_STORE_PATH,
+  // The store's addressable view-state: the search query lives in typed URL
+  // search so /store?q=celeste is deep-linkable and reproduced on cold load.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { readonly q: string } => ({
+    q: typeof search.q === "string" ? search.q : "",
+  }),
+  staticData: {
+    axes: [
+      { name: "q", kind: "search" },
+      { name: "data", kind: "data" },
+    ],
+  },
+  component: ShiftStoreRoute,
+})
+
 const companionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: SHIFT_COMPANION_PATH,
@@ -77,6 +101,7 @@ export const shiftRouteTree = rootRoute.addChildren([
   homeRoute,
   detailRoute,
   libraryRoute,
+  storeRoute,
   companionRoute,
 ])
 
@@ -95,6 +120,7 @@ export function shiftRouteManifests(): readonly ShiftRouteManifest[] {
   return [
     shiftRouteManifest("/", readAxes(homeRoute)),
     shiftRouteManifest(SHIFT_LIBRARY_PATH, readAxes(libraryRoute)),
+    shiftRouteManifest(SHIFT_STORE_PATH, readAxes(storeRoute)),
     shiftRouteManifest("/game/$id", readAxes(detailRoute)),
   ]
 }
