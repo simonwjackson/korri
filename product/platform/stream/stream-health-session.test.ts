@@ -102,6 +102,36 @@ describe("streamHealthSamplePortFromSession", () => {
     expect(monitor.latestSummary(1100).freshness).toBe("no-data")
   })
 
+  it("polls state snapshots as a fallback health source", async () => {
+    const harness = makeSession()
+    const monitor = createStreamHealthMonitor({
+      port: streamHealthSamplePortFromSession(harness.session, {
+        nowMs: () => 5_000,
+        pollIntervalMs: 1,
+        pollState: async () => ({
+          result: {
+            streamQuality: {
+              sample: {
+                seq: 7,
+                sampledAtMs: 4_000,
+                rttMs: 42,
+                deliveredBitrateKbps: 4_000,
+                requestedBitrateKbps: 8_000,
+              },
+            },
+          },
+        }),
+      }),
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 5))
+
+    const summary = monitor.latestSummary(5_100)
+    expect(summary.rttMs.mean).toBe(42)
+    expect(summary.bitrateDeliveryRatio).toBe(0.5)
+    monitor.close()
+  })
+
   it("unsubscribes from the session when the port listener is closed", () => {
     const harness = makeSession()
     const unsubscribe = streamHealthSamplePortFromSession(

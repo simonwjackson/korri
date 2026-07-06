@@ -4,6 +4,8 @@ import type { StreamHealthSamplePort } from "./stream-health-monitor"
 
 export interface StreamHealthSamplePortFromSessionOptions {
   readonly nowMs?: () => number
+  readonly pollState?: () => Promise<unknown>
+  readonly pollIntervalMs?: number
 }
 
 export function streamHealthSamplePortFromSession(
@@ -12,11 +14,30 @@ export function streamHealthSamplePortFromSession(
 ): StreamHealthSamplePort {
   const nowMs = options.nowMs ?? (() => Date.now())
   return {
-    onSample: listener =>
-      session.onEvent(delivery => {
-        const sample = streamHealthSampleFromEvent(delivery.event)
-        if (sample) listener({ ...sample, sampledAtMs: nowMs() })
-      }),
+    onSample: listener => {
+      let closed = false
+      const publish = (sample: StreamHealthSample | undefined) => {
+        if (closed || !sample) return
+        listener({ ...sample, sampledAtMs: nowMs() })
+      }
+      const unsubscribe = session.onEvent(delivery => {
+        publish(streamHealthSampleFromEvent(delivery.event))
+      })
+      const interval = options.pollState
+        ? setInterval(() => {
+            void options
+              .pollState?.()
+              .then(state => publish(streamHealthSampleFromState(state)))
+              .catch(() => undefined)
+          }, options.pollIntervalMs ?? 1_000)
+        : undefined
+      interval?.unref?.()
+      return () => {
+        closed = true
+        unsubscribe()
+        if (interval !== undefined) clearInterval(interval)
+      }
+    },
   }
 }
 
@@ -24,7 +45,20 @@ function streamHealthSampleFromEvent(
   event: unknown,
 ): StreamHealthSample | undefined {
   if (!isRecord(event) || event.name !== "quality.sample") return undefined
-  const sample = event.sample
+  return streamHealthSampleFromRecord(event.sample)
+}
+
+function streamHealthSampleFromState(
+  state: unknown,
+): StreamHealthSample | undefined {
+  const result = recordField(state, "result") ?? asRecord(state)
+  const streamQuality = recordField(result, "streamQuality")
+  return streamHealthSampleFromRecord(streamQuality?.sample)
+}
+
+function streamHealthSampleFromRecord(
+  sample: unknown,
+): StreamHealthSample | undefined {
   if (!isRecord(sample)) return undefined
   const seq = numberField(sample, "seq")
   const sampledAtMs = numberField(sample, "sampledAtMs")
@@ -44,6 +78,20 @@ function streamHealthSampleFromEvent(
     queueDepth: numberField(sample, "queueDepth"),
     firstFrameMs: numberField(sample, "firstFrameMs"),
   }
+}
+
+function recordField(
+  input: unknown,
+  key: string,
+): Readonly<Record<string, unknown>> | undefined {
+  const record = asRecord(input)
+  return asRecord(record?.[key])
+}
+
+function asRecord(
+  input: unknown,
+): Readonly<Record<string, unknown>> | undefined {
+  return isRecord(input) ? input : undefined
 }
 
 function numberField(

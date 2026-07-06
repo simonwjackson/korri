@@ -135,6 +135,7 @@ export async function startStreamRuntimeSession(
     const health = createStreamHealthMonitor({
       port: streamHealthSamplePortFromSession(session, {
         nowMs: options.nowMs,
+        pollState: () => session.state(),
       }),
     })
     const recovery = options.recoveryPort
