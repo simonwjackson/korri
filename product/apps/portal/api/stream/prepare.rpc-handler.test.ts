@@ -148,6 +148,54 @@ describe("app.stream.prepare handler", () => {
     ).not.toHaveProperty("appIntegration")
   })
 
+  it("preserves resolved input-seat launch companions in stream intents", async () => {
+    const intentDir = await mkdtemp(
+      join(tmpdir(), "korri-stream-prepare-input-seat-"),
+    )
+    await chmod(intentDir, 0o700)
+    cleanups.push(() => rm(intentDir, { recursive: true, force: true }))
+    process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
+    process.env.KORRI_GAME_STREAM_INTENT_PATH = join(
+      intentDir,
+      "next-launch.json",
+    )
+    delete process.env.XDG_RUNTIME_DIR
+
+    const result = await Effect.runPromise(
+      handlePrepareStream({ id: "rpcs3/skate-3" }).pipe(
+        Effect.provide(
+          makeInMemoryLibrarySourceLayer({
+            games: [{ id: "rpcs3/skate-3", system: "ps3" }],
+            resolvedLaunchById: new Map([
+              [
+                "rpcs3/skate-3",
+                {
+                  spec: { command: "/run/current-system/sw/bin/rpcs3", args: [] },
+                  launchCompanions: {
+                    "@korri:input-seat": {
+                      runtimeSupportsExtraSeats: true,
+                      playerCount: 4,
+                    },
+                  },
+                },
+              ],
+            ]),
+          }),
+        ),
+      ),
+    )
+
+    const intent = decodeLaunchIntent(
+      JSON.parse(await readFile(result.intentPath, "utf8")),
+    )
+    expect(intent.launchCompanions).toEqual({
+      "@korri:input-seat": {
+        runtimeSupportsExtraSeats: true,
+        playerCount: 4,
+      },
+    })
+  })
+
   it("cleans resolved artifacts when enqueueing the stream intent fails", async () => {
     await withArtifactRoot(async root => {
       const intentDir = await mkdtemp(

@@ -11,6 +11,11 @@ import type { Preferences } from "./inheritable-fields"
 import type { GlobalConfigRecord } from "./records/global"
 import type { LauncherRecord } from "./records/launcher"
 
+import {
+  decodeInputSeatPolicy,
+  INPUT_SEAT_PROVIDER_ID,
+} from "@platform/input-seat/policy"
+
 const frameProvider = "@fixture:frame" as const
 const telemetryProvider = "@fixture:telemetry" as const
 
@@ -139,6 +144,41 @@ describe("launch preferences folding", () => {
       resolveLocalLauncherPolicy(snap, { launcherId: "local" }).preferences,
     ).toEqual({
       launch: { video: { fullscreen: true }, audio: { volume: 80 } },
+    })
+  })
+})
+
+describe("input-seat launch companion folding", () => {
+  it("folds input-seat policy through launch.with and leaves validation to the provider schema", () => {
+    const snap = snapshot({
+      launchers: [
+        launcher({
+          with: {
+            [INPUT_SEAT_PROVIDER_ID]: {
+              runtimeSupportsExtraSeats: true,
+              playerCount: 4,
+            },
+          },
+        }),
+      ],
+    })
+    const override: EphemeralOverride = {
+      launch: { with: { [INPUT_SEAT_PROVIDER_ID]: { playerCount: 2 } } },
+    }
+
+    const companions = resolveLocalLauncherCompanionPolicy(snap, {
+      launcherId: "local",
+      override,
+    })
+
+    expect(companions[INPUT_SEAT_PROVIDER_ID]).toEqual({
+      runtimeSupportsExtraSeats: true,
+      playerCount: 2,
+    })
+    expect(decodeInputSeatPolicy(companions[INPUT_SEAT_PROVIDER_ID])).toMatchObject({
+      enabled: true,
+      playerCount: 2,
+      runtimeSupportsExtraSeats: true,
     })
   })
 })
