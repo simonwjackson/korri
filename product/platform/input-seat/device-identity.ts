@@ -35,7 +35,8 @@ const SafeSeatName = Schema.String.pipe(
 const OptionalSafeString = Schema.String.pipe(
   Schema.check(
     Schema.makeFilter<string>(value => {
-      if (value.length > 128) return "identity string must be 128 characters or fewer"
+      if (value.length > 128)
+        return "identity string must be 128 characters or fewer"
       if (/[\n\r]/.test(value)) return "identity string cannot contain newlines"
       return undefined
     }),

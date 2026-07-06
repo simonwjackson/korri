@@ -25,7 +25,8 @@ const sameSource = (
     { readonly tag: "occupied-connected" | "occupied-disconnected-reserved" }
   >,
   source: InputSeatSourceIdentity,
-): boolean => state.launchId === source.launchId && state.sourceId === source.sourceId
+): boolean =>
+  state.launchId === source.launchId && state.sourceId === source.sourceId
 
 export const connectInputSeat = (
   state: InputSeatState,

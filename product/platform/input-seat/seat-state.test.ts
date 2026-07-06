@@ -28,16 +28,27 @@ describe("input-seat state", () => {
 
   it("reconnects only the same launch-scoped source identity", () => {
     const reserved = disconnectInputSeat(
-      connectInputSeat(available, { launchId: "launch-1", sourceId: "source-1" }),
+      connectInputSeat(available, {
+        launchId: "launch-1",
+        sourceId: "source-1",
+      }),
       "stream closed",
     )
 
-    expect(reconnectInputSeat(reserved, { launchId: "launch-1", sourceId: "source-1" })).toMatchObject({
+    expect(
+      reconnectInputSeat(reserved, {
+        launchId: "launch-1",
+        sourceId: "source-1",
+      }),
+    ).toMatchObject({
       tag: "occupied-connected",
       sourceId: "source-1",
     })
     expect(() =>
-      reconnectInputSeat(reserved, { launchId: "launch-1", sourceId: "source-2" }),
+      reconnectInputSeat(reserved, {
+        launchId: "launch-1",
+        sourceId: "source-2",
+      }),
     ).toThrow(/reserved for a different source/)
   })
 
@@ -47,7 +58,9 @@ describe("input-seat state", () => {
       sourceId: "source-1",
     })
     expect(leaveInputSeat(connected)).toEqual({ tag: "available", slot: 1 })
-    expect(leaveInputSeat(disconnectInputSeat(connected, "stream closed"))).toEqual({
+    expect(
+      leaveInputSeat(disconnectInputSeat(connected, "stream closed")),
+    ).toEqual({
       tag: "available",
       slot: 1,
     })
@@ -60,7 +73,10 @@ describe("input-seat state", () => {
     })
 
     expect(() =>
-      connectInputSeat(connected, { launchId: "launch-1", sourceId: "source-2" }),
+      connectInputSeat(connected, {
+        launchId: "launch-1",
+        sourceId: "source-2",
+      }),
     ).toThrow(/not available/)
   })
 })

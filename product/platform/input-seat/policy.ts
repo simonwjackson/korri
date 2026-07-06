@@ -24,7 +24,8 @@ const NonEmptySafePrefix = Schema.String.pipe(
       if (/[\n\r"\\]/.test(value)) {
         return "seatNamePrefix contains unsupported config-control characters"
       }
-      if (value.length > 48) return "seatNamePrefix must be 48 characters or fewer"
+      if (value.length > 48)
+        return "seatNamePrefix must be 48 characters or fewer"
       return undefined
     }),
   ),
@@ -57,7 +58,9 @@ const normalizeInputSeatPolicy = (
   context?: InputSeatResolveContext,
 ): ResolvedInputSeatPolicy => {
   const runtimeSupportsExtraSeats =
-    policy.runtimeSupportsExtraSeats ?? context?.runtimeSupportsExtraSeats ?? false
+    policy.runtimeSupportsExtraSeats ??
+    context?.runtimeSupportsExtraSeats ??
+    false
 
   const requestedCount = policy.playerCount
   const defaultCount =
@@ -75,8 +78,12 @@ const normalizeInputSeatPolicy = (
   }
 }
 
-export const decodeInputSeatPolicy = (input: unknown): ResolvedInputSeatPolicy =>
-  normalizeInputSeatPolicy(Schema.decodeUnknownSync(InputSeatPolicy)(input, STRICT))
+export const decodeInputSeatPolicy = (
+  input: unknown,
+): ResolvedInputSeatPolicy =>
+  normalizeInputSeatPolicy(
+    Schema.decodeUnknownSync(InputSeatPolicy)(input, STRICT),
+  )
 
 export const resolveInputSeatPolicy = (
   input: unknown,

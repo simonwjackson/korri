@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import { decodeInputSeatIdentity, inputSeatNameForSlot } from "./device-identity"
+import {
+  decodeInputSeatIdentity,
+  inputSeatNameForSlot,
+} from "./device-identity"
 
 describe("input-seat identity", () => {
   it("creates deterministic P1-first safe seat names", () => {
@@ -36,7 +39,11 @@ describe("input-seat identity", () => {
   })
 
   it("rejects config-injection characters in seat names", () => {
-    for (const name of ["Korri Seat P1\nInjected: true", 'Korri "Seat"', "Korri\\Seat"]) {
+    for (const name of [
+      "Korri Seat P1\nInjected: true",
+      'Korri "Seat"',
+      "Korri\\Seat",
+    ]) {
       expect(() =>
         decodeInputSeatIdentity({
           slot: 1,

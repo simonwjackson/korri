@@ -61,7 +61,9 @@ describe("seat runtime port", () => {
   })
 
   it("treats duplicate discovered identities as ambiguous", async () => {
-    const runtime = createMemorySeatRuntime({ duplicateName: inputSeatNameForSlot(1) })
+    const runtime = createMemorySeatRuntime({
+      duplicateName: inputSeatNameForSlot(1),
+    })
     const result = await runtime.allocate({
       launchId: "launch-1",
       seats: [makeRequestedSeat(1)],

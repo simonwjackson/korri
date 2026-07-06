@@ -175,7 +175,9 @@ describe("input-seat launch companion folding", () => {
       runtimeSupportsExtraSeats: true,
       playerCount: 2,
     })
-    expect(decodeInputSeatPolicy(companions[INPUT_SEAT_PROVIDER_ID])).toMatchObject({
+    expect(
+      decodeInputSeatPolicy(companions[INPUT_SEAT_PROVIDER_ID]),
+    ).toMatchObject({
       enabled: true,
       playerCount: 2,
       runtimeSupportsExtraSeats: true,

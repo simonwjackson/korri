@@ -170,7 +170,10 @@ describe("app.stream.prepare handler", () => {
               [
                 "rpcs3/skate-3",
                 {
-                  spec: { command: "/run/current-system/sw/bin/rpcs3", args: [] },
+                  spec: {
+                    command: "/run/current-system/sw/bin/rpcs3",
+                    args: [],
+                  },
                   launchCompanions: {
                     "@korri:input-seat": {
                       runtimeSupportsExtraSeats: true,

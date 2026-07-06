@@ -170,7 +170,11 @@ export const createMemorySeatRuntime = (
         }
       }
 
-      return { status: "allocated", launchId: request.launchId, seats: allocated }
+      return {
+        status: "allocated",
+        launchId: request.launchId,
+        seats: allocated,
+      }
     },
   }
 }

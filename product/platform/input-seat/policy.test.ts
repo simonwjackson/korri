@@ -27,10 +27,13 @@ describe("input-seat policy", () => {
   })
 
   it("preserves deterministic P1-first ordering when a release opts down", () => {
-    const policy = resolveInputSeatPolicy({ playerCount: 2 }, {
-      launchKind: "remote-managed",
-      runtimeSupportsExtraSeats: true,
-    })
+    const policy = resolveInputSeatPolicy(
+      { playerCount: 2 },
+      {
+        launchKind: "remote-managed",
+        runtimeSupportsExtraSeats: true,
+      },
+    )
 
     expect(policy.playerCount).toBe(2)
   })
@@ -48,6 +51,8 @@ describe("input-seat policy", () => {
   })
 
   it("rejects unknown keys", () => {
-    expect(() => decodeInputSeatPolicy({ playerCount: 1, typo: true })).toThrow()
+    expect(() =>
+      decodeInputSeatPolicy({ playerCount: 1, typo: true }),
+    ).toThrow()
   })
 })

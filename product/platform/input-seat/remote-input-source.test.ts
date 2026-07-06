@@ -8,13 +8,19 @@ describe("remote input source", () => {
     let state: InputSeatState = { tag: "available", slot: 1 }
 
     state = source.connected(state, "source-1")
-    expect(state).toMatchObject({ tag: "occupied-connected", sourceId: "source-1" })
+    expect(state).toMatchObject({
+      tag: "occupied-connected",
+      sourceId: "source-1",
+    })
 
     state = source.disconnected(state, "stream closed")
     expect(state).toMatchObject({ tag: "occupied-disconnected-reserved" })
 
     state = source.reconnected(state, "source-1")
-    expect(state).toMatchObject({ tag: "occupied-connected", sourceId: "source-1" })
+    expect(state).toMatchObject({
+      tag: "occupied-connected",
+      sourceId: "source-1",
+    })
 
     state = source.left(state)
     expect(state).toEqual({ tag: "available", slot: 1 })
@@ -33,6 +39,8 @@ describe("remote input source", () => {
       { launchId: "launch-1", sourceId: "source-1" },
     )
 
-    expect(() => source.connected(occupied, "source-2")).toThrow(/not available/)
+    expect(() => source.connected(occupied, "source-2")).toThrow(
+      /not available/,
+    )
   })
 })

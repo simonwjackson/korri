@@ -7,9 +7,18 @@ import {
 } from "./seat-state"
 
 export interface RemoteInputSourcePort {
-  readonly connected: (state: InputSeatState, sourceId: string) => InputSeatState
-  readonly disconnected: (state: InputSeatState, reason?: string) => InputSeatState
-  readonly reconnected: (state: InputSeatState, sourceId: string) => InputSeatState
+  readonly connected: (
+    state: InputSeatState,
+    sourceId: string,
+  ) => InputSeatState
+  readonly disconnected: (
+    state: InputSeatState,
+    reason?: string,
+  ) => InputSeatState
+  readonly reconnected: (
+    state: InputSeatState,
+    sourceId: string,
+  ) => InputSeatState
   readonly left: (state: InputSeatState) => InputSeatState
 }
 
@@ -25,7 +34,10 @@ export const createMemoryRemoteInputSource = (input: {
   return {
     events: () => [...events],
     connected: (state, sourceId) => {
-      const next = connectInputSeat(state, { launchId: input.launchId, sourceId })
+      const next = connectInputSeat(state, {
+        launchId: input.launchId,
+        sourceId,
+      })
       events.push(`connected:${sourceId}`)
       return next
     },
