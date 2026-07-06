@@ -133,7 +133,7 @@ describe("createStreamAdaptiveRunner", () => {
     expect(events).toContainEqual({ kind: "dormant", reason: "not-streaming" })
   })
 
-  it("dispatches only the highest-priority targeted dimension per tick", async () => {
+  it("dispatches every survival target during shed mode", async () => {
     const { runner, calls, events } = makeHarness({
       health: summary({
         bitrateDeliveryRatio: 0.25,
@@ -148,8 +148,8 @@ describe("createStreamAdaptiveRunner", () => {
     await runner.tick()
 
     expect(calls.some(call => call.startsWith("bitrate:"))).toBe(true)
-    expect(calls.some(call => call.startsWith("fps:"))).toBe(false)
-    expect(calls.some(call => call.startsWith("resolution:"))).toBe(false)
+    expect(calls.some(call => call.startsWith("fps:"))).toBe(true)
+    expect(calls.some(call => call.startsWith("resolution:"))).toBe(true)
     expect(events).toContainEqual(
       expect.objectContaining({ kind: "decision", mode: "shed" }),
     )
@@ -183,6 +183,21 @@ describe("createStreamAdaptiveRunner", () => {
       command: "runtime.setBitrate",
       message: '{"status":"unsupported","reason":"native rejected bitrate"}',
     })
+  })
+
+  it("still serializes non-shed targets to one dimension per tick", async () => {
+    const { runner, calls, events } = makeHarness({
+      health: summary({ bitrateDeliveryRatio: 0.65, rttMs: numeric(70) }),
+    })
+
+    await runner.tick()
+
+    expect(calls.some(call => call.startsWith("bitrate:"))).toBe(true)
+    expect(calls.some(call => call.startsWith("fps:"))).toBe(false)
+    expect(calls.some(call => call.startsWith("resolution:"))).toBe(false)
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "decision", mode: "fine-tune" }),
+    )
   })
 
   it("reads boundaries dynamically before each dispatch", async () => {

@@ -10,6 +10,8 @@ import {
 } from "./stream-adaptive-controller"
 import type { StreamHealthMonitor } from "./stream-health-monitor"
 
+const SHED_MUTATION_SPACING_MS = 250
+
 export type StreamAdaptiveRunnerDormantReason =
   | "disabled"
   | "pending"
@@ -119,10 +121,17 @@ export function createStreamAdaptiveRunner(
       })
     }
 
-    await dispatchTarget(decision.target)
+    await dispatchTarget(decision.target, decision.mode)
   }
 
-  async function dispatchTarget(target: StreamAdaptiveTarget): Promise<void> {
+  async function dispatchTarget(
+    target: StreamAdaptiveTarget,
+    mode: StreamAdaptiveControllerMode,
+  ): Promise<void> {
+    if (mode === "shed") {
+      await dispatchShedTarget(target)
+      return
+    }
     if (target.bitrateKbps !== undefined) {
       await dispatch("runtime.setBitrate", target, () =>
         options.recovery.setBitrate(target.bitrateKbps as number),
@@ -142,6 +151,42 @@ export function createStreamAdaptiveRunner(
           target.resolution?.height as number,
         ),
       )
+    }
+  }
+
+  async function dispatchShedTarget(target: StreamAdaptiveTarget): Promise<void> {
+    const steps: (() => Promise<void>)[] = []
+    if (target.bitrateKbps !== undefined) {
+      steps.push(() =>
+        dispatch("runtime.setBitrate", target, () =>
+          options.recovery.setBitrate(target.bitrateKbps as number),
+        ),
+      )
+    }
+    if (target.fps !== undefined) {
+      steps.push(() =>
+        dispatch("runtime.setFps", target, () =>
+          options.recovery.setFps(target.fps as number),
+        ),
+      )
+    }
+    if (target.resolution !== undefined) {
+      steps.push(() =>
+        dispatch("runtime.setResolution", target, () =>
+          options.recovery.setResolution(
+            target.resolution?.width as number,
+            target.resolution?.height as number,
+          ),
+        ),
+      )
+    }
+
+    for (let index = 0; index < steps.length; index += 1) {
+      if (closed) return
+      await steps[index]?.()
+      if (!closed && index < steps.length - 1) {
+        await sleep(SHED_MUTATION_SPACING_MS)
+      }
     }
   }
 
@@ -172,6 +217,10 @@ export function createStreamAdaptiveRunner(
       if (interval !== undefined) clearInterval(interval)
     },
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function describeDispatchError(error: unknown): string {
