@@ -42,6 +42,12 @@ let
     (check "korri-inputd package exposes bundled JS" (
       builtins.pathExists "${packagePath "korri-inputd"}/share/korri-inputd/korri-inputd.js"
     ))
+    (check "korri-fakesuspend-toggle package exposes executable wrapper" (
+      builtins.pathExists "${packagePath "korri-fakesuspend-toggle"}/bin/korri-fakesuspend-toggle"
+    ))
+    (check "korri-fakesuspend-toggle package exposes bundled JS" (
+      builtins.pathExists "${packagePath "korri-fakesuspend-toggle"}/share/korri-fakesuspend-toggle/korri-fakesuspend-toggle.js"
+    ))
     (check "korri-game-stream package exposes runner wrapper" (
       builtins.pathExists "${packagePath "korri-game-stream"}/bin/korri-game-stream-runner"
     ))

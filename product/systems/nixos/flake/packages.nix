@@ -12,6 +12,7 @@
   nixOnRocksRevision,
   korriPortal,
   korriInputd,
+  korriFakesuspendToggle,
   korriGameStream,
   korriSessiond,
   korriWebSurfaceHost,
@@ -37,6 +38,7 @@
 }
 // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
   korri-inputd = korriInputd;
+  korri-fakesuspend-toggle = korriFakesuspendToggle;
   korri-game-stream = korriGameStream;
   korri-sessiond = korriSessiond;
   korri-web-surface-host = korriWebSurfaceHost;

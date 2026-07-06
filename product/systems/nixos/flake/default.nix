@@ -153,6 +153,13 @@ flake-utils.lib.eachDefaultSystem (
       inherit bunDeps;
     };
 
+    korriFakesuspendToggle = import ../../../../product/services/device/nix/fakesuspend-controller.nix {
+      inherit pkgs;
+      lib = pkgs.lib;
+      src = korriSources.inputd;
+      inherit bunDeps;
+    };
+
     korriGameStream = import ../../../../product/services/device/nix/game-stream.nix {
       inherit pkgs;
       lib = pkgs.lib;
@@ -276,6 +283,7 @@ flake-utils.lib.eachDefaultSystem (
         nixOnRocksRevision
         korriPortal
         korriInputd
+        korriFakesuspendToggle
         korriGameStream
         korriSessiond
         korriWebSurfaceHost

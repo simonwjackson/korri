@@ -752,19 +752,23 @@ let
       (check "${name}: sessiond launches inherit Korri user Pulse socket" (
         sessiondEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
       ))
-      (check "${name}: inputd owns power/lid buttons via the product fake-suspend toggle" (
-        lib.hasSuffix "korri-fakesuspend-toggle" (inputdEnv.KORRI_INPUTD_POWER_SUSPEND or "")
-        && lib.hasSuffix "korri-fakesuspend-toggle suspend" (inputdEnv.KORRI_INPUTD_LID_CLOSED or "")
-        && lib.hasSuffix "korri-fakesuspend-toggle resume" (inputdEnv.KORRI_INPUTD_LID_OPENED or "")
+      (check "${name}: inputd owns power/lid buttons via the packaged fake-suspend controller" (
+        lib.hasSuffix "/bin/korri-fakesuspend-toggle" (inputdEnv.KORRI_INPUTD_POWER_SUSPEND or "")
+        && lib.hasSuffix "/bin/korri-fakesuspend-toggle suspend" (inputdEnv.KORRI_INPUTD_LID_CLOSED or "")
+        && lib.hasSuffix "/bin/korri-fakesuspend-toggle resume" (inputdEnv.KORRI_INPUTD_LID_OPENED or "")
+        && (inputdEnv.KORRI_FAKESUSPEND_REQUEST_DIR or null) == "${cfg.rocknix.power.runtimeDir}/requests"
+        && (inputdEnv.KORRI_FAKESUSPEND_RESULT_DIR or null) == "${cfg.rocknix.power.runtimeDir}/status"
+        && (sessiondEnv.KORRI_FAKESUSPEND_ACTIVE_MARKER or null) == "%t/korri-fakesuspend/active"
         && inputdEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
         # Volume is no longer overridden; inputd falls back to its built-in
         # pactl set-sink-volume default against the Korri user Pulse socket.
         && !(inputdEnv ? KORRI_INPUTD_VOLUME_UP)
         && !(inputdEnv ? KORRI_INPUTD_VOLUME_DOWN)
         # The substrate power-state request channel is group-writable by the
-        # Korri runtime group so the toggle can drop enter/exit markers
+        # Korri runtime group so the controller can drop enter/exit markers
         # without root or polkit.
         && (cfg.rocknix.power.requestGroup or null) == runtime.group
+        && !(lib.hasInfix "writeShellScript \"korri-fakesuspend-toggle\"" sm8550PlatformAdapterSource)
       ))
       (check "${name}: inputd terminates foreground games through sessiond" (
         inputdEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"

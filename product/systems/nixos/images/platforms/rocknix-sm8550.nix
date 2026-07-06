@@ -132,102 +132,13 @@ let
   # watcher; this is where the product drops enter/exit markers). Derived
   # from the substrate option so the two stay in sync.
   powerRequestDir = "${config.rocknix.power.runtimeDir}/requests";
+  powerResultDir = "${config.rocknix.power.runtimeDir}/status";
+  fakeSuspendActiveMarker = "%t/korri-fakesuspend/active";
   # korri-fakesuspend-toggle -- product fake-suspend policy. Runs as the
-  # Korri runtime user (dispatched by inputd) and owns ONLY the session
-  # half of suspend/resume: blank the screen via Korri's own compositor
-  # socket, freeze/thaw the transient game *.scope units (never the
-  # compositor/inputd services, which are .service units and stay alive),
-  # then ask the substrate to enter/exit the low-power radio state by
-  # dropping a request marker. The substrate verb owns radios + governors
-  # + NM recovery; this script never touches them.
-  korriFakesuspendToggle = pkgs.writeShellScript "korri-fakesuspend-toggle" ''
-    set -u
-    export PATH=${
-      lib.makeBinPath (
-        with pkgs;
-        [
-          coreutils
-          gawk
-          gnugrep
-          sway
-          systemd
-        ]
-      )
-    }
-
-    request_dir="${powerRequestDir}"
-    runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
-    state_dir="$runtime_dir/korri-fakesuspend"
-    active="$state_dir/active"
-    last="$state_dir/last-toggle"
-    log="$state_dir/toggle.log"
-    mkdir -p "$state_dir" "$request_dir" 2>/dev/null || true
-
-    logline() { echo "$(date -Is) toggle: $*" | tee -a "$log" >&2 || true; }
-
-    sway_screen() {
-      sock=$(ls "$runtime_dir"/sway-ipc.*.sock 2>/dev/null | head -1)
-      [ -n "$sock" ] || return 0
-      SWAYSOCK="$sock" swaymsg "output * power $1" >/dev/null 2>&1 || true
-    }
-
-    # Freeze/thaw only the transient game scopes. The compositor and inputd
-    # are .service units, so they survive and can repaint on resume.
-    freeze_game_scopes() {
-      systemctl --user list-units --type=scope --state=running --no-legend 2>/dev/null \
-        | awk '{print $1}' \
-        | while read -r unit; do
-            [ -n "$unit" ] || continue
-            systemctl --user freeze "$unit" 2>/dev/null || true
-          done
-    }
-    thaw_game_scopes() {
-      systemctl --user list-units --type=scope --no-legend 2>/dev/null \
-        | awk '{print $1}' \
-        | while read -r unit; do
-            [ -n "$unit" ] || continue
-            systemctl --user thaw "$unit" 2>/dev/null || true
-          done
-    }
-
-    do_suspend() {
-      logline "suspend: screen off + freeze game scopes + request enter"
-      sway_screen off
-      freeze_game_scopes
-      : > "$active"
-      touch "$request_dir/enter.request" 2>/dev/null || true
-    }
-    do_resume() {
-      logline "resume: request exit + thaw game scopes + screen on"
-      touch "$request_dir/exit.request" 2>/dev/null || true
-      thaw_game_scopes
-      sway_screen on
-      rm -f "$active" 2>/dev/null || true
-    }
-
-    case "''${1:-toggle}" in
-      suspend) do_suspend ;;
-      resume)  do_resume ;;
-      toggle)
-        # KEY_POWER autorepeats (value 2) and inputd dispatches on every
-        # non-zero value; collapse presses within 2s into one toggle.
-        now=$(date +%s)
-        if [ -f "$last" ]; then
-          prev=$(cat "$last" 2>/dev/null || echo 0)
-          if [ $((now - prev)) -lt 2 ]; then
-            logline "toggle: debounced"
-            exit 0
-          fi
-        fi
-        echo "$now" > "$last"
-        if [ -e "$active" ]; then do_resume; else do_suspend; fi
-        ;;
-      *)
-        echo "korri-fakesuspend-toggle: usage: $0 [toggle|suspend|resume]" >&2
-        exit 64
-        ;;
-    esac
-  '';
+  # Korri runtime user (dispatched by inputd) and owns the session/display half
+  # of fake suspend. The substrate verb owns radios + governors + NM recovery;
+  # this package only drops enter/exit request markers into the neutral channel.
+  korriFakesuspendToggle = korri.packages.${targetSystem}.korri-fakesuspend-toggle;
   # Bandai bottom-screen keyboard MVP. This remains platform-local: the AYN/F24
   # button dispatches inputd's existing toggle-bottom-screen action, and only
   # this image overrides that action with second-screen policy.
@@ -876,7 +787,7 @@ in
 
   # Korri owns hardware button policy. inputd reads KEY_POWER / SW_LID and
   # dispatches the product fake-suspend toggle, which blanks the screen and
-  # freezes game scopes before asking the substrate to drop the radios.
+  # coordinates sessiond before asking the substrate to drop the radios.
   #   - power button  -> toggle (debounced suspend/resume)
   #   - lid close/open -> explicit suspend/resume edges
   #   - volume up/down -> inputd's built-in `pactl set-sink-volume` default
@@ -890,9 +801,11 @@ in
     KORRI_INPUTD_BACK_TAP_ACTION = "toggle-steam-visibility";
     KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN = "${korriBandaiBottomKeyboardToggle}/bin/korri-bandai-bottom-keyboard-toggle";
     KORRI_INPUTD_TOGGLE_STEAM_VISIBILITY = "${korriSteamVisibilityToggle}/bin/korri-steam-visibility-toggle";
-    KORRI_INPUTD_POWER_SUSPEND = "${korriFakesuspendToggle}";
-    KORRI_INPUTD_LID_CLOSED = "${korriFakesuspendToggle} suspend";
-    KORRI_INPUTD_LID_OPENED = "${korriFakesuspendToggle} resume";
+    KORRI_INPUTD_POWER_SUSPEND = "${korriFakesuspendToggle}/bin/korri-fakesuspend-toggle";
+    KORRI_INPUTD_LID_CLOSED = "${korriFakesuspendToggle}/bin/korri-fakesuspend-toggle suspend";
+    KORRI_INPUTD_LID_OPENED = "${korriFakesuspendToggle}/bin/korri-fakesuspend-toggle resume";
+    KORRI_FAKESUSPEND_REQUEST_DIR = powerRequestDir;
+    KORRI_FAKESUSPEND_RESULT_DIR = powerResultDir;
     KORRI_SESSIOND_SOCKET = config.services.korri.sessiond.socketPath;
     PULSE_SERVER = korriPulseServer;
   };
@@ -923,6 +836,7 @@ in
         DISPLAY = ":0";
         GDK_BACKEND = "x11";
         PULSE_SERVER = korriPulseServer;
+        KORRI_FAKESUSPEND_ACTIVE_MARKER = fakeSuspendActiveMarker;
         # Headless stream adaptation is wired but remains off until the
         # device-validation gate confirms recovery timing and visual geometry.
         KORRI_STREAM_ADAPTIVE_ENABLED = "0";
