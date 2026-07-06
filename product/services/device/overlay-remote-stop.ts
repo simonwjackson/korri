@@ -17,6 +17,13 @@ interface RpcExitFrame {
 
 const DEFAULT_REMOTE_STOP_TIMEOUT_MS = 10_000
 
+let requestSequence = 0
+
+function createRpcRequestId(): string {
+  requestSequence = (requestSequence + 1) % 1_000_000
+  return `${Date.now()}${requestSequence.toString().padStart(6, "0")}`
+}
+
 export async function stopRemoteGameOnHost(
   options: RemoteHostStopOptions,
 ): Promise<void> {
@@ -59,7 +66,7 @@ async function callKorridRpc(
   fetchImpl: typeof fetch,
   timeoutMs: number,
 ): Promise<unknown> {
-  const requestId = `inputd-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const requestId = createRpcRequestId()
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   if ("unref" in timeout && typeof timeout.unref === "function") timeout.unref()

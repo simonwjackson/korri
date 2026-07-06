@@ -58,12 +58,14 @@ describe("stopRemoteGameOnHost", () => {
 
     expect(calls).toHaveLength(1)
     expect(calls[0]?.input).toBe("http://aka:3001/api/rpc")
-    expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
+    const requestBody = JSON.parse(String(calls[0]?.init?.body))
+    expect(requestBody).toMatchObject({
       _tag: "Request",
       tag: "app.session.stop",
       payload: { confirmed: true },
       headers: [],
     })
+    expect(requestBody.id).toMatch(/^\d+$/)
     expect(log.entries.at(-1)?.level).toBe("info")
   })
 
