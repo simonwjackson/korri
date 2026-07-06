@@ -16,7 +16,10 @@ import {
   LibrarySource,
 } from "@platform/library/library-services"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
-import type { SearchResponse } from "@platform/protocol/acquisition/claim"
+import type {
+  SearchRequest,
+  SearchResponse,
+} from "@platform/protocol/acquisition/claim"
 import { remoteCatalogSourceLayerAtom } from "@platform/react/acquisition/remote-catalog-atoms"
 import {
   catalogFactsSourceLayerAtom,
@@ -189,14 +192,11 @@ function parseCatalogSnapshotFacts(value: unknown): CatalogSnapshotFacts {
   return value as CatalogSnapshotFacts
 }
 
-function createBridgeRemoteCatalogSourceLayer(bridge: KorriPlatformBridge) {
+function createBridgeRemoteCatalogSourceLayer(_bridge: KorriPlatformBridge) {
   return Layer.succeed(RemoteCatalogSource)({
     search: request =>
       Effect.tryPromise({
-        try: async () =>
-          parseSearchResponse(
-            await bridge.api.rpc("app.acquisition.search", request),
-          ),
+        try: async () => searchRemoteCatalogViaSameOriginRpc(request),
         catch: error =>
           new RemoteCatalogError({
             reason: "unavailable",
@@ -204,6 +204,59 @@ function createBridgeRemoteCatalogSourceLayer(bridge: KorriPlatformBridge) {
           }),
       }),
   })
+}
+
+let storeSearchRequestSequence = 0
+
+/**
+ * Search uses the same-origin RPC endpoint directly instead of the generic
+ * platform bridge. On the kiosk this path is the web-surface host's
+ * `/api/rpc` forwarder to local korrid; using it directly avoids stale bridge
+ * state leaving the route stuck on the previous empty result.
+ */
+export async function searchRemoteCatalogViaSameOriginRpc(
+  request: SearchRequest,
+  fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
+): Promise<SearchResponse> {
+  const response = await fetchImpl("/api/rpc", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify([
+      {
+        _tag: "Request",
+        id: `shift-store-search-${++storeSearchRequestSequence}`,
+        tag: "app.acquisition.search",
+        payload: request,
+        traceId: "shift-store",
+        spanId: "search",
+        sampled: false,
+        headers: [],
+      },
+    ]),
+  })
+
+  if (!response.ok) {
+    throw new Error(`app.acquisition.search: HTTP ${response.status}`)
+  }
+
+  return parseSearchResponse(readRpcSuccessValue(await response.json()))
+}
+
+function readRpcSuccessValue(value: unknown): unknown {
+  const frame = Array.isArray(value) ? value[0] : value
+  if (
+    typeof frame === "object" &&
+    frame !== null &&
+    "exit" in frame &&
+    typeof frame.exit === "object" &&
+    frame.exit !== null &&
+    "_tag" in frame.exit &&
+    frame.exit._tag === "Success" &&
+    "value" in frame.exit
+  ) {
+    return frame.exit.value
+  }
+  throw new Error("app.acquisition.search: unexpected RPC response shape")
 }
 
 function parseSearchResponse(value: unknown): SearchResponse {
