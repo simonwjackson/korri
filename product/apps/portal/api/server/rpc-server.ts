@@ -12,7 +12,7 @@ import {
 } from "@product/apps/portal/peers/peer-discovery"
 import { PeerSourceFetcherLive } from "@product/apps/portal/peers/peer-source-fetcher"
 import { makeFilePeerStore } from "@product/apps/portal/peers/peer-store"
-import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugin-host/acquisition"
+import { createFirstPartyAcquisitionPluginDefinitionsFromConfig } from "@product/plugin-host/acquisition"
 import {
   makePluginLibrarySourceLayerLive,
   PluginLibrarySourceLayerLive,
@@ -83,10 +83,11 @@ const PeerDiscoveryConfigured =
         }),
       })
 
+const acquisitionPluginDefinitions =
+  await createFirstPartyAcquisitionPluginDefinitionsFromConfig(process.env)
+
 const AcquisitionLayerLive = makeLiveAcquisitionLayer({
-  registry: createStaticAcquisitionPluginRegistry(
-    createFirstPartyAcquisitionPluginDefinitionsFromEnv(process.env),
-  ),
+  registry: createStaticAcquisitionPluginRegistry(acquisitionPluginDefinitions),
 })
 
 function makeLibraryInfrastructureLive(

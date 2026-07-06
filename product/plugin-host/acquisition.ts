@@ -1,5 +1,8 @@
 import { acquisitionPluginDefinitionsFromPluginRegistry } from "@platform/acquisition/product-plugin-adapter"
-import { createFirstPartyPluginState } from "./state"
+import {
+  createFirstPartyPluginState,
+  createFirstPartyPluginStateWithLocalRoots,
+} from "./state"
 
 export function createFirstPartyAcquisitionPluginDefinitionsFromEnv(
   env: Readonly<Record<string, string | undefined>> = process.env,
@@ -7,4 +10,14 @@ export function createFirstPartyAcquisitionPluginDefinitionsFromEnv(
   return acquisitionPluginDefinitionsFromPluginRegistry(
     createFirstPartyPluginState({ env, mode: "runtime" }).registry,
   )
+}
+
+export async function createFirstPartyAcquisitionPluginDefinitionsFromConfig(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+) {
+  const state = await createFirstPartyPluginStateWithLocalRoots({
+    env,
+    mode: "runtime",
+  })
+  return acquisitionPluginDefinitionsFromPluginRegistry(state.registry)
 }

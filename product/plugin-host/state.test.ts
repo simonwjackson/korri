@@ -126,6 +126,32 @@ describe("createFirstPartyPluginState", () => {
     )
   })
 
+  it("loads local roots and plugin enablement from plugin config", async () => {
+    const root = await tempRoot()
+    const configRoot = await tempRoot()
+    const configPath = join(configRoot, "plugins.json")
+    await writeLocalPlugin({ root, name: "toy" })
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        localRoots: [root],
+        plugins: {
+          "@local:toy": true,
+        },
+      }),
+    )
+
+    const state = await createFirstPartyPluginStateWithLocalRoots({
+      env: { KORRI_PLUGIN_CONFIG: configPath },
+    })
+
+    expect(state.diagnostics).toEqual([])
+    expect(state.installedPlugins.map(plugin => plugin.id)).toContain(
+      "@local:toy",
+    )
+    expect(state.registry.enabledPluginIds.has("@local:toy")).toBe(true)
+  })
+
   it("reports local plugins that claim the reserved @korri namespace", async () => {
     const root = await tempRoot()
     await writeLocalPlugin({ root, namespace: "@korri", name: "shadow" })

@@ -1,6 +1,7 @@
 import type { PluginId } from "./index"
 
 export type PluginDiagnosticCode =
+  | "invalid-plugin-config"
   | "invalid-plugin-module"
   | "denied-capability"
   | "load-failed"
