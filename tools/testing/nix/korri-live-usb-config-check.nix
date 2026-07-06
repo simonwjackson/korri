@@ -131,7 +131,7 @@ let
     ))
     (check "live USB Moonlight must use readable policy for command and mapping DB" (
       lib.hasSuffix "/bin/moonlight" (moonlightPolicy.command or "")
-      && lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (moonlightPolicy.input.mappingFile or "")
+      && lib.hasSuffix "share/moonlight/korri-inputplumber-gamecontrollerdb.txt" (moonlightPolicy.input.mappingFile or "")
     ))
     (check "live USB RetroArch must use the InputPlumber autoconfig baseline" (
       (retroarchPolicy.drivers.input or null) == "udev"

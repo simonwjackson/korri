@@ -213,7 +213,10 @@ echo "$CANDIDATE_LOGS" > "$RUN/current-log-dir"
 rm -f "$MOONLIGHT_LOCAL_CONTROL_SOCKET"
 export SWAYSOCK=$(ls /run/user/0/sway-ipc.*.sock 2>/dev/null | head -1)
 GAMESCOPE=/nix/store/vcv3dq9n6x2wn2jm8x11c96jmymwcmgk-gamescope-3.16.23/bin/gamescope
-MAPPING=$(dirname "$(dirname "$MOON")")/share/moonlight/gamecontrollerdb.txt
+MAPPING=$(dirname "$(dirname "$MOON")")/share/moonlight/korri-inputplumber-gamecontrollerdb.txt
+if [ ! -f "$MAPPING" ]; then
+  MAPPING=$(dirname "$(dirname "$MOON")")/share/moonlight/gamecontrollerdb.txt
+fi
 nohup setsid env \
   MOONLIGHT_LOCAL_CONTROL_AUTHORITY="$MOONLIGHT_LOCAL_CONTROL_AUTHORITY" \
   MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR="$MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR" \

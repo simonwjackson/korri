@@ -59,7 +59,7 @@
 
       services.korri.daemon.library.platformDefaults.host.moonlight = {
         command = lib.mkDefault "${pkgs.moonlight-embedded}/bin/moonlight";
-        input.mappingFile = lib.mkDefault "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
+        input.mappingFile = lib.mkDefault "${pkgs.moonlight-embedded}/share/moonlight/korri-inputplumber-gamecontrollerdb.txt";
       };
 
       services.korri.input.provider = {

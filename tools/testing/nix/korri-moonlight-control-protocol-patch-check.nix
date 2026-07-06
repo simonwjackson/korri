@@ -233,6 +233,18 @@ else
     test -x ${moonlightPackage}/bin/moonlight
     test -f ${moonlightPackage}/nix-support/moonlight-embedded-korri/manifest.txt
     grep -q '0016-add-stream-health-sampling.patch' ${moonlightPackage}/nix-support/moonlight-embedded-korri/manifest.txt
+    grep -q 'korri-inputplumber-gamecontrollerdb=share/moonlight/korri-inputplumber-gamecontrollerdb.txt' ${moonlightPackage}/nix-support/moonlight-embedded-korri/manifest.txt
+
+    korri_mapping=${moonlightPackage}/share/moonlight/korri-inputplumber-gamecontrollerdb.txt
+    test -f "$korri_mapping"
+    test -f ${moonlightPackage}/nix-support/moonlight-embedded-korri/korri-inputplumber-gamecontrollerdb-present
+    grep -Fq '030000005e0400008e02000001000000,Microsoft Xbox 360,a:b0,b:b1,back:b6,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1' "$korri_mapping"
+    grep -Fq '030000005e040000120b000001000000,Microsoft Xbox Series S|X Controller' "$korri_mapping"
+    grep -Fq 'dpup:h0.1,dpright:h0.2,dpdown:h0.4,dpleft:h0.8' "$korri_mapping"
+    if grep -Fq 'dpdown:h0.1,dpleft:h0.2,dpright:h0.8,dpup:h0.4' "$korri_mapping"; then
+      echo "Korri InputPlumber Moonlight mapping still contains inverted Xbox 360 D-pad" >&2
+      exit 1
+    fi
 
     cat > "$out/summary.txt" <<'EOF'
     Korri Moonlight local control protocol patch invariants passed and patched package built.

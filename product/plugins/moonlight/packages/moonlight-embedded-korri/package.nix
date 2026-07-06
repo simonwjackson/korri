@@ -143,6 +143,7 @@ stdenv.mkDerivation rec {
         lib.concatMapStringsSep " " (patch: builtins.baseNameOf (toString patch)) korriPatches
       }'
       printf '%s\n' 'main-program=bin/moonlight'
+      printf '%s\n' 'korri-inputplumber-gamecontrollerdb=share/moonlight/korri-inputplumber-gamecontrollerdb.txt'
     } > "$out/nix-support/moonlight-embedded-korri/manifest.txt"
 
     if [ -f "$out/bin/moonlight" ]; then
@@ -151,6 +152,16 @@ stdenv.mkDerivation rec {
       echo "error: moonlight binary missing from $out/bin" >&2
       exit 1
     fi
+
+    korriInputplumberMapping="$out/share/moonlight/korri-inputplumber-gamecontrollerdb.txt"
+    cp "$out/share/moonlight/gamecontrollerdb.txt" "$korriInputplumberMapping"
+    substituteInPlace "$korriInputplumberMapping" \
+      --replace-fail '030000005e0400008e02000001000000,Microsoft Xbox 360,a:b0,b:b1,back:b6,dpdown:h0.1,dpleft:h0.2,dpright:h0.8,dpup:h0.4,leftshoulder:b4,leftstick:b9,lefttrigger:a2,leftx:a0,lefty:a1,rightshoulder:b5,rightstick:b10,righttrigger:a5,rightx:a3,righty:a4,start:b7,x:b2,y:b3,platform:Linux,' \
+      '030000005e0400008e02000001000000,Microsoft Xbox 360,a:b0,b:b1,back:b6,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,leftshoulder:b4,leftstick:b9,lefttrigger:a2,leftx:a0,lefty:a1,rightshoulder:b5,rightstick:b10,righttrigger:a5,rightx:a3,righty:a4,start:b7,x:b2,y:b3,platform:Linux,'
+    printf '%s\n' \
+      '030000005e040000120b000001000000,Microsoft Xbox Series S|X Controller,a:b0,b:b1,x:b2,y:b3,back:b6,start:b7,guide:b8,leftstick:b9,rightstick:b10,leftshoulder:b4,rightshoulder:b5,dpup:h0.1,dpright:h0.2,dpdown:h0.4,dpleft:h0.8,leftx:a0,lefty:a1,rightx:a3,righty:a4,lefttrigger:a2,righttrigger:a5,platform:Linux,' \
+      >> "$korriInputplumberMapping"
+    printf 'present\n' > "$out/nix-support/moonlight-embedded-korri/korri-inputplumber-gamecontrollerdb-present"
 
     if [ -f CMakeCache.txt ]; then
       cp CMakeCache.txt "$out/nix-support/moonlight-embedded-korri/CMakeCache.txt"

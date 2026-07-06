@@ -434,7 +434,7 @@ let
       # which does not advertise the runtime quality controls.
       stream.codec = "h264";
       input = {
-        mappingFile = "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
+        mappingFile = "${pkgs.moonlight-embedded}/share/moonlight/korri-inputplumber-gamecontrollerdb.txt";
         touch = {
           absolute = true;
           requireBounds = true;

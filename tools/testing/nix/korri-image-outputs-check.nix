@@ -212,7 +212,7 @@ let
       )
     ))
     (check "Product live USB must use readable Moonlight mapping policy" (
-      lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (
+      lib.hasSuffix "share/moonlight/korri-inputplumber-gamecontrollerdb.txt" (
         liveUsbSummary.serverPlatformDefaults.host.moonlight.input.mappingFile or ""
       )
     ))
