@@ -1,7 +1,7 @@
 ---
 title: refactor: Make Bandai fake suspend guest-owned
 type: refactor
-status: active
+status: completed
 date: 2026-07-05
 deepened: 2026-07-05
 ---
