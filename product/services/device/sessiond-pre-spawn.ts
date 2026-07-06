@@ -1,5 +1,6 @@
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import type { LaunchFailureKind, LaunchSpec } from "@platform/library/launcher"
+import type { SessiondManagedLaunchInputSeatSummary } from "@platform/library/sessiond-managed-launch-protocol"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 
 export interface KorriSessiondPreSpawnGateRequest {
@@ -12,6 +13,7 @@ export interface KorriSessiondPreSpawnGateRequest {
 
 export interface KorriSessiondPreSpawnGateHandle {
   readonly stop: () => Promise<void> | void
+  readonly inputSeats?: SessiondManagedLaunchInputSeatSummary
 }
 
 export interface KorriSessiondPreSpawnGate {

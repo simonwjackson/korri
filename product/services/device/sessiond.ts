@@ -11,6 +11,7 @@ import {
   decodeSessiondManagedLaunchStartRequest,
   decodeSessiondManagedLaunchTerminateRequest,
   type SessiondManagedLaunchEvent,
+  type SessiondManagedLaunchInputSeatSummary,
   type SessiondManagedLaunchStartResponse,
   type SessiondManagedLaunchStatus,
   type SessiondManagedLaunchTerminateResponse,
@@ -302,9 +303,22 @@ export function createKorriSessiondCore(
     | undefined {
     const active = korriSessionActiveLaunch(state)
     if (!active) return undefined
-    return activeManagedLaunch?.launchMetadata
-      ? { ...active, launchMetadata: activeManagedLaunch.launchMetadata }
-      : active
+    const inputSeats = activeInputSeats()
+    return {
+      ...active,
+      ...(activeManagedLaunch?.launchMetadata
+        ? { launchMetadata: activeManagedLaunch.launchMetadata }
+        : {}),
+      ...(inputSeats ? { inputSeats } : {}),
+    }
+  }
+
+  function activeInputSeats():
+    | SessiondManagedLaunchInputSeatSummary
+    | undefined {
+    return activeManagedLaunch?.preSpawnGateHandles?.find(
+      handle => handle.inputSeats !== undefined,
+    )?.inputSeats
   }
 
   function managedStatus(): SessiondManagedLaunchStatus {
@@ -325,6 +339,7 @@ export function createKorriSessiondCore(
         // session-anchored peers. Phase 4B clients omitting the
         // field still negotiate to foreground correctly.
         sessionLifecycle: true,
+        inputSeats: true,
         ...(role.toggleHome && (role.homeToggleAvailable?.() ?? true)
           ? { laneToggle: true }
           : {}),

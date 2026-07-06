@@ -2,6 +2,7 @@ import type { ForegroundSessionStatusSnapshot } from "@platform/session/foregrou
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type {
   SessiondManagedLaunchCapabilities,
+  SessiondManagedLaunchInputSeatSummary,
   SessiondManagedLaunchMode,
   SessiondManagedLaunchPhase,
   SessiondManagedLaunchStatus,
@@ -14,6 +15,7 @@ export interface SessiondManagedLaunchStatusProjectionInput {
     readonly launchId: string
     readonly mode: SessiondManagedLaunchMode
     readonly launchMetadata?: LaunchMetadata
+    readonly inputSeats?: SessiondManagedLaunchInputSeatSummary
   }
   readonly phase?: SessiondManagedLaunchPhase
   readonly failureReason?: string
@@ -54,6 +56,9 @@ export function projectManagedLaunchStatus(
             ...(input.phase ? { phase: input.phase } : {}),
             ...(input.active.launchMetadata
               ? { launchMetadata: input.active.launchMetadata }
+              : {}),
+            ...(input.active.inputSeats
+              ? { inputSeats: input.active.inputSeats }
               : {}),
           },
         }

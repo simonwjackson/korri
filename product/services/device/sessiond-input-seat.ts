@@ -6,6 +6,7 @@ import {
   makeRequestedSeat,
   type SeatRuntimePort,
 } from "@platform/input-seat/seat-runtime-port"
+import type { SessiondManagedLaunchInputSeatSummary } from "@platform/library/sessiond-managed-launch-protocol"
 import {
   KorriSessiondPreSpawnFailure,
   type KorriSessiondPreSpawnGate,
@@ -51,6 +52,7 @@ export function createSessiondInputSeatPreSpawnGate(
 
       if (allocation.status === "allocated") {
         return {
+          inputSeats: toManagedLaunchInputSeatSummary(allocation.seats),
           stop: async () => {
             await options.runtime.release(allocation.seats)
           },
@@ -71,3 +73,18 @@ export function createSessiondInputSeatPreSpawnGate(
     },
   }
 }
+
+const toManagedLaunchInputSeatSummary = (
+  seats: readonly {
+    readonly slot: number
+    readonly playerIndex: number
+    readonly name: string
+  }[],
+): SessiondManagedLaunchInputSeatSummary => ({
+  seats: seats.map(seat => ({
+    slot: seat.slot,
+    playerIndex: seat.playerIndex + 1,
+    name: seat.name,
+    state: "available",
+  })),
+})

@@ -2046,6 +2046,68 @@ describe("korri sessiond", () => {
     })
   })
 
+  it("surfaces allocated input-seat summary through managed launch status", async () => {
+    const child = deferred<LaunchResult>()
+    const { core } = startHarness({
+      preSpawnGates: [
+        {
+          id: "@korri:input-seat",
+          start: async () => ({
+            inputSeats: {
+              seats: [
+                {
+                  slot: 1,
+                  playerIndex: 1,
+                  name: "Korri Seat P1",
+                  state: "available",
+                },
+              ],
+            },
+            stop: () => {},
+          }),
+        },
+      ],
+      spawnLaunch: async () => ({
+        result: child.promise,
+        terminate: () => child.resolve({ status: "launched" }),
+        terminateNow: () => child.resolve({ status: "failed", exitCode: 143 }),
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "input-seat-status", spec }),
+      }),
+    )
+
+    await new Promise(resolve => setTimeout(resolve, 5))
+    const statusResponse = await request(
+      core,
+      "/managed-launch/status",
+      authorized(),
+    )
+    const status = await statusResponse.json()
+
+    expect(status.capabilities.inputSeats).toBe(true)
+    expect(status.active.inputSeats).toEqual({
+      seats: [
+        {
+          slot: 1,
+          playerIndex: 1,
+          name: "Korri Seat P1",
+          state: "available",
+        },
+      ],
+    })
+
+    child.resolve({ status: "launched" })
+  })
+
   it("aborts a blocking pre-spawn gate on force terminate", async () => {
     const aborted = deferred<void>()
     const { core } = startHarness({
