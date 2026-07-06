@@ -24,12 +24,13 @@ export interface MoonlightStreamRuntimeOptions {
 export async function startMoonlightStreamRuntimeSession(
   options: MoonlightStreamRuntimeOptions,
 ): Promise<StreamRuntimeSession> {
-  const client = await (options.connect ?? connectMoonlightControl)({
-    socketPath: options.socketPath,
-  })
+  const connect = options.connect ?? connectMoonlightControl
+  const client = await connect({ socketPath: options.socketPath })
+  const healthPollClient = await connect({ socketPath: options.socketPath })
   try {
-    return await startStreamRuntimeSession({
+    const runtime = await startStreamRuntimeSession({
       session: moonlightSessionFromClient(client),
+      pollHealthState: () => healthPollClient.state(),
       recoveryPort: moonlightRecoveryControlPortFromClient(client),
       settingsFromState: moonlightRuntimeSettingsFromState,
       ...(options.adaptive ? { adaptive: options.adaptive } : {}),
@@ -38,7 +39,15 @@ export async function startMoonlightStreamRuntimeSession(
         : {}),
       ...(options.nowMs ? { nowMs: options.nowMs } : {}),
     })
+    return {
+      ...runtime,
+      close: () => {
+        runtime.close()
+        healthPollClient.close()
+      },
+    }
   } catch (error) {
+    healthPollClient.close()
     client.close()
     throw error
   }

@@ -117,7 +117,7 @@ describe("moonlightRuntimeSettingsFromState", () => {
 })
 
 describe("startMoonlightStreamRuntimeSession", () => {
-  it("connects the active socket and starts health plus recovery on one subscribed client", async () => {
+  it("connects the active socket plus a separate health polling client", async () => {
     const calls: unknown[] = []
     const runtime = await startMoonlightStreamRuntimeSession({
       socketPath: "/run/korri/control.sock",
@@ -128,7 +128,8 @@ describe("startMoonlightStreamRuntimeSession", () => {
       onRecoveryEvent: event => calls.push({ recovery: event }),
     })
 
-    expect(calls.slice(0, 4)).toEqual([
+    expect(calls.slice(0, 5)).toEqual([
+      { connect: "/run/korri/control.sock" },
       { connect: "/run/korri/control.sock" },
       "hello",
       "state",

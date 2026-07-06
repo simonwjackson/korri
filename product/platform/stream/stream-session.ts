@@ -55,6 +55,7 @@ export interface StreamRuntimeSettings {
 export interface StartStreamRuntimeSessionOptions {
   readonly session: StreamControlSession
   readonly settingsFromState: (state: unknown) => StreamRuntimeSettings
+  readonly pollHealthState?: () => Promise<unknown>
   readonly recoveryPort?: RuntimeRecoveryControlPort
   readonly onRecoveryEvent?: (event: RuntimeRecoveryEvent) => void
   readonly adaptive?: {
@@ -135,7 +136,7 @@ export async function startStreamRuntimeSession(
     const health = createStreamHealthMonitor({
       port: streamHealthSamplePortFromSession(session, {
         nowMs: options.nowMs,
-        pollState: () => session.state(),
+        pollState: options.pollHealthState ?? (() => session.state()),
       }),
     })
     const recovery = options.recoveryPort
