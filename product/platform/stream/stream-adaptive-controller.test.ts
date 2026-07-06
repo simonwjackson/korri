@@ -147,3 +147,165 @@ describe("computeStreamAdaptiveDecision", () => {
     expect(decision.target.bitrateKbps).toBeGreaterThan(8_000)
   })
 })
+
+describe("computeStreamAdaptiveDecision boundary-box controller behavior", () => {
+  it("clamps bitrate proposals to the boundary ceiling", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary(),
+      current: { ...current, bitrateKbps: 10_000 },
+      objectiveBias: 0.8,
+      boundaries: {
+        levers: { bitrate: { ceiling: 10_500 } },
+        outcomes: {},
+        lean: 0.8,
+      },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.target.bitrateKbps).toBe(10_500)
+  })
+
+  it("does not move pinned levers and adapts the remaining free levers", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({ bitrateDeliveryRatio: 0.65, rttMs: numeric(120, "rising") }),
+      current,
+      objectiveBias: 0.1,
+      boundaries: {
+        levers: { bitrate: { floor: 20_000, ceiling: 20_000, pinned: 20_000 } },
+        outcomes: {},
+        lean: 0,
+      },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.target.bitrateKbps).toBeUndefined()
+    expect(decision.target.fps).toBeLessThan(current.fps)
+  })
+
+  it("defends a max-latency outcome clamp and reports it as binding", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({ rttMs: numeric(80) }),
+      current,
+      objectiveBias: 0.9,
+      boundaries: {
+        levers: {},
+        outcomes: { maxLatencyMs: 50 },
+        lean: 0.9,
+      },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.bindingConstraint).toBe("max-latency")
+    expect(decision.target.bitrateKbps ?? decision.target.fps).toBeDefined()
+  })
+
+  it("recovers fps and resolution as well as bitrate when healthy", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary(),
+      current: {
+        ...current,
+        bitrateKbps: 8_000,
+        fps: 30,
+        resolution: { width: 960, height: 540 },
+      },
+      objectiveBias: 0.8,
+      boundaries: {
+        levers: {
+          bitrate: { ceiling: 20_000 },
+          fps: { ceiling: 60 },
+          resolution: { ceiling: { width: 1280, height: 720 } },
+        },
+        outcomes: {},
+        lean: 0.8,
+      },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.target.bitrateKbps).toBeGreaterThan(8_000)
+    expect(decision.target.fps).toBeGreaterThan(30)
+    expect(decision.target.resolution?.width).toBeGreaterThan(960)
+  })
+
+  it("sheds hard during a cliff and marks the decision mode", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({
+        bitrateDeliveryRatio: 0.25,
+        lossFraction: numeric(0.12, "rising"),
+        rttMs: numeric(140, "rising"),
+        queueDepth: numeric(9, "rising"),
+      }),
+      current,
+      objectiveBias: 0.5,
+      boundaries: { levers: {}, outcomes: {}, lean: 0.5 },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.mode).toBe("shed")
+    expect(decision.target.bitrateKbps).toBeLessThan(12_000)
+  })
+
+  it("shrinks canvas when bits per pixel are starved and grows grudgingly after recovery", () => {
+    const shrink = computeStreamAdaptiveDecision({
+      summary: summary({ bitrateDeliveryRatio: 0.75 }),
+      current: { ...current, bitrateKbps: 1_500 },
+      objectiveBias: 0.8,
+      boundaries: { levers: {}, outcomes: {}, lean: 0.8 },
+    })
+
+    expect(shrink.kind).toBe("target")
+    if (shrink.kind !== "target") throw new Error("expected shrink")
+    expect(shrink.target.resolution?.width).toBeLessThan(current.resolution.width)
+
+    const grow = computeStreamAdaptiveDecision({
+      summary: summary(),
+      current: {
+        ...current,
+        bitrateKbps: 20_000,
+        resolution: { width: 960, height: 540 },
+      },
+      objectiveBias: 0.8,
+      boundaries: {
+        levers: { resolution: { ceiling: { width: 1280, height: 720 } } },
+        outcomes: {},
+        lean: 0.8,
+      },
+    })
+
+    expect(grow.kind).toBe("target")
+    if (grow.kind !== "target") throw new Error("expected grow")
+    expect(grow.target.resolution?.width).toBeGreaterThan(960)
+  })
+
+  it("cold-starts conservatively then ramps once fresh samples arrive", () => {
+    const establish = computeStreamAdaptiveDecision({
+      summary: summary({ sampleCount: 1 }),
+      current,
+      objectiveBias: 0.8,
+      phase: "establishing",
+      boundaries: { levers: {}, outcomes: {}, lean: 0.8 },
+    })
+
+    expect(establish.kind).toBe("target")
+    if (establish.kind !== "target") throw new Error("expected establish target")
+    expect(establish.mode).toBe("establish")
+    expect(establish.target.bitrateKbps).toBeLessThanOrEqual(current.bitrateKbps)
+
+    const ramp = computeStreamAdaptiveDecision({
+      summary: summary({ sampleCount: 8 }),
+      current: { ...current, bitrateKbps: 8_000 },
+      objectiveBias: 0.8,
+      phase: "establishing",
+      boundaries: { levers: { bitrate: { ceiling: 20_000 } }, outcomes: {}, lean: 0.8 },
+    })
+
+    expect(ramp.kind).toBe("target")
+    if (ramp.kind !== "target") throw new Error("expected ramp target")
+    expect(ramp.mode).toBe("establish")
+    expect(ramp.target.bitrateKbps).toBeGreaterThan(8_800)
+  })
+})
