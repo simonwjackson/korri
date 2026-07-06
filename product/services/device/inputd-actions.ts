@@ -354,16 +354,10 @@ function defaultCommands(): InputdActionCommands {
       "output",
       "down",
     ]),
-    toggleBottomScreen: commandFromEnv(
+    toggleBottomScreen: commandFromEnvOptional(
       "KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN",
-      "swaymsg",
-      ["output", "DSI-1", "power", "toggle"],
     ),
-    toggleTopScreen: commandFromEnv(
-      "KORRI_INPUTD_TOGGLE_TOP_SCREEN",
-      "swaymsg",
-      ["output", "DSI-2", "power", "toggle"],
-    ),
+    toggleTopScreen: commandFromEnvOptional("KORRI_INPUTD_TOGGLE_TOP_SCREEN"),
     workspacePrev: buildSwayShortcutCommand("workspace-prev"),
     workspaceNext: buildSwayShortcutCommand("workspace-next"),
     moveOutputUp: buildSwayShortcutCommand("move-output-up"),

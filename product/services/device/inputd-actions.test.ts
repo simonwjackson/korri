@@ -297,15 +297,16 @@ describe("inputd actions", () => {
     ])
   })
 
-  it("runs direct Sway screen power toggle commands by default", async () => {
-    const { dispatcher, commands } = createHarness()
+  it("does not assume connector-specific screen power toggles by default", async () => {
+    const { dispatcher, commands, warnings } = createHarness()
 
     await dispatcher.dispatch("toggle-bottom-screen")
     await dispatcher.dispatch("toggle-top-screen")
 
-    expect(commands).toEqual([
-      { command: "swaymsg", args: ["output", "DSI-1", "power", "toggle"] },
-      { command: "swaymsg", args: ["output", "DSI-2", "power", "toggle"] },
+    expect(commands).toEqual([])
+    expect(warnings).toEqual([
+      { actionId: "toggle-bottom-screen" },
+      { actionId: "toggle-top-screen" },
     ])
   })
 
