@@ -6,6 +6,7 @@ import { KorriControlLayerLiveWithPlugins } from "@platform/control/korri-contro
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import { LibrarySource } from "@platform/library/library-services"
 import { createKorriControlRpc } from "@product/apps/portal/control/korri-control-rpc"
+import { createEvierStreamControlRpcClient } from "@product/apps/portal/features/evier/stream-control-rpc-client"
 import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugin-host/acquisition"
 import { PluginLibrarySourceLayerLive } from "@product/plugin-host/library-source-layer"
@@ -32,11 +33,27 @@ import {
 } from "./game-picker"
 import { runLaunchCommand } from "./launch-command"
 import { scoutCommand } from "./scout-command"
-import { parseResolution, runStreamSet, runStreamShow } from "./stream-quality"
+import {
+  parseResolution,
+  runStreamAdaptiveSet,
+  runStreamAdaptiveShow,
+  runStreamSet,
+  runStreamShow,
+} from "./stream-quality"
 
 const VERSION = "1.0.0"
 
 const streamSocketFlag = Flag.string("socket").pipe(Flag.optional)
+const streamAdaptiveFlags = {
+  bitrate: Flag.string("bitrate").pipe(Flag.optional),
+  fps: Flag.string("fps").pipe(Flag.optional),
+  resolution: Flag.string("resolution").pipe(Flag.optional),
+  lean: Flag.string("lean").pipe(Flag.optional),
+  auto: Flag.string("auto").pipe(Flag.optional),
+  maxLatency: Flag.string("max-latency").pipe(Flag.optional),
+  minFps: Flag.string("min-fps").pipe(Flag.optional),
+  dryRun: Flag.boolean("dry-run").pipe(Flag.withDefault(false)),
+}
 
 const streamShowCommand = Command.make(
   "show",
@@ -116,8 +133,24 @@ const streamResolutionCommand = Command.make(
   ),
 )
 
-const streamCommand = Command.make("stream").pipe(
-  Command.withDescription("Manage Korri game streaming."),
+const streamCommand = Command.make(
+  "stream",
+  { socket: streamSocketFlag, ...streamAdaptiveFlags },
+  ({ socket: _socket, dryRun, ...flags }) =>
+    Effect.gen(function* () {
+      const args = streamAdaptiveArgs(flags)
+      const client = createEvierStreamControlRpcClient()
+      const exitCode = yield* Effect.promise(() =>
+        args.length > 0
+          ? runStreamAdaptiveSet(args, { client, dryRun })
+          : runStreamAdaptiveShow({ client }),
+      )
+      process.exitCode = exitCode
+    }),
+).pipe(
+  Command.withDescription(
+    "Manage Korri game streaming. With --key=value flags, updates adaptive boundaries.",
+  ),
   Command.withSubcommands([
     streamShowCommand,
     streamBitrateCommand,
@@ -125,6 +158,30 @@ const streamCommand = Command.make("stream").pipe(
     streamResolutionCommand,
   ]),
 )
+
+function streamAdaptiveArgs(flags: {
+  readonly bitrate: Option.Option<string>
+  readonly fps: Option.Option<string>
+  readonly resolution: Option.Option<string>
+  readonly lean: Option.Option<string>
+  readonly auto: Option.Option<string>
+  readonly maxLatency: Option.Option<string>
+  readonly minFps: Option.Option<string>
+}): readonly string[] {
+  return [
+    optionArg("bitrate", flags.bitrate),
+    optionArg("fps", flags.fps),
+    optionArg("resolution", flags.resolution),
+    optionArg("lean", flags.lean),
+    optionArg("auto", flags.auto),
+    optionArg("max-latency", flags.maxLatency),
+    optionArg("min-fps", flags.minFps),
+  ].filter((arg): arg is string => arg !== undefined)
+}
+
+function optionArg(key: string, option: Option.Option<string>): string | undefined {
+  return Option.isSome(option) ? `${key}=${option.value}` : undefined
+}
 
 const gamesListCommand = Command.make(
   "list",

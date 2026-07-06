@@ -13,6 +13,8 @@ import {
   newestSocketPath,
   parseResolution,
   resolveMoonlightControlRoot,
+  runStreamAdaptiveSet,
+  runStreamAdaptiveShow,
   runStreamSet,
   runStreamShow,
   type StreamQualityIo,
@@ -362,6 +364,106 @@ describe("runStreamShow", () => {
     )
     expect(code).toBe(1)
     expect(err.join("\n")).toContain("no running stream found")
+  })
+})
+
+describe("runStreamAdaptiveSet", () => {
+  test("applies flat key=value adaptive boundaries through stream-control RPC", async () => {
+    const out: string[] = []
+    const calls: unknown[] = []
+    const code = await runStreamAdaptiveSet(["bitrate=..12000", "lean=responsive"], {
+      client: {
+        getState: async () => ({}),
+        applyAction: async payload => {
+          calls.push(payload)
+          return { outcome: { kind: "single", status: "applied" } }
+        },
+        setBrightness: async () => ({}),
+      },
+      write: line => out.push(line),
+    })
+
+    expect(code).toBe(0)
+    expect(calls).toEqual([
+      {
+        action: "app.stream-control.adaptive.set",
+        payload: { args: ["bitrate=..12000", "lean=responsive"] },
+      },
+    ])
+    expect(out.join("\n")).toContain("adaptive stream boundaries applied")
+  })
+
+  test("previews flat key=value adaptive boundaries with dry-run", async () => {
+    const out: string[] = []
+    const calls: unknown[] = []
+    const code = await runStreamAdaptiveSet(["bitrate=..12000"], {
+      dryRun: true,
+      client: {
+        getState: async () => ({}),
+        applyAction: async payload => {
+          calls.push(payload)
+          return { response: { decision: { kind: "dormant", reason: "within-hysteresis" } } }
+        },
+        setBrightness: async () => ({}),
+      },
+      write: line => out.push(line),
+    })
+
+    expect(code).toBe(0)
+    expect(calls).toEqual([
+      {
+        action: "app.stream-control.adaptive.dry-run",
+        payload: { args: ["bitrate=..12000"] },
+      },
+    ])
+    expect(out.join("\n")).toContain("adaptive stream dry-run")
+  })
+
+  test("validates flat boundary args before RPC", async () => {
+    const err: string[] = []
+    const calls: unknown[] = []
+    const code = await runStreamAdaptiveSet(["bitrate=20000..5000"], {
+      client: {
+        getState: async () => ({}),
+        applyAction: async payload => {
+          calls.push(payload)
+          return {}
+        },
+        setBrightness: async () => ({}),
+      },
+      writeError: line => err.push(line),
+    })
+
+    expect(code).toBe(2)
+    expect(calls).toEqual([])
+    expect(err.join("\n")).toContain("bitrate")
+  })
+})
+
+describe("runStreamAdaptiveShow", () => {
+  test("prints adaptive state from stream-control RPC", async () => {
+    const out: string[] = []
+    const code = await runStreamAdaptiveShow({
+      client: {
+        getState: async () => ({
+          adaptive: {
+            status: "ok",
+            readback: {
+              enabled: true,
+              boundaries: { levers: { bitrate: { ceiling: 12000 } }, outcomes: {}, lean: 0.5 },
+              lastEvent: { kind: "dormant", reason: "within-hysteresis" },
+            },
+          },
+        }),
+        applyAction: async () => ({}),
+        setBrightness: async () => ({}),
+      },
+      write: line => out.push(line),
+    })
+
+    expect(code).toBe(0)
+    expect(out.join("\n")).toContain("adaptive:    enabled")
+    expect(out.join("\n")).toContain("bitrate=..12000")
   })
 })
 

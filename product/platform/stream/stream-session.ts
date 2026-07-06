@@ -25,6 +25,7 @@ import { streamHealthSamplePortFromSession } from "./stream-health-session"
 export interface ActiveStreamControlSessionRecord {
   readonly sessionId: string
   readonly socketPath: string
+  readonly adaptiveControl?: () => StreamAdaptiveRuntimeControl | undefined
   readonly close?: () => void
 }
 
@@ -71,7 +72,7 @@ export interface StreamAdaptiveControlSnapshot {
 export interface StreamAdaptiveRuntimeControl {
   readonly snapshot: () => StreamAdaptiveControlSnapshot
   readonly setBoundaries: (boundaries: StreamBoundaries | undefined) => void
-  readonly dryRun: () => StreamAdaptiveDecision
+  readonly dryRun: (boundaries?: StreamBoundaries) => StreamAdaptiveDecision
 }
 
 export interface StreamRuntimeSession {
@@ -200,12 +201,12 @@ function startAdaptiveRunner(input: {
     setBoundaries: next => {
       boundaries = next
     },
-    dryRun: () =>
+    dryRun: previewBoundaries =>
       computeStreamAdaptiveDecision({
         summary: input.health.latestSummary((input.options.nowMs ?? Date.now)()),
         current: adaptiveCurrentSettings(input.recovery, initialSettings),
         objectiveBias: adaptive.objectiveBias,
-        boundaries,
+        boundaries: previewBoundaries ?? boundaries,
       }),
   }
   return { runner, control }

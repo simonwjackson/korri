@@ -12,6 +12,7 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@platform/plugin/registry"
+import { parseStreamBoundaryArgs } from "@platform/stream/stream-adaptive-boundaries"
 import {
   type ActiveStreamControlSessionRegistry,
   activeStreamControlSessionRegistry,
@@ -203,6 +204,14 @@ function applyAction(
   StreamControlCommandResponseData,
   DataError | ValidationError
 > {
+  if (action === "app.stream-control.adaptive.set") {
+    return runAdaptiveSet(runtime, action, requested, false)
+  }
+
+  if (action === "app.stream-control.adaptive.dry-run") {
+    return runAdaptiveSet(runtime, action, requested, true)
+  }
+
   if (action === "app.stream-control.brightness.set") {
     return numericPayloadField(requested, "percent").pipe(
       Effect.flatMap(percent =>
@@ -261,6 +270,57 @@ function applyAction(
       error =>
         new DataError({ reason: "Unavailable", message: errorMessage(error) }),
     ),
+  )
+}
+
+function runAdaptiveSet(
+  runtime: Runtime,
+  action: string,
+  requested: StreamControlRequestedPayload,
+  dryRun: boolean,
+): Effect.Effect<
+  StreamControlCommandResponseData,
+  DataError | ValidationError
+> {
+  return stringArrayPayloadField(requested, "args").pipe(
+    Effect.flatMap(args =>
+      Effect.try({
+        try: () => parseStreamBoundaryArgs(args),
+        catch: error =>
+          new ValidationError({ message: errorMessage(error) }),
+      }),
+    ),
+    Effect.flatMap(boundaries => {
+      const control = runtime.activeStreamControlSessionRegistry
+        ?.current()
+        ?.adaptiveControl?.()
+      if (!control) {
+        return Effect.fail(
+          new DataError({
+            reason: "Unavailable",
+            message: "no active adaptive stream controller",
+          }),
+        )
+      }
+      return Effect.tryPromise({
+        try: async () => {
+          const response = dryRun
+            ? {
+                _tag: "adaptive.boundaries.dry-run",
+                decision: control.dryRun(boundaries),
+                boundaries,
+              }
+            : { _tag: "adaptive.boundaries.applied", boundaries }
+          if (!dryRun) control.setBoundaries(boundaries)
+          return recordCommandOutcome(
+            { action, requested, record: runtime.record },
+            response,
+          )
+        },
+        catch: error =>
+          new DataError({ reason: "Unavailable", message: errorMessage(error) }),
+      })
+    }),
   )
 }
 
@@ -348,12 +408,14 @@ async function recordCommandOutcome(
 async function readState(
   runtime: Runtime,
 ): Promise<StreamControlStateResponseData> {
-  const [brightness, battery, pluginDescriptions] = await Promise.all([
+  const [adaptive, brightness, battery, pluginDescriptions] = await Promise.all([
+    readAdaptiveState(runtime),
     readBrightnessState(runtime),
     readBatteryState(runtime),
     describePluginStreamControls(runtime),
   ])
   const result = {
+    adaptive,
     brightness,
     battery,
     plugins: Object.fromEntries(
@@ -365,6 +427,18 @@ async function readState(
   }
   await recordStateSnapshot(runtime.record, result)
   return result
+}
+
+async function readAdaptiveState(runtime: Runtime) {
+  const control = runtime.activeStreamControlSessionRegistry
+    ?.current()
+    ?.adaptiveControl?.()
+  if (!control) return { status: "disabled" as const }
+  try {
+    return { status: "ok" as const, readback: control.snapshot() }
+  } catch (error) {
+    return { status: "error" as const, error: errorMessage(error) }
+  }
 }
 
 async function readBrightnessState(runtime: Runtime) {
@@ -496,6 +570,18 @@ function activeStreamControlSocketInput(runtime: Runtime): {
     ?.current()
     ?.socketPath.trim()
   return socketPath ? { socketPath } : {}
+}
+
+function stringArrayPayloadField(
+  payload: StreamControlRequestedPayload,
+  key: string,
+): Effect.Effect<readonly string[], ValidationError> {
+  const value = payload[key]
+  return Array.isArray(value) && value.every(item => typeof item === "string")
+    ? Effect.succeed(value)
+    : Effect.fail(
+        new ValidationError({ message: `${key} string array required` }),
+      )
 }
 
 function numericPayloadField(

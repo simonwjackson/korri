@@ -17,6 +17,7 @@ import type { PluginRegistry } from "@platform/plugin/registry"
 import {
   activeStreamControlSessionRegistry,
   type StartStreamRuntimeSessionOptions,
+  type StreamRuntimeSession,
 } from "@platform/stream/stream-session"
 import {
   dispatchStreamLaunch,
@@ -317,11 +318,11 @@ function registerMoonlightControlSession(
   session: ManagedMoonlightSessionHandle,
   startStreamRuntimeSession: (
     options: MoonlightStreamRuntimeOptions,
-  ) => Promise<{ readonly close: () => void }>,
+  ) => Promise<StreamRuntimeSession>,
 ): ManagedMoonlightSessionHandle {
   let unregistering = false
   let runtimeClosed = false
-  let runtimeSession: { readonly close: () => void } | undefined
+  let runtimeSession: StreamRuntimeSession | undefined
   const closeRuntimeSession = () => {
     if (runtimeClosed) return
     runtimeClosed = true
@@ -346,6 +347,7 @@ function registerMoonlightControlSession(
   activeStreamControlSessionRegistry.register({
     sessionId: control.sessionId,
     socketPath: control.socketPath,
+    adaptiveControl: () => runtimeSession?.adaptiveControl,
     close: () => {
       closeRuntimeSession()
       if (!unregistering) session.terminate()

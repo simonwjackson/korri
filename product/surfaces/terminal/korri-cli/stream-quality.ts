@@ -1,6 +1,11 @@
 import { readdir, stat } from "node:fs/promises"
 import { join } from "node:path"
 import {
+  parseStreamBoundaryArgs,
+  serializeStreamBoundaries,
+} from "@platform/stream/stream-adaptive-boundaries"
+import type { StreamControlClient } from "@platform/stream-control/stream-control-client"
+import {
   connectStreamControlSession,
   type StreamControlSession,
 } from "@platform/stream-control/stream-control-session"
@@ -69,6 +74,13 @@ export type StreamQualityChange =
       readonly height: number
     }
 
+export interface StreamAdaptiveCliIo {
+  readonly client?: StreamControlClient
+  readonly dryRun?: boolean
+  readonly write?: (line: string) => void
+  readonly writeError?: (line: string) => void
+}
+
 export interface StreamQualityIo {
   readonly socketPath?: string
   readonly discoverSocket?: () => Promise<string | undefined>
@@ -79,6 +91,59 @@ export interface StreamQualityIo {
 }
 
 const APPLY_SETTLE_MS = 1500
+const ADAPTIVE_SET_ACTION = "app.stream-control.adaptive.set"
+const ADAPTIVE_DRY_RUN_ACTION = "app.stream-control.adaptive.dry-run"
+
+export async function runStreamAdaptiveSet(
+  args: readonly string[],
+  io: StreamAdaptiveCliIo = {},
+): Promise<number> {
+  const write = io.write ?? (line => console.log(line))
+  const writeError = io.writeError ?? (line => console.error(line))
+  const client = io.client
+  if (!client) {
+    writeError("stream-control RPC client is not available")
+    return 1
+  }
+  try {
+    parseStreamBoundaryArgs(args)
+  } catch (error) {
+    writeError(error instanceof Error ? error.message : String(error))
+    return 2
+  }
+  try {
+    const action = io.dryRun ? ADAPTIVE_DRY_RUN_ACTION : ADAPTIVE_SET_ACTION
+    const response = await client.applyAction({ action, payload: { args } })
+    write(
+      io.dryRun
+        ? `adaptive stream dry-run: ${JSON.stringify(response)}`
+        : "adaptive stream boundaries applied",
+    )
+    return 0
+  } catch (error) {
+    writeError(describeControlError(error))
+    return 1
+  }
+}
+
+export async function runStreamAdaptiveShow(
+  io: StreamAdaptiveCliIo = {},
+): Promise<number> {
+  const write = io.write ?? (line => console.log(line))
+  const writeError = io.writeError ?? (line => console.error(line))
+  const client = io.client
+  if (!client) {
+    writeError("stream-control RPC client is not available")
+    return 1
+  }
+  try {
+    write(formatAdaptiveState(await client.getState()))
+    return 0
+  } catch (error) {
+    writeError(describeControlError(error))
+    return 1
+  }
+}
 
 export async function runStreamShow(io: StreamQualityIo = {}): Promise<number> {
   return withStream(io, async (client, write) => {
@@ -101,6 +166,31 @@ export async function runStreamSet(
     write(formatSetOutcome(change, before, after))
     return 0
   })
+}
+
+function formatAdaptiveState(state: unknown): string {
+  const adaptive = asRecord(state)?.adaptive
+  const record = asRecord(adaptive)
+  if (!record || record.status === "disabled") return "adaptive:    disabled"
+  if (record.status === "error") {
+    return `adaptive:    error (${String(record.error ?? "unknown")})`
+  }
+  const readback = asRecord(record.readback)
+  const enabled = readback?.enabled === true ? "enabled" : "disabled"
+  const boundaries = asRecord(readback?.boundaries)
+  const boundaryLine = boundaries
+    ? serializeStreamBoundaries(boundaries as Parameters<typeof serializeStreamBoundaries>[0]).join(" ")
+    : "auto"
+  const lastEvent = readback?.lastEvent
+    ? `\nlast event:  ${JSON.stringify(readback.lastEvent)}`
+    : ""
+  return [`adaptive:    ${enabled}`, `boundaries:   ${boundaryLine}`].join("\n") + lastEvent
+}
+
+function asRecord(input: unknown): Record<string, unknown> | undefined {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : undefined
 }
 
 async function withStream(

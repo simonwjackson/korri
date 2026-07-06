@@ -152,6 +152,133 @@ describe("app.stream-control RPC handlers", () => {
     })
   })
 
+  it("reports active adaptive stream policy state", async () => {
+    const registry = createActiveStreamControlSessionRegistry()
+    registry.register({
+      sessionId: "stream-1",
+      socketPath: "/run/stream/control.sock",
+      adaptiveControl: () => ({
+        snapshot: () => ({
+          enabled: true,
+          boundaries: {
+            levers: { bitrate: { ceiling: 12_000 } },
+            outcomes: { maxLatencyMs: 50 },
+            lean: 0,
+          },
+          lastEvent: { kind: "dormant", reason: "within-hysteresis" },
+        }),
+        setBoundaries: () => {},
+        dryRun: () => ({ kind: "dormant", reason: "within-hysteresis" }),
+      }),
+    })
+    const service = createStreamControlService(
+      {},
+      { activeStreamControlSessionRegistry: registry },
+    )
+
+    const state = await Effect.runPromise(service.state())
+
+    expect(state.adaptive).toEqual({
+      status: "ok",
+      readback: {
+        enabled: true,
+        boundaries: {
+          levers: { bitrate: { ceiling: 12_000 } },
+          outcomes: { maxLatencyMs: 50 },
+          lean: 0,
+        },
+        lastEvent: { kind: "dormant", reason: "within-hysteresis" },
+      },
+    })
+  })
+
+  it("applies active adaptive stream boundaries through the generic action path", async () => {
+    let captured: unknown
+    const registry = createActiveStreamControlSessionRegistry()
+    registry.register({
+      sessionId: "stream-1",
+      socketPath: "/run/stream/control.sock",
+      adaptiveControl: () => ({
+        snapshot: () => ({ enabled: true }),
+        setBoundaries: boundaries => {
+          captured = boundaries
+        },
+        dryRun: () => ({ kind: "dormant", reason: "within-hysteresis" }),
+      }),
+    })
+    const service = createStreamControlService(
+      {},
+      { activeStreamControlSessionRegistry: registry },
+    )
+
+    const response = await Effect.runPromise(
+      service.applyAction({
+        action: "app.stream-control.adaptive.set",
+        payload: { args: ["bitrate=..12000", "lean=responsive"] },
+      }),
+    )
+
+    expect(response).toMatchObject({
+      action: "app.stream-control.adaptive.set",
+      outcome: { kind: "single", status: "applied" },
+    })
+    expect(captured).toEqual({
+      levers: { bitrate: { ceiling: 12_000 } },
+      outcomes: {},
+      lean: 0,
+      auto: undefined,
+    })
+  })
+
+  it("previews active adaptive stream boundaries without applying them", async () => {
+    let applied = false
+    let previewed: unknown
+    const registry = createActiveStreamControlSessionRegistry()
+    registry.register({
+      sessionId: "stream-1",
+      socketPath: "/run/stream/control.sock",
+      adaptiveControl: () => ({
+        snapshot: () => ({ enabled: true }),
+        setBoundaries: () => {
+          applied = true
+        },
+        dryRun: boundaries => {
+          previewed = boundaries
+          return { kind: "dormant", reason: "within-hysteresis" }
+        },
+      }),
+    })
+    const service = createStreamControlService(
+      {},
+      { activeStreamControlSessionRegistry: registry },
+    )
+
+    const response = await Effect.runPromise(
+      service.applyAction({
+        action: "app.stream-control.adaptive.dry-run",
+        payload: { args: ["bitrate=..12000"] },
+      }),
+    )
+
+    expect(applied).toBe(false)
+    expect(previewed).toEqual({
+      levers: { bitrate: { ceiling: 12_000 } },
+      outcomes: {},
+      lean: undefined,
+      auto: undefined,
+    })
+    expect(response.response).toEqual({
+      _tag: "adaptive.boundaries.dry-run",
+      decision: { kind: "dormant", reason: "within-hysteresis" },
+      boundaries: {
+        levers: { bitrate: { ceiling: 12_000 } },
+        outcomes: {},
+        lean: undefined,
+        auto: undefined,
+      },
+    })
+  })
+
   it("uses the active stream session socket instead of stale env socket", async () => {
     await withMoonlightControlServer(async active => {
       const staleSocket = join(
