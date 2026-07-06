@@ -318,6 +318,68 @@ describe("RPCS3 readable launch integration", () => {
     }
   })
 
+  it("derives an RPCS3 input profile from input-seat launch companions", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-input-seat-"))
+    try {
+      const gameFolder = join(root, "Skate 3 [BLUS30464]")
+      const marker = join(gameFolder, "PS3_DISC.SFB")
+      const stateRoot = join(root, "rpcs3")
+      const firmwareSentinel = "dev_flash/sys/external/liblv2.sprx"
+      await mkdir(gameFolder, { recursive: true })
+      await writeFile(marker, "disc")
+      await mkdir(join(stateRoot, "dev_flash", "sys", "external"), {
+        recursive: true,
+      })
+      await writeFile(join(stateRoot, firmwareSentinel), "firmware")
+
+      const result = await Effect.runPromise(
+        materializeReadableRpcs3Launch({
+          context: context({
+            contentPath: marker,
+            launchCompanions: {
+              "@korri:input-seat": {
+                runtimeSupportsExtraSeats: true,
+                playerCount: 2,
+              },
+            },
+            policy: {
+              state: { root: stateRoot },
+              firmware: { sentinel: firmwareSentinel },
+            },
+          }),
+        }),
+      )
+
+      const args = result.spec.args
+      const inputIndex = args.indexOf("--input-config")
+      expect(inputIndex).toBeGreaterThanOrEqual(0)
+      expect(args[inputIndex + 1]).toBe("korri-Skate-3-BLUS30464")
+
+      const parsed = parse(
+        await readFile(
+          join(
+            stateRoot,
+            "input_configs",
+            "global",
+            "korri-Skate-3-BLUS30464.yml",
+          ),
+          "utf8",
+        ),
+      )
+      expect(parsed["Player 1 Input"]).toEqual({
+        Handler: "Evdev",
+        Device: "Korri Seat P1",
+      })
+      expect(parsed["Player 2 Input"]).toEqual({
+        Handler: "Evdev",
+        Device: "Korri Seat P2",
+      })
+      expect(parsed["Player 3 Input"]).toEqual({ Handler: "Null" })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("writes no input profile and no --input-config when input is unset", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-rpcs3-input-noop-"))
     try {
@@ -506,6 +568,7 @@ function context(
     readonly contentPath?: string
     readonly policy?: unknown
     readonly storage?: ReadableResolvedLaunchContext["storage"]
+    readonly launchCompanions?: ReadableResolvedLaunchContext["launchCompanions"]
   } = {},
 ): ReadableResolvedLaunchContext {
   return {
@@ -530,7 +593,7 @@ function context(
         ? {}
         : { content: { path: input.contentPath } }
       : { content: { path: "/tmp/Skate 3 [BLUS30464]/PS3_DISC.SFB" } }),
-    launchCompanions: {},
+    launchCompanions: input.launchCompanions ?? {},
     plugin: {
       [KORRI_RPCS3_PLUGIN_ID]: input.policy ?? {
         state: { root: "/tmp/rpcs3" },

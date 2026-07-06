@@ -22,6 +22,7 @@ import { mergeGuiIni } from "./gui-preseed"
 import { KORRI_RPCS3_PLUGIN_ID } from "./ids"
 import { renderInputConfigYaml } from "./input-config-render"
 import { routeInputConfig } from "./input-mapping"
+import { rpcs3InputPolicyWithInputSeats } from "./input-seat-policy"
 import { composeRpcs3LaunchSpec } from "./launch-spec"
 import { routeSettings } from "./mapping"
 import {
@@ -203,7 +204,11 @@ const writeInputConfig = (
   policy: Rpcs3Policy,
 ): Effect.Effect<string | undefined, ResolutionError> =>
   Effect.gen(function* () {
-    const text = renderInputConfigYaml(routeInputConfig(policy.input))
+    const text = renderInputConfigYaml(
+      routeInputConfig(
+        rpcs3InputPolicyWithInputSeats(policy.input, context.launchCompanions),
+      ),
+    )
     if (text === undefined) return undefined
     const name = `korri-${slugReleaseId(context.releaseId)}`
     const profilePath = join(
