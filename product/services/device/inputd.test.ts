@@ -662,6 +662,43 @@ B: KEY=40000000
     expect(actions).toEqual(["system-panel"])
   })
 
+  it("routes plain Back to the configured temporary action", async () => {
+    const previous = process.env.KORRI_INPUTD_BACK_TAP_ACTION
+    process.env.KORRI_INPUTD_BACK_TAP_ACTION = "toggle-steam-visibility"
+    try {
+      const proc = await loadProcFixture("bus-input-devices-device.txt")
+      const source = createControllableEventSource()
+      const actions: KorriInputdActionId[] = []
+      await startInputd({
+        readProcDevices: async () => proc,
+        openEventSource: device =>
+          device.eventNode === "event9"
+            ? source.open()
+            : createControllableEventSource().open(),
+        actionDispatcher: {
+          dispatch: async actionId => {
+            actions.push(actionId)
+          },
+        },
+      })
+
+      source.push(evdevKey(BTN_BACK, 1))
+      source.push(evdevKey(BTN_BACK, 0))
+
+      await waitFor(
+        () => actions.includes("toggle-steam-visibility"),
+        "Steam visibility toggle",
+      )
+      expect(actions).toEqual(["toggle-steam-visibility"])
+    } finally {
+      if (previous === undefined) {
+        delete process.env.KORRI_INPUTD_BACK_TAP_ACTION
+      } else {
+        process.env.KORRI_INPUTD_BACK_TAP_ACTION = previous
+      }
+    }
+  })
+
   it("does not treat AYN/F24 as Home by default", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const source = createControllableEventSource()
@@ -965,31 +1002,43 @@ B: KEY=40000000
     expect(actions).toEqual(["toggle-bottom-screen", "toggle-top-screen"])
   })
 
-  it("dispatches screen-switch from Home+Back", async () => {
-    const proc = await loadProcFixture("bus-input-devices-device.txt")
-    const systemSource = createControllableEventSource()
-    const gamepadSource = createControllableEventSource()
-    const actions: KorriInputdActionId[] = []
-    await startInputd({
-      readProcDevices: async () => proc,
-      openEventSource: device =>
-        device.eventNode === "event6"
-          ? systemSource.open()
-          : device.eventNode === "event9"
-            ? gamepadSource.open()
-            : createControllableEventSource().open(),
-      actionDispatcher: {
-        dispatch: async actionId => {
-          actions.push(actionId)
+  it("dispatches screen-switch from Home+Back without also firing the Back tap", async () => {
+    const previous = process.env.KORRI_INPUTD_BACK_TAP_ACTION
+    process.env.KORRI_INPUTD_BACK_TAP_ACTION = "toggle-steam-visibility"
+    try {
+      const proc = await loadProcFixture("bus-input-devices-device.txt")
+      const systemSource = createControllableEventSource()
+      const gamepadSource = createControllableEventSource()
+      const actions: KorriInputdActionId[] = []
+      await startInputd({
+        readProcDevices: async () => proc,
+        openEventSource: device =>
+          device.eventNode === "event6"
+            ? systemSource.open()
+            : device.eventNode === "event9"
+              ? gamepadSource.open()
+              : createControllableEventSource().open(),
+        actionDispatcher: {
+          dispatch: async actionId => {
+            actions.push(actionId)
+          },
         },
-      },
-    })
+      })
 
-    systemSource.push(evdevKey(BTN_MODE, 1))
-    gamepadSource.push(evdevKey(BTN_BACK, 1))
+      systemSource.push(evdevKey(BTN_MODE, 1))
+      gamepadSource.push(evdevKey(BTN_BACK, 1))
+      gamepadSource.push(evdevKey(BTN_BACK, 0))
 
-    await waitFor(() => actions.includes("screen-switch"), "screen-switch")
-    expect(actions).toEqual(["screen-switch"])
+      await waitFor(() => actions.includes("screen-switch"), "screen-switch")
+      await Bun.sleep(30)
+      expect(actions).toEqual(["screen-switch"])
+    } finally {
+      if (previous === undefined) {
+        delete process.env.KORRI_INPUTD_BACK_TAP_ACTION
+      } else {
+        process.env.KORRI_INPUTD_BACK_TAP_ACTION = previous
+      }
+    }
   })
 
   it("opens non-gamepad policy devices without broadcasting them to gamepad subscribers", async () => {

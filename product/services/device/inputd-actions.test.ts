@@ -374,6 +374,25 @@ describe("inputd actions", () => {
     expect(commands).toEqual([{ command: "osk", args: ["toggle"] }])
   })
 
+  it("runs configured Steam visibility toggle command", async () => {
+    const commands: InputdActionCommand[] = []
+    const dispatcher = createInputdActionDispatcher({
+      commands: {
+        toggleSteamVisibility: { command: "steam-visible", args: ["toggle"] },
+      },
+      runner: async command => {
+        commands.push(command)
+      },
+      logger: silentLogger,
+    })
+
+    await dispatcher.dispatch("toggle-steam-visibility")
+
+    expect(commands).toEqual([
+      { command: "steam-visible", args: ["toggle"] },
+    ])
+  })
+
   it("runs configured volume and brightness commands", async () => {
     const commands: InputdActionCommand[] = []
     const dispatcher = createInputdActionDispatcher({

@@ -290,6 +290,57 @@ let
           swaymsg 'focus output ${displayPrimaryConnector}' >/dev/null 2>&1 || true
         '';
   };
+  # Temporary Steam debugging escape hatch. The Steam broker is a nested
+  # Gamescope surface, so the outer Sway compositor only sees app_id=gamescope.
+  # Back-button visibility is profile-local and intentionally easy to remove
+  # once Steam launch/debugging stabilizes.
+  korriSteamVisibilityToggle = pkgs.writeShellApplication {
+    name = "korri-steam-visibility-toggle";
+    runtimeInputs = with pkgs; [
+      coreutils
+      findutils
+      jq
+      sway
+    ];
+    text = ''
+      set -u
+
+      runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
+      hub_workspace="''${KORRI_STEAM_TOGGLE_HUB_WORKSPACE:-korri:hub}"
+      steam_workspace="''${KORRI_STEAM_TOGGLE_WORKSPACE:-korri:steam-debug}"
+      sock=$(find "$runtime_dir" -maxdepth 1 -name 'sway-ipc.*.sock' -print 2>/dev/null | head -n 1 || true)
+      [ -n "$sock" ] || exit 0
+      export SWAYSOCK="$sock"
+
+      current_workspace=$(swaymsg -t get_workspaces 2>/dev/null \
+        | jq -r '.[] | select(.focused == true) | .name' \
+        | head -n 1 || true)
+
+      if [ "$current_workspace" = "$steam_workspace" ]; then
+        swaymsg "workspace \"$hub_workspace\"" >/dev/null 2>&1 || true
+        exit 0
+      fi
+
+      gamescope_ids=$(swaymsg -t get_tree 2>/dev/null \
+        | jq -r '.. | objects | select(.type? == "con" and ((.app_id? == "gamescope") or (.window_properties?.class? == "gamescope"))) | .id' \
+        | sort -n \
+        | tail -n 1 || true)
+
+      if [ -z "$gamescope_ids" ]; then
+        swaymsg "workspace \"$hub_workspace\"" >/dev/null 2>&1 || true
+        exit 0
+      fi
+
+      for id in $gamescope_ids; do
+        swaymsg "[con_id=$id] move container to workspace \"$steam_workspace\"" >/dev/null 2>&1 || true
+      done
+      swaymsg "workspace \"$steam_workspace\"" >/dev/null 2>&1 || true
+      for id in $gamescope_ids; do
+        swaymsg "[con_id=$id] focus, fullscreen enable, border none" >/dev/null 2>&1 || true
+      done
+    '';
+  };
+
   # The substrate exposes an explicit audio route strategy under
   # rocknix.device.audio.route.*. Korri owns the kiosk user's PipeWire graph,
   # but it still treats the substrate route as the source of truth: product
@@ -833,9 +884,12 @@ in
   #     override needed now that the substrate volume handler is gone.
   #   - AYN/F24 -> bottom-screen toggle. This is SM8550/Bandai-specific device
   #     policy and intentionally not part of standard controller Home handling.
+  #   - Back -> temporary Steam visibility toggle for development debugging.
   services.korri.input.inputd.environment = {
     KORRI_INPUTD_KEY_F24_ACTION = "toggle-bottom-screen";
+    KORRI_INPUTD_BACK_TAP_ACTION = "toggle-steam-visibility";
     KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN = "${korriBandaiBottomKeyboardToggle}/bin/korri-bandai-bottom-keyboard-toggle";
+    KORRI_INPUTD_TOGGLE_STEAM_VISIBILITY = "${korriSteamVisibilityToggle}/bin/korri-steam-visibility-toggle";
     KORRI_INPUTD_POWER_SUSPEND = "${korriFakesuspendToggle}";
     KORRI_INPUTD_LID_CLOSED = "${korriFakesuspendToggle} suspend";
     KORRI_INPUTD_LID_OPENED = "${korriFakesuspendToggle} resume";

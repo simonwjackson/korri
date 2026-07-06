@@ -125,7 +125,7 @@ describe("materializeSteamDesiredState", () => {
           target: "steam://rungameid/2379780",
           launchOptions: "wrapper -- %command%",
           defaultCompatTool: "proton-cachyos-arm64",
-          extraArgs: ["-silent", "-gamepadui"],
+          extraArgs: ["-dev-visible"],
         },
         fs,
         lifecycle: lifecycle(events),
@@ -140,7 +140,7 @@ describe("materializeSteamDesiredState", () => {
     expect(events).toEqual([
       "shutdown",
       "wait-shutdown",
-      "start:-silent -gamepadui",
+      "start:-dev-visible",
       "ready",
     ])
     expect(writes).toEqual([
@@ -408,7 +408,7 @@ describe("materializeSteamDesiredState", () => {
           defaultCompatTool: "proton-cachyos-arm64",
           suppressInterstitials: true,
           acceptEulas: true,
-          extraArgs: ["-silent", "-gamepadui"],
+          extraArgs: ["-dev-visible"],
         },
         fs,
         lifecycle: lifecycle(events),

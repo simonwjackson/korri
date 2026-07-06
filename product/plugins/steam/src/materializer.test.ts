@@ -146,7 +146,7 @@ describe("steamReadableLaunchIntegration", () => {
         }),
       )
 
-      expect(events).toContain("start:-silent -gamepadui -vgui")
+      expect(events).toContain("start:-vgui")
     })
   })
 
@@ -182,7 +182,7 @@ describe("steamReadableLaunchIntegration", () => {
       expect(events).toEqual([
         "shutdown:steam",
         "wait-shutdown",
-        "start:-silent -gamepadui",
+        "start:",
         "ready",
       ])
       expect(writes.length).toBe(2)
@@ -264,7 +264,7 @@ describe("steamReadableLaunchIntegration", () => {
       expect(events).toEqual([
         `shutdown:${command}`,
         "wait-shutdown",
-        "start:-silent -gamepadui",
+        "start:",
         "ready",
       ])
     })

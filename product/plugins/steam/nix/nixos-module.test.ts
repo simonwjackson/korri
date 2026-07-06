@@ -58,7 +58,7 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).not.toContain('"-steamos3"')
     expect(moduleSource).toContain("-steampal")
     expect(moduleSource).toContain("-steamdeck")
-    expect(moduleSource).toContain("-silent")
+    expect(moduleSource).not.toContain('"-silent"')
     expect(moduleSource).toContain("useGamepadUi")
     expect(moduleSource).toContain('lib.optional cfg.useGamepadUi "-gamepadui"')
     expect(moduleSource).toContain("steamClientArgs")
