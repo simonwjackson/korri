@@ -348,6 +348,21 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
     expect(decision.target.bitrateKbps).toBeLessThan(current.bitrateKbps)
   })
 
+  it("keeps emergency defaults within usable bitrate fps and resolution floors", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({ bitrateDeliveryRatio: 0.05, rttMs: numeric(220, "rising") }),
+      current: { ...current, bitrateKbps: 2_000, fps: 30, resolution: { width: 640, height: 360 } },
+      objectiveBias: 0.5,
+      boundaries: { levers: {}, outcomes: {}, lean: 0.5 },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.target.bitrateKbps).toBeGreaterThanOrEqual(1_500)
+    expect(decision.target.fps ?? 30).toBeGreaterThanOrEqual(30)
+    expect(decision.target.resolution?.width ?? 640).toBeGreaterThanOrEqual(640)
+  })
+
   it("keeps off-aspect resolution boundaries projected onto the stream aspect", () => {
     const decision = computeStreamAdaptiveDecision({
       summary: summary({ queueDepth: numeric(8), decodeTimeMs: numeric(35), frameDropFraction: 0.12 }),

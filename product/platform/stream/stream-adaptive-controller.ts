@@ -76,7 +76,7 @@ export interface StreamAdaptivePressure {
 }
 
 const DEFAULTS = {
-  minBitrateKbps: 500,
+  minBitrateKbps: 1_500,
   maxBitrateKbps: 150_000,
   maxFps: 120,
   bitrateDeadbandFraction: 0.05,
@@ -298,7 +298,7 @@ function maybeSetFps(
   const ceiling = fpsCeiling(boundaries, params)
   const floor = Math.min(
     ceiling,
-    Math.max(lever?.floor ?? 1, boundaries?.outcomes.minDeliveredFps ?? 1),
+    Math.max(lever?.floor ?? 30, boundaries?.outcomes.minDeliveredFps ?? 30),
   )
   const clamped = clamp(Math.round(proposed), floor, ceiling)
   if (clamped === current.fps) return
@@ -431,7 +431,11 @@ function clampResolution(
   const floor = boundaries?.levers.resolution?.floor
   const ceiling = resolutionCeiling(boundaries, current)
   const aspect = current.baselineResolution.height / current.baselineResolution.width
-  const minWidth = Math.max(floor?.width ?? 2, floor?.height === undefined ? 2 : floor.height / aspect)
+  const defaultFloorWidth = Math.min(current.baselineResolution.width, 640)
+  const minWidth = Math.max(
+    floor?.width ?? defaultFloorWidth,
+    floor?.height === undefined ? defaultFloorWidth : floor.height / aspect,
+  )
   const maxWidth = Math.min(ceiling.width, ceiling.height / aspect)
   const width = even(clamp(proposed.width, minWidth, Math.max(minWidth, maxWidth)))
   const height = even(width * aspect)
