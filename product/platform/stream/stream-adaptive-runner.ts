@@ -98,7 +98,10 @@ export function createStreamAdaptiveRunner(
       summary,
       current: currentSettings(options.recovery, options.initialSettings),
       objectiveBias: options.objectiveBias,
-      boundaries: currentBoundaries(options.boundaries),
+      boundaries: effectiveBoundaries(
+        currentBoundaries(options.boundaries),
+        options.initialSettings,
+      ),
     })
 
     if (decision.kind === "dormant") {
@@ -173,6 +176,33 @@ function currentBoundaries(
   boundaries: StreamAdaptiveRunnerOptions["boundaries"],
 ): StreamBoundaries | undefined {
   return typeof boundaries === "function" ? boundaries() : boundaries
+}
+
+function effectiveBoundaries(
+  boundaries: StreamBoundaries | undefined,
+  initial: StreamAdaptiveSettings,
+): StreamBoundaries {
+  return {
+    ...boundaries,
+    levers: {
+      ...(boundaries?.levers ?? {}),
+      bitrate: {
+        ...(boundaries?.levers.bitrate ?? {}),
+        ceiling:
+          boundaries?.levers.bitrate?.ceiling ?? initial.bitrateKbps,
+      },
+      fps: {
+        ...(boundaries?.levers.fps ?? {}),
+        ceiling: boundaries?.levers.fps?.ceiling ?? initial.fps,
+      },
+      resolution: {
+        ...(boundaries?.levers.resolution ?? {}),
+        ceiling:
+          boundaries?.levers.resolution?.ceiling ?? initial.baselineResolution,
+      },
+    },
+    outcomes: boundaries?.outcomes ?? {},
+  }
 }
 
 function currentSettings(
