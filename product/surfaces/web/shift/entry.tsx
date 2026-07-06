@@ -1,5 +1,9 @@
 import { useAtomRefresh } from "@effect/atom-react"
 import {
+  RemoteCatalogError,
+  RemoteCatalogSource,
+} from "@platform/acquisition/remote-catalog-source"
+import {
   CatalogFactsError,
   CatalogFactsSource,
   type CatalogSnapshotFacts,
@@ -12,6 +16,8 @@ import {
   LibrarySource,
 } from "@platform/library/library-services"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
+import type { SearchResponse } from "@platform/protocol/acquisition/claim"
+import { remoteCatalogSourceLayerAtom } from "@platform/react/acquisition/remote-catalog-atoms"
 import {
   catalogFactsSourceLayerAtom,
   catalogSnapshotAtom,
@@ -45,6 +51,10 @@ export const shiftTheme: KorriSurfaceEntrypoint = {
         createBridgeCatalogFactsSourceLayer(bridge),
       ],
       [librarySourceLayerAtom, createBridgeLibrarySourceLayer(bridge)],
+      [
+        remoteCatalogSourceLayerAtom,
+        createBridgeRemoteCatalogSourceLayer(bridge),
+      ],
       [launcherLayerAtom, createBridgeLauncherLayer(bridge)],
       [
         foregroundSessionStatusLayerAtom,
@@ -177,6 +187,35 @@ function parseCatalogSnapshotFacts(value: unknown): CatalogSnapshotFacts {
     throw new Error("app.catalog.snapshot: unexpected response shape")
   }
   return value as CatalogSnapshotFacts
+}
+
+function createBridgeRemoteCatalogSourceLayer(bridge: KorriPlatformBridge) {
+  return Layer.succeed(RemoteCatalogSource)({
+    search: request =>
+      Effect.tryPromise({
+        try: async () =>
+          parseSearchResponse(
+            await bridge.api.rpc("app.acquisition.search", request),
+          ),
+        catch: error =>
+          new RemoteCatalogError({
+            reason: "unavailable",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+      }),
+  })
+}
+
+function parseSearchResponse(value: unknown): SearchResponse {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("claims" in value) ||
+    !Array.isArray(value.claims)
+  ) {
+    throw new Error("app.acquisition.search: unexpected response shape")
+  }
+  return value as SearchResponse
 }
 
 function createBridgeLibrarySourceLayer(bridge: KorriPlatformBridge) {
