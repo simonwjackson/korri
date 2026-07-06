@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { INPUT_SEAT_PROVIDER_ID } from "@platform/input-seat/policy"
 import type {
   Launcher,
   LaunchResult,
@@ -1397,6 +1398,60 @@ describe("game stream runner sessiond foreground branch", () => {
       await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
       await expectArtifactRootRemoved(root)
     })
+  })
+
+  it("defers input-seat companions to sessiond while composing launch wrappers", async () => {
+    const sessiondSpecs: LaunchSpec[] = []
+    const extrasLog: Array<{
+      readonly spec: LaunchSpec
+      readonly extras?: unknown
+    }> = []
+    const { sessiondLauncher, controller } = createSessiondLauncherHarness(
+      sessiondSpecs,
+      extrasLog,
+    )
+    const launchCompanions = {
+      [frameProvider]: { enable: true },
+      [INPUT_SEAT_PROVIDER_ID]: { runtimeSupportsExtraSeats: true },
+    }
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        launchCompanions,
+      }),
+      sessiondLauncher,
+      pluginRegistry: framePluginRegistry,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {
+        ...sessionEnv,
+        KORRI_SESSIOND_SOCKET: "/run/user/2000/korri/sessiond.sock",
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    expect(sessiondSpecs).toHaveLength(1)
+    expect(sessiondSpecs[0]).toEqual({
+      command: managedWrapperCommand,
+      args: [
+        "--backend",
+        "wayland",
+        "-f",
+        "-b",
+        "--expose-wayland",
+        "--",
+        game.command,
+        ...game.args,
+      ],
+    })
+    expect(extrasLog).toHaveLength(1)
+    expect(extrasLog[0].extras).toMatchObject({
+      lifecycle: "foreground",
+      launchCompanions,
+    })
+
+    controller.exit(0)
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
   })
 
   it("propagates the sessiond child exit code on success", async () => {

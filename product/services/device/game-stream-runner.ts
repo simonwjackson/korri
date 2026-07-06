@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { xdgRuntimeDir } from "@platform/config/xdg-paths"
+import { INPUT_SEAT_PROVIDER_ID } from "@platform/input-seat/policy"
 import { cleanupLaunchArtifacts } from "@platform/library/config/app-materializer"
 import {
   decodeLaunchSpec,
@@ -427,10 +428,13 @@ export function createGameStreamRunner(
           return await fail("cleanup", "game stream stopped before launch", 143)
         }
 
+        const composeLaunchCompanionsInput = sessiondLauncher
+          ? launchCompanionsWithoutSessiondOnlyEntries(launchCompanions)
+          : launchCompanions
         const specResult = await Effect.runPromise(
           composeLaunchCompanions({
             spec: launchClaim.intent.launch,
-            launchCompanions,
+            launchCompanions: composeLaunchCompanionsInput,
             registry: pluginRegistry,
             options: {
               launchMetadata: launchClaim.intent.launchMetadata,
@@ -617,6 +621,21 @@ export function createGameStreamRunner(
       }
     },
   }
+}
+
+function launchCompanionsWithoutSessiondOnlyEntries(
+  launchCompanions: NonNullable<
+    ClaimedGameStreamLaunchIntent["intent"]["launchCompanions"]
+  >,
+): ClaimedGameStreamLaunchIntent["intent"]["launchCompanions"] {
+  const entries = Object.entries(launchCompanions).filter(
+    ([provider]) => provider !== INPUT_SEAT_PROVIDER_ID,
+  )
+  return entries.length > 0
+    ? (Object.fromEntries(entries) as NonNullable<
+        ClaimedGameStreamLaunchIntent["intent"]["launchCompanions"]
+      >)
+    : undefined
 }
 
 export function createBunManagedChildSpawner(
