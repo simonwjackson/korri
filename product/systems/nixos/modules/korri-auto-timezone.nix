@@ -11,6 +11,13 @@
 # user action. The upstream module also forces `time.timeZone = null`, which
 # keeps imperative `timedatectl set-timezone` available as a manual override
 # between re-checks.
+#
+# Deliberately guest-only: the ROCKNIX host stays at factory UTC and gets no
+# timezone smarts. Nothing on the host renders wall-clock time to a user in
+# this product (the kiosk owns all presentation), and a UTC host keeps the
+# zone-less timestamps ROCKNIX writes (e.g. gamelist `lastplayed`) consistent
+# with the repo convention of interpreting naive timestamps as UTC. Do not
+# add host-side timezone configuration or detection.
 { ... }:
 {
   key = "korri-auto-timezone";
