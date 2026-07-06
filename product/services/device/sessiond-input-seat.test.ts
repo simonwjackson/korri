@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises"
+import { access, mkdtemp, readFile, rm, stat } from "node:fs/promises"
 import { createConnection } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -121,6 +121,7 @@ describe("sessiond input-seat gate", () => {
   it("starts a Sunshine mirror socket that writes accepted state frames into active seats", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-input-seat-"))
     const socketPath = join(dir, "mirror.sock")
+    const sidecarPath = join(dir, "active-launch.json")
     const writes: Array<{ slot: number; state: InputSeatGamepadState }> = []
     const runtime = Object.assign(createMemorySeatRuntime(), {
       writeGamepadState: async (slot: number, state: InputSeatGamepadState) => {
@@ -134,6 +135,8 @@ describe("sessiond input-seat gate", () => {
         timeoutMs: 100,
         sunshineMirror: {
           socketPath,
+          activeLaunchSidecarPath: sidecarPath,
+          mirrorTokenFactory: () => "test-token",
           maxEventsPerSecond: 60,
         },
       })
@@ -147,27 +150,44 @@ describe("sessiond input-seat gate", () => {
         },
       })
 
-      expect(handle?.sourceEnv).toEqual({
-        KORRI_INPUT_SEAT_MIRROR_SOCKET: socketPath,
-        KORRI_INPUT_SEAT_LAUNCH_ID: "launch-1",
+      expect(handle?.sourceEnv).toBeUndefined()
+      expect((await stat(sidecarPath)).mode & 0o777).toBe(0o600)
+      expect(JSON.parse(await readFile(sidecarPath, "utf8"))).toEqual({
+        launchId: "launch-1",
+        generation: 1,
+        mirrorToken: "test-token",
       })
 
       await writeSocketFrame(socketPath, {
-        kind: "source-connected",
-        launchId: "launch-1",
-        controllerNumber: 0,
+        mirrorToken: "bad-token",
+        frame: {
+          kind: "source-connected",
+          launchId: "launch-1",
+          controllerNumber: 0,
+        },
       })
       await writeSocketFrame(socketPath, {
-        kind: "source-state",
-        launchId: "launch-1",
-        controllerNumber: 0,
-        buttons: 7,
-        leftTrigger: 1,
-        rightTrigger: 2,
-        leftStickX: -3,
-        leftStickY: 4,
-        rightStickX: -5,
-        rightStickY: 6,
+        mirrorToken: "test-token",
+        frame: {
+          kind: "source-connected",
+          launchId: "launch-1",
+          controllerNumber: 0,
+        },
+      })
+      await writeSocketFrame(socketPath, {
+        mirrorToken: "test-token",
+        frame: {
+          kind: "source-state",
+          launchId: "launch-1",
+          controllerNumber: 0,
+          buttons: 7,
+          leftTrigger: 1,
+          rightTrigger: 2,
+          leftStickX: -3,
+          leftStickY: 4,
+          rightStickX: -5,
+          rightStickY: 6,
+        },
       })
       await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -188,39 +208,49 @@ describe("sessiond input-seat gate", () => {
 
       handle?.leaveInputSeat?.(1)
       await writeSocketFrame(socketPath, {
-        kind: "source-state",
-        launchId: "launch-1",
-        controllerNumber: 0,
-        buttons: 8,
-        leftTrigger: 0,
-        rightTrigger: 0,
-        leftStickX: 0,
-        leftStickY: 0,
-        rightStickX: 0,
-        rightStickY: 0,
+        mirrorToken: "test-token",
+        frame: {
+          kind: "source-state",
+          launchId: "launch-1",
+          controllerNumber: 0,
+          buttons: 8,
+          leftTrigger: 0,
+          rightTrigger: 0,
+          leftStickX: 0,
+          leftStickY: 0,
+          rightStickX: 0,
+          rightStickY: 0,
+        },
       })
       await writeSocketFrame(socketPath, {
-        kind: "source-connected",
-        launchId: "launch-1",
-        controllerNumber: 1,
+        mirrorToken: "test-token",
+        frame: {
+          kind: "source-connected",
+          launchId: "launch-1",
+          controllerNumber: 1,
+        },
       })
       await writeSocketFrame(socketPath, {
-        kind: "source-state",
-        launchId: "launch-1",
-        controllerNumber: 1,
-        buttons: 9,
-        leftTrigger: 0,
-        rightTrigger: 0,
-        leftStickX: 0,
-        leftStickY: 0,
-        rightStickX: 0,
-        rightStickY: 0,
+        mirrorToken: "test-token",
+        frame: {
+          kind: "source-state",
+          launchId: "launch-1",
+          controllerNumber: 1,
+          buttons: 9,
+          leftTrigger: 0,
+          rightTrigger: 0,
+          leftStickX: 0,
+          leftStickY: 0,
+          rightStickX: 0,
+          rightStickY: 0,
+        },
       })
       await new Promise(resolve => setTimeout(resolve, 10))
 
       expect(writes.map(write => write.state.buttons)).toEqual([7, 9])
 
       await handle?.stop()
+      await expect(access(sidecarPath)).rejects.toThrow()
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

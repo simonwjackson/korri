@@ -1,8 +1,14 @@
+import { chmodSync, mkdirSync } from "node:fs"
+import { isAbsolute, join, normalize } from "node:path"
 import {
   createFirstPartyPluginRegistryFromEnv,
   firstPartySessionLifecycleHooksForRegistry,
 } from "@product/plugin-host"
 import { createUnavailableSeatRuntime } from "@platform/input-seat/seat-runtime-port"
+import {
+  createUinputSeatRuntime,
+  type UinputSeatBackend,
+} from "@platform/input-seat/uinput-seat-runtime"
 import type { KorriSessiondLifecycleHook } from "./sessiond"
 import type { KorriSessiondPreSpawnGate } from "./sessiond-pre-spawn"
 import { createSessiondInputSeatPreSpawnGate } from "./sessiond-input-seat"
@@ -14,12 +20,79 @@ export function sessionLifecycleHooksFromEnv(
   return firstPartySessionLifecycleHooksForRegistry(registry, { env })
 }
 
+export interface SessiondPreSpawnGateCompositionOptions {
+  readonly createSeatBackend?: () => UinputSeatBackend
+}
+
 export function sessiondPreSpawnGatesFromEnv(
-  _env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env,
+  options: SessiondPreSpawnGateCompositionOptions = {},
 ): readonly KorriSessiondPreSpawnGate[] {
+  const runtimeDir = env.KORRI_INPUT_SEAT_RUNTIME_DIR?.trim()
+  if (!runtimeDir) {
+    return [
+      createSessiondInputSeatPreSpawnGate({
+        runtime: createUnavailableSeatRuntime(),
+      }),
+    ]
+  }
+
+  const invalidRuntimeDir = inputSeatRuntimeDirError(runtimeDir)
+  if (invalidRuntimeDir) {
+    return [
+      createSessiondInputSeatPreSpawnGate({
+        runtime: createUnavailableSeatRuntime(invalidRuntimeDir),
+      }),
+    ]
+  }
+
+  try {
+    mkdirSync(runtimeDir, { recursive: true, mode: 0o700 })
+    chmodSync(runtimeDir, 0o700)
+  } catch {
+    return [
+      createSessiondInputSeatPreSpawnGate({
+        runtime: createUnavailableSeatRuntime(
+          "input-seat runtime directory is not accessible",
+        ),
+      }),
+    ]
+  }
+
+  const backend = options.createSeatBackend?.()
+  if (!backend) {
+    return [
+      createSessiondInputSeatPreSpawnGate({
+        runtime: createUnavailableSeatRuntime(
+          "input-seat uinput backend is not configured",
+        ),
+      }),
+    ]
+  }
+
+  const socketPath = join(runtimeDir, "sunshine-input-seat.sock")
+  const activeLaunchSidecarPath = join(runtimeDir, "sunshine-active-launch.json")
+
   return [
     createSessiondInputSeatPreSpawnGate({
-      runtime: createUnavailableSeatRuntime(),
+      runtime: createUinputSeatRuntime({ backend }),
+      sunshineMirror: {
+        socketPath,
+        activeLaunchSidecarPath,
+      },
     }),
   ]
+}
+
+const inputSeatRuntimeDirError = (runtimeDir: string): string | undefined => {
+  if (!isAbsolute(runtimeDir)) {
+    return "input-seat runtime directory must be absolute"
+  }
+  if (runtimeDir.includes("%")) {
+    return "input-seat runtime directory must not contain systemd specifiers"
+  }
+  if (normalize(runtimeDir) !== runtimeDir) {
+    return "input-seat runtime directory must be normalized"
+  }
+  return undefined
 }

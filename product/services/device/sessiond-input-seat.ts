@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto"
+import { chmod, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises"
+import { dirname, isAbsolute } from "node:path"
 import {
   INPUT_SEAT_PROVIDER_ID,
   resolveInputSeatPolicy,
@@ -24,6 +27,8 @@ export interface SessiondInputSeatSunshineMirrorOptions {
   readonly socketPathForLaunch?: (launchId: string) => string
   readonly maxEventsPerSecond?: number
   readonly maxFrameBytes?: number
+  readonly activeLaunchSidecarPath?: string
+  readonly mirrorTokenFactory?: () => string
   readonly onDiagnostic?: (
     diagnostic: SunshineInputSeatMirrorDiagnostic,
   ) => void
@@ -101,14 +106,6 @@ export function createSessiondInputSeatPreSpawnGate(
 
         return {
           inputSeats: toManagedLaunchInputSeatSummary(allocation.seats),
-          ...(mirror
-            ? {
-                sourceEnv: {
-                  KORRI_INPUT_SEAT_MIRROR_SOCKET: mirror.socketPath,
-                  KORRI_INPUT_SEAT_LAUNCH_ID: request.launchId,
-                },
-              }
-            : {}),
           leaveInputSeat: slot => {
             mirror?.adapter.leaveSeat(slot)
           },
@@ -147,23 +144,108 @@ const startSunshineMirrorIfConfigured = async (input: {
     throw new Error("input-seat Sunshine mirror socket path is not configured")
   }
 
-  return await startSunshineInputSeatMirrorSocket({
-    launchId: input.launchId,
-    socketPath,
-    seatCount: input.seatCount,
-    maxEventsPerSecond:
-      input.options.maxEventsPerSecond ?? DEFAULT_MAX_SUNSHINE_EVENTS_PER_SECOND,
-    ...(input.options.maxFrameBytes !== undefined
-      ? { maxFrameBytes: input.options.maxFrameBytes }
-      : {}),
-    onDiagnostic: input.options.onDiagnostic,
-    onGamepadState: async state => {
-      await input.runtime.writeGamepadState(
-        state.slot,
-        frameToGamepadState(state.frame),
-      )
-    },
-  })
+  const mirrorToken = input.options.activeLaunchSidecarPath
+    ? input.options.mirrorTokenFactory?.() ?? randomUUID()
+    : undefined
+  const sidecarPath = input.options.activeLaunchSidecarPath
+
+  try {
+    const socket = await startSunshineInputSeatMirrorSocket({
+      launchId: input.launchId,
+      socketPath,
+      seatCount: input.seatCount,
+      maxEventsPerSecond:
+        input.options.maxEventsPerSecond ?? DEFAULT_MAX_SUNSHINE_EVENTS_PER_SECOND,
+      ...(input.options.maxFrameBytes !== undefined
+        ? { maxFrameBytes: input.options.maxFrameBytes }
+        : {}),
+      ...(mirrorToken !== undefined
+        ? { authorizeFrame: token => token === mirrorToken }
+        : {}),
+      onDiagnostic: input.options.onDiagnostic,
+      onGamepadState: async state => {
+        await input.runtime.writeGamepadState(
+          state.slot,
+          frameToGamepadState(state.frame),
+        )
+      },
+    })
+
+    if (sidecarPath !== undefined && mirrorToken !== undefined) {
+      await writeActiveLaunchSidecar(sidecarPath, {
+        launchId: input.launchId,
+        generation: 1,
+        mirrorToken,
+      })
+    }
+
+    return {
+      ...socket,
+      stop: async () => {
+        await clearActiveLaunchSidecar(sidecarPath)
+        await socket.stop()
+      },
+    }
+  } catch (error) {
+    await clearActiveLaunchSidecar(sidecarPath)
+    throw error
+  }
+}
+
+interface ActiveLaunchSidecar {
+  readonly launchId: string
+  readonly generation: number
+  readonly mirrorToken: string
+}
+
+const writeActiveLaunchSidecar = async (
+  sidecarPath: string,
+  sidecar: ActiveLaunchSidecar,
+): Promise<void> => {
+  validateSidecarPath(sidecarPath)
+  const dir = dirname(sidecarPath)
+  await mkdir(dir, { recursive: true, mode: 0o700 })
+  await chmod(dir, 0o700)
+  await rejectSymlink(sidecarPath)
+  const tempPath = `${sidecarPath}.tmp-${process.pid}-${Date.now()}`
+  await rejectSymlink(tempPath)
+  const payload = `${JSON.stringify(sidecar)}\n`
+  try {
+    await writeFile(tempPath, payload, { mode: 0o600, flag: "wx" })
+    await chmod(tempPath, 0o600)
+    await rename(tempPath, sidecarPath)
+    await chmod(sidecarPath, 0o600)
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
+const clearActiveLaunchSidecar = async (
+  sidecarPath: string | undefined,
+): Promise<void> => {
+  if (!sidecarPath) return
+  validateSidecarPath(sidecarPath)
+  await rejectSymlink(sidecarPath)
+  await rm(sidecarPath, { force: true })
+}
+
+const validateSidecarPath = (sidecarPath: string) => {
+  if (!isAbsolute(sidecarPath) || sidecarPath.includes("%")) {
+    throw new Error("input-seat active-launch sidecar path must be absolute")
+  }
+}
+
+const rejectSymlink = async (path: string): Promise<void> => {
+  try {
+    const current = await lstat(path)
+    if (current.isSymbolicLink()) {
+      throw new Error("input-seat active-launch sidecar path must not be a symlink")
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return
+    throw error
+  }
 }
 
 const frameToGamepadState = (frame: {

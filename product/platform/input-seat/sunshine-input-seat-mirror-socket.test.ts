@@ -77,6 +77,35 @@ describe("Sunshine input-seat mirror socket", () => {
     ).toHaveLength(2)
   })
 
+  it("rejects unauthorized envelope frames before claiming a seat", () => {
+    const diagnostics: SunshineInputSeatMirrorDiagnostic[] = []
+    const adapter = createSunshineRemoteInputSourceAdapter({
+      launchId: "launch-1",
+      seatCount: 1,
+      maxEventsPerSecond: 10,
+    })
+    const sink = createSunshineInputSeatMirrorFrameSink({
+      adapter,
+      authorizeFrame: token => token === "expected-token",
+      onDiagnostic: diagnostic => diagnostics.push(diagnostic),
+    })
+
+    sink.push(line({ mirrorToken: "wrong-token", frame: connectedFrame() }))
+    sink.push(line({ frame: connectedFrame() }))
+    sink.push(line({ mirrorToken: "expected-token", frame: connectedFrame() }))
+
+    expect(adapter.seats()[0]).toMatchObject({
+      tag: "occupied-connected",
+      slot: 1,
+    })
+    expect(diagnostics).toContainEqual({
+      kind: "frame-authorization-failed",
+      message: "Sunshine input-seat mirror frame authorization failed",
+    })
+    expect(JSON.stringify(diagnostics)).not.toContain("wrong-token")
+    expect(JSON.stringify(diagnostics)).not.toContain("expected-token")
+  })
+
   it("drops stale launch frames without claiming a seat", () => {
     const diagnostics: SunshineInputSeatMirrorDiagnostic[] = []
     const adapter = createSunshineRemoteInputSourceAdapter({

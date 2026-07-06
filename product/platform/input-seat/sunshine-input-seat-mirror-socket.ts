@@ -17,6 +17,7 @@ export type SunshineInputSeatMirrorDiagnostic =
   | { readonly kind: "frame-too-large"; readonly bytes: number }
   | { readonly kind: "frame-json-invalid"; readonly message: string }
   | { readonly kind: "frame-schema-invalid"; readonly message: string }
+  | { readonly kind: "frame-authorization-failed"; readonly message: string }
   | { readonly kind: "frame-forward-failed"; readonly message: string }
   | { readonly kind: "frame-forward-dropped"; readonly reason: "queue-full" }
   | { readonly kind: "socket-client-error"; readonly message: string }
@@ -38,6 +39,7 @@ export interface SunshineInputSeatForwardedGamepadState {
 export interface SunshineInputSeatMirrorFrameSinkOptions {
   readonly adapter: SunshineRemoteInputSourceAdapter
   readonly maxFrameBytes?: number
+  readonly authorizeFrame?: (mirrorToken: string | undefined) => boolean
   readonly onGamepadState?: (
     state: SunshineInputSeatForwardedGamepadState,
   ) => Promise<void> | void
@@ -53,6 +55,7 @@ export interface SunshineInputSeatMirrorSocketOptions {
   readonly maxEventsPerSecond: number
   readonly maxFrameBytes?: number
   readonly maxPendingGamepadWrites?: number
+  readonly authorizeFrame?: (mirrorToken: string | undefined) => boolean
   readonly onGamepadState?: (
     state: SunshineInputSeatForwardedGamepadState,
   ) => Promise<void> | void
@@ -69,6 +72,24 @@ export interface SunshineInputSeatMirrorSocketHandle {
 
 const DEFAULT_MAX_FRAME_BYTES = 4096
 const DEFAULT_MAX_PENDING_GAMEPAD_WRITES = 256
+
+const framePayloadForAuthorization = (
+  parsed: unknown,
+  authorizeFrame: ((mirrorToken: string | undefined) => boolean) | undefined,
+): { readonly status: "accepted"; readonly frame: unknown } | { readonly status: "rejected" } => {
+  if (!authorizeFrame) return { status: "accepted", frame: parsed }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { status: "rejected" }
+  }
+  const envelope = parsed as {
+    readonly mirrorToken?: unknown
+    readonly frame?: unknown
+  }
+  const token =
+    typeof envelope.mirrorToken === "string" ? envelope.mirrorToken : undefined
+  if (!authorizeFrame(token)) return { status: "rejected" }
+  return { status: "accepted", frame: envelope.frame }
+}
 
 export const createSunshineInputSeatMirrorFrameSink = (
   options: SunshineInputSeatMirrorFrameSinkOptions,
@@ -99,8 +120,17 @@ export const createSunshineInputSeatMirrorFrameSink = (
       return
     }
 
+    const payload = framePayloadForAuthorization(parsed, options.authorizeFrame)
+    if (payload.status === "rejected") {
+      diagnostic({
+        kind: "frame-authorization-failed",
+        message: "Sunshine input-seat mirror frame authorization failed",
+      })
+      return
+    }
+
     try {
-      const frame = decodeSunshineInputSeatFrame(parsed)
+      const frame = decodeSunshineInputSeatFrame(payload.frame)
       const result = options.adapter.accept(frame)
       diagnostic({
         kind: "frame-accepted",
@@ -257,6 +287,7 @@ export const startSunshineInputSeatMirrorSocket = async (
     const sink = createSunshineInputSeatMirrorFrameSink({
       adapter,
       maxFrameBytes: options.maxFrameBytes,
+      authorizeFrame: options.authorizeFrame,
       onGamepadState: forwarder.enqueue,
       onDiagnostic: options.onDiagnostic,
     })
