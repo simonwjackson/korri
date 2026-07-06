@@ -38,6 +38,23 @@ export type SeatAllocationResult =
       readonly message: string
     }
 
+export interface InputSeatGamepadState {
+  readonly buttons: number
+  readonly leftTrigger: number
+  readonly rightTrigger: number
+  readonly leftStickX: number
+  readonly leftStickY: number
+  readonly rightStickX: number
+  readonly rightStickY: number
+}
+
+export interface SeatRuntimeWriter {
+  readonly writeGamepadState: (
+    slot: number,
+    state: InputSeatGamepadState,
+  ) => Promise<void> | void
+}
+
 export interface SeatRuntimePort {
   readonly allocate: (
     request: SeatAllocationRequest,
