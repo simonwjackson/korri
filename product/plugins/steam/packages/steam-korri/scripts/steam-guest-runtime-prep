@@ -131,8 +131,10 @@ runtime_check_freedreno() {
 }
 
 runtime_pressure_vessel_roots() {
+  # Narrow AppID/runtime recovery may repair Steam-installed sidecar runtimes
+  # only. Steam's client-owned steamrt64/pv-runtime tree is verified by the
+  # Steam updater and must remain byte-for-byte Steam-owned.
   [ -d "$common" ] && find "$common" -mindepth 2 -maxdepth 2 -path '*/SteamLinuxRuntime*/pressure-vessel' -type d -print 2>/dev/null || true
-  [ -d "$STEAM_HOME/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel" ] && printf '%s\n' "$STEAM_HOME/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel"
   return 0
 }
 

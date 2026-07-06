@@ -254,6 +254,8 @@ mkdir -p \
   "$runtime4_pv/bin" \
   "$runtime4_pv/libexec/steam-runtime-tools-0" \
   "$runtime4_home/steam-runtime-steamrt-arm64/bin" \
+  "$runtime4_home/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel/bin" \
+  "$runtime4_home/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel/libexec/steam-runtime-tools-0" \
   "$runtime4_home/steamapps/common/SteamLinuxRuntime_4/steamrt4_platform_test/files/share/fonts/test" \
   "$runtime4_rootfs/usr/bin" \
   "$runtime4_rootfs/usr/lib"
@@ -267,6 +269,9 @@ write_x86_elf "$runtime4_pv/bin/pressure-vessel-wrap"
 write_x86_elf "$runtime4_pv/libexec/steam-runtime-tools-0/pv-adverb"
 write_x86_elf "$runtime4_pv/libexec/steam-runtime-tools-0/srt-bwrap"
 write_x86_elf "$runtime4_pv/bin/unrelated-helper"
+write_x86_elf "$runtime4_home/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel/bin/pressure-vessel-wrap"
+write_x86_elf "$runtime4_home/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb"
+write_x86_elf "$runtime4_home/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel/libexec/steam-runtime-tools-0/srt-bwrap"
 write_x86_elf "$runtime4_rootfs/usr/lib/libvulkan_freedreno.so"
 cat > "$runtime4_rootfs/usr/bin/bwrap" <<'BWRAP'
 #!/bin/sh
@@ -314,5 +319,11 @@ grep -q 'exec /usr/bin/FEX "$bwrap_bin" "$@"' "$runtime4_pv/libexec/steam-runtim
   || fail "repair-runtime-helpers should not mutate font marker trees"
 [ ! -e "$runtime4_home/steamrtarm64/bin/steam-runtime-launcher-service" ] \
   || fail "repair-runtime-helpers should not mutate ARM64 launcher-service symlink state"
+[ ! -e "$runtime4_home/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel/bin/pressure-vessel-wrap.x86_64" ] \
+  || fail "repair-runtime-helpers should not mutate Steam client-owned pressure-vessel-wrap"
+[ ! -e "$runtime4_home/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb.x86_64" ] \
+  || fail "repair-runtime-helpers should not mutate Steam client-owned pv-adverb"
+[ ! -e "$runtime4_home/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel/libexec/steam-runtime-tools-0/srt-bwrap.x86_64" ] \
+  || fail "repair-runtime-helpers should not mutate Steam client-owned srt-bwrap"
 
 echo "steam-guest-runtime-prep-smoke: ok"
