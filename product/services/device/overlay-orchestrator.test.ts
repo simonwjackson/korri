@@ -103,10 +103,19 @@ describe("overlay orchestrator", () => {
     expect(renderer.calls.at(-1)).toEqual({ kind: "hide" })
   })
 
-  it("hides and force-quits on fired", () => {
-    const { renderer, actions, orchestrator } = setup()
+  it("hides and force-quits a local game on fired", () => {
+    const { renderer, actions, orchestrator } = setup("local")
     orchestrator.onHoldUpdate(hold("fired", 1))
     expect(renderer.calls).toEqual([{ kind: "hide" }])
+    expect(actions.forceQuit).toBe(1)
+    expect(actions.closeRemoteGame).toBe(0)
+  })
+
+  it("kills the remote host game and closes the local stream on fired", () => {
+    const { renderer, actions, orchestrator } = setup("stream")
+    orchestrator.onHoldUpdate(hold("fired", 1))
+    expect(renderer.calls).toEqual([{ kind: "hide" }])
+    expect(actions.closeRemoteGame).toBe(1)
     expect(actions.forceQuit).toBe(1)
   })
 

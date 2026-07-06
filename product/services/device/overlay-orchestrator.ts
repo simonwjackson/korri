@@ -4,7 +4,8 @@
  *
  *   press     -> show the hold ring at 0%
  *   progress  -> fill the ring
- *   fired     -> hide + force-quit the foreground (the deliberate 2s hold)
+ *   fired     -> hide + kill the foreground (local game, or remote host game
+ *                plus local stream for streams; this is the deliberate 2s hold)
  *   tap       -> open the decision menu: gate the game (intercept), render the
  *                menu, drive selection from ui_* nav, and run the chosen action
  *
@@ -32,7 +33,7 @@ export interface OverlayRendererClient {
 }
 
 export interface OverlayActions {
-  /** Quit the foreground: local game, or on a stream close the local view (remote lives). */
+  /** Close the local foreground view/session. */
   readonly forceQuit: () => void | Promise<void>
   /** Stream only: stop the game on the source; the stream collapses as a side effect. */
   readonly closeRemoteGame: () => void | Promise<void>
@@ -177,6 +178,10 @@ export function createOverlayOrchestrator(deps: {
           return
         case "fired":
           deps.renderer.hide()
+          // Full hold is explicit kill intent. For streams, stop the host game
+          // first (captures the source URL synchronously) and also close the
+          // local Moonlight view so the user exits immediately.
+          if (deps.sessionKind() === "stream") void deps.actions.closeRemoteGame()
           void deps.actions.forceQuit()
           ungate()
           return

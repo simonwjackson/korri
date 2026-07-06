@@ -4,7 +4,9 @@
  * Returns null when KORRI_OVERLAY_RENDERER_BIN is unset (no renderer available),
  * so inputd keeps its no-overlay behavior (only fired -> force-quit). When the
  * renderer is present, returns a handler that drives the full ring + decision
- * menu, using inputd's compositor wayland + system-bus environment for the
+ * menu. A full hold is a kill intent; for streams it calls closeRemoteGame as
+ * well as the local force-quit. Uses inputd's compositor wayland + system-bus
+ * environment for the
  * renderer child process and the busctl/gdbus intercept.
  */
 import type { ChordHoldUpdate } from "@platform/input/native/chord-hold-supervisor"
