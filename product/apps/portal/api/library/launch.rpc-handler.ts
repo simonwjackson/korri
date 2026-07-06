@@ -30,6 +30,7 @@ import {
   registerMoonlightControlRuntimeSession,
 } from "@product/apps/portal/stream/moonlight-launcher"
 import type { RemotePrepareResult } from "@product/apps/portal/stream/remote-stream-client"
+import { startMoonlightStreamRuntimeSession } from "@product/plugins/moonlight/src/stream-control/runtime-session"
 import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { Effect } from "effect"
 
@@ -600,7 +601,10 @@ function handleRemoteSourceLaunch(
     if (result.status === "launched") {
       if (moonlightControl && isMoonlightRuntimeSessionEnabled(process.env)) {
         const timer = setTimeout(() => {
-          registerMoonlightControlRuntimeSession({ control: moonlightControl })
+          registerMoonlightControlRuntimeSession({
+            control: moonlightControl,
+            startStreamRuntimeSession: startMoonlightStreamRuntimeSession,
+          })
         }, 0)
         timer.unref?.()
       }
