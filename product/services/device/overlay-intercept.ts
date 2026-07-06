@@ -71,7 +71,28 @@ export function createOverlayInterceptController(
   let handler: ((nav: OverlayNav) => void) | null = null
   let chordHandler: (() => void) | null = null
   const chordHeld = new Set<string>()
+  const heldCapabilities = new Set<string>()
   let chordFired = false
+  let pendingDeactivate: DeferredDeactivate | null = null
+
+  function resetChordTracking(): void {
+    chordHeld.clear()
+    chordFired = false
+  }
+
+  function finishDeactivate(): Promise<void> {
+    const pending = pendingDeactivate
+    pendingDeactivate = null
+    const done = port.setInterceptMode(0)
+    if (pending) void done.then(pending.resolve, pending.reject)
+    return done
+  }
+
+  function deactivateWhenReleased(): Promise<void> {
+    if (heldCapabilities.size === 0) return finishDeactivate()
+    if (!pendingDeactivate) pendingDeactivate = createDeferredDeactivate()
+    return pendingDeactivate.promise
+  }
 
   // Subscribe ONCE, up front, and keep the subscription for the controller's
   // lifetime. If we subscribed per-activate, the monitor would still be
@@ -80,6 +101,18 @@ export function createOverlayInterceptController(
   // when intercept is off no events reach the DBus channel anyway, and when it
   // is on the first event is delivered immediately. We gate delivery on `active`.
   port.subscribeInputEvents((capability, value) => {
+    if (pendingDeactivate) {
+      // While waiting to ungate, consume only releases for controls that were
+      // already held at close time. Ignore new presses so a noisy/new input
+      // cannot extend the pending gate indefinitely.
+      if (value !== 1) heldCapabilities.delete(capability)
+      if (heldCapabilities.size === 0) void finishDeactivate()
+      return
+    }
+
+    if (value === 1) heldCapabilities.add(capability)
+    else heldCapabilities.delete(capability)
+
     // Dismiss-chord tracking runs on both press and release so we can detect the
     // full combo and re-arm cleanly. Only fires once per chord press.
     if (DISMISS_CHORD_CAPABILITIES.includes(capability)) {
@@ -107,8 +140,8 @@ export function createOverlayInterceptController(
       active = true
       handler = onNav
       chordHandler = onChord ?? null
-      chordHeld.clear()
-      chordFired = false
+      heldCapabilities.clear()
+      resetChordTracking()
       try {
         await port.setInterceptMode(2)
       } catch (error) {
@@ -116,8 +149,9 @@ export function createOverlayInterceptController(
         active = false
         handler = null
         chordHandler = null
-        chordHeld.clear()
-        chordFired = false
+        heldCapabilities.clear()
+        resetChordTracking()
+        pendingDeactivate = null
         try {
           await port.setInterceptMode(0)
         } catch {
@@ -128,15 +162,30 @@ export function createOverlayInterceptController(
     },
 
     async deactivate() {
-      if (!active) return
+      if (!active && !pendingDeactivate) return
       active = false
       handler = null
       chordHandler = null
-      chordHeld.clear()
-      chordFired = false
-      await port.setInterceptMode(0)
+      resetChordTracking()
+      await deactivateWhenReleased()
     },
 
     isActive: () => active,
   }
+}
+
+interface DeferredDeactivate {
+  readonly promise: Promise<void>
+  readonly resolve: () => void
+  readonly reject: (error: unknown) => void
+}
+
+function createDeferredDeactivate(): DeferredDeactivate {
+  let resolve!: () => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<void>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
 }

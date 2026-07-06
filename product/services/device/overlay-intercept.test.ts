@@ -160,6 +160,57 @@ describe("overlay intercept controller", () => {
     expect(navs).toEqual([])
   })
 
+  it("waits for a held accept release before ungating", async () => {
+    const fake = createFakePort()
+    const controller = createOverlayInterceptController(fake.port)
+    const navs: OverlayNav[] = []
+
+    await controller.activate(nav => navs.push(nav))
+    fake.emit("ui_accept", 1)
+    const deactivated = controller.deactivate()
+
+    expect(controller.isActive()).toBe(false)
+    expect(fake.modes).toEqual([2])
+
+    fake.emit("ui_right", 1) // pending deactivate; ignore new presses
+    expect(navs).toEqual(["accept"])
+    expect(fake.modes).toEqual([2])
+
+    fake.emit("ui_accept", 0)
+    await deactivated
+    expect(fake.modes).toEqual([2, 0])
+  })
+
+  it("waits for every held dismiss-chord button to release before ungating", async () => {
+    const fake = createFakePort()
+    const controller = createOverlayInterceptController(fake.port)
+    let chords = 0
+
+    await controller.activate(
+      () => {},
+      () => {
+        chords++
+      },
+    )
+    fake.emit("ui_l1", 1)
+    fake.emit("ui_r1", 1)
+    fake.emit("ui_select", 1)
+    fake.emit("ui_option", 1)
+    expect(chords).toBe(1)
+
+    const deactivated = controller.deactivate()
+    expect(fake.modes).toEqual([2])
+
+    fake.emit("ui_l1", 0)
+    fake.emit("ui_r1", 0)
+    fake.emit("ui_select", 0)
+    expect(fake.modes).toEqual([2])
+
+    fake.emit("ui_option", 0)
+    await deactivated
+    expect(fake.modes).toEqual([2, 0])
+  })
+
   it("is idempotent on repeated activate/deactivate", async () => {
     const fake = createFakePort()
     const controller = createOverlayInterceptController(fake.port)
