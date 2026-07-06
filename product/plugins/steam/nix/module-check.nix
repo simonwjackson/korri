@@ -242,7 +242,7 @@ let
       && (seedUnit.environment.STEAM_BETA or null) == "steamdeck_stable"
       && lib.hasInfix "steam-arm64-seed --apply" (serviceExec seedUnit)
     ))
-    (check "gamescoped launch service carries Korri identity, gamescope, and Deck flags" (
+    (check "gamescoped launch service carries Korri identity and avoids Deck/Gamepad UI persona" (
       enabled.systemd.services ? korri-steam-gamescope
       && (gamescopedSteamUnit.serviceConfig.User or null) == "korri"
       && (gamescopedSteamUnit.serviceConfig.Group or null) == "korri"
@@ -255,8 +255,8 @@ let
       && lib.hasInfix "korri-steam-guest" (serviceExec gamescopedSteamUnit)
       && !(lib.hasInfix "-gamepadui" (serviceExec gamescopedSteamUnit))
       && !(lib.hasInfix "-steamos3" (serviceExec gamescopedSteamUnit))
-      && lib.hasInfix "-steampal" (serviceExec gamescopedSteamUnit)
-      && lib.hasInfix "-steamdeck" (serviceExec gamescopedSteamUnit)
+      && !(lib.hasInfix "-steampal" (serviceExec gamescopedSteamUnit))
+      && !(lib.hasInfix "-steamdeck" (serviceExec gamescopedSteamUnit))
       && !(lib.hasInfix " -O DSI-" (serviceExec gamescopedSteamUnit))
       && !(enabled.systemd.services ? korri-steam)
       && builtins.elem "korri-steam-seed.service" (gamescopedSteamUnit.after or [ ])

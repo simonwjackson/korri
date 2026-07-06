@@ -159,6 +159,11 @@ let
         else
           cfg.rocknix.sm8550.audio.defaultSink.name;
       steamGamescopeUnit = cfg.systemd.services.korri-steam-gamescope or { };
+      steamGamescopeExec =
+        let
+          raw = (steamGamescopeUnit.serviceConfig or { }).ExecStart or "";
+        in
+        if builtins.isList raw then lib.concatStringsSep "\n" raw else raw;
       steamWarmUnit = userServices.korri-steam-warm or { };
       steamUinputUnit = cfg.systemd.services.korri-steam-uinput or { };
       pipewireEnv = (userServices.pipewire or { }).environment or { };
@@ -323,6 +328,13 @@ let
         compositor.homeOutput != null
         && compositor.hubWorkspace == "korri:hub"
         && compositor.gameWorkspace == "korri:game:active"
+      ))
+      (check "${name}: managed Steam and Gamescope are isolated on the Steam workspace" (
+        lib.hasInfix "workspace korri:steam-debug output ${cfg.rocknix.device.display.primaryConnector}" compositor.sway.extraConfig
+        && lib.hasInfix ''for_window [class="gamescope"] move container to workspace korri:steam-debug'' compositor.sway.extraConfig
+        && lib.hasInfix ''for_window [app_id="gamescope"] move container to workspace korri:steam-debug'' compositor.sway.extraConfig
+        && lib.hasInfix ''for_window [class="steam"] move container to workspace korri:steam-debug'' compositor.sway.extraConfig
+        && lib.hasInfix ''for_window [app_id="steam"] move container to workspace korri:steam-debug'' compositor.sway.extraConfig
       ))
       (check "${name}: RockNIX guest device access module must be enabled" (
         (rocknixGuestDeviceAccess.enable or false) == true
@@ -814,6 +826,8 @@ let
         && (steam.dotDir or null) == "/home/korri/.steam"
         && (steam.fexRootfs or null) == "/var/lib/korri/steam/fex-rootfs"
         && (steam.keepWarm or false)
+        && (steam.presentationMode or null) == "gamescope"
+        && (steam.useGamepadUi or true) == false
         && (steam.appAudioSinkName or null) == expectedAudioTargetSink
       ))
       (check "${name}: Korri Steam gamescoped launch services are hardened" (
@@ -824,8 +838,12 @@ let
         && (steamGamescopeUnit.serviceConfig.User or null) == runtime.user
         && (steamGamescopeUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
         && (steamGamescopeUnit.serviceConfig.LimitNOFILE or null) == 524288
+        && (steamGamescopeUnit.serviceConfig.Restart or null) == "always"
         && (steamGamescopeUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
         && (steamGamescopeUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
+        && lib.hasInfix "korri-steam-service-run" steamGamescopeExec
+        && (steamGamescopeUnit.serviceConfig.RestartPreventExitStatus or [ ]) == [ 77 ]
+        && (steamGamescopeUnit.environment.GAMESCOPE_WAYLAND_DISPLAY or null) == "gamescope-0"
       ))
       (check "${name}: Korri Steam is warmed from the real user session" (
         userServices ? korri-steam-warm

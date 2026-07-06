@@ -29,29 +29,21 @@ let
   ];
 
   defaultSteamArgs = [
-    # Keep Steam in Deck-compatible mode for ARM64 AppID forwarding and Steam
-    # Input without enabling SteamOS system-management hooks. In particular,
-    # -steamos3 makes Steam assume it owns platform Bluetooth policy and power
-    # the adapter off on non-SteamOS guests.
-    # Keep the client visible in development builds; product visibility should be
-    # owned by session/foreground policy, not by Steam's startup flags.
-    # Platforms that need Steam to map an initial gamescope surface can opt into
-    # gamepad UI separately via useGamepadUi, but SM8550 keeps it disabled
-    # because Gamepad UI can hold controller ownership after focus changes.
-    "-steampal"
-    "-steamdeck"
+    # Keep Steam out of Deck/Gamepad UI persona by default. -gamepadui,
+    # -steamdeck, -steampal, and -steamos3 all push the client toward
+    # Big Picture / SteamOS behavior; on SM8550 that can retain controller
+    # ownership after focus changes or assume platform Bluetooth policy.
+    # Visibility is a session/debug concern, not a Steam startup flag.
+    # Do not include bootstrap/update suppressors here: Valve-owned ARM64
+    # client metadata must be allowed to self-update/install pending manifests.
+    "-nobigpicture"
     "-nochatui"
     "-nofriendsui"
     "-forcedesktopscaling"
     "1.5"
-    "-noverifyfiles"
-    "-nobootstrapupdate"
-    "-skipinitialbootstrap"
-    "-norepairfiles"
   ];
   gamescopeArgs = lib.escapeShellArgs (
     [
-      "-e"
       "-f"
       "-W"
       "1920"
@@ -64,8 +56,104 @@ let
     ]
   );
   steamClientArgs = lib.escapeShellArgs (
-    (lib.optional cfg.useGamepadUi "-gamepadui") ++ cfg.defaultArgs
+    [
+      "-clientbeta"
+      cfg.betaChannel
+    ]
+    ++ (lib.optional cfg.useGamepadUi "-gamepadui")
+    ++ cfg.defaultArgs
   );
+  steamServiceExec =
+    if cfg.presentationMode == "gamescope" then
+      # Keep Steam contained in Gamescope, but hide Gamescope's SteamOS/Gamepad
+      # UI hints from the Steam client. Steam can still render through the
+      # Gamescope-owned Xwayland DISPLAY, but it should not see Gamescope's
+      # Wayland/libei integration path that pushes native ARM64 Steam toward
+      # gamepadui.
+      "${pkgs.gamescope}/bin/gamescope ${gamescopeArgs} -- ${pkgs.coreutils}/bin/env -u GAMESCOPE_WAYLAND_DISPLAY -u LIBEI_SOCKET -u STEAM_GAME_DISPLAY_0 -u ENABLE_GAMESCOPE_WSI -u WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}"
+    else
+      "${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}";
+
+  steamServiceRunner = pkgs.writeShellScriptBin "korri-steam-service-run" ''
+    set -u
+
+    guard_status=77
+
+    is_descendant_of() {
+      child="$1"
+      ancestor="$2"
+      while [ -n "$child" ] && [ "$child" != "1" ]; do
+        [ "$child" = "$ancestor" ] && return 0
+        [ -r "/proc/$child/status" ] || return 1
+        child="$(${pkgs.gawk}/bin/awk '/^PPid:/ { print $2; exit }' "/proc/$child/status" 2>/dev/null || true)"
+      done
+      return 1
+    }
+
+    stop_gamescope() {
+      pid="$1"
+      [ -n "$pid" ] || return 0
+      kill "$pid" 2>/dev/null || return 0
+      for _ in $(${pkgs.coreutils}/bin/seq 1 20); do
+        kill -0 "$pid" 2>/dev/null || return 0
+        ${pkgs.coreutils}/bin/sleep 0.25
+      done
+      kill -KILL "$pid" 2>/dev/null || true
+    }
+
+    steam_workspace="''${KORRI_STEAM_WORKSPACE:-korri:steam-debug}"
+    sway_sock="/run/user/${toString runtime.uid}/sway-ipc.sock"
+    place_gamescope_workspace() {
+      pid="$1"
+      [ -S "$sway_sock" ] || return 1
+      SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg \
+        "[pid=$pid] move container to workspace \"$steam_workspace\", fullscreen enable, border none" \
+        >/dev/null 2>&1
+    }
+
+    ${steamServiceExec} &
+    gamescope_pid="$!"
+
+    trap 'stop_gamescope "$gamescope_pid"; wait "$gamescope_pid" 2>/dev/null; exit 143' TERM INT
+
+    accepted_ui_pid=""
+    workspace_placed=0
+    while true; do
+      if ! kill -0 "$gamescope_pid" 2>/dev/null; then
+        wait "$gamescope_pid"
+        exit "$?"
+      fi
+
+      if [ "$workspace_placed" -eq 0 ] && place_gamescope_workspace "$gamescope_pid"; then
+        echo "korri-steam-service-run: moved managed Gamescope pid=$gamescope_pid to workspace $steam_workspace" >&2
+        workspace_placed=1
+      fi
+
+      for cmdline in /proc/[0-9]*/cmdline; do
+        [ -r "$cmdline" ] || continue
+        pid="''${cmdline#/proc/}"
+        pid="''${pid%/cmdline}"
+        is_descendant_of "$pid" "$gamescope_pid" || continue
+        cmd="$(${pkgs.coreutils}/bin/tr '\0' ' ' < "$cmdline" 2>/dev/null || true)"
+        case "$cmd" in
+          *steamwebhelper*" -uimode=4"*)
+            echo "korri-steam-service-run: refusing Steam Gamepad UI descendant pid=$pid; stopping managed Gamescope pid=$gamescope_pid" >&2
+            stop_gamescope "$gamescope_pid"
+            wait "$gamescope_pid" 2>/dev/null || true
+            exit "$guard_status"
+            ;;
+          *steamwebhelper*" -uimode="*)
+            if [ "$accepted_ui_pid" != "$pid" ]; then
+              echo "korri-steam-service-run: Steam UI guard accepted descendant pid=$pid: $cmd" >&2
+              accepted_ui_pid="$pid"
+            fi
+            ;;
+        esac
+      done
+
+      ${pkgs.coreutils}/bin/sleep 1
+    done
+  '';
 
   steamUinputPrep = pkgs.writeShellScriptBin "korri-steam-ensure-uinput" ''
     set -eu
@@ -379,26 +467,78 @@ let
 
     ${steamUinputPrep}/bin/korri-steam-ensure-uinput || true
 
+    repair_arm64_client_manifest() {
+      package_dir="$STEAM_HOME/package"
+      installed_file="$package_dir/steam_client_''${STEAM_BETA}_linuxarm64.installed"
+      manifest_file="$package_dir/steam_client_''${STEAM_BETA}_linuxarm64.manifest"
+      beta_tmp="$package_dir/beta.tmp.$$"
+      manifest_tmp="$manifest_file.tmp.$$"
+      downloaded_manifest="$package_dir/steam_client_''${STEAM_BETA}_linuxarm64.downloaded.$$"
+      client_version=""
+
+      mkdir -p "$package_dir"
+      printf '%s\n' "$STEAM_BETA" > "$beta_tmp"
+      mv -f "$beta_tmp" "$package_dir/beta"
+
+      if [ -f "$installed_file" ]; then
+        client_version=$(${pkgs.gawk}/bin/awk -F'[,;]' 'NR == 1 && $3 ~ /^[0-9]+$/ { print $3; exit }' "$installed_file" 2>/dev/null || true)
+      fi
+      if [ -z "$client_version" ]; then
+        fallback_manifest="$package_dir/steam_client_''${STEAM_BETA}_ubuntu12.manifest"
+        if [ -f "$fallback_manifest" ]; then
+          client_version=$(${pkgs.gawk}/bin/awk -F'\"' '/\"version\"/ { print $4; exit }' "$fallback_manifest" 2>/dev/null || true)
+        fi
+      fi
+
+      if [ -n "$client_version" ]; then
+        if ${pkgs.curl}/bin/curl -fsSL --connect-timeout 10 --max-time 30 \
+          "https://client-update.fastly.steamstatic.com/steam_client_''${STEAM_BETA}_linuxarm64" \
+          -o "$downloaded_manifest" 2>/dev/null; then
+          ${pkgs.gawk}/bin/awk -v version="$client_version" '
+            BEGIN { replaced = 0 }
+            !replaced && $1 == "\"version\"" {
+              print "\t\"version\"\t\t\"" version "\""
+              replaced = 1
+              next
+            }
+            { print }
+          ' "$downloaded_manifest" > "$manifest_tmp"
+          rm -f "$downloaded_manifest"
+        else
+          rm -f "$downloaded_manifest"
+          cat > "$manifest_tmp" <<EOF
+"linuxarm64"
+{
+	"version"		"$client_version"
+}
+EOF
+        fi
+        mv -f "$manifest_tmp" "$manifest_file"
+      else
+        rm -f "$manifest_tmp" "$downloaded_manifest"
+        echo "korri-steam-guest: no ARM64 client version found; manifest repair skipped" >&2
+      fi
+    }
+
+    repair_arm64_client_manifest
+
     if [ "$#" -eq 0 ]; then
       set -- ${lib.escapeShellArgs cfg.defaultArgs}
     fi
 
-    installed_marker="$STEAM_HOME/package/steam_client_${cfg.betaChannel}_linuxarm64.installed"
-    if [ ! -f "$installed_marker" ]; then
-      # The seed fetches the minimal ARM64 client. A first real Steam launch
-      # must be allowed to run Valve's bootstrap/update path once, otherwise
-      # steamui can load against an incomplete libvideo/libavutil set. Apply
-      # this to explicit Steam client invocations too; AppID URL forwards do
-      # not contain these client bootstrap suppressors.
-      filtered=()
-      for arg in "$@"; do
-        case "$arg" in
-          -noverifyfiles|-nobootstrapupdate|-skipinitialbootstrap|-norepairfiles) ;;
-          *) filtered+=("$arg") ;;
-        esac
-      done
-      set -- "''${filtered[@]}"
-    fi
+    # Keep managed Steam self-updating. These suppressors are useful for one-off
+    # manual debugging, but in the managed service they can leave Valve-owned
+    # ARM64 package metadata half-updated: Steam sees a pending channel manifest,
+    # cannot install it, drops back to the generic linuxarm64 channel, and loops
+    # on the non-existent steam_client_linuxarm64 endpoint.
+    filtered=()
+    for arg in "$@"; do
+      case "$arg" in
+        -noverifyfiles|-nobootstrapupdate|-skipinitialbootstrap|-norepairfiles) ;;
+        *) filtered+=("$arg") ;;
+      esac
+    done
+    set -- "''${filtered[@]}"
 
     # buildFHSEnv/bwrap tries to enter the caller's cwd. A root shell or other
     # unreadable cwd fails before steam-guest-run can cd, so move into Steam's
@@ -421,7 +561,7 @@ let
       ""|*[!0-9]*) usage ;;
     esac
 
-    exec ${steamLauncher}/bin/korri-steam-guest -console +app_install "$appid"
+    exec ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs} -console +app_install "$appid"
   '';
 
   steamServiceControl = pkgs.writeShellScriptBin "korri-steam-service-control" ''
@@ -515,10 +655,10 @@ let
     wayland_socket="$runtime_dir/$wayland_display"
     bus_socket="$runtime_dir/bus"
 
-    # The gamescoped Steam system service consumes the real kiosk user's Wayland
+    # The managed Steam system service consumes the real kiosk user's Wayland
     # and D-Bus session. Start it from korri-session.target, but wait for the
     # compositor and bus sockets so boot/session ordering never falls back to
-    # direct Steam.
+    # ad-hoc direct Steam.
     i=0
     while [ "$i" -lt 120 ]; do
       if [ -S "$wayland_socket" ] && [ -S "$bus_socket" ]; then
@@ -574,6 +714,7 @@ let
     service_name="korri-steam-gamescope.service"
     gamescope_display="''${GAMESCOPE_WAYLAND_DISPLAY:-gamescope-0}"
     gamescope_socket="$XDG_RUNTIME_DIR/$gamescope_display"
+    require_gamescope_socket="${if cfg.presentationMode == "gamescope" then "1" else "0"}"
     target_audio_sink="''${KORRI_STEAM_AUDIO_SINK:-${cfg.appAudioSinkName}}"
     keep_steam_visible="''${KORRI_STEAM_KEEP_VISIBLE:-${
       if cfg.keepVisibleDuringLaunch then "1" else "0"
@@ -754,21 +895,25 @@ let
       ${pkgs.findutils}/bin/find "$STEAM_HOME/userdata" -mindepth 3 -maxdepth 3 -path '*/config/localconfig.vdf' -type f -print 2>/dev/null || true
     }
 
+    steam_surface_ready() {
+      [ "$require_gamescope_socket" != "1" ] || [ -S "$gamescope_socket" ]
+    }
+
     wait_for_steam_ready() {
       ready_deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + service_ready_timeout ))
       while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$ready_deadline" ]; do
         ready_log=""
         if [ -f "$console_log" ]; then
           if [ "$service_was_active" -eq 1 ]; then
-            # A deliberately prewarmed gamescoped Steam session emits its
-            # readiness lines before this AppID wrapper starts; accept the
-            # existing evidence as long as the gamescope socket is present.
+            # A deliberately prewarmed Steam session emits its readiness lines
+            # before this AppID wrapper starts; accept existing evidence as long
+            # as the presentation surface for the configured mode is present.
             ready_log="$(${pkgs.coreutils}/bin/cat "$console_log" 2>/dev/null || true)"
           else
             ready_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
           fi
         fi
-        if [ -S "$gamescope_socket" ] \
+        if steam_surface_ready \
           && printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
           return 0
         fi
@@ -792,13 +937,13 @@ let
 
     if ! ${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
       if ! request_steam_service_start; then
-        echo "korri-steam-app: could not start gamescoped Steam service $service_name" >&2
+        echo "korri-steam-app: could not start managed Steam service $service_name" >&2
         exit 125
       fi
     fi
 
     if ! wait_for_steam_ready; then
-      echo "korri-steam-app: timed out waiting for gamescoped Steam readiness before AppID launch" >&2
+      echo "korri-steam-app: timed out waiting for managed Steam readiness before AppID launch" >&2
       exit 125
     fi
 
@@ -807,7 +952,7 @@ let
     # console-log prompts.
     focus_korri_output
     hide_steam_hat
-    if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest -applaunch "$appid" >/dev/null; then
+    if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs} -applaunch "$appid" >/dev/null; then
       echo "korri-steam-app: timed out forwarding AppID $appid to Steam" >&2
       exit 125
     fi
@@ -967,13 +1112,25 @@ in
       '';
     };
 
+    presentationMode = mkOption {
+      type = types.enum [ "gamescope" "desktop" ];
+      default = "gamescope";
+      description = ''
+        Presentation host for the managed warm Steam client. `gamescope` keeps
+        Steam inside the broker used by AppID launch experiments. `desktop`
+        runs Steam directly as a Sway client, which preserves the desktop Steam
+        UI (`steamwebhelper -uimode=7`) for development/debugging on SM8550.
+      '';
+    };
+
     gamescopePreferOutput = mkOption {
       type = types.nullOr types.str;
       default = null;
       description = ''
         Optional Gamescope embedded-mode output preference. Device profiles may
         set this from their display contract when nested/headless Gamescope does
-        not present a visible foreground surface.
+        not present a visible foreground surface. Ignored when
+        presentationMode = "desktop".
       '';
     };
 
@@ -1145,7 +1302,7 @@ in
     };
 
     systemd.services.korri-steam-gamescope = {
-      description = "Launch Korri guest-native Steam inside gamescope";
+      description = "Launch Korri guest-native Steam (${cfg.presentationMode} presentation)";
       after = [
         "korri-steam-uinput.service"
         "korri-steam-seed.service"
@@ -1164,12 +1321,13 @@ in
         DISPLAY = ":0";
         DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/${toString runtime.uid}/bus";
         PULSE_SERVER = korriPulseServer;
-        GAMESCOPE_WAYLAND_DISPLAY = "gamescope-0";
         STEAM_HOME = cfg.home;
         STEAM_GAMES_ROOT = cfg.gamesRoot;
         STEAM_DOT = cfg.dotDir;
         STEAM_BETA = cfg.betaChannel;
         FEX_ROOTFS = cfg.fexRootfs;
+      } // lib.optionalAttrs (cfg.presentationMode == "gamescope") {
+        GAMESCOPE_WAYLAND_DISPLAY = "gamescope-0";
       };
       serviceConfig = {
         Type = "simple";
@@ -1178,9 +1336,10 @@ in
         SupplementaryGroups = [ steamInputGroup ];
         WorkingDirectory = cfg.home;
         LimitNOFILE = 524288;
-        ExecStart = "${pkgs.gamescope}/bin/gamescope ${gamescopeArgs} -- ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}";
-        Restart = "on-failure";
+        ExecStart = "${steamServiceRunner}/bin/korri-steam-service-run";
+        Restart = if cfg.keepWarm then "always" else "on-failure";
         RestartForceExitStatus = [ 42 ];
+        RestartPreventExitStatus = [ 77 ];
         RestartSec = "2s";
       };
       startLimitBurst = 30;

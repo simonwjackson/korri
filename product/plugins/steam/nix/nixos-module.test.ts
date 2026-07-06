@@ -29,6 +29,9 @@ describe("Steam plugin Nix module", () => {
       'pkgs.writeShellScriptBin "korri-steam-app-install"',
     )
     expect(moduleSource).toContain(
+      'korri-steam-guest ${steamClientArgs} -console +app_install "$appid"',
+    )
+    expect(moduleSource).not.toContain(
       'korri-steam-guest -console +app_install "$appid"',
     )
     expect(moduleSource).toContain("KORRI_STEAM_APP_INSTALL_HELPER")
@@ -47,30 +50,38 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
-  it("routes all managed Steam launches through the gamescoped Deck client", () => {
+  it("routes all managed Steam launches through the managed Steam service", () => {
     expect(moduleSource).toContain(
       'service_name="korri-steam-gamescope.service"',
     )
     expect(moduleSource).not.toContain("KORRI_STEAM_SERVICE")
     expect(moduleSource).toContain("systemd.services.korri-steam-gamescope")
+    expect(moduleSource).toContain('type = types.enum [ "gamescope" "desktop" ]')
+    expect(moduleSource).toContain('default = "gamescope"')
+    expect(moduleSource).toContain('cfg.presentationMode == "gamescope"')
     expect(moduleSource).not.toMatch(/systemd\.services\.korri-steam\s*=/)
     expect(moduleSource).not.toContain('conflicts = [ "korri-steam.service" ]')
     expect(moduleSource).not.toContain('"-steamos3"')
-    expect(moduleSource).toContain("-steampal")
-    expect(moduleSource).toContain("-steamdeck")
+    expect(moduleSource).not.toContain('"-steampal"')
+    expect(moduleSource).not.toContain('"-steamdeck"')
     expect(moduleSource).not.toContain('"-silent"')
     expect(moduleSource).toContain("useGamepadUi")
     expect(moduleSource).toContain('lib.optional cfg.useGamepadUi "-gamepadui"')
+    expect(moduleSource).toContain('"-clientbeta"')
+    expect(moduleSource).toContain("cfg.betaChannel")
     expect(moduleSource).toContain("steamClientArgs")
+    expect(moduleSource).toContain("steamServiceExec")
+    expect(moduleSource).toContain("XDG_CURRENT_DESKTOP=sway")
     expect(moduleSource).not.toContain("starting Steam directly without sudo")
     expect(moduleSource).not.toContain("direct_steam_pid")
   })
 
-  it("keeps Gamescope output selection device-configurable", () => {
+  it("keeps Gamescope output selection device-configurable without SteamOS integration", () => {
     expect(moduleSource).toContain("gamescopePreferOutput")
     expect(moduleSource).toContain("types.nullOr types.str")
     expect(moduleSource).toContain("cfg.gamescopePreferOutput != null")
     expect(moduleSource).toContain('"-O"')
+    expect(moduleSource).not.toContain('"-e"')
     expect(moduleSource).not.toContain("-O DSI-")
     expect(moduleSource).not.toContain("focus output")
     expect(moduleSource).not.toContain("move to output")
@@ -88,11 +99,15 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("SupplementaryGroups = [ steamInputGroup ]")
   })
 
-  it("requires gamescoped Steam readiness before forwarding an AppID", () => {
+  it("requires managed Steam readiness before forwarding an AppID", () => {
     expect(moduleSource).toContain("wait_for_steam_ready")
     expect(moduleSource).toContain("GAMESCOPE_WAYLAND_DISPLAY")
     expect(moduleSource).toContain("gamescope-0")
-    expect(moduleSource).toContain('[ -S "$gamescope_socket" ]')
+    expect(moduleSource).toContain("require_gamescope_socket")
+    expect(moduleSource).toContain("steam_surface_ready")
+    expect(moduleSource).toContain('[ "$require_gamescope_socket" != "1" ] || [ -S "$gamescope_socket" ]')
+    expect(moduleSource).toContain("if steam_surface_ready \\")
+    expect(moduleSource).not.toContain('if [ -S "$gamescope_socket" ] \\\n          && printf')
     expect(moduleSource).toContain("Waiting for compat in post-logon")
     expect(moduleSource).toContain("Loaded Config for Local Selection Path")
     expect(moduleSource).not.toContain("steam_big_picture_window_present")
@@ -101,7 +116,7 @@ describe("Steam plugin Nix module", () => {
       "Console Log Start|Waiting for compat in post-logon",
     )
     expect(moduleSource).toContain(
-      "timed out waiting for gamescoped Steam readiness before AppID launch",
+      "timed out waiting for managed Steam readiness before AppID launch",
     )
   })
 
@@ -137,35 +152,68 @@ describe("Steam plugin Nix module", () => {
 
   it("bounds AppID URL forwarding before launch observation", () => {
     expect(moduleSource).toContain("KORRI_STEAM_APP_FORWARD_TIMEOUT")
+    expect(moduleSource).toContain(
+      'korri-steam-guest ${steamClientArgs} -applaunch "$appid"',
+    )
+    expect(moduleSource).not.toContain(
+      'korri-steam-guest -applaunch "$appid"',
+    )
     expect(moduleSource).toContain("timed out forwarding AppID $appid to Steam")
   })
 
-  it("accepts existing readiness evidence for prewarmed gamescoped Steam", () => {
+  it("accepts existing readiness evidence for prewarmed managed Steam", () => {
     expect(moduleSource).toContain("service_was_active=0")
     expect(moduleSource).toContain("service_was_active=1")
     expect(moduleSource).toContain(
-      "A deliberately prewarmed gamescoped Steam session emits its",
+      "A deliberately prewarmed Steam session emits its readiness lines",
     )
     expect(moduleSource).toContain(
-      "existing evidence as long as the gamescope socket is present",
+      "presentation surface for the configured mode is present",
     )
     expect(moduleSource).toContain(
       'ready_log="$(' + "$" + "{pkgs.coreutils}/bin/cat",
     )
   })
 
-  it("lets managed Steam services run first-launch bootstrap repair", () => {
-    expect(moduleSource).toContain(
-      "Apply\n      # this to explicit Steam client invocations too",
-    )
+  it("lets managed Steam self-update instead of suppressing bootstrap", () => {
+    const defaultArgs = moduleSource.match(
+      /defaultSteamArgs = \[([\s\S]*?)\n  \];/,
+    )?.[1]
+    expect(defaultArgs).toBeDefined()
+    expect(defaultArgs).toContain("-nobigpicture")
+    expect(defaultArgs).not.toContain("-vgui")
+    expect(defaultArgs).not.toContain("-noverifyfiles")
+    expect(defaultArgs).not.toContain("-nobootstrapupdate")
+    expect(defaultArgs).not.toContain("-skipinitialbootstrap")
+    expect(defaultArgs).not.toContain("-norepairfiles")
+    expect(moduleSource).toContain("Keep managed Steam self-updating")
     expect(moduleSource).toContain("set -- \"''" + "$" + '{filtered[@]}"')
     expect(moduleSource).toContain(
-      'ExecStart = "' +
+      'ExecStart = "${steamServiceRunner}/bin/korri-steam-service-run"',
+    )
+    expect(moduleSource).toContain(
+      '"' +
         "$" +
         "{pkgs.gamescope}/bin/gamescope " +
         "$" +
         "{gamescopeArgs}",
     )
+    expect(moduleSource).toContain(
+      "-- ${pkgs.coreutils}/bin/env -u GAMESCOPE_WAYLAND_DISPLAY -u LIBEI_SOCKET -u STEAM_GAME_DISPLAY_0 -u ENABLE_GAMESCOPE_WSI -u WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway",
+    )
+    expect(moduleSource).toContain("korri-steam-service-run")
+    expect(moduleSource).not.toContain('set_guide_intercept')
+    expect(moduleSource).not.toContain('InterceptMode u \"$mode\"')
+    expect(moduleSource).toContain('steam_workspace=\"')
+    expect(moduleSource).toContain('KORRI_STEAM_WORKSPACE:-korri:steam-debug')
+    expect(moduleSource).toContain('place_gamescope_workspace')
+    expect(moduleSource).toContain('"[pid=$pid] move container to workspace')
+    expect(moduleSource).toContain('workspace_placed=0')
+    expect(moduleSource).toContain('accepted_ui_pid=\"\"')
+    expect(moduleSource).toContain('while true; do')
+    expect(moduleSource).toContain('guard_status=77')
+    expect(moduleSource).toContain('steamwebhelper*\" -uimode=4\"*')
+    expect(moduleSource).toContain('stop_gamescope \"$gamescope_pid\"')
   })
 
   it("declares a stable ARM64 Steam tracking channel", () => {
@@ -177,10 +225,32 @@ describe("Steam plugin Nix module", () => {
 
   it("checks first-launch markers for the configured channel only", () => {
     expect(moduleSource).toContain(
-      "steam_client_${cfg.betaChannel}_linuxarm64.installed",
+      "steam_client_''${STEAM_BETA}_linuxarm64.installed",
     )
     expect(moduleSource).not.toContain(
       "-name 'steam_client_*_linuxarm64.installed'",
+    )
+  })
+
+  it("repairs the channel-specific ARM64 client manifest before launch", () => {
+    expect(moduleSource).toContain("repair_arm64_client_manifest()")
+    expect(moduleSource).toContain(
+      "steam_client_''${STEAM_BETA}_linuxarm64.manifest",
+    )
+    expect(moduleSource).toContain(
+      "steam_client_''${STEAM_BETA}_linuxarm64.installed",
+    )
+    expect(moduleSource).toContain('printf \'%s\\n\' "$STEAM_BETA"')
+    expect(moduleSource).toContain("${pkgs.gawk}/bin/awk -F'[,;]'")
+    expect(moduleSource).toContain('NR == 1 && $3 ~ /^[0-9]+$/')
+    expect(moduleSource).toContain("${pkgs.curl}/bin/curl -fsSL")
+    expect(moduleSource).toContain(
+      "https://client-update.fastly.steamstatic.com/steam_client_''${STEAM_BETA}_linuxarm64",
+    )
+    expect(moduleSource).toContain('!replaced && $1 == "\\"version\\""')
+    expect(moduleSource).toContain('"linuxarm64"')
+    expect(moduleSource).not.toContain(
+      "steam_client_linuxarm64.manifest",
     )
   })
 
@@ -211,7 +281,11 @@ describe("Steam plugin Nix module", () => {
   })
 
   it("makes Steam update relaunch exits explicit and restartable", () => {
+    expect(moduleSource).toContain(
+      'Restart = if cfg.keepWarm then "always" else "on-failure"',
+    )
     expect(moduleSource).toContain("RestartForceExitStatus = [ 42 ]")
+    expect(moduleSource).toContain("RestartPreventExitStatus = [ 77 ]")
     expect(moduleSource).toContain("startLimitBurst = 30")
     expect(moduleSource).toContain("startLimitIntervalSec = 300")
   })

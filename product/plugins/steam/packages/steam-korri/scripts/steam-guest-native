@@ -74,4 +74,4 @@ if [ "$mode" = check ]; then
   exit 0
 fi
 
-exec "$client" -steamdeck "$@"
+exec "$client" "$@"

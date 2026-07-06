@@ -201,10 +201,9 @@ let
           swaymsg 'focus output ${displayPrimaryConnector}' >/dev/null 2>&1 || true
         '';
   };
-  # Temporary Steam debugging escape hatch. The Steam broker is a nested
-  # Gamescope surface, so the outer Sway compositor only sees app_id=gamescope.
-  # Back-button visibility is profile-local and intentionally easy to remove
-  # once Steam launch/debugging stabilizes.
+  # Temporary Steam debugging escape hatch. Desktop-mode Steam can map several
+  # Xwayland windows; Back-button visibility is profile-local and intentionally
+  # easy to remove once Steam launch/debugging stabilizes.
   korriSteamVisibilityToggle = pkgs.writeShellApplication {
     name = "korri-steam-visibility-toggle";
     runtimeInputs = with pkgs; [
@@ -232,23 +231,40 @@ let
         exit 0
       fi
 
-      gamescope_ids=$(swaymsg -t get_tree 2>/dev/null \
-        | jq -r '.. | objects | select(.type? == "con" and ((.app_id? == "gamescope") or (.window_properties?.class? == "gamescope"))) | .id' \
+      steam_window_filter='
+        def steam_text: ascii_downcase | test("steam|gamescope");
+        .. | objects
+        | select((.type? == "con" or .type? == "floating_con") and (
+            ((.app_id? // "") | steam_text)
+            or ((.window_properties?.class? // "") | steam_text)
+            or ((.window_properties?.instance? // "") | steam_text)
+            or ((.name? // "") | steam_text)
+          ))
+      '
+      steam_window_ids=$(swaymsg -t get_tree 2>/dev/null \
+        | jq -r "$steam_window_filter | .id" \
         | sort -n \
-        | tail -n 1 || true)
+        | uniq || true)
 
-      if [ -z "$gamescope_ids" ]; then
+      if [ -z "$steam_window_ids" ]; then
         swaymsg "workspace \"$hub_workspace\"" >/dev/null 2>&1 || true
         exit 0
       fi
 
-      for id in $gamescope_ids; do
+      steam_focus_id=$(swaymsg -t get_tree 2>/dev/null \
+        | jq -r "$steam_window_filter | select((((.app_id? // \"\") | ascii_downcase) == \"steam\") or (((.window_properties?.class? // \"\") | ascii_downcase) == \"steam\") or (((.name? // \"\") | ascii_downcase) == \"steam\")) | .id" \
+        | sort -n \
+        | tail -n 1 || true)
+      [ -n "$steam_focus_id" ] || steam_focus_id=$(printf '%s\n' "$steam_window_ids" | tail -n 1)
+
+      swaymsg 'focus output ${resolvedHomeOutput}' >/dev/null 2>&1 || true
+      for id in $steam_window_ids; do
+        swaymsg "[con_id=$id] scratchpad show" >/dev/null 2>&1 || true
         swaymsg "[con_id=$id] move container to workspace \"$steam_workspace\"" >/dev/null 2>&1 || true
       done
+      swaymsg 'focus output ${resolvedHomeOutput}' >/dev/null 2>&1 || true
       swaymsg "workspace \"$steam_workspace\"" >/dev/null 2>&1 || true
-      for id in $gamescope_ids; do
-        swaymsg "[con_id=$id] focus, fullscreen enable, border none" >/dev/null 2>&1 || true
-      done
+      swaymsg "[con_id=$steam_focus_id] focus, fullscreen enable, border none" >/dev/null 2>&1 || true
     '';
   };
 
@@ -643,10 +659,14 @@ in
     betaChannel = "steamdeck_stable";
     keepWarm = true;
     keepVisibleDuringLaunch = true;
+    # Bandai must keep Steam contained by Gamescope. Desktop-vs-Gamepad here is
+    # a Steam UI persona choice, not permission to run Steam as a naked Sway
+    # client: useGamepadUi=false keeps steamwebhelper in desktop UI while
+    # presentationMode=gamescope preserves controller/display ownership.
+    presentationMode = "gamescope";
     gamescopePreferOutput = resolvedHomeOutput;
     # Steam's Gamepad UI can grab controller focus from the foreground AppID
-    # game; keep Steam in the gamescoped service, but launch the desktop client
-    # without -gamepadui so control stays with the game window.
+    # game; keep the warm client in desktop UI without -gamepadui.
     useGamepadUi = false;
     appAudioSinkName = substrateAudioTargetSink;
   };
@@ -774,6 +794,14 @@ in
       # substrate's neutral display facts (rocknix.device.display.*).
       seat * hide_cursor 1000
       default_border none
+      workspace korri:steam-debug output ${resolvedHomeOutput}
+      # Managed Steam is always isolated from the Korri hub. Gamescope is the
+      # owned presentation container; Steam/Xwayland criteria are safety nets
+      # for updater/login helper windows that may map outside the nested server.
+      for_window [class="gamescope"] move container to workspace korri:steam-debug, fullscreen enable, border none
+      for_window [app_id="gamescope"] move container to workspace korri:steam-debug, fullscreen enable, border none
+      for_window [class="steam"] move container to workspace korri:steam-debug
+      for_window [app_id="steam"] move container to workspace korri:steam-debug
 
       ${renderSwayDisplay}
     '';
