@@ -21,7 +21,7 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@platform/plugin/registry"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect } from "effect"
 import {
   type RepairStreamSurfaceOptions,
@@ -1033,7 +1033,7 @@ if (import.meta.main) {
     launchIntentStore: createFileGameStreamLaunchIntentStore(intentPath),
     statusPath,
     lockManager: createFileGameStreamRunLock(lockPath),
-    pluginRegistry: createFirstPartyPluginRegistryFromEnv(process.env),
+    pluginRegistry: createFirstPartyPluginState().registry,
     fullscreen: {
       runner: createSwayCommandRunner(
         toolCommandFromEnv(process.env, SWAYMSG_COMMAND_ENV, "swaymsg"),

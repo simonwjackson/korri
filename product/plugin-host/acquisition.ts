@@ -1,10 +1,10 @@
 import { acquisitionPluginDefinitionsFromPluginRegistry } from "@platform/acquisition/product-plugin-adapter"
-import { createFirstPartyPluginRegistryFromEnv } from "."
+import { createFirstPartyPluginState } from "./state"
 
 export function createFirstPartyAcquisitionPluginDefinitionsFromEnv(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   return acquisitionPluginDefinitionsFromPluginRegistry(
-    createFirstPartyPluginRegistryFromEnv(env),
+    createFirstPartyPluginState({ env, mode: "runtime" }).registry,
   )
 }

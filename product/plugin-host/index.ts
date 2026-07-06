@@ -1,10 +1,6 @@
 import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
-import type { PluginDaemonHandle, PluginId } from "@platform/plugin"
-import {
-  createPluginRegistry,
-  type PluginRegistry,
-  parseEnabledPluginIds,
-} from "@platform/plugin/registry"
+import type { PluginDaemonHandle } from "@platform/plugin"
+import type { PluginRegistry } from "@platform/plugin/registry"
 import type {
   KorriSessionLifecycleHook,
   KorriSessionLifecycleHookFactoryOptions,
@@ -17,6 +13,7 @@ import { ryubingReadableLaunchIntegration } from "@product/plugins/ryubing"
 import { steamReadableLaunchIntegration } from "@product/plugins/steam"
 import { zquestClassicReadableLaunchIntegration } from "@product/plugins/zquest-classic"
 import { bundledFirstPartyPlugins } from "./roots"
+import { createFirstPartyPluginState } from "./state"
 
 export const firstPartyLaunchIntegrations = [
   retroarchReadableLaunchIntegration,
@@ -58,9 +55,7 @@ export const firstPartyPlugins = bundledFirstPartyPlugins
 export function createFirstPartyPluginRegistryFromEnv(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
-  return createPluginRegistry(firstPartyPlugins, {
-    enabledPluginIds: enabledFirstPartyPluginIds(env.KORRI_ENABLED_PLUGINS),
-  })
+  return createFirstPartyPluginState({ env, mode: "runtime" }).registry
 }
 
 /**
@@ -74,14 +69,5 @@ export function createFirstPartyPluginRegistryFromEnv(
 export function createInteractiveFirstPartyPluginRegistry(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
-  const configured = env.KORRI_ENABLED_PLUGINS?.trim()
-  return configured
-    ? createFirstPartyPluginRegistryFromEnv(env)
-    : createPluginRegistry(firstPartyPlugins, {
-        enabledPluginIds: firstPartyPlugins.map(plugin => plugin.id),
-      })
+  return createFirstPartyPluginState({ env, mode: "interactive" }).registry
 }
-
-const enabledFirstPartyPluginIds = (
-  enabledPlugins: string | undefined,
-): readonly PluginId[] => [...new Set(parseEnabledPluginIds(enabledPlugins))]

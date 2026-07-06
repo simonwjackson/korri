@@ -24,7 +24,7 @@ import {
   dispatchStreamLaunch,
   type StreamLaunchRequest,
 } from "@platform/stream/streamer-client"
-import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect } from "effect"
 
 const DEFAULT_STARTUP_OBSERVE_MS = 750
@@ -274,7 +274,7 @@ function resolveStreamRegistry(
 ): PluginRegistry {
   return (
     options.pluginRegistry ??
-    createInteractiveFirstPartyPluginRegistry(process.env)
+    createFirstPartyPluginState({ mode: "interactive" }).registry
   )
 }
 
@@ -288,7 +288,7 @@ async function composeLaunchSpecWithCompanions(
       launchCompanions: options.launchCompanions,
       registry:
         options.pluginRegistry ??
-        createInteractiveFirstPartyPluginRegistry(process.env),
+        createFirstPartyPluginState({ mode: "interactive" }).registry,
       options: { launchId: "moonlight-compose" },
     }),
   )
@@ -526,10 +526,7 @@ function runtimeSessionOutageOptions(): Pick<
     env.KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED ??
     env.KORRI_STREAM_ADAPTIVE_ENABLED
   if (enabled !== "1" && enabled !== "true") return {}
-  const tickIntervalMs = parseFiniteEnv(
-    env.KORRI_STREAM_OUTAGE_TICK_MS,
-    1_000,
-  )
+  const tickIntervalMs = parseFiniteEnv(env.KORRI_STREAM_OUTAGE_TICK_MS, 1_000)
   const lossAfterMs = parseFiniteEnv(
     env.KORRI_STREAM_OUTAGE_LOSS_AFTER_MS,
     2_000,

@@ -4,7 +4,7 @@ import {
   scanAndMergeReleaseCandidates,
   scanConfiguredReleaseCandidates,
 } from "@platform/library/discovery/release-candidate-scan"
-import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 
@@ -19,7 +19,9 @@ const scoutScanReleasesCommand = Command.make(
     Effect.promise(async () => {
       const configPath =
         config._tag === "Some" ? config.value : defaultScoutConfigPath()
-      const registry = createInteractiveFirstPartyPluginRegistry(process.env)
+      const registry = createFirstPartyPluginState({
+        mode: "interactive",
+      }).registry
       const merged = await scanAndMergeReleaseCandidates({
         root,
         storage,
@@ -46,7 +48,9 @@ const scoutScanConfiguredCommand = Command.make(
     Effect.promise(async () => {
       const configPath =
         config._tag === "Some" ? config.value : defaultScoutConfigPath()
-      const registry = createInteractiveFirstPartyPluginRegistry(process.env)
+      const registry = createFirstPartyPluginState({
+        mode: "interactive",
+      }).registry
       const result = await scanConfiguredReleaseCandidates({
         configPath,
         roots: configuredScanRoots(configPath),

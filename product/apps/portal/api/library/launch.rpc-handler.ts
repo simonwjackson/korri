@@ -17,12 +17,12 @@ import {
 import { logger } from "@platform/logger/logger"
 import type { PluginHandler, ProviderId } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
-import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import {
   composeLaunchCompanions,
   type LaunchCompanionDiagnostic,
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
+import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import {
   isMoonlightRuntimeSessionEnabled,
   moonlightControlEnvForHandle,
@@ -30,8 +30,8 @@ import {
   registerMoonlightControlRuntimeSession,
 } from "@product/apps/portal/stream/moonlight-launcher"
 import type { RemotePrepareResult } from "@product/apps/portal/stream/remote-stream-client"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { startMoonlightStreamRuntimeSession } from "@product/plugins/moonlight/src/stream-control/runtime-session"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { Effect } from "effect"
 
 import {
@@ -131,7 +131,7 @@ export const handleLaunchLibrary = (
     const specResult = yield* composeLaunchCompanions({
       spec: resolvedResult.resolved.spec,
       launchCompanions: resolvedResult.resolved.launchCompanions,
-      registry: createFirstPartyPluginRegistryFromEnv(process.env),
+      registry: createFirstPartyPluginState().registry,
       options: {
         launchMetadata: resolvedResult.resolved.launchMetadata,
         launchId,
@@ -240,7 +240,7 @@ function openLifecycleCorrelationForLaunch(input: {
     if (!providerId) return
     const appId = appIdFromProviderAnnotation(input.launchMetadata, providerId)
     if (!appId) return
-    const registry = createFirstPartyPluginRegistryFromEnv(process.env)
+    const registry = createFirstPartyPluginState().registry
     const plugin = registry.get(providerId)
     if (!plugin || !registry.enabledPluginIds.has(providerId)) return
     const handler = plugin.handlers.find(isLifecycleCorrelateHandler) as
@@ -529,7 +529,7 @@ function handleRemoteSourceLaunch(
         ),
       catch: error => toDataError(toLibraryError(error)),
     })
-    const streamRegistry = createFirstPartyPluginRegistryFromEnv(process.env)
+    const streamRegistry = createFirstPartyPluginState().registry
     const moonlightSpecResult = yield* Effect.tryPromise({
       try: () =>
         composeMoonlightLaunchSpec({

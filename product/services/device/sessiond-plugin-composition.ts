@@ -1,23 +1,24 @@
 import { chmodSync, mkdirSync } from "node:fs"
 import { isAbsolute, join, normalize } from "node:path"
-import {
-  createFirstPartyPluginRegistryFromEnv,
-  firstPartySessionLifecycleHooksForRegistry,
-} from "@product/plugin-host"
 import { createUnavailableSeatRuntime } from "@platform/input-seat/seat-runtime-port"
 import { createUinputSeatBackend } from "@platform/input-seat/uinput-seat-backend"
 import {
   createUinputSeatRuntime,
   type UinputSeatBackend,
 } from "@platform/input-seat/uinput-seat-runtime"
+import { firstPartySessionLifecycleHooksForRegistry } from "@product/plugin-host"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import type { KorriSessiondLifecycleHook } from "./sessiond"
-import type { KorriSessiondPreSpawnGate } from "./sessiond-pre-spawn"
 import { createSessiondInputSeatPreSpawnGate } from "./sessiond-input-seat"
+import type { KorriSessiondPreSpawnGate } from "./sessiond-pre-spawn"
 
 export function sessionLifecycleHooksFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): readonly KorriSessiondLifecycleHook[] {
-  const registry = createFirstPartyPluginRegistryFromEnv(env)
+  const registry = createFirstPartyPluginState({
+    env,
+    mode: "runtime",
+  }).registry
   return firstPartySessionLifecycleHooksForRegistry(registry, { env })
 }
 
@@ -72,7 +73,10 @@ export function sessiondPreSpawnGatesFromEnv(
   }
 
   const socketPath = join(runtimeDir, "sunshine-input-seat.sock")
-  const activeLaunchSidecarPath = join(runtimeDir, "sunshine-active-launch.json")
+  const activeLaunchSidecarPath = join(
+    runtimeDir,
+    "sunshine-active-launch.json",
+  )
 
   return [
     createSessiondInputSeatPreSpawnGate({

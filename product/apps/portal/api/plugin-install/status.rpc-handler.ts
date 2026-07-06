@@ -11,7 +11,7 @@ import {
 import { LibrarySource } from "@platform/library/library-services"
 import type { PluginHandler, ProviderId } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect } from "effect"
 import { requireInstallControl } from "./install-control-authorization"
 import {
@@ -41,7 +41,7 @@ export const handlePluginInstallStatus = (
     }
     yield* requireInstallMetadata(payload.providerId, payload.appId)
 
-    const registry = createFirstPartyPluginRegistryFromEnv(process.env)
+    const registry = createFirstPartyPluginState().registry
     const plugin = registry.get(payload.providerId)
     if (!plugin || !registry.enabledPluginIds.has(payload.providerId)) {
       return yield* Effect.fail(

@@ -9,7 +9,7 @@ import {
   connectStreamControlSession,
   type StreamControlSession,
 } from "@platform/stream-control/stream-control-session"
-import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 
 /**
  * Local structural view of the stream state snapshot this CLI reads back. The
@@ -155,7 +155,8 @@ export async function runStreamAdaptiveWatch(
 ): Promise<number> {
   const write = io.write ?? (line => console.log(line))
   const writeError = io.writeError ?? (line => console.error(line))
-  const sleep = io.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)))
+  const sleep =
+    io.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)))
   const client = io.client
   if (!client) {
     writeError("stream-control RPC client is not available")
@@ -211,7 +212,9 @@ function formatAdaptiveState(state: unknown): string {
   const boundaries = asRecord(readback?.boundaries)
   const boundaryLine = boundaries
     ? serializeStreamBoundaries(
-        boundaries as unknown as Parameters<typeof serializeStreamBoundaries>[0],
+        boundaries as unknown as Parameters<
+          typeof serializeStreamBoundaries
+        >[0],
       ).join(" ")
     : "auto"
   const lastEvent = readback?.lastEvent
@@ -243,7 +246,7 @@ async function withStream(
     io.connect ??
     (path =>
       connectStreamControlSession(
-        createInteractiveFirstPartyPluginRegistry(process.env),
+        createFirstPartyPluginState({ mode: "interactive" }).registry,
         { socketPath: path },
       ))
 

@@ -9,7 +9,7 @@ import {
 } from "@platform/library/sessiond-managed-launch-client"
 import type { PluginHandler } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect } from "effect"
 import { isStreamControlEnabled } from "../stream/control-mode"
 import {
@@ -100,7 +100,7 @@ const LIFECYCLE_COLLECT_CAPABILITY = "lifecycle.collect" as const
 
 function collectProviderLifecycleSummary() {
   return Effect.gen(function* () {
-    const registry = createFirstPartyPluginRegistryFromEnv(process.env)
+    const registry = createFirstPartyPluginState().registry
     for (const plugin of registry.enabledPlugins) {
       const handler = plugin.handlers.find(isLifecycleCollectHandler) as
         | PluginHandler<typeof LIFECYCLE_COLLECT_OPERATION, unknown, unknown>

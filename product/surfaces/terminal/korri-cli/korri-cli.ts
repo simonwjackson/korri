@@ -7,9 +7,9 @@ import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import { LibrarySource } from "@platform/library/library-services"
 import { createKorriControlRpc } from "@product/apps/portal/control/korri-control-rpc"
 import { createEvierStreamControlRpcClient } from "@product/apps/portal/features/evier/stream-control-rpc-client"
-import { createInteractiveFirstPartyPluginRegistry } from "@product/plugin-host"
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugin-host/acquisition"
 import { PluginLibrarySourceLayerLive } from "@product/plugin-host/library-source-layer"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect, Layer, Option } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 import { artifactCommand } from "./artifacts/artifact-import-command"
@@ -187,7 +187,10 @@ function streamAdaptiveArgs(flags: {
   ].filter((arg): arg is string => arg !== undefined)
 }
 
-function optionArg(key: string, option: Option.Option<string>): string | undefined {
+function optionArg(
+  key: string,
+  option: Option.Option<string>,
+): string | undefined {
   return Option.isSome(option) ? `${key}=${option.value}` : undefined
 }
 
@@ -358,7 +361,7 @@ const AcquisitionLayerLive = makeLiveAcquisitionLayer({
 })
 
 const KorriControlInfrastructureLive = KorriControlLayerLiveWithPlugins(
-  createInteractiveFirstPartyPluginRegistry(process.env),
+  createFirstPartyPluginState({ mode: "interactive" }).registry,
 ).pipe(
   Layer.provideMerge(
     Layer.mergeAll(PluginLibrarySourceLayerLive, LauncherLayerLive),

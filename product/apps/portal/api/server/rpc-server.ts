@@ -12,12 +12,12 @@ import {
 } from "@product/apps/portal/peers/peer-discovery"
 import { PeerSourceFetcherLive } from "@product/apps/portal/peers/peer-source-fetcher"
 import { makeFilePeerStore } from "@product/apps/portal/peers/peer-store"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugin-host/acquisition"
 import {
   makePluginLibrarySourceLayerLive,
   PluginLibrarySourceLayerLive,
 } from "@product/plugin-host/library-source-layer"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
@@ -95,8 +95,9 @@ function makeLibraryInfrastructureLive(
   const pluginLibrarySourceLayer = configGraphController
     ? makePluginLibrarySourceLayerLive({ configGraphController })
     : PluginLibrarySourceLayerLive
+  const pluginRegistry = createFirstPartyPluginState().registry
   const korriControlInfrastructureLive = KorriControlLayerLiveWithPlugins(
-    createFirstPartyPluginRegistryFromEnv(process.env),
+    pluginRegistry,
   ).pipe(
     Layer.provideMerge(
       Layer.mergeAll(pluginLibrarySourceLayer, LauncherLayerLive),
@@ -120,9 +121,7 @@ function makeLibraryInfrastructureLive(
     DeviceStateLayerLive,
     ForegroundSessionHostLive,
     RemoteStreamPrepareLive,
-    StreamControlLayerLiveWithPlugins(
-      createFirstPartyPluginRegistryFromEnv(process.env),
-    ),
+    StreamControlLayerLiveWithPlugins(pluginRegistry),
     AcquisitionLayerLive,
   )
 }

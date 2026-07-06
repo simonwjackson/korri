@@ -5,7 +5,7 @@ import {
 } from "@platform/api/rpc/errors"
 import type { PluginHandler, ProviderId } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect } from "effect"
 import {
   type CollectPluginDiagnosticsPayload,
@@ -27,7 +27,7 @@ export const handleCollectPluginDiagnostics = (
       )
     }
 
-    const registry = createFirstPartyPluginRegistryFromEnv(process.env)
+    const registry = createFirstPartyPluginState().registry
     const plugin = registry.get(payload.providerId)
 
     if (!plugin || !registry.enabledPluginIds.has(payload.providerId)) {

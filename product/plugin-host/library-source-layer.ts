@@ -24,10 +24,8 @@ import {
   withPortMasterInstalledLibrarySource,
 } from "@product/plugins/portmaster"
 import { Effect, Layer } from "effect"
-import {
-  createFirstPartyPluginRegistryFromEnv,
-  firstPartyLaunchIntegrationsForRegistry,
-} from "."
+import { firstPartyLaunchIntegrationsForRegistry } from "."
+import { createFirstPartyPluginState } from "./state"
 
 const DEFAULT_PLUGIN_RESOURCE_ROOT = "/var/lib/korri/plugins/resources"
 
@@ -43,7 +41,7 @@ export function makePluginLibrarySourceLayerLive(
   return Layer.effect(
     LibrarySource,
     Effect.sync(() => {
-      const registry = createFirstPartyPluginRegistryFromEnv(process.env)
+      const registry = createFirstPartyPluginState().registry
       const repositoryOptions = {
         pluginRegistry: registry,
         launchIntegrations: firstPartyLaunchIntegrationsForRegistry(registry),

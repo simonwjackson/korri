@@ -10,10 +10,10 @@ import { logger } from "@platform/logger"
 import { createHonoApp } from "@product/apps/portal/api/hono-app"
 import { createServerRpcHandler } from "@product/apps/portal/api/server/rpc-server"
 import {
-  createFirstPartyPluginRegistryFromEnv,
   firstPartyPluginDaemonsForRegistry,
   type KorriPluginDaemonHandle,
 } from "@product/plugin-host"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import {
   advertiseStreamHost,
   type StreamAdvertisement,
@@ -87,7 +87,7 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
   const advertise = options.advertise ?? advertiseStreamHost
   const pluginDaemons =
     options.pluginDaemons ??
-    firstPartyPluginDaemonsForRegistry(createFirstPartyPluginRegistryFromEnv())
+    firstPartyPluginDaemonsForRegistry(createFirstPartyPluginState().registry)
   let advertisement: StreamAdvertisement | undefined
   let started = false
 

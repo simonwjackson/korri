@@ -1,8 +1,8 @@
 import { DataError, NotFoundError } from "@platform/api/rpc/errors"
 import type { PluginId } from "@platform/plugin"
 import { executableResources } from "@platform/plugin/registry"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
 import { createPluginResourceFulfillerFromEnv } from "@product/plugin-host/library-source-layer"
+import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect } from "effect"
 import {
   type FulfillPluginResourcePayload,
@@ -13,7 +13,7 @@ export const handleFulfillPluginResource = (
   payload: typeof FulfillPluginResourcePayload.Type,
 ) =>
   Effect.gen(function* () {
-    const registry = createFirstPartyPluginRegistryFromEnv(process.env)
+    const registry = createFirstPartyPluginState().registry
     const resource = executableResources(registry).find(
       candidate =>
         candidate.pluginId === (payload.pluginId as PluginId) &&
