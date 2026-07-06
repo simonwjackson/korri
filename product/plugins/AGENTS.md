@@ -263,31 +263,66 @@ Initial service groups are intentionally narrow and should expand only when a cu
 
 Use service helper accessors for required services so missing host capabilities produce structured plugin-operation diagnostics instead of incidental `undefined` failures. Local/operator plugin roots are treated as trusted code until a sandboxed runner exists; grants gate Korri-provided services, not arbitrary ambient JavaScript globals.
 
-## Registration
+## Registration, discovery, and policy
 
-This directory is a pure plugin catalog: each plugin is a folder. The host-side
-first-party registry that aggregates these plugins lives outside the catalog.
+This directory is a pure bundled plugin catalog: each plugin is a folder. Host-side aggregation lives outside the catalog and consumes discovered descriptors through the plugin-state provider.
 
-Register first-party plugins in:
+Bundled product plugins are listed in the generated static inventory:
 
 ```text
-product/plugin-host/index.ts
+product/plugin-host/bundled-plugins.generated.ts
 ```
 
-The registry imports plugins by alias (it no longer sits inside this directory):
+That generated module statically imports descriptors so API/Nix builds keep bundled plugin modules reachable. Runtime composition reads descriptors through:
 
-```ts
-import { gamescopePlugin, KORRI_GAMESCOPE_PLUGIN_ID } from "@product/plugins/gamescope"
-import { neverballPlugin } from "@product/plugins/neverball"
-
-export const firstPartyPlugins = [gamescopePlugin, neverballPlugin] as const
+```text
+product/plugin-host/roots.ts
+product/plugin-host/state.ts
 ```
+
+Do not add plugin-specific imports to generic platform code. `product/platform/*` defines the plugin ABI and registry; `product/plugin-host/*` owns product/bundled composition.
 
 Enablement rules:
 
-- Catalog/content plugins may be gated by `KORRI_ENABLED_PLUGINS`.
-- Core infrastructure plugins that authored config depends on, such as `@korri:gamescope`, should be enabled by default unless the product explicitly supports disabling them.
-- If adding a default-enabled infrastructure plugin, update `enabledFirstPartyPluginIds(...)` and tests.
+- `createFirstPartyPluginState(...)` is the canonical host state provider for installed, enabled, diagnostics, and registry state.
+- Runtime mode is fail-closed unless policy enables plugins.
+- Interactive mode is explicit (`mode: "interactive"`) and may enable the shipped first-party set for operator tools.
+- `KORRI_ENABLED_PLUGINS` is a compatibility/test-dev input translated at the host edge; do not add new runtime consumers that parse it directly.
+- Capability grants are explicit and separate from trust tier. Grants authorize Korri-provided services; they do not sandbox in-process JavaScript.
+
+## Local/operator plugin roots
+
+Local plugins use the same ABI as bundled plugins: export a `KorriPlugin` descriptor created by `plugin(...)`. Source location is distribution metadata, not a plugin type.
+
+Canonical local module shape:
+
+```ts
+import { plugin } from "@platform/plugin"
+
+export default plugin({
+  namespace: "@local",
+  name: "toy",
+  title: "Toy plugin",
+  contributes: {
+    handlers: [
+      {
+        id: "toy.diagnostics",
+        operation: "diagnostics.collect",
+        run: context => ({ provider: context.provider }),
+      },
+    ],
+  },
+})
+```
+
+Local-root rules:
+
+- Local roots stay outside this repo and outside product images.
+- Local plugins must not claim the reserved `@korri` namespace.
+- Use operator/plugin-owned namespaces such as `@local` or another configured namespace.
+- Root loading is descriptor discovery only; discovered descriptors still flow through `createPluginRegistry` and policy/grant resolution.
+- Local in-process plugin files are trusted operator/developer code until a sandboxed runner exists. Do not document or imply sandbox-grade isolation.
+- Do not commit gray-area provider implementations, domains, or provider-specific scraping behavior to Korri. Keep fixtures harmless and generic.
 
 ## Tests
 
