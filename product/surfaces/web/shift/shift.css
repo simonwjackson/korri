@@ -2163,6 +2163,31 @@
 }
 
 /* ── Empty state ──────────────────────────────────────────────────────────── */
+[data-shift-store] .shift-store-status {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--shift-space-3);
+}
+
+[data-shift-store] .shift-store-retry {
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 700;
+	color: var(--shift-pill-fg);
+	background: var(--shift-pill-bg);
+	border: 1px solid var(--shift-rule);
+	border-radius: 9999px;
+	padding: var(--shift-space-1) var(--shift-space-4);
+	outline: none;
+	transition: box-shadow 140ms ease;
+}
+
+[data-shift-store] .shift-store-retry:is(:focus, [data-korri-active-focus]) {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
 [data-shift-store] .shift-store-empty {
 	margin: 0;
 	font-size: var(--shift-text-body);
