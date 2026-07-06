@@ -13,6 +13,13 @@ verify_command: "bun test product/platform/stream"
 
 Productize the existing flag-off adaptive stream controller into a continuous, math-driven controller that steers a Moonlight/Sunshine stream to the best quality the moment allows, inside a user-set boundary box, with an invisible-autopilot posture. The work upgrades the pure decision core (honor a boundary box, recover all levers, two-speed slope/cliff behavior, canvas-based resolution logic, cold-start), gives it a unified `--key=value` CLI as its only control/observability surface, adds total-loss/tunnel survival, and builds a device-free validation harness so it can be flipped on behind the existing flag after a device gate.
 
+## Current Implementation Status (2026-07-06)
+
+- Platform controller foundation landed on trunk: boundary grammar, continuous decision core, multi-lever runner dispatch, telemetry/scenario harness, handoff hints, outage state machine, netem helper, and validation runbook.
+- Product/runtime wiring landed in feature branch `feat/adaptive-stream-product-wiring`: live adaptive boundary control is exposed through the runtime session, `app.stream-control.*` RPC, `korri stream --key=value`, `korri stream --watch`, and `korri launch --key=value` launch seeding.
+- Runtime outage supervision is now wired into stream sessions and Moonlight runtime startup behind env, but native re-establish/hold-last-frame is **not implemented**; the platform layer emits a clear reconnect-failed event when no re-establish hook exists rather than pretending recovery happened.
+- Adaptive enablement remains gated: `KORRI_STREAM_ADAPTIVE_ENABLED=0` until coordinated device validation and human approval.
+
 ---
 
 ## Problem Frame
@@ -111,7 +118,7 @@ The stream controller shipped as **reflexes, not optimization**: `computeStreamA
 ### Deferred to Implementation
 
 - Exact pressure/threshold constants and the shed-fast/recover-slow time constants — tuned from device + replay data (U12/U13), not guessable at plan time.
-- Whether total-loss reconnect can be handled entirely in the platform recovery/outage layer or requires native Moonlight/sessiond changes — determined once U10 touches the real reconnect path.
+- Total-loss reconnect cannot honestly be completed entirely in the current platform layer: the session runtime can detect outage/return and can call an optional re-establish hook, but native Moonlight/sessiond reconnect + hold-last-frame ownership remains a blocker before claiming full U10 completion.
 - Final key names for outcome clamps (`--max-latency` vs `--max-input-lag`, `--min-fps` delivered vs the `fps` lever) — settle during U1 to avoid collisions with lever keys.
 
 ---
