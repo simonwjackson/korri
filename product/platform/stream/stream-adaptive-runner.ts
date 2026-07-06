@@ -54,7 +54,7 @@ export interface StreamAdaptiveRunnerOptions {
   readonly recovery: RuntimeRecoverySupervisor
   readonly initialSettings: StreamAdaptiveSettings
   readonly objectiveBias: number
-  readonly boundaries?: StreamBoundaries
+  readonly boundaries?: StreamBoundaries | (() => StreamBoundaries | undefined)
   readonly isStreaming: () => boolean
   readonly onEvent: (event: StreamAdaptiveRunnerEvent) => void
   readonly nowMs?: () => number
@@ -98,7 +98,7 @@ export function createStreamAdaptiveRunner(
       summary,
       current: currentSettings(options.recovery, options.initialSettings),
       objectiveBias: options.objectiveBias,
-      boundaries: options.boundaries,
+      boundaries: currentBoundaries(options.boundaries),
     })
 
     if (decision.kind === "dormant") {
@@ -167,6 +167,12 @@ export function createStreamAdaptiveRunner(
       if (interval !== undefined) clearInterval(interval)
     },
   }
+}
+
+function currentBoundaries(
+  boundaries: StreamAdaptiveRunnerOptions["boundaries"],
+): StreamBoundaries | undefined {
+  return typeof boundaries === "function" ? boundaries() : boundaries
 }
 
 function currentSettings(

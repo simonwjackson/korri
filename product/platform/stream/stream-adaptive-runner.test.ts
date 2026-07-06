@@ -41,7 +41,7 @@ function makeHarness(
     readonly streaming?: boolean
     readonly enabled?: boolean
     readonly rejectSet?: boolean
-    readonly boundaries?: StreamBoundaries
+    readonly boundaries?: StreamBoundaries | (() => StreamBoundaries | undefined)
   } = {},
 ) {
   const events: unknown[] = []
@@ -164,6 +164,29 @@ describe("createStreamAdaptiveRunner", () => {
       command: "runtime.setBitrate",
       message: "dispatch failed",
     })
+  })
+
+  it("reads boundaries dynamically before each dispatch", async () => {
+    let boundaries: StreamBoundaries | undefined
+    const { runner, calls } = makeHarness({
+      health: summary({
+        bitrateDeliveryRatio: 0.25,
+        lossFraction: numeric(0.12, "rising"),
+      }),
+      boundaries: () => boundaries,
+    })
+
+    boundaries = {
+      levers: { bitrate: { floor: 20_000, ceiling: 20_000, pinned: 20_000 } },
+      outcomes: {},
+      lean: 0.5,
+    }
+    await runner.tick()
+    expect(calls.some(call => call.startsWith("bitrate:"))).toBe(false)
+
+    boundaries = { levers: {}, outcomes: {}, lean: 0.5 }
+    await runner.tick()
+    expect(calls.some(call => call.startsWith("bitrate:"))).toBe(true)
   })
 
   it("honors pinned boundaries before dispatch", async () => {

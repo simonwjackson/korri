@@ -1,11 +1,16 @@
 import type { StreamControlSession } from "@platform/stream-control/stream-control-session"
+import type { StreamBoundaries } from "./stream-adaptive-boundaries"
 import {
   createRuntimeRecoverySupervisor,
   type RuntimeRecoveryControlPort,
   type RuntimeRecoveryEvent,
   type RuntimeRecoverySupervisor,
 } from "./runtime-recovery-supervisor"
-import type { StreamAdaptiveSettings } from "./stream-adaptive-controller"
+import {
+  computeStreamAdaptiveDecision,
+  type StreamAdaptiveDecision,
+  type StreamAdaptiveSettings,
+} from "./stream-adaptive-controller"
 import {
   createStreamAdaptiveRunner,
   type StreamAdaptiveRunner,
@@ -49,6 +54,7 @@ export interface StartStreamRuntimeSessionOptions {
   readonly adaptive?: {
     readonly enabled: boolean
     readonly objectiveBias: number
+    readonly boundaries?: StreamBoundaries
     readonly isStreaming: () => boolean
     readonly onEvent: (event: StreamAdaptiveRunnerEvent) => void
     readonly tickIntervalMs?: number
@@ -56,11 +62,24 @@ export interface StartStreamRuntimeSessionOptions {
   readonly nowMs?: () => number
 }
 
+export interface StreamAdaptiveControlSnapshot {
+  readonly enabled: boolean
+  readonly boundaries?: StreamBoundaries
+  readonly lastEvent?: StreamAdaptiveRunnerEvent
+}
+
+export interface StreamAdaptiveRuntimeControl {
+  readonly snapshot: () => StreamAdaptiveControlSnapshot
+  readonly setBoundaries: (boundaries: StreamBoundaries | undefined) => void
+  readonly dryRun: () => StreamAdaptiveDecision
+}
+
 export interface StreamRuntimeSession {
   readonly settings: StreamRuntimeSettings
   readonly health: StreamHealthMonitor
   readonly recovery?: RuntimeRecoverySupervisor
   readonly adaptive?: StreamAdaptiveRunner
+  readonly adaptiveControl?: StreamAdaptiveRuntimeControl
   readonly close: () => void
 }
 
@@ -105,7 +124,7 @@ export async function startStreamRuntimeSession(
           onEvent: options.onRecoveryEvent ?? (() => {}),
         })
       : undefined
-    const adaptive = startAdaptiveRunner({
+    const adaptiveRuntime = startAdaptiveRunner({
       options,
       settings,
       health,
@@ -116,11 +135,12 @@ export async function startStreamRuntimeSession(
       settings,
       health,
       ...(recovery ? { recovery } : {}),
-      ...(adaptive ? { adaptive } : {}),
+      ...(adaptiveRuntime ? { adaptive: adaptiveRuntime.runner } : {}),
+      ...(adaptiveRuntime ? { adaptiveControl: adaptiveRuntime.control } : {}),
       close: () => {
         if (closed) return
         closed = true
-        adaptive?.close()
+        adaptiveRuntime?.runner.close()
         recovery?.close()
         health.close()
         session.close()
@@ -137,7 +157,12 @@ function startAdaptiveRunner(input: {
   readonly settings: StreamRuntimeSettings
   readonly health: StreamHealthMonitor
   readonly recovery?: RuntimeRecoverySupervisor
-}): StreamAdaptiveRunner | undefined {
+}):
+  | {
+      readonly runner: StreamAdaptiveRunner
+      readonly control: StreamAdaptiveRuntimeControl
+    }
+  | undefined {
   const adaptive = input.options.adaptive
   if (!adaptive?.enabled) return undefined
   const initialSettings = adaptiveInitialSettings(input.settings)
@@ -145,19 +170,65 @@ function startAdaptiveRunner(input: {
     adaptive.onEvent({ kind: "dormant", reason: "not-ready" })
     return undefined
   }
-  return createStreamAdaptiveRunner({
+
+  let boundaries = adaptive.boundaries
+  let lastEvent: StreamAdaptiveRunnerEvent | undefined
+  const onEvent = (event: StreamAdaptiveRunnerEvent) => {
+    lastEvent = event
+    adaptive.onEvent(event)
+  }
+  const runner = createStreamAdaptiveRunner({
     enabled: adaptive.enabled,
     monitor: input.health,
     recovery: input.recovery,
     initialSettings,
     objectiveBias: adaptive.objectiveBias,
+    boundaries: () => boundaries,
     isStreaming: adaptive.isStreaming,
-    onEvent: adaptive.onEvent,
+    onEvent,
     nowMs: input.options.nowMs,
     ...(adaptive.tickIntervalMs !== undefined
       ? { tickIntervalMs: adaptive.tickIntervalMs }
       : {}),
   })
+  const control: StreamAdaptiveRuntimeControl = {
+    snapshot: () => ({
+      enabled: adaptive.enabled,
+      ...(boundaries ? { boundaries } : {}),
+      ...(lastEvent ? { lastEvent } : {}),
+    }),
+    setBoundaries: next => {
+      boundaries = next
+    },
+    dryRun: () =>
+      computeStreamAdaptiveDecision({
+        summary: input.health.latestSummary((input.options.nowMs ?? Date.now)()),
+        current: adaptiveCurrentSettings(input.recovery, initialSettings),
+        objectiveBias: adaptive.objectiveBias,
+        boundaries,
+      }),
+  }
+  return { runner, control }
+}
+
+function adaptiveCurrentSettings(
+  recovery: RuntimeRecoverySupervisor,
+  initial: StreamAdaptiveSettings,
+): StreamAdaptiveSettings {
+  const knownGood = recovery.knownGood()
+  const bitrate = knownGood["runtime.setBitrate"]
+  const fps = knownGood["runtime.setFps"]
+  const resolution = knownGood["runtime.setResolution"]
+  return {
+    ...initial,
+    bitrateKbps:
+      bitrate?.kind === "scalar" ? bitrate.value : initial.bitrateKbps,
+    fps: fps?.kind === "scalar" ? fps.value : initial.fps,
+    resolution:
+      resolution?.kind === "resolution"
+        ? { width: resolution.width, height: resolution.height }
+        : initial.resolution,
+  }
 }
 
 function adaptiveInitialSettings(

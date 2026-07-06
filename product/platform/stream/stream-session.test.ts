@@ -227,6 +227,54 @@ describe("startStreamRuntimeSession", () => {
     expect(recovery.calls).toContain("recovery.unsubscribe")
   })
 
+  it("exposes live adaptive boundary control and dry-run decisions", async () => {
+    const harness = makeSession()
+    const recovery = makeRecoveryPort()
+    const adaptiveEvents: StreamAdaptiveRunnerEvent[] = []
+    const runtime = await startStreamRuntimeSession({
+      session: harness.session,
+      settingsFromState: () => settings,
+      recoveryPort: recovery.port,
+      onRecoveryEvent: () => {},
+      adaptive: {
+        enabled: true,
+        objectiveBias: 0.5,
+        isStreaming: () => true,
+        onEvent: event => adaptiveEvents.push(event),
+      },
+      nowMs: () => 2_000,
+    })
+
+    harness.emit({
+      name: "quality.sample",
+      sample: {
+        seq: 1,
+        sampledAtMs: 1_000,
+        rttMs: 120,
+        incomingBitrateKbps: 5_000,
+        requestedBitrateKbps: 20_000,
+      },
+    })
+
+    runtime.adaptiveControl?.setBoundaries({
+      levers: { bitrate: { floor: 20_000, ceiling: 20_000, pinned: 20_000 } },
+      outcomes: {},
+      lean: 0.5,
+    })
+    await runtime.adaptive?.tick()
+    expect(recovery.calls.some(call => call.startsWith("bitrate:"))).toBe(false)
+
+    const dryRun = runtime.adaptiveControl?.dryRun()
+    expect(dryRun?.kind).toBe("dormant")
+    expect(runtime.adaptiveControl?.snapshot().boundaries?.levers.bitrate).toEqual({
+      floor: 20_000,
+      ceiling: 20_000,
+      pinned: 20_000,
+    })
+
+    runtime.close()
+  })
+
   it("does not start adaptive control without a recovery port", async () => {
     const harness = makeSession()
     const adaptiveEvents: StreamAdaptiveRunnerEvent[] = []
