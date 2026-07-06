@@ -210,12 +210,17 @@ function formatAdaptiveState(state: unknown): string {
   const enabled = readback?.enabled === true ? "enabled" : "disabled"
   const boundaries = asRecord(readback?.boundaries)
   const boundaryLine = boundaries
-    ? serializeStreamBoundaries(boundaries as Parameters<typeof serializeStreamBoundaries>[0]).join(" ")
+    ? serializeStreamBoundaries(
+        boundaries as unknown as Parameters<typeof serializeStreamBoundaries>[0],
+      ).join(" ")
     : "auto"
   const lastEvent = readback?.lastEvent
     ? `\nlast event:  ${JSON.stringify(readback.lastEvent)}`
     : ""
-  return [`adaptive:    ${enabled}`, `boundaries:   ${boundaryLine}`].join("\n") + lastEvent
+  return (
+    [`adaptive:    ${enabled}`, `boundaries:   ${boundaryLine}`].join("\n") +
+    lastEvent
+  )
 }
 
 function asRecord(input: unknown): Record<string, unknown> | undefined {

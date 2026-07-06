@@ -428,7 +428,7 @@ describe("app.stream-control RPC handlers", () => {
         deviceState: {
           current: () =>
             Effect.succeed({
-              observedAt: "2026-07-01T00:00:00.000Z",
+              ...unknownDeviceState("2026-07-01T00:00:00.000Z"),
               battery: {
                 _tag: "Ready",
                 percent: 91,
@@ -454,7 +454,7 @@ describe("app.stream-control RPC handlers", () => {
           refresh: () =>
             Effect.succeed({
               accepted: true,
-              fact: "battery",
+              facts: ["battery"],
               state: unknownDeviceState(),
             }),
         },

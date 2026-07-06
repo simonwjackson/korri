@@ -435,7 +435,10 @@ async function readAdaptiveState(runtime: Runtime) {
     ?.adaptiveControl?.()
   if (!control) return { status: "disabled" as const }
   try {
-    return { status: "ok" as const, readback: control.snapshot() }
+    return {
+      status: "ok" as const,
+      readback: control.snapshot() as unknown as Record<string, unknown>,
+    }
   } catch (error) {
     return { status: "error" as const, error: errorMessage(error) }
   }

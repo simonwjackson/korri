@@ -181,21 +181,22 @@ function startOutageRuntime(input: {
 }): StreamOutageRuntime | undefined {
   const outage = input.options.outage
   if (!outage?.enabled) return undefined
+  const outageOptions = outage
 
   const nowMs = input.options.nowMs ?? (() => Date.now())
   const supervisor = createStreamOutageSupervisor({
-    onEvent: outage.onEvent,
-    ...(outage.lossAfterMs !== undefined
-      ? { lossAfterMs: outage.lossAfterMs }
+    onEvent: outageOptions.onEvent,
+    ...(outageOptions.lossAfterMs !== undefined
+      ? { lossAfterMs: outageOptions.lossAfterMs }
       : {}),
   })
   let closed = false
   let reestablishing = false
   const interval =
-    outage.tickIntervalMs !== undefined
+    outageOptions.tickIntervalMs !== undefined
       ? setInterval(() => {
           void tick()
-        }, outage.tickIntervalMs)
+        }, outageOptions.tickIntervalMs)
       : undefined
 
   async function tick(): Promise<void> {
@@ -209,13 +210,13 @@ function startOutageRuntime(input: {
     })
     if (action?.kind !== "re-establish") return
     if (reestablishing) return
-    if (!outage.reestablish) {
+    if (!outageOptions.reestablish) {
       supervisor.markReconnectFailed("stream re-establish hook unavailable")
       return
     }
     reestablishing = true
     try {
-      await outage.reestablish()
+      await outageOptions.reestablish()
       if (!closed) supervisor.markReestablished()
     } catch (error) {
       if (!closed) {
@@ -257,6 +258,7 @@ function startAdaptiveRunner(input: {
     adaptive.onEvent({ kind: "dormant", reason: "not-ready" })
     return undefined
   }
+  const recovery = input.recovery
 
   let boundaries = adaptive.boundaries
   let lastEvent: StreamAdaptiveRunnerEvent | undefined
@@ -267,7 +269,7 @@ function startAdaptiveRunner(input: {
   const runner = createStreamAdaptiveRunner({
     enabled: adaptive.enabled,
     monitor: input.health,
-    recovery: input.recovery,
+    recovery,
     initialSettings,
     objectiveBias: adaptive.objectiveBias,
     boundaries: () => boundaries,
@@ -290,7 +292,7 @@ function startAdaptiveRunner(input: {
     dryRun: previewBoundaries =>
       computeStreamAdaptiveDecision({
         summary: input.health.latestSummary((input.options.nowMs ?? Date.now)()),
-        current: adaptiveCurrentSettings(input.recovery, initialSettings),
+        current: adaptiveCurrentSettings(recovery, initialSettings),
         objectiveBias: adaptive.objectiveBias,
         boundaries: previewBoundaries ?? boundaries,
       }),
