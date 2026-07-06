@@ -47,6 +47,28 @@ const createBackend = (
   }
 }
 
+const createPhysOnlyBackend = (
+  devices: () => readonly DiscoveredDevice[],
+): UinputSeatBackend & {
+  readonly created: number[]
+  readonly released: number[]
+  readonly writes: unknown[]
+} => {
+  const backend = createBackend(devices)
+  return {
+    ...backend,
+    createSeat: async seat => {
+      backend.created.push(seat.slot)
+      return {
+        slot: seat.slot,
+        token: `handle-${seat.slot}`,
+        expectedPhysicalPath: `korri/input-seat/p${seat.slot}`,
+        expectedUniqueId: null,
+      }
+    },
+  }
+}
+
 describe("uinput seat runtime", () => {
   it("allocates seats only after unique gamepad identities are discovered", async () => {
     const backend = createBackend(() => [gamepadDevice(1), gamepadDevice(2)])
@@ -74,6 +96,67 @@ describe("uinput seat runtime", () => {
 
   it("rejects ambiguous duplicate Korri seat names and releases created seats", async () => {
     const backend = createBackend(() => [gamepadDevice(1, "event1"), gamepadDevice(1, "event9")])
+    const runtime = createUinputSeatRuntime({ backend })
+
+    const result = await runtime.allocate({
+      launchId: "launch-1",
+      seats: [makeRequestedSeat(1)],
+      timeoutMs: 100,
+    })
+
+    expect(result).toMatchObject({ status: "ambiguous", slot: 1 })
+    expect(backend.released).toEqual([1])
+  })
+
+  it("allocates production uinput seats that expose phys without uniq", async () => {
+    const backend = createPhysOnlyBackend(() => [
+      {
+        ...gamepadDevice(1),
+        uniqueId: undefined,
+      },
+    ])
+    const runtime = createUinputSeatRuntime({ backend, inputRoot: "/dev/input" })
+    const result = await runtime.allocate({
+      launchId: "launch-1",
+      seats: [makeRequestedSeat(1)],
+      timeoutMs: 100,
+    })
+
+    expect(result.status).toBe("allocated")
+    if (result.status !== "allocated") throw new Error("allocation failed")
+    expect(result.seats[0]?.phys).toBe("korri/input-seat/p1")
+    expect(result.seats[0]?.uniq).toBeUndefined()
+  })
+
+  it("does not accept a stale phys-only candidate that exposes the wrong uniq", async () => {
+    const backend = createPhysOnlyBackend(() => [
+      { ...gamepadDevice(1), uniqueId: "stale-seat-p1" },
+    ])
+    const runtime = createUinputSeatRuntime({
+      backend,
+      pollIntervalMs: 1,
+      nowMs: (() => {
+        let now = 0
+        return () => (now += 10)
+      })(),
+      sleepMs: async () => {},
+    })
+
+    const result = await runtime.allocate({
+      launchId: "launch-1",
+      seats: [makeRequestedSeat(1)],
+      timeoutMs: 5,
+    })
+
+    expect(result).toMatchObject({ status: "unavailable", reason: "timeout" })
+    expect(backend.released).toEqual([1])
+  })
+
+  it("does not accept duplicate production uinput seats without uniq", async () => {
+    const backend = createPhysOnlyBackend(() => [
+      { ...gamepadDevice(1, "event1"), uniqueId: undefined },
+      { ...gamepadDevice(1, "event9"), uniqueId: undefined },
+    ])
     const runtime = createUinputSeatRuntime({ backend })
 
     const result = await runtime.allocate({

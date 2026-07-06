@@ -261,6 +261,7 @@ in
       }
       // (lib.optionalAttrs (inputSeat.enable or false) {
         KORRI_INPUT_SEAT_RUNTIME_DIR = inputSeat.runtimeDir;
+        KORRI_INPUT_SEAT_BACKEND_HELPER = "${cfg.package}/bin/korri-uinput-seat-helper";
       })
       // (lib.optionalAttrs (daemonConfigRoots != null) {
         KORRI_CONFIG_ROOTS = daemonConfigRoots;

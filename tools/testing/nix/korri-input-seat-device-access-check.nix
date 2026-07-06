@@ -66,6 +66,16 @@ pkgs.runCommand "korri-input-seat-device-access-check" { } ''
     exit 1
   ''}
 
+  ${lib.optionalString (!(lib.hasInfix ''ATTRS{name}=="Korri Seat P*", GROUP="uinput", MODE="0660"'' (dedicated.config.services.udev.extraRules or ""))) ''
+    echo "Korri Seat event-node udev rule missing" >&2
+    exit 1
+  ''}
+
+  ${lib.optionalString (lib.hasInfix ''TAG+="uaccess"'' (dedicated.config.services.udev.extraRules or "")) ''
+    echo "Korri Seat event-node rule must not use uaccess ACLs" >&2
+    exit 1
+  ''}
+
   ${lib.optionalString (!hasBroadGroupFailure broadDenied) ''
     echo "broad input-group configuration did not fail assertion" >&2
     exit 1

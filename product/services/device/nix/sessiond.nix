@@ -53,9 +53,14 @@ pkgs.stdenv.mkDerivation {
 
     mkdir -p "$out/share/korri-sessiond" "$out/bin"
     cp korri-sessiond.js "$out/share/korri-sessiond/korri-sessiond.js"
+    cp product/platform/input-seat/uinput-seat-backend-helper.py "$out/share/korri-sessiond/uinput-seat-backend-helper.py"
+    chmod +x "$out/share/korri-sessiond/uinput-seat-backend-helper.py"
 
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-sessiond" \
       --add-flags "$out/share/korri-sessiond/korri-sessiond.js"
+
+    makeWrapper ${pkgs.python3}/bin/python3 "$out/bin/korri-uinput-seat-helper" \
+      --add-flags "$out/share/korri-sessiond/uinput-seat-backend-helper.py"
 
     runHook postInstall
   '';
@@ -74,6 +79,13 @@ pkgs.stdenv.mkDerivation {
       echo "korri-sessiond bundled JS is missing" >&2
       exit 1
     fi
+
+    if [ ! -x "$out/bin/korri-uinput-seat-helper" ]; then
+      echo "korri-uinput-seat-helper wrapper is missing or not executable" >&2
+      exit 1
+    fi
+
+    "$out/bin/korri-uinput-seat-helper" --self-test
 
     if [ -d "$out/share/korri-sessiond/node_modules" ]; then
       echo "korri-sessiond install closure must not contain node_modules" >&2

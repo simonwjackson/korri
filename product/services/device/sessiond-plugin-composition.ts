@@ -5,6 +5,7 @@ import {
   firstPartySessionLifecycleHooksForRegistry,
 } from "@product/plugin-host"
 import { createUnavailableSeatRuntime } from "@platform/input-seat/seat-runtime-port"
+import { createUinputSeatBackend } from "@platform/input-seat/uinput-seat-backend"
 import {
   createUinputSeatRuntime,
   type UinputSeatBackend,
@@ -59,7 +60,7 @@ export function sessiondPreSpawnGatesFromEnv(
     ]
   }
 
-  const backend = options.createSeatBackend?.()
+  const backend = createInputSeatBackendFromEnv(env, options)
   if (!backend) {
     return [
       createSessiondInputSeatPreSpawnGate({
@@ -82,6 +83,23 @@ export function sessiondPreSpawnGatesFromEnv(
       },
     }),
   ]
+}
+
+const createInputSeatBackendFromEnv = (
+  env: NodeJS.ProcessEnv,
+  options: SessiondPreSpawnGateCompositionOptions,
+): UinputSeatBackend | undefined => {
+  const injected = options.createSeatBackend?.()
+  if (injected) return injected
+
+  const helperPath = env.KORRI_INPUT_SEAT_BACKEND_HELPER?.trim()
+  if (!helperPath) return undefined
+
+  try {
+    return createUinputSeatBackend({ helperPath })
+  } catch {
+    return undefined
+  }
 }
 
 const inputSeatRuntimeDirError = (runtimeDir: string): string | undefined => {

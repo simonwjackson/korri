@@ -1,6 +1,8 @@
+export const EV_SYN = 0
 export const EV_KEY = 1
 export const EV_ABS = 3
 export const EV_SW = 5
+export const SYN_REPORT = 0
 
 export const BTN_A = 0x130
 export const BTN_B = 0x131
@@ -22,6 +24,10 @@ export const KEY_BACK = 0x9e
 
 export const ABS_X = 0x00
 export const ABS_Y = 0x01
+export const ABS_Z = 0x02
+export const ABS_RX = 0x03
+export const ABS_RY = 0x04
+export const ABS_RZ = 0x05
 export const ABS_HAT0X = 0x10
 export const ABS_HAT0Y = 0x11
 

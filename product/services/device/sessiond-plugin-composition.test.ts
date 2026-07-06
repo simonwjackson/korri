@@ -68,6 +68,31 @@ describe("sessiond plugin composition", () => {
     }
   })
 
+  it("fails input-seat launches closed when runtime dir has no production helper", async () => {
+    const runtimeDir = await mkdtemp(join(tmpdir(), "korri-input-seat-runtime-"))
+    try {
+      for (const helperPath of [undefined, "/usr/bin/korri-uinput-seat-helper"]) {
+        const [gate] = sessiondPreSpawnGatesFromEnv({
+          KORRI_INPUT_SEAT_RUNTIME_DIR: runtimeDir,
+          ...(helperPath ? { KORRI_INPUT_SEAT_BACKEND_HELPER: helperPath } : {}),
+        })
+
+        await expect(
+          gate?.start({
+            launchId: "launch-1",
+            spec: { command: "/bin/game", args: [] },
+            signal: new AbortController().signal,
+            launchCompanions: {
+              "@korri:input-seat": { playerCount: 1 },
+            },
+          }),
+        ).rejects.toMatchObject({ failureKind: "input-unavailable" })
+      }
+    } finally {
+      await rm(runtimeDir, { recursive: true, force: true })
+    }
+  })
+
   it("fails input-seat launches closed when runtime dir is relative or unresolved", async () => {
     for (const value of ["relative/input-seat", "%t/korri/input-seat"]) {
       const [gate] = sessiondPreSpawnGatesFromEnv({

@@ -17,7 +17,7 @@ export interface UinputSeatHandle {
   readonly slot: number
   readonly token: string
   readonly expectedPhysicalPath?: string
-  readonly expectedUniqueId?: string
+  readonly expectedUniqueId?: string | null
 }
 
 export interface UinputSeatBackend {
@@ -169,12 +169,17 @@ const waitForSeatIdentity = async (
     const devices = await options.backend.discoverDevices()
     const expectedPhysicalPath =
       handle.expectedPhysicalPath ?? `korri/input-seat/p${seat.slot}`
-    const expectedUniqueId = handle.expectedUniqueId ?? `korri-seat-p${seat.slot}`
+    const expectedUniqueId =
+      handle.expectedUniqueId === null
+        ? undefined
+        : (handle.expectedUniqueId ?? `korri-seat-p${seat.slot}`)
     const candidates = devices.filter(
       device =>
         device.name === seat.name &&
-        device.uniqueId === expectedUniqueId &&
-        device.physicalPath === expectedPhysicalPath,
+        device.physicalPath === expectedPhysicalPath &&
+        (expectedUniqueId === undefined
+          ? device.uniqueId === undefined
+          : device.uniqueId === expectedUniqueId),
     )
 
     if (candidates.length > 1) {
@@ -229,7 +234,7 @@ const waitForSeatIdentity = async (
           vendorId: "045e",
           productId: "028e",
           phys: device.physicalPath ?? `korri/input-seat/p${seat.slot}`,
-          uniq: device.uniqueId ?? `korri-seat-p${seat.slot}`,
+          ...(device.uniqueId ? { uniq: device.uniqueId } : {}),
           eventPath,
           readiness: {
             readable: true,

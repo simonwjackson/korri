@@ -107,10 +107,17 @@ in
   # headless base. Streaming hosts also need the input provider (Xbox 360
   # over /dev/uinput via InputPlumber) so Sunshine can synthesize streamed
   # controllers.
+  services.korri.daemon.user = lib.mkDefault runtime.user;
   services.korri.daemon.streaming.enable = lib.mkDefault true;
   services.korri.input.provider = {
     enable = lib.mkDefault true;
     name = lib.mkDefault "inputplumber";
+  };
+  services.korri.input.inputSeat = {
+    enable = lib.mkDefault true;
+    user = lib.mkDefault runtime.user;
+    group = lib.mkDefault "uinput";
+    runtimeDir = lib.mkDefault "%t/korri/input-seat";
   };
 
   # Sessiond owns the foreground session lifecycle. Role is inferred

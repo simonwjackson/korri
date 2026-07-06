@@ -20,6 +20,8 @@ let
       compositor.kiosk.enable = lib.mkOption { type = lib.types.bool; default = false; };
       daemon.streaming.enable = lib.mkOption { type = lib.types.bool; default = false; };
       daemon.library.root = lib.mkOption { type = lib.types.str; default = "/var/lib/korri/library"; };
+      input.inputSeat.enable = lib.mkOption { type = lib.types.bool; default = false; };
+      input.inputSeat.runtimeDir = lib.mkOption { type = lib.types.str; default = "%t/korri/input-seat"; };
     };
   };
 
@@ -68,6 +70,10 @@ let
       esswayControl.enable = true;
     };
   };
+  inputSeatEnabled = evaluateWith {
+    services.korri.sessiond.enable = true;
+    services.korri.input.inputSeat.enable = true;
+  };
 
   check = message: assertion: { inherit message assertion; };
   checks = [
@@ -89,6 +95,13 @@ let
     (check "kiosk and streaming conflict rejected" (hasFailure bothKioskAndStreaming "must not be enabled together"))
     (check "path option flows through" (builtins.elem pkgs.gamescope (unitPath withPath)))
     (check "util-linux is on PATH for setsid" (builtins.elem pkgs.util-linux (unitPath baselineKiosk)))
+    (check "input-seat runtime dir exported when enabled" (
+      (unitEnv inputSeatEnabled).KORRI_INPUT_SEAT_RUNTIME_DIR == "%t/korri/input-seat"
+    ))
+    (check "input-seat helper path exported when enabled" (
+      lib.hasPrefix "/nix/store/" (unitEnv inputSeatEnabled).KORRI_INPUT_SEAT_BACKEND_HELPER
+      && lib.hasSuffix "/bin/korri-uinput-seat-helper" (unitEnv inputSeatEnabled).KORRI_INPUT_SEAT_BACKEND_HELPER
+    ))
     (check "token env not exported" (!((unitEnv baselineKiosk) ? KORRI_SESSIOND_TOKEN) && !((unitEnv baselineKiosk) ? KORRI_SESSIOND_TOKEN_FILE)))
   ];
   failures = builtins.filter (c: !c.assertion) checks;

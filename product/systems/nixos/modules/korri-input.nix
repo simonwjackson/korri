@@ -391,6 +391,11 @@ in
         # This grants write access to /dev/uinput without adding the runtime
         # user to the broad physical-input reader group.
         KERNEL=="uinput", GROUP="${cfg.inputSeat.group}", MODE="0660", OPTIONS+="static_node=uinput"
+
+        # Read access for Korri-created virtual gamepad event nodes. This is
+        # intentionally limited to Korri Seat devices instead of granting the
+        # broad physical-input reader group to sessiond/emulators.
+        SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Korri Seat P*", GROUP="${cfg.inputSeat.group}", MODE="0660"
       '';
     })
 
