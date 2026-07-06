@@ -41,6 +41,7 @@ rec {
   korri-rocknix-audio-bootstrap = import ../modules/korri-rocknix-audio-bootstrap.nix;
   korri-rocknix-guest-device-access = import ../modules/korri-rocknix-guest-device-access.nix;
   korri-rocknix-guest-profile = import ../modules/korri-rocknix-guest-profile.nix;
+  korri-auto-timezone = import ../modules/korri-auto-timezone.nix;
   korri-setup = import ../modules/korri-setup.nix;
   # Per-platform opt-in: removable-media mounting + card-wins config-root
   # exposure through config-roots.d. Bundles korri-runtime so the module's

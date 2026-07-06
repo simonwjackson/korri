@@ -118,6 +118,12 @@ pkgs.lib.optionalAttrs isX86Linux {
         inherit pkgs;
         korriRocknixGuestProfileModule = self.nixosModules.korri-rocknix-guest-profile;
       };
+  korri-auto-timezone-module =
+    import ../../../../tools/testing/nix/korri-auto-timezone-module-check.nix
+      {
+        inherit pkgs;
+        korriAutoTimezoneModule = self.nixosModules.korri-auto-timezone;
+      };
   korri-rocknix-audio-bootstrap-module =
     import ../../../../tools/testing/nix/korri-rocknix-audio-bootstrap-module-check.nix
       {
@@ -377,6 +383,10 @@ pkgs.lib.optionalAttrs isX86Linux {
       }
       {
         name = "korri-rocknix-guest-profile-module";
+        owner = "module";
+      }
+      {
+        name = "korri-auto-timezone-module";
         owner = "module";
       }
       {

@@ -470,6 +470,7 @@ in
     ../../modules/korri-rocknix-audio-bootstrap.nix
     ../../modules/korri-rocknix-guest-device-access.nix
     ../../modules/korri-rocknix-guest-profile.nix
+    ../../modules/korri-auto-timezone.nix
     ../../modules/korri-removable-media.nix
   ];
 

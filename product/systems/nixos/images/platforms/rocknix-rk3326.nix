@@ -46,6 +46,7 @@ in
     nix-on-rocks.nixosModules.rk3326
     deviceProfile
     ../../modules/korri-rocknix-guest-profile.nix
+    ../../modules/korri-auto-timezone.nix
   ];
 
   services.inputplumber.package = lib.mkForce substratePackages.inputplumber;

@@ -89,6 +89,7 @@ in
     deviceProfile
     ../../modules/korri-rocknix-audio-bootstrap.nix
     ../../modules/korri-rocknix-guest-profile.nix
+    ../../modules/korri-auto-timezone.nix
   ];
 
   # RK3566 intentionally does not import the shared RockNIX guest device-access
