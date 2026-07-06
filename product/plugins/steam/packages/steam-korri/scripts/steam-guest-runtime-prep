@@ -216,10 +216,12 @@ proton_roots() {
 # copy in steamrtarm64/bin, which steam-guest-run prepends to PATH, when Valve's
 # payload contains it. Without this, Steam disables the runtime launcher service
 # and Proton's lsteamclient cannot initialize reliably for Windows games.
+if [ "$mode" = apply ]; then
 launcher_service="$STEAM_HOME/steam-runtime-steamrt-arm64/bin/steam-runtime-launcher-service"
 if [ -x "$launcher_service" ]; then
   install -d -m 0755 "$STEAM_HOME/steamrtarm64/bin"
   ln -sfn "$launcher_service" "$STEAM_HOME/steamrtarm64/bin/steam-runtime-launcher-service"
+fi
 fi
 
 is_fex_wrapper() {

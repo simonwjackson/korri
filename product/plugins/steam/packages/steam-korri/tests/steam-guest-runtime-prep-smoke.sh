@@ -253,6 +253,7 @@ runtime4_rootfs="$runtime4_home/fex-rootfs"
 mkdir -p \
   "$runtime4_pv/bin" \
   "$runtime4_pv/libexec/steam-runtime-tools-0" \
+  "$runtime4_home/steam-runtime-steamrt-arm64/bin" \
   "$runtime4_home/steamapps/common/SteamLinuxRuntime_4/steamrt4_platform_test/files/share/fonts/test" \
   "$runtime4_rootfs/usr/bin" \
   "$runtime4_rootfs/usr/lib"
@@ -271,7 +272,11 @@ cat > "$runtime4_rootfs/usr/bin/bwrap" <<'BWRAP'
 #!/bin/sh
 exit 0
 BWRAP
-chmod 755 "$runtime4_rootfs/usr/bin/bwrap"
+cat > "$runtime4_home/steam-runtime-steamrt-arm64/bin/steam-runtime-launcher-service" <<'LAUNCHER'
+#!/bin/sh
+exit 0
+LAUNCHER
+chmod 755 "$runtime4_rootfs/usr/bin/bwrap" "$runtime4_home/steam-runtime-steamrt-arm64/bin/steam-runtime-launcher-service"
 
 set +e
 runtime4_before=$(STEAM_HOME="$runtime4_home" FEX_ROOTFS="$runtime4_rootfs" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --check 2>&1)
@@ -307,5 +312,7 @@ grep -q 'exec /usr/bin/FEX "$bwrap_bin" "$@"' "$runtime4_pv/libexec/steam-runtim
   || fail "repair-runtime-helpers should not wrap unrelated helpers"
 [ ! -e "$runtime4_home/steamapps/common/SteamLinuxRuntime_4/steamrt4_platform_test/files/share/fonts/test/.uuid" ] \
   || fail "repair-runtime-helpers should not mutate font marker trees"
+[ ! -e "$runtime4_home/steamrtarm64/bin/steam-runtime-launcher-service" ] \
+  || fail "repair-runtime-helpers should not mutate ARM64 launcher-service symlink state"
 
 echo "steam-guest-runtime-prep-smoke: ok"
