@@ -137,7 +137,7 @@ function applyBoundaryExpression(
     case "min-fps":
       return {
         ...boundaries,
-        outcomes: { ...boundaries.outcomes, minDeliveredFps: parsePlainNumber(value, "min-fps") },
+        outcomes: { ...boundaries.outcomes, minDeliveredFps: parsePositiveNumber(value, "min-fps") },
       }
     default:
       throw new Error(`unknown stream boundary key: ${key}`)
@@ -168,7 +168,11 @@ function parseResolutionLever(value: string): ResolutionLeverBoundary {
   if (parts.length === 2) {
     const floor = parts[0] === "" ? undefined : parseResolution(parts[0])
     const ceiling = parts[1] === "" ? undefined : parseResolution(parts[1])
-    if (floor && ceiling && floor.width * floor.height > ceiling.width * ceiling.height) {
+    if (
+      floor &&
+      ceiling &&
+      (floor.width > ceiling.width || floor.height > ceiling.height)
+    ) {
       throw new Error("resolution floor must be <= ceiling")
     }
     if (!floor && !ceiling) return { free: true }
@@ -180,24 +184,34 @@ function parseResolutionLever(value: string): ResolutionLeverBoundary {
 
 function parseLeverNumber(value: string, key: "bitrate" | "fps"): number {
   if (key === "bitrate") return parseBitrateKbps(value)
-  return parsePlainNumber(value, key)
+  return parsePositiveNumber(value, key)
 }
 
 function parseBitrateKbps(value: string): number {
   const normalized = value.trim().toLowerCase()
-  if (normalized.endsWith("mbps")) return parsePlainNumber(normalized.slice(0, -4), "bitrate") * 1000
-  if (normalized.endsWith("m")) return parsePlainNumber(normalized.slice(0, -1), "bitrate") * 1000
-  if (normalized.endsWith("kbps")) return parsePlainNumber(normalized.slice(0, -4), "bitrate")
-  if (normalized.endsWith("k")) return parsePlainNumber(normalized.slice(0, -1), "bitrate")
-  return parsePlainNumber(normalized, "bitrate")
+  if (normalized.endsWith("mbps")) return parsePositiveNumber(normalized.slice(0, -4), "bitrate") * 1000
+  if (normalized.endsWith("m")) return parsePositiveNumber(normalized.slice(0, -1), "bitrate") * 1000
+  if (normalized.endsWith("kbps")) return parsePositiveNumber(normalized.slice(0, -4), "bitrate")
+  if (normalized.endsWith("k")) return parsePositiveNumber(normalized.slice(0, -1), "bitrate")
+  return parsePositiveNumber(normalized, "bitrate")
 }
 
 function parseMs(value: string): number {
   const normalized = value.trim().toLowerCase()
-  return parsePlainNumber(normalized.endsWith("ms") ? normalized.slice(0, -2) : normalized, "max-latency")
+  return parsePositiveNumber(
+    normalized.endsWith("ms") ? normalized.slice(0, -2) : normalized,
+    "max-latency",
+  )
+}
+
+function parsePositiveNumber(value: string, key: string): number {
+  const parsed = parsePlainNumber(value, key)
+  if (parsed <= 0) throw new Error(`${key} must be positive`)
+  return parsed
 }
 
 function parsePlainNumber(value: string, key: string): number {
+  if (value.trim() === "") throw new Error(`invalid ${key} value: ${value}`)
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`invalid ${key} value: ${value}`)
   return parsed
@@ -213,6 +227,7 @@ function parseResolution(value: string): StreamAdaptiveResolution {
 }
 
 function parseLean(value: string): number {
+  if (value.trim() === "") throw new Error("invalid lean value")
   if (value === "responsive") return 0
   if (value === "balanced") return 0.5
   if (value === "cinematic") return 1

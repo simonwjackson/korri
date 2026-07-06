@@ -281,6 +281,35 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
     expect(grow.target.resolution?.width).toBeGreaterThan(960)
   })
 
+  it("honors auto=off as an adaptive kill switch", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({ bitrateDeliveryRatio: 0.25, lossFraction: numeric(0.12) }),
+      current,
+      objectiveBias: 0.5,
+      boundaries: { levers: {}, outcomes: {}, auto: "off" },
+    })
+
+    expect(decision).toEqual({ kind: "dormant", reason: "within-hysteresis" })
+  })
+
+  it("applies min-fps without violating the explicit FPS ceiling", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({ rttMs: numeric(140, "rising") }),
+      current,
+      objectiveBias: 0.1,
+      boundaries: {
+        levers: { fps: { ceiling: 30 } },
+        outcomes: { minDeliveredFps: 60 },
+        lean: 0,
+      },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.target.fps).toBe(30)
+    expect(decision.bindingConstraint).toBe("min-fps")
+  })
+
   it("cold-starts conservatively then ramps once fresh samples arrive", () => {
     const establish = computeStreamAdaptiveDecision({
       summary: summary({ sampleCount: 1 }),

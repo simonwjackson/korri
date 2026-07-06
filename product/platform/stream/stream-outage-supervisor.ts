@@ -75,6 +75,7 @@ export function createStreamOutageSupervisor(
       options.onEvent({ kind: "resumed" })
     },
     markReconnectFailed: message => {
+      state = "hold"
       options.onEvent({ kind: "reconnect-failed", message })
     },
   }

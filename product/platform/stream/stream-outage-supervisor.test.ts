@@ -45,6 +45,19 @@ describe("stream outage supervisor", () => {
     expect(events).toContainEqual({ kind: "reconnecting" })
   })
 
+  it("returns to hold after reconnect failure so the outage can retry", () => {
+    const events: unknown[] = []
+    const supervisor = createStreamOutageSupervisor({ onEvent: event => events.push(event), lossAfterMs: 1000 })
+
+    supervisor.observe(0, { ...base, bitrateDeliveryRatio: 0, fpsDeliveryRatio: 0 })
+    supervisor.observe(1200, { ...base, bitrateDeliveryRatio: 0, fpsDeliveryRatio: 0 })
+    supervisor.observe(1800, { ...base, bitrateDeliveryRatio: 0.8, fpsDeliveryRatio: 0.8 })
+    supervisor.markReconnectFailed("boom")
+
+    expect(supervisor.state()).toBe("hold")
+    expect(events).toContainEqual({ kind: "reconnect-failed", message: "boom" })
+  })
+
   it("marks resumed once re-establish completes", () => {
     const events: unknown[] = []
     const supervisor = createStreamOutageSupervisor({ onEvent: event => events.push(event), lossAfterMs: 1000 })

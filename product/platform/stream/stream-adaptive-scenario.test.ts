@@ -46,7 +46,9 @@ describe("stream adaptive scenario replay", () => {
 
     expect(result[0]?.decision.kind).toBe("target")
     expect(result[0]?.mode).toBe("shed")
-    expect(result[0]?.settings.bitrateKbps).toBeLessThan(20_000)
+    const shedBitrate = result[0]?.settings.bitrateKbps ?? 20_000
+    expect(shedBitrate).toBeLessThan(20_000)
+    expect(result.at(-1)?.settings.bitrateKbps).toBeGreaterThan(shedBitrate)
     expect(result.at(-1)?.settings.bitrateKbps).toBeLessThanOrEqual(20_000)
   })
 

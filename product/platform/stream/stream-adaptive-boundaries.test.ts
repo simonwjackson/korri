@@ -93,5 +93,11 @@ describe("stream adaptive boundaries", () => {
     expect(() => parseStreamBoundaryArgs(["resolution=1280x720..640x360"])).toThrow(
       /floor.*ceiling/i,
     )
+    expect(() => parseStreamBoundaryArgs(["resolution=1920x720..1280x1080"])).toThrow(
+      /floor.*ceiling/i,
+    )
+    expect(() => parseStreamBoundaryArgs(["bitrate=mbps"])).toThrow(/invalid|positive/i)
+    expect(() => parseStreamBoundaryArgs(["max-latency=ms"])).toThrow(/invalid|positive/i)
+    expect(() => parseStreamBoundaryArgs(["lean="])).toThrow(/lean|invalid/i)
   })
 })

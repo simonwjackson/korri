@@ -221,6 +221,12 @@ function applySteadyStateDecision(
   ) {
     const proposed = lowerFpsStep(current.fps, fpsCeiling(boundaries, params))
     if (proposed !== undefined) {
+      if (
+        boundaries?.outcomes.minDeliveredFps !== undefined &&
+        proposed < boundaries.outcomes.minDeliveredFps
+      ) {
+        bindingConstraint = bindingConstraint ?? "min-fps"
+      }
       maybeSetFps(target, current, proposed, boundaries, params, mode === "shed")
     }
   }
@@ -230,16 +236,6 @@ function applySteadyStateDecision(
     const scale = scaleForResolutionShrink(current, pressure, mode, bppStarved)
     const proposed = scaleResolution(current, scale)
     maybeSetResolution(target, current, proposed, boundaries, params, mode === "shed")
-  }
-
-  const minDeliveredFps = boundaries?.outcomes.minDeliveredFps
-  if (
-    minDeliveredFps !== undefined &&
-    target.fps !== undefined &&
-    target.fps < minDeliveredFps
-  ) {
-    target.fps = minDeliveredFps
-    bindingConstraint = bindingConstraint ?? "min-fps"
   }
 
   return bindingConstraint
@@ -299,8 +295,11 @@ function maybeSetFps(
 ): void {
   const lever = boundaries?.levers.fps
   if (isPinned(lever)) return
-  const floor = lever?.floor ?? 1
   const ceiling = fpsCeiling(boundaries, params)
+  const floor = Math.min(
+    ceiling,
+    Math.max(lever?.floor ?? 1, boundaries?.outcomes.minDeliveredFps ?? 1),
+  )
   const clamped = clamp(Math.round(proposed), floor, ceiling)
   if (clamped === current.fps) return
   if (bypassDeadband || Math.abs(current.fps - clamped) >= params.fpsDeadband) {
@@ -386,7 +385,10 @@ function scaleForResolutionShrink(
 ): number {
   if (mode === "shed") return clamp(1 - Math.max(pressure.bandwidth, pressure.decode) * 0.35, 0.45, 0.82)
   if (bppStarved) {
-    const targetPixels = Math.max(1, current.bitrateKbps / (TARGET_BITS_PER_PIXEL * current.fps))
+    const targetPixels = Math.max(
+      1,
+      (current.bitrateKbps * 1000) / (TARGET_BITS_PER_PIXEL * current.fps),
+    )
     const currentPixels = current.resolution.width * current.resolution.height
     return clamp(Math.sqrt(targetPixels / currentPixels), 0.45, 0.88)
   }
