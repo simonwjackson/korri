@@ -66,6 +66,17 @@ describe("launchStatusView", () => {
       reason: "Another game is running",
       canRetry: false,
     })
+    expect(
+      launchStatusView({
+        _tag: "Failed",
+        gameId: "g",
+        exitCode: 120,
+        failureKind: "fake-suspend-active",
+      }),
+    ).toMatchObject({
+      reason: "Wake the device first",
+      canRetry: false,
+    })
   })
 
   it("falls back for failures without a kind and for defects", () => {

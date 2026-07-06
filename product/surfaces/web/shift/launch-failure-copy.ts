@@ -38,6 +38,7 @@ const FAILURE_REASON: Record<LaunchFailureKind, string> = {
   "input-unavailable": "No controller detected",
   "input-ambiguous": "Pick a controller",
   "session-busy": "Another game is running",
+  "fake-suspend-active": "Wake the device first",
 }
 
 /** Kinds where retrying without changing anything is pointless. */
@@ -45,6 +46,7 @@ const NON_RETRYABLE: ReadonlySet<LaunchFailureKind> = new Set([
   "no-such-game",
   "host-control-disabled",
   "session-busy",
+  "fake-suspend-active",
 ])
 
 /**
