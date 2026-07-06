@@ -481,28 +481,28 @@
 [data-shift-home] .shift-cine-network-signal {
 	display: inline-flex;
 	align-items: end;
-	gap: 0.14em;
-	width: 1.3em;
-	height: 1.3em;
+	gap: 0.12em;
+	width: 1.1em;
+	height: 1.1em;
 }
 
 [data-shift-home] .shift-cine-network-bar {
-	width: 0.24em;
+	width: 0.2em;
 	border-radius: var(--shift-radius-pill);
 	background: currentColor;
 	opacity: 0.28;
 }
 
 [data-shift-home] .shift-cine-network-bar-1 {
-	height: 0.42em;
+	height: 0.36em;
 }
 
 [data-shift-home] .shift-cine-network-bar-2 {
-	height: 0.78em;
+	height: 0.66em;
 }
 
 [data-shift-home] .shift-cine-network-bar-3 {
-	height: 1.14em;
+	height: 0.96em;
 }
 
 [data-shift-home]

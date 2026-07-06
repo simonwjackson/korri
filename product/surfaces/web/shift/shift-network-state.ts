@@ -109,7 +109,7 @@ export function shiftNetworkDisplayLabel(reading: ShiftNetworkReading): string {
 }
 
 export function shiftNetworkDisplayName(reading: ShiftNetworkReading): string {
-  return reading._tag === "Connected" ? (reading.name ?? "Connected") : ""
+  return reading._tag === "Connected" ? (reading.name ?? "Wi-Fi") : ""
 }
 
 export function shiftNetworkConnected(reading: ShiftNetworkReading): boolean {

@@ -17,6 +17,17 @@ describe("ShiftNetworkIcon", () => {
     ).toBeTruthy()
   })
 
+  it("falls back to Wi-Fi rather than Connected when the SSID is unavailable", () => {
+    render(
+      <ShiftNetworkIcon
+        network={{ _tag: "Connected", name: null, strengthPercent: 82 }}
+      />,
+    )
+
+    expect(screen.getByText("Wi-Fi")).toBeTruthy()
+    expect(screen.queryByText("Connected")).toBeNull()
+  })
+
   it("renders a disconnected label when disconnected", () => {
     render(<ShiftNetworkIcon network={{ _tag: "Disconnected" }} />)
 
