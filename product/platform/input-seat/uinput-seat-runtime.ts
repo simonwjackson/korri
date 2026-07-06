@@ -162,6 +162,7 @@ const waitForSeatIdentity = async (
   options: WaitForSeatIdentityOptions,
 ): Promise<SeatReadinessResult> => {
   const deadline = options.nowMs() + request.timeoutMs
+  let sawUnreadableDevice = false
 
   while (options.nowMs() <= deadline) {
     if (request.signal?.aborted) return { status: "unavailable", result: cancelledResult() }
@@ -211,15 +212,9 @@ const waitForSeatIdentity = async (
       const eventPath = `${options.inputRoot}/${device.eventNode}`
       const readable = await (options.backend.isDeviceReadable?.(eventPath) ?? true)
       if (!readable) {
-        return {
-          status: "unavailable",
-          result: {
-            status: "unavailable",
-            reason: "allocation-failed",
-            slot: seat.slot,
-            message: `seat ${seat.slot} input device is not readable`,
-          },
-        }
+        sawUnreadableDevice = true
+        await options.sleepMs(options.pollIntervalMs)
+        continue
       }
 
       return {
@@ -251,9 +246,11 @@ const waitForSeatIdentity = async (
     status: "unavailable",
     result: {
       status: "unavailable",
-      reason: "timeout",
+      reason: sawUnreadableDevice ? "allocation-failed" : "timeout",
       slot: seat.slot,
-      message: `seat ${seat.slot} readiness timeout`,
+      message: sawUnreadableDevice
+        ? `seat ${seat.slot} input device is not readable`
+        : `seat ${seat.slot} readiness timeout`,
     },
   }
 }

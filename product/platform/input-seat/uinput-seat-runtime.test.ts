@@ -247,6 +247,67 @@ describe("uinput seat runtime", () => {
     expect(backend.released).toEqual([1])
   })
 
+  it("waits for udev to make a discovered event node readable", async () => {
+    let readableChecks = 0
+    const backend = {
+      ...createBackend(() => [gamepadDevice(1)]),
+      isDeviceReadable: async () => {
+        readableChecks += 1
+        return readableChecks >= 3
+      },
+    }
+    let now = 0
+    const runtime = createUinputSeatRuntime({
+      backend,
+      pollIntervalMs: 5,
+      nowMs: () => now,
+      sleepMs: async ms => {
+        now += ms
+      },
+    })
+
+    const result = await runtime.allocate({
+      launchId: "launch-1",
+      seats: [makeRequestedSeat(1)],
+      timeoutMs: 50,
+    })
+
+    expect(result.status).toBe("allocated")
+    if (result.status !== "allocated") throw new Error("allocation failed")
+    expect(readableChecks).toBe(3)
+    expect(result.seats[0]?.readiness?.readable).toBe(true)
+    expect(backend.released).toEqual([])
+  })
+
+  it("reports unreadable event nodes only after the readiness deadline", async () => {
+    const backend = {
+      ...createBackend(() => [gamepadDevice(1)]),
+      isDeviceReadable: async () => false,
+    }
+    let now = 0
+    const runtime = createUinputSeatRuntime({
+      backend,
+      pollIntervalMs: 5,
+      nowMs: () => now,
+      sleepMs: async ms => {
+        now += ms
+      },
+    })
+
+    const result = await runtime.allocate({
+      launchId: "launch-1",
+      seats: [makeRequestedSeat(1)],
+      timeoutMs: 10,
+    })
+
+    expect(result).toMatchObject({
+      status: "unavailable",
+      reason: "allocation-failed",
+      message: "seat 1 input device is not readable",
+    })
+    expect(backend.released).toEqual([1])
+  })
+
   it("writes validated gamepad state to the allocated seat handle", async () => {
     const backend = createBackend(() => [gamepadDevice(1)])
     const runtime = createUinputSeatRuntime({ backend })
