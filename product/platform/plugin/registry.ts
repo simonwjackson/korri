@@ -1,5 +1,6 @@
 import { Data } from "effect"
 
+import type { PluginDiagnostic } from "./diagnostics"
 import type { ReleaseDiscoveryProvider } from "./discovery"
 import type {
   ConfigRecord,
@@ -11,6 +12,14 @@ import type {
   PluginId,
 } from "./index"
 import { parsePluginRecordId, pluginRecordId } from "./index"
+import type { PluginPolicy } from "./policy"
+import {
+  enabledPluginIdsFromPolicy,
+  pluginPolicyFromEnabledPluginEnv,
+} from "./policy"
+
+export { enabledPluginIdsFromPolicy, pluginPolicyFromEnabledPluginEnv }
+export type { PluginPolicy }
 
 export class DuplicatePluginId extends Data.TaggedError("DuplicatePluginId")<{
   readonly pluginId: PluginId
@@ -31,6 +40,7 @@ export class InvalidDiscoveryProviderOwner extends Data.TaggedError(
 
 export interface PluginRegistryOptions {
   readonly enabledPluginIds?: readonly PluginId[]
+  readonly pluginPolicy?: PluginPolicy
 }
 
 export interface PluginRegistry {
@@ -49,6 +59,7 @@ export interface PluginRegistry {
   readonly catalog: ConfigRecordMap
   readonly handlers: readonly PluginHandler[]
   readonly discoveryProviders: readonly ReleaseDiscoveryProvider[]
+  readonly policyDiagnostics: readonly PluginDiagnostic[]
   readonly get: (pluginId: PluginId) => KorriPlugin | undefined
 }
 
@@ -78,8 +89,12 @@ export function createPluginRegistry(
     byId.set(candidate.id, candidate)
   }
 
+  const policyResolution = options.pluginPolicy
+    ? enabledPluginIdsFromPolicy(plugins, options.pluginPolicy)
+    : { enabledPluginIds: options.enabledPluginIds ?? [], diagnostics: [] }
+
   const expansion = expandRequiredPluginIds(
-    options.enabledPluginIds ?? [],
+    policyResolution.enabledPluginIds,
     byId,
   )
   const enabledPluginIds = expansion.enabled
@@ -109,6 +124,7 @@ export function createPluginRegistry(
       plugin => plugin.contributes.handlers ?? plugin.handlers,
     ),
     discoveryProviders: collectDiscoveryProviders(discoveryPlugins),
+    policyDiagnostics: policyResolution.diagnostics,
     get: pluginId => byId.get(pluginId),
   }
 }

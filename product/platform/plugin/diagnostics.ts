@@ -2,7 +2,9 @@ import type { PluginId } from "./index"
 
 export type PluginDiagnosticCode =
   | "invalid-plugin-module"
+  | "denied-capability"
   | "load-failed"
+  | "missing-plugin"
   | "missing-root"
   | "reserved-namespace"
   | "unsafe-entrypoint"
@@ -13,6 +15,7 @@ export interface PluginDiagnostic {
   readonly message: string
   readonly source?: string
   readonly pluginId?: PluginId
+  readonly capability?: string
 }
 
 export function pluginDiagnostic(
