@@ -34,6 +34,9 @@ The fix should not be RPCS3-specific. Controller readiness should become a foreg
 - R6. Disconnect and intentional leave are distinct: disconnect reserves the source's seat for reconnect; explicit leave releases that seat for another player/source.
 - R7. Verification proves the generic contract with unit/integration tests, then validates hardware behavior with Skate 3/RPCS3 and one second emulator or runtime.
 - R8. The Sunshine-side event mirror must publish bounded, launch-scoped, gamepad-only frames into a stable local socket contract before the TypeScript adapter writes them into Korri-owned seats.
+- R9. Production sessiond composition must construct a real writable input-seat runtime and mirror socket from `KORRI_INPUT_SEAT_RUNTIME_DIR`; the unavailable runtime is acceptable only when input-seat support is not configured.
+- R10. Per-launch Sunshine mirror activation must work with a long-running Sunshine service; no design may rely on injecting launch-specific environment variables into the emulator child or into an already-running Sunshine process.
+- R11. End-to-end validation must prove that a deployed launch actually opts into `@korri:input-seat`; a missing companion must be treated as a validation blocker, not a successful input-seat test.
 
 ---
 
@@ -44,6 +47,7 @@ The fix should not be RPCS3-specific. Controller readiness should become a foreg
 - This plan does not build the Korri-native remote input protocol; it leaves a source-adapter seam for it.
 - This plan does not solve every emulator's input mapping vocabulary. It integrates RPCS3 as the first consumer and validates one additional runtime to prove the seat lifecycle is not RPCS3-only.
 - This plan does not rely on sleep delays, synthetic "wiggle" input, or restarting the emulator after stream connection.
+- This plan does not defend against malicious code already running as the same trusted appliance Unix user as sessiond/Sunshine. The socket, sidecar, and token controls prevent cross-user, stale-launch, accidental, and public-surface injection/exposure; same-UID compromise remains an appliance trust-boundary concern.
 
 ### Deferred to Follow-Up Work
 
@@ -103,6 +107,10 @@ The fix should not be RPCS3-specific. Controller readiness should become a foreg
 | Use existing input failure kinds initially | Clear messages and seat events can explain seat failures while reusing `input-unavailable` and `input-ambiguous`, avoiding unnecessary managed-launch wire-literal churn in the first slice. |
 | Seat events use managed-launch status/SSE | Existing clients already understand launch-scoped status/events and heartbeat behavior; a separate input-seat events channel would create a second lifecycle truth. |
 | Sunshine publishes to a bounded local NDJSON socket | The TypeScript side owns strict decode, launch filtering, rate limiting, and seat state; the native Sunshine patch only needs to mirror sanitized controller packet frames into a known local contract. |
+| Production composition is env-driven | `KORRI_INPUT_SEAT_RUNTIME_DIR` is the deployment boundary: when present, sessiond builds the real uinput runtime and mirror socket; when absent, the unavailable runtime fails closed for input-seat launches without affecting launches that do not request the companion. |
+| Long-running Sunshine uses a stable socket plus launch-id sidecar | Sunshine cannot receive per-launch env after service start. Give Sunshine a stable mirror socket path through its systemd environment and deliver the active launch id/generation plus mirror token through a sessiond-owned sidecar that Sunshine re-reads. The sidecar must not contain arbitrary socket paths. |
+| Mirror socket authorization uses a per-launch token within the trusted appliance user boundary | The socket stays under a private runtime dir, and sessiond writes an unguessable mirror token into the active-launch sidecar for Sunshine to echo in frames. The TypeScript socket rejects frames without the active token; the token never appears in public status, SSE, logs, or committed acceptance artifacts. This protects against other local users, stale launches, and accidental exposure, while explicitly trusting same-UID appliance code. |
+| Launch opt-in stays explicit | `@korri:input-seat` must be present in the resolved launch companions for the gate to activate. RPCS3/Skate validation must author or verify that companion rather than inferring input-seat behavior from emulator identity. |
 
 ---
 
@@ -120,7 +128,8 @@ The fix should not be RPCS3-specific. Controller readiness should become a foreg
 ### Deferred to Implementation
 
 - Exact native Sunshine packet-field mapping: validate the downstream patch against Sunshine's current controller packet structs during implementation and keep the TypeScript socket schema stable unless the native API forces a documented adjustment.
-- Exact production uinput implementation path: choose the smallest production-safe adapter after confirming available dependencies in the Nix closure. The plan requires a real seat runtime/writer, not only the test in-memory port.
+- Exact production uinput mechanism: choose between a small native/helper backend and a direct Bun/native uinput backend after confirming available dependencies in the Nix closure. The plan requires a real `UinputSeatBackend` that opens `/dev/uinput`, owns device file descriptors, and writes gamepad state; the existing runtime seam alone is not sufficient.
+- Exact deployed config location for the first `@korri:input-seat` opt-in: prefer an explicit RPCS3 launcher/release config companion over emulator-name heuristics, then record the chosen config path in the acceptance note.
 - Exact second emulator/runtime for hardware proof: choose a runtime already launchable on the target hardware and representative of a different input path than RPCS3.
 
 ---
@@ -137,6 +146,7 @@ product/platform/input-seat/
   remote-input-source.ts
   sunshine-remote-input-source.ts
   sunshine-input-seat-mirror-socket.ts
+  uinput-seat-backend.ts
   device-identity.ts
 product/services/device/
   sessiond-input-seat.ts
@@ -207,6 +217,9 @@ flowchart TB
     U12[U12 Sunshine native packet mirror]
     U13[U13 Production virtual-seat runtime]
     U14[U14 Live bridge to seat writer]
+    U15[U15 Production composition]
+    U16[U16 Sunshine launch config delivery]
+    U17[U17 Launch opt-in config]
     U10[U10 Hardware validation]
 
     U0 --> U3
@@ -226,7 +239,16 @@ flowchart TB
     U11 --> U14
     U12 --> U14
     U13 --> U14
+    U16 --> U14
     U4 --> U14
+    U4 --> U15
+    U9 --> U15
+    U11 --> U15
+    U12 --> U15
+    U13 --> U15
+    U12 --> U16
+    U15 --> U16
+    U6 --> U17
     U4 --> U9
     U6 --> U10
     U8 --> U10
@@ -234,6 +256,9 @@ flowchart TB
     U12 --> U10
     U13 --> U10
     U14 --> U10
+    U15 --> U10
+    U16 --> U10
+    U17 --> U10
 ```
 
 ---
@@ -685,10 +710,11 @@ flowchart TB
 - Test: `product/platform/input-seat/sunshine-input-seat-mirror-socket.test.ts`
 
 **Approach:**
-- Use bounded newline-delimited JSON over a Unix socket so the native patch can emit simple frames and the TypeScript side can own strict decode, launch filtering, and diagnostics.
+- Use bounded newline-delimited JSON over a Unix socket so the native patch can emit simple frames and the TypeScript side can own strict decode, launch filtering, mirror-token verification, and diagnostics.
 - Require an absolute socket path, unlink stale socket files before bind, set `0600` permissions, and provide cleanup that closes the server and removes the socket.
-- Decode each complete frame with `decodeSunshineInputSeatFrame` before passing it to the U7 adapter.
-- Treat malformed JSON, schema failures, oversized frames, stale-launch drops, and adapter drops as observable diagnostics, not process crashes.
+- Extend or envelope the socket frame contract so callers can provide an opaque authorization field and the server can use an injected verifier before adapter binding, source identity updates, or writer calls. U14/U16 provide the production active-token verifier.
+- Decode each complete frame with `decodeSunshineInputSeatFrame` before passing it to the U7 adapter; authorization verification may happen in the socket envelope before the decoded gamepad payload reaches U7.
+- Treat malformed JSON, schema failures, authorization failures, oversized frames, stale-launch drops, and adapter drops as observable diagnostics, not process crashes.
 - Keep the socket contract local and launch-scoped; do not expose it as a network API or UI surface.
 
 **Patterns to follow:**
@@ -699,7 +725,7 @@ flowchart TB
 - Happy path: chunked NDJSON frames decode and reach the adapter in order.
 - Happy path: a live Unix socket client can connect, send a valid frame, and receive accepted diagnostics.
 - Error path: relative socket paths are rejected before server start.
-- Error path: malformed JSON, non-gamepad schema failures, oversized frames, stale launch ids, and rate-limit drops are reported without crashing or growing an unbounded buffer.
+- Error path: malformed JSON, non-gamepad schema failures, authorization failures, oversized frames, stale launch ids, and rate-limit drops are reported without crashing or growing an unbounded buffer.
 - Integration: socket cleanup closes the listener and removes the socket path.
 
 **Verification:**
@@ -709,24 +735,27 @@ flowchart TB
 
 ### U12. Patch Sunshine to mirror controller packets into the socket
 
-**Goal:** Add the native Sunshine-side producer for sanitized controller-domain input-seat frames.
+**Goal:** Add the native Sunshine-side producer for sanitized controller-domain input-seat frames, with a deployment-safe activation contract for a long-running Sunshine service.
 
-**Requirements:** R5, R6, R8
+**Requirements:** R5, R6, R8, R10
 
 **Dependencies:** U0, U11
 
 **Files:**
-- Create: `product/vendor/sunshine-korri/patches/0015-add-korri-input-seat-event-mirror.patch`
+- Create/modify: `product/vendor/sunshine-korri/patches/0015-add-korri-input-seat-event-mirror.patch`
 - Modify: `product/vendor/sunshine-korri/package.nix`
+- Modify: `product/vendor/sunshine-korri/README.md`
 - Test: `tools/testing/nix/korri-sunshine-input-seat-mirror-patch-check.nix`
 - Update: `docs/acceptance/remote-input-event-source-spike.md` if native packet details require contract clarification
 
 **Approach:**
 - Patch Sunshine controller passthrough seams identified in U0 to mirror only controller-domain events: source-connected, source-state, source-disconnected, and any explicitly supported controller metadata frames.
-- Gate emission behind launch-scoped environment/config values for socket path and launch id so stale Sunshine processes cannot publish to a newer launch.
-- Emit bounded NDJSON frames matching U11's schema; invalid or unsupported packet shapes should be dropped with local diagnostics rather than widening the public contract.
-- Avoid reading Sunshine-created evdev pads and avoid referencing Korri uinput seats from the Sunshine patch, preserving the no-feedback-loop boundary.
-- Preserve Sunshine's existing virtual-pad behavior while adding the mirror as a side-effect; the patch should not make Sunshine the emulator-visible allocator.
+- Preserve Sunshine as an event source only: the patch must not read Korri uinput seats, create emulator-visible devices, or depend on Sunshine's lazy evdev pads for the launch readiness contract.
+- Own and document the native-reader sidecar contract used by later production wiring: Sunshine reads a stable startup-time `KORRI_INPUT_SEAT_MIRROR_SOCKET` path from the service environment and reads only the active launch id/generation plus mirror token from a fixed sessiond-owned sidecar under the input-seat runtime dir. Do not read a per-launch socket path or `KORRI_INPUT_SEAT_LAUNCH_ID` from process env.
+- Define the sidecar contract here for both native and TypeScript implementers: fixed filename under `KORRI_INPUT_SEAT_RUNTIME_DIR`, payload fields (`launchId`, generation/timestamp, `mirrorToken`), missing/malformed behavior, and the rule that sidecar data never contains an arbitrary socket path.
+- Derive mirrored source identity from Sunshine's controller/session context and the active launch contract; do not trust arbitrary source identifiers supplied by socket JSON.
+- Emit bounded NDJSON frames matching U11's schema; invalid, unsupported, inactive-launch, or non-controller packet shapes should be dropped with local diagnostics rather than widening the public contract.
+- Preserve Sunshine's existing virtual-pad behavior while adding the mirror as a side-effect; missing mirror configuration disables only Korri mirroring.
 
 **Execution note:** Characterize the patch at the package/build level before hardware proof; hardware validation belongs to U10.
 
@@ -737,69 +766,184 @@ flowchart TB
 
 **Test scenarios:**
 - Happy path: Sunshine package applies the new patch and still includes the existing downstream patch series.
-- Happy path: controller arrival/state/disconnect packet paths write bounded NDJSON frames when the socket path and launch id are configured.
-- Error path: missing socket path disables mirroring without affecting Sunshine's existing input path.
+- Happy path: controller arrival/state/disconnect packet paths write bounded NDJSON frames to the stable socket when the stable mirror configuration and active launch-id/token sidecar are present.
+- Edge case: active launch sidecar is absent, empty, malformed, has the wrong generation, or lacks the mirror token, so controller packets produce no input-seat frames while Sunshine's existing input path continues.
+- Error path: spoofed source identifiers in mirrored JSON are ignored or rejected in favor of producer-derived controller identity.
+- Edge case: active launch id/generation changes between launches, so subsequent frames carry the new launch id and stale-launch filtering remains meaningful.
+- Error path: missing socket/runtime configuration disables mirroring without affecting Sunshine's existing input path.
 - Error path: socket write failures are bounded/local diagnostics and do not crash Sunshine's input handling path.
 - Error path: keyboard, mouse, text, pen, and non-controller packets produce no input-seat frames.
 
 **Verification:**
-- A built Korri Sunshine package can emit the U11 frame contract from controller packet seams without changing emulator-visible device ownership.
+- A built Korri Sunshine package can emit the U11 frame contract from controller packet seams without changing emulator-visible device ownership, and its activation mechanism is compatible with Sunshine staying alive across multiple game launches.
 
 ---
 
 ### U13. Implement the production virtual-seat runtime and writer
 
-**Goal:** Replace the test-only in-memory seat runtime with a production runtime that creates emulator-visible gamepad-only Korri seats and can receive forwarded gamepad state.
+**Goal:** Replace the test-only in-memory backend with a production `UinputSeatBackend` that creates emulator-visible gamepad-only Korri seats and writes forwarded gamepad state through real Linux uinput devices.
 
-**Requirements:** R1, R3, R5, R7
+**Requirements:** R1, R3, R5, R7, R9
 
 **Dependencies:** U3, U9
 
 **Files:**
-- Create: `product/platform/input-seat/uinput-seat-runtime.ts` or the chosen production adapter under `product/platform/input/native/`
-- Test: `product/platform/input-seat/uinput-seat-runtime.test.ts` or the corresponding adapter test path
+- Modify: `product/platform/input-seat/uinput-seat-runtime.ts`
+- Create: `product/platform/input-seat/uinput-seat-backend.ts` or the chosen production adapter under `product/platform/input/native/`
+- Test: `product/platform/input-seat/uinput-seat-runtime.test.ts`
+- Test: `product/platform/input-seat/uinput-seat-backend.test.ts` or the corresponding adapter test path
 - Modify: `product/services/device/sessiond-input-seat.ts`
 - Test: `product/services/device/sessiond-input-seat.test.ts`
+- Modify: `product/systems/nixos/flake/packages.nix` if a helper/native dependency must be packaged as a Korri package
+- Modify: `product/systems/nixos/overlays/korri-packages.nix` if the helper/native dependency needs overlay exposure
+- Modify: `product/systems/nixos/modules/korri-sessiond.nix` if the helper requires service path or environment wiring
 
 **Approach:**
-- Implement the `SeatRuntimePort` for real emulator-visible seats using the smallest production-safe uinput/libevdev/InputPlumber-compatible mechanism available in the Nix closure.
-- Enforce gamepad-only capability profiles; do not expose keyboard, mouse, text, or relative-pointer capabilities through the virtual seat.
-- Verify readiness from discovered device facts: stable name, backend/device class, expected VID/PID or phys/uniq strategy where available, and readability by the session user.
-- Provide a write path for validated gamepad state frames from U14 while preserving allocation lifecycle ownership in sessiond.
-- Keep partial allocation all-or-nothing and make process/file-descriptor cleanup release virtual devices on terminal session cleanup.
+- First choose and document the backend strategy in the unit's implementation notes: narrow helper/native boundary or direct Bun/native uinput backend. The selected backend must be packaged into the sessiond closure before U15 consumes it; do not leave packaging to hardware validation.
+- Implement the `UinputSeatBackend` for real emulator-visible seats using the selected production-safe mechanism. Do not let this choice leak into sessiond's higher-level runtime contract.
+- Create Xbox-style gamepad-only devices with deterministic identity: `name = Korri Seat P<N>`, `phys = korri/input-seat/p<N>`, and `uniq = korri-seat-p<N>` set before device creation. The readiness matcher must require all expected identity fields, not name-only matching.
+- Declare a complete gamepad capability profile needed by RPCS3/Evdev and other common emulators: action buttons, shoulders, select/start/mode, thumb clicks, d-pad hat axes, sticks, triggers, and `EV_SYN`; do not expose keyboard, mouse, text, touch, or relative-pointer capabilities.
+- Own uinput file descriptors for the launch lifetime with close-on-exec semantics so emulator or Sunshine child processes cannot keep devices alive after sessiond releases them.
+- Discover readiness through kernel/device facts rather than event-number prediction: either use a race-free sysfs path if the backend exposes one, or poll `/proc/bus/input/devices` by name+phys+uniq and verify the resulting event node is readable by the session user.
+- Detect stale pre-existing Korri seat identities before or during allocation and fail clearly rather than binding a new launch to an orphaned device.
+- Keep allocation all-or-nothing, release already-created devices on partial failures, and make terminal cleanup close/destroy every allocated seat.
 
 **Execution note:** Start with adapter-level tests against an injectable low-level backend so safety and lifecycle behavior are proven before hardware validation.
 
 **Patterns to follow:**
 - `product/platform/input/native/discover-devices.ts`
 - `product/platform/input/native/inputplumber-virtual-gamepad.ts`
+- `product/platform/input-seat/uinput-seat-runtime.ts`
 - `docs/solutions/integration-issues/steam-uinput-permissions-block-virtual-xinput-2026-06-13.md`
 
 **Test scenarios:**
+- Happy path: production backend creates P1 and discovery reports `Korri Seat P1` with matching `phys` and `uniq` before runtime allocation succeeds.
 - Happy path: production runtime requests P1-P4 seats and reports deterministic ready identities after discovery verifies matching devices.
-- Happy path: forwarded gamepad state writes only allowed button/axis/trigger events to the selected seat.
+- Happy path: forwarded gamepad state writes allowed button, axis, trigger, and sync events to the selected seat.
+- Edge case: `/dev/input/eventN` numbering changes across launches, but readiness still succeeds because identity matching uses name+phys+uniq rather than event number.
+- Edge case: a stale same-name or partial-identity orphan exists before allocation, so launch fails as unavailable/ambiguous instead of selecting arbitrarily.
+- Error path: `/dev/uinput` is missing or not writable by the session user, so allocation fails before emulator spawn with a clear local diagnostic and redacted managed-launch failure.
 - Error path: readiness times out when the created device cannot be uniquely discovered or read by the session user.
-- Error path: duplicate Korri seat names are ambiguous and block launch rather than selecting arbitrarily.
 - Error path: unsupported event types/codes are rejected before reaching uinput.
 - Error path: partial allocation failure releases already-created devices.
-- Integration: sessiond pre-spawn gate uses the production runtime when enabled and still uses in-memory runtime in deterministic tests.
+- Integration: sessiond input-seat gate can use the production runtime through the same `SeatRuntimePort`/writer contract tested with the memory backend.
+- Integration: the selected backend/helper or native dependency is present in the sessiond runtime closure used by the NixOS module.
 
 **Verification:**
-- sessiond can allocate real gamepad-only Korri seats and has a safe writer target for live mirrored Sunshine state.
+- sessiond has a production-safe writer target for live mirrored Sunshine state, and allocated Korri seats appear as real gamepad-only input devices with stable identities before emulator spawn.
+
+---
+
+### U15. Wire production sessiond composition from runtime-dir environment
+
+**Goal:** Make production sessiond construct the real input-seat runtime, mirror socket options, and diagnostics when deployment enables input-seat support.
+
+**Requirements:** R1, R3, R4, R8, R9
+
+**Dependencies:** U4, U9, U11, U12, U13
+
+**Files:**
+- Modify: `product/services/device/sessiond-plugin-composition.ts`
+- Test: `product/services/device/sessiond-plugin-composition.test.ts`
+- Modify: `product/services/device/sessiond-input-seat.ts`
+- Test: `product/services/device/sessiond-input-seat.test.ts`
+- Modify: `product/systems/nixos/modules/korri-sessiond.nix` if additional env or runtime-dir behavior is needed
+- Test: `tools/testing/nix/korri-input-seat-sessiond-composition-check.nix`
+
+**Approach:**
+- Read `KORRI_INPUT_SEAT_RUNTIME_DIR` in `sessiondPreSpawnGatesFromEnv`. A missing or blank value keeps the unavailable runtime so launches without `@korri:input-seat` remain unaffected and launches that request seats fail closed.
+- When the runtime dir is present, require a concrete absolute path as seen by sessiond. The NixOS/user-service layer should expand `%t` before process start; TypeScript should reject unresolved specifiers or relative paths instead of guessing.
+- Derive one stable mirror socket path under the runtime dir, plus the U12-defined sidecar path that U16 writes. The socket path must stay inside the canonical runtime dir and use `0600` socket mode.
+- Construct `createUinputSeatRuntime` with the production backend from U13 and pass `sunshineMirror` options into `createSessiondInputSeatPreSpawnGate`.
+- Wire mirror diagnostics and backend allocation failures to structured local logs. Public managed-launch failures remain redacted and input-specific.
+- Keep composition tests injectable: avoid opening `/dev/uinput` in unit tests by allowing the backend factory and path helpers to be substituted.
+
+**Patterns to follow:**
+- `product/services/device/sessiond-plugin-composition.ts`
+- `product/services/device/sessiond-plugin-composition.test.ts`
+- `product/systems/nixos/modules/korri-sessiond.nix`
+- `tools/testing/nix/korri-input-seat-device-access-check.nix`
+
+**Test scenarios:**
+- Happy path: env contains an absolute `KORRI_INPUT_SEAT_RUNTIME_DIR`, so the composition installs an input-seat pre-spawn gate backed by a writable runtime and configured mirror options.
+- Happy path: mirror diagnostics such as frame drops are routed to a structured logger without exposing raw device paths in public status.
+- Edge case: env value is blank, so composition uses the unavailable runtime and does not attempt socket/backend creation.
+- Edge case: runtime dir has a trailing slash or already exists, so socket/control path derivation remains stable and under the runtime dir.
+- Error path: runtime dir is relative, contains an unresolved `%t`, or cannot be created/accessed, so an input-seat launch fails before spawn as input-unavailable with local diagnostics.
+- Integration: Nix eval proves `korri-sessiond` and the backend/helper are configured with the intended input-seat runtime-dir contract/specifier and service closure.
+- Integration: a runtime/unit harness or systemd-rendered environment check proves the actual sessiond process sees an expanded absolute `KORRI_INPUT_SEAT_RUNTIME_DIR` with no unresolved `%t`.
+- Integration: a managed launch with `@korri:input-seat` activates the gate in an env-configured sessiond harness, while a launch without the companion still skips allocation.
+
+**Verification:**
+- A production-shaped sessiond process with `KORRI_INPUT_SEAT_RUNTIME_DIR` no longer uses `createUnavailableSeatRuntime` for requested input-seat launches.
+
+---
+
+### U16. Deliver active launch mirror configuration to long-running Sunshine
+
+**Goal:** Replace the dead `sourceEnv` path with a deployment-safe contract that lets a long-running Korri Sunshine service discover the active input-seat launch and mirror socket.
+
+**Requirements:** R5, R8, R10
+
+**Dependencies:** U12, U15
+
+**Files:**
+- Modify: `product/services/device/sessiond-input-seat.ts`
+- Modify: `product/services/device/sessiond-pre-spawn.ts`
+- Test: `product/services/device/sessiond-input-seat.test.ts`
+- Test: `product/services/device/sessiond.test.ts`
+- Modify: `product/vendor/sunshine-korri/README.md`
+- Modify: `product/systems/nixos/modules/korri-daemon.nix`
+- Test: `tools/testing/nix/korri-sunshine-input-seat-env-check.nix`
+- Test: `tools/testing/nix/korri-sunshine-input-seat-mirror-patch-check.nix` if the U12 patch check needs contract fixture updates
+
+**Approach:**
+- Implement the U12-defined sidecar contract: `korri-sunshine.service` receives startup-time `KORRI_INPUT_SEAT_MIRROR_SOCKET` and `KORRI_INPUT_SEAT_RUNTIME_DIR` values, while sessiond writes the active-launch sidecar before emulator spawn and removes it on cleanup.
+- Enforce the U12 contract's filename, payload fields (`launchId`, generation/timestamp, and unguessable `mirrorToken`), file owner, mode, stale-file behavior, and prohibition on arbitrary socket paths.
+- Write sidecar state via restrictive temp file in the same directory plus atomic rename. The parent runtime dir must be mode `0700`, and sidecar/temp files containing the mirror token must be same-owner mode `0600`; no group-readable token file is allowed unless a later reviewed design changes the service identity model. Cleanup may remove only the canonical expected path under the runtime dir.
+- Reject symlinks, hardlink surprises where detectable, unresolved `%t`, relative paths, and paths escaping the canonical runtime dir.
+- Missing sidecar disables Korri mirroring without affecting Sunshine input.
+- Remove or explicitly deprecate `sourceEnv` from the pre-spawn handle if no production consumer remains. Do not merge mirror env into the emulator `LaunchSpec`.
+- Add NixOS module wiring so the long-running Sunshine service has the stable mirror runtime/socket path in its environment when input-seat support is enabled, and prove sessiond and Sunshine resolve the same concrete runtime namespace/user contract.
+- On launch stop, failure, force terminate, or pre-spawn rollback, clear the sidecar/control state before or alongside stopping the socket so stale Sunshine frames cannot target the next launch.
+
+**Patterns to follow:**
+- `product/systems/nixos/modules/korri-daemon.nix`
+- `product/systems/nixos/modules/korri-sessiond.nix`
+- `product/services/device/sessiond-input-seat.ts`
+- `product/vendor/sunshine-korri/README.md`
+
+**Test scenarios:**
+- Happy path: pre-spawn gate start creates the active-launch sidecar with the expected launch id/generation and mirror token before child spawn, and the socket path remains the stable service-env path.
+- Happy path: gate stop removes the active-launch sidecar and unlinks/stops the socket.
+- Happy path: the NixOS Sunshine unit environment contains only stable runtime/socket configuration, not a per-launch launch id, and matches sessiond's concrete runtime namespace.
+- Edge case: a stale sidecar from a previous crash exists; a new launch overwrites it before accepting controller frames.
+- Edge case: Sunshine connects before the sidecar exists or after it is cleared; frames are absent or stale and do not write to seats.
+- Error path: sidecar write fails, so the gate releases allocated seats and fails before emulator spawn.
+- Error path: symlink, escaping, world-readable, or wrong-owner sidecar/control paths are rejected or repaired before Sunshine can consume them.
+- Error path: frames missing the active mirror token or carrying a bad token are rejected before seat binding or writer calls.
+- Error path: stale-launch frames from a previous launch are dropped by the TypeScript socket even if Sunshine reconnects late.
+- Integration: Nix eval proves sessiond and `korri-sunshine.service` are configured to run as the same Unix user under this `0600` sidecar/token design, with the same intended input-seat runtime-dir contract/specifier.
+- Integration: a runtime/unit harness or systemd-rendered environment check proves both actual processes see matching expanded absolute runtime paths with no unresolved `%t`.
+- Error path: bad/missing-token diagnostics, structured logs, public status/SSE payloads, and committed acceptance artifacts do not include the mirror token value.
+
+**Verification:**
+- A long-running Sunshine service can discover the active launch mirror contract without being restarted per game and without relying on `sourceEnv` or emulator child environment variables.
 
 ---
 
 ### U14. Wire live Sunshine mirror frames to the active seat writer
 
-**Goal:** Connect the U11 socket, U7 adapter, and U13 virtual-seat writer under sessiond's foreground launch lease.
+**Goal:** Connect the U11 socket, U7 adapter, and U13 virtual-seat writer under sessiond's foreground launch lease without relying on unconsumed `sourceEnv` child-environment plumbing.
 
-**Requirements:** R1, R4, R5, R6, R8
+**Requirements:** R1, R4, R5, R6, R8, R10
 
-**Dependencies:** U4, U7, U11, U12, U13
+**Dependencies:** U4, U7, U11, U12, U13, U16
 
 **Files:**
 - Modify: `product/services/device/sessiond-input-seat.ts`
 - Modify: `product/services/device/sessiond.ts`
+- Modify: `product/services/device/sessiond-pre-spawn.ts`
 - Modify: `product/platform/input-seat/sunshine-input-seat-mirror-socket.ts`
 - Test: `product/services/device/sessiond-input-seat.test.ts`
 - Test: `product/services/device/sessiond.test.ts`
@@ -807,11 +951,11 @@ flowchart TB
 
 **Approach:**
 - Start the Sunshine mirror socket only for an active launch whose input-seat policy selects the Sunshine source adapter.
-- Pass launch id, socket path, and any required source adapter env/config through the managed launch intent so Sunshine writes to the correct session-owned socket.
-- For each accepted source-state frame, write the validated gamepad state into the active seat writer only while the same launch owns the foreground child/input lease.
-- Drop or clear input during pre-spawn, restore gaps, child exit, terminate, cleanup, and launch-id rollover.
+- Treat `sourceEnv` as a dead-end for a long-running Sunshine process. The live path should be the production mirror configuration from U16 plus the session-owned socket and active-launch sidecar/control state, not env merged into the emulator child spec.
+- For each accepted source-state frame, require the active mirror token, revalidate launch id, derive/bind source identity from trusted Sunshine controller context, and confirm current seat ownership before writing the validated gamepad state into the active seat writer.
+- Drop or clear input during pre-spawn rollback, restore gaps, child exit, terminate, cleanup, explicit leave, and launch-id rollover. Stale queued frames must not write into a released seat or a newer launch's seat.
 - Translate adapter seat transitions into managed-launch seat events/status using the redacted payload contract from U8.
-- Stop the socket and release/clear writer state during terminal cleanup, pre-spawn rollback, and failed launch paths.
+- Stop the socket, clear active-launch control state, and release/clear writer state during terminal cleanup, pre-spawn rollback, and failed launch paths.
 
 **Patterns to follow:**
 - `product/services/device/sessiond-input-seat.ts`
@@ -824,13 +968,58 @@ flowchart TB
 - Happy path: source-disconnected transitions P1 to disconnected-reserved and stops writing new state without releasing the virtual seat.
 - Happy path: reconnect for the same source resumes writing to the same seat.
 - Edge case: a second source binds to P2 and writes independently without stealing P1.
+- Edge case: queued accepted frames are dropped if the source leaves or the seat is rebound before the writer drains them.
 - Error path: frames for a stale launch id are dropped and cannot affect the active launch.
-- Error path: frames arriving after child exit or during restore are dropped or converted into safe neutral state; they do not write into a new launch's seats.
+- Error path: frames arriving after child exit, during restore, or after active-launch sidecar cleanup are dropped or converted into safe neutral state; they do not write into a new launch's seats.
 - Error path: socket or adapter failure emits diagnostics and leaves emulator-visible seats alive until session cleanup.
+- Error path: missing or bad mirror token is rejected before adapter binding or writer calls, and diagnostics do not include the token value.
+- Error path: a frame cannot spoof another occupied or reserved source identity by supplying arbitrary source fields.
+- Error path: a second connection cannot claim an already-bound source identity unless it satisfies the authenticated reconnect contract for the same token-bound Sunshine controller identity.
 - Integration: explicit leave releases one seat while other seats and the foreground game session remain active.
 
 **Verification:**
-- A live source-host controller frame can flow through the socket and adapter into the correct active Korri virtual seat under sessiond ownership.
+- A live source-host controller frame can flow through the socket and adapter into the correct active Korri virtual seat under sessiond ownership, and stale queued frames cannot cross leave/rebind/launch boundaries.
+
+---
+
+### U17. Author and verify the first deployed `@korri:input-seat` launch opt-in
+
+**Goal:** Ensure Skate 3/RPCS3 validation exercises the new service instead of silently launching without the input-seat companion.
+
+**Requirements:** R2, R6, R7, R11
+
+**Dependencies:** U6
+
+**Files:**
+- Modify: `product/platform/library/config/cascade-resolver.ts` only if implementation chooses a code-owned launcher default
+- Test: `product/platform/library/config/cascade-resolver.test.ts` if a code-owned default is added
+- Test: `product/plugins/rpcs3/src/materializer.test.ts`
+- Test: `product/apps/portal/api/stream/prepare.rpc-handler.test.ts` or `product/services/device/sessiond.test.ts` to prove the resolved companion reaches sessiond
+- Update: `docs/acceptance/sessiond-remote-input-seats.md`
+
+**Approach:**
+- Before changing config or code, discover and record the concrete repo-relative config graph file that owns the RPCS3 launcher or Skate 3 release entry for the deployment under test. If the config lives outside this repo, record that external path in the acceptance note and keep code changes limited to tests/documentation.
+- Prefer explicit cascade policy over emulator-name heuristics. Add `launch.with["@korri:input-seat"]` with `runtimeSupportsExtraSeats: true` at the narrowest config level that matches the validation target without surprising unrelated launches.
+- If implementation chooses a code-owned RPCS3 launcher default instead of operator config, make it visible in cascade/materializer tests and keep release/profile opt-down precedence intact.
+- Verify the resolved launch companions reach both RPCS3 materialization and sessiond managed launch. RPCS3 should write Evdev device names for `Korri Seat P*`, and sessiond should run the input-seat pre-spawn gate rather than skipping it.
+- Record the exact config location and resolved policy in the acceptance document so future hardware validation cannot accidentally test the dormant path.
+
+**Patterns to follow:**
+- `product/platform/library/config/cascade-resolver.ts`
+- `product/platform/library/config/cascade-resolver.test.ts`
+- `product/plugins/rpcs3/src/materializer.ts`
+- `product/plugins/rpcs3/src/materializer.test.ts`
+- `docs/solutions/design-patterns/explicit-cascade-folded-policy-over-incidental-signal-heuristics-2026-05-27.md`
+
+**Test scenarios:**
+- Happy path: resolved Skate 3/RPCS3 launch companions include `@korri:input-seat` with `runtimeSupportsExtraSeats: true`.
+- Happy path: RPCS3 materialization without explicit input config derives Evdev players bound to `Korri Seat P1` through `Korri Seat P4` when the companion is present.
+- Edge case: release/profile opt-down to fewer players overrides the launcher-level default and materializes only the requested seats.
+- Error path: missing companion is reported in the acceptance checklist as a no-go for input-seat E2E validation rather than a successful launch.
+- Integration: a prepared remote launch carries the resolved companion through to sessiond so the pre-spawn gate is exercised.
+
+**Verification:**
+- The hardware validation target has an observable resolved `@korri:input-seat` companion before U10 begins.
 
 ---
 
@@ -838,17 +1027,21 @@ flowchart TB
 
 **Goal:** Validate the generic seat service against the original Skate 3/RPCS3 failure and one additional emulator/runtime.
 
-**Requirements:** R7
+**Requirements:** R7, R11
 
-**Dependencies:** U4, U6, U8, U9, U12, U13, U14
+**Dependencies:** U4, U6, U8, U9, U12, U13, U14, U15, U16, U17
 
 **Files:**
 - Create: `docs/acceptance/sessiond-remote-input-seats.md`
 - Modify: `work/items/active/01KWTZ3DDBRFV3GAJFFDRR7Z57-sessiond-remote-input-seats/work.md`
 
 **Approach:**
-- Define a reproducible device validation checklist that records launch id, resolved seat policy, created seat identities, managed-launch events, RPCS3 input profile facts, and observed controller behavior.
+- Define a reproducible device validation checklist that records launch id, resolved `@korri:input-seat` policy, created seat identities, active-launch sidecar/control facts, mirror socket facts, managed-launch events, RPCS3 input profile facts, and observed controller behavior.
+- Treat missing `@korri:input-seat` in the resolved launch as a validation failure, even if the game launches through the old path.
+- Before launch, verify `/dev/uinput` ownership/mode, session user group membership, `uinput` kernel module presence, absence of stale `Korri Seat P*` devices, and Sunshine service environment for stable mirror configuration.
+- During pre-spawn, verify Korri seats exist before emulator spawn and the mirror socket/control state exists under the runtime dir.
 - Validate Skate 3/RPCS3 remote launch with no controller wiggle, no emulator restart, and P1 input working on first boot.
+- Validate session cleanup: sidecar removed, socket unlinked, and `Korri Seat P*` devices disappear before a second launch reallocates fresh seats.
 - Validate one second emulator/runtime that exercises a different input path enough to prove the service boundary is generic.
 - Capture any remaining runtime limitations as follow-up backlog items rather than expanding this plan.
 
@@ -860,11 +1053,14 @@ flowchart TB
 - Device validation notes in existing work items under `work/items/active/`
 
 **Test scenarios:**
-- Hardware proof: remote Skate 3/RPCS3 launch shows P1 controller input on first boot without manual input/restart.
+- Hardware proof: resolved Skate 3/RPCS3 launch includes `@korri:input-seat`, RPCS3 config names `Korri Seat P1`, and remote launch shows P1 controller input on first boot without manual input/restart.
+- Hardware proof: `/proc/bus/input/devices` shows `Korri Seat P*` before emulator spawn and no stale `Korri Seat P*` devices after cleanup.
+- Hardware proof: Moonlight controller input produces events on the Korri seat event node and reaches the game through RPCS3's Evdev binding.
 - Hardware proof: remote disconnect reserves the same seat; reconnect restores control to that seat.
 - Hardware proof: explicit leave releases P2 and a later player/source can take P2.
 - Hardware proof: a second emulator/runtime launches with pre-created seats and no boot-scan controller race.
 - Error path: deliberately disabled/blocked uinput setup fails before emulator spawn with clear managed-launch status and events.
+- Error path: missing active-launch sidecar or stale Sunshine frames do not write to any seat and produce local diagnostics.
 
 **Verification:**
 - The original controller boot race is fixed end-to-end and the generic seat service is proven outside RPCS3.
@@ -873,10 +1069,10 @@ flowchart TB
 
 ## System-Wide Impact
 
-- **Interaction graph:** remote stream prepare, library cascade resolution, launch companion composition, game-stream runner, sessiond, input-seat runtime adapters, RPCS3 materialization, Moonlight/Sunshine source adapter, and NixOS device-access modules all participate.
+- **Interaction graph:** remote stream prepare, library cascade resolution, launch companion composition, game-stream runner, sessiond, input-seat runtime adapters, RPCS3 materialization, Moonlight/Sunshine source adapter, Sunshine service environment, active-launch sidecar/control state, and NixOS device-access modules all participate.
 - **Error propagation:** seat allocation failures should propagate as input-unavailable/input-ambiguous launch failures with clear seat-specific messages and structured logs. Adapter disconnects during a live session should become seat state changes, not automatic process termination unless policy later requires it.
-- **State lifecycle risks:** seats must be correlated by launch id and released exactly once. Partial allocation, session-anchor, restore retries, force termination, and sessiond crashes must not leak virtual devices or tear down a newer launch's seats. Runtime adapters should keep uinput file descriptors owned by sessiond-owned processes so process death closes devices, and startup diagnostics should fail clearly if Korri-named orphan devices are detected.
-- **API surface parity:** managed-launch status, managed-launch SSE events, session leave controls, and any CLI/agent status readers must all decode optional seat data consistently, using the same public/redacted payload contract.
+- **State lifecycle risks:** seats, mirror socket, and active-launch sidecar/control state must be correlated by launch id and released exactly once. Partial allocation, session-anchor, restore retries, force termination, and sessiond crashes must not leak virtual devices or tear down a newer launch's seats. Runtime adapters should keep uinput file descriptors owned by sessiond-owned processes with close-on-exec semantics so child processes cannot keep devices alive, and startup diagnostics should fail clearly if Korri-named orphan devices are detected.
+- **API surface parity:** managed-launch status, managed-launch SSE events, session leave controls, and any CLI/agent status readers must all decode optional seat data consistently, using the same public/redacted payload contract. Public payloads must not include sidecar paths, socket paths, event nodes, raw source IDs, permission diagnostics, mirror tokens, or full environment values.
 - **Integration coverage:** unit tests prove policy/state; sessiond integration tests prove ordering and cleanup; hardware validation proves uinput/Sunshine/RPCS3 timing.
 - **Unchanged invariants:** LaunchSpec remains command/argv/env only; emulator plugins still own emulator profile authoring; sessiond remains the lifecycle authority; local physical-controller routing remains unchanged.
 
@@ -926,8 +1122,13 @@ flowchart TB
 | `/dev/uinput` permissions fail after deployment | Add NixOS assertions/checks and explicit hardware validation for `/dev/uinput` ownership and service user group membership. |
 | Broad input-device permissions expose host keystrokes | Prefer a dedicated uinput-only group and avoid adding sessiond to the broad `input` group unless explicitly accepted with a warning. |
 | Remote input adapter can synthesize non-gamepad events or flood the host | Restrict virtual seat capability profiles to gamepad-only events and enforce per-seat rate limits plus event-code validation before writes. |
+| Other local user or stale process injects mirror frames | Keep the socket under a private runtime dir and require the per-launch mirror token from U16/U14 before accepting frames. The token never appears in public payloads, logs, or committed acceptance artifacts. Same-UID appliance code is trusted and explicitly outside this feature's security boundary. |
 | Sunshine mirror emits stale or malformed frames | Gate by launch id, strict-decode bounded NDJSON at the socket, and drop malformed/stale frames before adapter or writer state changes. |
-| Socket seam exists but no native producer or writer is wired | Treat U12, U13, and U14 as ship blockers for the full boot-race fix; U11 alone is only the contract seam. |
+| Socket seam exists but no native producer or writer is wired | Treat U12, U13, U14, U15, and U16 as ship blockers for the full boot-race fix; U11 alone is only the contract seam. |
+| Production composition remains unavailable | U15 must replace `createUnavailableSeatRuntime()` when `KORRI_INPUT_SEAT_RUNTIME_DIR` is configured and must retain fail-closed behavior otherwise. |
+| Long-running Sunshine never receives per-launch env | U16 uses stable service-start configuration plus active-launch sidecar/control state; do not rely on emulator child env or `sourceEnv`. |
+| E2E launch silently skips input seats | U17 makes the `@korri:input-seat` companion explicit and U10 treats a missing resolved companion as a no-go. |
+| Uinput devices survive or collide after crashes | U13 requires close-on-exec fd ownership, identity collision detection, and cleanup validation before hardware proof. |
 | Seat leave endpoint can be abused to kick players | Scope leave requests to launch id and caller authority, and require bound launch-scoped source identity or operator identity before releasing an occupied seat. |
 | Seat reservation without user identity is incomplete | Use launch-scoped source identity for this slice; preserve disconnect-vs-leave semantics while deferring richer cross-device participant/user identity. |
 | Scope balloons into local-controller routing | Keep local physical routing explicitly deferred and isolated in the already-captured backlog item. |
@@ -938,7 +1139,7 @@ flowchart TB
 
 - Add an acceptance document for the hardware validation contract because the final proof depends on physical devices and a remote stream.
 - Log detailed diagnostic information locally where needed, but define explicit public/redacted fields for wire status, SSE events, CLI output, and agent-readable status. Raw device paths, broad permission diagnostics, and unredacted source identifiers stay local-only unless a caller has an operator diagnostic path.
-- Device validation should record the resolved cascade policy, launch id, seat event sequence, emulator-visible input facts, uinput permission mode/group, and any orphan-seat startup diagnostics so future regressions can be diagnosed without repeating the full investigation.
+- Device validation should record the resolved cascade policy, launch id, redacted active-launch sidecar/control state, redacted mirror socket fact, seat event sequence, emulator-visible input facts, uinput permission mode/group, Sunshine service mirror environment presence, and any orphan-seat startup diagnostics so future regressions can be diagnosed without repeating the full investigation. Committed acceptance docs must not include host-local absolute paths, raw event nodes, raw source identifiers, mirror tokens, or full Sunshine environment dumps.
 - If a second-runtime validation reveals emulator-specific profile work, capture it separately unless it blocks proving the generic seat service.
 
 ---
