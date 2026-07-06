@@ -2108,6 +2108,85 @@ describe("korri sessiond", () => {
     child.resolve({ status: "launched" })
   })
 
+  it("releases an input seat through launch-scoped managed leave", async () => {
+    const child = deferred<LaunchResult>()
+    const { core } = startHarness({
+      preSpawnGates: [
+        {
+          id: "@korri:input-seat",
+          start: async () => ({
+            inputSeats: {
+              seats: [
+                {
+                  slot: 1,
+                  playerIndex: 1,
+                  name: "Korri Seat P1",
+                  state: "occupied-connected",
+                  sourceKey: "source:redacted",
+                },
+              ],
+            },
+            stop: () => {},
+          }),
+        },
+      ],
+      spawnLaunch: async () => ({
+        result: child.promise,
+        terminate: () => child.resolve({ status: "launched" }),
+        terminateNow: () => child.resolve({ status: "failed", exitCode: 143 }),
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "input-seat-leave", spec }),
+      }),
+    )
+    await new Promise(resolve => setTimeout(resolve, 5))
+
+    const leave = await request(
+      core,
+      "/managed-launch/input-seat/leave",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "input-seat-leave", slot: 1 }),
+      }),
+    )
+    expect(await leave.json()).toEqual({
+      status: "released",
+      launchId: "input-seat-leave",
+      slot: 1,
+    })
+
+    const status = await (
+      await request(core, "/managed-launch/status", authorized())
+    ).json()
+    expect(status.active.inputSeats.seats[0]).toEqual({
+      slot: 1,
+      playerIndex: 1,
+      name: "Korri Seat P1",
+      state: "available",
+      reason: "explicit-leave",
+    })
+
+    child.resolve({ status: "launched" })
+    await waitForSessionMode(core, "home")
+
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=input-seat-leave",
+      authorized(),
+    )
+    const lifecycle = parseSseEvents(await streamResponse.text())
+    expect(lifecycle.map(event => event.type)).toContain("seat-left")
+    expect(lifecycle.map(event => event.type)).toContain("seat-released")
+  })
+
   it("aborts a blocking pre-spawn gate on force terminate", async () => {
     const aborted = deferred<void>()
     const { core } = startHarness({

@@ -8,9 +8,12 @@ import {
 } from "@platform/library/launcher"
 import { projectManagedLaunchStatus } from "@platform/library/sessiond-lifecycle-projections"
 import {
+  decodeSessiondManagedLaunchInputSeatLeaveRequest,
   decodeSessiondManagedLaunchStartRequest,
   decodeSessiondManagedLaunchTerminateRequest,
   type SessiondManagedLaunchEvent,
+  type SessiondManagedLaunchInputSeatLeaveRequest,
+  type SessiondManagedLaunchInputSeatLeaveResponse,
   type SessiondManagedLaunchInputSeatSummary,
   type SessiondManagedLaunchStartResponse,
   type SessiondManagedLaunchStatus,
@@ -254,6 +257,7 @@ export function createKorriSessiondCore(
         sessionHookHandles?: readonly KorriSessiondLifecycleHookHandle[]
         preSpawnAbortController?: AbortController
         preSpawnGateHandles?: readonly KorriSessiondPreSpawnGateHandle[]
+        inputSeats?: SessiondManagedLaunchInputSeatSummary
       }
     | undefined
   // Phase 4D / Track A finishing follow-up. Tracks the current
@@ -316,9 +320,12 @@ export function createKorriSessiondCore(
   function activeInputSeats():
     | SessiondManagedLaunchInputSeatSummary
     | undefined {
-    return activeManagedLaunch?.preSpawnGateHandles?.find(
-      handle => handle.inputSeats !== undefined,
-    )?.inputSeats
+    return (
+      activeManagedLaunch?.inputSeats ??
+      activeManagedLaunch?.preSpawnGateHandles?.find(
+        handle => handle.inputSeats !== undefined,
+      )?.inputSeats
+    )
   }
 
   function managedStatus(): SessiondManagedLaunchStatus {
@@ -491,6 +498,7 @@ export function createKorriSessiondCore(
           readonly launchId: string
           preSpawnAbortController?: AbortController
           preSpawnGateHandles?: readonly KorriSessiondPreSpawnGateHandle[]
+          inputSeats?: SessiondManagedLaunchInputSeatSummary
         }
       | undefined,
   ): Promise<LaunchResult | undefined> {
@@ -531,6 +539,7 @@ export function createKorriSessiondCore(
     }
     if (active?.launchId === launchId && handles.length > 0) {
       active.preSpawnGateHandles = handles
+      active.inputSeats = handles.find(handle => handle.inputSeats)?.inputSeats
     }
     return undefined
   }
@@ -1103,6 +1112,77 @@ export function createKorriSessiondCore(
     return { status: "accepted", launchId }
   }
 
+  function leaveManagedInputSeat(
+    request: SessiondManagedLaunchInputSeatLeaveRequest,
+  ): SessiondManagedLaunchInputSeatLeaveResponse {
+    if (activeManagedLaunch?.launchId !== request.launchId) {
+      return {
+        status: "not-found",
+        launchId: request.launchId,
+        message: "managed launch is not active",
+      }
+    }
+    const inputSeats = activeManagedLaunch.inputSeats
+    const index = inputSeats?.seats.findIndex(
+      seat => seat.slot === request.slot,
+    )
+    if (inputSeats === undefined || index === undefined || index < 0) {
+      return {
+        status: "not-found",
+        launchId: request.launchId,
+        slot: request.slot,
+        message: "input seat is not active",
+      }
+    }
+    const seat = inputSeats.seats[index]
+    if (!seat) {
+      return {
+        status: "not-found",
+        launchId: request.launchId,
+        slot: request.slot,
+        message: "input seat is not active",
+      }
+    }
+    if (
+      request.sourceKey !== undefined &&
+      seat.sourceKey !== undefined &&
+      request.sourceKey !== seat.sourceKey &&
+      request.operator !== true
+    ) {
+      return {
+        status: "unauthorized",
+        launchId: request.launchId,
+        slot: request.slot,
+        message: "input seat is bound to a different source",
+      }
+    }
+    const releasedSeat = {
+      slot: seat.slot,
+      playerIndex: seat.playerIndex,
+      name: seat.name,
+      state: "available" as const,
+      reason: "explicit-leave",
+    }
+    activeManagedLaunch.inputSeats = {
+      seats: inputSeats.seats.map((candidate, candidateIndex) =>
+        candidateIndex === index ? releasedSeat : candidate,
+      ),
+    }
+    pushLifecycleEvent(request.launchId, {
+      type: "seat-left",
+      seat: releasedSeat,
+    })
+    pushLifecycleEvent(request.launchId, {
+      type: "seat-released",
+      seat: releasedSeat,
+    })
+    return {
+      status: "released",
+      launchId: request.launchId,
+      slot: request.slot,
+    }
+  }
+
   function lifecycleEventStream(launchId: string): Response {
     let subscriber:
       | {
@@ -1252,6 +1332,17 @@ export function createKorriSessiondCore(
           return json(
             terminateManagedLaunchById(body.value.launchId, body.value.force),
           )
+        }
+        if (
+          request.method === "POST" &&
+          url.pathname === "/managed-launch/input-seat/leave"
+        ) {
+          const body = await decodeRequestJson(
+            request,
+            decodeSessiondManagedLaunchInputSeatLeaveRequest,
+          )
+          if (body.status === "failed") return body.response
+          return json(leaveManagedInputSeat(body.value))
         }
         if (request.method === "POST" && url.pathname === "/launch") {
           const body = (await request.json()) as { readonly spec?: LaunchSpec }

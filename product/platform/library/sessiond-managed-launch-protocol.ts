@@ -322,6 +322,39 @@ export type SessiondManagedLaunchEvent = Schema.Schema.Type<
   typeof SessiondManagedLaunchEvent
 >
 
+export const SessiondManagedLaunchInputSeatLeaveRequest = Schema.Struct({
+  launchId: Schema.String,
+  slot: Schema.Number,
+  sourceKey: Schema.optional(Schema.String),
+  operator: Schema.optional(Schema.Boolean),
+})
+export type SessiondManagedLaunchInputSeatLeaveRequest = Schema.Schema.Type<
+  typeof SessiondManagedLaunchInputSeatLeaveRequest
+>
+
+export const SessiondManagedLaunchInputSeatLeaveResponse = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("released"),
+    launchId: Schema.String,
+    slot: Schema.Number,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("not-found"),
+    launchId: Schema.String,
+    slot: Schema.optional(Schema.Number),
+    message: Schema.String,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unauthorized"),
+    launchId: Schema.String,
+    slot: Schema.Number,
+    message: Schema.String,
+  }),
+])
+export type SessiondManagedLaunchInputSeatLeaveResponse = Schema.Schema.Type<
+  typeof SessiondManagedLaunchInputSeatLeaveResponse
+>
+
 export const SessiondManagedLaunchTerminateRequest = Schema.Struct({
   launchId: Schema.String,
   force: Schema.optional(Schema.Boolean),
@@ -391,6 +424,22 @@ export const decodeSessiondManagedLaunchTerminateRequest = (
   input: unknown,
 ): SessiondManagedLaunchTerminateRequest =>
   Schema.decodeUnknownSync(SessiondManagedLaunchTerminateRequest)(
+    input,
+    STRICT_DECODE,
+  )
+
+export const decodeSessiondManagedLaunchInputSeatLeaveRequest = (
+  input: unknown,
+): SessiondManagedLaunchInputSeatLeaveRequest =>
+  Schema.decodeUnknownSync(SessiondManagedLaunchInputSeatLeaveRequest)(
+    input,
+    STRICT_DECODE,
+  )
+
+export const decodeSessiondManagedLaunchInputSeatLeaveResponse = (
+  input: unknown,
+): SessiondManagedLaunchInputSeatLeaveResponse =>
+  Schema.decodeUnknownSync(SessiondManagedLaunchInputSeatLeaveResponse)(
     input,
     STRICT_DECODE,
   )

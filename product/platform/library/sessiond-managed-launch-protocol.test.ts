@@ -3,6 +3,8 @@ import { Schema } from "effect"
 import {
   decodeSessiondManagedLaunchEvent,
   decodeSessiondManagedLaunchHomeToggleResponse,
+  decodeSessiondManagedLaunchInputSeatLeaveRequest,
+  decodeSessiondManagedLaunchInputSeatLeaveResponse,
   decodeSessiondManagedLaunchStatus,
   decodeSessiondManagedLaunchTerminateResponse,
   SessiondManagedLaunchEvent,
@@ -816,6 +818,38 @@ describe("sessiond managed launch input-seat protocol", () => {
           state: "occupied-connected",
           sourceId: "moonlight-client-raw-identity",
         },
+      }),
+    ).toThrow()
+  })
+})
+
+describe("sessiond managed launch input-seat leave protocol", () => {
+  it("decodes leave request and response payloads under strict decode", () => {
+    expect(
+      decodeSessiondManagedLaunchInputSeatLeaveRequest({
+        launchId: "launch-1",
+        slot: 1,
+        sourceKey: "source:redacted",
+      }),
+    ).toEqual({
+      launchId: "launch-1",
+      slot: 1,
+      sourceKey: "source:redacted",
+    })
+
+    expect(
+      decodeSessiondManagedLaunchInputSeatLeaveResponse({
+        status: "released",
+        launchId: "launch-1",
+        slot: 1,
+      }),
+    ).toEqual({ status: "released", launchId: "launch-1", slot: 1 })
+
+    expect(() =>
+      decodeSessiondManagedLaunchInputSeatLeaveRequest({
+        launchId: "launch-1",
+        slot: 1,
+        devicePath: "/dev/input/event17",
       }),
     ).toThrow()
   })
