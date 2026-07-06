@@ -149,9 +149,11 @@ const REDACTED_HELPER_UNAVAILABLE = "input-seat uinput backend unavailable"
 
 const helperUnavailableError = (): Error => new Error(REDACTED_HELPER_UNAVAILABLE)
 
+const NIXOS_UINPUT_HELPER_WRAPPER = "/run/wrappers/bin/korri-uinput-seat-helper"
+
 export const assertProductionHelperPath = (helperPath: string): void => {
   if (!helperPath || helperPath.trim() !== helperPath) {
-    throw new Error("input-seat helper path must be a trimmed absolute Nix-store path")
+    throw new Error("input-seat helper path must be a trimmed absolute production path")
   }
   if (!isAbsolute(helperPath)) {
     throw new Error("input-seat helper path must be absolute")
@@ -159,9 +161,11 @@ export const assertProductionHelperPath = (helperPath: string): void => {
   if (helperPath.includes("%")) {
     throw new Error("input-seat helper path must not contain systemd specifiers")
   }
-  if (!helperPath.startsWith("/nix/store/")) {
-    throw new Error("input-seat helper path must be an immutable Nix-store path")
-  }
+  if (helperPath.startsWith("/nix/store/")) return
+  if (helperPath === NIXOS_UINPUT_HELPER_WRAPPER) return
+  throw new Error(
+    "input-seat helper path must be an immutable Nix-store path or the fixed NixOS uinput wrapper",
+  )
 }
 
 const UINT8_MAX = 0xff

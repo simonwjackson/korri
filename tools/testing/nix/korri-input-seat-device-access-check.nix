@@ -38,6 +38,12 @@ let
     allowBroadInputGroup = true;
   };
 
+  collapsedGroups = evalInputSeatConfig {
+    enable = true;
+    group = "uinput";
+    eventGroup = "uinput";
+  };
+
   failingAssertions = cfg: builtins.filter (assertion: !assertion.assertion) cfg.config.assertions;
   inputSeatFailures = cfg:
     builtins.filter (assertion: lib.hasInfix "services.korri.input.inputSeat" assertion.message) (failingAssertions cfg);
@@ -45,6 +51,11 @@ let
     builtins.any (
       assertion:
       lib.hasInfix "services.korri.input.inputSeat.group = \"input\"" assertion.message
+    ) (inputSeatFailures cfg);
+  hasCollapsedGroupFailure = cfg:
+    builtins.any (
+      assertion:
+      lib.hasInfix "inputSeat.eventGroup must differ" assertion.message
     ) (inputSeatFailures cfg);
 in
 pkgs.runCommand "korri-input-seat-device-access-check" { } ''
@@ -56,8 +67,8 @@ pkgs.runCommand "korri-input-seat-device-access-check" { } ''
     exit 1
   ''}
 
-  ${lib.optionalString (!(builtins.elem "uinput" (dedicated.config.users.users.korri.extraGroups or [ ]))) ''
-    echo "dedicated uinput group was not added to korri user" >&2
+  ${lib.optionalString (builtins.elem "uinput" (dedicated.config.users.users.korri.extraGroups or [ ])) ''
+    echo "runtime user must not inherit raw uinput group access" >&2
     exit 1
   ''}
 
@@ -66,8 +77,8 @@ pkgs.runCommand "korri-input-seat-device-access-check" { } ''
     exit 1
   ''}
 
-  ${lib.optionalString (!(lib.hasInfix ''ATTRS{name}=="Korri Seat P*", GROUP="uinput", MODE="0660"'' (dedicated.config.services.udev.extraRules or ""))) ''
-    echo "Korri Seat event-node udev rule missing" >&2
+  ${lib.optionalString (!(lib.hasInfix ''ATTRS{name}=="Korri Seat P*", GROUP="korri", MODE="0660"'' (dedicated.config.services.udev.extraRules or ""))) ''
+    echo "Korri Seat event-node udev rule missing or not separated from raw uinput group" >&2
     exit 1
   ''}
 
@@ -83,6 +94,11 @@ pkgs.runCommand "korri-input-seat-device-access-check" { } ''
 
   ${lib.optionalString (inputSeatFailures broadAllowed != [ ]) ''
     echo "explicitly acknowledged broad input-group configuration failed input-seat assertions" >&2
+    exit 1
+  ''}
+
+  ${lib.optionalString (!hasCollapsedGroupFailure collapsedGroups) ''
+    echo "collapsed event/uinput group configuration did not fail assertion" >&2
     exit 1
   ''}
 

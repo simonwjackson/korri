@@ -210,9 +210,10 @@ in
         default = runtime.user;
         defaultText = lib.literalExpression "config.services.korri.runtime.user";
         description = ''
-          Unix user that owns sessiond/input-seat virtual gamepad creation.
-          The user is granted membership in `services.korri.input.inputSeat.group`
-          when input-seat support is enabled.
+          Unix user that runs sessiond and launched foreground games. The user
+          is not granted membership in `services.korri.input.inputSeat.group`;
+          sessiond reaches /dev/uinput through its privileged helper wrapper so
+          foreground children cannot inherit raw uinput write access.
         '';
       };
 
@@ -220,9 +221,20 @@ in
         type = types.str;
         default = "uinput";
         description = ''
-          Dedicated group that owns /dev/uinput for Korri-created virtual
-          gamepads. Prefer the default `uinput` group over the broad `input`
-          group, which may grant read access to physical keyboards/gamepads.
+          Dedicated helper-only group that owns /dev/uinput for Korri-created
+          virtual gamepads. The runtime user is intentionally not added to this
+          group when input-seat support is enabled.
+        '';
+      };
+
+      eventGroup = mkOption {
+        type = types.str;
+        default = runtime.group;
+        defaultText = lib.literalExpression "config.services.korri.runtime.group";
+        description = ''
+          Group that can read Korri-created virtual gamepad event nodes. This is
+          separate from `group` so emulators can read Korri Seat P* without also
+          being able to open /dev/uinput and create arbitrary input devices.
         '';
       };
 
@@ -379,23 +391,32 @@ in
             allowBroadInputGroup = true to acknowledge the downgrade explicitly.
           '';
         }
+        {
+          assertion = cfg.inputSeat.eventGroup != cfg.inputSeat.group;
+          message = ''
+            services.korri.input.inputSeat.eventGroup must differ from
+            services.korri.input.inputSeat.group so launched games can read
+            Korri Seat event nodes without inheriting raw /dev/uinput access.
+          '';
+        }
       ];
 
-      users.groups.${cfg.inputSeat.group} = { };
-      users.users.${cfg.inputSeat.user}.extraGroups = [ cfg.inputSeat.group ];
+      users.groups = lib.genAttrs (lib.unique [ cfg.inputSeat.group cfg.inputSeat.eventGroup ]) (_: { });
+      users.users.${cfg.inputSeat.user}.extraGroups = lib.mkIf (
+        cfg.inputSeat.eventGroup != (config.users.users.${cfg.inputSeat.user}.group or null)
+      ) [ cfg.inputSeat.eventGroup ];
 
       boot.kernelModules = [ "uinput" ];
 
       services.udev.extraRules = ''
-        # Least-privilege uinput access for sessiond-owned remote input seats.
-        # This grants write access to /dev/uinput without adding the runtime
-        # user to the broad physical-input reader group.
+        # Raw uinput write access is reserved for the privileged helper wrapper;
+        # the runtime user is deliberately not a member of this group.
         KERNEL=="uinput", GROUP="${cfg.inputSeat.group}", MODE="0660", OPTIONS+="static_node=uinput"
 
         # Read access for Korri-created virtual gamepad event nodes. This is
-        # intentionally limited to Korri Seat devices instead of granting the
-        # broad physical-input reader group to sessiond/emulators.
-        SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Korri Seat P*", GROUP="${cfg.inputSeat.group}", MODE="0660"
+        # intentionally separate from /dev/uinput creation access so launched
+        # emulators can read seats without creating arbitrary input devices.
+        SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Korri Seat P*", GROUP="${cfg.inputSeat.eventGroup}", MODE="0660"
       '';
     })
 

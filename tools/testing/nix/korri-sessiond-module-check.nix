@@ -98,9 +98,13 @@ let
     (check "input-seat runtime dir exported when enabled" (
       (unitEnv inputSeatEnabled).KORRI_INPUT_SEAT_RUNTIME_DIR == "%t/korri/input-seat"
     ))
-    (check "input-seat helper path exported when enabled" (
-      lib.hasPrefix "/nix/store/" (unitEnv inputSeatEnabled).KORRI_INPUT_SEAT_BACKEND_HELPER
-      && lib.hasSuffix "/bin/korri-uinput-seat-helper" (unitEnv inputSeatEnabled).KORRI_INPUT_SEAT_BACKEND_HELPER
+    (check "input-seat privileged helper wrapper exported when enabled" (
+      (unitEnv inputSeatEnabled).KORRI_INPUT_SEAT_BACKEND_HELPER == "/run/wrappers/bin/korri-uinput-seat-helper"
+      && inputSeatEnabled.security.wrappers ? korri-uinput-seat-helper
+      && inputSeatEnabled.security.wrappers.korri-uinput-seat-helper.setuid == true
+      && inputSeatEnabled.security.wrappers.korri-uinput-seat-helper.owner == "root"
+      && lib.hasPrefix "/nix/store/" inputSeatEnabled.security.wrappers.korri-uinput-seat-helper.source
+      && lib.hasSuffix "/bin/korri-uinput-seat-helper" inputSeatEnabled.security.wrappers.korri-uinput-seat-helper.source
     ))
     (check "token env not exported" (!((unitEnv baselineKiosk) ? KORRI_SESSIOND_TOKEN) && !((unitEnv baselineKiosk) ? KORRI_SESSIOND_TOKEN_FILE)))
   ];

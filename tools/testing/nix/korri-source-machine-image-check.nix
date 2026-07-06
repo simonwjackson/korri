@@ -76,10 +76,16 @@ let
       cfg.services.korri.input.inputSeat.enable
       && cfg.services.korri.input.inputSeat.user == cfg.services.korri.runtime.user
       && cfg.services.korri.input.inputSeat.group == "uinput"
+      && cfg.services.korri.input.inputSeat.eventGroup == cfg.services.korri.runtime.group
       && sessiondEnv.KORRI_INPUT_SEAT_RUNTIME_DIR == "%t/korri/input-seat"
-      && lib.hasPrefix "/nix/store/" sessiondEnv.KORRI_INPUT_SEAT_BACKEND_HELPER
-      && lib.hasSuffix "/bin/korri-uinput-seat-helper" sessiondEnv.KORRI_INPUT_SEAT_BACKEND_HELPER
-      && builtins.elem "uinput" (korriUser.extraGroups or [ ])
+      && sessiondEnv.KORRI_INPUT_SEAT_BACKEND_HELPER == "/run/wrappers/bin/korri-uinput-seat-helper"
+      && cfg.security.wrappers ? korri-uinput-seat-helper
+      && cfg.security.wrappers.korri-uinput-seat-helper.setuid == true
+      && cfg.security.wrappers.korri-uinput-seat-helper.owner == "root"
+      && cfg.security.wrappers.korri-uinput-seat-helper.group == cfg.services.korri.runtime.group
+      && lib.hasPrefix "/nix/store/" cfg.security.wrappers.korri-uinput-seat-helper.source
+      && lib.hasSuffix "/bin/korri-uinput-seat-helper" cfg.security.wrappers.korri-uinput-seat-helper.source
+      && !(builtins.elem "uinput" (korriUser.extraGroups or [ ]))
     ))
     (check "stream-host socket delegation cannot drift" (
       cfg.services.korri.sessiond.socketPath == "%t/korri/sessiond.sock"
@@ -131,8 +137,10 @@ let
       && !lib.hasInfix "KORRI_SESSIOND_TOKEN_FILE" firstAppWrapper
     ))
     (check "sessiond PATH includes util-linux" (builtins.elem imagePkgs.util-linux sessiondPath))
-    (check "source-machine udev grants Korri Seat event-node access" (
-      lib.hasInfix ''ATTRS{name}=="Korri Seat P*", GROUP="uinput", MODE="0660"'' (cfg.services.udev.extraRules or "")
+    (check "source-machine udev grants Korri Seat event-node access without raw uinput" (
+      lib.hasInfix ''KERNEL=="uinput", GROUP="uinput", MODE="0660", OPTIONS+="static_node=uinput"'' (cfg.services.udev.extraRules or "")
+      && lib.hasInfix ''ATTRS{name}=="Korri Seat P*", GROUP="korri", MODE="0660"'' (cfg.services.udev.extraRules or "")
+      && !lib.hasInfix ''KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"'' (cfg.services.udev.extraRules or "")
       && !lib.hasInfix ''TAG+="uaccess"'' (cfg.services.udev.extraRules or "")
     ))
     (check "compositor participates in korri-session.target" (

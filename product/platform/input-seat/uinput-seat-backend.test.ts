@@ -88,11 +88,19 @@ describe("uinput seat backend", () => {
     ])
   })
 
-  it("rejects relative, unresolved, and non-store helper paths", () => {
+  it("accepts only Nix-store helpers or the fixed privileged NixOS wrapper", () => {
+    expect(() =>
+      createUinputSeatBackend({
+        helperPath: "/run/wrappers/bin/korri-uinput-seat-helper",
+        transport: createRecordingTransport(),
+      }),
+    ).not.toThrow()
+
     for (const helperPath of [
       "korri-uinput-seat-helper",
       "%t/korri-uinput-seat-helper",
       "/usr/bin/korri-uinput-seat-helper",
+      "/run/wrappers/bin/not-korri-uinput-seat-helper",
     ]) {
       expect(() => createUinputSeatBackend({ helperPath })).toThrow(/helper path/)
     }

@@ -117,6 +117,7 @@ in
     enable = lib.mkDefault true;
     user = lib.mkDefault runtime.user;
     group = lib.mkDefault "uinput";
+    eventGroup = lib.mkDefault runtime.group;
     runtimeDir = lib.mkDefault "%t/korri/input-seat";
   };
 

@@ -22,6 +22,7 @@ let
   isAbsolutePath = path: lib.hasPrefix "/" path;
   isSocketPath = path: isAbsolutePath path || lib.hasPrefix "%t/" path;
   launchArtifactsDir = cfg.launchArtifactsDir;
+  uinputSeatHelperWrapper = "/run/wrappers/bin/korri-uinput-seat-helper";
   daemonLibraryRoot = lib.attrByPath [ "services" "korri" "daemon" "library" "root" ] null config;
   # Inherit the rendered ordered config-graph roots from the korrid unit so
   # foreground session surfaces read the same effective config as the daemon.
@@ -245,6 +246,14 @@ in
 
     environment.systemPackages = [ cfg.package ];
 
+    security.wrappers.korri-uinput-seat-helper = mkIf (inputSeat.enable or false) {
+      source = "${cfg.package}/bin/korri-uinput-seat-helper";
+      owner = "root";
+      group = runtime.group or "root";
+      setuid = true;
+      permissions = "u+rx,g+x";
+    };
+
     systemd.user.services.korri-sessiond = {
       description = "Korri foreground-session supervisor (${cfg.role} role)";
       wantedBy = [ "korri-session.target" ];
@@ -261,7 +270,7 @@ in
       }
       // (lib.optionalAttrs (inputSeat.enable or false) {
         KORRI_INPUT_SEAT_RUNTIME_DIR = inputSeat.runtimeDir;
-        KORRI_INPUT_SEAT_BACKEND_HELPER = "${cfg.package}/bin/korri-uinput-seat-helper";
+        KORRI_INPUT_SEAT_BACKEND_HELPER = uinputSeatHelperWrapper;
       })
       // (lib.optionalAttrs (daemonConfigRoots != null) {
         KORRI_CONFIG_ROOTS = daemonConfigRoots;

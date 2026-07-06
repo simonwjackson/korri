@@ -668,9 +668,9 @@ flowchart TB
 - Test: create or extend a sibling check under `tools/testing/nix/` if module assertions need coverage beyond the SM8550 config check.
 
 **Approach:**
-- Ensure `/dev/uinput` exists with least-privilege ownership and mode before the sessiond/input-seat runtime needs it. Prefer a dedicated `uinput` group over the broad `input` group; if the target image cannot support that narrower grant, require an explicit opt-in warning that documents read-all-input risk.
-- Ensure the service user that owns seat creation has only the required uinput access and not broader physical-input read access unless explicitly accepted.
-- Add udev/device-access rules for the created `Korri Seat P*` event nodes so RPCS3/emulators running as the session user can read those virtual gamepad devices. This is separate from `/dev/uinput` write access; do not rely on adding the service user to the broad `input` group unless explicitly accepted with a warning.
+- Ensure `/dev/uinput` exists with least-privilege ownership and mode before the sessiond/input-seat runtime needs it. Prefer a dedicated helper-only `uinput` group over the broad `input` group; if the target image cannot support that narrower grant, require an explicit opt-in warning that documents read-all-input risk.
+- Do not add the runtime/session user to the raw `uinput` group. sessiond reaches `/dev/uinput` through the privileged helper wrapper, while foreground children inherit only the permissions needed to read Korri-created event nodes.
+- Add udev/device-access rules for the created `Korri Seat P*` event nodes so RPCS3/emulators running as the session user can read those virtual gamepad devices through a separate event group. This is separate from `/dev/uinput` write access; do not rely on adding the service user to the broad `input` group unless explicitly accepted with a warning.
 - Add module assertions/checks so an enabled input-seat path fails evaluation when the device-access contract is impossible.
 - Include environment/runtime-dir wiring for any adapter sockets or runtime state needed by sessiond and the source adapter.
 - Add startup diagnostics for leftover Korri-named virtual devices so orphaned seats are detected before accepting a new launch.
@@ -682,7 +682,7 @@ flowchart TB
 - `tools/testing/nix/korri-rocknix-sm8550-config-check.nix`
 
 **Test scenarios:**
-- Happy path: NixOS module evaluation exposes least-privilege uinput permissions for the configured service user and readable `Korri Seat P*` event-node access for the emulator/session user.
+- Happy path: NixOS module evaluation exposes helper-only `/dev/uinput` permissions, a privileged helper wrapper for sessiond, and readable `Korri Seat P*` event-node access for the emulator/session user without raw uinput group membership.
 - Error path: enabling input-seat support with an invalid service user or missing group configuration fails module assertions.
 - Error path: accidental broad `input` group access is rejected or requires an explicit documented opt-in.
 - Integration: SM8550/source-machine config checks verify the input-seat device-access contract without requiring a full image build.
@@ -803,7 +803,7 @@ flowchart TB
 **Approach:**
 - Backend strategy is resolved at planning time: implement a long-running Python subprocess helper following the remap bridge pattern. The TypeScript wrapper implements `UinputSeatBackend`, spawns/supervises the helper, sends line-oriented or NDJSON commands for create/write/release, and treats helper crash/missing binary as `input-unavailable` before emulator spawn.
 - The Python helper owns the raw `/dev/uinput` mechanics: open `/dev/uinput`, set capability bits, configure uinput user device fields, issue `UI_DEV_CREATE`/`UI_DEV_DESTROY`, emit input-event structs, and close every descriptor on release or helper shutdown. It should be started once for the gate/backend lifetime, not once per input event.
-- Package the helper and Python interpreter into the sessiond service closure before U15 consumes it. Either install the helper into the `korri-sessiond` package output or expose it as a dedicated immutable Nix package. Expose the helper through an absolute Nix-store path in the NixOS module/environment; production must not rely on host-global Python, mutable path lookup, or `PATH` discovery.
+- Package the helper and Python interpreter into the sessiond service closure before U15 consumes it. Either install the helper into the `korri-sessiond` package output or expose it as a dedicated immutable Nix package. Expose the packaged helper as the source for a fixed NixOS privileged wrapper (`/run/wrappers/bin/korri-uinput-seat-helper`); production must not rely on host-global Python, mutable path lookup, or `PATH` discovery.
 - Ensure all helper-owned uinput file descriptors are close-on-exec so emulator or Sunshine child processes cannot keep devices alive after sessiond releases them.
 - Create Xbox-style gamepad-only devices with deterministic identity: `name = Korri Seat P<N>`, `phys = korri/input-seat/p<N>`, and `uniq = korri-seat-p<N>` set before device creation. The readiness matcher must require all expected identity fields, not name-only matching.
 - Add any missing native input constants needed by the backend, including `EV_SYN`, `SYN_REPORT`, `ABS_Z`, `ABS_RX`, `ABS_RY`, and `ABS_RZ`.
@@ -832,8 +832,8 @@ flowchart TB
 - Edge case: `/dev/input/eventN` numbering changes across launches, but readiness still succeeds because identity matching uses name+phys+uniq rather than event number.
 - Edge case: upper/unknown Sunshine button bits are ignored or rejected according to the bounded gamepad contract, without emitting keyboard/mouse events.
 - Edge case: a stale same-name or partial-identity orphan exists before allocation, so launch fails as unavailable/ambiguous instead of selecting arbitrarily.
-- Error path: `/dev/uinput` is missing or not writable by the session user, so allocation fails before emulator spawn with a clear local diagnostic and redacted managed-launch failure.
-- Error path: helper binary path is absent from env/service closure, is not an absolute Nix-store path, or the helper crashes during device creation, so the pre-spawn gate propagates `input-unavailable` and leaves no zombie helper process.
+- Error path: `/dev/uinput` is missing or not writable by the privileged helper wrapper, so allocation fails before emulator spawn with a clear local diagnostic and redacted managed-launch failure.
+- Error path: helper binary path is absent from env/service closure, is neither the fixed privileged wrapper path nor an allowed immutable Nix-store test/helper path, or the helper crashes during device creation, so the pre-spawn gate propagates `input-unavailable` and leaves no zombie helper process.
 - Error path: helper receives an unknown command, invalid slot, malformed frame, oversized frame, or non-gamepad event code, so it rejects the command before any uinput write/ioctl and reports a bounded diagnostic.
 - Error path: readiness times out when the created device cannot be uniquely discovered or read by the session user.
 - Error path: unsupported event types/codes are rejected before reaching uinput.
@@ -870,12 +870,12 @@ flowchart TB
 
 **Approach:**
 - Read `KORRI_INPUT_SEAT_RUNTIME_DIR` in `sessiondPreSpawnGatesFromEnv`. A missing or blank value keeps the unavailable runtime so launches without `@korri:input-seat` remain unaffected and launches that request seats fail closed.
-- Add an explicit production helper-path contract, such as `KORRI_INPUT_SEAT_BACKEND_HELPER`, populated by the NixOS module from the packaged U13 helper as an absolute immutable Nix-store path. Missing, relative, unresolved, or non-store helper paths with input-seat enabled must fail closed before emulator spawn rather than silently falling back to test seams. Production must not discover the helper through `PATH`.
+- Add an explicit production helper-path contract, such as `KORRI_INPUT_SEAT_BACKEND_HELPER`, populated by the NixOS module with the fixed privileged helper wrapper path (`/run/wrappers/bin/korri-uinput-seat-helper`) whose source is the packaged U13 helper in the sessiond closure. Missing, relative, unresolved, or unexpected helper paths with input-seat enabled must fail closed before emulator spawn rather than silently falling back to test seams. Production must not discover the helper through `PATH`.
 - Keep production construction inside `sessiondPreSpawnGatesFromEnv` when the runtime dir and helper path are present, so the normal `sessiond.ts` `main()` call builds a non-unavailable gate without requiring ad-hoc test-only injection. `sessiond.ts` still needs coverage because it is the production entry point currently calling `sessiondPreSpawnGatesFromEnv(process.env)`.
 - When the runtime dir is present, require a concrete absolute path as seen by sessiond. The NixOS/user-service layer should expand `%t` before process start; TypeScript should reject unresolved specifiers or relative paths instead of guessing.
 - Derive one stable mirror socket path under the runtime dir, plus the U12-defined sidecar path that U16 writes. The socket path must stay inside the canonical runtime dir and use `0600` socket mode.
 - Construct `createUinputSeatRuntime` with the production backend from U13 and pass `sunshineMirror` options into `createSessiondInputSeatPreSpawnGate`.
-- Opt the AKA/source-machine image into `services.korri.input.inputSeat.enable = true` so `korri-sessiond` receives the runtime-dir/helper environment and the service user receives the dedicated `uinput` group plus readable virtual-seat event-node access. This is source-host work; Bandai/client images do not create emulator-visible RPCS3 devices.
+- Opt the AKA/source-machine image into `services.korri.input.inputSeat.enable = true` so `korri-sessiond` receives the runtime-dir/helper environment, the privileged helper wrapper is installed, `/dev/uinput` remains helper-only, and the runtime user receives readable virtual-seat event-node access. This is source-host work; Bandai/client images do not create emulator-visible RPCS3 devices.
 - Wire mirror diagnostics and backend allocation failures to structured local logs. Public managed-launch failures remain redacted and input-specific.
 - Keep composition tests injectable: avoid opening `/dev/uinput` in unit tests by allowing the backend factory, helper path, and path helpers to be substituted.
 
@@ -895,10 +895,10 @@ flowchart TB
 - Edge case: env value is blank, so composition uses the unavailable runtime and does not attempt socket/backend creation.
 - Edge case: runtime dir has a trailing slash or already exists, so socket/control path derivation remains stable and under the runtime dir.
 - Error path: runtime dir is relative, contains an unresolved `%t`, or cannot be created/accessed, so an input-seat launch fails before spawn as input-unavailable with local diagnostics.
-- Error path: helper path env is missing, relative, unresolved, not an immutable Nix-store path, or points outside the packaged service closure, so the gate fails closed instead of constructing a partial runtime.
+- Error path: helper path env is missing, relative, unresolved, neither the fixed privileged wrapper path nor an allowed immutable Nix-store helper path, or points outside the packaged service closure, so the gate fails closed instead of constructing a partial runtime.
 - Integration: production `sessiond.ts` wiring constructs a non-unavailable input-seat gate when both runtime-dir and helper-path env values are present, verified through a no-op/stub helper path without invoking OS uinput calls.
 - Integration: Nix eval proves `korri-sessiond` and the backend helper are configured with the intended input-seat runtime-dir/helper contract and service closure, and each new check is exported from `product/systems/nixos/flake/checks.nix`.
-- Integration: `product/systems/nixos/images/source-machine.nix` enables the input-seat module for AKA/source-host deployments, including `uinput` group membership and runtime-dir environment.
+- Integration: `product/systems/nixos/images/source-machine.nix` enables the input-seat module for AKA/source-host deployments, including helper-only `/dev/uinput`, separate event-node read access, the privileged helper wrapper, and runtime-dir environment.
 - Integration: a runtime/unit harness or systemd-rendered environment check proves the actual sessiond process sees expanded absolute `KORRI_INPUT_SEAT_RUNTIME_DIR` and helper path values with no unresolved `%t`.
 - Integration: a managed launch with `@korri:input-seat` activates the gate in an env-configured sessiond harness, while a launch without the companion still skips allocation.
 
@@ -1069,10 +1069,10 @@ flowchart TB
 
 **Approach:**
 - Define a reproducible device validation checklist that records launch id, resolved `@korri:input-seat` policy, created seat identities, active-launch sidecar/control facts, mirror socket facts, managed-launch events, RPCS3 input profile facts, and observed controller behavior.
-- Add an AKA deployment pre-flight section to the acceptance checklist. It must prove source-host readiness before any Skate/RPCS3 result counts: `services.korri.input.inputSeat.enable = true` is deployed, `korri-sessiond` sees an absolute `KORRI_INPUT_SEAT_RUNTIME_DIR`, `korri-sunshine` sees matching `KORRI_INPUT_SEAT_RUNTIME_DIR`/`KORRI_INPUT_SEAT_MIRROR_SOCKET`, `KORRI_INPUT_SEAT_BACKEND_HELPER` points to an absolute immutable Nix-store helper in the sessiond service closure, the session user is in the dedicated `uinput` group and can read created `Korri Seat P*` event nodes, the `uinput` kernel module is loaded, and no stale `Korri Seat P*` devices exist before launch.
+- Add an AKA deployment pre-flight section to the acceptance checklist. It must prove source-host readiness before any Skate/RPCS3 result counts: `services.korri.input.inputSeat.enable = true` is deployed, `korri-sessiond` sees an absolute `KORRI_INPUT_SEAT_RUNTIME_DIR`, `korri-sunshine` sees matching `KORRI_INPUT_SEAT_RUNTIME_DIR`/`KORRI_INPUT_SEAT_MIRROR_SOCKET`, `KORRI_INPUT_SEAT_BACKEND_HELPER` points to `/run/wrappers/bin/korri-uinput-seat-helper`, that wrapper is root-owned/setuid with an immutable Nix-store source in the sessiond service closure, the session user is not in the dedicated raw `uinput` group, created `Korri Seat P*` event nodes are readable by the emulator/session user through the separate event group, the `uinput` kernel module is loaded, and no stale `Korri Seat P*` devices exist before launch.
 - Treat missing `@korri:input-seat` in the resolved launch as a validation failure, even if the game launches through the old path.
 - Treat `input-unavailable` caused by a missing backend helper, missing runtime dir, or missing uinput permissions as a deployment/backend failure, not an E2E controller validation result.
-- Before launch, verify `/dev/uinput` ownership/mode, session user group membership, helper presence, `uinput` kernel module presence, absence of stale `Korri Seat P*` devices, and Sunshine service environment for stable mirror configuration.
+- Before launch, verify `/dev/uinput` ownership/mode, absence of runtime-user raw `uinput` membership, privileged helper wrapper presence/source, `uinput` kernel module presence, absence of stale `Korri Seat P*` devices, created-seat event-node readability, and Sunshine service environment for stable mirror configuration.
 - During pre-spawn, verify Korri seats exist before emulator spawn and the mirror socket/control state exists under the runtime dir.
 - Validate Skate 3/RPCS3 remote launch with no controller wiggle, no emulator restart, and P1 input working on first boot.
 - Validate session cleanup: sidecar removed, socket unlinked, and `Korri Seat P*` devices disappear before a second launch reallocates fresh seats.
@@ -1088,14 +1088,14 @@ flowchart TB
 - Device validation notes in existing work items under `work/items/active/`
 
 **Test scenarios:**
-- Hardware pre-flight: AKA's source-machine generation has input-seat enabled, `korri-sessiond` and `korri-sunshine` expose matching expanded runtime env, `KORRI_INPUT_SEAT_BACKEND_HELPER` points to an absolute immutable Nix-store helper, the session user is in `uinput`, created virtual seat event nodes are readable by the emulator/session user, the kernel module is loaded, and no stale `Korri Seat P*` devices exist before launch.
+- Hardware pre-flight: AKA's source-machine generation has input-seat enabled, `korri-sessiond` and `korri-sunshine` expose matching expanded runtime env, `KORRI_INPUT_SEAT_BACKEND_HELPER` points to `/run/wrappers/bin/korri-uinput-seat-helper`, the wrapper is root-owned/setuid with an immutable Nix-store source, the session user is not in `uinput`, created virtual seat event nodes are readable by the emulator/session user, the kernel module is loaded, and no stale `Korri Seat P*` devices exist before launch.
 - Hardware proof: resolved Skate 3/RPCS3 launch includes `@korri:input-seat`, RPCS3 config names `Korri Seat P1`, and remote launch shows P1 controller input on first boot without manual input/restart.
 - Hardware proof: `/proc/bus/input/devices` shows `Korri Seat P*` before emulator spawn and no stale `Korri Seat P*` devices after cleanup.
 - Hardware proof: Moonlight controller input produces events on the Korri seat event node and reaches the game through RPCS3's Evdev binding.
 - Hardware proof: remote disconnect reserves the same seat; reconnect restores control to that seat.
 - Hardware proof: explicit leave releases P2 and a later player/source can take P2.
 - Hardware proof: a second emulator/runtime launches with pre-created seats and no boot-scan controller race.
-- Error path: temporarily remove the session user from the `uinput` group or otherwise block `/dev/uinput`, attempt a managed RPCS3/Skate launch, and confirm launch fails with `input-unavailable` in managed-launch status before any emulator process spawns; restore permissions before continuing.
+- Error path: temporarily disable or break the privileged helper wrapper or otherwise block `/dev/uinput`, attempt a managed RPCS3/Skate launch, and confirm launch fails with `input-unavailable` in managed-launch status before any emulator process spawns; restore permissions before continuing.
 - Error path: missing backend helper env/path fails before emulator spawn and does not leave a helper process or virtual seats behind.
 - Error path: missing active-launch sidecar or stale Sunshine frames do not write to any seat and produce local diagnostics.
 
@@ -1156,15 +1156,15 @@ flowchart TB
 | Extra P2-P4 seats affect a single-player game | Default full pool for reliability but allow release/profile opt-down through the cascade. |
 | Partial allocation leaks devices | Treat required seat allocation as atomic: rollback successful seats on any failure. |
 | `eventN` paths are unstable | Never persist event-node numbers as identity; resolve and report them as runtime facts only. |
-| `/dev/uinput` permissions fail after deployment | Add NixOS assertions/checks and explicit hardware validation for `/dev/uinput` ownership and service user group membership. |
-| Broad input-device permissions expose host keystrokes | Prefer a dedicated uinput-only group and avoid adding sessiond to the broad `input` group unless explicitly accepted with a warning. |
+| `/dev/uinput` permissions fail after deployment | Add NixOS assertions/checks and explicit hardware validation for `/dev/uinput` ownership, helper-only group access, and privileged wrapper installation. |
+| Broad input-device permissions expose host keystrokes or raw injection | Prefer a dedicated helper-only uinput group, keep the runtime user out of that group, and expose only Korri Seat event nodes through a separate read group. |
 | Remote input adapter can synthesize non-gamepad events or flood the host | Restrict virtual seat capability profiles to gamepad-only events and enforce per-seat rate limits plus event-code validation before writes. |
 | Other local user or stale process injects mirror frames | Keep the socket under a private runtime dir and require the per-launch mirror token from U16/U14 before accepting frames. The token never appears in public payloads, logs, or committed acceptance artifacts. Same-UID appliance code is trusted and explicitly outside this feature's security boundary. |
 | Sunshine mirror emits stale or malformed frames | Gate by launch id, strict-decode bounded NDJSON at the socket, and drop malformed/stale frames before adapter or writer state changes. |
 | Socket seam exists but no native producer or writer is wired | Treat U12, U13, U14, U15, and U16 as ship blockers for the full boot-race fix; U11 alone is only the contract seam. |
 | Production composition remains unavailable | U15 must replace `createUnavailableSeatRuntime()` when `KORRI_INPUT_SEAT_RUNTIME_DIR` is configured and must retain fail-closed behavior otherwise. |
 | Python helper binary absent from sessiond closure in production deployment | Package the helper and Python interpreter into the NixOS sessiond service closure in U13/U15; add Nix eval checks that assert the helper path env/closure is present when input-seat is enabled. |
-| AKA/source-machine profile does not enable input seats | U15 must opt `product/systems/nixos/images/source-machine.nix` into `services.korri.input.inputSeat` so source-host sessiond gets runtime-dir, helper, and uinput access. |
+| AKA/source-machine profile does not enable input seats | U15 must opt `product/systems/nixos/images/source-machine.nix` into `services.korri.input.inputSeat` so source-host sessiond gets runtime-dir, the privileged helper wrapper, helper-only `/dev/uinput`, and event-node read access. |
 | Long-running Sunshine never receives per-launch env | U16 uses stable service-start configuration plus active-launch sidecar/control state; do not rely on emulator child env or `sourceEnv`. |
 | E2E launch silently skips input seats | U17 makes the `@korri:input-seat` companion explicit and U10 treats a missing resolved companion as a no-go. |
 | Uinput devices survive or collide after crashes | U13 requires close-on-exec fd ownership, identity collision detection, and cleanup validation before hardware proof. |
