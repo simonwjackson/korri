@@ -14,6 +14,7 @@ import {
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
 import type { PluginRegistry } from "@platform/plugin/registry"
+import type { StreamBoundaries } from "@platform/stream/stream-adaptive-boundaries"
 import {
   activeStreamControlSessionRegistry,
   type StartStreamRuntimeSessionOptions,
@@ -105,6 +106,11 @@ export interface MoonlightStreamRuntimeOptions {
   readonly onRecoveryEvent?: StartStreamRuntimeSessionOptions["onRecoveryEvent"]
 }
 
+export interface MoonlightStreamRuntimeSessionHandle {
+  readonly adaptiveControl?: StreamRuntimeSession["adaptiveControl"]
+  readonly close: () => void
+}
+
 export interface MoonlightLaunchOptions {
   readonly host?: string
   readonly moonlight?: StreamerPolicy
@@ -117,9 +123,10 @@ export interface MoonlightLaunchOptions {
   readonly readProcDevices?: () => Promise<string>
   readonly runner?: CommandRunner
   readonly moonlightControl?: MoonlightControlLaunchOptions | false
+  readonly adaptiveBoundaries?: StreamBoundaries
   readonly startStreamRuntimeSession?: (
     options: MoonlightStreamRuntimeOptions,
-  ) => Promise<{ readonly close: () => void }>
+  ) => Promise<MoonlightStreamRuntimeSessionHandle>
 }
 
 export async function launchMoonlight(
@@ -171,6 +178,7 @@ export async function launchMoonlight(
       session: installed.session,
       startStreamRuntimeSession:
         options.startStreamRuntimeSession ?? defaultStartStreamRuntimeSession,
+      adaptiveBoundaries: options.adaptiveBoundaries,
     })
   }
 
@@ -222,6 +230,7 @@ export async function launchMoonlight(
       session: fallback.session,
       startStreamRuntimeSession:
         options.startStreamRuntimeSession ?? defaultStartStreamRuntimeSession,
+      adaptiveBoundaries: options.adaptiveBoundaries,
     })
   }
 
@@ -293,7 +302,8 @@ function startedMoonlightResult(input: {
   readonly session?: ManagedMoonlightSessionHandle
   readonly startStreamRuntimeSession: (
     options: MoonlightStreamRuntimeOptions,
-  ) => Promise<{ readonly close: () => void }>
+  ) => Promise<MoonlightStreamRuntimeSessionHandle>
+  readonly adaptiveBoundaries?: StreamBoundaries
 }): MoonlightLaunchResult {
   const session =
     input.moonlightControl && input.session
@@ -301,6 +311,7 @@ function startedMoonlightResult(input: {
           input.moonlightControl,
           input.session,
           input.startStreamRuntimeSession,
+          input.adaptiveBoundaries,
         )
       : input.session
   return {
@@ -318,11 +329,12 @@ function registerMoonlightControlSession(
   session: ManagedMoonlightSessionHandle,
   startStreamRuntimeSession: (
     options: MoonlightStreamRuntimeOptions,
-  ) => Promise<StreamRuntimeSession>,
+  ) => Promise<MoonlightStreamRuntimeSessionHandle>,
+  adaptiveBoundaries: StreamBoundaries | undefined,
 ): ManagedMoonlightSessionHandle {
   let unregistering = false
   let runtimeClosed = false
-  let runtimeSession: StreamRuntimeSession | undefined
+  let runtimeSession: MoonlightStreamRuntimeSessionHandle | undefined
   const closeRuntimeSession = () => {
     if (runtimeClosed) return
     runtimeClosed = true
@@ -330,7 +342,7 @@ function registerMoonlightControlSession(
   }
   const runtimeSessionPromise = startStreamRuntimeSession({
     socketPath: control.socketPath,
-    ...runtimeSessionAdaptiveOptions(),
+    ...runtimeSessionAdaptiveOptions(adaptiveBoundaries),
     onRecoveryEvent: event => {
       console.warn("korri stream recovery:", JSON.stringify(event))
     },
@@ -404,7 +416,7 @@ export async function moonlightControlHandleFromOptions(
 
 export async function defaultStartStreamRuntimeSession(
   options: MoonlightStreamRuntimeOptions,
-): Promise<{ readonly close: () => void }> {
+): Promise<MoonlightStreamRuntimeSessionHandle> {
   // Keep the launcher removable from the Moonlight plugin. The plugin package
   // is loaded only at runtime for Moonlight sessions and the literal import
   // path is intentionally not a static dependency.
@@ -413,10 +425,9 @@ export async function defaultStartStreamRuntimeSession(
   return module.startMoonlightStreamRuntimeSession(options)
 }
 
-function runtimeSessionAdaptiveOptions(): Pick<
-  MoonlightStreamRuntimeOptions,
-  "adaptive"
-> {
+function runtimeSessionAdaptiveOptions(
+  boundaries?: StreamBoundaries,
+): Pick<MoonlightStreamRuntimeOptions, "adaptive"> {
   const env = globalThis.Bun?.env ?? process.env
   const enabled = env.KORRI_STREAM_ADAPTIVE_ENABLED
   if (enabled !== "1" && enabled !== "true") return {}
@@ -432,6 +443,7 @@ function runtimeSessionAdaptiveOptions(): Pick<
     adaptive: {
       enabled: true,
       objectiveBias,
+      ...(boundaries ? { boundaries } : {}),
       tickIntervalMs,
       isStreaming: () => true,
       onEvent: event => {

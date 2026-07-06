@@ -178,6 +178,33 @@ describe("unified launch command", () => {
     expect(lines.join("\n")).toContain("Prepared Wario Land 4 from aka")
   })
 
+  it("passes adaptive stream boundary flags into remote Moonlight launch", async () => {
+    let moonlightOptions: unknown
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      librarySource: localSource([]),
+      launchLocal: async () => launchedResult(SHARED_ID),
+      discoverHosts: async () => [host],
+      clientForHost: () => remoteClient(),
+      streamBoundaryArgs: ["bitrate=..12000", "lean=responsive"],
+      launchMoonlight: async options => {
+        moonlightOptions = options
+        return { status: "started", command: "moonlight" }
+      },
+      output: () => {},
+      errorOutput: () => {},
+    })
+
+    expect(code).toBe(0)
+    expect(moonlightOptions).toMatchObject({
+      adaptiveBoundaries: {
+        levers: { bitrate: { ceiling: 12_000 } },
+        outcomes: {},
+        lean: 0,
+      },
+    })
+  })
+
   it("prompts and launches when no game id is given", async () => {
     const code = await runLaunchCommand({
       librarySource: localSource([localGame]),

@@ -45,7 +45,7 @@ import {
 const VERSION = "1.0.0"
 
 const streamSocketFlag = Flag.string("socket").pipe(Flag.optional)
-const streamAdaptiveFlags = {
+const streamBoundaryFlags = {
   bitrate: Flag.string("bitrate").pipe(Flag.optional),
   fps: Flag.string("fps").pipe(Flag.optional),
   resolution: Flag.string("resolution").pipe(Flag.optional),
@@ -53,6 +53,9 @@ const streamAdaptiveFlags = {
   auto: Flag.string("auto").pipe(Flag.optional),
   maxLatency: Flag.string("max-latency").pipe(Flag.optional),
   minFps: Flag.string("min-fps").pipe(Flag.optional),
+}
+const streamAdaptiveFlags = {
+  ...streamBoundaryFlags,
   dryRun: Flag.boolean("dry-run").pipe(Flag.withDefault(false)),
   watch: Flag.boolean("watch").pipe(Flag.withDefault(false)),
   json: Flag.boolean("json").pipe(Flag.withDefault(false)),
@@ -258,8 +261,9 @@ const launchCommand = Command.make(
     appId: Flag.string("app-id").pipe(Flag.optional),
     profileId: Flag.string("profile-id").pipe(Flag.optional),
     yes: Flag.boolean("yes").pipe(Flag.withDefault(false)),
+    ...streamBoundaryFlags,
   },
-  ({ gameId, host, releaseId, appId, profileId, yes }) =>
+  ({ gameId, host, releaseId, appId, profileId, yes, ...flags }) =>
     Effect.gen(function* () {
       const control = yield* KorriControl
       const librarySource = yield* LibrarySource
@@ -270,6 +274,7 @@ const launchCommand = Command.make(
           releaseId: Option.getOrUndefined(releaseId),
           appId: Option.getOrUndefined(appId),
           profileId: Option.getOrUndefined(profileId),
+          streamBoundaryArgs: streamAdaptiveArgs(flags),
           confirmYes: yes,
           stdinIsTty: process.stdin.isTTY === true,
           librarySource,

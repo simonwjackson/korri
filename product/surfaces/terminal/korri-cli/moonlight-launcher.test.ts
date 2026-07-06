@@ -431,6 +431,66 @@ describe("moonlight launcher", () => {
     ])
   })
 
+  it("seeds launch adaptive boundaries into the stream runtime session", async () => {
+    activeStreamControlSessionRegistry.unregister("session-1")
+    const previousEnabled = Bun.env.KORRI_STREAM_ADAPTIVE_ENABLED
+    const calls: string[] = []
+    const session: ManagedMoonlightSessionHandle = {
+      id: "managed-session-1",
+      exited: new Promise(() => {}),
+      terminate: () => undefined,
+      terminateNow: () => undefined,
+    }
+    let runtimeOptions: unknown
+
+    try {
+      Bun.env.KORRI_STREAM_ADAPTIVE_ENABLED = "1"
+      const result = await launchMoonlight({
+        host: "aka.local",
+        moonlightControl: {
+          enabled: true,
+          runtimeDir: "/run/user/1000/korri-moonlight/session-1",
+          socketPath: "/run/user/1000/korri-moonlight/session-1/control.sock",
+          sessionId: "session-1",
+          authority: "controller",
+        },
+        adaptiveBoundaries: {
+          levers: { bitrate: { ceiling: 12_000 } },
+          outcomes: {},
+          lean: 0,
+        },
+        runner: {
+          run: async () => ({ status: "started", session }),
+        },
+        startStreamRuntimeSession: async options => {
+          runtimeOptions = options
+          return { close: () => calls.push("runtime.close") }
+        },
+      })
+
+      expect(result.status).toBe("started")
+      await Promise.resolve()
+      expect(runtimeOptions).toMatchObject({
+        adaptive: {
+          enabled: true,
+          boundaries: {
+            levers: { bitrate: { ceiling: 12_000 } },
+            outcomes: {},
+            lean: 0,
+          },
+        },
+      })
+      if (result.status === "started") result.session?.terminate()
+    } finally {
+      if (previousEnabled === undefined) {
+        delete Bun.env.KORRI_STREAM_ADAPTIVE_ENABLED
+      } else {
+        Bun.env.KORRI_STREAM_ADAPTIVE_ENABLED = previousEnabled
+      }
+      activeStreamControlSessionRegistry.unregister("session-1")
+    }
+  })
+
   it("keeps the InputPlumber -input device when local control is enabled", async () => {
     const calls: Array<{
       readonly argv: string

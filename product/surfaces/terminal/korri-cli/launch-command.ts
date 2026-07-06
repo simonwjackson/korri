@@ -4,6 +4,7 @@ import type {
   ControlSessionStatusResult,
 } from "@platform/control/control-results"
 import { releaseChoiceForLaunch } from "@platform/library/launch-state"
+import { parseStreamBoundaryArgs } from "@platform/stream/stream-adaptive-boundaries"
 import type { LibrarySourceService } from "@platform/library/library-services"
 import {
   type DiscoverStreamHostsOptions,
@@ -53,6 +54,7 @@ export interface RunLaunchCommandOptions {
   readonly releaseId?: string
   readonly appId?: string
   readonly profileId?: string
+  readonly streamBoundaryArgs?: readonly string[]
   readonly stdinIsTty?: boolean
   readonly confirmYes?: boolean
   readonly librarySource: LibrarySourceService
@@ -292,9 +294,13 @@ async function launchRemoteEntry(
   if (policy.status === "failed") {
     return fail("launch-invalid", policy.message)
   }
+  const adaptiveBoundaries = options.streamBoundaryArgs
+    ? parseStreamBoundaryArgs(options.streamBoundaryArgs)
+    : undefined
   const moonlight = await (options.launchMoonlight ?? launchMoonlight)({
     host: entry.source.host.id,
     ...policy.options,
+    ...(adaptiveBoundaries ? { adaptiveBoundaries } : {}),
   })
   if (moonlight.status === "started") {
     return ok([`Moonlight launch attempted via ${moonlight.command}.`])
