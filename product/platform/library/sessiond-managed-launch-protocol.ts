@@ -108,6 +108,12 @@ export const SessiondManagedLaunchCapabilities = Schema.Struct({
    * using their legacy Home fallback.
    */
   laneToggle: Schema.optional(Schema.Boolean),
+  /**
+   * When true, the daemon exposes launch-scoped input-seat status/events
+   * and accepts capability-gated leave/release requests. Older daemons omit
+   * this field; clients must treat absence as false.
+   */
+  inputSeats: Schema.optional(Schema.Boolean),
 })
 export type SessiondManagedLaunchCapabilities = Schema.Schema.Type<
   typeof SessiondManagedLaunchCapabilities
@@ -148,6 +154,40 @@ const SessiondLaunchMetadata = Schema.Struct({
   ),
 })
 
+export const SessiondManagedLaunchInputSeatState = Schema.Literals([
+  "available",
+  "occupied-connected",
+  "occupied-disconnected-reserved",
+  "released",
+])
+export type SessiondManagedLaunchInputSeatState = Schema.Schema.Type<
+  typeof SessiondManagedLaunchInputSeatState
+>
+
+export const SessiondManagedLaunchInputSeat = Schema.Struct({
+  slot: Schema.Number,
+  playerIndex: Schema.Number,
+  name: Schema.String,
+  state: SessiondManagedLaunchInputSeatState,
+  /**
+   * Redacted, non-authoritative correlation key. Must not contain raw remote
+   * source identity, device paths, permission details, or other host-local
+   * diagnostics.
+   */
+  sourceKey: Schema.optional(Schema.String),
+  reason: Schema.optional(Schema.String),
+})
+export type SessiondManagedLaunchInputSeat = Schema.Schema.Type<
+  typeof SessiondManagedLaunchInputSeat
+>
+
+export const SessiondManagedLaunchInputSeatSummary = Schema.Struct({
+  seats: Schema.Array(SessiondManagedLaunchInputSeat),
+})
+export type SessiondManagedLaunchInputSeatSummary = Schema.Schema.Type<
+  typeof SessiondManagedLaunchInputSeatSummary
+>
+
 export const SessiondManagedLaunchActive = Schema.Struct({
   launchId: Schema.String,
   mode: SessiondManagedLaunchMode,
@@ -158,6 +198,7 @@ export const SessiondManagedLaunchActive = Schema.Struct({
    * this to carry the source host/controlUrl so inputd can stop the host game.
    */
   launchMetadata: Schema.optional(SessiondLaunchMetadata),
+  inputSeats: Schema.optional(SessiondManagedLaunchInputSeatSummary),
 })
 export type SessiondManagedLaunchActive = Schema.Schema.Type<
   typeof SessiondManagedLaunchActive
@@ -234,6 +275,14 @@ export const SessiondManagedLaunchEventType = Schema.Literals([
   "wait-monitor-running",
   "wait-monitor-exited",
   "session-anchored",
+  "seat-allocated",
+  "seat-ready",
+  "seat-connected",
+  "seat-disconnected-reserved",
+  "seat-reconnected",
+  "seat-left",
+  "seat-released",
+  "seat-allocation-failed",
 ])
 export type SessiondManagedLaunchEventType = Schema.Schema.Type<
   typeof SessiondManagedLaunchEventType
@@ -267,6 +316,7 @@ export const SessiondManagedLaunchEvent = Schema.Struct({
   message: Schema.optional(Schema.String),
   terminal: Schema.optional(SessiondManagedLaunchTerminal),
   readiness: Schema.optional(SessiondManagedLaunchReadiness),
+  seat: Schema.optional(SessiondManagedLaunchInputSeat),
 })
 export type SessiondManagedLaunchEvent = Schema.Schema.Type<
   typeof SessiondManagedLaunchEvent

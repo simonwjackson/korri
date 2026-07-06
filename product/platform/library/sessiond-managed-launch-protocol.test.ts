@@ -697,3 +697,126 @@ describe("sessiond managed launch protocol", () => {
     expect(events.map(e => e.type)).toEqual(sequence)
   })
 })
+
+describe("sessiond managed launch input-seat protocol", () => {
+  it("decodes additive input-seat capability and active status summary", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "game",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+        inputSeats: true,
+      },
+      active: {
+        launchId: "launch-1",
+        mode: "game",
+        inputSeats: {
+          seats: [
+            {
+              slot: 1,
+              playerIndex: 1,
+              name: "Korri Seat P1",
+              state: "occupied-connected",
+              sourceKey: "source:7f4a1b",
+            },
+            {
+              slot: 2,
+              playerIndex: 2,
+              name: "Korri Seat P2",
+              state: "available",
+            },
+          ],
+        },
+      },
+      restoreAttempts: 0,
+    })
+
+    expect(status.capabilities.inputSeats).toBe(true)
+    expect(status.active?.inputSeats?.seats[0]).toEqual({
+      slot: 1,
+      playerIndex: 1,
+      name: "Korri Seat P1",
+      state: "occupied-connected",
+      sourceKey: "source:7f4a1b",
+    })
+  })
+
+  it("decodes input-seat lifecycle events with redacted seat payloads", () => {
+    for (const type of [
+      "seat-allocated",
+      "seat-ready",
+      "seat-connected",
+      "seat-disconnected-reserved",
+      "seat-reconnected",
+      "seat-left",
+      "seat-released",
+      "seat-allocation-failed",
+    ] as const) {
+      expect(
+        decodeSessiondManagedLaunchEvent({
+          schemaVersion: 1,
+          sequence: 10,
+          launchId: "launch-1",
+          type,
+          at: "2026-05-26T00:00:00.000Z",
+          seat: {
+            slot: 1,
+            playerIndex: 1,
+            name: "Korri Seat P1",
+            state: "occupied-disconnected-reserved",
+            reason: "stream-disconnected",
+          },
+        }).type,
+      ).toBe(type)
+    }
+  })
+
+  it("rejects raw device paths and unredacted source identifiers in public seat payloads", () => {
+    expect(() =>
+      decodeSessiondManagedLaunchStatus({
+        schemaVersion: 1,
+        mode: "game",
+        capabilities: {
+          managedLaunch: true,
+          lifecycleEvents: true,
+          perLaunchTermination: true,
+        },
+        active: {
+          launchId: "launch-1",
+          mode: "game",
+          inputSeats: {
+            seats: [
+              {
+                slot: 1,
+                playerIndex: 1,
+                name: "Korri Seat P1",
+                state: "available",
+                devicePath: "/dev/input/event17",
+              },
+            ],
+          },
+        },
+        restoreAttempts: 0,
+      }),
+    ).toThrow()
+
+    expect(() =>
+      decodeSessiondManagedLaunchEvent({
+        schemaVersion: 1,
+        sequence: 10,
+        launchId: "launch-1",
+        type: "seat-connected",
+        at: "2026-05-26T00:00:00.000Z",
+        seat: {
+          slot: 1,
+          playerIndex: 1,
+          name: "Korri Seat P1",
+          state: "occupied-connected",
+          sourceId: "moonlight-client-raw-identity",
+        },
+      }),
+    ).toThrow()
+  })
+})
