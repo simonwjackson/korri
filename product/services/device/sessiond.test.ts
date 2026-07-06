@@ -1939,6 +1939,7 @@ describe("korri sessiond", () => {
       id: "pre-spawn-role",
       idleModeLabel: "idle",
       idleReadyEventName: "idle-ready",
+      emitsRendererStopped: false,
       rendererStatus: () => ({ kind: "none" }),
       enterIdle: async () => {},
       leaveIdle: async () => {},

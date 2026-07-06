@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "@product/plugins/gamescope"
 import { KORRI_STEAM_PLUGIN_ID } from "@product/plugins/steam"
-import { sessionLifecycleHooksFromEnv } from "./sessiond-plugin-composition"
+import {
+  sessiondPreSpawnGatesFromEnv,
+  sessionLifecycleHooksFromEnv,
+} from "./sessiond-plugin-composition"
 
 describe("sessiond plugin composition", () => {
   it("installs lifecycle hooks for enabled first-party plugins", () => {
@@ -16,5 +19,16 @@ describe("sessiond plugin composition", () => {
       KORRI_GAMESCOPE_PLUGIN_ID,
       KORRI_STEAM_PLUGIN_ID,
     ])
+  })
+
+  it("installs the input-seat pre-spawn gate regardless of enabled plugins", () => {
+    expect(sessiondPreSpawnGatesFromEnv({}).map(gate => gate.id)).toEqual([
+      "@korri:input-seat",
+    ])
+    expect(
+      sessiondPreSpawnGatesFromEnv({ KORRI_ENABLED_PLUGINS: "" }).map(
+        gate => gate.id,
+      ),
+    ).toEqual(["@korri:input-seat"])
   })
 })

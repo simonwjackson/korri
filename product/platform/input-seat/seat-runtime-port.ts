@@ -42,6 +42,9 @@ export interface SeatRuntimePort {
   readonly allocate: (
     request: SeatAllocationRequest,
   ) => Promise<SeatAllocationResult>
+  readonly release: (
+    seats: readonly InputSeatIdentity[],
+  ) => Promise<void> | void
 }
 
 export const validateGamepadCapabilityProfile = (
@@ -109,6 +112,9 @@ export const createMemorySeatRuntime = (
   return {
     createdSlots: () => [...created],
     releasedSlots: () => [...released],
+    release: seats => {
+      releaseAllocated(seats)
+    },
     allocate: async request => {
       const allocated: InputSeatIdentity[] = []
 
@@ -178,3 +184,14 @@ export const createMemorySeatRuntime = (
     },
   }
 }
+
+export const createUnavailableSeatRuntime = (
+  message = "input-seat runtime is not configured",
+): SeatRuntimePort => ({
+  allocate: async request => ({
+    status: "unavailable",
+    reason: request.signal?.aborted ? "cancelled" : "allocation-failed",
+    message,
+  }),
+  release: () => {},
+})
