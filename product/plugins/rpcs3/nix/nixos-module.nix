@@ -14,6 +14,7 @@ let
     ;
 
   cfg = config.services.korri.rpcs3;
+  inputSeat = config.services.korri.input.inputSeat or { enable = false; };
   rpcs3Command = "${cfg.package}/bin/rpcs3";
 in
 {
@@ -89,6 +90,11 @@ in
         settings.plugin = {
           state.root = "{storage:@korri:rpcs3/state}";
           firmware.sentinel = cfg.firmwareSentinel;
+        };
+      }
+      // lib.optionalAttrs (inputSeat.enable or false) {
+        launch."with"."@korri:input-seat" = {
+          runtimeSupportsExtraSeats = true;
         };
       };
       host.plugin."@korri:rpcs3" = {

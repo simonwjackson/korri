@@ -28,6 +28,7 @@ let
         type = lib.types.attrs;
         default = { };
       };
+      options.services.korri.input.inputSeat.enable = lib.mkEnableOption "input-seat test fixture";
 
       config = {
         nixpkgs.hostPlatform = pkgs.stdenv.hostPlatform.system;
@@ -50,14 +51,21 @@ let
       ];
     }).config;
 
+  rpcs3Config = {
+    enable = true;
+    package = fakeRpcs3;
+    gamesRoot = "/srv/lakes/towada/gaming/games/sony-playstation-3";
+    stateRoot = "/srv/lakes/towada/gaming/games/sony-playstation-3/_dev_hdd0";
+    firmwareSentinel = "dev_flash/sys/external/liblv2.sprx";
+  };
+
   enabled = evaluateWith {
-    services.korri.rpcs3 = {
-      enable = true;
-      package = fakeRpcs3;
-      gamesRoot = "/srv/lakes/towada/gaming/games/sony-playstation-3";
-      stateRoot = "/srv/lakes/towada/gaming/games/sony-playstation-3/_dev_hdd0";
-      firmwareSentinel = "dev_flash/sys/external/liblv2.sprx";
-    };
+    services.korri.rpcs3 = rpcs3Config;
+  };
+
+  inputSeatEnabled = evaluateWith {
+    services.korri.rpcs3 = rpcs3Config;
+    services.korri.input.inputSeat.enable = true;
   };
 
   disabled = evaluateWith { };
@@ -65,6 +73,8 @@ let
   launcherDefaults = platformDefaults.launchers."@korri:rpcs3/rpcs3";
   sourceDefaults = platformDefaults.sources."@korri:rpcs3/ps3-games";
   pluginDefaults = platformDefaults.host.plugin."@korri:rpcs3";
+  inputSeatLauncherDefaults =
+    inputSeatEnabled.services.korri.daemon.library.platformDefaults.launchers."@korri:rpcs3/rpcs3";
 
   packageNames = map (package: package.name or "") enabled.environment.systemPackages;
   sessiondPathNames = map (package: package.name or "") (enabled.systemd.user.services.korri-sessiond.path or [ ]);
@@ -97,13 +107,17 @@ let
       && lib.hasPrefix "/" launcherDefaults.command
       && lib.hasSuffix "/bin/rpcs3" launcherDefaults.command
       && launcherDefaults.policy.allowedCommands == [ launcherDefaults.command ]
-      && pluginDefaults.command == launcherDefaults.command
+      && !(pluginDefaults ? command)
     ))
     (check "enabled module renders firmware sentinel policy" (
       launcherDefaults.settings.plugin.firmware.sentinel
         == "dev_flash/sys/external/liblv2.sprx"
       && pluginDefaults.firmware.sentinel
         == "dev_flash/sys/external/liblv2.sprx"
+    ))
+    (check "input-seat-enabled RPCS3 launcher explicitly opts into Korri input seats" (
+      !(launcherDefaults ? launch)
+      && inputSeatLauncherDefaults.launch."with"."@korri:input-seat".runtimeSupportsExtraSeats == true
     ))
   ];
   failures = builtins.filter (item: !item.assertion) checks;
