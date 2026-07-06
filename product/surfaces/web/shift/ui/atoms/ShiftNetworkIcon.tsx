@@ -1,20 +1,22 @@
 /**
  * Shift — the status-bar connectivity icon (atom).
  *
- * Owns the Wifi / WifiOff / omitted choice from the network reading, so the
- * status bar just hands it the reading. Unknown readings intentionally render
- * nothing instead of falling back to the fixture default connected state.
+ * Owns the connected / disconnected / omitted choice from the network reading,
+ * so the status bar just hands it the reading. Unknown readings intentionally
+ * render nothing instead of falling back to the fixture default connected state.
  */
-import { Wifi, WifiOff } from "lucide-react"
+import { WifiOff } from "lucide-react"
 import {
   SHIFT_DESIGN_PARTS,
   shiftDesignPartAttrs,
 } from "../../shift-design-parts"
 import {
   DEFAULT_SHIFT_NETWORK_READING,
+  networkStrengthLabel,
   type ShiftNetworkReading,
   shiftNetworkConnected,
   shiftNetworkDisplayLabel,
+  shiftNetworkDisplayName,
 } from "../../shift-network-state"
 
 export function ShiftNetworkIcon({
@@ -24,14 +26,48 @@ export function ShiftNetworkIcon({
 }) {
   if (network._tag === "Unknown") return null
 
-  const Icon = shiftNetworkConnected(network) ? Wifi : WifiOff
+  const label = shiftNetworkDisplayLabel(network)
+  const strength = shiftNetworkStrength(network)
+
   return (
-    <span role="img" aria-label={shiftNetworkDisplayLabel(network)}>
-      <Icon
-        className="shift-cine-status-icon"
-        aria-hidden
-        {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.networkIcon)}
-      />
+    <span
+      className="shift-cine-network"
+      role="img"
+      aria-label={label}
+      data-shift-network-strength={strength}
+      {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.networkIcon)}
+    >
+      {shiftNetworkConnected(network) ? (
+        <span className="shift-cine-network-signal" aria-hidden>
+          <span className="shift-cine-network-bar shift-cine-network-bar-1" />
+          <span className="shift-cine-network-bar shift-cine-network-bar-2" />
+          <span className="shift-cine-network-bar shift-cine-network-bar-3" />
+        </span>
+      ) : (
+        <WifiOff className="shift-cine-status-icon" aria-hidden />
+      )}
+      {network._tag === "Connected" ? (
+        <span className="shift-cine-network-name">
+          {shiftNetworkDisplayName(network)}
+        </span>
+      ) : null}
     </span>
   )
+}
+
+function shiftNetworkStrength(
+  network: ShiftNetworkReading,
+): "none" | "unknown" | "weak" | "good" | "strong" {
+  if (network._tag === "Disconnected") return "none"
+  if (network._tag !== "Connected" || network.strengthPercent === null) {
+    return "unknown"
+  }
+  switch (networkStrengthLabel(network.strengthPercent)) {
+    case "Weak":
+      return "weak"
+    case "Good":
+      return "good"
+    case "Strong":
+      return "strong"
+  }
 }

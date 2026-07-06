@@ -7,7 +7,7 @@ import { ShiftNetworkIcon } from "./ShiftNetworkIcon"
 export const ShiftNetworkIconStates = [
   {
     state: "Connected",
-    network: { _tag: "Connected", strengthPercent: 80 } as const,
+    network: { _tag: "Connected", name: "Wi-Fi", strengthPercent: 80 } as const,
   },
   { state: "Disconnected", network: { _tag: "Disconnected" } as const },
 ].map(({ state, network }) => ({

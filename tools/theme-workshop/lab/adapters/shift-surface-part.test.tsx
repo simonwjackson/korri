@@ -275,7 +275,7 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
     expect(screen.getByText("11:08 PM")).toBeTruthy()
   })
 
-  it("drives Status Bar network status through the real Status Bar molecule", () => {
+  it("drives Status Bar network status through the real device-state event path", () => {
     const { container } = mountSpec(statusBarStory, {
       sourceId: "dev",
       inputValues: { network: { _tag: "Disconnected" } },
@@ -283,6 +283,21 @@ describe("renderShiftSurfacePart (Workshop edge render)", () => {
 
     expect(screen.queryByText("Pre-baked status bar snapshot")).toBeNull()
     expect(container.querySelector(".lucide-wifi-off")).toBeTruthy()
+
+    const network = shiftSurfacePartEvents(statusBarStory).find(
+      event => event.id === "network",
+    )
+    act(() => {
+      network?.emit(
+        { _tag: "Connected", name: "KorriNet", strengthPercent: 82 },
+        { scopeId: "object-part" },
+      )
+    })
+
+    expect(screen.getByText("KorriNet")).toBeTruthy()
+    expect(
+      container.querySelector("[data-shift-network-strength='strong']"),
+    ).toBeTruthy()
   })
 
   it("canonicalizes a malformed battery event payload instead of crashing", () => {

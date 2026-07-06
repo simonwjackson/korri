@@ -471,6 +471,61 @@
 	height: 1.3em;
 }
 
+[data-shift-home] .shift-cine-network {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--shift-space-1);
+	white-space: nowrap;
+}
+
+[data-shift-home] .shift-cine-network-signal {
+	display: inline-flex;
+	align-items: end;
+	gap: 0.14em;
+	width: 1.3em;
+	height: 1.3em;
+}
+
+[data-shift-home] .shift-cine-network-bar {
+	width: 0.24em;
+	border-radius: var(--shift-radius-pill);
+	background: currentColor;
+	opacity: 0.28;
+}
+
+[data-shift-home] .shift-cine-network-bar-1 {
+	height: 0.42em;
+}
+
+[data-shift-home] .shift-cine-network-bar-2 {
+	height: 0.78em;
+}
+
+[data-shift-home] .shift-cine-network-bar-3 {
+	height: 1.14em;
+}
+
+[data-shift-home]
+	.shift-cine-network[data-shift-network-strength="weak"]
+	.shift-cine-network-bar-1,
+[data-shift-home]
+	.shift-cine-network[data-shift-network-strength="good"]
+	.shift-cine-network-bar-1,
+[data-shift-home]
+	.shift-cine-network[data-shift-network-strength="good"]
+	.shift-cine-network-bar-2,
+[data-shift-home]
+	.shift-cine-network[data-shift-network-strength="strong"]
+	.shift-cine-network-bar {
+	opacity: 1;
+}
+
+[data-shift-home] .shift-cine-network-name {
+	font-size: var(--shift-text-fine);
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
 [data-shift-home] .shift-cine-battery {
 	display: inline-flex;
 	align-items: center;

@@ -66,14 +66,14 @@ const STATUS_BAR_TAKES = [
     name: "Airier status bar",
     avatar: "https://i.pravatar.cc/96?u=korri-shift-airier",
     power: { percent: 92, charging: true },
-    network: { _tag: "Connected", strengthPercent: 86 } as const,
+    network: { _tag: "Connected", name: "Wi-Fi", strengthPercent: 86 } as const,
   },
   {
     slug: "quiet",
     name: "Quiet status bar",
     avatar: "https://i.pravatar.cc/96?u=korri-shift-quiet",
     power: { percent: 68, charging: false },
-    network: { _tag: "Connected", strengthPercent: 64 } as const,
+    network: { _tag: "Connected", name: "Wi-Fi", strengthPercent: 64 } as const,
   },
   {
     slug: "focused",
@@ -87,14 +87,18 @@ const STATUS_BAR_TAKES = [
     name: "Warmer status bar",
     avatar: "https://i.pravatar.cc/96?u=korri-shift-warm",
     power: { percent: 100, charging: true },
-    network: { _tag: "Connected", strengthPercent: 100 } as const,
+    network: {
+      _tag: "Connected",
+      name: "KorriNet",
+      strengthPercent: 100,
+    } as const,
   },
   {
     slug: "minimal",
     name: "Minimal status bar",
     avatar: "https://i.pravatar.cc/96?u=korri-shift-minimal",
     power: { percent: 24, charging: false },
-    network: { _tag: "Connected", strengthPercent: 38 } as const,
+    network: { _tag: "Connected", name: "Wi-Fi", strengthPercent: 38 } as const,
   },
 ] as const
 
@@ -106,8 +110,8 @@ const BATTERY_EMPHASIS = {
 
 const NETWORK_EMPHASIS = {
   low: { _tag: "Disconnected" },
-  medium: { _tag: "Connected", strengthPercent: 55 },
-  high: { _tag: "Connected", strengthPercent: 96 },
+  medium: { _tag: "Connected", name: "Wi-Fi", strengthPercent: 55 },
+  high: { _tag: "Connected", name: "KorriNet", strengthPercent: 96 },
 } as const
 
 /**
@@ -120,7 +124,11 @@ export function shiftStatusBarPropsFromRecipe(recipe: ShiftStatusBarRecipe): {
   readonly avatarSrc: string
   readonly battery: { readonly percent: number; readonly charging: boolean }
   readonly network:
-    | { readonly _tag: "Connected"; readonly strengthPercent: number }
+    | {
+        readonly _tag: "Connected"
+        readonly name: string | null
+        readonly strengthPercent: number
+      }
     | { readonly _tag: "Disconnected" }
 } {
   return {

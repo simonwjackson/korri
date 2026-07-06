@@ -3,12 +3,18 @@ import { render, screen } from "@testing-library/react"
 import { ShiftNetworkIcon } from "./ShiftNetworkIcon"
 
 describe("ShiftNetworkIcon", () => {
-  it("renders a connected label with signal when connected", () => {
-    render(
-      <ShiftNetworkIcon network={{ _tag: "Connected", strengthPercent: 82 }} />,
+  it("renders the network name and signal strength when connected", () => {
+    const { container } = render(
+      <ShiftNetworkIcon
+        network={{ _tag: "Connected", name: "KorriNet", strengthPercent: 82 }}
+      />,
     )
 
-    expect(screen.getByLabelText("Strong Wi-Fi (82%)")).toBeTruthy()
+    expect(screen.getByLabelText("KorriNet · Strong Wi-Fi (82%)")).toBeTruthy()
+    expect(screen.getByText("KorriNet")).toBeTruthy()
+    expect(
+      container.querySelector("[data-shift-network-strength='strong']"),
+    ).toBeTruthy()
   })
 
   it("renders a disconnected label when disconnected", () => {

@@ -31,6 +31,7 @@ import {
   type ShiftNetworkReading,
   shiftDeviceNetworkStateForNetworkReading,
   shiftNetworkReadingAtom,
+  shiftNetworkReadingForDeviceState,
   shiftNetworkReadingForValue,
 } from "@product/surfaces/web/shift/shift-network-state"
 import {
@@ -99,6 +100,22 @@ export const SHIFT_NETWORK_INPUT_CONTROL: LabInputControl = {
       tag: "Connected",
       label: "Connected",
       fields: [
+        {
+          id: "name",
+          label: "Name",
+          defaultValue:
+            DEFAULT_SHIFT_NETWORK_READING._tag === "Connected"
+              ? DEFAULT_SHIFT_NETWORK_READING.name
+              : "Wi-Fi",
+          control: {
+            kind: "select",
+            options: [
+              { id: "Wi-Fi", label: "Wi-Fi" },
+              { id: "KorriNet", label: "KorriNet" },
+              { id: "Handheld", label: "Handheld" },
+            ],
+          },
+        },
         {
           id: "strengthPercent",
           label: "Signal",
@@ -201,11 +218,12 @@ function ShiftBatteryFromDeviceState() {
 }
 
 function ShiftStatusBarFromEdges() {
+  const deviceState = useAtomValue(deviceStateAtom)
   const battery = shiftBatteryPropsForPowerDisplay(
-    shiftPowerDisplayForDeviceState(useAtomValue(deviceStateAtom)),
+    shiftPowerDisplayForDeviceState(deviceState),
   )
   const clockIso = useAtomValue(shiftClockIsoAtom)
-  const network = useAtomValue(shiftNetworkReadingAtom)
+  const network = shiftNetworkReadingForDeviceState(deviceState)
   return (
     <ShiftStatusBar
       time={shiftClockLabelForIso(clockIso)}

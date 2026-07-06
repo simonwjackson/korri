@@ -22,11 +22,12 @@ describe("shift network state", () => {
         state({
           _tag: "Connected",
           kind: "wifi",
+          name: "KorriNet",
           strengthPercent: 76,
           observedAt: "now",
         }),
       ),
-    ).toEqual({ _tag: "Connected", strengthPercent: 76 })
+    ).toEqual({ _tag: "Connected", name: "KorriNet", strengthPercent: 76 })
   })
 
   it("maps disconnected device facts to a disconnected Shift reading", () => {
@@ -52,6 +53,7 @@ describe("shift network state", () => {
           lastKnown: {
             _tag: "Connected",
             kind: "wifi",
+            name: "KorriNet",
             strengthPercent: 88,
             observedAt: "earlier",
           },
@@ -62,8 +64,26 @@ describe("shift network state", () => {
 
   it("keeps null strength as connected without fake precision", () => {
     expect(
-      shiftNetworkDisplayLabel({ _tag: "Connected", strengthPercent: null }),
-    ).toBe("Connected")
+      shiftNetworkDisplayLabel({
+        _tag: "Connected",
+        name: "KorriNet",
+        strengthPercent: null,
+      }),
+    ).toBe("KorriNet")
+  })
+
+  it("parses named connected network readings from lab values", () => {
+    expect(
+      shiftNetworkReadingForValue({
+        _tag: "Connected",
+        name: "KorriNet",
+        strengthPercent: 88,
+      }),
+    ).toEqual({
+      _tag: "Connected",
+      name: "KorriNet",
+      strengthPercent: 88,
+    })
   })
 
   it("parses unknown network readings from lab values", () => {
@@ -75,12 +95,13 @@ describe("shift network state", () => {
   it("maps lab network readings into device network facts", () => {
     expect(
       shiftDeviceNetworkStateForNetworkReading(
-        { _tag: "Connected", strengthPercent: 44 },
+        { _tag: "Connected", name: "KorriNet", strengthPercent: 44 },
         "now",
       ),
     ).toEqual({
       _tag: "Connected",
       kind: "wifi",
+      name: "KorriNet",
       strengthPercent: 44,
       observedAt: "now",
     })

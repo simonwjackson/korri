@@ -7,12 +7,17 @@ import * as Atom from "effect/unstable/reactivity/Atom"
 export type ShiftNetworkReading =
   | { readonly _tag: "Unknown" }
   | { readonly _tag: "Disconnected" }
-  | { readonly _tag: "Connected"; readonly strengthPercent: number | null }
+  | {
+      readonly _tag: "Connected"
+      readonly name: string | null
+      readonly strengthPercent: number | null
+    }
 
 const DEFAULT_SHIFT_NETWORK_STRENGTH_PERCENT = 82
 
 export const DEFAULT_SHIFT_NETWORK_READING: ShiftNetworkReading = {
   _tag: "Connected",
+  name: "Wi-Fi",
   strengthPercent: DEFAULT_SHIFT_NETWORK_STRENGTH_PERCENT,
 }
 
@@ -36,6 +41,7 @@ export function shiftNetworkReadingForValue(
   if (record._tag === "Connected") {
     return {
       _tag: "Connected",
+      name: normalizeName(record.name),
       strengthPercent:
         record.strengthPercent === null
           ? null
@@ -57,6 +63,7 @@ export function shiftDeviceNetworkStateForNetworkReading(
       return {
         _tag: "Connected",
         kind: "wifi",
+        name: reading.name,
         strengthPercent: reading.strengthPercent,
         observedAt,
       }
@@ -74,6 +81,7 @@ export function shiftNetworkReadingForDeviceState(
     case "Connected":
       return {
         _tag: "Connected",
+        name: state.network.name,
         strengthPercent: state.network.strengthPercent,
       }
     case "Disconnected":
@@ -91,11 +99,17 @@ export function shiftNetworkDisplayLabel(reading: ShiftNetworkReading): string {
       return "Network unknown"
     case "Disconnected":
       return "Disconnected"
-    case "Connected":
+    case "Connected": {
+      const name = shiftNetworkDisplayName(reading)
       return reading.strengthPercent === null
-        ? "Connected"
-        : `${networkStrengthLabel(reading.strengthPercent)} Wi-Fi (${reading.strengthPercent}%)`
+        ? name
+        : `${name} · ${networkStrengthLabel(reading.strengthPercent)} Wi-Fi (${reading.strengthPercent}%)`
+    }
   }
+}
+
+export function shiftNetworkDisplayName(reading: ShiftNetworkReading): string {
+  return reading._tag === "Connected" ? (reading.name ?? "Connected") : ""
 }
 
 export function shiftNetworkConnected(reading: ShiftNetworkReading): boolean {
@@ -114,4 +128,10 @@ function normalizePercent(value: unknown, fallback: number): number {
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
   return Math.max(0, Math.min(100, Math.round(n)))
+}
+
+function normalizeName(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
 }
