@@ -180,6 +180,15 @@ pkgs.lib.optionalAttrs isX86Linux {
         sunshinePackage = self.packages.${system}.sunshine-korri;
         moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
       };
+  korri-sunshine-input-seat-mirror-patch =
+    import ../../../../tools/testing/nix/korri-sunshine-input-seat-mirror-patch-check.nix
+      {
+        inherit pkgs;
+        patchPath = ../../../../product/vendor/sunshine-korri/patches/0015-add-korri-input-seat-event-mirror.patch;
+        readmePath = ../../../../product/vendor/sunshine-korri/README.md;
+        sunshinePackagePath = ../../../../product/vendor/sunshine-korri/package.nix;
+        sunshinePackage = self.packages.${system}.sunshine-korri;
+      };
   korri-moonlight-control-protocol-patch =
     import ../../../../tools/testing/nix/korri-moonlight-control-protocol-patch-check.nix
       {
@@ -411,6 +420,10 @@ pkgs.lib.optionalAttrs isX86Linux {
       }
       {
         name = "korri-sunshine-runtime-bitrate-patch";
+        owner = "package-output";
+      }
+      {
+        name = "korri-sunshine-input-seat-mirror-patch";
         owner = "package-output";
       }
       {

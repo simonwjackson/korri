@@ -87,6 +87,18 @@ Evidence is recorded in:
 - `docs/acceptance/sunshine-korri-seamless-vaapi-runtime-bitrate-sm8550-2026-05-31.md`
 - `docs/acceptance/sunshine-korri-runtime-resolution-2026-05-26.md`
 
+
+### Input-seat event mirror patch
+
+`0015-add-korri-input-seat-event-mirror.patch` is the first native Sunshine event-source seam for Korri sessiond input seats. Sunshine remains an event source: it mirrors sanitized controller-domain packets into Korri's local socket while sessiond owns the emulator-visible virtual seats.
+
+The mirror is enabled only when both launch-scoped environment variables are present:
+
+- `KORRI_INPUT_SEAT_MIRROR_SOCKET`: absolute Unix socket path owned by the active sessiond input-seat service.
+- `KORRI_INPUT_SEAT_LAUNCH_ID`: launch id copied into every emitted frame so stale Sunshine processes can be rejected by the TypeScript adapter.
+
+Frames are bounded NDJSON and follow the TypeScript `SunshineInputSeatFrame` schema: `source-connected`, `source-state`, and `source-disconnected`. The patch does not emit keyboard, mouse, text, touch, pen, motion, battery, or raw device-path data. Missing env disables the mirror without changing Sunshine's existing input path; socket connection/write failures are logged as local diagnostics and do not crash controller handling.
+
 ## Removal/upstream policy
 
 Remove or replace a carried patch when one of these becomes true:
