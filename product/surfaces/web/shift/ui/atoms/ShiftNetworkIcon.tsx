@@ -1,11 +1,10 @@
 /**
  * Shift — the status-bar connectivity icon (atom).
  *
- * Owns the connected / disconnected / omitted choice from the network reading,
- * so the status bar just hands it the reading. Unknown readings intentionally
- * render nothing instead of falling back to the fixture default connected state.
+ * Owns the connected / omitted choice from the network reading, so the status
+ * bar just hands it the reading. Non-connected readings intentionally render
+ * nothing instead of falling back to the fixture default connected state.
  */
-import { WifiOff } from "lucide-react"
 import {
   SHIFT_DESIGN_PARTS,
   shiftDesignPartAttrs,
@@ -14,7 +13,6 @@ import {
   DEFAULT_SHIFT_NETWORK_READING,
   networkStrengthLabel,
   type ShiftNetworkReading,
-  shiftNetworkConnected,
   shiftNetworkDisplayLabel,
   shiftNetworkDisplayName,
 } from "../../shift-network-state"
@@ -24,7 +22,7 @@ export function ShiftNetworkIcon({
 }: {
   readonly network?: ShiftNetworkReading
 }) {
-  if (network._tag === "Unknown") return null
+  if (network._tag !== "Connected") return null
 
   const label = shiftNetworkDisplayLabel(network)
   const strength = shiftNetworkStrength(network)
@@ -37,20 +35,14 @@ export function ShiftNetworkIcon({
       data-shift-network-strength={strength}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.networkIcon)}
     >
-      {shiftNetworkConnected(network) ? (
-        <span className="shift-cine-network-signal" aria-hidden>
-          <span className="shift-cine-network-bar shift-cine-network-bar-1" />
-          <span className="shift-cine-network-bar shift-cine-network-bar-2" />
-          <span className="shift-cine-network-bar shift-cine-network-bar-3" />
-        </span>
-      ) : (
-        <WifiOff className="shift-cine-status-icon" aria-hidden />
-      )}
-      {network._tag === "Connected" ? (
-        <span className="shift-cine-network-name">
-          {shiftNetworkDisplayName(network)}
-        </span>
-      ) : null}
+      <span className="shift-cine-network-signal" aria-hidden>
+        <span className="shift-cine-network-bar shift-cine-network-bar-1" />
+        <span className="shift-cine-network-bar shift-cine-network-bar-2" />
+        <span className="shift-cine-network-bar shift-cine-network-bar-3" />
+      </span>
+      <span className="shift-cine-network-name">
+        {shiftNetworkDisplayName(network)}
+      </span>
     </span>
   )
 }

@@ -16,7 +16,7 @@ function state(network: Parameters<typeof deviceStateFromFacts>[0]["network"]) {
 }
 
 describe("shift network state", () => {
-  it("maps connected device facts to a connected Shift reading", () => {
+  it("maps connected wifi device facts to a connected Shift reading", () => {
     expect(
       shiftNetworkReadingForDeviceState(
         state({
@@ -28,6 +28,20 @@ describe("shift network state", () => {
         }),
       ),
     ).toEqual({ _tag: "Connected", name: "KorriNet", strengthPercent: 76 })
+  })
+
+  it("omits connected non-wifi device facts from the Shift wifi indicator", () => {
+    expect(
+      shiftNetworkReadingForDeviceState(
+        state({
+          _tag: "Connected",
+          kind: "ethernet",
+          name: null,
+          strengthPercent: null,
+          observedAt: "now",
+        }),
+      ),
+    ).toEqual({ _tag: "Unknown" })
   })
 
   it("maps disconnected device facts to a disconnected Shift reading", () => {

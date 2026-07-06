@@ -79,6 +79,7 @@ export function shiftNetworkReadingForDeviceState(
 ): ShiftNetworkReading {
   switch (state.network._tag) {
     case "Connected":
+      if (state.network.kind !== "wifi") return UNKNOWN_SHIFT_NETWORK_READING
       return {
         _tag: "Connected",
         name: state.network.name,

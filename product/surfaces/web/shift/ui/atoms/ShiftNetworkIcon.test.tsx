@@ -28,10 +28,13 @@ describe("ShiftNetworkIcon", () => {
     expect(screen.queryByText("Connected")).toBeNull()
   })
 
-  it("renders a disconnected label when disconnected", () => {
-    render(<ShiftNetworkIcon network={{ _tag: "Disconnected" }} />)
+  it("renders nothing when disconnected", () => {
+    const { container } = render(
+      <ShiftNetworkIcon network={{ _tag: "Disconnected" }} />,
+    )
 
-    expect(screen.getByLabelText("Disconnected")).toBeTruthy()
+    expect(container.textContent).toBe("")
+    expect(container.querySelector("svg")).toBeNull()
   })
 
   it("renders nothing for unknown network state", () => {
