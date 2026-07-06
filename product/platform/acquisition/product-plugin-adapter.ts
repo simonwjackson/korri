@@ -5,6 +5,7 @@ import type {
 } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
 import type { PluginRegistry } from "@platform/plugin/registry"
+import { createProviderScopedPluginServices } from "@platform/plugin/services"
 import type {
   AcquireArtifactRequest,
   PluginAcquireOutput,
@@ -214,7 +215,10 @@ function runAcquisitionPluginHandler<Output>(input: {
     operation: input.operation,
     provider: input.plugin.id,
     input: input.input,
-    services: input.context.services,
+    services: createProviderScopedPluginServices(
+      input.context.services,
+      input.plugin.id,
+    ),
   }).pipe(
     Effect.map(value => value as Output),
     Effect.mapError(error =>

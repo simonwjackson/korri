@@ -3,7 +3,13 @@ import { join, sep } from "node:path"
 import { pathToFileURL } from "node:url"
 import type { PluginDiagnostic } from "./diagnostics"
 import { pluginDiagnostic } from "./diagnostics"
-import type { KorriPlugin, PluginId, PluginNamespace } from "./index"
+import {
+  type KorriPlugin,
+  type PluginDefinitionInput,
+  type PluginId,
+  type PluginNamespace,
+  plugin,
+} from "./index"
 
 export type PluginDiscoverySource = "bundled" | "local"
 
@@ -169,8 +175,8 @@ async function loadPluginEntrypoint(
   try {
     const moduleUrl = `${pathToFileURL(entrypoint).href}?mtime=${Date.now()}`
     const module = (await import(moduleUrl)) as { readonly default?: unknown }
-    const plugin = module.default
-    if (!isKorriPlugin(plugin)) {
+    const plugin = normalizePluginExport(module.default)
+    if (!plugin) {
       return {
         ok: false,
         diagnostic: pluginDiagnostic({
@@ -191,6 +197,31 @@ async function loadPluginEntrypoint(
       }),
     }
   }
+}
+
+function normalizePluginExport(value: unknown): KorriPlugin | undefined {
+  if (isKorriPlugin(value)) return value
+  if (isPluginDefinitionInput(value)) return plugin(value)
+  return undefined
+}
+
+function isPluginDefinitionInput(
+  value: unknown,
+): value is PluginDefinitionInput {
+  if (!isRecord(value)) return false
+  if (!isPluginNamespace(value.namespace)) return false
+  if (typeof value.name !== "string") return false
+  if (value.title !== undefined && typeof value.title !== "string") return false
+  if (
+    value.description !== undefined &&
+    typeof value.description !== "string"
+  ) {
+    return false
+  }
+  if (value.contributes !== undefined && !isRecord(value.contributes)) {
+    return false
+  }
+  return true
 }
 
 function isKorriPlugin(value: unknown): value is KorriPlugin {

@@ -46,6 +46,21 @@ export function createAcquisitionPluginServices(input: {
       nowIso: input.clock.nowIso,
       sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
     },
+    crypto: {
+      stableId: stableId,
+      urlId: encodeURIComponent,
+      urlFromId: decodeURIComponent,
+    },
+    credentials: {
+      get: name => process.env[name],
+      require: name => {
+        const value = process.env[name]
+        if (value === undefined || value.length === 0) {
+          throw new Error(`Missing plugin credential ${name}`)
+        }
+        return value
+      },
+    },
     log: {
       debug: (message, data) => input.logger.debug(message, logFields(data)),
       info: (message, data) => input.logger.info(message, logFields(data)),
@@ -69,6 +84,15 @@ export function createAcquisitionPluginServices(input: {
       },
     },
   }
+}
+
+function stableId(input: string): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `id-${(hash >>> 0).toString(36)}`
 }
 
 function logFields(data: unknown): Record<string, unknown> | undefined {

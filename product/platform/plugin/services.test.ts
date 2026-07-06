@@ -7,7 +7,11 @@ import {
   plugin,
   runPluginHandler,
 } from "."
-import { type PluginServices, requirePluginService } from "./services"
+import {
+  createProviderScopedPluginServices,
+  type PluginServices,
+  requirePluginService,
+} from "./services"
 
 describe("PluginServices", () => {
   it("lets handlers read injected services without changing the run(context) shape", async () => {
@@ -126,6 +130,47 @@ describe("PluginServices", () => {
         ),
       ),
     ).resolves.toBe("2026-07-03T00:00:00.000Z")
+  })
+
+  it("provides provider-scoped claim, download, and health builders", () => {
+    const services = createProviderScopedPluginServices(
+      { time: { nowIso: () => "2026-07-06T00:00:00.000Z" } },
+      "@local:plain",
+    )
+
+    expect(
+      services.claims?.claim?.({
+        title: "Plain Game",
+        url: "https://example.test/game",
+        platform: "nes",
+        fileName: "plain.zip",
+      }),
+    ).toMatchObject({
+      _tag: "ProviderClaim",
+      providerId: "@local:plain",
+      id: encodeURIComponent("https://example.test/game"),
+      artifact: {
+        kind: "content",
+        system: "nes",
+        format: { id: "zip" },
+        file: { name: "plain.zip", extension: "zip" },
+      },
+    })
+    expect(
+      services.downloads?.final?.({
+        url: "https://example.test/plain.zip",
+        filename: "plain.zip",
+      }),
+    ).toMatchObject({
+      _tag: "FinalDownload",
+      providerId: "@local:plain",
+      url: "https://example.test/plain.zip",
+    })
+    expect(services.provider?.healthy?.()).toEqual({
+      _tag: "HealthyProvider",
+      providerId: "@local:plain",
+      checkedAt: "2026-07-06T00:00:00.000Z",
+    })
   })
 
   it("throws a plugin-service error when a required service is absent", () => {

@@ -93,6 +93,41 @@ describe("discoverPluginRoots", () => {
     ])
   })
 
+  it("normalizes plain descriptor exports without requiring a plugin helper import", async () => {
+    const root = await tempRoot()
+    await writePluginModule(
+      root,
+      "plain",
+      `
+        export default {
+          namespace: "@local",
+          name: "plain",
+          title: "Plain",
+          contributes: {
+            handlers: [
+              {
+                id: "plain.diagnostics",
+                operation: "diagnostics.collect",
+                run: context => ({ provider: context.provider }),
+              },
+            ],
+          },
+        }
+      `,
+    )
+
+    const result = await discoverPluginRoots([localRoot(root)])
+
+    expect(result.diagnostics).toEqual([])
+    expect(result.plugins[0]?.id).toBe("@local:plain")
+    expect(result.plugins[0]?.contributes.config.providers).toHaveProperty(
+      "@local:plain",
+    )
+    expect(result.plugins[0]?.handlers.map(handler => handler.id)).toEqual([
+      "plain.diagnostics",
+    ])
+  })
+
   it("rejects local plugins that claim the reserved @korri namespace", async () => {
     const root = await tempRoot()
     await writePluginModule(
