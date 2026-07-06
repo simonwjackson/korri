@@ -335,6 +335,7 @@ function claimFor(providerId: ProviderId, entry: Pico8BbsEntry): ProviderClaim {
     title: entry.title,
     url: entry.url,
     platform: entry.platform,
+    ...(entry.thumbnailUrl ? { thumbnailUrl: entry.thumbnailUrl } : {}),
     playable: playableFor(providerId, entry),
   }
 }

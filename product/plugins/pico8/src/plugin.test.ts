@@ -141,6 +141,7 @@ describe("PICO-8 plugin", () => {
       providerId: KORRI_PICO8_PLUGIN_ID,
       id: "11722",
       platform: "pico8",
+      thumbnailUrl: "https://www.lexaloffle.com/bbs/thumbs/pico15133.png",
       playable: {
         id: "11722",
         releases: [{ id: "pico8", system: "pico8" }],
