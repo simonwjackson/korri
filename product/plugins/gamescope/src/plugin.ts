@@ -10,6 +10,7 @@ import {
   decodeGamescopePolicy,
   type GamescopePolicyValue,
 } from "./launch-companion"
+import { createGamescopeSessionLifecycleHook } from "./session/lifecycle-hook"
 import {
   applyGamescopeStreamControl,
   describeGamescopeStreamControl,
@@ -38,6 +39,12 @@ export const gamescopePlugin = plugin({
   description:
     "Contributes Korri's first-party Gamescope launch, runtime-control, stream-control, session, CLI, and package capabilities.",
   contributes: {
+    lifecycleHooks: [
+      {
+        pluginId: KORRI_GAMESCOPE_PLUGIN_ID,
+        create: createGamescopeSessionLifecycleHook,
+      },
+    ],
     config: {
       modules: {
         "launch-wrapper": {

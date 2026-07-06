@@ -1,5 +1,5 @@
 import type { ReadableLaunchIntegration } from "@platform/library/proseql/library-repository"
-import type { PluginId } from "@platform/plugin"
+import type { PluginDaemonHandle, PluginId } from "@platform/plugin"
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -7,7 +7,6 @@ import {
 } from "@platform/plugin/registry"
 import type {
   KorriSessionLifecycleHook,
-  KorriSessionLifecycleHookFactory,
   KorriSessionLifecycleHookFactoryOptions,
 } from "@platform/plugin/session-lifecycle"
 import {
@@ -21,7 +20,6 @@ import { communityCatalogPlugin } from "@product/plugins/community-catalog"
 import { domeRomantikPlugin } from "@product/plugins/dome-romantik"
 import { fexRuntimePlugin } from "@product/plugins/fex-runtime"
 import { gamescopePlugin } from "@product/plugins/gamescope"
-import { createGamescopeSessionLifecycleHook } from "@product/plugins/gamescope/src/session/lifecycle-hook"
 import { globebaPlugin } from "@product/plugins/globeba"
 import {
   gmloaderPlugin,
@@ -64,8 +62,6 @@ import { srb2Plugin } from "@product/plugins/srb2"
 import { srb2KartPlugin } from "@product/plugins/srb2kart"
 import { stargroveScramblePlugin } from "@product/plugins/stargrove-scramble"
 import {
-  createSteamLogObserverDaemon,
-  createSteamSessionLifecycleHook,
   steamPlugin,
   steamReadableLaunchIntegration,
 } from "@product/plugins/steam"
@@ -103,49 +99,19 @@ export function firstPartyLaunchIntegrationsForRegistry(
   )
 }
 
-export interface KorriPluginDaemonHandle {
-  readonly start: () => Promise<void>
-  readonly stop: () => Promise<void>
-}
-
-export interface KorriPluginDaemonFactory {
-  readonly pluginId: PluginId
-  readonly create: () => KorriPluginDaemonHandle
-}
-
-export const firstPartySessionLifecycleHookFactories = [
-  {
-    pluginId: gamescopePlugin.id,
-    create: createGamescopeSessionLifecycleHook,
-  },
-  {
-    pluginId: steamPlugin.id,
-    create: () => createSteamSessionLifecycleHook(),
-  },
-] satisfies readonly KorriSessionLifecycleHookFactory[]
-
-export const firstPartyPluginDaemonFactories = [
-  {
-    pluginId: steamPlugin.id,
-    create: createSteamLogObserverDaemon,
-  },
-] satisfies readonly KorriPluginDaemonFactory[]
+export type KorriPluginDaemonHandle = PluginDaemonHandle
 
 export function firstPartyPluginDaemonsForRegistry(
-  registry: Pick<PluginRegistry, "enabledPluginIds">,
-): readonly KorriPluginDaemonHandle[] {
-  return firstPartyPluginDaemonFactories
-    .filter(factory => registry.enabledPluginIds.has(factory.pluginId))
-    .map(factory => factory.create())
+  registry: Pick<PluginRegistry, "daemons">,
+): readonly PluginDaemonHandle[] {
+  return registry.daemons.map(factory => factory.create())
 }
 
 export function firstPartySessionLifecycleHooksForRegistry(
-  registry: Pick<PluginRegistry, "enabledPluginIds">,
+  registry: Pick<PluginRegistry, "lifecycleHooks">,
   options: KorriSessionLifecycleHookFactoryOptions = {},
 ): readonly KorriSessionLifecycleHook[] {
-  return firstPartySessionLifecycleHookFactories
-    .filter(factory => registry.enabledPluginIds.has(factory.pluginId))
-    .map(factory => factory.create(options))
+  return registry.lifecycleHooks.map(factory => factory.create(options))
 }
 
 export const firstPartyPlugins = [

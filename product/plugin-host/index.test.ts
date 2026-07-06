@@ -84,6 +84,7 @@ import {
 import {
   createFirstPartyPluginRegistryFromEnv,
   firstPartyLaunchIntegrationsForRegistry,
+  firstPartyPluginDaemonsForRegistry,
   firstPartyPlugins,
   firstPartySessionLifecycleHooksForRegistry,
 } from "."
@@ -503,6 +504,18 @@ describe("first-party plugins", () => {
     expect(
       firstPartySessionLifecycleHooksForRegistry(enabled).map(hook => hook.id),
     ).toEqual([KORRI_GAMESCOPE_PLUGIN_ID, KORRI_STEAM_PLUGIN_ID])
+  })
+
+  it("filters plugin-owned daemon factories by enabled provider", () => {
+    const disabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: undefined,
+    })
+    const enabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_STEAM_PLUGIN_ID,
+    })
+
+    expect(firstPartyPluginDaemonsForRegistry(disabled)).toEqual([])
+    expect(firstPartyPluginDaemonsForRegistry(enabled)).toHaveLength(1)
   })
 
   it("filters plugin-owned launch integrations by enabled provider", () => {

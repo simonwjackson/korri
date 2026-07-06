@@ -8,6 +8,7 @@ import type {
   ExecutablePluginResource,
   KorriPlugin,
   PluginConfigContributions,
+  PluginDaemonFactory,
   PluginHandler,
   PluginId,
 } from "./index"
@@ -17,6 +18,7 @@ import {
   enabledPluginIdsFromPolicy,
   pluginPolicyFromEnabledPluginEnv,
 } from "./policy"
+import type { KorriSessionLifecycleHookFactory } from "./session-lifecycle"
 
 export { enabledPluginIdsFromPolicy, pluginPolicyFromEnabledPluginEnv }
 export type { PluginPolicy }
@@ -59,6 +61,8 @@ export interface PluginRegistry {
   readonly catalog: ConfigRecordMap
   readonly handlers: readonly PluginHandler[]
   readonly discoveryProviders: readonly ReleaseDiscoveryProvider[]
+  readonly lifecycleHooks: readonly KorriSessionLifecycleHookFactory[]
+  readonly daemons: readonly PluginDaemonFactory[]
   readonly policyDiagnostics: readonly PluginDiagnostic[]
   readonly get: (pluginId: PluginId) => KorriPlugin | undefined
 }
@@ -124,6 +128,10 @@ export function createPluginRegistry(
       plugin => plugin.contributes.handlers ?? plugin.handlers,
     ),
     discoveryProviders: collectDiscoveryProviders(discoveryPlugins),
+    lifecycleHooks: enabledPlugins.flatMap(
+      plugin => plugin.contributes.lifecycleHooks ?? [],
+    ),
+    daemons: enabledPlugins.flatMap(plugin => plugin.contributes.daemons ?? []),
     policyDiagnostics: policyResolution.diagnostics,
     get: pluginId => byId.get(pluginId),
   }

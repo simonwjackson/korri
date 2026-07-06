@@ -15,6 +15,8 @@ import {
   collectSteamLifecycle,
   openSteamLifecycleCorrelation,
 } from "./observability/lifecycle-api"
+import { createSteamLogObserverDaemon } from "./observability/log-observer"
+import { createSteamSessionLifecycleHook } from "./session/lifecycle-hook"
 
 export {
   KORRI_STEAM_APP_ID,
@@ -78,6 +80,18 @@ export const steamPlugin = plugin({
   ],
   contributes: {
     discovery: [steamInstalledAppsDiscoveryProvider],
+    lifecycleHooks: [
+      {
+        pluginId: KORRI_STEAM_PLUGIN_ID,
+        create: () => createSteamSessionLifecycleHook(),
+      },
+    ],
+    daemons: [
+      {
+        pluginId: KORRI_STEAM_PLUGIN_ID,
+        create: createSteamLogObserverDaemon,
+      },
+    ],
     config: {
       storage: {
         [KORRI_STEAM_STORAGE_LOCAL_ID]: {

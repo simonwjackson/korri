@@ -26,6 +26,28 @@ const alpha = plugin({
 
 const beta = plugin({ namespace: "@korri", name: "beta", title: "Beta" })
 
+const lifecycle = plugin({
+  namespace: "@fake",
+  name: "lifecycle",
+  contributes: {
+    lifecycleHooks: [
+      {
+        pluginId: "@fake:lifecycle",
+        create: () => ({ id: "@fake:lifecycle" }),
+      },
+    ],
+    daemons: [
+      {
+        pluginId: "@fake:lifecycle",
+        create: () => ({
+          start: async () => undefined,
+          stop: async () => undefined,
+        }),
+      },
+    ],
+  },
+})
+
 const wrapper = plugin({
   namespace: "@fake",
   name: "wrapper",
@@ -231,6 +253,20 @@ describe("createPluginRegistry", () => {
       id: "default",
       kind: "test-runtime",
     })
+  })
+
+  it("exposes lifecycle hooks and daemon factories only for enabled plugins", () => {
+    const disabled = createPluginRegistry([lifecycle])
+    const enabled = createPluginRegistry([lifecycle], {
+      enabledPluginIds: [lifecycle.id],
+    })
+
+    expect(disabled.lifecycleHooks).toEqual([])
+    expect(disabled.daemons).toEqual([])
+    expect(enabled.lifecycleHooks).toHaveLength(1)
+    expect(enabled.lifecycleHooks[0]?.pluginId).toBe(lifecycle.id)
+    expect(enabled.daemons).toHaveLength(1)
+    expect(enabled.daemons[0]?.pluginId).toBe(lifecycle.id)
   })
 
   it("projects executable resources from generic module config records", () => {

@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import type { ReleaseDiscoveryProvider } from "./discovery"
 import type { LaunchMetadata } from "./launch-metadata"
 import type { PluginServices } from "./services"
+import type { KorriSessionLifecycleHookFactory } from "./session-lifecycle"
 
 export type ConfigRecord = object
 export type ConfigRecordMap = Readonly<Record<string, ConfigRecord>>
@@ -107,10 +108,22 @@ export interface PluginConfigContributions {
   readonly catalog?: Readonly<Record<string, PluginCatalogItem>>
 }
 
+export interface PluginDaemonHandle {
+  readonly start: () => Promise<void>
+  readonly stop: () => Promise<void>
+}
+
+export interface PluginDaemonFactory {
+  readonly pluginId: PluginId
+  readonly create: () => PluginDaemonHandle
+}
+
 export interface PluginContributions {
   readonly config?: PluginConfigContributions
   readonly handlers?: readonly PluginHandler[]
   readonly discovery?: readonly ReleaseDiscoveryProvider[]
+  readonly lifecycleHooks?: readonly KorriSessionLifecycleHookFactory[]
+  readonly daemons?: readonly PluginDaemonFactory[]
 }
 
 export interface PluginDefinitionInput {
