@@ -2,6 +2,7 @@ import { AcquisitionError } from "@platform/acquisition/errors"
 import type { ProviderId } from "@platform/plugin"
 import { plugin } from "@platform/plugin"
 import { releaseDiscoveryProvider } from "@platform/plugin/discovery"
+import type { PluginServices } from "@platform/plugin/services"
 import type {
   ProviderClaim,
   ProviderClaimDetails,
@@ -149,7 +150,13 @@ export function createPico8Plugin(options: Pico8PluginOptions = {}) {
                     typeof platform === "string",
                 )
               : undefined
-            return searchPico8Bbs(runtime, context.provider, query, platforms)
+            return searchPico8Bbs(
+              runtime,
+              context.provider,
+              query,
+              platforms,
+              context.services,
+            )
           },
         },
         {
@@ -159,7 +166,7 @@ export function createPico8Plugin(options: Pico8PluginOptions = {}) {
           run: context => {
             const input = readRecord(context.input)
             const id = stringField(input, "id")
-            return fetchPico8Details(runtime, id).pipe(
+            return fetchPico8Details(runtime, id, context.services).pipe(
               Effect.map(entry => detailsFor(context.provider, entry)),
             )
           },
@@ -180,7 +187,11 @@ export function createPico8Plugin(options: Pico8PluginOptions = {}) {
           capabilities: ["provider.validate", "pico8"],
           run: context => {
             const input = readRecord(context.input)
-            return fetchText(runtime, searchUrl(runtime, "pico8", 1)).pipe(
+            return fetchText(
+              runtime,
+              searchUrl(runtime, "pico8", 1),
+              context.services,
+            ).pipe(
               Effect.map(
                 () =>
                   ({
@@ -206,6 +217,7 @@ export function createPico8Plugin(options: Pico8PluginOptions = {}) {
               runtime,
               context.provider,
               candidateUrl,
+              context.services,
             )
           },
         },
@@ -248,6 +260,7 @@ function searchPico8Bbs(
   providerId: ProviderId,
   query: string,
   platforms?: readonly string[],
+  services?: PluginServices,
 ): Effect.Effect<readonly ProviderClaim[], AcquisitionError> {
   const normalized = query.trim()
   if (normalized.length === 0) return Effect.succeed([])
@@ -255,7 +268,7 @@ function searchPico8Bbs(
     return Effect.succeed([])
   }
 
-  return fetchText(runtime, searchUrl(runtime, normalized)).pipe(
+  return fetchText(runtime, searchUrl(runtime, normalized), services).pipe(
     Effect.map(html =>
       parsePico8SearchEntries(runtime, html)
         .slice(0, MAX_SEARCH_RESULTS)
@@ -267,8 +280,9 @@ function searchPico8Bbs(
 function fetchPico8Details(
   runtime: Pico8Runtime,
   id: string,
+  services?: PluginServices,
 ): Effect.Effect<Pico8CartDetails, AcquisitionError> {
-  return fetchText(runtime, postUrl(runtime, id)).pipe(
+  return fetchText(runtime, postUrl(runtime, id), services).pipe(
     Effect.flatMap(html => {
       const details = parsePico8Details(runtime, html, id)
       if (details) return Effect.succeed(details)
@@ -287,6 +301,7 @@ function resolvePico8BbsDownload(
   runtime: Pico8Runtime,
   providerId: ProviderId,
   candidateUrl: string,
+  services?: PluginServices,
 ): Effect.Effect<DownloadResolution, AcquisitionError> {
   const parsed = parsePico8BbsUrl(candidateUrl, runtime)
   if (!parsed) {
@@ -311,7 +326,7 @@ function resolvePico8BbsDownload(
     })
   }
 
-  return fetchPico8Details(runtime, parsed.id).pipe(
+  return fetchPico8Details(runtime, parsed.id, services).pipe(
     Effect.map(details => {
       if (!details.downloadUrl) {
         return {
@@ -610,9 +625,17 @@ function absoluteBbsUrl(
 function fetchText(
   runtime: Pico8Runtime,
   url: string,
+  services?: PluginServices,
 ): Effect.Effect<string, AcquisitionError> {
   return Effect.tryPromise({
     try: async () => {
+      const serviceText = services?.http?.text
+      if (serviceText) {
+        return serviceText(url, {
+          headers: { accept: "text/html,application/xhtml+xml" },
+        })
+      }
+
       const response = await runtime.fetchImpl(url, {
         headers: { accept: "text/html,application/xhtml+xml" },
       })

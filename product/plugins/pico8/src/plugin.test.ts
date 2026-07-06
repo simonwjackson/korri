@@ -84,19 +84,18 @@ describe("PICO-8 plugin", () => {
 
   it("queries the PICO-8 BBS instead of searching hard-coded catalog rows", async () => {
     const requestedUrls: string[] = []
-    const fetchImpl = async (input: string | URL | Request) => {
+    const httpText = async (input: string | URL) => {
       const url = String(input)
       requestedUrls.push(url)
-      if (url.includes("search=celeste")) return htmlResponse(searchHtml)
-      if (url.includes("search=pico8")) return htmlResponse(searchHtml)
-      if (url.includes("pid=11722")) return htmlResponse(detailsHtml)
-      return new Response("not found", { status: 404 })
+      if (url.includes("search=celeste")) return searchHtml
+      if (url.includes("search=pico8")) return searchHtml
+      if (url.includes("pid=11722")) return detailsHtml
+      throw new Error(`unexpected PICO-8 BBS URL: ${url}`)
     }
     const productRegistry = createPluginRegistry(
       [
         createPico8Plugin({
           bbsBaseUrl: "https://www.lexaloffle.com",
-          fetchImpl: fetchImpl as typeof fetch,
         }),
       ],
       { enabledPluginIds: [KORRI_PICO8_PLUGIN_ID] },
@@ -104,7 +103,10 @@ describe("PICO-8 plugin", () => {
     const acquisitionRegistry = createStaticAcquisitionPluginRegistry(
       acquisitionPluginDefinitionsFromPluginRegistry(productRegistry),
     )
-    const layer = makeLiveAcquisitionLayer({ registry: acquisitionRegistry })
+    const layer = makeLiveAcquisitionLayer({
+      registry: acquisitionRegistry,
+      services: { http: { text: httpText } },
+    })
 
     const result = await Effect.runPromise(
       Effect.gen(function* () {
@@ -162,9 +164,3 @@ describe("PICO-8 plugin", () => {
     })
   })
 })
-
-function htmlResponse(body: string): Response {
-  return new Response(body, {
-    headers: { "content-type": "text/html; charset=utf-8" },
-  })
-}

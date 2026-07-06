@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { plugin } from "@platform/plugin"
 import { createPluginRegistry } from "@platform/plugin/registry"
+import { requirePluginService } from "@platform/plugin/services"
 import { Effect } from "effect"
 import { Acquisition, makeLiveAcquisitionLayer } from "./acquisition-service"
 import { createStaticAcquisitionPluginRegistry } from "./plugin-loader"
@@ -46,11 +47,18 @@ const claimPlugin = plugin({
         id: "claims.validate",
         operation: "provider.validate",
         capabilities: ["provider.validate"],
-        run: context => ({
-          _tag: "HealthyProvider" as const,
-          providerId: context.provider,
-          checkedAt: "2026-01-01T00:00:00.000Z",
-        }),
+        run: context => {
+          const time = requirePluginService(
+            context.services,
+            "time",
+            context.operation,
+          )
+          return {
+            _tag: "HealthyProvider" as const,
+            providerId: context.provider,
+            checkedAt: time.nowIso?.() ?? "missing-time-service",
+          }
+        },
       },
       {
         id: "claims.resolve-download",
@@ -92,6 +100,7 @@ describe("acquisitionPluginDefinitionsFromPluginRegistry", () => {
 
     const layer = makeLiveAcquisitionLayer({
       registry: createStaticAcquisitionPluginRegistry(acquisitionDefinitions),
+      clock: { nowIso: () => "2026-01-01T00:00:00.000Z" },
     })
 
     const result = await Effect.runPromise(

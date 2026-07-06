@@ -214,6 +214,7 @@ function runAcquisitionPluginHandler<Output>(input: {
     operation: input.operation,
     provider: input.plugin.id,
     input: input.input,
+    services: input.context.services,
   }).pipe(
     Effect.map(value => value as Output),
     Effect.mapError(error =>
