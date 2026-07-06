@@ -2,7 +2,10 @@ import { describe, expect, it, mock } from "bun:test"
 import type { CatalogEntry } from "@platform/catalog/catalog-facts-source"
 import { LaunchState } from "@platform/library/launch-state"
 import { launchFailureExitCode } from "@platform/library/launcher"
+import type { ForegroundSessionGateState } from "@platform/session/foreground-session-gate-state"
+import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import {
+  foregroundStateFromAtom,
   makeLaunchHandler,
   shiftLaunchStateForForeground,
   toCinematicGame,
@@ -23,6 +26,26 @@ function entry(id: string): CatalogEntry {
     },
   } satisfies CatalogEntry
 }
+
+describe("foregroundStateFromAtom", () => {
+  it("preserves the last running foreground while a refresh is pending", () => {
+    const refreshingRunning = {
+      _tag: "Success",
+      value: {
+        _tag: "Running",
+        requestId: "request-1",
+        gameId: "game-1",
+      },
+      waiting: true,
+      timestamp: Date.now(),
+    } as AsyncResult.AsyncResult<ForegroundSessionGateState, unknown>
+
+    expect(foregroundStateFromAtom(refreshingRunning)).toMatchObject({
+      _tag: "Running",
+      gameId: "game-1",
+    })
+  })
+})
 
 describe("shiftLaunchStateForForeground", () => {
   it("leaves launch state alone when the foreground gate is ready", () => {

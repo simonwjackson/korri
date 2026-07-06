@@ -76,6 +76,8 @@ const LOAD_ERROR_FOREGROUND = {
 export function foregroundStateFromAtom(
   result: AsyncResult.AsyncResult<ForegroundSessionGateState, unknown>,
 ): ForegroundSessionGateState {
+  if (AsyncResult.isSuccess(result)) return result.value
+
   return AsyncResult.matchWithWaiting(result, {
     onWaiting: () => UNKNOWN_FOREGROUND,
     onError: () => LOAD_ERROR_FOREGROUND,
