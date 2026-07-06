@@ -1,4 +1,5 @@
 import type { ForegroundSessionStatusSnapshot } from "@platform/session/foreground-session-status"
+import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type {
   SessiondManagedLaunchCapabilities,
   SessiondManagedLaunchMode,
@@ -12,6 +13,7 @@ export interface SessiondManagedLaunchStatusProjectionInput {
   readonly active?: {
     readonly launchId: string
     readonly mode: SessiondManagedLaunchMode
+    readonly launchMetadata?: LaunchMetadata
   }
   readonly phase?: SessiondManagedLaunchPhase
   readonly failureReason?: string
@@ -19,10 +21,15 @@ export interface SessiondManagedLaunchStatusProjectionInput {
   readonly capabilities: SessiondManagedLaunchCapabilities
 }
 
+type SessiondStatusLaunchMetadata = NonNullable<
+  SessiondManagedLaunchStatus["active"]
+>["launchMetadata"]
+
 export interface SessiondLifecycleActiveProjection {
   readonly launchId: string
   readonly mode: SessiondManagedLaunchMode
   readonly phase?: SessiondManagedLaunchPhase
+  readonly launchMetadata?: SessiondStatusLaunchMetadata
 }
 
 export interface SessiondLifecycleSummaryProjection {
@@ -45,6 +52,9 @@ export function projectManagedLaunchStatus(
             launchId: input.active.launchId,
             mode: roleAwareMode(input.active.mode, input.idleModeLabel),
             ...(input.phase ? { phase: input.phase } : {}),
+            ...(input.active.launchMetadata
+              ? { launchMetadata: input.active.launchMetadata }
+              : {}),
           },
         }
       : {}),
@@ -66,6 +76,9 @@ export function projectSessiondLifecycleSummary(
             launchId: status.active.launchId,
             mode: status.active.mode,
             ...(status.active.phase ? { phase: status.active.phase } : {}),
+            ...(status.active.launchMetadata
+              ? { launchMetadata: status.active.launchMetadata }
+              : {}),
           },
         }
       : {}),

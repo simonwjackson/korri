@@ -86,6 +86,7 @@ function activeSessionProbe() {
     refresh: async () => {},
     isActive: () => true,
     isStream: () => false,
+    sourceControlUrl: () => undefined,
   }
 }
 
@@ -559,6 +560,7 @@ B: KEY=40000000
         refresh: async () => {},
         isActive: () => false,
         isStream: () => false,
+        sourceControlUrl: () => undefined,
       },
     })
 

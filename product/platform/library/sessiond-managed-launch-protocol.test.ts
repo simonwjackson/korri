@@ -70,6 +70,36 @@ describe("sessiond managed launch protocol", () => {
     expect(status.active).toEqual({ launchId: "launch-1", mode: "game" })
   })
 
+  it("decodes sanitized launch metadata on the active status", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "game",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+      },
+      active: {
+        launchId: "launch-1",
+        mode: "game",
+        launchMetadata: {
+          annotations: {
+            "@korri:stream": {
+              hostId: "aka",
+              controlUrl: "http://aka:3001",
+            },
+          },
+        },
+      },
+      restoreAttempts: 0,
+    })
+
+    expect(status.active?.launchMetadata?.annotations?.["@korri:stream"]).toEqual({
+      hostId: "aka",
+      controlUrl: "http://aka:3001",
+    })
+  })
+
   it("decodes lifecycle event payloads", () => {
     const event = decodeSessiondManagedLaunchEvent({
       schemaVersion: 1,

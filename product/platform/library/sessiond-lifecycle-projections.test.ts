@@ -31,11 +31,19 @@ describe("sessiond lifecycle projections", () => {
     })
   })
 
-  it("preserves active phase and failure reason in managed-launch status", () => {
+  it("preserves active phase, launch metadata, and failure reason in managed-launch status", () => {
     const status = projectManagedLaunchStatus({
       mode: "game",
       idleModeLabel: "home",
-      active: { launchId: "launch-2", mode: "game" },
+      active: {
+        launchId: "launch-2",
+        mode: "game",
+        launchMetadata: {
+          annotations: {
+            "@korri:stream": { controlUrl: "http://aka:3001" },
+          },
+        },
+      },
       phase: "wait-monitor",
       failureReason: "renderer failed",
       restoreAttempts: 1,
@@ -49,7 +57,16 @@ describe("sessiond lifecycle projections", () => {
 
     expect(status).toMatchObject({
       mode: "game",
-      active: { launchId: "launch-2", mode: "game", phase: "wait-monitor" },
+      active: {
+        launchId: "launch-2",
+        mode: "game",
+        phase: "wait-monitor",
+        launchMetadata: {
+          annotations: {
+            "@korri:stream": { controlUrl: "http://aka:3001" },
+          },
+        },
+      },
       failureReason: "renderer failed",
       capabilities: { perLaunchTermination: false },
     })

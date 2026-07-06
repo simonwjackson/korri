@@ -11,6 +11,8 @@
  */
 import type { SessiondManagedLaunchStatus } from "@platform/library/sessiond-managed-launch-protocol"
 
+export const KORRI_STREAM_METADATA_PROVIDER_ID = "@korri:stream"
+
 /**
  * A session counts as an active game/stream when sessiond reports an active
  * launch in game mode. The coarse `mode` stays "game" across the running /
@@ -29,6 +31,7 @@ export function isGameSessionActive(
 export interface OverlaySessionSnapshot {
   readonly active: boolean
   readonly stream: boolean
+  readonly sourceControlUrl?: string
 }
 
 export interface OverlaySessionProbe {
@@ -38,6 +41,8 @@ export interface OverlaySessionProbe {
   readonly isActive: () => boolean
   /** The active session is a Moonlight stream (vs a local game). */
   readonly isStream: () => boolean
+  /** Remote-source control URL for the active stream, when sessiond advertised it. */
+  readonly sourceControlUrl: () => string | undefined
 }
 
 export interface OverlaySessionProbeDeps {
@@ -52,6 +57,7 @@ export function createOverlaySessionProbe(
 ): OverlaySessionProbe {
   let active = false
   let stream = false
+  let sourceControlUrl: string | undefined
   return {
     async refresh() {
       let status: SessiondManagedLaunchStatus | null = null
@@ -73,8 +79,30 @@ export function createOverlaySessionProbe(
       }
       active = nextActive
       stream = nextStream
+      sourceControlUrl = nextActive && nextStream
+        ? streamSourceControlUrlFromStatus(status)
+        : undefined
     },
     isActive: () => active,
     isStream: () => stream,
+    sourceControlUrl: () => sourceControlUrl,
   }
+}
+
+export function streamSourceControlUrlFromStatus(
+  status: SessiondManagedLaunchStatus | null,
+): string | undefined {
+  const annotation =
+    status?.active?.launchMetadata?.annotations?.[
+      KORRI_STREAM_METADATA_PROVIDER_ID
+    ]
+  if (!isRecord(annotation)) return undefined
+  const controlUrl = annotation.controlUrl
+  if (typeof controlUrl !== "string") return undefined
+  const trimmed = controlUrl.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

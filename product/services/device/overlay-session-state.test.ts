@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import {
   createOverlaySessionProbe,
   isGameSessionActive,
+  streamSourceControlUrlFromStatus,
 } from "./overlay-session-state"
 import type { SessiondManagedLaunchStatus } from "@platform/library/sessiond-managed-launch-protocol"
 
@@ -60,6 +61,7 @@ describe("createOverlaySessionProbe", () => {
     })
     expect(probe.isActive()).toBe(false)
     expect(probe.isStream()).toBe(false)
+    expect(probe.sourceControlUrl()).toBeUndefined()
   })
 
   it("reports an active local session (no moonlight)", async () => {
@@ -80,6 +82,46 @@ describe("createOverlaySessionProbe", () => {
     await probe.refresh()
     expect(probe.isActive()).toBe(true)
     expect(probe.isStream()).toBe(true)
+  })
+
+  it("caches the stream source control URL from active launch metadata", async () => {
+    const probe = createOverlaySessionProbe({
+      readStatus: async () =>
+        status({
+          mode: "game",
+          active: {
+            launchId: "l1",
+            mode: "game",
+            launchMetadata: {
+              annotations: {
+                "@korri:stream": { controlUrl: "http://aka:3001" },
+              },
+            },
+          },
+        }),
+      isMoonlightRunning: async () => true,
+    })
+    await probe.refresh()
+    expect(probe.sourceControlUrl()).toBe("http://aka:3001")
+  })
+
+  it("extracts a stream source control URL from status metadata", () => {
+    expect(
+      streamSourceControlUrlFromStatus(
+        status({
+          mode: "game",
+          active: {
+            launchId: "l1",
+            mode: "game",
+            launchMetadata: {
+              annotations: {
+                "@korri:stream": { controlUrl: " http://aka:3001 " },
+              },
+            },
+          },
+        }),
+      ),
+    ).toBe("http://aka:3001")
   })
 
   it("does not probe moonlight when no session is active", async () => {

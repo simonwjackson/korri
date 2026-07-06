@@ -891,6 +891,49 @@ describe("korri sessiond", () => {
     expect(events).not.toContain("restore-es")
   })
 
+  it("surfaces active launch metadata in managed status", async () => {
+    const child = deferred<LaunchResult>()
+    const { core } = startHarness({
+      spawnLaunch: async () => ({
+        result: child.promise,
+        terminate: () => child.resolve({ status: "failed", exitCode: 143 }),
+        terminateNow: () => child.resolve({ status: "failed", exitCode: 137 }),
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "launch-1",
+          spec,
+          launchMetadata: {
+            annotations: {
+              "@korri:stream": {
+                hostId: "aka",
+                controlUrl: "http://aka:3001",
+              },
+            },
+          },
+        }),
+      }),
+    )
+
+    const response = await request(core, "/managed-launch/status", authorized())
+    const body = await response.json()
+    expect(body.active.launchMetadata.annotations["@korri:stream"]).toEqual({
+      hostId: "aka",
+      controlUrl: "http://aka:3001",
+    })
+
+    child.resolve({ status: "failed", exitCode: 143 })
+    await waitForSessionMode(core, "home")
+  })
+
   it("force terminates an accepted managed launch when requested before child registration", async () => {
     const spawnReady = deferred<{
       readonly result: Promise<LaunchResult>

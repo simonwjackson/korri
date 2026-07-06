@@ -17,6 +17,7 @@ import {
 import { logger } from "@platform/logger/logger"
 import type { PluginHandler, ProviderId } from "@platform/plugin"
 import { runPluginHandler } from "@platform/plugin"
+import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import {
   composeLaunchCompanions,
   type LaunchCompanionDiagnostic,
@@ -39,6 +40,8 @@ import { ForegroundSessionHost } from "./foreground-session-host-layer"
 import type { LaunchLibraryPayload, LaunchLibraryResponse } from "./launch.rpc"
 import { launchLocalForegroundSession } from "./local-foreground-launch-adapter"
 import { RemoteStreamPrepare } from "./remote-stream-prepare"
+
+const KORRI_STREAM_METADATA_PROVIDER_ID = "@korri:stream" as ProviderId
 
 type FailedLaunchLibraryResponse = Extract<
   LaunchLibraryResponse,
@@ -519,7 +522,7 @@ function handleRemoteSourceLaunch(
       try: () =>
         moonlightControlHandleFromOptions(
           undefined,
-          localPolicy.moonlight?.control,
+          moonlightControlPolicyFromStreamerPolicy(localPolicy.moonlight),
         ),
       catch: error => toDataError(toLibraryError(error)),
     })
@@ -554,11 +557,12 @@ function handleRemoteSourceLaunch(
       return moonlightSpecResult.response
 
     const launchId = globalThis.crypto.randomUUID()
+    const launchMetadata = streamSourceLaunchMetadata(source)
     const specResult = yield* composeLaunchCompanions({
       spec: moonlightSpecResult.spec,
       launchCompanions: localPolicy.launchCompanions,
       registry: streamRegistry,
-      options: { launchId },
+      options: { launchId, launchMetadata },
     })
     if (specResult._tag === "LaunchCompanionDiagnostics") {
       return launchConfigurationFailureFromDiagnostics(specResult.diagnostics)
@@ -578,6 +582,7 @@ function handleRemoteSourceLaunch(
                 .spawn(spec, {
                   extras: {
                     launchId,
+                    launchMetadata,
                     ...(Object.keys(localPolicy.launchCompanions).length > 0
                       ? { launchCompanions: localPolicy.launchCompanions }
                       : {}),
@@ -617,6 +622,42 @@ function handleRemoteSourceLaunch(
     )
     return result
   })
+}
+
+
+interface MoonlightControlPolicyView {
+  readonly enable?: boolean
+  readonly authority?: "observer" | "controller"
+  readonly allowRootPeers?: boolean
+}
+
+function moonlightControlPolicyFromStreamerPolicy(
+  policy: Readonly<Record<string, unknown>> | undefined,
+): MoonlightControlPolicyView | undefined {
+  const control = policy?.control
+  if (!isRecord(control)) return undefined
+  return {
+    ...(typeof control.enable === "boolean" ? { enable: control.enable } : {}),
+    ...(control.authority === "observer" || control.authority === "controller"
+      ? { authority: control.authority }
+      : {}),
+    ...(typeof control.allowRootPeers === "boolean"
+      ? { allowRootPeers: control.allowRootPeers }
+      : {}),
+  }
+}
+
+function streamSourceLaunchMetadata(
+  source: NonNullable<LaunchPayload["source"]>,
+): LaunchMetadata {
+  return {
+    annotations: {
+      [KORRI_STREAM_METADATA_PROVIDER_ID]: {
+        hostId: source.hostId,
+        controlUrl: source.controlUrl,
+      },
+    },
+  }
 }
 
 function nextLaunchFallbackPayload(

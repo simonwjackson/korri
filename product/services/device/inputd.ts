@@ -60,6 +60,7 @@ import {
   type InputdActionDispatcher,
   type KorriInputdActionId,
 } from "./inputd-actions"
+import { stopRemoteGameOnHost } from "./overlay-remote-stop"
 import { createLiveOverlaySessionProbe } from "./overlay-session-state-live"
 import type { OverlaySessionProbe } from "./overlay-session-state"
 
@@ -207,6 +208,11 @@ export async function startKorriInputd(
   const overlayHoldHandler = createOverlayHoldHandlerFromEnv({
     env: process.env,
     forceQuit: () => dispatchAction(KILL_CHORD_ID),
+    closeRemoteGame: () =>
+      stopRemoteGameOnHost({
+        controlUrl: sessionProbe.sourceControlUrl(),
+        logger,
+      }),
     isSessionActive: () => sessionProbe.isActive(),
     sessionKind: () => (sessionProbe.isStream() ? "stream" : "local"),
   })

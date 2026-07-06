@@ -150,6 +150,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       | { command: string; args: ReadonlyArray<string> }
       | undefined
     let preparedFor: { controlUrl?: string; gameId?: string } | undefined
+    let dispatchedExtras: unknown
     const remoteSource = new EntrySource({
       hostId: "aka",
       controlUrl: "http://aka.local:3001",
@@ -174,6 +175,9 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
             launchedSpec: spec => {
               dispatchedSpec = spec
             },
+            launchedExtras: extras => {
+              dispatchedExtras = extras
+            },
           }),
         ),
       ),
@@ -191,6 +195,16 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       "Korri Stream",
       "aka.local",
     ])
+    expect(dispatchedExtras).toMatchObject({
+      launchMetadata: {
+        annotations: {
+          "@korri:stream": {
+            hostId: "aka",
+            controlUrl: "http://aka.local:3001",
+          },
+        },
+      },
+    })
   })
 
   it("passes typed local Moonlight input policy for remote-source launches", async () => {
@@ -1219,6 +1233,7 @@ function remoteSourceTestLayer(options: {
     readonly envUnset?: readonly string[]
   }) => void
   readonly localPolicy?: ResolvedLocalLauncherPolicy
+  readonly launchedExtras?: (extras: unknown) => void
 }) {
   // Remote-source launches dispatch the Moonlight streamer through the registry.
   process.env.KORRI_ENABLED_PLUGINS = "@korri:moonlight"
@@ -1253,8 +1268,9 @@ function remoteSourceTestLayer(options: {
       options.launchedSpec(spec)
       return Effect.succeed({ status: "launched" as const })
     },
-    spawn: spec => {
+    spawn: (spec, spawnOptions) => {
       options.launchedSpec(spec)
+      options.launchedExtras?.(spawnOptions?.extras)
       return Effect.succeed({
         status: "started" as const,
         result: Promise.resolve({ status: "launched" as const }),

@@ -58,6 +58,7 @@ import {
   completeKorriRestore,
   failKorriRestore,
   initialKorriSessionState,
+  type KorriSessionMode,
   type KorriSessionState,
   korriSessionActiveLaunch,
   markKorriGameRunning,
@@ -221,6 +222,7 @@ export function createKorriSessiondCore(
         // the dispatcher; resetting falls back to terminate/terminateNow.
         cancelAnchor?: () => void
         cancelWaiter?: () => void
+        launchMetadata?: LaunchMetadata
         sessionHookHandles?: readonly KorriSessiondLifecycleHookHandle[]
       }
     | undefined
@@ -262,11 +264,25 @@ export function createKorriSessiondCore(
     })
   }
 
+  function activeLaunchForManagedStatus():
+    | {
+        readonly launchId: string
+        readonly mode: KorriSessionMode
+        readonly launchMetadata?: LaunchMetadata
+      }
+    | undefined {
+    const active = korriSessionActiveLaunch(state)
+    if (!active) return undefined
+    return activeManagedLaunch?.launchMetadata
+      ? { ...active, launchMetadata: activeManagedLaunch.launchMetadata }
+      : active
+  }
+
   function managedStatus(): SessiondManagedLaunchStatus {
     return projectManagedLaunchStatus({
       mode: state.mode,
       idleModeLabel: role.idleModeLabel,
-      active: korriSessionActiveLaunch(state),
+      active: activeLaunchForManagedStatus(),
       ...(currentPhase ? { phase: currentPhase } : {}),
       ...(state.failureReason ? { failureReason: state.failureReason } : {}),
       restoreAttempts: state.restoreAttempts,
@@ -367,7 +383,12 @@ export function createKorriSessiondCore(
     const launchId = requestedLaunchId ?? crypto.randomUUID()
     state = beginKorriLaunch(state, launchId)
     emitStatusSidecar("launching")
-    activeManagedLaunch = { launchId }
+    activeManagedLaunch = {
+      launchId,
+      ...(lifecycleOptions.launchMetadata
+        ? { launchMetadata: lifecycleOptions.launchMetadata }
+        : {}),
+    }
     pushLifecycleEvent(launchId, { type: "launch-accepted" })
 
     const result = runManagedLaunch(launchId, spec, lifecycleOptions)

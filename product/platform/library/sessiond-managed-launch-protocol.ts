@@ -137,10 +137,27 @@ export type SessiondManagedLaunchPhase = Schema.Schema.Type<
   typeof SessiondManagedLaunchPhase
 >
 
+const LaunchMetadataProviderId = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^@[^:]+:.+$/)),
+)
+
+const SessiondLaunchMetadata = Schema.Struct({
+  appProviderId: Schema.optional(LaunchMetadataProviderId),
+  annotations: Schema.optional(
+    Schema.Record(LaunchMetadataProviderId, Schema.Unknown),
+  ),
+})
+
 export const SessiondManagedLaunchActive = Schema.Struct({
   launchId: Schema.String,
   mode: SessiondManagedLaunchMode,
   phase: Schema.optional(SessiondManagedLaunchPhase),
+  /**
+   * Optional, sanitized metadata for clients that need launch ownership facts
+   * without exposing raw LaunchSpec internals. Remote Moonlight sessions use
+   * this to carry the source host/controlUrl so inputd can stop the host game.
+   */
+  launchMetadata: Schema.optional(SessiondLaunchMetadata),
 })
 export type SessiondManagedLaunchActive = Schema.Schema.Type<
   typeof SessiondManagedLaunchActive
@@ -157,17 +174,6 @@ export const SessiondManagedLaunchStatus = Schema.Struct({
 export type SessiondManagedLaunchStatus = Schema.Schema.Type<
   typeof SessiondManagedLaunchStatus
 >
-
-const LaunchMetadataProviderId = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^@[^:]+:.+$/)),
-)
-
-const SessiondLaunchMetadata = Schema.Struct({
-  appProviderId: Schema.optional(LaunchMetadataProviderId),
-  annotations: Schema.optional(
-    Schema.Record(LaunchMetadataProviderId, Schema.Unknown),
-  ),
-})
 
 export const SessiondManagedLaunchStartRequest = Schema.Struct({
   launchId: Schema.optional(Schema.String),
