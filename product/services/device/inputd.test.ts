@@ -14,6 +14,7 @@ import {
   BTN_THUMBR,
   BTN_TL,
   BTN_TR,
+  KEY_BACK,
   KEY_BRIGHTNESSUP,
   KEY_F24,
   KEY_POWER,
@@ -682,8 +683,97 @@ B: KEY=40000000
         },
       })
 
+      source.push(evdevKey(BTN_SELECT, 1))
+      source.push(evdevKey(BTN_SELECT, 0))
+      await Bun.sleep(30)
+      expect(actions).toEqual([])
+
       source.push(evdevKey(BTN_BACK, 1))
       source.push(evdevKey(BTN_BACK, 0))
+
+      await waitFor(
+        () => actions.includes("toggle-steam-visibility"),
+        "Steam visibility toggle",
+      )
+      expect(actions).toEqual(["toggle-steam-visibility"])
+    } finally {
+      if (previous === undefined) {
+        delete process.env.KORRI_INPUTD_BACK_TAP_ACTION
+      } else {
+        process.env.KORRI_INPUTD_BACK_TAP_ACTION = previous
+      }
+    }
+  })
+
+  it("routes Android keyboard Back without treating Select as Back", async () => {
+    const previous = process.env.KORRI_INPUTD_BACK_TAP_ACTION
+    process.env.KORRI_INPUTD_BACK_TAP_ACTION = "toggle-steam-visibility"
+    try {
+      const proc = await loadProcFixture("bus-input-devices-device.txt")
+      const source = createControllableEventSource()
+      const actions: KorriInputdActionId[] = []
+      await startInputd({
+        readProcDevices: async () => proc,
+        openEventSource: device =>
+          device.eventNode === "event9"
+            ? source.open()
+            : createControllableEventSource().open(),
+        actionDispatcher: {
+          dispatch: async actionId => {
+            actions.push(actionId)
+          },
+        },
+      })
+
+      source.push(evdevKey(BTN_SELECT, 1))
+      source.push(evdevKey(BTN_SELECT, 0))
+      await Bun.sleep(30)
+      expect(actions).toEqual([])
+
+      source.push(evdevKey(KEY_BACK, 1))
+      source.push(evdevKey(KEY_BACK, 0))
+
+      await waitFor(
+        () => actions.includes("toggle-steam-visibility"),
+        "Steam visibility toggle",
+      )
+      expect(actions).toEqual(["toggle-steam-visibility"])
+    } finally {
+      if (previous === undefined) {
+        delete process.env.KORRI_INPUTD_BACK_TAP_ACTION
+      } else {
+        process.env.KORRI_INPUTD_BACK_TAP_ACTION = previous
+      }
+    }
+  })
+
+  it("routes deployed QuickAccess2/Screenshot Back as the temporary action", async () => {
+    const previous = process.env.KORRI_INPUTD_BACK_TAP_ACTION
+    process.env.KORRI_INPUTD_BACK_TAP_ACTION = "toggle-steam-visibility"
+    try {
+      const proc = await loadProcFixture("bus-input-devices-device.txt")
+      const source = createControllableEventSource()
+      const actions: KorriInputdActionId[] = []
+      await startInputd({
+        readProcDevices: async () => proc,
+        openEventSource: device =>
+          device.eventNode === "event9"
+            ? source.open()
+            : createControllableEventSource().open(),
+        actionDispatcher: {
+          dispatch: async actionId => {
+            actions.push(actionId)
+          },
+        },
+      })
+
+      source.push(evdevKey(BTN_SELECT, 1))
+      source.push(evdevKey(BTN_SELECT, 0))
+      await Bun.sleep(30)
+      expect(actions).toEqual([])
+
+      source.push(evdevKey(KEY_RECORD, 1))
+      source.push(evdevKey(KEY_RECORD, 0))
 
       await waitFor(
         () => actions.includes("toggle-steam-visibility"),

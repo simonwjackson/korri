@@ -18,6 +18,7 @@ import {
   EV_KEY,
   EV_SW,
   KEY_BRIGHTNESSDOWN,
+  KEY_BACK,
   KEY_BRIGHTNESSUP,
   KEY_F24,
   KEY_POWER,
@@ -697,7 +698,13 @@ function policyControlForEvent(
     if (event.code === BTN_SELECT) return "select"
     if (event.code === BTN_THUMBL) return "l3"
     if (event.code === BTN_THUMBR) return "r3"
-    if (event.code === BTN_BACK || event.code === KEY_RECORD) return "back"
+    if (
+      event.code === BTN_BACK ||
+      event.code === KEY_BACK ||
+      event.code === KEY_RECORD
+    ) {
+      return "back"
+    }
     if (event.code === BTN_X || event.code === BTN_Y) return "x"
     if (event.code === KEY_VOLUMEUP) return "volume-up"
     if (event.code === KEY_VOLUMEDOWN) return "volume-down"
@@ -744,7 +751,13 @@ function systemKeyAction(
   if (code === KEY_BRIGHTNESSUP) return "brightness-up"
   if (code === KEY_BRIGHTNESSDOWN) return "brightness-down"
   if (code === KEY_POWER) return "power-suspend"
-  if (code === KEY_RECORD) return "screen-switch"
+  if (code === KEY_RECORD) {
+    // InputPlumber's deployed SM8550 profile translates AYN Android Back via
+    // QuickAccess2 -> Screenshot -> KEY_RECORD. While the temporary Back tap
+    // action is configured, reserve KEY_RECORD for the tap/shortcut engine so
+    // plain Back reveals Steam instead of immediately switching screens.
+    return backTapActionFromEnv(env) ? null : "screen-switch"
+  }
   return null
 }
 

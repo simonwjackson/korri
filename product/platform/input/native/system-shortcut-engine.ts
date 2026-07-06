@@ -13,6 +13,7 @@ import {
   BTN_Y,
   EV_ABS,
   EV_KEY,
+  KEY_BACK,
   KEY_RECORD,
   KEY_VOLUMEDOWN,
   KEY_VOLUMEUP,
@@ -246,7 +247,9 @@ function controlForKeyCode(code: number): SystemShortcutControl | null {
   if (code === BTN_SELECT) return "select"
   if (code === BTN_THUMBL) return "l3"
   if (code === BTN_THUMBR) return "r3"
-  if (code === BTN_BACK || code === KEY_RECORD) return "back"
+  if (code === BTN_BACK || code === KEY_BACK || code === KEY_RECORD) {
+    return "back"
+  }
   if (code === BTN_X || code === BTN_Y) return "x"
   if (code === KEY_VOLUMEUP) return "volume-up"
   if (code === KEY_VOLUMEDOWN) return "volume-down"
