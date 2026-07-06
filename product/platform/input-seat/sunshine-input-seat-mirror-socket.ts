@@ -18,6 +18,7 @@ export type SunshineInputSeatMirrorDiagnostic =
   | { readonly kind: "frame-json-invalid"; readonly message: string }
   | { readonly kind: "frame-schema-invalid"; readonly message: string }
   | { readonly kind: "frame-forward-failed"; readonly message: string }
+  | { readonly kind: "frame-forward-dropped"; readonly reason: "queue-full" }
   | { readonly kind: "socket-client-error"; readonly message: string }
   | { readonly kind: "socket-server-error"; readonly message: string }
 
@@ -51,6 +52,7 @@ export interface SunshineInputSeatMirrorSocketOptions {
   readonly seatCount: number
   readonly maxEventsPerSecond: number
   readonly maxFrameBytes?: number
+  readonly maxPendingGamepadWrites?: number
   readonly onGamepadState?: (
     state: SunshineInputSeatForwardedGamepadState,
   ) => Promise<void> | void
@@ -66,13 +68,13 @@ export interface SunshineInputSeatMirrorSocketHandle {
 }
 
 const DEFAULT_MAX_FRAME_BYTES = 4096
+const DEFAULT_MAX_PENDING_GAMEPAD_WRITES = 256
 
 export const createSunshineInputSeatMirrorFrameSink = (
   options: SunshineInputSeatMirrorFrameSinkOptions,
 ): SunshineInputSeatMirrorFrameSink => {
   const maxFrameBytes = options.maxFrameBytes ?? DEFAULT_MAX_FRAME_BYTES
   let buffer = ""
-  let forwardQueue: Promise<void> = Promise.resolve()
 
   const diagnostic = (event: SunshineInputSeatMirrorDiagnostic) => {
     options.onDiagnostic?.(event)
@@ -109,16 +111,7 @@ export const createSunshineInputSeatMirrorFrameSink = (
         result.slot !== undefined &&
         frame.kind === "source-state"
       ) {
-        const slot = result.slot
-        forwardQueue = forwardQueue
-          .then(() => options.onGamepadState?.({ slot, frame }))
-          .then(() => undefined)
-          .catch(error => {
-            diagnostic({
-              kind: "frame-forward-failed",
-              message: error instanceof Error ? error.message : String(error),
-            })
-          })
+        options.onGamepadState?.({ slot: result.slot, frame })
       }
     } catch (error) {
       diagnostic({
@@ -159,7 +152,64 @@ export const createSunshineInputSeatMirrorFrameSink = (
       const tail = buffer
       buffer = ""
       processLine(tail)
-      await forwardQueue
+    },
+  }
+}
+
+const createBoundedGamepadForwarder = (options: {
+  readonly onGamepadState?: (
+    state: SunshineInputSeatForwardedGamepadState,
+  ) => Promise<void> | void
+  readonly maxPending: number
+  readonly onDiagnostic?: (
+    diagnostic: SunshineInputSeatMirrorDiagnostic,
+  ) => void
+}) => {
+  const queue: SunshineInputSeatForwardedGamepadState[] = []
+  let draining = false
+  let stopped = false
+
+  const drain = () => {
+    const onGamepadState = options.onGamepadState
+    if (draining || stopped || !onGamepadState) return
+    draining = true
+    void (async () => {
+      try {
+        while (!stopped) {
+          const next = queue.shift()
+          if (!next) return
+          try {
+            await onGamepadState(next)
+          } catch (error) {
+            options.onDiagnostic?.({
+              kind: "frame-forward-failed",
+              message: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
+      } finally {
+        draining = false
+        if (!stopped && queue.length > 0) drain()
+      }
+    })()
+  }
+
+  return {
+    enqueue: (state: SunshineInputSeatForwardedGamepadState) => {
+      if (!options.onGamepadState || stopped) return
+      if (queue.length >= options.maxPending) {
+        options.onDiagnostic?.({
+          kind: "frame-forward-dropped",
+          reason: "queue-full",
+        })
+        return
+      }
+      queue.push(state)
+      drain()
+    },
+    stop: () => {
+      stopped = true
+      queue.length = 0
     },
   }
 }
@@ -183,6 +233,23 @@ export const startSunshineInputSeatMirrorSocket = async (
   })
 
   const connections = new Set<Socket>()
+  const forwarder = createBoundedGamepadForwarder({
+    onGamepadState: options.onGamepadState
+      ? state => {
+          const seat = adapter.seats().find(candidate => candidate.slot === state.slot)
+          if (
+            seat?.tag !== "occupied-connected" ||
+            seat.sourceId !== `sunshine:controller-${state.frame.controllerNumber}`
+          ) {
+            return
+          }
+          return options.onGamepadState?.(state)
+        }
+      : undefined,
+    maxPending:
+      options.maxPendingGamepadWrites ?? DEFAULT_MAX_PENDING_GAMEPAD_WRITES,
+    onDiagnostic: options.onDiagnostic,
+  })
 
   const server = createServer(connection => {
     connections.add(connection)
@@ -190,7 +257,7 @@ export const startSunshineInputSeatMirrorSocket = async (
     const sink = createSunshineInputSeatMirrorFrameSink({
       adapter,
       maxFrameBytes: options.maxFrameBytes,
-      onGamepadState: options.onGamepadState,
+      onGamepadState: forwarder.enqueue,
       onDiagnostic: options.onDiagnostic,
     })
     connection.on("data", chunk => sink.push(chunk))
@@ -219,6 +286,7 @@ export const startSunshineInputSeatMirrorSocket = async (
     socketPath: options.socketPath,
     adapter,
     stop: async () => {
+      forwarder.stop()
       for (const connection of connections) connection.destroy()
       await closeServer(server)
       await unlink(options.socketPath).catch(error => {

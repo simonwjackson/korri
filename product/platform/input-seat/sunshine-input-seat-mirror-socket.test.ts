@@ -40,6 +40,15 @@ const disconnectedFrame = () => ({
 
 const line = (frame: unknown): string => `${JSON.stringify(frame)}\n`
 
+const writeFrame = (socketPath: string, frame: unknown): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const client = createConnection(socketPath)
+    client.once("error", reject)
+    client.once("connect", () => {
+      client.end(line(frame), resolve)
+    })
+  })
+
 describe("Sunshine input-seat mirror socket", () => {
   it("feeds chunked newline-delimited mirror frames into the launch-scoped adapter", () => {
     const diagnostics: SunshineInputSeatMirrorDiagnostic[] = []
@@ -177,6 +186,78 @@ describe("Sunshine input-seat mirror socket", () => {
         tag: "occupied-connected",
         slot: 1,
       })
+    } finally {
+      await handle.stop()
+    }
+  })
+
+  it("bounds socket-wide writer backlog when the seat writer stalls", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sunshine-input-seat-"))
+    const socketPath = join(dir, "mirror.sock")
+    const diagnostics: SunshineInputSeatMirrorDiagnostic[] = []
+    let resolveFirstWrite: (() => void) | undefined
+    const firstWrite = new Promise<void>(resolve => {
+      resolveFirstWrite = resolve
+    })
+    const handle = await startSunshineInputSeatMirrorSocket({
+      launchId: "launch-1",
+      socketPath,
+      seatCount: 1,
+      maxEventsPerSecond: 10,
+      maxPendingGamepadWrites: 1,
+      onGamepadState: () => firstWrite,
+      onDiagnostic: diagnostic => diagnostics.push(diagnostic),
+    })
+
+    try {
+      await writeFrame(socketPath, connectedFrame())
+      await writeFrame(socketPath, stateFrame({ buttons: 1 }))
+      await writeFrame(socketPath, stateFrame({ buttons: 2 }))
+      await writeFrame(socketPath, stateFrame({ buttons: 3 }))
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      expect(diagnostics).toContainEqual({
+        kind: "frame-forward-dropped",
+        reason: "queue-full",
+      })
+      resolveFirstWrite?.()
+    } finally {
+      await handle.stop()
+    }
+  })
+
+  it("drops pending queued state after the source leaves the seat", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sunshine-input-seat-"))
+    const socketPath = join(dir, "mirror.sock")
+    let resolveFirstWrite: (() => void) | undefined
+    const firstWrite = new Promise<void>(resolve => {
+      resolveFirstWrite = resolve
+    })
+    const writes: number[] = []
+    const handle = await startSunshineInputSeatMirrorSocket({
+      launchId: "launch-1",
+      socketPath,
+      seatCount: 1,
+      maxEventsPerSecond: 10,
+      maxPendingGamepadWrites: 4,
+      onGamepadState: async state => {
+        writes.push(state.frame.buttons)
+        if (state.frame.buttons === 1) await firstWrite
+      },
+    })
+
+    try {
+      await writeFrame(socketPath, connectedFrame())
+      await writeFrame(socketPath, stateFrame({ buttons: 1 }))
+      await writeFrame(socketPath, stateFrame({ buttons: 2 }))
+      await new Promise(resolve => setTimeout(resolve, 10))
+      expect(writes).toEqual([1])
+
+      handle.adapter.leaveSeat(1)
+      resolveFirstWrite?.()
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      expect(writes).toEqual([1])
     } finally {
       await handle.stop()
     }

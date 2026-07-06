@@ -114,6 +114,34 @@ describe("uinput seat runtime", () => {
     expect(backend.released).toEqual([1])
   })
 
+  it("does not accept a stale same-name orphan with only a partial identity match", async () => {
+    const backend = createBackend(() => [
+      {
+        ...gamepadDevice(1),
+        physicalPath: "stale/input-seat/p1",
+        uniqueId: "korri-seat-p1",
+      },
+    ])
+    const runtime = createUinputSeatRuntime({
+      backend,
+      pollIntervalMs: 1,
+      nowMs: (() => {
+        let now = 0
+        return () => (now += 10)
+      })(),
+      sleepMs: async () => {},
+    })
+
+    const result = await runtime.allocate({
+      launchId: "launch-1",
+      seats: [makeRequestedSeat(1)],
+      timeoutMs: 5,
+    })
+
+    expect(result).toMatchObject({ status: "unavailable", reason: "timeout" })
+    expect(backend.released).toEqual([1])
+  })
+
   it("times out unreadiness and releases partial allocation", async () => {
     const backend = createBackend(() => [])
     const runtime = createUinputSeatRuntime({

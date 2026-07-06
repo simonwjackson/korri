@@ -173,8 +173,8 @@ const waitForSeatIdentity = async (
     const candidates = devices.filter(
       device =>
         device.name === seat.name &&
-        (device.uniqueId === expectedUniqueId ||
-          device.physicalPath === expectedPhysicalPath),
+        device.uniqueId === expectedUniqueId &&
+        device.physicalPath === expectedPhysicalPath,
     )
 
     if (candidates.length > 1) {
