@@ -3,6 +3,7 @@ import { RegistryProvider, useAtomSet } from "@effect/atom-react"
 import {
   makeFailingRemoteCatalogSourceLayer,
   makeInMemoryRemoteCatalogSourceLayer,
+  type RemoteCatalogSource,
 } from "@platform/acquisition/remote-catalog-source"
 import type { ProviderClaim } from "@platform/protocol/acquisition/claim"
 import { remoteCatalogSourceLayerAtom } from "@platform/react/acquisition/remote-catalog-atoms"
@@ -49,7 +50,7 @@ function StoreAt({
   layer,
 }: {
   readonly entry: string
-  readonly layer: Layer.Layer<never>
+  readonly layer: Layer.Layer<RemoteCatalogSource>
 }) {
   const setSource = useAtomSet(remoteCatalogSourceLayerAtom)
   useLayoutEffect(() => {
@@ -120,9 +121,12 @@ describe("Shift store route — remote catalog search", () => {
     })
 
     fireEvent.click(screen.getByRole("button", { name: "Search the store" }))
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search the store" }), {
-      target: { value: "pico" },
-    })
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search the store" }),
+      {
+        target: { value: "pico" },
+      },
+    )
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Pico Park" })).toBeDefined()

@@ -21,7 +21,10 @@ function LibraryAt({ entry }: { readonly entry: string }) {
     setCatalog(shiftCatalogSourceLayers.Ready())
   }, [setCatalog])
   const router = useMemo(
-    () => createShiftRouter({ history: createMemoryHistory({ initialEntries: [entry] }) }),
+    () =>
+      createShiftRouter({
+        history: createMemoryHistory({ initialEntries: [entry] }),
+      }),
     [entry],
   )
   return <RouterProvider router={router} />
@@ -37,7 +40,9 @@ describe("Shift library route — URL-addressable view-state", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("tab", { name: "Favorites" }).getAttribute("aria-selected"),
+        screen
+          .getByRole("tab", { name: "Favorites" })
+          .getAttribute("aria-selected"),
       ).toBe("true")
     })
     expect(
@@ -54,7 +59,9 @@ describe("Shift library route — URL-addressable view-state", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("tab", { name: "By Genre" }).getAttribute("aria-selected"),
+        screen
+          .getByRole("tab", { name: "By Genre" })
+          .getAttribute("aria-selected"),
       ).toBe("true")
     })
   })

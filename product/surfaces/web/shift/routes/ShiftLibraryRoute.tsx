@@ -19,8 +19,6 @@ import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router"
 import { Option } from "effect"
 import type { ComponentProps } from "react"
-import type { ShiftLibraryLens as LibraryLens } from "../pages/ShiftLensRow"
-import type { ShiftLibrarySort } from "../pages/shift-library-query"
 import {
   ShiftCatalogStateRoot,
   useShiftCatalogCase,
@@ -29,8 +27,10 @@ import { ShiftHomeDefectBody } from "../pages/ShiftHomeDefectBody"
 import { ShiftHomeEmptyBody } from "../pages/ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "../pages/ShiftHomeLoadErrorBody"
 import { ShiftHomeLoadingBody } from "../pages/ShiftHomeLoadingBody"
+import type { ShiftLibraryLens as LibraryLens } from "../pages/ShiftLensRow"
 import { ShiftLibraryLens } from "../pages/ShiftLibraryLens"
 import type { ShiftLibraryGame } from "../pages/shift-library-game"
+import type { ShiftLibrarySort } from "../pages/shift-library-query"
 
 const noop = () => {}
 

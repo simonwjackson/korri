@@ -83,7 +83,8 @@ export function ShiftStoreSearchView({
   )
   const facets = useMemo(() => deriveShiftStoreSources(entries), [entries])
   const visible = useMemo(
-    () => applyShiftStoreQuery(entries, { text: "", sources }),
+    () =>
+      applyShiftStoreQuery(entries, { text: "", sources, sort: "relevance" }),
     [entries, sources],
   )
 
