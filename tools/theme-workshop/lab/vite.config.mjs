@@ -190,7 +190,6 @@ const PART_IMPORT_ALLOWLIST = new Set([
   "../ui/atoms/ShiftClock",
   "../ui/atoms/ShiftBattery",
   "../ui/atoms/ShiftNetworkIcon",
-  "../ui/atoms/ShiftAvatar",
 ])
 
 function isWritablePartFile(tsx) {

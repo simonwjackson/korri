@@ -16,7 +16,6 @@ import {
   ShiftCinematicHome,
 } from "./pages/ShiftCinematicHome"
 
-const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
 const UP_NEXT_CAP = 12
 
 /** Blend recent play + committed favorites into one compact, de-duplicated
@@ -49,7 +48,6 @@ export default {
     <ShiftCinematicHome
       games={curateUpNext(SHIFT_CINEMATIC_GAMES)}
       time="4:24 PM"
-      avatarSrc={AVATAR}
       onSurprise={() => undefined}
       onOpenLibrary={() => undefined}
     />

@@ -34,7 +34,7 @@ const model = process.env.LAB_AI_MODEL ?? "openai-codex/gpt-5.5"
 
 const instructionsFor = (input: v.InferOutput<typeof Input>): string => `
 You are a UI engineer for the Korri "Shift" home screen. The user is looking at
-the Shift status bar (top chrome: clock, network, battery, avatar) and wants
+the Shift status bar (top chrome: clock, network, battery) and wants
 fresh design directions realized as REAL components.
 
 Author ${input.count} distinct part file(s) for this request:
@@ -52,19 +52,17 @@ FILE CONTRACT (follow exactly):
     import { ShiftClock } from "../ui/atoms/ShiftClock"
     import { ShiftBattery } from "../ui/atoms/ShiftBattery"
     import { ShiftNetworkIcon } from "../ui/atoms/ShiftNetworkIcon"
-    import { ShiftAvatar } from "../ui/atoms/ShiftAvatar"
 - Beyond those components you may use plain HTML elements with inline style={{…}}
   to express layout, spacing, background, and rhythm. No other imports.
 
 COMPONENT SIGNATURES:
 - ShiftPartFrame({ children })
-- ShiftStatusBar({ time?: string; avatarSrc?: string;
+- ShiftStatusBar({ time?: string;
     network?: { _tag: "Connected"; strengthPercent: number } | { _tag: "Disconnected" };
     battery?: { level?: "full" | "medium" | "low"; charging?: boolean } })
 - ShiftClock({ time: string })
 - ShiftBattery({ level?: "full" | "medium" | "low"; charging?: boolean })
 - ShiftNetworkIcon({ network: { _tag: "Connected"; strengthPercent: number } | { _tag: "Disconnected" } })
-- ShiftAvatar({ src: string })
 
 Make the takes genuinely different from each other in composition/layout/feel —
 recompose the atoms, don't just tweak one prop. Give each a short human "name",

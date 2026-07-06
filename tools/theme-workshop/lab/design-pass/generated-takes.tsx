@@ -27,8 +27,6 @@ export interface LabGeneratedTakeRequest {
  */
 export interface ShiftStatusBarRecipe {
   readonly kind: "shift-status-bar-take-v1"
-  readonly density: "airy" | "cozy" | "compact"
-  readonly tone: "quiet" | "neutral" | "bold"
   readonly batteryEmphasis: "low" | "medium" | "high"
   readonly networkEmphasis: "low" | "medium" | "high"
 }
@@ -64,28 +62,24 @@ const STATUS_BAR_TAKES = [
   {
     slug: "airier",
     name: "Airier status bar",
-    avatar: "https://i.pravatar.cc/96?u=korri-shift-airier",
     power: { percent: 92, charging: true },
     network: { _tag: "Connected", name: "Wi-Fi", strengthPercent: 86 } as const,
   },
   {
     slug: "quiet",
     name: "Quiet status bar",
-    avatar: "https://i.pravatar.cc/96?u=korri-shift-quiet",
     power: { percent: 68, charging: false },
     network: { _tag: "Connected", name: "Wi-Fi", strengthPercent: 64 } as const,
   },
   {
     slug: "focused",
     name: "Focused status bar",
-    avatar: "https://i.pravatar.cc/96?u=korri-shift-focused",
     power: { percent: 41, charging: false },
     network: { _tag: "Disconnected" } as const,
   },
   {
     slug: "warm",
     name: "Warmer status bar",
-    avatar: "https://i.pravatar.cc/96?u=korri-shift-warm",
     power: { percent: 100, charging: true },
     network: {
       _tag: "Connected",
@@ -96,7 +90,6 @@ const STATUS_BAR_TAKES = [
   {
     slug: "minimal",
     name: "Minimal status bar",
-    avatar: "https://i.pravatar.cc/96?u=korri-shift-minimal",
     power: { percent: 24, charging: false },
     network: { _tag: "Connected", name: "Wi-Fi", strengthPercent: 38 } as const,
   },
@@ -116,12 +109,10 @@ const NETWORK_EMPHASIS = {
 
 /**
  * Pure mapping from a semantic recipe to the concrete props the real
- * `ShiftStatusBar` consumes. The status bar only exposes battery, network, and
- * avatar, so density/tone steer the avatar seed while the emphasis knobs drive
- * the battery and network readings.
+ * `ShiftStatusBar` consumes. The status bar only exposes battery and network,
+ * so the emphasis knobs drive the visible readings.
  */
 export function shiftStatusBarPropsFromRecipe(recipe: ShiftStatusBarRecipe): {
-  readonly avatarSrc: string
   readonly battery: { readonly percent: number; readonly charging: boolean }
   readonly network:
     | {
@@ -132,7 +123,6 @@ export function shiftStatusBarPropsFromRecipe(recipe: ShiftStatusBarRecipe): {
     | { readonly _tag: "Disconnected" }
 } {
   return {
-    avatarSrc: `https://i.pravatar.cc/96?u=korri-shift-${recipe.tone}-${recipe.density}`,
     battery: BATTERY_EMPHASIS[recipe.batteryEmphasis],
     network: NETWORK_EMPHASIS[recipe.networkEmphasis],
   }
@@ -280,7 +270,6 @@ function storyFromDescriptor(
             <ShiftPartFrame>
               <ShiftStatusBar
                 time={shiftClockLabelForIso(DEFAULT_SHIFT_CLOCK_ISO)}
-                avatarSrc={props.avatarSrc}
                 battery={shiftBatteryPropsForPowerReading(props.battery)}
                 network={props.network}
               />
@@ -292,7 +281,6 @@ function storyFromDescriptor(
             <ShiftPartFrame>
               <ShiftStatusBar
                 time={shiftClockLabelForIso(DEFAULT_SHIFT_CLOCK_ISO)}
-                avatarSrc={statusBarTake.avatar}
                 battery={shiftBatteryPropsForPowerReading(statusBarTake.power)}
                 network={statusBarTake.network}
               />

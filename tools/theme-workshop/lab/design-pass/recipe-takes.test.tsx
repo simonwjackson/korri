@@ -18,14 +18,11 @@ describe("recipe Takes", () => {
   it("maps emphasis knobs to concrete status-bar props", () => {
     const props = shiftStatusBarPropsFromRecipe({
       kind: "shift-status-bar-take-v1",
-      density: "airy",
-      tone: "quiet",
       batteryEmphasis: "high",
       networkEmphasis: "low",
     })
     expect(props.battery).toEqual({ percent: 97, charging: true })
     expect(props.network).toEqual({ _tag: "Disconnected" })
-    expect(props.avatarSrc).toContain("korri-shift-quiet-airy")
   })
 
   it("builds a generated Take batch that carries the recipe on each descriptor", () => {
@@ -42,8 +39,6 @@ describe("recipe Takes", () => {
           summary: "Airy and hushed.",
           recipe: {
             kind: "shift-status-bar-take-v1",
-            density: "airy",
-            tone: "quiet",
             batteryEmphasis: "low",
             networkEmphasis: "low",
           },
@@ -52,7 +47,7 @@ describe("recipe Takes", () => {
     )
 
     expect(batch.stories).toHaveLength(1)
-    expect(batch.descriptors[0]?.recipe?.density).toBe("airy")
+    expect(batch.descriptors[0]?.recipe?.batteryEmphasis).toBe("low")
     expect(batch.descriptors[0]?.summary).toBe("Airy and hushed.")
     expect(batch.metaByStoryId[batch.stories[0]?.id ?? ""]).toMatchObject({
       role: "take",

@@ -157,7 +157,6 @@ const SHIFT_KNOBS: readonly ThemeKnob[] = [
 ]
 
 const PLACEHOLDER_TIME = "4:24 PM"
-const PLACEHOLDER_AVATAR_SRC = "https://i.pravatar.cc/96?u=korri-shift-user"
 
 // ── Real-media prototype catalog ──────────────────────────────────────────
 // Every Shift lab screen renders real games with SteamGridDB art (see
@@ -300,7 +299,6 @@ const SHIFT_SCREENS: readonly Screen[] = [
       <ShiftCinematicHome
         games={SHIFT_CINEMATIC_GAMES}
         time={PLACEHOLDER_TIME}
-        avatarSrc={PLACEHOLDER_AVATAR_SRC}
       />
     ),
   },

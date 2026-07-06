@@ -16,8 +16,6 @@ import { ShiftCineTile } from "./ui/molecules/ShiftCineTile"
 import { ShiftStatusBar } from "./ui/molecules/ShiftStatusBar"
 import { ShiftCineHero } from "./ui/organisms/ShiftCineHero"
 
-const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
-
 const recents = SHIFT_CINEMATIC_GAMES.filter(game => game.lastPlayedLabel)
 const favorites = SHIFT_CINEMATIC_GAMES.filter(
   game => game.favorite && !game.lastPlayedLabel,
@@ -103,7 +101,7 @@ export function RailSegmentsScene({
     >
       <style>{`${BASE_CSS}${headerCss}`}</style>
       <ShiftCineBackdrop artUrl={FOCUSED_GAME?.wideArtUrl ?? ""} />
-      <ShiftStatusBar time="4:24 PM" avatarSrc={AVATAR} />
+      <ShiftStatusBar time="4:24 PM" />
       <div className="shift-cine-stage">
         <div className="shift-cine-midrow">
           {FOCUSED_GAME ? (

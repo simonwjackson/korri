@@ -10,8 +10,6 @@ import * as v from "valibot"
  */
 const ShiftStatusBarRecipe = v.object({
   kind: v.literal("shift-status-bar-take-v1"),
-  density: v.picklist(["airy", "cozy", "compact"]),
-  tone: v.picklist(["quiet", "neutral", "bold"]),
   batteryEmphasis: v.picklist(["low", "medium", "high"]),
   networkEmphasis: v.picklist(["low", "medium", "high"]),
 })
@@ -39,14 +37,12 @@ const model =
 const instructionsFor = (input: v.InferOutput<typeof Input>): string => `
 You are a design assistant for the Korri "Shift" home screen. The user is
 looking at the Shift status bar — the top chrome that shows the clock, network
-signal, battery, and avatar — and wants fresh design directions.
+signal, and battery — and wants fresh design directions.
 
 Produce exactly ${input.count} distinct take(s) for this request:
 "${input.prompt}"
 
 Each take is semantic design intent expressed through these knobs only:
-- density: "airy" | "cozy" | "compact" — how much breathing room the bar wants.
-- tone: "quiet" | "neutral" | "bold" — the visual voice of the bar.
 - batteryEmphasis: "low" | "medium" | "high" — how loud the battery indicator is.
 - networkEmphasis: "low" | "medium" | "high" — how loud the network indicator is.
 

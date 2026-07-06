@@ -26,7 +26,6 @@ export const SHIFT_DESIGN_PARTS = {
   },
   battery: { id: "shift.battery", layer: "atom", name: "Battery" },
   clock: { id: "shift.clock", layer: "atom", name: "Clock" },
-  avatar: { id: "shift.avatar", layer: "atom", name: "Avatar" },
   networkIcon: {
     id: "shift.network-icon",
     layer: "atom",

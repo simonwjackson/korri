@@ -10,8 +10,6 @@ describe("design takes client", () => {
           summary: "Airy and hushed.",
           recipe: {
             kind: "shift-status-bar-take-v1",
-            density: "airy",
-            tone: "quiet",
             batteryEmphasis: "low",
             networkEmphasis: "low",
           },
@@ -22,7 +20,7 @@ describe("design takes client", () => {
     const candidates = parseCandidates(raw)
     expect(candidates).toHaveLength(1)
     expect(candidates?.[0]?.name).toBe("Gallery Calm")
-    expect(candidates?.[0]?.recipe.density).toBe("airy")
+    expect(candidates?.[0]?.recipe.batteryEmphasis).toBe("low")
   })
 
   it("drops candidates with an invalid recipe and returns null when none remain", () => {
@@ -34,9 +32,7 @@ describe("design takes client", () => {
           summary: "bad enum",
           recipe: {
             kind: "shift-status-bar-take-v1",
-            density: "spacious",
-            tone: "quiet",
-            batteryEmphasis: "low",
+            batteryEmphasis: "soft",
             networkEmphasis: "low",
           },
         },

@@ -114,7 +114,6 @@ export function shiftPreloadImageUrls(
 export interface ShiftCinematicHomeProps {
   readonly games: readonly ShiftCinematicGame[]
   readonly time?: string
-  readonly avatarSrc?: string
   /** Status-bar battery state; defaults to a mid-charge battery. */
   readonly battery?: ShiftStatusBarProps["battery"]
   /** Status-bar network state; defaults to connected. */
@@ -145,7 +144,6 @@ export interface ShiftCinematicHomeProps {
 export function ShiftCinematicHome({
   games,
   time = "4:24 PM",
-  avatarSrc,
   battery,
   network,
   onGameFocus,
@@ -389,12 +387,7 @@ export function ShiftCinematicHome({
         cooled={!activeAffordance && status?.tone === "failed"}
       />
 
-      <ShiftStatusBar
-        time={time}
-        avatarSrc={avatarSrc}
-        battery={battery}
-        network={network}
-      />
+      <ShiftStatusBar time={time} battery={battery} network={network} />
 
       <div className="shift-cine-stage" ref={stageRef}>
         <div className="shift-cine-midrow">

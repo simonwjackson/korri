@@ -119,8 +119,6 @@ function normalizeDescriptor(
   }
 }
 
-const DENSITY = new Set(["airy", "cozy", "compact"])
-const TONE = new Set(["quiet", "neutral", "bold"])
 const EMPHASIS = new Set(["low", "medium", "high"])
 
 function normalizeRecipe(value: unknown): ShiftStatusBarRecipe | null {
@@ -128,8 +126,6 @@ function normalizeRecipe(value: unknown): ShiftStatusBarRecipe | null {
   const candidate = value as Record<string, unknown>
   if (
     candidate.kind !== "shift-status-bar-take-v1" ||
-    !DENSITY.has(candidate.density as string) ||
-    !TONE.has(candidate.tone as string) ||
     !EMPHASIS.has(candidate.batteryEmphasis as string) ||
     !EMPHASIS.has(candidate.networkEmphasis as string)
   ) {
@@ -137,8 +133,6 @@ function normalizeRecipe(value: unknown): ShiftStatusBarRecipe | null {
   }
   return {
     kind: "shift-status-bar-take-v1",
-    density: candidate.density as ShiftStatusBarRecipe["density"],
-    tone: candidate.tone as ShiftStatusBarRecipe["tone"],
     batteryEmphasis:
       candidate.batteryEmphasis as ShiftStatusBarRecipe["batteryEmphasis"],
     networkEmphasis:

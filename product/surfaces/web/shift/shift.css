@@ -539,14 +539,6 @@
 	letter-spacing: 0.02em;
 }
 
-[data-shift-home] .shift-cine-avatar {
-	width: 2.1em;
-	height: 2.1em;
-	border-radius: 9999px;
-	object-fit: cover;
-	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
-}
-
 [data-shift-home] .shift-cine-stage {
 	position: absolute;
 	inset: 0;

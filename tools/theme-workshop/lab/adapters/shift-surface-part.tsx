@@ -227,7 +227,6 @@ function ShiftStatusBarFromEdges() {
   return (
     <ShiftStatusBar
       time={shiftClockLabelForIso(clockIso)}
-      avatarSrc="https://i.pravatar.cc/96?u=korri-shift-user"
       battery={battery}
       network={network}
     />

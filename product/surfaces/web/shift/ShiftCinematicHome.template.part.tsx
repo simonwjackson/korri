@@ -8,18 +8,12 @@ import { SHIFT_CINEMATIC_GAMES } from "./config"
 import { ShiftCinematicHome } from "./pages/ShiftCinematicHome"
 import { SHIFT_DESIGN_PARTS } from "./shift-design-parts"
 
-const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
-
 export default {
   designPartId: SHIFT_DESIGN_PARTS.homeTemplate.id,
   name: "Cinematic Home",
   note: "Template",
   surface: true,
   render: () => (
-    <ShiftCinematicHome
-      games={SHIFT_CINEMATIC_GAMES}
-      time="4:24 PM"
-      avatarSrc={AVATAR}
-    />
+    <ShiftCinematicHome games={SHIFT_CINEMATIC_GAMES} time="4:24 PM" />
   ),
 }

@@ -63,7 +63,6 @@ import {
 } from "../shift-power-state"
 import { playtimeLabel, relativeLastPlayed } from "./cinematic-play-labels"
 
-const AVATAR = "https://i.pravatar.cc/96?u=korri-shift-user"
 const UNKNOWN_FOREGROUND = {
   _tag: "Unknown",
   state: "foreground-status-waiting",
@@ -286,7 +285,6 @@ function NavigatingReadyBody({
       games.length > 0 ? (
         <ShiftCinematicHome
           games={games.map(toCinematicGame)}
-          avatarSrc={AVATAR}
           time={shiftClockLabelForIso(clockIso)}
           battery={battery}
           network={network}
