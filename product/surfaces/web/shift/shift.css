@@ -700,6 +700,46 @@
 	color: var(--shift-on-accent);
 }
 
+/* EXPLORATION (throwaway): button-row placement takes for the dev lab. Keyed on
+ * `data-legend-placement` on the Home root. Delete this whole block together
+ * with the `legendPlacement` prop and `ShiftHomeButtonRow.template.part.tsx`
+ * once a placement is chosen. The default ("above-rail") needs no rule. */
+[data-shift-home][data-legend-placement="center"] .shift-cine-legend {
+	justify-content: center;
+}
+
+[data-shift-home][data-legend-placement="footer"] .shift-cine-legend {
+	/* Renders after the rail in the DOM; add breathing room off the tiles. */
+	margin-top: var(--shift-space-3);
+}
+
+[data-shift-home][data-legend-placement="hero-band"] .shift-cine-heroband {
+	/* Hero info left, button hints right, sharing one baseline band. Wraps the
+	 * hints below on frames too narrow to hold both. */
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: var(--shift-space-3) var(--shift-space-4);
+	width: 100%;
+}
+
+[data-shift-home][data-legend-placement="hero-band"]
+	.shift-cine-heroband
+	.shift-cine-hero-stack {
+	/* Let the hero share the row instead of claiming its full width. */
+	width: auto;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+[data-shift-home][data-legend-placement="hero-band"]
+	.shift-cine-heroband
+	.shift-cine-legend {
+	width: auto;
+	flex: 0 0 auto;
+}
+
 [data-shift-home] .shift-cine-rail {
 	position: relative;
 	flex: 0 0 auto;

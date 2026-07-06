@@ -111,6 +111,18 @@ export function shiftPreloadImageUrls(
   return Array.from(urls)
 }
 
+/**
+ * EXPLORATION (throwaway): where the button-hint row sits relative to the hero
+ * and rail. Drives the ShiftHomeButtonRow dev-lab takes; delete this type, the
+ * `legendPlacement` prop, the `[data-legend-placement]` CSS block, and
+ * `ShiftHomeButtonRow.template.part.tsx` together once a placement is chosen.
+ */
+export type ShiftLegendPlacement =
+  | "above-rail"
+  | "hero-band"
+  | "footer"
+  | "center"
+
 export interface ShiftCinematicHomeProps {
   readonly games: readonly ShiftCinematicGame[]
   readonly time?: string
@@ -140,6 +152,9 @@ export interface ShiftCinematicHomeProps {
   /** Pick a random game. When provided, a trailing "Surprise" affordance is
    * appended to the rail (before Library); confirming it fires this. */
   readonly onSurprise?: () => void
+  /** EXPLORATION (throwaway): button-row placement take. Omitted = the current
+   * "above-rail" behavior. Remove with the ShiftHomeButtonRow template part. */
+  readonly legendPlacement?: ShiftLegendPlacement
 }
 
 export function ShiftCinematicHome({
@@ -156,6 +171,7 @@ export function ShiftCinematicHome({
   onDismiss,
   onOpenLibrary,
   onSurprise,
+  legendPlacement = "above-rail",
 }: ShiftCinematicHomeProps) {
   const [index, setIndex] = useState(0)
   const [trackX, setTrackX] = useState(0)
@@ -365,9 +381,22 @@ export function ShiftCinematicHome({
           { glyph: "Y", label: "Favorite" },
         ]
 
+  // EXPLORATION (throwaway): the hero + legend nodes are hoisted so the
+  // `legendPlacement` takes can slot the legend into different positions.
+  const heroNode =
+    activeAffordance?.kind === "surprise" ? (
+      <ShiftCineSurpriseHero />
+    ) : activeAffordance?.kind === "library" ? (
+      <ShiftCineLibraryHero />
+    ) : game ? (
+      <ShiftCineHero game={game} status={status} resuming={resuming} />
+    ) : null
+  const legend = legendHints ? <ShiftCineLegend hints={legendHints} /> : null
+
   return (
     <div
       data-shift-home
+      data-legend-placement={legendPlacement}
       className="shift-cine intrinsic relative h-full w-full overflow-hidden"
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.homeTemplate)}
     >
@@ -385,18 +414,21 @@ export function ShiftCinematicHome({
 
       <div className="shift-cine-stage" ref={stageRef}>
         <div className="shift-cine-midrow">
-          {activeAffordance?.kind === "surprise" ? (
-            <ShiftCineSurpriseHero />
-          ) : activeAffordance?.kind === "library" ? (
-            <ShiftCineLibraryHero />
-          ) : game ? (
-            <ShiftCineHero game={game} status={status} resuming={resuming} />
-          ) : null}
+          {legendPlacement === "hero-band" ? (
+            <div className="shift-cine-heroband">
+              {heroNode}
+              {legend}
+            </div>
+          ) : (
+            heroNode
+          )}
         </div>
 
-        {/* Button hints — their own right-aligned row above the rail, so they
-            never compete with the hero's chips for one line. */}
-        {legendHints ? <ShiftCineLegend hints={legendHints} /> : null}
+        {/* Button hints — placement varies per the throwaway `legendPlacement`
+            take; default "above-rail" is a right-aligned row above the rail. */}
+        {legendPlacement === "above-rail" || legendPlacement === "center"
+          ? legend
+          : null}
 
         <ShiftCineRail
           games={games}
@@ -432,6 +464,8 @@ export function ShiftCinematicHome({
               : undefined
           }
         />
+
+        {legendPlacement === "footer" ? legend : null}
       </div>
     </div>
   )
