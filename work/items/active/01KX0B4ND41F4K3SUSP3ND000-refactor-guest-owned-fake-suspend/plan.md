@@ -30,7 +30,7 @@ ROCKNIX/SM8550 does not provide a dependable real sleep mode for Bandai, so susp
 - R4. Lid close turns the screen off before low-power radio/governor work and reaches a bounded, observable state even when the power-state watcher is down.
 - R5. Lid open resumes only from an active fake-suspend state; spurious open events do not trigger substrate exit work.
 - R6. Power button behavior is form-factor aware: while the lid is closed, power does not silently resume a clamshell into an invisible running state.
-- R7. Active session behavior is coordinated with sessiond: local games may freeze/thaw; active streams and launch-in-progress states do not get SIGSTOPed into undefined behavior.
+- R7. Active session behavior is coordinated with sessiond: local games pause/resume through an owned primitive; active streams and launch-in-progress states do not get SIGSTOPed into undefined behavior.
 - R8. CI can prove the wiring, state transitions, and substrate/product boundary before the final physical Bandai lid-close validation.
 
 ---
@@ -57,7 +57,7 @@ ROCKNIX/SM8550 does not provide a dependable real sleep mode for Bandai, so susp
 
 - [korri] `product/services/device/inputd.ts` maps `KEY_POWER` to `power-suspend` and `SW_LID` to `lid-closed` / `lid-opened`.
 - [korri] `product/services/device/inputd-actions.ts` dispatches action commands through `KORRI_INPUTD_*` env overrides and already has sessiond client patterns for kill/home actions.
-- [korri] `product/systems/nixos/images/platforms/rocknix-sm8550.nix` currently defines the inline `korri-fakesuspend-toggle`, wires inputd env, derives `powerRequestDir` from `config.rocknix.power.runtimeDir`, and sets `rocknix.power.requestGroup = runtime.group`.
+- [korri] `product/systems/nixos/images/platforms/rocknix-sm8550.nix` currently defines the inline `korri-fakesuspend-toggle`, wires inputd env, derives `powerRequestDir` from `config.rocknix.power.runtimeDir`, and sets `rocknix.power.requestGroup = runtime.group`; the plan should tighten or explicitly justify that broad writer group before shipping.
 - [korri] `product/platform/library/sessiond-managed-launch-client.ts` provides existing status and terminate clients over the sessiond socket.
 - [korri] `product/services/device/overlay-session-state-live.ts` shows a thin live adapter that classifies active Moonlight sessions from sessiond/proc state.
 - [korri] `tools/testing/nix/korri-rocknix-sm8550-config-check.nix` is the main pure-Nix guard for SM8550 platform wiring.
@@ -84,7 +84,7 @@ ROCKNIX/SM8550 does not provide a dependable real sleep mode for Bandai, so susp
 - Product policy moves into a Korri fake-suspend controller rather than staying as a large inline Nix shell snippet. Rationale: the behavior now has state, sessiond coordination, testable edge cases, and form-factor policy; that is product logic, not substrate glue.
 - Keep the substrate request channel file-based and polled. Rationale: nix-on-rocks already records that systemd path units multi-trigger and can hit start limits; the boring poll loop is the validated actuator boundary.
 - Use existing sessiond status/terminate clients for active-session handling, but make new-launch blocking a deliberate sessiond concern if remote or agent launches can enter while fake suspend is active. Rationale: status/terminate is enough to settle current work, but only sessiond can reliably reject future launches that arrive through daemon/RPC paths.
-- Treat active streams differently from local games. Rationale: freezing Moonlight can kill the network stream; stream sessions need graceful disconnect/termination semantics, while local game scopes can be frozen/thawed.
+- Treat active streams differently from local games. Rationale: freezing Moonlight can kill the network stream; stream sessions need graceful disconnect/termination semantics, while local games should be paused through sessiond-owned process-group/scope control rather than an ungrounded `systemctl --user` scope sweep.
 - Make lid-open idempotent and guarded. Rationale: spurious `SW_LID=0` events should not run a substrate exit path when Korri never entered fake suspend; this relies on the substrate exit path remaining no-snapshot/no-op safe.
 - Make power-button resume lid-state aware on Thor/Bandai. Rationale: pressing power while the clamshell is closed should not resume audio/CPU/radios with no visible display.
 - Assert cross-repo boundaries in Nix checks and lint, not comments. Rationale: this bug class came from stale product details in substrate code; CI should fail if that coupling returns.
@@ -102,9 +102,9 @@ ROCKNIX/SM8550 does not provide a dependable real sleep mode for Bandai, so susp
 
 ### Deferred to Implementation
 
-- Exact controller packaging shape: TypeScript/Bun controller versus extracted shell package can be decided locally, but the chosen shape must be independently testable and no longer live as untested inline platform glue.
-- Exact sessiond coordination primitive for active sessions: start with existing status/terminate; add a small additive capability only if status/terminate cannot represent suspend safely.
-- Exact new-launch guard shape: implementation must choose either a sessiond marker check or a capability-flagged suspend guard before U3 lands; passive “the screen is off” gating is not enough for remote or agent-triggered launches.
+- Exact controller packaging details: U1 is a TypeScript/Bun controller packaged as the `korri-fakesuspend-toggle` executable; implementation may choose only the Nix derivation/package-output details.
+- Exact sessiond coordination primitive for active sessions: start with existing status/terminate, but local-game pause/resume must use a concrete sessiond-owned active process primitive — either an exposed process-group suspend/resume path or explicitly named transient scopes — before production activation.
+- Exact new-launch guard shape: sessiond must own the canonical pre-spawn check by reading a configured fake-suspend marker path or equivalent capability-flagged state; passive “the screen is off” gating is not enough for remote or agent-triggered launches.
 - Exact physical lid-state source for power-button-while-closed behavior: use the most reliable implementation-time source available, such as last observed `SW_LID` marker or a kernel state read.
 
 ---
@@ -129,9 +129,9 @@ sequenceDiagram
   Ctrl->>Sessiond: fresh status query for active launch/session kind
   alt active stream or launch transition
     Ctrl->>Sessiond: terminate/settle active launch deliberately
-  else local game scope
+  else local game
+    Ctrl->>Sessiond: pause active process group/scope via owned primitive
     Ctrl->>Sway: output power off
-    Ctrl->>Ctrl: freeze transient game scopes
   end
   Ctrl->>Sub: write enter.request / exit.request
   Sub->>Sub: radios/governors first-wins enter/exit
@@ -148,23 +148,28 @@ sequenceDiagram
 
 **Requirements:** R1, R4, R5, R6, R8
 
-**Dependencies:** None
+**Dependencies:** None for state/controller extraction. Sessiond pause/resume behavior depends on U3, and substrate acknowledgement behavior depends on U4; U2 must not activate the controller on device until those contracts are in place.
 
 **Files:**
 - Create: [korri] `product/services/device/fakesuspend-controller.ts`
 - Create: [korri] `product/services/device/fakesuspend-controller.test.ts`
 - Create/Modify: [korri] `product/services/device/nix/fakesuspend-controller.nix`
 - Modify: [korri] `flake.nix`
+- Modify: [korri] `product/systems/nixos/flake/default.nix`
+- Modify: [korri] `product/systems/nixos/flake/packages.nix`
+- Modify: [korri] `product/systems/nixos/flake/sources.nix` if the package source set needs the new controller
 - Modify: [korri] `tools/testing/nix/korri-package-outputs-check.nix`
 
 **Approach:**
 - Model fake-suspend controller state explicitly: active marker, last-toggle/debounce marker, last lid state, request directory, runtime dir, and command runner dependencies.
 - Keep the controller executable-compatible with inputd env command dispatch: `toggle`, `suspend`, and `resume` remain valid action arguments, and keep the executable name `korri-fakesuspend-toggle` unless the U2 config assertions are changed atomically with the rename.
 - Keep active, debounce, and lid-state markers filesystem-backed under the runtime state directory so a spawned-per-event controller or restarted long-running controller can still recover/resume.
-- Replace hidden shell side effects with a small command-runner boundary for Sway output power, systemd user scope freeze/thaw, and request-file writes.
-- Make the scope-freeze predicate explicit. Prefer a launch/sessiond-derived local game scope list; if the kiosk image relies on “all running user scopes are game scopes,” guard that assumption with a config/test assertion rather than carrying it implicitly.
+- Protect the state directory with controller-owned restrictive permissions, atomic marker updates, and stale-marker reconciliation against substrate ack/status so ordinary runtime processes cannot forge or erase fake-suspend state.
+- Replace hidden shell side effects with a small command-runner boundary for Sway output power, sessiond-owned active-process pause/resume, and request-file writes.
+- Make the active local-game pause primitive explicit. Prefer a sessiond-derived active process group; if implementation migrates launches into transient user scopes, expose named scopes through sessiond. Do not sweep every running user scope unless a config/test assertion proves every such scope is game-owned.
 - Treat missing Sway socket as a non-fatal display-control failure but make it observable in logs/results so screen-off failure is diagnosable.
 - Do not let the product controller create the substrate request directory silently; substrate tmpfiles owns that directory. The controller should report when the request channel is missing, and device activation must not remove the current `mkdir -p` safety net until U4's tmpfiles behavior is deployed or landed atomically.
+- After writing `enter.request` or `exit.request`, observe the neutral substrate acknowledgement/result contract from U4 within a bounded timeout and report `requested`, `applied`, or `degraded` accurately instead of assuming a successful actuator change.
 
 **Execution note:** Implement controller behavior test-first with temp directories and a recording command runner; do not rely on physical Bandai for basic state-machine coverage.
 
@@ -174,15 +179,17 @@ sequenceDiagram
 - [nix-on-rocks] `nix/tests/powerstate-script-contract.nix` for fake filesystem/state-root testing posture.
 
 **Test scenarios:**
-- Happy path: `suspend` with no active marker powers Sway outputs off, freezes local scopes selected by the explicit predicate, writes `enter.request`, and records active state.
-- Happy path: `resume` with active marker writes `exit.request`, thaws frozen scopes, powers Sway outputs on, and clears active state.
-- Edge case: `resume` with no active marker is a no-op and does not write `exit.request`.
+- Happy path: `suspend` with no active marker powers Sway outputs off, invokes the sessiond-owned active-process pause primitive when a local game is active, writes `enter.request`, and records active state.
+- Happy path: `resume` with active marker writes `exit.request`, invokes the matching sessiond-owned resume primitive, powers Sway outputs on, and clears active state.
+- Edge case: `resume` with no active marker is a no-op only when substrate ack/status also shows no active low-power snapshot; if substrate state indicates an active snapshot, the controller enters a degraded recovery path and requests safe exit.
 - Edge case: `suspend` while the active marker already exists is idempotent and does not write a second `enter.request`.
 - Edge case: a controller restart or fresh process with an existing active marker can still resume because marker state is filesystem-backed.
 - Edge case: two `toggle` actions inside the debounce window produce one suspend action and one debounced result.
 - Edge case: `toggle` after the debounce window resumes only when active and lid state allows it.
 - Error path: missing Sway socket does not prevent active marker/request-file behavior but records a display-control warning.
 - Error path: missing substrate request directory records a degraded/failure result instead of creating the directory and pretending substrate power-state will run.
+- Error path: request file is written but no substrate acknowledgement/result appears before the timeout, so the controller reports degraded/substrate-unavailable.
+- Error path: marker directory owner/mode is wrong or marker tampering is detected, so controller refuses to trust the marker and reports degraded recovery.
 - Integration: the packaged executable accepts the same command shape that `commandFromEnv` produces for `KORRI_INPUTD_POWER_SUSPEND` and lid actions.
 
 **Verification:**
@@ -197,7 +204,7 @@ sequenceDiagram
 
 **Requirements:** R1, R2, R3, R4, R8
 
-**Dependencies:** U1
+**Dependencies:** U1 for build-time wiring. Production/device activation also depends on U3's sessiond guard/active-session primitive and U4's request-channel tmpfiles/ack contract, or all three must deploy atomically.
 
 **Files:**
 - Modify: [korri] `product/systems/nixos/images/platforms/rocknix-sm8550.nix`
@@ -208,7 +215,8 @@ sequenceDiagram
 - Wire `KORRI_INPUTD_POWER_SUSPEND`, `KORRI_INPUTD_LID_CLOSED`, and `KORRI_INPUTD_LID_OPENED` to the packaged controller.
 - Preserve the existing command semantics: power button toggles, lid close explicitly suspends, lid open explicitly resumes.
 - Keep `PULSE_SERVER` and `KORRI_SESSIOND_SOCKET` available to inputd/controller commands when needed.
-- Assert `rocknix.power.requestGroup = runtime.group` and that the controller's evaluated request path derives from `config.rocknix.power.runtimeDir`.
+- Assert that the controller's evaluated request path derives from `config.rocknix.power.runtimeDir`.
+- Prefer a dedicated least-privilege request-writer group/service identity for `enter.request` / `exit.request`; if the current `runtime.group` remains necessary, document why ordinary runtime/game processes cannot exploit it and add a follow-up blocker if that cannot be proven.
 - Explicitly set the SM8550 Wi-Fi watchdog decision in platform config, then assert that decision in the config check.
 
 **Patterns to follow:**
@@ -218,8 +226,7 @@ sequenceDiagram
 **Test scenarios:**
 - Happy path: Nix config evaluation shows inputd power/lid env values point at the controller package and preserve the right executable name/subcommands.
 - Edge case: changing `rocknix.power.runtimeDir` changes the evaluated request path consumed by the controller wiring.
-- Error path: config check fails if `requestGroup` is unset or no longer equals the Korri runtime group.
-- Error path: config check fails if SM8550 reintroduces `KORRI_INPUTD_VOLUME_UP` / `KORRI_INPUTD_VOLUME_DOWN` overrides instead of using the Korri Pulse socket with inputd defaults.
+- Error path: config check fails if `requestGroup` is unset, too broad for the intended writer set, or disconnected from the controller's service identity.
 
 **Verification:**
 - SM8550 Nix config check proves inputd, request group, runtime dir, sessiond socket, Pulse socket, and watchdog posture are coherent.
@@ -229,11 +236,11 @@ sequenceDiagram
 
 ### U3. Coordinate fake suspend with sessiond lifecycle
 
-**Goal:** Prevent fake suspend from racing or corrupting sessiond-managed foreground lifecycle by using existing sessiond status/terminate surfaces before freezing or dropping radios.
+**Goal:** Prevent fake suspend from racing or corrupting sessiond-managed foreground lifecycle by using sessiond status/terminate and a concrete active-process pause/resume primitive before dropping radios.
 
 **Requirements:** R1, R4, R7, R8
 
-**Dependencies:** U1, U2
+**Dependencies:** U1. U3 should land before U2 is enabled on-device, even if U2 package/config edits are prepared earlier.
 
 **Files:**
 - Modify: [korri] `product/services/device/fakesuspend-controller.ts`
@@ -249,8 +256,9 @@ sequenceDiagram
 - For `home` mode with no active launch, proceed directly to display-off/request-write with no scope freeze or session termination.
 - For active Moonlight/stream sessions, prefer deliberate termination/disconnect over freezing the stream process.
 - For launch-in-progress or restoring/recovering states, avoid racing scope creation. Either terminate/settle to idle first or refuse/defer suspend with an observable result.
-- For local game sessions, freeze only the transient game scopes and keep compositor, inputd, sessiond, and daemon services running.
-- Prevent new foreground launches while fake suspend is active through a sessiond-owned guard or additive capability; do not rely on passive screen-off gating because remote/agent launches can still enter sessiond.
+- For local game sessions, pause/resume only the active launch through a sessiond-owned primitive: either freeze/thaw the known process group that sessiond launched or migrate local launches into named transient scopes and expose those scope names. Do not sweep every running user scope unless a Nix/test assertion proves every such scope is game-owned.
+- Prevent new foreground launches while fake suspend is active through a sessiond-owned guard at the canonical pre-spawn path. The controller should create an `entering/suspended` marker under a locked, controller-owned state directory before classification, sessiond should reject new launches while that marker is present with a typed `fake-suspend-active` launch failure, and the controller should clear or reconcile the marker on failed entry.
+- Guard both managed and legacy process-creation paths, including `startManagedLaunch` and `launchUnderSession`, so daemon/RPC/CLI/agent entrypoints cannot bypass fake-suspend state.
 - If implementation proves existing sessiond status/terminate APIs insufficient, add the smallest additive suspend capability and capability flag; do not version-break the managed-launch protocol.
 
 **Patterns to follow:**
@@ -260,12 +268,12 @@ sequenceDiagram
 
 **Test scenarios:**
 - Happy path: `home` mode with no active launch writes the suspend marker/request and does not freeze or terminate a session.
-- Happy path: local game in `game` mode freezes local scopes and writes `enter.request` without terminating sessiond itself.
-- Happy path: active stream session invokes deliberate sessiond termination/disconnect handling and does not freeze Moonlight as a paused scope.
-- Edge case: suspend requested during `launching` does not allow a newly-created scope to escape the freeze/terminate decision.
+- Happy path: local game in `game` mode pauses the active launch through the concrete sessiond-owned process-group/scope primitive and writes `enter.request` without terminating sessiond itself.
+- Happy path: active stream session invokes deliberate sessiond termination/disconnect handling and does not freeze Moonlight as a paused process.
+- Edge case: suspend requested during `launching` does not allow a newly-created process/scope to escape the pause/terminate decision.
 - Edge case: suspend requested while `restoring` or `recovering` does not increment restore attempts as if fake suspend were a crash.
 - Error path: sessiond unavailable produces a conservative, observable result; it must not blindly claim a fully-coordinated suspend.
-- Integration: the chosen sessiond suspend guard rejects a new foreground launch while the fake-suspend active marker is present.
+- Integration: daemon/RPC/CLI/agent launch entrypoints all return a typed `fake-suspend-active` rejection before process creation while the fake-suspend marker is present.
 
 **Verification:**
 - Unit tests show controller/sessiond coordination for idle, local game, stream, launching, restoring, and unavailable states.
@@ -291,6 +299,7 @@ sequenceDiagram
 - Assert that `rocknix-powerstate-watcher.service` is wanted by `multi-user.target`, uses the evaluated request directory, and remains product-blind.
 - Preserve first-wins snapshot and consume-on-exit semantics for repeated/duplicate enter requests.
 - Ensure request directory group ownership remains declarative via tmpfiles and `rocknix.power.requestGroup`, not through product-side directory creation.
+- Add a product-blind acknowledgement/result contract for request processing: after `enter.request` or `exit.request`, the watcher should consume the request and update a neutral status/result timestamp that the Korri controller can observe without knowing substrate internals.
 - Keep the host-reachable kill switch path under `/storage/.guest/lid-suspend.disabled`.
 - Keep logind ignoring lid/power inside the guest so unsupported real suspend does not take down the container.
 
@@ -303,8 +312,9 @@ sequenceDiagram
 - Happy path: powerstate exit restores governors/radios, performs Wi-Fi recovery when needed, and consumes the snapshot.
 - Edge case: exit without active snapshot is a no-op.
 - Error path: kill switch present causes enter/exit requests to skip substrate mutation.
-- Error path: boundary lint fails if `powerstate.nix` references Korri units, `main-space-pipewire`, or uid-0 Sway socket patterns.
-- Integration: NixOS evaluation proves request directory permissions are group-writable only when `requestGroup` is configured.
+- Error path: boundary lint fails if any relevant nix-on-rocks guest/module source references Korri units, `main-space-pipewire`, uid-0 Sway socket patterns, product user IDs, or product lifecycle policy outside documented neutral test fixtures.
+- Error path: stopping or disabling the watcher leaves request writes unacknowledged and causes the controller to report degraded/substrate-unavailable instead of claiming low-power success.
+- Integration: NixOS evaluation proves request directory permissions are group-writable only when `requestGroup` is configured and scoped to the intended writer identity.
 
 **Verification:**
 - nix-on-rocks checks prove substrate behavior and boundary lint without importing Korri or naming product services.
@@ -330,7 +340,7 @@ sequenceDiagram
 
 **Approach:**
 - Keep inputd's existing `KEY_POWER` / `SW_LID` event mapping; no TypeScript inputd dispatch change is expected unless tests reveal a missing frame.
-- Add targeted Nix assertions that SM8550 device access grants the runtime user direct access to bare `/dev/input/event*` nodes and runs before the login/session path that consumes them.
+- Add targeted Nix assertions that SM8550 device access grants only the inputd service identity or dedicated input group access to the required power/lid `/dev/input/event*` nodes, with broad runtime-user access allowed only if explicitly justified.
 - Track last lid state in the controller so `toggle` does not resume into a physically closed clamshell.
 - Make duplicate lid-close events idempotent; lid-close while already suspended should not corrupt state or overwrite substrate snapshots.
 
@@ -344,12 +354,12 @@ sequenceDiagram
 - Happy path: lid close writes a closed-lid state marker and suspends.
 - Edge case: power toggle while closed-lid marker is active does not resume the device invisibly.
 - Edge case: lid open clears closed-lid state and resumes only when fake suspend is active.
-- Error path: config check fails if SM8550 no longer grants runtime-user ACLs for input event nodes before the session starts.
+- Error path: config check fails if SM8550 grants broad runtime-user ACLs for input event nodes without a reviewed exception and compensating controls.
 - Integration: platform config exposes the neutral SM8550 input facts needed to identify `pmic_pwrkey` and `gpio-keys` without Korri hard-coding chipset-private paths.
 
 **Verification:**
 - Unit tests prove input event classification and form-factor state behavior.
-- Nix config checks prove Bandai runtime user can access host-bound physical input nodes through the guest.
+- Nix config checks prove the inputd service identity or dedicated input group can access only the required host-bound physical input nodes through the guest.
 
 ---
 
@@ -378,7 +388,7 @@ sequenceDiagram
 
 **Test scenarios:**
 - Integration: lid-close from idle blanks screen and powers down substrate state; lid-open restores screen and Wi-Fi.
-- Integration: lid-close with a local game freezes/thaws or otherwise preserves session according to U3 policy.
+- Integration: lid-close with a local game pauses/resumes or otherwise preserves session according to U3 policy.
 - Integration: lid-close with an active Moonlight stream follows the stream-specific U3 behavior without freezing Moonlight into a broken connection.
 - Integration: lid-close during a launch transition does not leave sessiond stuck in `launching` or consume restore attempts as a crash.
 - Edge case: rapid lid close/open settles into one coherent final state.
@@ -394,9 +404,9 @@ sequenceDiagram
 
 ## System-Wide Impact
 
-- **Interaction graph:** Physical evdev → inputd → fake-suspend controller → sessiond/Sway/systemd user scopes → nix-on-rocks request watcher → substrate radios/governors. Host remains only the recovery and guest-supervision plane.
+- **Interaction graph:** Physical evdev → inputd → fake-suspend controller → sessiond/Sway/sessiond-owned active process primitive → nix-on-rocks request watcher/ack → substrate radios/governors. Host remains only the recovery and guest-supervision plane.
 - **Error propagation:** Product-controller failures should be visible in controller logs/results; substrate actuator failures should be visible in powerstate logs/results; sessiond coordination failures should not masquerade as successful suspend.
-- **State lifecycle risks:** Active marker, last-toggle debounce, last lid state, substrate snapshot, request files, and sessiond mode must not drift under duplicate events or partial suspend/resume.
+- **State lifecycle risks:** Active marker, last-toggle debounce, last lid state, substrate snapshot, request files, substrate ack/status, and sessiond mode must not drift under duplicate events, marker loss, tampering, or partial suspend/resume.
 - **API surface parity:** inputd env command contract remains unchanged; sessiond protocol changes, if any, must be additive and capability-flagged.
 - **Integration coverage:** Unit and Nix checks can prove state-machine and wiring behavior, but only physical Bandai validation can prove real lid events, display power, Wi-Fi recovery, and host kill-switch recovery.
 - **Unchanged invariants:** nix-on-rocks does not import Korri, name Korri services, own product UI/session policy, or reintroduce real logind suspend behavior.
@@ -412,8 +422,8 @@ sequenceDiagram
 | Stream handling surprises users by disconnecting instead of preserving | Make stream behavior explicit and observable; do not freeze Moonlight blindly. |
 | Host/substrate watcher missing silently degrades to display-only suspend | Stop creating request dir from product controller; report missing request channel and assert watcher/tmpfiles in Nix checks. |
 | Physical lid/power events remain inaccessible to inputd | Add targeted ACL/order assertions and verify on Bandai before accepting the implementation. |
-| Cross-repo drift breaks request path or group ownership | Assert evaluated `rocknix.power.runtimeDir` and `requestGroup` from Korri config and substrate tests. |
-| Fake suspend drains battery because some scopes fail to freeze | Log freeze failures and decide whether to proceed as degraded; include physical validation for CPU/session state. |
+| Cross-repo drift breaks request path or group ownership | Assert evaluated `rocknix.power.runtimeDir` and least-privilege `requestGroup` from Korri config and substrate tests. |
+| Fake suspend drains battery because active local games are not paused | Use a concrete sessiond-owned process-group/scope primitive, log pause failures, and decide whether to proceed as degraded; include physical validation for CPU/session state. |
 
 ---
 
