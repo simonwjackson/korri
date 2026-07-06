@@ -111,7 +111,6 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("Waiting for compat in post-logon")
     expect(moduleSource).toContain("Loaded Config for Local Selection Path")
     expect(moduleSource).not.toContain("steam_big_picture_window_present")
-    expect(moduleSource).not.toContain("Steam Big Picture Mode")
     expect(moduleSource).not.toContain(
       "Console Log Start|Waiting for compat in post-logon",
     )
@@ -260,6 +259,14 @@ describe("Steam plugin Nix module", () => {
     )
     expect(moduleSource).toContain(
       "korri-steam-recover: leaving Steam Runtime helper files Steam-owned",
+    )
+  })
+
+  it("refuses visible Steam Big Picture surfaces even when uimode is desktop", () => {
+    expect(moduleSource).toContain("has_big_picture_surface()")
+    expect(moduleSource).toContain("Steam Big Picture Mode")
+    expect(moduleSource).toContain(
+      "korri-steam-service-run: refusing visible Steam Big Picture surface",
     )
   })
 

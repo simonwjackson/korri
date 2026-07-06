@@ -111,6 +111,12 @@ let
         >/dev/null 2>&1
     }
 
+    has_big_picture_surface() {
+      [ -S "$sway_sock" ] || return 1
+      SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg -t get_tree 2>/dev/null \
+        | ${pkgs.gnugrep}/bin/grep -qi 'Steam Big Picture Mode'
+    }
+
     ${steamServiceExec} &
     gamescope_pid="$!"
 
@@ -127,6 +133,13 @@ let
       if [ "$workspace_placed" -eq 0 ] && place_gamescope_workspace "$gamescope_pid"; then
         echo "korri-steam-service-run: moved managed Gamescope pid=$gamescope_pid to workspace $steam_workspace" >&2
         workspace_placed=1
+      fi
+
+      if has_big_picture_surface; then
+        echo "korri-steam-service-run: refusing visible Steam Big Picture surface; stopping managed Gamescope pid=$gamescope_pid" >&2
+        stop_gamescope "$gamescope_pid"
+        wait "$gamescope_pid" 2>/dev/null || true
+        exit "$guard_status"
       fi
 
       for cmdline in /proc/[0-9]*/cmdline; do

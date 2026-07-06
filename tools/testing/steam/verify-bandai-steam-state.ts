@@ -194,6 +194,9 @@ if (webhelpers.length > 0 && !liveUimodes.includes("7")) {
     `Steam webhelper uimodes are ${liveUimodes.join(",") || "unknown"}, expected 7`,
   )
 }
+if (swayMatches.some(match => /big picture/i.test(match.name ?? ""))) {
+  failures.push("Steam/Gamescope Sway container title is Big Picture")
+}
 if (!gamescopeProcesses.some(process => process.cmdline.includes("-nobigpicture"))) {
   failures.push("managed Gamescope Steam command does not include -nobigpicture")
 }
