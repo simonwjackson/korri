@@ -43,3 +43,22 @@ Remaining major follow-ups:
 - Wire the TypeScript Sunshine source adapter into the live packet-mirror IPC/socket path and virtual-seat writer.
 - Add portal/API-level leave-seat wrapper if required by clients beyond the direct sessiond managed endpoint.
 - Add NixOS/uinput access and hardware validation for Skate 3/RPCS3 plus a second runtime.
+
+## Progress — U9 NixOS/device access
+
+Implemented and committed `717f530a feat(nixos): add input seat uinput access`.
+
+What changed:
+
+- Added `services.korri.input.inputSeat` NixOS options for sessiond-owned remote input-seat `/dev/uinput` access.
+- Defaulted input-seat access to a dedicated `uinput` group instead of the broad `input` group.
+- Added assertions that reject `group = "input"` unless `allowBroadInputGroup = true` explicitly acknowledges the security downgrade.
+- Wired enabled input-seat support to create the group, add the configured service user to it, load `uinput`, and emit a `0660` udev rule for `/dev/uinput`.
+- Exported `KORRI_INPUT_SEAT_RUNTIME_DIR` from `korri-sessiond` when input-seat support is enabled.
+- Enabled the input-seat device-access contract on SM8550 with `group = "uinput"` and `%t/korri/input-seat` runtime dir.
+- Added a focused Nix check for dedicated-vs-broad uinput group behavior and extended the SM8550 config check to assert the device-access contract.
+
+Verification:
+
+- `nix build .#checks.x86_64-linux.korri-input-seat-device-access --no-link`
+- `nix build .#checks.x86_64-linux.korri-sm8550-kiosk-config --no-link`
