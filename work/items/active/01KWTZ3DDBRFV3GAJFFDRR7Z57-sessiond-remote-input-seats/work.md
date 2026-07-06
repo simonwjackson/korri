@@ -62,3 +62,31 @@ Verification:
 
 - `nix build .#checks.x86_64-linux.korri-input-seat-device-access --no-link`
 - `nix build .#checks.x86_64-linux.korri-sm8550-kiosk-config --no-link`
+
+## Progress — quick socket seam
+
+Added and committed `97e4aa19 feat(input-seat): add sunshine mirror socket seam`.
+
+What landed:
+
+- `product/platform/input-seat/sunshine-input-seat-mirror-socket.ts`
+  - newline-delimited JSON frame sink for Sunshine mirror packets
+  - strict decode through existing `decodeSunshineInputSeatFrame`
+  - launch-scoped feeding into `createSunshineRemoteInputSourceAdapter`
+  - bounded frame-size handling
+  - diagnostics for accepted, stale/drop results, malformed JSON, schema failures, oversized frames, and socket errors
+  - Unix socket server wrapper with absolute-path requirement, stale unlink, `0600` mode, and cleanup
+- `product/platform/input-seat/sunshine-input-seat-mirror-socket.test.ts`
+  - chunked frame handling
+  - stale-launch drop
+  - malformed/non-gamepad/oversized frame rejection
+  - adapter rate-limit propagation
+  - real Unix socket smoke check
+  - absolute socket path requirement
+
+Verification:
+
+- `bun test ./product/platform/input-seat/*.test.ts` → 33 pass
+- `just typecheck` still fails on the known pre-existing repo-wide errors; touched-path filter showed no input-seat/sessiond/RPCS3/protocol errors.
+
+Next quickest remaining non-hardware slice: add the Sunshine C++ packet mirror patch that writes these NDJSON frames to the socket path.
