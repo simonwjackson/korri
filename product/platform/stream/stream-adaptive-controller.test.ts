@@ -249,6 +249,26 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
     expect(decision.target.bitrateKbps).toBeLessThan(12_000)
   })
 
+  it("targets a playable emergency envelope during a shed", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({
+        bitrateDeliveryRatio: 0.12,
+        fpsDeliveryRatio: 0.2,
+        rttMs: numeric(180, "rising"),
+      }),
+      current,
+      objectiveBias: 0.8,
+      boundaries: { levers: {}, outcomes: {}, lean: 0.8 },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.mode).toBe("shed")
+    expect(decision.target.bitrateKbps).toBe(2_500)
+    expect(decision.target.fps).toBe(30)
+    expect(decision.target.resolution).toEqual({ width: 854, height: 480 })
+  })
+
   it("shrinks canvas when bits per pixel are starved and grows grudgingly after recovery", () => {
     const shrink = computeStreamAdaptiveDecision({
       summary: summary({ bitrateDeliveryRatio: 0.75 }),
@@ -356,11 +376,7 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
       boundaries: { levers: {}, outcomes: {}, lean: 0.5 },
     })
 
-    expect(decision.kind).toBe("target")
-    if (decision.kind !== "target") throw new Error("expected target")
-    expect(decision.target.bitrateKbps).toBeGreaterThanOrEqual(1_500)
-    expect(decision.target.fps ?? 30).toBeGreaterThanOrEqual(30)
-    expect(decision.target.resolution?.width ?? 640).toBeGreaterThanOrEqual(640)
+    expect(decision).toEqual({ kind: "dormant", reason: "within-hysteresis" })
   })
 
   it("keeps off-aspect resolution boundaries projected onto the stream aspect", () => {

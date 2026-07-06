@@ -27,6 +27,10 @@ export interface StreamAdaptiveControllerParams {
   readonly coldStartSampleCount?: number
   readonly coldStartBitrateKbps?: number
   readonly coldStartIncreaseFraction?: number
+  readonly playableBitrateKbps?: number
+  readonly panicBitrateKbps?: number
+  readonly playableFps?: number
+  readonly playableResolutionWidth?: number
 }
 
 export type StreamAdaptiveControllerPhase = "steady" | "establishing"
@@ -88,6 +92,10 @@ const DEFAULTS = {
   coldStartSampleCount: 3,
   coldStartBitrateKbps: 8_000,
   coldStartIncreaseFraction: 0.28,
+  playableBitrateKbps: 3_500,
+  panicBitrateKbps: 2_500,
+  playableFps: 30,
+  playableResolutionWidth: 854,
 }
 
 const FPS_STEPS = [15, 30, 40, 45, 60, 75, 90, 100, 120, 144, 240]
@@ -181,12 +189,13 @@ function applySteadyStateDecision(
   let bindingConstraint: StreamAdaptiveBindingConstraint | undefined =
     latencyClampBinding ? "max-latency" : undefined
 
-  if (pressure.bandwidth > 0.1 || mode === "shed") {
-    const cliffMultiplier = mode === "shed" ? 1.65 : 1
+  if (mode === "shed") {
+    applyPlayabilityShed(target, input, pressure, boundaries, params)
+  } else if (pressure.bandwidth > 0.1) {
     const reduction = clamp(
-      pressure.bandwidth * cliffMultiplier * (0.45 - objectiveBias * 0.15),
-      mode === "shed" ? 0.35 : 0.06,
-      mode === "shed" ? 0.7 : 0.45,
+      pressure.bandwidth * (0.45 - objectiveBias * 0.15),
+      0.06,
+      0.45,
     )
     maybeSetBitrate(
       target,
@@ -194,7 +203,6 @@ function applySteadyStateDecision(
       Math.round(current.bitrateKbps * (1 - reduction)),
       boundaries,
       params,
-      mode === "shed",
     )
   } else if (healthy && current.bitrateKbps < bitrateCeiling(boundaries, params)) {
     maybeSetBitrate(
@@ -215,9 +223,8 @@ function applySteadyStateDecision(
   }
 
   if (
-    mode === "shed" ||
-    (objectiveBias < 0.5 && pressure.latency > 0.3) ||
-    latencyClampBinding
+    mode !== "shed" &&
+    ((objectiveBias < 0.5 && pressure.latency > 0.3) || latencyClampBinding)
   ) {
     const proposed = lowerFpsStep(current.fps, fpsCeiling(boundaries, params))
     if (proposed !== undefined) {
@@ -232,13 +239,64 @@ function applySteadyStateDecision(
   }
 
   const bppStarved = bitsPerPixel(current) < MIN_BITS_PER_PIXEL
-  if (pressure.decode > 0.35 || bppStarved || mode === "shed") {
+  if (mode !== "shed" && (pressure.decode > 0.35 || bppStarved)) {
     const scale = scaleForResolutionShrink(current, pressure, mode, bppStarved)
     const proposed = scaleResolution(current, scale)
     maybeSetResolution(target, current, proposed, boundaries, params, mode === "shed")
   }
 
   return bindingConstraint
+}
+
+function applyPlayabilityShed(
+  target: MutableTarget,
+  input: StreamAdaptiveControllerInput,
+  pressure: StreamAdaptivePressure,
+  boundaries: StreamBoundaries | undefined,
+  params: Required<StreamAdaptiveControllerParams>,
+): void {
+  const { current, summary } = input
+  const severe =
+    pressure.bandwidth >= 0.85 ||
+    pressure.latency >= 0.75 ||
+    (summary.bitrateDeliveryRatio ?? 1) <= 0.25 ||
+    (summary.fpsDeliveryRatio ?? 1) <= 0.35
+  const playableBitrate = severe
+    ? params.panicBitrateKbps
+    : params.playableBitrateKbps
+  if (current.bitrateKbps > playableBitrate) {
+    maybeSetBitrate(target, current, playableBitrate, boundaries, params, true)
+  }
+  if (current.fps > params.playableFps) {
+    maybeSetFps(target, current, params.playableFps, boundaries, params, true)
+  }
+  const playableResolution = playabilityResolution(current, params)
+  if (current.resolution.width > playableResolution.width) {
+    maybeSetResolution(
+      target,
+      current,
+      playableResolution,
+      boundaries,
+      params,
+      true,
+    )
+  }
+}
+
+function playabilityResolution(
+  current: StreamAdaptiveSettings,
+  params: Required<StreamAdaptiveControllerParams>,
+): StreamAdaptiveResolution {
+  const baseline = current.baselineResolution
+  const aspect = baseline.height / baseline.width
+  const width = even(
+    Math.min(
+      current.resolution.width,
+      baseline.width,
+      params.playableResolutionWidth,
+    ),
+  )
+  return { width, height: even(width * aspect) }
 }
 
 function recoverFps(
