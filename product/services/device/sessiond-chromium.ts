@@ -57,6 +57,7 @@ export function buildChromiumCommand(
     args: [
       "--ozone-platform=wayland",
       `--app=${hostUrl}`,
+      "--kiosk",
       `--user-data-dir=${join(stateRoot, "profile")}`,
       "--no-first-run",
       "--no-default-browser-check",

@@ -34,6 +34,7 @@ describe("Chromium renderer command", () => {
       expect.arrayContaining([
         "--ozone-platform=wayland",
         "--app=http://127.0.0.1:8099/",
+        "--kiosk",
         "--user-data-dir=/storage/app-state/profile",
         "--no-first-run",
         "--noerrdialogs",

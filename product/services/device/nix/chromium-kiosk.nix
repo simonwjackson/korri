@@ -39,6 +39,7 @@ pkgs.writeShellApplication {
     exec ${chromium}/bin/chromium \
       --ozone-platform=wayland \
       --app="$url" \
+      --kiosk \
       --user-data-dir="$user_data_dir" \
       --no-first-run \
       --no-default-browser-check \
