@@ -1,7 +1,11 @@
 {
+  fetchurl,
   lib,
   stdenvNoCC,
-  protonCachyosArm64Src ? ./vendor/proton-cachyos-11.0-20260601-slr-arm64,
+  protonCachyosArm64Src ? fetchurl {
+    url = "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20260601-slr/proton-cachyos-11.0-20260601-slr-arm64.tar.xz";
+    hash = "sha256-Z5Oml8gVNiapwB/NISqulyvRWWodE9SCYg9kq/X8adk=";
+  },
 }:
 
 stdenvNoCC.mkDerivation rec {
@@ -12,6 +16,7 @@ stdenvNoCC.mkDerivation rec {
 
   dontConfigure = true;
   dontBuild = true;
+  dontFixup = true;
 
   installPhase = ''
     runHook preInstall
