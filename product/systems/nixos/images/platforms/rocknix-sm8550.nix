@@ -894,6 +894,15 @@ in
     KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
     KORRI_NIX_COMMAND = "${pkgs.nix}/bin/nix";
     KORRI_PLUGIN_RESOURCE_ROOT = "${runtime.stateRoot}/plugins/resources";
+    # The daemon owns remote-source Moonlight runtime supervision after it
+    # dispatches the sessiond launch, so it needs the same adaptive feature
+    # gate values as sessiond-spawned foreground children.
+    KORRI_STREAM_ADAPTIVE_ENABLED = "0";
+    KORRI_STREAM_ADAPTIVE_OBJECTIVE_BIAS = "0.5";
+    KORRI_STREAM_ADAPTIVE_TICK_MS = "5000";
+    KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED = "0";
+    KORRI_STREAM_OUTAGE_TICK_MS = "1000";
+    KORRI_STREAM_OUTAGE_LOSS_AFTER_MS = "2000";
   };
 
   # NOTE: `rocknix.sm8550.moonlight.{enable,package}` is no longer set

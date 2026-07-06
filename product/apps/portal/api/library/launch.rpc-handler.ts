@@ -24,8 +24,10 @@ import {
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
 import {
+  isMoonlightRuntimeSessionEnabled,
   moonlightControlEnvForHandle,
   moonlightControlHandleFromOptions,
+  registerMoonlightControlRuntimeSession,
 } from "@product/apps/portal/stream/moonlight-launcher"
 import type { RemotePrepareResult } from "@product/apps/portal/stream/remote-stream-client"
 import { createFirstPartyPluginRegistryFromEnv } from "@product/plugin-host"
@@ -596,6 +598,9 @@ function handleRemoteSourceLaunch(
     })
 
     if (result.status === "launched") {
+      if (moonlightControl && isMoonlightRuntimeSessionEnabled(process.env)) {
+        registerMoonlightControlRuntimeSession({ control: moonlightControl })
+      }
       logger.info(
         {
           id: payload.id,

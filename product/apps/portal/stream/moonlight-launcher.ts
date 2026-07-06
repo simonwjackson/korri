@@ -112,6 +112,11 @@ export interface MoonlightStreamRuntimeSessionHandle {
   readonly close: () => void
 }
 
+export interface MoonlightControlRuntimeRegistration {
+  readonly runtimeSession: Promise<MoonlightStreamRuntimeSessionHandle>
+  readonly close: () => void
+}
+
 export interface MoonlightLaunchOptions {
   readonly host?: string
   readonly moonlight?: StreamerPolicy
@@ -334,44 +339,18 @@ function registerMoonlightControlSession(
   adaptiveBoundaries: StreamBoundaries | undefined,
 ): ManagedMoonlightSessionHandle {
   let unregistering = false
-  let runtimeClosed = false
-  let runtimeSession: MoonlightStreamRuntimeSessionHandle | undefined
-  const closeRuntimeSession = () => {
-    if (runtimeClosed) return
-    runtimeClosed = true
-    runtimeSession?.close()
-  }
-  const runtimeSessionPromise = startStreamRuntimeSession({
-    socketPath: control.socketPath,
-    ...runtimeSessionAdaptiveOptions(adaptiveBoundaries),
-    ...runtimeSessionOutageOptions(),
-    onRecoveryEvent: event => {
-      console.warn("korri stream recovery:", JSON.stringify(event))
-    },
-  }).then(runtime => {
-    runtimeSession = runtime
-    return runtime
-  })
-  void runtimeSessionPromise.catch(error => {
-    console.warn(
-      "korri stream runtime session failed:",
-      error instanceof Error ? error.message : String(error),
-    )
-  })
-  activeStreamControlSessionRegistry.register({
-    sessionId: control.sessionId,
-    socketPath: control.socketPath,
-    adaptiveControl: () => runtimeSession?.adaptiveControl,
-    close: () => {
-      closeRuntimeSession()
+  const registration = registerMoonlightControlRuntimeSession({
+    control,
+    startStreamRuntimeSession,
+    adaptiveBoundaries,
+    onClose: () => {
       if (!unregistering) session.terminate()
     },
   })
   const unregister = () => {
     unregistering = true
     try {
-      closeRuntimeSession()
-      activeStreamControlSessionRegistry.unregister(control.sessionId)
+      registration.close()
     } finally {
       unregistering = false
     }
@@ -388,6 +367,89 @@ function registerMoonlightControlSession(
       unregister()
     },
   }
+}
+
+export function isMoonlightRuntimeSessionEnabled(
+  env: Record<string, string | undefined> = globalThis.Bun?.env ?? process.env,
+): boolean {
+  return (
+    env.KORRI_STREAM_ADAPTIVE_ENABLED === "1" ||
+    env.KORRI_STREAM_ADAPTIVE_ENABLED === "true" ||
+    env.KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED === "1" ||
+    env.KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED === "true"
+  )
+}
+
+export function registerMoonlightControlRuntimeSession(input: {
+  readonly control: MoonlightControlLaunchHandle
+  readonly startStreamRuntimeSession?: (
+    options: MoonlightStreamRuntimeOptions,
+  ) => Promise<MoonlightStreamRuntimeSessionHandle>
+  readonly adaptiveBoundaries?: StreamBoundaries
+  readonly onClose?: () => void
+}): MoonlightControlRuntimeRegistration {
+  const startStreamRuntimeSession =
+    input.startStreamRuntimeSession ?? defaultStartStreamRuntimeSession
+  let closed = false
+  let runtimeSession: MoonlightStreamRuntimeSessionHandle | undefined
+  const close = () => {
+    if (closed) return
+    closed = true
+    runtimeSession?.close()
+    activeStreamControlSessionRegistry.unregister(input.control.sessionId)
+    input.onClose?.()
+  }
+  const runtimeSessionPromise = startStreamRuntimeSessionWithRetry(
+    startStreamRuntimeSession,
+    {
+      socketPath: input.control.socketPath,
+      ...runtimeSessionAdaptiveOptions(input.adaptiveBoundaries),
+      ...runtimeSessionOutageOptions(),
+      onRecoveryEvent: event => {
+        console.warn("korri stream recovery:", JSON.stringify(event))
+      },
+    },
+  ).then(runtime => {
+    if (closed) {
+      runtime.close()
+      return runtime
+    }
+    runtimeSession = runtime
+    return runtime
+  })
+  void runtimeSessionPromise.catch(error => {
+    console.warn(
+      "korri stream runtime session failed:",
+      error instanceof Error ? error.message : String(error),
+    )
+  })
+  activeStreamControlSessionRegistry.register({
+    sessionId: input.control.sessionId,
+    socketPath: input.control.socketPath,
+    adaptiveControl: () => runtimeSession?.adaptiveControl,
+    close,
+  })
+  return { runtimeSession: runtimeSessionPromise, close }
+}
+
+async function startStreamRuntimeSessionWithRetry(
+  startStreamRuntimeSession: (
+    options: MoonlightStreamRuntimeOptions,
+  ) => Promise<MoonlightStreamRuntimeSessionHandle>,
+  options: MoonlightStreamRuntimeOptions,
+): Promise<MoonlightStreamRuntimeSessionHandle> {
+  const attempts = 25
+  let lastError: unknown
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await startStreamRuntimeSession(options)
+    } catch (error) {
+      lastError = error
+      if (attempt + 1 >= attempts) break
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+  }
+  throw lastError
 }
 
 export async function moonlightControlHandleFromOptions(
