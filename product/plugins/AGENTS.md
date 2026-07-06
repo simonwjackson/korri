@@ -230,15 +230,38 @@ Use the operation vocabulary from `@platform/plugin` when possible:
 - `session.cleanup`
 - `package.expose`
 - `cli.expose`
+- `claims.search`
+- `claims.details`
+- `claims.parse-url`
+- `provider.validate`
 - `artifact.resolve-download`
+- `artifact.acquire`
 - `diagnostics.collect`
 
 Handler rules:
 
 - Validate `context.input` at the handler boundary.
+- Read common host-provided tooling from `context.services` instead of importing host internals or reading ambient process state.
 - Return plain values, promises, or `Effect`; the host normalizes them.
 - Keep handler ids stable and namespaced, e.g. `gamescope.launch-compose`.
 - Include `capabilities` on handlers when they implement declared capabilities.
+
+## Injected handler services
+
+Handlers keep the same one-argument shape: `run(context)`. Korri injects common tooling on `context.services` so plugin code can stay provider-focused while the host owns permissions, diagnostics, and policy enforcement.
+
+Initial service groups are intentionally narrow and should expand only when a current plugin needs them:
+
+- `http` for host-mediated text/JSON requests;
+- `cache` for plugin-scoped cached reads;
+- `html` for host-provided HTML parsing;
+- `urls` for URL normalization;
+- `crypto` for stable ids;
+- `time` and `log` for deterministic timestamps and plugin-scoped logging;
+- `claims` and `downloads` for acquisition result helpers;
+- `limits` for bounded result counts, timeouts, and similar execution limits.
+
+Use service helper accessors for required services so missing host capabilities produce structured plugin-operation diagnostics instead of incidental `undefined` failures. Local/operator plugin roots are treated as trusted code until a sandboxed runner exists; grants gate Korri-provided services, not arbitrary ambient JavaScript globals.
 
 ## Registration
 

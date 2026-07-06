@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import type { ReleaseDiscoveryProvider } from "./discovery"
 import type { LaunchMetadata } from "./launch-metadata"
+import type { PluginServices } from "./services"
 
 export type ConfigRecord = object
 export type ConfigRecordMap = Readonly<Record<string, ConfigRecord>>
@@ -29,9 +30,22 @@ export type PluginOperation =
   | "session.cleanup"
   | "package.expose"
   | "cli.expose"
+  | "claims.search"
+  | "claims.details"
+  | "claims.parse-url"
+  | "provider.validate"
   | "artifact.resolve-download"
+  | "artifact.acquire"
   | "diagnostics.collect"
   | (string & {})
+
+export const CLAIMS_SEARCH_OPERATION = "claims.search" as const
+export const CLAIMS_DETAILS_OPERATION = "claims.details" as const
+export const CLAIMS_PARSE_URL_OPERATION = "claims.parse-url" as const
+export const PROVIDER_VALIDATE_OPERATION = "provider.validate" as const
+export const ARTIFACT_RESOLVE_DOWNLOAD_OPERATION =
+  "artifact.resolve-download" as const
+export const ARTIFACT_ACQUIRE_OPERATION = "artifact.acquire" as const
 
 export interface PluginRequirement {
   readonly capability: string
@@ -60,6 +74,7 @@ export interface PluginOperationContext<
   readonly refs?: Readonly<Record<string, ProviderRecordRef>>
   readonly capabilities?: readonly string[]
   readonly input?: Input
+  readonly services?: PluginServices
 }
 
 export type PluginHandlerContext<Input = unknown> = PluginOperationContext<
