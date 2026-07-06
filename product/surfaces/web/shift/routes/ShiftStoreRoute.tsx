@@ -15,11 +15,11 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { RemoteCatalogError } from "@platform/acquisition/remote-catalog-source"
 import type { SearchResponse } from "@platform/protocol/acquisition/claim"
-import { useInputAction } from "@platform/react/input/use-input-action"
 import {
   storeSearchQueryAtom,
   storeSearchResultsAtom,
 } from "@platform/react/acquisition/remote-catalog-atoms"
+import { useInputAction } from "@platform/react/input/use-input-action"
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { useEffect, useMemo, useState } from "react"
@@ -102,11 +102,7 @@ export function ShiftStoreSearchView({
           message={error.message ?? "The remote catalogs are unreachable."}
         />
         {onRetry ? (
-          <button
-            type="button"
-            className="shift-store-retry"
-            onClick={onRetry}
-          >
+          <button type="button" className="shift-store-retry" onClick={onRetry}>
             Retry
           </button>
         ) : null}

@@ -7,15 +7,15 @@ import {
 import type { ShiftLibraryLens } from "../pages/ShiftLensRow"
 import type { ShiftLibrarySort } from "../pages/shift-library-query"
 import {
-  type ShiftRouteAxis,
-  type ShiftRouteManifest,
-  shiftRouteManifest,
-} from "./route-axis-manifest"
-import {
   SHIFT_COMPANION_PATH,
   SHIFT_LIBRARY_PATH,
   SHIFT_STORE_PATH,
 } from "./paths"
+import {
+  type ShiftRouteAxis,
+  type ShiftRouteManifest,
+  shiftRouteManifest,
+} from "./route-axis-manifest"
 import { ShiftCompanionRoute } from "./ShiftCompanionRoute"
 import { ShiftGameDetailRoute } from "./ShiftGameDetailRoute"
 import { ShiftHomeRoute } from "./ShiftHomeRoute"
