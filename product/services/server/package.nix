@@ -85,11 +85,13 @@ pkgs.stdenv.mkDerivation {
     # self-contained — consumers don't have to remember to add
     # `pkgs.avahi` to the systemd unit's path. Same trick for the
     # standalone lan-stream-advertise CLI.
+    deviceStatusPath=${lib.makeBinPath [ pkgs.avahi pkgs.iw ]}
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korrid" \
       --add-flags "$out/share/korrid/korrid.js" \
-      --prefix PATH : "${pkgs.avahi}/bin"
+      --prefix PATH : "$deviceStatusPath"
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-api" \
-      --add-flags "$out/share/korrid/korri-api.js"
+      --add-flags "$out/share/korrid/korri-api.js" \
+      --prefix PATH : "${lib.makeBinPath [ pkgs.iw ]}"
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-lan-stream-advertise" \
       --add-flags "$out/share/korrid/korri-lan-stream-advertise.js" \
       --prefix PATH : "${pkgs.avahi}/bin"
@@ -111,6 +113,13 @@ pkgs.stdenv.mkDerivation {
       find "$out/share/korrid/node_modules" -maxdepth 2 -type d >&2
       exit 1
     fi
+
+    for entry in "$out/bin/korrid" "$out/bin/korri-api"; do
+      if ! grep -q "${pkgs.iw}/bin" "$entry"; then
+        echo "$entry must expose iw for live Wi-Fi SSID status" >&2
+        exit 1
+      fi
+    done
 
     # No runtime smoke for the three server entries: korrid.js,
     # korri-api.js, and korri-lan-stream-advertise.js all bind ports on
