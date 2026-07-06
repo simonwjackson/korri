@@ -85,6 +85,21 @@ describe("moonlightRecoveryControlPortFromClient", () => {
     ])
   })
 
+  it("uses and closes a fresh command client when configured", async () => {
+    const eventHarness = makeClient()
+    const commandHarness = makeClient()
+    const port = moonlightRecoveryControlPortFromClient(eventHarness.client, {
+      commandClient: async () => commandHarness.client,
+    })
+
+    await expect(port.setBitrate({ bitrateKbps: 12_000 })).resolves.toBe(
+      "bitrate-1",
+    )
+
+    expect(eventHarness.calls).toEqual([])
+    expect(commandHarness.calls).toEqual(["setBitrate:12000", "close"])
+  })
+
   it("returns undefined when a setter response is not command.accepted", async () => {
     const harness = makeClient()
     const port = moonlightRecoveryControlPortFromClient(harness.client)

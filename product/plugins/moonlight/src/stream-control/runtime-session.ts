@@ -31,7 +31,9 @@ export async function startMoonlightStreamRuntimeSession(
     const runtime = await startStreamRuntimeSession({
       session: moonlightSessionFromClient(client),
       pollHealthState: () => healthPollClient.state(),
-      recoveryPort: moonlightRecoveryControlPortFromClient(client),
+      recoveryPort: moonlightRecoveryControlPortFromClient(client, {
+        commandClient: () => connect({ socketPath: options.socketPath }),
+      }),
       settingsFromState: moonlightRuntimeSettingsFromState,
       ...(options.adaptive ? { adaptive: options.adaptive } : {}),
       ...(options.onRecoveryEvent

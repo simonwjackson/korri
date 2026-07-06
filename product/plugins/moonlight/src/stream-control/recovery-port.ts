@@ -10,22 +10,33 @@ import type {
   MoonlightControlSuccessResponse,
 } from "../moonlight-control-protocol"
 
+export interface MoonlightRecoveryControlPortOptions {
+  readonly commandClient?: () => Promise<MoonlightControlClient>
+}
+
 export function moonlightRecoveryControlPortFromClient(
   client: MoonlightControlClient,
+  options: MoonlightRecoveryControlPortOptions = {},
 ): RuntimeRecoveryControlPort {
   return {
-    setBitrate: async params =>
-      requestIdFromAccepted(
-        await client.setBitrate({ bitrateKbps: params.bitrateKbps }),
+    setBitrate: params =>
+      withCommandClient(options, client, commandClient =>
+        requestIdFromAccepted(
+          commandClient.setBitrate({ bitrateKbps: params.bitrateKbps }),
+        ),
       ),
-    setFps: async params =>
-      requestIdFromAccepted(await client.setFps({ fps: params.fps })),
-    setResolution: async params =>
-      requestIdFromAccepted(
-        await client.setResolution({
-          width: params.width,
-          height: params.height,
-        }),
+    setFps: params =>
+      withCommandClient(options, client, commandClient =>
+        requestIdFromAccepted(commandClient.setFps({ fps: params.fps })),
+      ),
+    setResolution: params =>
+      withCommandClient(options, client, commandClient =>
+        requestIdFromAccepted(
+          commandClient.setResolution({
+            width: params.width,
+            height: params.height,
+          }),
+        ),
       ),
     onResult: listener =>
       client.onEvent(delivery => {
@@ -35,10 +46,25 @@ export function moonlightRecoveryControlPortFromClient(
   }
 }
 
-function requestIdFromAccepted(
-  response: MoonlightControlSuccessResponse,
-): RuntimeRecoveryRequestId | undefined {
-  const result = response.result
+async function withCommandClient(
+  options: MoonlightRecoveryControlPortOptions,
+  fallbackClient: MoonlightControlClient,
+  run: (client: MoonlightControlClient) => Promise<RuntimeRecoveryRequestId | undefined>,
+): Promise<RuntimeRecoveryRequestId | undefined> {
+  const commandClient = options.commandClient
+    ? await options.commandClient()
+    : fallbackClient
+  try {
+    return await run(commandClient)
+  } finally {
+    if (commandClient !== fallbackClient) commandClient.close()
+  }
+}
+
+async function requestIdFromAccepted(
+  response: Promise<MoonlightControlSuccessResponse>,
+): Promise<RuntimeRecoveryRequestId | undefined> {
+  const result = (await response).result
   return isRecord(result) &&
     result._tag === "command.accepted" &&
     isRequestId(result.requestId)
