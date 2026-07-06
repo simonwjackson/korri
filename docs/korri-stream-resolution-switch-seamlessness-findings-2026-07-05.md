@@ -12,6 +12,27 @@ host) using the `KORRI_RESW_TRACE` instrumentation (patches 0017 + 0018).
 - **BLOCKER for the host-gap measurement:** the bandai<->aka **Korri federation is currently disconnected** -- aka is not a ready peer from bandai (`stream-control: disabled`, catalog cache stale, `app.library.launch` dry-run returns `PlayableNotFound`). aka's korrid is reachable from bandai (network is fine), so this is a source-registration/pairing-state issue, not connectivity. **No aka game can be launched, so no stream can be started, so the host gap cannot be measured yet.** Reconnecting aka as a source is the normal UI/pairing flow (deliberately not automated here to avoid wedging the device while unattended).
 - **To unblock (operator):** reconnect aka as a stream source from the bandai UI (re-pair if prompted), launch any aka-sourced game (e.g. Skate 3 `ps3-disc`), then run the host-gap capture below. Everything else (0018 stamp, drop-in, armed trace) is already in place.
 
+## RESULT: host-gap measured -> host-bound, and the host is already optimized (2026-07-05)
+
+Captured on a live stream (720->540 same-ratio) with patch 0018's command-received stamp:
+
+| Stage | Time |
+|---|---|
+| **HOST GAP** (command-received -> size-change-detected) | **149.5 ms** |
+| decoder reopen (client) | 37.9 ms |
+| first-frame decode (client) | 24.4 ms |
+| presenter reset (client) | 4.3 ms |
+| client pipeline total | 62.4 ms |
+| **TOTAL PERCEIVED FREEZE** | **211.8 ms** |
+
+**Verdict: host-bound.** ~71% of the freeze (150 of 212 ms) is the host (aka/Sunshine) tearing down and rebuilding its encoder for the new size, during which it sends nothing and the client holds the last frame. The whole client pipeline is only ~62 ms, and its dominant piece (the ~38 ms decoder reopen) is load-bearing for correctness (patch 0010). **No client-side work can make resolution switching seamless.**
+
+**The host is already optimized.** aka's Sunshine already carries the host-gap patches: 0012 (persist runtime config + reinit capture) and 0013 (async capture reinit) originated in commit `e2da35f1` -- the same foundational commit that makes runtime resolution work at all -- so the fact that switching works on aka proves they are deployed; 0014 (VAAPI destructor-flush hardening, `a0b8aa91`) is very likely present too. **So 149.5 ms is the already-optimized floor, not an un-patched regression -- there is no quick win from deploying "missing" patches.**
+
+**What true seamlessness would require (a real project, not a patch):** the host would keep the old-resolution encoder producing frames while it spins up the new one and cut over frame-accurately (double-encode/overlap), or use a materially faster VAAPI encoder re-init. Both are substantial Sunshine engineering.
+
+**Decision (confirmed by measurement): resolution is the last-resort adaptive lever.** Bitrate/FPS are live dials (~0 freeze); resolution costs ~200 ms because the host rebuilds its pipeline. The continuous controller should prefer bitrate/FPS and touch resolution rarely, with strong hysteresis. This closes the seamlessness question: switching is already near its practical floor and robust under stress; going further is a dedicated host-side effort, not a tuning tweak.
+
 ## Method
 
 `KORRI_RESW_TRACE=/run/user/2000/korri-resw.trace` is set on `korri-sessiond`
