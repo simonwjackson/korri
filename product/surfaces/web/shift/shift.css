@@ -572,13 +572,28 @@
 	width: 100%;
 }
 
+[data-shift-home] .shift-cine-heroband {
+	/* The hero (left) and the button-hint legend (right) share one baseline
+	 * band above the rail, so the actions sit with the game they describe.
+	 * Wraps the hints below on frames too narrow to hold both. */
+	display: flex;
+	align-items: flex-end;
+	flex-wrap: wrap;
+	gap: var(--shift-space-3) var(--shift-space-4);
+	width: 100%;
+}
+
 [data-shift-home] .shift-cine-hero-stack {
 	/* Grid-stack every hero layer (the AnimatePresence outgoing + incoming
 	 * title) into a single cell so a fast focus change crossfades the titles in
 	 * place. Without this, the briefly co-mounted layers flow as two side-by-side
-	 * flex columns and the new title visibly snaps left when the old one leaves. */
+	 * flex columns and the new title visibly snaps left when the old one leaves.
+	 * Inside the hero band it grows to share the row (min-width:0 lets the title
+	 * clamp) while the legend keeps its intrinsic width on the right. */
 	display: grid;
-	width: 100%;
+	width: auto;
+	flex: 1 1 auto;
+	min-width: 0;
 	max-width: 70cqi;
 }
 
@@ -622,8 +637,9 @@
 
 [data-shift-home] .shift-cine-chips {
 	/* One line; the hero stays short so the title survives on tiny frames. The
-	 * legend has its own row now, so extra chips clip at the hero edge instead
-	 * of colliding with it. A right fade hints there's more. */
+	 * legend sits to the right of the hero (not over it), so extra chips clip at
+	 * the hero edge instead of colliding with it. A right fade hints there's
+	 * more. */
 	display: flex;
 	flex-wrap: nowrap;
 	gap: var(--shift-space-2);
@@ -659,11 +675,12 @@
 }
 
 [data-shift-home] .shift-cine-legend {
-	/* Its own right-aligned hint row above the rail (was inline-right of the
-	 * hero, where it fought the chips for one line). Wraps if a narrow frame
-	 * can't hold all hints. */
+	/* Right side of the hero band: keeps its intrinsic width and is pushed to
+	 * the right edge (margin-left:auto), so on a wrapped narrow frame it stays
+	 * right-aligned on its own line under the hero. */
 	flex: 0 0 auto;
-	width: 100%;
+	width: auto;
+	margin-left: auto;
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: flex-end;
@@ -698,46 +715,6 @@
 [data-shift-home] .shift-cine-hint[data-primary] .shift-cine-hint-glyph {
 	background: var(--shift-accent);
 	color: var(--shift-on-accent);
-}
-
-/* EXPLORATION (throwaway): button-row placement takes for the dev lab. Keyed on
- * `data-legend-placement` on the Home root. Delete this whole block together
- * with the `legendPlacement` prop and `ShiftHomeButtonRow.template.part.tsx`
- * once a placement is chosen. The default ("above-rail") needs no rule. */
-[data-shift-home][data-legend-placement="center"] .shift-cine-legend {
-	justify-content: center;
-}
-
-[data-shift-home][data-legend-placement="footer"] .shift-cine-legend {
-	/* Renders after the rail in the DOM; add breathing room off the tiles. */
-	margin-top: var(--shift-space-3);
-}
-
-[data-shift-home][data-legend-placement="hero-band"] .shift-cine-heroband {
-	/* Hero info left, button hints right, sharing one baseline band. Wraps the
-	 * hints below on frames too narrow to hold both. */
-	display: flex;
-	align-items: flex-end;
-	justify-content: space-between;
-	flex-wrap: wrap;
-	gap: var(--shift-space-3) var(--shift-space-4);
-	width: 100%;
-}
-
-[data-shift-home][data-legend-placement="hero-band"]
-	.shift-cine-heroband
-	.shift-cine-hero-stack {
-	/* Let the hero share the row instead of claiming its full width. */
-	width: auto;
-	flex: 1 1 auto;
-	min-width: 0;
-}
-
-[data-shift-home][data-legend-placement="hero-band"]
-	.shift-cine-heroband
-	.shift-cine-legend {
-	width: auto;
-	flex: 0 0 auto;
 }
 
 [data-shift-home] .shift-cine-rail {
