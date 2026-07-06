@@ -928,6 +928,13 @@ in
         KORRI_STREAM_ADAPTIVE_ENABLED = "0";
         KORRI_STREAM_ADAPTIVE_OBJECTIVE_BIAS = "0.5";
         KORRI_STREAM_ADAPTIVE_TICK_MS = "5000";
+        # Keep outage supervision explicitly flag-off with the adaptive gate.
+        # The platform layer is wired, but native Moonlight/sessiond
+        # re-establish ownership is still required before tunnel recovery can
+        # be claimed as supported.
+        KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED = "0";
+        KORRI_STREAM_OUTAGE_TICK_MS = "1000";
+        KORRI_STREAM_OUTAGE_LOSS_AFTER_MS = "2000";
       };
   };
 
