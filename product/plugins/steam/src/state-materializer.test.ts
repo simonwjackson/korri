@@ -590,6 +590,45 @@ describe("materializeSteamDesiredState", () => {
     expect(writes).toEqual([])
   })
 
+  it("fails loudly before writing when the compat tool proton launcher is the repository placeholder", async () => {
+    const stateRoot = "/steam-home"
+    const toolRoot = "/steam-home/compatibilitytools.d/proton-cachyos-arm64"
+    const { fs, writes } = memoryFs(
+      {
+        [`${toolRoot}/toolmanifest.vdf`]: '"manifest" {}',
+        [`${toolRoot}/proton`]: `#!/usr/bin/env bash
+echo "This repository fixture marks the vendored proton-cachyos-arm64 payload contract. Replace this directory with the validated ARM64 proton-cachyos build for production images." >&2
+exit 126
+`,
+      },
+      {
+        existingPaths: [toolRoot, `${toolRoot}/proton`],
+        executablePaths: [`${toolRoot}/proton`],
+      },
+    )
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        materializeSteamDesiredState({
+          desired: {
+            stateRoot,
+            target: "steam://rungameid/1029210",
+            defaultCompatTool: "proton-cachyos-arm64",
+          },
+          fs,
+          lifecycle: lifecycle([]),
+          lock: inlineLock,
+        }),
+      ),
+    )
+
+    expect(error).toMatchObject({
+      _tag: "SteamCompatToolMissing",
+      tool: "proton-cachyos-arm64",
+    })
+    expect(writes).toEqual([])
+  })
+
   it("fails loudly before writing when the compat tool manifest requires an unavailable tool appid", async () => {
     const stateRoot = "/steam-home"
     const toolRoot = "/steam-home/compatibilitytools.d/proton-cachyos-arm64"

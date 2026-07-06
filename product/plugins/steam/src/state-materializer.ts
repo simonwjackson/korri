@@ -43,6 +43,7 @@ export class SteamCompatToolMissing extends Data.TaggedError(
 )<{
   readonly stateRoot: string
   readonly tool: string
+  readonly reason?: string
 }> {}
 
 export class SteamReadinessTimeout extends Data.TaggedError(
@@ -561,11 +562,48 @@ async function assertCompatToolExists(
       ? await fs.pathExists(protonPath)
       : true
   if (!hasExecutableProton)
-    throw new SteamCompatToolMissing({ stateRoot, tool })
-  const manifest = await fs.readText(join(path, "toolmanifest.vdf"))
-  if (manifest === undefined || manifest.includes("require_tool_appid")) {
-    throw new SteamCompatToolMissing({ stateRoot, tool })
+    throw new SteamCompatToolMissing({
+      stateRoot,
+      tool,
+      reason: "proton launcher is missing or not executable",
+    })
+  const protonLauncher = await fs.readText(protonPath)
+  if (isRepositoryFixtureProtonLauncher(protonLauncher)) {
+    throw new SteamCompatToolMissing({
+      stateRoot,
+      tool,
+      reason: "proton launcher is the repository fixture placeholder",
+    })
   }
+  const manifest = await fs.readText(join(path, "toolmanifest.vdf"))
+  if (manifest === undefined) {
+    throw new SteamCompatToolMissing({
+      stateRoot,
+      tool,
+      reason: "toolmanifest.vdf is missing",
+    })
+  }
+  if (manifest.includes("require_tool_appid")) {
+    throw new SteamCompatToolMissing({
+      stateRoot,
+      tool,
+      reason: "toolmanifest.vdf requires a Steam runtime tool appid",
+    })
+  }
+}
+
+function isRepositoryFixtureProtonLauncher(
+  content: string | undefined,
+): boolean {
+  if (content === undefined) return false
+  return (
+    content.includes(
+      "repository fixture marks the vendored proton-cachyos-arm64 payload contract",
+    ) ||
+    content.includes(
+      "Replace this directory with the validated ARM64 proton-cachyos build",
+    )
+  )
 }
 
 function stableVdfSnapshot(value: VdfObject): string {
