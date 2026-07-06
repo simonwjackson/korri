@@ -232,9 +232,11 @@ const StreamHealthSample = Schema.StructWithRest(
     rttMs: Schema.optional(nonNegativeInt("rttMs")),
     rttVarianceMs: Schema.optional(nonNegativeInt("rttVarianceMs")),
     lossFraction: Schema.optional(fractionSchema("lossFraction")),
-    deliveredBitrateKbps: Schema.optional(bitrateKbpsSchema()),
+    deliveredBitrateKbps: Schema.optional(
+      nonNegativeInt("deliveredBitrateKbps"),
+    ),
     requestedBitrateKbps: Schema.optional(bitrateKbpsSchema()),
-    deliveredFps: Schema.optional(fpsSchema()),
+    deliveredFps: Schema.optional(nonNegativeInt("deliveredFps")),
     requestedFps: Schema.optional(fpsSchema()),
     framesDropped: Schema.optional(nonNegativeInt("framesDropped")),
     decodeTimeMs: Schema.optional(nonNegativeNumber("decodeTimeMs")),

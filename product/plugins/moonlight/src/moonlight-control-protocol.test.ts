@@ -166,6 +166,42 @@ describe("moonlight local control protocol", () => {
     }
   })
 
+  it("accepts stalled stream health samples with zero delivery", () => {
+    const decoded = expectSuccessResponse(
+      decodeMoonlightControlResponse({
+        jsonrpc: "2.0",
+        id: "stalled-snapshot-sample",
+        result: {
+          _tag: "state.snapshot",
+          seq: 18,
+          session: { sessionId: "session-abc", state: "streaming" },
+          streamQuality: {
+            connection: "poor",
+            sample: {
+              seq: 13,
+              sampledAtMs: 1800,
+              deliveredBitrateKbps: 0,
+              requestedBitrateKbps: 6000,
+              deliveredFps: 0,
+              requestedFps: 60,
+            },
+          },
+          runtimeSettings: {},
+          input: {
+            route: "moonlight-embedded",
+            status: "available",
+            capabilities: [],
+          },
+        },
+      }),
+    )
+
+    if (decoded.result._tag === "state.snapshot") {
+      expect(decoded.result.streamQuality.sample?.deliveredBitrateKbps).toBe(0)
+      expect(decoded.result.streamQuality.sample?.deliveredFps).toBe(0)
+    }
+  })
+
   it("rejects invalid stream health samples in snapshots", () => {
     expect(() =>
       decodeMoonlightControlResponse({
