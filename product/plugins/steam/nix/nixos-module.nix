@@ -643,13 +643,7 @@ EOF
       echo "korri-steam-recover: removed stale Korri Steam IPC $korri_ipc" >&2
     fi
 
-    echo "korri-steam-recover: repairing Steam Runtime helper trampolines" >&2
-    ${pkgs.util-linux}/bin/runuser -u ${runtime.user} -- \
-      ${pkgs.coreutils}/bin/env \
-        STEAM_HOME="$steam_home" \
-        FEX_ROOTFS=${lib.escapeShellArg cfg.fexRootfs} \
-        FEX_WRAPPER_BIN=/usr/bin/FEX \
-        ${cfg.package}/bin/steam-guest-runtime-prep --repair-runtime-helpers
+    echo "korri-steam-recover: leaving Steam Runtime helper files Steam-owned" >&2
 
     echo "korri-steam-recover: channel=$beta_channel" >&2
     echo "korri-steam-recover: preserved installed/manifest files in $package_dir" >&2

@@ -254,15 +254,12 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
-  it("routes runtime helper repair through the explicit recovery helper", () => {
-    expect(moduleSource).toContain(
+  it("keeps recovery from mutating Steam Runtime helper files", () => {
+    expect(moduleSource).not.toContain(
       "steam-guest-runtime-prep --repair-runtime-helpers",
     )
     expect(moduleSource).toContain(
-      "FEX_ROOTFS=${lib.escapeShellArg cfg.fexRootfs}",
-    )
-    expect(moduleSource).toContain(
-      "korri-steam-recover: repairing Steam Runtime helper trampolines",
+      "korri-steam-recover: leaving Steam Runtime helper files Steam-owned",
     )
   })
 

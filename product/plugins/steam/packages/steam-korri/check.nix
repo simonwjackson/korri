@@ -73,12 +73,13 @@ let
       && lib.hasInfix ''find "$compat_tools" -mindepth 1 -maxdepth 1 -type d'' runtimePrepScript
       && lib.hasInfix "find \"$common\" -mindepth 1 -maxdepth 1 -type d -name 'Proton*'" runtimePrepScript
     ))
-    (check "steam-korri runtime helper repair is explicit and allowlisted" (
+    (check "steam-korri runtime helper repair refuses in-place mutation" (
       lib.hasInfix "--repair-runtime-helpers" runtimePrepScript
       && lib.hasInfix ''"$mode" = repair-runtime-helpers'' runtimePrepScript
-      && lib.hasInfix ''"$pv/bin/pressure-vessel-wrap"'' runtimePrepScript
-      && lib.hasInfix "find \"$pv\" -name pv-adverb" runtimePrepScript
-      && lib.hasInfix "find \"$pv\" -name srt-bwrap" runtimePrepScript
+      && lib.hasInfix "Steam Runtime helper files must remain Steam-owned" runtimePrepScript
+      && lib.hasInfix "exit 77" runtimePrepScript
+      && !(lib.hasInfix ''if [ "$mode" = repair-runtime-helpers ]; then
+runtime_pressure_vessel_roots'' runtimePrepScript)
     ))
     (check "steam-korri guest runner does not apply runtime prep on normal startup" (
       lib.hasInfix "must not run --apply" runtimePrepScript

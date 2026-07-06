@@ -295,24 +295,24 @@ printf '%s\n' "$runtime4_before" | grep -q 'name=SteamLinuxRuntime_4-pv-adverb' 
 printf '%s\n' "$runtime4_before" | grep -q 'name=SteamLinuxRuntime_4-srt-bwrap' \
   || fail "Runtime 4 check should name srt-bwrap"
 
-STEAM_HOME="$runtime4_home" FEX_ROOTFS="$runtime4_rootfs" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --repair-runtime-helpers
-runtime4_after=$(STEAM_HOME="$runtime4_home" FEX_ROOTFS="$runtime4_rootfs" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --check)
-printf '%s\n' "$runtime4_after" | grep -q 'status=ok name=SteamLinuxRuntime_4-pressure-vessel-wrap' \
-  || fail "Runtime 4 pressure-vessel-wrap should be repaired"
-printf '%s\n' "$runtime4_after" | grep -q 'status=ok name=SteamLinuxRuntime_4-pv-adverb' \
-  || fail "Runtime 4 pv-adverb should be repaired"
-printf '%s\n' "$runtime4_after" | grep -q 'status=ok name=SteamLinuxRuntime_4-srt-bwrap' \
-  || fail "Runtime 4 srt-bwrap should be repaired"
-grep -q 'exec /usr/bin/FEX "$0.x86_64"' "$runtime4_pv/bin/pressure-vessel-wrap" \
-  || fail "Runtime 4 pressure-vessel-wrap should use FEX trampoline"
-grep -q 'exec /usr/bin/FEX "$0.x86_64"' "$runtime4_pv/libexec/steam-runtime-tools-0/pv-adverb" \
-  || fail "Runtime 4 pv-adverb should use FEX trampoline"
-grep -q 'bwrap_bin="${FEX_ROOTFS%/}/usr/bin/bwrap"' "$runtime4_pv/libexec/steam-runtime-tools-0/srt-bwrap" \
-  || fail "Runtime 4 srt-bwrap should resolve bwrap from FEX_ROOTFS"
-grep -q 'PATH="/run/current-system/sw/bin:${PATH:-}"' "$runtime4_pv/libexec/steam-runtime-tools-0/srt-bwrap" \
-  || fail "Runtime 4 srt-bwrap should prefix host PATH"
-grep -q 'exec /usr/bin/FEX "$bwrap_bin" "$@"' "$runtime4_pv/libexec/steam-runtime-tools-0/srt-bwrap" \
-  || fail "Runtime 4 srt-bwrap should direct-FEX bwrap"
+set +e
+runtime4_repair_out=$(STEAM_HOME="$runtime4_home" FEX_ROOTFS="$runtime4_rootfs" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --repair-runtime-helpers 2>&1)
+runtime4_repair_status=$?
+runtime4_after=$(STEAM_HOME="$runtime4_home" FEX_ROOTFS="$runtime4_rootfs" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --check 2>&1)
+runtime4_after_status=$?
+set -e
+[ "$runtime4_repair_status" -eq 77 ] \
+  || fail "repair-runtime-helpers should refuse unsafe in-place Runtime helper mutation"
+printf '%s\n' "$runtime4_repair_out" | grep -q 'Steam Runtime helper files must remain Steam-owned' \
+  || fail "repair-runtime-helpers refusal should explain Steam-owned helper files"
+[ "$runtime4_after_status" -ne 0 ] \
+  || fail "Runtime 4 x86 helpers should remain unrepaired by refused repair mode"
+[ ! -e "$runtime4_pv/bin/pressure-vessel-wrap.x86_64" ] \
+  || fail "repair-runtime-helpers should not mutate Runtime 4 pressure-vessel-wrap"
+[ ! -e "$runtime4_pv/libexec/steam-runtime-tools-0/pv-adverb.x86_64" ] \
+  || fail "repair-runtime-helpers should not mutate Runtime 4 pv-adverb"
+[ ! -e "$runtime4_pv/libexec/steam-runtime-tools-0/srt-bwrap.x86_64" ] \
+  || fail "repair-runtime-helpers should not mutate Runtime 4 srt-bwrap"
 [ ! -e "$runtime4_pv/bin/unrelated-helper.x86_64" ] \
   || fail "repair-runtime-helpers should not wrap unrelated helpers"
 [ ! -e "$runtime4_home/steamapps/common/SteamLinuxRuntime_4/steamrt4_platform_test/files/share/fonts/test/.uuid" ] \

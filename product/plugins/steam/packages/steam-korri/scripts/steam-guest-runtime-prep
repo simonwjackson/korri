@@ -14,7 +14,7 @@ Required environment:
 
 Modes:
   --check                  Diagnose launch-critical runtime prerequisites without mutation
-  --repair-runtime-helpers Explicitly repair only allowlisted pressure-vessel helpers
+  --repair-runtime-helpers Refuse legacy in-place helper repair (unsafe for Runtime 4)
   --apply                  Explicit legacy repair of mutable Steam-owned runtime state (default)
   --patch-proton           Repair Korri-owned compatibility-tool payloads/FEX links only
 EOF
@@ -36,6 +36,11 @@ if [ -z "${STEAM_HOME:-}" ]; then
 fi
 
 common="$STEAM_HOME/steamapps/common"
+
+if [ "$mode" = repair-runtime-helpers ]; then
+  echo "steam-guest-runtime-prep: --repair-runtime-helpers is disabled; Steam Runtime helper files must remain Steam-owned" >&2
+  exit 77
+fi
 
 runtime_check_failed=0
 runtime_check_report() {
@@ -420,19 +425,8 @@ proton_roots | while IFS= read -r proton; do
   done
 done
 
-if [ "$mode" = repair-runtime-helpers ]; then
-runtime_pressure_vessel_roots | while IFS= read -r pv; do
-  [ -d "$pv" ] || continue
-  for helper in \
-    "$pv/bin/pressure-vessel-wrap" \
-    $(find "$pv" -name pv-adverb -type f -print 2>/dev/null || true) \
-    $(find "$pv" -name srt-bwrap -type f -print 2>/dev/null || true); do
-    [ -n "$helper" ] || continue
-    wrap_fex_tool "$helper"
-  done
-done
-elif [ "$mode" = apply ]; then
-for pv in "$common"/SteamLinuxRuntime*/pressure-vessel "$STEAM_HOME"/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel; do
+if [ "$mode" = apply ]; then
+for pv in "$common"/SteamLinuxRuntime*/pressure-vessel; do
   [ -d "$pv" ] || continue
   find "$pv" -type f -perm -0100 ! -name '*.x86_64*' ! -name '*.x86' | while IFS= read -r file; do
     wrap_fex_tool "$file"
