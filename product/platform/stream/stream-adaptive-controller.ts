@@ -329,8 +329,8 @@ function modeFor(
   pressure: StreamAdaptivePressure,
   params: Required<StreamAdaptiveControllerParams>,
 ): StreamAdaptiveControllerMode {
-  if (input.phase === "establishing") return "establish"
   if (isCliff(input.summary, pressure)) return "shed"
+  if (input.phase === "establishing") return "establish"
   return "fine-tune"
 }
 
@@ -430,12 +430,12 @@ function clampResolution(
 ): StreamAdaptiveResolution {
   const floor = boundaries?.levers.resolution?.floor
   const ceiling = resolutionCeiling(boundaries, current)
-  const width = even(clamp(proposed.width, floor?.width ?? 2, ceiling.width))
-  const height = even(width * (current.baselineResolution.height / current.baselineResolution.width))
-  return {
-    width,
-    height: even(clamp(height, floor?.height ?? 2, ceiling.height)),
-  }
+  const aspect = current.baselineResolution.height / current.baselineResolution.width
+  const minWidth = Math.max(floor?.width ?? 2, floor?.height === undefined ? 2 : floor.height / aspect)
+  const maxWidth = Math.min(ceiling.width, ceiling.height / aspect)
+  const width = even(clamp(proposed.width, minWidth, Math.max(minWidth, maxWidth)))
+  const height = even(width * aspect)
+  return { width, height }
 }
 
 function bitrateFloor(

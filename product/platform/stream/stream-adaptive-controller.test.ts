@@ -292,6 +292,24 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
     expect(decision).toEqual({ kind: "dormant", reason: "within-hysteresis" })
   })
 
+  it("uses min-fps as the FPS floor when it is feasible", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({ rttMs: numeric(140, "rising") }),
+      current,
+      objectiveBias: 0.1,
+      boundaries: {
+        levers: {},
+        outcomes: { minDeliveredFps: 50 },
+        lean: 0,
+      },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.target.fps).toBe(50)
+    expect(decision.bindingConstraint).toBe("min-fps")
+  })
+
   it("applies min-fps without violating the explicit FPS ceiling", () => {
     const decision = computeStreamAdaptiveDecision({
       summary: summary({ rttMs: numeric(140, "rising") }),
@@ -308,6 +326,44 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
     if (decision.kind !== "target") throw new Error("expected target")
     expect(decision.target.fps).toBe(30)
     expect(decision.bindingConstraint).toBe("min-fps")
+  })
+
+  it("lets cliff shedding override the establishing phase", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({
+        sampleCount: 8,
+        bitrateDeliveryRatio: 0.25,
+        lossFraction: numeric(0.12, "rising"),
+        rttMs: numeric(140, "rising"),
+      }),
+      current,
+      objectiveBias: 0.8,
+      phase: "establishing",
+      boundaries: { levers: {}, outcomes: {}, lean: 0.8 },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.mode).toBe("shed")
+    expect(decision.target.bitrateKbps).toBeLessThan(current.bitrateKbps)
+  })
+
+  it("keeps off-aspect resolution boundaries projected onto the stream aspect", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({ queueDepth: numeric(8), decodeTimeMs: numeric(35), frameDropFraction: 0.12 }),
+      current,
+      objectiveBias: 0.5,
+      boundaries: {
+        levers: { resolution: { floor: { width: 800, height: 600 } } },
+        outcomes: {},
+        lean: 0.5,
+      },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.target.resolution?.width).toBeGreaterThanOrEqual(1066)
+    expect((decision.target.resolution?.width ?? 1) / (decision.target.resolution?.height ?? 1)).toBeCloseTo(16 / 9, 2)
   })
 
   it("cold-starts conservatively then ramps once fresh samples arrive", () => {
