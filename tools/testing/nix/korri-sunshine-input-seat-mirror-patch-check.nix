@@ -39,8 +39,10 @@ let
       && contains "KORRI_INPUT_SEAT_MAX_FRAME_BYTES" patch
       && contains "\\n" patch
       && contains "source-state" patch
-      && contains "frame" patch
-      && contains "mirrorToken" patch
+      && contains ''korri_input_seat_json_field(json, "launchId"sv, active.launch_id)'' patch
+      && contains ''korri_input_seat_json_field(json, "mirrorToken"sv, active.mirror_token)'' patch
+      && contains "envelope += \"{\\\"mirrorToken\\\":\\\"\"" patch
+      && contains "envelope += \"\\\",\\\"frame\\\":\"" patch
     ))
     (check "Sunshine input-seat mirror emits launch-scoped controller lifecycle frames" (
       contains "korri_input_seat_emit_source_connected" patch

@@ -110,8 +110,11 @@ export function createSessiondInputSeatPreSpawnGate(
             mirror?.adapter.leaveSeat(slot)
           },
           stop: async () => {
-            await mirror?.stop()
-            await options.runtime.release(allocation.seats)
+            try {
+              await mirror?.stop()
+            } finally {
+              await options.runtime.release(allocation.seats)
+            }
           },
         }
       }
@@ -149,8 +152,9 @@ const startSunshineMirrorIfConfigured = async (input: {
     : undefined
   const sidecarPath = input.options.activeLaunchSidecarPath
 
+  let socket: SunshineInputSeatMirrorSocketHandle | undefined
   try {
-    const socket = await startSunshineInputSeatMirrorSocket({
+    socket = await startSunshineInputSeatMirrorSocket({
       launchId: input.launchId,
       socketPath,
       seatCount: input.seatCount,
@@ -182,12 +186,19 @@ const startSunshineMirrorIfConfigured = async (input: {
     return {
       ...socket,
       stop: async () => {
-        await clearActiveLaunchSidecar(sidecarPath)
-        await socket.stop()
+        try {
+          await clearActiveLaunchSidecar(sidecarPath)
+        } finally {
+          await socket?.stop()
+        }
       },
     }
   } catch (error) {
-    await clearActiveLaunchSidecar(sidecarPath)
+    try {
+      await socket?.stop()
+    } finally {
+      await clearActiveLaunchSidecar(sidecarPath)
+    }
     throw error
   }
 }

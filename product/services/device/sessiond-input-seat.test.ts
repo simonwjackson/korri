@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, rm, stat } from "node:fs/promises"
+import { access, mkdtemp, readFile, rm, stat, symlink } from "node:fs/promises"
 import { createConnection } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -251,6 +251,43 @@ describe("sessiond input-seat gate", () => {
 
       await handle?.stop()
       await expect(access(sidecarPath)).rejects.toThrow()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("releases seats even when mirror sidecar cleanup fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-input-seat-"))
+    const socketPath = join(dir, "mirror.sock")
+    const sidecarPath = join(dir, "active-launch.json")
+    const runtime = Object.assign(createMemorySeatRuntime(), {
+      writeGamepadState: () => {},
+    } satisfies SeatRuntimeWriter)
+
+    try {
+      const gate = createSessiondInputSeatPreSpawnGate({
+        runtime,
+        timeoutMs: 100,
+        sunshineMirror: {
+          socketPath,
+          activeLaunchSidecarPath: sidecarPath,
+          mirrorTokenFactory: () => "test-token",
+        },
+      })
+
+      const handle = await gate.start({
+        launchId: "launch-1",
+        spec: { command: "/bin/game", args: [] },
+        signal: new AbortController().signal,
+        launchCompanions: {
+          [INPUT_SEAT_PROVIDER_ID]: { playerCount: 1 },
+        },
+      })
+
+      await rm(sidecarPath)
+      await symlink(join(dir, "target"), sidecarPath)
+      await expect(handle?.stop()).rejects.toThrow(/symlink/)
+      expect(runtime.releasedSlots()).toEqual([1])
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
