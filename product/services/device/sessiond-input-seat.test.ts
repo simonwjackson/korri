@@ -1,6 +1,14 @@
+import { mkdtemp, rm } from "node:fs/promises"
+import { createConnection } from "node:net"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { describe, expect, it } from "bun:test"
 import { INPUT_SEAT_PROVIDER_ID } from "@platform/input-seat/policy"
-import { createMemorySeatRuntime } from "@platform/input-seat/seat-runtime-port"
+import {
+  createMemorySeatRuntime,
+  type InputSeatGamepadState,
+  type SeatRuntimeWriter,
+} from "@platform/input-seat/seat-runtime-port"
 import { createSessiondInputSeatPreSpawnGate } from "./sessiond-input-seat"
 
 describe("sessiond input-seat gate", () => {
@@ -109,4 +117,90 @@ describe("sessiond input-seat gate", () => {
     ).rejects.toMatchObject({ failureKind: "input-unavailable" })
     expect(runtime.releasedSlots()).toEqual([1])
   })
+
+  it("starts a Sunshine mirror socket that writes accepted state frames into active seats", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-input-seat-"))
+    const socketPath = join(dir, "mirror.sock")
+    const writes: Array<{ slot: number; state: InputSeatGamepadState }> = []
+    const runtime = Object.assign(createMemorySeatRuntime(), {
+      writeGamepadState: async (slot: number, state: InputSeatGamepadState) => {
+        writes.push({ slot, state })
+      },
+    } satisfies SeatRuntimeWriter)
+
+    try {
+      const gate = createSessiondInputSeatPreSpawnGate({
+        runtime,
+        timeoutMs: 100,
+        sunshineMirror: {
+          socketPath,
+          maxEventsPerSecond: 60,
+        },
+      })
+
+      const handle = await gate.start({
+        launchId: "launch-1",
+        spec: { command: "/bin/game", args: [] },
+        signal: new AbortController().signal,
+        launchCompanions: {
+          [INPUT_SEAT_PROVIDER_ID]: { playerCount: 1 },
+        },
+      })
+
+      expect(handle?.launchEnv).toEqual({
+        KORRI_INPUT_SEAT_MIRROR_SOCKET: socketPath,
+        KORRI_INPUT_SEAT_LAUNCH_ID: "launch-1",
+      })
+
+      await writeSocketFrame(socketPath, {
+        kind: "source-connected",
+        launchId: "launch-1",
+        controllerNumber: 0,
+      })
+      await writeSocketFrame(socketPath, {
+        kind: "source-state",
+        launchId: "launch-1",
+        controllerNumber: 0,
+        buttons: 7,
+        leftTrigger: 1,
+        rightTrigger: 2,
+        leftStickX: -3,
+        leftStickY: 4,
+        rightStickX: -5,
+        rightStickY: 6,
+      })
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      expect(writes).toEqual([
+        {
+          slot: 1,
+          state: {
+            buttons: 7,
+            leftTrigger: 1,
+            rightTrigger: 2,
+            leftStickX: -3,
+            leftStickY: 4,
+            rightStickX: -5,
+            rightStickY: 6,
+          },
+        },
+      ])
+
+      await handle?.stop()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })
+
+const writeSocketFrame = (
+  socketPath: string,
+  frame: Record<string, unknown>,
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const client = createConnection(socketPath)
+    client.once("error", reject)
+    client.once("connect", () => {
+      client.end(`${JSON.stringify(frame)}\n`, resolve)
+    })
+  })

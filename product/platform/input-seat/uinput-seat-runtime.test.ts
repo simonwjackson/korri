@@ -64,7 +64,7 @@ describe("uinput seat runtime", () => {
         "/dev/input/event1",
         "/dev/input/event2",
       ])
-      expect(result.seats.map(seat => seat.readiness.readable)).toEqual([
+      expect(result.seats.map(seat => seat.readiness?.readable)).toEqual([
         true,
         true,
       ])

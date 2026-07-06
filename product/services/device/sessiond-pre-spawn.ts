@@ -14,6 +14,7 @@ export interface KorriSessiondPreSpawnGateRequest {
 export interface KorriSessiondPreSpawnGateHandle {
   readonly stop: () => Promise<void> | void
   readonly inputSeats?: SessiondManagedLaunchInputSeatSummary
+  readonly launchEnv?: Readonly<Record<string, string>>
 }
 
 export interface KorriSessiondPreSpawnGate {

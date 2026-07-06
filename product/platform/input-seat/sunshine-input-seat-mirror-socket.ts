@@ -5,6 +5,7 @@ import {
   createSunshineRemoteInputSourceAdapter,
   decodeSunshineInputSeatFrame,
   type SunshineInputSeatAcceptResult,
+  type SunshineInputSeatFrame,
   type SunshineRemoteInputSourceAdapter,
 } from "./sunshine-remote-input-source"
 
@@ -16,6 +17,7 @@ export type SunshineInputSeatMirrorDiagnostic =
   | { readonly kind: "frame-too-large"; readonly bytes: number }
   | { readonly kind: "frame-json-invalid"; readonly message: string }
   | { readonly kind: "frame-schema-invalid"; readonly message: string }
+  | { readonly kind: "frame-forward-failed"; readonly message: string }
   | { readonly kind: "socket-client-error"; readonly message: string }
   | { readonly kind: "socket-server-error"; readonly message: string }
 
@@ -24,9 +26,20 @@ export interface SunshineInputSeatMirrorFrameSink {
   readonly close: () => void
 }
 
+export interface SunshineInputSeatForwardedGamepadState {
+  readonly slot: number
+  readonly frame: Extract<
+    SunshineInputSeatFrame,
+    { readonly kind: "source-state" }
+  >
+}
+
 export interface SunshineInputSeatMirrorFrameSinkOptions {
   readonly adapter: SunshineRemoteInputSourceAdapter
   readonly maxFrameBytes?: number
+  readonly onGamepadState?: (
+    state: SunshineInputSeatForwardedGamepadState,
+  ) => Promise<void> | void
   readonly onDiagnostic?: (
     diagnostic: SunshineInputSeatMirrorDiagnostic,
   ) => void
@@ -38,6 +51,9 @@ export interface SunshineInputSeatMirrorSocketOptions {
   readonly seatCount: number
   readonly maxEventsPerSecond: number
   readonly maxFrameBytes?: number
+  readonly onGamepadState?: (
+    state: SunshineInputSeatForwardedGamepadState,
+  ) => Promise<void> | void
   readonly onDiagnostic?: (
     diagnostic: SunshineInputSeatMirrorDiagnostic,
   ) => void
@@ -82,10 +98,25 @@ export const createSunshineInputSeatMirrorFrameSink = (
 
     try {
       const frame = decodeSunshineInputSeatFrame(parsed)
+      const result = options.adapter.accept(frame)
       diagnostic({
         kind: "frame-accepted",
-        result: options.adapter.accept(frame),
+        result,
       })
+      if (
+        result.status === "accepted" &&
+        result.slot !== undefined &&
+        frame.kind === "source-state"
+      ) {
+        Promise.resolve(
+          options.onGamepadState?.({ slot: result.slot, frame }),
+        ).catch(error => {
+          diagnostic({
+            kind: "frame-forward-failed",
+            message: error instanceof Error ? error.message : String(error),
+          })
+        })
+      }
     } catch (error) {
       diagnostic({
         kind: "frame-schema-invalid",
@@ -150,6 +181,7 @@ export const startSunshineInputSeatMirrorSocket = async (
     const sink = createSunshineInputSeatMirrorFrameSink({
       adapter,
       maxFrameBytes: options.maxFrameBytes,
+      onGamepadState: options.onGamepadState,
       onDiagnostic: options.onDiagnostic,
     })
     connection.on("data", chunk => sink.push(chunk))

@@ -1994,6 +1994,56 @@ describe("korri sessiond", () => {
     child.resolve({ status: "launched" })
   })
 
+  it("merges pre-spawn launch environment into the spawned child spec", async () => {
+    let spawnedSpec: LaunchSpec | undefined
+    const child = deferred<LaunchResult>()
+    const { core } = startHarness({
+      preSpawnGates: [
+        {
+          id: "test-pre-spawn-env",
+          start: async () => ({
+            launchEnv: {
+              KORRI_INPUT_SEAT_MIRROR_SOCKET: "/tmp/korri-seat.sock",
+              KORRI_INPUT_SEAT_LAUNCH_ID: "launch-env",
+            },
+            stop: () => {},
+          }),
+        },
+      ],
+      spawnLaunch: async receivedSpec => {
+        spawnedSpec = receivedSpec
+        return {
+          result: child.promise,
+          terminate: () => child.resolve({ status: "launched" }),
+          terminateNow: () =>
+            child.resolve({ status: "failed", exitCode: 143 }),
+        }
+      },
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "launch-env",
+          spec: { ...spec, env: { EXISTING: "1" } },
+        }),
+      }),
+    )
+
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(spawnedSpec?.env).toEqual({
+      EXISTING: "1",
+      KORRI_INPUT_SEAT_MIRROR_SOCKET: "/tmp/korri-seat.sock",
+      KORRI_INPUT_SEAT_LAUNCH_ID: "launch-env",
+    })
+    child.resolve({ status: "launched" })
+  })
+
   it("fails before spawn with the pre-spawn gate failure kind", async () => {
     const order: string[] = []
     const { core } = startHarness({
