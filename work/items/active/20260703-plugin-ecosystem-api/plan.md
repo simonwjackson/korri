@@ -1,7 +1,7 @@
 ---
 title: refactor: Evolve Korri plugin API into one ecosystem ABI
 type: refactor
-status: active
+status: completed
 date: 2026-07-03
 origin: work/items/active/01KV8NZRAAETDX69P5T73BRVY8-first-party-plugin-system-shape/requirements.md
 verify_command: "bun test product/platform/plugin product/platform/acquisition/product-plugin-adapter.test.ts product/plugin-host && just typecheck && just test-nix"
