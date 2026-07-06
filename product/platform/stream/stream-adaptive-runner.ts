@@ -156,7 +156,7 @@ export function createStreamAdaptiveRunner(
         options.onEvent({
           kind: "dispatch-failed",
           command,
-          message: error instanceof Error ? error.message : String(error),
+          message: describeDispatchError(error),
         })
       }
     }
@@ -170,6 +170,18 @@ export function createStreamAdaptiveRunner(
       if (interval !== undefined) clearInterval(interval)
     },
   }
+}
+
+function describeDispatchError(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  try {
+    const encoded = JSON.stringify(error)
+    if (encoded && encoded !== "{}") return encoded
+  } catch {
+    // Fall through to String for non-serializable values.
+  }
+  return String(error)
 }
 
 function currentBoundaries(

@@ -41,6 +41,7 @@ function makeHarness(
     readonly streaming?: boolean
     readonly enabled?: boolean
     readonly rejectSet?: boolean
+    readonly rejectWith?: unknown
     readonly boundaries?: StreamBoundaries | (() => StreamBoundaries | undefined)
   } = {},
 ) {
@@ -53,14 +54,17 @@ function makeHarness(
   const recovery: RuntimeRecoverySupervisor = {
     setBitrate: async kbps => {
       calls.push(`bitrate:${kbps}`)
+      if (input.rejectWith !== undefined) throw input.rejectWith
       if (input.rejectSet) throw new Error("dispatch failed")
     },
     setFps: async fps => {
       calls.push(`fps:${fps}`)
+      if (input.rejectWith !== undefined) throw input.rejectWith
       if (input.rejectSet) throw new Error("dispatch failed")
     },
     setResolution: async (width, height) => {
       calls.push(`resolution:${width}x${height}`)
+      if (input.rejectWith !== undefined) throw input.rejectWith
       if (input.rejectSet) throw new Error("dispatch failed")
     },
     hasPending: () => input.pending ?? false,
@@ -163,6 +167,21 @@ describe("createStreamAdaptiveRunner", () => {
       kind: "dispatch-failed",
       command: "runtime.setBitrate",
       message: "dispatch failed",
+    })
+  })
+
+  it("renders object dispatch failures as useful JSON", async () => {
+    const { runner, events } = makeHarness({
+      rejectWith: { status: "unsupported", reason: "native rejected bitrate" },
+      health: summary({ bitrateDeliveryRatio: 0.65 }),
+    })
+
+    await runner.tick()
+
+    expect(events).toContainEqual({
+      kind: "dispatch-failed",
+      command: "runtime.setBitrate",
+      message: '{"status":"unsupported","reason":"native rejected bitrate"}',
     })
   })
 
