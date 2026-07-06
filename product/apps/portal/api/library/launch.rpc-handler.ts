@@ -599,7 +599,10 @@ function handleRemoteSourceLaunch(
 
     if (result.status === "launched") {
       if (moonlightControl && isMoonlightRuntimeSessionEnabled(process.env)) {
-        registerMoonlightControlRuntimeSession({ control: moonlightControl })
+        const timer = setTimeout(() => {
+          registerMoonlightControlRuntimeSession({ control: moonlightControl })
+        }, 0)
+        timer.unref?.()
       }
       logger.info(
         {
