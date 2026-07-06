@@ -133,7 +133,7 @@ describe("createStreamAdaptiveRunner", () => {
     expect(events).toContainEqual({ kind: "dormant", reason: "not-streaming" })
   })
 
-  it("dispatches all targeted dimensions from one decision tick", async () => {
+  it("dispatches only the highest-priority targeted dimension per tick", async () => {
     const { runner, calls, events } = makeHarness({
       health: summary({
         bitrateDeliveryRatio: 0.25,
@@ -148,8 +148,8 @@ describe("createStreamAdaptiveRunner", () => {
     await runner.tick()
 
     expect(calls.some(call => call.startsWith("bitrate:"))).toBe(true)
-    expect(calls.some(call => call.startsWith("fps:"))).toBe(true)
-    expect(calls.some(call => call.startsWith("resolution:"))).toBe(true)
+    expect(calls.some(call => call.startsWith("fps:"))).toBe(false)
+    expect(calls.some(call => call.startsWith("resolution:"))).toBe(false)
     expect(events).toContainEqual(
       expect.objectContaining({ kind: "decision", mode: "shed" }),
     )

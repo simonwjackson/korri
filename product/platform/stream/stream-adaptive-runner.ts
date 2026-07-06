@@ -127,11 +127,13 @@ export function createStreamAdaptiveRunner(
       await dispatch("runtime.setBitrate", target, () =>
         options.recovery.setBitrate(target.bitrateKbps as number),
       )
+      return
     }
     if (target.fps !== undefined) {
       await dispatch("runtime.setFps", target, () =>
         options.recovery.setFps(target.fps as number),
       )
+      return
     }
     if (target.resolution !== undefined) {
       await dispatch("runtime.setResolution", target, () =>
