@@ -229,11 +229,11 @@ printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=fex-root
   || fail "--check should validate FEX rootfs bwrap"
 printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=fex-rootfs-freedreno' \
   || fail "--check should validate x86_64 Freedreno in the FEX rootfs"
-printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=sniper-pressure-vessel-wrap' \
+printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=SteamLinuxRuntime_sniper-pressure-vessel-wrap' \
   || fail "--check should validate pressure-vessel-wrap trampoline"
-printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=sniper-pv-adverb' \
+printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=SteamLinuxRuntime_sniper-pv-adverb' \
   || fail "--check should validate pv-adverb trampoline"
-printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=sniper-srt-bwrap' \
+printf '%s\n' "$check_out" | grep -q 'runtime-prep-check status=ok name=SteamLinuxRuntime_sniper-srt-bwrap' \
   || fail "--check should validate srt-bwrap rootfs contract"
 
 set +e
@@ -243,5 +243,69 @@ set -e
 [ "$missing_fex_status" -ne 0 ] || fail "--check should fail when FEX_ROOTFS is absent"
 printf '%s\n' "$missing_fex_out" | grep -q 'runtime-prep-check status=fail name=FEX_ROOTFS' \
   || fail "missing FEX_ROOTFS diagnostic should name FEX_ROOTFS"
+
+
+# Runtime 4 narrow repair mode must touch only launch-critical pressure-vessel
+# helpers, leaving unrelated executables and legacy font/python mutations alone.
+runtime4_home="$tmp/Runtime4Steam"
+runtime4_pv="$runtime4_home/steamapps/common/SteamLinuxRuntime_4/pressure-vessel"
+runtime4_rootfs="$runtime4_home/fex-rootfs"
+mkdir -p \
+  "$runtime4_pv/bin" \
+  "$runtime4_pv/libexec/steam-runtime-tools-0" \
+  "$runtime4_home/steamapps/common/SteamLinuxRuntime_4/steamrt4_platform_test/files/share/fonts/test" \
+  "$runtime4_rootfs/usr/bin" \
+  "$runtime4_rootfs/usr/lib"
+
+write_x86_elf() {
+  printf '\177ELF\002\001\001\000\000\000\000\000\000\000\000\000\002\000\076\000\001\000\000\000' > "$1"
+  chmod 755 "$1"
+}
+
+write_x86_elf "$runtime4_pv/bin/pressure-vessel-wrap"
+write_x86_elf "$runtime4_pv/libexec/steam-runtime-tools-0/pv-adverb"
+write_x86_elf "$runtime4_pv/libexec/steam-runtime-tools-0/srt-bwrap"
+write_x86_elf "$runtime4_pv/bin/unrelated-helper"
+write_x86_elf "$runtime4_rootfs/usr/lib/libvulkan_freedreno.so"
+cat > "$runtime4_rootfs/usr/bin/bwrap" <<'BWRAP'
+#!/bin/sh
+exit 0
+BWRAP
+chmod 755 "$runtime4_rootfs/usr/bin/bwrap"
+
+set +e
+runtime4_before=$(STEAM_HOME="$runtime4_home" FEX_ROOTFS="$runtime4_rootfs" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --check 2>&1)
+runtime4_before_status=$?
+set -e
+[ "$runtime4_before_status" -ne 0 ] || fail "Runtime 4 x86 helpers should fail check before repair"
+printf '%s\n' "$runtime4_before" | grep -q 'name=SteamLinuxRuntime_4-pressure-vessel-wrap' \
+  || fail "Runtime 4 check should name pressure-vessel-wrap"
+printf '%s\n' "$runtime4_before" | grep -q 'name=SteamLinuxRuntime_4-pv-adverb' \
+  || fail "Runtime 4 check should name pv-adverb"
+printf '%s\n' "$runtime4_before" | grep -q 'name=SteamLinuxRuntime_4-srt-bwrap' \
+  || fail "Runtime 4 check should name srt-bwrap"
+
+STEAM_HOME="$runtime4_home" FEX_ROOTFS="$runtime4_rootfs" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --repair-runtime-helpers
+runtime4_after=$(STEAM_HOME="$runtime4_home" FEX_ROOTFS="$runtime4_rootfs" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --check)
+printf '%s\n' "$runtime4_after" | grep -q 'status=ok name=SteamLinuxRuntime_4-pressure-vessel-wrap' \
+  || fail "Runtime 4 pressure-vessel-wrap should be repaired"
+printf '%s\n' "$runtime4_after" | grep -q 'status=ok name=SteamLinuxRuntime_4-pv-adverb' \
+  || fail "Runtime 4 pv-adverb should be repaired"
+printf '%s\n' "$runtime4_after" | grep -q 'status=ok name=SteamLinuxRuntime_4-srt-bwrap' \
+  || fail "Runtime 4 srt-bwrap should be repaired"
+grep -q 'exec /usr/bin/FEX "$0.x86_64"' "$runtime4_pv/bin/pressure-vessel-wrap" \
+  || fail "Runtime 4 pressure-vessel-wrap should use FEX trampoline"
+grep -q 'exec /usr/bin/FEX "$0.x86_64"' "$runtime4_pv/libexec/steam-runtime-tools-0/pv-adverb" \
+  || fail "Runtime 4 pv-adverb should use FEX trampoline"
+grep -q 'bwrap_bin="${FEX_ROOTFS%/}/usr/bin/bwrap"' "$runtime4_pv/libexec/steam-runtime-tools-0/srt-bwrap" \
+  || fail "Runtime 4 srt-bwrap should resolve bwrap from FEX_ROOTFS"
+grep -q 'PATH="/run/current-system/sw/bin:${PATH:-}"' "$runtime4_pv/libexec/steam-runtime-tools-0/srt-bwrap" \
+  || fail "Runtime 4 srt-bwrap should prefix host PATH"
+grep -q 'exec /usr/bin/FEX "$bwrap_bin" "$@"' "$runtime4_pv/libexec/steam-runtime-tools-0/srt-bwrap" \
+  || fail "Runtime 4 srt-bwrap should direct-FEX bwrap"
+[ ! -e "$runtime4_pv/bin/unrelated-helper.x86_64" ] \
+  || fail "repair-runtime-helpers should not wrap unrelated helpers"
+[ ! -e "$runtime4_home/steamapps/common/SteamLinuxRuntime_4/steamrt4_platform_test/files/share/fonts/test/.uuid" ] \
+  || fail "repair-runtime-helpers should not mutate font marker trees"
 
 echo "steam-guest-runtime-prep-smoke: ok"

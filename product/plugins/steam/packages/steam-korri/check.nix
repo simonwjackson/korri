@@ -73,6 +73,13 @@ let
       && lib.hasInfix ''find "$compat_tools" -mindepth 1 -maxdepth 1 -type d'' runtimePrepScript
       && lib.hasInfix "find \"$common\" -mindepth 1 -maxdepth 1 -type d -name 'Proton*'" runtimePrepScript
     ))
+    (check "steam-korri runtime helper repair is explicit and allowlisted" (
+      lib.hasInfix "--repair-runtime-helpers" runtimePrepScript
+      && lib.hasInfix ''"$mode" = repair-runtime-helpers'' runtimePrepScript
+      && lib.hasInfix ''"$pv/bin/pressure-vessel-wrap"'' runtimePrepScript
+      && lib.hasInfix "find \"$pv\" -name pv-adverb" runtimePrepScript
+      && lib.hasInfix "find \"$pv\" -name srt-bwrap" runtimePrepScript
+    ))
     (check "steam-korri guest runner does not apply runtime prep on normal startup" (
       lib.hasInfix "must not run --apply" runtimePrepScript
       && lib.hasInfix "Do not run" guestRunScript
@@ -259,6 +266,8 @@ PROTON
         echo "runtime prep Proton patching is not idempotent" >&2
         exit 1
       }
+
+      ${pkgs.bash}/bin/bash ${sourceRoot}/tests/steam-guest-runtime-prep-smoke.sh
 
       cat > "$out/summary.txt" <<'EOF'
       steam-korri derivation passes helper, provenance, resource, and smoke-fix checks.

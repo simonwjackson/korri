@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-usage: steam-guest-runtime-prep [--check|--apply|--patch-proton]
+usage: steam-guest-runtime-prep [--check|--apply|--repair-runtime-helpers|--patch-proton]
 
 Diagnose or explicitly repair mutable Steam Runtime / pressure-vessel state in
 a caller-provided ARM64 Steam home. Normal Steam startup must not run --apply;
@@ -13,9 +13,10 @@ Required environment:
   STEAM_HOME        Steam client home containing steamapps/common
 
 Modes:
-  --check          Diagnose launch-critical runtime prerequisites without mutation
-  --apply          Explicit legacy repair of mutable Steam-owned runtime state (default)
-  --patch-proton   Repair Korri-owned compatibility-tool payloads/FEX links only
+  --check                  Diagnose launch-critical runtime prerequisites without mutation
+  --repair-runtime-helpers Explicitly repair only allowlisted pressure-vessel helpers
+  --apply                  Explicit legacy repair of mutable Steam-owned runtime state (default)
+  --patch-proton           Repair Korri-owned compatibility-tool payloads/FEX links only
 EOF
 }
 
@@ -23,6 +24,7 @@ mode=apply
 case "${1:-}" in
   ""|--apply) mode=apply ;;
   --check) mode=check ;;
+  --repair-runtime-helpers) mode=repair-runtime-helpers ;;
   --patch-proton) mode=patch-proton ;;
   -h|--help) usage; exit 0 ;;
   *) usage >&2; exit 2 ;;
@@ -51,10 +53,30 @@ runtime_check_executable() {
   fi
 }
 
+runtime_helper_architecture() {
+  local path="$1" info
+  info="$(file "$path" 2>/dev/null || true)"
+  case "$info" in
+    *"executable"*"x86-64"*|*"x86-64"*"executable"*|*"executable"*"Intel 80386"*|*"Intel 80386"*"executable"*) echo x86 ;;
+    *"aarch64"*|*"ARM aarch64"*) echo arm64 ;;
+    *"shell script"*|*"text executable"*) echo script ;;
+    *) echo unknown ;;
+  esac
+}
+
 runtime_check_fex_trampoline() {
-  local name="$1" path="$2" expected_wrapper="$3"
+  local name="$1" path="$2" expected_wrapper="$3" arch
   if [ ! -f "$path" ]; then
-    runtime_check_report fail "$name" "missing wrapper: $path"
+    runtime_check_report fail "$name" "missing helper: $path"
+    return 0
+  fi
+  arch="$(runtime_helper_architecture "$path")"
+  if [ "$arch" = arm64 ]; then
+    runtime_check_report ok "$name" "$path is ARM64-native"
+    return 0
+  fi
+  if [ "$arch" != script ]; then
+    runtime_check_report fail "$name" "$path is $arch and not repaired to a FEX trampoline"
     return 0
   fi
   if [ ! -f "$path.x86_64" ]; then
@@ -69,18 +91,27 @@ runtime_check_fex_trampoline() {
 }
 
 runtime_check_srt_bwrap() {
-  local path="$1" expected_wrapper="$2"
+  local name="$1" path="$2" expected_wrapper="$3" arch
   if [ ! -f "$path" ]; then
-    runtime_check_report fail sniper-srt-bwrap "missing wrapper: $path"
+    runtime_check_report fail "$name" "missing helper: $path"
+    return 0
+  fi
+  arch="$(runtime_helper_architecture "$path")"
+  if [ "$arch" = arm64 ]; then
+    runtime_check_report ok "$name" "$path is ARM64-native"
+    return 0
+  fi
+  if [ "$arch" != script ]; then
+    runtime_check_report fail "$name" "$path is $arch and not repaired to the FEX_ROOTFS bwrap contract"
     return 0
   fi
   if grep -q 'bwrap_bin="${FEX_ROOTFS%/}/usr/bin/bwrap"' "$path" 2>/dev/null \
     && grep -q 'PATH="/run/current-system/sw/bin:${PATH:-}"' "$path" 2>/dev/null \
     && grep -q "exec $expected_wrapper" "$path" 2>/dev/null \
     && grep -q '\$bwrap_bin' "$path" 2>/dev/null; then
-    runtime_check_report ok sniper-srt-bwrap "$path resolves bwrap from FEX_ROOTFS through $expected_wrapper"
+    runtime_check_report ok "$name" "$path resolves bwrap from FEX_ROOTFS through $expected_wrapper"
   else
-    runtime_check_report fail sniper-srt-bwrap "$path does not match the FEX_ROOTFS bwrap contract"
+    runtime_check_report fail "$name" "$path does not match the FEX_ROOTFS bwrap contract"
   fi
 }
 
@@ -99,8 +130,21 @@ runtime_check_freedreno() {
   esac
 }
 
+runtime_pressure_vessel_roots() {
+  [ -d "$common" ] && find "$common" -mindepth 2 -maxdepth 2 -path '*/SteamLinuxRuntime*/pressure-vessel' -type d -print 2>/dev/null || true
+  [ -d "$STEAM_HOME/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel" ] && printf '%s\n' "$STEAM_HOME/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel"
+  return 0
+}
+
+runtime_root_name() {
+  local pv="$1" parent runtime
+  parent="${pv%/pressure-vessel}"
+  runtime="${parent##*/}"
+  printf '%s' "$runtime"
+}
+
 runtime_check() {
-  local sniper pv_wrap pv_adverb srt_bwrap expected_wrapper
+  local expected_wrapper roots pv runtime pv_wrap pv_adverb srt_bwrap
   echo "steam-guest-runtime-prep mode=check"
   echo "STEAM_HOME=$STEAM_HOME"
 
@@ -108,6 +152,12 @@ runtime_check() {
     runtime_check_report ok steamapps-common "$common"
   else
     runtime_check_report fail steamapps-common "missing directory: $common"
+  fi
+
+  roots="$(runtime_pressure_vessel_roots)"
+  if [ -z "$roots" ]; then
+    runtime_check_report ok runtime-helpers "no SteamLinuxRuntime pressure-vessel directories installed"
+    return "$runtime_check_failed"
   fi
 
   if [ -n "${FEX_ROOTFS:-}" ]; then
@@ -119,15 +169,22 @@ runtime_check() {
   fi
 
   expected_wrapper="${FEX_WRAPPER_BIN:-/usr/bin/FEX}"
-  sniper="$common/SteamLinuxRuntime_sniper/pressure-vessel"
-  pv_wrap="$sniper/bin/pressure-vessel-wrap"
-  pv_adverb="$sniper/libexec/steam-runtime-tools-0/pv-adverb"
-  srt_bwrap="$(find "$sniper" -name srt-bwrap -type f -print -quit 2>/dev/null || true)"
-  [ -n "$srt_bwrap" ] || srt_bwrap="$sniper/libexec/steam-runtime-tools-0/srt-bwrap"
+  while IFS= read -r pv; do
+    [ -n "$pv" ] || continue
+    runtime="$(runtime_root_name "$pv")"
+    runtime_check_report ok "runtime-$runtime" "$pv"
+    pv_wrap="$pv/bin/pressure-vessel-wrap"
+    pv_adverb="$(find "$pv" -name pv-adverb -type f -print -quit 2>/dev/null || true)"
+    [ -n "$pv_adverb" ] || pv_adverb="$pv/libexec/steam-runtime-tools-0/pv-adverb"
+    srt_bwrap="$(find "$pv" -name srt-bwrap -type f -print -quit 2>/dev/null || true)"
+    [ -n "$srt_bwrap" ] || srt_bwrap="$pv/libexec/steam-runtime-tools-0/srt-bwrap"
 
-  runtime_check_fex_trampoline sniper-pressure-vessel-wrap "$pv_wrap" "$expected_wrapper"
-  runtime_check_fex_trampoline sniper-pv-adverb "$pv_adverb" "$expected_wrapper"
-  runtime_check_srt_bwrap "$srt_bwrap" "$expected_wrapper"
+    runtime_check_fex_trampoline "$runtime-pressure-vessel-wrap" "$pv_wrap" "$expected_wrapper"
+    runtime_check_fex_trampoline "$runtime-pv-adverb" "$pv_adverb" "$expected_wrapper"
+    runtime_check_srt_bwrap "$runtime-srt-bwrap" "$srt_bwrap" "$expected_wrapper"
+  done <<EOF
+$roots
+EOF
 
   return "$runtime_check_failed"
 }
@@ -149,7 +206,7 @@ proton_roots() {
     # Proton tools commonly point at immutable package/store content and must
     # not be patched as a startup side effect.
     find "$compat_tools" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null || true
-  else
+  elif [ "$mode" = apply ]; then
     [ -d "$common" ] || return 0
     find "$common" -mindepth 1 -maxdepth 1 -type d -name 'Proton*' -print 2>/dev/null || true
   fi
@@ -359,7 +416,18 @@ proton_roots | while IFS= read -r proton; do
   done
 done
 
-if [ "$mode" != patch-proton ]; then
+if [ "$mode" = repair-runtime-helpers ]; then
+runtime_pressure_vessel_roots | while IFS= read -r pv; do
+  [ -d "$pv" ] || continue
+  for helper in \
+    "$pv/bin/pressure-vessel-wrap" \
+    $(find "$pv" -name pv-adverb -type f -print 2>/dev/null || true) \
+    $(find "$pv" -name srt-bwrap -type f -print 2>/dev/null || true); do
+    [ -n "$helper" ] || continue
+    wrap_fex_tool "$helper"
+  done
+done
+elif [ "$mode" = apply ]; then
 for pv in "$common"/SteamLinuxRuntime*/pressure-vessel "$STEAM_HOME"/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel; do
   [ -d "$pv" ] || continue
   find "$pv" -type f -perm -0100 ! -name '*.x86_64*' ! -name '*.x86' | while IFS= read -r file; do
@@ -458,7 +526,7 @@ proton_roots | while IFS= read -r proton_root; do
   esac
 done
 
-if [ "$mode" != patch-proton ]; then
+if [ "$mode" = apply ]; then
 for py in "$common"/SteamLinuxRuntime*/steamrt*_platform_*/files/bin/python3.* "$common"/SteamLinuxRuntime*/sniper_platform_*/files/bin/python3.*; do
   [ -x "$py" ] || continue
   bindir="${py%/*}"
