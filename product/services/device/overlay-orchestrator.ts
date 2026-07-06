@@ -108,7 +108,8 @@ export function createOverlayOrchestrator(deps: {
     // menu model exists synchronously so any nav that does arrive is handled; we
     // just defer the visible frame until input is actually routed to us.
     void ensureGated().then(() => {
-      if (menu === opened) deps.renderer.menu(menuOptions, opened.state().selected)
+      if (menu === opened)
+        deps.renderer.menu(menuOptions, opened.state().selected)
     })
   }
 

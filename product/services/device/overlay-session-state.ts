@@ -79,9 +79,10 @@ export function createOverlaySessionProbe(
       }
       active = nextActive
       stream = nextStream
-      sourceControlUrl = nextActive && nextStream
-        ? streamSourceControlUrlFromStatus(status)
-        : undefined
+      sourceControlUrl =
+        nextActive && nextStream
+          ? streamSourceControlUrlFromStatus(status)
+          : undefined
     },
     isActive: () => active,
     isStream: () => stream,

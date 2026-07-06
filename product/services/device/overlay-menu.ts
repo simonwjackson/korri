@@ -90,7 +90,9 @@ export function overlayMenuOptionsFor(
 }
 
 /** Index of the safe default ("keep playing"), for the initial selection. */
-export function safeDefaultIndex(options: readonly OverlayMenuOption[]): number {
+export function safeDefaultIndex(
+  options: readonly OverlayMenuOption[],
+): number {
   const index = options.findIndex(option => option.id === "keep-playing")
   return index >= 0 ? index : options.length - 1
 }

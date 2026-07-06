@@ -12,7 +12,9 @@ describe("createOverlayHoldHandlerFromEnv", () => {
 
   it("returns a handler when the renderer bin is set", () => {
     const handler = createOverlayHoldHandlerFromEnv({
-      env: { KORRI_OVERLAY_RENDERER_BIN: "/nix/store/x/bin/korri-overlay-renderer" },
+      env: {
+        KORRI_OVERLAY_RENDERER_BIN: "/nix/store/x/bin/korri-overlay-renderer",
+      },
       forceQuit: () => {},
     })
     expect(typeof handler).toBe("function")

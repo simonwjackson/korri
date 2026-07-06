@@ -27,7 +27,9 @@ export interface ParsedInputEvent {
  * Returns null for unrelated lines.
  */
 export function parseInputEventLine(line: string): ParsedInputEvent | null {
-  const match = line.match(/InputEvent\s*\(\s*'([^']+)'\s*,\s*(-?[0-9]+(?:\.[0-9]+)?)\s*\)/)
+  const match = line.match(
+    /InputEvent\s*\(\s*'([^']+)'\s*,\s*(-?[0-9]+(?:\.[0-9]+)?)\s*\)/,
+  )
   if (!match) return null
   return { capability: match[1], value: Number(match[2]) }
 }
@@ -46,17 +48,15 @@ export interface InterceptSubprocess {
   ) => () => void
 }
 
-export function createLiveInterceptPort(
-  deps: {
-    readonly subprocess: InterceptSubprocess
-    readonly busctl?: string
-    readonly gdbus?: string
-    /** Path to coreutils `stdbuf`, used to force line-buffered monitor output. */
-    readonly stdbuf?: string
-    /** When true, log every received monitor line to stderr for diagnosis. */
-    readonly debug?: boolean
-  },
-): InputPlumberInterceptPort {
+export function createLiveInterceptPort(deps: {
+  readonly subprocess: InterceptSubprocess
+  readonly busctl?: string
+  readonly gdbus?: string
+  /** Path to coreutils `stdbuf`, used to force line-buffered monitor output. */
+  readonly stdbuf?: string
+  /** When true, log every received monitor line to stderr for diagnosis. */
+  readonly debug?: boolean
+}): InputPlumberInterceptPort {
   const busctl = deps.busctl ?? "busctl"
   const gdbus = deps.gdbus ?? "gdbus"
   const stdbuf = deps.stdbuf ?? "stdbuf"

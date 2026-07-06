@@ -35,9 +35,9 @@ describe("overlay renderer protocol", () => {
   })
 
   it("strips newlines from labels to keep one command per line", () => {
-    expect(
-      encodeMenu([{ id: "x", label: "Bad\nlabel" }], 0),
-    ).toBe("menu 0 1\n0 Bad label\n")
+    expect(encodeMenu([{ id: "x", label: "Bad\nlabel" }], 0)).toBe(
+      "menu 0 1\n0 Bad label\n",
+    )
   })
 })
 

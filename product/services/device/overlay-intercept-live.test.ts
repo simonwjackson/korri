@@ -9,13 +9,17 @@ describe("parseInputEventLine", () => {
   it("parses a dbus0 InputEvent press", () => {
     const line =
       "/org/shadowblip/InputPlumber/devices/target/dbus0: org.shadowblip.Input.DBusDevice.InputEvent ('ui_left', 1.0)"
-    expect(parseInputEventLine(line)).toEqual({ capability: "ui_left", value: 1 })
+    expect(parseInputEventLine(line)).toEqual({
+      capability: "ui_left",
+      value: 1,
+    })
   })
 
   it("parses a release (0.0)", () => {
-    expect(
-      parseInputEventLine("... InputEvent ('ui_accept', 0.0)"),
-    ).toEqual({ capability: "ui_accept", value: 0 })
+    expect(parseInputEventLine("... InputEvent ('ui_accept', 0.0)")).toEqual({
+      capability: "ui_accept",
+      value: 0,
+    })
   })
 
   it("returns null for unrelated lines", () => {
@@ -73,7 +77,9 @@ describe("createLiveInterceptPort", () => {
     const fake = fakeSubprocess()
     const port = createLiveInterceptPort({ subprocess: fake.subprocess })
     const events: Array<[string, number]> = []
-    const stop = port.subscribeInputEvents((cap, val) => events.push([cap, val]))
+    const stop = port.subscribeInputEvents((cap, val) =>
+      events.push([cap, val]),
+    )
     fake.emit("... InputEvent ('ui_right', 1.0)")
     fake.emit("noise")
     fake.emit("... InputEvent ('ui_back', 0.0)")

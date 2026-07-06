@@ -93,7 +93,9 @@ async function callKorridRpc(
     throw new Error(`RPC response missing Exit frame: ${text.slice(0, 500)}`)
   }
   if (exit.exit._tag === "Success") return exit.exit.value
-  throw new Error(`RPC failure: ${JSON.stringify(exit.exit.cause ?? exit.exit)}`)
+  throw new Error(
+    `RPC failure: ${JSON.stringify(exit.exit.cause ?? exit.exit)}`,
+  )
 }
 
 export function rpcUrlForControlUrl(controlUrl: string): string {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test"
 import type { ChordHoldUpdate } from "@platform/input/native/chord-hold-supervisor"
-import type { OverlayInterceptController, OverlayNav } from "./overlay-intercept"
+import type {
+  OverlayInterceptController,
+  OverlayNav,
+} from "./overlay-intercept"
 import type { OverlayMenuOption } from "./overlay-menu"
 import {
   createOverlayOrchestrator,
@@ -16,7 +19,8 @@ function createFakeRenderer() {
   const calls: RenderCall[] = []
   const client: OverlayRendererClient = {
     ring: pct => calls.push({ kind: "ring", pct }),
-    menu: (options, selected) => calls.push({ kind: "menu", options, selected }),
+    menu: (options, selected) =>
+      calls.push({ kind: "menu", options, selected }),
     hide: () => calls.push({ kind: "hide" }),
   }
   return { client, calls }
@@ -147,7 +151,10 @@ describe("overlay orchestrator", () => {
     const first = renderer.calls[0]
     expect(first.kind).toBe("menu")
     if (first.kind === "menu") {
-      expect(first.options.map(o => o.id)).toEqual(["quit-game", "keep-playing"])
+      expect(first.options.map(o => o.id)).toEqual([
+        "quit-game",
+        "keep-playing",
+      ])
       expect(first.selected).toBe(1) // keep-playing default
     }
   })

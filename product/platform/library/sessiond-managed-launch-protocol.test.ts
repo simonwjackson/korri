@@ -94,7 +94,9 @@ describe("sessiond managed launch protocol", () => {
       restoreAttempts: 0,
     })
 
-    expect(status.active?.launchMetadata?.annotations?.["@korri:stream"]).toEqual({
+    expect(
+      status.active?.launchMetadata?.annotations?.["@korri:stream"],
+    ).toEqual({
       hostId: "aka",
       controlUrl: "http://aka:3001",
     })

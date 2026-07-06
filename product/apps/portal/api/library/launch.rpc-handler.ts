@@ -624,7 +624,6 @@ function handleRemoteSourceLaunch(
   })
 }
 
-
 interface MoonlightControlPolicyView {
   readonly enable?: boolean
   readonly authority?: "observer" | "controller"

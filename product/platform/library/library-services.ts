@@ -2,9 +2,7 @@ import type { EntrySource } from "@platform/api/rpc/entry-source"
 import { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
-import type {
-  LaunchCompanionMap,
-} from "@platform/library/config/inheritable-fields"
+import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import type { StreamerPolicy } from "@platform/library/config/streamer-policy"
 import type { LaunchAlternative } from "@platform/library/launch-alternative"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"

@@ -110,7 +110,6 @@ export const launchCompanionsFromLaunch = (layer: {
 }): LaunchCompanionMap | undefined =>
   layer.launch?.with as LaunchCompanionMap | undefined
 
-
 /**
  * Launcher-neutral launch preferences — declared once at any cascade layer
  * under `preferences.launch`, folded like `moonlight`, and translated into
@@ -169,7 +168,6 @@ export type InheritableLayer = Schema.Schema.Type<typeof InheritableLayer>
 
 export const ByLauncherPayload = Schema.Record(Schema.String, InheritableLayer)
 export type ByLauncherPayload = Schema.Schema.Type<typeof ByLauncherPayload>
-
 
 export const decodePreferences = (input: unknown): Preferences =>
   Schema.decodeUnknownSync(Preferences)(input, STRICT)

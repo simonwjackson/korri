@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import { rpcUrlForControlUrl, stopRemoteGameOnHost } from "./overlay-remote-stop"
+import {
+  rpcUrlForControlUrl,
+  stopRemoteGameOnHost,
+} from "./overlay-remote-stop"
 
 function logger() {
   const entries: Array<{ level: string; input: unknown; message?: string }> = []
@@ -77,7 +80,8 @@ describe("stopRemoteGameOnHost", () => {
       {
         level: "warn",
         input: {},
-        message: "overlay close-game skipped; active stream has no source controlUrl",
+        message:
+          "overlay close-game skipped; active stream has no source controlUrl",
       },
     ])
   })

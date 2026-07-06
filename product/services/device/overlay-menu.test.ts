@@ -40,7 +40,10 @@ describe("overlay menu model", () => {
       ],
       1,
     )
-    expect(menu.handle("accept")).toEqual({ kind: "chosen", id: "keep-playing" })
+    expect(menu.handle("accept")).toEqual({
+      kind: "chosen",
+      id: "keep-playing",
+    })
     menu.handle("left")
     expect(menu.handle("accept")).toEqual({ kind: "chosen", id: "quit-game" })
     expect(menu.handle("back")).toEqual({ kind: "cancelled" })
