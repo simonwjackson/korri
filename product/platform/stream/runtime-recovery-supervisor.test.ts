@@ -85,6 +85,30 @@ describe("createRuntimeRecoverySupervisor", () => {
     expect(harness.calls).toHaveLength(1)
   })
 
+  it("handles command results that arrive before the accepted id is recorded", async () => {
+    const events: RuntimeRecoveryEvent[] = []
+    const harness = makePort()
+    const sup = createRuntimeRecoverySupervisor({
+      port: harness.port,
+      onEvent: e => events.push(e),
+    })
+
+    const mutation = sup.setBitrate(12_000)
+    harness.emit({
+      requestId: "req-1",
+      command: "runtime.setBitrate",
+      status: "applied",
+    })
+    await mutation
+
+    expect(sup.hasPending()).toBe(false)
+    expect(sup.knownGood()["runtime.setBitrate"]).toEqual({
+      kind: "scalar",
+      value: 12_000,
+    })
+    expect(events).toEqual([])
+  })
+
   it("auto-reverts a stalled change to the last applied known-good", async () => {
     const events: RuntimeRecoveryEvent[] = []
     const harness = makePort()

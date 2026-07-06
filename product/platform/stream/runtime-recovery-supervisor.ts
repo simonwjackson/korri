@@ -109,6 +109,16 @@ export interface RuntimeRecoverySupervisor {
  * (e.g. a manual CLI change on another connection) carry no tracked value and
  * are ignored — the supervisor only recovers changes it drove.
  */
+const MAX_EARLY_RESULTS = 32
+
+function trimEarlyResults(results: Map<string, RuntimeRecoveryResult>): void {
+  while (results.size > MAX_EARLY_RESULTS) {
+    const first = results.keys().next().value
+    if (first === undefined) return
+    results.delete(first)
+  }
+}
+
 export function createRuntimeRecoverySupervisor(
   options: RuntimeRecoverySupervisorOptions,
 ): RuntimeRecoverySupervisor {
@@ -117,6 +127,7 @@ export function createRuntimeRecoverySupervisor(
     pending: {},
     knownGood: { ...(baseline ?? {}) },
   }
+  const earlyResults = new Map<string, RuntimeRecoveryResult>()
 
   const advance = (
     input: Parameters<typeof reduceRuntimeRecovery>[1],
@@ -182,10 +193,26 @@ export function createRuntimeRecoverySupervisor(
     const requestId = await issue(command, value)
     if (requestId !== undefined) {
       advance({ kind: "sent", requestId, command, value, isRevert })
+      const earlyResult = earlyResults.get(String(requestId))
+      if (earlyResult) {
+        earlyResults.delete(String(requestId))
+        advance({
+          kind: "result",
+          requestId: earlyResult.requestId,
+          command: earlyResult.command,
+          status: earlyResult.status,
+        })
+      }
     }
   }
 
   const unsubscribe = port.onResult(result => {
+    const key = String(result.requestId)
+    if (!(key in state.pending)) {
+      earlyResults.set(key, result)
+      trimEarlyResults(earlyResults)
+      return
+    }
     advance({
       kind: "result",
       requestId: result.requestId,
