@@ -26,6 +26,10 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     korri = self;
   };
+  korri-sunshine-input-seat-env = import ../../../../tools/testing/nix/korri-sunshine-input-seat-env-check.nix {
+    inherit pkgs;
+    daemonModulePath = ../../../../product/systems/nixos/modules/korri-daemon.nix;
+  };
   korri-image-outputs = import ../../../../tools/testing/nix/korri-image-outputs-check.nix {
     inherit pkgs;
     packages = self.packages.${system};

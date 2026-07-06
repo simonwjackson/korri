@@ -1,6 +1,6 @@
 --- a/src/input.cpp
 +++ b/src/input.cpp
-@@ -3,22 +3,33 @@
+@@ -3,22 +3,34 @@
   * @brief Definitions for gamepad, keyboard, and mouse input handling.
   */
  #include <cstdint>
@@ -17,6 +17,7 @@
  #include <chrono>
  #include <cmath>
  #include <list>
++#include <fstream>
 +#include <sstream>
 +#include <string>
  #include <thread>
@@ -34,15 +35,24 @@
  // local includes
  #include "config.h"
  #include "globals.h"
-@@ -57,6 +68,173 @@
+@@ -57,6 +69,252 @@
      UP  ///< Button is up
    };
  
 +  constexpr auto KORRI_INPUT_SEAT_MAX_FRAME_BYTES = 2048;
++  constexpr auto KORRI_INPUT_SEAT_SIDECAR_NAME = "sunshine-active-launch.json"sv;
 +
 +#ifndef _WIN32
++  struct korri_input_seat_active_launch_t {
++    bool ready {false};
++    std::string launch_id;
++    std::string mirror_token;
++  };
++
 +  static std::atomic_bool korri_input_seat_logged_disabled {false};
 +  static std::atomic_bool korri_input_seat_logged_bad_socket_path {false};
++  static std::atomic_bool korri_input_seat_logged_bad_sidecar_path {false};
++  static std::atomic_bool korri_input_seat_logged_bad_sidecar {false};
 +  static std::atomic_bool korri_input_seat_logged_oversized_frame {false};
 +  static std::atomic_bool korri_input_seat_logged_connect_failure {false};
 +  static std::atomic_bool korri_input_seat_logged_write_failure {false};
@@ -75,12 +85,30 @@
 +    return escaped;
 +  }
 +
-+  std::string_view korri_input_seat_launch_id() {
-+    auto launch_id = std::getenv("KORRI_INPUT_SEAT_LAUNCH_ID");
-+    if (launch_id == nullptr || launch_id[0] == '\0') {
-+      return {};
++  bool korri_input_seat_json_field(std::string_view json, std::string_view name, std::string &out) {
++    auto key = std::string{"\""} + std::string{name} + "\"";
++    auto key_pos = json.find(key);
++    if (key_pos == std::string_view::npos) return false;
++    auto colon_pos = json.find(':', key_pos + key.size());
++    if (colon_pos == std::string_view::npos) return false;
++    auto quote_pos = json.find('"', colon_pos + 1);
++    if (quote_pos == std::string_view::npos) return false;
++
++    std::string value;
++    for (auto index = quote_pos + 1; index < json.size(); ++index) {
++      auto ch = json[index];
++      if (ch == '"') {
++        out = value;
++        return true;
++      }
++      if (ch == '\\' && index + 1 < json.size()) {
++        value += json[index + 1];
++        ++index;
++      } else {
++        value += ch;
++      }
 +    }
-+    return launch_id;
++    return false;
 +  }
 +
 +  const char *korri_input_seat_socket_path() {
@@ -91,10 +119,52 @@
 +    return socket_path;
 +  }
 +
-+  bool korri_input_seat_mirror_ready(const char *socket_path, std::string_view launch_id) {
-+    if (socket_path == nullptr || launch_id.empty()) {
++  std::string korri_input_seat_sidecar_path() {
++    auto runtime_dir = std::getenv("KORRI_INPUT_SEAT_RUNTIME_DIR");
++    if (runtime_dir == nullptr || runtime_dir[0] == '\0') {
++      return {};
++    }
++    std::string dir {runtime_dir};
++    if (dir[0] != '/' || dir.find('%') != std::string::npos) {
++      if (!korri_input_seat_logged_bad_sidecar_path.exchange(true)) {
++        BOOST_LOG(warning) << "invalid input seat mirror runtime directory"sv;
++      }
++      return {};
++    }
++    if (!dir.empty() && dir.back() == '/') {
++      dir.pop_back();
++    }
++    return dir + "/" + std::string{KORRI_INPUT_SEAT_SIDECAR_NAME};
++  }
++
++  korri_input_seat_active_launch_t korri_input_seat_active_launch() {
++    auto sidecar_path = korri_input_seat_sidecar_path();
++    if (sidecar_path.empty()) {
++      return {};
++    }
++
++    std::ifstream sidecar {sidecar_path};
++    if (!sidecar) {
++      return {};
++    }
++    std::stringstream buffer;
++    buffer << sidecar.rdbuf();
++    auto json = buffer.str();
++
++    korri_input_seat_active_launch_t active;
++    active.ready = korri_input_seat_json_field(json, "launchId"sv, active.launch_id) &&
++                   korri_input_seat_json_field(json, "mirrorToken"sv, active.mirror_token) &&
++                   !active.launch_id.empty() && !active.mirror_token.empty();
++    if (!active.ready && !korri_input_seat_logged_bad_sidecar.exchange(true)) {
++      BOOST_LOG(warning) << "invalid input seat mirror active-launch sidecar"sv;
++    }
++    return active;
++  }
++
++  bool korri_input_seat_mirror_ready(const char *socket_path, const korri_input_seat_active_launch_t &active) {
++    if (socket_path == nullptr || !active.ready) {
 +      if (!korri_input_seat_logged_disabled.exchange(true)) {
-+        BOOST_LOG(debug) << "input seat mirror disabled: missing KORRI_INPUT_SEAT_MIRROR_SOCKET or KORRI_INPUT_SEAT_LAUNCH_ID"sv;
++        BOOST_LOG(debug) << "input seat mirror disabled: missing KORRI_INPUT_SEAT_MIRROR_SOCKET or active launch sidecar"sv;
 +      }
 +      return false;
 +    }
@@ -109,14 +179,21 @@
 +    return true;
 +  }
 +
-+  void korri_input_seat_emit_json(std::string_view json) {
++  void korri_input_seat_emit_json(std::string_view json, const korri_input_seat_active_launch_t &active) {
 +    auto socket_path = korri_input_seat_socket_path();
-+    auto launch_id = korri_input_seat_launch_id();
-+    if (!korri_input_seat_mirror_ready(socket_path, launch_id)) {
++    if (!korri_input_seat_mirror_ready(socket_path, active)) {
 +      return;
 +    }
 +
-+    if (json.size() + 1 > KORRI_INPUT_SEAT_MAX_FRAME_BYTES) {
++    std::string envelope;
++    envelope.reserve(json.size() + active.mirror_token.size() + 64);
++    envelope += "{\"mirrorToken\":\"";
++    envelope += korri_input_seat_json_escape(active.mirror_token);
++    envelope += "\",\"frame\":";
++    envelope += json;
++    envelope += "}";
++
++    if (envelope.size() + 1 > KORRI_INPUT_SEAT_MAX_FRAME_BYTES) {
 +      if (!korri_input_seat_logged_oversized_frame.exchange(true)) {
 +        BOOST_LOG(warning) << "input seat mirror frame exceeded maximum size"sv;
 +      }
@@ -143,7 +220,7 @@
 +      return;
 +    }
 +
-+    std::string frame {json};
++    std::string frame {envelope};
 +    frame += '\n';
 +    std::size_t written = 0;
 +    while (written < frame.size()) {
@@ -165,30 +242,33 @@
 +    ::close(fd);
 +  }
 +
-+  std::ostringstream korri_input_seat_frame_prefix(std::string_view kind, std::int32_t controller_number) {
++  std::ostringstream korri_input_seat_frame_prefix(std::string_view kind, std::int32_t controller_number, std::string_view launch_id) {
 +    std::ostringstream out;
 +    out << "{\"kind\":\"" << kind << "\",\"launchId\":\""
-+        << korri_input_seat_json_escape(korri_input_seat_launch_id())
++        << korri_input_seat_json_escape(launch_id)
 +        << "\",\"controllerNumber\":" << controller_number;
 +    return out;
 +  }
 +
 +  void korri_input_seat_emit_source_connected(std::int32_t controller_number) {
-+    auto out = korri_input_seat_frame_prefix("source-connected"sv, controller_number);
++    auto active = korri_input_seat_active_launch();
++    auto out = korri_input_seat_frame_prefix("source-connected"sv, controller_number, active.launch_id);
 +    out << '}';
-+    korri_input_seat_emit_json(out.str());
++    korri_input_seat_emit_json(out.str(), active);
 +  }
 +
 +  void korri_input_seat_emit_source_disconnected(std::int32_t controller_number, std::string_view reason) {
-+    auto out = korri_input_seat_frame_prefix("source-disconnected"sv, controller_number);
++    auto active = korri_input_seat_active_launch();
++    auto out = korri_input_seat_frame_prefix("source-disconnected"sv, controller_number, active.launch_id);
 +    out << ",\"reason\":\"" << korri_input_seat_json_escape(reason) << "\"}";
-+    korri_input_seat_emit_json(out.str());
++    korri_input_seat_emit_json(out.str(), active);
 +  }
 +
 +  void korri_input_seat_emit_source_state(PNV_MULTI_CONTROLLER_PACKET packet) {
++    auto active = korri_input_seat_active_launch();
 +    const auto buttons = static_cast<std::uint32_t>(static_cast<std::uint16_t>(packet->buttonFlags)) |
 +                         (static_cast<std::uint32_t>(static_cast<std::uint16_t>(packet->buttonFlags2)) << 16);
-+    auto out = korri_input_seat_frame_prefix("source-state"sv, packet->controllerNumber);
++    auto out = korri_input_seat_frame_prefix("source-state"sv, packet->controllerNumber, active.launch_id);
 +    out << ",\"buttons\":" << buttons
 +        << ",\"leftTrigger\":" << static_cast<std::uint32_t>(packet->leftTrigger)
 +        << ",\"rightTrigger\":" << static_cast<std::uint32_t>(packet->rightTrigger)
@@ -197,7 +277,7 @@
 +        << ",\"rightStickX\":" << static_cast<std::int32_t>(packet->rightStickX)
 +        << ",\"rightStickY\":" << static_cast<std::int32_t>(packet->rightStickY)
 +        << '}';
-+    korri_input_seat_emit_json(out.str());
++    korri_input_seat_emit_json(out.str(), active);
 +  }
 +#else
 +  void korri_input_seat_emit_source_connected(std::int32_t) {}
@@ -208,7 +288,7 @@
    template<std::size_t N>
    int alloc_id(std::bitset<N> &gamepad_mask) {
      for (int x = 0; x < gamepad_mask.size(); ++x) {
-@@ -849,6 +1027,8 @@
+@@ -849,6 +1100,8 @@
        return;
      }
  
@@ -217,7 +297,7 @@
      platf::gamepad_arrival_t arrival {
        packet->type,
        util::endian::little(packet->capabilities),
-@@ -1094,6 +1274,8 @@
+@@ -1094,6 +1347,8 @@
      // If this is an event for a new gamepad, create the gamepad now. Ideally, the client would
      // send a controller arrival instead of this but it's still supported for legacy clients.
      if ((packet->activeGamepadMask & (1 << packet->controllerNumber)) && gamepad.id < 0) {
@@ -226,7 +306,7 @@
        auto id = alloc_id(gamepadMask);
        if (id < 0) {
          return;
-@@ -1107,11 +1289,17 @@
+@@ -1107,11 +1362,17 @@
        gamepad.id = id;
      } else if (!(packet->activeGamepadMask & (1 << packet->controllerNumber)) && gamepad.id >= 0) {
        // If this is the final event for a gamepad being removed, free the gamepad and return.

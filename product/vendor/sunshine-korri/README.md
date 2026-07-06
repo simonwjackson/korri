@@ -92,12 +92,13 @@ Evidence is recorded in:
 
 `0015-add-korri-input-seat-event-mirror.patch` is the first native Sunshine event-source seam for Korri sessiond input seats. Sunshine remains an event source: it mirrors sanitized controller-domain packets into Korri's local socket while sessiond owns the emulator-visible virtual seats.
 
-The mirror is enabled only when both launch-scoped environment variables are present:
+The mirror is enabled by stable service environment plus a sessiond-owned active-launch sidecar so the long-running Sunshine process does not need per-game restarts:
 
 - `KORRI_INPUT_SEAT_MIRROR_SOCKET`: absolute Unix socket path owned by the active sessiond input-seat service.
-- `KORRI_INPUT_SEAT_LAUNCH_ID`: launch id copied into every emitted frame so stale Sunshine processes can be rejected by the TypeScript adapter.
+- `KORRI_INPUT_SEAT_RUNTIME_DIR`: absolute runtime directory containing the fixed `sunshine-active-launch.json` sidecar.
+- `sunshine-active-launch.json`: restrictive sessiond-owned sidecar with `launchId`, `generation`, and `mirrorToken`. The sidecar never carries arbitrary socket paths.
 
-Frames are bounded NDJSON and follow the TypeScript `SunshineInputSeatFrame` schema: `source-connected`, `source-state`, and `source-disconnected`. The patch does not emit keyboard, mouse, text, touch, pen, motion, battery, or raw device-path data. Missing env disables the mirror without changing Sunshine's existing input path; socket connection/write failures are logged as local diagnostics and do not crash controller handling.
+Frames are bounded token-envelope NDJSON: `{ "mirrorToken": "...", "frame": SunshineInputSeatFrame }`. The inner `frame` follows the TypeScript `SunshineInputSeatFrame` schema: `source-connected`, `source-state`, and `source-disconnected`. The patch does not emit keyboard, mouse, text, touch, pen, motion, battery, or raw device-path data. Missing env or missing sidecar disables the mirror without changing Sunshine's existing input path; socket connection/write failures are logged as local diagnostics and do not crash controller handling. The mirror token is a local authorization value for sessiond's socket and must not appear in public status, SSE, logs, or committed acceptance artifacts.
 
 ## Removal/upstream policy
 

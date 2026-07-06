@@ -19,9 +19,12 @@ let
     (check "Sunshine input-seat mirror patch is applied by sunshine-korri" (
       contains "0015-add-korri-input-seat-event-mirror.patch" sunshinePackageSource
     ))
-    (check "Sunshine input-seat mirror is gated by socket path and launch id env" (
+    (check "Sunshine input-seat mirror is gated by stable socket env and active-launch sidecar" (
       contains "KORRI_INPUT_SEAT_MIRROR_SOCKET" patch
-      && contains "KORRI_INPUT_SEAT_LAUNCH_ID" patch
+      && contains "KORRI_INPUT_SEAT_RUNTIME_DIR" patch
+      && contains "sunshine-active-launch.json" patch
+      && contains "mirrorToken" patch
+      && !(contains "KORRI_INPUT_SEAT_LAUNCH_ID" patch)
       && contains "input seat mirror disabled" patch
     ))
     (check "Sunshine input-seat mirror uses local Unix socket writes" (
@@ -31,11 +34,13 @@ let
       && contains "send(fd" patch
       && contains "close(fd" patch
     ))
-    (check "Sunshine input-seat mirror emits bounded newline-delimited JSON" (
+    (check "Sunshine input-seat mirror emits bounded token-envelope NDJSON" (
       contains "korri_input_seat_emit_json" patch
       && contains "KORRI_INPUT_SEAT_MAX_FRAME_BYTES" patch
       && contains "\\n" patch
       && contains "source-state" patch
+      && contains "frame" patch
+      && contains "mirrorToken" patch
     ))
     (check "Sunshine input-seat mirror emits launch-scoped controller lifecycle frames" (
       contains "korri_input_seat_emit_source_connected" patch
@@ -63,8 +68,10 @@ let
     (check "Sunshine input-seat mirror contract is documented" (
       contains "Input-seat event mirror patch" readme
       && contains "KORRI_INPUT_SEAT_MIRROR_SOCKET" readme
-      && contains "KORRI_INPUT_SEAT_LAUNCH_ID" readme
-      && contains "bounded NDJSON" readme
+      && contains "KORRI_INPUT_SEAT_RUNTIME_DIR" readme
+      && contains "sunshine-active-launch.json" readme
+      && contains "mirrorToken" readme
+      && contains "bounded token-envelope NDJSON" readme
       && contains "Sunshine remains an event source" readme
     ))
   ];

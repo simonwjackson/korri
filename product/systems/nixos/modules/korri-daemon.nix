@@ -10,6 +10,7 @@
 let
   cfg = config.services.korri.daemon;
   runtime = config.services.korri.runtime;
+  inputSeat = config.services.korri.input.inputSeat or { enable = false; };
   scoutReleaseScan = config.services.korri.scout.releaseScan;
   system = pkgs.stdenv.hostPlatform.system;
   packagesForSystem = korri.packages.${system} or { };
@@ -108,6 +109,8 @@ let
   runtimeDir = cfg.streaming.runtimeDir;
   intentPath = cfg.streaming.intentPath;
   statusPath = cfg.streaming.statusPath;
+  inputSeatRuntimeDir = inputSeat.runtimeDir or "%t/korri/input-seat";
+  inputSeatMirrorSocketPath = "${inputSeatRuntimeDir}/sunshine-input-seat.sock";
   launchArtifactsDir = cfg.launchArtifactsDir;
   isDefaultSystemRuntimeDir = isSystemMode && runtimeDir == systemRuntimeDir;
   daemonGroup = if cfg.group != null then cfg.group else cfg.user;
@@ -823,6 +826,15 @@ in
         '';
       }
       {
+        assertion = !cfg.streaming.enable || !(inputSeat.enable or false) || inputSeat.user == cfg.user;
+        message = ''
+          services.korri.daemon.streaming.enable with services.korri.input.inputSeat.enable
+          requires services.korri.input.inputSeat.user to match services.korri.daemon.user.
+          The active-launch mirror sidecar is mode 0600 and is intentionally shared
+          only within the same trusted appliance Unix user boundary.
+        '';
+      }
+      {
         assertion = !hasPublicApiBaseUrl || !publicApiBaseUrlHasWhitespace;
         message = "services.korri.daemon.publicApiBaseUrl must not contain whitespace.";
       }
@@ -1015,6 +1027,13 @@ in
               # after a clean rebuild. Disabling this option is the rollback path
               # back to the safe bitrate/FPS/resolution-unsupported contract.
               SUNSHINE_LIVE_SETTINGS_MVP = "1";
+            }
+            // optionalAttrs (inputSeat.enable or false) {
+              # Stable input-seat mirror activation for the long-running Sunshine
+              # service. Per-launch state lives in the sessiond-owned
+              # sunshine-active-launch.json sidecar under this runtime dir.
+              KORRI_INPUT_SEAT_RUNTIME_DIR = inputSeatRuntimeDir;
+              KORRI_INPUT_SEAT_MIRROR_SOCKET = inputSeatMirrorSocketPath;
             }
             // optionalAttrs (cfg.streaming.audio.enable && cfg.streaming.audio.pulseServer != null) {
               PULSE_SERVER = cfg.streaming.audio.pulseServer;
