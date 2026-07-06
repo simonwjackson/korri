@@ -999,28 +999,15 @@ export function classifySteamRuntimeVerifyTranscript(
       /WRAPPER_PV_ADVERB_BACKUP_EXISTS=yes/.test(transcript),
     ),
     checkSignal(
-      "runtime prep service uses full --apply repair",
-      /ExecStart=.*steam-guest-runtime-prep --apply/.test(transcript),
+      "runtime helper check reports no failures",
+      !/runtime-prep-check status=fail/.test(transcript),
     ),
     checkSignal(
-      "runtime prep service embeds FHS-visible wrapper path",
-      /FEX_WRAPPER_BIN=\/usr\/bin\/FEX/.test(transcript),
-    ),
-    checkSignal(
-      "runtime prep watches Proton 10",
-      /PathChanged=.*Proton 10\.0\/proton/.test(transcript),
-    ),
-    checkSignal(
-      "runtime prep watches Sniper pressure-vessel-wrap",
-      /PathChanged=.*SteamLinuxRuntime_sniper\/pressure-vessel\/bin\/pressure-vessel-wrap/.test(
-        transcript,
-      ),
-    ),
-    checkSignal(
-      "runtime prep watches Sniper pv-adverb",
-      /PathChanged=.*SteamLinuxRuntime_sniper\/pressure-vessel\/libexec\/steam-runtime-tools-0\/pv-adverb/.test(
-        transcript,
-      ),
+      "runtime helper check is Runtime 4 aware when Runtime 4 is present",
+      !/SteamLinuxRuntime_4/.test(transcript) ||
+        /runtime-prep-check status=ok name=SteamLinuxRuntime_4-pressure-vessel-wrap/.test(
+          transcript,
+        ),
     ),
     checkSignal(
       "FEX rootfs Freedreno is x86_64",
@@ -1129,21 +1116,27 @@ function steamRuntimeVerifyScript(options: {
   const steamHome = shellQuote(options.steamHome)
   return `set +e
 steam_home=${steamHome}
-wrap="$steam_home/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap"
-pv="$steam_home/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb"
+wrap=$(find "$steam_home/steamapps/common" -path '*/SteamLinuxRuntime*/pressure-vessel/bin/pressure-vessel-wrap' -type f -print 2>/dev/null | sort | head -n 1)
+pv=$(find "$steam_home/steamapps/common" -path '*/SteamLinuxRuntime*/pressure-vessel/*' -name pv-adverb -type f -print 2>/dev/null | sort | head -n 1)
 freedreno="$steam_home/fex-rootfs/usr/lib/libvulkan_freedreno.so"
 echo "###CURRENT_SYSTEM"
 readlink /run/current-system 2>/dev/null || true
+echo "###RUNTIME_CHECK"
+if command -v steam-guest-runtime-prep >/dev/null 2>&1; then
+  STEAM_HOME="$steam_home" FEX_ROOTFS="$steam_home/fex-rootfs" FEX_WRAPPER_BIN=/usr/bin/FEX steam-guest-runtime-prep --check 2>/dev/null || true
+else
+  echo 'runtime-prep-check status=fail name=steam-guest-runtime-prep detail=missing helper on PATH'
+fi
 echo "###RUNTIME_PREP_UNIT"
 systemctl cat korri-steam-runtime-prep.service korri-steam-runtime-prep.path 2>/dev/null || true
 echo "###RUNTIME_PREP_STATE"
 systemctl show -p ActiveState -p SubState -p Result -p ExecMainStatus korri-steam-runtime-prep.service korri-steam-runtime-prep.path 2>/dev/null || true
 echo "###WRAPPER_PRESSURE_VESSEL_WRAP"
 sed -n '1,80p' "$wrap" 2>/dev/null || true
-[ -f "$wrap.x86_64" ] && echo WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=yes || echo WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=no
+[ -n "$wrap" ] && [ -f "$wrap.x86_64" ] && echo WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=yes || echo WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=no
 echo "###WRAPPER_PV_ADVERB"
 sed -n '1,80p' "$pv" 2>/dev/null || true
-[ -f "$pv.x86_64" ] && echo WRAPPER_PV_ADVERB_BACKUP_EXISTS=yes || echo WRAPPER_PV_ADVERB_BACKUP_EXISTS=no
+[ -n "$pv" ] && [ -f "$pv.x86_64" ] && echo WRAPPER_PV_ADVERB_BACKUP_EXISTS=yes || echo WRAPPER_PV_ADVERB_BACKUP_EXISTS=no
 echo "###FREEDRENO"
 if [ -f "$freedreno" ]; then
   machine=$(od -An -tx1 -j18 -N2 "$freedreno" 2>/dev/null | tr -d '[:space:]')

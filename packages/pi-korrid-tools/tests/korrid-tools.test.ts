@@ -648,6 +648,35 @@ SteamLaunch AppId=401710
     ).toBe("waiting_for_user")
   })
 
+  it("accepts Runtime 4 check-mode helper repair transcripts without startup watchers", () => {
+    const transcript = `
+###RUNTIME_CHECK
+steam-guest-runtime-prep mode=check
+runtime-prep-check status=ok name=runtime-SteamLinuxRuntime_4 detail=/var/lib/korri/steam/steamapps/common/SteamLinuxRuntime_4/pressure-vessel
+runtime-prep-check status=ok name=SteamLinuxRuntime_4-pressure-vessel-wrap detail=uses /usr/bin/FEX trampoline
+runtime-prep-check status=ok name=SteamLinuxRuntime_4-pv-adverb detail=uses /usr/bin/FEX trampoline
+runtime-prep-check status=ok name=SteamLinuxRuntime_4-srt-bwrap detail=resolves bwrap from FEX_ROOTFS through /usr/bin/FEX
+###WRAPPER_PRESSURE_VESSEL_WRAP
+#!/usr/bin/env bash
+exec /usr/bin/FEX "$0.x86_64" "$@"
+WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=yes
+###WRAPPER_PV_ADVERB
+#!/usr/bin/env bash
+exec /usr/bin/FEX "$0.x86_64" "$@"
+WRAPPER_PV_ADVERB_BACKUP_EXISTS=yes
+###FREEDRENO
+FREEDRENO_MACHINE=x86-64
+`
+
+    const result = classifySteamRuntimeVerifyTranscript(transcript, {
+      steamHome: "/var/lib/korri/steam",
+      expectedWrapperBin: "/usr/bin/FEX",
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.failures).toEqual([])
+  })
+
   it("verifies Steam runtime repair transcript invariants", () => {
     const transcript = `
 ###RUNTIME_PREP_UNIT
