@@ -1,4 +1,4 @@
-import { unlink } from "node:fs/promises"
+import { access, unlink } from "node:fs/promises"
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import {
   type LaunchResult,
@@ -150,6 +150,12 @@ export interface KorriSessiondOptions {
   readonly managedStopGraceMs?: number
   /** Delay between idle-restore retries after a managed launch. Default 1s. */
   readonly restoreRetryDelayMs?: number
+  /**
+   * Filesystem marker owned by the fake-suspend controller. When present,
+   * sessiond rejects new launches before spawning so remote/agent entrypoints
+   * cannot start foreground work while the display/session is suspended.
+   */
+  readonly fakeSuspendActiveMarkerPath?: string
   readonly logger?: KorriSessiondLogger
 }
 
@@ -203,6 +209,8 @@ export function createKorriSessiondCore(
     options.managedStopGraceMs ?? DEFAULT_MANAGED_STOP_GRACE_MS
   const restoreRetryDelayMs =
     options.restoreRetryDelayMs ?? RESTORE_RETRY_DELAY_MS
+  const fakeSuspendActiveMarkerPath =
+    options.fakeSuspendActiveMarkerPath ?? process.env.KORRI_FAKESUSPEND_ACTIVE_MARKER
   const heartbeatPayload = new TextEncoder().encode(": hb\n\n")
   const lifecycleSubscribers = new Set<{
     readonly launchId: string
@@ -357,6 +365,16 @@ export function createKorriSessiondCore(
     await role.reconcileIdle()
   }
 
+  async function isFakeSuspendActive(): Promise<boolean> {
+    if (!fakeSuspendActiveMarkerPath) return false
+    try {
+      await access(fakeSuspendActiveMarkerPath)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   async function startManagedLaunch(
     spec: LaunchSpec,
     requestedLaunchId?: string,
@@ -370,6 +388,16 @@ export function createKorriSessiondCore(
     readonly response: SessiondManagedLaunchStartResponse
     readonly result?: Promise<LaunchResult>
   }> {
+    if (await isFakeSuspendActive()) {
+      return {
+        response: {
+          status: "failed",
+          failureKind: "fake-suspend-active",
+          message: "fake suspend is active; launch requires resume",
+        },
+      }
+    }
+
     if (state.mode !== "home") {
       return {
         response: {

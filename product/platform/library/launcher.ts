@@ -79,6 +79,7 @@ export const LaunchFailureKind = Schema.Literals([
   "input-unavailable",
   "input-ambiguous",
   "session-busy",
+  "fake-suspend-active",
 ])
 export type LaunchFailureKind = Schema.Schema.Type<typeof LaunchFailureKind>
 
@@ -92,6 +93,7 @@ export const LAUNCH_FAILURE_EXIT_CODES = {
   "input-unavailable": 123,
   "input-ambiguous": 122,
   "session-busy": 121,
+  "fake-suspend-active": 120,
 } satisfies Record<LaunchFailureKind, number>
 
 export function launchFailureExitCode(kind: LaunchFailureKind): number {

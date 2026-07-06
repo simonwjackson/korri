@@ -1,8 +1,12 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, rm, stat } from "node:fs/promises"
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { LaunchResult, LaunchSpec } from "@platform/library/launcher"
+import {
+  launchFailureExitCode,
+  type LaunchResult,
+  type LaunchSpec,
+} from "@platform/library/launcher"
 import type { SessiondManagedLaunchEvent } from "@platform/library/sessiond-managed-launch-protocol"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import {
@@ -59,6 +63,7 @@ function startHarness(
     readonly restoreRetryDelayMs?: number
     readonly heartbeatIntervalMs?: number
     readonly role?: SessionRole
+    readonly fakeSuspendActiveMarkerPath?: string
   } = {},
 ) {
   const events: string[] = []
@@ -139,6 +144,9 @@ function startHarness(
     },
     sessionHooks: options.sessionHooks,
     ...(options.role ? { role: options.role } : {}),
+    ...(options.fakeSuspendActiveMarkerPath
+      ? { fakeSuspendActiveMarkerPath: options.fakeSuspendActiveMarkerPath }
+      : {}),
     ...(options.managedStopGraceMs !== undefined
       ? { managedStopGraceMs: options.managedStopGraceMs }
       : {}),
@@ -610,6 +618,71 @@ describe("korri sessiond", () => {
 
     expect(body.result).toEqual({ status: "launched" })
     expect(body.state.mode).toBe("home")
+  })
+
+  it("rejects managed launches while fake suspend is active", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-fakesuspend-"))
+    try {
+      const activeMarker = join(dir, "active")
+      await writeFile(activeMarker, "active\n")
+      const { core, events } = startHarness({
+        fakeSuspendActiveMarkerPath: activeMarker,
+      })
+      await request(core, "/control/start", authorized({ method: "POST" }))
+
+      const response = await request(
+        core,
+        "/managed-launch",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ launchId: "launch-while-suspended", spec }),
+        }),
+      )
+
+      expect(await response.json()).toEqual({
+        status: "failed",
+        failureKind: "fake-suspend-active",
+        message: "fake suspend is active; launch requires resume",
+      })
+      expect(events).not.toContain("launch-game:/bin/game")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects legacy launches while fake suspend is active", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-fakesuspend-"))
+    try {
+      const activeMarker = join(dir, "active")
+      await writeFile(activeMarker, "active\n")
+      const { core, events } = startHarness({
+        fakeSuspendActiveMarkerPath: activeMarker,
+      })
+      await request(core, "/control/start", authorized({ method: "POST" }))
+
+      const response = await request(
+        core,
+        "/launch",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ spec }),
+        }),
+      )
+      const body = await response.json()
+
+      expect(body.result).toEqual({
+        status: "failed",
+        exitCode: launchFailureExitCode("fake-suspend-active"),
+        failureKind: "fake-suspend-active",
+        stderrTail: "fake suspend is active; launch requires resume",
+      })
+      expect(body.state.mode).toBe("home")
+      expect(events).not.toContain("launch-game:/bin/game")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 
   it("keeps duplicate managed launchIds rejected as busy while the first launch is active", async () => {

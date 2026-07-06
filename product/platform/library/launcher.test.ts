@@ -66,10 +66,13 @@ describe("LaunchSpec schema", () => {
 })
 
 describe("LaunchFailureKind schema", () => {
-  it("decodes session-busy as a shared launch failure kind", () => {
+  it("decodes session-busy and fake-suspend-active as shared launch failure kinds", () => {
     expect(Schema.decodeUnknownSync(LaunchFailureKind)("session-busy")).toBe(
       "session-busy",
     )
+    expect(
+      Schema.decodeUnknownSync(LaunchFailureKind)("fake-suspend-active"),
+    ).toBe("fake-suspend-active")
   })
 
   it("rejects unknown failure categories", () => {
@@ -78,7 +81,8 @@ describe("LaunchFailureKind schema", () => {
     ).toThrow()
   })
 
-  it("maps session-busy to the shared exit code", () => {
+  it("maps session-busy and fake-suspend-active to shared exit codes", () => {
     expect(launchFailureExitCode("session-busy")).toBe(121)
+    expect(launchFailureExitCode("fake-suspend-active")).toBe(120)
   })
 })

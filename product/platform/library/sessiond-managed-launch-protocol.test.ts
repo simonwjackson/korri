@@ -52,6 +52,18 @@ describe("sessiond managed launch protocol", () => {
       failureKind: "session-busy",
       message: "sessiond is already launching",
     })
+
+    expect(
+      Schema.decodeUnknownSync(SessiondManagedLaunchStartResponse)({
+        status: "failed",
+        failureKind: "fake-suspend-active",
+        message: "fake suspend is active",
+      }),
+    ).toEqual({
+      status: "failed",
+      failureKind: "fake-suspend-active",
+      message: "fake suspend is active",
+    })
   })
 
   it("decodes status and capability payloads", () => {
