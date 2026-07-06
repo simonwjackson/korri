@@ -159,6 +159,15 @@ const DEFAULT_SHORTCUTS: readonly SystemShortcutDefinition<KorriInputdActionId>[
 const DEFAULT_SYSTEM_TAPS: readonly SystemTapDefinition<KorriInputdActionId>[] =
   [{ id: "system-panel", control: "home" }]
 
+function systemTapsFromEnv(
+  env: NodeJS.ProcessEnv,
+): readonly SystemTapDefinition<KorriInputdActionId>[] {
+  const backAction = backTapActionFromEnv(env)
+  return backAction
+    ? [...DEFAULT_SYSTEM_TAPS, { id: backAction, control: "back" }]
+    : DEFAULT_SYSTEM_TAPS
+}
+
 // Quitting a game is destructive, so the kill chord must be a deliberate HOLD
 // rather than an instant press. inputd feeds the chord into a hold supervisor
 // and only dispatches the kill once it has been held past this threshold.
@@ -192,7 +201,7 @@ export async function startKorriInputd(
     (options.openEventSource ? alwaysEventNodeExists : realEventNodeExists)
   const shortcutEngine = createSystemShortcutEngine({
     shortcuts: options.shortcuts ?? DEFAULT_SHORTCUTS,
-    taps: options.systemTaps ?? DEFAULT_SYSTEM_TAPS,
+    taps: options.systemTaps ?? systemTapsFromEnv(process.env),
   })
   // Hold-to-fire gate for the destructive kill chord. A quick press engages then
   // releases below the threshold (a tap) and does nothing; holding past the
@@ -745,6 +754,17 @@ function keyF24ActionFromEnv(
   switch (env.KORRI_INPUTD_KEY_F24_ACTION) {
     case "toggle-bottom-screen":
       return "toggle-bottom-screen"
+    default:
+      return null
+  }
+}
+
+function backTapActionFromEnv(
+  env: NodeJS.ProcessEnv,
+): KorriInputdActionId | null {
+  switch (env.KORRI_INPUTD_BACK_TAP_ACTION) {
+    case "toggle-steam-visibility":
+      return "toggle-steam-visibility"
     default:
       return null
   }

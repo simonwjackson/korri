@@ -265,8 +265,8 @@ const materializeReadableSteamResources = (input: {
       catch: error => error as ResolutionError,
     })
     const storage = input.context.storage ?? {}
-    // Baseline Korri wrapper args (silent Big Picture) form the routed segment
-    // that release.launch.overrides.args prepend/append/replace around.
+    // Baseline Korri wrapper args form the routed segment that
+    // release.launch.overrides.args prepend/append/replace around.
     const wrapperArgs = applyArgsOverrides({
       leading: [],
       routed: [...STEAM_BASELINE_WRAPPER_ARGS],

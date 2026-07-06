@@ -32,11 +32,13 @@ export const DEFAULT_STEAM_COMPAT_TOOL =
   "proton-cachyos-11.0-20260601-slr-arm64" as const
 
 /**
- * Korri-owned baseline wrapper args always passed to korri-steam-app: launch
- * Steam silently into Big Picture / gamepad UI. `overrides.args` prepend/append
- * around this segment; `overrides.args.replace` swaps it.
+ * Korri-owned baseline wrapper args always passed to korri-steam-app. Keep this
+ * empty for SM8550: Steam Gamepad UI can retain controller ownership after
+ * focus changes, and Steam visibility is a session/debug concern rather than a
+ * launch-wrapper default. `overrides.args` can prepend/append, and
+ * `overrides.args.replace` swaps this segment for per-release experiments.
  */
-export const STEAM_BASELINE_WRAPPER_ARGS = ["-silent", "-gamepadui"] as const
+export const STEAM_BASELINE_WRAPPER_ARGS = [] as const
 
 export interface SteamPluginPolicy {
   readonly state: {

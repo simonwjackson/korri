@@ -33,11 +33,13 @@ let
     # Input without enabling SteamOS system-management hooks. In particular,
     # -steamos3 makes Steam assume it owns platform Bluetooth policy and power
     # the adapter off on non-SteamOS guests.
+    # Keep the client visible in development builds; product visibility should be
+    # owned by session/foreground policy, not by Steam's startup flags.
     # Platforms that need Steam to map an initial gamescope surface can opt into
-    # gamepad UI separately via useGamepadUi.
+    # gamepad UI separately via useGamepadUi, but SM8550 keeps it disabled
+    # because Gamepad UI can hold controller ownership after focus changes.
     "-steampal"
     "-steamdeck"
-    "-silent"
     "-nochatui"
     "-nofriendsui"
     "-forcedesktopscaling"

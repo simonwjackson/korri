@@ -27,6 +27,7 @@ export const KORRI_INPUTD_ACTION_IDS = [
   "move-output-up",
   "move-output-down",
   "toggle-bottom-keyboard",
+  "toggle-steam-visibility",
 ] as const
 
 export type KorriInputdActionId = (typeof KORRI_INPUTD_ACTION_IDS)[number]
@@ -63,6 +64,7 @@ export interface InputdActionCommands {
   readonly moveOutputUp?: InputdActionCommand
   readonly moveOutputDown?: InputdActionCommand
   readonly toggleBottomKeyboard?: InputdActionCommand
+  readonly toggleSteamVisibility?: InputdActionCommand
 }
 
 export interface InputdActionContext {
@@ -189,6 +191,9 @@ export function createInputdActionDispatcher(
           return
         case "toggle-bottom-keyboard":
           await runNamedCommand(actionId, commands.toggleBottomKeyboard)
+          return
+        case "toggle-steam-visibility":
+          await runNamedCommand(actionId, commands.toggleSteamVisibility)
           return
       }
     },
@@ -364,6 +369,9 @@ function defaultCommands(): InputdActionCommands {
     moveOutputUp: buildSwayShortcutCommand("move-output-up"),
     moveOutputDown: buildSwayShortcutCommand("move-output-down"),
     toggleBottomKeyboard: bottomKeyboardCommand.command,
+    toggleSteamVisibility: commandFromEnvOptional(
+      "KORRI_INPUTD_TOGGLE_STEAM_VISIBILITY",
+    ),
   }
 }
 
