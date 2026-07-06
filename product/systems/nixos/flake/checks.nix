@@ -22,6 +22,10 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     packages = self.packages.${system};
   };
+  korri-input-seat-device-access = import ../../../../tools/testing/nix/korri-input-seat-device-access-check.nix {
+    inherit pkgs;
+    korri = self;
+  };
   korri-image-outputs = import ../../../../tools/testing/nix/korri-image-outputs-check.nix {
     inherit pkgs;
     packages = self.packages.${system};

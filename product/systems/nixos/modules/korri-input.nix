@@ -5,7 +5,7 @@
 #   provider:  host-side normalized appliance input. When name = "inputplumber"
 #              the module fully self-wires (enables services.inputplumber, loads
 #              the uinput kernel module, writes the /dev/uinput udev rule that
-#              Sunshine needs to synthesize virtual controllers). Other names
+#              Sunshine/sessiond need to synthesize virtual controllers). Other names
 #              are contract-only — they let platforms declare a provider exists
 #              while leaving wiring to the platform.
 #
@@ -16,7 +16,7 @@
 #
 # `uhid` is intentionally NOT loaded by default. DualSense passthrough is an
 # explicit opt-in future follow-up; the validated working path is InputPlumber
-# normalizing controllers to a virtual Xbox 360 over /dev/uinput.
+# normalizing controllers and sessiond-owned seats over /dev/uinput.
 { korri }:
 
 {
@@ -28,6 +28,7 @@
 
 let
   cfg = config.services.korri.input;
+  runtime = config.services.korri.runtime;
   system = pkgs.stdenv.hostPlatform.system;
   packagesForSystem = korri.packages.${system} or { };
   inputdDefaultPackage =
@@ -134,6 +135,7 @@ let
   };
 
   isInputplumber = cfg.provider.enable && cfg.provider.name == "inputplumber";
+  uinputGroup = if cfg.inputSeat.enable then cfg.inputSeat.group else "input";
 
   inherit (lib)
     mkEnableOption
@@ -196,6 +198,50 @@ in
           XDG_DATA_DIRS before the resolved provider package. Platform adapters
           use this for device-map packages that must override the default
           InputPlumber data bundled in the active service package.
+        '';
+      };
+    };
+
+    inputSeat = {
+      enable = mkEnableOption "sessiond-owned remote input-seat /dev/uinput access";
+
+      user = mkOption {
+        type = types.str;
+        default = runtime.user;
+        defaultText = lib.literalExpression "config.services.korri.runtime.user";
+        description = ''
+          Unix user that owns sessiond/input-seat virtual gamepad creation.
+          The user is granted membership in `services.korri.input.inputSeat.group`
+          when input-seat support is enabled.
+        '';
+      };
+
+      group = mkOption {
+        type = types.str;
+        default = "uinput";
+        description = ''
+          Dedicated group that owns /dev/uinput for Korri-created virtual
+          gamepads. Prefer the default `uinput` group over the broad `input`
+          group, which may grant read access to physical keyboards/gamepads.
+        '';
+      };
+
+      allowBroadInputGroup = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Explicitly permit group = "input" for platforms that cannot support a
+          dedicated uinput group. This is a security downgrade because `input`
+          commonly grants broad physical input-device access.
+        '';
+      };
+
+      runtimeDir = mkOption {
+        type = types.str;
+        default = "%t/korri/input-seat";
+        description = ''
+          User-runtime directory reserved for input-seat IPC and adapter state.
+          Sessiond exports this as KORRI_INPUT_SEAT_RUNTIME_DIR.
         '';
       };
     };
@@ -284,8 +330,7 @@ in
           # Decision overlay: inputd spawns this renderer for the hold ring and
           # the tap decision menu (drives it over stdin; gates the game via the
           # InputPlumber intercept). Override/unset to disable the overlay.
-          KORRI_OVERLAY_RENDERER_BIN =
-            lib.mkDefault "${overlayRenderer}/bin/korri-overlay-renderer";
+          KORRI_OVERLAY_RENDERER_BIN = lib.mkDefault "${overlayRenderer}/bin/korri-overlay-renderer";
         };
         path = [
           korriBacklightStep
@@ -316,6 +361,39 @@ in
       ];
     })
 
+    (mkIf cfg.inputSeat.enable {
+      assertions = [
+        {
+          assertion = cfg.inputSeat.user != "root";
+          message = "services.korri.input.inputSeat.user must not be root.";
+        }
+        {
+          assertion = lib.hasAttr cfg.inputSeat.user config.users.users;
+          message = "services.korri.input.inputSeat.user must name an existing NixOS user.";
+        }
+        {
+          assertion = cfg.inputSeat.group != "input" || cfg.inputSeat.allowBroadInputGroup;
+          message = ''
+            services.korri.input.inputSeat.group = "input" grants broad physical
+            input-device access. Use the default dedicated "uinput" group or set
+            allowBroadInputGroup = true to acknowledge the downgrade explicitly.
+          '';
+        }
+      ];
+
+      users.groups.${cfg.inputSeat.group} = { };
+      users.users.${cfg.inputSeat.user}.extraGroups = [ cfg.inputSeat.group ];
+
+      boot.kernelModules = [ "uinput" ];
+
+      services.udev.extraRules = ''
+        # Least-privilege uinput access for sessiond-owned remote input seats.
+        # This grants write access to /dev/uinput without adding the runtime
+        # user to the broad physical-input reader group.
+        KERNEL=="uinput", GROUP="${cfg.inputSeat.group}", MODE="0660", OPTIONS+="static_node=uinput"
+      '';
+    })
+
     # InputPlumber full-wiring branch.
     (mkIf isInputplumber {
       services.inputplumber = {
@@ -333,15 +411,18 @@ in
           );
 
       # uinput is the OUTPUT side of normalized input: InputPlumber writes
-      # virtual Xbox 360 controllers through /dev/uinput, and Sunshine reads
-      # them as the streamed gamepad. uhid (the DualSense passthrough path)
-      # is deliberately NOT loaded — that's a separate opt-in.
+      # virtual Xbox 360 controllers through /dev/uinput, and Sunshine/sessiond
+      # read/write gamepad events around that substrate. uhid (the DualSense
+      # passthrough path) is deliberately NOT loaded — that's a separate opt-in.
       boot.kernelModules = [ "uinput" ];
 
       services.udev.extraRules = ''
-        # Uinput access for normalized appliance input. Owned by
-        # services.korri.input.provider when name = "inputplumber".
-        KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
+        # Uinput access for normalized appliance input. When input-seat support
+        # is enabled this intentionally uses its dedicated group instead of the
+        # broad physical-input reader group.
+        KERNEL=="uinput", GROUP="${uinputGroup}", MODE="0660", OPTIONS+="static_node=uinput"
+      ''
+      + lib.optionalString (!cfg.inputSeat.enable) ''
         KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"
       '';
 

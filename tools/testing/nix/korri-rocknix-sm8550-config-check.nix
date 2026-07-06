@@ -115,6 +115,9 @@ let
       inputplumberService = systemServices.inputplumber or { };
       inputplumberEnv = inputplumberService.environment or { };
       inputplumberPackage = cfg.services.inputplumber.package or { };
+      inputSeat = cfg.services.korri.input.inputSeat or { };
+      udevRules = cfg.services.udev.extraRules or "";
+      kernelModules = cfg.boot.kernelModules or [ ];
       tailnetFlags = cfg.services.tailscale.extraUpFlags or [ ];
       tailnetSetFlags = cfg.services.tailscale.extraSetFlags or [ ];
       tailscaledUnit = systemServices.tailscaled or { };
@@ -212,6 +215,15 @@ let
           "video"
         ]
       ))
+      (check "${name}: input-seat uinput access uses dedicated group" (
+        (inputSeat.enable or false)
+        && (inputSeat.group or null) == "uinput"
+        && builtins.elem "uinput" (korriUser.extraGroups or [ ])
+        && builtins.elem "uinput" (builtins.attrNames (cfg.users.groups or { }))
+        && builtins.elem "uinput" kernelModules
+        && lib.hasInfix ''KERNEL=="uinput", GROUP="uinput", MODE="0660", OPTIONS+="static_node=uinput"'' udevRules
+        && !(lib.hasInfix ''KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"'' udevRules)
+      ))
       (check "${name}: no lingering before login-created Korri sessions" (
         (cfg.users.users.root.linger or false) != true
         && ((korriUser.linger or false) != true)
@@ -249,6 +261,9 @@ let
       ))
       (check "${name}: sessiond inherits the config-graph roots" (
         (sessiondEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
+      ))
+      (check "${name}: sessiond receives input-seat runtime directory" (
+        (sessiondEnv.KORRI_INPUT_SEAT_RUNTIME_DIR or null) == "%t/korri/input-seat"
       ))
       (check "${name}: korrid enables first-party plugin resources" (
         lib.hasInfix "@korri:neverball" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
@@ -316,7 +331,8 @@ let
         # splicing a substrate Sway string. Assert the primary connector's
         # transform line and the type:touch default are present; exact
         # per-device rotation is locked in the top-level Thor/Sobo checks.
-        lib.hasInfix "output ${cfg.rocknix.device.display.primaryConnector} transform " compositor.sway.extraConfig
+        lib.hasInfix "output ${cfg.rocknix.device.display.primaryConnector} transform "
+          compositor.sway.extraConfig
         && lib.hasInfix "input type:touch map_to_output ${cfg.rocknix.device.display.primaryConnector}" compositor.sway.extraConfig
       ))
       # Stage 1 home-output pin: every SM8550 device declares a primary display
@@ -371,7 +387,9 @@ let
         # Idempotent fire-once tag: a DP hotplug 'change' on card0 must not
         # re-assert master-of-seat (that pauses logind DRM and black-screens all
         # outputs). See korri-rocknix-guest-device-access.nix.
-        lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{KORRI_DRM_SEAT_TAGGED}!="1", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0", ENV{KORRI_DRM_SEAT_TAGGED}="1"'' cfg.services.udev.extraRules
+        lib.hasInfix
+          ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{KORRI_DRM_SEAT_TAGGED}!="1", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0", ENV{KORRI_DRM_SEAT_TAGGED}="1"''
+          cfg.services.udev.extraRules
         && !(lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' cfg.services.udev.extraRules)
       ))
       (check "${name}: SM8550 evdev input is readable by Korri inputd" (

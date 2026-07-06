@@ -10,6 +10,7 @@
 let
   cfg = config.services.korri.sessiond;
   runtime = config.services.korri.runtime or { };
+  inputSeat = config.services.korri.input.inputSeat or { enable = false; };
   system = pkgs.stdenv.hostPlatform.system;
   packagesForSystem = korri.packages.${system} or { };
   defaultPackage =
@@ -141,7 +142,10 @@ in
     };
 
     role = mkOption {
-      type = types.enum [ "kiosk" "source-machine" ];
+      type = types.enum [
+        "kiosk"
+        "source-machine"
+      ];
       default = inferredRole;
       defaultText = lib.literalMD ''
         Inferred from `services.korri.compositor.kiosk.enable`: `"kiosk"` when
@@ -151,7 +155,10 @@ in
     };
 
     kioskPolicy = mkOption {
-      type = types.enum [ "legacy" "lanes" ];
+      type = types.enum [
+        "legacy"
+        "lanes"
+      ];
       default = "legacy";
       description = ''
         Kiosk foreground policy. `legacy` stops/relaunches the renderer around
@@ -252,6 +259,9 @@ in
         KORRI_SESSIOND_ESSWAY_CONTROL = if cfg.esswayControl.enable then "1" else "0";
         KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
       }
+      // (lib.optionalAttrs (inputSeat.enable or false) {
+        KORRI_INPUT_SEAT_RUNTIME_DIR = inputSeat.runtimeDir;
+      })
       // (lib.optionalAttrs (daemonConfigRoots != null) {
         KORRI_CONFIG_ROOTS = daemonConfigRoots;
       })

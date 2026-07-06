@@ -586,11 +586,19 @@ in
     extraEnvironment.KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
   };
 
+  services.korri.input.inputSeat = {
+    enable = true;
+    user = runtime.user;
+    group = "uinput";
+    runtimeDir = "%t/korri/input-seat";
+  };
+
   services.korri.runtime.extraGroups = [
     "audio"
     "input"
     "render"
     "seat"
+    "uinput"
     "video"
     "wheel"
   ];
