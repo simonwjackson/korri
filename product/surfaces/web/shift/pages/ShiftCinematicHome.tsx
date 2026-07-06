@@ -29,6 +29,7 @@ import {
   ShiftCineLegend,
 } from "../ui/molecules/ShiftCineLegend"
 import { ShiftCineLibraryTile } from "../ui/molecules/ShiftCineLibraryTile"
+import { ShiftCineStoreTile } from "../ui/molecules/ShiftCineStoreTile"
 import { ShiftCineSurpriseTile } from "../ui/molecules/ShiftCineSurpriseTile"
 import {
   ShiftStatusBar,
@@ -37,6 +38,7 @@ import {
 import { ShiftCineHero } from "../ui/organisms/ShiftCineHero"
 import { ShiftCineLibraryHero } from "../ui/organisms/ShiftCineLibraryHero"
 import { ShiftCineRail } from "../ui/organisms/ShiftCineRail"
+import { ShiftCineStoreHero } from "../ui/organisms/ShiftCineStoreHero"
 import { ShiftCineSurpriseHero } from "../ui/organisms/ShiftCineSurpriseHero"
 
 export interface ShiftCinematicGame {
@@ -56,7 +58,7 @@ export interface ShiftCinematicGame {
 
 /** A trailing non-game rail entry (a "destination"): Surprise or Library. */
 type RailAffordance = {
-  readonly kind: "surprise" | "library"
+  readonly kind: "surprise" | "library" | "store"
   readonly onConfirm: () => void
 }
 
@@ -136,6 +138,10 @@ export interface ShiftCinematicHomeProps {
    * appended to the rail as a distinct non-game entry; confirming it fires this.
    * Omitted in standalone/prototype usage (no library entry). */
   readonly onOpenLibrary?: () => void
+  /** Open the store. When provided, a trailing "Store" affordance is appended
+   * to the rail after Library (the outward-most destination: go get something
+   * new); confirming it fires this. Omitted = no store entry. */
+  readonly onOpenStore?: () => void
   /** Pick a random game. When provided, a trailing "Surprise" affordance is
    * appended to the rail (before Library); confirming it fires this. */
   readonly onSurprise?: () => void
@@ -153,6 +159,7 @@ export function ShiftCinematicHome({
   onRetry,
   onDismiss,
   onOpenLibrary,
+  onOpenStore,
   onSurprise,
 }: ShiftCinematicHomeProps) {
   const [index, setIndex] = useState(0)
@@ -162,10 +169,11 @@ export function ShiftCinematicHome({
   const preloadedImageUrlsRef = useRef<Set<string>>(new Set())
   const game = games[index]
   const gameId = game?.id
-  // The rail's trailing entries are non-game "destination" affordances: Surprise
-  // (a random pick) first, then Library (browse everything) as the escape hatch.
-  // Each occupies one focus slot past the games, in order, so the focus index
-  // runs past `games.length` when an affordance is active.
+  // The rail's trailing entries are non-game "destination" affordances:
+  // Surprise (a random pick) first, then Library (browse everything you have),
+  // then Store (go get something new) as the outward-most end cap. Each
+  // occupies one focus slot past the games, in order, so the focus index runs
+  // past `games.length` when an affordance is active.
   const affordances = useMemo<readonly RailAffordance[]>(
     () => [
       ...(onSurprise
@@ -174,8 +182,11 @@ export function ShiftCinematicHome({
       ...(onOpenLibrary
         ? [{ kind: "library" as const, onConfirm: onOpenLibrary }]
         : []),
+      ...(onOpenStore
+        ? [{ kind: "store" as const, onConfirm: onOpenStore }]
+        : []),
     ],
-    [onSurprise, onOpenLibrary],
+    [onSurprise, onOpenLibrary, onOpenStore],
   )
   const activeAffordance =
     index >= games.length ? affordances[index - games.length] : undefined
@@ -371,6 +382,8 @@ export function ShiftCinematicHome({
       <ShiftCineSurpriseHero />
     ) : activeAffordance?.kind === "library" ? (
       <ShiftCineLibraryHero />
+    ) : activeAffordance?.kind === "store" ? (
+      <ShiftCineStoreHero />
     ) : game ? (
       <ShiftCineHero game={game} status={status} resuming={resuming} />
     ) : null
@@ -413,6 +426,14 @@ export function ShiftCinematicHome({
                   return affordance.kind === "surprise" ? (
                     <ShiftCineSurpriseTile
                       key="surprise"
+                      index={slot}
+                      focused={affordanceFocused}
+                      onFocus={() => setIndex(slot)}
+                      onActivate={() => activate(slot)}
+                    />
+                  ) : affordance.kind === "store" ? (
+                    <ShiftCineStoreTile
+                      key="store"
                       index={slot}
                       focused={affordanceFocused}
                       onFocus={() => setIndex(slot)}

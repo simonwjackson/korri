@@ -49,6 +49,16 @@ export const SHIFT_DESIGN_PARTS = {
     layer: "organism",
     name: "Library Rail Hero",
   },
+  cineStoreTile: {
+    id: "shift.cine-store-tile",
+    layer: "molecule",
+    name: "Store Rail Tile",
+  },
+  cineStoreHero: {
+    id: "shift.cine-store-hero",
+    layer: "organism",
+    name: "Store Rail Hero",
+  },
   cineSurpriseTile: {
     id: "shift.cine-surprise-tile",
     layer: "molecule",

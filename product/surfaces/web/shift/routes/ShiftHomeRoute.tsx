@@ -295,6 +295,7 @@ function NavigatingReadyBody({
           onRetry={launch.retry}
           onDismiss={() => setAcked(true)}
           onOpenLibrary={() => navigate({ to: "/library" })}
+          onOpenStore={() => navigate({ to: "/store" })}
         />
       ) : null,
   })

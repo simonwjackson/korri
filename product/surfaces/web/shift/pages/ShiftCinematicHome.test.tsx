@@ -158,6 +158,52 @@ describe("ShiftCinematicHome library affordance", () => {
   })
 })
 
+describe("ShiftCinematicHome store affordance", () => {
+  it("appends a trailing Store entry and opens it on confirm", () => {
+    const onOpenStore = mock(() => undefined)
+    const onOpenLibrary = mock(() => undefined)
+    render(
+      <ShiftCinematicHome
+        games={games}
+        onOpenLibrary={onOpenLibrary}
+        onOpenStore={onOpenStore}
+      />,
+    )
+
+    const storeTile = screen.getByRole("button", { name: "Store" })
+    // Mount focus sits on Game A, so the first activation only focuses the
+    // trailing slot (it does not open); the store hero takes the heroband.
+    fireEvent.click(storeTile)
+    expect(onOpenStore).not.toHaveBeenCalled()
+    expect(screen.getByText("Search the remote catalogs")).toBeTruthy()
+
+    // Confirming the focused Store slot opens the store.
+    fireEvent.click(storeTile)
+    expect(onOpenStore).toHaveBeenCalledTimes(1)
+    expect(onOpenLibrary).not.toHaveBeenCalled()
+  })
+
+  it("caps the rail with Store after Library (the outward-most destination)", () => {
+    render(
+      <ShiftCinematicHome
+        games={games}
+        onOpenLibrary={() => undefined}
+        onOpenStore={() => undefined}
+      />,
+    )
+    const library = screen.getByRole("button", { name: "Library" })
+    const store = screen.getByRole("button", { name: "Store" })
+    expect(Number(store.getAttribute("data-cine-index"))).toBe(
+      Number(library.getAttribute("data-cine-index")) + 1,
+    )
+  })
+
+  it("omits the Store entry when no handler is provided", () => {
+    render(<ShiftCinematicHome games={games} onOpenLibrary={() => undefined} />)
+    expect(screen.queryByRole("button", { name: "Store" })).toBeNull()
+  })
+})
+
 describe("ShiftCinematicHome surprise affordance", () => {
   it("appends a trailing Surprise entry and picks on confirm", () => {
     const onSurprise = mock(() => undefined)
