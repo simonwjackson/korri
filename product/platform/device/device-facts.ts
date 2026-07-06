@@ -63,6 +63,7 @@ export type DeviceNetworkKind = Schema.Schema.Type<typeof DeviceNetworkKind>
 export const DeviceNetworkConnected = Schema.Struct({
   _tag: Schema.Literal("Connected"),
   kind: DeviceNetworkKind,
+  name: Schema.Union([Schema.String, Schema.Null]),
   strengthPercent: Schema.Union([Schema.Number, Schema.Null]),
   observedAt: Schema.String,
 })
@@ -119,6 +120,7 @@ export interface RawBatterySnapshot {
 export interface RawNetworkSnapshot {
   readonly connected: boolean | null
   readonly kind: DeviceNetworkKind | null
+  readonly name?: string | null
   readonly strengthPercent: number | null
 }
 
@@ -158,6 +160,7 @@ export function normalizeNetworkSnapshot(
   return {
     _tag: "Connected",
     kind: snapshot.kind ?? "unknown",
+    name: normalizeName(snapshot.name),
     strengthPercent: normalizePercent(snapshot.strengthPercent),
     observedAt,
   }
@@ -249,6 +252,12 @@ function lastKnownReadyNetwork(
 function normalizePercent(value: number | null): number | null {
   if (value === null || !Number.isFinite(value)) return null
   return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+function normalizeName(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null
+  const trimmed = value.trim()
+  return trimmed.length === 0 ? null : trimmed
 }
 
 function errorMessage(error: unknown): string {

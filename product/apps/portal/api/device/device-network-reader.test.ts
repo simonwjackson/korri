@@ -7,7 +7,11 @@ const wirelessPath = "/proc/net/wireless"
 
 type Files = Record<string, string>
 
-function deps(files: Files, dirs: readonly string[] = []) {
+function deps(
+  files: Files,
+  dirs: readonly string[] = [],
+  commands: Readonly<Record<string, string>> = {},
+) {
   return {
     readdir: async (path: string) => {
       if (path !== netDir)
@@ -28,6 +32,10 @@ function deps(files: Files, dirs: readonly string[] = []) {
         throw Object.assign(new Error(path), { code: "ENOENT" })
       return { isDirectory: () => true }
     },
+    command: async (command: readonly string[]) => ({
+      exitCode: commands[command.join(" ")] === undefined ? 1 : 0,
+      stdout: commands[command.join(" ")] ?? "",
+    }),
   }
 }
 
@@ -36,7 +44,7 @@ function iface(name: string, file: string): string {
 }
 
 describe("createDeviceNetworkReader", () => {
-  it("reads a connected wifi interface with wireless signal", async () => {
+  it("reads a connected wifi interface with wireless name and signal", async () => {
     const reader = createDeviceNetworkReader(
       { netDir, procNetWirelessPath: wirelessPath },
       deps(
@@ -47,12 +55,17 @@ describe("createDeviceNetworkReader", () => {
             "Inter-| sta-| Quality | Discarded\n wlan0: 0000 70. -60. -95. 0 0 0\n",
         },
         [iface("wlan0", "wireless")],
+        {
+          "iw dev wlan0 link":
+            "Connected to 00:11:22:33:44:55 (on wlan0)\n\tSSID: KorriNet\n\tsignal: -60 dBm\n",
+        },
       ),
     )
 
     await expect(reader.readNetwork()).resolves.toEqual({
       connected: true,
       kind: "wifi",
+      name: "KorriNet",
       strengthPercent: 80,
     })
   })
@@ -69,6 +82,7 @@ describe("createDeviceNetworkReader", () => {
     await expect(reader.readNetwork()).resolves.toEqual({
       connected: true,
       kind: "ethernet",
+      name: null,
       strengthPercent: null,
     })
   })
@@ -89,6 +103,7 @@ describe("createDeviceNetworkReader", () => {
     await expect(reader.readNetwork()).resolves.toEqual({
       connected: false,
       kind: "wifi",
+      name: null,
       strengthPercent: null,
     })
   })
@@ -137,6 +152,7 @@ describe("createDeviceNetworkReader", () => {
     await expect(reader.readNetwork()).resolves.toEqual({
       connected: null,
       kind: null,
+      name: null,
       strengthPercent: null,
     })
   })

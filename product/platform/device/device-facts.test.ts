@@ -28,15 +28,21 @@ function supply(overrides: Partial<DevicePowerSupply>): DevicePowerSupply {
 }
 
 describe("device facts network normalization", () => {
-  it("maps connected wifi with signal to ready network state", () => {
+  it("maps connected wifi with signal and name to ready network state", () => {
     expect(
       normalizeNetworkSnapshot(
-        { connected: true, kind: "wifi", strengthPercent: 82 },
+        {
+          connected: true,
+          kind: "wifi",
+          name: "KorriNet",
+          strengthPercent: 82,
+        },
         observedAt,
       ),
     ).toEqual({
       _tag: "Connected",
       kind: "wifi",
+      name: "KorriNet",
       strengthPercent: 82,
       observedAt,
     })
@@ -60,18 +66,18 @@ describe("device facts network normalization", () => {
     ).toEqual({ _tag: "Unknown", observedAt })
   })
 
-  it("clamps malformed signal strength", () => {
+  it("clamps malformed signal strength and normalizes empty names", () => {
     expect(
       normalizeNetworkSnapshot(
-        { connected: true, kind: "wifi", strengthPercent: 140 },
+        { connected: true, kind: "wifi", name: "  ", strengthPercent: 140 },
         observedAt,
       ),
-    ).toMatchObject({ _tag: "Connected", strengthPercent: 100 })
+    ).toMatchObject({ _tag: "Connected", name: null, strengthPercent: 100 })
   })
 
   it("turns failures after a known value into stale network state", () => {
     const ready = normalizeNetworkSnapshot(
-      { connected: true, kind: "wifi", strengthPercent: 70 },
+      { connected: true, kind: "wifi", name: "KorriNet", strengthPercent: 70 },
       observedAt,
     )
     const state = failedNetworkReadState(ready, new Error("net busy"), "later")
@@ -80,7 +86,7 @@ describe("device facts network normalization", () => {
       _tag: "Stale",
       message: "net busy",
       observedAt: "later",
-      lastKnown: { _tag: "Connected", strengthPercent: 70 },
+      lastKnown: { _tag: "Connected", name: "KorriNet", strengthPercent: 70 },
     })
   })
 })

@@ -17,6 +17,9 @@ export interface DeviceNetworkReaderDependencies {
   readonly stat?: (
     path: string,
   ) => Promise<{ readonly isDirectory: () => boolean }>
+  readonly command?: (
+    command: readonly string[],
+  ) => Promise<{ readonly exitCode: number; readonly stdout: string }>
 }
 
 export interface DeviceNetworkReader {
@@ -24,9 +27,10 @@ export interface DeviceNetworkReader {
 }
 
 interface NetworkInterfaceSnapshot {
-  readonly name: string
+  readonly iface: string
   readonly kind: DeviceNetworkKind
   readonly connected: boolean | null
+  readonly name: string | null
   readonly strengthPercent: number | null
 }
 
@@ -51,6 +55,7 @@ export function createDeviceNetworkReader(
   const readdirImpl = deps.readdir ?? readdir
   const readFileImpl = deps.readFile ?? readFile
   const statImpl = deps.stat ?? stat
+  const command = deps.command ?? runCommand
 
   return {
     readNetwork: () =>
@@ -61,6 +66,7 @@ export function createDeviceNetworkReader(
         readdirImpl,
         readFileImpl,
         statImpl,
+        command,
       }),
   }
 }
@@ -72,6 +78,7 @@ async function readNetworkSnapshot({
   readdirImpl,
   readFileImpl,
   statImpl,
+  command,
 }: {
   readonly netDir: string
   readonly procNetWirelessPath: string
@@ -81,6 +88,9 @@ async function readNetworkSnapshot({
   readonly statImpl: (
     path: string,
   ) => Promise<{ readonly isDirectory: () => boolean }>
+  readonly command: (
+    command: readonly string[],
+  ) => Promise<{ readonly exitCode: number; readonly stdout: string }>
 }): Promise<RawNetworkSnapshot> {
   const names = iface
     ? [iface]
@@ -97,6 +107,7 @@ async function readNetworkSnapshot({
         name,
         readFileImpl,
         statImpl,
+        command,
       }),
     ),
   )
@@ -111,6 +122,7 @@ async function readNetworkSnapshot({
     return {
       connected: true,
       kind: representative.kind,
+      name: representative.name,
       strengthPercent: representative.strengthPercent,
     }
   }
@@ -119,11 +131,12 @@ async function readNetworkSnapshot({
     return {
       connected: false,
       kind: known[0]?.kind ?? null,
+      name: null,
       strengthPercent: null,
     }
   }
 
-  return { connected: null, kind: null, strengthPercent: null }
+  return { connected: null, kind: null, name: null, strengthPercent: null }
 }
 
 async function discoverInterfaceNames(
@@ -142,6 +155,7 @@ async function readInterfaceSnapshot({
   name,
   readFileImpl,
   statImpl,
+  command,
 }: {
   readonly netDir: string
   readonly procNetWirelessPath: string
@@ -150,6 +164,9 @@ async function readInterfaceSnapshot({
   readonly statImpl: (
     path: string,
   ) => Promise<{ readonly isDirectory: () => boolean }>
+  readonly command: (
+    command: readonly string[],
+  ) => Promise<{ readonly exitCode: number; readonly stdout: string }>
 }): Promise<NetworkInterfaceSnapshot> {
   const base = join(netDir, name)
   const kind: DeviceNetworkKind = (await isDirectory(
@@ -167,14 +184,19 @@ async function readInterfaceSnapshot({
       ? null
       : await readOptionalCarrier(join(base, "carrier"), readFileImpl)
   const connected = connectedForOperstate(operstate, carrier)
+  const wifiName =
+    kind === "wifi" && connected
+      ? await wifiNetworkNameForInterface(name, command)
+      : null
   const strengthPercent =
     kind === "wifi"
       ? await signalPercentForInterface(name, procNetWirelessPath, readFileImpl)
       : null
   return {
-    name,
+    iface: name,
     kind,
     connected,
+    name: wifiName,
     strengthPercent,
   }
 }
@@ -214,6 +236,36 @@ async function signalPercentForInterface(
   const dbm = Number.parseFloat(parts[3]?.replace(".", "") ?? "")
   if (!Number.isFinite(dbm)) return null
   return Math.max(0, Math.min(100, Math.round(2 * (dbm + 100))))
+}
+
+async function wifiNetworkNameForInterface(
+  name: string,
+  command: (
+    command: readonly string[],
+  ) => Promise<{ readonly exitCode: number; readonly stdout: string }>,
+): Promise<string | null> {
+  const result = await command(["iw", "dev", name, "link"])
+  if (result.exitCode !== 0) return null
+  const ssid = result.stdout
+    .split("\n")
+    .map(line => line.trim())
+    .find(line => line.startsWith("SSID:"))
+    ?.slice("SSID:".length)
+    .trim()
+  return ssid && ssid.length > 0 ? ssid : null
+}
+
+async function runCommand(
+  command: readonly string[],
+): Promise<{ readonly exitCode: number; readonly stdout: string }> {
+  if (command[0] && !Bun.which(command[0])) return { exitCode: 127, stdout: "" }
+  try {
+    const proc = Bun.spawn([...command], { stdout: "pipe", stderr: "ignore" })
+    const stdout = await new Response(proc.stdout).text()
+    return { exitCode: await proc.exited, stdout }
+  } catch {
+    return { exitCode: 127, stdout: "" }
+  }
 }
 
 async function readOptionalCarrier(
