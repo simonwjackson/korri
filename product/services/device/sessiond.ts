@@ -1,6 +1,7 @@
 import { access, unlink } from "node:fs/promises"
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import {
+  type LaunchFailureKind,
   type LaunchResult,
   type LaunchSpec,
   launchFailureExitCode,
@@ -105,6 +106,35 @@ export interface KorriSessiondLauncher {
   spawn?: (spec: LaunchSpec) => Promise<ManagedLaunchResult>
 }
 
+export interface KorriSessiondPreSpawnGateRequest {
+  readonly launchId: string
+  readonly spec: LaunchSpec
+  readonly signal: AbortSignal
+  readonly launchMetadata?: LaunchMetadata
+  readonly launchCompanions?: LaunchCompanionMap
+}
+
+export interface KorriSessiondPreSpawnGateHandle {
+  readonly stop: () => Promise<void> | void
+}
+
+export interface KorriSessiondPreSpawnGate {
+  readonly id: string
+  readonly start: (
+    request: KorriSessiondPreSpawnGateRequest,
+  ) => Promise<KorriSessiondPreSpawnGateHandle | void>
+}
+
+export class KorriSessiondPreSpawnFailure extends Error {
+  readonly failureKind: LaunchFailureKind
+
+  constructor(message: string, failureKind: LaunchFailureKind) {
+    super(message)
+    this.name = "KorriSessiondPreSpawnFailure"
+    this.failureKind = failureKind
+  }
+}
+
 export type {
   KorriSessiondLifecycleHook,
   KorriSessiondLifecycleHookCleanupRequest,
@@ -131,6 +161,8 @@ export interface KorriSessiondOptions {
    * lifecycle and invokes these only at bounded launch/cleanup phases.
    */
   readonly sessionHooks?: readonly KorriSessiondLifecycleHook[]
+  /** Focused pre-spawn readiness gates. Input-seat uses this to block spawn until seats are ready. */
+  readonly preSpawnGates?: readonly KorriSessiondPreSpawnGate[]
   /**
    * Back-compat `status.json` sidecar (source-machine role only). When
    * configured, sessiond writes a runner-shaped JSON snapshot on every
@@ -200,6 +232,7 @@ export function createKorriSessiondCore(
   const role: SessionRole =
     options.role ?? createKioskSessionRole({ renderer, sway, serviceManager })
   const sessionHooks = options.sessionHooks ?? []
+  const preSpawnGates = options.preSpawnGates ?? []
   const statusSidecar = options.statusSidecar
   let state: KorriSessionState = initialKorriSessionState
   let eventSequence = 0
@@ -233,6 +266,8 @@ export function createKorriSessiondCore(
         cancelWaiter?: () => void
         launchMetadata?: LaunchMetadata
         sessionHookHandles?: readonly KorriSessiondLifecycleHookHandle[]
+        preSpawnAbortController?: AbortController
+        preSpawnGateHandles?: readonly KorriSessiondPreSpawnGateHandle[]
       }
     | undefined
   // Phase 4D / Track A finishing follow-up. Tracks the current
@@ -434,6 +469,72 @@ export function createKorriSessiondCore(
     return { response: { status: "accepted", launchId }, result }
   }
 
+  async function stopPreSpawnGateHandles(
+    handles: readonly KorriSessiondPreSpawnGateHandle[],
+  ): Promise<void> {
+    for (const handle of handles) {
+      try {
+        await handle.stop()
+      } catch (error) {
+        logger.warn({ err: error }, "sessiond: pre-spawn gate stop failed")
+      }
+    }
+  }
+
+  async function startPreSpawnGatesForLaunch(
+    launchId: string,
+    spec: LaunchSpec,
+    launchMetadata: LaunchMetadata | undefined,
+    launchCompanions: LaunchCompanionMap | undefined,
+    active:
+      | {
+          readonly launchId: string
+          preSpawnAbortController?: AbortController
+          preSpawnGateHandles?: readonly KorriSessiondPreSpawnGateHandle[]
+        }
+      | undefined,
+  ): Promise<LaunchResult | undefined> {
+    if (preSpawnGates.length === 0) return undefined
+    const abortController = new AbortController()
+    if (active?.launchId === launchId) {
+      active.preSpawnAbortController = abortController
+    }
+    const handles: KorriSessiondPreSpawnGateHandle[] = []
+    for (const gate of preSpawnGates) {
+      try {
+        const handle = await gate.start({
+          launchId,
+          spec,
+          signal: abortController.signal,
+          ...(launchMetadata ? { launchMetadata } : {}),
+          ...(launchCompanions ? { launchCompanions } : {}),
+        })
+        if (handle) handles.push(handle)
+      } catch (error) {
+        await stopPreSpawnGateHandles(handles)
+        const message = error instanceof Error ? error.message : String(error)
+        const failureKind =
+          error instanceof KorriSessiondPreSpawnFailure
+            ? error.failureKind
+            : "host-unavailable"
+        logger.warn(
+          { err: error, gateId: gate.id, failureKind },
+          "sessiond: pre-spawn gate failed",
+        )
+        return {
+          status: "failed",
+          exitCode: launchFailureExitCode(failureKind),
+          failureKind,
+          stderrTail: message,
+        }
+      }
+    }
+    if (active?.launchId === launchId && handles.length > 0) {
+      active.preSpawnGateHandles = handles
+    }
+    return undefined
+  }
+
   async function startLifecycleHooksForLaunch(
     launchId: string,
     spec: LaunchSpec,
@@ -500,93 +601,108 @@ export function createKorriSessiondCore(
 
     try {
       await role.beforeChildLaunch()
-      if (role.emitsRendererStopped) {
-        pushLifecycleEvent(launchId, { type: "renderer-stopped" })
-      }
-      state = markKorriGameRunning(state)
-      emitStatusSidecar("running")
-
-      const spawn = launcher.spawn
-      if (spawn) {
-        const spawned = await spawn(spec)
-        if (spawned.status === "failed") {
-          result = spawned.result
-        } else {
-          const active = activeManagedLaunch
-          if (active?.launchId === launchId) {
-            active.terminate = spawned.session.terminate
-            active.terminateNow = spawned.session.terminateNow
-            if (spawned.session.processGroupId !== undefined) {
-              active.processGroupId = spawned.session.processGroupId
-            }
-            if (active.cancelRequested === "force") {
-              spawned.session.terminateNow()
-            } else if (active.cancelRequested === "graceful") {
-              spawned.session.terminate()
-            }
-          }
-          pushLifecycleEvent(launchId, { type: "child-running" })
-          if (!result) {
-            result = await startLifecycleHooksForLaunch(
-              launchId,
-              spec,
-              launchMetadata,
-              launchCompanions,
-              active,
-            )
-            if (result) {
-              try {
-                spawned.session.terminate()
-              } catch {
-                // Best-effort; ignore.
-              }
-            }
-          }
-          if (!result) {
-            // Phase 4D / Track A. Role-specific foreground promotion
-            // runs after the primary child is observed running. Throwing
-            // here turns into a launch failure (host-unavailable).
-            try {
-              await role.afterChildRunning(spec)
-            } catch (error) {
-              const message =
-                error instanceof Error ? error.message : String(error)
-              logger.warn({ err: error }, "sessiond: afterChildRunning failed")
-              // Attempt to terminate the still-running child so we do not
-              // leave it dangling while restoring.
-              try {
-                spawned.session.terminate()
-              } catch {
-                // Best-effort; ignore.
-              }
-              result = {
-                status: "failed",
-                exitCode: launchFailureExitCode("host-unavailable"),
-                failureKind: "host-unavailable",
-                stderrTail: message,
-              }
-            }
-          }
-          if (!result) {
-            result = await waitForSpawnedLaunchResult(launchId, spawned)
-          }
-        }
+      result = await startPreSpawnGatesForLaunch(
+        launchId,
+        spec,
+        launchMetadata,
+        launchCompanions,
+        activeManagedLaunch,
+      )
+      if (result) {
+        // Skip spawn; the readiness gate already produced a launch failure.
       } else {
-        pushLifecycleEvent(launchId, { type: "child-running" })
-        try {
-          await role.afterChildRunning(spec)
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          logger.warn({ err: error }, "sessiond: afterChildRunning failed")
-          result = {
-            status: "failed",
-            exitCode: launchFailureExitCode("host-unavailable"),
-            failureKind: "host-unavailable",
-            stderrTail: message,
-          }
+        if (role.emitsRendererStopped) {
+          pushLifecycleEvent(launchId, { type: "renderer-stopped" })
         }
-        if (!result) {
-          result = await launcher.run(spec)
+        state = markKorriGameRunning(state)
+        emitStatusSidecar("running")
+
+        const spawn = launcher.spawn
+        if (spawn) {
+          const spawned = await spawn(spec)
+          if (spawned.status === "failed") {
+            result = spawned.result
+          } else {
+            const active = activeManagedLaunch
+            if (active?.launchId === launchId) {
+              active.terminate = spawned.session.terminate
+              active.terminateNow = spawned.session.terminateNow
+              if (spawned.session.processGroupId !== undefined) {
+                active.processGroupId = spawned.session.processGroupId
+              }
+              if (active.cancelRequested === "force") {
+                spawned.session.terminateNow()
+              } else if (active.cancelRequested === "graceful") {
+                spawned.session.terminate()
+              }
+            }
+            pushLifecycleEvent(launchId, { type: "child-running" })
+            if (!result) {
+              result = await startLifecycleHooksForLaunch(
+                launchId,
+                spec,
+                launchMetadata,
+                launchCompanions,
+                active,
+              )
+              if (result) {
+                try {
+                  spawned.session.terminate()
+                } catch {
+                  // Best-effort; ignore.
+                }
+              }
+            }
+            if (!result) {
+              // Phase 4D / Track A. Role-specific foreground promotion
+              // runs after the primary child is observed running. Throwing
+              // here turns into a launch failure (host-unavailable).
+              try {
+                await role.afterChildRunning(spec)
+              } catch (error) {
+                const message =
+                  error instanceof Error ? error.message : String(error)
+                logger.warn(
+                  { err: error },
+                  "sessiond: afterChildRunning failed",
+                )
+                // Attempt to terminate the still-running child so we do not
+                // leave it dangling while restoring.
+                try {
+                  spawned.session.terminate()
+                } catch {
+                  // Best-effort; ignore.
+                }
+                result = {
+                  status: "failed",
+                  exitCode: launchFailureExitCode("host-unavailable"),
+                  failureKind: "host-unavailable",
+                  stderrTail: message,
+                }
+              }
+            }
+            if (!result) {
+              result = await waitForSpawnedLaunchResult(launchId, spawned)
+            }
+          }
+        } else {
+          pushLifecycleEvent(launchId, { type: "child-running" })
+          try {
+            await role.afterChildRunning(spec)
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error)
+            logger.warn({ err: error }, "sessiond: afterChildRunning failed")
+            result = {
+              status: "failed",
+              exitCode: launchFailureExitCode("host-unavailable"),
+              failureKind: "host-unavailable",
+              stderrTail: message,
+            }
+          }
+          if (!result) {
+            result = await launcher.run(spec)
+          }
         }
       }
     } catch (error) {
@@ -642,6 +758,7 @@ export function createKorriSessiondCore(
         : undefined
     const pgid = activeForRestore?.processGroupId
     await stopLifecycleHookHandles(activeForRestore?.sessionHookHandles ?? [])
+    await stopPreSpawnGateHandles(activeForRestore?.preSpawnGateHandles ?? [])
     await cleanupLifecycleHooks(
       launchId,
       pgid,
@@ -963,6 +1080,7 @@ export function createKorriSessiondCore(
 
     activeManagedLaunch.cancelRequested = force ? "force" : "graceful"
     if (force) {
+      activeManagedLaunch.preSpawnAbortController?.abort()
       activeManagedLaunch.terminateNow?.()
     } else {
       activeManagedLaunch.terminate?.()

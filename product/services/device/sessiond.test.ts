@@ -21,6 +21,8 @@ import {
   type KorriSessiondLifecycleHookCleanupRequest,
   type KorriSessiondLifecycleHookCleanupResult,
   type KorriSessiondLifecycleHookStartRequest,
+  KorriSessiondPreSpawnFailure,
+  type KorriSessiondPreSpawnGate,
   startKorriSessiond,
 } from "./sessiond"
 import type { SessionRole } from "./sessiond-role"
@@ -59,6 +61,7 @@ function startHarness(
       readonly processGroupId?: number
     }>
     readonly sessionHooks?: readonly KorriSessiondLifecycleHook[]
+    readonly preSpawnGates?: readonly KorriSessiondPreSpawnGate[]
     readonly managedStopGraceMs?: number
     readonly restoreRetryDelayMs?: number
     readonly heartbeatIntervalMs?: number
@@ -143,6 +146,7 @@ function startHarness(
         : undefined,
     },
     sessionHooks: options.sessionHooks,
+    preSpawnGates: options.preSpawnGates,
     ...(options.role ? { role: options.role } : {}),
     ...(options.fakeSuspendActiveMarkerPath
       ? { fakeSuspendActiveMarkerPath: options.fakeSuspendActiveMarkerPath }
@@ -1926,6 +1930,174 @@ describe("korri sessiond", () => {
     })
     expect(calls).toContain("beforeChildLaunch")
     expect(calls).toContain("restoreIdleAfterLaunch")
+  })
+
+  it("runs pre-spawn gates after role preparation and before child spawn", async () => {
+    const order: string[] = []
+    const child = deferred<LaunchResult>()
+    const role: SessionRole = {
+      id: "pre-spawn-role",
+      idleModeLabel: "idle",
+      idleReadyEventName: "idle-ready",
+      rendererStatus: () => ({ kind: "none" }),
+      enterIdle: async () => {},
+      leaveIdle: async () => {},
+      beforeChildLaunch: async () => {
+        order.push("before-child")
+      },
+      afterChildRunning: async () => {
+        order.push("after-child")
+      },
+      restoreIdleAfterLaunch: async () => {},
+      reconcileIdle: async () => {},
+      idleReadyEvidence: () => "idle-ready",
+    }
+    const { core } = startHarness({
+      role,
+      preSpawnGates: [
+        {
+          id: "test-pre-spawn",
+          start: async () => {
+            order.push("pre-spawn")
+          },
+        },
+      ],
+      spawnLaunch: async () => {
+        order.push("spawn")
+        return {
+          result: child.promise,
+          terminate: () => child.resolve({ status: "launched" }),
+          terminateNow: () =>
+            child.resolve({ status: "failed", exitCode: 143 }),
+        }
+      },
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    const launch = await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "pre-spawn-order", spec }),
+      }),
+    )
+    expect(await launch.json()).toEqual({
+      status: "accepted",
+      launchId: "pre-spawn-order",
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(order).toEqual(["before-child", "pre-spawn", "spawn", "after-child"])
+    child.resolve({ status: "launched" })
+  })
+
+  it("fails before spawn with the pre-spawn gate failure kind", async () => {
+    const order: string[] = []
+    const { core } = startHarness({
+      preSpawnGates: [
+        {
+          id: "test-pre-spawn",
+          start: async () => {
+            order.push("pre-spawn")
+            throw new KorriSessiondPreSpawnFailure(
+              "input seats unavailable",
+              "input-unavailable",
+            )
+          },
+        },
+      ],
+      spawnLaunch: async () => {
+        order.push("spawn")
+        return {
+          result: Promise.resolve({ status: "launched" }),
+          terminate: () => {},
+          terminateNow: () => {},
+        }
+      },
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "pre-spawn-failed", spec }),
+      }),
+    )
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=pre-spawn-failed",
+      authorized(),
+    )
+    const lifecycle = parseSseEvents(await streamResponse.text())
+
+    expect(order).toEqual(["pre-spawn"])
+    expect(
+      lifecycle.find(event => event.type === "child-exited")?.terminal,
+    ).toMatchObject({
+      exitCode: 123,
+      failureKind: "input-unavailable",
+      stderrTail: "input seats unavailable",
+    })
+  })
+
+  it("aborts a blocking pre-spawn gate on force terminate", async () => {
+    const aborted = deferred<void>()
+    const { core } = startHarness({
+      preSpawnGates: [
+        {
+          id: "test-pre-spawn",
+          start: async request => {
+            await new Promise<void>(resolve => {
+              request.signal.addEventListener(
+                "abort",
+                () => {
+                  aborted.resolve()
+                  resolve()
+                },
+                { once: true },
+              )
+            })
+            throw new KorriSessiondPreSpawnFailure(
+              "cancelled",
+              "input-unavailable",
+            )
+          },
+        },
+      ],
+      spawnLaunch: async () => ({
+        result: Promise.resolve({ status: "launched" }),
+        terminate: () => {},
+        terminateNow: () => {},
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "pre-spawn-abort", spec }),
+      }),
+    )
+    const stop = await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "pre-spawn-abort", force: true }),
+      }),
+    )
+
+    expect(await stop.json()).toMatchObject({ status: "accepted" })
+    await aborted.promise
   })
 
   it("fails launch as host-unavailable when session lifecycle hook start fails", async () => {
