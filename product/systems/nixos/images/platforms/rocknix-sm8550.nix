@@ -84,6 +84,24 @@ let
         d.calibrationMatrix != null
       ) ''input "${d.match}" calibration_matrix ${d.calibrationMatrix}''
     );
+  outputPowerOnBoot =
+    connector:
+    let
+      matches = builtins.filter (o: o.connector == connector) displayFacts.outputs;
+    in
+    if matches == [ ] then true else (builtins.head matches).powerOnBoot;
+  bottomTouchMatches =
+    if displayBottomConnector == null then
+      [ ]
+    else
+      map (d: d.match) (builtins.filter (d: d.connector == displayBottomConnector) displayFacts.touch.devices);
+  renderSwayTouchInitialState =
+    d: lib.optionalString (!outputPowerOnBoot d.connector) ''input "${d.match}" events disabled'';
+  renderBottomTouchEvents =
+    state:
+    lib.concatMapStringsSep "\n" (
+      match: ''swaymsg 'input "${match}" events ${state}' >/dev/null 2>&1 || true''
+    ) bottomTouchMatches;
   # Full Sway display fragment rendered from the neutral facts: per-output
   # transform/pos/bg/tearing, the touch default + per-device maps, then
   # power-off for any output declared dark-at-boot (Thor's bottom panel).
@@ -96,6 +114,7 @@ let
     ++ (map (o: "output ${o.connector} power off") (
       builtins.filter (o: !o.powerOnBoot) displayFacts.outputs
     ))
+    ++ (map renderSwayTouchInitialState displayFacts.touch.devices)
   );
   # Single resolved primary-connector value used by every output consumer
   # (compositor lane pin, gamescope preferred output, Steam). The product's
@@ -167,7 +186,18 @@ let
           set -u
 
           runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
-          sock=$(find "$runtime_dir" -maxdepth 1 -name 'sway-ipc.*.sock' -print 2>/dev/null | head -n 1 || true)
+          find_sway_sock() {
+            if [ -n "''${SWAYSOCK:-}" ] && [ -S "$SWAYSOCK" ]; then
+              printf '%s\n' "$SWAYSOCK"
+              return 0
+            fi
+            if [ -S "$runtime_dir/sway-ipc.sock" ]; then
+              printf '%s\n' "$runtime_dir/sway-ipc.sock"
+              return 0
+            fi
+            find "$runtime_dir" -maxdepth 1 -type s -name 'sway-ipc.*.sock' -print -quit 2>/dev/null || true
+          }
+          sock=$(find_sway_sock | head -n 1)
           [ -n "$sock" ] || exit 0
           export SWAYSOCK="$sock"
 
@@ -185,11 +215,13 @@ let
           if bottom_is_on; then
             stop_keyboard
             swaymsg 'focus output ${displayPrimaryConnector}' >/dev/null 2>&1 || true
+            ${renderBottomTouchEvents "disabled"}
             swaymsg 'output ${displayBottomConnector} power off' >/dev/null 2>&1 || true
             exit 0
           fi
 
           swaymsg 'output ${displayBottomConnector} power on' >/dev/null 2>&1 || true
+          ${renderBottomTouchEvents "enabled"}
           swaymsg 'focus output ${displayBottomConnector}' >/dev/null 2>&1 || true
           swaymsg 'workspace "korri:bottom-keyboard"' >/dev/null 2>&1 || true
 

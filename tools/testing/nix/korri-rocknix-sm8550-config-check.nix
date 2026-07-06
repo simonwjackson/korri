@@ -804,6 +804,11 @@ let
         inputdEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"
         && !(inputdEnv ? KORRI_INPUTD_KILL_CURRENT_GAME)
       ))
+      (check "${name}: bottom keyboard toggle follows stable Sway socket and gates touch" (
+        lib.hasSuffix "/bin/korri-bandai-bottom-keyboard-toggle" (inputdEnv.KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN or "")
+        && lib.hasInfix ''$runtime_dir/sway-ipc.sock'' sm8550PlatformAdapterSource
+        && lib.hasInfix "events \${state}" sm8550PlatformAdapterSource
+      ))
       (check "${name}: inputd PATH includes swaymsg for foreground shortcuts" (
         builtins.elem compositor.sway.package inputdPath
       ))
@@ -936,6 +941,7 @@ let
       lib.hasInfix "output DSI-2 transform 90" c
       && lib.hasInfix "output DSI-1 transform 90" c
       && lib.hasInfix "output DSI-1 power off" c
+      && lib.hasInfix ''input "0:0:ft5x06-bottom" events disabled'' c
     ))
     (check "Sobo (Odin 2 Portal) renders single DSI-1 @270 with no power-off" (
       let
