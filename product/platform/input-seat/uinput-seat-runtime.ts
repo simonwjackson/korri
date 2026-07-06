@@ -16,6 +16,8 @@ import {
 export interface UinputSeatHandle {
   readonly slot: number
   readonly token: string
+  readonly expectedPhysicalPath?: string
+  readonly expectedUniqueId?: string
 }
 
 export interface UinputSeatBackend {
@@ -97,7 +99,7 @@ export const createUinputSeatRuntime = (
         handles.set(seat.slot, handle)
         createdSlots.push(seat.slot)
 
-        const readiness = await waitForSeatIdentity(seat, request, {
+        const readiness = await waitForSeatIdentity(seat, handle, request, {
           backend: options.backend,
           inputRoot,
           nowMs,
@@ -155,6 +157,7 @@ type SeatReadinessResult =
 
 const waitForSeatIdentity = async (
   seat: RequestedInputSeat,
+  handle: UinputSeatHandle,
   request: SeatAllocationRequest,
   options: WaitForSeatIdentityOptions,
 ): Promise<SeatReadinessResult> => {
@@ -164,7 +167,15 @@ const waitForSeatIdentity = async (
     if (request.signal?.aborted) return { status: "unavailable", result: cancelledResult() }
 
     const devices = await options.backend.discoverDevices()
-    const candidates = devices.filter(device => device.name === seat.name)
+    const expectedPhysicalPath =
+      handle.expectedPhysicalPath ?? `korri/input-seat/p${seat.slot}`
+    const expectedUniqueId = handle.expectedUniqueId ?? `korri-seat-p${seat.slot}`
+    const candidates = devices.filter(
+      device =>
+        device.name === seat.name &&
+        (device.uniqueId === expectedUniqueId ||
+          device.physicalPath === expectedPhysicalPath),
+    )
 
     if (candidates.length > 1) {
       return {

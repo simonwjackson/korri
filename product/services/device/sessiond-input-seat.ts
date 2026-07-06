@@ -91,10 +91,10 @@ export function createSessiondInputSeatPreSpawnGate(
             runtime: options.runtime as SeatRuntimePort & SeatRuntimeWriter,
             options: options.sunshineMirror,
           })
-        } catch (error) {
+        } catch {
           await options.runtime.release(allocation.seats)
           throw new KorriSessiondPreSpawnFailure(
-            error instanceof Error ? error.message : String(error),
+            "input-seat mirror unavailable",
             "input-unavailable",
           )
         }
@@ -103,12 +103,15 @@ export function createSessiondInputSeatPreSpawnGate(
           inputSeats: toManagedLaunchInputSeatSummary(allocation.seats),
           ...(mirror
             ? {
-                launchEnv: {
+                sourceEnv: {
                   KORRI_INPUT_SEAT_MIRROR_SOCKET: mirror.socketPath,
                   KORRI_INPUT_SEAT_LAUNCH_ID: request.launchId,
                 },
               }
             : {}),
+          leaveInputSeat: slot => {
+            mirror?.adapter.leaveSeat(slot)
+          },
           stop: async () => {
             await mirror?.stop()
             await options.runtime.release(allocation.seats)

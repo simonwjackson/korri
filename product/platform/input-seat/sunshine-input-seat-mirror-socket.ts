@@ -1,6 +1,6 @@
 import { chmod, unlink } from "node:fs/promises"
 import { isAbsolute } from "node:path"
-import { createServer, type Server } from "node:net"
+import { createServer, type Server, type Socket } from "node:net"
 import {
   createSunshineRemoteInputSourceAdapter,
   decodeSunshineInputSeatFrame,
@@ -23,7 +23,7 @@ export type SunshineInputSeatMirrorDiagnostic =
 
 export interface SunshineInputSeatMirrorFrameSink {
   readonly push: (chunk: string | Uint8Array) => void
-  readonly close: () => void
+  readonly close: () => Promise<void>
 }
 
 export interface SunshineInputSeatForwardedGamepadState {
@@ -72,6 +72,7 @@ export const createSunshineInputSeatMirrorFrameSink = (
 ): SunshineInputSeatMirrorFrameSink => {
   const maxFrameBytes = options.maxFrameBytes ?? DEFAULT_MAX_FRAME_BYTES
   let buffer = ""
+  let forwardQueue: Promise<void> = Promise.resolve()
 
   const diagnostic = (event: SunshineInputSeatMirrorDiagnostic) => {
     options.onDiagnostic?.(event)
@@ -108,14 +109,16 @@ export const createSunshineInputSeatMirrorFrameSink = (
         result.slot !== undefined &&
         frame.kind === "source-state"
       ) {
-        Promise.resolve(
-          options.onGamepadState?.({ slot: result.slot, frame }),
-        ).catch(error => {
-          diagnostic({
-            kind: "frame-forward-failed",
-            message: error instanceof Error ? error.message : String(error),
+        const slot = result.slot
+        forwardQueue = forwardQueue
+          .then(() => options.onGamepadState?.({ slot, frame }))
+          .then(() => undefined)
+          .catch(error => {
+            diagnostic({
+              kind: "frame-forward-failed",
+              message: error instanceof Error ? error.message : String(error),
+            })
           })
-        })
       }
     } catch (error) {
       diagnostic({
@@ -152,10 +155,11 @@ export const createSunshineInputSeatMirrorFrameSink = (
       }
       flushCompleteLines()
     },
-    close: () => {
+    close: async () => {
       const tail = buffer
       buffer = ""
       processLine(tail)
+      await forwardQueue
     },
   }
 }
@@ -171,13 +175,18 @@ export const startSunshineInputSeatMirrorSocket = async (
     launchId: options.launchId,
     seatCount: options.seatCount,
     maxEventsPerSecond: options.maxEventsPerSecond,
+    forwardedEventBufferSize: 0,
   })
 
   await unlink(options.socketPath).catch(error => {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
   })
 
+  const connections = new Set<Socket>()
+
   const server = createServer(connection => {
+    connections.add(connection)
+    connection.on("close", () => connections.delete(connection))
     const sink = createSunshineInputSeatMirrorFrameSink({
       adapter,
       maxFrameBytes: options.maxFrameBytes,
@@ -185,7 +194,9 @@ export const startSunshineInputSeatMirrorSocket = async (
       onDiagnostic: options.onDiagnostic,
     })
     connection.on("data", chunk => sink.push(chunk))
-    connection.on("end", () => sink.close())
+    connection.on("end", () => {
+      void sink.close()
+    })
     connection.on("error", error => {
       options.onDiagnostic?.({
         kind: "socket-client-error",
@@ -208,6 +219,7 @@ export const startSunshineInputSeatMirrorSocket = async (
     socketPath: options.socketPath,
     adapter,
     stop: async () => {
+      for (const connection of connections) connection.destroy()
       await closeServer(server)
       await unlink(options.socketPath).catch(error => {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error

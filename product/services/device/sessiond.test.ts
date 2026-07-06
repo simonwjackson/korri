@@ -1994,7 +1994,7 @@ describe("korri sessiond", () => {
     child.resolve({ status: "launched" })
   })
 
-  it("merges pre-spawn launch environment into the spawned child spec", async () => {
+  it("does not leak pre-spawn source environment into the spawned child spec", async () => {
     let spawnedSpec: LaunchSpec | undefined
     const child = deferred<LaunchResult>()
     const { core } = startHarness({
@@ -2002,7 +2002,7 @@ describe("korri sessiond", () => {
         {
           id: "test-pre-spawn-env",
           start: async () => ({
-            launchEnv: {
+            sourceEnv: {
               KORRI_INPUT_SEAT_MIRROR_SOCKET: "/tmp/korri-seat.sock",
               KORRI_INPUT_SEAT_LAUNCH_ID: "launch-env",
             },
@@ -2036,11 +2036,7 @@ describe("korri sessiond", () => {
     )
 
     await new Promise(resolve => setTimeout(resolve, 5))
-    expect(spawnedSpec?.env).toEqual({
-      EXISTING: "1",
-      KORRI_INPUT_SEAT_MIRROR_SOCKET: "/tmp/korri-seat.sock",
-      KORRI_INPUT_SEAT_LAUNCH_ID: "launch-env",
-    })
+    expect(spawnedSpec?.env).toEqual({ EXISTING: "1" })
     child.resolve({ status: "launched" })
   })
 
@@ -2160,6 +2156,7 @@ describe("korri sessiond", () => {
 
   it("releases an input seat through launch-scoped managed leave", async () => {
     const child = deferred<LaunchResult>()
+    const leftSlots: number[] = []
     const { core } = startHarness({
       preSpawnGates: [
         {
@@ -2176,6 +2173,7 @@ describe("korri sessiond", () => {
                 },
               ],
             },
+            leaveInputSeat: slot => leftSlots.push(slot),
             stop: () => {},
           }),
         },
@@ -2204,7 +2202,11 @@ describe("korri sessiond", () => {
       authorized({
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ launchId: "input-seat-leave", slot: 1 }),
+        body: JSON.stringify({
+          launchId: "input-seat-leave",
+          slot: 1,
+          sourceKey: "source:redacted",
+        }),
       }),
     )
     expect(await leave.json()).toEqual({
@@ -2212,6 +2214,7 @@ describe("korri sessiond", () => {
       launchId: "input-seat-leave",
       slot: 1,
     })
+    expect(leftSlots).toEqual([1])
 
     const status = await (
       await request(core, "/managed-launch/status", authorized())

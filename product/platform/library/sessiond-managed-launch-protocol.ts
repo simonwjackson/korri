@@ -326,7 +326,6 @@ export const SessiondManagedLaunchInputSeatLeaveRequest = Schema.Struct({
   launchId: Schema.String,
   slot: Schema.Number,
   sourceKey: Schema.optional(Schema.String),
-  operator: Schema.optional(Schema.Boolean),
 })
 export type SessiondManagedLaunchInputSeatLeaveRequest = Schema.Schema.Type<
   typeof SessiondManagedLaunchInputSeatLeaveRequest

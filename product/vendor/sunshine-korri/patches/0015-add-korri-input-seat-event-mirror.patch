@@ -34,7 +34,7 @@
  // local includes
  #include "config.h"
  #include "globals.h"
-@@ -57,6 +68,171 @@
+@@ -57,6 +68,173 @@
      UP  ///< Button is up
    };
  
@@ -186,8 +186,10 @@
 +  }
 +
 +  void korri_input_seat_emit_source_state(PNV_MULTI_CONTROLLER_PACKET packet) {
++    const auto buttons = static_cast<std::uint32_t>(static_cast<std::uint16_t>(packet->buttonFlags)) |
++                         (static_cast<std::uint32_t>(static_cast<std::uint16_t>(packet->buttonFlags2)) << 16);
 +    auto out = korri_input_seat_frame_prefix("source-state"sv, packet->controllerNumber);
-+    out << ",\"buttons\":" << static_cast<std::uint32_t>(packet->buttonFlags | (packet->buttonFlags2 << 16))
++    out << ",\"buttons\":" << buttons
 +        << ",\"leftTrigger\":" << static_cast<std::uint32_t>(packet->leftTrigger)
 +        << ",\"rightTrigger\":" << static_cast<std::uint32_t>(packet->rightTrigger)
 +        << ",\"leftStickX\":" << static_cast<std::int32_t>(packet->leftStickX)
@@ -206,7 +208,7 @@
    template<std::size_t N>
    int alloc_id(std::bitset<N> &gamepad_mask) {
      for (int x = 0; x < gamepad_mask.size(); ++x) {
-@@ -849,6 +1025,8 @@
+@@ -849,6 +1027,8 @@
        return;
      }
  
@@ -215,7 +217,7 @@
      platf::gamepad_arrival_t arrival {
        packet->type,
        util::endian::little(packet->capabilities),
-@@ -1094,6 +1272,8 @@
+@@ -1094,6 +1274,8 @@
      // If this is an event for a new gamepad, create the gamepad now. Ideally, the client would
      // send a controller arrival instead of this but it's still supported for legacy clients.
      if ((packet->activeGamepadMask & (1 << packet->controllerNumber)) && gamepad.id < 0) {
@@ -224,7 +226,7 @@
        auto id = alloc_id(gamepadMask);
        if (id < 0) {
          return;
-@@ -1107,11 +1287,17 @@
+@@ -1107,11 +1289,17 @@
        gamepad.id = id;
      } else if (!(packet->activeGamepadMask & (1 << packet->controllerNumber)) && gamepad.id >= 0) {
        // If this is the final event for a gamepad being removed, free the gamepad and return.

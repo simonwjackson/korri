@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import {
   connectInputSeat,
   disconnectInputSeat,
+  leaveInputSeat,
   reconnectInputSeat,
   type InputSeatState,
 } from "./seat-state"
@@ -104,12 +105,14 @@ export interface SunshineRemoteInputSourceAdapter {
   ) => SunshineInputSeatAcceptResult
   readonly seats: () => readonly InputSeatState[]
   readonly forwardedEvents: () => readonly SunshineForwardedGamepadState[]
+  readonly leaveSeat: (slot: number) => boolean
 }
 
 export interface SunshineRemoteInputSourceAdapterOptions {
   readonly launchId: string
   readonly seatCount: number
   readonly maxEventsPerSecond: number
+  readonly forwardedEventBufferSize?: number
   readonly nowMs?: () => number
 }
 
@@ -132,6 +135,7 @@ export const createSunshineRemoteInputSourceAdapter = (
     (_, index) => ({ tag: "available" as const, slot: index + 1 }),
   )
   const forwarded: SunshineForwardedGamepadState[] = []
+  const forwardedEventBufferSize = options.forwardedEventBufferSize ?? 128
   const rateBuckets = new Map<string, RateBucket>()
   const nowMs = options.nowMs ?? (() => Date.now())
 
@@ -185,6 +189,15 @@ export const createSunshineRemoteInputSourceAdapter = (
   return {
     seats: () => [...seats],
     forwardedEvents: () => [...forwarded],
+    leaveSeat: slot => {
+      const index = seats.findIndex(seat => seat.slot === slot)
+      const seat = seats[index]
+      if (seat === undefined || seat.tag === "available") return false
+      seats = seats.map((candidate, candidateIndex) =>
+        candidateIndex === index ? leaveInputSeat(candidate) : candidate,
+      )
+      return true
+    },
     accept: frame => {
       if (frame.launchId !== options.launchId) {
         return { status: "dropped", reason: "stale-launch" }
@@ -225,7 +238,10 @@ export const createSunshineRemoteInputSourceAdapter = (
       if (!consumeRate(sourceId)) {
         return { status: "dropped", reason: "rate-limited" }
       }
-      forwarded.push({ sourceId, slot: seat.slot, frame })
+      if (forwardedEventBufferSize > 0) {
+        forwarded.push({ sourceId, slot: seat.slot, frame })
+        if (forwarded.length > forwardedEventBufferSize) forwarded.shift()
+      }
       return { status: "accepted", slot: seat.slot }
     },
   }

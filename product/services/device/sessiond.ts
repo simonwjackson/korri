@@ -544,28 +544,6 @@ export function createKorriSessiondCore(
     return undefined
   }
 
-  function applyPreSpawnLaunchEnv(
-    spec: LaunchSpec,
-    handles: readonly KorriSessiondPreSpawnGateHandle[] | undefined,
-  ): LaunchSpec {
-    const launchEnv = Object.assign(
-      {},
-      ...((handles ?? [])
-        .map(handle => handle.launchEnv)
-        .filter((env): env is Readonly<Record<string, string>> =>
-          env !== undefined,
-        )),
-    )
-    if (Object.keys(launchEnv).length === 0) return spec
-    return {
-      ...spec,
-      env: {
-        ...(spec.env ?? {}),
-        ...launchEnv,
-      },
-    }
-  }
-
   async function startLifecycleHooksForLaunch(
     launchId: string,
     spec: LaunchSpec,
@@ -642,10 +620,6 @@ export function createKorriSessiondCore(
       if (result) {
         // Skip spawn; the readiness gate already produced a launch failure.
       } else {
-        const childSpec = applyPreSpawnLaunchEnv(
-          spec,
-          activeManagedLaunch?.preSpawnGateHandles,
-        )
         if (role.emitsRendererStopped) {
           pushLifecycleEvent(launchId, { type: "renderer-stopped" })
         }
@@ -654,7 +628,7 @@ export function createKorriSessiondCore(
 
         const spawn = launcher.spawn
         if (spawn) {
-          const spawned = await spawn(childSpec)
+          const spawned = await spawn(spec)
           if (spawned.status === "failed") {
             result = spawned.result
           } else {
@@ -675,7 +649,7 @@ export function createKorriSessiondCore(
             if (!result) {
               result = await startLifecycleHooksForLaunch(
                 launchId,
-                childSpec,
+                spec,
                 launchMetadata,
                 launchCompanions,
                 active,
@@ -693,7 +667,7 @@ export function createKorriSessiondCore(
               // runs after the primary child is observed running. Throwing
               // here turns into a launch failure (host-unavailable).
               try {
-                await role.afterChildRunning(childSpec)
+                await role.afterChildRunning(spec)
               } catch (error) {
                 const message =
                   error instanceof Error ? error.message : String(error)
@@ -723,7 +697,7 @@ export function createKorriSessiondCore(
         } else {
           pushLifecycleEvent(launchId, { type: "child-running" })
           try {
-            await role.afterChildRunning(childSpec)
+            await role.afterChildRunning(spec)
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error)
@@ -736,7 +710,7 @@ export function createKorriSessiondCore(
             }
           }
           if (!result) {
-            result = await launcher.run(childSpec)
+            result = await launcher.run(spec)
           }
         }
       }
@@ -1169,12 +1143,7 @@ export function createKorriSessiondCore(
         message: "input seat is not active",
       }
     }
-    if (
-      request.sourceKey !== undefined &&
-      seat.sourceKey !== undefined &&
-      request.sourceKey !== seat.sourceKey &&
-      request.operator !== true
-    ) {
+    if (seat.sourceKey !== undefined && request.sourceKey !== seat.sourceKey) {
       return {
         status: "unauthorized",
         launchId: request.launchId,
@@ -1188,6 +1157,9 @@ export function createKorriSessiondCore(
       name: seat.name,
       state: "available" as const,
       reason: "explicit-leave",
+    }
+    for (const handle of activeManagedLaunch.preSpawnGateHandles ?? []) {
+      handle.leaveInputSeat?.(request.slot)
     }
     activeManagedLaunch.inputSeats = {
       seats: inputSeats.seats.map((candidate, candidateIndex) =>

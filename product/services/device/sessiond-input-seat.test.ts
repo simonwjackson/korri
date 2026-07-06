@@ -147,7 +147,7 @@ describe("sessiond input-seat gate", () => {
         },
       })
 
-      expect(handle?.launchEnv).toEqual({
+      expect(handle?.sourceEnv).toEqual({
         KORRI_INPUT_SEAT_MIRROR_SOCKET: socketPath,
         KORRI_INPUT_SEAT_LAUNCH_ID: "launch-1",
       })
@@ -185,6 +185,40 @@ describe("sessiond input-seat gate", () => {
           },
         },
       ])
+
+      handle?.leaveInputSeat?.(1)
+      await writeSocketFrame(socketPath, {
+        kind: "source-state",
+        launchId: "launch-1",
+        controllerNumber: 0,
+        buttons: 8,
+        leftTrigger: 0,
+        rightTrigger: 0,
+        leftStickX: 0,
+        leftStickY: 0,
+        rightStickX: 0,
+        rightStickY: 0,
+      })
+      await writeSocketFrame(socketPath, {
+        kind: "source-connected",
+        launchId: "launch-1",
+        controllerNumber: 1,
+      })
+      await writeSocketFrame(socketPath, {
+        kind: "source-state",
+        launchId: "launch-1",
+        controllerNumber: 1,
+        buttons: 9,
+        leftTrigger: 0,
+        rightTrigger: 0,
+        leftStickX: 0,
+        leftStickY: 0,
+        rightStickX: 0,
+        rightStickY: 0,
+      })
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      expect(writes.map(write => write.state.buttons)).toEqual([7, 9])
 
       await handle?.stop()
     } finally {

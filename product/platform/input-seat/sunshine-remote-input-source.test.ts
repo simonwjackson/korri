@@ -86,6 +86,44 @@ describe("Sunshine remote input source adapter", () => {
     ])
   })
 
+  it("releases a live source binding on explicit leave", () => {
+    const adapter = createSunshineRemoteInputSourceAdapter({
+      launchId: "launch-1",
+      seatCount: 1,
+      maxEventsPerSecond: 10,
+    })
+
+    adapter.accept({
+      kind: "source-connected",
+      launchId: "launch-1",
+      controllerNumber: 0,
+    })
+    expect(adapter.leaveSeat(1)).toBe(true)
+    expect(adapter.seats()).toEqual([{ tag: "available", slot: 1 }])
+    expect(
+      adapter.accept({
+        kind: "source-state",
+        launchId: "launch-1",
+        controllerNumber: 0,
+        buttons: 1,
+        leftTrigger: 0,
+        rightTrigger: 0,
+        leftStickX: 0,
+        leftStickY: 0,
+        rightStickX: 0,
+        rightStickY: 0,
+      }),
+    ).toEqual({ status: "dropped", reason: "unknown-source" })
+
+    expect(
+      adapter.accept({
+        kind: "source-connected",
+        launchId: "launch-1",
+        controllerNumber: 1,
+      }),
+    ).toEqual({ status: "accepted", slot: 1 })
+  })
+
   it("drops stale-launch and non-gamepad frames", () => {
     const adapter = createSunshineRemoteInputSourceAdapter({
       launchId: "launch-1",
@@ -184,6 +222,40 @@ describe("Sunshine remote input source adapter", () => {
       }).status,
     ).toBe("accepted")
     expect(adapter.forwardedEvents()).toHaveLength(3)
+  })
+
+  it("bounds forwarded state history", () => {
+    const adapter = createSunshineRemoteInputSourceAdapter({
+      launchId: "launch-1",
+      seatCount: 1,
+      maxEventsPerSecond: 10,
+      forwardedEventBufferSize: 2,
+    })
+    adapter.accept({
+      kind: "source-connected",
+      launchId: "launch-1",
+      controllerNumber: 0,
+    })
+
+    for (const buttons of [1, 2, 3]) {
+      adapter.accept({
+        kind: "source-state",
+        launchId: "launch-1",
+        controllerNumber: 0,
+        buttons,
+        leftTrigger: 0,
+        rightTrigger: 0,
+        leftStickX: 0,
+        leftStickY: 0,
+        rightStickX: 0,
+        rightStickY: 0,
+      })
+    }
+
+    expect(adapter.forwardedEvents().map(event => event.frame.buttons)).toEqual([
+      2,
+      3,
+    ])
   })
 
   it("strictly decodes bounded gamepad frames", () => {
