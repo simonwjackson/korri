@@ -105,6 +105,10 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("gamescope-0")
     expect(moduleSource).toContain("require_gamescope_socket")
     expect(moduleSource).toContain("steam_surface_ready")
+    expect(moduleSource).toContain("big_picture_surface_present")
+    expect(moduleSource).toContain("refuse_big_picture_surface \"managed Steam readiness\"")
+    expect(moduleSource).toContain("refuse_big_picture_surface \"AppID $appid launch forwarding\"")
+    expect(moduleSource).toContain("refuse_big_picture_surface \"AppID $appid launch observation\"")
     expect(moduleSource).toContain('[ "$require_gamescope_socket" != "1" ] || [ -S "$gamescope_socket" ]')
     expect(moduleSource).toContain("if steam_surface_ready \\")
     expect(moduleSource).not.toContain('if [ -S "$gamescope_socket" ] \\\n          && printf')
@@ -264,9 +268,13 @@ describe("Steam plugin Nix module", () => {
 
   it("refuses visible Steam Big Picture surfaces even when uimode is desktop", () => {
     expect(moduleSource).toContain("has_big_picture_surface()")
-    expect(moduleSource).toContain("Steam Big Picture Mode")
+    expect(moduleSource).toContain("Steam Big Picture")
+    expect(moduleSource).toContain("Steam Deck")
     expect(moduleSource).toContain(
       "korri-steam-service-run: refusing visible Steam Big Picture surface",
+    )
+    expect(moduleSource).toContain(
+      "korri-steam-app: refusing $phase because Steam Big Picture surface is visible",
     )
   })
 

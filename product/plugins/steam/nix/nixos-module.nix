@@ -114,7 +114,7 @@ let
     has_big_picture_surface() {
       [ -S "$sway_sock" ] || return 1
       SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg -t get_tree 2>/dev/null \
-        | ${pkgs.gnugrep}/bin/grep -qi 'Steam Big Picture Mode'
+        | ${pkgs.gnugrep}/bin/grep -a -E -qi '"name"[[:space:]]*:[[:space:]]*"[^"]*(Steam Big Picture|Big Picture Mode|Big Picture|Steam Deck)'
     }
 
     ${steamServiceExec} &
@@ -758,6 +758,10 @@ EOF
       SWAYSOCK="$sock" ${pkgs.sway}/bin/swaymsg -t get_tree 2>/dev/null || true
     }
 
+    big_picture_surface_present() {
+      sway_tree | ${pkgs.gnugrep}/bin/grep -a -E -qi '"name"[[:space:]]*:[[:space:]]*"[^"]*(Steam Big Picture|Big Picture Mode|Big Picture|Steam Deck)'
+    }
+
     focus_korri_output() {
       sway '[app_id="korri-chromium-kiosk"] focus, fullscreen enable'
       sway '[app_id="^chrome-.*"] focus, fullscreen enable'
@@ -874,6 +878,15 @@ EOF
       control_steam_service start
     }
 
+    refuse_big_picture_surface() {
+      phase="$1"
+      if big_picture_surface_present; then
+        echo "korri-steam-app: refusing $phase because Steam Big Picture surface is visible" >&2
+        control_steam_service stop >/dev/null 2>&1 || true
+        exit 77
+      fi
+    }
+
     cleanup() {
       [ "$cleanup_done" -eq 0 ] || return 0
       cleanup_done=1
@@ -917,6 +930,7 @@ EOF
     wait_for_steam_ready() {
       ready_deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + service_ready_timeout ))
       while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$ready_deadline" ]; do
+        refuse_big_picture_surface "managed Steam readiness"
         ready_log=""
         if [ -f "$console_log" ]; then
           if [ "$service_was_active" -eq 1 ]; then
@@ -967,6 +981,7 @@ EOF
     # console-log prompts.
     focus_korri_output
     hide_steam_hat
+    refuse_big_picture_surface "AppID $appid launch forwarding"
     if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs} -applaunch "$appid" >/dev/null; then
       echo "korri-steam-app: timed out forwarding AppID $appid to Steam" >&2
       exit 125
@@ -994,6 +1009,7 @@ EOF
     deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + launch_timeout ))
     saw_added=0
     while true; do
+      refuse_big_picture_surface "AppID $appid launch observation"
       new_log=""
       if [ -f "$console_log" ]; then
         current_mark="$(${pkgs.coreutils}/bin/wc -c < "$console_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
