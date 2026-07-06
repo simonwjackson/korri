@@ -103,6 +103,7 @@ interface MoonlightLaunchPolicyView {
 export interface MoonlightStreamRuntimeOptions {
   readonly socketPath: string
   readonly adaptive?: StartStreamRuntimeSessionOptions["adaptive"]
+  readonly outage?: StartStreamRuntimeSessionOptions["outage"]
   readonly onRecoveryEvent?: StartStreamRuntimeSessionOptions["onRecoveryEvent"]
 }
 
@@ -343,6 +344,7 @@ function registerMoonlightControlSession(
   const runtimeSessionPromise = startStreamRuntimeSession({
     socketPath: control.socketPath,
     ...runtimeSessionAdaptiveOptions(adaptiveBoundaries),
+    ...runtimeSessionOutageOptions(),
     onRecoveryEvent: event => {
       console.warn("korri stream recovery:", JSON.stringify(event))
     },
@@ -448,6 +450,35 @@ function runtimeSessionAdaptiveOptions(
       isStreaming: () => true,
       onEvent: event => {
         console.info("korri stream adaptive:", JSON.stringify(event))
+      },
+    },
+  }
+}
+
+function runtimeSessionOutageOptions(): Pick<
+  MoonlightStreamRuntimeOptions,
+  "outage"
+> {
+  const env = globalThis.Bun?.env ?? process.env
+  const enabled =
+    env.KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED ??
+    env.KORRI_STREAM_ADAPTIVE_ENABLED
+  if (enabled !== "1" && enabled !== "true") return {}
+  const tickIntervalMs = parseFiniteEnv(
+    env.KORRI_STREAM_OUTAGE_TICK_MS,
+    1_000,
+  )
+  const lossAfterMs = parseFiniteEnv(
+    env.KORRI_STREAM_OUTAGE_LOSS_AFTER_MS,
+    2_000,
+  )
+  return {
+    outage: {
+      enabled: true,
+      tickIntervalMs,
+      lossAfterMs,
+      onEvent: event => {
+        console.warn("korri stream outage:", JSON.stringify(event))
       },
     },
   }

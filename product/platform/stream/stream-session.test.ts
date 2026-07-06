@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import type { StreamControlSession } from "@platform/stream-control/stream-control-session"
 import type { RuntimeRecoveryControlPort } from "./runtime-recovery-supervisor"
 import type { StreamAdaptiveRunnerEvent } from "./stream-adaptive-runner"
+import type { StreamOutageEvent } from "./stream-outage-supervisor"
 import {
   createActiveStreamControlSessionRegistry,
   type StreamRuntimeSettings,
@@ -272,6 +273,121 @@ describe("startStreamRuntimeSession", () => {
       pinned: 20_000,
     })
 
+    runtime.close()
+  })
+
+  it("surfaces outage hold and unavailable re-establish without pretending recovery", async () => {
+    const harness = makeSession()
+    const events: StreamOutageEvent[] = []
+    let now = 1_000
+    const runtime = await startStreamRuntimeSession({
+      session: harness.session,
+      settingsFromState: () => settings,
+      recoveryPort: makeRecoveryPort().port,
+      onRecoveryEvent: () => {},
+      outage: {
+        enabled: true,
+        lossAfterMs: 1,
+        onEvent: event => events.push(event),
+      },
+      nowMs: () => now,
+    })
+
+    harness.emit({
+      name: "quality.sample",
+      sample: {
+        seq: 1,
+        sampledAtMs: now,
+        deliveredBitrateKbps: 0,
+        requestedBitrateKbps: 20_000,
+        deliveredFps: 0,
+        requestedFps: 60,
+      },
+    })
+    await runtime.outage?.tick()
+    now += 2
+    await runtime.outage?.tick()
+
+    harness.emit({
+      name: "quality.sample",
+      sample: {
+        seq: 2,
+        sampledAtMs: now,
+        deliveredBitrateKbps: 20_000,
+        requestedBitrateKbps: 20_000,
+        deliveredFps: 60,
+        requestedFps: 60,
+      },
+    })
+    await runtime.outage?.tick()
+
+    expect(events).toEqual([
+      { kind: "outage-detected" },
+      { kind: "reconnecting" },
+      {
+        kind: "reconnect-failed",
+        message: "stream re-establish hook unavailable",
+      },
+    ])
+    expect(runtime.outage?.supervisor.state()).toBe("hold")
+    runtime.close()
+  })
+
+  it("marks outage resumed after an explicit re-establish hook succeeds", async () => {
+    const harness = makeSession()
+    const events: StreamOutageEvent[] = []
+    const reestablishCalls: string[] = []
+    let now = 1_000
+    const runtime = await startStreamRuntimeSession({
+      session: harness.session,
+      settingsFromState: () => settings,
+      recoveryPort: makeRecoveryPort().port,
+      onRecoveryEvent: () => {},
+      outage: {
+        enabled: true,
+        lossAfterMs: 1,
+        onEvent: event => events.push(event),
+        reestablish: async () => {
+          reestablishCalls.push("reestablish")
+        },
+      },
+      nowMs: () => now,
+    })
+
+    harness.emit({
+      name: "quality.sample",
+      sample: {
+        seq: 1,
+        sampledAtMs: now,
+        deliveredBitrateKbps: 0,
+        requestedBitrateKbps: 20_000,
+        deliveredFps: 0,
+        requestedFps: 60,
+      },
+    })
+    await runtime.outage?.tick()
+    now += 2
+    await runtime.outage?.tick()
+    harness.emit({
+      name: "quality.sample",
+      sample: {
+        seq: 2,
+        sampledAtMs: now,
+        deliveredBitrateKbps: 20_000,
+        requestedBitrateKbps: 20_000,
+        deliveredFps: 60,
+        requestedFps: 60,
+      },
+    })
+    await runtime.outage?.tick()
+
+    expect(reestablishCalls).toEqual(["reestablish"])
+    expect(events).toEqual([
+      { kind: "outage-detected" },
+      { kind: "reconnecting" },
+      { kind: "resumed" },
+    ])
+    expect(runtime.outage?.supervisor.state()).toBe("connected")
     runtime.close()
   })
 

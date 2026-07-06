@@ -21,6 +21,11 @@ import {
   type StreamHealthMonitor,
 } from "./stream-health-monitor"
 import { streamHealthSamplePortFromSession } from "./stream-health-session"
+import {
+  createStreamOutageSupervisor,
+  type StreamOutageEvent,
+  type StreamOutageSupervisor,
+} from "./stream-outage-supervisor"
 
 export interface ActiveStreamControlSessionRecord {
   readonly sessionId: string
@@ -60,6 +65,13 @@ export interface StartStreamRuntimeSessionOptions {
     readonly onEvent: (event: StreamAdaptiveRunnerEvent) => void
     readonly tickIntervalMs?: number
   }
+  readonly outage?: {
+    readonly enabled: boolean
+    readonly onEvent: (event: StreamOutageEvent) => void
+    readonly reestablish?: () => Promise<void>
+    readonly tickIntervalMs?: number
+    readonly lossAfterMs?: number
+  }
   readonly nowMs?: () => number
 }
 
@@ -75,12 +87,19 @@ export interface StreamAdaptiveRuntimeControl {
   readonly dryRun: (boundaries?: StreamBoundaries) => StreamAdaptiveDecision
 }
 
+export interface StreamOutageRuntime {
+  readonly supervisor: StreamOutageSupervisor
+  readonly tick: () => Promise<void>
+  readonly close: () => void
+}
+
 export interface StreamRuntimeSession {
   readonly settings: StreamRuntimeSettings
   readonly health: StreamHealthMonitor
   readonly recovery?: RuntimeRecoverySupervisor
   readonly adaptive?: StreamAdaptiveRunner
   readonly adaptiveControl?: StreamAdaptiveRuntimeControl
+  readonly outage?: StreamOutageRuntime
   readonly close: () => void
 }
 
@@ -131,6 +150,7 @@ export async function startStreamRuntimeSession(
       health,
       recovery,
     })
+    const outageRuntime = startOutageRuntime({ options, health })
     let closed = false
     return {
       settings,
@@ -138,10 +158,12 @@ export async function startStreamRuntimeSession(
       ...(recovery ? { recovery } : {}),
       ...(adaptiveRuntime ? { adaptive: adaptiveRuntime.runner } : {}),
       ...(adaptiveRuntime ? { adaptiveControl: adaptiveRuntime.control } : {}),
+      ...(outageRuntime ? { outage: outageRuntime } : {}),
       close: () => {
         if (closed) return
         closed = true
         adaptiveRuntime?.runner.close()
+        outageRuntime?.close()
         recovery?.close()
         health.close()
         session.close()
@@ -150,6 +172,70 @@ export async function startStreamRuntimeSession(
   } catch (error) {
     session.close()
     throw error
+  }
+}
+
+function startOutageRuntime(input: {
+  readonly options: StartStreamRuntimeSessionOptions
+  readonly health: StreamHealthMonitor
+}): StreamOutageRuntime | undefined {
+  const outage = input.options.outage
+  if (!outage?.enabled) return undefined
+
+  const nowMs = input.options.nowMs ?? (() => Date.now())
+  const supervisor = createStreamOutageSupervisor({
+    onEvent: outage.onEvent,
+    ...(outage.lossAfterMs !== undefined
+      ? { lossAfterMs: outage.lossAfterMs }
+      : {}),
+  })
+  let closed = false
+  let reestablishing = false
+  const interval =
+    outage.tickIntervalMs !== undefined
+      ? setInterval(() => {
+          void tick()
+        }, outage.tickIntervalMs)
+      : undefined
+
+  async function tick(): Promise<void> {
+    if (closed) return
+    const summary = input.health.latestSummary(nowMs())
+    const action = supervisor.observe(nowMs(), {
+      freshness: summary.freshness,
+      bitrateDeliveryRatio: summary.bitrateDeliveryRatio,
+      fpsDeliveryRatio: summary.fpsDeliveryRatio,
+      frameDropFraction: summary.frameDropFraction,
+    })
+    if (action?.kind !== "re-establish") return
+    if (reestablishing) return
+    if (!outage.reestablish) {
+      supervisor.markReconnectFailed("stream re-establish hook unavailable")
+      return
+    }
+    reestablishing = true
+    try {
+      await outage.reestablish()
+      if (!closed) supervisor.markReestablished()
+    } catch (error) {
+      if (!closed) {
+        supervisor.markReconnectFailed(
+          error instanceof Error ? error.message : String(error),
+        )
+      }
+    } finally {
+      reestablishing = false
+    }
+  }
+
+  return {
+    supervisor,
+    tick,
+    close: () => {
+      if (closed) return
+      closed = true
+      if (interval !== undefined) clearInterval(interval)
+    },
   }
 }
 
