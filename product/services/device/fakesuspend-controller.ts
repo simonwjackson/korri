@@ -1,18 +1,18 @@
 import {
+  chmod,
+  mkdir,
   readdir,
   readFile,
   rename,
+  rm,
   stat,
   writeFile,
-  mkdir,
-  chmod,
-  rm,
 } from "node:fs/promises"
 import { join } from "node:path"
 import {
   probeSessiondManagedLaunchStatus,
-  terminateSessiondManagedLaunch,
   type SessiondManagedLaunchClientOptions,
+  terminateSessiondManagedLaunch,
 } from "@platform/library/sessiond-managed-launch-client"
 
 export type FakeSuspendAction = "toggle" | "suspend" | "resume"

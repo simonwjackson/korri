@@ -3,9 +3,9 @@ import { mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
-  launchFailureExitCode,
   type LaunchResult,
   type LaunchSpec,
+  launchFailureExitCode,
 } from "@platform/library/launcher"
 import type { SessiondManagedLaunchEvent } from "@platform/library/sessiond-managed-launch-protocol"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
