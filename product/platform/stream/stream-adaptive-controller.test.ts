@@ -39,15 +39,24 @@ const current = {
 }
 
 describe("computeStreamAdaptiveDecision", () => {
-  it("stays dormant when health is stale or absent", () => {
-    expect(
-      computeStreamAdaptiveDecision({
-        summary: summary({ freshness: "stale" }),
-        current,
-        objectiveBias: 0.5,
-      }),
-    ).toEqual({ kind: "dormant", reason: "stale" })
+  it("sheds to manual-style rescue when health goes stale", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({ freshness: "stale" }),
+      current,
+      objectiveBias: 0.5,
+    })
 
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.mode).toBe("shed")
+    expect(decision.target).toMatchObject({
+      bitrateKbps: 500,
+      fps: 30,
+      resolution: { width: 640, height: 360 },
+    })
+  })
+
+  it("stays dormant when health is absent", () => {
     expect(
       computeStreamAdaptiveDecision({
         summary: summary({ freshness: "no-data", sampleCount: 0 }),
@@ -264,7 +273,7 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
     expect(decision.kind).toBe("target")
     if (decision.kind !== "target") throw new Error("expected target")
     expect(decision.mode).toBe("shed")
-    expect(decision.target.bitrateKbps).toBe(2_500)
+    expect(decision.target.bitrateKbps).toBe(500)
     expect(decision.target.fps).toBe(30)
     expect(decision.target.resolution).toEqual({ width: 640, height: 360 })
   })
@@ -371,7 +380,7 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
   it("keeps emergency defaults within usable bitrate fps and resolution floors", () => {
     const decision = computeStreamAdaptiveDecision({
       summary: summary({ bitrateDeliveryRatio: 0.05, rttMs: numeric(220, "rising") }),
-      current: { ...current, bitrateKbps: 2_000, fps: 30, resolution: { width: 640, height: 360 } },
+      current: { ...current, bitrateKbps: 500, fps: 30, resolution: { width: 640, height: 360 } },
       objectiveBias: 0.5,
       boundaries: { levers: {}, outcomes: {}, lean: 0.5 },
     })

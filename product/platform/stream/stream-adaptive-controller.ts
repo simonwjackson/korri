@@ -80,7 +80,7 @@ export interface StreamAdaptivePressure {
 }
 
 const DEFAULTS = {
-  minBitrateKbps: 1_500,
+  minBitrateKbps: 500,
   maxBitrateKbps: 150_000,
   maxFps: 120,
   bitrateDeadbandFraction: 0.05,
@@ -92,8 +92,8 @@ const DEFAULTS = {
   coldStartSampleCount: 3,
   coldStartBitrateKbps: 8_000,
   coldStartIncreaseFraction: 0.28,
-  playableBitrateKbps: 3_500,
-  panicBitrateKbps: 2_500,
+  playableBitrateKbps: 1_500,
+  panicBitrateKbps: 500,
   playableFps: 30,
   playableResolutionWidth: 640,
 }
@@ -109,15 +109,12 @@ export function computeStreamAdaptiveDecision(
   if (summary.freshness === "no-data") {
     return { kind: "dormant", reason: "no-data" }
   }
-  if (summary.freshness === "stale") {
-    return { kind: "dormant", reason: "stale" }
-  }
 
   const params = { ...DEFAULTS, ...(input.params ?? {}) }
   const boundaries = input.boundaries
   const objectiveBias = clamp(boundaries?.lean ?? input.objectiveBias, 0, 1)
   const pressure = computePressure(summary)
-  const mode = modeFor(input, pressure, params)
+  const mode = summary.freshness === "stale" ? "shed" : modeFor(input, pressure, params)
   const target: MutableTarget = {}
   let bindingConstraint: StreamAdaptiveBindingConstraint | undefined
 
@@ -257,6 +254,7 @@ function applyPlayabilityShed(
 ): void {
   const { current, summary } = input
   const severe =
+    summary.freshness === "stale" ||
     pressure.bandwidth >= 0.85 ||
     pressure.latency >= 0.75 ||
     (summary.bitrateDeliveryRatio ?? 1) <= 0.25 ||

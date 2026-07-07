@@ -104,15 +104,17 @@ describe("createStreamAdaptiveRunner", () => {
     expect(events).toContainEqual({ kind: "dormant", reason: "disabled" })
   })
 
-  it("does not dispatch when health is stale", async () => {
+  it("dispatches the rescue burst when health is stale", async () => {
     const { runner, calls, events } = makeHarness({
       health: summary({ freshness: "stale" }),
     })
 
     await runner.tick()
 
-    expect(calls).toEqual([])
-    expect(events).toContainEqual({ kind: "dormant", reason: "stale" })
+    expect(calls).toEqual(["bitrate:500", "fps:30", "resolution:640x360"])
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "decision", mode: "shed" }),
+    )
   })
 
   it("does not dispatch while a mutation is pending", async () => {
