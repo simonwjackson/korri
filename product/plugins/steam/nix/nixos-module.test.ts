@@ -101,6 +101,28 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("SupplementaryGroups = [ steamInputGroup ]")
   })
 
+  it("guards Home/Guide at the Steam process boundary", () => {
+    expect(moduleSource).toContain("steamInputGuardEnv = lib.escapeShellArgs")
+    expect(moduleSource).toContain('"KORRI_STEAM_INPUT_GUARD=1"')
+    expect(moduleSource).toContain(
+      '"LD_PRELOAD=${cfg.package}/lib/libkorri-steam-input-guard.so"',
+    )
+    expect(moduleSource).toContain(
+      "XDG_CURRENT_DESKTOP=sway ${steamInputGuardEnv} ${steamLauncher}/bin/korri-steam-guest",
+    )
+    expect(moduleSource).toContain(
+      "${pkgs.coreutils}/bin/env ${steamInputGuardEnv} ${steamLauncher}/bin/korri-steam-guest",
+    )
+    expect(moduleSource).toContain(
+      "direct install/forward stubs inherit the same policy",
+    )
+    expect(moduleSource).toContain(
+      "export KORRI_STEAM_INPUT_GUARD=\"''${KORRI_STEAM_INPUT_GUARD:-1}\"",
+    )
+    expect(moduleSource).toContain("EVIOCGRAB attempts")
+    expect(moduleSource).not.toContain("gamepad:\n        button: Guide")
+  })
+
   it("requires managed Steam readiness before forwarding an AppID", () => {
     expect(moduleSource).toContain("wait_for_steam_ready")
     expect(moduleSource).toContain("GAMESCOPE_WAYLAND_DISPLAY")

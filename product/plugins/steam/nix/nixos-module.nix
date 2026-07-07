@@ -63,6 +63,10 @@ let
     ++ (lib.optional cfg.useGamepadUi "-gamepadui")
     ++ cfg.defaultArgs
   );
+  steamInputGuardEnv = lib.escapeShellArgs [
+    "KORRI_STEAM_INPUT_GUARD=1"
+    "LD_PRELOAD=${cfg.package}/lib/libkorri-steam-input-guard.so"
+  ];
   steamServiceExec =
     if cfg.presentationMode == "gamescope" then
       # Keep Steam contained in Gamescope, but hide Gamescope's SteamOS/Gamepad
@@ -70,9 +74,9 @@ let
       # Gamescope-owned Xwayland DISPLAY, but it should not see Gamescope's
       # Wayland/libei integration path that pushes native ARM64 Steam toward
       # gamepadui.
-      "${pkgs.gamescope}/bin/gamescope ${gamescopeArgs} -- ${pkgs.coreutils}/bin/env -u GAMESCOPE_WAYLAND_DISPLAY -u LIBEI_SOCKET -u STEAM_GAME_DISPLAY_0 -u ENABLE_GAMESCOPE_WSI -u WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}"
+      "${pkgs.gamescope}/bin/gamescope ${gamescopeArgs} -- ${pkgs.coreutils}/bin/env -u GAMESCOPE_WAYLAND_DISPLAY -u LIBEI_SOCKET -u STEAM_GAME_DISPLAY_0 -u ENABLE_GAMESCOPE_WSI -u WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway ${steamInputGuardEnv} ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}"
     else
-      "${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}";
+      "${pkgs.coreutils}/bin/env ${steamInputGuardEnv} ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}";
 
   steamServiceRunner = pkgs.writeShellScriptBin "korri-steam-service-run" ''
     set -u
@@ -549,6 +553,18 @@ EOF
       esac
     done
     set -- "''${filtered[@]}"
+
+    # Steam and Steam-launched helpers must never receive or own Korri's
+    # privileged Home/Guide input. Keep the physical mapping unchanged for
+    # inputd, but guard the Steam process boundary against BTN_MODE reads and
+    # EVIOCGRAB attempts. Do this in the launcher as well as the managed service
+    # command so direct install/forward stubs inherit the same policy.
+    export KORRI_STEAM_INPUT_GUARD="''${KORRI_STEAM_INPUT_GUARD:-1}"
+    steam_input_guard=${lib.escapeShellArg "${cfg.package}/lib/libkorri-steam-input-guard.so"}
+    case ":''${LD_PRELOAD:-}:" in
+      *:"$steam_input_guard":*) ;;
+      *) export LD_PRELOAD="$steam_input_guard''${LD_PRELOAD:+:$LD_PRELOAD}" ;;
+    esac
 
     # buildFHSEnv/bwrap tries to enter the caller's cwd. A root shell or other
     # unreadable cwd fails before steam-guest-run can cd, so move into Steam's

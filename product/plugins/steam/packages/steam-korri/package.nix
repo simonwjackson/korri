@@ -1,4 +1,5 @@
 { lib
+, stdenv
 , stdenvNoCC
 , callPackage
 , symlinkJoin
@@ -72,6 +73,28 @@ let
   resourceNames = map (resource: resource.name) manifest.resources;
   isAarch64 = stdenvNoCC.hostPlatform.system == "aarch64-linux";
 
+  steamInputGuard = stdenv.mkDerivation {
+    pname = "${manifest.pname}-input-guard";
+    version = manifest.version;
+
+    src = ./src/steam-input-guard.c;
+    dontUnpack = true;
+
+    buildPhase = ''
+      runHook preBuild
+      $CC -shared -fPIC -Wall -Wextra -O2 \
+        -o libkorri-steam-input-guard.so "$src" -ldl
+      runHook postBuild
+    '';
+
+    installPhase = ''
+      runHook preInstall
+      install -Dm755 libkorri-steam-input-guard.so \
+        "$out/lib/libkorri-steam-input-guard.so"
+      runHook postInstall
+    '';
+  };
+
   steamHelpers = stdenvNoCC.mkDerivation {
     pname = "${manifest.pname}-helpers";
     version = manifest.version;
@@ -129,7 +152,7 @@ let
       steam-arm64-cdn-base-url=${manifest.arm64Bootstrap.cdnBaseUrl}
       proton-compatibility-tool-name=${manifest.arm64Bootstrap.protonCompatibilityToolName}
       proton-compatibility-tool-link=${manifest.arm64Bootstrap.protonCompatibilityToolLink}
-      package-entry-points=bin/steam-arm64-bootstrap bin/steam-arm64-seed bin/steam-guest-native bin/steam-guest-runtime-prep bin/steam-guest-run${lib.optionalString isAarch64 " bin/steam-arm64-fhs"}
+      package-entry-points=bin/steam-arm64-bootstrap bin/steam-arm64-seed bin/steam-guest-native bin/steam-guest-runtime-prep bin/steam-guest-run lib/libkorri-steam-input-guard.so${lib.optionalString isAarch64 " bin/steam-arm64-fhs"}
       steam-client-launcher=guest-native-helper
       steam-runtime-prep-helper=bin/steam-guest-runtime-prep
       steam-run-capsule=${if isAarch64 then "bin/steam-arm64-fhs" else "aarch64-only"}
@@ -272,11 +295,12 @@ let
 in
 symlinkJoin {
   name = "${manifest.pname}-${manifest.version}";
-  paths = [ steamHelpers ] ++ lib.optionals isAarch64 [ steamFhs ];
+  paths = [ steamHelpers steamInputGuard ] ++ lib.optionals isAarch64 [ steamFhs ];
 
   passthru = {
     rocknixSteamManifest = manifest;
     rocknixSteamHelpers = steamHelpers;
+    rocknixSteamInputGuard = steamInputGuard;
     rocknixSteamFhs = if isAarch64 then steamFhs else null;
     rocknixSteamHasRunCapsule = isAarch64;
   };

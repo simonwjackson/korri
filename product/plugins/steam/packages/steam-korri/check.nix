@@ -19,6 +19,7 @@ let
   runtimePrepScript = builtins.readFile ./scripts/steam-guest-runtime-prep;
   guestRunScript = builtins.readFile ./scripts/steam-guest-run;
   packageSource = builtins.readFile ./package.nix;
+  inputGuardSource = builtins.readFile ./src/steam-input-guard.c;
 
   check = message: assertion: { inherit message assertion; };
   checks = [
@@ -29,6 +30,7 @@ let
       && (manifest.korriVendoredFrom.rev or "") != ""
     ))
     (check "steam-korri exposes helper derivation passthru" (pkg ? rocknixSteamHelpers))
+    (check "steam-korri exposes the Steam-only input guard passthru" (pkg ? rocknixSteamInputGuard))
     (check "steam-korri run-capsule passthru matches the host platform" (
       (pkg.rocknixSteamHasRunCapsule or null) == isAarch64
     ))
@@ -94,6 +96,12 @@ runtime_pressure_vessel_roots'' runtimePrepScript)
     (check "steam-korri FHS target package list carries util-linux/taskset" (
       lib.hasInfix "util-linux" packageSource
     ))
+    (check "steam-korri input guard reserves Home without remapping device maps" (
+      lib.hasInfix "BTN_MODE" inputGuardSource
+      && lib.hasInfix "EVIOCGRAB" inputGuardSource
+      && lib.hasInfix "SYN_REPORT" inputGuardSource
+      && lib.hasInfix "KORRI_STEAM_INPUT_GUARD" inputGuardSource
+    ))
   ];
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;
@@ -105,7 +113,7 @@ if failures != [ ] then
 else
   pkgs.runCommand "steam-korri-check"
     {
-      nativeBuildInputs = [ pkgs.coreutils pkgs.gnugrep ];
+      nativeBuildInputs = [ pkgs.binutils pkgs.coreutils pkgs.gnugrep ];
       passthru = {
         inherit manifest;
       };
@@ -131,6 +139,19 @@ else
 
       test -f "$manifest_file" || {
         echo "built Steam package missing bootstrap manifest: $manifest_file" >&2
+        exit 1
+      }
+
+      test -x "$package_out/lib/libkorri-steam-input-guard.so" || {
+        echo "built Steam package missing input guard shared object" >&2
+        exit 1
+      }
+      nm -D "$package_out/lib/libkorri-steam-input-guard.so" | grep -q ' T read$' || {
+        echo "Steam input guard must interpose read" >&2
+        exit 1
+      }
+      nm -D "$package_out/lib/libkorri-steam-input-guard.so" | grep -q ' T ioctl$' || {
+        echo "Steam input guard must interpose ioctl" >&2
         exit 1
       }
 
