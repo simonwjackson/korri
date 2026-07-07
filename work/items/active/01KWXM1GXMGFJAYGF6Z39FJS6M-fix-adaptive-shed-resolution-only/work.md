@@ -3,7 +3,7 @@ id: 01KWXM1GXMGFJAYGF6Z39FJS6M
 slug: fix-adaptive-shed-resolution-only
 title: Fix adaptive shed stopping after resolution-only rescue
 type: fix
-status: active
+status: completed
 created: 2026-07-07
 source: live-validation
 priority: high

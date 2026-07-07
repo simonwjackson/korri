@@ -1,7 +1,7 @@
 ---
 title: fix: Complete adaptive shed after resolution-only rescue
 type: fix
-status: active
+status: completed
 date: 2026-07-07
 origin: work/items/active/01KWXM1GXMGFJAYGF6Z39FJS6M-fix-adaptive-shed-resolution-only/item.md
 deepened: 2026-07-07
