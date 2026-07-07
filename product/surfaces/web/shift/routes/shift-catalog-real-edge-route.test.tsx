@@ -94,6 +94,13 @@ function labGame(id: string, title: string): CatalogEntry {
     releases: [{ id: "default", system: "steam", launchable: true }],
     launchable: true,
     metadata: { name: title, genre: ["Adventure"], developer: "Lab Fixtures" },
+    // Played so the games land in the home's "Recent" section (an unplayed set
+    // would surface only a single Random pick).
+    playStats: {
+      lastPlayed: new Date("2026-07-01T00:00:00.000Z"),
+      playCount: 1,
+      totalPlaytimeSeconds: 300,
+    },
     media: [
       {
         role: "tile",

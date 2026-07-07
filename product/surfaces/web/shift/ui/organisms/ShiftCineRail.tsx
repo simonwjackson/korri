@@ -16,6 +16,45 @@ export interface ShiftCineRailGame {
   readonly tileArtAspectRatio?: string
   /** Discovery/recommended pick — surfaces a "Fresh" marker on the tile. */
   readonly fresh?: boolean
+  /** Section this game belongs to; consecutive games sharing a section are
+   * grouped under one caption below the group. */
+  readonly section?: string
+}
+
+interface RailTileRef {
+  readonly game: ShiftCineRailGame
+  readonly index: number
+}
+interface RailGroup {
+  readonly key: string
+  readonly label?: string
+  readonly tiles: readonly RailTileRef[]
+}
+
+/** Group consecutive games by their `section`, preserving each game's absolute
+ * rail index (so focus/centering/image-windowing stay index-driven). Games with
+ * no section coalesce into unlabeled groups. */
+export function groupRailGames(
+  games: readonly ShiftCineRailGame[],
+): readonly RailGroup[] {
+  const groups: {
+    key: string
+    label?: string
+    tiles: RailTileRef[]
+  }[] = []
+  games.forEach((game, index) => {
+    const last = groups.at(-1)
+    if (last && last.label === game.section) {
+      last.tiles.push({ game, index })
+    } else {
+      groups.push({
+        key: `${game.section ?? "_"}-${index}`,
+        ...(game.section !== undefined ? { label: game.section } : {}),
+        tiles: [{ game, index }],
+      })
+    }
+  })
+  return groups
 }
 
 /**
@@ -26,6 +65,11 @@ export interface ShiftCineRailGame {
  * optional `cap` renders after the game tiles for a trailing non-game entry
  * (e.g. the Library affordance); it is a self-contained focusable node, so the
  * rail stays purely presentational.
+ *
+ * When any game carries a `section`, the rail groups consecutive same-section
+ * games under a caption (rendered below the group); otherwise it lays the tiles
+ * out flat exactly as before. The `cap` is aligned to the game tiles via a
+ * hidden caption-height spacer in sectioned mode.
  */
 export function ShiftCineRail({
   games,
@@ -46,6 +90,26 @@ export function ShiftCineRail({
   readonly onTileActivate: (index: number) => void
   readonly cap?: ReactNode
 }) {
+  const renderTile = (game: ShiftCineRailGame, i: number) => (
+    <ShiftCineTile
+      key={game.id}
+      index={i}
+      title={game.title}
+      artUrl={game.tileArtUrl}
+      aspectRatio={game.tileArtAspectRatio}
+      fresh={game.fresh}
+      focused={i === index}
+      renderImage={
+        !imageWindow || (i >= imageWindow.start && i <= imageWindow.end)
+      }
+      onFocus={() => onTileFocus(i)}
+      onActivate={() => onTileActivate(i)}
+    />
+  )
+
+  const groups = groupRailGames(games)
+  const sectioned = groups.some(group => group.label !== undefined)
+
   return (
     <div
       className="shift-cine-rail"
@@ -53,27 +117,58 @@ export function ShiftCineRail({
     >
       <motion.div
         className="shift-cine-track"
+        data-sectioned={sectioned || undefined}
         ref={trackRef}
         animate={{ x: trackX }}
         transition={SPRING}
       >
-        {games.map((entry, i) => (
-          <ShiftCineTile
-            key={entry.id}
-            index={i}
-            title={entry.title}
-            artUrl={entry.tileArtUrl}
-            aspectRatio={entry.tileArtAspectRatio}
-            fresh={entry.fresh}
-            focused={i === index}
-            renderImage={
-              !imageWindow || (i >= imageWindow.start && i <= imageWindow.end)
-            }
-            onFocus={() => onTileFocus(i)}
-            onActivate={() => onTileActivate(i)}
-          />
-        ))}
-        {cap}
+        {sectioned ? (
+          <>
+            {groups.map(group => (
+              <div
+                key={group.key}
+                className="shift-cine-rail-group"
+                data-active={
+                  group.tiles.some(tile => tile.index === index) || undefined
+                }
+              >
+                <div className="shift-cine-rail-group-tiles">
+                  {group.tiles.map(tile => renderTile(tile.game, tile.index))}
+                </div>
+                {group.label ? (
+                  <div className="shift-cine-rail-group-label">
+                    {group.label}
+                  </div>
+                ) : (
+                  <div
+                    className="shift-cine-rail-group-label"
+                    data-spacer
+                    aria-hidden
+                  >
+                    {"\u00A0"}
+                  </div>
+                )}
+              </div>
+            ))}
+            {cap ? (
+              <div className="shift-cine-rail-group">
+                <div className="shift-cine-rail-group-tiles">{cap}</div>
+                <div
+                  className="shift-cine-rail-group-label"
+                  data-spacer
+                  aria-hidden
+                >
+                  {"\u00A0"}
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {games.map((game, i) => renderTile(game, i))}
+            {cap}
+          </>
+        )}
       </motion.div>
     </div>
   )

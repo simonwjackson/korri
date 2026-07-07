@@ -1,274 +1,293 @@
-# Institutional Learnings — `@korri:remap` Refactor Planning
+# Institutional Learnings: Korri Stream-Quality Follow-Up
 
 ## Search Context
-- **Feature/Task**: Refactor the just-landed CDP input bridge API into a general launch-scoped `@korri:remap` launch companion. Preserve strong isolation, adopt the `launch.with` provider-map convention used by gamescope, hide CDP/Chrome implementation details, and support multi-controller bindings + gamepad-to-keyboard / gamepad-to-gamepad outputs.
-- **Keywords Used**: plugin composition, launch lifecycle, launch.with, provider-map, launch companion, session-lifecycle-hook, input bridge, gamescope, browser runtime, CDP, isolation, uinput, controller, gamepad, sessiond, cascade policy, explicit intent
-- **Files Scanned**: 47 files across `docs/solutions/{architecture-patterns,design-patterns,best-practices,integration-issues,runtime-errors,tooling-decisions,workflow-issues}` plus live plugin source
-- **Relevant Matches**: 9 files
+
+- **Feature/Task**: Stream-quality product follow-up — floor/startup/ceiling CLI grammar, launch startup profile, preflight launch-quality probe, health-driven/handoff-aware downshift. Covers Moonlight/Sunshine runtime stream settings, adaptive controller design, CLI surfaces, network shaping, stream health telemetry, resolution/FPS launch envelope, and related validation runbooks.
+- **Keywords Used**: stream-control, moonlight, sunshine, bitrate, fps, resolution, adaptive, preflight, handoff, downshift, cli-contract, quality-ladder, health-window, panic-bitrate, emergency, cascade-policy, gamescope, runtime-settings, korrid-device-state, validation
+- **Files Scanned**: ~35 across `docs/solutions/`, `docs/acceptance/`, `docs/research/`, parking-lot items, and active work items
+- **Relevant Matches**: 15 high-relevance sources
 
 ---
 
 ## Critical Patterns
 
-`docs/solutions/patterns/critical-patterns.md` does not exist in this repo.
+No `docs/solutions/patterns/critical-patterns.md` exists in this repo.
 
 ---
 
 ## Relevant Learnings
 
-### 1. Gamescope as Plugin-Owned Composition (`launch.with` is the canonical companion convention)
-- **File**: `docs/solutions/architecture-patterns/gamescope-as-plugin-owned-composition-2026-06-17.md`
-- **Module**: plugins + launch-composition + nix-composition
-- **Problem Type**: `architecture_boundary`
-- **Relevance**: `@korri:remap` must use exactly this convention. This is the team's documented and landed pattern for launch companions — the gamescope plugin is the reference implementation.
-- **Key Insight**:
+### 1. Runtime Settings Protocol Contract — the authoritative source of truth
 
-  The platform owns: generic provider maps, plugin registries, launch companion dispatch, session lifecycle hook points, and structured diagnostics.
-
-  The plugin owns: the provider id, the policy payload shape, the launch-wrapping behaviour, the runtime-control protocol, and its Nix artifacts.
-
-  Config authors compose through `launch.with` entries keyed by provider id:
-
-  ```yaml
-  launch:
-    with:
-      "@korri:gamescope":
-        enable: true
-        backend:
-          type: wayland
-  ```
-
-  The platform decodes that map generically. Provider-specific validation and folding belong to the enabled plugin. **Generic Korri code (platform, services, apps, themes, Nix modules) must not name the plugin.**
-
-  When an authored launch references a provider that is absent, disabled, or rejects its payload, dry-run and actual launch return structured `LaunchCompanionDiagnostic` before process spawn. The `composeLaunchCompanions` function in `product/platform/plugin/launch-companion.ts` is the dispatch surface — it already handles `PluginMissing`, `PluginDisabled`, `CapabilityMissing`, `OperationFailed`, and `InvalidOperationResult` with typed diagnostics.
-
-  **The current CDP bridge uses `launchMetadata.annotations["@korri:cdp-input-bridge"]`** — not `launch.with`. The refactor to `@korri:remap` is specifically about migrating from the annotations-at-runtime pattern to the `launch.with` config-layer pattern. This is a meaningful seam change: `launch.with` entries are evaluated at compose time (preflight, dry-run) while annotations are only read at `afterChildRunning`.
-
-  Keep multi-plugin control coordination out of examples until Korri has a generic authored-control model; authors express desired plugin composition directly.
-
-- **Severity**: high
+- **File**: `docs/acceptance/runtime-settings-protocol-contract.md`
+- **Module**: Sunshine/Moonlight runtime stream settings
+- **Problem Type**: `architecture_pattern` (inferred — acceptance doc, not solutions frontmatter)
+- **Relevance**: Every piece of the planned stream-quality follow-up (floor/startup/ceiling grammar, preflight, downshift, CLI surfaces) must comply with this contract. It defines the protocol envelope, mutation sequencing, applied-truth semantics, recovery rules, and product-support scope.
+- **Key Insights**:
+  - **Accepted ≠ applied.** `accepted` means the command entered the runtime-settings path. Only a terminal `applied` with an observable readback value (matching width/height/bitrate/fps) is success. CLI and adaptive controller must surface this distinction, not collapse it.
+  - **Global one-at-a-time mutation queue.** Only one bitrate/FPS/resolution mutation may be in flight at a time — across all families. The per-family latch already exists (patch `0005b`); the global cross-family latch is a known gap (item `01KWN2KEGW61TJ54X13JP0BTZ2`). Any multi-setting adaptive step must serialize through this queue.
+  - **Accept and adapt, never reject for preference.** No allowlist of approved resolutions/bitrates. Any positive value is accepted and coerced to the nearest achievable (encoder alignment, min/max). Coerced values are reported via applied truth. This is the foundation the adaptive controller sits on.
+  - **Scale only, never stretch.** Aspect ratio is fixed at stream launch. Runtime resolution changes only scale along the fixed ratio. Off-ratio requests are rejected with `invalid`, not silently stretched. The ceiling patch (patch `0019`) clamps same-ratio requests to the launch-negotiated ceiling per-dimension.
+  - **Recovery is the caller's job, not the protocol's.** The protocol exposes launch baseline, current applied values, and last-command status so that higher-level recovery logic can issue an explicit revert. There is no protocol auto-rollback.
+  - **Capability is required before mutation.** If the active session has not reported runtime-settings support, product mutation attempts must not be sent blindly. `protocol.hello` / `state.snapshot` capabilities gate access.
+  - **Proven product profile**: h264\_vaapi + v4l2m2m (bandai/aka) is the only validated combination for live bitrate and FPS. Resolution remains proof-gated until client-side decode proof exists. Other codecs/encoders are diagnostic-only until separately validated (see `docs/acceptance/sunshine-korri-seamless-vaapi-runtime-bitrate-sm8550-2026-05-31.md`).
+- **Severity**: critical (foundational contract for all planned work)
 
 ---
 
-### 2. Explicit Cascade-Folded Policy Over Wrapper-Side Env/Argv Heuristics
+### 2. Resolution Is the Last-Resort Adaptive Lever — measured physics
+
+- **File**: `docs/korri-stream-resolution-switch-seamlessness-findings-2026-07-05.md`
+- **Module**: stream-adaptive-controller, moonlight-embedded-korri
+- **Problem Type**: `tooling_decision` / `best_practice` (inferred — findings doc)
+- **Relevance**: Determines the lever-priority ordering for the floor/startup/ceiling grammar and the continuous adaptive controller design.
+- **Key Insights**:
+  - **Host-bound, not client-bound.** Measured live on bandai↔aka: 149.5ms host gap (Sunshine encoder teardown+rebuild, during which it sends nothing) + 62ms client pipeline = ~212ms total perceived freeze per resolution switch. 71% is host-side. No client-side work can make resolution switching seamless.
+  - **The host is already optimized.** Patches 0012/0013/0014 are deployed on aka. 149ms is the already-optimized floor; it is not a regression.
+  - **Confirmed design decision: bitrate/FPS are continuous live dials (~0ms freeze); resolution costs ~200ms because the host rebuilds its pipeline.** The adaptive controller must prefer bitrate/FPS and touch resolution rarely with strong hysteresis/damping. This closes the seamlessness question for the current hardware path.
+  - **Decoder reopen (~30ms) is load-bearing and cannot be safely deleted.** Patch 0010 deliberately replaced in-place resize with a full `avcodec_free_context` + reopen because the iris FFmpeg-v4l2m2m path produces corrupt frames across a resolution change without it. Do not revert to in-place reconfig.
+  - **10× rapid stress cycle confirms robustness.** Zero dropped frames, no crash, no latency growth. The mechanism is solid; the frequency/hysteresis is the tuning target.
+
+---
+
+### 3. Layer 3 Safety Net — global latch + decode-confirmed applied-truth
+
+- **File**: `docs/korri-stream-layer3-safety-net-scope.md`
+- **Module**: stream-control, moonlight-embedded-korri
+- **Problem Type**: `architecture_pattern` (inferred)
+- **Relevance**: Two specific engineering gaps must close before an autonomous adaptive controller is safe to ship. The scope doc specifies the implementation shape, anti-patterns, and what already exists.
+- **Key Insights**:
+  - **U-A (global latch, `01KWN2KEGW61TJ54X13JP0BTZ2`)**: Promote the in-flight latch from per-family to global. A new mutation while any mutation is in flight is rejected with `conflict`. Hard constraint: must not starve the operation-0 capability query (it shares the send path). Do this through the moonlight patch-export workflow.
+  - **U-B (decode-confirmed applied-truth, `01KWN2M3GSW2FQST7F3M7RX0V2`)**: For resolution changes, "applied" must mean host-applied AND client-decoded a frame at the new size. A timer armed only during a change watches the decode loop; if no frame arrives in the window, report `failed` reason `decode-stall` and let Korri policy issue an explicit revert to last known-good. **Anti-pattern explicitly called out**: do NOT build a separate process that polls `korri stream show` / runtime-watch and infers screen state. That is tools-watching-tools — laggy, guessy, structurally blind to decode state. The mechanism lives in the client's decode loop.
+  - **Last known-good**: the last decode-confirmed applied settings, falling back to the launch baseline. Never the last merely-requested value.
+  - **Sequencing**: do both U-A and U-B in one moonlight patch-export checkout to avoid double patch churn. U-A first (mostly machine-verifiable); U-B test-first, tune threshold on device.
+  - **Conflict policy for the adaptive controller**: reject with `conflict` now (already the per-family behavior); revisit coalescing when Layer 5 (controller) exists.
+
+---
+
+### 4. Continuous Adaptive Controller Design — NOT a preset ladder
+
+- **File**: `work/items/active/01KSXN94148T4616TA79KHQD9T-adaptive-stream-controller/item.md`
+- **Module**: stream-adaptive-controller, product-policy
+- **Problem Type**: `architecture_pattern` (inferred — active work item)
+- **Relevance**: Defines the north-star design for the adaptive controller that floor/startup/ceiling CLI grammar and the downshift/preflight items must plug into.
+- **Key Insights**:
+  - **No fixed table of blessed quality levels.** The controller derives bitrate/FPS/resolution mathematically from live measurements (throughput, latency, loss). Any internal ladder is at most a damping/fallback representation, not the source of allowed values. The legacy item title says "ladder"; the 2026-07-03 direction correction is explicit: treat the deliverable as a continuous adaptive controller with an objective bias.
+  - **Accept-and-adapt is the required foundation.** The controller emits arbitrary computed values and expects the mechanism to coerce any value to the nearest achievable (clamp + even-round + host letterbox). Resolution coercion shipped; bitrate/FPS clamp (`01KWN2KEGT3NGTJZ6SHDRJ3YEG`) and host arbitrary-ratio + letterbox (`01KWN5M3AQR7TVMDDB0FHQ29GA`) are next.
+  - **Mental model from testing**: FPS 120→30 at the same bitrate changes frame pacing but leaves bitrate (bandwidth) unchanged. To reduce bandwidth, lower bitrate explicitly. Resolution scaling is a tertiary lever that makes low bitrate more watchable by reducing pixels/second — not a substitute for bitrate control.
+  - **Damping/hysteresis applies around a continuous setpoint** (avoid oscillation/flapping), not by snapping between named rungs.
+  - **Objective-parametrized**: optimize for a chosen goal on a latency↔throughput/quality axis. The objective is a tunable bias, later surfaceable as a slider; defaults to fully automatic.
+
+---
+
+### 5. Stream-Control Command Outcome Contract — RPC envelope
+
+- **File**: `docs/solutions/architecture-patterns/stream-control-command-outcome-contract-2026-06-03.md`
+- **Module**: stream-control, moonlight-control, gamescope-control
+- **Problem Type**: `architecture_pattern`
+- **Relevance**: Any CLI command or product RPC that mutates stream settings must use this outcome envelope. Defines the product-level lifecycle contract that hides backend-specific raw JSON-RPC payloads.
+- **Key Insights**:
+  - **Outcome shape is stable across backends.** Single-target: `{ kind: "single", status: "applied"|"pending"|"failed", error?: string }`. Linked (moon+gamescope): `{ kind: "linked", status: "applied"|"pending"|"partial"|"failed", moonlight: {...}, gamescope: {...} }`.
+  - **Do not treat backend ACK as applied state.** Preserve `pending` when the backend accepted but readback hasn't confirmed.
+  - **Preserve linked partial failure** — do not collapse to success.
+  - **Raw protocol payloads are diagnostic-only.** Product consumers use `outcome`; debugging inspects `response`.
+  - **Displayed UI values must come from `state.get` readback**, not command outcome.
+
+---
+
+### 6. Three New Parking-Lot Items Directly in Scope
+
+These three items were parked as part of the same session that produced this planning request. They define the concrete work the plan must cover:
+
+**a) Preflight probe for stream launch quality selection** (`01KWX9Q78A1BQ5AAAANNM4SCRJ`)
+- **File**: `work/items/parking-lot/01KWX9Q78A1BQ5AAAANNM4SCRJ-add-preflight-probe-for-stream-launch-quality-selection.md`
+- Lightweight probe (compare iperf3 vs product-owned) to choose a safe launch profile before Moonlight starts flooding the connection. Maps probe results to explicit profiles such as 1080p120/high, 1080p60/medium, 720p60/safe, 640x360/30/rescue.
+- **Key distinction**: this is launch-time quality selection (before the stream), not handoff rescue (during a running stream).
+
+**b) Handoff-aware preemptive downshift** (`01KWX9Q78CY3QNQ5BXV1BJ47ER`)
+- **File**: `work/items/parking-lot/01KWX9Q78CY3QNQ5BXV1BJ47ER-add-handoff-aware-preemptive-stream-downshift.md`
+- Detects route/interface changes (Wi-Fi → cellular, RTT spike, reconnect) on already-running streams and drops to a playable floor preemptively — before congestion builds. Waiting for normal adaptive health windows can make runtime control commands fail mid-choke.
+- Recovery behavior: quality climbs only after the new connection is stable.
+
+**c) Explore replacing explicit emergency mode with unified controller** (`01KWX6X2C5RZ08BTG9FSXYBHNY`)
+- **File**: `work/items/parking-lot/01KWX6X2C5RZ08BTG9FSXYBHNY-explore-replacing-explicit-stream-emergency-mode-with-unifie.md`
+- Investigates whether the current shed/emergency burst path can be replaced by a single continuous control law (ceiling/startup/floor constraints, same math for downshift and recovery). Must still reach a playable floor quickly under 6mbit/55ms/2% loss without overreacting during startup warmup.
+
+---
+
+### 7. CLI Exit-Code Contract — one canonical table
+
+- **File**: `docs/solutions/tooling-decisions/korri-cli-exit-code-contract-2026-07-03.md`
+- **Module**: korri-cli
+- **Problem Type**: `tooling_decision`
+- **Relevance**: Any new CLI command surfaces for stream quality (floor/startup/ceiling grammar, preflight probe, downshift triggers) must route through the canonical exit-code table and `renderOutcome`. Competing numbering schemes have already been consolidated; any addition that invents new codes outside the table is a contract violation.
+- **Key Insights**:
+  - Canonical table owned by `product/surfaces/terminal/korri-cli/cli-outcome.ts`.
+  - Relevant codes for stream-quality work: `3` (not-found), `5` (host-unreachable), `6` (host-service-off), `9` (host-refused — includes preflight rejection), `10` (launch-failed — game started but exited non-zero), `11` (stop-pending).
+  - **A failed launch reports the game's own exit code in the message and returns `10`** — does not leak the child code as korri's process code.
+  - The standalone `foreground-session-status` binary still uses its own `0/2/20/30` scheme; folding it onto this table is a separate follow-up.
+  - Changing a command's failure code is a public-contract change: update table + `renderOutcome` + tests together, never silently.
+
+---
+
+### 8. Explicit Cascade-Folded Policy Over Heuristics — launch quality composition
+
 - **File**: `docs/solutions/design-patterns/explicit-cascade-folded-policy-over-incidental-signal-heuristics-2026-05-27.md`
-- **Module**: korri/shared/library/config + launch composition
+- **Module**: korri/shared/library/config, stream-control
 - **Problem Type**: `design_pattern`
-- **Relevance**: The `@korri:remap` policy schema should make all binding intent explicit — no inferring controller type from device names at compose time, no sniffing argv/env to decide which target to use. This pattern has bitten three separate subsystems (gamescope flags, input-bus source inference, focus-style inference).
-- **Key Insight**:
+- **Relevance**: Launch startup profiles, floor/startup/ceiling constraints, and preflight-derived launch quality must all be expressed as named, cascade-folded policy fields — never as argv/env sniffing or wrapper-side inference. This pattern has bitten three subsystems already.
+- **Key Insights**:
+  - **Intent must be explicit in cascade policy fields.** The component that knows a fact records it. The composer emits strictly from the resolved policy with no branching on incidental signals.
+  - **Provide a correct-for-typical-deployment default.** The floor of the cascade encodes the production deployment shape. Callers in atypical deployments override per-game/launcher in YAML; common-case callers need not think about the field at all.
+  - **Delete the heuristic when you ship the field.** Leaving a heuristic alongside a new explicit policy field creates a parallel universe where both can disagree and the loser is silent.
+  - **Why this matters for quality selection**: a preflight-derived quality profile or floor/ceiling envelope must be a named field on the launch policy (e.g. `streamQuality: { floor: ..., startup: ..., ceiling: ... }`), not inferred from network conditions at compose time without a stable policy seam.
+  - Same-pattern siblings: input-bus action source tagging, Electrobun active-focus attribute.
 
-  **Make intent explicit in cascade policy fields.** When a wrapper or companion needs to know something about the child it launches, add that knowledge as a named, cascade-folded field on the policy. The component that knows a fact records it in the policy at construction time; the companion emits strictly from resolved policy.
+---
 
-  ```
-  Caller knows fact → sets field in policy → companion emits from policy
-  (never: composer infers fact from argv/env/device name at compose time)
-  ```
+### 9. Generic Stream Runner Validation Runbook
 
-  For `@korri:remap`, this means:
-  - Each binding explicitly names its `source` (device selector) and `target` (output type + parameters).
-  - The output type (`cdp-key`, `uinput-gamepad`, future types) is a declared field, not an inference from the game's launch argv.
-  - The "mapping preset" is a named string in policy, resolved by the plugin. The cascade can override it per-game, per-launcher, or globally via inheritable fields.
-  - Provide a correct-for-typical-deployment default at the floor of the cascade. Callers in the common case need not specify anything beyond `enable: true`.
-
-  **Delete the old heuristic when you ship the new field.** Leaving an inference path alongside a new explicit policy field creates a parallel universe where both can disagree and the loser is silent.
-
+- **File**: `docs/solutions/workflow-issues/generic-game-stream-runner-validation-contract-2026-05-19.md`
+- **Module**: korri-game-stream, sunshine, moonlight
+- **Problem Type**: `workflow_issue`
 - **Severity**: medium
+- **Relevance**: Acceptance runbook for validating any stream-quality change that touches the Sunshine/Moonlight path. Captures critical gotchas that made failures look like runner bugs when they were contract/workflow misunderstandings.
+- **Key Insights**:
+  - **Enqueue first, then launch.** The intent is one-shot. If you launch `Korri Stream` without a fresh intent, the runner will fail (preflight failure) and not overwrite the prior status — which looks like a regression but is by design.
+  - **Check Sunshine as a user service, not a system unit.** `systemctl status sunshine` returns exit code `4` because there is no system unit. Use `systemctl --user status sunshine`.
+  - **Two Moonlight entries in the app list are different.** `Korri Stream` → generic runner requiring a pending intent. `Korri Stream Profile` → host display/profile app; does not exercise the runner.
+  - **`status.json` is the primary low-friction diagnostic** (user mode: `$XDG_RUNTIME_DIR/korri-game-stream/status.json`; system mode: `/run/korri-game-stream/status.json`). Use this before reaching for Sunshine journals.
+  - **Validation target must stay generic.** Do not validate the generic runner by turning Sunshine into a per-game launcher. Smoke with a Nixpkgs game (`supertux`, `extremetuxracer`) to preserve the contract.
+  - **References**: `work/01KRW63S14EZX008ANYWY3P8Z1-feat-headless-game-stream-runner/`, `work/01KRYRGG160HR51KYGS0E53ZQG-feat-korri-cli-stream-launch/requirements.md`
 
 ---
 
-### 3. Session Lifecycle Hook Contract — `afterChildRunning` + `stopBeforeCleanup`
-- **File**: `product/platform/plugin/session-lifecycle.ts` (live source) + `docs/solutions/architecture-patterns/sessiond-operator-model-2026-05-29.md`
-- **Module**: product/platform/plugin + tools/device/sessiond
-- **Problem Type**: `architecture_pattern`
-- **Relevance**: The `@korri:remap` bridge process (whether CDP or uinput) must integrate via `KorriSessionLifecycleHook`. The existing CDP bridge's integration shape is the reference — the refactor should keep this integration point and extend it, not replace it.
-- **Key Insight**:
+### 10. Above-Launch-Ceiling Resolution Clamping (patch 0019)
 
-  The `KorriSessionLifecycleHook` interface provides:
-  - `afterChildRunning({ launchId, spec, launchMetadata, terminateLaunch })` — start the bridge after the game process is running. Returns a handle with `label`, `resource`, and `stopBeforeCleanup`.
-  - `cleanup({ launchId, processGroupId, launchMetadata })` — post-exit cleanup.
-  - `failurePolicy: "fail-launch" | "warn"` — the current CDP bridge uses `"fail-launch"` (fail closed). Keep this for `@korri:remap`.
-
-  The sessiond foreground event sequence is:
-  ```
-  child-running → (game runs) → child-exited → restoring → home-ready|idle-ready
-  ```
-  The bridge process must be stopped in `stopBeforeCleanup` so it does not outlive the session and does not convert input events after the game has exited (critical for returning to the Korri UI without phantom key events).
-
-  **Important distinction**: the `launch.with` compose operation happens at preflight/dry-run time (wraps the LaunchSpec); the session lifecycle hook fires at `afterChildRunning` time. `@korri:remap` with uinput output needs **both**: compose-time validation (does uinput access exist? is the mapping name known?) and runtime hook (start the bridge process when the game is running).
-
-  The protocol evolution rule (from sessiond operator model): capability flags over schema versioning. When `@korri:remap` adds a new output type (e.g. `uinput-gamepad`), encode daemon support as a capability flag, not a schema version bump.
-
-- **Severity**: high
+- **File**: `work/items/parking-lot/01KWSYPQ0VW56DS0EK1E5Q5VQD-make-above-launch-ceiling-resolution-requests-clamp-or-expla.md`
+- **Module**: moonlight-embedded-korri, stream-control CLI
+- **Problem Type**: `tooling_decision` (inferred)
+- **Relevance**: The resolution ceiling clamp is compile-verified but has an unconfirmed device validation gate (blocked by bandai↔aka federation disconnect on 2026-07-05). The plan must include a device verification step for this.
+- **Key Insights**:
+  - **Patch 0019 clamps above-ceiling resolution requests per-dimension**, preserving aspect ratio for same-ratio requests (e.g. 1920×1080 → 1280×720 on a 720p-launched stream). Chosen behavior is clamp (matches bitrate/FPS coercion posture), not explicit reject.
+  - **Residual**: on-device runtime verification that an above-ceiling request coerces instead of failing is pending. Genuinely non-ceiling failures (conflict/unsupported/host error) still surface as the generic CLI message `runtime command dispatch failed` — a follow-up item exists to translate those tags more specifically.
+  - **Acceptance test**: `korri stream resolution 1920x1080` on a 720p-launched stream should return a coerced `1280x720` applied result, not `runtime command dispatch failed`.
 
 ---
 
-### 4. Steam Input Needs `/dev/uinput` Group Access — Handle Both Device States
-- **File**: `docs/solutions/integration-issues/steam-uinput-permissions-block-virtual-xinput-2026-06-13.md`
-- **Module**: korri-steam / product/systems/nixos/modules/korri-steam.nix
-- **Problem Type**: `integration_issue`
-- **Relevance**: `@korri:remap` with `gamepad-to-gamepad` output must create virtual input devices via uinput. This is a privilege-escalation relative to the current CDP-only bridge (which deliberately avoids uinput). The permission pattern has an established form in this repo.
-- **Key Insight**:
+### 11. Gamescope Runtime Control Contract — FIFO serialization
 
-  Virtual input device creation is a two-part path: (1) physical input visible → (2) permission to open `/dev/uinput` and issue ioctls. A plugin that can enumerate the physical device but cannot create the virtual one will fail silently from the game's perspective.
-
-  The durable fix shape from the Steam case:
-  ```sh
-  # Ensure uinput is accessible to the korri group
-  chgrp input /dev/uinput 2>/dev/null || true
-  chmod 0660 /dev/uinput 2>/dev/null || true
-  ```
-
-  Handle both device states: the character device may already exist (normal boot) or may need to be created from the kernel-reported major/minor pair (stale/missing node). Both paths must end with the same ownership/mode policy.
-
-  The NixOS module approach: use `services.udev.extraRules` or `boot.extraModprobeConfig` to set uinput group membership at boot. Do not rely on a pre-exec shell script alone.
-
-  **For `@korri:remap`**: the `@korri:remap` Nix module should declare a `capabilities.uinput` flag (or similar) that enables the uinput permission wiring. Image compositions that do not need gamepad-to-gamepad output should evaluate cleanly without it. The platform generic code should not know which capability gates uinput — the plugin's Nix module declares it.
-
-  **Validation checklist**:
-  1. Build the module check: `nix build .#checks.x86_64-linux.korri-remap-module`
-  2. Verify node ownership: `ls -l /dev/uinput` (expect `crw-rw---- root input`)
-  3. Confirm no new virtual devices persist after session ends
-  4. Confirm the selected source is the InputPlumber virtual controller, not a raw source device
-
-- **Severity**: high
-
----
-
-### 5. Input Isolation at Compositor/Session Boundaries — Per-Game Gamescope Wrapping Breaks Input
-- **File**: `docs/solutions/architecture-patterns/steam-inside-gamescope-preserves-steam-input-2026-06-15.md`
-- **Module**: Bandai Steam launches
-- **Problem Type**: `architecture_pattern`
-- **Relevance**: `@korri:remap` runs as a sidecar that dispatches synthesized input to a specific process. The bridge must remain in the same session scope as the game. Compositor/session boundaries that move the game to a different input domain will silently break the bridge. This is the same failure topology as Steam Input + per-game Gamescope.
-- **Key Insight**:
-
-  Steam Input is part of the Steam session architecture — not just an input device visible to the game. Per-game nested Gamescope moves the game across a focus/input boundary that Steam Input does not bridge reliably. The A/B isolation was definitive:
-
-  - normal Steam/no Korri wrapper: controls worked
-  - Korri wrapper with inline Gamescope (per-game): **controls failed**
-  - Steam inside Gamescope (session-level): controls worked
-
-  **For `@korri:remap`**: the CDP keyboard dispatch sends events to a specific page via the Chrome DevTools Protocol over localhost — this is session-agnostic as long as the Chromium process is alive and addressable. But the evdev source path (reading `/dev/input/event*` via evtest) and the uinput sink path (writing `/dev/uinput`) are kernel-seat-scoped. If `@korri:gamescope` and `@korri:remap` are composed together (game inside Gamescope, remap bridge as sidecar), verify that the uinput device created by the remap bridge lands in the seat the game reads from. A uinput device created outside a Gamescope session may not appear inside it.
-
-  **Prevention**: When `launch.with` composes both `@korri:gamescope` and `@korri:remap`, document which output types are safe across the Gamescope boundary (`cdp-key` over localhost TCP — safe; `uinput-gamepad` seat injection — verify per-target).
-
-- **Severity**: high
-
----
-
-### 6. Boot-Scoped Isolation Contract — Plugin Processes Must Not Escape Session Scope
-- **File**: `docs/solutions/architecture-patterns/boot-scoped-control-plane-with-session-scoped-runner-2026-05-19.md`
-- **Module**: nix/modules/korri-server
-- **Problem Type**: `architecture_pattern`
-- **Relevance**: The `@korri:remap` bridge process is a session-scoped sidecar. The lessons about fail-closed trust contracts, private runtime dirs, and explicit ownership are directly applicable to designing the bridge's lifecycle boundaries.
-- **Key Insight**:
-
-  When a sidecar process must share private runtime state with a session runner, model the lifecycle as an explicit option and derive paths/ownership from a single authoritative source. Fail closed at **evaluation** (Nix assertions), not at **runtime** (service startup errors).
-
-  Key patterns for `@korri:remap`:
-
-  1. **Explicit process ownership**: the bridge process is owned by the session lifecycle hook. The hook starts it in `afterChildRunning` and stops it in `stopBeforeCleanup`. The hook holds the only reference; no orphan processes can linger.
-
-  2. **Conservative hardening for long-lived bridge processes**: if `@korri:remap` runs as a separate binary (like `korri-cdp-input-bridge` does today), apply systemd-level sandboxing to it: `NoNewPrivileges = true`, `PrivateNetwork = true` (for CDP-only; uinput targets need network off), `RestrictSUIDSGID = true`, `LockPersonality = true`. The bridge runs for the full game session — it has a larger attack surface than a one-shot command.
-
-  3. **Fail closed on missing preconditions**: If the mapping name is unknown, the source device is missing, or the CDP target doesn't respond within `attachTimeoutMs`, fail the launch (if `failClosed: true`) rather than letting the game start without input. The current CDP bridge already does this; preserve it in `@korri:remap`.
-
-  4. **The env injection seam**: if the bridge command is configurable via env var (`KORRI_CDP_INPUT_BRIDGE_COMMAND` in the current implementation), keep that seam for `@korri:remap`'s binary — it allows the NixOS module to inject the store path without hardcoding it in the plugin source.
-
-- **Severity**: medium
-
----
-
-### 7. Gamescope Runtime Control Contract — Socket Protocol Shape for Sidecar Bridges
 - **File**: `docs/solutions/architecture-patterns/gamescope-runtime-control-contract-2026-06-02.md`
-- **Module**: korri/shared/gamescope-control
-- **Problem Type**: `architecture_pattern` (inferred — no explicit `problem_type` in frontmatter)
-- **Relevance**: If `@korri:remap` eventually needs a live-control protocol (pause, remap swap, diagnostics) analogous to Gamescope's control bridge, this is the established shape. Also relevant because a remap companion co-composed with Gamescope must not race writes to compositor state.
-- **Key Insight**:
+- **Module**: gamescope-control, stream-control
+- **Problem Type**: `architecture_pattern`
+- **Relevance**: Stream-quality changes that touch Gamescope (scaling, filter, framerate) must go through the bridge-level typed protocol and its FIFO queue — the same serialization lesson the runtime-settings contract has for Moonlight.
+- **Key Insights**:
+  - **`applied` only after required readback matches.** Readback mismatch, readback failure, timeout, backend absence, and session abort are explicit non-success states.
+  - **Mutations serialize through one bridge-wide FIFO queue.** No concurrent writes to shared compositor state.
+  - **No high-level quality-profile command in v1.** Product code calls individual controls. Multi-plugin stream control coordination is a backlog item (`01KVBPNPXZ3X49XSCFXPY6CVW8`).
+  - **Capability-gate stock Gamescope.** `gamescope-korri` is the guaranteed target; stock Gamescope is best-effort and must be capability-gated.
+  - **Verification reference**: `docs/acceptance/gamescope-control-api-coverage-contract.md` as the method/event/error coverage matrix.
 
-  The Gamescope control contract rules that apply to any sidecar bridge:
+---
 
-  - The socket (or channel) is **local-only and owner-only by default**.
-  - **Mutations serialize through a FIFO queue** — no concurrent writes from multiple clients.
-  - A command reports `applied` only after required readback matches (not just after send).
-  - Explicit non-success states: `unsupported`, `unimplemented`, readback mismatch, timeout, backend absence.
-  - Events are first-class server pushes with monotonic sequence numbers.
-  - Sessiond remains the lifecycle truth. The bridge reports control-plane readiness and state; it does not decide foreground session ownership.
+### 12. Stream CLI Noun Decision — settle before the surface hardens
 
-  For `@korri:remap` v1, a runtime control protocol is likely out of scope. But when it arrives, model it as a local Unix socket or loopback TCP (not a shared bus), and serialize binding changes through a single queue to prevent input state corruption.
-
-  **Current bridge diagnostic shape** (from `diagnostics.ts` in the CDP bridge): structured diagnostics with typed reasons, not log lines. Extend this for `@korri:remap` — the policy violation, device selection, and bridge attachment diagnostics should all be typed and reportable through `LaunchCompanionDiagnostic`.
-
-- **Severity**: medium
+- **File**: `work/items/parking-lot/01KWTMPE4MJXVR940R4X9GB0PR-reconsider-stream-as-a-first-class-cli-noun-vs-an-implementa.md`
+- **Module**: korri-cli, streaming
+- **Problem Type**: `tooling_decision` (inferred)
+- **Relevance**: The floor/startup/ceiling CLI grammar is being designed now. This item flags that the decision of whether these controls attach to a `stream` noun or to the game/session/launch should be settled before the surface hardens.
+- **Key Insights**:
+  - **Current posture**: adaptive quality controls (bitrate/fps/resolution/lean/auto boundaries) are under `korri stream ...`, treating 'stream' as a first-class concept.
+  - **Competing view**: streaming is an implementation detail of playing a remote game. Boundaries should attach to the game/session/launch (`korri play --bitrate-floor=... --fps-ceiling=...`), with no separate stream noun. Same flat key=value boundary schema on launch and on the running session.
+  - **Shared constraint regardless**: the design must support live mid-session adjustment and observability (watch feed) without reintroducing a separate stream concept if stream is retired.
+  - **Action required**: settle this before the floor/startup/ceiling grammar is implemented. Record the decision in the task-067 spec so CLI and future GUI share one noun model.
 
 ---
 
 ## Recommendations
 
-### 1. Adopt `launch.with` but preserve the session lifecycle hook
+### Ordered by execution sequence
 
-The refactor has two independent seams to move:
+**1. Read and gate against `docs/acceptance/runtime-settings-protocol-contract.md` before every design decision.**
+All planned work (preflight, floor/startup/ceiling grammar, continuous controller, downshift) must comply with this contract. Specifically: capability before mutation, accepted ≠ applied, global serialization, accept-and-adapt, scale-only-never-stretch, explicit recovery.
 
-- **Config seam**: migrate from `launchMetadata.annotations["@korri:cdp-input-bridge"]` to `launch.with."@korri:remap"` with an Effect Schema-decoded policy. This makes `@korri:remap` visible at preflight and dry-run time (the `launch.compose` operation validates the policy and checks capability before any process spawns).
-- **Runtime seam**: keep `KorriSessionLifecycleHook.afterChildRunning` as the process launch point. This is correct — the bridge process needs a live game process before it can attach to a CDP page or open a source device.
+**2. Close Layer 3 (U-A + U-B) before shipping an autonomous adaptive controller.**
+The plan (`docs/korri-stream-layer3-safety-net-scope.md`) is already scoped. Both gaps must close: global cross-family latch (U-A, `01KWN2KEGW61TJ54X13JP0BTZ2`) and decode-confirmed applied-truth with auto-revert (U-B, `01KWN2M3GSW2FQST7F3M7RX0V2`). Build these together in one moonlight patch-export checkout. Do not build a poller or screen-scraper for U-B — the mechanism lives in the client's decode loop.
 
-Do not collapse these into one. The compose operation validates; the lifecycle hook runs.
+**3. Confirm the above-ceiling clamp (patch 0019) on device before building the ceiling grammar.**
+The patch is compile-verified but not device-verified (blocked by bandai↔aka federation disconnect). Re-pair the devices and run `korri stream resolution 1920x1080` on a 720p-launched stream to confirm coercion, not a generic failure. See `docs/acceptance/runtime-settings-gate-a-accept-and-adapt-2026-07-03.md` for the Gate-A runbook.
 
-### 2. Define the `@korri:remap` policy schema in abstract terms — hide transport details
+**4. Use the seamlessness findings to set lever priorities in the continuous controller.**
+Bitrate: ~0ms, use freely. FPS: ~0ms, use freely. Resolution: ~200ms host-bound, use rarely with strong hysteresis. Do not invert this ordering. See `docs/korri-stream-resolution-switch-seamlessness-findings-2026-07-05.md`.
 
-The policy schema should not expose CDP vocabulary. Instead:
+**5. Settle the `korri stream` noun vs game/session/launch boundary before implementing the floor/startup/ceiling grammar.**
+Blocking decision. See `01KWTMPE4MJXVR940R4X9GB0PR`. Record the choice in the task-067 spec before the CLI hardens.
 
-```yaml
-launch:
-  with:
-    "@korri:remap":
-      enable: true
-      bindings:
-        - source:
-            preference:
-              names: ["Microsoft Xbox Series S|X Controller"]
-          mapping: "yfs-default"
-          target:
-            type: cdp-key        # ← abstract output type, not "CDP"
-            urlPattern: "index.html"
-            port: 9333
-        - source:
-            preference:
-              names: ["Player 2 Controller"]
-          mapping: "gamepad-mirror"
-          target:
-            type: uinput-gamepad  # ← second output type
-```
+**6. Express floor/startup/ceiling as named cascade-folded policy fields, not runtime inference.**
+Follow the explicit cascade-folded policy pattern (`docs/solutions/design-patterns/explicit-cascade-folded-policy-over-incidental-signal-heuristics-2026-05-27.md`). The preflight-derived launch profile, floor/ceiling constraints, and handoff override must all be named fields in the stream launch policy — not inferred from argv/env at compose time.
 
-The plugin schema owns what `type: "cdp-key"` means internally. Generic platform code, Nix modules, and docs only see the `@korri:remap` provider id and `enable: true/false`.
+**7. Route all CLI stream quality command outcomes through `renderOutcome` in `cli-outcome.ts`.**
+See `docs/solutions/tooling-decisions/korri-cli-exit-code-contract-2026-07-03.md`. Preflight rejection is exit code `9` (host-refused). No new exit codes without updating the table, `renderOutcome`, and tests together.
 
-### 3. For `uinput-gamepad` output, declare uinput capability in the plugin's Nix module
+**8. For stream runner validation: enqueue intent first, verify `status.json`, use a generic Nixpkgs smoke target.**
+See `docs/solutions/workflow-issues/generic-game-stream-runner-validation-contract-2026-05-19.md`. The runbook distinguishes the two Moonlight app entries, the user vs system service scope, and the one-shot intent model.
 
-Follow the pattern from `korri-steam.nix`. The `@korri:remap` Nix module should:
+**9. Treat h264\_vaapi + v4l2m2m as the only proven live-control path.**
+Bitrate/FPS: supported (validated 2026-05-31). Resolution: server-applied but not client-decode-proven (needs U-B). Other codecs/encoders are diagnostic-only until separately validated. See `docs/acceptance/sunshine-korri-seamless-vaapi-runtime-bitrate-sm8550-2026-05-31.md`.
 
-1. Declare a `capabilities.uinput` opt-in option (or derive it from the presence of any `uinput-gamepad` target in the default config).
-2. Add a udev rule that sets `/dev/uinput` to `crw-rw---- root:input` at boot.
-3. Ensure the bridge process runs as a user in the `input` group.
-4. Add Nix assertions that `capabilities.uinput = true` is required when any enabled launch config uses `type: "uinput-gamepad"`.
+**10. Preflight probe: iperf3 vs lightweight product-owned probe decision must happen early.**
+Item `01KWX9Q78A1BQ5AAAANNM4SCRJ` is un-decided on whether iperf3 (accurate but requires setup/latency) or a product-owned lighter probe (less friction) is the right shape. Capture the tradeoff analysis before designing the probe-to-launch-profile mapping.
 
-Fail at Nix evaluation, not at runtime.
+**11. Handoff-aware downshift is separate from preflight.**
+Preflight: before the stream starts (launch quality selection). Handoff downshift: while the stream is running (preemptive rescue on network transition). Do not merge these into one mechanism. See `01KWX9Q78CY3QNQ5BXV1BJ47ER`.
 
-### 4. Apply the explicit cascade policy rule to multi-controller bindings
+**12. Emergency mode unification (replacing shed/emergency burst with unified controller) should be the last item.**
+It depends on having the continuous controller working first. It is a design-debt exploration, not a new capability. See `01KWX6X2C5RZ08BTG9FSXYBHNY`. Current shed/emergency path works; this is about principle, not rescue.
 
-Each binding in the `bindings` array is a fully-specified intent: source selector + mapping name + output type. No component downstream of the policy resolver infers any of these from device names, argv, or environment variables. The plugin is the only component that reads the evdev device characteristic file — it reads it to *select* among candidates, not to *infer* the output type.
+---
 
-### 5. Verify the seat boundary when composing with `@korri:gamescope`
+## Acceptance / Runbook Reference Paths
 
-Before shipping multi-plugin composition of `@korri:remap` + `@korri:gamescope`:
+All paths are repo-relative.
 
-- For `cdp-key` output: safe — CDP is loopback TCP, not seat-scoped. The Chromium process is inside Gamescope and still reachable on localhost.
-- For `uinput-gamepad` output: **verify**. A uinput device created by a process outside the Gamescope session may not be visible inside it. This may require creating the uinput device before Gamescope starts (i.e., in `launch.compose` not `afterChildRunning`) or finding a Gamescope-aware injection path.
+| Runbook / Contract | Path |
+|---|---|
+| Runtime settings protocol contract | `docs/acceptance/runtime-settings-protocol-contract.md` |
+| Gate A: accept-and-adapt device validation | `docs/acceptance/runtime-settings-gate-a-accept-and-adapt-2026-07-03.md` |
+| Seamless bitrate on SM8550 (h264\_vaapi + v4l2m2m) | `docs/acceptance/sunshine-korri-seamless-vaapi-runtime-bitrate-sm8550-2026-05-31.md` |
+| Runtime resolution evidence (server-applied, not client-proven) | `docs/acceptance/sunshine-korri-runtime-resolution-2026-05-26.md` |
+| Moonlight live-settings validation — Sobo | `docs/acceptance/moonlight-live-settings-validation-sobo-2026-05-25.md` |
+| Gamescope control API coverage contract | `docs/acceptance/gamescope-control-api-coverage-contract.md` |
+| Gamescope scaling policy | `docs/acceptance/gamescope-scaling-policy.md` |
+| Resolution switch seamlessness findings | `docs/korri-stream-resolution-switch-seamlessness-findings-2026-07-05.md` |
+| Layer 3 safety net scope | `docs/korri-stream-layer3-safety-net-scope.md` |
+| Generic stream runner validation contract | `docs/solutions/workflow-issues/generic-game-stream-runner-validation-contract-2026-05-19.md` |
 
-Capture this as a validation gate in the acceptance criteria before multi-binding + gamescope ships.
+| Architecture Pattern | Path |
+|---|---|
+| Stream-control command outcome contract | `docs/solutions/architecture-patterns/stream-control-command-outcome-contract-2026-06-03.md` |
+| Gamescope runtime control contract | `docs/solutions/architecture-patterns/gamescope-runtime-control-contract-2026-06-02.md` |
+| Gamescope as plugin-owned composition | `docs/solutions/architecture-patterns/gamescope-as-plugin-owned-composition-2026-06-17.md` |
+| Kiosk foreground app policy | `docs/solutions/architecture-patterns/kiosk-foreground-app-policy-over-gamescope-overlay-2026-05-24.md` |
+| Korrid device state (battery for stream-control) | `docs/solutions/architecture-patterns/korrid-device-state-subscriptionref-2026-07-01.md` |
 
-### 6. Keep `failClosed: true` and `stopBeforeCleanup` as defaults
+| Design Pattern | Path |
+|---|---|
+| Explicit cascade-folded policy over heuristics | `docs/solutions/design-patterns/explicit-cascade-folded-policy-over-incidental-signal-heuristics-2026-05-27.md` |
 
-The current CDP bridge fails launch on bridge startup failure (`failurePolicy: "fail-launch"`) and stops cleanly before session cleanup. Both must survive the rename. The remap bridge must not leave synthetic input events firing after the game exits — the first input event on the Korri UI after a session ends would otherwise produce phantom key presses.
+| Tooling Decision | Path |
+|---|---|
+| CLI exit-code contract | `docs/solutions/tooling-decisions/korri-cli-exit-code-contract-2026-07-03.md` |
 
-### 7. Preserve the `KORRI_REMAP_BRIDGE_COMMAND` env seam
-
-The NixOS module will inject the store path of the remap bridge binary via env. Keep this seam for test doubles — the session lifecycle hook tests can inject `false` (the `processManager === false` branch) to exercise the hook logic without spawning a real process.
+| Active / Parking-Lot Items | Path |
+|---|---|
+| Adaptive stream controller (continuous, not a ladder) | `work/items/active/01KSXN94148T4616TA79KHQD9T-adaptive-stream-controller/item.md` |
+| Preflight probe for launch quality selection | `work/items/parking-lot/01KWX9Q78A1BQ5AAAANNM4SCRJ-add-preflight-probe-for-stream-launch-quality-selection.md` |
+| Handoff-aware preemptive downshift | `work/items/parking-lot/01KWX9Q78CY3QNQ5BXV1BJ47ER-add-handoff-aware-preemptive-stream-downshift.md` |
+| Explore replacing emergency mode with unified controller | `work/items/parking-lot/01KWX6X2C5RZ08BTG9FSXYBHNY-explore-replacing-explicit-stream-emergency-mode-with-unifie.md` |
+| `stream` noun vs game/session noun decision | `work/items/parking-lot/01KWTMPE4MJXVR940R4X9GB0PR-reconsider-stream-as-a-first-class-cli-noun-vs-an-implementa.md` |
+| Above-ceiling clamp verification (device-pending) | `work/items/parking-lot/01KWSYPQ0VW56DS0EK1E5Q5VQD-make-above-launch-ceiling-resolution-requests-clamp-or-expla.md` |
+| Global one-at-a-time latch (U-A) | Backlog: `01KWN2KEGW61TJ54X13JP0BTZ2` |
+| Decode-confirmed applied-truth + auto-revert (U-B) | Backlog: `01KWN2M3GSW2FQST7F3M7RX0V2` |
+| Bitrate/FPS coercion (patch-export) | Backlog: `01KWN2KEGT3NGTJZ6SHDRJ3YEG` |
+| Host arbitrary-ratio + letterbox | Backlog: `01KWN5M3AQR7TVMDDB0FHQ29GA` |

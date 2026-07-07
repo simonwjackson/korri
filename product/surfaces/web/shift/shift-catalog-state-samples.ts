@@ -20,7 +20,7 @@ import { DEV_GAME_MEDIA } from "./dev-game-media"
 export type { CatalogResult }
 
 export const shiftCatalogFixtureEntries: readonly CatalogEntry[] =
-  DEV_GAME_MEDIA.slice(0, 6).map(media => ({
+  DEV_GAME_MEDIA.slice(0, 6).map((media, index) => ({
     id: media.id,
     itemId: media.id,
     title: media.title,
@@ -54,6 +54,17 @@ export const shiftCatalogFixtureEntries: readonly CatalogEntry[] =
       controlUrl: "http://127.0.0.1:3001",
       isLocal: true,
     },
+    // The first four are recently played (newest first) so the home's Recent
+    // section is populated; the last two are unplayed, leaving a Random pick.
+    ...(index < 4
+      ? {
+          playStats: {
+            lastPlayed: new Date(Date.UTC(2026, 6, 20 - index)),
+            playCount: index + 1,
+            totalPlaytimeSeconds: (index + 1) * 600,
+          },
+        }
+      : {}),
   }))
 
 export const shiftCatalogStateSamples = makeCatalogStateSamples(

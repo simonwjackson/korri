@@ -1,591 +1,561 @@
-# Repo Research: `@korri:remap` Plugin Refactor
+# Repository Research Summary — Stream Quality Product Follow-Up
 
-> Planning context: refactor the just-landed launch-owned CDP input bridge into a
-> general launch-scoped remapping plugin/config shape. Product-facing `@korri:remap`
-> under `launch.with`, no CDP/Chrome terminology in authored config, compact dot-path
-> bindings, multi-controller support, gamepad-to-keyboard and gamepad-to-gamepad
-> bindings, fail-closed isolation, InputPlumber-normalized sources.
+**Focus:** Extend `floor..ceiling` adaptive range grammar to `floor..startup..ceiling`; wire startup into the launch/Moonlight policy while keeping floor/ceiling boundaries; preflight launch-quality selection; health-driven and handoff-aware early downshift.
 
 ---
 
 ## Technology & Infrastructure
 
-- **Language**: TypeScript (strict), ~71%; TSX ~12%; Nix ~10%
-- **Runtime / bundler**: Bun (primary), tsx for certain scripts
-- **Test runner**: `bun test` (`just test-unit`)
-- **Formatter / linter**: Biome (`just lint`, `just format`)
-- **Build**: Vite (portal), Nix flakes for system packages
-- **Effect version**: v4 (`effect`, `@effect/atom-react`)
-- **Dev environment**: Nix flakes + direnv; `just` for task automation
+- **Languages:** TypeScript (68 %), TSX (16 %), Nix (9 %), CSS (4 %), Shell (0.7 %)
+- **Runtime:** Bun (unit tests via `bun test`, scripts via `tsx`/`bun`)
+- **Build:** Vite + `@tailwindcss/vite` for web; Bun for API; Nix flakes for reproducible toolchain
+- **Formatter/Linter:** Biome (`just lint`, `just format`)
+- **Type checking:** strict TypeScript, whole-repo only (`just typecheck`) because of path aliases
+- **Test runner:** `bun test` for unit tests; Playwright for E2E/component; `just test-nix` for Nix checks
+- **Web framework:** TanStack Router + React + Effect v4 atoms (`@effect/atom-react`)
+- **API server:** Hono (`@hono/node-server`)
+- **Effect runtime:** `effect` library — services, layers, schemas, RPC used throughout
+- **Verification commands:** `just typecheck && just test-unit && just lint && just format`
+
+### Module Organisation
+
+| Alias | Location | Role |
+|---|---|---|
+| `@platform/*` | `product/platform/` | Contracts, pure logic, streamer-agnostic interfaces |
+| `@product/apps/portal/*` | `product/apps/portal/` | Hono API, React surfaces, RPC handlers |
+| `@product/plugins/moonlight/*` | `product/plugins/moonlight/` | Moonlight-specific implementation (removable) |
+| `@product/surfaces/terminal/korri-cli/*` | `product/surfaces/terminal/korri-cli/` | CLI commands |
+| `@product/plugin-host/*` | `product/plugin-host/` | Plugin composition root |
 
 ---
 
 ## Architecture & Structure
 
-### Plugin model
+### Strict Platform/Plugin Layering
 
-Every first-party capability is a **`KorriPlugin`** declared via `plugin({ namespace, name, ... })` in `product/platform/plugin/index.ts`. Plugins:
-
-- Get a stable `ProviderId`: `"@{namespace}:{name}"` (e.g. `"@korri:gamescope"`).
-- Declare handlers (operations they handle), config contributions (catalog entries, modules, launchers), and capabilities.
-- Are registered in `product/plugins/index.ts` → `firstPartyPlugins`, `firstPartySessionLifecycleHookFactories`, `firstPartyPluginDaemonFactories`.
-
-### `launch.with` — the authored companion map
-
-`InheritableLayer.launch.with` is a `Record<ProviderId, unknown>` where each value is opaque at the schema level and decoded by the owning plugin. Defined in:
+The governing architectural constraint is **removability**: no shipped code imports the Moonlight plugin. The platform owns contracts; the plugin implements them through a registry. This is enforced via a removability gate (see `work/items/active/01KWN49HEG9X0HFJBMK2KRJ8CM-moonlight-streaming-plugin/plan.md`).
 
 ```
-product/platform/library/config/inheritable-fields.ts
-  LaunchWithPolicy = LaunchCompanionMap = Record<ProviderIdKey, unknown>
-  LaunchPolicy = { with?: LaunchWithPolicy }
-  InheritableLayer = { launch?: LaunchPolicy, ... }
+CLI / Portal RPC Handlers
+  └─ platform contracts (streamer-agnostic seams)
+       └─ plugin registry dispatch
+            └─ @korri:moonlight plugin (implements: stream.launch, stream-control.connect/apply/describe)
 ```
 
-Cascade fold rules (from `cascade-resolver.ts` JSDoc):
-- Object values **deep-merge** across inheritance layers.
-- Arrays **concatenate** in inheritance order.
-- Scalars **last-win** (more specific wins).
+### Stream Quality Subsystem — Layer Map
 
-`launchCompanionsFromLaunch(layer)` extracts `layer.launch?.with` as `LaunchCompanionMap`.
+The stream quality work is layered in explicit numbered "layers" with Layer 5 (adaptive controller) currently the newest landed layer:
 
-### Launch companion composition (launch.with → spec wrapping)
-
-`composeLaunchCompanions()` in `product/platform/plugin/launch-companion.ts` iterates the `launchCompanions` map and calls each registered plugin's `launch.compose` handler to wrap the `LaunchSpec`. This is for **launch-time spec mutation** (e.g. wrapping in `gamescope ...`). It runs in the Portal API RPC handler **before** the spec is handed to sessiond.
-
-**Important**: `launch.with` companions are consumed for spec composition. They are NOT automatically forwarded to sessiond or to session lifecycle hooks. The `ResolvedLaunch` struct has both `launchCompanions?: LaunchCompanionMap` and `launchMetadata?: LaunchMetadata` as separate fields.
-
-### Session lifecycle hooks
-
-Defined in `product/platform/plugin/session-lifecycle.ts`:
-
-```ts
-export interface KorriSessionLifecycleHookStartRequest {
-  readonly launchId: string
-  readonly spec: LaunchSpec
-  readonly launchMetadata?: LaunchMetadata     // ← how policy reaches hooks today
-  readonly terminateLaunch?: () => void
-}
-
-export interface KorriSessionLifecycleHook {
-  readonly id: PluginId | (string & {})
-  readonly failurePolicy?: "fail-launch" | "warn"
-  readonly afterChildRunning?: (req) => Promise<KorriSessionLifecycleHookHandle | undefined>
-  readonly cleanup?: (req) => Promise<...>
-}
-```
-
-Sessiond calls `afterChildRunning` for each registered hook after the child process starts. Hooks registered in `product/plugins/index.ts → firstPartySessionLifecycleHookFactories`.
-
-The `launchMetadata.annotations[pluginId]` is the **current** mechanism for per-launch policy reaching a hook. The new `@korri:remap` plugin needs its policy to be visible here from `launch.with["@korri:remap"]`.
-
-### The annotation vs. companion gap (critical for this refactor)
-
-| Surface | Reaches lifecycle hook via | Used for |
-|---------|---------------------------|----------|
-| `launchMetadata.annotations[id]` | `afterChildRunning({ launchMetadata })` | CDP bridge (current, to retire) |
-| `launch.with[id]` | `composeLaunchCompanions()` → spec wrapping | Gamescope (wrapper pattern) |
-
-`@korri:remap` is a **session lifecycle hook**, not a launch wrapper. Its policy must reach `afterChildRunning`. Options:
-
-**Option A — Recommended**: Extend `KorriSessionLifecycleHookStartRequest` with `launchCompanions?: LaunchCompanionMap`. Thread it through `LaunchExtras` (or a new extras field) from the RPC handler → sessiond → lifecycle hooks. The hook then reads `request.launchCompanions?.["@korri:remap"]`.
-
-**Option B** (messier): In the cascade resolver, translate `launch.with["@korri:remap"]` into `launchMetadata.annotations["@korri:remap"]` so the existing hook interface works unchanged. Avoids interface changes but couples the resolver to plugin knowledge.
-
-**Option C**: Add `launchCompanions` to `LaunchExtras` so sessiond already receives them without a separate interface change to the hook request.
-
-Option A is cleanest: lifecycle hooks are already the right seam; adding `launchCompanions` to the request is additive and consistent with how `launchMetadata` was added before.
-
----
-
-## Current CDP Input Bridge — Files & Patterns to Refactor
-
-### Core files
-
-| File | Role |
-|------|------|
-| `product/plugins/cdp-input-bridge/index.ts` | Plugin declaration, re-exports |
-| `product/plugins/cdp-input-bridge/src/policy.ts` | Policy schema + decode; reads `launchMetadata.annotations` |
-| `product/plugins/cdp-input-bridge/src/mapping.ts` | Hard-coded named mapping presets (`yfs-default`, `none`) with CDP types |
-| `product/plugins/cdp-input-bridge/src/bridge-process.ts` | Process lifecycle, evtest line parsing, CDP keyboard translator |
-| `product/plugins/cdp-input-bridge/src/session-lifecycle-hook.ts` | Wires policy → process manager → lifecycle hook |
-| `product/plugins/cdp-input-bridge/src/diagnostics.ts` | Diagnostics collection handler |
-| `product/plugins/cdp-input-bridge/packages/korri-cdp-input-bridge/index.ts` | Bun entry script: CLI arg parsing, evtest, CDP WebSocket |
-| `product/plugins/cdp-input-bridge/nix/cdp-input-bridge.nix` | Nix derivation for the binary |
-| Tests: `*.test.ts` per src file | Comprehensive unit coverage |
-
-### Current policy annotation shape (in YFS catalog entry)
-
-```ts
-// product/plugins/yoshis-fabrication-station/index.ts
-launchMetadata: {
-  annotations: {
-    [CDP_INPUT_BRIDGE_PLUGIN_ID]: {  // "@korri:cdp-input-bridge"
-      enable: true,
-      cdpPort: 9333,
-      mapping: "yfs-default",
-      sourcePreference: { names: ["Microsoft Xbox Series S|X Controller"] },
-      target: { type: "page", urlPattern: "index.html" },
-    },
-  },
-},
-```
-
-### Current policy fields (to rename/restructure)
-
-| Current field | CDP-specific | New shape |
+| Layer | Description | Status |
 |---|---|---|
-| `enable: true` | No | Keep as opt-in gate |
-| `cdpHost`, `cdpPort` | YES — implementation detail | Remove from authored config; keep as internal defaults |
-| `mapping: "yfs-default"` | YES — named preset | Replace with inline `bindings` |
-| `sourcePreference.names` | No | Keep as `source.names` |
-| `sourcePreference.eventNodes` | No | Keep as `source.event-nodes` |
-| `target.type`, `target.urlPattern`, `target.titlePattern` | YES — CDP-specific | Remove from authored remap config |
-| `axis.pressThreshold`, `axis.releaseThreshold` | No | Keep as `axis.press-threshold`, `axis.release-threshold` |
-| `attachTimeoutMs` | Partially | Keep as `attach-timeout-ms` |
-| `failClosed` | No | Keep as `fail-closed` |
-
-### InputPlumber-normalized evdev codes in current mapping
-
-The `YFS_DEFAULT_MAPPING` uses raw evdev button codes that must be remapped to InputPlumber-normalized logical names in the new dot-path scheme:
-
-| Evdev code | Logical name (proposed) |
-|---|---|
-| `BTN_DPAD_UP` | `dpad.up` |
-| `BTN_DPAD_DOWN` | `dpad.down` |
-| `BTN_DPAD_LEFT` | `dpad.left` |
-| `BTN_DPAD_RIGHT` | `dpad.right` |
-| `BTN_WEST` | `btn.west` |
-| `BTN_SOUTH` | `btn.south` |
-| `BTN_EAST` | `btn.east` |
-| `BTN_NORTH` | `btn.north` |
-| `BTN_START` | `btn.start` |
-| `ABS_X` (axis) | `stick.left.x` |
-| `ABS_Y` (axis) | `stick.left.y` |
-| `ABS_RX` (axis) | `stick.right.x` |
-| `ABS_RY` (axis) | `stick.right.y` |
-
-Button code constants are in `product/platform/input/native/button-codes.ts`. InputPlumber virtual gamepad resolution is in `product/platform/input/native/inputplumber-virtual-gamepad.ts`.
-
----
-
-## `@korri:gamescope` — the Target Pattern
-
-```
-product/plugins/gamescope/
-  index.ts                    — re-exports plugin and id
-  src/plugin.ts               — plugin declaration with handlers
-  src/launch-companion/
-    policy.ts                 — GamescopePolicy Schema, decode, fold, normalize
-    wrapper.ts                — composeGamescopeLaunchSpec() wraps LaunchSpec
-    index.ts                  — exports
-  src/session/
-    lifecycle-hook.ts         — createGamescopeSessionLifecycleHook() (control bridge sidecar)
-```
-
-**Key reference**: `gamescopePolicyFromLaunch()` in `src/launch-companion/policy.ts`:
-
-```ts
-export const gamescopePolicyFromLaunch = (layer: {
-  readonly launch?: {
-    readonly with?: Partial<Record<string, GamescopePolicy | undefined>>
-  }
-}): GamescopePolicy | undefined =>
-  layer.launch?.with?.[KORRI_GAMESCOPE_PLUGIN_ID]
-```
-
-This is how a plugin reads **its own** policy from a `launch.with` layer. For `@korri:remap`, create an equivalent `remapPolicyFromLaunch()` that reads `layer.launch?.with?.["@korri:remap"]`.
-
-**Key difference from cdp-input-bridge**: Gamescope's `plugin.ts` registers a `launch.compose` handler that wraps the spec. The session lifecycle hook for gamescope is **separate** and manages only the runtime control bridge sidecar. Gamescope does **not** need `launchMetadata` in its lifecycle hook.
-
-`@korri:remap` is different: it needs its config at **session runtime** (in `afterChildRunning`), not at launch composition time. This means either the `launch.with` value must reach the lifecycle hook (via `launchCompanions` in the request) or through the `launchMetadata.annotations` channel.
-
----
-
-## New `@korri:remap` Config Shape
-
-### Authored format (`launch.with["@korri:remap"]`)
-
-```yaml
-launch:
-  with:
-    "@korri:remap":
-      enable: true
-      controllers:
-        - source: p1                # slot identifier, not a device path
-          bindings:
-            dpad.down: key.down
-            dpad.up: key.up
-            dpad.left: key.left
-            dpad.right: key.right
-            btn.west: key.z
-            btn.south: key.a
-            btn.east: key.x
-            btn.north: key.s
-            btn.start: key.p
-            stick.left.x: stick.left.x  # gamepad-to-gamepad example
-        - source: p2
-          bindings:
-            dpad.down: key.s
-            dpad.up: key.w
-```
-
-Alternatively the user's preferred compact form uses flat dot-path keys:
-```yaml
-"@korri:remap":
-  "p1.dpad.down": "key.down"
-  "p1.dpad.up": "key.up"
-  "p1.btn.west": "key.z"
-  "p2.dpad.down": "key.s"
-```
-
-Clarify with user: nested `controllers[]` array vs flat `p1.*` key prefix. Both convey the intent; the flat form is more compact but harder to validate with strict schemas.
-
-### Design decisions per user requirements
-
-| Requirement | Decision |
-|---|---|
-| No CDP/Chrome terminology | Remove `cdpHost`, `cdpPort`, `target.*`, `mapping` named presets entirely from authored config |
-| Single-word plugin name `remap` | `@korri:remap`, plugin dir `product/plugins/remap/` |
-| Under `launch.with` | Not `launchMetadata.annotations` |
-| Compact dot-path bindings | `p1.dpad.down: key.down` (source: `{slot}.{input}`, target: `{kind}.{name}`) |
-| Kebab-case names | `fail-closed`, `press-threshold`, `release-threshold`, `event-nodes`, etc. |
-| No profiles/presets | Inline bindings only; no `mapping: "yfs-default"` |
-| Multiple controllers | `p1`, `p2`, … slot identifiers |
-| Gamepad-to-keyboard | Target: `key.{dom-key-name}` |
-| Gamepad-to-gamepad | Target: `btn.{name}` or `stick.{side}.{axis}` |
-| Fail-closed isolation | `fail-closed` defaults to `true`; hook `failurePolicy: "fail-launch"` |
-| InputPlumber-normalized sources | Use `resolveInputPlumberVirtualGamepad()` unchanged |
+| L2 | Accept-and-adapt (Moonlight coerces requests to achievable values) | Complete |
+| L3 | Safety net (recovery supervisor, decode-stall watchdog) | Complete |
+| L4 | Senses: numeric health telemetry via `quality.sample` native events | Active (`01KWNSXR8H87GJ720M51K1HH31`) |
+| L5 | Adaptive controller (brain + runner) | Landed (`01KWPW23JPV3F01BAJC3NJYKE8`) |
+| L6 | GUI/slider surfacing | Deferred |
 
 ---
 
 ## Implementation Patterns
 
-### Plugin declaration pattern (from `gamescope/src/plugin.ts`)
+### Stream Boundary Grammar — Current Design
 
-```ts
-export const remapPlugin = plugin({
-  namespace: "@korri",
-  name: "remap",
-  title: "Input Remap",
-  description: "Launch-scoped controller-to-keyboard and controller-to-controller remapping.",
-  contributes: {
-    handlers: [
-      {
-        id: "remap.diagnostics",
-        operation: "diagnostics.collect",
-        capabilities: ["diagnostics.collect", "input.remap"],
-        run: context => collectRemapDiagnostics(context.input),
-      },
-    ],
-  },
-})
+**File:** `product/platform/stream/stream-adaptive-boundaries.ts`
+
+The grammar is a flat `key=value` expression set, passed as `string[]` and parsed by `parseStreamBoundaryArgs(args)`. Each lever uses `..` as the range separator:
+
+```
+bitrate=5000..20000    → floor 5000, ceiling 20000
+bitrate=8000           → pinned (floor=ceiling=pinned=8000)
+bitrate=5000..         → floor only
+bitrate=..20000        → ceiling only
+bitrate=auto           → free (no constraint)
+bitrate=..             → free (no constraint)
 ```
 
-Note: `@korri:remap` does NOT need a `launch.compose` handler (it doesn't wrap the spec). It is purely a session sidecar.
+**Key interface:**
+```ts
+// product/platform/stream/stream-adaptive-boundaries.ts
+export interface NumericLeverBoundary {
+  readonly floor?: number
+  readonly ceiling?: number
+  readonly pinned?: number
+  readonly free?: boolean
+  // NOTE: no `startup` field yet — this is the extension point
+}
 
-### Session lifecycle hook factory pattern (from `cdp-input-bridge/src/session-lifecycle-hook.ts`)
+export interface StreamAdaptiveLeverBoundaries {
+  readonly bitrate?: NumericLeverBoundary
+  readonly fps?: NumericLeverBoundary
+  readonly resolution?: ResolutionLeverBoundary
+}
+
+export interface StreamBoundaries {
+  readonly levers: StreamAdaptiveLeverBoundaries
+  readonly outcomes: StreamAdaptiveOutcomeBoundaries
+  readonly lean?: number  // 0=responsiveness, 1=picture
+  readonly auto?: "on" | "off"
+}
+```
+
+**Current parser** (`parseNumericLever`):
+```ts
+// Splits on ".." — more than 2 parts currently throws "invalid range"
+const parts = value.split("..")
+if (parts.length > 2) throw new Error(`invalid range for ${key}: ${value}`)
+```
+
+**Extension point for `floor..startup..ceiling`:** `parts.length === 3` is currently an error. Handling it as startup requires:
+1. Adding `startup?: number` to `NumericLeverBoundary`
+2. Recognising 3-part as `[floor, startup, ceiling]` in `parseNumericLever`
+3. Updating `serializeNumericLever` to emit the middle segment when `startup` is set
+4. Updating `definedNumericLever` to pass through `startup`
+
+**Serialisation** (current — would need startup in the middle):
+```ts
+// Current: "floor..ceiling"
+// With startup: "floor..startup..ceiling"
+function serializeNumericLever(lever: NumericLeverBoundary): string {
+  if (lever.free) return "auto"
+  if (lever.pinned !== undefined) return formatNumber(lever.pinned)
+  return `${floor}..${ceiling}`  // startup would go between the two dots
+}
+```
+
+### Adaptive Controller — Current Cold-Start / Establish Phase
+
+**File:** `product/platform/stream/stream-adaptive-controller.ts`
+
+The controller has two phases (`StreamAdaptiveControllerPhase = "steady" | "establishing"`) and three modes (`"establish" | "fine-tune" | "shed"`). During `establish` mode, it uses a baked-in `coldStartBitrateKbps` param (default 8 000 kbps) as the conservative opening target:
 
 ```ts
-export function createRemapSessionLifecycleHook(
-  options: RemapSessionLifecycleHookOptions = {},
-): KorriSessionLifecycleHook {
-  return {
-    id: KORRI_REMAP_PLUGIN_ID,
-    failurePolicy: "fail-launch",
-    afterChildRunning: async ({ launchId, launchCompanions, terminateLaunch }) => {
-      // reads policy from launchCompanions["@korri:remap"] once interface is extended
-      const policy = decodeRemapPolicy(launchCompanions?.[KORRI_REMAP_PLUGIN_ID])
-      if (!policy.enabled) return undefined
-      // ... start bridge process per controller slot
-    },
+// Current establish logic — uses params.coldStartBitrateKbps
+if (mode === "establish") {
+  const conservative = Math.min(
+    bitrateCeiling(boundaries, params),
+    params.coldStartBitrateKbps,   // ← this is the extension point for startup
+  )
+  if (summary.sampleCount < params.coldStartSampleCount) {
+    maybeSetBitrate(target, current, conservative, boundaries, params, true)
+  } else if (healthyEnoughForGrowth(pressure)) {
+    maybeSetBitrate(
+      target, current,
+      Math.round(current.bitrateKbps * (1 + params.coldStartIncreaseFraction)),
+      boundaries, params,
+    )
   }
 }
 ```
 
-### Effect Schema policy decode pattern (from `cdp-input-bridge/src/policy.ts`)
-
+**Default params (code constants, not user-configurable today):**
 ```ts
-const STRICT = { onExcessProperty: "error" } as const
-
-const RawPolicy = Schema.Struct({
-  enable: Schema.optional(Schema.Boolean),
-  "fail-closed": Schema.optional(Schema.Boolean),
-  // ...
-})
-
-export function decodeRemapPolicy(input: unknown): RemapPolicy {
-  if (input === undefined) return { enabled: false }
-  const raw = Schema.decodeUnknownSync(RawPolicy)(input, STRICT)
-  if (raw.enable !== true) return { enabled: false }
-  return { enabled: true, /* ... */ }
+const DEFAULTS = {
+  coldStartSampleCount: 3,
+  coldStartBitrateKbps: 8_000,   // ← startup boundary would override this
+  coldStartIncreaseFraction: 0.28,
+  playableBitrateKbps: 1_500,    // ← floor (soft rescue target)
+  panicBitrateKbps: 500,          // ← severe shed target
+  playableFps: 30,
+  playableResolutionWidth: 640,
 }
 ```
 
-### Process manager pattern (from `cdp-input-bridge/src/bridge-process.ts`)
-
-The `createProcessCdpInputBridge()` factory returns a `CdpInputBridgeProcessManager` that:
-1. Validates arguments (`resolveBridgeMapping`)
-2. Spawns a child process (injectable `spawn` parameter for testing)
-3. Waits for a readiness signal on stdout (`"korri-cdp-input-bridge: ready"`)
-4. Returns a `handle` with `pid`, `exited` promise, and `stop()`
-
-For `@korri:remap`, this becomes `createRemapBridgeProcessManager()`. The process name changes to `korri-remap` (or `korri-input-remap`); the args change to pass binding config instead of CDP args.
-
-### Nix binary derivation pattern (from `cdp-input-bridge/nix/cdp-input-bridge.nix`)
-
-```nix
-{ lib, writeShellApplication, bun, evtest }:
-writeShellApplication {
-  name = "korri-remap";
-  runtimeInputs = [ bun evtest ];
-  text = ''
-    exec ${lib.getExe bun} run ${../.}/packages/korri-remap/index.ts "$@"
-  '';
+**Boundary helper functions to extend:**
+```ts
+// Current boundary helpers in stream-adaptive-controller.ts
+function bitrateFloor(boundaries, params): number {
+  return boundaries?.levers.bitrate?.floor ?? params.minBitrateKbps
+}
+function bitrateCeiling(boundaries, params): number {
+  return boundaries?.levers.bitrate?.ceiling ?? params.maxBitrateKbps
+}
+// NEW: bitrateStartup would follow the same pattern
+function bitrateStartup(boundaries, params): number {
+  return boundaries?.levers.bitrate?.startup ?? params.coldStartBitrateKbps
 }
 ```
 
-### Test double pattern (from existing tests)
+### Runner — Effective Boundaries and Moonlight Envelope
+
+**File:** `product/platform/stream/stream-adaptive-runner.ts`
+
+The runner calls `effectiveBoundaries()` before passing to the controller. This function **caps ceilings at the Moonlight launch settings** if no explicit ceiling was provided:
 
 ```ts
-// Inject a fake process manager
-const hook = createRemapSessionLifecycleHook({
-  devices: async () => singleDevice,
-  processManager: {
-    start: async request => {
-      starts.push(request)
-      return { pid: 111, stop: async () => {} }
-    },
-  },
-})
-```
-
-Tests are in `*.test.ts` colocated with each source file. No `__mocks__` or `Mock*` prefixes.
-
-### Plugin registration pattern (from `product/plugins/index.ts`)
-
-```ts
-// Add to firstPartyPlugins array
-export const firstPartyPlugins = [
-  // ...existing...
-  remapPlugin,
-  // Keep cdp-input-bridge for migration period or remove
-] as const
-
-// Add to firstPartySessionLifecycleHookFactories
-export const firstPartySessionLifecycleHookFactories = [
-  // ...existing...
-  {
-    pluginId: remapPlugin.id,
-    create: createRemapSessionLifecycleHook,
-  },
-] satisfies readonly KorriSessionLifecycleHookFactory[]
-```
-
-### YFS catalog entry update pattern
-
-After the refactor, `yoshis-fabrication-station/index.ts` changes from:
-```ts
-launchMetadata: {
-  annotations: { [CDP_INPUT_BRIDGE_PLUGIN_ID]: { enable: true, cdpPort: 9333, mapping: "yfs-default", ... } },
-},
-```
-To (`ProcessPluginLaunch.with` field, or via the game's `launch.with` in inherited config):
-```ts
-with: {
-  [KORRI_REMAP_PLUGIN_ID]: {
-    enable: true,
-    controllers: [
-      {
-        source: "p1",
-        bindings: {
-          "dpad.down": "key.down",
-          "dpad.up": "key.up",
-          "dpad.left": "key.left",
-          "dpad.right": "key.right",
-          "btn.west": "key.z",
-          "btn.south": "key.a",
-          "btn.east": "key.x",
-          "btn.north": "key.s",
-          "btn.start": "key.p",
-        },
-        source: { names: ["Microsoft Xbox Series S|X Controller"] },
+function effectiveBoundaries(
+  boundaries: StreamBoundaries | undefined,
+  initial: StreamAdaptiveSettings,  // ← set from Moonlight launch bitrate/fps/resolution
+): StreamBoundaries {
+  return {
+    ...boundaries,
+    levers: {
+      ...(boundaries?.levers ?? {}),
+      bitrate: {
+        ...(boundaries?.levers.bitrate ?? {}),
+        ceiling: boundaries?.levers.bitrate?.ceiling ?? initial.bitrateKbps,
       },
-    ],
-  },
-},
+      fps: {
+        ...(boundaries?.levers.fps ?? {}),
+        ceiling: boundaries?.levers.fps?.ceiling ?? initial.fps,
+      },
+      resolution: {
+        ...(boundaries?.levers.resolution ?? {}),
+        ceiling: boundaries?.levers.resolution?.ceiling ?? initial.baselineResolution,
+      },
+    },
+    outcomes: boundaries?.outcomes ?? {},
+  }
+}
 ```
+
+**Key insight:** Moonlight's launch FPS/resolution already acts as the adaptive ceiling/envelope automatically — no duplicate configuration needed. The startup bitrate can be conservative, and the runtime will ramp toward the ceiling as health permits.
+
+### CLI Flag Wiring — Stream Boundaries
+
+**File:** `product/surfaces/terminal/korri-cli/korri-cli.ts`
+
+```ts
+// Individual flags for each lever
+const streamBoundaryFlags = {
+  bitrate: Flag.string("bitrate").pipe(Flag.optional),
+  fps:     Flag.string("fps").pipe(Flag.optional),
+  resolution: Flag.string("resolution").pipe(Flag.optional),
+  lean:    Flag.string("lean").pipe(Flag.optional),
+  minFps:  Flag.string("min-fps").pipe(Flag.optional),
+}
+
+// Converts flags to key=value args array
+function streamAdaptiveArgs(flags) {
+  return [
+    optionArg("bitrate", flags.bitrate),
+    optionArg("fps",     flags.fps),
+    optionArg("resolution", flags.resolution),
+    optionArg("lean",    flags.lean),
+    optionArg("min-fps", flags.minFps),
+  ].filter(Boolean)
+}
+```
+
+**Data flow:** `--bitrate=3000..8000..30000` (after extension) → `streamAdaptiveArgs()` → `["bitrate=3000..8000..30000"]` → `parseStreamBoundaryArgs(args)` → `StreamBoundaries` → `launchMoonlight({ adaptiveBoundaries })` → `runtimeSessionAdaptiveOptions(boundaries)` → `StreamAdaptiveRunner`.
+
+**File:** `product/surfaces/terminal/korri-cli/launch-command.ts`
+```ts
+// Line 297-303: boundary parsing and pass-through in the launch command
+const adaptiveBoundaries = options.streamBoundaryArgs
+  ? parseStreamBoundaryArgs(options.streamBoundaryArgs)
+  : undefined
+// ...passed to launchMoonlight({ adaptiveBoundaries })
+```
+
+### Adaptive Runner — Phase Tracking (Missing Piece)
+
+The runner (`stream-adaptive-runner.ts`) currently does **not** pass a `phase` argument to `computeStreamAdaptiveDecision`. The controller's `phase` input is optional; when absent it defaults to `"steady"` (fine-tune mode). To activate the `establish` phase, the runner needs to track whether the stream is in its startup window and pass `phase: "establishing"` during that window.
+
+### Handoff Trigger — Existing Foundation
+
+**File:** `product/platform/stream/stream-handoff-trigger.ts`
+
+The handoff trigger module already exists but is not yet wired into the runner:
+
+```ts
+export interface StreamHandoffSignal {
+  readonly signalPercent?: number   // Wi-Fi signal strength %
+  readonly handoffInProgress?: boolean
+}
+
+export function normalizeHandoffTrigger(signal?: StreamHandoffSignal): StreamHandoffHint | undefined
+export function handoffHintPressure(hint: StreamHandoffHint): StreamAdaptivePressure
+// { bandwidth: 0..1, latency: 0..1, decode: 0 }
+```
+
+The runner would accept a `handoff?: () => StreamHandoffSignal` option and use `handoffHintPressure()` to inject artificial pressure that bypasses the normal health-window latency and immediately drives a floor downshift.
 
 ---
 
 ## Issue Conventions
 
-This is a single-author project with no GitHub Issue templates or external contribution guidelines found. The `AGENTS.md` and `CLAUDE.md` at root are the primary agent-facing convention docs.
+No `.github/ISSUE_TEMPLATE/` directory found — issues are tracked as markdown files in `work/items/`.
+
+**Work item format** (`work/items/parking-lot/*.md`):
+```yaml
+---
+id: 01KWX9Q78A1BQ5AAAANNM4SCRJ
+slug: add-preflight-probe-for-stream-launch-quality-selection
+title: Add preflight probe for stream launch quality selection
+origin: parked
+status: To Do
+priority: medium
+labels:
+  - stream-control
+  - adaptive
+  - preflight
+created: 2026-07-07
+source: user
+---
+```
+
+**Active plan format** (`work/items/active/<id>-<slug>/plan.md`):
+YAML frontmatter with `title`, `type`, `status`, `date`, `verify_command`. Body uses `##` for sections: Summary, Problem Frame, Requirements (R1…), Scope Boundaries, Context & Research, Key Technical Decisions, Open Questions, High-Level Technical Design (Mermaid), Implementation Units (U1…), System-Wide Impact, Risks & Dependencies, Documentation / Operational Notes.
 
 ---
 
 ## Documentation Insights
 
-### AGENTS.md / CLAUDE.md
+### Coding Standards
+- Biome formatting (2-space indent, double quotes, semicolons as needed)
+- Strict TypeScript at all module boundaries
+- No `any`, no barrel exports except documented entrypoints
+- `@shared/logger` not `console.log` in runtime code (platform uses `@platform/logger/logger`)
+- Test files colocated with source: `stream-adaptive-controller.test.ts` beside `stream-adaptive-controller.ts`
 
-- Present at root. Must be read before any coding work.
-- `AGENTS.local.md` for machine-local overrides.
+### Test Posture
+- Unit tests via `bun test` — pure functions, no mocks, real implementations with injected config
+- No `Mock*`/`Stub*`/`Fake*` — test doubles are real implementations with `behavior`/`config` args
+- Nix checks for Nix-owned contracts only; TS tests for runtime/domain behavior
 
-### Naming conventions (kebab-case in authored config; confirmed by `launch-composition-config-sketch.yaml`)
+### Platform Boundary Rules
+- `product/platform/*` MUST NOT import from `product/plugins/*` or any product-layer code
+- Plugin-specific types are redeclared locally in platform modules (see `stream-health.ts`, `runtime-recovery.ts`)
+- The plugin provides implementations via registry dispatch only
 
-> "Author-facing structural keys use kebab-case only: no camel-case and no snake-case."
-
-All new authored policy fields must be kebab-case:
-- `fail-closed` (not `failClosed`)
-- `press-threshold`, `release-threshold`
-- `event-nodes` (not `eventNodes`)
-- `attach-timeout-ms`
-
-TypeScript internal field names may stay camelCase (decoded from kebab schema).
-
-### Plan/design files
-
-- `out/config-sketches/launch-composition-config-sketch.yaml` — canonical example of `launch.with` authored shape
-- `out/config-sketches/plugin-produced-vs-authored.yaml` — documents produced vs authored separation
-- `docs/handoffs/2026-06-17-gamescope-plugin-launch-companion-temporary-handoff.md` — how gamescope was migrated; directly relevant
-- `work/items/parking-lot/01KVNHQKSVADKGYYNTD6G699R9-productize-scoped-controller-to-keyboard-input-for-yfs-style.md` — the backlog item this refactor addresses
+### Key Solution Docs (durable reference)
+- `docs/acceptance/runtime-settings-protocol-contract.md` — accept-and-adapt, scale-only geometry, applied truth, recovery ownership
+- `docs/solutions/architecture-patterns/stream-control-command-outcome-contract-2026-06-03.md` — `command.accepted` ≠ applied; recovery trusts readback
+- `docs/korri-stream-layer3-safety-net-scope.md` — no external watcher, decode truth in Moonlight, recovery policy in Korri
 
 ---
 
 ## Templates Found
 
-No GitHub Issue/PR templates found (no `.github/ISSUE_TEMPLATE/` or `.github/pull_request_template.md`). This is a solo project.
+No formal GitHub templates. The project uses its own planning document schema:
+
+- **Parking-lot item:** `work/items/parking-lot/<id>-<slug>.md` — YAML frontmatter + `# Title`, `## Why it matters`, `## Acceptance Criteria`, `## Related`, `## Notes`
+- **Active plan:** `work/items/active/<id>-<slug>/plan.md` — full plan format with sections
+- **Work log:** `work/items/active/<id>-<slug>/work.md` — execution journal
 
 ---
 
-## Implementation Patterns Summary
+## Active Plans Relevant to This Work
 
-### Files to create (new `@korri:remap` plugin)
+### Currently Active (must not conflict)
 
-```
-product/plugins/remap/
-  index.ts                          — plugin declaration + re-exports
-  src/
-    policy.ts                       — RemapPolicy schema; reads from launch.with companion map
-    binding-resolver.ts             — dot-path binding → evdev code + target action resolver
-    session-lifecycle-hook.ts       — createRemapSessionLifecycleHook()
-    bridge-process.ts               — createRemapBridgeProcessManager()
-    diagnostics.ts                  — collectRemapDiagnostics()
-    policy.test.ts
-    binding-resolver.test.ts
-    session-lifecycle-hook.test.ts
-    bridge-process.test.ts
-    diagnostics.test.ts
-  packages/
-    korri-remap/
-      index.ts                      — Bun entry: CLI args, evtest, output dispatch (keyboard or gamepad)
-      package.json
-      README.md
-  nix/
-    remap.nix                       — writeShellApplication for korri-remap binary
-  plugin.test.ts
-  README.md
-```
+| Plan | ID | Status | Relevance |
+|---|---|---|---|
+| Moonlight streaming plugin refactor | `01KWN49HEG9X0HFJBMK2KRJ8CM` | completed | Established removable plugin architecture; CLI consumers now use platform `StreamControlSession` interface |
+| Senses: stream health telemetry | `01KWNSXR8H87GJ720M51K1HH31` | active | Defines `StreamHealthSample` protocol, `quality.sample` native events, `StreamHealthMonitor` — inputs to the adaptive controller |
+| Adaptive stream brain/watchdog | `01KWPW23JPV3F01BAJC3NJYKE8` | landed | Built the complete controller stack: `stream-adaptive-controller.ts`, `stream-adaptive-runner.ts`, `runtime-recovery-supervisor.ts`, `stream-health.ts` |
+| CLI interface unification | `01KWMVFMNJJ0TYPBF2H9Q1QPGD` | completed | Unified `launch` verb, established canonical exit-code table; `stream` retains live-tuning verbs only |
+| Stream game lifecycle chord | `01KWMNX6R2N1BNCY124TWH94XF` | active | Chord-hold supervisor; shares inputd/overlay infra; independent of stream quality |
 
-### Files to modify
+### Parked Items Directly in Scope for This Plan
 
-| File | Change |
-|---|---|
-| `product/platform/plugin/session-lifecycle.ts` | Add `launchCompanions?: LaunchCompanionMap` to `KorriSessionLifecycleHookStartRequest` |
-| `product/services/device/sessiond.ts` | Thread `launchCompanions` through to `afterChildRunning` call |
-| `product/plugins/index.ts` | Register `remapPlugin` in `firstPartyPlugins` and `firstPartySessionLifecycleHookFactories` |
-| `product/plugins/yoshis-fabrication-station/index.ts` | Replace `launchMetadata.annotations[CDP_INPUT_BRIDGE_PLUGIN_ID]` with `with[KORRI_REMAP_PLUGIN_ID]` |
-| `product/plugins/cdp-input-bridge/index.ts` | Mark as deprecated or remove; keep binary for any remaining consumers |
+| Item | ID | Labels |
+|---|---|---|
+| Add preflight probe for stream launch quality selection | `01KWX9Q78A1BQ5AAAANNM4SCRJ` | stream-control, adaptive, preflight |
+| Add handoff-aware preemptive stream downshift | `01KWX9Q78CY3QNQ5BXV1BJ47ER` | stream-control, adaptive, handoff |
+| Explore replacing explicit stream emergency mode with unified controller | `01KWX6X2C5RZ08BTG9FSXYBHNY` | stream-control, adaptive, design-debt |
 
-### Interface change needed in platform (session-lifecycle.ts)
+### Other Parked Items Composing Well (awareness)
 
-```ts
-import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
-
-export interface KorriSessionLifecycleHookStartRequest {
-  readonly launchId: string
-  readonly spec: LaunchSpec
-  readonly launchMetadata?: LaunchMetadata
-  readonly launchCompanions?: LaunchCompanionMap  // ← ADD THIS
-  readonly terminateLaunch?: () => void
-}
-```
-
-Then in `sessiond.ts`, the call becomes:
-```ts
-await hook.afterChildRunning({
-  launchId,
-  spec,
-  ...(launchMetadata ? { launchMetadata } : {}),
-  ...(launchCompanions ? { launchCompanions } : {}),  // ← thread through
-  ...(active?.terminate ? { terminateLaunch: active.terminate } : {}),
-})
-```
-
-The `launchCompanions` must be threaded from the resolved launch through `LaunchExtras` to sessiond. Check `game-stream-launch-intent.ts` and `sessiond.ts` receive/store paths for the right injection point.
+| Item | ID | Notes |
+|---|---|---|
+| Boundary persistence: named presets and per-game memory | `01KWTQJS39SZGCWQRKH3Z8QE0W` | Deferred persistence; same flat key=value schema |
+| Adapt streaming to handheld device state (battery, thermal) | `01KWTQ750V3HJZ9AMQKH6H5W13` | Composes with same lever/outcome machinery |
+| Reconsider 'stream' as first-class CLI noun | `01KWTMPE4MJXVR940R4X9GB0PR` | CLI noun model decision; currently `stream` is retained for live-tuning |
 
 ---
 
 ## Recommendations
 
-### 1. Extend the lifecycle hook request first (lowest risk)
+### Grammar Extension (`floor..startup..ceiling`)
 
-Before creating the `@korri:remap` plugin, add `launchCompanions?: LaunchCompanionMap` to `KorriSessionLifecycleHookStartRequest` and thread it from the Portal RPC handler → `LaunchExtras` → sessiond → hook calls. This is a non-breaking additive change. Existing hooks (`@korri:gamescope`, `@korri:steam`, `@korri:cdp-input-bridge`) already ignore unknown fields.
+**Files to touch:**
+1. `product/platform/stream/stream-adaptive-boundaries.ts` — sole parser/serializer; extend `NumericLeverBoundary`, `parseNumericLever`, `serializeNumericLever`, `definedNumericLever`, `mergeStreamBoundaries`
+2. `product/platform/stream/stream-adaptive-boundaries.test.ts` — add: 3-part parse, invalid 4-part rejection, startup-only omit, serialise round-trip with startup
 
-### 2. Keep `@korri:cdp-input-bridge` binary intact during migration
-
-The `korri-cdp-input-bridge` binary is a Bun + evtest script. The new `korri-remap` binary can share its CDP dispatch logic if needed. Start fresh for the new plugin, but don't delete `cdp-input-bridge` until YFS is migrated and tested on Sobo.
-
-### 3. Confirm the flat vs. nested binding config shape with user
-
-The user said "compact dot-path bindings like `p1.dpad.down: key.down`". This could mean:
-- **Flat record**: `{ "p1.dpad.down": "key.down" }` — simpler schema, flat map
-- **Nested**: `{ controllers: [{ source: "p1", bindings: { "dpad.down": "key.down" } }] }` — more structured, better for multi-source disambiguation
-
-The flat form is more compact as the user requested. The nested form is more robust for per-controller `source.names` hints. Clarify before designing the `RemapPolicy` schema.
-
-### 4. Gamepad-to-gamepad binding implementation gap
-
-The current CDP bridge only dispatches **keyboard events via CDP**. A gamepad-to-gamepad binding requires a different output mechanism (e.g. uinput virtual device or InputPlumber profile). This is a non-trivial addition. The fail-closed safety contract must still hold. Recommend implementing keyboard targets first and flagging gamepad output as a future extension.
-
-### 5. Check `product/platform/library/config/cascade-resolver.ts` for companion threading
-
-The resolver already calls `composeLaunchCompanions()`. Whether the resolved `launchCompanions` map is included in the `LaunchExtras` payload sent to sessiond is a key gap to verify. Look at lines 509+ in `cascade-resolver.ts` and the `launchLocalForegroundSession()` call path in `launch.rpc-handler.ts`.
-
-### 6. Verification commands for this refactor
-
-```sh
-just typecheck
-bun test product/plugins/remap/
-bun test product/platform/plugin/session-lifecycle.test.ts
-bun test product/services/device/sessiond-plugin-composition.test.ts
-bun test product/plugins/yoshis-fabrication-station/
-just lint
+**Interface extension:**
+```ts
+export interface NumericLeverBoundary {
+  readonly floor?: number
+  readonly startup?: number   // ← new: conservative opening target
+  readonly ceiling?: number
+  readonly pinned?: number
+  readonly free?: boolean
+}
 ```
+
+**Parser extension in `parseNumericLever`:** Handle `parts.length === 3` as `[floor, startup, ceiling]`. Validate `floor ≤ startup ≤ ceiling`. Empty middle segment (`5000..…..20000` with blank middle) should be treated as no startup (not an error — keep backward compatibility).
+
+**Serialiser extension in `serializeNumericLever`:** Emit `floor..startup..ceiling` when `startup` is defined (and neither `free` nor `pinned`).
+
+**Open grammar questions to resolve in plan:**
+- Is `..startup..` (startup-only, no floor or ceiling) a valid form? Probably yes — it just sets the opening target with floor/ceiling defaulting to params.
+- Is `startup..ceiling` (no floor) valid? Probably yes — startup is conservative opener, floor is rescue floor.
+
+### Controller Integration
+
+**File:** `product/platform/stream/stream-adaptive-controller.ts`
+
+Add `bitrateStartup()` helper alongside `bitrateFloor` / `bitrateCeiling`:
+```ts
+function bitrateStartup(
+  boundaries: StreamBoundaries | undefined,
+  params: Required<StreamAdaptiveControllerParams>,
+): number {
+  return boundaries?.levers.bitrate?.startup ?? params.coldStartBitrateKbps
+}
+```
+
+Replace the `conservative` calculation in the `establish` branch:
+```ts
+// Before:
+const conservative = Math.min(bitrateCeiling(boundaries, params), params.coldStartBitrateKbps)
+// After:
+const conservative = Math.min(bitrateCeiling(boundaries, params), bitrateStartup(boundaries, params))
+```
+
+**Tests to add in `stream-adaptive-controller.test.ts`:**
+- `bitrate=3000..8000..30000` → startup 8000 used during establish phase, not params.coldStartBitrateKbps
+- `bitrate=..8000..30000` → floor defaults, startup 8000, ceiling 30000
+- Startup is clamped by ceiling (e.g. startup 40000 with ceiling 30000 → min = 30000)
+- After cold-start sample count passes, ramps from startup toward ceiling
+- Floor still applies for shed/rescue regardless of startup
+
+### Runner — Phase Tracking
+
+**File:** `product/platform/stream/stream-adaptive-runner.ts`
+
+The runner currently does not pass `phase` to the controller. To activate the `establish` phase during stream startup, the runner needs to track:
+- Whether the stream just started (e.g. sample count below `coldStartSampleCount`)
+- Or an explicit startup window (e.g. first N seconds)
+
+A `startedAtMs?: number` could be seeded in `createStreamAdaptiveRunner` options and compared in `tick()` to gate the `phase: "establishing"` argument. This keeps the phase determination in the runner (closer to session lifecycle) rather than the controller (which should remain pure/stateless).
+
+### Moonlight Launch Policy — Startup as Conservative Opening Move
+
+**File:** `product/apps/portal/stream/moonlight-launcher.ts`
+
+The Moonlight **launch** FPS and resolution (set from the policy/config, e.g. 1080p60) act as the runtime envelope via `effectiveBoundaries()`. No changes needed there. The startup bitrate is the conservative opening bitrate within that envelope. The user's mental model:
+
+```
+korri launch <game> --host <host> --bitrate=3000..8000..30000 --fps=..60 --resolution=..1920x1080
+```
+
+- Moonlight launches at 1920×1080@60fps (the ceiling/envelope)
+- Adaptive controller opens at 8000 kbps (startup)
+- Ramps toward 30000 kbps ceiling as health permits
+- Falls back to 3000 kbps floor if health deteriorates
+- Never exceeds 60fps or 1920×1080 (enforced by `effectiveBoundaries`)
+
+**No changes needed in `moonlight-launcher.ts`** — the boundaries flow through as `adaptiveBoundaries` already. Startup is purely a controller-layer concern.
+
+### Preflight Launch Quality Selection
+
+**Parking-lot item:** `01KWX9Q78A1BQ5AAAANNM4SCRJ`
+
+**Files:**
+- `product/apps/portal/api/library/launch.rpc-handler.ts` — RPC handler call site; preflight probe would run before `composeMoonlightLaunchSpec()`
+- `product/apps/portal/api/library/remote-stream-prepare.ts` — remote prepare seam
+- `product/apps/portal/stream/moonlight-launcher.ts` — `launchMoonlight()` receives `adaptiveBoundaries`; the preflight result could adjust this
+
+**Design approach:**
+- A `probeStreamQuality(host)` function runs a lightweight measurement (RTT/loss probe; possibly iperf3 vs product-owned approach to be decided per the parking-lot item)
+- Maps probe results to an explicit launch profile (`{ bitrateKbps: number, fps: number, resolution: StreamAdaptiveResolution }`) — not a named tier enum, but derived values
+- The profile contributes to `adaptiveBoundaries` (e.g. sets startup, maybe ceiling) and Moonlight launch FPS/resolution policy
+- The probe runs at the CLI launch command level or RPC handler level (before `composeMoonlightLaunchSpec`)
+- Keep preflight opt-in (not automatic); bad preflight condition avoids launching into an unrecoverable high-bitrate choke
+
+### Handoff-Aware Preemptive Downshift
+
+**Parking-lot item:** `01KWX9Q78CY3QNQ5BXV1BJ47ER`
+
+**Files:**
+- `product/platform/stream/stream-handoff-trigger.ts` — existing `normalizeHandoffTrigger()`, `handoffHintPressure()`; the machinery exists, it just needs wiring into the runner
+- `product/platform/stream/stream-adaptive-runner.ts` — accept a `handoff?: () => StreamHandoffSignal` option
+
+**Integration in the runner:**
+```ts
+// In tick(), before normal decision path:
+const handoffHint = options.handoff
+  ? normalizeHandoffTrigger(options.handoff())
+  : undefined
+if (handoffHint) {
+  // Bypass health windows: immediately target floor
+  const floorBitrate = bitrateFloor(currentBoundaries(options.boundaries), DEFAULTS)
+  await dispatchTarget({ bitrateKbps: floorBitrate, fps: DEFAULTS.playableFps }, "shed")
+  return
+}
+```
+
+The severity field on `StreamHandoffHint` allows graduated response: a mild handoff hint could inject artificial pressure via `handoffHintPressure(hint)` rather than immediately shedding to floor (only `severity === 1` / `handoffInProgress: true` triggers the preemptive shed).
+
+**Signal sources to decide (per parking-lot item):**
+- Wi-Fi signal strength (existing `signalPercent` field in `StreamHandoffSignal`)
+- Network interface change detection (route/interface events)
+- Abrupt RTT/loss spike exceeding a threshold (could be derived from the existing health monitor)
+
+### Unified Controller Investigation
+
+**Parking-lot item:** `01KWX6X2C5RZ08BTG9FSXYBHNY`
+
+The current `shed` mode is the explicit emergency path. The parking-lot item asks whether it can be replaced by the continuous controller naturally reaching floor under sufficient pressure. This is a **design exploration**, not an immediate implementation. The `bitrateFloor`, startup, and ceiling boundaries are the building blocks. Key question: can `panicBitrateKbps` (500 kbps) emerge from the controller math under severe pressure without a separate shed branch? The `applyPlayabilityShed` function is the unit to evaluate.
+
+**Recommendation:** Defer this exploration to after startup/preflight/handoff land. The shed path is a safety invariant; changing it carries risk and needs the device validation gate from L5 to be proven first.
 
 ---
 
-## Key Files Reference
+## Key Files for This Plan (All Repo-Relative)
 
-| Path | What it is |
+### Grammar Extension
+- `product/platform/stream/stream-adaptive-boundaries.ts` — extend `NumericLeverBoundary` + parser + serialiser
+- `product/platform/stream/stream-adaptive-boundaries.test.ts` — add startup round-trip tests
+
+### Controller Integration
+- `product/platform/stream/stream-adaptive-controller.ts` — add `bitrateStartup()`, wire into establish branch
+- `product/platform/stream/stream-adaptive-controller.test.ts` — startup boundary test cases
+
+### Runner Phase Tracking
+- `product/platform/stream/stream-adaptive-runner.ts` — add startup-window tracking, pass `phase: "establishing"`
+- `product/platform/stream/stream-adaptive-runner.test.ts` — phase-handoff test cases
+
+### Handoff Wiring
+- `product/platform/stream/stream-handoff-trigger.ts` — existing; use as-is
+- `product/platform/stream/stream-adaptive-runner.ts` — add `handoff?` option
+
+### Preflight
+- `product/apps/portal/api/library/launch.rpc-handler.ts` — RPC handler call site
+- `product/apps/portal/api/library/remote-stream-prepare.ts` — remote prepare seam
+- `product/apps/portal/stream/moonlight-launcher.ts` — `adaptiveBoundaries` injection point
+
+### CLI Surface
+- `product/surfaces/terminal/korri-cli/korri-cli.ts` — `streamBoundaryFlags` (all boundary flags already present; startup rides on `--bitrate` grammar extension, no new flags needed)
+- `product/surfaces/terminal/korri-cli/launch-command.ts` — `streamBoundaryArgs` passed through; no new wiring needed
+- `product/surfaces/terminal/korri-cli/stream-quality.ts` — adaptive set/show/watch commands
+
+### Live Telemetry (already landed, consumed by controller)
+- `product/platform/stream/stream-health.ts`
+- `product/platform/stream/stream-health-monitor.ts`
+- `product/platform/stream/stream-health-session.ts`
+- `product/platform/stream/runtime-recovery.ts`
+- `product/platform/stream/runtime-recovery-supervisor.ts`
+
+### Plan Docs to Update or Reference
+- `work/items/parking-lot/01KWX9Q78A1BQ5AAAANNM4SCRJ-add-preflight-probe-for-stream-launch-quality-selection.md`
+- `work/items/parking-lot/01KWX9Q78CY3QNQ5BXV1BJ47ER-add-handoff-aware-preemptive-stream-downshift.md`
+- `work/items/parking-lot/01KWX6X2C5RZ08BTG9FSXYBHNY-explore-replacing-explicit-stream-emergency-mode-with-unifie.md`
+
+---
+
+## Constraint Summary for the Plan
+
+| Constraint | Evidence |
 |---|---|
-| `product/platform/plugin/index.ts` | `plugin()`, `KorriPlugin`, `PluginHandler`, `ProcessPluginLaunch` (has `with?: Record<ProviderId, unknown>`) |
-| `product/platform/plugin/session-lifecycle.ts` | `KorriSessionLifecycleHook`, `KorriSessionLifecycleHookStartRequest` |
-| `product/platform/plugin/launch-companion.ts` | `composeLaunchCompanions()` — how `launch.with` values run `launch.compose` handlers |
-| `product/platform/plugin/launch-metadata.ts` | `LaunchMetadata`, `decodeLaunchMetadata` |
-| `product/platform/library/config/inheritable-fields.ts` | `LaunchWithPolicy`, `LaunchCompanionMap`, `InheritableLayer`, `launchCompanionsFromLaunch()` |
-| `product/platform/library/config/cascade-resolver.ts` | Config cascade fold logic for `launch.with` |
-| `product/platform/library/library-services.ts` | `ResolvedLaunch` — has both `launchCompanions?` and `launchMetadata?` |
-| `product/platform/input/native/inputplumber-virtual-gamepad.ts` | `resolveInputPlumberVirtualGamepad()` — keep unchanged |
-| `product/platform/input/native/button-codes.ts` | InputPlumber-normalized evdev button constants |
-| `product/plugins/gamescope/src/launch-companion/policy.ts` | Reference for `gamescopePolicyFromLaunch()`, `decodeGamescopePolicy()`, `foldGamescopePolicy()` |
-| `product/plugins/gamescope/src/session/lifecycle-hook.ts` | Reference session lifecycle hook factory pattern |
-| `product/plugins/cdp-input-bridge/src/policy.ts` | Current CDP policy (to restructure) |
-| `product/plugins/cdp-input-bridge/src/mapping.ts` | Current named-preset mapping (to replace with inline bindings) |
-| `product/plugins/cdp-input-bridge/src/session-lifecycle-hook.ts` | Current lifecycle hook (to refactor) |
-| `product/plugins/cdp-input-bridge/src/bridge-process.ts` | Current process manager + evtest translator (to generalize) |
-| `product/plugins/cdp-input-bridge/packages/korri-cdp-input-bridge/index.ts` | Current Bun CLI entry (to refactor) |
-| `product/plugins/yoshis-fabrication-station/index.ts` | YFS plugin — the primary consumer to migrate |
-| `product/plugins/index.ts` | Registration of all first-party plugins and lifecycle hook factories |
-| `product/services/device/sessiond.ts` | Calls `afterChildRunning`; needs `launchCompanions` threading |
-| `product/services/device/sessiond-plugin-composition.ts` | `sessionLifecycleHooksFromEnv()` |
-| `out/config-sketches/launch-composition-config-sketch.yaml` | Canonical authored `launch.with` examples |
+| CLI first, no GUI | `01KWPW23JPV3F01BAJC3NJYKE8` scope boundaries explicitly state "No GUI, portal slider, or in-session overlay controls" for the controller; GUI is Layer 6 |
+| No autodetect ceiling | Per user requirement; ceiling must be explicit; `effectiveBoundaries()` already caps at Moonlight launch settings |
+| Explicit ceiling input | User provides `--bitrate=floor..startup..ceiling` on launch; no inference |
+| Moonlight launch resolution/FPS as envelope | `effectiveBoundaries()` in runner uses launch `initial.fps`/`initial.bitrateKbps`/`initial.baselineResolution` as ceiling when not explicitly overridden |
+| Startup can be conservative | Maps to `boundaries.levers.bitrate.startup` overriding `params.coldStartBitrateKbps` |
+| Floor = playable-first rescue | `bitrateFloor()`, `playableBitrateKbps=1500`, `panicBitrateKbps=500` in controller |
+| Platform must stay streamer-agnostic | No Moonlight imports in `product/platform/stream/*` |
+| Test with `bun test` | `just test-unit` covers the pure platform layer; Nix tests cover package/module wiring |
+| Whole-repo typecheck | `just typecheck` is the only valid TS type gate |

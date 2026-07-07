@@ -54,6 +54,9 @@ export interface ShiftCinematicGame {
   readonly favorite?: boolean
   /** Discovery/recommended pick — draws a "Fresh" tile marker + hero reason chip. */
   readonly fresh?: boolean
+  /** Rail section this game belongs to (e.g. "Continue", "Fresh picks"); the rail
+   * groups consecutive games sharing a section under one caption. */
+  readonly section?: string
 }
 
 /** A trailing non-game rail entry (a "destination"): Surprise or Library. */

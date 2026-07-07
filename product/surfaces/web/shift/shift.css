@@ -728,6 +728,10 @@
 	display: flex;
 	align-items: flex-end;
 	gap: var(--shift-space-3);
+	/* Sectioned rails space the GROUPS wider than the tiles within a group. */
+	&[data-sectioned] {
+		gap: calc(var(--cine-tile) * 0.44);
+	}
 	/* Just enough headroom for the focused tile's scale-up; the old space-4 was
 	 * wasted vertical room that crowded the hero off short frames. */
 	padding: var(--shift-space-2) 0;
@@ -768,10 +772,46 @@
 	z-index: 2;
 	opacity: 1;
 	filter: none;
-	transform: scale(1.12) translateY(-6%);
+	/* A gentle grow on focus — kept small so the tile never crowds its caption. */
+	transform: scale(1.03) translateY(-6%);
 	box-shadow:
 		0 18px 50px rgba(0, 0, 0, 0.6),
 		0 0 0 3px var(--shift-accent);
+}
+
+/* Sectioned rail: consecutive same-section games grouped under a caption below
+ * the group (the focused tile only grows upward, so a label beneath is never
+ * covered). The active group's caption lights in the accent; the trailing
+ * affordance group reserves a hidden caption-height spacer to stay aligned. */
+[data-shift-home] .shift-cine-rail-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-4);
+}
+
+[data-shift-home] .shift-cine-rail-group-tiles {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--shift-space-3);
+}
+
+[data-shift-home] .shift-cine-rail-group-label {
+	padding-left: var(--shift-space-1);
+	font-size: var(--shift-text-fine);
+	font-weight: 700;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--shift-ink-dim);
+}
+
+[data-shift-home]
+	.shift-cine-rail-group[data-active]
+	.shift-cine-rail-group-label {
+	color: var(--shift-accent);
+}
+
+[data-shift-home] .shift-cine-rail-group-label[data-spacer] {
+	visibility: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {

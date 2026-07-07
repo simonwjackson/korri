@@ -248,6 +248,8 @@ function NavigatingReadyBody({
     [focusGame],
   )
   const [acked, setAcked] = useState(false)
+  // Stable per visit so the Random pick doesn't reshuffle on clock/state ticks.
+  const homeRandomSeed = useMemo(() => Math.random(), [])
 
   const rawLaunch = launch.state
   const raw = shiftLaunchStateForForeground({
@@ -284,7 +286,9 @@ function NavigatingReadyBody({
     onSome: ({ games }) =>
       games.length > 0 ? (
         <ShiftCinematicHome
-          games={games.map(toCinematicGame)}
+          games={shiftHomeGamesFromCatalog(games, count =>
+            Math.floor(homeRandomSeed * count),
+          )}
           time={shiftClockLabelForIso(clockIso)}
           battery={battery}
           network={network}
@@ -314,6 +318,51 @@ export function makeLaunchHandler(
     const entry = games.find(game => game.id === id)
     if (entry) start(entry)
   }
+}
+
+/** How many recently-played games "Recent" shows before the rest fall behind
+ * the Library affordance (Home stays curated, not an A–Z dump). */
+const HOME_RECENT_CAP = 8
+
+/**
+ * Build the curated home rail from the live catalog: a "Recent" section of the
+ * most recently played games, then a single "Random" pick drawn from the games
+ * NOT already in Recent. Everything else stays behind the Library affordance.
+ * Sections are encoded on each game via `section`; the rail groups them under
+ * captions.
+ *
+ * `randomIndex` chooses the Random pick's position among the candidates; the
+ * caller passes a stable one (memoized per visit) so the pick does not reshuffle
+ * on every re-render.
+ */
+export function shiftHomeGamesFromCatalog(
+  entries: readonly CatalogEntry[],
+  randomIndex: (count: number) => number = count =>
+    Math.floor(Math.random() * count),
+): readonly ShiftCinematicGame[] {
+  const recent = entries
+    .filter(entry => entry.playStats?.lastPlayed)
+    .sort(
+      (a, b) =>
+        (b.playStats?.lastPlayed?.getTime() ?? 0) -
+        (a.playStats?.lastPlayed?.getTime() ?? 0),
+    )
+    .slice(0, HOME_RECENT_CAP)
+  const recentIds = new Set(recent.map(entry => entry.id))
+  const candidates = entries.filter(entry => !recentIds.has(entry.id))
+  const random =
+    candidates.length > 0
+      ? candidates[
+          Math.min(
+            Math.max(randomIndex(candidates.length), 0),
+            candidates.length - 1,
+          )
+        ]
+      : undefined
+  return [
+    ...recent.map(entry => ({ ...toCinematicGame(entry), section: "Recent" })),
+    ...(random ? [{ ...toCinematicGame(random), section: "Random" }] : []),
+  ]
 }
 
 export function toCinematicGame(game: CatalogEntry): ShiftCinematicGame {

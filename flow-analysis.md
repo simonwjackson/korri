@@ -1,373 +1,465 @@
-# Flow Analysis: `@korri:cdp-input-bridge` → `@korri:remap`
+# Stream Quality Plan — Flow Analysis
 
-_Generated against trunk @ 2f27d32d. Reviewer role: UX / architecture gap analysis._
+**Scope**: Four work items analyzed for user flows, state transitions, edge cases, and test scenarios.
+1. Extend adaptive boundary grammar to `floor..startup..ceiling`
+2. Use `startup` for conservative launch/establish; preserve explicit `ceiling` and `floor`
+3. Preflight launch-quality selection before Moonlight starts
+4. Health-driven / handoff-aware early downshift for running streams
+
+**Codebase version**: trunk @ c90182f6
 
 ---
 
-## Codebase Context
+## Phase 1: Codebase Ground Truth
 
-Before mapping flows, key constraints surfaced from Phase 1:
+Key files read before analysis:
 
-| Component | Location | What it does |
+| Area | Path |
+|---|---|
+| Boundary grammar | `product/platform/stream/stream-adaptive-boundaries.ts` |
+| Adaptive controller | `product/platform/stream/stream-adaptive-controller.ts` |
+| Adaptive runner | `product/platform/stream/stream-adaptive-runner.ts` |
+| Stream session | `product/platform/stream/stream-session.ts` |
+| Handoff trigger | `product/platform/stream/stream-handoff-trigger.ts` |
+| Moonlight launcher | `product/apps/portal/stream/moonlight-launcher.ts` |
+| Moonlight launch spec | `product/plugins/moonlight/src/moonlight-launch-spec.ts` |
+| Moonlight policy | `product/plugins/moonlight/src/config/policy.ts` |
+| CLI launch command | `product/surfaces/terminal/korri-cli/launch-command.ts` |
+| CLI entry point | `product/surfaces/terminal/korri-cli/korri-cli.ts` |
+| Stream quality CLI | `product/surfaces/terminal/korri-cli/stream-quality.test.ts` |
+| Platform limits | `product/platform/stream-control/limits.ts` |
+| Moonlight removability | `product/plugins/moonlight/removability.test.ts` |
+
+### Existing structure relevant to the plan
+
+**Boundary grammar** (`NumericLeverBoundary`): supports `{ floor?, ceiling?, pinned?, free? }`. CLI grammar: `5000..20000` (range), `5000` (pinned), `..20000` (ceiling-only), `5000..` (floor-only), `auto` (free). No `startup` slot exists.
+
+**Establish phase**: `StreamAdaptiveControllerPhase = "steady" | "establishing"` exists in the controller. When phase is `"establishing"`, the controller uses `Math.min(bitrateCeiling, coldStartBitrateKbps)` — currently `8_000` kbps hardcoded in `DEFAULTS`. **Critical gap**: the adaptive runner (`createStreamAdaptiveRunner`) never passes a `phase` argument to `computeStreamAdaptiveDecision`. The establish path in the controller is effectively dead from the runner's perspective and only exercises via the scenario runner.
+
+**Effective ceilings**: `effectiveBoundaries` in `stream-adaptive-runner.ts` automatically caps all levers at Moonlight's initial reported values (bitrate, fps, resolution). This is the "launch values act as envelope" invariant — already implemented.
+
+**Handoff module**: `stream-handoff-trigger.ts` provides `normalizeHandoffTrigger → StreamHandoffHint` and `handoffHintPressure → StreamAdaptivePressure`. **No runtime consumer exists**. Both functions are only referenced in their own test.
+
+**Plugin removability**: `@platform/stream` (boundaries, controller, runner) is the platform layer. `@product/plugins/moonlight` is the plugin layer. The boundary type lives in platform and must remain plugin-agnostic. The removability test enforces zero shipped imports of the moonlight package outside the plugin host.
+
+---
+
+## Phase 2: User Flows
+
+### Flow 1 — Static launch with explicit startup bitrate
+
+**Entry**: `korri launch <game> --bitrate=5000..10000..20000`
+
+```
+User invokes CLI with 3-part bitrate flag
+    │
+    ▼
+parseStreamBoundaryArgs() — needs to parse "10000" as startup slot
+    │  [gap: current parser rejects >2 parts]
+    ▼
+StreamBoundaries.levers.bitrate = { floor: 5000, startup: 10000, ceiling: 20000 }
+    │
+    ▼
+launchMoonlight()
+    │
+    ├── Moonlight spawned with ceiling values in args (-bitrate ceiling, -width/-height/-fps from policy)
+    │   [question: does the policy bitrate === ceiling? or is startup passed to Moonlight directly?]
+    │
+    └── startStreamRuntimeSession()
+           │
+           ▼
+        adaptiveRunner created; startup → coldStartBitrateKbps
+           │  [gap: no path from boundaries.startup → params.coldStartBitrateKbps]
+           │
+           ▼
+        runner.tick() with phase="establishing"
+           │  [gap: runner never sets phase on tick calls]
+           │
+           ▼
+        establish mode: start at min(ceiling, startup) = 10000 kbps
+           │
+           ▼
+        gradually climb toward ceiling as health permits
+           │
+           ▼
+        phase transitions to "steady" after N healthy samples
+           │  [gap: no phase-transition logic in runner]
+```
+
+**Terminal states**: Stream running at ceiling if healthy; stream at floor if link poor; Moonlight exits.
+
+---
+
+### Flow 2 — Preflight quality selection
+
+**Entry**: `korri launch <game>` (no explicit bitrate; preflight selects quality profile)
+
+```
+User invokes launch
+    │
+    ▼
+runLaunchCommand() — before launchMoonlight()
+    │
+    ▼
+[new] runPreflight(host) — probe link to source machine
+    │
+    ├── probe timeout? → use rescue profile (640x360/30fps/startup=4000)
+    ├── probe result: excellent → use high profile (1080p/120fps/startup=20000)
+    ├── probe result: good → use medium profile (1080p/60fps/startup=12000)
+    ├── probe result: fair → use safe profile (720p/60fps/startup=8000)
+    └── probe fails (tool missing, refused) → abort or use rescue profile
+    │
+    ▼
+launchMoonlight({ adaptiveBoundaries: probeResult })
+    │
+    ▼
+stream runs as in Flow 1
+```
+
+**Decision points**: abort-on-failure vs rescue-on-failure; whether explicit flags override probe.
+
+---
+
+### Flow 3 — Handoff-aware early downshift (running stream)
+
+**Entry**: User is streaming; network transitions (Wi-Fi → cellular, or RTT spike detected)
+
+```
+Stream running normally (adaptive in steady/fine-tune phase)
+    │
+    ▼
+External signal arrives: signalPercent drops below 30, or handoffInProgress=true
+    │
+    ▼
+normalizeHandoffTrigger(signal) → { kind: "collapse-likely", severity }
+    │
+    ▼
+handoffHintPressure(hint) → synthetic StreamAdaptivePressure
+    │  [gap: no consumer in runner; synthetic pressure not injected into tick]
+    │
+    ▼
+[new] runner.injectPressure(pressure) — triggers immediate downshift without waiting for next tick
+    │
+    ├── bitrateKbps → floor (e.g. 500 kbps)
+    ├── fps → playable floor (e.g. 30)
+    └── resolution → playable floor (e.g. 640x360)
+    │
+    ▼
+Stream stabilizes at playable floor
+    │
+    ▼
+Recovery window: wait N samples of healthy RTT/loss before climbing
+    │
+    ▼
+Gradual climb back toward startup, then ceiling
+```
+
+**Terminal states**: Stream survives handoff at low quality; stream drops (outage supervisor handles); user manually raises quality.
+
+---
+
+### Flow 4 — Manual runtime set under active handoff
+
+**Entry**: User runs `korri stream bitrate 20000` while handoff/congestion is in progress
+
+```
+korri stream bitrate 20000
+    │
+    ▼
+runStreamSet({ kind: "bitrate", bitrateKbps: 20000 }, io)
+    │
+    ▼
+client.setBitrate({ bitrateKbps: 20000 }) → Promise.reject or command.rejected
+    │  [known: spec says "manual commands can fail if stream floods link"]
+    │
+    ├── rejected → err output "bitrate out of bounds" or transport error
+    │   [question: should CLI warn that a handoff may be in progress?]
+    └── silently accepted but link drops new frames → stream degrades further
+    │
+    ▼
+exit code 1; no retry; user must try again
+```
+
+---
+
+## Phase 3: Gaps
+
+### Critical
+
+**C1 — Establish phase is dead code from the runner**
+
+The controller has an "establish" mode gated on `input.phase === "establishing"`, but `createStreamAdaptiveRunner` never passes `phase` to `computeStreamAdaptiveDecision`. The startup bitrate logic (`coldStartBitrateKbps`) only activates in this phase. Adding a `startup` field to `NumericLeverBoundary` is wasted if the runner never transitions through the establish phase.
+
+_Existing pattern_: `stream-adaptive-scenario.ts` does pass `phase` — it's the right model. The runner needs equivalent phase lifecycle: `establishing` for the first N healthy samples, then `steady`.
+
+_Required_: Add phase state to the runner (or to `StartStreamRuntimeSessionOptions`). Define the transition predicate (e.g., `sampleCount >= coldStartSampleCount && healthyEnoughForGrowth`). Expose phase in runner events for observability.
+
+---
+
+**C2 — No path from `boundaries.levers.bitrate.startup` to `params.coldStartBitrateKbps`**
+
+Even after the grammar extension, the startup value in `StreamBoundaries` has no path into the controller. `StreamAdaptiveControllerParams` is a separate type. The runner's `computeStreamAdaptiveDecision` call in `stream-adaptive-runner.ts` passes `boundaries` but not `params`.
+
+_Options_: (a) Add a `startup` field to `NumericLeverBoundary` and have the controller read it directly from boundaries, keeping params as overrides. (b) Extract `startup` from boundaries in the runner and inject as `params.coldStartBitrateKbps`. Option (a) is cleaner — boundaries already express the user's intent; params are internal tuning.
+
+---
+
+**C3 — Handoff trigger has no runtime consumer**
+
+`stream-handoff-trigger.ts` is fully isolated. No runner, session, or launcher reads it. The plan treats it as a building block, but the wiring between signal acquisition, hint normalization, and adaptive dispatch doesn't exist.
+
+_Required_: Define the signal acquisition source (network manager events? RTT spike from health monitor? explicit API call?). Wire `normalizeHandoffTrigger` → `handoffHintPressure` → runner. Decide whether the runner polls or receives pushed events. The current tick model is polling — handoff needs a lower-latency path.
+
+---
+
+**C4 — Preflight probe protocol is unspecified**
+
+The parking lot item captures the intent but leaves probe mechanism open (iperf3 vs custom). Without specifying the protocol, the implementation cannot be planned: the source machine needs a server, the probe duration constrains UX, and failure modes differ between iperf3 and a product-owned TCP probe.
+
+_Decision needed before implementation_: protocol choice, probe duration budget, server-side capability requirement, and whether the probe is opt-in or default.
+
+---
+
+### Important
+
+**I1 — Moonlight launch bitrate vs startup bitrate**
+
+`renderStreamArgs` passes `stream.bitrateKbps` from the policy to Moonlight's `-bitrate` flag. If the policy encodes the ceiling, Moonlight negotiates at ceiling bandwidth. The adaptive runner then issues `setBitrate` at startup. There is a window (connect → first adaptive tick, up to `tickIntervalMs = 5000ms`) during which the stream runs at full ceiling bitrate. On a constrained link this window can flood the connection and drop packets before the first correction.
+
+_Question_: Should `startup` be passed as the initial `-bitrate` arg to Moonlight (capping what Moonlight negotiates) with only resolution/fps at ceiling? Or should Korri issue a `setBitrate(startup)` immediately after the control socket connects, before the first adaptive tick?
+
+_Implication_: if Moonlight is launched with a lower `-bitrate` than the ceiling, Sunshine may refuse to serve higher bitrates even after adaptive upgrades. The spec says "current Moonlight launch resolution/FPS act as envelope" — not bitrate. This asymmetry needs an explicit statement.
+
+---
+
+**I2 — Grammar serialization is a contract**
+
+`serializeStreamBoundaries` and `serializeNumericLever` produce strings like `bitrate=5000..20000` that round-trip through `parseStreamBoundaryArgs`. After adding a startup slot, existing serialized strings (e.g., from `korri stream adaptive show --json`) will not carry startup information, and new strings will not parse on old CLI versions. The RPC call `app.stream-control.adaptive.set` passes `{ args: string[] }` — adding `startup` to args is backward-compatible for the server, but old servers will silently drop the field.
+
+_Required_: Define the serialized form (`5000..10000..20000` vs `floor=5000,startup=10000,ceiling=20000` vs a separate key `bitrate-startup=10000`). If the 3-part form is chosen, update `serializeNumericLever` and all round-trip tests.
+
+---
+
+**I3 — Phase transition predicate is unspecified**
+
+When does `establishing` end and `steady` begin? The controller uses `coldStartSampleCount: 3` as the threshold, but that's sample count, not health quality. A stream can accumulate 3 samples on a flooded link; reaching sample count alone is not a sufficient "established" signal.
+
+_Recommended_: Transition to `steady` when `sampleCount >= coldStartSampleCount && healthyEnoughForGrowth(pressure)` (matching the existing `healthyEnoughForGrowth` predicate). Document this as the contract.
+
+---
+
+**I4 — Preflight failure must have a defined resolution**
+
+If the probe fails (tool not found, host refuses, timeout), the launch must have a specified behavior. Three options:
+
+1. **Abort**: fail with a clear error (high friction, safe).
+2. **Rescue fallback**: use the lowest safe profile (640x360/30fps/floor bitrate).
+3. **Skip**: proceed with user-specified or default values, warn that preflight failed.
+
+Without specifying this, every implementation path will make a different choice, leading to inconsistent UX across devices and operators.
+
+---
+
+**I5 — Handoff recovery boundary is undefined**
+
+After a handoff downshift, when does quality recovery begin? The current adaptive controller recovers toward ceiling whenever `healthyEnoughForGrowth`. There is no "post-handoff cooldown" or "wait for N stable samples before allowing recovery." On a flapping mobile connection, this could cause thrash: downshift → recover → downshift → recover.
+
+_Required_: Define a recovery gate specific to post-handoff state (e.g., minimum N samples within healthy thresholds after the last handoff signal). This likely requires new state in the runner.
+
+---
+
+**I6 — `startup` applicability to fps and resolution levers**
+
+The spec says "startup to choose conservative launch/establish behavior." Is `startup` meaningful for fps and resolution? For fps, a conservative launch at 30fps with ceiling at 60fps is a valid UX (lower latency during establish). For resolution, launching at 720p and growing to 1080p is already the current resolution-recovery behavior.
+
+If `startup` is only for bitrate, the grammar extension should be scoped (`bitrateFloor..startup..ceiling` in docs, not a generic 3-part form). If it applies to all levers, fp and resolution behavior during establish must be specified.
+
+---
+
+**I7 — Explicit ceiling vs preflight result conflict**
+
+If the user passes `--resolution=1280x720 --fps=60` and the preflight suggests a 1080p120 profile is safe, which wins? Similarly, if the user passes explicit boundaries but the probe says the link is too weak for the ceiling, does the probe override the ceiling?
+
+_Recommended_: Explicit flags always win. Preflight only populates missing fields. Document this precedence.
+
+---
+
+### Minor
+
+**M1 — `--startup` flag omitted from `streamBoundaryFlags`**
+
+`korri-cli.ts` defines `streamBoundaryFlags` with `bitrate`, `fps`, `resolution`, `lean`, `auto`, `max-latency`, `min-fps`. If startup is a separate concept (not embedded in the bitrate range string), a `--startup-bitrate` flag is needed. If it's embedded in the `--bitrate` value string, the flag set is unchanged but the help text and validator need updating.
+
+---
+
+**M2 — `parseStreamBoundaryArgs` error messages for 3-part ranges**
+
+The current rejection message `"invalid range for bitrate: 5000..10000..20000"` will appear until the parser is updated. After the update, the error for `floor > startup` vs `startup > ceiling` vs `floor > ceiling` must be distinct.
+
+---
+
+**M3 — Preflight is optional for local launches**
+
+The `launchRemoteEntry` path in `launch-command.ts` handles remote launches. Local launches use `launchLocal` (sessiond). Preflight only makes sense for remote streams. The code must not run a network probe for local launches. The existing remote/local branch at `findEntryForChoice` is the right insertion point for preflight.
+
+---
+
+**M4 — `coldStartBitrateKbps` default confusion after startup is added**
+
+Once `startup` is a first-class boundary value, the `DEFAULTS.coldStartBitrateKbps = 8_000` in the controller is a fallback, not the user-facing value. Its relationship to `startup` must be documented: when `startup` is absent, `coldStartBitrateKbps` is used; when `startup` is present, it overrides. The distinction matters for DEFAULTS audits.
+
+---
+
+## Phase 4: Questions
+
+**Q1 — Does the establish phase apply only to bitrate, or also to fps and resolution?**
+
+_Stakes_: If fps and resolution also have startup values, the grammar extension and controller logic are significantly larger. If it's bitrate-only, the grammar can stay simpler (`floor..startup..ceiling` only valid for `bitrate=`).
+_Default assumption_: Bitrate only for startup. fps and resolution follow existing recovery behavior.
+
+---
+
+**Q2 — Should Moonlight be launched with `startup` bitrate or `ceiling` bitrate as the `-bitrate` flag?**
+
+_Stakes_: If launched with ceiling, there is a 0–5000ms window of full-ceiling bandwidth usage before adaptive kicks in. On a 6 Mbit link with a 20 Mbit ceiling, this can cause immediate packet loss and control command failure. If launched with startup, Sunshine may cap the stream at that value even after adaptive upgrades — depending on how Sunshine handles runtime bitrate vs negotiated bitrate.
+_Default assumption_: Launch with ceiling value (preserve full capability negotiation); issue an immediate `setBitrate(startup)` command as soon as the control socket connects, before the first adaptive tick. Define the sequence explicitly in the launcher.
+
+---
+
+**Q3 — What is the preflight probe mechanism: iperf3 or product-owned?**
+
+_Stakes_: iperf3 requires server-side setup, adds a dependency, and takes 3–10 seconds. A product-owned TCP probe can be faster and self-contained but less accurate. This decision gates whether the source daemon needs a new service listener.
+_Default assumption_: Product-owned lightweight probe (TCP round-trip + small payload, <1s). Document iperf3 tradeoffs in the parking lot item.
+
+---
+
+**Q4 — What happens when preflight fails: abort, rescue profile, or skip?**
+
+_Stakes_: Aborting is safest but creates friction on flaky networks. Skip-with-warning may cause the exact unrecoverable-choke problem the feature is designed to prevent.
+_Default assumption_: Use the rescue profile (`640x360/30fps/startup=4000kbps`) on probe failure, with a visible warning. Do not abort.
+
+---
+
+**Q5 — What signal source feeds the handoff trigger at runtime?**
+
+_Stakes_: RTT spike from health data is already available and requires no new wiring. Network manager / interface-change events are more accurate but platform-specific and require a new integration point. Without a source, `normalizeHandoffTrigger` remains unused.
+_Default assumption_: For the first cut, use RTT spike from health data as a synthetic handoff signal (if RTT exceeds a threshold suddenly, treat it as a collapse-likely hint). External network signals are a follow-on.
+
+---
+
+**Q6 — Does handoff downshift preempt the next tick or happen immediately?**
+
+_Stakes_: If the runner ticks every 5 seconds, a handoff detected between ticks waits up to 5 seconds before the downshift — long enough for control commands to fail.
+_Default assumption_: Handoff signal triggers an immediate out-of-band dispatch (bypassing the tick interval) to the playable floor. The runner needs a `triggerDownshift()` method or the signal must be injected into health data such that the next tick (re-scheduled immediately on signal) responds.
+
+---
+
+**Q7 — What is the post-handoff recovery gate?**
+
+_Stakes_: Without a cooldown, aggressive recovery on a flapping mobile connection causes quality thrash. With too long a cooldown, the user is stuck at floor even after the connection stabilizes.
+_Default assumption_: Require `coldStartSampleCount` (3) consecutive healthy samples after the last handoff signal before allowing upward recovery. Use the same `healthyEnoughForGrowth` predicate.
+
+---
+
+**Q8 — Should `startup` serialize as a 3-part token (`5000..10000..20000`) or a separate key (`bitrate-startup=10000`)?**
+
+_Stakes_: The 3-part token is compact and extends the existing grammar family. It changes `serializeNumericLever` output format and will not parse on older CLI builds. A separate key is additive and backward-compatible but splits a single conceptual boundary across two flags.
+_Default assumption_: 3-part token (`floor..startup..ceiling`) for consistency with the existing range grammar. Document as a minor breaking change to the serialized format.
+
+---
+
+## Test Scenarios
+
+Organized by work item. New test files/locations suggested in parentheses.
+
+### Work Item 1 — Grammar extension
+
+| # | Scenario | Expected |
 |---|---|---|
-| `cdp-input-bridge` session hook | `product/plugins/cdp-input-bridge/src/session-lifecycle-hook.ts` | Spawns `korri-cdp-input-bridge` sidecar in `afterChildRunning` |
-| Policy / annotation source | `launchMetadata.annotations["@korri:cdp-input-bridge"]` | Not in `launch.with` |
-| Named mapping table | `product/plugins/cdp-input-bridge/src/mapping.ts` | `"yfs-default"` and `"none"` presets |
-| Launch companion seam | `product/platform/plugin/launch-companion.ts` | `launch.compose` operation; returns a mutated `LaunchSpec` |
-| Gamescope companion | `product/plugins/gamescope/src/launch-companion/` | Wraps command; does spec-transformation, not sidecar spawning |
-| Session hook registry | `product/plugins/index.ts → firstPartySessionLifecycleHookFactories` | Hooks are registered by plugin id; enabled via env |
-| Hook start contract | `product/platform/plugin/session-lifecycle.ts → KorriSessionLifecycleHookStartRequest` | Receives `spec`, `launchMetadata` — **not `launch.with`** |
-| `composeLaunchCompanions` call site | `product/platform/control/korri-control-live.ts:298` | Runs at launch-config time; receives `resolved.launchCompanions` (= `launch.with` map) |
-| Safety contract | `product/plugins/cdp-input-bridge/README.md` | Forbids `ydotoold`, `/dev/uinput`, raw source gamepads, profile switching |
+| T1 | `parseStreamBoundaryArgs(["bitrate=5000..10000..20000"])` | `{ floor: 5000, startup: 10000, ceiling: 20000 }` |
+| T2 | `parseStreamBoundaryArgs(["bitrate=..10000..20000"])` | `{ startup: 10000, ceiling: 20000 }` |
+| T3 | `parseStreamBoundaryArgs(["bitrate=5000..10000.."])` | `{ floor: 5000, startup: 10000 }` |
+| T4 | `bitrate=5000..20000` (existing 2-part) still parses | No regression |
+| T5 | `bitrate=20000..10000..5000` (startup < floor) | Throw `startup must be >= floor` |
+| T6 | `bitrate=5000..30000..20000` (startup > ceiling) | Throw `startup must be <= ceiling` |
+| T7 | `bitrate=5000..10000..20000` serializes to `"5000..10000..20000"` | Round-trip |
+| T8 | `mergeStreamBoundaries` with startup in lower layer and ceiling in upper | Last-write-wins per lever, not per sub-field |
 
-**The single most load-bearing architectural fact:** `KorriSessionLifecycleHookStartRequest` receives `launchMetadata` but _not_ `launch.with` / `launchCompanions`. There is **no existing seam** that delivers `launch.with` config to a session lifecycle hook. This is the central gap the plan must resolve before any other design decision is meaningful.
-
----
-
-## User Flows
-
-### Flow 1: Current CDP Bridge (authoritative baseline)
-
-```
-Author config ──► launchMetadata.annotations["@korri:cdp-input-bridge"]
-                   │ { enable: true, cdpPort: 9333, mapping: "yfs-default", … }
-                   │
-                   ▼
-korri-control-live: composeLaunchCompanions
-   (skips CDP bridge — it has no launch.compose handler)
-                   │
-                   ▼
-sessiond: runManagedLaunch → spawn game child
-                   │
-                   ▼ afterChildRunning
-CDP bridge lifecycle hook reads launchMetadata.annotations
-   → resolveInputPlumberVirtualGamepad (single device)
-   → spawn korri-cdp-input-bridge
-       ├─ waitForBridgeReady (stdout "korri-cdp-input-bridge: ready")
-       ├─ evtest --grab /dev/input/eventN  ← grabs InputPlumber virtual controller
-       └─ WebSocket → Chromium CDP → Input.dispatchKeyEvent
-                   │
-                   ▼ stopBeforeCleanup
-   bridge.stop() → SIGTERM → evtest exits → releaseAll keys
-```
-
-**Terminal states:** bridge ready (nominal), bridge exits unexpectedly → `terminateLaunch()` (fail-closed), bridge never becomes ready → timeout → fail-launch.
+_Location_: `product/platform/stream/stream-adaptive-boundaries.test.ts`
 
 ---
 
-### Flow 2: Proposed `@korri:remap` — Happy Path (as described)
+### Work Item 2 — Startup → establish wiring
 
-```
-Author config ──► launch.with["@korri:remap"]
-                   │ { enable: true,
-                   │   p1: { dpad: { down: "key.down" },
-                   │         stick: { left: "key.left" } } }
-                   │
-                   ▼
-composeLaunchCompanions
-   → @korri:remap launch.compose handler
-   → ???  (what does the spec mutation look like?)
-                   │
-                   ▼
-sessiond: spawn game
-                   │
-                   ▼ (if remap is a session lifecycle hook)
-How does the hook read launch.with config?
-   (current contract: no seam for this)
-```
-
-This flow has **no defined terminal state** for the runtime side — the plan must specify whether the remap process is:
-- (A) A launch-compose wrapper injected into the `LaunchSpec` command
-- (B) A session lifecycle sidecar that reads config from a new seam
-- (C) Both (like gamescope: compose + session hook)
-
----
-
-### Flow 3: Multiple Controllers
-
-```
-launch.with["@korri:remap"]:
-   p1: { dpad: { down: "key.down" } }
-   p2: { dpad: { down: "key.x" } }
-                   │
-                   ▼
-resolveInputPlumberVirtualGamepad() ← currently returns ONE device
-How are two device slots resolved?
-   - By index among all InputPlumber virtual gamepads?
-   - By named preference per slot?
-   - By stable slot assignment from InputPlumber?
-```
-
----
-
-### Flow 4: Gamepad-to-Gamepad Binding
-
-```
-launch.with["@korri:remap"]:
-   p1: { btn: { south: "p1.btn.east" } }  ← remap A → B
-                   │
-                   ▼
-Output target is a virtual gamepad, not a keyboard key.
-Current mechanism to emit to a gamepad device: uinput (FORBIDDEN)
-                   │
-                   ▼
-???
-```
-
-No existing mechanism in this codebase produces virtual gamepad output without uinput or InputPlumber profile switching, both of which are banned by the current safety contract.
-
----
-
-### Flow 5: Kebab-Case Dot-Path Binding Parsing
-
-```
-"p1.dpad.down: key.down"
-             │
-             ▼
-Parse source: player slot (p1) → input type (dpad) → direction (down)
-  → resolve to evdev code: BTN_DPAD_DOWN? ABS_HAT0Y negative? Both?
-
-Parse target: key → direction (down)
-  → resolve to output: ArrowDown? KEY_DOWN? CDP event? uinput?
-```
-
-The current bridge has a pre-built mapping table (BTN_DPAD_DOWN → action-id → CDP key binding). The new dot-path syntax must define a canonical vocabulary and a resolution algorithm that doesn't fall back to the named-preset model.
-
----
-
-## Gaps
-
-### Critical — Blocks Implementation or Creates Architectural Incoherence
-
-**Gap C-1: Missing seam between `launch.with` and session lifecycle hooks.**
-
-`KorriSessionLifecycleHookStartRequest` carries `launchMetadata` but not `launchCompanions` (i.e., `launch.with`). If `@korri:remap` stores its policy in `launch.with`, the lifecycle hook cannot read it without a new field in the start request. The plan must specify one of:
-- Extend `KorriSessionLifecycleHookStartRequest` with `launchCompanions?: LaunchCompanionMap`
-- Have the launch.compose handler inject the policy into `launchMetadata.annotations` (a compile-time-to-runtime bridge)
-- Make `@korri:remap` purely a `launch.compose` wrapper (no sidecar lifecycle hook), which changes the runtime model fundamentally
-
-Without resolving this, the config location and the activation model cannot both be changed at once without a new contract on the hook start request.
-
----
-
-**Gap C-2: Gamepad-to-gamepad output has no permitted mechanism.**
-
-The spec requires `gamepad-to-gamepad bindings`. The only mechanisms for emitting gamepad events are:
-- `uinput` virtual device — explicitly forbidden by the existing safety contract
-- InputPlumber profile switching — explicitly forbidden
-- Forwarding to an already-running virtual device that InputPlumber owns — not a defined API
-
-The plan must either:
-1. Define a specific permitted mechanism (e.g. InputPlumber's emit-event IPC, if it exists)
-2. Narrow the scope: gamepad-to-gamepad only works if the target is the InputPlumber virtual gamepad the game already reads (i.e. "passthrough with remap")
-3. Explicitly relax the safety contract for this case and document why it is still isolated
-
-Leaving this unspecified means the implementation team will either violate the safety contract or discover the feature is impossible and revert it late.
-
----
-
-**Gap C-3: Non-browser keyboard injection mechanism is undefined.**
-
-The current CDP bridge sends keyboard events only to a Chromium page via WebSocket — it is browser-scoped by design. If `@korri:remap` targets non-browser games (native emulators, native PC games), `key.down` must reach the X11/Wayland focus window or the application's input event node. The only known mechanisms are:
-- `ydotool` / `xdotool` (host-seat virtual keyboard) — explicitly **forbidden**
-- `uinput` virtual keyboard — explicitly **forbidden**
-- CDP (browser-only, and the spec bans CDP terms in authored config)
-
-If `@korri:remap` is genuinely general-purpose (not browser-only), the plan must name a permitted keyboard injection path for native targets. If it is still browser-only under the hood, that constraint must be stated so authors know `key.*` targets only work for Chromium-launched games.
-
----
-
-### Important — Significantly Affects UX or Implementation Consistency
-
-**Gap I-1: Execution model of `@korri:remap` as a launch.compose companion.**
-
-Gamescope as a `launch.compose` companion returns a mutated `LaunchSpec` (wraps the command). Input remapping is a runtime side-process that must start _after_ the game child launches. These two requirements are incompatible if `@korri:remap` is purely a `launch.compose` companion.
-
-Likely resolution: `@korri:remap` uses a wrapper-binary model — the compose step injects `korri-remap <binding-args> -- <game-command>` so the remap binary is the top-level process, which forks the game. But this has implications:
-- The game's PID is a child of `korri-remap`, not a direct child of sessiond. Does sessiond's process-group-id tracking and cleanup still work correctly?
-- `korri-remap` must survive the game exiting long enough to release all keys (the current bridge does `releaseAll` in `evtestProcess.once("exit")`). Is that guaranteed?
-- If `korri-remap` crashes before the game, does the game also exit? Under what conditions?
-
-The plan must specify which execution model is chosen (wrapper vs sidecar), because they have different contracts with sessiond.
-
----
-
-**Gap I-2: Multi-controller source resolution.**
-
-`resolveInputPlumberVirtualGamepad` returns a single device. The spec says "support multiple controllers" with `p1`, `p2` slots. The plan must specify:
-- How many InputPlumber virtual gamepads can exist simultaneously on the target hardware (Sobo/SM8550)
-- How `p1` vs `p2` is assigned — by index among virtual gamepads? by explicit preference per slot in config? by a stable InputPlumber slot ID?
-- Whether the "ambiguous" error state changes meaning (two gamepads found is now expected for p2 support, not an error)
-
-Without this, multi-controller config cannot be authored correctly.
-
----
-
-**Gap I-3: Dot-path vocabulary is not defined.**
-
-The binding syntax `p1.dpad.down: key.down` requires a canonical vocabulary for both the source (input) side and the target (output) side. Missing:
-- **Source paths:** Does `p1.dpad.down` map to `BTN_DPAD_DOWN`? To `ABS_HAT0Y < 0`? To both simultaneously (current bridge does both for "arrow-down")?
-- **Axis paths:** What is `p1.stick.left`? Does it mean the left analog stick leftward direction? What is the threshold model (press/release hysteresis)?
-- **Target keyboard paths:** Does `key.down` mean `ArrowDown`? Does `key.z` mean the Z key? Is the vocabulary the DOM key names (`ArrowDown`, `KeyZ`) or the Korri-defined action IDs?
-- **Target gamepad paths:** What is `p1.btn.south`? The Xbox A button? The evdev `BTN_SOUTH`?
-
-Without this vocabulary, authors cannot write correct bindings and validators cannot check them at decode time. The plan must produce a schema-checkable enum or pattern for both sides.
-
----
-
-**Gap I-4: YFS authored-config migration is not addressed.**
-
-YFS currently uses `launchMetadata.annotations["@korri:cdp-input-bridge"]` with `mapping: "yfs-default"`. The plan says "no profiles/presets" — meaning `yfs-default` must be expanded into explicit dot-path bindings in the new format. But:
-- Who updates the YFS plugin config?
-- Does `@korri:cdp-input-bridge` remain registered alongside `@korri:remap` during a transition period?
-- What is the cutover plan if both exist? Does `@korri:remap` take precedence?
-- If `@korri:cdp-input-bridge` is deleted, `KORRI_ENABLED_PLUGINS` env vars on deployed devices that include it will fail (unknown plugin id). Is there a graceful fallback?
-
----
-
-**Gap I-5: Fail-closed contract for new execution models.**
-
-The current bridge's fail-closed behavior is well-specified: if the bridge exits while `failClosed: true` and the game is still running, `terminateLaunch()` is called. For a wrapper-binary model, the remap process _is_ the parent — if it exits, the child game exits automatically. But:
-- For gamepad-to-gamepad: if the remap side-process exits while the game continues, the gamepad state may be stuck (button held, axis deflected). The plan must specify what "fail-closed" means when the output target is a virtual gamepad rather than a browser keyboard.
-- The `releaseAll()` path (release all held keys on shutdown) — does this concept extend to releasing held gamepad buttons on a virtual device?
-
----
-
-**Gap I-6: Diagnostics capability for `@korri:remap`.**
-
-The current plugin exposes `diagnostics.collect` with CDP-specific fields (host, port, mapping name). The new plugin's diagnostics surface must be defined. At minimum:
-- What policy fields are surfaced (bound slots, binding count, mechanism)?
-- What does "enabled" look like in the new format?
-- Does the diagnostics handler read from `launch.with` config or from something else?
-
----
-
-### Minor — Has a Reasonable Default but Worth Confirming
-
-**Gap M-1: Binary name and env override convention.**
-
-The current bridge binary is `korri-cdp-input-bridge`, overridable via `KORRI_CDP_INPUT_BRIDGE_COMMAND`. The new plugin needs a binary name (`korri-remap`?) and env override key (`KORRI_REMAP_COMMAND`?). This is a naming decision but must be made before Nix packaging.
-
-**Gap M-2: `enable: false` short-circuit placement.**
-
-The current bridge checks `policy.enabled` in the lifecycle hook body before spawning. If `@korri:remap` is a `launch.compose` companion, the `enable: false` check must happen inside the handler so the `LaunchSpec` is returned unchanged. The `isDisabledLaunchCompanionPolicy` helper in `launch-companion.ts` already handles this at the `composeLaunchCompanions` loop level — confirm whether that's sufficient or whether the handler also needs its own guard.
-
-**Gap M-3: Axis thresholds in dot-path syntax.**
-
-The current bridge exposes `axis.pressThreshold` and `axis.releaseThreshold` as top-level policy fields. In the new format, per-binding or per-axis threshold control must either be dropped (always default), exposed as optional fields per binding, or surfaced as top-level policy knobs. The hysteresis model (press ≠ release threshold) is important for jitter suppression and must not silently disappear.
-
-**Gap M-4: `attachTimeoutMs` equivalent.**
-
-The current bridge has an `attachTimeoutMs` for waiting for the CDP WebSocket. If the new execution model is a wrapper binary, there may be no "attach" — the binary starts before the game. But if there is still an "attach" step (e.g., waiting for an InputPlumber virtual gamepad to appear), the timeout policy must be preserved or explicitly removed.
-
-**Gap M-5: Strict excess-property policy.**
-
-The current bridge policy decoder uses `{ onExcessProperty: "error" }`. The new schema must carry this forward — authors should get loud failures on typos, not silent strips.
-
----
-
-## Questions
-
-**Q1 (blocks all other work): What is the execution model?**
-Is `@korri:remap` a `launch.compose` command-wrapper, a session lifecycle hook that reads `launch.with` via a new seam, or both? The answer determines the entire module structure, the sessiond contract extension, and the Nix package shape.
-
-_Stakes:_ Without this, two teams can independently implement two incompatible models. The `KorriSessionLifecycleHookStartRequest` contract extension (or absence) is a merge conflict waiting to happen.
-
-_Default assumption:_ Hybrid (launch.compose wrapper + session lifecycle hook cleanup), mirroring the Gamescope pattern, but this needs explicit sign-off.
-
----
-
-**Q2 (blocks gamepad-to-gamepad): What mechanism produces virtual gamepad output?**
-The existing safety contract forbids `uinput` and InputPlumber profile switching. What is the permitted path for emitting gamepad button/axis events to a virtual device?
-
-_Stakes:_ If no answer exists, the feature is unimplementable without relaxing the safety contract, which has security/isolation implications.
-
-_Default assumption:_ Gamepad-to-gamepad is deferred to a follow-on iteration; the v1 `@korri:remap` only supports keyboard output.
-
----
-
-**Q3 (blocks non-browser keyboard output): What mechanism emits keyboard events to non-browser targets?**
-For native games that are not Chromium-backed, `key.down` needs a host-level injection path. All known mechanisms are currently forbidden.
-
-_Stakes:_ If unresolved, `@korri:remap` silently works only for Chromium-launched games, and authors of native-game entries will write configs that do nothing.
-
-_Default assumption:_ `@korri:remap` v1 retains CDP as the keyboard injection mechanism (under the hood) for browser-backed games; the CDP terms are hidden from authored config but still required for the target selector (URL pattern, page type). If this is the answer, the `target:` field must re-appear in the schema under a non-CDP name.
-
----
-
-**Q4 (blocks multi-controller): How is `p1` vs `p2` mapped to physical devices?**
-Does the `p<N>` slot correspond to the N-th InputPlumber virtual gamepad in `/proc/bus/input/devices` order? Or is each slot explicitly configured with a device preference (name, event node)?
-
-_Stakes:_ Authors cannot write correct multi-controller configs without knowing the slot-to-device mapping rule. A wrong assumption leads to reversed inputs or ambiguous device errors.
-
-_Default assumption:_ Each slot has an optional `source` sub-key (like the current `sourcePreference`) — `p1.source.names: ["Microsoft Xbox Series S|X Controller"]`. If absent, slots are assigned in device enumeration order.
-
----
-
-**Q5 (blocks schema work): What is the canonical dot-path vocabulary?**
-Specifically: what are the valid source paths (buttons, axes, dpad directions, stick directions) and valid target paths for keyboard and gamepad outputs? Are axis bindings expressed as directional paths (`p1.stick.left`) or as axis-plus-sign (`p1.axis.left-x.negative`)?
-
-_Stakes:_ Without a spec'd vocabulary, two implementers will produce incompatible schemas. Schema validation at decode time (which is the safety guarantee) cannot be implemented without the vocabulary.
-
-_Default assumption:_ Source vocabulary mirrors the DOM Gamepad API (dpad, buttons a/b/x/y/l1/r1/l2/r2/etc., stick left/right with directional suffixes). Target keyboard vocabulary mirrors DOM key names (kebab-cased: `arrow-down`, `key-z`). Axis thresholds remain top-level `axis` policy knobs, not per-binding.
-
----
-
-**Q6 (blocks YFS migration): Does `@korri:cdp-input-bridge` remain registered while `@korri:remap` is being built?**
-Is this a rename-in-place (old id removed, new id added, YFS config updated atomically) or a parallel existence period?
-
-_Stakes:_ Deployed Sobo devices have `KORRI_ENABLED_PLUGINS` referencing `@korri:cdp-input-bridge`. A hard cutover without device reflash will leave those devices with an unknown plugin id in the env var (currently a no-op via `parseEnabledPluginIds`, but worth confirming).
-
-_Default assumption:_ Parallel existence: `@korri:cdp-input-bridge` stays registered but is deprecated. YFS config is updated in the same PR that ships `@korri:remap`. The old plugin is removed in a follow-on after device images are updated.
-
----
-
-**Q7 (important for safety): Does the `releaseAll` / stuck-input guarantee extend to gamepad output?**
-For keyboard output, the bridge releases all held keys on shutdown. For gamepad output, an equivalent must be defined — otherwise a held virtual button survives across sessions.
-
-_Stakes:_ If a session exits abnormally without cleanup, a stuck virtual gamepad button in the InputPlumber layer would affect the next launched game.
-
-_Default assumption:_ The plan should specify that `stopBeforeCleanup` on the remap sidecar must ensure all held inputs are released, regardless of output type, before returning.
-
----
-
-## Test Scenarios the Plan Must Cover
-
-These are scenarios the existing test suite does not cover and that the plan should explicitly commission:
-
-| # | Scenario | Why it matters |
+| # | Scenario | Expected |
 |---|---|---|
-| T-1 | Single controller, keyboard output (happy path migration from `yfs-default`) | Core regression test for existing YFS behavior |
-| T-2 | `enable: false` in `launch.with` → game launches without remap | Smoke-test for disabled policy short-circuit at the compose step |
-| T-3 | Malformed dot-path (typo, unknown slot name, unknown key) → policy decode error at launch time, not runtime | Fail-loud at the correct phase |
-| T-4 | Excess property in `launch.with` config → schema error | Strict whitelist mode |
-| T-5 | `p1` source device missing (no InputPlumber virtual gamepad) → fail-launch | Existing behavior must be preserved |
-| T-6 | `p1` source device ambiguous without preference → fail-launch | Existing behavior |
-| T-7 | `p1` source ambiguous, preference resolves it → succeed | Existing behavior |
-| T-8 | Remap sidecar exits unexpectedly, `fail-closed: true` → `terminateLaunch()` called | Fail-closed isolation contract |
-| T-9 | Remap sidecar stops during cleanup → no `terminateLaunch()` | The `stoppingForCleanup` guard must carry over |
-| T-10 | Axis direction switch with hysteresis (both negative and positive triggered in sequence) → correct release/press order | Core input correctness |
-| T-11 | Multiple bindings share the same output key → only one `rawKeyDown` until all sources release | Source-set deduplication |
-| T-12 | `@korri:remap` composes alongside `@korri:gamescope` → `composeLaunchCompanions` applies both in order | Companion composition ordering |
-| T-13 | `p2` slot configured, two InputPlumber virtual gamepads present → each maps to correct device | Multi-controller happy path |
-| T-14 | `p2` slot configured but only one InputPlumber virtual gamepad → defined error (fail-launch or warn) | Multi-controller degraded mode |
-| T-15 | Wrapper binary (if execution model A) forks game child → game exit causes wrapper exit → sessiond observes clean exit | Process-group accounting with wrapper model |
-| T-16 | Wrapper binary crashes before game starts → sessiond observes failed launch | Fail-closed at wrapper startup |
-| T-17 | Diagnostics collect with enabled config → correct fields reported (no CDP terms) | Diagnostics surface correctness |
-| T-18 | Diagnostics collect with invalid config → surfaced as `"invalid"` without throwing | Diagnostics fault tolerance |
+| T9 | Runner tick with `phase="establishing"` and `startup=10000`, `ceiling=20000` | First decision targets 10000, not 20000 |
+| T10 | Runner transitions phase after `coldStartSampleCount` healthy samples | Mode shifts from `establish` to `fine-tune` |
+| T11 | Runner with `startup` in boundaries and no explicit `params` | Startup extracted from boundaries, not hardcoded 8000 |
+| T12 | Runner with phase `"establishing"` and no startup in boundaries | Falls back to `DEFAULTS.coldStartBitrateKbps = 8000` |
+| T13 | Scenario: stream starts at startup=10000 and healthy samples arrive | Bitrate grows toward ceiling without overshoot |
+| T14 | Scenario: stream starts at startup=10000, link is stressed | Drops to floor, not ceiling, during establish |
+| T15 | `effectiveBoundaries` with explicit ceiling | Startup does not exceed ceiling |
+
+_Location_: `product/platform/stream/stream-adaptive-runner.test.ts`, `product/platform/stream/stream-adaptive-scenario.test.ts`
 
 ---
 
-## Recommended Next Steps
+### Work Item 3 — Preflight quality selection
 
-**Before any code is written:**
+| # | Scenario | Expected |
+|---|---|---|
+| T16 | Probe returns excellent result | Boundaries set to high profile (1080p120 ceiling, startup=20000) |
+| T17 | Probe returns fair result | Boundaries set to safe profile (720p60, startup=8000) |
+| T18 | Probe times out | Rescue profile used, warning emitted, launch proceeds |
+| T19 | Probe tool not found | Rescue profile used, warning emitted; exit code 0 (launch proceeds) |
+| T20 | Probe host unreachable | Rescue profile, warning; not an abort |
+| T21 | User passes explicit `--bitrate=..20000` and probe says 8000 safe | Explicit ceiling wins; probe may adjust startup, not ceiling |
+| T22 | Local launch does not invoke probe | `runPreflight` never called on local entry |
+| T23 | Probe result composes with user boundary args | merge order: probe < explicit flags |
 
-1. **Resolve Q1 (execution model)** in a single design document with the sessiond and plugin owners. The answer propagates to the `KorriSessionLifecycleHookStartRequest` contract (needs `launchCompanions` field or not), the Nix package shape (wrapper binary or sidecar binary), and the process-group contract with sessiond. This is the load-bearing decision.
+_Location_: New test file near `product/surfaces/terminal/korri-cli/launch-command.test.ts`; a pure probe result → boundary adapter unit test at `product/platform/stream/`
 
-2. **Resolve Q2 and Q3 (output mechanisms)** as a paired decision. If the answer to Q2 is "defer gamepad-to-gamepad," say so in the plan so the schema can omit gamepad targets from the first schema version. If the answer to Q3 is "CDP stays under the hood," the `target:` selector must reappear in the schema under a renamed key (e.g., `window.url-pattern`) and that must be spec'd before the schema is written.
+---
 
-3. **Write the dot-path vocabulary** (Q5) as a formal table before implementing the schema decoder. The vocabulary is the contract between authors and the runtime — it cannot be discovered experimentally after the feature ships.
+### Work Item 4 — Handoff-aware downshift
 
-4. **Plan the YFS migration** (Q6) atomically with the new schema. The YFS plugin config update and the `@korri:remap` plugin registration should ship in the same commit so there is no window where YFS config points to a non-existent annotation key.
+| # | Scenario | Expected |
+|---|---|---|
+| T24 | `signalPercent=10` during running stream | Runner dispatches to playable floor before next scheduled tick |
+| T25 | `handoffInProgress=true` | Immediate downshift; severity=1 maps to full shed |
+| T26 | `signalPercent=80` (healthy) | No downshift triggered |
+| T27 | Signal arrives, link recovers, N healthy samples elapse | Quality recovery begins; no premature upshift |
+| T28 | Signal arrives again before recovery completes | Recovery gate resets; floor maintained |
+| T29 | Manual `korri stream bitrate 20000` during handoff | CLI emits warning "stream may be congested"; error from rejected command surfaces cleanly |
+| T30 | Handoff hint + organic shed simultaneously | Shed path wins; no double-dispatch |
+| T31 | Handoff downshift with `floor` boundary set | Downshift stops at floor, not at absolute minimum |
 
-5. **Gate T-5 through T-9** (source resolution, fail-closed, cleanup guard) as first-class acceptance criteria before marking the session lifecycle hook work done. These are the scenarios where the existing CDP bridge has been most carefully tested, and they are the hardest to recover from if broken silently.
+_Location_: `product/platform/stream/stream-adaptive-runner.test.ts`; `product/platform/stream/stream-handoff-trigger.test.ts` (signal-to-dispatch integration)
+
+---
+
+## Recommended Next Steps (ordered)
+
+1. **Resolve Q2** (Moonlight launch bitrate vs startup bitrate) before any code is written. It determines whether the launcher needs a new immediate `setBitrate` call, which affects the moonlight-launcher contract and test doubles.
+
+2. **Fix the dead establish phase (C1)**. Add phase lifecycle to `createStreamAdaptiveRunner`: `phase` state initialized to `"establishing"`, transitions to `"steady"` after the predicate from I3. This is the prerequisite for items 1 and 2. Unblock with T9–T15.
+
+3. **Extend `NumericLeverBoundary` with `startup?` (C2, I2)**. Add the field; update `parseNumericLever`, `serializeNumericLever`, `mergeStreamBoundaries`, and `definedNumericLever`. Wire `startup` into controller params (resolve Q8 for serialization form first). Cover T1–T8.
+
+4. **Resolve Q3 and Q4** (preflight mechanism and failure behavior) before building preflight. The probe protocol determines what server-side capability is required on the source machine. The failure behavior determines whether `runPreflight` is a pure adapter or has side effects on the launch path.
+
+5. **Wire handoff trigger into runner (C3)**. Decide on signal source (Q5) and timing (Q6). The simplest first cut: expose a `triggerHandoffDownshift(signal: StreamHandoffSignal)` method on the runner that immediately dispatches to the floor without waiting for the next tick. Cover T24–T31.
+
+6. **Build preflight adapter** once Q3/Q4 are resolved. Pure function: `probeLinkQuality(host) → LinkQualityResult`; separate function: `selectLaunchProfile(result, userBoundaries) → StreamBoundaries`. Test as two pure units (T16–T23).
+
+7. **Add `--startup` to CLI `streamBoundaryFlags`** only after the boundary type and runner wiring are stable. This is the last step because CLI flag naming (`--bitrate=5000..10000..20000` vs `--startup-bitrate`) depends on Q8 resolution. Update `launch-command.ts`, `korri-cli.ts`, and help text.
+
+---
+
+## Open Invariants to Document Before Implementation
+
+- `floor ≤ startup ≤ ceiling` must hold; enforcement point: `parseNumericLever`.
+- Startup bitrate never exceeds the initial Moonlight-reported bitrate (effective ceiling). If `startup > initial.bitrateKbps`, clamp startup to ceiling silently or error.
+- Plugin removability: `StreamBoundaries` with `startup` lives at `@platform/stream`. The Moonlight launcher reads it without importing the plugin. The `STREAM_CONTROL_LIMITS` in `product/platform/stream-control/limits.ts` does not need a startup limit (startup is a boundary concept, not a control-surface validation concern).
+- The `establish → steady` transition is a one-way latch per session. Re-connecting (outage supervisor re-establish) should reset phase to `"establishing"`.
