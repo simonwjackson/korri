@@ -1,44 +1,162 @@
 # Korri adaptive stream validation runbook
 
 Created: 2026-07-06
+Updated: 2026-07-07
 
-This runbook gates enabling `KORRI_STREAM_ADAPTIVE_ENABLED=1` on SM8550 devices. It validates the continuous adaptive stream-quality controller without requiring a physical walk or cellular network.
+This runbook gates adaptive stream-quality changes on SM8550 devices. It validates the continuous adaptive controller, conservative startup policy, preflight startup selection, and health-driven early downshift without relying on a physical walk or cellular network.
 
 ## Scope
 
 - Keep `h264_vaapi` as the proven Sunshine path.
-- Validate bitrate/FPS/resolution decisions from the pure scenario harness first.
-- Validate the full Moonlight/Sunshine path with Linux `tc netem` shaping.
+- Validate bitrate/FPS/resolution decisions from pure tests first.
+- Validate the full Moonlight/Sunshine path with Linux `tc netem` shaping from the source/host side (aka), not Bandai.
 - Treat real-device visual confirmation as the final human gate.
+- Preserve the product rule: **playable first, pretty later**.
 
-## Pure replay gate
+## Preflight cleanup gate
 
-Run the stream platform tests and confirm the scenario harness covers:
+Before any device-backed run, prove there is no stale shaping or active stream residue:
 
-- gentle slope: small bitrate steps, no resolution flapping;
-- cliff: immediate shed, `mode=shed`, fast-down/slow-up behavior;
-- cold start: conservative opening then ramp on fresh samples;
-- clamp/pin: pinned levers never move;
-- outage: sustained zero throughput enters hold and re-establishes on return.
+```sh
+ssh aka 'sudo tc qdisc del dev eno1 root 2>/dev/null || true; tc qdisc show dev eno1 | head -5'
+korri stream show || true
+```
+
+If validating on Bandai, also confirm session state is sane:
+
+```sh
+korrid_query --host bandai --command session-status
+```
+
+## Pure test gate
+
+Run the focused product slices before device validation:
+
+```sh
+bun test \
+  product/platform/stream/stream-adaptive-boundaries.test.ts \
+  product/platform/stream/stream-preflight.test.ts \
+  product/platform/stream/stream-handoff-trigger.test.ts \
+  product/platform/stream/stream-adaptive-controller.test.ts \
+  product/platform/stream/stream-adaptive-runner.test.ts \
+  product/surfaces/terminal/korri-cli/launch-command.test.ts \
+  product/surfaces/terminal/korri-cli/stream-quality.test.ts \
+  product/apps/portal/api/library/launch.rpc-handler.test.ts
+```
+
+Confirm coverage for:
+
+- bitrate `floor..startup..ceiling` grammar;
+- high ceiling with conservative startup;
+- optional preflight filling missing startup;
+- required preflight rejecting before remote prepare;
+- health-primary early downshift;
+- hint-only handoff signals ignored while health is good;
+- boundary/startup and early-downshift event observability in `korri stream show`/JSON state.
+
+## Safe high-envelope launch scenario
+
+The high-ceiling validation profile is:
+
+```text
+resolution envelope: 640x360..1920x1080
+fps envelope:        30..120
+bitrate policy:      500k..6m..40m
+```
+
+Expected behavior:
+
+- Moonlight launches at `1920x1080 / 120fps` so later recovery is not trapped by a low launch envelope.
+- Moonlight launch bitrate is the startup value (`6000 kbps`), not the ceiling (`40000 kbps`).
+- Adaptive boundaries still retain floor/startup/ceiling so the controller can shed to `500 kbps` and later grow toward the ceiling.
+
+Example direct launch shape for RPC/manual validation:
+
+```ts
+override: {
+  moonlight: {
+    stream: {
+      resolution: { width: 1920, height: 1080 },
+      fps: 120,
+      bitrateKbps: 40000,
+      codec: "h264",
+    },
+  },
+},
+streamBoundaryArgs: [
+  "bitrate=500k..6m..40m",
+  "fps=30..120",
+  "resolution=640x360..1920x1080",
+]
+```
+
+## Preflight startup selection scenario
+
+When a remote Moonlight launch has an explicit bitrate ceiling but no startup, optional preflight must fill a conservative startup before source prepare:
+
+```text
+input:  bitrate=500k..40m
+output: bitrate=500..3000..40000 when v1 facts are unavailable
+```
+
+Expected behavior:
+
+- Optional/auto mode warns but proceeds with the conservative startup.
+- Required mode rejects before `app.server.stream.prepare`, so no stale source intent is left behind.
+- Explicit startup remains authoritative: `bitrate=500k..6m..40m` is not silently lowered. If required mode decides it is unsafe, it rejects instead of rewriting policy.
 
 ## Full-stack netem gate
 
-Use `tools/testing/netem/stream-drive.sh` from a trusted operator shell. Example:
+Shape from aka (`eno1` in current lab setup):
 
 ```sh
-DEVICE=aka IFACE=<host-egress-iface> tools/testing/netem/stream-drive.sh slope
-DEVICE=aka IFACE=<host-egress-iface> tools/testing/netem/stream-drive.sh cliff
-DEVICE=aka IFACE=<host-egress-iface> TUNNEL_SECONDS=8 tools/testing/netem/stream-drive.sh tunnel
-DEVICE=aka IFACE=<host-egress-iface> tools/testing/netem/stream-drive.sh clear
+ssh aka 'sudo tc qdisc add dev eno1 root netem delay 55ms 15ms rate 6mbit loss 2%'
+# ...run launch / observe...
+ssh aka 'sudo tc qdisc del dev eno1 root 2>/dev/null || true'
 ```
 
-Observe from the device with the first-class surface available in the build (`korri stream show` today; `korri stream --watch` once U8 is wired). Expected outcomes:
+Legacy helper scenarios remain useful:
 
-- slope: bitrate/fps adjust before resolution; no rapid resolution flap;
+```sh
+DEVICE=aka IFACE=eno1 tools/testing/netem/stream-drive.sh slope
+DEVICE=aka IFACE=eno1 tools/testing/netem/stream-drive.sh cliff
+DEVICE=aka IFACE=eno1 TUNNEL_SECONDS=8 tools/testing/netem/stream-drive.sh tunnel
+DEVICE=aka IFACE=eno1 tools/testing/netem/stream-drive.sh clear
+```
+
+Expected outcomes:
+
+- startup-low/high-ceiling: no launch-time multi-second RTT flood before the first adaptive correction;
+- slope: bitrate/FPS adjust before resolution; no rapid resolution flap;
 - cliff: large immediate shed with a visible but controlled quality drop;
-- tunnel: hold/reconnect/resume path signals clearly; reconnect behaves like cold-start;
-- recovery: bitrate, FPS, and resolution all climb back within their clamps.
+- early downshift: rising RTT plus falling delivery triggers `early-downshift` before a full stale/cliff panic;
+- tunnel/outage: hold/reconnect/resume path signals clearly; reconnect behaves like establishing/cold start;
+- recovery: bitrate, FPS, and resolution climb gradually within explicit clamps.
+
+Observe with:
+
+```sh
+korri stream show
+korri stream --watch --json
+```
+
+Check these fields separately:
+
+- applied stream state: current bitrate/FPS/resolution readback;
+- policy: serialized boundaries, especially `bitrate=500..6000..40000`;
+- event context: last adaptive event, including `early-downshift` reason/evidence when applicable.
+
+## Post-run cleanup gate
+
+Always finish by clearing shaping and stopping the stream/session:
+
+```sh
+ssh aka 'sudo tc qdisc del dev eno1 root 2>/dev/null || true; tc qdisc show dev eno1 | head -5'
+korri stream bitrate 500 || true
+# stop via the active session-control surface for the target device, then verify home/idle
+korrid_query --host bandai --command session-status
+```
 
 ## Enablement rule
 
-Do not flip `KORRI_STREAM_ADAPTIVE_ENABLED=1` until the pure replay gate and full-stack netem gate both pass on the target device profile. If the gate fails, leave the flag off and use the telemetry trace as the replay fixture for the next controller-tuning pass.
+Do not default high `1080p120 / 40Mbps` ceilings without this slice enabled. A high-ceiling launch must start conservatively, preflight must fill or reject unsafe missing startup policy, and early downshift must reach the playable floor before control commands are starved.

@@ -10,12 +10,14 @@ usage() {
 Usage: DEVICE=<ssh-host> IFACE=<iface> stream-drive.sh <action>
 
 Actions:
-  slope     gradually constrain bandwidth with latency/jitter
-  cliff     hard bandwidth collapse for adaptive shed testing
-  tunnel    100% loss window, then recover
-  clear     remove qdisc shaping
+  startup-low  launch pressure for high-ceiling/low-startup validation (6mbit, 55ms, 2% loss)
+  handoff      mild degradation followed by a corroborated early-downshift window
+  slope        gradually constrain bandwidth with latency/jitter
+  cliff        hard bandwidth collapse for adaptive shed testing
+  tunnel       100% loss window, then recover
+  clear        remove qdisc shaping
 
-This is an operator helper for U12/U13 validation. Run it against a test path only.
+This is an operator helper for adaptive stream validation. Run it against a test path only.
 USAGE
 }
 
@@ -35,6 +37,18 @@ clear_qdisc() {
 }
 
 case "$ACTION" in
+  startup-low)
+    require_target
+    clear_qdisc
+    remote_tc qdisc add dev "$IFACE" root netem delay 55ms 15ms rate 6mbit loss 2%
+    ;;
+  handoff)
+    require_target
+    clear_qdisc
+    remote_tc qdisc add dev "$IFACE" root netem delay 45ms 10ms rate 12mbit loss 0.5%
+    sleep 8
+    remote_tc qdisc change dev "$IFACE" root netem delay 85ms 20ms rate 6mbit loss 2%
+    ;;
   slope)
     require_target
     clear_qdisc
