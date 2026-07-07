@@ -419,6 +419,9 @@ let
     host.launch."with"."@korri:gamescope" = {
       enable = true;
       display.output.preferredConnectors = [ resolvedHomeOutput ];
+      # Moonlight runs inside Gamescope on SM8550. Touch must pass through to
+      # Moonlight so the live touch-bounds coordinator can own host mapping.
+      input.defaultTouchMode = 4;
     };
 
     host.moonlight = {
@@ -908,6 +911,7 @@ in
         KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED = "0";
         KORRI_STREAM_OUTAGE_TICK_MS = "1000";
         KORRI_STREAM_OUTAGE_LOSS_AFTER_MS = "2000";
+        KORRI_STREAM_SURFACE_APP_IDS = "gamescope";
       };
   };
 
@@ -926,6 +930,7 @@ in
     KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED = "0";
     KORRI_STREAM_OUTAGE_TICK_MS = "1000";
     KORRI_STREAM_OUTAGE_LOSS_AFTER_MS = "2000";
+    KORRI_STREAM_SURFACE_APP_IDS = "gamescope";
   };
 
   # NOTE: `rocknix.sm8550.moonlight.{enable,package}` is no longer set

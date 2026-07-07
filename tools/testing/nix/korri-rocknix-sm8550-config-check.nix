@@ -602,6 +602,8 @@ let
           (lib.attrByPath [ "display" "output" "preferredConnectors" ] [ ] moonlightGamescopePolicy) == [
             compositor.homeOutput
           ]
+        && (lib.attrByPath [ "input" "defaultTouchMode" ] null moonlightGamescopePolicy) == 4
+        && (sessiondEnv.KORRI_STREAM_SURFACE_APP_IDS or null) == "gamescope"
         && !(hostDefaults.moonlight ? launch)
       ))
       (check "${name}: PICO-8 fake-08 core is exposed at the stable launch path" (

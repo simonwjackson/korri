@@ -26,6 +26,7 @@ import {
 } from "@platform/stream/streamer-client"
 import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect } from "effect"
+import { startMoonlightTouchBoundsRuntime } from "./moonlight-touch-bounds-runtime"
 
 const DEFAULT_STARTUP_OBSERVE_MS = 750
 
@@ -486,7 +487,24 @@ export async function defaultStartStreamRuntimeSession(
   // path is intentionally not a static dependency.
   const modulePath = `${"@product/plugins/"}moonlight/src/stream-control/runtime-session`
   const module = await import(modulePath)
-  return module.startMoonlightStreamRuntimeSession(options)
+  const runtime = await module.startMoonlightStreamRuntimeSession(options)
+  const touchBounds = await startMoonlightTouchBoundsRuntime({
+    socketPath: options.socketPath,
+  }).catch(error => {
+    console.warn(
+      "korri stream touch-bounds runtime failed:",
+      error instanceof Error ? error.message : String(error),
+    )
+    return undefined
+  })
+
+  return {
+    ...runtime,
+    close: () => {
+      void touchBounds?.close()
+      runtime.close()
+    },
+  }
 }
 
 function runtimeSessionAdaptiveOptions(
