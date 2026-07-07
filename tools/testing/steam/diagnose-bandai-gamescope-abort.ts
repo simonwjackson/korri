@@ -171,7 +171,19 @@ journalctl -u korri-steam-gamescope.service --since "$since" --until "$until" --
 printf '###STEAM_LOGS\n'
 for log in console_log.txt gameprocess_log.txt; do
   if [ -f "$steam_home/logs/$log" ]; then
-    grep -a -E "Game process|SteamLaunch AppId=$app_id|AppID $app_id|proton-cachyos|Exec format|cannot execute binary" "$steam_home/logs/$log" \
+    if printf '%s' "$since" | grep -Eq '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]'; then
+      awk -v mark="$since" -v end="$until" '
+        /^\[[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]\]/ {
+          ts = substr($0, 2, 19)
+          if (ts >= mark && (end !~ /^[0-9][0-9][0-9][0-9]-/ || ts <= end)) print
+          next
+        }
+        { print }
+      ' "$steam_home/logs/$log"
+    else
+      cat "$steam_home/logs/$log"
+    fi \
+      | grep -a -E "Game process|SteamLaunch AppId=$app_id|AppID $app_id|proton-cachyos|Exec format|cannot execute binary" \
       | tail -160 \
       || true
   fi
