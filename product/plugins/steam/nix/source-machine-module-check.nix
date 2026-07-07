@@ -48,9 +48,14 @@ let
   sessiondEnv = cfg.systemd.user.services.korri-sessiond.environment or { };
   systemPackages = cfg.environment.systemPackages or [ ];
   packageName = package: package.pname or package.name or "";
-  hasPackage = expected: builtins.any (package: packageName package == expected) systemPackages;
-  hasPackagePrefix =
-    expected: builtins.any (package: lib.hasPrefix expected (packageName package)) systemPackages;
+  findPackage =
+    expected: lib.findFirst (package: packageName package == expected) null systemPackages;
+  findPackagePrefix =
+    expected: lib.findFirst (package: lib.hasPrefix expected (packageName package)) null systemPackages;
+  protonCachyosX86Package = findPackagePrefix "proton-cachyos-x86_64";
+  systemPackagePaths = lib.concatStringsSep " " (map toString systemPackages);
+  hasPackage = expected: findPackage expected != null;
+  hasPackagePrefix = expected: findPackagePrefix expected != null;
   check = message: assertion: { inherit message assertion; };
   checks = [
     (check "Steam source-machine module evaluates on x86_64" (
@@ -92,6 +97,22 @@ if failures != [ ] then
   }"
 else
   pkgs.runCommand "korri-steam-source-machine-module-check" { } ''
+    found_stateful_app=0
+    found_detached_install=0
+    for package in ${systemPackagePaths}; do
+      if [ -x "$package/bin/korri-steam-app" ] \
+        && grep -q 'export HOME=/var/lib/korri/steam' "$package/bin/korri-steam-app" \
+        && grep -q 'STEAM_COMPAT_CLIENT_INSTALL_PATH=/var/lib/korri/steam' "$package/bin/korri-steam-app"; then
+        found_stateful_app=1
+      fi
+      if [ -x "$package/bin/korri-steam-x86-app-install" ] \
+        && grep -q 'nohup .* +app_install' "$package/bin/korri-steam-x86-app-install"; then
+        found_detached_install=1
+      fi
+    done
+    test "$found_stateful_app" -eq 1
+    test "$found_detached_install" -eq 1
+    test -f ${protonCachyosX86Package}/${protonCachyosX86Package.passthru.dist}/compatibilitytool.vdf
     echo "All ${toString (builtins.length checks)} korri Steam source-machine checks passed."
     touch $out
   ''

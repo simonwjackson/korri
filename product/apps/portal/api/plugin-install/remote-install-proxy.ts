@@ -2,8 +2,13 @@ import { DataError, ValidationError } from "@platform/api/rpc/errors"
 import { rpcProtocolHttpLayer } from "@platform/api/rpc/client-layer"
 import type { EntrySource } from "@platform/api/rpc/entry-source"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
+import {
+  makeFilePeerStore,
+  type PeerStore,
+} from "@product/apps/portal/peers/peer-store"
 import { Effect } from "effect"
 import { RpcClient } from "effect/unstable/rpc"
+import { INSTALL_CONTROL_COOKIE } from "./install-control-authorization"
 import type {
   RequestPluginInstallPayload,
   RequestPluginInstallResponse,
@@ -13,7 +18,15 @@ import type {
   PluginInstallStatusResponse,
 } from "./status.rpc"
 
+const DEFAULT_REMOTE_INSTALL_TIMEOUT_MS = 5_000
+
 const remoteInstallSessions = new Map<string, string>()
+
+export interface RemoteInstallProxyOptions {
+  readonly fetch?: typeof fetch
+  readonly peerStore?: Pick<PeerStore, "load">
+  readonly timeoutMs?: number
+}
 
 export function isRemoteInstallSource(
   source: EntrySource | undefined,
@@ -36,25 +49,57 @@ export function validateRemoteInstallSource(source: EntrySource): string {
   return controlUrl
 }
 
+export async function trustedRemoteInstallControlUrl(
+  source: EntrySource,
+  options: RemoteInstallProxyOptions = {},
+): Promise<string> {
+  const requestedControlUrl = validateRemoteInstallSource(source)
+  const peerStore = options.peerStore ?? makeFilePeerStore()
+  const peers = await peerStore.load()
+  const peer = peers.find(candidate => candidate.hostId === source.hostId)
+  if (!peer) {
+    throw new ValidationError({
+      message: `Remote install source ${source.hostId} is not trusted`,
+    })
+  }
+  if (!peer.caps.includes("source")) {
+    throw new ValidationError({
+      message: `Remote install source ${source.hostId} is not a source host`,
+    })
+  }
+  const trustedControlUrl = normalizeRemoteControlUrl(peer.controlUrl)
+  if (trustedControlUrl !== requestedControlUrl) {
+    throw new ValidationError({
+      message: "Remote install source URL does not match trusted peer registry",
+    })
+  }
+  return trustedControlUrl
+}
+
 export async function createRemoteInstallControlSession(
   source: EntrySource,
   submitted: string,
-  fetchImpl: typeof fetch = fetch,
+  options: RemoteInstallProxyOptions = {},
 ): Promise<Response> {
-  const controlUrl = validateRemoteInstallSource(source)
-  const response = await fetchImpl(
+  const controlUrl = await trustedRemoteInstallControlUrl(source, options)
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REMOTE_INSTALL_TIMEOUT_MS
+  const response = await fetchWithTimeout(
+    options.fetch ?? fetch,
     `${controlUrl}/api/install-control/session`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ pin: submitted }),
     },
+    timeoutMs,
   )
 
   if (response.ok) {
     const setCookie = response.headers.get("set-cookie")
     const sessionCookie = sessionCookieFromSetCookie(setCookie)
     if (sessionCookie) remoteInstallSessions.set(controlUrl, sessionCookie)
+  } else if (response.status === 401 || response.status === 403) {
+    remoteInstallSessions.delete(controlUrl)
   }
 
   return response
@@ -72,7 +117,7 @@ export function requestRemotePluginInstall(
       if (!isRemoteInstallSource(source)) {
         throw new ValidationError({ message: "Remote install source required" })
       }
-      const controlUrl = validateRemoteInstallSource(source)
+      const controlUrl = await trustedRemoteInstallControlUrl(source)
       return await runRemoteInstallRpc(controlUrl, client =>
         client["app.plugin.install.request"]({
           providerId: payload.providerId,
@@ -98,7 +143,7 @@ export function requestRemotePluginInstallStatus(
       if (!isRemoteInstallSource(source)) {
         throw new ValidationError({ message: "Remote install source required" })
       }
-      const controlUrl = validateRemoteInstallSource(source)
+      const controlUrl = await trustedRemoteInstallControlUrl(source)
       return await runRemoteInstallRpc(controlUrl, client =>
         client["app.plugin.install.status"]({
           providerId: payload.providerId,
@@ -128,14 +173,50 @@ async function runRemoteInstallRpc<T>(
   const layer = rpcProtocolHttpLayer(`${controlUrl}/api/rpc`, {
     headers: sessionCookie ? { cookie: sessionCookie } : {},
   })
-  return (await Effect.runPromise(
+  const promise = Effect.runPromise(
     Effect.scoped(
       RpcClient.make(appRpcGroup).pipe(
         Effect.flatMap(client => run(client as RemoteInstallRpcClient)),
         Effect.provide(layer),
       ) as never,
     ),
-  )) as T
+  ) as Promise<T>
+  return await promiseWithTimeout(promise, DEFAULT_REMOTE_INSTALL_TIMEOUT_MS)
+}
+
+async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetchImpl(input, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function promiseWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("remote install request timed out")),
+          timeoutMs,
+        )
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
 }
 
 function normalizeRemoteControlUrl(controlUrl: string): string {
@@ -177,7 +258,10 @@ function isBlockedHost(hostname: string): boolean {
     host === "localhost" ||
     host === "0.0.0.0" ||
     host === "::" ||
-    host === "::1"
+    host === "::1" ||
+    host.startsWith("::ffff:127.") ||
+    host.startsWith("::ffff:7f") ||
+    host.startsWith("fe80:")
   )
     return true
   if (host.startsWith("127.")) return true
@@ -190,7 +274,7 @@ function sessionCookieFromSetCookie(
 ): string | undefined {
   if (!setCookie) return undefined
   const cookie = setCookie.split(";")[0]?.trim()
-  return cookie && cookie.startsWith("korri_install_control=")
+  return cookie && cookie.startsWith(`${INSTALL_CONTROL_COOKIE}=`)
     ? cookie
     : undefined
 }

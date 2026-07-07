@@ -27,13 +27,14 @@ export const handleRequestPluginInstall = (
   payload: typeof RequestPluginInstallPayload.Type,
 ) =>
   Effect.gen(function* () {
+    yield* requireInstallControl
+
     if (isRemoteInstallSource(payload.source)) {
       return yield* requestRemotePluginInstall(payload).pipe(
         Effect.map(response => new RequestPluginInstallResponse(response)),
       )
     }
 
-    yield* requireInstallControl
     if (!isProviderId(payload.providerId)) {
       return yield* Effect.fail(
         new ValidationError({

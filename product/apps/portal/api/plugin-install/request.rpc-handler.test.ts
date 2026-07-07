@@ -18,11 +18,16 @@ afterEach(() => {
 })
 
 describe("handleRequestPluginInstall", () => {
-  it("rejects unauthorized callers before dispatch", async () => {
+  it("rejects unauthorized callers before local or remote dispatch", async () => {
     const result = await Effect.runPromiseExit(
       handleRequestPluginInstall({
         providerId: "@korri:steam",
         appId: "1029210",
+        source: {
+          hostId: "aka",
+          controlUrl: "http://192.168.1.117:3001",
+          isLocal: false,
+        },
       }).pipe(
         Effect.provide(
           Layer.succeed(CurrentInstallControl, { authorized: false }),

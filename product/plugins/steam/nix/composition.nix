@@ -25,7 +25,6 @@ in
   enabledPluginIds = lib.optional enable "@korri:steam";
   overlays = lib.optional enable overlay;
   nixosModules = lib.optional enable steamNixosModule;
-  sourceMachineNixosModules = lib.optional enable steamSourceMachineModule;
   packages = lib.optionalAttrs enable {
     steam-korri = steamKorriPackage;
   };

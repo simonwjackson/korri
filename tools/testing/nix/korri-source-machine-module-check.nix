@@ -63,6 +63,10 @@ let
     (evaluateWith {
       services.korri.daemon.sessiond.socketPath = lib.mkForce "%t/korri/other.sock";
     }).config;
+  composedPluginsCfg =
+    (evaluateWith {
+      services.korri.sourceMachine.enabledPlugins = lib.mkAfter [ "@korri:test-plugin" ];
+    }).config;
 
   failedAssertions = cfg: builtins.filter (a: !a.assertion) cfg.assertions;
   failedAssertionMessages = cfg: map (a: a.message) (failedAssertions cfg);
@@ -159,6 +163,17 @@ let
       && lib.hasInfix "@korri:steam" (gameStreamEnv.KORRI_ENABLED_PLUGINS or "")
       && (daemonEnv.KORRI_STEAM_APP_INSTALL_HELPER or "") != ""
       && (daemonEnv.KORRI_STEAM_X86_COMPAT_TOOL or "") == "proton-cachyos-11.0-20260601-slr-x86_64"
+    ))
+    (check "exported source-machine module composes additional plugin ids" (
+      lib.hasInfix "@korri:test-plugin" (
+        composedPluginsCfg.systemd.user.services.korrid.environment.KORRI_ENABLED_PLUGINS or ""
+      )
+      && lib.hasInfix "@korri:test-plugin" (
+        composedPluginsCfg.services.korri.sessiond.extraEnvironment.KORRI_ENABLED_PLUGINS or ""
+      )
+      && lib.hasInfix "@korri:test-plugin" (
+        composedPluginsCfg.services.korri.gameStream.extraEnvironment.KORRI_ENABLED_PLUGINS or ""
+      )
     ))
     (check "exported source-machine module excludes ARM-only Steam substrate" (
       !(cfg.systemd.services ? korri-steam-gamescope)

@@ -16,8 +16,16 @@ let
   steamHome = "${runtime.stateRoot}/steam";
   protonCachyosX86 = pkgs.callPackage ../../proton-runtime/packages/proton-cachyos-x86_64 { };
   steamPackage = pkgs.steam;
+  steamEnv = ''
+    export HOME=${lib.escapeShellArg steamHome}
+    export XDG_DATA_HOME=${lib.escapeShellArg "${steamHome}/.local/share"}
+    export XDG_CONFIG_HOME=${lib.escapeShellArg "${steamHome}/.config"}
+    export XDG_CACHE_HOME=${lib.escapeShellArg "${steamHome}/.cache"}
+    export STEAM_COMPAT_CLIENT_INSTALL_PATH=${lib.escapeShellArg steamHome}
+  '';
   steamApp = pkgs.writeShellScriptBin "korri-steam-app" ''
     set -eu
+    ${steamEnv}
     if [ "$#" -ne 1 ]; then
       echo "usage: korri-steam-app <appid>" >&2
       exit 64
@@ -33,6 +41,7 @@ let
   '';
   steamInstallHelper = pkgs.writeShellScriptBin "korri-steam-x86-app-install" ''
     set -eu
+    ${steamEnv}
     if [ "$#" -ne 1 ]; then
       echo "usage: korri-steam-x86-app-install <appid>" >&2
       exit 64
@@ -44,7 +53,10 @@ let
         exit 64
         ;;
     esac
-    exec ${steamPackage}/bin/steam -console +app_install "$appid"
+    log="${steamHome}/steamapps/korri-app-install-$appid.log"
+    mkdir -p "$(dirname "$log")"
+    nohup ${steamPackage}/bin/steam -console +app_install "$appid" >"$log" 2>&1 &
+    echo "korri-steam-x86-app-install: requested Steam install for $appid"
   '';
 in
 {

@@ -25,6 +25,7 @@ type CommandSpec = {
   readonly payload: unknown
   readonly mutates: boolean
   readonly confirmed: boolean
+  readonly headers?: readonly [string, string][]
 }
 
 type RpcExitFrame = {
@@ -130,6 +131,9 @@ export function registerKorridTools(
       profileId: { type: "string", description: "Optional launch profile id." },
       releaseId: { type: "string", description: "Optional release id." },
       appId: { type: "string", description: "Optional app id." },
+      source: {
+        description: "Optional EntrySource for a remote source entry.",
+      },
     }),
     async execute(_toolCallId, params, signal) {
       return executeSpecFromParams(
@@ -152,6 +156,9 @@ export function registerKorridTools(
       profileId: { type: "string", description: "Optional launch profile id." },
       releaseId: { type: "string", description: "Optional release id." },
       appId: { type: "string", description: "Optional app id." },
+      source: {
+        description: "Optional EntrySource for a remote source entry.",
+      },
       confirmLaunch: {
         type: "boolean",
         description: "Must be true to confirm this mutating launch request.",
@@ -165,6 +172,96 @@ export function registerKorridTools(
         launchSpec,
         "app.library.launch",
       )
+    },
+  })
+
+  pi.registerTool({
+    name: "korrid_plugin_install",
+    label: "Korrid Plugin Install",
+    description:
+      "Request a plugin-managed app install through korrid. Requires confirmInstall=true and installControlSecret.",
+    parameters: baseParameters({
+      providerId: { type: "string", description: "Plugin provider id." },
+      appId: { type: "string", description: "Provider app id to install." },
+      playableId: { type: "string", description: "Optional playable id." },
+      mode: {
+        enum: ["install", "update"],
+        description: "Install request mode. Defaults to install.",
+      },
+      source: {
+        description:
+          "Optional EntrySource for a remote source-machine install target.",
+      },
+      installControlSecret: {
+        type: "string",
+        description: "Local install-control secret for this daemon.",
+      },
+      confirmInstall: {
+        type: "boolean",
+        description: "Must be true to confirm this mutating install request.",
+      },
+    }),
+    async execute(_toolCallId, params, signal) {
+      return executeSpecFromParams(
+        params,
+        signal,
+        fetchImpl,
+        pluginInstallSpec,
+        "app.plugin.install.request",
+      )
+    },
+  })
+
+  pi.registerTool({
+    name: "korrid_plugin_install_status",
+    label: "Korrid Plugin Install Status",
+    description:
+      "Read plugin-managed install status. installControlSecret is required by daemon policy.",
+    parameters: baseParameters({
+      providerId: { type: "string", description: "Plugin provider id." },
+      appId: { type: "string", description: "Provider app id." },
+      requestId: {
+        type: "string",
+        description: "Optional install request id.",
+      },
+      source: {
+        description:
+          "Optional EntrySource for a remote source-machine install target.",
+      },
+      installControlSecret: {
+        type: "string",
+        description: "Local install-control secret for this daemon.",
+      },
+    }),
+    async execute(_toolCallId, params, signal) {
+      return executeSpecFromParams(
+        params,
+        signal,
+        fetchImpl,
+        pluginInstallStatusSpec,
+        "app.plugin.install.status",
+      )
+    },
+  })
+
+  pi.registerTool({
+    name: "korrid_install_control_session",
+    label: "Korrid Install Control Session",
+    description:
+      "Unlock local or remote install-control. Requires confirmUnlock=true.",
+    parameters: baseParameters({
+      pin: { type: "string", description: "Install-control PIN or secret." },
+      source: {
+        description:
+          "Optional EntrySource to proxy unlock to a remote source-machine.",
+      },
+      confirmUnlock: {
+        type: "boolean",
+        description: "Must be true to confirm install-control unlock.",
+      },
+    }),
+    async execute(_toolCallId, params, signal) {
+      return executeInstallControlSession(params, signal, fetchImpl)
     },
   })
 
@@ -373,6 +470,63 @@ function launchSelectionPayload(
       ? { profileId: params.profileId }
       : {}),
     ...(typeof params.appId === "string" ? { appId: params.appId } : {}),
+    ...(entrySourceFromParams(params)
+      ? { source: entrySourceFromParams(params) }
+      : {}),
+  }
+}
+
+function pluginInstallSpec(params: Record<string, unknown>): CommandSpec {
+  const providerId = requiredString(params.providerId, "providerId")
+  const appId = requiredString(params.appId, "appId")
+  const installControlSecret = requiredString(
+    params.installControlSecret,
+    "installControlSecret",
+  )
+  const confirmed = params.confirmInstall === true
+  return {
+    tag: "app.plugin.install.request",
+    payload: {
+      providerId,
+      appId,
+      ...(typeof params.playableId === "string"
+        ? { playableId: params.playableId }
+        : {}),
+      ...(params.mode === "install" || params.mode === "update"
+        ? { mode: params.mode }
+        : {}),
+      ...(entrySourceFromParams(params)
+        ? { source: entrySourceFromParams(params) }
+        : {}),
+    },
+    mutates: true,
+    confirmed,
+    headers: [["x-korri-install-control", installControlSecret]],
+  }
+}
+
+function pluginInstallStatusSpec(params: Record<string, unknown>): CommandSpec {
+  const providerId = requiredString(params.providerId, "providerId")
+  const appId = requiredString(params.appId, "appId")
+  const installControlSecret = requiredString(
+    params.installControlSecret,
+    "installControlSecret",
+  )
+  return {
+    tag: "app.plugin.install.status",
+    payload: {
+      providerId,
+      appId,
+      ...(typeof params.requestId === "string"
+        ? { requestId: params.requestId }
+        : {}),
+      ...(entrySourceFromParams(params)
+        ? { source: entrySourceFromParams(params) }
+        : {}),
+    },
+    mutates: false,
+    confirmed: true,
+    headers: [["x-korri-install-control", installControlSecret]],
   }
 }
 
@@ -447,6 +601,60 @@ async function executeSpec(
   }
 }
 
+async function executeInstallControlSession(
+  params: Record<string, unknown>,
+  signal: AbortSignal | undefined,
+  fetchImpl: typeof fetch,
+) {
+  const rpcUrl = rpcUrlFromParams(params)
+  const pin = requiredString(params.pin, "pin")
+  if (params.confirmUnlock !== true) {
+    return toolResult(
+      {
+        ok: false,
+        url: rpcUrlToBaseUrl(rpcUrl),
+        error: "install-control unlock requires explicit confirmation",
+      },
+      true,
+    )
+  }
+  try {
+    const response = await fetchImpl(
+      `${rpcUrlToBaseUrl(rpcUrl)}/api/install-control/session`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          pin,
+          ...(entrySourceFromParams(params)
+            ? { source: entrySourceFromParams(params) }
+            : {}),
+        }),
+        signal: signalWithFallbackTimeout(signal),
+      },
+    )
+    const text = await response.text()
+    return toolResult(
+      {
+        ok: response.ok,
+        url: rpcUrlToBaseUrl(rpcUrl),
+        status: response.status,
+        result: parseJsonOrText(text),
+      },
+      !response.ok,
+    )
+  } catch (error) {
+    return toolResult(
+      {
+        ok: false,
+        url: rpcUrlToBaseUrl(rpcUrl),
+        error: error instanceof Error ? error.message : String(error),
+      },
+      true,
+    )
+  }
+}
+
 async function executeFindGame(
   params: Record<string, unknown>,
   signal: AbortSignal | undefined,
@@ -496,6 +704,25 @@ async function executeFindGame(
   }
 }
 
+function entrySourceFromParams(
+  params: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const value = params.source
+  if (!isRecord(value)) return undefined
+  if (
+    typeof value.hostId !== "string" ||
+    typeof value.controlUrl !== "string" ||
+    typeof value.isLocal !== "boolean"
+  ) {
+    throw new Error("source must include hostId, controlUrl, and isLocal")
+  }
+  return {
+    hostId: value.hostId,
+    controlUrl: value.controlUrl,
+    isLocal: value.isLocal,
+  }
+}
+
 function rpcUrlFromParams(params: Record<string, unknown>): string {
   return normalizeKorridRpcUrl(
     typeof params.url === "string"
@@ -516,9 +743,21 @@ function safeRpcUrlFromParams(params: Record<string, unknown>): string {
   }
 }
 
+function rpcUrlToBaseUrl(rpcUrl: string): string {
+  return rpcUrl.replace(/\/api\/rpc\/?$/, "")
+}
+
+function parseJsonOrText(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
 export async function callKorridRpc(
   rpcUrl: string,
-  spec: Pick<CommandSpec, "tag" | "payload">,
+  spec: Pick<CommandSpec, "tag" | "payload" | "headers">,
   signal: AbortSignal | undefined,
   fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
 ): Promise<unknown> {
@@ -531,7 +770,7 @@ export async function callKorridRpc(
       id: requestId,
       tag: spec.tag,
       payload: spec.payload,
-      headers: [],
+      headers: spec.headers ?? [],
     }),
     signal: signalWithFallbackTimeout(signal),
   })

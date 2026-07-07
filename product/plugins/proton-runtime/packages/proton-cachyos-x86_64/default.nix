@@ -30,6 +30,11 @@ stdenvNoCC.mkDerivation rec {
       mv "$tmp" "$toolmanifest"
     fi
 
+    # Upstream carries a few gamefix symlinks to fixes that are absent from
+    # this release archive. Nix's fixup rejects dangling links, and Steam does
+    # not require these absent per-game fixes for tool discovery.
+    find "$out/share/korri/proton-cachyos-x86_64" -xtype l -delete
+
     runHook postInstall
   '';
 
