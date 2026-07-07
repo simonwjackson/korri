@@ -95,7 +95,7 @@ const DEFAULTS = {
   playableBitrateKbps: 3_500,
   panicBitrateKbps: 2_500,
   playableFps: 30,
-  playableResolutionWidth: 854,
+  playableResolutionWidth: 640,
 }
 
 const FPS_STEPS = [15, 30, 40, 45, 60, 75, 90, 100, 120, 144, 240]

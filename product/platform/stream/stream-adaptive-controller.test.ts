@@ -266,7 +266,7 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
     expect(decision.mode).toBe("shed")
     expect(decision.target.bitrateKbps).toBe(2_500)
     expect(decision.target.fps).toBe(30)
-    expect(decision.target.resolution).toEqual({ width: 854, height: 480 })
+    expect(decision.target.resolution).toEqual({ width: 640, height: 360 })
   })
 
   it("shrinks canvas when bits per pixel are starved and grows grudgingly after recovery", () => {
