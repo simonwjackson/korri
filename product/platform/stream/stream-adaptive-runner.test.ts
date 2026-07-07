@@ -240,6 +240,40 @@ describe("createStreamAdaptiveRunner", () => {
     })
   })
 
+  it("starts in establishing phase and uses bitrate startup", async () => {
+    const { runner, calls, events } = makeHarness({
+      health: summary({ sampleCount: 1 }),
+      boundaries: {
+        levers: { bitrate: { floor: 500, startup: 6_000, ceiling: 40_000 } },
+        outcomes: {},
+      },
+    })
+
+    await runner.tick()
+
+    expect(calls).toContain("bitrate:6000")
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "decision", mode: "establish" }),
+    )
+  })
+
+  it("uses steady mode after enough healthy startup samples", async () => {
+    const { runner, calls, events } = makeHarness({
+      health: summary({ sampleCount: 5 }),
+      boundaries: {
+        levers: { bitrate: { floor: 500, startup: 6_000, ceiling: 40_000 } },
+        outcomes: {},
+      },
+    })
+
+    await runner.tick()
+
+    expect(calls).not.toContain("bitrate:6000")
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "decision", mode: "fine-tune" }),
+    )
+  })
+
   it("still serializes non-shed targets to one dimension per tick", async () => {
     const { runner, calls, events } = makeHarness({
       health: summary({ bitrateDeliveryRatio: 0.65, rttMs: numeric(70) }),

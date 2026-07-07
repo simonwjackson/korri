@@ -4,6 +4,7 @@ import {
   computeStreamAdaptiveDecision,
   type StreamAdaptiveBindingConstraint,
   type StreamAdaptiveControllerMode,
+  type StreamAdaptiveControllerPhase,
   type StreamAdaptivePressure,
   type StreamAdaptiveSettings,
   type StreamAdaptiveTarget,
@@ -100,6 +101,7 @@ export function createStreamAdaptiveRunner(
         currentBoundaries(options.boundaries),
         options.initialSettings,
       ),
+      phase: phaseForSummary(summary),
     })
 
     if (
@@ -229,6 +231,10 @@ export function createStreamAdaptiveRunner(
       if (interval !== undefined) clearInterval(interval)
     },
   }
+}
+
+function phaseForSummary(summary: { readonly sampleCount: number }): StreamAdaptiveControllerPhase {
+  return summary.sampleCount < 3 ? "establishing" : "steady"
 }
 
 function sleep(ms: number): Promise<void> {

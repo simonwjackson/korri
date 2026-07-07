@@ -129,7 +129,7 @@ export function computeStreamAdaptiveDecision(
   if (mode === "establish") {
     const conservative = Math.min(
       bitrateCeiling(boundaries, params),
-      params.coldStartBitrateKbps,
+      bitrateStartup(boundaries, params),
     )
     if (summary.sampleCount < params.coldStartSampleCount) {
       maybeSetBitrate(target, current, conservative, boundaries, params, true)
@@ -593,6 +593,13 @@ function bitrateCeiling(
   params: Required<StreamAdaptiveControllerParams>,
 ): number {
   return boundaries?.levers.bitrate?.ceiling ?? params.maxBitrateKbps
+}
+
+function bitrateStartup(
+  boundaries: StreamBoundaries | undefined,
+  params: Required<StreamAdaptiveControllerParams>,
+): number {
+  return boundaries?.levers.bitrate?.startup ?? params.coldStartBitrateKbps
 }
 
 function fpsCeiling(

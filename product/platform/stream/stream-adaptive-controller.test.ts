@@ -178,6 +178,38 @@ describe("computeStreamAdaptiveDecision", () => {
     expect(decision).toEqual({ kind: "dormant", reason: "within-hysteresis" })
   })
 
+  it("uses bitrate startup while establishing", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({ sampleCount: 1 }),
+      current,
+      objectiveBias: 0.5,
+      phase: "establishing",
+      boundaries: {
+        levers: { bitrate: { floor: 500, startup: 6_000, ceiling: 40_000 } },
+        outcomes: {},
+      },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.mode).toBe("establish")
+    expect(decision.target.bitrateKbps).toBe(6_000)
+  })
+
+  it("falls back to cold-start bitrate when establishing has no startup boundary", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({ sampleCount: 1 }),
+      current,
+      objectiveBias: 0.5,
+      phase: "establishing",
+      params: { coldStartBitrateKbps: 7_000 },
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.target.bitrateKbps).toBe(7_000)
+  })
+
   it("gradually raises bitrate when healthy and below baseline ceiling", () => {
     const decision = computeStreamAdaptiveDecision({
       summary: summary(),
