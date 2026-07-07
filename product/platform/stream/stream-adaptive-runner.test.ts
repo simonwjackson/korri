@@ -477,6 +477,114 @@ describe("createStreamAdaptiveRunner", () => {
     expect(calls).toContain("resolution:1066x600");
   });
 
+  it("clears shed convergence when adaptive auto is disabled", async () => {
+    let boundaries: StreamBoundaries | undefined = {
+      levers: {
+        bitrate: { floor: 500, startup: 6_000, ceiling: 40_000 },
+        fps: { floor: 30, ceiling: 120 },
+        resolution: {
+          floor: { width: 640, height: 360 },
+          ceiling: { width: 1920, height: 1080 },
+        },
+      },
+      outcomes: {},
+    };
+    let health = summary({ freshness: "stale" });
+    let knownGood: KnownGood = {
+      "runtime.setBitrate": { kind: "scalar", value: 28_409 },
+      "runtime.setFps": { kind: "scalar", value: 120 },
+      "runtime.setResolution": {
+        kind: "resolution",
+        width: 1920,
+        height: 1080,
+      },
+    };
+    const { runner, calls, events } = makeHarness({
+      boundaries: () => boundaries,
+      health: () => health,
+      knownGood: () => knownGood,
+    });
+
+    await runner.tick();
+    expect(calls).toContain("bitrate:500");
+
+    boundaries = { auto: "off", levers: {}, outcomes: {} };
+    health = summary();
+    knownGood = {
+      "runtime.setBitrate": { kind: "scalar", value: 28_409 },
+      "runtime.setFps": { kind: "scalar", value: 120 },
+      "runtime.setResolution": {
+        kind: "resolution",
+        width: 640,
+        height: 360,
+      },
+    };
+    calls.length = 0;
+    events.length = 0;
+
+    await runner.tick();
+
+    expect(calls).toEqual([]);
+    expect(events).toEqual([{ kind: "dormant", reason: "within-hysteresis" }]);
+
+    boundaries = { levers: {}, outcomes: {} };
+    await runner.tick();
+
+    expect(calls).not.toContain("bitrate:500");
+    expect(calls).not.toContain("fps:30");
+  });
+
+  it("clears shed convergence when auto is disabled before pending early downshift", async () => {
+    let pending = false;
+    let boundaries: StreamBoundaries | undefined = { levers: {}, outcomes: {} };
+    let health = summary({ freshness: "stale" });
+    let knownGood: KnownGood = {
+      "runtime.setBitrate": { kind: "scalar", value: 20_000 },
+      "runtime.setFps": { kind: "scalar", value: 60 },
+      "runtime.setResolution": { kind: "resolution", width: 1280, height: 720 },
+    };
+    const { runner, calls, events } = makeHarness({
+      pending: () => pending,
+      boundaries: () => boundaries,
+      health: () => health,
+      knownGood: () => knownGood,
+    });
+
+    await runner.tick();
+    expect(calls).toContain("bitrate:500");
+
+    boundaries = { auto: "off", levers: {}, outcomes: {} };
+    pending = true;
+    health = summary({
+      rttMs: numeric(86, "rising"),
+      rttVarianceMs: numeric(30),
+      bitrateDeliveryRatio: 0.8,
+    });
+    knownGood = {
+      "runtime.setBitrate": { kind: "scalar", value: 20_000 },
+      "runtime.setFps": { kind: "scalar", value: 60 },
+      "runtime.setResolution": { kind: "resolution", width: 640, height: 360 },
+    };
+    calls.length = 0;
+    events.length = 0;
+
+    await runner.tick();
+
+    expect(calls).toEqual([]);
+    expect(events).toEqual([{ kind: "dormant", reason: "within-hysteresis" }]);
+
+    boundaries = { levers: {}, outcomes: {} };
+    pending = false;
+    health = summary();
+    calls.length = 0;
+    events.length = 0;
+
+    await runner.tick();
+
+    expect(calls).not.toContain("bitrate:500");
+    expect(calls).not.toContain("fps:30");
+  });
+
   it("clears transient shed convergence after stable healthy samples", async () => {
     let health = summary({
       bitrateDeliveryRatio: 0.25,

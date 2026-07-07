@@ -112,6 +112,15 @@ export function createStreamAdaptiveRunner(
       return;
     }
     const hasPending = options.recovery.hasPending();
+    const boundaries = effectiveBoundaries(
+      currentBoundaries(options.boundaries),
+      options.initialSettings,
+    );
+    if (boundaries.auto === "off") {
+      shedConvergence = undefined;
+      options.onEvent({ kind: "dormant", reason: "within-hysteresis" });
+      return;
+    }
     const summary = options.monitor.latestSummary(nowMs());
     const earlyDownshift =
       summary.freshness === "fresh"
@@ -137,10 +146,6 @@ export function createStreamAdaptiveRunner(
         ? summaryForEarlyDownshift(summary)
         : summary;
     const current = currentSettings(options.recovery, options.initialSettings);
-    const boundaries = effectiveBoundaries(
-      currentBoundaries(options.boundaries),
-      options.initialSettings,
-    );
     const decision = computeStreamAdaptiveDecision({
       summary: decisionSummary,
       current,
