@@ -31,22 +31,13 @@ let
   gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
   enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:gmloader,@korri:mega-man-rock-n-roll,@korri:moonlight,@korri:neverball,@korri:pico8,@korri:remap,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:webpage,@korri:web-canvas,@korri:xjlt,@korri:yoshis-fabrication-station,@korri:zquest-classic";
   moonlightRuntimeSettingsEnvironment = {
-    # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
-    # These are intentionally enumerated and preserved as Moonlight process env
-    # through host.moonlight.environment below, not service-wide KORRI_MOONLIGHT_*
-    # launch-policy fallbacks. They remain spike scope until the runtime-settings
-    # product model graduates.
-    MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S = "6";
-    MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS = "60";
-    MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS = "12000";
-    MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION = "1280x720";
+    # Runtime stream-quality policy is owned by Korri's stream-control surface.
+    # Keep the downstream Moonlight spike hooks disabled in product images: the
+    # one-shot MVP hook can overwrite live bitrate/FPS/resolution shortly after
+    # launch, and the native spike adapter can race Korri's adaptive controller.
+    # The proof-gated escape hatch remains while the runtime-settings protocol
+    # still advertises some operations as proof gated on current Sunshine builds.
     MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED = "1";
-    MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION = "1";
-    MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS = "6000";
-    MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS = "30";
-    MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_KBPS = "12000";
-    MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS = "60";
-    MOONLIGHT_RUNTIME_SETTINGS_MVP_COOLDOWN_S = "10";
   };
   sm8550 = config.rocknix.sm8550;
   runtime = config.services.korri.runtime;
