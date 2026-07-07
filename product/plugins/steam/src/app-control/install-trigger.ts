@@ -1,5 +1,9 @@
 import { Effect } from "effect"
 import { sanitizeSteamEvidenceExcerpt } from "../observability/evidence-sanitizer"
+import {
+  collectSteamBusySnapshot,
+  type SteamBusySnapshot,
+} from "../observability/install-activity"
 import { collectSteamInstallSnapshot } from "../observability/install-state"
 import {
   materializeSteamDesiredState,
@@ -41,6 +45,7 @@ export interface PrepareSteamAppInstallStateInput {
   readonly fs?: SteamStateFileSystem
   readonly lifecycle?: SteamLifecycle
   readonly lock?: SteamStateLock
+  readonly collectBusy?: () => Promise<SteamBusySnapshot>
 }
 
 export async function prepareSteamAppInstallState(
@@ -58,6 +63,18 @@ export async function prepareSteamAppInstallState(
       fs: input.fs,
       lifecycle: input.lifecycle ?? noopSteamLifecycle,
       lock: input.lock,
+      shutdownGuard: async () => {
+        const busy = await (input.collectBusy ??
+          (() => collectSteamBusySnapshot({ steamHome: input.stateRoot })))()
+        if (busy.state === "idle") return { allowed: true }
+        return {
+          allowed: false,
+          reason:
+            busy.state === "active"
+              ? `steam-busy: ${busy.evidence.join("; ")}`
+              : `steam-busy: unable to prove Steam install activity is idle (${busy.evidence.join("; ")})`,
+        }
+      },
     }),
   )
 }

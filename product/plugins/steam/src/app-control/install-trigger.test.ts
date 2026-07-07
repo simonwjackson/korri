@@ -54,6 +54,7 @@ describe("Steam install trigger", () => {
       stateRoot: "/steam-home",
       compatTool: "proton-cachyos-arm64",
       fs,
+      collectBusy: async () => ({ state: "idle", busyAppIds: [], evidence: [] }),
     })
 
     expect(parseVdf(files.get(steamConfigPath("/steam-home")) ?? "")).toMatchObject({
@@ -69,6 +70,25 @@ describe("Steam install trigger", () => {
         },
       },
     })
+  })
+
+  it("refuses install preparation when another Steam app is busy", async () => {
+    const { fs } = memoryFs()
+
+    const error = await prepareSteamAppInstallState({
+      appId: "360740",
+      stateRoot: "/steam-home",
+      compatTool: "proton-cachyos-arm64",
+      fs,
+      collectBusy: async () => ({
+        state: "active",
+        busyAppIds: ["401710"],
+        evidence: ["AppID 401710: StateFlags=1026"],
+      }),
+    }).catch(error => error)
+
+    expect(error._tag).toBe("SteamStateMutationFailed")
+    expect(error.reason).toContain("steam-busy")
   })
 
   it("prepares Steam policy before invoking the install helper", async () => {

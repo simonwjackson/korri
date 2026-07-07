@@ -424,6 +424,36 @@ describe("materializeSteamDesiredState", () => {
     expect(writes).toEqual([])
   })
 
+  it("fails closed before shutdown when the shutdown guard reports active Steam work", async () => {
+    const stateRoot = "/steam-home"
+    const events: string[] = []
+    const { fs, writes } = memoryFs()
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        materializeSteamDesiredState({
+          desired: {
+            stateRoot,
+            target: "steam://rungameid/360740",
+            defaultCompatTool: "proton-cachyos-arm64",
+          },
+          fs,
+          lifecycle: lifecycle(events),
+          lock: inlineLock,
+          shutdownGuard: async () => ({
+            allowed: false,
+            reason: "steam-busy: downloading 401710",
+          }),
+        }),
+      ),
+    )
+
+    expect(error._tag).toBe("SteamStateMutationFailed")
+    expect("reason" in error ? error.reason : "").toContain("steam-busy")
+    expect(events).toEqual([])
+    expect(writes).toEqual([])
+  })
+
   it("re-reads VDF state after shutdown before writing", async () => {
     const stateRoot = "/steam-home"
     const localconfig = steamLocalConfigPath(stateRoot)

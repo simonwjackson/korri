@@ -110,11 +110,24 @@ export interface SteamStateLock {
   readonly withLock: <A>(key: string, run: () => Promise<A>) => Promise<A>
 }
 
+export interface SteamShutdownGuardResult {
+  readonly allowed: boolean
+  readonly reason?: string
+}
+
+export interface SteamShutdownGuard {
+  readonly beforeShutdown: (input: {
+    readonly stateRoot: string
+    readonly paths: readonly string[]
+  }) => Promise<SteamShutdownGuardResult>
+}
+
 export interface MaterializeSteamDesiredStateOptions {
   readonly desired: SteamDesiredState
   readonly fs?: SteamStateFileSystem
   readonly lifecycle?: SteamLifecycle
   readonly lock?: SteamStateLock
+  readonly shutdownGuard?: SteamShutdownGuard["beforeShutdown"]
 }
 
 export interface MaterializedSteamDesiredState {
@@ -506,6 +519,21 @@ async function materializeSteamDesiredStatePromise(
 
     let writes = await buildWrites()
     if (writes.length === 0) return
+
+    if (options.shutdownGuard) {
+      const guard = await options.shutdownGuard({
+        stateRoot: desired.stateRoot,
+        paths: writes.map(write => write.path),
+      })
+      if (!guard.allowed) {
+        throw new SteamStateMutationFailed({
+          path: desired.stateRoot,
+          reason:
+            guard.reason ??
+            "Steam shutdown refused before VDF write because Steam is busy",
+        })
+      }
+    }
 
     await lifecycle.shutdown({ command, stateRoot: desired.stateRoot })
     await lifecycle.waitForShutdown({ stateRoot: desired.stateRoot })
