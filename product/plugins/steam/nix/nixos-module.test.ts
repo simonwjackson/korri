@@ -138,6 +138,18 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("RemainAfterExit = false")
   })
 
+  it("exposes explicit service drain and reset operations for AppID handoff", () => {
+    expect(moduleSource).toContain("usage: korri-steam-service-control <start|stop|drain|reset>")
+    expect(moduleSource).toContain('drain) drain_service ;;')
+    expect(moduleSource).toContain('reset) reset_service ;;')
+    expect(moduleSource).toContain("systemctl show korri-steam-gamescope.service")
+    expect(moduleSource).toContain("InvocationID")
+    expect(moduleSource).toContain("NRestarts")
+    expect(moduleSource).toContain("systemctl kill -s SIGKILL --kill-whom=all korri-steam-gamescope.service")
+    expect(moduleSource).not.toContain("pkill -f gamescope")
+    expect(moduleSource).not.toContain("pkill -f steam")
+  })
+
   it("bounds service-control waits before relying on the readiness loop", () => {
     expect(moduleSource).toContain("systemctl --no-block start")
     expect(moduleSource).toContain("KORRI_STEAM_APP_SYSTEMCTL_TIMEOUT")

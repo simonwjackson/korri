@@ -577,14 +577,77 @@ EOF
   steamServiceControl = pkgs.writeShellScriptBin "korri-steam-service-control" ''
     set -eu
 
+    service=korri-steam-gamescope.service
+
     usage() {
-      echo "usage: korri-steam-service-control <start|stop>" >&2
+      echo "usage: korri-steam-service-control <start|stop|drain|reset>" >&2
       exit 64
+    }
+
+    service_show() {
+      ${pkgs.systemd}/bin/systemctl show korri-steam-gamescope.service \
+        -p ActiveState -p SubState -p Result -p InvocationID -p NRestarts --value 2>/dev/null || true
+    }
+
+    service_active_state() {
+      ${pkgs.systemd}/bin/systemctl show "$service" -p ActiveState --value 2>/dev/null || printf 'unknown\n'
+    }
+
+    service_invocation() {
+      ${pkgs.systemd}/bin/systemctl show "$service" -p InvocationID --value 2>/dev/null || true
+    }
+
+    service_restarts() {
+      ${pkgs.systemd}/bin/systemctl show "$service" -p NRestarts --value 2>/dev/null || printf 'unknown\n'
+    }
+
+    wait_inactive_stable() {
+      deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + ''${1:-30} ))
+      previous_invocation="$(service_invocation)"
+      previous_restarts="$(service_restarts)"
+      stable=0
+      while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$deadline" ]; do
+        state="$(service_active_state)"
+        invocation="$(service_invocation)"
+        restarts="$(service_restarts)"
+        case "$state" in
+          inactive|failed)
+            if [ "$invocation" = "$previous_invocation" ] && [ "$restarts" = "$previous_restarts" ]; then
+              stable=$((stable + 1))
+            else
+              stable=0
+              previous_invocation="$invocation"
+              previous_restarts="$restarts"
+            fi
+            [ "$stable" -ge 2 ] && return 0
+            ;;
+          *) stable=0 ;;
+        esac
+        previous_invocation="$invocation"
+        previous_restarts="$restarts"
+        ${pkgs.coreutils}/bin/sleep 1
+      done
+      echo "korri-steam-service-control: $service did not become inactive with stable InvocationID/NRestarts" >&2
+      service_show >&2
+      return 1
+    }
+
+    drain_service() {
+      wait_inactive_stable "''${KORRI_STEAM_CONTROL_DRAIN_TIMEOUT:-30}"
+    }
+
+    reset_service() {
+      if ! ${pkgs.coreutils}/bin/timeout "''${KORRI_STEAM_CONTROL_STOP_TIMEOUT:-30}" ${pkgs.systemd}/bin/systemctl stop "$service"; then
+        echo "korri-steam-service-control: stop timed out; killing $service cgroup" >&2
+        ${pkgs.systemd}/bin/systemctl kill -s SIGKILL --kill-whom=all korri-steam-gamescope.service || true
+      fi
+      ${pkgs.systemd}/bin/systemctl reset-failed "$service" >/dev/null 2>&1 || true
+      wait_inactive_stable "''${KORRI_STEAM_CONTROL_DRAIN_TIMEOUT:-30}"
     }
 
     [ "$#" -eq 1 ] || usage
     case "$1" in
-      start|stop) ;;
+      start|stop|drain|reset) ;;
       *) usage ;;
     esac
 
@@ -594,6 +657,8 @@ EOF
         exec ${pkgs.systemd}/bin/systemctl --no-block start korri-steam-gamescope.service
         ;;
       stop) exec ${pkgs.coreutils}/bin/timeout 30 ${pkgs.systemd}/bin/systemctl stop korri-steam-gamescope.service ;;
+      drain) drain_service ;;
+      reset) reset_service ;;
     esac
   '';
 
