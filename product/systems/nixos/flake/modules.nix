@@ -114,6 +114,7 @@ rec {
       korri-sessiond
       ../../../plugins/gamescope/nix/source-machine-module.nix
       ../../../plugins/retroarch/nix/source-machine-module.nix
+      ../../../plugins/steam/nix/source-machine-module.nix
       korri-rpcs3
       ../images/source-machine.nix
     ];

@@ -26,10 +26,16 @@ let
   gameStreamStatusPath = "${gameStreamRuntimeDir}/status.json";
   runtime = config.services.korri.runtime;
   compositorCfg = config.services.korri.compositor;
+  sourceMachineEnabledPlugins = lib.concatStringsSep "," [
+    "@korri:gamescope"
+    "@korri:steam"
+  ];
 in
 {
   # The headless base wires the server bits (users, federation defaults).
   imports = [ ./headless.nix ];
+
+  nixpkgs.config.allowUnfree = lib.mkDefault true;
 
   services.seatd.enable = lib.mkDefault true;
   services.dbus.enable = lib.mkDefault true;
@@ -146,17 +152,19 @@ in
       XDG_CURRENT_DESKTOP = "sway";
       DISPLAY = ":0";
       SDL_VIDEODRIVER = "wayland,x11";
+      KORRI_ENABLED_PLUGINS = sourceMachineEnabledPlugins;
       GDK_BACKEND = "wayland,x11";
       QT_QPA_PLATFORM = "wayland;xcb";
     }
-    // lib.optionalAttrs
-      (compositorCfg.sessionBus.mode == "existing" && compositorCfg.sessionBus.address != null)
-      {
-        # Sessiond-spawned foreground apps are sibling-unit children, not Sway
-        # descendants, so hand them the same session bus address the compositor
-        # uses (mirrors the kiosk renderer env in images/kiosk.nix).
-        DBUS_SESSION_BUS_ADDRESS = compositorCfg.sessionBus.address;
-      };
+    //
+      lib.optionalAttrs
+        (compositorCfg.sessionBus.mode == "existing" && compositorCfg.sessionBus.address != null)
+        {
+          # Sessiond-spawned foreground apps are sibling-unit children, not Sway
+          # descendants, so hand them the same session bus address the compositor
+          # uses (mirrors the kiosk renderer env in images/kiosk.nix).
+          DBUS_SESSION_BUS_ADDRESS = compositorCfg.sessionBus.address;
+        };
   };
 
   # Game-stream runner routes lifecycle:"foreground" intents through
@@ -167,11 +175,13 @@ in
     runtimeDir = gameStreamRuntimeDir;
     statusPath = gameStreamStatusPath;
     sessiond.socketPath = sessiondSocketPath;
+    extraEnvironment.KORRI_ENABLED_PLUGINS = sourceMachineEnabledPlugins;
   };
 
   # Without this, korrid's Launcher falls through to the in-process
   # shell launcher instead of delegating to the foreground lifecycle service.
   services.korri.daemon.sessiond.socketPath = sessiondSocketPath;
+  systemd.user.services.korrid.environment.KORRI_ENABLED_PLUGINS = sourceMachineEnabledPlugins;
 
   assertions = [
     {

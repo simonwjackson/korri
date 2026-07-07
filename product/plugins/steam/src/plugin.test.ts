@@ -8,6 +8,7 @@ import {
   KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID,
   KORRI_STEAM_PLUGIN_ID,
   KORRI_STEAM_STORAGE_ID,
+  defaultX86SteamPluginPolicy,
   steamPlugin,
 } from ".."
 
@@ -78,6 +79,13 @@ describe("Steam plugin descriptor", () => {
       path: "product/plugins/steam/nix/nixos-module.nix",
       capabilities: ["system.service", "steam.runtime"],
     })
+    expect(
+      steamPlugin.contributes.config.modules?.["steam-source-machine-module"],
+    ).toMatchObject({
+      kind: "nixos-module",
+      path: "product/plugins/steam/nix/source-machine-module.nix",
+      capabilities: ["system.service", "steam.runtime", "steam.x86"],
+    })
     expect(steamPlugin.handlers).toContainEqual(
       expect.objectContaining({ operation: "session.cleanup" }),
     )
@@ -93,6 +101,22 @@ describe("Steam plugin descriptor", () => {
         capabilities: ["install.status"],
       }),
     )
+  })
+
+  it("declares an x86 CachyOS Proton policy distinct from Bandai ARM", () => {
+    expect(defaultX86SteamPluginPolicy["compat-tool"]).toBe(
+      "proton-cachyos-11.0-20260601-slr-x86_64",
+    )
+    expect(defaultX86SteamPluginPolicy["compat-tool"]).not.toBe(
+      "proton-cachyos-11.0-20260601-slr-arm64",
+    )
+    expect(defaultX86SteamPluginPolicy).toMatchObject({
+      state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
+      "first-launch": {
+        "suppress-interstitials": true,
+        "accept-eulas": true,
+      },
+    })
   })
 
   it("models Gamescope as an explicit non-auto-enabled launch requirement", () => {

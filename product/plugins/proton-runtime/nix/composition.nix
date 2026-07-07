@@ -7,6 +7,7 @@ let
   lib = pkgs.lib;
   protonRuntimePackage = pkgs.callPackage ../packages/proton-runtime { };
   protonCachyosArm64Package = pkgs.callPackage ../packages/proton-cachyos-arm64 { };
+  protonCachyosX86Package = pkgs.callPackage ../packages/proton-cachyos-x86_64 { };
 in
 {
   enabledPluginIds = lib.optional enable "@korri:proton";
@@ -15,6 +16,7 @@ in
   packages = lib.optionalAttrs enable {
     korri-proton-runtime = protonRuntimePackage;
     proton-cachyos-arm64 = protonCachyosArm64Package;
+    proton-cachyos-x86_64 = protonCachyosX86Package;
   };
   apps = { };
   checks = { };

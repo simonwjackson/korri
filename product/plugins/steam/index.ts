@@ -19,7 +19,9 @@ export {
 } from "./src/observability/log-observer"
 export {
   DEFAULT_STEAM_COMPAT_TOOL,
+  DEFAULT_X86_STEAM_COMPAT_TOOL,
   defaultSteamPluginPolicy,
+  defaultX86SteamPluginPolicy,
   KORRI_STEAM_APP_ID,
   KORRI_STEAM_APP_LOCAL_ID,
   KORRI_STEAM_PLUGIN_ID,

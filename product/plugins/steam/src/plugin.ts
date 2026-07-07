@@ -33,6 +33,9 @@ export const steamRuntimePaths = {
 export const DEFAULT_STEAM_COMPAT_TOOL =
   "proton-cachyos-11.0-20260601-slr-arm64" as const
 
+export const DEFAULT_X86_STEAM_COMPAT_TOOL =
+  "proton-cachyos-11.0-20260601-slr-x86_64" as const
+
 /**
  * Korri-owned baseline wrapper args always passed to korri-steam-app. Keep this
  * empty for SM8550: Steam Gamepad UI can retain controller ownership after
@@ -58,6 +61,15 @@ export interface SteamPluginPolicy {
 export const defaultSteamPluginPolicy = {
   state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
   "compat-tool": DEFAULT_STEAM_COMPAT_TOOL,
+  "first-launch": {
+    "suppress-interstitials": true,
+    "accept-eulas": true,
+  },
+} satisfies SteamPluginPolicy
+
+export const defaultX86SteamPluginPolicy = {
+  state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
+  "compat-tool": DEFAULT_X86_STEAM_COMPAT_TOOL,
   "first-launch": {
     "suppress-interstitials": true,
     "accept-eulas": true,
@@ -123,6 +135,12 @@ export const steamPlugin = plugin({
           kind: "nixos-module",
           path: "product/plugins/steam/nix/nixos-module.nix",
           capabilities: ["system.service", "steam.runtime"],
+        },
+        "steam-source-machine-module": {
+          id: "steam-source-machine-module",
+          kind: "nixos-module",
+          path: "product/plugins/steam/nix/source-machine-module.nix",
+          capabilities: ["system.service", "steam.runtime", "steam.x86"],
         },
       },
       launchers: {

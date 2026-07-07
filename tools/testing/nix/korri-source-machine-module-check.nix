@@ -69,6 +69,7 @@ let
   hasFailure = cfg: expected: builtins.any (m: lib.hasInfix expected m) (failedAssertionMessages cfg);
   daemonEnv = cfg.systemd.user.services.korrid.environment or { };
   sessiondEnv = cfg.systemd.user.services.korri-sessiond.environment or { };
+  gameStreamEnv = cfg.services.korri.gameStream.extraEnvironment or { };
   tailnetFlags = cfg.services.tailscale.extraUpFlags or [ ];
   sunshineApps = cfg.services.sunshine.applications.apps or [ ];
   firstAppWrapper =
@@ -118,8 +119,7 @@ let
       && cfg.services.korri.sessiond.role == "source-machine"
     ))
     (check "exported source-machine module enables stream-control source RPCs" (
-      cfg.services.korri.daemon.streamControl.enable
-      && daemonEnv.KORRI_STREAM_CONTROL_ENABLED == "1"
+      cfg.services.korri.daemon.streamControl.enable && daemonEnv.KORRI_STREAM_CONTROL_ENABLED == "1"
     ))
     (check "exported source-machine module enables Korri tailnet posture" (
       cfg.services.korri.tailnet.enable
@@ -134,15 +134,18 @@ let
       && !(cfg.networking.firewall.interfaces ? lan0)
       && !(builtins.elem "tailscale0" (cfg.networking.firewall.trustedInterfaces or [ ]))
     ))
-    (check "exported source-machine module provisions the RetroArch closure at stable /etc/korri paths" (
-      (cfg.environment.etc."korri/bin/retroarch".source or null) != null
-      && (cfg.environment.etc."korri/cores/mgba_libretro.so".source or null) != null
-      && (cfg.environment.etc."korri/shaders/slang".source or null) != null
-      && hasPackage "korri-retroarch" cfg.systemd.user.services.korri-sessiond.path
-    ))
+    (check "exported source-machine module provisions the RetroArch closure at stable /etc/korri paths"
+      (
+        (cfg.environment.etc."korri/bin/retroarch".source or null) != null
+        && (cfg.environment.etc."korri/cores/mgba_libretro.so".source or null) != null
+        && (cfg.environment.etc."korri/shaders/slang".source or null) != null
+        && hasPackage "korri-retroarch" cfg.systemd.user.services.korri-sessiond.path
+      )
+    )
     (check "exported source-machine module enables Gamescope plugin runtime path" (
       lib.hasInfix "@korri:gamescope" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
       && lib.hasInfix "@korri:gamescope" (sessiondEnv.KORRI_ENABLED_PLUGINS or "")
+      && lib.hasInfix "@korri:gamescope" (gameStreamEnv.KORRI_ENABLED_PLUGINS or "")
       && sessiondEnv.KORRI_STREAM_SURFACE_APP_IDS == "gamescope"
       && lib.hasInfix "@korri:gamescope" firstAppWrapper
       && hasPackage "gamescope-korri" cfg.systemd.user.services.korri-sessiond.path
@@ -150,14 +153,28 @@ let
       && lib.hasInfix "coreutils" firstAppWrapper
       && lib.hasInfix "util-linux" firstAppWrapper
     ))
+    (check "exported source-machine module enables Steam plugin runtime path" (
+      lib.hasInfix "@korri:steam" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
+      && lib.hasInfix "@korri:steam" (sessiondEnv.KORRI_ENABLED_PLUGINS or "")
+      && lib.hasInfix "@korri:steam" (gameStreamEnv.KORRI_ENABLED_PLUGINS or "")
+      && (daemonEnv.KORRI_STEAM_APP_INSTALL_HELPER or "") != ""
+      && (daemonEnv.KORRI_STEAM_X86_COMPAT_TOOL or "") == "proton-cachyos-11.0-20260601-slr-x86_64"
+    ))
+    (check "exported source-machine module excludes ARM-only Steam substrate" (
+      !(cfg.systemd.services ? korri-steam-gamescope)
+      && !(cfg.systemd.services ? korri-steam-prepare-fex-rootfs)
+      && !(cfg.systemd.services ? korri-steam-seed)
+      && !(daemonEnv ? FEX_ROOTFS)
+      && !(sessiondEnv ? FEX_ROOTFS)
+      && !(cfg.users.groups ? korri-steam-input)
+    ))
     (check "exported source-machine module exposes opt-in RPCS3 runtime wiring" (
       (options.services.korri.rpcs3.enable.isDefined or false)
       && cfg.services.korri.rpcs3.enable == false
       && !lib.hasInfix "@korri:rpcs3" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
     ))
     (check "source-machine compositor uses the canonical logind runtime root" (
-      cfg.services.korri.compositor.runtimeDir == "%t"
-      && sessiondEnv.XDG_RUNTIME_DIR == "%t"
+      cfg.services.korri.compositor.runtimeDir == "%t" && sessiondEnv.XDG_RUNTIME_DIR == "%t"
     ))
     (check "source-machine shares the existing user session bus" (
       cfg.services.korri.compositor.sessionBus.mode == "existing"

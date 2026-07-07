@@ -224,6 +224,7 @@ flake-utils.lib.eachDefaultSystem (
       sourceMachinePluginNixosModules = [
         ../../../../product/plugins/gamescope/nix/source-machine-module.nix
         ../../../../product/plugins/retroarch/nix/source-machine-module.nix
+        ../../../../product/plugins/steam/nix/source-machine-module.nix
       ];
     };
 

@@ -22,14 +22,18 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     packages = self.packages.${system};
   };
-  korri-input-seat-device-access = import ../../../../tools/testing/nix/korri-input-seat-device-access-check.nix {
-    inherit pkgs;
-    korri = self;
-  };
-  korri-sunshine-input-seat-env = import ../../../../tools/testing/nix/korri-sunshine-input-seat-env-check.nix {
-    inherit pkgs;
-    daemonModulePath = ../../../../product/systems/nixos/modules/korri-daemon.nix;
-  };
+  korri-input-seat-device-access =
+    import ../../../../tools/testing/nix/korri-input-seat-device-access-check.nix
+      {
+        inherit pkgs;
+        korri = self;
+      };
+  korri-sunshine-input-seat-env =
+    import ../../../../tools/testing/nix/korri-sunshine-input-seat-env-check.nix
+      {
+        inherit pkgs;
+        daemonModulePath = ../../../../product/systems/nixos/modules/korri-daemon.nix;
+      };
   korri-image-outputs = import ../../../../tools/testing/nix/korri-image-outputs-check.nix {
     inherit pkgs;
     packages = self.packages.${system};
@@ -114,6 +118,17 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     korriSteamModule = self.nixosModules.korri-steam;
   };
+  korri-steam-source-machine-module =
+    import ../../../../product/plugins/steam/nix/source-machine-module-check.nix
+      {
+        inherit pkgs;
+        korriSteamSourceMachineModule = {
+          imports = [
+            ../../../../product/systems/nixos/modules/korri-runtime.nix
+            ../../../../product/plugins/steam/nix/source-machine-module.nix
+          ];
+        };
+      };
   korri-removable-media = import ../../../../tools/testing/nix/korri-removable-media-check.nix {
     inherit pkgs;
     korriRemovableMediaModule = self.nixosModules.korri-removable-media;
