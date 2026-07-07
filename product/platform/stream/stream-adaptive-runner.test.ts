@@ -48,6 +48,15 @@ function makeHarness(
     readonly rejectWith?: unknown;
     readonly hangBitrate?: boolean;
     readonly knownGood?: () => KnownGood;
+    readonly observedSettings?: () => {
+      readonly bitrateKbps: number;
+      readonly fps: number;
+      readonly resolution: { readonly width: number; readonly height: number };
+      readonly baselineResolution: {
+        readonly width: number;
+        readonly height: number;
+      };
+    };
     readonly boundaries?:
       | StreamBoundaries
       | (() => StreamBoundaries | undefined);
@@ -105,6 +114,7 @@ function makeHarness(
       resolution: { width: 1280, height: 720 },
       baselineResolution: { width: 1920, height: 1080 },
     },
+    observedSettings: input.observedSettings,
     objectiveBias: 0.5,
     boundaries: input.boundaries,
     isStreaming: () =>
@@ -343,6 +353,47 @@ describe("createStreamAdaptiveRunner", () => {
       kind: "dormant",
       reason: "within-hysteresis",
     });
+  });
+
+  it("resumes floor convergence after resolution-floor rescue state is observed", async () => {
+    const { runner, calls, events } = makeHarness({
+      health: summary(),
+      observedSettings: () => ({
+        bitrateKbps: 14_148,
+        fps: 120,
+        resolution: { width: 640, height: 360 },
+        baselineResolution: { width: 1920, height: 1080 },
+      }),
+      knownGood: () => ({
+        "runtime.setBitrate": { kind: "scalar", value: 9_664 },
+        "runtime.setFps": { kind: "scalar", value: 120 },
+        "runtime.setResolution": {
+          kind: "resolution",
+          width: 1920,
+          height: 1080,
+        },
+      }),
+      boundaries: {
+        levers: {
+          bitrate: { floor: 500, startup: 6_000, ceiling: 40_000 },
+          fps: { floor: 30, ceiling: 120 },
+          resolution: {
+            floor: { width: 640, height: 360 },
+            ceiling: { width: 1920, height: 1080 },
+          },
+        },
+        outcomes: {},
+      },
+    });
+
+    await runner.tick();
+
+    expect(calls).toContain("bitrate:500");
+    expect(calls).toContain("fps:30");
+    expect(calls).not.toContain("resolution:640x360");
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "shed-converging" }),
+    );
   });
 
   it("surfaces pending unresolved shed convergence without dispatching", async () => {

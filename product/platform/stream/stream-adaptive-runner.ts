@@ -72,6 +72,7 @@ export interface StreamAdaptiveRunnerOptions {
   readonly monitor: StreamHealthMonitor;
   readonly recovery: RuntimeRecoverySupervisor;
   readonly initialSettings: StreamAdaptiveSettings;
+  readonly observedSettings?: () => StreamAdaptiveSettings | undefined;
   readonly objectiveBias: number;
   readonly boundaries?: StreamBoundaries | (() => StreamBoundaries | undefined);
   readonly isStreaming: () => boolean;
@@ -145,7 +146,12 @@ export function createStreamAdaptiveRunner(
       earlyDownshift?.kind === "triggered"
         ? summaryForEarlyDownshift(summary)
         : summary;
-    const current = currentSettings(options.recovery, options.initialSettings);
+    const current = currentSettings(
+      options.recovery,
+      options.initialSettings,
+      options.observedSettings?.(),
+    );
+    shedConvergence ??= floorRescueConvergenceTarget(current, boundaries);
     const decision = computeStreamAdaptiveDecision({
       summary: decisionSummary,
       current,
@@ -155,7 +161,10 @@ export function createStreamAdaptiveRunner(
     });
 
     if (decision.kind === "target" && decision.mode === "shed") {
-      shedConvergence = decision.target;
+      shedConvergence = completeShedConvergenceTarget(
+        decision.target,
+        boundaries,
+      );
     }
 
     let unresolvedShed = shedConvergence
@@ -170,6 +179,7 @@ export function createStreamAdaptiveRunner(
       shedConvergence &&
       unresolvedShed &&
       stableEnoughToClearShed(decisionSummary) &&
+      !isFloorRescueConvergence(shedConvergence, current, boundaries) &&
       !hasShedProgress(
         shedConvergence,
         current,
@@ -378,6 +388,88 @@ function stableEnoughToClearShed(summary: StreamHealthSummary): boolean {
   );
 }
 
+function floorRescueConvergenceTarget(
+  current: StreamAdaptiveSettings,
+  boundaries: StreamBoundaries,
+): StreamAdaptiveTarget | undefined {
+  const floor = boundaries.levers.resolution?.floor;
+  if (floor === undefined) return undefined;
+  if (
+    current.resolution.width > floor.width ||
+    current.resolution.height > floor.height
+  ) {
+    return undefined;
+  }
+  const target: { bitrateKbps?: number; fps?: number } = {};
+  const bitrate = explicitBitrateFloor(boundaries);
+  if (bitrate !== undefined && current.bitrateKbps > bitrate) {
+    target.bitrateKbps = bitrate;
+  }
+  const fps = explicitFpsFloor(boundaries);
+  if (fps !== undefined && current.fps > fps) target.fps = fps;
+  return hasAnyTarget(target) ? target : undefined;
+}
+
+function completeShedConvergenceTarget(
+  target: StreamAdaptiveTarget,
+  boundaries: StreamBoundaries,
+): StreamAdaptiveTarget {
+  const bitrate = explicitBitrateFloor(boundaries);
+  const fps = explicitFpsFloor(boundaries);
+  const resolution = explicitResolutionFloor(boundaries);
+  return {
+    ...target,
+    ...(target.bitrateKbps === undefined && bitrate !== undefined
+      ? { bitrateKbps: bitrate }
+      : {}),
+    ...(target.fps === undefined && fps !== undefined ? { fps } : {}),
+    ...(target.resolution === undefined && resolution !== undefined
+      ? { resolution }
+      : {}),
+  };
+}
+
+function isFloorRescueConvergence(
+  target: StreamAdaptiveTarget,
+  current: StreamAdaptiveSettings,
+  boundaries: StreamBoundaries,
+): boolean {
+  const resolution = explicitResolutionFloor(boundaries);
+  if (
+    resolution === undefined ||
+    current.resolution.width > resolution.width ||
+    current.resolution.height > resolution.height
+  ) {
+    return false;
+  }
+  const bitrate = explicitBitrateFloor(boundaries);
+  const fps = explicitFpsFloor(boundaries);
+  return (
+    (bitrate !== undefined && target.bitrateKbps === bitrate) ||
+    (fps !== undefined && target.fps === fps)
+  );
+}
+
+function explicitBitrateFloor(boundaries: StreamBoundaries): number | undefined {
+  const lever = boundaries.levers.bitrate;
+  if (lever?.pinned) return undefined;
+  return lever?.floor;
+}
+
+function explicitFpsFloor(boundaries: StreamBoundaries): number | undefined {
+  const lever = boundaries.levers.fps;
+  if (lever?.pinned) return undefined;
+  return lever?.floor;
+}
+
+function explicitResolutionFloor(
+  boundaries: StreamBoundaries,
+): StreamAdaptiveTarget["resolution"] | undefined {
+  const lever = boundaries.levers.resolution;
+  if (lever?.pinned) return undefined;
+  return lever?.floor;
+}
+
 function unresolvedShedTarget(
   target: StreamAdaptiveTarget,
   current: StreamAdaptiveSettings,
@@ -558,6 +650,7 @@ function effectiveBoundaries(
 function currentSettings(
   recovery: RuntimeRecoverySupervisor,
   initial: StreamAdaptiveSettings,
+  observed: StreamAdaptiveSettings | undefined,
 ): StreamAdaptiveSettings {
   const knownGood = recovery.knownGood();
   const bitrate = knownGood["runtime.setBitrate"];
@@ -566,11 +659,13 @@ function currentSettings(
   return {
     ...initial,
     bitrateKbps:
-      bitrate?.kind === "scalar" ? bitrate.value : initial.bitrateKbps,
-    fps: fps?.kind === "scalar" ? fps.value : initial.fps,
+      observed?.bitrateKbps ??
+      (bitrate?.kind === "scalar" ? bitrate.value : initial.bitrateKbps),
+    fps: observed?.fps ?? (fps?.kind === "scalar" ? fps.value : initial.fps),
     resolution:
-      resolution?.kind === "resolution"
+      observed?.resolution ??
+      (resolution?.kind === "resolution"
         ? { width: resolution.width, height: resolution.height }
-        : initial.resolution,
+        : initial.resolution),
   };
 }

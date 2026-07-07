@@ -133,10 +133,17 @@ export async function startStreamRuntimeSession(
     const state = await session.state()
     await session.subscribe()
     const settings = options.settingsFromState(state)
+    let latestObservedSettings: StreamRuntimeSettings | undefined
+    const pollState = options.pollHealthState ?? (() => session.state())
+    const pollStateAndRememberSettings = async () => {
+      const nextState = await pollState()
+      latestObservedSettings = options.settingsFromState(nextState)
+      return nextState
+    }
     const health = createStreamHealthMonitor({
       port: streamHealthSamplePortFromSession(session, {
         nowMs: options.nowMs,
-        pollState: options.pollHealthState ?? (() => session.state()),
+        pollState: pollStateAndRememberSettings,
       }),
     })
     const recovery = options.recoveryPort
@@ -149,6 +156,10 @@ export async function startStreamRuntimeSession(
     const adaptiveRuntime = startAdaptiveRunner({
       options,
       settings,
+      observedSettings: () =>
+        latestObservedSettings
+          ? adaptiveInitialSettings(latestObservedSettings)
+          : undefined,
       health,
       recovery,
     })
@@ -245,6 +256,7 @@ function startOutageRuntime(input: {
 function startAdaptiveRunner(input: {
   readonly options: StartStreamRuntimeSessionOptions
   readonly settings: StreamRuntimeSettings
+  readonly observedSettings?: () => StreamAdaptiveSettings | undefined
   readonly health: StreamHealthMonitor
   readonly recovery?: RuntimeRecoverySupervisor
 }):
@@ -273,6 +285,7 @@ function startAdaptiveRunner(input: {
     monitor: input.health,
     recovery,
     initialSettings,
+    observedSettings: input.observedSettings,
     objectiveBias: adaptive.objectiveBias,
     boundaries: () => boundaries,
     isStreaming: adaptive.isStreaming,
