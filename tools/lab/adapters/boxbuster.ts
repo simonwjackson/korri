@@ -1,12 +1,12 @@
 import { setBoxbusterArtMode } from "@product/surfaces/web/boxbuster/art-mode"
 import { mountBoxbuster } from "@product/surfaces/web/boxbuster/mount-boxbuster"
 import type { RouterHistory } from "@tanstack/history"
-import type { DeviceConfig, ThemeKnob } from "../../device-lab"
+import type { DeviceConfig, ThemeKnob } from "@simonwjackson/caliper"
 import {
   makeSeedInitialValues,
   type SeedInitialValues,
 } from "../seed/shift-seed"
-import type { LabSurfaceAdapter } from "../surface-registry"
+import type { LabSurfaceAdapter } from "@simonwjackson/caliper"
 
 const BOXBUSTER_DEVICES: readonly DeviceConfig[] = [
   {

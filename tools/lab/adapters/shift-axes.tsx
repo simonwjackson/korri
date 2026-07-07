@@ -12,12 +12,12 @@ import {
   type LabScreenCoordinate,
   type LabStateAxis,
   type LabStateAxisContext,
-} from "../model/lab-state-axis"
+} from "@simonwjackson/caliper/adapter-kit"
 import {
   eachLabSurfaceRegistry,
   eachLabSurfaceRegistryForScope,
   type LabSurfaceRegistryEntry,
-} from "../model/lab-surface-registries"
+} from "@simonwjackson/caliper/adapter-kit"
 
 // Shift Home's screen-state controls. These are real product state machines,
 // scoped by the selected live device when the lab is editing one.

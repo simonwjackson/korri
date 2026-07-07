@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { ShiftStoreSpotlightStates } from "@product/surfaces/web/shift/pages/ShiftStore.template.part"
 import { cleanup, render, screen, waitFor } from "@testing-library/react"
-import { LabDraggablePart } from "../canvas/LabDraggablePart"
-import { LabPartPreview } from "../canvas/LabPartPreview"
-import { LabContext, type LabContextValue } from "../Lab.context"
-import type { LabCalibrationController } from "../model/lab-calibration-state"
-import { clearLabSurfaceRegistries } from "../model/lab-surface-registries"
+import { LabDraggablePart } from "@simonwjackson/caliper/test-support"
+import { LabPartPreview } from "@simonwjackson/caliper/test-support"
+import { LabContext, type LabContextValue } from "@simonwjackson/caliper/test-support"
+import type { LabCalibrationController } from "@simonwjackson/caliper/test-support"
+import { clearLabSurfaceRegistries } from "@simonwjackson/caliper/adapter-kit"
 import { shiftLabSurfaceAdapter } from "./shift"
 
 afterEach(() => {

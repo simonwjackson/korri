@@ -1,5 +1,8 @@
 import { shiftConfig } from "@product/surfaces/web/shift/config"
-import { mountShift } from "@product/surfaces/web/shift/mount-shift"
+import {
+  mountShift,
+  type ShiftDualScreenAdapter,
+} from "@product/surfaces/web/shift/mount-shift"
 import { ShiftPartSurface } from "@product/surfaces/web/shift/mount-shift-part"
 import { SHIFT_COMPANION_PATH } from "@product/surfaces/web/shift/routes/paths"
 import { SHIFT_DESIGN_PARTS } from "@product/surfaces/web/shift/shift-design-parts"
@@ -10,7 +13,7 @@ import {
   type SeedInitialValues,
   shiftLabSources,
 } from "../seed/shift-seed"
-import type { LabSurfaceAdapter } from "../surface-registry"
+import type { LabSurfaceAdapter } from "@simonwjackson/caliper"
 import { shiftAxesForScreen, shiftCaptureCoordinate } from "./shift-axes"
 import { shiftSurfacePartEvents, shiftSurfacePartInputs } from "./shift-edges"
 import {
@@ -56,7 +59,10 @@ export const shiftLabSurfaceAdapter: LabSurfaceAdapter = {
     mountShift(host, {
       data: { initialValues: initialValues as SeedInitialValues },
       navigation: history ? { history: history as RouterHistory } : undefined,
-      dualScreen,
+      // Caliper's generic DualScreenRole ("primary" | "secondary" | string) is
+      // wider than Shift's product role ("primary" | "companion"); the runtime
+      // value is Shift's own, so bridge the nominal gap at the adapter edge.
+      dualScreen: dualScreen as ShiftDualScreenAdapter | undefined,
       onRegistry,
     }),
 }

@@ -4,12 +4,12 @@ import { usePicoControls } from "@product/surfaces/web/pico/pico-controls"
 import { PICO_DESIGN_PARTS } from "@product/surfaces/web/pico/pico-design-parts"
 import type { RouterHistory } from "@tanstack/history"
 import { createElement, type ReactNode } from "react"
-import type { DeviceConfig, ThemeKnob } from "../../device-lab"
+import type { DeviceConfig, ThemeKnob } from "@simonwjackson/caliper"
 import {
   makeSeedInitialValues,
   type SeedInitialValues,
 } from "../seed/shift-seed"
-import type { LabSurfaceAdapter } from "../surface-registry"
+import type { LabSurfaceAdapter } from "@simonwjackson/caliper"
 import { picoAxesForScreen } from "./pico-axes"
 import { picoSurfacePartEvents, picoSurfacePartInputs } from "./pico-edges"
 import {

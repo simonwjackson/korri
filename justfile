@@ -23,8 +23,9 @@ dev-theme-workshop port="3130":
   bun run vite --config tools/theme-workshop/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
 
 # Dev-only first-class design lab: real app surfaces, parts, sources/states, and multi-device routing.
+# Engine comes from the @simonwjackson/caliper package; korri contributes only adapters + parts (tools/lab).
 dev-lab port="3130":
-  bun run vite --config tools/theme-workshop/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
+  bun run vite --config tools/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
 
 # Design lab for on-device viewing (phone/tablet). Keeps HMR, but swaps Vite's
 # reconnect-driven full-page reload for a silent in-place reconnect, so

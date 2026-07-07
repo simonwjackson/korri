@@ -7,7 +7,7 @@ import {
   axisOptionsFromTags,
   type LabStateAxis,
   pinFromTable,
-} from "../model/lab-state-axis"
+} from "@simonwjackson/caliper/adapter-kit"
 
 // Pico's catalog Data axis — the same model as Shift Home, minus Launch. The
 // pin drives the pico-data preview singleton the live routes consult.

@@ -18,9 +18,9 @@ import {
   shiftDeviceStateForPowerReading,
   shiftPowerReadingForValue,
 } from "@product/surfaces/web/shift/shift-power-state"
-import type { Story } from "../../types"
-import { eachLabTargetRegistry } from "../model/lab-surface-registries"
-import type { LabSurfaceEvent, LabSurfacePartInput } from "../surface-registry"
+import type { Story } from "@simonwjackson/caliper"
+import { eachLabTargetRegistry } from "@simonwjackson/caliper/adapter-kit"
+import type { LabSurfaceEvent, LabSurfacePartInput } from "@simonwjackson/caliper"
 import {
   isShiftBatteryStory,
   isShiftHomeStory,

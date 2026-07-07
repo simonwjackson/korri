@@ -22,9 +22,9 @@ import {
 import { VariantCartridgeShelf } from "@product/surfaces/web/pico/VariantCartridgeShelf"
 import { VariantGameDetail } from "@product/surfaces/web/pico/VariantGameDetail"
 import type { ReactNode } from "react"
-import type { Story } from "../../types"
-import type { LabInputControl, LabInputValue } from "../model/lab-source-state"
-import type { LabSurfacePartMountSpec } from "../surface-registry"
+import type { Story } from "@simonwjackson/caliper"
+import type { LabInputControl, LabInputValue } from "@simonwjackson/caliper/adapter-kit"
+import type { LabSurfacePartMountSpec } from "@simonwjackson/caliper"
 
 /**
  * Live-mount specs and static renders for placed Pico parts. Parts whose

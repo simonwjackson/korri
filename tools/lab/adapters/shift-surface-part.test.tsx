@@ -17,12 +17,12 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react"
-import type { Story } from "../../types"
+import type { Story } from "@simonwjackson/caliper"
 import {
   clearLabSurfaceRegistries,
   eachLabSurfaceRegistryForScope,
-} from "../model/lab-surface-registries"
-import { LabPartMount } from "../part-mount/LabPartMount"
+} from "@simonwjackson/caliper/adapter-kit"
+import { LabPartMount } from "@simonwjackson/caliper/test-support"
 import { shiftSurfacePartEvents } from "./shift-edges"
 import {
   renderShiftSurfacePart,

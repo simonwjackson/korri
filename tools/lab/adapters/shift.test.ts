@@ -1,3 +1,4 @@
+import { labTestRegistry } from "./lab-test-registry"
 import { afterEach, describe, expect, it } from "bun:test"
 import { loadingForeverCatalogFactsSourceLayer } from "@platform/catalog/catalog-facts-source"
 import { unknownDeviceState } from "@platform/device/device-facts"
@@ -32,16 +33,16 @@ import {
 } from "@product/surfaces/web/shift/shift-power-state"
 import type * as Atom from "effect/unstable/reactivity/Atom"
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
-import type { Story } from "../../types"
+import type { Story } from "@simonwjackson/caliper"
 import {
   deviceEventsForScreen,
   deviceInputsForScreen,
-} from "../model/lab-part-edges"
+} from "@simonwjackson/caliper/test-support"
 import {
   clearLabSurfaceRegistries,
   registerLabSurfaceRegistry,
-} from "../model/lab-surface-registries"
-import { resolveLabSurfaceAdapter } from "../surface-registry"
+} from "@simonwjackson/caliper/adapter-kit"
+import { resolveLabSurfaceAdapter } from "@simonwjackson/caliper"
 
 /** The Home page part a mounted "/" screen composes — the story the device
  * inherits its edges from. */
@@ -56,7 +57,7 @@ const homePagePart: Story = {
 
 describe("shift lab surface adapter", () => {
   it("resolves shift with devices and production-shaped atom initial values", async () => {
-    const adapter = resolveLabSurfaceAdapter("shift")
+    const adapter = resolveLabSurfaceAdapter(labTestRegistry(), "shift")
 
     expect(adapter.id).toBe("shift")
     expect(adapter.devices.length).toBeGreaterThan(0)
@@ -82,7 +83,7 @@ describe("shift lab surface adapter", () => {
   })
 
   it("reports unknown surface adapters clearly", () => {
-    expect(() => resolveLabSurfaceAdapter("nope")).toThrow(
+    expect(() => resolveLabSurfaceAdapter(labTestRegistry(), "nope")).toThrow(
       "Unknown lab surface adapter nope",
     )
   })
@@ -94,7 +95,7 @@ describe("shift home state axes", () => {
   })
 
   const home = () =>
-    resolveLabSurfaceAdapter("shift").axesForScreen?.("/") ?? []
+    resolveLabSurfaceAdapter(labTestRegistry(), "shift").axesForScreen?.("/") ?? []
 
   const homeAxis = (id: string) => {
     const axis = home().find(candidate => candidate.id === id)
@@ -237,7 +238,7 @@ describe("shift home state axes", () => {
     // The device inherits its inputs from the composed Home page part, minus
     // Foreground (covered by the richer axis) — leaving clock, exactly the
     // curated screen-scoped set the adapter used to declare.
-    const adapter = resolveLabSurfaceAdapter("shift")
+    const adapter = resolveLabSurfaceAdapter(labTestRegistry(), "shift")
     const inputs = deviceInputsForScreen(
       adapter,
       "/",
@@ -271,7 +272,7 @@ describe("shift home state axes", () => {
 
   it("drives battery and network device events into the live registry", () => {
     const events = deviceEventsForScreen(
-      resolveLabSurfaceAdapter("shift"),
+      resolveLabSurfaceAdapter(labTestRegistry(), "shift"),
       "/",
       [homePagePart],
     )
@@ -315,7 +316,7 @@ describe("shift home state axes", () => {
 
   it("scopes battery and network events to one live device registry", () => {
     const events = deviceEventsForScreen(
-      resolveLabSurfaceAdapter("shift"),
+      resolveLabSurfaceAdapter(labTestRegistry(), "shift"),
       "/",
       [homePagePart],
     )
@@ -376,7 +377,7 @@ describe("shift home state axes", () => {
   it("exposes no axes for screens without a state machine", () => {
     expect(home().length).toBe(2)
     expect(
-      resolveLabSurfaceAdapter("shift").axesForScreen?.("/game/hollow-knight"),
+      resolveLabSurfaceAdapter(labTestRegistry(), "shift").axesForScreen?.("/game/hollow-knight"),
     ).toEqual([])
   })
 })
@@ -392,7 +393,7 @@ describe("shift capture-back coordinate", () => {
   })
 
   const capture = () =>
-    resolveLabSurfaceAdapter("shift").captureCoordinate?.("/")
+    resolveLabSurfaceAdapter(labTestRegistry(), "shift").captureCoordinate?.("/")
 
   it("captures the seed's resting coordinate when nothing is pinned", () => {
     expect(capture()).toEqual({

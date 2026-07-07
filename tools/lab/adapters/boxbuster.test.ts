@@ -1,3 +1,4 @@
+import { labTestRegistry } from "./lab-test-registry"
 import { describe, expect, it } from "bun:test"
 import { act } from "@testing-library/react"
 import { boxbusterArtMode } from "@product/surfaces/web/boxbuster/art-mode"
@@ -5,11 +6,11 @@ import { catalogFactsSourceLayerAtom } from "@platform/react/catalog/catalog-ato
 import {
   labSurfaceAdapters,
   resolveLabSurfaceAdapter,
-} from "../surface-registry"
+} from "@simonwjackson/caliper"
 
 describe("boxbuster lab surface adapter", () => {
   it("is registered as a lab surface peer", () => {
-    const ids = labSurfaceAdapters().map(adapter => adapter.id)
+    const ids = labSurfaceAdapters(labTestRegistry()).map(adapter => adapter.id)
 
     expect(ids).toContain("shift")
     expect(ids).toContain("pico")
@@ -17,7 +18,7 @@ describe("boxbuster lab surface adapter", () => {
   })
 
   it("resolves boxbuster with screens and catalog seed atoms", async () => {
-    const adapter = resolveLabSurfaceAdapter("boxbuster")
+    const adapter = resolveLabSurfaceAdapter(labTestRegistry(), "boxbuster")
 
     expect(adapter.id).toBe("boxbuster")
     expect(adapter.devices.map(device => device.id)).toContain("odin2portal")
@@ -37,7 +38,7 @@ describe("boxbuster lab surface adapter", () => {
   })
 
   it("enables offline art before mounting and resets it on dispose", async () => {
-    const adapter = resolveLabSurfaceAdapter("boxbuster")
+    const adapter = resolveLabSurfaceAdapter(labTestRegistry(), "boxbuster")
     const host = document.createElement("div")
     const initialValues = await adapter.makeSeedInitialValues()
 

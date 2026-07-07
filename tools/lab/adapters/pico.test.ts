@@ -1,3 +1,4 @@
+import { labTestRegistry } from "./lab-test-registry"
 import { afterEach, describe, expect, it } from "bun:test"
 import { catalogFactsSourceLayerAtom } from "@platform/react/catalog/catalog-atoms"
 import {
@@ -12,17 +13,17 @@ import {
 import {
   labSurfaceAdapters,
   resolveLabSurfaceAdapter,
-} from "../surface-registry"
+} from "@simonwjackson/caliper"
 
 describe("pico lab surface adapter", () => {
   it("is registered alongside shift so the theme switcher has two surfaces", () => {
-    const ids = labSurfaceAdapters().map(adapter => adapter.id)
+    const ids = labSurfaceAdapters(labTestRegistry()).map(adapter => adapter.id)
     expect(ids).toContain("shift")
     expect(ids).toContain("pico")
   })
 
   it("resolves pico with devices and production-shaped atom initial values", async () => {
-    const adapter = resolveLabSurfaceAdapter("pico")
+    const adapter = resolveLabSurfaceAdapter(labTestRegistry(), "pico")
 
     expect(adapter.id).toBe("pico")
     expect(adapter.devices.map(device => device.id)).toContain("rg353m")
@@ -48,7 +49,7 @@ describe("pico lab surface adapter", () => {
 describe("pico home data axis", () => {
   afterEach(() => setPicoDataPreview(null))
 
-  const home = () => resolveLabSurfaceAdapter("pico").axesForScreen?.("/") ?? []
+  const home = () => resolveLabSurfaceAdapter(labTestRegistry(), "pico").axesForScreen?.("/") ?? []
 
   it("exposes a single Data axis derived from the pico data tags", () => {
     const axes = home()
@@ -71,7 +72,7 @@ describe("pico home data axis", () => {
 
   it("exposes no axes for the game detail screen", () => {
     expect(
-      resolveLabSurfaceAdapter("pico").axesForScreen?.("/game/hollow-knight"),
+      resolveLabSurfaceAdapter(labTestRegistry(), "pico").axesForScreen?.("/game/hollow-knight"),
     ).toEqual([])
   })
 })

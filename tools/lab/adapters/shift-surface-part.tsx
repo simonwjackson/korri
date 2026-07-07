@@ -47,15 +47,15 @@ import { ShiftBattery } from "@product/surfaces/web/shift/ui/atoms/ShiftBattery"
 import { ShiftStatusBar } from "@product/surfaces/web/shift/ui/molecules/ShiftStatusBar"
 import { ShiftPartFrame } from "@product/surfaces/web/shift/ui/ShiftPartFrame"
 import type { ReactNode } from "react"
-import type { Story } from "../../types"
-import { LAB_VARIANT_INPUT_ID } from "../model/lab-object-inputs"
-import type { LabInputControl, LabInputValue } from "../model/lab-source-state"
+import type { Story } from "@simonwjackson/caliper"
+import { LAB_VARIANT_INPUT_ID } from "@simonwjackson/caliper/adapter-kit"
+import type { LabInputControl, LabInputValue } from "@simonwjackson/caliper/adapter-kit"
 import {
   shiftCatalogLayerForBinding,
   shiftEntriesForBinding,
   shiftLibraryGamesForBinding,
 } from "../seed/shift-seed"
-import type { LabSurfacePartMountSpec } from "../surface-registry"
+import type { LabSurfacePartMountSpec } from "@simonwjackson/caliper"
 
 /**
  * Live-mount specs and static renders for placed Shift parts. Parts whose
