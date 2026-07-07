@@ -850,7 +850,7 @@ let
         && (steam.gamesRoot or null) == "/var/lib/korri/content/games/steam"
         && (steam.dotDir or null) == "/home/korri/.steam"
         && (steam.fexRootfs or null) == "/var/lib/korri/steam/fex-rootfs"
-        && (steam.keepWarm or false)
+        && (steam.keepWarm or true) == false
         && (steam.presentationMode or null) == "gamescope"
         && (steam.useGamepadUi or true) == false
         && (steam.appAudioSinkName or null) == expectedAudioTargetSink
@@ -863,19 +863,15 @@ let
         && (steamGamescopeUnit.serviceConfig.User or null) == runtime.user
         && (steamGamescopeUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
         && (steamGamescopeUnit.serviceConfig.LimitNOFILE or null) == 524288
-        && (steamGamescopeUnit.serviceConfig.Restart or null) == "always"
+        && (steamGamescopeUnit.serviceConfig.Restart or null) == "on-failure"
         && (steamGamescopeUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
         && (steamGamescopeUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
         && lib.hasInfix "korri-steam-service-run" steamGamescopeExec
         && (steamGamescopeUnit.serviceConfig.RestartPreventExitStatus or [ ]) == [ 77 ]
         && (steamGamescopeUnit.environment.GAMESCOPE_WAYLAND_DISPLAY or null) == "gamescope-0"
       ))
-      (check "${name}: Korri Steam is warmed from the real user session" (
-        userServices ? korri-steam-warm
-        && builtins.elem "korri-session.target" (steamWarmUnit.wantedBy or [ ])
-        && builtins.elem "korri-compositor.service" (steamWarmUnit.after or [ ])
-        && (steamWarmUnit.serviceConfig.Type or null) == "oneshot"
-        && lib.hasInfix "korri-steam-warm" (steamWarmUnit.serviceConfig.ExecStart or "")
+      (check "${name}: Korri Steam is not warmed at boot" (
+        !(userServices ? korri-steam-warm)
       ))
       (check "${name}: old substrate Steam launcher/service is absent" (
         !(cfg.systemd.services ? main-space-steam-uinput)

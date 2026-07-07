@@ -691,7 +691,11 @@ in
     dotDir = "${runtime.home}/.steam";
     fexRootfs = "${runtime.stateRoot}/steam/fex-rootfs";
     betaChannel = "steamdeck_stable";
-    keepWarm = true;
+    # Do not keep desktop Steam resident after boot on SM8550. Even in desktop
+    # UI (`uimode=7`), a warm Steam client can retain access to controller
+    # Guide/Home input through the normal Korri user seat. AppID launches still
+    # cold-start the managed Gamescope service on demand, then stop it on exit.
+    keepWarm = false;
     keepVisibleDuringLaunch = true;
     # Bandai must keep Steam contained by Gamescope. Desktop-vs-Gamepad here is
     # a Steam UI persona choice, not permission to run Steam as a naked Sway
