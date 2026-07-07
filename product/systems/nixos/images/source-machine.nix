@@ -36,6 +36,7 @@ in
     type = lib.types.listOf lib.types.str;
     default = [
       "@korri:gamescope"
+      "@korri:retroarch"
       "@korri:steam"
     ];
     description = "Plugin provider ids enabled by the source-machine image role.";
