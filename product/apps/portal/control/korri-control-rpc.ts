@@ -90,6 +90,9 @@ export function createKorriControlRpc(
               ...(request.streamBoundaryArgs !== undefined
                 ? { streamBoundaryArgs: [...request.streamBoundaryArgs] }
                 : {}),
+              ...(request.streamPreflight !== undefined
+                ? { streamPreflight: request.streamPreflight }
+                : {}),
             }),
           ),
         ),

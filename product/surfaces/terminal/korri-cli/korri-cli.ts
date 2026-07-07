@@ -263,10 +263,11 @@ const launchCommand = Command.make(
     releaseId: Flag.string("release-id").pipe(Flag.optional),
     appId: Flag.string("app-id").pipe(Flag.optional),
     profileId: Flag.string("profile-id").pipe(Flag.optional),
+    streamPreflight: Flag.string("stream-preflight").pipe(Flag.optional),
     yes: Flag.boolean("yes").pipe(Flag.withDefault(false)),
     ...streamBoundaryFlags,
   },
-  ({ gameId, host, releaseId, appId, profileId, yes, ...flags }) =>
+  ({ gameId, host, releaseId, appId, profileId, streamPreflight, yes, ...flags }) =>
     Effect.gen(function* () {
       const control = yield* KorriControl
       const librarySource = yield* LibrarySource
@@ -278,6 +279,7 @@ const launchCommand = Command.make(
           appId: Option.getOrUndefined(appId),
           profileId: Option.getOrUndefined(profileId),
           streamBoundaryArgs: streamAdaptiveArgs(flags),
+          streamPreflight: Option.getOrUndefined(streamPreflight),
           confirmYes: yes,
           stdinIsTty: process.stdin.isTTY === true,
           librarySource,

@@ -16,6 +16,7 @@ export interface ControlLaunchRequest {
   readonly profileId?: string
   readonly override?: EphemeralOverride
   readonly streamBoundaryArgs?: readonly string[]
+  readonly streamPreflight?: "skip" | "auto" | "required"
 }
 
 export type ControlDryRunLaunchRequest = ControlLaunchRequest

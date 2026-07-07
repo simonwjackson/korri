@@ -310,6 +310,93 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     ])
   })
 
+  it("fills missing remote-source startup bitrate from preflight", async () => {
+    let dispatchedSpec:
+      | { command: string; args: ReadonlyArray<string> }
+      | undefined
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+
+    await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+        streamBoundaryArgs: ["bitrate=500k..40m"],
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: (_controlUrl, gameId) =>
+              Effect.succeed({
+                status: "prepared" as const,
+                gameId,
+                sessionId: "sess-prefill",
+              }),
+            launchedSpec: spec => {
+              dispatchedSpec = spec
+            },
+            localPolicy: {
+              launchCompanions: {},
+              moonlight: {
+                stream: {
+                  bitrateKbps: 40_000,
+                  fps: 120,
+                  resolution: { width: 1920, height: 1080 },
+                },
+              },
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(dispatchedSpec?.args).toContain("-bitrate")
+    expect(dispatchedSpec?.args).toContain("3000")
+  })
+
+  it("rejects required stream preflight before peer prepare", async () => {
+    let prepareCalls = 0
+    let launchCalls = 0
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+        streamBoundaryArgs: ["bitrate=500k..40m"],
+        streamPreflight: "required",
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: () => {
+              prepareCalls += 1
+              return Effect.succeed({
+                status: "prepared" as const,
+                gameId: "snes/echo.smc",
+                sessionId: "sess-required",
+              })
+            },
+            launchedSpec: () => {
+              launchCalls += 1
+            },
+            localPolicy: { launchCompanions: {}, moonlight: {} },
+          }),
+        ),
+      ),
+    )
+
+    expect(result.status).toBe("failed")
+    expect(result.stderrTail).toContain("Stream preflight rejected launch")
+    expect(prepareCalls).toBe(0)
+    expect(launchCalls).toBe(0)
+  })
+
   it("injects typed local-control env for remote-source launches before dispatch", async () => {
     let dispatchedSpec:
       | {

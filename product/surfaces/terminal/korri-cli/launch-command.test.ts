@@ -205,6 +205,64 @@ describe("unified launch command", () => {
     })
   })
 
+  it("fills missing startup bitrate before remote prepare", async () => {
+    let moonlightOptions: unknown
+    const lines: string[] = []
+    const order: string[] = []
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      librarySource: localSource([]),
+      launchLocal: async () => launchedResult(SHARED_ID),
+      discoverHosts: async () => [host],
+      clientForHost: () =>
+        remoteClient({
+          prepareGame: async gameId => {
+            order.push(`prepare-after-${lines.length}`)
+            return { status: "prepared", gameId, intentPath: "/tmp/x.json" }
+          },
+        }),
+      streamBoundaryArgs: ["bitrate=500k..40m"],
+      launchMoonlight: async options => {
+        moonlightOptions = options
+        return { status: "started", command: "moonlight" }
+      },
+      output: line => lines.push(line),
+      errorOutput: line => lines.push(line),
+    })
+
+    expect(code).toBe(0)
+    expect(order).toEqual(["prepare-after-1"])
+    expect(lines[0]).toContain("Stream preflight:")
+    expect(moonlightOptions).toMatchObject({
+      adaptiveBoundaries: {
+        levers: {
+          bitrate: { floor: 500, startup: 3_000, ceiling: 40_000 },
+        },
+      },
+    })
+  })
+
+  it("rejects required preflight before remote prepare", async () => {
+    const prepared: string[] = []
+    const lines: string[] = []
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      librarySource: localSource([]),
+      launchLocal: async () => launchedResult(SHARED_ID),
+      discoverHosts: async () => [host],
+      clientForHost: () => remoteClient({ prepared }),
+      streamBoundaryArgs: ["bitrate=500k..40m"],
+      streamPreflight: "required",
+      launchMoonlight: async () => ({ status: "started", command: "moonlight" }),
+      output: line => lines.push(line),
+      errorOutput: line => lines.push(line),
+    })
+
+    expect(code).toBe(8)
+    expect(prepared).toEqual([])
+    expect(lines.join("\n")).toContain("Stream preflight rejected launch")
+  })
+
   it("prompts and launches when no game id is given", async () => {
     const code = await runLaunchCommand({
       librarySource: localSource([localGame]),

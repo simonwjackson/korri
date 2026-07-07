@@ -5,6 +5,10 @@ import type {
 } from "@platform/control/control-results"
 import { releaseChoiceForLaunch } from "@platform/library/launch-state"
 import { parseStreamBoundaryArgs } from "@platform/stream/stream-adaptive-boundaries"
+import {
+  selectStreamPreflightStartup,
+  type StreamPreflightMode,
+} from "@platform/stream/stream-preflight"
 import type { LibrarySourceService } from "@platform/library/library-services"
 import {
   type DiscoverStreamHostsOptions,
@@ -55,6 +59,7 @@ export interface RunLaunchCommandOptions {
   readonly appId?: string
   readonly profileId?: string
   readonly streamBoundaryArgs?: readonly string[]
+  readonly streamPreflight?: StreamPreflightMode | string
   readonly stdinIsTty?: boolean
   readonly confirmYes?: boolean
   readonly librarySource: LibrarySourceService
@@ -281,6 +286,29 @@ async function launchRemoteEntry(
   output: (line: string) => void,
 ): Promise<CliOutcome> {
   const client = remoteClientFor(entry.source.host, options.clientForHost)
+  const parsedBoundaries = options.streamBoundaryArgs
+    ? parseStreamBoundaryArgs(options.streamBoundaryArgs)
+    : undefined
+  const preflightMode = streamPreflightMode(options.streamPreflight)
+  if (preflightMode._tag === "Invalid") {
+    return fail("usage", preflightMode.message)
+  }
+  const preflight = selectStreamPreflightStartup({
+    mode: preflightMode.mode,
+    boundaries: parsedBoundaries,
+    facts: {
+      sourceReachable: entry.source.status.status === "available",
+      streamControlReachable:
+        entry.source.status.streamControl === "enabled",
+    },
+  })
+  if (preflight.status === "rejected") {
+    return fail("launch-invalid", `Stream preflight rejected launch: ${preflight.message}`)
+  }
+  if (preflight.status === "selected" || preflight.status === "warning") {
+    output(`Stream preflight: ${preflight.message}`)
+  }
+
   const prepare = await client.prepareGame(entry.game.id)
   if (prepare.status === "failed") {
     return prepareFailureOutcome(prepare)
@@ -294,13 +322,10 @@ async function launchRemoteEntry(
   if (policy.status === "failed") {
     return fail("launch-invalid", policy.message)
   }
-  const adaptiveBoundaries = options.streamBoundaryArgs
-    ? parseStreamBoundaryArgs(options.streamBoundaryArgs)
-    : undefined
   const moonlight = await (options.launchMoonlight ?? launchMoonlight)({
     host: entry.source.host.id,
     ...policy.options,
-    ...(adaptiveBoundaries ? { adaptiveBoundaries } : {}),
+    ...(preflight.boundaries ? { adaptiveBoundaries: preflight.boundaries } : {}),
   })
   if (moonlight.status === "started") {
     return ok([`Moonlight launch attempted via ${moonlight.command}.`])
@@ -309,6 +334,20 @@ async function launchRemoteEntry(
     moonlight.message,
     "Remote staging succeeded; connect to the Korri Stream app manually if needed.",
   ])
+}
+
+function streamPreflightMode(
+  raw: StreamPreflightMode | string | undefined,
+):
+  | { readonly _tag: "Valid"; readonly mode: StreamPreflightMode }
+  | { readonly _tag: "Invalid"; readonly message: string } {
+  if (raw === undefined || raw === "auto") return { _tag: "Valid", mode: "auto" }
+  if (raw === "skip" || raw === "required") return { _tag: "Valid", mode: raw }
+  return {
+    _tag: "Invalid",
+    message:
+      "Invalid stream preflight mode; use auto, required, or skip",
+  }
 }
 
 function prepareFailureOutcome(

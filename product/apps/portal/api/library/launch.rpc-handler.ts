@@ -24,6 +24,7 @@ import {
 } from "@platform/plugin/launch-companion"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import { parseStreamBoundaryArgs } from "@platform/stream/stream-adaptive-boundaries"
+import { selectStreamPreflightStartup } from "@platform/stream/stream-preflight"
 import {
   isMoonlightRuntimeSessionEnabled,
   moonlightControlEnvForHandle,
@@ -414,6 +415,23 @@ function handleRemoteSourceLaunch(
     const launcher = yield* Launcher
     const foregroundSessionHost = yield* ForegroundSessionHost
     const localLibrarySource = yield* LibrarySource
+    const preflight = streamPreflightFromPayload(payload)
+    if (preflight.status === "rejected") {
+      logger.warn(
+        {
+          id: payload.id,
+          peerHostId: source.hostId,
+          reasonCode: preflight.reasonCode,
+        },
+        "app.library.launch: stream preflight rejected remote-source launch",
+      )
+      return launchConfigurationFailure(
+        new LibraryError({
+          reason: "config",
+          message: `Stream preflight rejected launch: ${preflight.message}`,
+        }),
+      )
+    }
 
     const prepareResult = yield* remotePrepare.prepare(
       source.controlUrl,
@@ -503,7 +521,7 @@ function handleRemoteSourceLaunch(
           })
     if (localPolicyResult._tag === "failed") return localPolicyResult.response
     const localPolicy = localPolicyResult.policy
-    const adaptiveBoundaries = streamBoundariesFromPayload(payload)
+    const adaptiveBoundaries = preflight.boundaries
     const moonlightPolicy = moonlightPolicyWithStartupBitrate(
       localPolicy.moonlight,
       adaptiveBoundaries,
@@ -700,6 +718,7 @@ function nextLaunchFallbackPayload(
     presetId: next.presetId,
     override: payload.override,
     streamBoundaryArgs: payload.streamBoundaryArgs,
+    streamPreflight: payload.streamPreflight,
     launchAlternatives: remaining.slice(1),
   }
 }
@@ -775,6 +794,13 @@ function streamBoundariesFromPayload(payload: LaunchPayload) {
     return undefined
   }
   return parseStreamBoundaryArgs(payload.streamBoundaryArgs)
+}
+
+function streamPreflightFromPayload(payload: LaunchPayload) {
+  return selectStreamPreflightStartup({
+    mode: payload.streamPreflight ?? "auto",
+    boundaries: streamBoundariesFromPayload(payload),
+  })
 }
 
 function moonlightHostFromPeerControlUrl(
