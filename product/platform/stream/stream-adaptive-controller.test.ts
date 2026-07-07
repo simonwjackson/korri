@@ -66,6 +66,21 @@ describe("computeStreamAdaptiveDecision", () => {
     ).toEqual({ kind: "dormant", reason: "no-data" })
   })
 
+  it("does not panic on pre-first-frame startup zero delivery", () => {
+    expect(
+      computeStreamAdaptiveDecision({
+        summary: summary({
+          sampleCount: 2,
+          firstFrameMs: numeric(),
+          bitrateDeliveryRatio: 0,
+          fpsDeliveryRatio: 0,
+        }),
+        current,
+        objectiveBias: 0.5,
+      }),
+    ).toEqual({ kind: "dormant", reason: "within-hysteresis" })
+  })
+
   it("lowers bitrate first under delivery and loss pressure", () => {
     const decision = computeStreamAdaptiveDecision({
       summary: summary({
@@ -177,7 +192,10 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
 
   it("does not move pinned levers and adapts the remaining free levers", () => {
     const decision = computeStreamAdaptiveDecision({
-      summary: summary({ bitrateDeliveryRatio: 0.65, rttMs: numeric(120, "rising") }),
+      summary: summary({
+        bitrateDeliveryRatio: 0.65,
+        rttMs: numeric(120, "rising"),
+      }),
       current,
       objectiveBias: 0.1,
       boundaries: {
@@ -288,7 +306,9 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
 
     expect(shrink.kind).toBe("target")
     if (shrink.kind !== "target") throw new Error("expected shrink")
-    expect(shrink.target.resolution?.width).toBeLessThan(current.resolution.width)
+    expect(shrink.target.resolution?.width).toBeLessThan(
+      current.resolution.width,
+    )
 
     const grow = computeStreamAdaptiveDecision({
       summary: summary(),
@@ -312,7 +332,10 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
 
   it("honors auto=off as an adaptive kill switch", () => {
     const decision = computeStreamAdaptiveDecision({
-      summary: summary({ bitrateDeliveryRatio: 0.25, lossFraction: numeric(0.12) }),
+      summary: summary({
+        bitrateDeliveryRatio: 0.25,
+        lossFraction: numeric(0.12),
+      }),
       current,
       objectiveBias: 0.5,
       boundaries: { levers: {}, outcomes: {}, auto: "off" },
@@ -379,8 +402,16 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
 
   it("keeps emergency defaults within usable bitrate fps and resolution floors", () => {
     const decision = computeStreamAdaptiveDecision({
-      summary: summary({ bitrateDeliveryRatio: 0.05, rttMs: numeric(220, "rising") }),
-      current: { ...current, bitrateKbps: 500, fps: 30, resolution: { width: 640, height: 360 } },
+      summary: summary({
+        bitrateDeliveryRatio: 0.05,
+        rttMs: numeric(220, "rising"),
+      }),
+      current: {
+        ...current,
+        bitrateKbps: 500,
+        fps: 30,
+        resolution: { width: 640, height: 360 },
+      },
       objectiveBias: 0.5,
       boundaries: { levers: {}, outcomes: {}, lean: 0.5 },
     })
@@ -390,7 +421,11 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
 
   it("keeps off-aspect resolution boundaries projected onto the stream aspect", () => {
     const decision = computeStreamAdaptiveDecision({
-      summary: summary({ queueDepth: numeric(8), decodeTimeMs: numeric(35), frameDropFraction: 0.12 }),
+      summary: summary({
+        queueDepth: numeric(8),
+        decodeTimeMs: numeric(35),
+        frameDropFraction: 0.12,
+      }),
       current,
       objectiveBias: 0.5,
       boundaries: {
@@ -403,7 +438,10 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
     expect(decision.kind).toBe("target")
     if (decision.kind !== "target") throw new Error("expected target")
     expect(decision.target.resolution?.width).toBeGreaterThanOrEqual(1066)
-    expect((decision.target.resolution?.width ?? 1) / (decision.target.resolution?.height ?? 1)).toBeCloseTo(16 / 9, 2)
+    expect(
+      (decision.target.resolution?.width ?? 1) /
+        (decision.target.resolution?.height ?? 1),
+    ).toBeCloseTo(16 / 9, 2)
   })
 
   it("cold-starts conservatively then ramps once fresh samples arrive", () => {
@@ -416,16 +454,23 @@ describe("computeStreamAdaptiveDecision boundary-box controller behavior", () =>
     })
 
     expect(establish.kind).toBe("target")
-    if (establish.kind !== "target") throw new Error("expected establish target")
+    if (establish.kind !== "target")
+      throw new Error("expected establish target")
     expect(establish.mode).toBe("establish")
-    expect(establish.target.bitrateKbps).toBeLessThanOrEqual(current.bitrateKbps)
+    expect(establish.target.bitrateKbps).toBeLessThanOrEqual(
+      current.bitrateKbps,
+    )
 
     const ramp = computeStreamAdaptiveDecision({
       summary: summary({ sampleCount: 8 }),
       current: { ...current, bitrateKbps: 8_000 },
       objectiveBias: 0.8,
       phase: "establishing",
-      boundaries: { levers: { bitrate: { ceiling: 20_000 } }, outcomes: {}, lean: 0.8 },
+      boundaries: {
+        levers: { bitrate: { ceiling: 20_000 } },
+        outcomes: {},
+        lean: 0.8,
+      },
     })
 
     expect(ramp.kind).toBe("target")

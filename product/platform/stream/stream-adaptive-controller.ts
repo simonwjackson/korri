@@ -111,10 +111,14 @@ export function computeStreamAdaptiveDecision(
   }
 
   const params = { ...DEFAULTS, ...(input.params ?? {}) }
+  if (isPreFirstFrameWarmup(summary, params)) {
+    return { kind: "dormant", reason: "within-hysteresis" }
+  }
   const boundaries = input.boundaries
   const objectiveBias = clamp(boundaries?.lean ?? input.objectiveBias, 0, 1)
   const pressure = computePressure(summary)
-  const mode = summary.freshness === "stale" ? "shed" : modeFor(input, pressure, params)
+  const mode =
+    summary.freshness === "stale" ? "shed" : modeFor(input, pressure, params)
   const target: MutableTarget = {}
   let bindingConstraint: StreamAdaptiveBindingConstraint | undefined
 
@@ -133,7 +137,9 @@ export function computeStreamAdaptiveDecision(
       maybeSetBitrate(
         target,
         current,
-        Math.round(current.bitrateKbps * (1 + params.coldStartIncreaseFraction)),
+        Math.round(
+          current.bitrateKbps * (1 + params.coldStartIncreaseFraction),
+        ),
         boundaries,
         params,
       )
@@ -201,7 +207,10 @@ function applySteadyStateDecision(
       boundaries,
       params,
     )
-  } else if (healthy && current.bitrateKbps < bitrateCeiling(boundaries, params)) {
+  } else if (
+    healthy &&
+    current.bitrateKbps < bitrateCeiling(boundaries, params)
+  ) {
     maybeSetBitrate(
       target,
       current,
@@ -231,7 +240,14 @@ function applySteadyStateDecision(
       ) {
         bindingConstraint = bindingConstraint ?? "min-fps"
       }
-      maybeSetFps(target, current, proposed, boundaries, params, mode === "shed")
+      maybeSetFps(
+        target,
+        current,
+        proposed,
+        boundaries,
+        params,
+        mode === "shed",
+      )
     }
   }
 
@@ -239,7 +255,14 @@ function applySteadyStateDecision(
   if (mode !== "shed" && (pressure.decode > 0.35 || bppStarved)) {
     const scale = scaleForResolutionShrink(current, pressure, mode, bppStarved)
     const proposed = scaleResolution(current, scale)
-    maybeSetResolution(target, current, proposed, boundaries, params, mode === "shed")
+    maybeSetResolution(
+      target,
+      current,
+      proposed,
+      boundaries,
+      params,
+      mode === "shed",
+    )
   }
 
   return bindingConstraint
@@ -306,7 +329,8 @@ function recoverFps(
   const ceiling = fpsCeiling(boundaries, params)
   if (current.fps >= ceiling || isPinned(boundaries?.levers.fps)) return
   const proposed = higherFpsStep(current.fps, ceiling, params.fpsRecoverStep)
-  if (proposed !== undefined) maybeSetFps(target, current, proposed, boundaries, params)
+  if (proposed !== undefined)
+    maybeSetFps(target, current, proposed, boundaries, params)
 }
 
 function recoverResolution(
@@ -317,10 +341,19 @@ function recoverResolution(
   params: Required<StreamAdaptiveControllerParams>,
 ): void {
   if (isPinned(boundaries?.levers.resolution)) return
-  if (pressure.decode > 0.04 || bitsPerPixel(current) < TARGET_BITS_PER_PIXEL) return
+  if (pressure.decode > 0.04 || bitsPerPixel(current) < TARGET_BITS_PER_PIXEL)
+    return
   const ceiling = resolutionCeiling(boundaries, current)
-  if (current.resolution.width >= ceiling.width && current.resolution.height >= ceiling.height) return
-  const proposed = growResolution(current, ceiling, params.resolutionRecoverFraction)
+  if (
+    current.resolution.width >= ceiling.width &&
+    current.resolution.height >= ceiling.height
+  )
+    return
+  const proposed = growResolution(
+    current,
+    ceiling,
+    params.resolutionRecoverFraction,
+  )
   maybeSetResolution(target, current, proposed, boundaries, params)
 }
 
@@ -334,9 +367,16 @@ function maybeSetBitrate(
 ): void {
   const lever = boundaries?.levers.bitrate
   if (isPinned(lever)) return
-  const clamped = clamp(Math.round(proposed), bitrateFloor(boundaries, params), bitrateCeiling(boundaries, params))
+  const clamped = clamp(
+    Math.round(proposed),
+    bitrateFloor(boundaries, params),
+    bitrateCeiling(boundaries, params),
+  )
   if (clamped === current.bitrateKbps) return
-  if (bypassDeadband || passesBitrateDeadband(current.bitrateKbps, clamped, params)) {
+  if (
+    bypassDeadband ||
+    passesBitrateDeadband(current.bitrateKbps, clamped, params)
+  ) {
     target.bitrateKbps = clamped
   }
 }
@@ -374,10 +414,28 @@ function maybeSetResolution(
   const lever = boundaries?.levers.resolution
   if (isPinned(lever)) return
   const clamped = clampResolution(proposed, current, boundaries)
-  if (clamped.width === current.resolution.width && clamped.height === current.resolution.height) return
-  if (bypassDeadband || passesResolutionDeadband(current.resolution, clamped, params)) {
+  if (
+    clamped.width === current.resolution.width &&
+    clamped.height === current.resolution.height
+  )
+    return
+  if (
+    bypassDeadband ||
+    passesResolutionDeadband(current.resolution, clamped, params)
+  ) {
     target.resolution = clamped
   }
+}
+
+function isPreFirstFrameWarmup(
+  summary: StreamHealthSummary,
+  params: Required<StreamAdaptiveControllerParams>,
+): boolean {
+  return (
+    summary.freshness === "fresh" &&
+    summary.firstFrameMs.mean === undefined &&
+    summary.sampleCount < params.coldStartSampleCount
+  )
 }
 
 function modeFor(
@@ -390,16 +448,28 @@ function modeFor(
   return "fine-tune"
 }
 
-function isCliff(summary: StreamHealthSummary, pressure: StreamAdaptivePressure): boolean {
+function isCliff(
+  summary: StreamHealthSummary,
+  pressure: StreamAdaptivePressure,
+): boolean {
   const delivery = summary.bitrateDeliveryRatio ?? 1
   const loss = summary.lossFraction.mean ?? 0
-  const queueRising = summary.queueDepth.trend === "rising" && (summary.queueDepth.mean ?? 0) >= 6
-  const rttRising = summary.rttMs.trend === "rising" && (summary.rttMs.mean ?? 0) >= 100
-  return delivery < 0.45 || loss >= 0.08 || pressure.bandwidth > 0.7 || (queueRising && rttRising)
+  const queueRising =
+    summary.queueDepth.trend === "rising" && (summary.queueDepth.mean ?? 0) >= 6
+  const rttRising =
+    summary.rttMs.trend === "rising" && (summary.rttMs.mean ?? 0) >= 100
+  return (
+    delivery < 0.45 ||
+    loss >= 0.08 ||
+    pressure.bandwidth > 0.7 ||
+    (queueRising && rttRising)
+  )
 }
 
 function healthyEnoughForGrowth(pressure: StreamAdaptivePressure): boolean {
-  return pressure.bandwidth < 0.02 && pressure.latency < 0.1 && pressure.decode < 0.1
+  return (
+    pressure.bandwidth < 0.02 && pressure.latency < 0.1 && pressure.decode < 0.1
+  )
 }
 
 function computePressure(summary: StreamHealthSummary): StreamAdaptivePressure {
@@ -426,7 +496,11 @@ function lowerFpsStep(currentFps: number, maxFps: number): number | undefined {
   return lower
 }
 
-function higherFpsStep(currentFps: number, maxFps: number, stepCount: number): number | undefined {
+function higherFpsStep(
+  currentFps: number,
+  maxFps: number,
+  stepCount: number,
+): number | undefined {
   const steps = FPS_STEPS.filter(step => step <= maxFps)
   const index = steps.findIndex(step => step > currentFps)
   if (index < 0) return undefined
@@ -439,7 +513,12 @@ function scaleForResolutionShrink(
   mode: StreamAdaptiveControllerMode,
   bppStarved: boolean,
 ): number {
-  if (mode === "shed") return clamp(1 - Math.max(pressure.bandwidth, pressure.decode) * 0.35, 0.45, 0.82)
+  if (mode === "shed")
+    return clamp(
+      1 - Math.max(pressure.bandwidth, pressure.decode) * 0.35,
+      0.45,
+      0.82,
+    )
   if (bppStarved) {
     const targetPixels = Math.max(
       1,
@@ -471,7 +550,10 @@ function growResolution(
   fraction: number,
 ): StreamAdaptiveResolution {
   const baseline = current.baselineResolution
-  const targetWidth = Math.min(ceiling.width, current.resolution.width * (1 + fraction))
+  const targetWidth = Math.min(
+    ceiling.width,
+    current.resolution.width * (1 + fraction),
+  )
   const targetHeight = targetWidth * (baseline.height / baseline.width)
   return {
     width: even(Math.min(ceiling.width, targetWidth)),
@@ -486,14 +568,17 @@ function clampResolution(
 ): StreamAdaptiveResolution {
   const floor = boundaries?.levers.resolution?.floor
   const ceiling = resolutionCeiling(boundaries, current)
-  const aspect = current.baselineResolution.height / current.baselineResolution.width
+  const aspect =
+    current.baselineResolution.height / current.baselineResolution.width
   const defaultFloorWidth = Math.min(current.baselineResolution.width, 640)
   const minWidth = Math.max(
     floor?.width ?? defaultFloorWidth,
     floor?.height === undefined ? defaultFloorWidth : floor.height / aspect,
   )
   const maxWidth = Math.min(ceiling.width, ceiling.height / aspect)
-  const width = even(clamp(proposed.width, minWidth, Math.max(minWidth, maxWidth)))
+  const width = even(
+    clamp(proposed.width, minWidth, Math.max(minWidth, maxWidth)),
+  )
   const height = even(width * aspect)
   return { width, height }
 }
@@ -527,7 +612,8 @@ function resolutionCeiling(
 }
 
 function bitsPerPixel(current: StreamAdaptiveSettings): number {
-  const pixelsPerSecond = current.resolution.width * current.resolution.height * current.fps
+  const pixelsPerSecond =
+    current.resolution.width * current.resolution.height * current.fps
   return (current.bitrateKbps * 1000) / Math.max(1, pixelsPerSecond)
 }
 
