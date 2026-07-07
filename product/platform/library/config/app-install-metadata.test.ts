@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test"
-import { installMetadataForRelease } from "./app-install-metadata"
+import { readFile } from "node:fs/promises"
+import { parse } from "yaml"
+import {
+  installMetadataAllowed,
+  installMetadataForRelease,
+} from "./app-install-metadata"
 import type { AppRecord } from "./records/app"
 
 const steamApp: AppRecord = {
@@ -63,6 +68,54 @@ describe("install metadata projection", () => {
       providerId: "@korri:steam",
       appId: "1029210",
     })
+  })
+
+  it("allows an AKA config-backed Steam entry before an appmanifest exists", async () => {
+    const fixture = parse(
+      await readFile(
+        "product/platform/library/config/fixtures/aka-steam-installable.korri.yaml",
+        "utf8",
+      ),
+    ) as {
+      readonly launchers: Record<string, AppRecord>
+      readonly library: Record<
+        string,
+        {
+          readonly releases: ReadonlyArray<
+            Parameters<typeof installMetadataForRelease>[0]
+          >
+        }
+      >
+    }
+
+    const release = fixture.library["thirty-xx"]?.releases[0]
+    expect(release).toBeDefined()
+    const install = installMetadataForRelease(
+      release!,
+      new Map([
+        ["@korri:steam/steam", fixture.launchers["@korri:steam/steam"]!],
+      ]),
+    )
+
+    expect(install).toEqual({
+      providerId: "@korri:steam",
+      appId: "1029210",
+      canRequestInstall: true,
+    })
+    expect(
+      installMetadataAllowed(
+        [{ releases: [{ install }] }],
+        "@korri:steam",
+        "1029210",
+      ),
+    ).toBe(true)
+    expect(
+      installMetadataAllowed(
+        [{ releases: [{ install }] }],
+        "@korri:steam",
+        "999999",
+      ),
+    ).toBe(false)
   })
 
   it("does not infer metadata without a provider-qualified launcher", () => {

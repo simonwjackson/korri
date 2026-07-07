@@ -1,0 +1,44 @@
+# AKA source-machine Steam installability fixture.
+#
+# This models a game that may be installed before an appmanifest exists. The
+# provider-ref target is the allowlist signal consumed by install metadata.
+
+storage:
+  "@korri:steam/steam":
+    root: /var/lib/korri/steam
+
+providers:
+  "@korri:steam":
+    title: Steam
+
+systems:
+  steam:
+    name: Steam
+
+launchers:
+  "@korri:steam/steam":
+    plugin: "@korri:steam"
+    command: steam
+    systems: [steam]
+    launch:
+      with:
+        "@korri:gamescope":
+          enable: true
+    settings:
+      plugin:
+        state:
+          root: "{storage:@korri:steam/steam}"
+        compat-tool: proton-cachyos-11.0-20260601-slr-x86_64
+
+library:
+  thirty-xx:
+    title: 30XX
+    releases:
+      - id: steam
+        system: steam
+        target:
+          kind: provider-ref
+          provider: "@korri:steam"
+          ref: "1029210"
+        launch:
+          use: "@korri:steam/steam"
