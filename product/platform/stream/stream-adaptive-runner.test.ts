@@ -13,6 +13,8 @@ const numeric = (
     ? { trend: "unknown" as const }
     : { mean, variance: 0, trend }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
 function summary(
   overrides: Partial<StreamHealthSummary> = {},
 ): StreamHealthSummary {
@@ -42,7 +44,10 @@ function makeHarness(
     readonly enabled?: boolean
     readonly rejectSet?: boolean
     readonly rejectWith?: unknown
-    readonly boundaries?: StreamBoundaries | (() => StreamBoundaries | undefined)
+    readonly hangBitrate?: boolean
+    readonly boundaries?:
+      | StreamBoundaries
+      | (() => StreamBoundaries | undefined)
   } = {},
 ) {
   const events: unknown[] = []
@@ -54,6 +59,7 @@ function makeHarness(
   const recovery: RuntimeRecoverySupervisor = {
     setBitrate: async kbps => {
       calls.push(`bitrate:${kbps}`)
+      if (input.hangBitrate) await new Promise(() => {})
       if (input.rejectWith !== undefined) throw input.rejectWith
       if (input.rejectSet) throw new Error("dispatch failed")
     },
@@ -117,13 +123,45 @@ describe("createStreamAdaptiveRunner", () => {
     )
   })
 
-  it("does not dispatch while a mutation is pending", async () => {
-    const { runner, calls, events } = makeHarness({ pending: true })
+  it("does not dispatch non-emergency changes while a mutation is pending", async () => {
+    const { runner, calls, events } = makeHarness({
+      pending: true,
+      health: summary({ bitrateDeliveryRatio: 0.65, rttMs: numeric(70) }),
+    })
 
     await runner.tick()
 
     expect(calls).toEqual([])
     expect(events).toContainEqual({ kind: "dormant", reason: "pending" })
+  })
+
+  it("dispatches emergency rescue even while a mutation is pending", async () => {
+    const { runner, calls, events } = makeHarness({
+      pending: true,
+      health: summary({ freshness: "stale" }),
+    })
+
+    await runner.tick()
+
+    expect(calls).toEqual(["bitrate:500", "fps:30", "resolution:640x360"])
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "decision", mode: "shed" }),
+    )
+  })
+
+  it("does not let a slow bitrate response block FPS and resolution rescue", async () => {
+    const { runner, calls } = makeHarness({
+      hangBitrate: true,
+      health: summary({ freshness: "stale" }),
+    })
+
+    const result = await Promise.race([
+      runner.tick().then(() => "completed" as const),
+      sleep(800).then(() => "timed-out" as const),
+    ])
+
+    expect(result).toBe("completed")
+    expect(calls).toEqual(["bitrate:500", "fps:30", "resolution:640x360"])
   })
 
   it("does not dispatch when the session is not streaming", async () => {

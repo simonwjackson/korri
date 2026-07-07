@@ -12,7 +12,10 @@ import type {
 
 export interface MoonlightRecoveryControlPortOptions {
   readonly commandClient?: () => Promise<MoonlightControlClient>
+  readonly commandResponseTimeoutMs?: number
 }
+
+const DEFAULT_FRESH_COMMAND_RESPONSE_TIMEOUT_MS = 1_000
 
 export function moonlightRecoveryControlPortFromClient(
   client: MoonlightControlClient,
@@ -49,16 +52,55 @@ export function moonlightRecoveryControlPortFromClient(
 async function withCommandClient(
   options: MoonlightRecoveryControlPortOptions,
   fallbackClient: MoonlightControlClient,
-  run: (client: MoonlightControlClient) => Promise<RuntimeRecoveryRequestId | undefined>,
+  run: (
+    client: MoonlightControlClient,
+  ) => Promise<RuntimeRecoveryRequestId | undefined>,
 ): Promise<RuntimeRecoveryRequestId | undefined> {
   const commandClient = options.commandClient
     ? await options.commandClient()
     : fallbackClient
-  try {
-    return await run(commandClient)
-  } finally {
-    if (commandClient !== fallbackClient) commandClient.close()
+  const isFreshCommandClient = commandClient !== fallbackClient
+  const timeoutMs =
+    options.commandResponseTimeoutMs ??
+    (isFreshCommandClient ? DEFAULT_FRESH_COMMAND_RESPONSE_TIMEOUT_MS : 0)
+  let commandClientClosed = false
+  const closeFreshCommandClient = () => {
+    if (!isFreshCommandClient || commandClientClosed) return
+    commandClientClosed = true
+    commandClient.close()
   }
+  try {
+    return await withTimeout(
+      run(commandClient),
+      timeoutMs,
+      closeFreshCommandClient,
+    )
+  } finally {
+    closeFreshCommandClient()
+  }
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => void,
+): Promise<T> {
+  if (timeoutMs <= 0) return promise
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      onTimeout()
+      reject(
+        new Error(
+          `Moonlight runtime command response timed out after ${timeoutMs}ms`,
+        ),
+      )
+    }, timeoutMs)
+    timer.unref?.()
+  })
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer)
+  })
 }
 
 async function requestIdFromAccepted(

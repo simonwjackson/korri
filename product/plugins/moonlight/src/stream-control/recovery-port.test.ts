@@ -10,7 +10,7 @@ function success(result: unknown): MoonlightControlSuccessResponse {
   return { jsonrpc: "2.0", id: 1, result } as MoonlightControlSuccessResponse
 }
 
-function makeClient() {
+function makeClient(options: { readonly hangSetBitrate?: boolean } = {}) {
   const listeners: ((delivery: MoonlightControlEventDelivery) => void)[] = []
   const calls: string[] = []
   const queued: MoonlightControlSuccessResponse[] = []
@@ -21,6 +21,7 @@ function makeClient() {
     subscribe: async () => success({ _tag: "events.subscribed" }),
     setBitrate: async params => {
       calls.push(`setBitrate:${params.bitrateKbps}`)
+      if (options.hangSetBitrate) await new Promise(() => {})
       return next({
         _tag: "command.accepted",
         requestId: "bitrate-1",
@@ -106,6 +107,22 @@ describe("moonlightRecoveryControlPortFromClient", () => {
     harness.queue(success({ _tag: "command.result", status: "invalid" }))
 
     await expect(port.setBitrate({ bitrateKbps: 1 })).resolves.toBeUndefined()
+  })
+
+  it("times out and closes a stuck fresh command client", async () => {
+    const eventHarness = makeClient()
+    const commandHarness = makeClient({ hangSetBitrate: true })
+    const port = moonlightRecoveryControlPortFromClient(eventHarness.client, {
+      commandClient: async () => commandHarness.client,
+      commandResponseTimeoutMs: 5,
+    })
+
+    await expect(port.setBitrate({ bitrateKbps: 500 })).rejects.toThrow(
+      "Moonlight runtime command response timed out after 5ms",
+    )
+
+    expect(eventHarness.calls).toEqual([])
+    expect(commandHarness.calls).toEqual(["setBitrate:500", "close"])
   })
 
   it("forwards only runtime command result events", () => {

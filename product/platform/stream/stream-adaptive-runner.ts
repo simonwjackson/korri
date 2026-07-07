@@ -90,11 +90,7 @@ export function createStreamAdaptiveRunner(
       options.onEvent({ kind: "dormant", reason: "not-streaming" })
       return
     }
-    if (options.recovery.hasPending()) {
-      options.onEvent({ kind: "dormant", reason: "pending" })
-      return
-    }
-
+    const hasPending = options.recovery.hasPending()
     const summary = options.monitor.latestSummary(nowMs())
     const decision = computeStreamAdaptiveDecision({
       summary,
@@ -105,6 +101,14 @@ export function createStreamAdaptiveRunner(
         options.initialSettings,
       ),
     })
+
+    if (
+      hasPending &&
+      (decision.kind !== "target" || decision.mode !== "shed")
+    ) {
+      options.onEvent({ kind: "dormant", reason: "pending" })
+      return
+    }
 
     if (decision.kind === "dormant") {
       options.onEvent({ kind: "dormant", reason: decision.reason })
@@ -154,7 +158,9 @@ export function createStreamAdaptiveRunner(
     }
   }
 
-  async function dispatchShedTarget(target: StreamAdaptiveTarget): Promise<void> {
+  async function dispatchShedTarget(
+    target: StreamAdaptiveTarget,
+  ): Promise<void> {
     const steps: (() => Promise<void>)[] = []
     if (target.bitrateKbps !== undefined) {
       steps.push(() =>
@@ -183,7 +189,7 @@ export function createStreamAdaptiveRunner(
 
     for (let index = 0; index < steps.length; index += 1) {
       if (closed) return
-      await steps[index]?.()
+      void steps[index]?.()
       if (!closed && index < steps.length - 1) {
         await sleep(SHED_MUTATION_SPACING_MS)
       }
@@ -251,8 +257,7 @@ function effectiveBoundaries(
       ...(boundaries?.levers ?? {}),
       bitrate: {
         ...(boundaries?.levers.bitrate ?? {}),
-        ceiling:
-          boundaries?.levers.bitrate?.ceiling ?? initial.bitrateKbps,
+        ceiling: boundaries?.levers.bitrate?.ceiling ?? initial.bitrateKbps,
       },
       fps: {
         ...(boundaries?.levers.fps ?? {}),
