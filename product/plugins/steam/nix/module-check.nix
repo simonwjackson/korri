@@ -251,8 +251,7 @@ let
       && (gamescopedSteamUnit.serviceConfig.LimitNOFILE or null) == 524288
       && (gamescopedSteamUnit.environment.GAMESCOPE_WAYLAND_DISPLAY or null) == "gamescope-0"
       && (gamescopedSteamUnit.environment.PULSE_SERVER or null) == "unix:/run/user/2000/pulse/native"
-      && lib.hasInfix "gamescope" (serviceExec gamescopedSteamUnit)
-      && lib.hasInfix "korri-steam-guest" (serviceExec gamescopedSteamUnit)
+      && lib.hasInfix "korri-steam-service-run" (serviceExec gamescopedSteamUnit)
       && !(lib.hasInfix "-gamepadui" (serviceExec gamescopedSteamUnit))
       && !(lib.hasInfix "-steamos3" (serviceExec gamescopedSteamUnit))
       && !(lib.hasInfix "-steampal" (serviceExec gamescopedSteamUnit))
