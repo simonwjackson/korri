@@ -8,7 +8,11 @@ import {
 } from "@platform/library/launcher"
 import {
   probeSessiondManagedLaunchStatus,
+  terminateSessiondManagedLaunch,
+  type SessiondManagedLaunchClientOptions,
   type SessiondManagedLaunchStatusResult,
+  type SessiondManagedLaunchTerminateInput,
+  type SessiondManagedLaunchTerminateResult,
 } from "@platform/library/sessiond-managed-launch-client"
 import { isLaunchReadyMode } from "@platform/library/sessiond-managed-launch-protocol"
 import type { ForegroundSessionState } from "@platform/session/foreground-session-lifecycle"
@@ -120,6 +124,116 @@ export type LocalForegroundLaunchOwner = ReturnType<
   typeof createLocalForegroundLaunchOwner
 >
 
+type SteamTransitionProbe = () => Promise<SessiondManagedLaunchStatusResult>
+type SteamTransitionTerminate = (
+  input: SessiondManagedLaunchTerminateInput,
+) => Promise<SessiondManagedLaunchTerminateResult>
+
+type SteamTransitionLock = <A>(run: () => Promise<A>) => Promise<A>
+
+const steamTransitionLocks = new Map<string, Promise<unknown>>()
+
+export interface PrepareSteamAppIdForegroundTransitionInput {
+  readonly spec: LaunchSpec
+  readonly probe?: SteamTransitionProbe
+  readonly terminate?: SteamTransitionTerminate
+  readonly sleep?: (ms: number) => Promise<void>
+  readonly withLock?: SteamTransitionLock
+  readonly timeoutMs?: number
+  readonly pollMs?: number
+}
+
+export async function prepareSteamAppIdForegroundTransition(
+  input: PrepareSteamAppIdForegroundTransitionInput,
+): Promise<LaunchLibraryResponse | undefined> {
+  if (!isSteamAppIdLaunchSpec(input.spec)) return undefined
+  const lock = input.withLock ?? (run => withSteamTransitionLock("steam-appid", run))
+  return await lock(() => prepareSteamAppIdForegroundTransitionUnlocked(input))
+}
+
+async function prepareSteamAppIdForegroundTransitionUnlocked(
+  input: PrepareSteamAppIdForegroundTransitionInput,
+): Promise<LaunchLibraryResponse | undefined> {
+  const probe = input.probe ?? (() => probeSessiondManagedLaunchStatus())
+  const first = await probe()
+  if (first.kind !== "ok") return hostUnavailableFromSessiond(first.message)
+  if (isLaunchReadyMode(first.status.mode) || !first.status.active) return undefined
+
+  const terminate =
+    input.terminate ??
+    (terminateInput => terminateSessiondManagedLaunch(terminateInput, sessiondOptions()))
+  const terminated = await terminate({ launchId: first.status.active.launchId })
+  if (terminated.kind !== "ok") return hostUnavailableFromSessiond(terminated.message)
+
+  const sleep = input.sleep ?? sleepMs
+  const deadline = Date.now() + (input.timeoutMs ?? 15_000)
+  const pollMs = input.pollMs ?? 250
+  while (Date.now() <= deadline) {
+    const current = await probe()
+    if (current.kind !== "ok") return hostUnavailableFromSessiond(current.message)
+    if (isLaunchReadyMode(current.status.mode) && !current.status.active) {
+      return undefined
+    }
+    await sleep(pollMs)
+  }
+
+  return {
+    _tag: "PreflightRejected",
+    status: "failed",
+    exitCode: 121,
+    failureKind: "session-busy",
+    stderrTail: "timed out waiting for previous Steam AppID session to stop",
+    preflightReason: {
+      source: "sessiond",
+      externalMode: first.status.mode,
+      currentSessionId: first.status.active.launchId,
+    },
+  }
+}
+
+function isSteamAppIdLaunchSpec(spec: LaunchSpec): boolean {
+  return /(^|\/)korri-steam-app$/.test(spec.command)
+}
+
+async function withSteamTransitionLock<A>(
+  key: string,
+  run: () => Promise<A>,
+): Promise<A> {
+  const previous = steamTransitionLocks.get(key) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>(resolve => {
+    release = resolve
+  })
+  const queued = previous.then(() => current)
+  steamTransitionLocks.set(key, queued)
+  await previous
+  try {
+    return await run()
+  } finally {
+    release()
+    if (steamTransitionLocks.get(key) === queued) steamTransitionLocks.delete(key)
+  }
+}
+
+function sessiondOptions(): SessiondManagedLaunchClientOptions {
+  return { env: process.env }
+}
+
+function hostUnavailableFromSessiond(message: string | undefined): LaunchLibraryResponse {
+  return {
+    _tag: "HostUnavailable",
+    status: "failed",
+    exitCode: 124,
+    failureKind: "host-unavailable",
+    ...(message ? { stderrTail: message } : {}),
+    hostUnavailableReason: { kind: "network" },
+  }
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export function createLocalForegroundLaunchOwner(
   options: CreateLocalForegroundLaunchOwnerOptions = {},
 ) {
@@ -180,6 +294,11 @@ export async function launchLocalForegroundSession(
 ): Promise<LaunchLibraryResponse> {
   let handedOffToOwnerTeardown = false
   try {
+    const transitionFailure = await prepareSteamAppIdForegroundTransition({
+      spec: request.spec,
+    })
+    if (transitionFailure) return transitionFailure
+
     const result = await owner.launch(request)
     if (result._tag === "Launched") handedOffToOwnerTeardown = true
     return await launchResponseFromOwnerResult(result)

@@ -22,6 +22,7 @@ import {
   createLocalForegroundLaunchOwner,
   externalIdleFromSessiondProbe,
   launchLocalForegroundSession,
+  prepareSteamAppIdForegroundTransition,
 } from "./local-foreground-launch-adapter"
 import { createPlayRecordingCoordinator } from "./play-recording-coordinator"
 
@@ -111,6 +112,77 @@ async function launcherFromLayer(
     }).pipe(Effect.provide(layer)),
   )
 }
+
+describe("Steam AppID foreground transition", () => {
+  it("terminates an active foreground session and waits for sessiond to become launch-ready", async () => {
+    const calls: string[] = []
+    const result = await prepareSteamAppIdForegroundTransition({
+      spec: {
+        command: "/run/current-system/sw/bin/korri-steam-app",
+        args: ["360740"],
+      },
+      probe: async () => {
+        calls.push("probe")
+        return calls.length === 1
+          ? {
+              kind: "ok",
+              status: {
+                ...sessiondStatus("game"),
+                active: {
+                  launchId: "steam-1",
+                  mode: "game",
+                  launchMetadata: { appProviderId: "@korri:native" },
+                },
+              },
+            }
+          : { kind: "ok", status: sessiondStatus("home") }
+      },
+      terminate: async input => {
+        calls.push(`terminate:${input.launchId}`)
+        return {
+          kind: "ok",
+          response: { status: "accepted", launchId: input.launchId },
+        }
+      },
+      sleep: async () => {},
+    })
+
+    expect(result).toBeUndefined()
+    expect(calls).toEqual(["probe", "terminate:steam-1", "probe"])
+  })
+
+  it("serializes concurrent Steam transition attempts through one lock", async () => {
+    let inProbe = 0
+    let maxInProbe = 0
+    const probe = async () => {
+      inProbe += 1
+      maxInProbe = Math.max(maxInProbe, inProbe)
+      await new Promise(resolve => setTimeout(resolve, 1))
+      inProbe -= 1
+      return { kind: "ok" as const, status: sessiondStatus("home") }
+    }
+
+    const result = await Promise.all([
+      prepareSteamAppIdForegroundTransition({
+        spec: {
+          command: "/run/current-system/sw/bin/korri-steam-app",
+          args: ["360740"],
+        },
+        probe,
+      }),
+      prepareSteamAppIdForegroundTransition({
+        spec: {
+          command: "/run/current-system/sw/bin/korri-steam-app",
+          args: ["401710"],
+        },
+        probe,
+      }),
+    ])
+
+    expect(result).toEqual([undefined, undefined])
+    expect(maxInProbe).toBe(1)
+  })
+})
 
 describe("local foreground launch adapter", () => {
   it("maps invalid sessiond status payloads to unavailable external-idle probes", () => {
