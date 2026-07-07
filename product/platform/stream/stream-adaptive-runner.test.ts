@@ -117,7 +117,12 @@ describe("createStreamAdaptiveRunner", () => {
 
     await runner.tick()
 
-    expect(calls).toEqual(["fps:30", "resolution:640x360", "bitrate:500"])
+    expect(calls).toEqual([
+      "bitrate:500",
+      "fps:30",
+      "resolution:640x360",
+      "bitrate:500",
+    ])
     expect(events).toContainEqual(
       expect.objectContaining({ kind: "decision", mode: "shed" }),
     )
@@ -143,7 +148,12 @@ describe("createStreamAdaptiveRunner", () => {
 
     await runner.tick()
 
-    expect(calls).toEqual(["fps:30", "resolution:640x360", "bitrate:500"])
+    expect(calls).toEqual([
+      "bitrate:500",
+      "fps:30",
+      "resolution:640x360",
+      "bitrate:500",
+    ])
     expect(events).toContainEqual(
       expect.objectContaining({ kind: "decision", mode: "shed" }),
     )
@@ -161,7 +171,12 @@ describe("createStreamAdaptiveRunner", () => {
     ])
 
     expect(result).toBe("completed")
-    expect(calls).toEqual(["fps:30", "resolution:640x360", "bitrate:500"])
+    expect(calls).toEqual([
+      "bitrate:500",
+      "fps:30",
+      "resolution:640x360",
+      "bitrate:500",
+    ])
   })
 
   it("does not dispatch when the session is not streaming", async () => {
