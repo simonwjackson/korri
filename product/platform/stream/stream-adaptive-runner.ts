@@ -10,6 +10,12 @@ import {
   type StreamAdaptiveTarget,
 } from "./stream-adaptive-controller"
 import type { StreamHealthMonitor } from "./stream-health-monitor"
+import {
+  detectEarlyStreamDownshift,
+  normalizeHandoffTrigger,
+  type StreamHandoffSignal,
+} from "./stream-handoff-trigger"
+import type { StreamHealthSummary } from "./stream-health"
 
 const SHED_MUTATION_SPACING_MS = 250
 
@@ -26,6 +32,12 @@ export type StreamAdaptiveRunnerEvent =
   | {
       readonly kind: "dormant"
       readonly reason: StreamAdaptiveRunnerDormantReason
+    }
+  | {
+      readonly kind: "early-downshift"
+      readonly reasonCode: string
+      readonly hintRole: "none" | "corroborating"
+      readonly evidence: Readonly<Record<string, unknown>>
     }
   | {
       readonly kind: "decision"
@@ -59,6 +71,7 @@ export interface StreamAdaptiveRunnerOptions {
   readonly objectiveBias: number
   readonly boundaries?: StreamBoundaries | (() => StreamBoundaries | undefined)
   readonly isStreaming: () => boolean
+  readonly handoffSignal?: () => StreamHandoffSignal | undefined
   readonly onEvent: (event: StreamAdaptiveRunnerEvent) => void
   readonly nowMs?: () => number
   readonly tickIntervalMs?: number
@@ -93,15 +106,38 @@ export function createStreamAdaptiveRunner(
     }
     const hasPending = options.recovery.hasPending()
     const summary = options.monitor.latestSummary(nowMs())
+    const earlyDownshift =
+      summary.freshness === "fresh"
+        ? detectEarlyStreamDownshift(
+            summary,
+            normalizeHandoffTrigger(options.handoffSignal?.()),
+          )
+        : undefined
+    if (earlyDownshift?.kind === "triggered") {
+      options.onEvent({
+        kind: "early-downshift",
+        reasonCode: earlyDownshift.reasonCode,
+        hintRole: earlyDownshift.hintRole,
+        evidence: earlyDownshift.evidence,
+      })
+      if (hasPending) {
+        options.onEvent({ kind: "dormant", reason: "pending" })
+        return
+      }
+    }
+    const decisionSummary =
+      earlyDownshift?.kind === "triggered"
+        ? summaryForEarlyDownshift(summary)
+        : summary
     const decision = computeStreamAdaptiveDecision({
-      summary,
+      summary: decisionSummary,
       current: currentSettings(options.recovery, options.initialSettings),
       objectiveBias: options.objectiveBias,
       boundaries: effectiveBoundaries(
         currentBoundaries(options.boundaries),
         options.initialSettings,
       ),
-      phase: phaseForSummary(summary),
+      phase: phaseForSummary(decisionSummary),
     })
 
     if (
@@ -235,6 +271,21 @@ export function createStreamAdaptiveRunner(
 
 function phaseForSummary(summary: { readonly sampleCount: number }): StreamAdaptiveControllerPhase {
   return summary.sampleCount < 3 ? "establishing" : "steady"
+}
+
+function summaryForEarlyDownshift(
+  summary: StreamHealthSummary,
+): StreamHealthSummary {
+  return {
+    ...summary,
+    rttMs: {
+      ...summary.rttMs,
+      mean: Math.max(summary.rttMs.mean ?? 0, 110),
+      trend: "rising",
+    },
+    bitrateDeliveryRatio: Math.min(summary.bitrateDeliveryRatio ?? 1, 0.24),
+    fpsDeliveryRatio: Math.min(summary.fpsDeliveryRatio ?? 1, 0.34),
+  }
 }
 
 function sleep(ms: number): Promise<void> {

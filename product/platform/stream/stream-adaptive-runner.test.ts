@@ -128,6 +128,53 @@ describe("createStreamAdaptiveRunner", () => {
     )
   })
 
+  it("downshifts early on corroborated health degradation", async () => {
+    const { runner, calls, events } = makeHarness({
+      health: summary({
+        rttMs: numeric(86, "rising"),
+        rttVarianceMs: numeric(30),
+        bitrateDeliveryRatio: 0.8,
+      }),
+    })
+
+    await runner.tick()
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: "early-downshift",
+        reasonCode: "rtt-slope-delivery-drop",
+      }),
+    )
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "decision", mode: "shed" }),
+    )
+    expect(calls).toEqual([
+      "bitrate:500",
+      "fps:30",
+      "resolution:640x360",
+      "bitrate:500",
+    ])
+  })
+
+  it("does not bypass pending mutations for early downshift", async () => {
+    const { runner, calls, events } = makeHarness({
+      pending: true,
+      health: summary({
+        rttMs: numeric(86, "rising"),
+        rttVarianceMs: numeric(30),
+        bitrateDeliveryRatio: 0.8,
+      }),
+    })
+
+    await runner.tick()
+
+    expect(calls).toEqual([])
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "early-downshift" }),
+    )
+    expect(events).toContainEqual({ kind: "dormant", reason: "pending" })
+  })
+
   it("does not dispatch non-emergency changes while a mutation is pending", async () => {
     const { runner, calls, events } = makeHarness({
       pending: true,

@@ -451,8 +451,17 @@ describe("runStreamAdaptiveShow", () => {
             status: "ok",
             readback: {
               enabled: true,
-              boundaries: { levers: { bitrate: { ceiling: 12000 } }, outcomes: {}, lean: 0.5 },
-              lastEvent: { kind: "dormant", reason: "within-hysteresis" },
+              boundaries: {
+                levers: { bitrate: { floor: 500, startup: 6000, ceiling: 40000 } },
+                outcomes: {},
+                lean: 0.5,
+              },
+              lastEvent: {
+                kind: "early-downshift",
+                reasonCode: "rtt-slope-delivery-drop",
+                hintRole: "none",
+                evidence: { rttMs: 86, bitrateDeliveryRatio: 0.8 },
+              },
             },
           },
         }),
@@ -464,7 +473,9 @@ describe("runStreamAdaptiveShow", () => {
 
     expect(code).toBe(0)
     expect(out.join("\n")).toContain("adaptive:    enabled")
-    expect(out.join("\n")).toContain("bitrate=..12000")
+    expect(out.join("\n")).toContain("bitrate=500..6000..40000")
+    expect(out.join("\n")).toContain("early-downshift")
+    expect(out.join("\n")).toContain("rtt-slope-delivery-drop")
   })
 
   test("prints JSON adaptive state for scripts", async () => {
