@@ -7,6 +7,7 @@ import {
 import { collectSteamInstallSnapshot } from "../observability/install-state"
 import {
   materializeSteamDesiredState,
+  nodeSteamStateFileSystem,
   noopSteamLifecycle,
   type SteamLifecycle,
   type SteamStateFileSystem,
@@ -51,6 +52,7 @@ export interface PrepareSteamAppInstallStateInput {
 export async function prepareSteamAppInstallState(
   input: PrepareSteamAppInstallStateInput,
 ): Promise<void> {
+  const fs = input.fs ?? nodeSteamStateFileSystem
   await Effect.runPromise(
     materializeSteamDesiredState({
       desired: {
@@ -60,7 +62,7 @@ export async function prepareSteamAppInstallState(
         suppressInterstitials: true,
         acceptEulas: true,
       },
-      fs: input.fs,
+      fs,
       lifecycle: input.lifecycle ?? noopSteamLifecycle,
       lock: input.lock,
       shutdownGuard: async () => {
@@ -76,6 +78,11 @@ export async function prepareSteamAppInstallState(
         }
       },
     }),
+  )
+  await fs.mkdirp(`${input.stateRoot}/.korri/install-policy-prepared`)
+  await fs.writeTextAtomic(
+    `${input.stateRoot}/.korri/install-policy-prepared/${input.appId}`,
+    `compatTool=${input.compatTool}\npreparedAt=${new Date().toISOString()}\n`,
   )
 }
 

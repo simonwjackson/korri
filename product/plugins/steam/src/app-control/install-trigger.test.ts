@@ -57,6 +57,9 @@ describe("Steam install trigger", () => {
       collectBusy: async () => ({ state: "idle", busyAppIds: [], evidence: [] }),
     })
 
+    expect(files.get("/steam-home/.korri/install-policy-prepared/360740")).toContain(
+      "proton-cachyos-arm64",
+    )
     expect(parseVdf(files.get(steamConfigPath("/steam-home")) ?? "")).toMatchObject({
       InstallConfigStore: {
         Software: {

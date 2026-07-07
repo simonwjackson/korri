@@ -28,6 +28,8 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain(
       'pkgs.writeShellScriptBin "korri-steam-app-install"',
     )
+    expect(moduleSource).toContain('policy_stamp="$STEAM_HOME/.korri/install-policy-prepared/$appid"')
+    expect(moduleSource).toContain("Steam install policy has not been prepared")
     expect(moduleSource).toContain(
       'korri-steam-guest ${steamClientArgs} -console +app_install "$appid"',
     )

@@ -571,6 +571,14 @@ EOF
       ""|*[!0-9]*) usage ;;
     esac
 
+    export STEAM_HOME="''${STEAM_HOME:-${cfg.home}}"
+    policy_stamp="$STEAM_HOME/.korri/install-policy-prepared/$appid"
+    if [ ! -s "$policy_stamp" ]; then
+      echo "korri-steam-app-install: Steam install policy has not been prepared for AppID $appid" >&2
+      echo "korri-steam-app-install: request installs through app.plugin.install.request so Windows/Cachy policy is reconciled before +app_install" >&2
+      exit 78
+    fi
+
     exec ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs} -console +app_install "$appid"
   '';
 
