@@ -15,13 +15,28 @@ describe("stream adaptive boundaries", () => {
     ])
 
     expect(boundaries.levers.bitrate).toEqual({ floor: 5000, ceiling: 20000 })
-    expect(boundaries.levers.fps).toEqual({ floor: 60, ceiling: 60, pinned: 60 })
-    expect(boundaries.levers.resolution?.ceiling).toEqual({ width: 1280, height: 720 })
+    expect(boundaries.levers.fps).toEqual({
+      floor: 60,
+      ceiling: 60,
+      pinned: 60,
+    })
+    expect(boundaries.levers.resolution?.ceiling).toEqual({
+      width: 1280,
+      height: 720,
+    })
 
-    expect(parseStreamBoundaryArgs(["bitrate=5000.."]).levers.bitrate).toEqual({ floor: 5000 })
-    expect(parseStreamBoundaryArgs(["bitrate=..20000"]).levers.bitrate).toEqual({ ceiling: 20000 })
-    expect(parseStreamBoundaryArgs(["bitrate=auto"]).levers.bitrate).toEqual({ free: true })
-    expect(parseStreamBoundaryArgs(["bitrate=.."]).levers.bitrate).toEqual({ free: true })
+    expect(parseStreamBoundaryArgs(["bitrate=5000.."]).levers.bitrate).toEqual({
+      floor: 5000,
+    })
+    expect(parseStreamBoundaryArgs(["bitrate=..20000"]).levers.bitrate).toEqual(
+      { ceiling: 20000 },
+    )
+    expect(parseStreamBoundaryArgs(["bitrate=auto"]).levers.bitrate).toEqual({
+      free: true,
+    })
+    expect(parseStreamBoundaryArgs(["bitrate=.."]).levers.bitrate).toEqual({
+      free: true,
+    })
   })
 
   it("normalizes bitrate units and outcome clamps", () => {
@@ -48,7 +63,10 @@ describe("stream adaptive boundaries", () => {
   })
 
   it("merges layers with last expression wins semantics", () => {
-    const defaults = parseStreamBoundaryArgs(["bitrate=5000..20000", "lean=cinematic"])
+    const defaults = parseStreamBoundaryArgs([
+      "bitrate=5000..20000",
+      "lean=cinematic",
+    ])
     const launch = parseStreamBoundaryArgs(["bitrate=..12000"])
     const live = parseStreamBoundaryArgs(["bitrate=auto", "lean=balanced"])
 
@@ -57,8 +75,23 @@ describe("stream adaptive boundaries", () => {
       levers: { bitrate: { free: true } },
       outcomes: {},
       lean: 0.5,
-      auto: undefined,
     })
+  })
+
+  it("omits undefined fields so boundary snapshots stay JSON-serializable", () => {
+    expect(defaultStreamBoundaries()).toEqual({ levers: {}, outcomes: {} })
+    expect(parseStreamBoundaryArgs(["auto=off"])).toEqual({
+      levers: {},
+      outcomes: {},
+      auto: "off",
+    })
+    expect(parseStreamBoundaryArgs(["bitrate=..20000"])).toEqual({
+      levers: { bitrate: { ceiling: 20000 } },
+      outcomes: {},
+    })
+    expect(JSON.stringify(parseStreamBoundaryArgs(["auto=off"]))).toBe(
+      '{"levers":{},"outcomes":{},"auto":"off"}',
+    )
   })
 
   it("serializes to an equivalent flat key set", () => {
@@ -84,20 +117,24 @@ describe("stream adaptive boundaries", () => {
   })
 
   it("rejects malformed or inverted ranges", () => {
-    expect(() => parseStreamBoundaryArgs(["bitrate=5000..20000..30000"])).toThrow(
-      /invalid range/i,
-    )
+    expect(() =>
+      parseStreamBoundaryArgs(["bitrate=5000..20000..30000"]),
+    ).toThrow(/invalid range/i)
     expect(() => parseStreamBoundaryArgs(["bitrate=20000..5000"])).toThrow(
       /floor.*ceiling/i,
     )
-    expect(() => parseStreamBoundaryArgs(["resolution=1280x720..640x360"])).toThrow(
-      /floor.*ceiling/i,
+    expect(() =>
+      parseStreamBoundaryArgs(["resolution=1280x720..640x360"]),
+    ).toThrow(/floor.*ceiling/i)
+    expect(() =>
+      parseStreamBoundaryArgs(["resolution=1920x720..1280x1080"]),
+    ).toThrow(/floor.*ceiling/i)
+    expect(() => parseStreamBoundaryArgs(["bitrate=mbps"])).toThrow(
+      /invalid|positive/i,
     )
-    expect(() => parseStreamBoundaryArgs(["resolution=1920x720..1280x1080"])).toThrow(
-      /floor.*ceiling/i,
+    expect(() => parseStreamBoundaryArgs(["max-latency=ms"])).toThrow(
+      /invalid|positive/i,
     )
-    expect(() => parseStreamBoundaryArgs(["bitrate=mbps"])).toThrow(/invalid|positive/i)
-    expect(() => parseStreamBoundaryArgs(["max-latency=ms"])).toThrow(/invalid|positive/i)
     expect(() => parseStreamBoundaryArgs(["lean="])).toThrow(/lean|invalid/i)
   })
 })

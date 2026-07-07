@@ -46,14 +46,17 @@ export type StreamBoundaryKey =
   | "min-fps"
 
 export function defaultStreamBoundaries(): StreamBoundaries {
-  return { levers: {}, outcomes: {}, lean: undefined, auto: undefined }
+  return { levers: {}, outcomes: {} }
 }
 
-export function parseStreamBoundaryArgs(args: readonly string[]): StreamBoundaries {
+export function parseStreamBoundaryArgs(
+  args: readonly string[],
+): StreamBoundaries {
   let boundaries = defaultStreamBoundaries()
   for (const expression of args) {
     const equals = expression.indexOf("=")
-    if (equals <= 0) throw new Error(`invalid boundary expression: ${expression}`)
+    if (equals <= 0)
+      throw new Error(`invalid boundary expression: ${expression}`)
     const key = expression.slice(0, equals) as StreamBoundaryKey
     const value = expression.slice(equals + 1)
     boundaries = applyBoundaryExpression(boundaries, key, value)
@@ -81,7 +84,9 @@ export function mergeStreamBoundaries(
   }, defaultStreamBoundaries())
 }
 
-export function serializeStreamBoundaries(boundaries: StreamBoundaries): string[] {
+export function serializeStreamBoundaries(
+  boundaries: StreamBoundaries,
+): string[] {
   const out: string[] = []
   if (boundaries.levers.bitrate) {
     out.push(`bitrate=${serializeNumericLever(boundaries.levers.bitrate)}`)
@@ -90,9 +95,12 @@ export function serializeStreamBoundaries(boundaries: StreamBoundaries): string[
     out.push(`fps=${serializeNumericLever(boundaries.levers.fps)}`)
   }
   if (boundaries.levers.resolution) {
-    out.push(`resolution=${serializeResolutionLever(boundaries.levers.resolution)}`)
+    out.push(
+      `resolution=${serializeResolutionLever(boundaries.levers.resolution)}`,
+    )
   }
-  if (boundaries.lean !== undefined) out.push(`lean=${formatNumber(boundaries.lean)}`)
+  if (boundaries.lean !== undefined)
+    out.push(`lean=${formatNumber(boundaries.lean)}`)
   if (boundaries.auto !== undefined) out.push(`auto=${boundaries.auto}`)
   if (boundaries.outcomes.maxLatencyMs !== undefined) {
     out.push(`max-latency=${formatNumber(boundaries.outcomes.maxLatencyMs)}ms`)
@@ -112,7 +120,10 @@ function applyBoundaryExpression(
     case "bitrate":
       return {
         ...boundaries,
-        levers: { ...boundaries.levers, bitrate: parseNumericLever(value, "bitrate") },
+        levers: {
+          ...boundaries.levers,
+          bitrate: parseNumericLever(value, "bitrate"),
+        },
       }
     case "fps":
       return {
@@ -122,12 +133,16 @@ function applyBoundaryExpression(
     case "resolution":
       return {
         ...boundaries,
-        levers: { ...boundaries.levers, resolution: parseResolutionLever(value) },
+        levers: {
+          ...boundaries.levers,
+          resolution: parseResolutionLever(value),
+        },
       }
     case "lean":
       return { ...boundaries, lean: parseLean(value) }
     case "auto":
-      if (value !== "on" && value !== "off") throw new Error("auto must be on or off")
+      if (value !== "on" && value !== "off")
+        throw new Error("auto must be on or off")
       return { ...boundaries, auto: value }
     case "max-latency":
       return {
@@ -137,25 +152,32 @@ function applyBoundaryExpression(
     case "min-fps":
       return {
         ...boundaries,
-        outcomes: { ...boundaries.outcomes, minDeliveredFps: parsePositiveNumber(value, "min-fps") },
+        outcomes: {
+          ...boundaries.outcomes,
+          minDeliveredFps: parsePositiveNumber(value, "min-fps"),
+        },
       }
     default:
       throw new Error(`unknown stream boundary key: ${key}`)
   }
 }
 
-function parseNumericLever(value: string, key: "bitrate" | "fps"): NumericLeverBoundary {
+function parseNumericLever(
+  value: string,
+  key: "bitrate" | "fps",
+): NumericLeverBoundary {
   if (value === "auto" || value === "..") return { free: true }
   const parts = value.split("..")
   if (parts.length > 2) throw new Error(`invalid range for ${key}: ${value}`)
   if (parts.length === 2) {
     const floor = parts[0] === "" ? undefined : parseLeverNumber(parts[0], key)
-    const ceiling = parts[1] === "" ? undefined : parseLeverNumber(parts[1], key)
+    const ceiling =
+      parts[1] === "" ? undefined : parseLeverNumber(parts[1], key)
     if (floor !== undefined && ceiling !== undefined && floor > ceiling) {
       throw new Error(`${key} floor must be <= ceiling`)
     }
     if (floor === undefined && ceiling === undefined) return { free: true }
-    return { floor, ceiling }
+    return definedNumericLever({ floor, ceiling })
   }
   const pinned = parseLeverNumber(value, key)
   return { floor: pinned, ceiling: pinned, pinned }
@@ -164,7 +186,8 @@ function parseNumericLever(value: string, key: "bitrate" | "fps"): NumericLeverB
 function parseResolutionLever(value: string): ResolutionLeverBoundary {
   if (value === "auto" || value === "..") return { free: true }
   const parts = value.split("..")
-  if (parts.length > 2) throw new Error(`invalid range for resolution: ${value}`)
+  if (parts.length > 2)
+    throw new Error(`invalid range for resolution: ${value}`)
   if (parts.length === 2) {
     const floor = parts[0] === "" ? undefined : parseResolution(parts[0])
     const ceiling = parts[1] === "" ? undefined : parseResolution(parts[1])
@@ -176,7 +199,7 @@ function parseResolutionLever(value: string): ResolutionLeverBoundary {
       throw new Error("resolution floor must be <= ceiling")
     }
     if (!floor && !ceiling) return { free: true }
-    return { floor, ceiling }
+    return definedResolutionLever({ floor, ceiling })
   }
   const pinned = parseResolution(value)
   return { floor: pinned, ceiling: pinned, pinned }
@@ -189,10 +212,14 @@ function parseLeverNumber(value: string, key: "bitrate" | "fps"): number {
 
 function parseBitrateKbps(value: string): number {
   const normalized = value.trim().toLowerCase()
-  if (normalized.endsWith("mbps")) return parsePositiveNumber(normalized.slice(0, -4), "bitrate") * 1000
-  if (normalized.endsWith("m")) return parsePositiveNumber(normalized.slice(0, -1), "bitrate") * 1000
-  if (normalized.endsWith("kbps")) return parsePositiveNumber(normalized.slice(0, -4), "bitrate")
-  if (normalized.endsWith("k")) return parsePositiveNumber(normalized.slice(0, -1), "bitrate")
+  if (normalized.endsWith("mbps"))
+    return parsePositiveNumber(normalized.slice(0, -4), "bitrate") * 1000
+  if (normalized.endsWith("m"))
+    return parsePositiveNumber(normalized.slice(0, -1), "bitrate") * 1000
+  if (normalized.endsWith("kbps"))
+    return parsePositiveNumber(normalized.slice(0, -4), "bitrate")
+  if (normalized.endsWith("k"))
+    return parsePositiveNumber(normalized.slice(0, -1), "bitrate")
   return parsePositiveNumber(normalized, "bitrate")
 }
 
@@ -213,7 +240,8 @@ function parsePositiveNumber(value: string, key: string): number {
 function parsePlainNumber(value: string, key: string): number {
   if (value.trim() === "") throw new Error(`invalid ${key} value: ${value}`)
   const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`invalid ${key} value: ${value}`)
+  if (!Number.isFinite(parsed) || parsed < 0)
+    throw new Error(`invalid ${key} value: ${value}`)
   return parsed
 }
 
@@ -222,7 +250,8 @@ function parseResolution(value: string): StreamAdaptiveResolution {
   if (!match) throw new Error(`invalid resolution value: ${value}`)
   const width = Number(match[1])
   const height = Number(match[2])
-  if (width <= 0 || height <= 0) throw new Error(`invalid resolution value: ${value}`)
+  if (width <= 0 || height <= 0)
+    throw new Error(`invalid resolution value: ${value}`)
   return { width, height }
 }
 
@@ -262,13 +291,39 @@ function formatNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : String(value)
 }
 
-function definedLeverEntries(levers: StreamAdaptiveLeverBoundaries): StreamAdaptiveLeverBoundaries {
+function definedNumericLever(
+  lever: NumericLeverBoundary,
+): NumericLeverBoundary {
   return Object.fromEntries(
-    Object.entries(levers).filter(([, value]) => value !== undefined),
-  ) as StreamAdaptiveLeverBoundaries
+    Object.entries(lever).filter(([, value]) => value !== undefined),
+  ) as NumericLeverBoundary
 }
 
-function definedOutcomeEntries(outcomes: StreamAdaptiveOutcomeBoundaries): StreamAdaptiveOutcomeBoundaries {
+function definedResolutionLever(
+  lever: ResolutionLeverBoundary,
+): ResolutionLeverBoundary {
+  return Object.fromEntries(
+    Object.entries(lever).filter(([, value]) => value !== undefined),
+  ) as ResolutionLeverBoundary
+}
+
+function definedLeverEntries(
+  levers: StreamAdaptiveLeverBoundaries,
+): StreamAdaptiveLeverBoundaries {
+  const entries = Object.entries(levers)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => [
+      key,
+      key === "resolution"
+        ? definedResolutionLever(value as ResolutionLeverBoundary)
+        : definedNumericLever(value as NumericLeverBoundary),
+    ])
+  return Object.fromEntries(entries) as StreamAdaptiveLeverBoundaries
+}
+
+function definedOutcomeEntries(
+  outcomes: StreamAdaptiveOutcomeBoundaries,
+): StreamAdaptiveOutcomeBoundaries {
   return Object.fromEntries(
     Object.entries(outcomes).filter(([, value]) => value !== undefined),
   ) as StreamAdaptiveOutcomeBoundaries
