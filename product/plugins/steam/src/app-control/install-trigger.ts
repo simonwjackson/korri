@@ -1,5 +1,13 @@
+import { Effect } from "effect"
 import { sanitizeSteamEvidenceExcerpt } from "../observability/evidence-sanitizer"
 import { collectSteamInstallSnapshot } from "../observability/install-state"
+import {
+  materializeSteamDesiredState,
+  noopSteamLifecycle,
+  type SteamLifecycle,
+  type SteamStateFileSystem,
+  type SteamStateLock,
+} from "../state-materializer"
 import {
   findActiveSteamInstallRequest,
   upsertSteamInstallRequest,
@@ -10,6 +18,10 @@ export interface SteamInstallTriggerInput {
   readonly mode?: "install" | "update"
   readonly authorized?: boolean
   readonly helperPath?: string
+  readonly prepare?: (input: {
+    readonly appId: string
+    readonly mode: "install" | "update"
+  }) => Promise<void>
   readonly spawn?: (
     command: string,
     args: readonly string[],
@@ -20,6 +32,34 @@ export interface SteamInstallSpawnResult {
   readonly exitCode: number
   readonly stdout?: string
   readonly stderr?: string
+}
+
+export interface PrepareSteamAppInstallStateInput {
+  readonly appId: string
+  readonly stateRoot: string
+  readonly compatTool: string
+  readonly fs?: SteamStateFileSystem
+  readonly lifecycle?: SteamLifecycle
+  readonly lock?: SteamStateLock
+}
+
+export async function prepareSteamAppInstallState(
+  input: PrepareSteamAppInstallStateInput,
+): Promise<void> {
+  await Effect.runPromise(
+    materializeSteamDesiredState({
+      desired: {
+        stateRoot: input.stateRoot,
+        target: `steam://rungameid/${input.appId}`,
+        defaultCompatTool: input.compatTool,
+        suppressInterstitials: true,
+        acceptEulas: true,
+      },
+      fs: input.fs,
+      lifecycle: input.lifecycle ?? noopSteamLifecycle,
+      lock: input.lock,
+    }),
+  )
 }
 
 export async function requestSteamAppInstall(input: SteamInstallTriggerInput) {
@@ -71,6 +111,20 @@ export async function requestSteamAppInstall(input: SteamInstallTriggerInput) {
       message: "Steam install helper is not configured",
     }
   }
+  if (input.prepare) {
+    try {
+      await input.prepare({ appId: input.appId, mode: input.mode ?? "install" })
+    } catch (error) {
+      return {
+        outcome: "rejected" as const,
+        state: "failed" as const,
+        requestId: rejectedRequestId,
+        message: sanitizeSteamEvidenceExcerpt(errorMessage(error), {
+          maxLength: 180,
+        }),
+      }
+    }
+  }
   const spawn = input.spawn ?? spawnCommand
   const result = await spawn(helper, [input.appId])
   if (result.exitCode !== 0) {
@@ -96,6 +150,11 @@ export async function requestSteamAppInstall(input: SteamInstallTriggerInput) {
     observedAt: new Date().toISOString(),
     message: "Steam install request accepted",
   }
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.length > 0) return error.message
+  return String(error)
 }
 
 async function spawnCommand(

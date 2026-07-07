@@ -1,6 +1,9 @@
 import { plugin } from "@platform/plugin"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
-import { requestSteamAppInstall } from "./app-control/install-trigger"
+import {
+  prepareSteamAppInstallState,
+  requestSteamAppInstall,
+} from "./app-control/install-trigger"
 import { steamInstalledAppsDiscoveryProvider } from "./discovery"
 import {
   KORRI_STEAM_APP_ID,
@@ -176,10 +179,22 @@ export const steamPlugin = plugin({
         id: "steam.install.request",
         operation: "install.request",
         capabilities: ["install.request"],
-        run: context =>
-          requestSteamAppInstall(
-            context.input as Parameters<typeof requestSteamAppInstall>[0],
-          ),
+        run: context => {
+          const input = context.input as Parameters<
+            typeof requestSteamAppInstall
+          >[0]
+          return requestSteamAppInstall({
+            ...input,
+            prepare:
+              input.prepare ??
+              (({ appId }) =>
+                prepareSteamAppInstallState({
+                  appId,
+                  stateRoot: process.env.STEAM_HOME ?? "/var/lib/korri/steam",
+                  compatTool: DEFAULT_STEAM_COMPAT_TOOL,
+                })),
+          })
+        },
       },
       {
         id: "steam.install.status",
