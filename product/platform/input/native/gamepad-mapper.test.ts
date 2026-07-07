@@ -288,18 +288,54 @@ describe("createNativeGamepadMapper", () => {
     ])
   })
 
-  it("reset clears held directions, pressed buttons, and axes", async () => {
+  it("clearInputState stops active input without dropping device metadata", async () => {
     const { emitted, mapper, send } = createMapper({
       repeatDelayMs: 20,
       repeatIntervalMs: 10,
     })
 
-    send({ code: BTN_DPAD_RIGHT, value: 1 })
-    send({ code: BTN_A, value: 1 })
-    send({ type: EV_ABS, code: ABS_X, value: 20_000 })
+    mapper.configureDevice({
+      deviceId: "rocknix-pad",
+      axes: [
+        { code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 },
+        { code: ABS_Y, minimum: -1_408, maximum: 1_408, flat: 0 },
+      ],
+    })
+    send({ deviceId: "rocknix-pad", code: BTN_DPAD_RIGHT, value: 1 })
+    send({ deviceId: "rocknix-pad", code: BTN_A, value: 1 })
+    mapper.clearInputState()
+    await Bun.sleep(50)
+    send({ deviceId: "rocknix-pad", code: BTN_A, value: 1 })
+    send({ deviceId: "rocknix-pad", type: EV_ABS, code: ABS_X, value: 1_000 })
+
+    expect(emitted).toEqual([
+      { type: "direction", direction: "right", source: "native" },
+      { type: "confirm", source: "native" },
+      { type: "confirm", source: "native" },
+      { type: "direction", direction: "right", source: "native" },
+    ])
+  })
+
+  it("reset clears held directions, pressed buttons, axes, and metadata", async () => {
+    const { emitted, mapper, send } = createMapper({
+      repeatDelayMs: 20,
+      repeatIntervalMs: 10,
+    })
+
+    mapper.configureDevice({
+      deviceId: "rocknix-pad",
+      axes: [
+        { code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 },
+        { code: ABS_Y, minimum: -1_408, maximum: 1_408, flat: 0 },
+      ],
+    })
+    send({ deviceId: "rocknix-pad", code: BTN_DPAD_RIGHT, value: 1 })
+    send({ deviceId: "rocknix-pad", code: BTN_A, value: 1 })
+    send({ deviceId: "rocknix-pad", type: EV_ABS, code: ABS_X, value: 1_000 })
     mapper.reset()
     await Bun.sleep(50)
-    send({ code: BTN_A, value: 1 })
+    send({ deviceId: "rocknix-pad", code: BTN_A, value: 1 })
+    send({ deviceId: "rocknix-pad", type: EV_ABS, code: ABS_X, value: 1_000 })
 
     expect(emitted).toEqual([
       { type: "direction", direction: "right", source: "native" },

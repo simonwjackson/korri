@@ -10,9 +10,14 @@ import type { RuntimeConfig } from "../desktop/runtime-config-shape"
  * from inputd through the page-side native WebSocket adapter. Non-desktop/dev
  * runs keep browser gamepad input.
  */
+export interface SpatialNavigationConfigOptions {
+  readonly isInputActive?: () => boolean
+}
+
 export function buildSpatialNavigationConfig(
   runtime: RuntimeConfig,
   profile: ControllerInputProfile,
+  options: SpatialNavigationConfigOptions = {},
 ): StartSpatialNavigationOptions {
   return {
     diagnostics: true,
@@ -20,9 +25,17 @@ export function buildSpatialNavigationConfig(
       profile,
       native:
         runtime.desktopInput && runtime.nativeInputdUrl
-          ? { url: runtime.nativeInputdUrl }
+          ? {
+              url: runtime.nativeInputdUrl,
+              isActive: options.isInputActive ?? browserSurfaceIsInputActive,
+            }
           : undefined,
       desktop: undefined,
     },
   }
+}
+
+export function browserSurfaceIsInputActive(): boolean {
+  if (typeof document === "undefined") return true
+  return document.visibilityState !== "hidden" && document.hasFocus()
 }

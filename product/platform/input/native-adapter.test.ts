@@ -279,6 +279,53 @@ describe("createNativeInputAdapter", () => {
     expect(emitted).toEqual([{ type: "system", source: "native" }])
   })
 
+  it("suppresses portal actions while the surface is inactive", async () => {
+    const server = createInputServer()
+    let active = false
+    const emitted = startAdapter(server, {
+      subscribe: ["gamepad", "system"],
+      isActive: () => active,
+    })
+    await waitForSubscription(server)
+
+    server.send(inputEvent({ code: 304, value: 1 }))
+    server.send({
+      kind: "action",
+      class: "system",
+      action: "system",
+      timestamp: Date.now(),
+    })
+    await Bun.sleep(30)
+
+    active = true
+    server.send(inputEvent({ code: 304, value: 1 }))
+
+    await waitFor(() => emitted.length === 1, "active surface action")
+    expect(emitted).toEqual([{ type: "confirm", source: "native" }])
+  })
+
+  it("resets held native input when the surface becomes inactive", async () => {
+    const server = createInputServer()
+    let active = true
+    const emitted = startAdapter(server, {
+      isActive: () => active,
+      repeatDelayMs: 20,
+      repeatIntervalMs: 10,
+    })
+    await waitForSubscription(server)
+
+    server.send(inputEvent({ code: 547, value: 1 }))
+    await waitFor(() => emitted.length >= 1, "initial focused action")
+
+    active = false
+    server.send(inputEvent({ code: 547, value: 1 }))
+    await Bun.sleep(60)
+
+    expect(emitted).toEqual([
+      { type: "direction", direction: "right", source: "native" },
+    ])
+  })
+
   it("ignores non-gamepad input events and device lifecycle events", async () => {
     const server = createInputServer()
     const emitted = startAdapter(server)

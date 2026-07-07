@@ -27,6 +27,14 @@ export interface NativeInputAdapterOptions extends NativeGamepadMapperOptions {
   readonly url: string
   readonly subscribe?: readonly NativeInputDeviceClass[]
   readonly reconnect?: NativeInputReconnectOptions
+  /**
+   * Whether the browser surface currently owns ordinary input.
+   *
+   * Native input arrives over WebSocket, bypassing browser focus routing. Kiosk
+   * lane mode keeps Chromium alive while games are foreground, so the adapter
+   * must explicitly drop actions unless the Chromium surface is active/focused.
+   */
+  readonly isActive?: () => boolean
 }
 
 export function createNativeInputAdapter(
@@ -51,6 +59,7 @@ export function createNativeInputAdapter(
       }
 
       const mapper = createNativeGamepadMapper(options)
+      const surfaceIsActive = options.isActive ?? (() => true)
       let socket: WebSocket | undefined
       let disposed = false
       let reconnectTimer: ReturnType<typeof setTimeout> | undefined
@@ -79,6 +88,10 @@ export function createNativeInputAdapter(
               JSON.parse(String(event.data)),
             )
             if (decoded.kind === "action") {
+              if (!surfaceIsActive()) {
+                mapper.clearInputState()
+                return
+              }
               if (decoded.action === "system") {
                 diagnosticEmit({ type: "system", source: "native" })
               }
@@ -96,6 +109,10 @@ export function createNativeInputAdapter(
             }
             if (decoded.kind !== "input") return
             if (decoded.class !== "gamepad") return
+            if (!surfaceIsActive()) {
+              mapper.clearInputState()
+              return
+            }
             mapper.handle(decoded, diagnosticEmit)
           } catch (error) {
             logger.warn({ err: error }, "ignored malformed native input frame")

@@ -9,11 +9,15 @@ describe("buildSpatialNavigationConfig", () => {
       desktopInput: true,
       nativeInputdUrl: "ws://127.0.0.1:3002",
     }
-    expect(buildSpatialNavigationConfig(runtime, "auto")).toEqual({
+    const isInputActive = () => true
+
+    expect(
+      buildSpatialNavigationConfig(runtime, "auto", { isInputActive }),
+    ).toEqual({
       diagnostics: true,
       controller: {
         profile: "auto",
-        native: { url: "ws://127.0.0.1:3002" },
+        native: { url: "ws://127.0.0.1:3002", isActive: isInputActive },
         desktop: undefined,
       },
     })
@@ -33,6 +37,22 @@ describe("buildSpatialNavigationConfig", () => {
       diagnostics: true,
       controller: { profile: "auto", native: undefined, desktop: undefined },
     })
+  })
+
+  it("uses browser focus as the default desktop input activity gate", () => {
+    const runtime: RuntimeConfig = {
+      desktopInput: true,
+      nativeInputdUrl: "ws://127.0.0.1:3002",
+    }
+
+    const controller = buildSpatialNavigationConfig(runtime, "auto").controller
+    if (typeof controller !== "object" || controller === null) {
+      throw new Error("expected object controller config")
+    }
+    const native = controller.native
+    if (!native) throw new Error("expected native input config")
+
+    expect(native.isActive?.()).toBe(document.hasFocus())
   })
 
   it("propagates the controller profile", () => {

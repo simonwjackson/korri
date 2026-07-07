@@ -64,6 +64,7 @@ export interface NativeGamepadMapper {
   configureDevice(device: NativeGamepadDeviceInfo): void
   clearDevice(deviceId: string): void
   handle(event: NativeGamepadInputEvent, emit: InputListener): void
+  clearInputState(): void
   reset(): void
 }
 
@@ -144,10 +145,14 @@ export function createNativeGamepadMapper(
     axisInfo.delete(deviceId)
   }
 
-  const reset = () => {
+  const clearInputState = () => {
     for (const key of [...holds.keys()]) stopHold(key)
     pressedButtons.clear()
     axes.clear()
+  }
+
+  const reset = () => {
+    clearInputState()
     axisInfo.clear()
   }
 
@@ -182,6 +187,7 @@ export function createNativeGamepadMapper(
         })
       }
     },
+    clearInputState,
     reset,
   }
 }
