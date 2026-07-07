@@ -15,6 +15,7 @@ export interface ControlLaunchRequest {
   readonly userId?: string
   readonly profileId?: string
   readonly override?: EphemeralOverride
+  readonly streamBoundaryArgs?: readonly string[]
 }
 
 export type ControlDryRunLaunchRequest = ControlLaunchRequest

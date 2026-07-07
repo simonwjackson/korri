@@ -252,6 +252,64 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     ])
   })
 
+  it("launches remote-source Moonlight at bitrate startup while retaining ceiling", async () => {
+    let dispatchedSpec:
+      | { command: string; args: ReadonlyArray<string> }
+      | undefined
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+
+    await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+        streamBoundaryArgs: ["--bitrate=500k..6m..40m"],
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: (_controlUrl, gameId) =>
+              Effect.succeed({
+                status: "prepared" as const,
+                gameId,
+                sessionId: "sess-startup",
+              }),
+            launchedSpec: spec => {
+              dispatchedSpec = spec
+            },
+            localPolicy: {
+              launchCompanions: {},
+              moonlight: {
+                stream: {
+                  bitrateKbps: 40_000,
+                  fps: 120,
+                  resolution: { width: 1920, height: 1080 },
+                },
+              },
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(dispatchedSpec?.args).toEqual([
+      "stream",
+      "-width",
+      "1920",
+      "-height",
+      "1080",
+      "-fps",
+      "120",
+      "-bitrate",
+      "6000",
+      "-app",
+      "Korri Stream",
+      "aka.local",
+    ])
+  })
+
   it("injects typed local-control env for remote-source launches before dispatch", async () => {
     let dispatchedSpec:
       | {

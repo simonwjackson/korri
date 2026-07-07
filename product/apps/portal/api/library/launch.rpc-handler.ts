@@ -23,10 +23,12 @@ import {
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
+import { parseStreamBoundaryArgs } from "@platform/stream/stream-adaptive-boundaries"
 import {
   isMoonlightRuntimeSessionEnabled,
   moonlightControlEnvForHandle,
   moonlightControlHandleFromOptions,
+  moonlightPolicyWithStartupBitrate,
   registerMoonlightControlRuntimeSession,
 } from "@product/apps/portal/stream/moonlight-launcher"
 import type { RemotePrepareResult } from "@product/apps/portal/stream/remote-stream-client"
@@ -501,6 +503,11 @@ function handleRemoteSourceLaunch(
           })
     if (localPolicyResult._tag === "failed") return localPolicyResult.response
     const localPolicy = localPolicyResult.policy
+    const adaptiveBoundaries = streamBoundariesFromPayload(payload)
+    const moonlightPolicy = moonlightPolicyWithStartupBitrate(
+      localPolicy.moonlight,
+      adaptiveBoundaries,
+    )
 
     const inputDevice = yield* Effect.tryPromise({
       try: () =>
@@ -534,7 +541,7 @@ function handleRemoteSourceLaunch(
       try: () =>
         composeMoonlightLaunchSpec({
           host,
-          moonlight: localPolicy.moonlight,
+          moonlight: moonlightPolicy,
           registry: streamRegistry,
           ...(inputDevice.path ? { inputDevices: [inputDevice.path] } : {}),
           ...(moonlightControl
@@ -604,6 +611,7 @@ function handleRemoteSourceLaunch(
           registerMoonlightControlRuntimeSession({
             control: moonlightControl,
             startStreamRuntimeSession: startMoonlightStreamRuntimeSession,
+            ...(adaptiveBoundaries ? { adaptiveBoundaries } : {}),
           })
         }, 0)
         timer.unref?.()
@@ -691,6 +699,7 @@ function nextLaunchFallbackPayload(
     profileId: next.profileId,
     presetId: next.presetId,
     override: payload.override,
+    streamBoundaryArgs: payload.streamBoundaryArgs,
     launchAlternatives: remaining.slice(1),
   }
 }
@@ -759,6 +768,13 @@ function remotePrepareCategoryToFailureKind(
     case "prepare-failed":
       return "prepare-failed"
   }
+}
+
+function streamBoundariesFromPayload(payload: LaunchPayload) {
+  if (!payload.streamBoundaryArgs || payload.streamBoundaryArgs.length === 0) {
+    return undefined
+  }
+  return parseStreamBoundaryArgs(payload.streamBoundaryArgs)
 }
 
 function moonlightHostFromPeerControlUrl(

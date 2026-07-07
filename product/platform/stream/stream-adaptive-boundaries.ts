@@ -58,7 +58,10 @@ export function parseStreamBoundaryArgs(
     const equals = expression.indexOf("=")
     if (equals <= 0)
       throw new Error(`invalid boundary expression: ${expression}`)
-    const key = expression.slice(0, equals) as StreamBoundaryKey
+    const rawKey = expression.slice(0, equals)
+    const key = rawKey.startsWith("--")
+      ? (rawKey.slice(2) as StreamBoundaryKey)
+      : (rawKey as StreamBoundaryKey)
     const value = expression.slice(equals + 1)
     boundaries = applyBoundaryExpression(boundaries, key, value)
   }

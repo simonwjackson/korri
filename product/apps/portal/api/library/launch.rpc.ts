@@ -25,6 +25,7 @@ export class LaunchLibraryPayload extends Schema.Class<LaunchLibraryPayload>(
   /** @deprecated use profileId. */
   presetId: Schema.optional(Schema.Union([Schema.String, Schema.Null])),
   override: Schema.optional(EphemeralOverride),
+  streamBoundaryArgs: Schema.optional(Schema.Array(Schema.String)),
   launchAlternatives: Schema.optional(Schema.Array(LaunchAlternative)),
 }) {}
 

@@ -99,6 +99,11 @@ interface MoonlightLaunchPolicyView {
   readonly command?: string
   readonly control?: MoonlightControlPolicyView
   readonly input?: { readonly devices?: readonly string[] }
+  readonly stream?: {
+    readonly bitrateKbps?: number | null
+    readonly fps?: number
+    readonly resolution?: { readonly width?: number; readonly height?: number }
+  }
 }
 
 export interface MoonlightStreamRuntimeOptions {
@@ -143,7 +148,10 @@ export async function launchMoonlight(
   const inputDevice = await moonlightInputDevice(options)
   if (inputDevice.status === "failed") return inputDevice
 
-  const policy = (options.moonlight ?? {}) as MoonlightLaunchPolicyView
+  const policy = moonlightPolicyWithStartupBitrate(
+    options.moonlight,
+    options.adaptiveBoundaries,
+  ) as MoonlightLaunchPolicyView
   const moonlightControl = await moonlightControlHandleFromOptions(
     options.moonlightControl,
     policy.control,
@@ -268,6 +276,22 @@ async function composeMoonlightWithLaunchCompanions(
   } catch (error) {
     return { _tag: "failed", status: "failed", message: errorMessage(error) }
   }
+}
+
+export function moonlightPolicyWithStartupBitrate(
+  policy: StreamerPolicy | undefined,
+  boundaries: StreamBoundaries | undefined,
+): StreamerPolicy | undefined {
+  const startup = boundaries?.levers.bitrate?.startup
+  if (startup === undefined) return policy ?? ({} as StreamerPolicy)
+  const view = (policy ?? {}) as MoonlightLaunchPolicyView
+  return {
+    ...view,
+    stream: {
+      ...(view.stream ?? {}),
+      bitrateKbps: startup,
+    },
+  } as StreamerPolicy
 }
 
 function resolveStreamRegistry(

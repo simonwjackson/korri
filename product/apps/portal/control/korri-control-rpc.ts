@@ -87,6 +87,9 @@ export function createKorriControlRpc(
               ...(request.override !== undefined
                 ? { override: request.override }
                 : {}),
+              ...(request.streamBoundaryArgs !== undefined
+                ? { streamBoundaryArgs: [...request.streamBoundaryArgs] }
+                : {}),
             }),
           ),
         ),

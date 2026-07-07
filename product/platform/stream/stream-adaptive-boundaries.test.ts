@@ -44,6 +44,9 @@ describe("stream adaptive boundaries", () => {
       parseStreamBoundaryArgs(["bitrate=500k..6m..40m"]).levers.bitrate,
     ).toEqual({ floor: 500, startup: 6000, ceiling: 40000 })
     expect(
+      parseStreamBoundaryArgs(["--bitrate=500k..6m..40m"]).levers.bitrate,
+    ).toEqual({ floor: 500, startup: 6000, ceiling: 40000 })
+    expect(
       parseStreamBoundaryArgs(["bitrate=..6m..40m"]).levers.bitrate,
     ).toEqual({ startup: 6000, ceiling: 40000 })
     expect(

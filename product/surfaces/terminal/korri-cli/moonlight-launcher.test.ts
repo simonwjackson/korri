@@ -117,6 +117,30 @@ describe("moonlight launcher", () => {
     ])
   })
 
+  it("launches Moonlight with bitrate startup while retaining adaptive ceiling", async () => {
+    const calls: string[] = []
+    const result = await launchMoonlight({
+      host: "aka.local",
+      moonlight: {
+        stream: {
+          bitrateKbps: 40_000,
+          fps: 120,
+          resolution: { width: 1920, height: 1080 },
+        },
+      },
+      adaptiveBoundaries: {
+        levers: { bitrate: { floor: 500, startup: 6_000, ceiling: 40_000 } },
+        outcomes: {},
+      },
+      runner: recordingRunner(calls),
+    })
+
+    expect(result).toEqual({ status: "started", command: "moonlight" })
+    expect(calls).toEqual([
+      "moonlight stream -width 1920 -height 1080 -fps 120 -bitrate 6000 -app Korri Stream aka.local",
+    ])
+  })
+
   it("uses typed Moonlight command and does not read KORRI_MOONLIGHT_COMMAND", async () => {
     const previous = Bun.env.KORRI_MOONLIGHT_COMMAND
     const calls: string[] = []
