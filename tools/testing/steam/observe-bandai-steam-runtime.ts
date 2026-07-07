@@ -10,25 +10,16 @@ interface SectionMap {
   readonly [name: string]: readonly string[]
 }
 
-const args = new Map<string, string>()
-for (let index = 2; index < Bun.argv.length; index += 1) {
-  const arg = Bun.argv[index]
-  const next = Bun.argv[index + 1]
-  if (arg.startsWith("--") && next && !next.startsWith("--")) {
-    args.set(arg.slice(2), next)
-    index += 1
-  }
+export interface SteamRuntimeClassificationOptions {
+  readonly appId?: string
+  readonly sinceMarker?: string
 }
 
-const host = args.get("host") ?? "bandai-guest-ip"
-const sshConfig = args.get("ssh-config") ?? "/tmp/bandai-deploy/ssh_config_ip"
-const steamHome = args.get("steam-home") ?? "/var/lib/korri/steam"
-const appId = args.get("app-id") ?? "1029210"
-const expectedExe = args.get("expected-exe") ?? "30XX.exe"
-const pollSeconds = Number(args.get("poll-seconds") ?? "45")
-const pollIntervalSeconds = Number(args.get("poll-interval-seconds") ?? "5")
-
-async function runRemote(script: string): Promise<RemoteResult> {
+async function runRemote(
+  sshConfig: string,
+  host: string,
+  script: string,
+): Promise<RemoteResult> {
   const proc = Bun.spawn(["ssh", "-F", sshConfig, host, "bash", "-s"], {
     stdin: "pipe",
     stdout: "pipe",
@@ -42,6 +33,19 @@ async function runRemote(script: string): Promise<RemoteResult> {
     proc.exited,
   ])
   return { stdout, stderr, exitCode }
+}
+
+function parseArgs(argv: readonly string[]): Map<string, string> {
+  const args = new Map<string, string>()
+  for (let index = 2; index < argv.length; index += 1) {
+    const arg = argv[index]
+    const next = argv[index + 1]
+    if (arg.startsWith("--") && next && !next.startsWith("--")) {
+      args.set(arg.slice(2), next)
+      index += 1
+    }
+  }
+  return args
 }
 
 function parseSections(stdout: string): SectionMap {
@@ -60,20 +64,34 @@ function parseSections(stdout: string): SectionMap {
   return sections
 }
 
-function classifyTranscript(transcript: string) {
+export function classifyTranscript(
+  transcript: string,
+  options: SteamRuntimeClassificationOptions = {},
+) {
+  const currentTranscript = options.sinceMarker
+    ? (transcript.split(options.sinceMarker).at(-1) ?? transcript)
+    : transcript
   const realProtonCachyos =
-    /compatibilitytools\.d\/proton-cachyos-11\.0-20260601-slr-arm64\/proton/.test(
-      transcript,
-    )
-  const steamLinuxRuntime4 = /SteamLinuxRuntime_4\//.test(transcript)
-  const steamLinuxRuntimeSniper = /SteamLinuxRuntime_sniper\//.test(transcript)
+    /compatibilitytools\.d\/proton-cachyos-11\.0-20260601-slr-arm64(?:\/.*)?\/proton/.test(
+      currentTranscript,
+    ) || /\/nix\/store\/[^\s]*proton-cachyos-arm64[^\s]*\/dist\/proton/.test(currentTranscript)
+  const steamLinuxRuntime4 = /SteamLinuxRuntime_4\//.test(currentTranscript)
+  const steamLinuxRuntimeSniper = /SteamLinuxRuntime_sniper\//.test(
+    currentTranscript,
+  )
   const officialProtonFallback =
-    /steamapps\/common\/Proton(?:\s|-)/.test(transcript) && !realProtonCachyos
+    /steamapps\/common\/Proton(?:\s|-)/.test(currentTranscript) &&
+    !realProtonCachyos
   const execFormat = /Exec format error|cannot execute binary file/.test(
-    transcript,
+    currentTranscript,
   )
   const runtimeHelperExecFormat =
-    execFormat && /pressure-vessel|pv-adverb|srt-bwrap/.test(transcript)
+    execFormat && /pressure-vessel|pv-adverb|srt-bwrap/.test(currentTranscript)
+  const processRemoved = options.appId
+    ? new RegExp(`Game process removed ?:? AppID ${escapeRegExp(options.appId)}`).test(
+        currentTranscript,
+      )
+    : /Game process removed ?:? AppID \d+/.test(currentTranscript)
 
   const launchChain = (() => {
     if (runtimeHelperExecFormat && steamLinuxRuntime4)
@@ -96,15 +114,30 @@ function classifyTranscript(transcript: string) {
       officialProtonFallback,
       execFormat,
       runtimeHelperExecFormat,
+      processRemoved,
     },
   }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 function shellSingleQuote(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`
 }
 
-const remoteScript = String.raw`
+async function main(argv: readonly string[]): Promise<number> {
+  const args = parseArgs(argv)
+  const host = args.get("host") ?? "bandai-guest-ip"
+  const sshConfig = args.get("ssh-config") ?? "/tmp/bandai-deploy/ssh_config_ip"
+  const steamHome = args.get("steam-home") ?? "/var/lib/korri/steam"
+  const appId = args.get("app-id") ?? "1029210"
+  const expectedExe = args.get("expected-exe") ?? "30XX.exe"
+  const pollSeconds = Number(args.get("poll-seconds") ?? "45")
+  const pollIntervalSeconds = Number(args.get("poll-interval-seconds") ?? "5")
+
+  const remoteScript = String.raw`
 set -u
 steam_home=__STEAM_HOME__
 app_id=__APP_ID__
@@ -140,38 +173,44 @@ while [ "$(date +%s)" -le "$deadline" ]; do
   sleep "$interval"
 done
 `
-  .replaceAll("__STEAM_HOME__", shellSingleQuote(steamHome))
-  .replaceAll("__APP_ID__", shellSingleQuote(appId))
-  .replaceAll("__EXPECTED_EXE__", shellSingleQuote(expectedExe))
-  .replaceAll("__POLL_SECONDS__", String(pollSeconds))
-  .replaceAll("__POLL_INTERVAL_SECONDS__", String(pollIntervalSeconds))
+    .replaceAll("__STEAM_HOME__", shellSingleQuote(steamHome))
+    .replaceAll("__APP_ID__", shellSingleQuote(appId))
+    .replaceAll("__EXPECTED_EXE__", shellSingleQuote(expectedExe))
+    .replaceAll("__POLL_SECONDS__", String(pollSeconds))
+    .replaceAll("__POLL_INTERVAL_SECONDS__", String(pollIntervalSeconds))
 
-const result = await runRemote(remoteScript)
-if (result.exitCode !== 0) {
-  console.error(result.stderr)
-  console.error(result.stdout)
-  process.exit(result.exitCode)
+  const result = await runRemote(sshConfig, host, remoteScript)
+  if (result.exitCode !== 0) {
+    console.error(result.stderr)
+    console.error(result.stdout)
+    return result.exitCode
+  }
+
+  const sections = parseSections(result.stdout)
+  const transcript = [
+    ...(sections.PROCESSES ?? []),
+    ...(sections.CONSOLE ?? []),
+    ...(sections.JOURNAL ?? []),
+  ].join("\n")
+
+  const report = {
+    host,
+    appId,
+    expectedExe,
+    steamHome,
+    poll: { seconds: pollSeconds, intervalSeconds: pollIntervalSeconds },
+    classification: classifyTranscript(transcript, { appId }),
+    evidence: {
+      processes: (sections.PROCESSES ?? []).slice(-80),
+      console: (sections.CONSOLE ?? []).slice(-80),
+      journal: (sections.JOURNAL ?? []).slice(-80),
+    },
+  }
+
+  console.log(JSON.stringify(report, null, 2))
+  return 0
 }
 
-const sections = parseSections(result.stdout)
-const transcript = [
-  ...(sections.PROCESSES ?? []),
-  ...(sections.CONSOLE ?? []),
-  ...(sections.JOURNAL ?? []),
-].join("\n")
-
-const report = {
-  host,
-  appId,
-  expectedExe,
-  steamHome,
-  poll: { seconds: pollSeconds, intervalSeconds: pollIntervalSeconds },
-  classification: classifyTranscript(transcript),
-  evidence: {
-    processes: (sections.PROCESSES ?? []).slice(-80),
-    console: (sections.CONSOLE ?? []).slice(-80),
-    journal: (sections.JOURNAL ?? []).slice(-80),
-  },
+if (import.meta.main) {
+  process.exit(await main(Bun.argv))
 }
-
-console.log(JSON.stringify(report, null, 2))
