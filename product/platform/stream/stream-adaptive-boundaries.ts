@@ -5,6 +5,7 @@ export interface StreamAdaptiveResolution {
 
 export interface NumericLeverBoundary {
   readonly floor?: number
+  readonly startup?: number
   readonly ceiling?: number
   readonly pinned?: number
   readonly free?: boolean
@@ -168,7 +169,31 @@ function parseNumericLever(
 ): NumericLeverBoundary {
   if (value === "auto" || value === "..") return { free: true }
   const parts = value.split("..")
-  if (parts.length > 2) throw new Error(`invalid range for ${key}: ${value}`)
+  if (parts.length > 3) throw new Error(`invalid range for ${key}: ${value}`)
+  if (parts.length === 3) {
+    if (key !== "bitrate") {
+      throw new Error(
+        `${key} startup is not supported; launch fps/resolution define the current envelope`,
+      )
+    }
+    const floor = parts[0] === "" ? undefined : parseLeverNumber(parts[0], key)
+    const startup = parts[1] === "" ? undefined : parseLeverNumber(parts[1], key)
+    const ceiling =
+      parts[2] === "" ? undefined : parseLeverNumber(parts[2], key)
+    if (startup === undefined) {
+      throw new Error("bitrate startup must be provided in floor..startup..ceiling")
+    }
+    if (floor !== undefined && floor > startup) {
+      throw new Error("bitrate startup must be >= floor")
+    }
+    if (ceiling !== undefined && startup > ceiling) {
+      throw new Error("bitrate startup must be <= ceiling")
+    }
+    if (floor === undefined && ceiling === undefined) {
+      return definedNumericLever({ startup })
+    }
+    return definedNumericLever({ floor, startup, ceiling })
+  }
   if (parts.length === 2) {
     const floor = parts[0] === "" ? undefined : parseLeverNumber(parts[0], key)
     const ceiling =
@@ -187,7 +212,9 @@ function parseResolutionLever(value: string): ResolutionLeverBoundary {
   if (value === "auto" || value === "..") return { free: true }
   const parts = value.split("..")
   if (parts.length > 2)
-    throw new Error(`invalid range for resolution: ${value}`)
+    throw new Error(
+      "resolution startup is not supported; launch resolution defines the current envelope",
+    )
   if (parts.length === 2) {
     const floor = parts[0] === "" ? undefined : parseResolution(parts[0])
     const ceiling = parts[1] === "" ? undefined : parseResolution(parts[1])
@@ -270,6 +297,11 @@ function parseLean(value: string): number {
 function serializeNumericLever(lever: NumericLeverBoundary): string {
   if (lever.free) return "auto"
   if (lever.pinned !== undefined) return formatNumber(lever.pinned)
+  if (lever.startup !== undefined) {
+    return `${lever.floor === undefined ? "" : formatNumber(lever.floor)}..${formatNumber(lever.startup)}..${
+      lever.ceiling === undefined ? "" : formatNumber(lever.ceiling)
+    }`
+  }
   return `${lever.floor === undefined ? "" : formatNumber(lever.floor)}..${
     lever.ceiling === undefined ? "" : formatNumber(lever.ceiling)
   }`

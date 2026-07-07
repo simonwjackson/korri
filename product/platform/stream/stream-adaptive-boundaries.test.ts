@@ -39,6 +39,27 @@ describe("stream adaptive boundaries", () => {
     })
   })
 
+  it("parses bitrate startup between floor and ceiling", () => {
+    expect(
+      parseStreamBoundaryArgs(["bitrate=500k..6m..40m"]).levers.bitrate,
+    ).toEqual({ floor: 500, startup: 6000, ceiling: 40000 })
+    expect(
+      parseStreamBoundaryArgs(["bitrate=..6m..40m"]).levers.bitrate,
+    ).toEqual({ startup: 6000, ceiling: 40000 })
+    expect(
+      parseStreamBoundaryArgs(["bitrate=500k..6m.."]).levers.bitrate,
+    ).toEqual({ floor: 500, startup: 6000 })
+  })
+
+  it("rejects startup segments for fps and resolution in v1", () => {
+    expect(() => parseStreamBoundaryArgs(["fps=30..60..120"])).toThrow(
+      /startup.*bitrate|fps.*startup|envelope/i,
+    )
+    expect(() =>
+      parseStreamBoundaryArgs(["resolution=640x360..1280x720..1920x1080"]),
+    ).toThrow(/startup.*bitrate|resolution.*startup|envelope/i)
+  })
+
   it("normalizes bitrate units and outcome clamps", () => {
     expect(parseStreamBoundaryArgs(["bitrate=8mbps"]).levers.bitrate).toEqual({
       floor: 8000,
@@ -64,7 +85,7 @@ describe("stream adaptive boundaries", () => {
 
   it("merges layers with last expression wins semantics", () => {
     const defaults = parseStreamBoundaryArgs([
-      "bitrate=5000..20000",
+      "bitrate=5000..8000..20000",
       "lean=cinematic",
     ])
     const launch = parseStreamBoundaryArgs(["bitrate=..12000"])
@@ -94,6 +115,14 @@ describe("stream adaptive boundaries", () => {
     )
   })
 
+  it("serializes bitrate startup boundaries", () => {
+    const boundaries = parseStreamBoundaryArgs(["bitrate=500k..6m..40m"])
+
+    expect(serializeStreamBoundaries(boundaries)).toEqual([
+      "bitrate=500..6000..40000",
+    ])
+  })
+
   it("serializes to an equivalent flat key set", () => {
     const boundaries = parseStreamBoundaryArgs([
       "bitrate=5000..20000",
@@ -118,8 +147,14 @@ describe("stream adaptive boundaries", () => {
 
   it("rejects malformed or inverted ranges", () => {
     expect(() =>
-      parseStreamBoundaryArgs(["bitrate=5000..20000..30000"]),
+      parseStreamBoundaryArgs(["bitrate=5000..20000..30000..40000"]),
     ).toThrow(/invalid range/i)
+    expect(() =>
+      parseStreamBoundaryArgs(["bitrate=20000..10000..30000"]),
+    ).toThrow(/startup.*floor/i)
+    expect(() =>
+      parseStreamBoundaryArgs(["bitrate=5000..30000..20000"]),
+    ).toThrow(/startup.*ceiling/i)
     expect(() => parseStreamBoundaryArgs(["bitrate=20000..5000"])).toThrow(
       /floor.*ceiling/i,
     )
