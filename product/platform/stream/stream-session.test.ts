@@ -212,6 +212,7 @@ describe("startStreamRuntimeSession", () => {
         rttMs: 120,
         incomingBitrateKbps: 8_000,
         requestedBitrateKbps: 20_000,
+        firstFrameMs: 120,
       },
     })
 
