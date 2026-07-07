@@ -5,7 +5,7 @@
 
 storage:
   "@korri:steam/steam":
-    root: /var/lib/korri/steam
+    root: /home/simonwjackson/.local/share/Steam
 
 providers:
   "@korri:steam":

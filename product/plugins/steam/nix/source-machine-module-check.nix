@@ -63,9 +63,14 @@ let
     ))
     (check "Steam source-machine module exposes native install helper to korrid" (
       lib.hasSuffix "/bin/korri-steam-x86-app-install" daemonEnv.KORRI_STEAM_APP_INSTALL_HELPER
+      && daemonEnv.KORRI_STEAM_HOME == "/home/simonwjackson/.local/share/Steam"
+      && daemonEnv.SWAYSOCK == "%t/sway-ipc.sock"
     ))
     (check "Steam source-machine module provides Steam and Korri wrapper packages" (
-      hasPackage "steam" && hasPackage "korri-steam-app" && hasPackage "korri-steam-x86-app-install"
+      hasPackage "steam"
+      && hasPackage "korri-steam-app"
+      && hasPackage "korri-steam-x86-app-install"
+      && hasPackage "korri-steam-x86-install-on-display"
     ))
     (check "Steam source-machine module provides x86 CachyOS Proton metadata" (
       daemonEnv.KORRI_STEAM_X86_COMPAT_TOOL == "proton-cachyos-11.0-20260601-slr-x86_64"
@@ -74,7 +79,7 @@ let
     (check "Steam source-machine module materializes CachyOS Proton under Steam home" (
       builtins.any (
         rule:
-        lib.hasInfix "/var/lib/korri/steam/compatibilitytools.d/proton-cachyos-11.0-20260601-slr-x86_64" rule
+        lib.hasInfix "/home/simonwjackson/.local/share/Steam/compatibilitytools.d/proton-cachyos-11.0-20260601-slr-x86_64" rule
       ) cfg.systemd.tmpfiles.rules
     ))
     (check "Steam source-machine module does not enable plugin ids itself" (
@@ -98,20 +103,21 @@ if failures != [ ] then
 else
   pkgs.runCommand "korri-steam-source-machine-module-check" { } ''
     found_stateful_app=0
-    found_detached_install=0
+    found_graphical_install=0
     for package in ${systemPackagePaths}; do
       if [ -x "$package/bin/korri-steam-app" ] \
-        && grep -q 'export HOME=/var/lib/korri/steam' "$package/bin/korri-steam-app" \
-        && grep -q 'STEAM_COMPAT_CLIENT_INSTALL_PATH=/var/lib/korri/steam' "$package/bin/korri-steam-app"; then
+        && grep -q 'export HOME=/home/simonwjackson' "$package/bin/korri-steam-app" \
+        && grep -q 'STEAM_COMPAT_CLIENT_INSTALL_PATH=/home/simonwjackson/.local/share/Steam' "$package/bin/korri-steam-app"; then
         found_stateful_app=1
       fi
       if [ -x "$package/bin/korri-steam-x86-app-install" ] \
+        && grep -q 'swaymsg exec' "$package/bin/korri-steam-x86-app-install" \
         && grep -q 'nohup .* +app_install' "$package/bin/korri-steam-x86-app-install"; then
-        found_detached_install=1
+        found_graphical_install=1
       fi
     done
     test "$found_stateful_app" -eq 1
-    test "$found_detached_install" -eq 1
+    test "$found_graphical_install" -eq 1
     test -f ${protonCachyosX86Package}/${protonCachyosX86Package.passthru.dist}/compatibilitytool.vdf
     echo "All ${toString (builtins.length checks)} korri Steam source-machine checks passed."
     touch $out
