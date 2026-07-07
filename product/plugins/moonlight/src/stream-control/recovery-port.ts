@@ -15,7 +15,10 @@ export interface MoonlightRecoveryControlPortOptions {
   readonly commandResponseTimeoutMs?: number
 }
 
-const DEFAULT_FRESH_COMMAND_RESPONSE_TIMEOUT_MS = 1_000
+// Moonlight may be busy draining a congested stream when the emergency command
+// arrives. Keep the wait bounded, but long enough for the native loop to accept
+// a rescue command instead of aborting it just as it would have applied.
+const DEFAULT_FRESH_COMMAND_RESPONSE_TIMEOUT_MS = 5_000
 
 export function moonlightRecoveryControlPortFromClient(
   client: MoonlightControlClient,
