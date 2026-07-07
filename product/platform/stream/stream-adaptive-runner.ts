@@ -162,13 +162,6 @@ export function createStreamAdaptiveRunner(
     target: StreamAdaptiveTarget,
   ): Promise<void> {
     const steps: (() => Promise<void>)[] = []
-    if (target.bitrateKbps !== undefined) {
-      steps.push(() =>
-        dispatch("runtime.setBitrate", target, () =>
-          options.recovery.setBitrate(target.bitrateKbps as number),
-        ),
-      )
-    }
     if (target.fps !== undefined) {
       steps.push(() =>
         dispatch("runtime.setFps", target, () =>
@@ -183,6 +176,13 @@ export function createStreamAdaptiveRunner(
             target.resolution?.width as number,
             target.resolution?.height as number,
           ),
+        ),
+      )
+    }
+    if (target.bitrateKbps !== undefined) {
+      steps.push(() =>
+        dispatch("runtime.setBitrate", target, () =>
+          options.recovery.setBitrate(target.bitrateKbps as number),
         ),
       )
     }
