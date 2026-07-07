@@ -45,7 +45,7 @@ let
         exit 64
         ;;
     esac
-    exec ${steamPackage}/bin/steam -applaunch "$appid"
+    exec ${steamPackage}/bin/steam -vgui -applaunch "$appid"
   '';
   steamInstallOnDisplay = pkgs.writeShellScriptBin "korri-steam-x86-install-on-display" ''
     set -eu
@@ -53,7 +53,7 @@ let
     appid="$1"
     log="${steamHome}/steamapps/korri-app-install-$appid.log"
     mkdir -p "$(dirname "$log")"
-    exec ${steamPackage}/bin/steam -console +app_install "$appid" >>"$log" 2>&1
+    exec ${steamPackage}/bin/steam -vgui -console +app_install "$appid" >>"$log" 2>&1
   '';
   steamInstallHelper = pkgs.writeShellScriptBin "korri-steam-x86-app-install" ''
     set -eu
@@ -75,7 +75,7 @@ let
     if [ -S "$SWAYSOCK" ]; then
       ${pkgs.sway}/bin/swaymsg exec "${steamInstallOnDisplay}/bin/korri-steam-x86-install-on-display $appid" >>"$log" 2>&1
     else
-      nohup ${steamPackage}/bin/steam -console +app_install "$appid" >>"$log" 2>&1 &
+      nohup ${steamPackage}/bin/steam -vgui -console +app_install "$appid" >>"$log" 2>&1 &
     fi
     echo "korri-steam-x86-app-install: requested Steam install for $appid"
   '';
