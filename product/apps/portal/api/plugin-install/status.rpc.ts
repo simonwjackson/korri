@@ -1,4 +1,5 @@
 import { ApiError } from "@platform/api/rpc/errors"
+import { EntrySource } from "@platform/api/rpc/entry-source-core"
 import {
   PluginInstallNextActionHint,
   PluginInstallState,
@@ -12,6 +13,7 @@ export class PluginInstallStatusPayload extends Schema.Class<PluginInstallStatus
   providerId: Schema.String,
   appId: Schema.String,
   requestId: Schema.optional(Schema.String),
+  source: Schema.optional(EntrySource),
 }) {}
 
 export class PluginInstallStatusResponse extends Schema.Class<PluginInstallStatusResponse>(

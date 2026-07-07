@@ -15,6 +15,10 @@ import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect } from "effect"
 import { requireInstallControl } from "./install-control-authorization"
 import {
+  isRemoteInstallSource,
+  requestRemotePluginInstallStatus,
+} from "./remote-install-proxy"
+import {
   type PluginInstallStatusPayload,
   PluginInstallStatusResponse,
 } from "./status.rpc"
@@ -26,6 +30,12 @@ export const handlePluginInstallStatus = (
   payload: typeof PluginInstallStatusPayload.Type,
 ) =>
   Effect.gen(function* () {
+    if (isRemoteInstallSource(payload.source)) {
+      return yield* requestRemotePluginInstallStatus(payload).pipe(
+        Effect.map(response => new PluginInstallStatusResponse(response)),
+      )
+    }
+
     yield* requireInstallControl
     if (!isProviderId(payload.providerId)) {
       return yield* Effect.fail(

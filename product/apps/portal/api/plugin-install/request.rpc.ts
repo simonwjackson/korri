@@ -1,4 +1,5 @@
 import { ApiError } from "@platform/api/rpc/errors"
+import { EntrySource } from "@platform/api/rpc/entry-source-core"
 import { PluginInstallState } from "@platform/library/install-state"
 import { Schema } from "effect"
 import { Rpc } from "effect/unstable/rpc"
@@ -10,6 +11,7 @@ export class RequestPluginInstallPayload extends Schema.Class<RequestPluginInsta
   appId: Schema.String,
   playableId: Schema.optional(Schema.String),
   mode: Schema.optional(Schema.Literals(["install", "update"])),
+  source: Schema.optional(EntrySource),
 }) {}
 
 export class RequestPluginInstallResponse extends Schema.Class<RequestPluginInstallResponse>(

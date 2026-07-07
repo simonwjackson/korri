@@ -16,6 +16,7 @@ import {
   installControlCookie,
   installControlSecret,
 } from "./plugin-install/install-control-authorization"
+import { createRemoteInstallControlSession } from "./plugin-install/remote-install-proxy"
 import { rpcHandler } from "./rpc-server"
 import { serverRpcHandler } from "./server/rpc-server"
 
@@ -94,16 +95,51 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
     const expected = installControlSecret(process.env)
     if (!expected)
       return c.json({ ok: false, reason: "not-configured-or-weak" }, 404)
-    let submitted: unknown
+    let body: {
+      readonly pin?: unknown
+      readonly secret?: unknown
+      readonly source?: unknown
+    }
     try {
-      const body = (await c.req.json()) as {
+      body = (await c.req.json()) as {
         readonly pin?: unknown
         readonly secret?: unknown
+        readonly source?: unknown
       }
-      submitted = body.pin ?? body.secret
     } catch {
       return c.json({ ok: false, reason: "invalid-json" }, 400)
     }
+
+    const submitted = body.pin ?? body.secret
+    const source = remoteInstallSourceFromUnknown(body.source)
+    if (source) {
+      if (typeof submitted !== "string") {
+        return c.json({ ok: false, reason: "unauthorized" }, 401)
+      }
+      try {
+        const remote = await createRemoteInstallControlSession(
+          source,
+          submitted,
+        )
+        return new Response(await remote.text(), {
+          status: remote.status,
+          headers: {
+            "content-type":
+              remote.headers.get("content-type") ?? "application/json",
+          },
+        })
+      } catch (error) {
+        return c.json(
+          {
+            ok: false,
+            reason: "remote-unavailable",
+            message: error instanceof Error ? error.message : String(error),
+          },
+          502,
+        )
+      }
+    }
+
     if (typeof submitted !== "string" || submitted !== expected) {
       return c.json({ ok: false, reason: "unauthorized" }, 401)
     }
@@ -175,6 +211,30 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
   app.post("/api/rpc/", async c => handleRpc(c.req.raw))
 
   return app
+}
+
+interface RemoteInstallSourceShape {
+  readonly hostId: string
+  readonly controlUrl: string
+  readonly isLocal: false
+}
+
+function remoteInstallSourceFromUnknown(
+  value: unknown,
+): RemoteInstallSourceShape | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined
+  }
+  const record = value as Record<string, unknown>
+  return typeof record.hostId === "string" &&
+    typeof record.controlUrl === "string" &&
+    record.isLocal === false
+    ? {
+        hostId: record.hostId,
+        controlUrl: record.controlUrl,
+        isLocal: false,
+      }
+    : undefined
 }
 
 function isJsonRequest(request: Request): boolean {
