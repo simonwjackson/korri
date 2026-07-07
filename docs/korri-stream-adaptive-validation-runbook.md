@@ -127,6 +127,7 @@ DEVICE=aka IFACE=eno1 tools/testing/netem/stream-drive.sh clear
 Expected outcomes:
 
 - startup-low/high-ceiling: no launch-time multi-second RTT flood before the first adaptive correction;
+- startup-low/high-ceiling under shaping: after any healthy-link ramp, the shaped link must converge without manual intervention to the playable floor (`500 kbps / 30 fps / 640x360` for the profile above). Resolution-only rescue is a failure, even if RTT improves afterward;
 - slope: bitrate/FPS adjust before resolution; no rapid resolution flap;
 - cliff: large immediate shed with a visible but controlled quality drop;
 - early downshift: rising RTT plus falling delivery triggers `early-downshift` before a full stale/cliff panic;
@@ -144,7 +145,9 @@ Check these fields separately:
 
 - applied stream state: current bitrate/FPS/resolution readback;
 - policy: serialized boundaries, especially `bitrate=500..6000..40000`;
-- event context: last adaptive event, including `early-downshift` reason/evidence when applicable.
+- event context: last adaptive event, including `early-downshift` reason/evidence and `shed-converging` unresolved levers when rescue has not fully reached the floor.
+
+If the event context reports pending or failed commands, capture it as diagnostic evidence and treat the validation as incomplete until applied readback reaches the floor without manual intervention.
 
 ## Post-run cleanup gate
 
@@ -159,4 +162,4 @@ korrid_query --host bandai --command session-status
 
 ## Enablement rule
 
-Do not default high `1080p120 / 40Mbps` ceilings without this slice enabled. A high-ceiling launch must start conservatively, preflight must fill or reject unsafe missing startup policy, and early downshift must reach the playable floor before control commands are starved.
+Do not default high `1080p120 / 40Mbps` ceilings without this slice enabled. A high-ceiling launch must start conservatively, preflight must fill or reject unsafe missing startup policy, and adaptive shed convergence must reach the playable floor before control commands are starved.
