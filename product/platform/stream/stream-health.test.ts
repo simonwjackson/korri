@@ -63,6 +63,18 @@ describe("stream health rolling summary", () => {
     expect(summarizeStreamHealth(window, 3_100).rttMs.mean).toBe(22.5)
   })
 
+  it("defaults to a short control window for cliff response", () => {
+    const window = [
+      sample(1, 1_000),
+      sample(2, 2_000),
+      sample(3, 3_000),
+      sample(4, 4_000),
+    ].reduce(ingestStreamHealthSample, createStreamHealthWindow())
+
+    expect(window.maxSamples).toBe(3)
+    expect(window.samples.map(s => s.seq)).toEqual([2, 3, 4])
+  })
+
   it("returns no-data for an empty window", () => {
     const summary = summarizeStreamHealth(createStreamHealthWindow(), 1_000)
 

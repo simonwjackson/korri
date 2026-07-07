@@ -54,7 +54,7 @@ export interface StreamHealthSummary {
   readonly frameDropFraction?: number
 }
 
-const DEFAULT_MAX_SAMPLES = 30
+const DEFAULT_MAX_SAMPLES = 3
 const DEFAULT_STALE_AFTER_MS = 3_000
 
 export function createStreamHealthWindow(
