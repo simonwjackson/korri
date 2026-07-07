@@ -907,6 +907,7 @@ EOF
             ${pkgs.systemd}/bin/systemctl --no-block start "$service_name"
             ;;
           stop) ${pkgs.coreutils}/bin/timeout "$control_timeout" ${pkgs.systemd}/bin/systemctl stop "$service_name" ;;
+          drain|reset) ${steamServiceControl}/bin/korri-steam-service-control "$action" ;;
         esac
         return $?
       fi
@@ -947,6 +948,30 @@ EOF
       fi
     }
 
+    active_steam_appids() {
+      ${pkgs.procps}/bin/ps -eo args= \
+        | ${pkgs.gnugrep}/bin/grep -a -F 'SteamLaunch AppId=' \
+        | ${pkgs.gnugrep}/bin/grep -a -v -F 'grep -a -F' \
+        | ${pkgs.gnused}/bin/sed -n 's/.*SteamLaunch AppId=\([0-9][0-9]*\).*/\1/p' \
+        | ${pkgs.coreutils}/bin/sort -u || true
+    }
+
+    reset_for_exclusive_appid_handoff() {
+      active_appids="$(active_steam_appids | ${pkgs.coreutils}/bin/tr '\n' ' ' | ${pkgs.gnused}/bin/sed 's/[[:space:]]*$//')"
+      [ -n "$active_appids" ] || return 0
+      echo "korri-steam-app: resetting managed Steam service before AppID $appid handoff; active AppIDs: $active_appids" >&2
+      control_steam_service reset
+    }
+
+    mark_current_console_log() {
+      if [ -f "$console_log" ]; then
+        mark="$(${pkgs.coreutils}/bin/wc -c < "$console_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
+      else
+        mark=0
+        : > "$console_log" 2>/dev/null || true
+      fi
+    }
+
     cleanup() {
       [ "$cleanup_done" -eq 0 ] || return 0
       cleanup_done=1
@@ -963,16 +988,12 @@ EOF
 
     ${steamUinputPrep}/bin/korri-steam-ensure-uinput || true
     ${pkgs.coreutils}/bin/mkdir -p "$STEAM_HOME/logs" "$STEAM_HOME/package"
+    reset_for_exclusive_appid_handoff
     service_was_active=0
     if ${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
       service_was_active=1
     fi
-    if [ -f "$console_log" ]; then
-      mark="$(${pkgs.coreutils}/bin/wc -c < "$console_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
-    else
-      mark=0
-      : > "$console_log" 2>/dev/null || true
-    fi
+    mark_current_console_log
 
     steam_service_state() {
       state="$(${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active "$service_name" 2>/dev/null || true)"

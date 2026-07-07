@@ -165,6 +165,17 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
+  it("resets stale Steam AppID foreground state before marking the new launch", () => {
+    expect(moduleSource).toContain("active_steam_appids()")
+    expect(moduleSource).toContain("reset_for_exclusive_appid_handoff")
+    expect(moduleSource).toContain('control_steam_service reset')
+    expect(moduleSource).toContain("mark_current_console_log")
+    expect(moduleSource.indexOf("reset_for_exclusive_appid_handoff")).toBeLessThan(
+      moduleSource.indexOf("mark_current_console_log"),
+    )
+    expect(moduleSource).toContain('SteamLaunch AppId=')
+  })
+
   it("bounds AppID URL forwarding before launch observation", () => {
     expect(moduleSource).toContain("KORRI_STEAM_APP_FORWARD_TIMEOUT")
     expect(moduleSource).toContain(
