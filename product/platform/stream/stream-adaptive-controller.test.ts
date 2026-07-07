@@ -81,6 +81,25 @@ describe("computeStreamAdaptiveDecision", () => {
     ).toEqual({ kind: "dormant", reason: "within-hysteresis" })
   })
 
+  it("does not shed on low-latency startup zero delivery", () => {
+    const decision = computeStreamAdaptiveDecision({
+      summary: summary({
+        bitrateDeliveryRatio: 0,
+        fpsDeliveryRatio: 0,
+        rttMs: numeric(5),
+        queueDepth: numeric(1),
+        lossFraction: numeric(0),
+      }),
+      current,
+      objectiveBias: 0.5,
+    })
+
+    expect(decision.kind).toBe("target")
+    if (decision.kind !== "target") throw new Error("expected target")
+    expect(decision.mode).toBe("fine-tune")
+    expect(decision.target).toEqual({ bitrateKbps: 12_500 })
+  })
+
   it("lowers bitrate first under delivery and loss pressure", () => {
     const decision = computeStreamAdaptiveDecision({
       summary: summary({

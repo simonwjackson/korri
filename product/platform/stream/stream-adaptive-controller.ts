@@ -454,16 +454,14 @@ function isCliff(
 ): boolean {
   const delivery = summary.bitrateDeliveryRatio ?? 1
   const loss = summary.lossFraction.mean ?? 0
-  const queueRising =
-    summary.queueDepth.trend === "rising" && (summary.queueDepth.mean ?? 0) >= 6
-  const rttRising =
-    summary.rttMs.trend === "rising" && (summary.rttMs.mean ?? 0) >= 100
-  return (
-    delivery < 0.45 ||
-    loss >= 0.08 ||
-    pressure.bandwidth > 0.7 ||
-    (queueRising && rttRising)
-  )
+  const queue = summary.queueDepth.mean ?? 0
+  const rtt = summary.rttMs.mean ?? 0
+  const queueRising = summary.queueDepth.trend === "rising" && queue >= 6
+  const rttRising = summary.rttMs.trend === "rising" && rtt >= 100
+  const corroboratedDeliveryCliff =
+    delivery < 0.45 &&
+    (rtt >= 100 || queue >= 3 || loss >= 0.02 || pressure.decode > 0.35)
+  return loss >= 0.08 || corroboratedDeliveryCliff || (queueRising && rttRising)
 }
 
 function healthyEnoughForGrowth(pressure: StreamAdaptivePressure): boolean {
