@@ -136,10 +136,7 @@ let
       fi
 
       if has_big_picture_surface; then
-        echo "korri-steam-service-run: refusing visible Steam Big Picture surface; stopping managed Gamescope pid=$gamescope_pid" >&2
-        stop_gamescope "$gamescope_pid"
-        wait "$gamescope_pid" 2>/dev/null || true
-        exit "$guard_status"
+        echo "korri-steam-service-run: observed Steam Big Picture-titled surface while Steam remains managed; continuing unless uimode=4 appears" >&2
       fi
 
       for cmdline in /proc/[0-9]*/cmdline; do
@@ -878,12 +875,10 @@ EOF
       control_steam_service start
     }
 
-    refuse_big_picture_surface() {
+    note_big_picture_surface() {
       phase="$1"
       if big_picture_surface_present; then
-        echo "korri-steam-app: refusing $phase because Steam Big Picture surface is visible" >&2
-        control_steam_service stop >/dev/null 2>&1 || true
-        exit 77
+        echo "korri-steam-app: observed Steam Big Picture-titled surface during $phase; continuing unless uimode=4 appears" >&2
       fi
     }
 
@@ -930,7 +925,7 @@ EOF
     wait_for_steam_ready() {
       ready_deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + service_ready_timeout ))
       while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$ready_deadline" ]; do
-        refuse_big_picture_surface "managed Steam readiness"
+        note_big_picture_surface "managed Steam readiness"
         ready_log=""
         if [ -f "$console_log" ]; then
           if [ "$service_was_active" -eq 1 ]; then
@@ -981,7 +976,7 @@ EOF
     # console-log prompts.
     focus_korri_output
     hide_steam_hat
-    refuse_big_picture_surface "AppID $appid launch forwarding"
+    note_big_picture_surface "AppID $appid launch forwarding"
     if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs} -applaunch "$appid" >/dev/null; then
       echo "korri-steam-app: timed out forwarding AppID $appid to Steam" >&2
       exit 125
@@ -1009,7 +1004,7 @@ EOF
     deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + launch_timeout ))
     saw_added=0
     while true; do
-      refuse_big_picture_surface "AppID $appid launch observation"
+      note_big_picture_surface "AppID $appid launch observation"
       new_log=""
       if [ -f "$console_log" ]; then
         current_mark="$(${pkgs.coreutils}/bin/wc -c < "$console_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
