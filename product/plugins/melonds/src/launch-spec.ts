@@ -10,9 +10,20 @@ export interface ComposeMelonDsLaunchSpecOptions {
   readonly policy?: MelonDsPolicy
   readonly overridesArgs?: LaunchOverrides["args"]
   readonly env?: Readonly<Record<string, string>>
+  readonly presenterCommand?: string
+  readonly presentationPayloadPath?: string
 }
 
 export function composeMelonDsLaunchSpec(
+  options: ComposeMelonDsLaunchSpecOptions,
+): LaunchSpec {
+  if (options.policy?.presentation?.intent === "matched-dual-screen") {
+    return composeMatchedPresentationLaunchSpec(options)
+  }
+  return composeDirectMelonDsLaunchSpec(options)
+}
+
+export function composeDirectMelonDsLaunchSpec(
   options: ComposeMelonDsLaunchSpecOptions,
 ): LaunchSpec {
   if (!isAbsolute(options.command)) {
@@ -34,6 +45,28 @@ export function composeMelonDsLaunchSpec(
   return {
     command: options.command,
     args,
+    ...(options.env !== undefined ? { env: options.env } : {}),
+  }
+}
+
+function composeMatchedPresentationLaunchSpec(
+  options: ComposeMelonDsLaunchSpecOptions,
+): LaunchSpec {
+  const presenterCommand = options.presenterCommand
+  if (presenterCommand === undefined || !isAbsolute(presenterCommand)) {
+    throw new Error(
+      "matched melonDS presentation requires an absolute presenter command",
+    )
+  }
+  const payloadPath = options.presentationPayloadPath
+  if (payloadPath === undefined || !isAbsolute(payloadPath)) {
+    throw new Error(
+      "matched melonDS presentation requires an absolute payload path",
+    )
+  }
+  return {
+    command: presenterCommand,
+    args: ["--payload", payloadPath],
     ...(options.env !== undefined ? { env: options.env } : {}),
   }
 }

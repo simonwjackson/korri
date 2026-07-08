@@ -1,10 +1,16 @@
-{ melonDsPackage }:
+{
+  melonDsPackage,
+  melonDsPresenterPackage,
+}:
 
 { ... }:
 
 {
   config = {
-    environment.systemPackages = [ melonDsPackage ];
+    environment.systemPackages = [
+      melonDsPackage
+      melonDsPresenterPackage
+    ];
 
     systemd.tmpfiles.rules = [
       "d /var/lib/korri/melonDS 0755 korri korri -"

@@ -21,4 +21,8 @@ export const KORRI_MELONDS_DEFAULT_STATE_ROOT =
   "/var/lib/korri/melonDS" as const
 export const KORRI_MELONDS_DEFAULT_COMMAND =
   "/run/current-system/sw/bin/melonDS" as const
+export const KORRI_MELONDS_PRESENTER_COMMAND =
+  "/run/current-system/sw/bin/korri-melonds-presenter" as const
 export const KORRI_MELONDS_NIX_PACKAGE = "melonDS" as const
+export const KORRI_MELONDS_PRESENTER_NIX_PACKAGE =
+  "korri-melonds-presenter" as const

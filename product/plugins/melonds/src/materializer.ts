@@ -9,8 +9,11 @@ import { appRecordKind } from "@platform/library/config/records/app"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { Effect } from "effect"
 import { renderMelonDsConfig } from "./config-render"
-import { KORRI_MELONDS_PLUGIN_ID } from "./ids"
-import { composeMelonDsLaunchSpec } from "./launch-spec"
+import { KORRI_MELONDS_PLUGIN_ID, KORRI_MELONDS_PRESENTER_COMMAND } from "./ids"
+import {
+  composeDirectMelonDsLaunchSpec,
+  composeMelonDsLaunchSpec,
+} from "./launch-spec"
 import { decodeMelonDsPolicy, type MelonDsPolicy } from "./policy"
 
 const STORAGE_TOKEN_PATTERN = /\{storage:([^}]+)\}/g
@@ -61,21 +64,32 @@ export const materializeReadableMelonDsLaunch = (input: {
     yield* writePresentationSupport(context, stateRoot, resolvedPolicy)
 
     const envParent = dirname(stateRoot)
-    const spec = yield* tryMaterialize(context, () =>
-      composeMelonDsLaunchSpec({
-        command,
-        contentPath,
-        policy: resolvedPolicy,
-        ...(context.overrides?.args !== undefined
-          ? { overridesArgs: context.overrides.args }
-          : {}),
-        env: {
-          ...(context.env ?? {}),
-          XDG_CONFIG_HOME: envParent,
-          XDG_DATA_HOME: envParent,
-        },
-      }),
-    )
+    const baseEnv = {
+      ...(context.env ?? {}),
+      XDG_CONFIG_HOME: envParent,
+      XDG_DATA_HOME: envParent,
+    }
+    const spec =
+      resolvedPolicy.presentation?.intent === "matched-dual-screen"
+        ? yield* materializeMatchedPresentationSpec({
+            context,
+            command,
+            contentPath,
+            stateRoot,
+            policy: resolvedPolicy,
+            baseEnv,
+          })
+        : yield* tryMaterialize(context, () =>
+            composeMelonDsLaunchSpec({
+              command,
+              contentPath,
+              policy: resolvedPolicy,
+              ...(context.overrides?.args !== undefined
+                ? { overridesArgs: context.overrides.args }
+                : {}),
+              env: baseEnv,
+            }),
+          )
 
     return { spec, context }
   })
@@ -171,10 +185,104 @@ const writePresentationSupport = (
   tryMaterialize(context, async () => {
     if (policy.presentation?.menu?.hide !== true) return
     await writeAtomic(
-      join(stateRoot, "presentation", "hide-menubar.qss"),
+      hideMenuStylesheetPath(stateRoot),
       "QMenuBar { height: 0px; max-height: 0px; border: none; }\nQMenuBar::item { padding: 0px; margin: 0px; }\n",
     )
   })
+
+const materializeMatchedPresentationSpec = (input: {
+  readonly context: ReadableResolvedLaunchContext
+  readonly command: string
+  readonly contentPath: string
+  readonly stateRoot: string
+  readonly policy: MelonDsPolicy
+  readonly baseEnv: Readonly<Record<string, string>>
+}): Effect.Effect<
+  ReturnType<typeof composeMelonDsLaunchSpec>,
+  ResolutionError
+> =>
+  tryMaterialize(input.context, async () => {
+    const presentation = input.policy.presentation
+    if (presentation?.intent !== "matched-dual-screen") {
+      throw new Error("matched melonDS presentation policy is missing")
+    }
+    const wayland = presentation.wayland
+    if (wayland === undefined) {
+      throw new Error(
+        "matched melonDS presentation requires trusted compositor control",
+      )
+    }
+
+    const presenterEnv = matchedPresenterEnv(input.baseEnv, wayland)
+    const melonDsSpec = composeDirectMelonDsLaunchSpec({
+      command: input.command,
+      contentPath: input.contentPath,
+      policy: input.policy,
+      ...(input.context.overrides?.args !== undefined
+        ? { overridesArgs: input.context.overrides.args }
+        : {}),
+      env: presenterEnv,
+    })
+    const payloadPath = matchedPayloadPath(input.stateRoot)
+    await writeAtomic(
+      payloadPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          melonDs: melonDsSpec,
+          wayland,
+          selectors: {
+            appId: "net.kuribo64.melonDS",
+            topTitlePrefix: "[w1]",
+            bottomTitlePrefix: "[w2]",
+          },
+          windows: presentation.windows,
+          secondaryOutput: presentation.secondaryOutput ?? {
+            output: presentation.windows.bottom.output,
+            restore: "observed",
+          },
+          ...(presentation.menu?.hide === true
+            ? { stylesheet: hideMenuStylesheetPath(input.stateRoot) }
+            : {}),
+        },
+        null,
+        2,
+      )}\n`,
+    )
+
+    return composeMelonDsLaunchSpec({
+      command: input.command,
+      contentPath: input.contentPath,
+      policy: input.policy,
+      presenterCommand: KORRI_MELONDS_PRESENTER_COMMAND,
+      presentationPayloadPath: payloadPath,
+      env: presenterEnv,
+    })
+  })
+
+function matchedPresenterEnv(
+  env: Readonly<Record<string, string>>,
+  wayland: NonNullable<MelonDsPolicy["presentation"]>["wayland"],
+): Record<string, string> {
+  if (wayland === undefined) {
+    throw new Error("matched melonDS presentation requires compositor control")
+  }
+  const { DISPLAY: _display, GDK_BACKEND: _gdkBackend, ...safeEnv } = env
+  return {
+    ...safeEnv,
+    WAYLAND_DISPLAY: wayland.display,
+    SWAYSOCK: wayland.compositorSocket,
+    QT_QPA_PLATFORM: "wayland",
+  }
+}
+
+function matchedPayloadPath(stateRoot: string): string {
+  return join(stateRoot, "presentation", "matched-dual-screen.json")
+}
+
+function hideMenuStylesheetPath(stateRoot: string): string {
+  return join(stateRoot, "presentation", "hide-menubar.qss")
+}
 
 async function writeAtomic(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true })

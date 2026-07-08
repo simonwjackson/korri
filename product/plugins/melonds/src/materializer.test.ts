@@ -297,6 +297,10 @@ it("materializes matched presentation stylesheet and managed dual-window config"
             presentation: {
               intent: "matched-dual-screen",
               menu: { hide: true },
+              wayland: {
+                display: "wayland-1",
+                compositorSocket: "/run/user/1000/sway-ipc.sock",
+              },
               windows: {
                 top: {
                   output: "TOP",
@@ -326,6 +330,137 @@ it("materializes matched presentation stylesheet and managed dual-window config"
     await expect(
       readFile(join(stateRoot, "presentation", "hide-menubar.qss"), "utf8"),
     ).resolves.toContain("QMenuBar")
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+it("writes a matched presenter payload and forces Wayland env", async () => {
+  const root = await mkdtemp(join(tmpdir(), "korri-melonds-presenter-"))
+  try {
+    const rom = join(root, "Tetris DS.nds")
+    const stateRoot = join(root, "melonDS")
+    await writeFile(rom, "nds")
+
+    const result = await Effect.runPromise(
+      materializeReadableMelonDsLaunch({
+        context: context({
+          contentPath: rom,
+          stateRoot,
+          env: { DISPLAY: ":0", GDK_BACKEND: "x11" },
+          policy: {
+            state: { root: stateRoot },
+            display: { mode: "dual-window" },
+            presentation: {
+              intent: "matched-dual-screen",
+              menu: { hide: true },
+              wayland: {
+                display: "wayland-1",
+                compositorSocket: "/run/user/1000/sway-ipc.sock",
+              },
+              windows: {
+                top: {
+                  output: "TOP",
+                  x: 407,
+                  y: 250,
+                  width: 1106,
+                  height: 830,
+                },
+                bottom: {
+                  output: "BOTTOM",
+                  x: 0,
+                  y: 0,
+                  width: 1240,
+                  height: 930,
+                },
+              },
+              secondaryOutput: { output: "BOTTOM", restore: "observed" },
+            },
+          },
+        }),
+      }),
+    )
+
+    expect(result.spec.command).toBe(
+      "/run/current-system/sw/bin/korri-melonds-presenter",
+    )
+    expect(result.spec.args).toEqual([
+      "--payload",
+      join(stateRoot, "presentation", "matched-dual-screen.json"),
+    ])
+    expect(result.spec.env).toMatchObject({
+      WAYLAND_DISPLAY: "wayland-1",
+      SWAYSOCK: "/run/user/1000/sway-ipc.sock",
+      QT_QPA_PLATFORM: "wayland",
+    })
+    expect(result.spec.env).not.toHaveProperty("DISPLAY")
+    expect(result.spec.env).not.toHaveProperty("GDK_BACKEND")
+
+    const payload = JSON.parse(
+      await readFile(
+        join(stateRoot, "presentation", "matched-dual-screen.json"),
+        "utf8",
+      ),
+    )
+    expect(payload.melonDs.command).toBe(KORRI_MELONDS_DEFAULT_COMMAND)
+    expect(payload.melonDs.args).toEqual([rom])
+    expect(payload.windows.top).toEqual({
+      output: "TOP",
+      x: 407,
+      y: 250,
+      width: 1106,
+      height: 830,
+    })
+    expect(payload.selectors).toMatchObject({
+      appId: "net.kuribo64.melonDS",
+      topTitlePrefix: "[w1]",
+      bottomTitlePrefix: "[w2]",
+    })
+    expect(payload.stylesheet).toBe(
+      join(stateRoot, "presentation", "hide-menubar.qss"),
+    )
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+it("fails matched presentation before spawn when trusted compositor env is missing", async () => {
+  const root = await mkdtemp(join(tmpdir(), "korri-melonds-no-sway-"))
+  try {
+    const rom = join(root, "Tetris DS.nds")
+    await writeFile(rom, "nds")
+    const exit = await Effect.runPromiseExit(
+      materializeReadableMelonDsLaunch({
+        context: context({
+          contentPath: rom,
+          stateRoot: join(root, "melonDS"),
+          policy: {
+            state: { root: join(root, "melonDS") },
+            display: { mode: "dual-window" },
+            presentation: {
+              intent: "matched-dual-screen",
+              windows: {
+                top: {
+                  output: "TOP",
+                  x: 407,
+                  y: 250,
+                  width: 1106,
+                  height: 830,
+                },
+                bottom: {
+                  output: "BOTTOM",
+                  x: 0,
+                  y: 0,
+                  width: 1240,
+                  height: 930,
+                },
+              },
+            },
+          },
+        }),
+      }),
+    )
+    expectFailureReason(exit, "compositor")
   } finally {
     await rm(root, { recursive: true, force: true })
   }

@@ -15,6 +15,14 @@ let
     EOF
     chmod +x "$out/bin/melonDS"
   '';
+  fakePresenter = pkgs.runCommand "fake-melonds-presenter" { } ''
+    mkdir -p "$out/bin"
+    cat > "$out/bin/korri-melonds-presenter" <<'EOF'
+    #!/usr/bin/env sh
+    exit 0
+    EOF
+    chmod +x "$out/bin/korri-melonds-presenter"
+  '';
 
   config = (evalConfig {
     system = pkgs.stdenv.hostPlatform.system;
@@ -33,7 +41,10 @@ let
         };
         system.stateVersion = "24.11";
       }
-      (korriMelonDsModule { melonDsPackage = fakeMelonDs; })
+      (korriMelonDsModule {
+        melonDsPackage = fakeMelonDs;
+        melonDsPresenterPackage = fakePresenter;
+      })
     ];
   }).config;
 
@@ -43,6 +54,9 @@ let
   checks = [
     (check "module adds melonDS to system packages" (
       builtins.any (name: lib.hasInfix "fake-melonds" name) packageNames
+    ))
+    (check "module adds melonDS presenter to system packages" (
+      builtins.any (name: lib.hasInfix "fake-melonds-presenter" name) packageNames
     ))
     (check "module creates Korri-owned melonDS state directories" (
       builtins.elem "d /var/lib/korri/melonDS 0755 korri korri -" rules

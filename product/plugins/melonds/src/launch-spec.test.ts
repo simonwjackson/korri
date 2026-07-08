@@ -59,3 +59,35 @@ describe("composeMelonDsLaunchSpec", () => {
     ).toThrow("ROM path")
   })
 })
+
+it("wraps matched presentation launches with the packaged presenter", () => {
+  expect(
+    composeMelonDsLaunchSpec({
+      command: COMMAND,
+      contentPath: ROM,
+      policy: {
+        display: { mode: "dual-window" },
+        presentation: {
+          intent: "matched-dual-screen",
+          wayland: {
+            display: "wayland-1",
+            compositorSocket: "/run/user/1000/sway-ipc.sock",
+          },
+          windows: {
+            top: { output: "TOP", x: 407, y: 250, width: 1106, height: 830 },
+            bottom: { output: "BOTTOM", x: 0, y: 0, width: 1240, height: 930 },
+          },
+        },
+      },
+      presenterCommand: "/run/current-system/sw/bin/korri-melonds-presenter",
+      presentationPayloadPath:
+        "/var/lib/korri/melonDS/presentation/matched-dual-screen.json",
+    }),
+  ).toEqual({
+    command: "/run/current-system/sw/bin/korri-melonds-presenter",
+    args: [
+      "--payload",
+      "/var/lib/korri/melonDS/presentation/matched-dual-screen.json",
+    ],
+  })
+})
