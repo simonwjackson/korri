@@ -13,9 +13,25 @@ import type { ForegroundSessionGateState } from "@platform/session/foreground-se
 
 export type LaunchStatusTone =
   | "launching"
+  | "preparing"
   | "launched"
+  | "cooling"
+  | "recovering"
   | "failed"
   | "unavailable"
+
+/**
+ * In-progress tones (the launch is still resolving) should show a loading
+ * indicator; the terminal tones (launched / failed / unavailable) should not.
+ */
+export function isLaunchInProgress(tone: LaunchStatusTone): boolean {
+  return (
+    tone === "launching" ||
+    tone === "preparing" ||
+    tone === "cooling" ||
+    tone === "recovering"
+  )
+}
 
 export interface LaunchStatusView {
   readonly tone: LaunchStatusTone
@@ -58,50 +74,81 @@ export function launchStatusView(
   state: LaunchState | undefined,
   foreground?: ForegroundSessionGateState,
 ): LaunchStatusView | null {
+  // Terminal launch-request outcomes take precedence over the live gate.
+  if (state?._tag === "Unavailable") {
+    return {
+      tone: "unavailable",
+      kicker: "Not playable here",
+      reason: "Unavailable on this device",
+      canRetry: false,
+    }
+  }
+  if (state?._tag === "Failed") {
+    return {
+      tone: "failed",
+      kicker: "Couldn't start",
+      reason: state.failureKind
+        ? FAILURE_REASON[state.failureKind]
+        : "It didn't start",
+      canRetry: state.failureKind
+        ? !NON_RETRYABLE.has(state.failureKind)
+        : true,
+    }
+  }
+  if (state?._tag === "Defect") {
+    return {
+      tone: "failed",
+      kicker: "Couldn't start",
+      reason: "Something went wrong",
+      canRetry: true,
+    }
+  }
+
+  // The initial request phase, before the daemon's session lifecycle takes over.
   if (state?._tag === "Launching") {
     return { tone: "launching", kicker: "Starting…", canRetry: false }
   }
 
-  if (
-    state?._tag !== "Failed" &&
-    state?._tag !== "Defect" &&
-    state?._tag !== "Unavailable" &&
-    foreground?._tag === "Running"
-  ) {
-    return { tone: "launched", kicker: "Now playing", canRetry: false }
-  }
-
-  if (!state) return null
-  switch (state._tag) {
-    case "Accepted":
-      return null
-    case "Unavailable":
+  // Then follow the authoritative foreground-session lifecycle, so the launch is
+  // observable through prepare → run → cool down → recover — surfacing the
+  // provider's own human message when it supplies one.
+  const providerMessage =
+    foreground?.providerLifecycle?.displayMessage?.trim() || undefined
+  switch (foreground?._tag) {
+    case "Preparing":
       return {
-        tone: "unavailable",
-        kicker: "Not playable here",
-        reason: "Unavailable on this device",
+        tone: "preparing",
+        kicker:
+          foreground.state === "Spawning"
+            ? "Launching…"
+            : foreground.state === "Foregrounding"
+              ? "Bringing it up…"
+              : "Getting it ready…",
+        ...(providerMessage ? { reason: providerMessage } : {}),
         canRetry: false,
       }
-    case "Failed":
+    case "Running":
+      return { tone: "launched", kicker: "Now playing", canRetry: false }
+    case "Cooling":
       return {
-        tone: "failed",
-        kicker: "Couldn't start",
-        reason: state.failureKind
-          ? FAILURE_REASON[state.failureKind]
-          : "It didn't start",
-        canRetry: state.failureKind
-          ? !NON_RETRYABLE.has(state.failureKind)
-          : true,
+        tone: "cooling",
+        kicker: "Wrapping up…",
+        ...(providerMessage ? { reason: providerMessage } : {}),
+        canRetry: false,
       }
-    case "Defect":
+    case "Recovering":
       return {
-        tone: "failed",
-        kicker: "Couldn't start",
-        reason: "Something went wrong",
-        canRetry: true,
+        tone: "recovering",
+        kicker: "Recovering…",
+        reason:
+          foreground.message?.trim() ||
+          providerMessage ||
+          "Getting things back in order",
+        canRetry: false,
       }
     default:
-      // Idle, ReleaseSelectionRequired — render the normal hero.
+      // Idle, Accepted, Ready, Unknown, LoadError, ReleaseSelectionRequired —
+      // render the normal browsing hero.
       return null
   }
 }

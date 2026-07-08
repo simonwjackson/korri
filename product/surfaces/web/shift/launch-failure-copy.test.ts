@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { launchStatusView } from "./launch-failure-copy"
+import { isLaunchInProgress, launchStatusView } from "./launch-failure-copy"
 
 describe("launchStatusView", () => {
   it("renders the normal hero for idle / no state", () => {
@@ -99,5 +99,59 @@ describe("launchStatusView", () => {
       tone: "unavailable",
       canRetry: false,
     })
+  })
+
+  it("surfaces the foreground session lifecycle after the request is accepted", () => {
+    // Preparing (with per-provider stage message) makes the wait observable.
+    expect(
+      launchStatusView(
+        { _tag: "Accepted", gameId: "g" },
+        { _tag: "Preparing", state: "Preparing" },
+      ),
+    ).toMatchObject({ tone: "preparing", kicker: "Getting it ready…" })
+    expect(
+      launchStatusView(
+        { _tag: "Accepted", gameId: "g" },
+        {
+          _tag: "Preparing",
+          state: "Spawning",
+          providerLifecycle: {
+            providerId: "steam",
+            observerHealth: "ok",
+            lifecycleStatus: "preparing",
+            providerPhase: "launch",
+            displayMessage: "Preparing shaders",
+          },
+        },
+      ),
+    ).toMatchObject({
+      tone: "preparing",
+      kicker: "Launching…",
+      reason: "Preparing shaders",
+    })
+
+    // Cooling + Recovering are surfaced too (exit / teardown / recovery).
+    expect(
+      launchStatusView(undefined, { _tag: "Cooling", state: "TearingDown" }),
+    ).toMatchObject({
+      tone: "cooling",
+      kicker: "Wrapping up…",
+      canRetry: false,
+    })
+    expect(
+      launchStatusView(undefined, {
+        _tag: "Recovering",
+        state: "Failed",
+        message: "Restoring session",
+      }),
+    ).toMatchObject({ tone: "recovering", reason: "Restoring session" })
+  })
+
+  it("flags in-progress tones for the loading indicator", () => {
+    expect(isLaunchInProgress("preparing")).toBe(true)
+    expect(isLaunchInProgress("cooling")).toBe(true)
+    expect(isLaunchInProgress("recovering")).toBe(true)
+    expect(isLaunchInProgress("launched")).toBe(false)
+    expect(isLaunchInProgress("failed")).toBe(false)
   })
 })

@@ -351,4 +351,26 @@ describe("ShiftCinematicHome launch feedback", () => {
     expect(screen.getByText("Starting\u2026")).toBeTruthy()
     expect(screen.queryByText("Metroidvania")).toBeNull()
   })
+
+  it("surfaces the daemon's Preparing lifecycle with the provider stage", () => {
+    render(
+      <ShiftCinematicHome
+        games={games}
+        foregroundState={{
+          _tag: "Preparing",
+          state: "Spawning",
+          providerLifecycle: {
+            providerId: "steam",
+            observerHealth: "ok",
+            lifecycleStatus: "preparing",
+            providerPhase: "launch",
+            displayMessage: "Preparing shaders",
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText("Launching\u2026")).toBeTruthy()
+    expect(screen.getByText("Preparing shaders")).toBeTruthy()
+  })
 })

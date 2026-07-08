@@ -1,5 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion"
-import type { LaunchStatusView } from "../../launch-failure-copy"
+import {
+  isLaunchInProgress,
+  type LaunchStatusView,
+} from "../../launch-failure-copy"
 import type { ShiftCinematicGame } from "../../pages/ShiftCinematicHome"
 import {
   SHIFT_DESIGN_PARTS,
@@ -60,8 +63,17 @@ export function ShiftCineHero({
                 {status.kicker}
               </ShiftCineKicker>
               <ShiftCineTitle>{game.title}</ShiftCineTitle>
-              {status.tone === "launching" ? (
-                <ShiftCineLoading />
+              {isLaunchInProgress(status.tone) ? (
+                <>
+                  <ShiftCineLoading />
+                  {status.reason ? (
+                    <div className="shift-cine-chips">
+                      {/* Neutral progress line (e.g. the provider's stage), not
+                          the red failure chip. */}
+                      <ShiftCineChip>{status.reason}</ShiftCineChip>
+                    </div>
+                  ) : null}
+                </>
               ) : status.reason ? (
                 <div className="shift-cine-chips">
                   <ShiftCineChip tone="reason">{status.reason}</ShiftCineChip>
