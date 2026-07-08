@@ -148,12 +148,18 @@ export function renderRyubingConfig(
     policy.console?.["skip-user-profile-manager"],
   )
 
-  // Default to OpenAL: Ryujinx's SDL2 backend accumulates an undrainable
-  // sample queue whenever emulation runs sub-realtime (boot, shader
-  // compile), leaving seconds of permanent audio latency. Validated on
-  // bandai/SM8550 2026-06-11 — see
-  // docs/solutions/performance-issues/ryubing-sm8550-turnip26-openal-2026-06-11.md.
-  put(config, "audio_backend", kebabEnum(policy.audio?.backend) ?? "OpenAl")
+  if (policy.audio?.backend !== undefined) {
+    put(config, "audio_backend", kebabEnum(policy.audio.backend))
+  } else if (policy.display?.headless !== false) {
+    // Default headless/generated config to OpenAL: Ryujinx's SDL2 backend
+    // queues samples without dropping them whenever emulation runs
+    // sub-realtime (boot, shader compile), leaving seconds of permanent audio
+    // latency. Validated on bandai/SM8550 2026-06-11 — see
+    // docs/solutions/performance-issues/ryubing-sm8550-turnip26-openal-2026-06-11.md.
+    // GUI mode preserves the user's existing Config.json audio backend unless
+    // policy explicitly owns it via audio.backend.
+    put(config, "audio_backend", "OpenAl")
+  }
   put(config, "audio_volume", policy.audio?.volume)
 
   put(config, "enable_keyboard", policy.input?.keyboard)

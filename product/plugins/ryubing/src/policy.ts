@@ -56,7 +56,6 @@ const RyubingStatePolicy = Schema.Struct({
 const RyubingConfigPolicy = Schema.Struct({
   "merge-existing": Schema.optional(Schema.Boolean),
   "preserve-unknown": Schema.optional(Schema.Boolean),
-  version: Schema.optional(Schema.Number),
 })
 
 const RyubingContentPolicy = Schema.Struct({
@@ -160,8 +159,6 @@ const RyubingNetworkPolicy = Schema.Struct({
 
 const RyubingLoggingPolicy = Schema.Struct({
   file: Schema.optional(Schema.Boolean),
-  levels: Schema.optional(Schema.Array(Schema.String)),
-  "filtered-classes": Schema.optional(Schema.Array(Schema.String)),
 })
 
 export const RyubingPolicy = Schema.Struct({

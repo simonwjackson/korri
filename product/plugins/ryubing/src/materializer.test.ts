@@ -179,6 +179,7 @@ describe("Ryubing plugin materializer", () => {
         JSON.stringify({
           version: 70,
           input_config: [{ id: "existing-controller" }],
+          audio_backend: "SDL2",
           custom_user_setting: true,
         }),
       )
@@ -202,6 +203,7 @@ describe("Ryubing plugin materializer", () => {
         await readFile(join(stateRoot, "Config.json"), "utf8"),
       )
       expect(config.input_config).toEqual([{ id: "existing-controller" }])
+      expect(config.audio_backend).toBe("SDL2")
       expect(config.custom_user_setting).toBe(true)
     } finally {
       await rm(root, { recursive: true, force: true })

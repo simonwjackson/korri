@@ -71,5 +71,12 @@ describe("Ryubing plugin policy", () => {
       decodeRyubingPolicy({ input: { hotkeys: { toggle: "F11" } } }),
     ).toThrow()
     expect(() => decodeRyubingPolicy({ debug: { trace: true } })).toThrow()
+    expect(() => decodeRyubingPolicy({ config: { version: 70 } })).toThrow()
+    expect(() =>
+      decodeRyubingPolicy({ logging: { levels: ["Info"] } }),
+    ).toThrow()
+    expect(() =>
+      decodeRyubingPolicy({ logging: { "filtered-classes": ["Gpu"] } }),
+    ).toThrow()
   })
 })
