@@ -1,0 +1,127 @@
+/**
+ * Shift store detail route — focused view for one remote catalog claim.
+ *
+ * The route carries the current Store query in URL search (`q`) so a detail page
+ * opened from results can cold-load by re-running the same remote search and
+ * selecting the provider-qualified entry id from those claims.
+ */
+import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react"
+import type { RemoteCatalogError } from "@platform/acquisition/remote-catalog-source"
+import type { SearchResponse } from "@platform/protocol/acquisition/claim"
+import {
+  storeSearchQueryAtom,
+  storeSearchResultsAtom,
+} from "@platform/react/acquisition/remote-catalog-atoms"
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import { useEffect, useMemo } from "react"
+import { ShiftStoreDetail } from "../pages/ShiftStoreDetail"
+import { ShiftStoreEmpty } from "../pages/ShiftStoreEmpty"
+import type { ShiftStoreEntry } from "../pages/shift-store-entry"
+import { shiftStoreEntryIdFromRouteToken } from "./paths"
+import { shiftStoreEntriesFromSearch } from "./ShiftStoreRoute"
+
+export function ShiftStoreDetailRoute() {
+  const navigate = useNavigate()
+  const params = useParams({ strict: false }) as { readonly entryId?: string }
+  const search = useSearch({ strict: false }) as { readonly q?: string }
+  const query = search.q ?? ""
+  const entryId = params.entryId
+    ? shiftStoreEntryIdFromRouteToken(params.entryId)
+    : undefined
+
+  const setQuery = useAtomSet(storeSearchQueryAtom)
+  const result = useAtomValue(storeSearchResultsAtom)
+  const retry = useAtomRefresh(storeSearchResultsAtom)
+
+  useEffect(() => {
+    setQuery(query)
+  }, [query, setQuery])
+
+  const entry = useMemo(
+    () => findStoreDetailEntry(result, entryId),
+    [result, entryId],
+  )
+
+  const onBack = () =>
+    navigate({
+      to: "/store",
+      search: { q: query },
+      replace: false,
+    })
+
+  return (
+    <ShiftStoreDetailBody
+      query={query}
+      entry={entry}
+      result={result}
+      onRetry={retry}
+      onBack={onBack}
+    />
+  )
+}
+
+export function findStoreDetailEntry(
+  result: AsyncResult.AsyncResult<SearchResponse, RemoteCatalogError>,
+  entryId: string | undefined,
+): ShiftStoreEntry | undefined {
+  if (!entryId) return undefined
+  return AsyncResult.matchWithError(result, {
+    onInitial: () => undefined,
+    onError: () => undefined,
+    onDefect: () => undefined,
+    onSuccess: success =>
+      shiftStoreEntriesFromSearch(success.value).find(
+        entry => entry.id === entryId,
+      ),
+  })
+}
+
+function ShiftStoreDetailBody({
+  query,
+  entry,
+  result,
+  onRetry,
+  onBack,
+}: {
+  readonly query: string
+  readonly entry: ShiftStoreEntry | undefined
+  readonly result: AsyncResult.AsyncResult<SearchResponse, RemoteCatalogError>
+  readonly onRetry: () => void
+  readonly onBack: () => void
+}) {
+  return AsyncResult.matchWithError(result, {
+    onInitial: () => (
+      <StoreDetailStatus
+        message={query ? "Loading details…" : "Search again to open this item."}
+      />
+    ),
+    onError: error => (
+      <div className="shift-store-status">
+        <StoreDetailStatus
+          message={error.message ?? "The remote catalogs are unreachable."}
+        />
+        <button type="button" className="shift-store-retry" onClick={onRetry}>
+          Retry
+        </button>
+      </div>
+    ),
+    onDefect: () => (
+      <StoreDetailStatus message="Something went wrong loading details." />
+    ),
+    onSuccess: () =>
+      entry ? (
+        <ShiftStoreDetail entry={entry} onBack={onBack} />
+      ) : (
+        <StoreDetailStatus message="Store item not found." />
+      ),
+  })
+}
+
+function StoreDetailStatus({ message }: { readonly message: string }) {
+  return (
+    <div data-shift-detail className="shift-detail-split intrinsic">
+      <ShiftStoreEmpty message={message} />
+    </div>
+  )
+}

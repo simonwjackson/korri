@@ -18,6 +18,7 @@ import {
 } from "@testing-library/react"
 import type { Layer } from "effect"
 import { useLayoutEffect, useMemo } from "react"
+import { shiftStoreEntryIdToRouteToken } from "./paths"
 import { createShiftRouter } from "./route-tree"
 
 afterEach(() => cleanup())
@@ -165,6 +166,46 @@ describe("Shift store route — remote catalog search", () => {
     })
     expect(history.location.href).toBe("/store")
     expect(replaceCalls.some(href => href.includes("q=pico"))).toBe(true)
+  })
+
+  it("opens a searched item detail page from the result tile", async () => {
+    render(
+      <RegistryProvider>
+        <StoreAt
+          entry="/store?q=pico"
+          layer={makeInMemoryRemoteCatalogSourceLayer(CLAIMS)}
+        />
+      </RegistryProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Pico Park" })).toBeDefined()
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Pico Park" }))
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Pico Park" })).toBeDefined()
+    })
+    expect(screen.getByRole("button", { name: "Get" })).toBeDefined()
+    expect(screen.getAllByText(/itch\.io/).length).toBeGreaterThan(0)
+  })
+
+  it("cold-loads a store detail page from its query and entry token", async () => {
+    const entryId = "@korri:itchio:pico-park"
+    render(
+      <RegistryProvider>
+        <StoreAt
+          entry={`/store/${shiftStoreEntryIdToRouteToken(entryId)}?q=pico`}
+          layer={makeInMemoryRemoteCatalogSourceLayer(CLAIMS)}
+        />
+      </RegistryProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Pico Park" })).toBeDefined()
+    })
+    expect(screen.getByText(/available from itch\.io/)).toBeDefined()
   })
 
   it("shows the search error with a retry affordance", async () => {

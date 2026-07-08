@@ -35,7 +35,11 @@ import {
   deriveShiftStoreSources,
   toggleSource,
 } from "../pages/shift-store-query"
-import { SHIFT_STORE_PATH } from "./paths"
+import {
+  SHIFT_STORE_DETAIL_PATH,
+  SHIFT_STORE_PATH,
+  shiftStoreEntryIdToRouteToken,
+} from "./paths"
 
 const SEARCH_DEBOUNCE_MS = 250
 
@@ -61,6 +65,7 @@ export function ShiftStoreSearchView({
   result,
   onRetry,
   onBack,
+  onOpen,
 }: {
   readonly query: string
   readonly text: string
@@ -68,6 +73,7 @@ export function ShiftStoreSearchView({
   readonly result: AsyncResult.AsyncResult<SearchResponse, RemoteCatalogError>
   readonly onRetry?: () => void
   readonly onBack?: () => void
+  readonly onOpen?: (id: string) => void
 }) {
   const [sources, setSources] = useState<readonly string[]>([])
 
@@ -119,7 +125,11 @@ export function ShiftStoreSearchView({
       return (
         <div className="shift-store-tiles">
           {visible.map(entry => (
-            <ShiftStoreBrowseTile key={entry.id} entry={entry} />
+            <ShiftStoreBrowseTile
+              key={entry.id}
+              entry={entry}
+              onOpen={onOpen}
+            />
           ))}
         </div>
       )
@@ -188,6 +198,13 @@ export function ShiftStoreRoute() {
     return () => clearTimeout(timer)
   }, [text, activeQuery, navigate, setQuery])
 
+  const openEntry = (id: string) =>
+    navigate({
+      to: SHIFT_STORE_DETAIL_PATH,
+      params: { entryId: shiftStoreEntryIdToRouteToken(id) },
+      search: { q: activeQuery },
+    })
+
   return (
     <ShiftStoreSearchView
       query={activeQuery}
@@ -196,6 +213,7 @@ export function ShiftStoreRoute() {
       result={result}
       onRetry={retry}
       onBack={() => router.history.back()}
+      onOpen={openEntry}
     />
   )
 }

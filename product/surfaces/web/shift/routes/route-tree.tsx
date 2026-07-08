@@ -9,6 +9,7 @@ import type { ShiftLibrarySort } from "../pages/shift-library-query"
 import {
   SHIFT_COMPANION_PATH,
   SHIFT_LIBRARY_PATH,
+  SHIFT_STORE_DETAIL_PATH,
   SHIFT_STORE_PATH,
 } from "./paths"
 import {
@@ -21,6 +22,7 @@ import { ShiftGameDetailRoute } from "./ShiftGameDetailRoute"
 import { ShiftHomeRoute } from "./ShiftHomeRoute"
 import { ShiftLibraryRoute } from "./ShiftLibraryRoute"
 import { ShiftRouteTransition } from "./ShiftRouteTransition"
+import { ShiftStoreDetailRoute } from "./ShiftStoreDetailRoute"
 import { ShiftStoreRoute } from "./ShiftStoreRoute"
 
 const rootRoute = createRootRoute({ component: ShiftRouteTransition })
@@ -91,6 +93,24 @@ const storeRoute = createRoute({
   component: ShiftStoreRoute,
 })
 
+const storeDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: SHIFT_STORE_DETAIL_PATH,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { readonly q: string } => ({
+    q: typeof search.q === "string" ? search.q : "",
+  }),
+  staticData: {
+    axes: [
+      { name: "entryId", kind: "param" },
+      { name: "q", kind: "search" },
+      { name: "data", kind: "data" },
+    ],
+  },
+  component: ShiftStoreDetailRoute,
+})
+
 const companionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: SHIFT_COMPANION_PATH,
@@ -102,6 +122,7 @@ export const shiftRouteTree = rootRoute.addChildren([
   detailRoute,
   libraryRoute,
   storeRoute,
+  storeDetailRoute,
   companionRoute,
 ])
 
@@ -121,6 +142,7 @@ export function shiftRouteManifests(): readonly ShiftRouteManifest[] {
     shiftRouteManifest("/", readAxes(homeRoute)),
     shiftRouteManifest(SHIFT_LIBRARY_PATH, readAxes(libraryRoute)),
     shiftRouteManifest(SHIFT_STORE_PATH, readAxes(storeRoute)),
+    shiftRouteManifest(SHIFT_STORE_DETAIL_PATH, readAxes(storeDetailRoute)),
     shiftRouteManifest("/game/$id", readAxes(detailRoute)),
   ]
 }
