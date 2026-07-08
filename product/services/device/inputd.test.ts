@@ -705,9 +705,9 @@ B: KEY=40000000
     }
   })
 
-  it("routes Android keyboard Back without treating Select as Back", async () => {
+  it("routes Android keyboard Back to the configured keyboard toggle", async () => {
     const previous = process.env.KORRI_INPUTD_BACK_TAP_ACTION
-    process.env.KORRI_INPUTD_BACK_TAP_ACTION = "toggle-steam-visibility"
+    process.env.KORRI_INPUTD_BACK_TAP_ACTION = "toggle-bottom-keyboard"
     try {
       const proc = await loadProcFixture("bus-input-devices-device.txt")
       const source = createControllableEventSource()
@@ -734,10 +734,10 @@ B: KEY=40000000
       source.push(evdevKey(KEY_BACK, 0))
 
       await waitFor(
-        () => actions.includes("toggle-steam-visibility"),
-        "Steam visibility toggle",
+        () => actions.includes("toggle-bottom-keyboard"),
+        "keyboard toggle",
       )
-      expect(actions).toEqual(["toggle-steam-visibility"])
+      expect(actions).toEqual(["toggle-bottom-keyboard"])
     } finally {
       if (previous === undefined) {
         delete process.env.KORRI_INPUTD_BACK_TAP_ACTION

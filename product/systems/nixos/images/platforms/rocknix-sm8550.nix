@@ -149,148 +149,27 @@ let
   # of fake suspend. The substrate verb owns radios + governors + NM recovery;
   # this package only drops enter/exit request markers into the neutral channel.
   korriFakesuspendToggle = korri.packages.${targetSystem}.korri-fakesuspend-toggle;
-  # Bandai bottom-screen keyboard MVP. This remains platform-local: the AYN/F24
-  # button dispatches inputd's existing toggle-bottom-screen action, and only
-  # this image overrides that action with second-screen policy.
-  korriBandaiBottomKeyboardToggle = pkgs.writeShellApplication {
-    name = "korri-bandai-bottom-keyboard-toggle";
+  # Bandai keyboard toggle. Android Back dispatches inputd's keyboard action,
+  # and wvkbd opens on the currently focused workspace/output instead of being
+  # coupled to second-screen power policy.
+  korriBandaiKeyboardToggle = pkgs.writeShellApplication {
+    name = "korri-bandai-keyboard-toggle";
     runtimeInputs = with pkgs; [
-      coreutils
-      findutils
-      gnugrep
       procps
-      sway
       wvkbd
-    ];
-    text =
-      # Bottom-screen keyboard toggle is dual-panel (Thor/Bandai) policy. On
-      # single-panel devices there is no secondary connector, so the action
-      # must no-op rather than power off the only display.
-      if displayBottomConnector == null then
-        ''
-          set -u
-          # Single-panel device: no secondary/bottom screen to toggle.
-          exit 0
-        ''
-      else
-        ''
-          set -u
-
-          runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
-          find_sway_sock() {
-            if [ -n "''${SWAYSOCK:-}" ] && [ -S "$SWAYSOCK" ]; then
-              printf '%s\n' "$SWAYSOCK"
-              return 0
-            fi
-            if [ -S "$runtime_dir/sway-ipc.sock" ]; then
-              printf '%s\n' "$runtime_dir/sway-ipc.sock"
-              return 0
-            fi
-            find "$runtime_dir" -maxdepth 1 -type s -name 'sway-ipc.*.sock' -print -quit 2>/dev/null || true
-          }
-          sock=$(find_sway_sock | head -n 1)
-          [ -n "$sock" ] || exit 0
-          export SWAYSOCK="$sock"
-
-          bottom_is_on() {
-            swaymsg -t get_outputs \
-              | grep -A30 '"name": "${displayBottomConnector}"' \
-              | grep -q '"power": true'
-          }
-
-          stop_keyboard() {
-            pkill -x wvkbd-mobintl 2>/dev/null || true
-            pkill -x wvkbd 2>/dev/null || true
-          }
-
-          if bottom_is_on; then
-            stop_keyboard
-            swaymsg 'focus output ${displayPrimaryConnector}' >/dev/null 2>&1 || true
-            ${renderBottomTouchEvents "disabled"}
-            swaymsg 'output ${displayBottomConnector} power off' >/dev/null 2>&1 || true
-            exit 0
-          fi
-
-          swaymsg 'output ${displayBottomConnector} power on' >/dev/null 2>&1 || true
-          ${renderBottomTouchEvents "enabled"}
-          swaymsg 'focus output ${displayBottomConnector}' >/dev/null 2>&1 || true
-          swaymsg 'workspace "korri:bottom-keyboard"' >/dev/null 2>&1 || true
-
-          if ! pgrep -x wvkbd-mobintl >/dev/null 2>&1; then
-            wvkbd-mobintl -L 360 --fn 'sans 18' >/tmp/korri-bottom-keyboard.log 2>&1 &
-          fi
-
-          sleep 0.2
-          swaymsg 'focus output ${displayPrimaryConnector}' >/dev/null 2>&1 || true
-        '';
-  };
-  # Temporary Steam debugging escape hatch. Desktop-mode Steam can map several
-  # Xwayland windows; Back-button visibility is profile-local and intentionally
-  # easy to remove once Steam launch/debugging stabilizes.
-  korriSteamVisibilityToggle = pkgs.writeShellApplication {
-    name = "korri-steam-visibility-toggle";
-    runtimeInputs = with pkgs; [
-      coreutils
-      findutils
-      jq
-      sway
     ];
     text = ''
       set -u
 
-      runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
-      hub_workspace="''${KORRI_STEAM_TOGGLE_HUB_WORKSPACE:-korri:hub}"
-      steam_workspace="''${KORRI_STEAM_TOGGLE_WORKSPACE:-korri:steam-debug}"
-      sock=$(find "$runtime_dir" -maxdepth 1 -name 'sway-ipc.*.sock' -print 2>/dev/null | head -n 1 || true)
-      [ -n "$sock" ] || exit 0
-      export SWAYSOCK="$sock"
-
-      current_workspace=$(swaymsg -t get_workspaces 2>/dev/null \
-        | jq -r '.[] | select(.focused == true) | .name' \
-        | head -n 1 || true)
-
-      if [ "$current_workspace" = "$steam_workspace" ]; then
-        swaymsg "workspace \"$hub_workspace\"" >/dev/null 2>&1 || true
+      if pgrep -x wvkbd-mobintl >/dev/null 2>&1 || pgrep -x wvkbd >/dev/null 2>&1; then
+        pkill -x wvkbd-mobintl 2>/dev/null || true
+        pkill -x wvkbd 2>/dev/null || true
         exit 0
       fi
 
-      steam_window_filter='
-        def steam_text: ascii_downcase | test("steam|gamescope");
-        .. | objects
-        | select((.type? == "con" or .type? == "floating_con") and (
-            ((.app_id? // "") | steam_text)
-            or ((.window_properties?.class? // "") | steam_text)
-            or ((.window_properties?.instance? // "") | steam_text)
-            or ((.name? // "") | steam_text)
-          ))
-      '
-      steam_window_ids=$(swaymsg -t get_tree 2>/dev/null \
-        | jq -r "$steam_window_filter | .id" \
-        | sort -n \
-        | uniq || true)
-
-      if [ -z "$steam_window_ids" ]; then
-        swaymsg "workspace \"$hub_workspace\"" >/dev/null 2>&1 || true
-        exit 0
-      fi
-
-      steam_focus_id=$(swaymsg -t get_tree 2>/dev/null \
-        | jq -r "$steam_window_filter | select((((.app_id? // \"\") | ascii_downcase) == \"steam\") or (((.window_properties?.class? // \"\") | ascii_downcase) == \"steam\") or (((.name? // \"\") | ascii_downcase) == \"steam\")) | .id" \
-        | sort -n \
-        | tail -n 1 || true)
-      [ -n "$steam_focus_id" ] || steam_focus_id=$(printf '%s\n' "$steam_window_ids" | tail -n 1)
-
-      swaymsg 'focus output ${resolvedHomeOutput}' >/dev/null 2>&1 || true
-      for id in $steam_window_ids; do
-        swaymsg "[con_id=$id] scratchpad show" >/dev/null 2>&1 || true
-        swaymsg "[con_id=$id] move container to workspace \"$steam_workspace\"" >/dev/null 2>&1 || true
-      done
-      swaymsg 'focus output ${resolvedHomeOutput}' >/dev/null 2>&1 || true
-      swaymsg "workspace \"$steam_workspace\"" >/dev/null 2>&1 || true
-      swaymsg "[con_id=$steam_focus_id] focus, fullscreen enable, border none" >/dev/null 2>&1 || true
+      wvkbd-mobintl -L 360 --fn 'sans 18' >/tmp/korri-keyboard.log 2>&1 &
     '';
   };
-
   # The substrate exposes an explicit audio route strategy under
   # rocknix.device.audio.route.*. Korri owns the kiosk user's PipeWire graph,
   # but it still treats the substrate route as the source of truth: product
@@ -859,14 +738,11 @@ in
   #   - volume up/down -> inputd's built-in `pactl set-sink-volume` default
   #     (PULSE_SERVER below points it at the Korri user-session graph); no
   #     override needed now that the substrate volume handler is gone.
-  #   - AYN/F24 -> bottom-screen toggle. This is SM8550/Bandai-specific device
-  #     policy and intentionally not part of standard controller Home handling.
-  #   - Back -> temporary Steam visibility toggle for development debugging.
+  #   - Back -> keyboard toggle. The Android Back key is the hardware gesture for
+  #     the active-workspace on-screen keyboard on Bandai.
   services.korri.input.inputd.environment = {
-    KORRI_INPUTD_KEY_F24_ACTION = "toggle-bottom-screen";
-    KORRI_INPUTD_BACK_TAP_ACTION = "toggle-steam-visibility";
-    KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN = "${korriBandaiBottomKeyboardToggle}/bin/korri-bandai-bottom-keyboard-toggle";
-    KORRI_INPUTD_TOGGLE_STEAM_VISIBILITY = "${korriSteamVisibilityToggle}/bin/korri-steam-visibility-toggle";
+    KORRI_INPUTD_BACK_TAP_ACTION = "toggle-bottom-keyboard";
+    KORRI_INPUTD_BOTTOM_KEYBOARD = "${korriBandaiKeyboardToggle}/bin/korri-bandai-keyboard-toggle";
     KORRI_INPUTD_POWER_SUSPEND = "${korriFakesuspendToggle}/bin/korri-fakesuspend-toggle";
     KORRI_INPUTD_LID_CLOSED = "${korriFakesuspendToggle}/bin/korri-fakesuspend-toggle suspend";
     KORRI_INPUTD_LID_OPENED = "${korriFakesuspendToggle}/bin/korri-fakesuspend-toggle resume";

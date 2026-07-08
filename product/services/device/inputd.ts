@@ -17,8 +17,8 @@ import {
   EV_ABS,
   EV_KEY,
   EV_SW,
-  KEY_BRIGHTNESSDOWN,
   KEY_BACK,
+  KEY_BRIGHTNESSDOWN,
   KEY_BRIGHTNESSUP,
   KEY_F24,
   KEY_POWER,
@@ -27,6 +27,10 @@ import {
   KEY_VOLUMEUP,
   SW_LID,
 } from "@platform/input/native/button-codes"
+import {
+  type ChordHoldTimers,
+  createChordHoldSupervisor,
+} from "@platform/input/native/chord-hold-supervisor"
 import {
   type DiscoveredDevice,
   type NativeInputAxisInfo,
@@ -45,11 +49,6 @@ import {
   type SystemTapDefinition,
 } from "@platform/input/native/system-shortcut-engine"
 import {
-  createChordHoldSupervisor,
-  type ChordHoldTimers,
-} from "@platform/input/native/chord-hold-supervisor"
-import { createOverlayHoldHandlerFromEnv } from "./overlay-wiring"
-import {
   decodeNativeInputEvent,
   decodeNativeInputSubscription,
   encodeNativeInputEvent,
@@ -62,8 +61,9 @@ import {
   type KorriInputdActionId,
 } from "./inputd-actions"
 import { stopRemoteGameOnHost } from "./overlay-remote-stop"
-import { createLiveOverlaySessionProbe } from "./overlay-session-state-live"
 import type { OverlaySessionProbe } from "./overlay-session-state"
+import { createLiveOverlaySessionProbe } from "./overlay-session-state-live"
+import { createOverlayHoldHandlerFromEnv } from "./overlay-wiring"
 
 export interface KorriInputdEventSource extends AsyncIterable<Uint8Array> {
   close?: () => void
@@ -776,6 +776,8 @@ function backTapActionFromEnv(
   env: NodeJS.ProcessEnv,
 ): KorriInputdActionId | null {
   switch (env.KORRI_INPUTD_BACK_TAP_ACTION) {
+    case "toggle-bottom-keyboard":
+      return "toggle-bottom-keyboard"
     case "toggle-steam-visibility":
       return "toggle-steam-visibility"
     default:
