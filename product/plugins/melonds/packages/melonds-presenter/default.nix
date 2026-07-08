@@ -4,6 +4,7 @@ pkgs.writeShellApplication {
   name = "korri-melonds-presenter";
   runtimeInputs = [
     pkgs.coreutils
+    pkgs.gnused
     pkgs.jq
     pkgs.sway
   ];
@@ -63,7 +64,7 @@ pkgs.writeShellApplication {
     }
 
     regex_escape() {
-      jq -rn --arg value "$1" '$value | gsub("([][.^$*+?(){}|\\\\])"; "\\\\\\1")'
+      printf '%s' "$1" | sed 's/[][\\.^$*+?(){}|]/\\\\&/g'
     }
 
     melonds_cmd="$(jq -er '.melonDs.command' "$payload")"
@@ -86,6 +87,13 @@ pkgs.writeShellApplication {
     if [ -n "$stylesheet" ]; then
       require_safe_path stylesheet "$stylesheet"
     fi
+    for rect_key in top bottom; do
+      require_safe_token "windows.$rect_key.output" "$(jq -er ".windows.$rect_key.output" "$payload")"
+      jq -er ".windows.$rect_key.x | numbers" "$payload" >/dev/null
+      jq -er ".windows.$rect_key.y | numbers" "$payload" >/dev/null
+      jq -er ".windows.$rect_key.width | numbers" "$payload" >/dev/null
+      jq -er ".windows.$rect_key.height | numbers" "$payload" >/dev/null
+    done
 
     mapfile -t melonds_args < <(jq -er '.melonDs.args[]?' "$payload")
     for arg in "''${melonds_args[@]}"; do
