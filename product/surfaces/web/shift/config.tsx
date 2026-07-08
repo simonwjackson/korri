@@ -18,7 +18,7 @@ import type {
   Screen,
   ThemeKnob,
   ThemeWorkshopConfig,
-} from "@tools/theme-workshop"
+} from "@simonwjackson/caliper"
 import { DEV_GAME_MEDIA } from "./dev-game-media"
 import {
   type ShiftCinematicGame,

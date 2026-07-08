@@ -2,7 +2,7 @@
  * Lens Row molecule catalog entry — the All / Favorites / By Genre tablist as
  * a lens-selection state family (which lens is active).
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"
 import { ShiftPartFrame } from "../ui/ShiftPartFrame"
 import { SHIFT_LIBRARY_LENSES, ShiftLensRow } from "./ShiftLensRow"

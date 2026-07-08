@@ -754,7 +754,7 @@
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.60.2", "", { "os": "win32", "cpu": "x64" }, "sha512-Nd/SgG27WoA9e+/TdK74KnHz852TLa94ovOYySo/yMPuTmpckK/jIF2jSwS3g7ELSKXK13/cVdmg1Z/DaCWKxA=="],
 
-    "@simonwjackson/caliper": ["@simonwjackson/caliper@git+ssh://git@github.com/simonwjackson/caliper.git#e16ef24db7feef02743bbb3a570a1ce73fa7a3dc", { "dependencies": { "@fontsource-variable/geist": "^5.2.8", "@fontsource-variable/nunito": "^5.2.7" }, "peerDependencies": { "@effect/atom-react": "4.0.0-beta.78", "@tanstack/history": "^1.120.3", "@tanstack/react-router": "^1.120.3", "effect": "4.0.0-beta.78", "react": ">=19", "react-dom": ">=19" } }, "e16ef24db7feef02743bbb3a570a1ce73fa7a3dc"],
+    "@simonwjackson/caliper": ["@simonwjackson/caliper@git+ssh://git@github.com/simonwjackson/caliper.git#4e5fdfb677bc407b3674312bd2d287d8400761f2", { "dependencies": { "@fontsource-variable/geist": "^5.2.8", "@fontsource-variable/nunito": "^5.2.7" }, "peerDependencies": { "@effect/atom-react": "4.0.0-beta.78", "@tanstack/history": "^1.120.3", "@tanstack/react-router": "^1.120.3", "effect": "4.0.0-beta.78", "react": ">=19", "react-dom": ">=19" } }, "4e5fdfb677bc407b3674312bd2d287d8400761f2"],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 

@@ -10,7 +10,7 @@
  * (`shift-store-variants.tsx`) shared with the device-lab screen catalog, so
  * parts discovery collects exactly one story family per variant.
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_STORE_ENTRIES } from "../config"
 import {
   type ShiftStoreVariant,

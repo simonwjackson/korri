@@ -6,7 +6,7 @@
  * fixture-backed variant so the dev-lab States panel can switch between them
  * while inspecting the part. Static (no backend, no router).
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { ShiftDetailSplit } from "./pages/ShiftDetailSplit"
 import {
   SHIFT_DETAIL_FRESH,

@@ -7,4 +7,4 @@ export {
   makeSeedInitialValues,
   SEED_ENTRY_SOURCE,
   type SeedInitialValues,
-} from "../theme-workshop/lab/seed/shift-seed"
+} from "../lab/seed/shift-seed"

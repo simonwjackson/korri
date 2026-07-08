@@ -2,7 +2,7 @@
  * Detail Button atom catalog entry — primary (play verb), secondary (New
  * Game), and the favourite toggle in both pressed states.
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"
 import { ShiftPartFrame } from "../ui/ShiftPartFrame"
 import { ShiftDetailButton } from "./ShiftDetailButton"

@@ -1,7 +1,7 @@
 /**
  * Deck Favorite Button atom catalog entry — unfavorited and favorited.
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"
 import { ShiftPartFrame } from "../ui/ShiftPartFrame"
 import { ShiftDeckFavoriteButton } from "./ShiftDeckFavoriteButton"

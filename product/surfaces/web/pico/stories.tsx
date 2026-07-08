@@ -9,7 +9,7 @@
  * its `*.story.tsx` and it shows up in the right layer. See `story-spec.ts`
  * for the StorySpec contract.
  */
-import type { Story, StoryLayer } from "@tools/theme-workshop"
+import type { Story, StoryLayer } from "@simonwjackson/caliper"
 import type { StorySpec } from "./story-spec"
 
 const LAYER_OF: Record<string, StoryLayer> = {

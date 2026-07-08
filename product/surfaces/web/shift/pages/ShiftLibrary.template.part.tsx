@@ -12,7 +12,7 @@
  * replace the coarse `ShiftScreens` bridge for Library, so parts discovery
  * collects exactly one story family per variant.
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_LIBRARY_GAMES } from "../config"
 import {
   type ShiftLibraryVariant,

@@ -14,7 +14,7 @@
  * ShiftLibrary.page.part.tsx); the bridge remains as the safety net for any
  * future screen added to the config before its dedicated part exists.
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { shiftConfig } from "./config"
 
 // Covered by dedicated stateful part files; keep them out of the bridge so the

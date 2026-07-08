@@ -1,4 +1,4 @@
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { picoConfig } from "./config"
 
 export const rootProps = picoConfig.rootProps

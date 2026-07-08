@@ -12,7 +12,7 @@
  * to the capture seam (see `ShiftHomeStateView` / `shift-live-coordinate`).
  */
 import { CATALOG_DISPLAY_TAGS } from "@platform/catalog/catalog-state-samples"
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { ShiftHomeStateView } from "./routes/ShiftHomeRoute"
 import { shiftCatalogStateSamples } from "./shift-catalog-state-samples"
 import { SHIFT_DESIGN_PARTS } from "./shift-design-parts"

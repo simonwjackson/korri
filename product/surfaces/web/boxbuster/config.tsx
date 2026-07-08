@@ -13,7 +13,7 @@ import type {
   DeviceConfig,
   Screen,
   ThemeWorkshopConfig,
-} from "@tools/theme-workshop"
+} from "@simonwjackson/caliper"
 import { App } from "./app"
 
 const DEVICES: readonly DeviceConfig[] = [

@@ -13,7 +13,7 @@ import type {
   Story,
   ThemeKnob,
   ThemeWorkshopConfig,
-} from "@tools/theme-workshop"
+} from "@simonwjackson/caliper"
 import { usePicoControls } from "./pico-controls"
 import { picoCue } from "./pico-cue"
 import { PICO_GROUPS, PICO_SCREENS } from "./screen-catalog"

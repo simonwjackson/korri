@@ -3,7 +3,7 @@
  * candidates under exploration), each shown selected beside an idle sibling so
  * the pair can be judged per variant.
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"
 import { ShiftPartFrame } from "../ui/ShiftPartFrame"
 import {

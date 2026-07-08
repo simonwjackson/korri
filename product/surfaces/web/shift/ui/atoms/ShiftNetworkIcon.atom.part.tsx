@@ -1,5 +1,5 @@
 /** Network Icon atom catalog entry — connected and disconnected. */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_DESIGN_PARTS } from "../../shift-design-parts"
 import { ShiftPartFrame } from "../ShiftPartFrame"
 import { ShiftNetworkIcon } from "./ShiftNetworkIcon"

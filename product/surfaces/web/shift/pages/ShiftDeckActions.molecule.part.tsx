@@ -2,7 +2,7 @@
  * Deck Actions molecule catalog entry — prev / Play / Favorite / next, in its
  * unfavorited and favorited states.
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"
 import { ShiftPartFrame } from "../ui/ShiftPartFrame"
 import { ShiftDeckActions } from "./ShiftDeckActions"

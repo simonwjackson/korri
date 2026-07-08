@@ -2,7 +2,7 @@
  * Detail Stats molecule catalog entry — play-history row across its real
  * states: played (with playtime + favourite) and never-played.
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"
 import { ShiftPartFrame } from "../ui/ShiftPartFrame"
 import { ShiftDetailStats } from "./ShiftDetailStats"

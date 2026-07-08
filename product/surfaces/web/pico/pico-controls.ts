@@ -10,7 +10,7 @@
  *   ♪ / 🔇 → mute the 8-bit SFX
  */
 
-import type { WorkshopControl } from "@tools/theme-workshop"
+import type { WorkshopControl } from "@simonwjackson/caliper"
 import { useState } from "react"
 import {
   cycleGranularity,

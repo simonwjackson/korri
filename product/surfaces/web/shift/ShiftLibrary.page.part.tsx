@@ -13,7 +13,7 @@
  * the Lens is a real route.
  */
 import { CATALOG_DISPLAY_TAGS } from "@platform/catalog/catalog-state-samples"
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { ShiftLibraryStateView } from "./routes/ShiftLibraryRoute"
 import { shiftCatalogStateSamples } from "./shift-catalog-state-samples"
 import { SHIFT_DESIGN_PARTS } from "./shift-design-parts"

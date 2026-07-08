@@ -1,7 +1,7 @@
 /**
  * Deck Arrow atom catalog entry — previous and next riffle chevrons.
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"
 import { ShiftPartFrame } from "../ui/ShiftPartFrame"
 import { ShiftDeckArrow } from "./ShiftDeckArrow"

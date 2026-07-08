@@ -10,7 +10,7 @@
  * add a PicoScreen entry. Group css is side-effect-imported here so a new group
  * is wired in one place.
  */
-import type { Screen } from "@tools/theme-workshop"
+import type { Screen } from "@simonwjackson/caliper"
 import { picoGames } from "./fixtures"
 import { picoHero } from "./fixtures-extra"
 import * as Acquire from "./screens/AcquireScreens"

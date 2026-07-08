@@ -2,7 +2,7 @@
  * Reel Cover molecule catalog entry — the wheel cover in its centre (hero) and
  * peeking (off-centre) states.
  */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_LIBRARY_GAMES } from "../config"
 import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"
 import { ShiftPartFrame } from "../ui/ShiftPartFrame"

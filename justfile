@@ -17,24 +17,10 @@ dev-web port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}":
 dev-api port="${API_PORT:-3001}":
   PORT={{port}} NODE_ENV=development bun product/services/server/http/server.ts
 
-# Deprecated: dev-lab is the canonical design tool. Kept as a compatibility alias.
-dev-theme-workshop port="3130":
-  @echo "dev-theme-workshop is deprecated; starting dev-lab instead"
-  bun run vite --config tools/theme-workshop/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
-
 # Dev-only first-class design lab: real app surfaces, parts, sources/states, and multi-device routing.
 # Engine comes from the @simonwjackson/caliper package; korri contributes only adapters + parts (tools/lab).
 dev-lab port="3130":
   bun run vite --config tools/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
-
-# Design lab for on-device viewing (phone/tablet). Keeps HMR, but swaps Vite's
-# reconnect-driven full-page reload for a silent in-place reconnect, so
-# backgrounding the browser and returning resumes HMR instead of reloading.
-# Serves an installable fullscreen PWA; serves HTTPS automatically when a
-# locally-trusted cert exists at tools/theme-workshop/lab/pwa/.certs
-# (mint one with tools/theme-workshop/lab/pwa/make-cert.sh).
-dev-lab-device port="3130":
-  LAB_DEVICE=1 bun run vite --config tools/theme-workshop/lab/vite.config.mjs --host 0.0.0.0 --port {{port}} --clearScreen false
 
 # Dev-only seed proof: render the REAL Shift home from an in-memory seed (no API/device).
 dev-seed-proof port="3120":

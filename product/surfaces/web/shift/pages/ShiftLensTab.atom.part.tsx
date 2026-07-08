@@ -1,5 +1,5 @@
 /** Lens Tab atom catalog entry — selected and unselected. */
-import type { Story } from "@tools/theme-workshop"
+import type { Story } from "@simonwjackson/caliper"
 import { SHIFT_DESIGN_PARTS } from "../shift-design-parts"
 import { ShiftPartFrame } from "../ui/ShiftPartFrame"
 import { ShiftLensTab } from "./ShiftLensTab"
