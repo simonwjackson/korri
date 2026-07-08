@@ -1,7 +1,7 @@
 ---
 title: "fix: Productize Steam AppID exclusive Gamescope lifecycle"
 type: fix
-status: active
+status: completed
 date: 2026-07-07
 deepened: 2026-07-08
 scope_confirmed: "Include full Gamescope crash root-cause fix in this plan"
