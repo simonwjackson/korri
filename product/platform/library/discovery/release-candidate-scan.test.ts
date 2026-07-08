@@ -54,6 +54,25 @@ const testGbaDiscoveryProvider = releaseDiscoveryProvider({
 })
 const testGbaDiscoveryProviders = [testGbaDiscoveryProvider]
 
+const testNdsDiscoveryProvider = releaseDiscoveryProvider({
+  id: "@korri:test/nds-files",
+  title: "Test NDS files",
+  discover: ({ files }) =>
+    files
+      .filter(file => file.extension.toLowerCase() === ".nds")
+      .map(file => ({
+        kind: "file-release" as const,
+        confidence: "high" as const,
+        source: file,
+        release: {
+          id: "nds",
+          system: "nds",
+          app: "@korri:melonds/melonds",
+        },
+        evidence: [{ kind: "extension", value: ".nds" }],
+      })),
+})
+
 const testSteamDiscoveryProvider = releaseDiscoveryProvider({
   id: "@korri:steam/installed-apps",
   title: "Steam installed apps",
@@ -139,10 +158,6 @@ describe("classifyRomScanPath", () => {
   })
 
   it("reports unsupported game-like files without making them candidates", () => {
-    expect(classifyRomScanPath("game.nds")).toMatchObject({
-      _tag: "Unsupported",
-      system: "nds",
-    })
     expect(classifyRomScanPath("game.wua")).toMatchObject({
       _tag: "Unsupported",
       system: "wiiu",
@@ -162,6 +177,11 @@ describe("classifyRomScanPath", () => {
   })
 
   it("lets plugin-owned systems reach release discovery providers", () => {
+    expect(classifyRomScanPath("game.nds")).toMatchObject({
+      _tag: "Unclaimed",
+      system: "nds",
+      reason: "unclaimed:nds",
+    })
     expect(classifyRomScanPath("game.nsp")).toMatchObject({
       _tag: "Unclaimed",
       system: "switch",
@@ -402,6 +422,57 @@ describe("scanReleaseCandidates", () => {
     const metroid = decodeLibraryItemPayload(parsed.library["metroid-fusion"])
     expect(metroid.releases[0]?.target).toMatchObject({
       discovery: { "first-seen-at": "2026-06-29T12:34:56.000Z" },
+    })
+  })
+
+  it("discovers Nintendo DS files only when the melonDS provider is enabled", async () => {
+    await using fixture = await withTempRomRoot({
+      "Nintendo DS/Mario Kart DS.NDS": "",
+      "Nintendo DS/archive.zip": "",
+    })
+
+    const disabled = await scanReleaseCandidates({
+      discoveryProviders: [],
+      root: fixture.root,
+      storage: "roms",
+      now: () => "2026-06-29T12:34:56.000Z",
+    })
+    expect(disabled.status).toBe("ok")
+    if (disabled.status !== "ok") return
+    expect(disabled.report).toMatchObject({
+      files: 2,
+      candidates: 0,
+      ambiguous: 1,
+      unclaimed: 1,
+    })
+
+    const enabled = await scanReleaseCandidates({
+      discoveryProviders: [testNdsDiscoveryProvider],
+      root: fixture.root,
+      storage: "roms",
+      now: () => "2026-06-29T12:34:56.000Z",
+    })
+    expect(enabled.status).toBe("ok")
+    if (enabled.status !== "ok") return
+    expect(enabled.report).toMatchObject({
+      files: 2,
+      candidates: 1,
+      ambiguous: 1,
+      unclaimed: 0,
+    })
+    const parsed = parse(enabled.yaml) as {
+      readonly library: Record<string, unknown>
+    }
+    const item = decodeLibraryItemPayload(parsed.library["mario-kart-ds"])
+    expect(item.releases[0]).toMatchObject({
+      id: "nds",
+      system: "nds",
+      target: {
+        kind: "file",
+        storage: "roms",
+        path: "Nintendo DS/Mario Kart DS.NDS",
+      },
+      launch: { use: "@korri:melonds/melonds" },
     })
   })
 

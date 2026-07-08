@@ -11,6 +11,12 @@ import { KORRI_GMLOADER_PLUGIN_ID } from "@product/plugins/gmloader"
 import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "@product/plugins/levelsharesquare"
 import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "@product/plugins/mega-man-arena"
 import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "@product/plugins/mega-man-maker"
+import {
+  KORRI_MELONDS_APP_ID,
+  KORRI_MELONDS_NDS_DISCOVERY_PROVIDER_ID,
+  KORRI_MELONDS_NDS_SYSTEM_ID,
+  KORRI_MELONDS_PLUGIN_ID,
+} from "@product/plugins/melonds"
 import { KORRI_MIDAS_MACHINE_PLUGIN_ID } from "@product/plugins/midas-machine"
 import {
   KORRI_PICO8_CART_DISCOVERY_PROVIDER_ID,
@@ -175,6 +181,48 @@ describe("first-party plugins", () => {
     expect(
       ryubing?.contributes.discovery?.map(provider => provider.id),
     ).toEqual([KORRI_RYUBING_DISCOVERY_PROVIDER_ID])
+  })
+
+  it("registers melonDS as a first-party Nintendo DS standalone launcher", () => {
+    const melonDs = firstPartyPlugins.find(
+      plugin => plugin.id === KORRI_MELONDS_PLUGIN_ID,
+    )
+
+    expect(melonDs?.contributes.config.launchers?.melonds).toMatchObject({
+      id: KORRI_MELONDS_APP_ID,
+      plugin: KORRI_MELONDS_PLUGIN_ID,
+      command: "/run/current-system/sw/bin/melonDS",
+      args: ["{content.path}"],
+      systems: [KORRI_MELONDS_NDS_SYSTEM_ID],
+    })
+    expect(melonDs?.contributes.config.systems?.nds).toMatchObject({
+      id: KORRI_MELONDS_NDS_SYSTEM_ID,
+    })
+    expect(
+      melonDs?.contributes.discovery?.map(provider => provider.id),
+    ).toEqual([KORRI_MELONDS_NDS_DISCOVERY_PROVIDER_ID])
+  })
+
+  it("exposes the melonDS readable launch integration only when enabled", () => {
+    const disabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,
+    })
+    const enabled = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_MELONDS_PLUGIN_ID,
+    })
+
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(disabled).some(
+        integration => integration.providerId === KORRI_MELONDS_PLUGIN_ID,
+      ),
+    ).toBe(false)
+    expect(
+      firstPartyLaunchIntegrationsForRegistry(enabled).some(
+        integration =>
+          integration.kind === KORRI_MELONDS_PLUGIN_ID &&
+          integration.integration === "melonds",
+      ),
+    ).toBe(true)
   })
 
   it("registers Steam as a first-party app provider plugin", () => {

@@ -18,6 +18,7 @@ import { levelShareSquarePlugin } from "@product/plugins/levelsharesquare"
 import { megaManArenaPlugin } from "@product/plugins/mega-man-arena"
 import { megaManMakerPlugin } from "@product/plugins/mega-man-maker"
 import { megaManRockNRollPlugin } from "@product/plugins/mega-man-rock-n-roll"
+import { melonDsPlugin } from "@product/plugins/melonds"
 import { midasMachinePlugin } from "@product/plugins/midas-machine"
 import { moonlightPlugin } from "@product/plugins/moonlight"
 import { neverballPlugin } from "@product/plugins/neverball"
@@ -95,6 +96,7 @@ export const bundledPluginInventory = [
   gmloaderPlugin,
   psychoWaluigiPlugin,
   ryubingPlugin,
+  melonDsPlugin,
   superMarioBrosRemasteredPlugin,
   superMario127Plugin,
   turnipPlugin,

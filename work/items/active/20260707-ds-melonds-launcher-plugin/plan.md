@@ -4,7 +4,7 @@ type: feat
 status: active
 date: 2026-07-07
 origin: work/items/active/01KV8NZRAAETDX69P5T73BRVY8-first-party-plugin-system-shape/requirements.md
-verify_command: "bun test product/plugins/melonds product/platform/library/discovery product/plugin-host && just typecheck && just lint && just test-nix"
+verify_command: "just test-unit && just typecheck && just lint && just test-nix"
 ---
 
 # feat: Add standalone melonDS Nintendo DS launcher plugin
@@ -27,15 +27,15 @@ Korri can already model several emulator integrations as first-party plugins, bu
 - R2. Contribute Nintendo DS system, launcher, storage, and package/module records through normal plugin config contributions, not generic platform special cases (origin R6-R8, R14-R16).
 - R3. Discover `.nds` ROMs as file-backed releases and remove the current classifier hard block that prevents plugin discovery from seeing NDS files.
 - R4. Launch through standalone melonDS v1 as a direct process: absolute command, ROM positional argument, optional fullscreen flag, and HLE/direct-boot default with no BIOS requirement for normal `.nds` launches.
-- R5. Model melonDS display behavior as typed plugin policy: single-window vertical/horizontal/hybrid/top-only/bottom-only layouts, screen sizing, gap, swap, fullscreen, and renderer choices.
-- R6. Materialize `melonDS.toml` before launch into a Korri-managed state root, and set XDG config/data env so melonDS does not read/write operator home config or scatter saves beside ROMs.
+- R5. Model melonDS display behavior as typed plugin policy: single-window vertical/horizontal/hybrid/top-only/bottom-only layouts, dual-window TOML seeding, screen sizing, gap, swap, fullscreen, and renderer choices.
+- R6. Materialize `melonDS.toml` before launch into a Korri-managed state root, set explicit save/savestate/cheat paths under that root, and set XDG config/data env so melonDS does not read/write operator home config or scatter saves beside ROMs.
 - R7. Register the readable launch integration and bundled plugin inventory so dry-run and real launches can resolve only when `@korri:melonds` is enabled.
 - R8. Provide Nix composition that exposes the nixpkgs melonDS Qt wrapper/binary in the product environment with conservative module defaults and evaluation checks.
 - R9. Cover descriptor, discovery, policy/rendering, launch-spec, materializer, registration, and Nix composition behavior with focused tests using real implementations and temp files.
 
 **Origin actors:** A1 Integration author, A2 Planner/implementer, A3 Image/profile composer, A4 Player/operator.
-**Origin flows:** F1 static plugin config contribution, F2 host-invoked behavior, F3 simple capability validation.
-**Origin acceptance examples:** AE1 plugin app/launch behavior through host-owned handler, AE2 fail-closed missing capability diagnostics, AE4 plain/Effect handler consumption, AE5 catalog-first plugin vocabulary.
+**Origin flows:** F1 static plugin config contribution, F2 host-invoked behavior.
+**Origin acceptance examples:** AE1 plugin app/launch behavior through host-owned handler, AE4 plain/Effect handler consumption, AE5 catalog-first plugin vocabulary.
 
 ---
 
@@ -102,7 +102,7 @@ Korri can already model several emulator integrations as first-party plugins, bu
 | HLE direct boot is the baseline | Normal DS launches need no BIOS files; DSi/firmware complexity is deferred. |
 | Typed policy drives TOML | melonDS layout and renderer choices are config-file settings; explicit policy avoids wrapper-side guessing and keeps reviewable semantics. |
 | Generated TOML is authoritative in v1 | The plugin controls a Korri-managed state root and writes the minimal known scalar/table keys before launch; raw TOML merge waits for a safe parser/stringifier decision. |
-| XDG config and data are co-located | Setting both `XDG_CONFIG_HOME` and `XDG_DATA_HOME` to the managed parent keeps config and save data under Korri state, not operator home or ROM directories. |
+| XDG config/data plus explicit save paths are co-located | Setting both `XDG_CONFIG_HOME` and `XDG_DATA_HOME` to the managed parent keeps melonDS defaults under Korri state; rendering `SaveFilePath`, `SavestatePath`, and `CheatFilePath` prevents ROM-adjacent save leakage. |
 | Nix module default is conservative | Product images decide whether melonDS is enabled; the plugin module only exposes the package/state paths and checks when included. |
 
 ---
@@ -134,7 +134,7 @@ product/plugins/melonds/
   nix/
     composition.nix
     nixos-module.nix
-  packages/
+  packages/                  # optional; add only if pkgs.melonDS needs wrapping
     melonds/
       check.nix
       default.nix
@@ -149,6 +149,8 @@ product/plugins/melonds/
     launch-spec.test.ts
     materializer.ts
     materializer.test.ts
+    readable-launch-integration.ts
+    readable-launch-integration.test.ts
     plugin.ts
     plugin.test.ts
     policy.ts
@@ -261,7 +263,7 @@ flowchart TB
 
 **Approach:**
 - Remove the `.nds` hard-block from `unsupportedSystemFor` while keeping unsupported Wii/GBA/archive behavior unchanged.
-- Keep `.nds` mapped to `nds` in the classifier so scans produce an unclaimed/candidate state that provider discovery can claim.
+- Add `nds` to `pluginDiscoverableSystems` and keep `.nds` mapped to `nds` in the classifier so scans produce an unclaimed/candidate state that provider discovery can claim.
 - Add a plugin-owned discovery provider with a stable id such as `@korri:melonds/nds-files`.
 - Emit `file-release` observations for `.nds` files with NDS system id and melonDS launcher id.
 - Defer archive-member detection and `.dsi` discovery; those should remain unclaimed or unsupported according to existing classifier behavior.
@@ -304,11 +306,11 @@ flowchart TB
 - Follow: `product/plugins/ryubing/src/launch-spec.ts`
 
 **Approach:**
-- Define a strict Effect Schema policy with delivery-agnostic names: direct boot, fullscreen, renderer, screen layout, screen sizing, screen gap, screen swap, integer scaling, and optional dual-window mode.
+- Define a strict Effect Schema policy with delivery-agnostic names: direct boot, fullscreen, renderer, screen layout, screen sizing, screen gap, screen swap, integer scaling, save path controls, and optional dual-window mode.
 - Map policy values to melonDS TOML tables and numeric enum values in one renderer module; the schema should not expose melonDS numeric constants directly.
-- Generate only the known v1 scalar/table keys needed for launch. Do not parse or merge raw TOML fragments in v1.
-- Include a default profile that sets direct boot/HLE behavior and a single-window vertical dual-screen layout unless overridden.
-- Represent dual-window mode as deterministic TOML for `Instance0.Window0` and `Instance0.Window1`; note that window placement remains outside v1.
+- Generate only the known v1 scalar/table keys needed for launch, including `SaveFilePath`, `SavestatePath`, and `CheatFilePath` under managed state directories. Do not parse or merge raw TOML fragments in v1.
+- Include a default profile that sets direct boot/HLE behavior, managed save paths, and a single-window vertical dual-screen layout unless overridden.
+- Represent dual-window mode as deterministic TOML for `Instance0.Window0` and `Instance0.Window1`, including explicit window-enabled state; note that window placement remains outside v1.
 
 **Technical design:** Directional mapping only — implementation must verify the exact keys against the pinned melonDS source/package.
 
@@ -319,6 +321,7 @@ flowchart TB
 | screen layout | `Instance0.Window*.ScreenLayout` enum |
 | screen sizing | `Instance0.Window*.ScreenSizing` enum |
 | screen gap/swap/integer scaling | per-window display keys |
+| save/savestate/cheat paths | managed state-root subdirectories |
 | renderer | 3D renderer enum |
 
 **Patterns to follow:**
@@ -329,7 +332,9 @@ flowchart TB
 **Test scenarios:**
 - Happy path: empty/undefined plugin policy decodes to defaults that render a direct-boot single-window dual-screen TOML.
 - Happy path: `horizontal`, `vertical`, `hybrid`, `top-only`, and `bottom-only` policies render the expected screen layout/sizing values.
-- Happy path: dual-window policy renders two window sections with top-only and bottom-only sizing.
+- Happy path: dual-window policy renders two window sections with top-only and bottom-only sizing and marks the second window enabled.
+- Happy path: reverting from dual-window to single-window renders config that disables/clears stale extra window enablement.
+- Happy path: managed save, savestate, and cheat paths render under the configured state root.
 - Edge case: screen gap rejects negative values and values above the verified melonDS range.
 - Edge case: unknown policy keys fail strict decoding.
 - Error path: unsupported raw config override fragments are not accepted silently by the renderer/materializer path.
@@ -353,6 +358,8 @@ flowchart TB
 - Create: `product/plugins/melonds/src/launch-spec.test.ts`
 - Create: `product/plugins/melonds/src/materializer.ts`
 - Create: `product/plugins/melonds/src/materializer.test.ts`
+- Create: `product/plugins/melonds/src/readable-launch-integration.ts`
+- Create: `product/plugins/melonds/src/readable-launch-integration.test.ts`
 - Modify: `product/plugins/melonds/index.ts`
 - Follow: `product/plugins/rpcs3/src/materializer.ts`
 - Follow: `product/plugins/ryubing/src/materializer.ts`
@@ -362,8 +369,8 @@ flowchart TB
 - Compose `melonDS [--fullscreen] <content.path>` with `applyArgsOverrides` for argv-only escape hatches.
 - Fail fast when the command is missing/non-absolute, plugin id does not match, content path is absent, or state root is missing.
 - Enforce a state root basename compatible with melonDS XDG resolution, e.g. a root ending in `melonDS`; set both `XDG_CONFIG_HOME` and `XDG_DATA_HOME` to its parent.
-- Create the state root and required subdirectories before launch.
-- Write `melonDS.toml` atomically before launch using U3 renderer.
+- Create the state root and required `saves`, `savestates`, and `cheats` subdirectories before launch.
+- Write `melonDS.toml` atomically before launch using U3 renderer, including explicit save/savestate/cheat paths.
 - Return a normal `MaterializedReadableLaunch` with the original context and launch spec; do not spawn melonDS inside the materializer.
 
 **Patterns to follow:**
@@ -375,6 +382,7 @@ flowchart TB
 - Happy path: materializer writes `melonDS.toml`, returns `command: /run/current-system/sw/bin/melonDS` (or the U6-selected path), and args ending with the `.nds` content path.
 - Happy path: fullscreen policy produces a `--fullscreen` argument without changing the ROM positional argument.
 - Happy path: env includes original context env plus XDG config/data values rooted at the managed parent.
+- Happy path: materializer creates managed `saves`, `savestates`, and `cheats` directories and the TOML points melonDS at them.
 - Edge case: missing content path fails with a typed materialization error.
 - Edge case: state root basename mismatch fails before writing files.
 - Edge case: non-absolute command fails before writing files.
@@ -392,7 +400,7 @@ flowchart TB
 
 **Requirements:** R1, R2, R7, R9
 
-**Dependencies:** U2, U4, U6
+**Dependencies:** U2, U4
 
 **Files:**
 - Modify: `product/plugin-host/index.ts`
@@ -405,7 +413,7 @@ flowchart TB
 - Follow: `tools/library/launcher-config-cli.ts`
 
 **Approach:**
-- Export `melonDsReadableLaunchIntegration` and add it to `firstPartyLaunchIntegrations`.
+- Export `melonDsReadableLaunchIntegration` from the plugin's readable-launch-integration module and add it to `firstPartyLaunchIntegrations`.
 - Add `melonDsPlugin` to the bundled plugin inventory using the repository's current inventory maintenance mechanism.
 - Ensure `firstPartyLaunchIntegrationsForRegistry` filters the integration by `providerId` like other plugin-owned launch integrations.
 - Add or extend a launch dry-run/resolution test that proves a readable `.nds` release with the plugin enabled reaches the melonDS materializer path.
@@ -439,18 +447,18 @@ flowchart TB
 **Files:**
 - Create: `product/plugins/melonds/nix/composition.nix`
 - Create: `product/plugins/melonds/nix/nixos-module.nix`
-- Create: `product/plugins/melonds/packages/melonds/default.nix`
-- Create: `product/plugins/melonds/packages/melonds/check.nix`
-- Create: `product/plugins/melonds/packages/melonds/README.md`
-- Modify: Nix plugin-composition aggregation file that imports plugin `nix/composition.nix`
+- Create if wrapping is needed: `product/plugins/melonds/packages/melonds/default.nix`
+- Create if wrapping is needed: `product/plugins/melonds/packages/melonds/check.nix`
+- Create if wrapping is needed: `product/plugins/melonds/packages/melonds/README.md`
+- Modify if explicit registration is required: Nix plugin-composition aggregation file that imports plugin `nix/composition.nix`
 - Test: nearest Nix check that validates plugin package/composition exposure
 - Follow: `product/plugins/zquest-classic/nix/composition.nix`
 - Follow: `product/plugins/zquest-classic/nix/nixos-module.nix`
 - Follow: `product/plugins/zquest-classic/packages/zquest-classic/check.nix`
 
 **Approach:**
-- Wrap or expose nixpkgs `melonDS` so `/run/current-system/sw/bin/melonDS` is available when the plugin module is included.
-- Preserve the nixpkgs Qt wrapper unless implementation proves it injects behavior that breaks Korri's explicit argv/config contract; if custom wrapping is required, keep it plugin-owned.
+- Prefer exposing nixpkgs `melonDS` directly so `/run/current-system/sw/bin/melonDS` is available when the plugin module is included.
+- Preserve the nixpkgs Qt wrapper unless implementation proves it injects behavior that breaks Korri's explicit argv/config contract; create plugin-owned package files only if custom wrapping is required.
 - Add tmpfiles/state directory rules for the managed melonDS state root and saves/config parent.
 - Keep module defaults conservative: the plugin is included only by the product/image composition that opts into it.
 - Add a Nix check that verifies the package exposes the expected `melonDS` binary and that the composition contributes the plugin id/module when enabled.
@@ -464,7 +472,7 @@ flowchart TB
 - Happy path: plugin composition exposes package/check outputs when enabled.
 - Happy path: NixOS module places melonDS in `environment.systemPackages` and creates the managed state directory with Korri ownership.
 - Edge case: disabled composition does not enable `@korri:melonds` or include the package/module.
-- Error path: package check fails if `melonDS` binary is missing or incorrectly cased.
+- Error path: composition/package check fails if `melonDS` binary is missing or incorrectly cased.
 - Regression: module can evaluate on Linux/aarch64-supported systems without assuming BIOS files exist.
 
 **Verification:**
@@ -488,7 +496,7 @@ flowchart TB
 
 - **Interaction graph:** Library scanning, plugin discovery, readable launch resolution, plugin-host enabled registry, materialization, and Nix image composition all participate. The plugin itself owns melonDS-specific policy and TOML rendering.
 - **Error propagation:** Classifier/provider errors should remain scan diagnostics; launch-time failures use existing `AppMaterializationFailed` / `ResolutionError` paths and occur before process spawn.
-- **State lifecycle risks:** melonDS writes config on exit; v1 makes typed policy authoritative by regenerating config before launch. XDG config/data env prevents writes to operator home and ROM directories.
+- **State lifecycle risks:** melonDS writes config on exit; v1 makes typed policy authoritative by regenerating config before launch. XDG config/data env plus explicit save/savestate/cheat paths prevent writes to operator home and ROM directories.
 - **API surface parity:** CLI/dry-run and real launch paths must see the same `ReadableLaunchIntegration` registration. No portal-only or CLI-only registration drift.
 - **Integration coverage:** Unit tests cover plugin pieces; at least one dry-run/resolution test should exercise classifier → provider → readable release → materializer handoff.
 - **Unchanged invariants:** Existing RetroArch, RPCS3, Ryubing, ZQuest, Steam, and generic plugin registry behavior remain unchanged. Generic platform modules do not gain Nintendo DS literals except the existing classifier system id handling required for discovery.
@@ -502,7 +510,7 @@ flowchart TB
 | `.nds` files remain skipped before provider discovery | U2 explicitly removes the classifier hard-block and tests the scan path. |
 | Wrong melonDS TOML keys silently produce bad display behavior | U3 renderer tests pin the v1 mapping and implementation verifies against the pinned melonDS source/package. |
 | Saves/config leak to operator home or ROM directories | U4 sets both XDG config/data roots and U4 tests launch env + file location. |
-| Nix exposes the wrong command casing or strips Qt runtime wrapper behavior | U6 package check asserts `melonDS` casing and preserves/evaluates the nixpkgs wrapper. |
+| Nix exposes the wrong command casing or strips Qt runtime wrapper behavior | U6 composition/package check asserts `melonDS` casing and preserves/evaluates the nixpkgs wrapper. |
 | Generic platform code starts depending on `@korri:melonds` | U5 limits imports to plugin-host composition roots/tests and adds a boundary regression check. |
 | Dual-window support is overpromised | Scope states v1 seeds TOML window config only; physical monitor placement is deferred. |
 | Active launcher-standardization refactor changes record shapes mid-implementation | Keep the plan anchored to current plugin patterns; implementation should rebase descriptors to the latest `launchers` vocabulary if the standardization refactor lands first. |

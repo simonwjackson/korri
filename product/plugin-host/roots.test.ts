@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { createPluginRegistry } from "@platform/plugin/registry"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "@product/plugins/gamescope"
+import { KORRI_MELONDS_PLUGIN_ID } from "@product/plugins/melonds"
 import { KORRI_PICO8_PLUGIN_ID } from "@product/plugins/pico8"
 import { KORRI_STEAM_PLUGIN_ID } from "@product/plugins/steam"
 import { bundledPluginInventory } from "./bundled-plugins.generated"
@@ -17,6 +18,9 @@ describe("bundled plugin roots", () => {
     )
     expect(result.plugins.map(plugin => plugin.id)).toContain(
       KORRI_STEAM_PLUGIN_ID,
+    )
+    expect(result.plugins.map(plugin => plugin.id)).toContain(
+      KORRI_MELONDS_PLUGIN_ID,
     )
     expect(result.plugins.map(plugin => plugin.id)).toContain(
       KORRI_PICO8_PLUGIN_ID,

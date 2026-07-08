@@ -134,6 +134,7 @@ const pluginDiscoverableSystems = new Set([
   "gba",
   "genesis",
   "n64",
+  "nds",
   "nes",
   "pc98",
   "pico8",
@@ -344,7 +345,6 @@ function unsupportedSystemFor(
   if (folder === "wii" && extension === "iso") return "wii"
   if (folder === "nds" && extension === "zip") return "nds"
   if (folder === "gba" && extension === "zip") return "gba"
-  if (extension === "nds") return "nds"
   const extensionSystem = systemByExtension.get(extension)
   if (extensionSystem === "archive" || extensionSystem === "disc-image") {
     return undefined

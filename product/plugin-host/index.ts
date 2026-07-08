@@ -7,6 +7,7 @@ import type {
 } from "@platform/plugin/session-lifecycle"
 import { threeDSenReadableLaunchIntegration } from "@product/plugins/3dsen"
 import { gmloaderReadableLaunchIntegration } from "@product/plugins/gmloader"
+import { melonDsReadableLaunchIntegration } from "@product/plugins/melonds"
 import { retroarchReadableLaunchIntegration } from "@product/plugins/retroarch"
 import { rpcs3ReadableLaunchIntegration } from "@product/plugins/rpcs3"
 import { ryubingReadableLaunchIntegration } from "@product/plugins/ryubing"
@@ -19,6 +20,7 @@ export const firstPartyLaunchIntegrations = [
   retroarchReadableLaunchIntegration,
   rpcs3ReadableLaunchIntegration,
   ryubingReadableLaunchIntegration,
+  melonDsReadableLaunchIntegration,
   steamReadableLaunchIntegration,
   threeDSenReadableLaunchIntegration,
   zquestClassicReadableLaunchIntegration,
