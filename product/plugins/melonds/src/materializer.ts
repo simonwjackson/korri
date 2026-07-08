@@ -58,6 +58,7 @@ export const materializeReadableMelonDsLaunch = (input: {
 
     yield* createStateDirectories(context, stateRoot)
     yield* writeConfig(context, stateRoot, resolvedPolicy)
+    yield* writePresentationSupport(context, stateRoot, resolvedPolicy)
 
     const envParent = dirname(stateRoot)
     const spec = yield* tryMaterialize(context, () =>
@@ -144,6 +145,7 @@ const createStateDirectories = (
     await mkdir(join(stateRoot, "saves"), { recursive: true })
     await mkdir(join(stateRoot, "savestates"), { recursive: true })
     await mkdir(join(stateRoot, "cheats"), { recursive: true })
+    await mkdir(join(stateRoot, "presentation"), { recursive: true })
   })
 
 const writeConfig = (
@@ -160,6 +162,19 @@ const writeConfig = (
       }),
     ),
   )
+
+const writePresentationSupport = (
+  context: ReadableResolvedLaunchContext,
+  stateRoot: string,
+  policy: MelonDsPolicy,
+): Effect.Effect<void, ResolutionError> =>
+  tryMaterialize(context, async () => {
+    if (policy.presentation?.menu?.hide !== true) return
+    await writeAtomic(
+      join(stateRoot, "presentation", "hide-menubar.qss"),
+      "QMenuBar { height: 0px; max-height: 0px; border: none; }\nQMenuBar::item { padding: 0px; margin: 0px; }\n",
+    )
+  })
 
 async function writeAtomic(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true })

@@ -87,3 +87,31 @@ function windowLines(
     policy,
   })
 }
+
+it("renders matched presentation as dual windows with InputPlumber Xbox joystick mapping", () => {
+  const config = renderMelonDsConfig({
+    stateRoot: "/tmp/melonDS",
+    policy: {
+      display: { mode: "dual-window" },
+      presentation: {
+        intent: "matched-dual-screen",
+        windows: {
+          top: { output: "TOP", x: 407, y: 250, width: 1106, height: 830 },
+          bottom: { output: "BOTTOM", x: 0, y: 0, width: 1240, height: 930 },
+        },
+        input: { profile: "inputplumber-xbox" },
+      },
+    },
+  })
+
+  expect(config).toContain("[Instance0.Window0]\nEnabled = true")
+  expect(config).toContain("ScreenSizing = 4")
+  expect(config).toContain("[Instance0.Window1]\nEnabled = true")
+  expect(config).toContain("ScreenSizing = 5")
+  expect(config).toContain("[Instance0.Joystick]")
+  expect(config).toContain("JoystickID = 0")
+  expect(config).toContain("A = 0")
+  expect(config).toContain("B = 1")
+  expect(config).toContain("Start = 7")
+  expect(config).toContain("Up = 257")
+})

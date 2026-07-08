@@ -278,3 +278,55 @@ function expectFailureReason(
     expect((error as AppMaterializationFailed).reason).toContain(reason)
   }
 }
+
+it("materializes matched presentation stylesheet and managed dual-window config", async () => {
+  const root = await mkdtemp(join(tmpdir(), "korri-melonds-matched-"))
+  try {
+    const rom = join(root, "Tetris DS.nds")
+    const stateRoot = join(root, "melonDS")
+    await writeFile(rom, "nds")
+
+    await Effect.runPromise(
+      materializeReadableMelonDsLaunch({
+        context: context({
+          contentPath: rom,
+          stateRoot,
+          policy: {
+            state: { root: stateRoot },
+            display: { mode: "dual-window" },
+            presentation: {
+              intent: "matched-dual-screen",
+              menu: { hide: true },
+              windows: {
+                top: {
+                  output: "TOP",
+                  x: 407,
+                  y: 250,
+                  width: 1106,
+                  height: 830,
+                },
+                bottom: {
+                  output: "BOTTOM",
+                  x: 0,
+                  y: 0,
+                  width: 1240,
+                  height: 930,
+                },
+              },
+              input: { profile: "inputplumber-xbox" },
+            },
+          },
+        }),
+      }),
+    )
+
+    const config = await readFile(join(stateRoot, "melonDS.toml"), "utf8")
+    expect(config).toContain("[Instance0.Window1]\nEnabled = true")
+    expect(config).toContain("[Instance0.Joystick]")
+    await expect(
+      readFile(join(stateRoot, "presentation", "hide-menubar.qss"), "utf8"),
+    ).resolves.toContain("QMenuBar")
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})

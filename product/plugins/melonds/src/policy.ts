@@ -55,20 +55,80 @@ const MelonDsVideoPolicy = Schema.Struct({
   scaleFactor: Schema.optional(IntInRange("melonds.video.scaleFactor", 1, 16)),
 })
 
+const WindowRectanglePolicy = Schema.Struct({
+  output: NonEmptyString("melonds.presentation.windows.output"),
+  x: Schema.Int,
+  y: Schema.Int,
+  width: IntInRange("melonds.presentation.windows.width", 1, 10000),
+  height: IntInRange("melonds.presentation.windows.height", 1, 10000),
+})
+
+const MelonDsPresentationPolicy = Schema.Struct({
+  intent: Schema.Literals(["matched-dual-screen"]),
+  windows: Schema.Struct({
+    top: WindowRectanglePolicy,
+    bottom: WindowRectanglePolicy,
+  }),
+  wayland: Schema.optional(
+    Schema.Struct({
+      display: NonEmptyString("melonds.presentation.wayland.display"),
+      compositorSocket: NonEmptyString(
+        "melonds.presentation.wayland.compositorSocket",
+      ),
+    }),
+  ),
+  secondaryOutput: Schema.optional(
+    Schema.Struct({
+      output: NonEmptyString("melonds.presentation.secondaryOutput.output"),
+      restore: Schema.optional(Schema.Literals(["observed", "on", "off"])),
+    }),
+  ),
+  menu: Schema.optional(
+    Schema.Struct({ hide: Schema.optional(Schema.Boolean) }),
+  ),
+  input: Schema.optional(
+    Schema.Struct({
+      profile: Schema.optional(Schema.Literals(["inputplumber-xbox"])),
+      joystickId: Schema.optional(
+        IntInRange("melonds.presentation.input.joystickId", 0, 16),
+      ),
+    }),
+  ),
+})
+
 export const MelonDsPolicy = Schema.Struct({
   state: Schema.optional(MelonDsStatePolicy),
   boot: Schema.optional(MelonDsBootPolicy),
   display: Schema.optional(MelonDsDisplayPolicy),
   video: Schema.optional(MelonDsVideoPolicy),
+  presentation: Schema.optional(MelonDsPresentationPolicy),
 })
 export type MelonDsPolicy = Schema.Schema.Type<typeof MelonDsPolicy>
+export type MelonDsWindowRectangle = Schema.Schema.Type<
+  typeof WindowRectanglePolicy
+>
 
 export function decodeMelonDsPolicy(input: unknown): MelonDsPolicy {
   try {
-    return Schema.decodeUnknownSync(MelonDsPolicy)(input ?? {}, STRICT)
+    const policy = Schema.decodeUnknownSync(MelonDsPolicy)(input ?? {}, STRICT)
+    validateMelonDsPolicy(policy)
+    return policy
   } catch (error) {
+    if (error instanceof AppMaterializationFailed) throw error
     throw policyError(
       `policy is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+}
+
+function validateMelonDsPolicy(policy: MelonDsPolicy): void {
+  if (
+    policy.presentation?.intent === "matched-dual-screen" &&
+    policy.display?.mode !== undefined &&
+    policy.display.mode !== "dual-window"
+  ) {
+    throw policyError(
+      "policy is invalid: matched-dual-screen presentation requires display.mode to be dual-window",
     )
   }
 }

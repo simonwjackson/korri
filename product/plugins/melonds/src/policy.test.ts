@@ -61,3 +61,68 @@ function expectPolicyError(run: () => unknown): void {
     )
   }
 }
+
+it("accepts matched dual-screen presentation geometry", () => {
+  expect(
+    decodeMelonDsPolicy({
+      display: { mode: "dual-window" },
+      presentation: {
+        intent: "matched-dual-screen",
+        menu: { hide: true },
+        input: { profile: "inputplumber-xbox" },
+        wayland: {
+          display: "wayland-1",
+          compositorSocket: "/run/user/1000/sway-ipc.sock",
+        },
+        windows: {
+          top: { output: "TOP", x: 407, y: 250, width: 1106, height: 830 },
+          bottom: { output: "BOTTOM", x: 0, y: 0, width: 1240, height: 930 },
+        },
+        secondaryOutput: { output: "BOTTOM", restore: "observed" },
+      },
+    }),
+  ).toMatchObject({
+    display: { mode: "dual-window" },
+    presentation: {
+      intent: "matched-dual-screen",
+      menu: { hide: true },
+      input: { profile: "inputplumber-xbox" },
+    },
+  })
+})
+
+it("rejects incomplete matched presentation policy", () => {
+  expectPolicyError(() =>
+    decodeMelonDsPolicy({
+      presentation: {
+        intent: "matched-dual-screen",
+        windows: {
+          top: { output: "TOP", x: 0, y: 0, width: 256, height: 192 },
+        },
+      },
+    }),
+  )
+  expectPolicyError(() =>
+    decodeMelonDsPolicy({
+      presentation: {
+        intent: "matched-dual-screen",
+        input: { profile: "ps5" },
+      },
+    }),
+  )
+})
+
+it("rejects matched presentation when display mode explicitly conflicts", () => {
+  expectPolicyError(() =>
+    decodeMelonDsPolicy({
+      display: { mode: "vertical" },
+      presentation: {
+        intent: "matched-dual-screen",
+        windows: {
+          top: { output: "TOP", x: 0, y: 0, width: 256, height: 192 },
+          bottom: { output: "BOTTOM", x: 0, y: 0, width: 256, height: 192 },
+        },
+      },
+    }),
+  )
+})

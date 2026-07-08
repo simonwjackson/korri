@@ -28,9 +28,28 @@ const RENDERER = {
   "opengl-compute": 2,
 } as const
 
+const INPUTPLUMBER_XBOX_JOYSTICK = {
+  JoystickID: 0,
+  A: 0,
+  B: 1,
+  X: 2,
+  Y: 3,
+  L: 4,
+  R: 5,
+  Select: 6,
+  Start: 7,
+  Up: 257,
+  Right: 258,
+  Down: 260,
+  Left: 264,
+} as const
+
 export function renderMelonDsConfig(input: RenderMelonDsConfigInput): string {
   const policy = input.policy ?? {}
-  const mode = policy.display?.mode ?? "vertical"
+  const matchedPresentation =
+    policy.presentation?.intent === "matched-dual-screen"
+  const mode =
+    policy.display?.mode ?? (matchedPresentation ? "dual-window" : "vertical")
   const root = input.stateRoot
 
   const document: TomlDocument = {
@@ -67,6 +86,19 @@ export function renderMelonDsConfig(input: RenderMelonDsConfigInput): string {
         name: "Instance0.Window1",
         values: windowValuesForMode(mode, policy, "secondary"),
       },
+      ...(policy.presentation?.input?.profile === "inputplumber-xbox"
+        ? [
+            {
+              name: "Instance0.Joystick",
+              values: {
+                ...INPUTPLUMBER_XBOX_JOYSTICK,
+                JoystickID:
+                  policy.presentation.input.joystickId ??
+                  INPUTPLUMBER_XBOX_JOYSTICK.JoystickID,
+              },
+            },
+          ]
+        : []),
     ],
   }
 
