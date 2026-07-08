@@ -1,7 +1,7 @@
 ---
 title: feat: Add standalone melonDS Nintendo DS launcher plugin
 type: feat
-status: active
+status: completed
 date: 2026-07-07
 origin: work/items/active/01KV8NZRAAETDX69P5T73BRVY8-first-party-plugin-system-shape/requirements.md
 verify_command: "just test-unit && just typecheck && just lint && just test-nix"
