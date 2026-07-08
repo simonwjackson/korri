@@ -104,12 +104,15 @@ int ioctl(int fd, unsigned long request, ...) {
     return 0;
   }
 
+  // Forward the caller-provided third argument unchanged for every
+  // non-intercepted ioctl. Some Linux ioctls (including socket control paths
+  // Steam uses while initializing networking/WebUI transport) are encoded with
+  // _IOC_NONE even though callers still pass a pointer-sized argument. Dropping
+  // that argument turns unrelated non-input ioctls into NULL calls.
   void *arg = NULL;
   va_list ap;
   va_start(ap, request);
-  if (_IOC_DIR(request) != _IOC_NONE) {
-    arg = va_arg(ap, void *);
-  }
+  arg = va_arg(ap, void *);
   va_end(ap);
 
   resolve_ioctl();

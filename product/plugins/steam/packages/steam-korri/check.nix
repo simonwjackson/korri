@@ -102,6 +102,11 @@ runtime_pressure_vessel_roots'' runtimePrepScript)
       && lib.hasInfix "SYN_REPORT" inputGuardSource
       && lib.hasInfix "KORRI_STEAM_INPUT_GUARD" inputGuardSource
     ))
+    (check "steam-korri input guard forwards non-input ioctl arguments unchanged" (
+      lib.hasInfix "arg = va_arg(ap, void *)" inputGuardSource
+      && lib.hasInfix "Some Linux ioctls" inputGuardSource
+      && !(lib.hasInfix "if (_IOC_DIR(request) != _IOC_NONE)" inputGuardSource)
+    ))
   ];
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;

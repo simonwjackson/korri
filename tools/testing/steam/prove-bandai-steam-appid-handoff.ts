@@ -91,7 +91,10 @@ export function classifyProbeTranscript(
 ): ProbeClassification {
   const sections = parseSections(stdout)
   const service = (sections.SERVICE ?? []).join("\n")
-  const processes = (sections.PROCESSES ?? []).join("\n")
+  const processEvidence = (sections.PROCESSES ?? []).filter(
+    line => !line.includes("awk -v app_id=") && !line.includes("grep -a"),
+  )
+  const processes = processEvidence.join("\n")
   const consoleLog = (sections.CONSOLE ?? []).join("\n")
   const journal = (sections.JOURNAL ?? []).join("\n")
   const sway = (sections.SWAY ?? []).join("\n")
@@ -107,7 +110,7 @@ export function classifyProbeTranscript(
     gameProcessAdded: new RegExp(`Game process added ?: AppID ${appId}|SteamLaunch AppId=${appId}`).test(
       all,
     ),
-    expectedProcess: new RegExp(expectedExe, "i").test(all),
+    expectedProcess: new RegExp(expectedExe, "i").test(processes),
     realProtonCachyos:
       /compatibilitytools\.d\/proton-cachyos-11\.0-20260601-slr-arm64(?:\/.*)?\/proton/.test(
         all,
@@ -201,6 +204,8 @@ systemctl show korri-steam-gamescope.service \
 echo "###PROCESSES"
 ps -eo pid=,stat=,etime=,cmd= 2>/dev/null \
   | awk -v app_id="$app_id" -v expected_exe="$expected_exe" '
+    index($0, "awk -v app_id=") { next }
+    index($0, "grep -a") { next }
     index($0, "SteamLaunch AppId=" app_id) {print}
     index(tolower($0), tolower(expected_exe)) {print}
     /steamwebhelper|proton-cachyos|korri-steam-app|korri-steam-service-run|gamescope/ {print}

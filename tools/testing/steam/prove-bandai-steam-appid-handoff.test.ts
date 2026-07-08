@@ -71,6 +71,27 @@ SCREENSHOT_OK /tmp/proof.png
     expect(stepPassed(classification)).toBe(false)
   })
 
+  it("does not count its own probe process as the game process", () => {
+    const classification = classifyProbeTranscript(
+      `###SERVICE
+active
+ActiveState=active
+###PROCESSES
+123 S 00:10 steamwebhelper -uimode=7 --type=renderer
+999 S 00:00 awk -v app_id=360740 -v expected_exe=Downwell.exe index(tolower($0), tolower(expected_exe)) {print}
+###CONSOLE
+###JOURNAL
+###SWAY
+###SCREENSHOT
+SCREENSHOT_OK /tmp/proof.png
+`,
+      downwell,
+    )
+
+    expect(classification.expectedProcess).toBe(false)
+    expect(stepPassed(classification)).toBe(false)
+  })
+
   it("rejects Gamescope ABRT/status=134 as compositor failure", () => {
     const classification = classifyProbeTranscript(
       `###SERVICE

@@ -812,6 +812,7 @@ EOF
     launch_timeout="''${KORRI_STEAM_APP_LAUNCH_TIMEOUT:-180}"
     forward_timeout="''${KORRI_STEAM_APP_FORWARD_TIMEOUT:-15}"
     service_ready_timeout="''${KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-90}"
+    desktop_ui_stable_seconds="''${KORRI_STEAM_APP_DESKTOP_UI_READY_STABLE_SECONDS:-5}"
     service_name="korri-steam-gamescope.service"
     gamescope_display="''${GAMESCOPE_WAYLAND_DISPLAY:-gamescope-0}"
     gamescope_socket="$XDG_RUNTIME_DIR/$gamescope_display"
@@ -973,10 +974,15 @@ EOF
     }
 
     active_steam_appids() {
-      ${pkgs.procps}/bin/ps -eo args= \
-        | ${pkgs.gnugrep}/bin/grep -a -F 'SteamLaunch AppId=' \
-        | ${pkgs.gnugrep}/bin/grep -a -v -F 'grep -a -F' \
-        | ${pkgs.gnused}/bin/sed -n 's/.*SteamLaunch AppId=\([0-9][0-9]*\).*/\1/p' \
+      ${pkgs.procps}/bin/ps -eo pid=,args= \
+        | ${pkgs.gawk}/bin/awk '
+          index($0, "SteamLaunch AppId=") \
+            && $0 !~ /active_steam_appids|grep|gawk|awk|sed|korri-steam-app|ssh -F|sh -c/ {
+              if (match($0, /SteamLaunch AppId=([0-9]+)/)) {
+                print substr($0, RSTART + 18, RLENGTH - 18)
+              }
+            }
+          ' \
         | ${pkgs.coreutils}/bin/sort -u || true
     }
 
@@ -1032,8 +1038,51 @@ EOF
       [ "$require_gamescope_socket" != "1" ] || [ -S "$gamescope_socket" ]
     }
 
+    steam_service_control_group() {
+      ${pkgs.systemd}/bin/systemctl show "$service_name" -p ControlGroup --value 2>/dev/null || true
+    }
+
+    pid_in_service_control_group() {
+      pid="$1"
+      service_cgroup="$2"
+      [ -n "$pid" ] || return 1
+      [ -n "$service_cgroup" ] || return 1
+      [ -r "/proc/$pid/cgroup" ] || return 1
+      ${pkgs.gawk}/bin/awk -F: -v service_cgroup="$service_cgroup" '
+        $1 == "0" {
+          proc_cgroup = $3
+          if (proc_cgroup == service_cgroup || index(proc_cgroup, service_cgroup "/") == 1) {
+            found = 1
+          }
+        }
+        END { exit found ? 0 : 1 }
+      ' "/proc/$pid/cgroup" 2>/dev/null
+    }
+
+    steam_desktop_ui_ready() {
+      service_cgroup="$(steam_service_control_group)"
+      [ -n "$service_cgroup" ] || return 1
+      for cmdline in /proc/[0-9]*/cmdline; do
+        [ -r "$cmdline" ] || continue
+        pid="''${cmdline#/proc/}"
+        pid="''${pid%/cmdline}"
+        pid_in_service_control_group "$pid" "$service_cgroup" || continue
+        cmd="$(${pkgs.coreutils}/bin/tr '\0' ' ' < "$cmdline" 2>/dev/null || true)"
+        case "$cmd" in
+          *steamwebhelper*" -uimode=7"*) return 0 ;;
+        esac
+      done
+      return 1
+    }
+
+    steam_ready_log_present() {
+      printf '%s\n' "$1" \
+        | ${pkgs.gnugrep}/bin/grep -a -E -q 'Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'
+    }
+
     wait_for_steam_ready() {
       ready_deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + service_ready_timeout ))
+      desktop_ready_since=0
       while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$ready_deadline" ]; do
         note_big_picture_surface "managed Steam readiness"
         ready_log=""
@@ -1047,8 +1096,19 @@ EOF
             ready_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
           fi
         fi
-        if steam_surface_ready \
-          && printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
+        now="$(${pkgs.coreutils}/bin/date +%s)"
+        desktop_ui_ready=0
+        if steam_surface_ready && steam_desktop_ui_ready; then
+          if [ "$desktop_ready_since" -eq 0 ]; then
+            desktop_ready_since="$now"
+          fi
+          if [ $(( now - desktop_ready_since )) -ge "$desktop_ui_stable_seconds" ]; then
+            desktop_ui_ready=1
+          fi
+        else
+          desktop_ready_since=0
+        fi
+        if steam_surface_ready && { [ "$desktop_ui_ready" -eq 1 ] || steam_ready_log_present "$ready_log"; }; then
           return 0
         fi
         service_state="$(steam_service_state)"
