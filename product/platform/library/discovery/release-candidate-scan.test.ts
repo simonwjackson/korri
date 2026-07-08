@@ -78,7 +78,9 @@ const testSteamDiscoveryProvider = releaseDiscoveryProvider({
   title: "Steam installed apps",
   discover: async ({ files, readText }) => {
     const manifest = files.find(
-      file => file.relativePath === "steamapps/appmanifest_1029210.acf",
+      file =>
+        file.relativePath === "steamapps/appmanifest_1029210.acf" ||
+        file.relativePath === "appmanifest_1029210.acf",
     )
     if (manifest === undefined || readText === undefined) return []
     const content = await readText(manifest.absolutePath)
@@ -1245,6 +1247,46 @@ describe("scanConfiguredReleaseCandidates", () => {
       readonly library: Record<string, unknown>
     }
     expect(Object.keys(parsed.library)).toEqual(["thirty-xx-authored"])
+  })
+
+  it("honors configured max-depth scan hints for manifest-only storages", async () => {
+    await using fixture = await withTempRomRoot({
+      "steamapps/appmanifest_1029210.acf": "acf",
+      "steamapps/common/30XX/30XX.exe": "game-binary",
+    })
+    const config = join(fixture.root, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        '  "@korri:steam/installed-manifests":',
+        `    root: ${join(fixture.root, "steamapps")}`,
+        "    path:",
+        '      scan.max-depth: "1"',
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: [testSteamDiscoveryProvider],
+      configPath: config,
+      roots: [{ root: fixture.root, optional: false }],
+      findBinary: resolveFromPath("find"),
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    expect(result.results[0]).toMatchObject({
+      storage: "@korri:steam/installed-manifests",
+      status: "scanned",
+      report: { files: 1, candidates: 1 },
+      merge: { libraryAdded: 1 },
+    })
+    const parsed = parse(await readFile(config, "utf8")) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(parsed.library["30xx"]).toMatchObject({ title: "30XX" })
   })
 
   it("backfills a cross-root authored release with a full local overlay", async () => {

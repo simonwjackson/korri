@@ -95,6 +95,7 @@ interface RomScanArgs {
   readonly now?: () => string
   readonly claimedIndex?: ClaimedContentIndex
   readonly discoveryProviders?: readonly ReleaseDiscoveryProvider[]
+  readonly maxDepth?: number
 }
 
 export interface MergeReleaseCandidateConfigArgs {
@@ -253,6 +254,22 @@ function createClaimedContentIndex(): ClaimedContentIndex {
   }
 }
 
+function findArgsForScan(args: Pick<RomScanArgs, "root" | "maxDepth">): string[] {
+  const findArgs = [args.root]
+  if (args.maxDepth !== undefined) {
+    findArgs.push("-maxdepth", String(args.maxDepth))
+  }
+  findArgs.push("-type", "f", "-print0")
+  return findArgs
+}
+
+function scanMaxDepthForStorage(storage: StorageRecord): number | undefined {
+  const value = storage.path?.["scan.max-depth"]
+  if (value === undefined || !/^\d+$/.test(value)) return undefined
+  const maxDepth = Number(value)
+  return maxDepth > 0 ? maxDepth : undefined
+}
+
 export async function scanReleaseCandidates(
   args: RomScanArgs,
 ): Promise<RomScanResult> {
@@ -262,7 +279,7 @@ export async function scanReleaseCandidates(
   const firstSeenAt = (args.now ?? currentIsoTimestamp)()
   let child: ReturnType<typeof spawn>
   try {
-    child = spawn(findBinary, [args.root, "-type", "f", "-print0"], {
+    child = spawn(findBinary, findArgsForScan(args), {
       stdio: ["ignore", "pipe", "pipe"],
     })
   } catch (error) {
@@ -467,6 +484,7 @@ export async function scanConfiguredReleaseCandidates(
       now: () => firstSeenAt,
       claimedIndex,
       discoveryProviders: args.discoveryProviders,
+      maxDepth: scanMaxDepthForStorage(storage),
     })
     if (scan.status === "diagnostic") {
       results.push({

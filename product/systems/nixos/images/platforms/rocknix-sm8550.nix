@@ -226,6 +226,7 @@ let
   sm8550PlatformDefaults = {
     storage."@korri:steam/installed-manifests" = {
       root = "${runtime.stateRoot}/steam/steamapps";
+      path."scan.max-depth" = "1";
     };
 
     launchers."@korri:web-canvas/chromium" = {

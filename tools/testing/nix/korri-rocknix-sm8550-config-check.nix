@@ -306,6 +306,7 @@ let
       ))
       (check "${name}: boot release scan covers installed Steam manifests" (
         (steamInstalledManifestsStorage.root or null) == "/var/lib/korri/steam/steamapps"
+        && (lib.attrByPath [ "path" "scan.max-depth" ] null steamInstalledManifestsStorage) == "1"
       ))
       (check "${name}: compositor/sessiond/inputd/korrid are user services" (
         userServices ? "korri-compositor"
