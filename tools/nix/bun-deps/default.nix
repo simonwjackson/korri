@@ -32,6 +32,7 @@ let
     "@argo-video/cli@"
     "@tiptap/"
     "@xyflow/"
+    "@simonwjackson/caliper@"
   ];
 
   forbiddenProductionPackageMatches = builtins.filter (

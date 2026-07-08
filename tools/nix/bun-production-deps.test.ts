@@ -37,6 +37,7 @@ describe("production Bun dependency selection", () => {
       "@argo-video/cli",
       "@tiptap/",
       "@xyflow/",
+      "@simonwjackson/caliper",
     ]) {
       expectNoPackageNameContaining(names, forbidden)
     }
@@ -71,6 +72,7 @@ describe("production Bun dependency selection", () => {
     expect(manifest.dependencies.vite).toBeDefined()
     expect(manifest.dependencies["@vitejs/plugin-react"]).toBeDefined()
     expect(manifest.dependencies["@playwright/test"]).toBeUndefined()
+    expect(manifest.dependencies["@simonwjackson/caliper"]).toBeUndefined()
     expect(manifest.dependencies.storybook).toBeUndefined()
     expect(manifest.overrides).toEqual(JSON.parse(packageJsonText).overrides)
     expect(manifest.devDependencies).toBeUndefined()
@@ -79,6 +81,9 @@ describe("production Bun dependency selection", () => {
     expect(
       productionLock.workspaces[""].dependencies["@vitejs/plugin-react"],
     ).toBeDefined()
+    expect(
+      productionLock.workspaces[""].dependencies["@simonwjackson/caliper"],
+    ).toBeUndefined()
     expect(productionLock.workspaces[""].devDependencies).toBeUndefined()
     expect(Object.keys(productionLock.packages).length).toBe(
       Object.keys(lock.packages).length,

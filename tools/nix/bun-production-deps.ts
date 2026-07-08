@@ -8,6 +8,14 @@ export const productionBuildDependencyNames = [
   "@vitejs/plugin-react",
 ]
 
+export const productionExcludedDependencyNames = [
+  // The first-class design lab imports Caliper from product surface story/config
+  // files, but tools/lab is not shipped to devices. Keeping this private git
+  // dependency in runtime package manifests makes sandboxed Nix builds try to
+  // clone GitHub during deployment.
+  "@simonwjackson/caliper",
+]
+
 const trailingCommaPattern = /,\s*([}\]])/g
 
 export type BunLockPackage = [
@@ -90,6 +98,9 @@ function productionDependencySpecMap(
   }
   const dependencies: Record<string, string> = {
     ...(packageJson.dependencies ?? {}),
+  }
+  for (const name of productionExcludedDependencyNames) {
+    delete dependencies[name]
   }
   const missingBuildDeps = productionBuildDependencyNames.filter(
     name =>
