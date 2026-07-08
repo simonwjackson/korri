@@ -879,7 +879,7 @@ EOF
       # Steam-hide policy can put the frontend back on top and drop controls.
       i=0
       while [ "$i" -lt 30 ]; do
-        if app_removed_since_mark; then
+        if app_exit_confirmed_after_removal; then
           return 10
         fi
         if sway_tree | ${pkgs.gnugrep}/bin/grep -a -F "\"class\": \"steam_app_$appid\"" >/dev/null 2>&1; then
@@ -894,12 +894,13 @@ EOF
     }
 
     repair_game_audio() {
+      [ "$appid" = "1029210" ] || return 0
       [ -n "$target_audio_sink" ] || return 0
       PIPEWIRE_RUNTIME_DIR="''${PIPEWIRE_RUNTIME_DIR:-$XDG_RUNTIME_DIR}"
       export PIPEWIRE_RUNTIME_DIR
       i=0
       while [ "$i" -lt 15 ]; do
-        if app_removed_since_mark; then
+        if app_exit_confirmed_after_removal; then
           return 10
         fi
         outputs="$(${pkgs.pipewire}/bin/pw-link -o 2>/dev/null || true)"
@@ -1203,6 +1204,7 @@ EOF
     }
 
     app_removed_since_mark() {
+      [ "''${observed_app_removed:-0}" -eq 1 ] && return 0
       [ -f "$console_log" ] || return 1
       current_mark="$(${pkgs.coreutils}/bin/wc -c < "$console_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
       if [ "$current_mark" -ge "$mark" ]; then
@@ -1214,8 +1216,68 @@ EOF
         || log_has "$removal_log" "Game process removed : AppID $appid"
     }
 
+    app_window_present() {
+      sway_tree | ${pkgs.gnugrep}/bin/grep -a -F "\"class\": \"steam_app_$appid\"" >/dev/null 2>&1
+    }
+
+    app_process_evidence_present() {
+      service_cgroup="$(steam_service_control_group)"
+      [ -n "$service_cgroup" ] || return 1
+      for cmdline in /proc/[0-9]*/cmdline; do
+        [ -r "$cmdline" ] || continue
+        pid="''${cmdline#/proc/}"
+        pid="''${pid%/cmdline}"
+        pid_in_service_control_group "$pid" "$service_cgroup" || continue
+        cmd="$(${pkgs.coreutils}/bin/tr '\0' ' ' < "$cmdline" 2>/dev/null || true)"
+        case "$cmd" in
+          *"SteamLaunch AppId=$appid"*|*"/steamapps/"*".exe"*) return 0 ;;
+        esac
+        if [ -r "/proc/$pid/environ" ] \
+          && ${pkgs.coreutils}/bin/tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null \
+            | ${pkgs.gnugrep}/bin/grep -a -E -q "^(SteamAppId|SteamGameId|SteamOverlayGameId)=$appid$"; then
+          return 0
+        fi
+      done
+      return 1
+    }
+
+    app_running_evidence_present() {
+      app_window_present || app_process_evidence_present
+    }
+
+    app_exit_confirmed_after_removal() {
+      app_removed_since_mark || return 1
+      if app_running_evidence_present; then
+        echo "korri-steam-app: Steam reported AppID $appid process removal; waiting for corroborating stopped evidence" >&2
+        return 1
+      fi
+      return 0
+    }
+
+    steamlaunch_wrapper_present() {
+      ${pkgs.procps}/bin/ps -eo args= \
+        | ${pkgs.gnugrep}/bin/grep -F "SteamLaunch AppId=$appid" \
+        | ${pkgs.gnugrep}/bin/grep -v -F "grep -F" >/dev/null
+    }
+
+    service_failure_classification() {
+      service_state="$(${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active "$service_name" 2>/dev/null || true)"
+      service_result="$(${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl show "$service_name" -p Result --value 2>/dev/null || true)"
+      service_status="$(${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl show "$service_name" -p ExecMainStatus --value 2>/dev/null || true)"
+      case "$service_status" in
+        77) printf '%s\n' "gamepad-ui-guard"; return 0 ;;
+        134) printf '%s\n' "gamescope-abort"; return 0 ;;
+      esac
+      case "$service_state:$service_result" in
+        failed:*|*:core-dump|*:signal|*:exit-code) printf '%s\n' "service-failed"; return 0 ;;
+      esac
+      return 1
+    }
+
     deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + launch_timeout ))
     saw_added=0
+    observed_app_removed=0
+    wrapper_handoff_reported=0
     while true; do
       note_big_picture_surface "AppID $appid launch observation"
       new_log=""
@@ -1227,6 +1289,11 @@ EOF
           new_log="$(${pkgs.coreutils}/bin/cat "$console_log" 2>/dev/null || true)"
         fi
         mark="$current_mark"
+      fi
+
+      if log_has "$new_log" "Game process removed: AppID $appid" \
+        || log_has "$new_log" "Game process removed : AppID $appid"; then
+        observed_app_removed=1
       fi
 
       if [ "$saw_added" -eq 0 ] && log_has "$new_log" "Game process added : AppID $appid"; then
@@ -1242,17 +1309,21 @@ EOF
         fi
       fi
 
-      if [ "$saw_added" -eq 1 ] \
-        && { log_has "$new_log" "Game process removed: AppID $appid" \
-          || log_has "$new_log" "Game process removed : AppID $appid"; }; then
-        hide_steam_hat
-        exit 0
-      fi
-
       if [ "$saw_added" -eq 1 ]; then
-        if ! ${pkgs.procps}/bin/ps -eo args= | ${pkgs.gnugrep}/bin/grep -F "SteamLaunch AppId=$appid" | ${pkgs.gnugrep}/bin/grep -v -F "grep -F" >/dev/null; then
+        if failure_kind="$(service_failure_classification)"; then
+          hide_steam_hat
+          echo "korri-steam-app: managed Steam service failed during AppID $appid observation: $failure_kind" >&2
+          exit 126
+        fi
+
+        if app_exit_confirmed_after_removal; then
           hide_steam_hat
           exit 0
+        fi
+
+        if ! steamlaunch_wrapper_present && [ "$wrapper_handoff_reported" -eq 0 ]; then
+          wrapper_handoff_reported=1
+          echo "korri-steam-app: SteamLaunch wrapper for AppID $appid is gone; continuing while AppID evidence remains live" >&2
         fi
       elif [ "$(${pkgs.coreutils}/bin/date +%s)" -gt "$deadline" ]; then
         hide_steam_hat

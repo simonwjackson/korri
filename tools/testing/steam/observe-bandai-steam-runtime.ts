@@ -12,6 +12,7 @@ interface SectionMap {
 
 export interface SteamRuntimeClassificationOptions {
   readonly appId?: string
+  readonly expectedExe?: string
   readonly sinceMarker?: string
 }
 
@@ -87,11 +88,21 @@ export function classifyTranscript(
   )
   const runtimeHelperExecFormat =
     execFormat && /pressure-vessel|pv-adverb|srt-bwrap/.test(currentTranscript)
-  const processRemoved = options.appId
+  const removalHint = options.appId
     ? new RegExp(`Game process removed ?:? AppID ${escapeRegExp(options.appId)}`).test(
         currentTranscript,
       )
     : /Game process removed ?:? AppID \d+/.test(currentTranscript)
+  const appStillRunning = options.appId
+    ? new RegExp(`SteamLaunch AppId=${escapeRegExp(options.appId)}|steam_app_${escapeRegExp(options.appId)}`).test(
+        currentTranscript,
+      ) ||
+      (options.expectedExe
+        ? new RegExp(escapeRegExp(options.expectedExe), "i").test(currentTranscript)
+        : false)
+    : false
+  const wrapperRemoved = removalHint && appStillRunning
+  const processRemoved = removalHint && !appStillRunning
 
   const launchChain = (() => {
     if (runtimeHelperExecFormat && steamLinuxRuntime4)
@@ -115,6 +126,7 @@ export function classifyTranscript(
       execFormat,
       runtimeHelperExecFormat,
       processRemoved,
+      wrapperRemoved,
     },
   }
 }

@@ -20,6 +20,9 @@ interface ProbeClassification {
   readonly steamGamepadPersona: boolean
   readonly gameProcessAdded: boolean
   readonly expectedProcess: boolean
+  readonly appLauncherAlive: boolean
+  readonly sessionRestoring: boolean
+  readonly wrapperRemovedNonTerminal: boolean
   readonly realProtonCachyos: boolean
   readonly screenshotCaptured: boolean
   readonly swayTitleObserved: boolean
@@ -97,11 +100,16 @@ export function classifyProbeTranscript(
   const processes = processEvidence.join("\n")
   const consoleLog = (sections.CONSOLE ?? []).join("\n")
   const journal = (sections.JOURNAL ?? []).join("\n")
+  const sessiond = (sections.SESSIOND ?? []).join("\n")
   const sway = (sections.SWAY ?? []).join("\n")
   const screenshot = (sections.SCREENSHOT ?? []).join("\n")
-  const all = [service, processes, consoleLog, journal, sway, screenshot].join("\n")
+  const all = [service, processes, consoleLog, journal, sessiond, sway, screenshot].join("\n")
   const appId = escapeRegExp(app.appId)
   const expectedExe = escapeRegExp(app.expectedExe)
+
+  const expectedProcess = new RegExp(expectedExe, "i").test(processes)
+  const swayAppWindow = new RegExp(`steam_app_${appId}|${expectedExe}`, "i").test(sway)
+  const removalHint = new RegExp(`Game process removed ?: AppID ${appId}`).test(consoleLog)
 
   return {
     serviceActive: /(^|\n)active($|\n)|ActiveState=active/.test(service),
@@ -110,7 +118,12 @@ export function classifyProbeTranscript(
     gameProcessAdded: new RegExp(`Game process added ?: AppID ${appId}|SteamLaunch AppId=${appId}`).test(
       all,
     ),
-    expectedProcess: new RegExp(expectedExe, "i").test(processes),
+    expectedProcess,
+    appLauncherAlive: new RegExp(`korri-steam-app\\s+${appId}`).test(processes),
+    sessionRestoring: /\b(restoring|cleanup|cleaning Steam foreground processes|stopping foreground)\b/i.test(
+      sessiond,
+    ),
+    wrapperRemovedNonTerminal: removalHint && (expectedProcess || swayAppWindow),
     realProtonCachyos:
       /compatibilitytools\.d\/proton-cachyos-11\.0-20260601-slr-arm64(?:\/.*)?\/proton/.test(
         all,
@@ -131,6 +144,8 @@ export function stepPassed(classification: ProbeClassification): boolean {
     !classification.steamGamepadPersona &&
     classification.gameProcessAdded &&
     classification.expectedProcess &&
+    classification.appLauncherAlive &&
+    !classification.sessionRestoring &&
     classification.realProtonCachyos &&
     classification.screenshotCaptured &&
     !classification.gamescopeAbort
@@ -229,6 +244,12 @@ journalctl --no-pager -u korri-steam-gamescope.service --since "$launch_mark" 2>
   | grep -a -E "status=|Main process exited|ABRT|Aborted|SteamLaunch AppId=$app_id|AppID $app_id|proton-cachyos|$expected_exe|Exec format|cannot execute binary" \
   | tail -180 || true
 
+echo "###SESSIOND"
+systemctl --user is-active korri-sessiond.service 2>/dev/null || true
+journalctl --user --no-pager -u korri-sessiond.service --since "$launch_mark" 2>/dev/null \
+  | grep -a -E "restor|cleanup|cleaning Steam foreground|foreground|Steam" \
+  | tail -120 || true
+
 echo "###SWAY"
 swaymsg_bin=/run/current-system/sw/bin/swaymsg
 sway_sock=$(/run/current-system/sw/bin/find /run/user -maxdepth 2 -name 'sway-ipc*.sock' 2>/dev/null | sed -n '1p')
@@ -292,6 +313,7 @@ async function proveStep(options: {
   readonly runId: string
   readonly timeoutSeconds: number
   readonly pollSeconds: number
+  readonly holdSeconds: number
   readonly artifactDir: string
 }): Promise<StepProof> {
   const launch = await runRemote(options.sshConfig, options.host, launchScript(options.app))
@@ -309,6 +331,7 @@ async function proveStep(options: {
   let lastProbe = ""
   let lastClassification: ProbeClassification | undefined
   const deadline = Date.now() + options.timeoutSeconds * 1000
+  let firstPassedAt: number | undefined
   while (Date.now() <= deadline) {
     const probe = await runRemote(
       options.sshConfig,
@@ -317,7 +340,13 @@ async function proveStep(options: {
     )
     lastProbe = probe.stdout
     lastClassification = classifyProbeTranscript(probe.stdout, options.app)
-    if (stepPassed(lastClassification)) break
+    const now = Date.now()
+    if (stepPassed(lastClassification)) {
+      firstPassedAt ??= now
+      if (now - firstPassedAt >= options.holdSeconds * 1000) break
+    } else {
+      firstPassedAt = undefined
+    }
     await Bun.sleep(options.pollSeconds * 1000)
   }
 
@@ -347,6 +376,7 @@ async function main(argv: readonly string[]): Promise<number> {
   const sshConfig = args.get("ssh-config") ?? "/tmp/bandai-deploy/ssh_config_ip"
   const timeoutSeconds = Number(args.get("timeout-seconds") ?? "120")
   const pollSeconds = Number(args.get("poll-seconds") ?? "5")
+  const holdSeconds = Number(args.get("hold-seconds") ?? "75")
   const sequence = parseSequence(args.get("sequence"))
   const runId = args.get("run-id") ?? new Date().toISOString().replace(/[:.]/g, "-")
   const artifactDir = args.get("artifact-dir") ?? `/tmp/korri-steam-proof-${runId}`
@@ -373,6 +403,7 @@ async function main(argv: readonly string[]): Promise<number> {
       runId,
       timeoutSeconds,
       pollSeconds,
+      holdSeconds,
       artifactDir,
     })
     steps.push(proof)

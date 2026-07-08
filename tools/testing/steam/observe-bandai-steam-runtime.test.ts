@@ -20,4 +20,14 @@ describe("Bandai Steam runtime observer classification", () => {
 
     expect(classification.signals.processRemoved).toBe(false)
   })
+
+  it("treats current removal as wrapper evidence when AppID is still running", () => {
+    const classification = classifyTranscript(
+      `Game process removed: AppID 360740\nsteam_app_360740\nDownwell.exe`,
+      { appId: "360740", expectedExe: "Downwell.exe" },
+    )
+
+    expect(classification.signals.wrapperRemoved).toBe(true)
+    expect(classification.signals.processRemoved).toBe(false)
+  })
 })

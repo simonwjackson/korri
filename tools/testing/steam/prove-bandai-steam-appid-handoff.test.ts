@@ -20,6 +20,7 @@ ActiveState=active
 Result=success
 ###PROCESSES
 123 S 00:10 steamwebhelper -uimode=7 --type=renderer
+222 S 00:40 /run/current-system/sw/bin/korri-steam-app 360740
 234 S 00:01 SteamLaunch AppId=360740 -- /nix/store/abc-proton-cachyos-arm64-11/share/korri/proton-cachyos-arm64/dist/proton waitforexitandrun /var/lib/korri/steam/steamapps/common/Downwell/Downwell.exe
 345 S 00:01 Downwell.exe
 ###CONSOLE
@@ -41,6 +42,8 @@ SCREENSHOT_OK /tmp/proof.png
       steamGamepadPersona: false,
       gameProcessAdded: true,
       expectedProcess: true,
+      appLauncherAlive: true,
+      sessionRestoring: false,
       realProtonCachyos: true,
       screenshotCaptured: true,
       swayTitleObserved: true,
@@ -55,6 +58,7 @@ SCREENSHOT_OK /tmp/proof.png
 active
 ###PROCESSES
 123 S 00:10 steamwebhelper -uimode=4 --type=renderer
+222 S 00:40 /run/current-system/sw/bin/korri-steam-app 360740
 234 S 00:01 SteamLaunch AppId=360740 -- /nix/store/abc-proton-cachyos-arm64-11/share/korri/proton-cachyos-arm64/dist/proton waitforexitandrun Downwell.exe
 ###CONSOLE
 Game process added : AppID 360740
@@ -92,12 +96,64 @@ SCREENSHOT_OK /tmp/proof.png
     expect(stepPassed(classification)).toBe(false)
   })
 
+  it("treats SteamLaunch removal as non-terminal when launcher and game evidence remain live", () => {
+    const classification = classifyProbeTranscript(
+      `###SERVICE
+active
+###PROCESSES
+123 S 00:10 steamwebhelper -uimode=7 --type=renderer
+222 S 00:40 /run/current-system/sw/bin/korri-steam-app 360740
+345 S 00:01 /nix/store/abc-proton-cachyos-arm64-11/share/korri/proton-cachyos-arm64/dist/proton waitforexitandrun /var/lib/korri/steam/steamapps/common/Downwell/Downwell.exe
+346 S 00:01 Downwell.exe
+###CONSOLE
+Game process added : AppID 360740
+Game process removed : AppID 360740
+###JOURNAL
+###SWAY
+"class":"steam_app_360740"
+"name":"Downwell"
+###SCREENSHOT
+SCREENSHOT_OK /tmp/proof.png
+`,
+      downwell,
+    )
+
+    expect(classification.wrapperRemovedNonTerminal).toBe(true)
+    expect(stepPassed(classification)).toBe(true)
+  })
+
+  it("rejects proof when sessiond has entered restore/cleanup", () => {
+    const classification = classifyProbeTranscript(
+      `###SERVICE
+active
+###PROCESSES
+123 S 00:10 steamwebhelper -uimode=7 --type=renderer
+222 S 00:40 /run/current-system/sw/bin/korri-steam-app 360740
+345 S 00:01 Downwell.exe
+###CONSOLE
+Game process added : AppID 360740
+###SESSIOND
+korri-sessiond: restoring foreground session after child exit
+###JOURNAL
+###SWAY
+"name":"Downwell"
+###SCREENSHOT
+SCREENSHOT_OK /tmp/proof.png
+`,
+      downwell,
+    )
+
+    expect(classification.sessionRestoring).toBe(true)
+    expect(stepPassed(classification)).toBe(false)
+  })
+
   it("rejects Gamescope ABRT/status=134 as compositor failure", () => {
     const classification = classifyProbeTranscript(
       `###SERVICE
 active
 ###PROCESSES
 123 S 00:10 steamwebhelper -uimode=7
+222 S 00:40 /run/current-system/sw/bin/korri-steam-app 360740
 234 S 00:01 SteamLaunch AppId=360740 -- /nix/store/abc-proton-cachyos-arm64-11/share/korri/proton-cachyos-arm64/dist/proton waitforexitandrun Downwell.exe
 ###CONSOLE
 Game process added : AppID 360740
