@@ -30,6 +30,9 @@ describe("typed RetroArch launch spec rendering", () => {
     expect(renderRetroArchConfig()).toContain('auto_remaps_enable = "false"')
     expect(renderRetroArchConfig()).toContain('game_specific_options = "false"')
     expect(renderRetroArchConfig()).toContain('auto_shaders_enable = "false"')
+    expect(renderRetroArchConfig()).toContain(
+      'builtin_imageviewer_enable = "false"',
+    )
   })
 
   it("omits audio backend and hardware device settings by default", () => {
@@ -617,6 +620,7 @@ describe("typed RetroArch launch spec rendering", () => {
         'input_autodetect_enable = "true"',
         "input_max_users = 4",
         "input_menu_toggle_gamepad_combo = 4",
+        'builtin_imageviewer_enable = "false"',
         'video_fullscreen = "false"',
         "",
       ].join("\n"),

@@ -38,6 +38,10 @@ const SAFE_LIFECYCLE_DEFAULTS: SafeRetroArchLifecycleDefaults = {
   autoShaders: false,
 }
 
+const SAFE_CONTENT_BROWSER_DEFAULTS = {
+  builtinImageViewer: false,
+} as const
+
 const DANGEROUS_CORE_ARGS = new Set(["-L", "--libretro"])
 const DANGEROUS_CONFIG_ARGS = new Set(["-c", "--config"])
 const DANGEROUS_APPEND_CONFIG_ARGS = new Set(["--appendconfig"])
@@ -228,6 +232,7 @@ function renderRetroArchSettings(
   appendRewindSettings(writer, policy)
   appendPlaybackSettings(writer, policy)
   appendLatencySettings(writer, policy)
+  appendContentBrowserSettings(writer)
   appendAdvancedSettings(writer, policy)
 
   return [...writer.settings]
@@ -720,6 +725,16 @@ function appendLatencySettings(
     writer,
     policy.latency?.preemptiveFrames,
     PREEMPTIVE_FRAME_SETTINGS,
+  )
+}
+
+function appendContentBrowserSettings(writer: TypedSettingsWriter) {
+  // PICO-8 carts commonly use .p8.png; RetroArch's image viewer can otherwise
+  // intercept those PNG carts before the selected fake-08 core sees them.
+  pushTypedSetting(
+    writer,
+    "builtin_imageviewer_enable",
+    SAFE_CONTENT_BROWSER_DEFAULTS.builtinImageViewer,
   )
 }
 
