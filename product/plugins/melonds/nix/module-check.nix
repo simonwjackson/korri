@@ -7,7 +7,7 @@ let
   lib = pkgs.lib;
   evalConfig = import (pkgs.path + "/nixos/lib/eval-config.nix");
 
-  fakeMelonDs = pkgs.runCommand "fake-melonds" { } ''
+  testMelonDsPackage = pkgs.runCommand "test-melonds" { } ''
     mkdir -p "$out/bin"
     cat > "$out/bin/melonDS" <<'EOF'
     #!/usr/bin/env sh
@@ -15,7 +15,7 @@ let
     EOF
     chmod +x "$out/bin/melonDS"
   '';
-  fakePresenter = pkgs.runCommand "fake-melonds-presenter" { } ''
+  testPresenterPackage = pkgs.runCommand "test-melonds-presenter" { } ''
     mkdir -p "$out/bin"
     cat > "$out/bin/korri-melonds-presenter" <<'EOF'
     #!/usr/bin/env sh
@@ -42,8 +42,8 @@ let
         system.stateVersion = "24.11";
       }
       (korriMelonDsModule {
-        melonDsPackage = fakeMelonDs;
-        melonDsPresenterPackage = fakePresenter;
+        melonDsPackage = testMelonDsPackage;
+        melonDsPresenterPackage = testPresenterPackage;
       })
     ];
   }).config;
@@ -53,10 +53,10 @@ let
   check = message: assertion: { inherit message assertion; };
   checks = [
     (check "module adds melonDS to system packages" (
-      builtins.any (name: lib.hasInfix "fake-melonds" name) packageNames
+      builtins.any (name: lib.hasInfix "test-melonds" name) packageNames
     ))
     (check "module adds melonDS presenter to system packages" (
-      builtins.any (name: lib.hasInfix "fake-melonds-presenter" name) packageNames
+      builtins.any (name: lib.hasInfix "test-melonds-presenter" name) packageNames
     ))
     (check "module creates Korri-owned melonDS state directories" (
       builtins.elem "d /var/lib/korri/melonDS 0755 korri korri -" rules
