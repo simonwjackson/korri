@@ -27,9 +27,11 @@ let
   ryubingPackage = korri.packages.${targetSystem}.ryubing-korri;
   yfsPackage = korri.packages.${targetSystem}.yoshis-fabrication-station;
   webCanvasPackage = korri.packages.${targetSystem}.korri-web-canvas;
+  melonDsPackage = korri.packages.${targetSystem}.melonds or pkgs.melonDS;
+  melonDsPresenterPackage = korri.packages.${targetSystem}."melonds-presenter";
   box64RuntimePackage = korri.packages.${targetSystem}.korri-box64-runtime or pkgs.box64;
   gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
-  enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:gmloader,@korri:mega-man-rock-n-roll,@korri:moonlight,@korri:neverball,@korri:pico8,@korri:remap,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:webpage,@korri:web-canvas,@korri:xjlt,@korri:yoshis-fabrication-station,@korri:zquest-classic";
+  enabledFirstPartyPlugins = "@korri:3dsen,@korri:am2rlauncher,@korri:box64-runtime,@korri:dome-romantik,@korri:gamescope,@korri:globeba,@korri:gmloader,@korri:mega-man-rock-n-roll,@korri:melonds,@korri:moonlight,@korri:neverball,@korri:pico8,@korri:remap,@korri:retroarch,@korri:ryubing,@korri:shipwright,@korri:smb-wonderland-1987,@korri:sonic-3-air,@korri:sonic-time-twisted,@korri:spelunky-classic-hd,@korri:srb2kart,@korri:stargrove-scramble,@korri:steam,@korri:tiny-crate,@korri:tmnt-rescue-palooza,@korri:turnip,@korri:webpage,@korri:web-canvas,@korri:xjlt,@korri:yoshis-fabrication-station,@korri:zquest-classic";
   moonlightRuntimeSettingsEnvironment = {
     # Runtime stream-quality policy is owned by Korri's stream-control surface.
     # Keep the downstream Moonlight spike hooks disabled in product images: the
@@ -217,13 +219,60 @@ let
         chmod -R u+w $out
         ${inputplumberHelpers.patchInputplumberXb360Target { targetDeviceYaml = "02-ayn-controller.yaml"; }}
       '';
+  sm8550DualPanelPlatformDefaults = lib.optionalAttrs (displayBottomConnector != null) {
+    launchers."@korri:melonds/matched-dual-screen" = {
+      command = "/run/current-system/sw/bin/melonDS";
+      args = [ "{content.path}" ];
+      systems = [ "nds" ];
+      env = {
+        WAYLAND_DISPLAY = "wayland-1";
+        QT_QPA_PLATFORM = "wayland";
+      };
+      launch."with"."@korri:gamescope".enable = false;
+      settings.plugin = {
+        state.root = "{storage:@korri:melonds/state}";
+        boot.direct = true;
+        display.mode = "dual-window";
+        presentation = {
+          intent = "matched-dual-screen";
+          menu.hide = true;
+          input.profile = "inputplumber-xbox";
+          wayland = {
+            display = "wayland-1";
+            compositorSocket = "${korriRuntimeDir}/sway-ipc.sock";
+          };
+          secondaryOutput = {
+            output = displayBottomConnector;
+            restore = "observed";
+          };
+          windows = {
+            top = {
+              output = resolvedHomeOutput;
+              x = 407;
+              y = 250;
+              width = 1106;
+              height = 830;
+            };
+            bottom = {
+              output = displayBottomConnector;
+              x = 0;
+              y = 0;
+              width = 1240;
+              height = 930;
+            };
+          };
+        };
+      };
+      policy.allowedCommands = [ "/run/current-system/sw/bin/melonDS" ];
+    };
+  };
   # SM8550 platform launch policy is rendered into the readable library
   # cascade. Moonlight uses host.moonlight. YFS carries authored plugin
   # settings and browser display environment on argv because the Remap
   # runner/Bun boundary cannot rely on KORRI_* process env being visible to
   # JavaScript. Device-specific YFS presentation settings belong in device
   # YAML, not in this platform adapter.
-  sm8550PlatformDefaults = {
+  sm8550PlatformDefaults = lib.recursiveUpdate {
     storage."@korri:steam/installed-manifests" = {
       root = "${runtime.stateRoot}/steam/steamapps";
       path."scan.max-depth" = "1";
@@ -334,7 +383,7 @@ let
         authority = "controller";
       };
     };
-  };
+  } sm8550DualPanelPlatformDefaults;
   # SDL clients (Moonlight, Cemu) talk to the substrate audio graph via
   # the API nix-on-rocks exposes. The substrate currently reports
   # pulseaudio; Korri applies it as SDL_AUDIODRIVER. If the substrate
@@ -766,6 +815,8 @@ in
     path = [
       gamescopePackage
       box64RuntimePackage
+      melonDsPackage
+      melonDsPresenterPackage
       pkgs.moonlight-embedded
       yfsPackage
       webCanvasPackage

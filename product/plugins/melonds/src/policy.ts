@@ -65,10 +65,12 @@ const WindowRectanglePolicy = Schema.Struct({
 
 const MelonDsPresentationPolicy = Schema.Struct({
   intent: Schema.Literals(["matched-dual-screen"]),
-  windows: Schema.Struct({
-    top: WindowRectanglePolicy,
-    bottom: WindowRectanglePolicy,
-  }),
+  windows: Schema.optional(
+    Schema.Struct({
+      top: WindowRectanglePolicy,
+      bottom: WindowRectanglePolicy,
+    }),
+  ),
   wayland: Schema.optional(
     Schema.Struct({
       display: NonEmptyString("melonds.presentation.wayland.display"),

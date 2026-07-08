@@ -4,6 +4,10 @@ export const KORRI_MELONDS_APP_LOCAL_ID = "melonds" as const
 export const KORRI_MELONDS_APP_ID =
   `${KORRI_MELONDS_PLUGIN_ID}/${KORRI_MELONDS_APP_LOCAL_ID}` as const
 
+export const KORRI_MELONDS_MATCHED_APP_LOCAL_ID = "matched-dual-screen" as const
+export const KORRI_MELONDS_MATCHED_APP_ID =
+  `${KORRI_MELONDS_PLUGIN_ID}/${KORRI_MELONDS_MATCHED_APP_LOCAL_ID}` as const
+
 export const KORRI_MELONDS_NDS_SYSTEM_ID = "nds" as const
 
 export const KORRI_MELONDS_STATE_STORAGE_LOCAL_ID = "state" as const

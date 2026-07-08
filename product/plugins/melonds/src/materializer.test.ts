@@ -424,6 +424,36 @@ it("writes a matched presenter payload and forces Wayland env", async () => {
   }
 })
 
+it("fails matched presentation before spawn when geometry is missing", async () => {
+  const root = await mkdtemp(join(tmpdir(), "korri-melonds-no-geometry-"))
+  try {
+    const rom = join(root, "Tetris DS.nds")
+    await writeFile(rom, "nds")
+    const exit = await Effect.runPromiseExit(
+      materializeReadableMelonDsLaunch({
+        context: context({
+          contentPath: rom,
+          stateRoot: join(root, "melonDS"),
+          policy: {
+            state: { root: join(root, "melonDS") },
+            display: { mode: "dual-window" },
+            presentation: {
+              intent: "matched-dual-screen",
+              wayland: {
+                display: "wayland-1",
+                compositorSocket: "/run/user/1000/sway-ipc.sock",
+              },
+            },
+          },
+        }),
+      }),
+    )
+    expectFailureReason(exit, "window geometry")
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 it("fails matched presentation before spawn when trusted compositor env is missing", async () => {
   const root = await mkdtemp(join(tmpdir(), "korri-melonds-no-sway-"))
   try {

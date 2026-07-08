@@ -212,6 +212,10 @@ const materializeMatchedPresentationSpec = (input: {
         "matched melonDS presentation requires trusted compositor control",
       )
     }
+    const windows = presentation.windows
+    if (windows === undefined) {
+      throw new Error("matched melonDS presentation requires window geometry")
+    }
 
     const presenterEnv = matchedPresenterEnv(input.baseEnv, wayland)
     const melonDsSpec = composeDirectMelonDsLaunchSpec({
@@ -236,9 +240,9 @@ const materializeMatchedPresentationSpec = (input: {
             topTitlePrefix: "[w1]",
             bottomTitlePrefix: "[w2]",
           },
-          windows: presentation.windows,
+          windows,
           secondaryOutput: presentation.secondaryOutput ?? {
-            output: presentation.windows.bottom.output,
+            output: windows.bottom.output,
             restore: "observed",
           },
           ...(presentation.menu?.hide === true

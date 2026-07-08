@@ -62,6 +62,18 @@ function expectPolicyError(run: () => unknown): void {
   }
 }
 
+it("accepts generic matched dual-screen intent before platform geometry is applied", () => {
+  expect(
+    decodeMelonDsPolicy({
+      display: { mode: "dual-window" },
+      presentation: { intent: "matched-dual-screen" },
+    }),
+  ).toEqual({
+    display: { mode: "dual-window" },
+    presentation: { intent: "matched-dual-screen" },
+  })
+})
+
 it("accepts matched dual-screen presentation geometry", () => {
   expect(
     decodeMelonDsPolicy({

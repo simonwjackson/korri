@@ -5,6 +5,8 @@ import {
   KORRI_MELONDS_APP_LOCAL_ID,
   KORRI_MELONDS_DEFAULT_COMMAND,
   KORRI_MELONDS_DEFAULT_STATE_ROOT,
+  KORRI_MELONDS_MATCHED_APP_ID,
+  KORRI_MELONDS_MATCHED_APP_LOCAL_ID,
   KORRI_MELONDS_NDS_DISCOVERY_PROVIDER_ID,
   KORRI_MELONDS_NDS_SYSTEM_ID,
   KORRI_MELONDS_NIX_PACKAGE,
@@ -41,6 +43,28 @@ describe("melonDS plugin", () => {
       policy: { allowedCommands: [KORRI_MELONDS_DEFAULT_COMMAND] },
     })
     expect(KORRI_MELONDS_DEFAULT_COMMAND.startsWith("/")).toBe(true)
+  })
+
+  it("declares a generic matched dual-screen launcher with Gamescope disabled", () => {
+    expect(
+      melonDsPlugin.contributes.config.launchers?.[
+        KORRI_MELONDS_MATCHED_APP_LOCAL_ID
+      ],
+    ).toMatchObject({
+      id: KORRI_MELONDS_MATCHED_APP_ID,
+      plugin: KORRI_MELONDS_PLUGIN_ID,
+      command: KORRI_MELONDS_DEFAULT_COMMAND,
+      systems: [KORRI_MELONDS_NDS_SYSTEM_ID],
+      launch: { with: { "@korri:gamescope": { enable: false } } },
+      settings: {
+        plugin: {
+          state: { root: `{storage:${KORRI_MELONDS_STATE_STORAGE_ID}}` },
+          boot: { direct: true },
+          display: { mode: "dual-window" },
+          presentation: { intent: "matched-dual-screen" },
+        },
+      },
+    })
   })
 
   it("contributes Nintendo DS storage, system, and package module records", () => {

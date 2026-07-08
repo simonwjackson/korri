@@ -145,6 +145,17 @@ let
         "launchers"
         "@korri:yoshis-fabrication-station/level"
       ] { } platformDefaults;
+      melonDsMatchedLauncher = lib.attrByPath [
+        "launchers"
+        "@korri:melonds/matched-dual-screen"
+      ] null platformDefaults;
+      melonDsMatchedLauncherOrEmpty = if melonDsMatchedLauncher == null then { } else melonDsMatchedLauncher;
+      melonDsMatchedSettings = lib.attrByPath [ "settings" "plugin" ] { } melonDsMatchedLauncherOrEmpty;
+      melonDsMatchedGamescopePolicy = lib.attrByPath [
+        "launch"
+        "with"
+        "@korri:gamescope"
+      ] { } melonDsMatchedLauncherOrEmpty;
       yfsLauncherSettings = lib.attrByPath [ "settings" "plugin" ] { } yfsPlatformLauncher;
       yfsRemapBindings = lib.attrByPath [
         "launch"
@@ -267,7 +278,8 @@ let
         (sessiondEnv.KORRI_INPUT_SEAT_RUNTIME_DIR or null) == "%t/korri/input-seat"
       ))
       (check "${name}: korrid enables first-party plugin resources" (
-        lib.hasInfix "@korri:neverball" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
+        lib.hasInfix "@korri:melonds" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
+        && lib.hasInfix "@korri:neverball" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "@korri:remap" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "@korri:turnip" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "@korri:webpage" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
@@ -299,6 +311,7 @@ let
       (check "${name}: boot release scan inherits trusted config roots, plugins, and Nix find" (
         (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
         && (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS_DIR or null) == "/run/korri/config-roots.d"
+        && lib.hasInfix "@korri:melonds" (scoutReleaseScanEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "@korri:retroarch" (scoutReleaseScanEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "@korri:steam" (scoutReleaseScanEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasInfix "findutils" (scoutReleaseScanEnv.KORRI_FIND_BIN or "")
@@ -533,6 +546,12 @@ let
         hasPackagePname "korri-web-canvas" cfg.environment.systemPackages
         && hasPackagePname "korri-web-canvas" sessiond.path
       ))
+      (check "${name}: melonDS and matched presenter are installed and available to sessiond" (
+        hasPackagePname "melonDS" cfg.environment.systemPackages
+        && hasPackagePname "korri-melonds-presenter" cfg.environment.systemPackages
+        && hasPackagePname "melonDS" sessiond.path
+        && hasPackagePname "korri-melonds-presenter" sessiond.path
+      ))
       (check "${name}: Remap native wrapper is enabled for launch-scoped controls" (
         (cfg.services.korri.remap.enable or false)
         && cfg.security.wrappers ? korri-remap-bridge
@@ -598,6 +617,30 @@ let
       ))
       (check "${name}: YFS platform defaults do not bake presentation settings" (
         yfsLauncherSettings == { }
+      ))
+      (check "${name}: melonDS matched presentation defaults are dual-panel only" (
+        if name == "Thor" then
+          melonDsMatchedLauncher != null
+          && !(melonDsMatchedLauncher ? plugin)
+          && (melonDsMatchedLauncher.command or null) == "/run/current-system/sw/bin/melonDS"
+          && (melonDsMatchedGamescopePolicy.enable or true) == false
+          && (melonDsMatchedLauncher.env.WAYLAND_DISPLAY or null) == "wayland-1"
+          && (melonDsMatchedLauncher.env.QT_QPA_PLATFORM or null) == "wayland"
+          && (melonDsMatchedSettings.display.mode or null) == "dual-window"
+          && (melonDsMatchedSettings.presentation.intent or null) == "matched-dual-screen"
+          && (melonDsMatchedSettings.presentation.menu.hide or false) == true
+          && (melonDsMatchedSettings.presentation.input.profile or null) == "inputplumber-xbox"
+          && (melonDsMatchedSettings.presentation.wayland.display or null) == "wayland-1"
+          && (melonDsMatchedSettings.presentation.wayland.compositorSocket or null) == "/run/user/2000/sway-ipc.sock"
+          && (melonDsMatchedSettings.presentation.secondaryOutput.output or null) == "DSI-1"
+          && (melonDsMatchedSettings.presentation.windows.top.output or null) == "DSI-2"
+          && (melonDsMatchedSettings.presentation.windows.top.width or null) == 1106
+          && (melonDsMatchedSettings.presentation.windows.top.height or null) == 830
+          && (melonDsMatchedSettings.presentation.windows.bottom.output or null) == "DSI-1"
+          && (melonDsMatchedSettings.presentation.windows.bottom.width or null) == 1240
+          && (melonDsMatchedSettings.presentation.windows.bottom.height or null) == 930
+        else
+          melonDsMatchedLauncher == null
       ))
       (check "${name}: Moonlight remote streams launch through host-level Gamescope" (
         (moonlightGamescopePolicy.enable or false) == true
