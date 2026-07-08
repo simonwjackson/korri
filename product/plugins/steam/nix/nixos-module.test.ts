@@ -133,8 +133,12 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("steam_service_control_group")
     expect(moduleSource).toContain("pid_in_service_control_group")
     expect(moduleSource).toContain("KORRI_STEAM_APP_DESKTOP_UI_READY_STABLE_SECONDS")
+    expect(moduleSource).toContain("KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-600")
+    expect(moduleSource).toContain("KORRI_STEAM_APP_STARTUP_UPDATE_TIMEOUT:-900")
     expect(moduleSource).toContain("desktop_ready_since=0")
     expect(moduleSource).toContain("steam_ready_log_present")
+    expect(moduleSource).toContain("steam_startup_update_active")
+    expect(moduleSource).toContain("observed Steam startup self-update; extending readiness wait")
     expect(moduleSource).toContain('*steamwebhelper*" -uimode=7"*) return 0')
     expect(moduleSource).toContain("big_picture_surface_present")
     expect(moduleSource).toContain("note_big_picture_surface \"managed Steam readiness\"")
@@ -361,6 +365,22 @@ describe("Steam plugin Nix module", () => {
       "u${toString runtime.uid}-ValveIPCSharedObj-Steam",
     )
     expect(moduleSource).not.toContain("/dev/shm/u*-ValveIPCSharedObj-Steam")
+  })
+
+  it("lets cold AppID launch waits survive Steam startup self-update", () => {
+    expect(moduleSource).toContain('bootstrap_log="$STEAM_HOME/logs/bootstrap_log.txt"')
+    expect(moduleSource).toContain("bootstrap_mark=0")
+    expect(moduleSource).toContain("steam_log_since_mark")
+    expect(moduleSource).toContain("Checking for update on startup")
+    expect(moduleSource).toContain("Found pending update")
+    expect(moduleSource).toContain("Extracting package")
+    expect(moduleSource).toContain("ready_deadline=$((now + startup_update_timeout))")
+    expect(moduleSource).toContain(
+      "leaving managed Steam running to finish startup self-update",
+    )
+    expect(moduleSource).toContain(
+      'if [ "$steam_launch_forwarded" -eq 0 ] && steam_startup_update_active; then',
+    )
   })
 
   it("makes Steam update relaunch exits explicit and restartable", () => {

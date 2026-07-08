@@ -809,9 +809,11 @@ EOF
     export FEX_ROOTFS="''${FEX_ROOTFS:-${cfg.fexRootfs}}"
 
     console_log="$STEAM_HOME/logs/console_log.txt"
+    bootstrap_log="$STEAM_HOME/logs/bootstrap_log.txt"
     launch_timeout="''${KORRI_STEAM_APP_LAUNCH_TIMEOUT:-180}"
     forward_timeout="''${KORRI_STEAM_APP_FORWARD_TIMEOUT:-15}"
-    service_ready_timeout="''${KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-90}"
+    service_ready_timeout="''${KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-600}"
+    startup_update_timeout="''${KORRI_STEAM_APP_STARTUP_UPDATE_TIMEOUT:-900}"
     desktop_ui_stable_seconds="''${KORRI_STEAM_APP_DESKTOP_UI_READY_STABLE_SECONDS:-5}"
     service_name="korri-steam-gamescope.service"
     gamescope_display="''${GAMESCOPE_WAYLAND_DISPLAY:-gamescope-0}"
@@ -921,6 +923,10 @@ EOF
 
     cleanup_done=0
     service_start_attempted_at=0
+    steam_launch_forwarded=0
+    steam_startup_update_observed=0
+    mark=0
+    bootstrap_mark=0
 
     control_steam_service() {
       action="$1"
@@ -1000,6 +1006,31 @@ EOF
         mark=0
         : > "$console_log" 2>/dev/null || true
       fi
+      if [ -f "$bootstrap_log" ]; then
+        bootstrap_mark="$(${pkgs.coreutils}/bin/wc -c < "$bootstrap_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
+      else
+        bootstrap_mark=0
+        : > "$bootstrap_log" 2>/dev/null || true
+      fi
+    }
+
+    steam_log_since_mark() {
+      path="$1"
+      offset="$2"
+      [ -f "$path" ] || return 0
+      current_offset="$(${pkgs.coreutils}/bin/wc -c < "$path" | ${pkgs.coreutils}/bin/tr -d ' ')"
+      if [ "$current_offset" -ge "$offset" ]; then
+        ${pkgs.coreutils}/bin/tail -c +$((offset + 1)) "$path" 2>/dev/null || true
+      else
+        ${pkgs.coreutils}/bin/cat "$path" 2>/dev/null || true
+      fi
+    }
+
+    steam_startup_update_active() {
+      {
+        steam_log_since_mark "$bootstrap_log" "$bootstrap_mark"
+        steam_log_since_mark "$console_log" "$mark"
+      } | ${pkgs.gnugrep}/bin/grep -a -E -q 'Checking for update on startup|Checking for available updates|Downloading manifest|Downloaded new manifest|Found pending update|Installing update|Extracting package|Set status message: (Checking for available updates|Download complete|Installing update|Extracting package)|Looks like steam didn'"'"'t shutdown cleanly'
     }
 
     cleanup() {
@@ -1007,6 +1038,10 @@ EOF
       cleanup_done=1
       hide_steam_hat || true
       if [ "$stop_service_on_exit" != "0" ]; then
+        if [ "$steam_launch_forwarded" -eq 0 ] && steam_startup_update_active; then
+          echo "korri-steam-app: leaving managed Steam running to finish startup self-update" >&2
+          return 0
+        fi
         control_steam_service stop >/dev/null 2>&1 || \
           echo "korri-steam-app: warning: could not stop $service_name after launch" >&2
       fi
@@ -1111,6 +1146,13 @@ EOF
         if steam_surface_ready && { [ "$desktop_ui_ready" -eq 1 ] || steam_ready_log_present "$ready_log"; }; then
           return 0
         fi
+        if steam_startup_update_active; then
+          if [ "$steam_startup_update_observed" -eq 0 ]; then
+            steam_startup_update_observed=1
+            ready_deadline=$((now + startup_update_timeout))
+            echo "korri-steam-app: observed Steam startup self-update; extending readiness wait" >&2
+          fi
+        fi
         service_state="$(steam_service_state)"
         case "$service_state" in
           active|activating|deactivating|reloading) ;;
@@ -1147,6 +1189,7 @@ EOF
     focus_korri_output
     hide_steam_hat
     note_big_picture_surface "AppID $appid launch forwarding"
+    steam_launch_forwarded=1
     if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs} -applaunch "$appid" >/dev/null; then
       echo "korri-steam-app: timed out forwarding AppID $appid to Steam" >&2
       exit 125
