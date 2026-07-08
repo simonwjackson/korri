@@ -293,29 +293,9 @@ let
         (daemonEnv.KORRI_CONFIG_ROOTS_DIR or null) == "/run/korri/config-roots.d"
         && (sessiondEnv.KORRI_CONFIG_ROOTS_DIR or null) == (daemonEnv.KORRI_CONFIG_ROOTS_DIR or null)
       ))
-      (check "${name}: boot release scanning is opt-in and targets local config" (
-        (scoutReleaseScan.enable or false)
-        && (scoutReleaseScan.configPath or null) == "/var/lib/korri/config/korri.yaml"
-        && cfg.systemd.services ? korri-scout-release-scan
-        && ((scoutReleaseScanUnit.serviceConfig.User or null) == runtime.user)
-        && ((scoutReleaseScanUnit.serviceConfig.Group or null) == runtime.group)
-        && builtins.elem "/var/lib/korri/config" (scoutReleaseScanUnit.serviceConfig.ReadWritePaths or [ ])
-      ))
-      (check "${name}: boot release scan waits for removable media coldplug" (
-        builtins.elem "korri-removable-media-coldplug.service" (scoutReleaseScanUnit.after or [ ])
-        && builtins.elem "korri-removable-media-coldplug.service" (scoutReleaseScanUnit.wants or [ ])
-        && builtins.any (cmd: lib.hasInfix "korri-scout-wait-for-removable-media" cmd) (
-          scoutReleaseScanUnit.serviceConfig.ExecStartPre or [ ]
-        )
-      ))
-      (check "${name}: boot release scan inherits trusted config roots, plugins, and Nix find" (
-        (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
-        && (scoutReleaseScanEnv.KORRI_CONFIG_ROOTS_DIR or null) == "/run/korri/config-roots.d"
-        && lib.hasInfix "@korri:melonds" (scoutReleaseScanEnv.KORRI_ENABLED_PLUGINS or "")
-        && lib.hasInfix "@korri:retroarch" (scoutReleaseScanEnv.KORRI_ENABLED_PLUGINS or "")
-        && lib.hasInfix "@korri:steam" (scoutReleaseScanEnv.KORRI_ENABLED_PLUGINS or "")
-        && lib.hasInfix "findutils" (scoutReleaseScanEnv.KORRI_FIND_BIN or "")
-        && lib.hasSuffix "/bin/find" (scoutReleaseScanEnv.KORRI_FIND_BIN or "")
+      (check "${name}: boot release scanning is disabled for deploy safety" (
+        !(scoutReleaseScan.enable or false)
+        && !(cfg.systemd.services ? korri-scout-release-scan)
       ))
       (check "${name}: boot release scan covers installed Steam manifests" (
         (steamInstalledManifestsStorage.root or null) == "/var/lib/korri/steam/steamapps"

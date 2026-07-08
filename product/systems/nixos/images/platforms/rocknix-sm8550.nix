@@ -545,10 +545,11 @@ in
   # AYN UCM package), but the product owns where the graph lives.
   services.korri.remap.enable = true;
 
-  services.korri.scout.releaseScan = {
-    enable = true;
-    extraEnvironment.KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
-  };
+  # Boot-time Scout release scans can recursively walk large removable or
+  # mutable game-library roots on Bandai, blocking `nixos-rebuild switch` and
+  # consuming multiple GiB of memory. Keep discovery operator/user initiated
+  # until the scan path is bounded enough for boot/deploy activation.
+  services.korri.scout.releaseScan.enable = false;
 
   services.korri.input.inputSeat = {
     enable = true;
