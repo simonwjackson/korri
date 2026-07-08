@@ -404,6 +404,9 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("service_failure_classification()")
     expect(moduleSource).toContain("korri-steam-app: Steam reported AppID $appid process removal; waiting for corroborating stopped evidence")
     expect(moduleSource).toContain("korri-steam-app: SteamLaunch wrapper for AppID $appid is gone; continuing while AppID evidence remains live")
+    expect(moduleSource).toContain("korri-steam-app: SteamLaunch wrapper for AppID $appid is gone and no AppID evidence remains; treating as game exit")
+    expect(moduleSource).toContain("if app_running_evidence_present; then")
+    expect(moduleSource).not.toContain('*"/steamapps/"*".exe"*) return 0')
     expect(moduleSource).not.toContain('grep -F "SteamLaunch AppId=$appid" | ${pkgs.gnugrep}/bin/grep -v -F "grep -F" >/dev/null; then\n          hide_steam_hat\n          exit 0')
   })
 

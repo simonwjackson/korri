@@ -13,6 +13,7 @@ interface SectionMap {
 export interface SteamRuntimeClassificationOptions {
   readonly appId?: string
   readonly expectedExe?: string
+  readonly liveEvidenceTranscript?: string
   readonly sinceMarker?: string
 }
 
@@ -93,12 +94,13 @@ export function classifyTranscript(
         currentTranscript,
       )
     : /Game process removed ?:? AppID \d+/.test(currentTranscript)
+  const liveEvidenceTranscript = options.liveEvidenceTranscript ?? currentTranscript
   const appStillRunning = options.appId
     ? new RegExp(`SteamLaunch AppId=${escapeRegExp(options.appId)}|steam_app_${escapeRegExp(options.appId)}`).test(
-        currentTranscript,
+        liveEvidenceTranscript,
       ) ||
       (options.expectedExe
-        ? new RegExp(escapeRegExp(options.expectedExe), "i").test(currentTranscript)
+        ? new RegExp(escapeRegExp(options.expectedExe), "i").test(liveEvidenceTranscript)
         : false)
     : false
   const wrapperRemoved = removalHint && appStillRunning
@@ -211,7 +213,11 @@ done
     expectedExe,
     steamHome,
     poll: { seconds: pollSeconds, intervalSeconds: pollIntervalSeconds },
-    classification: classifyTranscript(transcript, { appId }),
+    classification: classifyTranscript(transcript, {
+      appId,
+      expectedExe,
+      liveEvidenceTranscript: (sections.PROCESSES ?? []).join("\n"),
+    }),
     evidence: {
       processes: (sections.PROCESSES ?? []).slice(-80),
       console: (sections.CONSOLE ?? []).slice(-80),

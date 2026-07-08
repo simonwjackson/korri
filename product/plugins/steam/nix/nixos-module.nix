@@ -1230,7 +1230,7 @@ EOF
         pid_in_service_control_group "$pid" "$service_cgroup" || continue
         cmd="$(${pkgs.coreutils}/bin/tr '\0' ' ' < "$cmdline" 2>/dev/null || true)"
         case "$cmd" in
-          *"SteamLaunch AppId=$appid"*|*"/steamapps/"*".exe"*) return 0 ;;
+          *"SteamLaunch AppId=$appid"*) return 0 ;;
         esac
         if [ -r "/proc/$pid/environ" ] \
           && ${pkgs.coreutils}/bin/tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null \
@@ -1321,9 +1321,17 @@ EOF
           exit 0
         fi
 
-        if ! steamlaunch_wrapper_present && [ "$wrapper_handoff_reported" -eq 0 ]; then
-          wrapper_handoff_reported=1
-          echo "korri-steam-app: SteamLaunch wrapper for AppID $appid is gone; continuing while AppID evidence remains live" >&2
+        if ! steamlaunch_wrapper_present; then
+          if app_running_evidence_present; then
+            if [ "$wrapper_handoff_reported" -eq 0 ]; then
+              wrapper_handoff_reported=1
+              echo "korri-steam-app: SteamLaunch wrapper for AppID $appid is gone; continuing while AppID evidence remains live" >&2
+            fi
+          else
+            hide_steam_hat
+            echo "korri-steam-app: SteamLaunch wrapper for AppID $appid is gone and no AppID evidence remains; treating as game exit" >&2
+            exit 0
+          fi
         fi
       elif [ "$(${pkgs.coreutils}/bin/date +%s)" -gt "$deadline" ]; then
         hide_steam_hat

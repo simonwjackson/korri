@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 
 import {
   classifyProbeTranscript,
+  proofPassed,
   stepPassed,
 } from "./prove-bandai-steam-appid-handoff"
 
@@ -169,5 +170,31 @@ SCREENSHOT_OK /tmp/proof.png
 
     expect(classification.gamescopeAbort).toBe(true)
     expect(stepPassed(classification)).toBe(false)
+  })
+
+  it("requires the post-proof hold window for a passing proof", () => {
+    const classification = classifyProbeTranscript(
+      `###SERVICE
+active
+ActiveState=active
+###PROCESSES
+123 S 00:10 steamwebhelper -uimode=7 --type=renderer
+222 S 00:40 /run/current-system/sw/bin/korri-steam-app 360740
+234 S 00:01 /nix/store/abc-proton-cachyos-arm64-11/share/korri/proton-cachyos-arm64/dist/proton waitforexitandrun /var/lib/korri/steam/steamapps/common/Downwell/Downwell.exe
+345 S 00:01 Downwell.exe
+###CONSOLE
+Game process added : AppID 360740
+###JOURNAL
+###SWAY
+"name":"Downwell"
+###SCREENSHOT
+SCREENSHOT_OK /tmp/proof.png
+`,
+      downwell,
+    )
+
+    expect(stepPassed(classification)).toBe(true)
+    expect(proofPassed({ classification, holdSatisfied: false })).toBe(false)
+    expect(proofPassed({ classification, holdSatisfied: true })).toBe(true)
   })
 })

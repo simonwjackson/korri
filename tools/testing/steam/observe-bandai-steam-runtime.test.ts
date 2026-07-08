@@ -30,4 +30,14 @@ describe("Bandai Steam runtime observer classification", () => {
     expect(classification.signals.wrapperRemoved).toBe(true)
     expect(classification.signals.processRemoved).toBe(false)
   })
+
+  it("does not use historical logs as live process evidence", () => {
+    const classification = classifyTranscript(
+      `Game process removed: AppID 360740\nSteamLaunch AppId=360740`,
+      { appId: "360740", liveEvidenceTranscript: "" },
+    )
+
+    expect(classification.signals.wrapperRemoved).toBe(false)
+    expect(classification.signals.processRemoved).toBe(true)
+  })
 })

@@ -37,6 +37,7 @@ interface StepProof {
   readonly screenshotRemotePath: string
   readonly screenshotLocalPath?: string
   readonly classification: ProbeClassification
+  readonly holdSatisfied: boolean
   readonly sections: SectionMap
 }
 
@@ -150,6 +151,10 @@ export function stepPassed(classification: ProbeClassification): boolean {
     classification.screenshotCaptured &&
     !classification.gamescopeAbort
   )
+}
+
+export function proofPassed(proof: Pick<StepProof, "classification" | "holdSatisfied">): boolean {
+  return proof.holdSatisfied && stepPassed(proof.classification)
 }
 
 async function runRemote(
@@ -332,6 +337,7 @@ async function proveStep(options: {
   let lastClassification: ProbeClassification | undefined
   const deadline = Date.now() + options.timeoutSeconds * 1000
   let firstPassedAt: number | undefined
+  let holdSatisfied = false
   while (Date.now() <= deadline) {
     const probe = await runRemote(
       options.sshConfig,
@@ -343,7 +349,10 @@ async function proveStep(options: {
     const now = Date.now()
     if (stepPassed(lastClassification)) {
       firstPassedAt ??= now
-      if (now - firstPassedAt >= options.holdSeconds * 1000) break
+      if (now - firstPassedAt >= options.holdSeconds * 1000) {
+        holdSatisfied = true
+        break
+      }
     } else {
       firstPassedAt = undefined
     }
@@ -366,6 +375,7 @@ async function proveStep(options: {
     screenshotRemotePath,
     ...(copied ? { screenshotLocalPath: localPath } : {}),
     classification: lastClassification ?? classifyProbeTranscript(lastProbe, options.app),
+    holdSatisfied,
     sections: parseSections(lastProbe),
   }
 }
@@ -408,7 +418,7 @@ async function main(argv: readonly string[]): Promise<number> {
     })
     steps.push(proof)
     console.error(
-      `[${index + 1}/${sequence.length}] ${proof.app.name} ${proof.app.appId}: ${stepPassed(proof.classification) ? "pass" : "pending/fail"}`,
+      `[${index + 1}/${sequence.length}] ${proof.app.name} ${proof.app.appId}: ${proofPassed(proof) ? "pass" : "pending/fail"}`,
     )
   }
 
@@ -417,7 +427,7 @@ async function main(argv: readonly string[]): Promise<number> {
     runId,
     artifactDir,
     sequence,
-    passed: steps.every(step => stepPassed(step.classification)),
+    passed: steps.every(step => proofPassed(step)),
     steps,
   }
   const reportPath = `${artifactDir}/${runId}.json`
@@ -434,7 +444,8 @@ async function main(argv: readonly string[]): Promise<number> {
           step: step.step,
           appId: step.app.appId,
           name: step.app.name,
-          passed: stepPassed(step.classification),
+          passed: proofPassed(step),
+          holdSatisfied: step.holdSatisfied,
           screenshotLocalPath: step.screenshotLocalPath,
           classification: step.classification,
         })),
