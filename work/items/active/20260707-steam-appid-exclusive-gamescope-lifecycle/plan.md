@@ -5,7 +5,7 @@ status: active
 date: 2026-07-07
 deepened: 2026-07-08
 scope_confirmed: "Include full Gamescope crash root-cause fix in this plan"
-verify_command: "bun test product/plugins/steam/src/app-control/install-trigger.test.ts product/plugins/steam/src/materializer.test.ts product/plugins/steam/src/state-materializer.test.ts product/plugins/steam/src/session/foreground-processes.test.ts product/plugins/steam/src/session/lifecycle-hook.test.ts product/plugins/steam/src/observability/log-signals.test.ts product/plugins/steam/src/observability/launch-state.test.ts product/plugins/steam/src/observability/lifecycle-events.test.ts product/plugins/steam/nix/nixos-module.test.ts tools/testing/steam/diagnose-bandai-gamescope-abort.test.ts tools/testing/steam/observe-bandai-steam-runtime.test.ts tools/testing/steam/prove-bandai-steam-appid-handoff.test.ts && nix build .#checks.x86_64-linux.korri-steam-module-check --no-link"
+verify_command: "bun test product/plugins/steam/src/app-control/install-trigger.test.ts product/plugins/steam/src/materializer.test.ts product/plugins/steam/src/state-materializer.test.ts product/plugins/steam/src/session/foreground-processes.test.ts product/plugins/steam/src/session/lifecycle-hook.test.ts product/plugins/steam/src/observability/log-signals.test.ts product/plugins/steam/src/observability/launch-state.test.ts product/plugins/steam/src/observability/lifecycle-events.test.ts product/plugins/steam/nix/nixos-module.test.ts tools/testing/steam/diagnose-bandai-gamescope-abort.test.ts tools/testing/steam/observe-bandai-steam-runtime.test.ts tools/testing/steam/prove-bandai-steam-appid-handoff.test.ts && nix build .#checks.x86_64-linux.korri-steam-module --no-link"
 ---
 
 # fix: Productize Steam AppID exclusive Gamescope lifecycle
@@ -485,7 +485,7 @@ bun test \
   tools/testing/steam/observe-bandai-steam-runtime.test.ts \
   tools/testing/steam/prove-bandai-steam-appid-handoff.test.ts
 
-nix build .#checks.x86_64-linux.korri-steam-module-check --no-link
+nix build .#checks.x86_64-linux.korri-steam-module --no-link
 ```
 
 If Gamescope hooks/patches are touched, also run the relevant gamescope plugin tests and package check.
