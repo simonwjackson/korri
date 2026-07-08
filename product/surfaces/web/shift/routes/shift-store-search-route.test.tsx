@@ -48,9 +48,11 @@ const CLAIMS: readonly ProviderClaim[] = [
 function StoreAt({
   entry,
   layer,
+  history,
 }: {
   readonly entry: string
   readonly layer: Layer.Layer<RemoteCatalogSource>
+  readonly history?: ReturnType<typeof createMemoryHistory>
 }) {
   const setSource = useAtomSet(remoteCatalogSourceLayerAtom)
   useLayoutEffect(() => {
@@ -59,11 +61,27 @@ function StoreAt({
   const router = useMemo(
     () =>
       createShiftRouter({
-        history: createMemoryHistory({ initialEntries: [entry] }),
+        history: history ?? createMemoryHistory({ initialEntries: [entry] }),
       }),
-    [entry],
+    [entry, history],
   )
   return <RouterProvider router={router} />
+}
+
+async function typeStoreSearch(value: string) {
+  await waitFor(() => {
+    expect(
+      screen.getByRole("button", { name: "Search the store" }),
+    ).toBeDefined()
+  })
+
+  fireEvent.click(screen.getByRole("button", { name: "Search the store" }))
+  fireEvent.change(
+    screen.getByRole("searchbox", { name: "Search the store" }),
+    {
+      target: { value },
+    },
+  )
 }
 
 describe("Shift store route — remote catalog search", () => {
@@ -114,24 +132,39 @@ describe("Shift store route — remote catalog search", () => {
       </RegistryProvider>,
     )
 
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Search the store" }),
-      ).toBeDefined()
-    })
-
-    fireEvent.click(screen.getByRole("button", { name: "Search the store" }))
-    fireEvent.change(
-      screen.getByRole("searchbox", { name: "Search the store" }),
-      {
-        target: { value: "pico" },
-      },
-    )
+    await typeStoreSearch("pico")
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Pico Park" })).toBeDefined()
     })
     expect(screen.queryByRole("button", { name: "Celeste Classic" })).toBeNull()
+  })
+
+  it("searches from typed text even when URL replacement lags", async () => {
+    const history = createMemoryHistory({ initialEntries: ["/store"] })
+    const replaceCalls: string[] = []
+    ;(history as unknown as { replace: (href: string) => void }).replace =
+      href => {
+        replaceCalls.push(href)
+      }
+
+    render(
+      <RegistryProvider>
+        <StoreAt
+          entry="/store"
+          layer={makeInMemoryRemoteCatalogSourceLayer(CLAIMS)}
+          history={history}
+        />
+      </RegistryProvider>,
+    )
+
+    await typeStoreSearch("pico")
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Pico Park" })).toBeDefined()
+    })
+    expect(history.location.href).toBe("/store")
+    expect(replaceCalls.some(href => href.includes("q=pico"))).toBe(true)
   })
 
   it("shows the search error with a retry affordance", async () => {

@@ -149,36 +149,48 @@ export function ShiftStoreRoute() {
   const navigate = useNavigate()
   const router = useRouter()
   const search = useSearch({ strict: false }) as { readonly q?: string }
-  const query = search.q ?? ""
+  const routeQuery = search.q ?? ""
 
   const setQuery = useAtomSet(storeSearchQueryAtom)
   const result = useAtomValue(storeSearchResultsAtom)
   const retry = useAtomRefresh(storeSearchResultsAtom)
 
-  // The URL is the source of truth; the atom mirrors it.
-  useEffect(() => {
-    setQuery(query)
-  }, [query, setQuery])
+  const [text, setText] = useState(routeQuery)
+  const [activeQuery, setActiveQuery] = useState(routeQuery)
 
-  // Debounce keystrokes into the URL so plugins aren't searched per keypress.
-  const [text, setText] = useState(query)
+  // Route search remains deep-linkable, but it is not the only live edge: the
+  // kiosk's app-mode Chromium can leave hash-search propagation lagging while
+  // the input itself has already changed. Sync URL -> atom for cold loads and
+  // back/forward navigation without rolling back newer local typing.
   useEffect(() => {
-    if (text === query) return undefined
-    const timer = setTimeout(
-      () =>
-        navigate({
-          to: SHIFT_STORE_PATH,
-          search: { q: text },
-          replace: true,
-        }),
-      SEARCH_DEBOUNCE_MS,
-    )
+    setQuery(routeQuery)
+    setActiveQuery(current => {
+      if (current === routeQuery) return current
+      setText(routeQuery)
+      return routeQuery
+    })
+  }, [routeQuery, setQuery])
+
+  // Debounce keystrokes into the remote-search atom first, then mirror them to
+  // the URL. Results should not depend on the router finishing a replace before
+  // the Store can search.
+  useEffect(() => {
+    if (text === activeQuery) return undefined
+    const timer = setTimeout(() => {
+      setActiveQuery(text)
+      setQuery(text)
+      void navigate({
+        to: SHIFT_STORE_PATH,
+        search: { q: text },
+        replace: true,
+      })
+    }, SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [text, query, navigate])
+  }, [text, activeQuery, navigate, setQuery])
 
   return (
     <ShiftStoreSearchView
-      query={query}
+      query={activeQuery}
       text={text}
       onText={setText}
       result={result}
