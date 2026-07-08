@@ -30,14 +30,17 @@ export function composeRyubingLaunchSpec(
   if (!stateRoot) throw new Error("Ryubing launches require state.root")
   if (!options.gamePath) throw new Error("Ryubing launches require a game path")
 
+  const guiMode = policy.display?.headless === false
   const args = applyArgsOverrides({
     leading: [
-      ...(policy.display?.headless === false ? [] : ["--no-gui"]),
+      ...(guiMode ? [] : ["--no-gui"]),
       "--root-data-dir",
       stateRoot,
       "--use-main-config",
     ],
-    routed: renderTypedHeadlessArgs(policy),
+    routed: guiMode
+      ? renderTypedGuiArgs(policy)
+      : renderTypedHeadlessArgs(policy),
     trailing: [options.gamePath],
     ...(options.overrides?.args !== undefined
       ? { overrides: options.overrides.args }
@@ -139,7 +142,11 @@ export function renderRyubingConfig(
     policy.console?.["ignore-missing-services"],
   )
   put(config, "ignore_applet", policy.console?.["ignore-controller-applet"])
-  put(config, "skip_user_profiles", policy.console?.["skip-user-profile-manager"])
+  put(
+    config,
+    "skip_user_profiles",
+    policy.console?.["skip-user-profile-manager"],
+  )
 
   // Default to OpenAL: Ryujinx's SDL2 backend accumulates an undrainable
   // sample queue whenever emulation runs sub-realtime (boot, shader
@@ -192,6 +199,15 @@ function applyRyubingConfigOverrides(
     if (parsed) merged = deepMergeConfig(merged, parsed)
   }
   return merged
+}
+
+function renderTypedGuiArgs(policy: RyubingPolicy): string[] {
+  const args: string[] = []
+  // Keep GUI-mode argv deliberately small. Ryujinx's GUI and headless parsers
+  // do not accept exactly the same flags; only emit the presentation flag that
+  // has been validated with the normal Ryujinx window path.
+  if (policy.display?.fullscreen === true) args.push("--fullscreen")
+  return args
 }
 
 function renderTypedHeadlessArgs(policy: RyubingPolicy): string[] {

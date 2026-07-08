@@ -41,7 +41,6 @@ const NonNegativeInteger = (label: string) =>
 const RyubingPath = NonEmptyString("ryubing.path")
 const RyubingEnv = Schema.Record(EnvironmentKey, Schema.String)
 const RyubingStringList = Schema.Array(Schema.String)
-const RyubingUnknownRecord = Schema.Record(Schema.String, Schema.Unknown)
 
 const RyubingStatePolicy = Schema.Struct({
   root: Schema.optional(RyubingPath),
@@ -80,9 +79,6 @@ const RyubingDisplayPolicy = Schema.Struct({
   "show-console": Schema.optional(Schema.Boolean),
   "confirm-exit": Schema.optional(Schema.Boolean),
   "remember-window-state": Schema.optional(Schema.Boolean),
-  window: Schema.optional(RyubingUnknownRecord),
-  "game-list": Schema.optional(RyubingUnknownRecord),
-  ui: Schema.optional(RyubingUnknownRecord),
 })
 
 const RyubingGraphicsPolicy = Schema.Struct({
@@ -151,9 +147,7 @@ const RyubingInputPolicy = Schema.Struct({
   mouse: Schema.optional(Schema.Boolean),
   "disable-when-out-of-focus": Schema.optional(Schema.Boolean),
   "require-config": Schema.optional(Schema.Boolean),
-  "global-config": Schema.optional(RyubingUnknownRecord),
   controllers: Schema.optional(Schema.Array(RyubingControllerPolicy)),
-  hotkeys: Schema.optional(RyubingUnknownRecord),
 })
 
 const RyubingNetworkPolicy = Schema.Struct({
@@ -182,7 +176,6 @@ export const RyubingPolicy = Schema.Struct({
   input: Schema.optional(RyubingInputPolicy),
   network: Schema.optional(RyubingNetworkPolicy),
   logging: Schema.optional(RyubingLoggingPolicy),
-  debug: Schema.optional(RyubingUnknownRecord),
 })
 export type RyubingPolicy = Schema.Schema.Type<typeof RyubingPolicy>
 

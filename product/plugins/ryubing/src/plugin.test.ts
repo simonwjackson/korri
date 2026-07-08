@@ -7,6 +7,7 @@ import {
   KORRI_RYUBING_SYSTEM_ID,
   ryubingPlugin,
 } from "./plugin"
+import { decodeRyubingPolicy } from "./policy"
 
 describe("Ryubing plugin descriptor", () => {
   it("owns the Korri Ryubing runtime package metadata", () => {
@@ -42,5 +43,33 @@ describe("Ryubing plugin descriptor", () => {
     expect(
       ryubingPlugin.contributes.discovery?.map(provider => provider.id),
     ).toEqual([KORRI_RYUBING_DISCOVERY_PROVIDER_ID])
+  })
+})
+
+describe("Ryubing plugin policy", () => {
+  it("accepts the minimal generic state-root contract and GUI mode", () => {
+    expect(
+      decodeRyubingPolicy({
+        state: { root: "{storage:@korri:ryubing/state}" },
+        display: { headless: false },
+        config: { "merge-existing": true, "preserve-unknown": true },
+      }),
+    ).toMatchObject({
+      state: { root: "{storage:@korri:ryubing/state}" },
+      display: { headless: false },
+    })
+  })
+
+  it("rejects raw unmapped GUI/input/debug records so authors use launch.overrides.config", () => {
+    expect(() =>
+      decodeRyubingPolicy({ display: { window: { width: 1280 } } }),
+    ).toThrow()
+    expect(() =>
+      decodeRyubingPolicy({ display: { "game-list": { columns: [] } } }),
+    ).toThrow()
+    expect(() =>
+      decodeRyubingPolicy({ input: { hotkeys: { toggle: "F11" } } }),
+    ).toThrow()
+    expect(() => decodeRyubingPolicy({ debug: { trace: true } })).toThrow()
   })
 })

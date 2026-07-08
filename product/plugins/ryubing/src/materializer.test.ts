@@ -135,7 +135,189 @@ describe("Ryubing plugin materializer", () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  it("lets GUI mode materialize without generated input_config", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
+    try {
+      const stateRoot = join(root, "state")
+      await mkdir(join(stateRoot, "system"), { recursive: true })
+      await writeFile(join(stateRoot, "system", "prod.keys"), "keys")
+      const game = join(root, "game.nsp")
+      await writeFile(game, "game")
+
+      const result = await Effect.runPromise(
+        materializeReadableRyubingLaunch({
+          context: context({
+            stateRoot,
+            contentPath: game,
+            policy: {
+              state: { root: stateRoot },
+              display: { headless: false },
+            },
+          }),
+        }),
+      )
+
+      expect(result.spec.args).not.toContain("--no-gui")
+      const config = JSON.parse(
+        await readFile(join(stateRoot, "Config.json"), "utf8"),
+      )
+      expect(config.input_config).toBeUndefined()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("preserves existing Ryujinx input_config in GUI mode", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
+    try {
+      const stateRoot = join(root, "state")
+      await mkdir(join(stateRoot, "system"), { recursive: true })
+      await writeFile(join(stateRoot, "system", "prod.keys"), "keys")
+      await writeFile(
+        join(stateRoot, "Config.json"),
+        JSON.stringify({
+          version: 70,
+          input_config: [{ id: "existing-controller" }],
+          custom_user_setting: true,
+        }),
+      )
+      const game = join(root, "game.nsp")
+      await writeFile(game, "game")
+
+      await Effect.runPromise(
+        materializeReadableRyubingLaunch({
+          context: context({
+            stateRoot,
+            contentPath: game,
+            policy: {
+              state: { root: stateRoot },
+              display: { headless: false },
+            },
+          }),
+        }),
+      )
+
+      const config = JSON.parse(
+        await readFile(join(stateRoot, "Config.json"), "utf8"),
+      )
+      expect(config.input_config).toEqual([{ id: "existing-controller" }])
+      expect(config.custom_user_setting).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps the input_config gate for headless launches", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
+    try {
+      const stateRoot = join(root, "state")
+      await mkdir(join(stateRoot, "system"), { recursive: true })
+      await writeFile(join(stateRoot, "system", "prod.keys"), "keys")
+      const game = join(root, "game.nsp")
+      await writeFile(game, "game")
+
+      await expectMaterializationFailureReason(
+        Effect.runPromise(
+          materializeReadableRyubingLaunch({
+            context: context({
+              stateRoot,
+              contentPath: game,
+              policy: { state: { root: stateRoot } },
+            }),
+          }),
+        ),
+        "headless Ryubing launches require at least one input_config entry",
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("lets GUI mode opt back into the input_config gate", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
+    try {
+      const stateRoot = join(root, "state")
+      await mkdir(join(stateRoot, "system"), { recursive: true })
+      await writeFile(join(stateRoot, "system", "prod.keys"), "keys")
+      const game = join(root, "game.nsp")
+      await writeFile(game, "game")
+
+      await expectMaterializationFailureReason(
+        Effect.runPromise(
+          materializeReadableRyubingLaunch({
+            context: context({
+              stateRoot,
+              contentPath: game,
+              policy: {
+                state: { root: stateRoot },
+                display: { headless: false },
+                input: { "require-config": true },
+              },
+            }),
+          }),
+        ),
+        "Ryubing launches with input.require-config enabled require at least one input_config entry",
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("applies storage tokens in env without device-specific paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
+    try {
+      const stateRoot = join(root, "state")
+      const storageRoot = join(root, "storage-root")
+      await mkdir(join(stateRoot, "system"), { recursive: true })
+      await mkdir(storageRoot, { recursive: true })
+      await writeFile(join(stateRoot, "system", "prod.keys"), "keys")
+      const game = join(root, "game.xci")
+      await writeFile(game, "game")
+
+      const result = await Effect.runPromise(
+        materializeReadableRyubingLaunch({
+          context: {
+            ...context({
+              stateRoot,
+              contentPath: game,
+              policy: {
+                state: { root: stateRoot },
+                display: { headless: false },
+                env: { RYUBING_TEST_ROOT: "{storage:switch-state}/config" },
+              },
+            }),
+            storage: {
+              "switch-state": {
+                id: "switch-state",
+                root: storageRoot,
+              },
+            },
+          },
+        }),
+      )
+
+      expect(result.spec.env?.RYUBING_TEST_ROOT).toBe(
+        join(storageRoot, "config"),
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
+
+async function expectMaterializationFailureReason(
+  promise: Promise<unknown>,
+  reason: string,
+): Promise<void> {
+  try {
+    await promise
+  } catch (error) {
+    expect((error as { readonly reason?: unknown }).reason).toBe(reason)
+    return
+  }
+  throw new Error(`expected materialization to fail with reason: ${reason}`)
+}
 
 function context(input: {
   readonly stateRoot: string

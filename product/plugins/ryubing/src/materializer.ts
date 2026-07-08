@@ -372,7 +372,12 @@ const validateInputConfig = (
   policy: RyubingPolicy,
   config: JsonObject,
 ): Effect.Effect<void, ResolutionError> => {
-  if (policy.input?.["require-config"] === false) return Effect.void
+  const inputConfigRequired =
+    policy.input?.["require-config"] ?? policy.display?.headless !== false
+  // In GUI mode, Ryujinx owns input setup through its normal Config.json/UI
+  // path. Keep the preflight gate for headless launches, unless an operator
+  // explicitly opts GUI mode back into requiring an effective input_config.
+  if (!inputConfigRequired) return Effect.void
   // Own-property check only: an override fragment must not satisfy the gate via
   // an inherited (prototype-polluted) input_config that JSON.stringify omits.
   const inputConfig = Object.hasOwn(config, "input_config")
@@ -383,7 +388,9 @@ const validateInputConfig = (
     new AppMaterializationFailed({
       appId,
       reason:
-        "headless Ryubing launches require at least one input_config entry",
+        policy.display?.headless === false
+          ? "Ryubing launches with input.require-config enabled require at least one input_config entry"
+          : "headless Ryubing launches require at least one input_config entry",
     }),
   )
 }

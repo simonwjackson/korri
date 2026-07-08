@@ -45,6 +45,36 @@ describe("typed Ryubing launch spec rendering", () => {
     ])
   })
 
+  it("does not reuse unverified headless-only flags in GUI mode", () => {
+    const spec = composeRyubingLaunchSpec({
+      command: "/bin/Ryujinx",
+      policy: {
+        state: { root: "/state/Ryujinx" },
+        display: { headless: false, fullscreen: true, "hide-cursor": "always" },
+        graphics: {
+          backend: "vulkan",
+          "backend-threading": "auto",
+          pptc: "disabled",
+        },
+        console: { mode: "handheld" },
+      },
+      gamePath: "/games/Cadence.nsp",
+    })
+
+    expect(spec.args).toEqual([
+      "--root-data-dir",
+      "/state/Ryujinx",
+      "--use-main-config",
+      "--fullscreen",
+      "/games/Cadence.nsp",
+    ])
+    expect(spec.args).not.toContain("--hide-cursor")
+    expect(spec.args).not.toContain("--graphics-backend")
+    expect(spec.args).not.toContain("--backend-threading")
+    expect(spec.args).not.toContain("--disable-ptc")
+    expect(spec.args).not.toContain("--disable-docked-mode")
+  })
+
   it("renders typed display graphics and console options consistently", () => {
     const policy = {
       state: { root: "/state/Ryujinx" },
