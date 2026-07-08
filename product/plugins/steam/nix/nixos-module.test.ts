@@ -1,8 +1,74 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
 import { describe, expect, it } from "bun:test"
 
 const moduleSource = await Bun.file(
   "product/plugins/steam/nix/nixos-module.nix",
 ).text()
+
+function generatedShellFunction(name: string): string {
+  const start = moduleSource.indexOf(`    ${name}() {`)
+  expect(start).toBeGreaterThanOrEqual(0)
+  const end = moduleSource.indexOf("\n    }\n\n", start)
+  expect(end).toBeGreaterThan(start)
+  return moduleSource.slice(start, end + "\n    }".length).replace(/^    /gm, "")
+}
+
+async function runGeneratedServiceFailureClassifier(input: {
+  readonly active: string
+  readonly result: string
+  readonly status: string
+}) {
+  const dir = await mkdtemp(join(tmpdir(), "korri-steam-classifier-"))
+  const scriptPath = join(dir, "classify.sh")
+  const classifier = generatedShellFunction("service_failure_classification").replaceAll(
+    "${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl",
+    "systemctl",
+  )
+  await writeFile(
+    scriptPath,
+    `#!/usr/bin/env bash
+set -eu
+service_name=korri-steam-gamescope.service
+systemctl() {
+  case "$1" in
+    is-active) printf '%s\\n' "$TEST_ACTIVE" ;;
+    show)
+      case "$4" in
+        Result) printf '%s\\n' "$TEST_RESULT" ;;
+        ExecMainStatus) printf '%s\\n' "$TEST_STATUS" ;;
+      esac
+      ;;
+  esac
+}
+${classifier}
+if failure_kind="$(service_failure_classification)"; then
+  printf '%s\\n' "$failure_kind"
+  exit 126
+fi
+printf 'no-failure\\n'
+`,
+  )
+  const proc = Bun.spawn(["bash", scriptPath], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: {
+      ...process.env,
+      TEST_ACTIVE: input.active,
+      TEST_RESULT: input.result,
+      TEST_STATUS: input.status,
+    },
+  })
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  await rm(dir, { recursive: true, force: true })
+  return { stdout: stdout.trim(), stderr, exitCode }
+}
 
 describe("Steam plugin Nix module", () => {
   it("uses the Nix-provided systemctl in the AppID launcher", () => {
@@ -415,6 +481,47 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("if app_exit_confirmed_after_removal; then")
     expect(moduleSource).toContain("if ! focus_game; then")
     expect(moduleSource).toContain("if ! repair_game_audio; then")
+  })
+
+  it("classifies post-running service failures as non-successful terminal states", () => {
+    expect(moduleSource).toContain("service_failure_classification()")
+    expect(moduleSource).toContain("77) printf '%s\\n' \"gamepad-ui-guard\"; return 0")
+    expect(moduleSource).toContain("134) printf '%s\\n' \"gamescope-abort\"; return 0")
+    expect(moduleSource).toContain("failed:*|*:core-dump|*:signal|*:exit-code) printf '%s\\n' \"service-failed\"; return 0")
+    expect(moduleSource).toContain("korri-steam-app: managed Steam service failed during AppID $appid observation: $failure_kind")
+    expect(moduleSource).toContain("exit 126")
+  })
+
+  it("executes generated service failure classification branches", async () => {
+    const cases = [
+      {
+        input: { active: "active", result: "success", status: "77" },
+        stdout: "gamepad-ui-guard",
+        exitCode: 126,
+      },
+      {
+        input: { active: "active", result: "success", status: "134" },
+        stdout: "gamescope-abort",
+        exitCode: 126,
+      },
+      {
+        input: { active: "failed", result: "exit-code", status: "1" },
+        stdout: "service-failed",
+        exitCode: 126,
+      },
+      {
+        input: { active: "active", result: "success", status: "0" },
+        stdout: "no-failure",
+        exitCode: 0,
+      },
+    ]
+
+    for (const item of cases) {
+      const result = await runGeneratedServiceFailureClassifier(item.input)
+      expect(result.stderr).toBe("")
+      expect(result.stdout).toBe(item.stdout)
+      expect(result.exitCode).toBe(item.exitCode)
+    }
   })
 
   it("keeps the 30XX PipeWire repair loop scoped to the 30XX AppID", () => {
