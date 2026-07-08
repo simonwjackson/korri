@@ -152,7 +152,7 @@ let
         "@korri:remap"
         "bindings"
       ] { } yfsPlatformLauncher;
-      steamStorage = lib.attrByPath [ "storage" "@korri:steam/steam" ] { } platformDefaults;
+      steamInstalledManifestsStorage = lib.attrByPath [ "storage" "@korri:steam/installed-manifests" ] { } platformDefaults;
       steam = cfg.services.korri.steam or { };
       audioRoute = cfg.rocknix.device.audio.route;
       expectedAudioTargetSink =
@@ -305,7 +305,7 @@ let
         && lib.hasSuffix "/bin/find" (scoutReleaseScanEnv.KORRI_FIND_BIN or "")
       ))
       (check "${name}: boot release scan covers installed Steam manifests" (
-        (steamStorage.root or null) == "/var/lib/korri/steam"
+        (steamInstalledManifestsStorage.root or null) == "/var/lib/korri/steam/steamapps"
       ))
       (check "${name}: compositor/sessiond/inputd/korrid are user services" (
         userServices ? "korri-compositor"

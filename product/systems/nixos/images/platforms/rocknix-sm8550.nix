@@ -224,8 +224,8 @@ let
   # JavaScript. Device-specific YFS presentation settings belong in device
   # YAML, not in this platform adapter.
   sm8550PlatformDefaults = {
-    storage."@korri:steam/steam" = {
-      root = "${runtime.stateRoot}/steam";
+    storage."@korri:steam/installed-manifests" = {
+      root = "${runtime.stateRoot}/steam/steamapps";
     };
 
     launchers."@korri:web-canvas/chromium" = {

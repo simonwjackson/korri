@@ -5,7 +5,7 @@ import { parseVdf } from "./state-materializer"
 export const KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID =
   `${KORRI_STEAM_PLUGIN_ID}/installed-apps` as const
 
-const steamManifestPattern = /^steamapps\/appmanifest_(\d+)\.acf$/i
+const steamManifestPattern = /^(?:steamapps\/)?appmanifest_(\d+)\.acf$/i
 
 export const steamInstalledAppsDiscoveryProvider = releaseDiscoveryProvider({
   id: KORRI_STEAM_INSTALLED_APPS_DISCOVERY_PROVIDER_ID,

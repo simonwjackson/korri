@@ -149,6 +149,40 @@ describe("steamInstalledAppsDiscoveryProvider", () => {
     })
   })
 
+  it("emits observations when the scan root is Steam's steamapps directory", async () => {
+    const descriptor: FileDiscoveryDescriptor = {
+      storageId: "@korri:steam/installed-manifests",
+      rootPath: `${rootPath}/steamapps`,
+      absolutePath: `${rootPath}/steamapps/appmanifest_360740.acf`,
+      relativePath: "appmanifest_360740.acf",
+      name: "appmanifest_360740.acf",
+      extension: ".acf",
+    }
+
+    const observations = await discover(
+      [descriptor],
+      new Map([
+        [
+          descriptor.absolutePath,
+          manifest({
+            appId: "360740",
+            name: "Downwell",
+            stateFlags: "4",
+            type: "Game",
+          }),
+        ],
+      ]),
+    )
+
+    expect(observations).toMatchObject([
+      {
+        target: { provider: KORRI_STEAM_PLUGIN_ID, ref: "360740" },
+        release: { title: "Downwell", system: "steam" },
+        launch: { use: KORRI_STEAM_APP_ID },
+      },
+    ])
+  })
+
   it("accepts missing manifest type and falls back to a stable title", async () => {
     const descriptor = manifestDescriptor("1029210")
     const observations = await discover(
