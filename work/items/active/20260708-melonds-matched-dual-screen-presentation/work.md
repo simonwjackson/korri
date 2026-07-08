@@ -1,6 +1,6 @@
 ---
 title: Productize melonDS matched dual-screen presentation
-status: active
+status: completed
 created: 2026-07-08
 source: se-plan
 ---
@@ -9,4 +9,4 @@ source: se-plan
 
 Implemented first-party support for a generic `@korri:melonds/matched-dual-screen` launcher, managed matched presentation policy/config, plugin-owned presenter packaging, SM8550 dual-panel platform defaults, and documentation for removing the temporary Bandai wrapper after deployment smoke.
 
-Remaining before closing: full local verification, code review, final plan status flip, and local fast-forward integration back to `trunk`.
+Local implementation is complete and locally verified. Device deployment smoke and prototype cleanup are tracked separately in backlog item `01KX01TK5EB3ZVVKB4NSVW7WCK`.

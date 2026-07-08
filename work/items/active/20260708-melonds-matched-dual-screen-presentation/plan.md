@@ -1,7 +1,7 @@
 ---
 title: feat: Productize melonDS matched dual-screen presentation
 type: feat
-status: active
+status: completed
 date: 2026-07-08
 verify_command: "bun test product/plugins/melonds/src/*.test.ts product/platform/library/config/*.test.ts product/plugin-host/*.test.ts && nix build path:.#checks.x86_64-linux.korri-melonds-module path:.#checks.x86_64-linux.korri-melonds-package path:.#checks.aarch64-linux.korri-rocknix-sm8550-config"
 ---
