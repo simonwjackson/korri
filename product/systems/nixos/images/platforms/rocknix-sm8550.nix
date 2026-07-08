@@ -220,6 +220,11 @@ let
         ${inputplumberHelpers.patchInputplumberXb360Target { targetDeviceYaml = "02-ayn-controller.yaml"; }}
       '';
   sm8550DualPanelPlatformDefaults = lib.optionalAttrs (displayBottomConnector != null) {
+    # Keep this as a complete launcher-shaped overlay rather than a tiny
+    # geometry fragment. Current readable launcher merging treats this layer as
+    # the launch-policy participant for `launch.with`; omitting the canonical
+    # command/args/systems/policy here risks resolving the matched path as a
+    # generic process launcher instead of preserving the melonDS materializer.
     launchers."@korri:melonds/matched-dual-screen" = {
       command = "/run/current-system/sw/bin/melonDS";
       args = [ "{content.path}" ];

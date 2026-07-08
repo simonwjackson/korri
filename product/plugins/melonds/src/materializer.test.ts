@@ -347,7 +347,7 @@ it("writes a matched presenter payload and forces Wayland env", async () => {
         context: context({
           contentPath: rom,
           stateRoot,
-          env: { DISPLAY: ":0", GDK_BACKEND: "x11" },
+          env: { BASH_ENV: "/tmp/evil", DISPLAY: ":0", GDK_BACKEND: "x11" },
           policy: {
             state: { root: stateRoot },
             display: { mode: "dual-window" },
@@ -393,6 +393,7 @@ it("writes a matched presenter payload and forces Wayland env", async () => {
       SWAYSOCK: "/run/user/1000/sway-ipc.sock",
       QT_QPA_PLATFORM: "wayland",
     })
+    expect(result.spec.env).not.toHaveProperty("BASH_ENV")
     expect(result.spec.env).not.toHaveProperty("DISPLAY")
     expect(result.spec.env).not.toHaveProperty("GDK_BACKEND")
 
@@ -419,6 +420,53 @@ it("writes a matched presenter payload and forces Wayland env", async () => {
     expect(payload.stylesheet).toBe(
       join(stateRoot, "presentation", "hide-menubar.qss"),
     )
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+it("fails matched presentation before spawn when payload args contain newlines", async () => {
+  const root = await mkdtemp(join(tmpdir(), "korri-melonds-newline-"))
+  try {
+    const rom = join(root, "Tetris DS.nds")
+    await writeFile(rom, "nds")
+    const exit = await Effect.runPromiseExit(
+      materializeReadableMelonDsLaunch({
+        context: context({
+          contentPath: rom,
+          stateRoot: join(root, "melonDS"),
+          overrides: { args: { append: ["--bad\nflag"] } },
+          policy: {
+            state: { root: join(root, "melonDS") },
+            display: { mode: "dual-window" },
+            presentation: {
+              intent: "matched-dual-screen",
+              wayland: {
+                display: "wayland-1",
+                compositorSocket: "/run/user/1000/sway-ipc.sock",
+              },
+              windows: {
+                top: {
+                  output: "TOP",
+                  x: 407,
+                  y: 250,
+                  width: 1106,
+                  height: 830,
+                },
+                bottom: {
+                  output: "BOTTOM",
+                  x: 0,
+                  y: 0,
+                  width: 1240,
+                  height: 930,
+                },
+              },
+            },
+          },
+        }),
+      }),
+    )
+    expectFailureReason(exit, "newlines")
   } finally {
     await rm(root, { recursive: true, force: true })
   }

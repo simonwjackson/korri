@@ -227,6 +227,7 @@ const materializeMatchedPresentationSpec = (input: {
         : {}),
       env: presenterEnv,
     })
+    validatePayloadArgv(melonDsSpec.args)
     const payloadPath = matchedPayloadPath(input.stateRoot)
     await writeAtomic(
       payloadPath,
@@ -271,12 +272,41 @@ function matchedPresenterEnv(
   if (wayland === undefined) {
     throw new Error("matched melonDS presentation requires compositor control")
   }
-  const { DISPLAY: _display, GDK_BACKEND: _gdkBackend, ...safeEnv } = env
   return {
-    ...safeEnv,
+    ...pickAllowedEnv(env, [
+      "HOME",
+      "LOGNAME",
+      "PULSE_SERVER",
+      "USER",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_RUNTIME_DIR",
+    ]),
     WAYLAND_DISPLAY: wayland.display,
     SWAYSOCK: wayland.compositorSocket,
     QT_QPA_PLATFORM: "wayland",
+  }
+}
+
+function pickAllowedEnv(
+  env: Readonly<Record<string, string>>,
+  keys: readonly string[],
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const key of keys) {
+    const value = env[key]
+    if (value !== undefined) out[key] = value
+  }
+  return out
+}
+
+function validatePayloadArgv(args: readonly string[]): void {
+  for (const arg of args) {
+    if (arg.includes("\n") || arg.includes("\r")) {
+      throw new Error(
+        "matched melonDS presentation payload args must not contain newlines",
+      )
+    }
   }
 }
 

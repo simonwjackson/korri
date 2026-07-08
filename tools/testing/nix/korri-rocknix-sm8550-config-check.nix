@@ -634,9 +634,13 @@ let
           && (melonDsMatchedSettings.presentation.wayland.compositorSocket or null) == "/run/user/2000/sway-ipc.sock"
           && (melonDsMatchedSettings.presentation.secondaryOutput.output or null) == "DSI-1"
           && (melonDsMatchedSettings.presentation.windows.top.output or null) == "DSI-2"
+          && (melonDsMatchedSettings.presentation.windows.top.x or null) == 407
+          && (melonDsMatchedSettings.presentation.windows.top.y or null) == 250
           && (melonDsMatchedSettings.presentation.windows.top.width or null) == 1106
           && (melonDsMatchedSettings.presentation.windows.top.height or null) == 830
           && (melonDsMatchedSettings.presentation.windows.bottom.output or null) == "DSI-1"
+          && (melonDsMatchedSettings.presentation.windows.bottom.x or null) == 0
+          && (melonDsMatchedSettings.presentation.windows.bottom.y or null) == 0
           && (melonDsMatchedSettings.presentation.windows.bottom.width or null) == 1240
           && (melonDsMatchedSettings.presentation.windows.bottom.height or null) == 930
         else
