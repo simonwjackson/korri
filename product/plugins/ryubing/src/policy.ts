@@ -68,6 +68,12 @@ const RyubingContentPolicy = Schema.Struct({
 
 const RyubingDisplayPolicy = Schema.Struct({
   fullscreen: Schema.optional(Schema.Boolean),
+  /**
+   * Ryujinx's headless/no-gui path is not universally equivalent to the GUI
+   * path. Some device/windowing stacks (validated on Bandai SM8550) only
+   * present Switch output correctly when Ryujinx owns its normal X11 window.
+   */
+  headless: Schema.optional(Schema.Boolean),
   "hide-cursor": Schema.optional(
     Schema.Literals(["never", "on-idle", "always"]),
   ),

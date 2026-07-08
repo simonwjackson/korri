@@ -31,7 +31,12 @@ export function composeRyubingLaunchSpec(
   if (!options.gamePath) throw new Error("Ryubing launches require a game path")
 
   const args = applyArgsOverrides({
-    leading: ["--no-gui", "--root-data-dir", stateRoot, "--use-main-config"],
+    leading: [
+      ...(policy.display?.headless === false ? [] : ["--no-gui"]),
+      "--root-data-dir",
+      stateRoot,
+      "--use-main-config",
+    ],
     routed: renderTypedHeadlessArgs(policy),
     trailing: [options.gamePath],
     ...(options.overrides?.args !== undefined
@@ -133,16 +138,8 @@ export function renderRyubingConfig(
     "ignore_missing_services",
     policy.console?.["ignore-missing-services"],
   )
-  put(
-    config,
-    "ignore_controller_applet",
-    policy.console?.["ignore-controller-applet"],
-  )
-  put(
-    config,
-    "skip_user_profile_manager",
-    policy.console?.["skip-user-profile-manager"],
-  )
+  put(config, "ignore_applet", policy.console?.["ignore-controller-applet"])
+  put(config, "skip_user_profiles", policy.console?.["skip-user-profile-manager"])
 
   // Default to OpenAL: Ryujinx's SDL2 backend accumulates an undrainable
   // sample queue whenever emulation runs sub-realtime (boot, shader

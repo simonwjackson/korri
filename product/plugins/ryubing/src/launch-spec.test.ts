@@ -26,6 +26,25 @@ describe("typed Ryubing launch spec rendering", () => {
     })
   })
 
+  it("can launch through the normal Ryujinx GUI path when headless is disabled", () => {
+    const spec = composeRyubingLaunchSpec({
+      command: "/bin/Ryujinx",
+      policy: {
+        state: { root: "/state/Ryujinx" },
+        display: { headless: false, fullscreen: true },
+      },
+      gamePath: "/games/Cadence.nsp",
+    })
+
+    expect(spec.args).toEqual([
+      "--root-data-dir",
+      "/state/Ryujinx",
+      "--use-main-config",
+      "--fullscreen",
+      "/games/Cadence.nsp",
+    ])
+  })
+
   it("renders typed display graphics and console options consistently", () => {
     const policy = {
       state: { root: "/state/Ryujinx" },
@@ -136,6 +155,22 @@ describe("typed Ryubing launch spec rendering", () => {
       "/games/zelda.nsp",
     ])
     expect(spec.args).not.toContain("--fullscreen")
+  })
+
+  it("renders Ryujinx applet/profile config keys for this Config.json version", () => {
+    const config = renderRyubingConfig({
+      console: {
+        "ignore-controller-applet": true,
+        "skip-user-profile-manager": true,
+      },
+    })
+
+    expect(config).toMatchObject({
+      ignore_applet: true,
+      skip_user_profiles: true,
+    })
+    expect(config).not.toHaveProperty("ignore_controller_applet")
+    expect(config).not.toHaveProperty("skip_user_profile_manager")
   })
 
   it("applies overrides.config (JSON text) last and renders typed controller input_config", () => {
