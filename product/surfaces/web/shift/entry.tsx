@@ -224,11 +224,13 @@ export async function searchRemoteCatalogViaSameOriginRpc(
     body: JSON.stringify([
       {
         _tag: "Request",
-        id: `shift-store-search-${++storeSearchRequestSequence}`,
+        // effect/rpc parses request ids as BigInt on the server side; keep
+        // direct hand-written envelopes numeric like the generated client.
+        id: String(++storeSearchRequestSequence),
         tag: "app.acquisition.search",
         payload: request,
-        traceId: "shift-store",
-        spanId: "search",
+        traceId: "00000000000000000000000000000000",
+        spanId: "0000000000000000",
         sampled: false,
         headers: [],
       },

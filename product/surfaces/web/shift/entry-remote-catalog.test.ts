@@ -16,7 +16,7 @@ describe("Shift remote catalog entry bridge", () => {
       return Response.json([
         {
           _tag: "Exit",
-          requestId: "shift-store-search-1",
+          requestId: "1",
           exit: {
             _tag: "Success",
             value: {
@@ -52,10 +52,14 @@ describe("Shift remote catalog entry bridge", () => {
     expect(body).toMatchObject([
       {
         _tag: "Request",
+        id: "1",
         tag: "app.acquisition.search",
         payload: { query: "ball" },
+        traceId: "00000000000000000000000000000000",
+        spanId: "0000000000000000",
       },
     ])
+    expect(BigInt(body[0].id)).toBe(1n)
     expect(result.claims).toHaveLength(1)
     expect(result.claims[0]).toMatchObject({
       providerId: "@korri:pico8",
