@@ -118,7 +118,7 @@ describe("sessiond input-seat gate", () => {
     expect(runtime.releasedSlots()).toEqual([1])
   })
 
-  it("starts a Sunshine mirror socket that writes accepted state frames into active seats", async () => {
+  it("starts a Sunshine mirror socket and normalizes Y axes into active seats", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-input-seat-"))
     const socketPath = join(dir, "mirror.sock")
     const sidecarPath = join(dir, "active-launch.json")
@@ -199,9 +199,9 @@ describe("sessiond input-seat gate", () => {
             leftTrigger: 1,
             rightTrigger: 2,
             leftStickX: -3,
-            leftStickY: 4,
+            leftStickY: -4,
             rightStickX: -5,
-            rightStickY: 6,
+            rightStickY: -6,
           },
         },
       ])

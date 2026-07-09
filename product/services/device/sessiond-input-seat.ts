@@ -272,10 +272,16 @@ const frameToGamepadState = (frame: {
   leftTrigger: frame.leftTrigger,
   rightTrigger: frame.rightTrigger,
   leftStickX: frame.leftStickX,
-  leftStickY: frame.leftStickY,
+  // Sunshine's GamepadPacket stick-Y convention is opposite Linux evdev's
+  // ABS_Y/ABS_RY convention. Normalize at the sessiond -> uinput seam so
+  // Korri Seat devices match Sunshine's own virtual evdev pad: stick-up < 0.
+  leftStickY: invertSignedAxis(frame.leftStickY),
   rightStickX: frame.rightStickX,
-  rightStickY: frame.rightStickY,
+  rightStickY: invertSignedAxis(frame.rightStickY),
 })
+
+const invertSignedAxis = (value: number): number =>
+  value === -32768 ? 32767 : -value
 
 const toManagedLaunchInputSeatSummary = (
   seats: readonly {
