@@ -100,6 +100,13 @@ export function sharedPlayLogStore(): PlayLogStore {
   return sharedStore
 }
 
+function isMalformedPlayLogError(error: unknown): boolean {
+  return (
+    error instanceof SyntaxError ||
+    (error instanceof Error && error.name === "SchemaError")
+  )
+}
+
 export function createFilePlayLogStore(root: string): PlayLogStore {
   const dirFor = (key: PlayHistoryKey) =>
     join(root, encodeURIComponent(key.userId))
@@ -112,6 +119,9 @@ export function createFilePlayLogStore(root: string): PlayLogStore {
       return decodePlayLog(JSON.parse(raw))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return emptyPlayLog(key)
+      }
+      if (isMalformedPlayLogError(error)) {
         return emptyPlayLog(key)
       }
       throw error

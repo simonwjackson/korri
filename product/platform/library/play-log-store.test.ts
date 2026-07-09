@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -119,6 +119,38 @@ describe("file-backed play-log store", () => {
       )
       expect(recorded).toBe(false)
       expect((await store.load(alice)).entries).toHaveLength(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("treats malformed per-game logs as empty optional history", async () => {
+    const root = await mkdtemp(join(tmpdir(), "play-log-store-"))
+    try {
+      const malformedKey = key("default", "dank-tomb")
+      const logPath = join(
+        root,
+        encodeURIComponent(malformedKey.userId),
+        `${encodeURIComponent(malformedKey.gameId)}.json`,
+      )
+      await mkdir(join(root, encodeURIComponent(malformedKey.userId)), {
+        recursive: true,
+      })
+      await writeFile(logPath, "\u0000\u0000\u0000")
+
+      const store = createFilePlayLogStore(root)
+      await expect(store.load(malformedKey)).resolves.toEqual({
+        userId: "default",
+        gameId: "dank-tomb",
+        entries: [],
+      })
+
+      await store.record(malformedKey, entry("2026-07-02T10:00:00.000Z", 60))
+      expect(JSON.parse(await readFile(logPath, "utf8"))).toMatchObject({
+        userId: "default",
+        gameId: "dank-tomb",
+        entries: [{ durationSeconds: 60 }],
+      })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
