@@ -373,8 +373,33 @@ let
       # Default to H.264 so live runtime stream-settings (bitrate/FPS/resolution)
       # are offered on the connection point. The runtime-settings apply path is
       # validated on H.264 VAAPI only; leaving codec at "auto" negotiates H.265,
-      # which does not advertise the runtime quality controls.
-      stream.codec = "h264";
+      # which does not advertise the runtime quality controls. Keep quality
+      # ranges in this unified Moonlight stream policy: scalars pin levers,
+      # ranges provide Korri adaptive bounds while start is the Moonlight argv
+      # launch value.
+      stream = {
+        codec = "h264";
+        resolution = {
+          min = {
+            width = 640;
+            height = 360;
+          };
+          start = {
+            width = 1280;
+            height = 720;
+          };
+          max = {
+            width = 1920;
+            height = 1080;
+          };
+        };
+        fps = 120;
+        bitrateKbps = {
+          min = 500;
+          start = 6000;
+          max = 40000;
+        };
+      };
       input = {
         mappingFile = "${pkgs.moonlight-embedded}/share/moonlight/korri-inputplumber-gamecontrollerdb.txt";
         touch = {
@@ -841,16 +866,12 @@ in
         GDK_BACKEND = "x11";
         PULSE_SERVER = korriPulseServer;
         KORRI_FAKESUSPEND_ACTIVE_MARKER = fakeSuspendActiveMarker;
-        # Headless stream adaptation is wired but remains off until the
-        # device-validation gate confirms recovery timing and visual geometry.
-        KORRI_STREAM_ADAPTIVE_ENABLED = "0";
+        # Enable Korri-owned adaptive stream quality on SM8550: launch defaults
+        # and bounds come from host.moonlight.stream above.
+        KORRI_STREAM_ADAPTIVE_ENABLED = "1";
         KORRI_STREAM_ADAPTIVE_OBJECTIVE_BIAS = "0.5";
         KORRI_STREAM_ADAPTIVE_TICK_MS = "5000";
-        # Keep outage supervision explicitly flag-off with the adaptive gate.
-        # The platform layer is wired, but native Moonlight/sessiond
-        # re-establish ownership is still required before tunnel recovery can
-        # be claimed as supported.
-        KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED = "0";
+        KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED = "1";
         KORRI_STREAM_OUTAGE_TICK_MS = "1000";
         KORRI_STREAM_OUTAGE_LOSS_AFTER_MS = "2000";
         KORRI_STREAM_SURFACE_APP_IDS = "gamescope";
@@ -866,10 +887,10 @@ in
     # The daemon owns remote-source Moonlight runtime supervision after it
     # dispatches the sessiond launch, so it needs the same adaptive feature
     # gate values as sessiond-spawned foreground children.
-    KORRI_STREAM_ADAPTIVE_ENABLED = "0";
+    KORRI_STREAM_ADAPTIVE_ENABLED = "1";
     KORRI_STREAM_ADAPTIVE_OBJECTIVE_BIAS = "0.5";
     KORRI_STREAM_ADAPTIVE_TICK_MS = "5000";
-    KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED = "0";
+    KORRI_STREAM_OUTAGE_SUPERVISOR_ENABLED = "1";
     KORRI_STREAM_OUTAGE_TICK_MS = "1000";
     KORRI_STREAM_OUTAGE_LOSS_AFTER_MS = "2000";
     KORRI_STREAM_SURFACE_APP_IDS = "gamescope";
