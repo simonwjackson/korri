@@ -2,15 +2,19 @@ import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fi
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type { LaunchSpec } from "./launcher"
 import {
+  decodeSessiondManagedLaunchFreezeResponse,
   decodeSessiondManagedLaunchHomeToggleResponse,
   decodeSessiondManagedLaunchStartResponse,
   decodeSessiondManagedLaunchStatus,
   decodeSessiondManagedLaunchTerminateResponse,
+  decodeSessiondManagedLaunchThawResponse,
+  type SessiondManagedLaunchFreezeResponse,
   type SessiondManagedLaunchHomeToggleResponse,
   type SessiondManagedLaunchLifecycle,
   type SessiondManagedLaunchStartResponse,
   type SessiondManagedLaunchStatus,
   type SessiondManagedLaunchTerminateResponse,
+  type SessiondManagedLaunchThawResponse,
 } from "./sessiond-managed-launch-protocol"
 
 export type SessiondManagedLaunchClientFetch = (
@@ -56,6 +60,20 @@ export type SessiondManagedLaunchTerminateResult =
     }
   | SessiondManagedLaunchClientFailure
 
+export type SessiondManagedLaunchFreezeResult =
+  | {
+      readonly kind: "ok"
+      readonly response: SessiondManagedLaunchFreezeResponse
+    }
+  | SessiondManagedLaunchClientFailure
+
+export type SessiondManagedLaunchThawResult =
+  | {
+      readonly kind: "ok"
+      readonly response: SessiondManagedLaunchThawResponse
+    }
+  | SessiondManagedLaunchClientFailure
+
 export type SessiondManagedLaunchHomeToggleResult =
   | {
       readonly kind: "ok"
@@ -75,6 +93,14 @@ export interface SessiondManagedLaunchStartInput {
 export interface SessiondManagedLaunchTerminateInput {
   readonly launchId: string
   readonly force?: boolean
+}
+
+export interface SessiondManagedLaunchFreezeInput {
+  readonly launchId: string
+}
+
+export interface SessiondManagedLaunchThawInput {
+  readonly launchId: string
 }
 
 const DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS = 10_000
@@ -171,6 +197,54 @@ export async function terminateSessiondManagedLaunch(
     }
   } catch (error) {
     return invalidPayloadFailure("sessiond terminate payload invalid", error)
+  }
+}
+
+export async function freezeSessiondManagedLaunch(
+  input: SessiondManagedLaunchFreezeInput,
+  options: SessiondManagedLaunchClientOptions,
+): Promise<SessiondManagedLaunchFreezeResult> {
+  const response = await requestSessiondManagedLaunchJson(
+    options,
+    "/managed-launch/freeze",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ launchId: input.launchId }),
+    },
+  )
+  if (response.kind !== "ok") return response
+  try {
+    return {
+      kind: "ok",
+      response: decodeSessiondManagedLaunchFreezeResponse(response.value),
+    }
+  } catch (error) {
+    return invalidPayloadFailure("sessiond freeze payload invalid", error)
+  }
+}
+
+export async function thawSessiondManagedLaunch(
+  input: SessiondManagedLaunchThawInput,
+  options: SessiondManagedLaunchClientOptions,
+): Promise<SessiondManagedLaunchThawResult> {
+  const response = await requestSessiondManagedLaunchJson(
+    options,
+    "/managed-launch/thaw",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ launchId: input.launchId }),
+    },
+  )
+  if (response.kind !== "ok") return response
+  try {
+    return {
+      kind: "ok",
+      response: decodeSessiondManagedLaunchThawResponse(response.value),
+    }
+  } catch (error) {
+    return invalidPayloadFailure("sessiond thaw payload invalid", error)
   }
 }
 

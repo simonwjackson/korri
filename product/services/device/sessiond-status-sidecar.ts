@@ -33,6 +33,7 @@ export type SessiondLifecyclePhase =
   | "running"
   | "wait-monitor"
   | "anchored"
+  | "frozen"
   | "restoring"
 
 export interface SessiondLifecycleSnapshot {

@@ -74,6 +74,8 @@ export interface ForegroundManagedSessionHandle {
   readonly exited: Promise<{ readonly exitCode: number | null }>
   readonly ready?: Promise<ForegroundManagedSessionReadiness>
   readonly isGone?: () => Promise<boolean> | boolean
+  readonly freeze?: () => void
+  readonly thaw?: () => void
   readonly terminate: () => void
   readonly terminateNow: () => void
 }

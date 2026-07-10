@@ -58,6 +58,8 @@ function startHarness(
       readonly result: Promise<LaunchResult>
       readonly terminate: () => void
       readonly terminateNow: () => void
+      readonly freeze?: () => void
+      readonly thaw?: () => void
       readonly processGroupId?: number
     }>
     readonly sessionHooks?: readonly KorriSessiondLifecycleHook[]
@@ -140,6 +142,8 @@ function startHarness(
                 })),
                 terminate: spawned.terminate,
                 terminateNow: spawned.terminateNow,
+                ...(spawned.freeze ? { freeze: spawned.freeze } : {}),
+                ...(spawned.thaw ? { thaw: spawned.thaw } : {}),
               },
             }
           }
@@ -1009,6 +1013,144 @@ describe("korri sessiond", () => {
 
     child.resolve({ status: "failed", exitCode: 143 })
     await waitForSessionMode(core, "home")
+  })
+
+  it("freezes and thaws the active managed launch in the standard launch cycle", async () => {
+    const child = deferred<LaunchResult>()
+    const { core, events } = startHarness({
+      spawnLaunch: async () => ({
+        result: child.promise,
+        freeze: () => events.push("freeze-game"),
+        thaw: () => events.push("thaw-game"),
+        terminate: () => child.resolve({ status: "failed", exitCode: 143 }),
+        terminateNow: () => child.resolve({ status: "failed", exitCode: 137 }),
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", spec }),
+      }),
+    )
+
+    const frozen = await request(
+      core,
+      "/managed-launch/freeze",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1" }),
+      }),
+    )
+    expect(await frozen.json()).toEqual({
+      status: "accepted",
+      launchId: "launch-1",
+    })
+    expect(events).toContain("freeze-game")
+
+    const frozenStatus = await (
+      await request(core, "/managed-launch/status", authorized())
+    ).json()
+    expect(frozenStatus.capabilities.launchFreeze).toBe(true)
+    expect(frozenStatus.active.phase).toBe("frozen")
+
+    const thawed = await request(
+      core,
+      "/managed-launch/thaw",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1" }),
+      }),
+    )
+    expect(await thawed.json()).toEqual({
+      status: "accepted",
+      launchId: "launch-1",
+    })
+    expect(events).toContain("thaw-game")
+
+    const thawedStatus = await (
+      await request(core, "/managed-launch/status", authorized())
+    ).json()
+    expect(thawedStatus.active.phase).toBe("running")
+
+    child.resolve({ status: "failed", exitCode: 143 })
+    await waitForSessionMode(core, "home")
+
+    const lifecycle = await (
+      await request(
+        core,
+        "/managed-launch/events?launchId=launch-1",
+        authorized(),
+      )
+    ).text()
+    expect(parseSseEvents(lifecycle).map(event => event.type)).toContain(
+      "child-frozen",
+    )
+    expect(parseSseEvents(lifecycle).map(event => event.type)).toContain(
+      "child-thawed",
+    )
+  })
+
+  it("thaws a frozen managed launch before terminating it", async () => {
+    const child = deferred<LaunchResult>()
+    const { core, events } = startHarness({
+      spawnLaunch: async () => ({
+        result: child.promise,
+        freeze: () => events.push("freeze-game"),
+        thaw: () => events.push("thaw-game"),
+        terminate: () => {
+          events.push("terminate-game")
+          child.resolve({ status: "failed", exitCode: 143 })
+        },
+        terminateNow: () => {
+          events.push("terminate-game-now")
+          child.resolve({ status: "failed", exitCode: 137 })
+        },
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", spec }),
+      }),
+    )
+    await request(
+      core,
+      "/managed-launch/freeze",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1" }),
+      }),
+    )
+
+    await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1" }),
+      }),
+    )
+
+    await waitForSessionMode(core, "home")
+    expect(events).toEqual(
+      expect.arrayContaining(["freeze-game", "thaw-game", "terminate-game"]),
+    )
+    expect(events.indexOf("thaw-game")).toBeLessThan(
+      events.indexOf("terminate-game"),
+    )
   })
 
   it("force terminates an accepted managed launch when requested before child registration", async () => {

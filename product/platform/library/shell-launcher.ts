@@ -215,6 +215,9 @@ async function spawnShellLaunch(
     }
   }
 
+  const signalLaunch = (signal: NodeJS.Signals) =>
+    useProcessGroup ? killGroup(signal) : proc.kill(signal)
+
   const sleep = (milliseconds: number) =>
     new Promise(resolve => setTimeout(resolve, milliseconds))
 
@@ -302,13 +305,15 @@ async function spawnShellLaunch(
       processId: proc.pid,
       ...(useProcessGroup ? { processGroupId: proc.pid } : {}),
       exited,
+      freeze: () => signalLaunch("SIGSTOP"),
+      thaw: () => signalLaunch("SIGCONT"),
       terminate: () => {
         if (terminateRemapBridgeUnit()) return
-        return useProcessGroup ? killGroup("SIGTERM") : proc.kill("SIGTERM")
+        return signalLaunch("SIGTERM")
       },
       terminateNow: () => {
         if (killRemapBridgeUnit()) return
-        return useProcessGroup ? killGroup("SIGKILL") : proc.kill("SIGKILL")
+        return signalLaunch("SIGKILL")
       },
     },
   }

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import {
+  freezeSessiondManagedLaunch,
   probeSessiondManagedLaunchStatus,
   requestSessiondManagedLaunchStart,
   terminateSessiondManagedLaunch,
+  thawSessiondManagedLaunch,
   toggleSessiondHomeLane,
 } from "./sessiond-managed-launch-client"
 
@@ -147,6 +149,41 @@ describe("sessiond managed-launch client", () => {
     expect(JSON.parse(String(requests[0].init?.body))).toEqual({
       launchId: "launch-1",
       force: true,
+    })
+  })
+
+  it("posts per-launch freeze and thaw requests", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    const options = {
+      socketPath: "/run/user/1000/korri/sessiond.sock",
+      fetchImpl: async (input: string, init?: RequestInit) => {
+        requests.push({ input, init })
+        return Response.json({ status: "accepted", launchId: "launch-1" })
+      },
+    }
+
+    await expect(
+      freezeSessiondManagedLaunch({ launchId: "launch-1" }, options),
+    ).resolves.toEqual({
+      kind: "ok",
+      response: { status: "accepted", launchId: "launch-1" },
+    })
+    await expect(
+      thawSessiondManagedLaunch({ launchId: "launch-1" }, options),
+    ).resolves.toEqual({
+      kind: "ok",
+      response: { status: "accepted", launchId: "launch-1" },
+    })
+
+    expect(requests.map(request => request.input)).toEqual([
+      "http://korri-sessiond/managed-launch/freeze",
+      "http://korri-sessiond/managed-launch/thaw",
+    ])
+    expect(JSON.parse(String(requests[0].init?.body))).toEqual({
+      launchId: "launch-1",
+    })
+    expect(JSON.parse(String(requests[1].init?.body))).toEqual({
+      launchId: "launch-1",
     })
   })
 })

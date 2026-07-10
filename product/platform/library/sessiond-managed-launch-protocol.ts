@@ -114,6 +114,12 @@ export const SessiondManagedLaunchCapabilities = Schema.Struct({
    * this field; clients must treat absence as false.
    */
   inputSeats: Schema.optional(Schema.Boolean),
+  /**
+   * When true, the daemon accepts launch-scoped freeze/thaw requests for the
+   * active managed child as part of the standard session lifecycle. Older
+   * daemons omit this field; clients must treat absence as false.
+   */
+  launchFreeze: Schema.optional(Schema.Boolean),
 })
 export type SessiondManagedLaunchCapabilities = Schema.Schema.Type<
   typeof SessiondManagedLaunchCapabilities
@@ -125,8 +131,9 @@ export type SessiondManagedLaunchCapabilities = Schema.Schema.Type<
  * accepted, child not yet running), `running` (primary child active),
  * `wait-monitor` (launcher exited cleanly, wait monitor is the
  * active child), `anchored` (launcher exited cleanly, no wait, no
- * live child but sessiond is holding role-foreground state), and
- * `restoring` (post-launch teardown). Coarse `mode` stays the same
+ * live child but sessiond is holding role-foreground state), `frozen`
+ * (active child is stopped for resume), and `restoring` (post-launch teardown).
+ * Coarse `mode` stays the same
  * across the running / wait-monitor / anchored sub-phases (all
  * `mode: "game"`) so Phase 4B clients see no mode-literal change.
  * Older daemons omit this field; clients must treat its absence as
@@ -137,6 +144,7 @@ export const SessiondManagedLaunchPhase = Schema.Literals([
   "running",
   "wait-monitor",
   "anchored",
+  "frozen",
   "restoring",
 ])
 export type SessiondManagedLaunchPhase = Schema.Schema.Type<
@@ -283,6 +291,8 @@ export const SessiondManagedLaunchEventType = Schema.Literals([
   "seat-left",
   "seat-released",
   "seat-allocation-failed",
+  "child-frozen",
+  "child-thawed",
 ])
 export type SessiondManagedLaunchEventType = Schema.Schema.Type<
   typeof SessiondManagedLaunchEventType
@@ -362,6 +372,20 @@ export type SessiondManagedLaunchTerminateRequest = Schema.Schema.Type<
   typeof SessiondManagedLaunchTerminateRequest
 >
 
+export const SessiondManagedLaunchFreezeRequest = Schema.Struct({
+  launchId: Schema.String,
+})
+export type SessiondManagedLaunchFreezeRequest = Schema.Schema.Type<
+  typeof SessiondManagedLaunchFreezeRequest
+>
+
+export const SessiondManagedLaunchThawRequest = Schema.Struct({
+  launchId: Schema.String,
+})
+export type SessiondManagedLaunchThawRequest = Schema.Schema.Type<
+  typeof SessiondManagedLaunchThawRequest
+>
+
 export const SessiondManagedLaunchHomeToggleResponse = Schema.Union([
   Schema.Struct({ status: Schema.Literal("focused-hub") }),
   Schema.Struct({ status: Schema.Literal("focused-game") }),
@@ -389,6 +413,47 @@ export const SessiondManagedLaunchTerminateResponse = Schema.Union([
 ])
 export type SessiondManagedLaunchTerminateResponse = Schema.Schema.Type<
   typeof SessiondManagedLaunchTerminateResponse
+>
+
+const SessiondManagedLaunchFreezeAcceptedResponse = Schema.Struct({
+  status: Schema.Literal("accepted"),
+  launchId: Schema.String,
+})
+const SessiondManagedLaunchFreezeNotFoundResponse = Schema.Struct({
+  status: Schema.Literal("not-found"),
+  launchId: Schema.String,
+  message: Schema.String,
+})
+const SessiondManagedLaunchFreezeUnsupportedResponse = Schema.Struct({
+  status: Schema.Literal("unsupported"),
+  launchId: Schema.String,
+  message: Schema.String,
+})
+
+export const SessiondManagedLaunchFreezeResponse = Schema.Union([
+  SessiondManagedLaunchFreezeAcceptedResponse,
+  SessiondManagedLaunchFreezeNotFoundResponse,
+  SessiondManagedLaunchFreezeUnsupportedResponse,
+  Schema.Struct({
+    status: Schema.Literal("already-frozen"),
+    launchId: Schema.String,
+  }),
+])
+export type SessiondManagedLaunchFreezeResponse = Schema.Schema.Type<
+  typeof SessiondManagedLaunchFreezeResponse
+>
+
+export const SessiondManagedLaunchThawResponse = Schema.Union([
+  SessiondManagedLaunchFreezeAcceptedResponse,
+  SessiondManagedLaunchFreezeNotFoundResponse,
+  SessiondManagedLaunchFreezeUnsupportedResponse,
+  Schema.Struct({
+    status: Schema.Literal("already-thawed"),
+    launchId: Schema.String,
+  }),
+])
+export type SessiondManagedLaunchThawResponse = Schema.Schema.Type<
+  typeof SessiondManagedLaunchThawResponse
 >
 
 const STRICT_DECODE = { onExcessProperty: "error" } as const
@@ -427,6 +492,22 @@ export const decodeSessiondManagedLaunchTerminateRequest = (
     STRICT_DECODE,
   )
 
+export const decodeSessiondManagedLaunchFreezeRequest = (
+  input: unknown,
+): SessiondManagedLaunchFreezeRequest =>
+  Schema.decodeUnknownSync(SessiondManagedLaunchFreezeRequest)(
+    input,
+    STRICT_DECODE,
+  )
+
+export const decodeSessiondManagedLaunchThawRequest = (
+  input: unknown,
+): SessiondManagedLaunchThawRequest =>
+  Schema.decodeUnknownSync(SessiondManagedLaunchThawRequest)(
+    input,
+    STRICT_DECODE,
+  )
+
 export const decodeSessiondManagedLaunchInputSeatLeaveRequest = (
   input: unknown,
 ): SessiondManagedLaunchInputSeatLeaveRequest =>
@@ -455,6 +536,22 @@ export const decodeSessiondManagedLaunchTerminateResponse = (
   input: unknown,
 ): SessiondManagedLaunchTerminateResponse =>
   Schema.decodeUnknownSync(SessiondManagedLaunchTerminateResponse)(
+    input,
+    STRICT_DECODE,
+  )
+
+export const decodeSessiondManagedLaunchFreezeResponse = (
+  input: unknown,
+): SessiondManagedLaunchFreezeResponse =>
+  Schema.decodeUnknownSync(SessiondManagedLaunchFreezeResponse)(
+    input,
+    STRICT_DECODE,
+  )
+
+export const decodeSessiondManagedLaunchThawResponse = (
+  input: unknown,
+): SessiondManagedLaunchThawResponse =>
+  Schema.decodeUnknownSync(SessiondManagedLaunchThawResponse)(
     input,
     STRICT_DECODE,
   )

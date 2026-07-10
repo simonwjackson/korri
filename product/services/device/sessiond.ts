@@ -8,16 +8,20 @@ import {
 } from "@platform/library/launcher"
 import { projectManagedLaunchStatus } from "@platform/library/sessiond-lifecycle-projections"
 import {
+  decodeSessiondManagedLaunchFreezeRequest,
   decodeSessiondManagedLaunchInputSeatLeaveRequest,
   decodeSessiondManagedLaunchStartRequest,
   decodeSessiondManagedLaunchTerminateRequest,
+  decodeSessiondManagedLaunchThawRequest,
   type SessiondManagedLaunchEvent,
+  type SessiondManagedLaunchFreezeResponse,
   type SessiondManagedLaunchInputSeatLeaveRequest,
   type SessiondManagedLaunchInputSeatLeaveResponse,
   type SessiondManagedLaunchInputSeatSummary,
   type SessiondManagedLaunchStartResponse,
   type SessiondManagedLaunchStatus,
   type SessiondManagedLaunchTerminateResponse,
+  type SessiondManagedLaunchThawResponse,
 } from "@platform/library/sessiond-managed-launch-protocol"
 import { createShellLauncher } from "@platform/library/shell-launcher"
 import { logger as defaultLogger } from "@platform/logger"
@@ -43,14 +47,14 @@ import {
 } from "./sessiond-chromium"
 import { createKorriLaneController } from "./sessiond-lanes"
 import {
+  sessiondPreSpawnGatesFromEnv,
+  sessionLifecycleHooksFromEnv,
+} from "./sessiond-plugin-composition"
+import {
   KorriSessiondPreSpawnFailure,
   type KorriSessiondPreSpawnGate,
   type KorriSessiondPreSpawnGateHandle,
 } from "./sessiond-pre-spawn"
-import {
-  sessiondPreSpawnGatesFromEnv,
-  sessionLifecycleHooksFromEnv,
-} from "./sessiond-plugin-composition"
 import type {
   KorriRendererController,
   KorriRendererStatus,
@@ -117,12 +121,12 @@ export interface KorriSessiondLauncher {
   spawn?: (spec: LaunchSpec) => Promise<ManagedLaunchResult>
 }
 
-export { KorriSessiondPreSpawnFailure } from "./sessiond-pre-spawn"
 export type {
   KorriSessiondPreSpawnGate,
   KorriSessiondPreSpawnGateHandle,
   KorriSessiondPreSpawnGateRequest,
 } from "./sessiond-pre-spawn"
+export { KorriSessiondPreSpawnFailure } from "./sessiond-pre-spawn"
 
 export type {
   KorriSessiondLifecycleHook,
@@ -246,6 +250,15 @@ export function createKorriSessiondCore(
         cancelRequested?: "graceful" | "force"
         terminate?: () => void
         terminateNow?: () => void
+        freeze?: () => void
+        thaw?: () => void
+        frozen?: boolean
+        preFreezePhase?:
+          | "launching"
+          | "running"
+          | "wait-monitor"
+          | "anchored"
+          | "restoring"
         processGroupId?: number
         // Phase 4D / Track A. Set while sessiond is in the session-
         // anchored state (no live child, waiting for an external
@@ -269,6 +282,7 @@ export function createKorriSessiondCore(
     | "running"
     | "wait-monitor"
     | "anchored"
+    | "frozen"
     | "restoring"
     | undefined
 
@@ -280,7 +294,13 @@ export function createKorriSessiondCore(
   }
 
   function emitStatusSidecar(
-    phase?: "launching" | "running" | "wait-monitor" | "anchored" | "restoring",
+    phase?:
+      | "launching"
+      | "running"
+      | "wait-monitor"
+      | "anchored"
+      | "frozen"
+      | "restoring",
   ): void {
     // Phase 4D / Track A finishing follow-up. Each transition that
     // writes the sidecar also updates `currentPhase` so
@@ -340,6 +360,7 @@ export function createKorriSessiondCore(
         managedLaunch: true,
         lifecycleEvents: true,
         perLaunchTermination: typeof launcher.spawn === "function",
+        launchFreeze: typeof launcher.spawn === "function",
         // Phase 4D / Track A. Sessiond now understands
         // lifecycle: "session" start requests and emits
         // launcher-exited / wait-monitor-{running,exited} /
@@ -636,6 +657,8 @@ export function createKorriSessiondCore(
             if (active?.launchId === launchId) {
               active.terminate = spawned.session.terminate
               active.terminateNow = spawned.session.terminateNow
+              active.freeze = spawned.session.freeze
+              active.thaw = spawned.session.thaw
               if (spawned.session.processGroupId !== undefined) {
                 active.processGroupId = spawned.session.processGroupId
               }
@@ -1012,6 +1035,8 @@ export function createKorriSessiondCore(
     if (active?.launchId === launchId) {
       active.terminate = spawned.session.terminate
       active.terminateNow = spawned.session.terminateNow
+      active.freeze = spawned.session.freeze
+      active.thaw = spawned.session.thaw
       if (spawned.session.processGroupId !== undefined) {
         active.processGroupId = spawned.session.processGroupId
       }
@@ -1075,6 +1100,71 @@ export function createKorriSessiondCore(
     return await started.result
   }
 
+  function freezeManagedLaunchById(
+    launchId: string,
+  ): SessiondManagedLaunchFreezeResponse {
+    if (activeManagedLaunch?.launchId !== launchId) {
+      return {
+        status: "not-found",
+        launchId,
+        message: "managed launch is not active",
+      }
+    }
+    if (activeManagedLaunch.frozen)
+      return { status: "already-frozen", launchId }
+    if (!activeManagedLaunch.freeze || !activeManagedLaunch.thaw) {
+      return {
+        status: "unsupported",
+        launchId,
+        message: "active managed launch cannot be frozen",
+      }
+    }
+
+    activeManagedLaunch.freeze()
+    activeManagedLaunch.frozen = true
+    activeManagedLaunch.preFreezePhase =
+      currentPhase && currentPhase !== "frozen" ? currentPhase : "running"
+    emitStatusSidecar("frozen")
+    pushLifecycleEvent(launchId, { type: "child-frozen" })
+    return { status: "accepted", launchId }
+  }
+
+  function thawManagedLaunchById(
+    launchId: string,
+  ): SessiondManagedLaunchThawResponse {
+    if (activeManagedLaunch?.launchId !== launchId) {
+      return {
+        status: "not-found",
+        launchId,
+        message: "managed launch is not active",
+      }
+    }
+    if (!activeManagedLaunch.frozen)
+      return { status: "already-thawed", launchId }
+    if (!activeManagedLaunch.thaw) {
+      return {
+        status: "unsupported",
+        launchId,
+        message: "active managed launch cannot be thawed",
+      }
+    }
+
+    thawActiveManagedLaunch(activeManagedLaunch)
+    return { status: "accepted", launchId }
+  }
+
+  function thawActiveManagedLaunch(
+    active: NonNullable<typeof activeManagedLaunch>,
+  ) {
+    if (!active.frozen) return
+    active.thaw?.()
+    active.frozen = false
+    const restoredPhase = active.preFreezePhase ?? "running"
+    active.preFreezePhase = undefined
+    emitStatusSidecar(restoredPhase)
+    pushLifecycleEvent(active.launchId, { type: "child-thawed" })
+  }
+
   function terminateManagedLaunchById(
     launchId: string,
     force = false,
@@ -1087,6 +1177,7 @@ export function createKorriSessiondCore(
       }
     }
 
+    thawActiveManagedLaunch(activeManagedLaunch)
     activeManagedLaunch.cancelRequested = force ? "force" : "graceful"
     if (force) {
       activeManagedLaunch.preSpawnAbortController?.abort()
@@ -1330,6 +1421,28 @@ export function createKorriSessiondCore(
           return json(
             terminateManagedLaunchById(body.value.launchId, body.value.force),
           )
+        }
+        if (
+          request.method === "POST" &&
+          url.pathname === "/managed-launch/freeze"
+        ) {
+          const body = await decodeRequestJson(
+            request,
+            decodeSessiondManagedLaunchFreezeRequest,
+          )
+          if (body.status === "failed") return body.response
+          return json(freezeManagedLaunchById(body.value.launchId))
+        }
+        if (
+          request.method === "POST" &&
+          url.pathname === "/managed-launch/thaw"
+        ) {
+          const body = await decodeRequestJson(
+            request,
+            decodeSessiondManagedLaunchThawRequest,
+          )
+          if (body.status === "failed") return body.response
+          return json(thawManagedLaunchById(body.value.launchId))
         }
         if (
           request.method === "POST" &&

@@ -47,6 +47,7 @@ const SessiondLifecyclePhase = Schema.Literals([
   "running",
   "wait-monitor",
   "anchored",
+  "frozen",
   "restoring",
 ])
 

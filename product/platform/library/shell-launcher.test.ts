@@ -225,6 +225,8 @@ describe("createShellLauncher (real Bun.spawn)", () => {
     expect(managed.status).toBe("started")
     if (managed.status === "started") {
       expect(managed.session.processGroupId).toBe(managed.session.processId)
+      expect(managed.session.freeze).toBeTypeOf("function")
+      expect(managed.session.thaw).toBeTypeOf("function")
       const result = await managed.result
       expect(result).toEqual({ status: "launched" })
     }

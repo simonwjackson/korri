@@ -2,17 +2,25 @@ import { describe, expect, it } from "bun:test"
 import { Schema } from "effect"
 import {
   decodeSessiondManagedLaunchEvent,
+  decodeSessiondManagedLaunchFreezeRequest,
+  decodeSessiondManagedLaunchFreezeResponse,
   decodeSessiondManagedLaunchHomeToggleResponse,
   decodeSessiondManagedLaunchInputSeatLeaveRequest,
   decodeSessiondManagedLaunchInputSeatLeaveResponse,
   decodeSessiondManagedLaunchStatus,
   decodeSessiondManagedLaunchTerminateResponse,
+  decodeSessiondManagedLaunchThawRequest,
+  decodeSessiondManagedLaunchThawResponse,
   SessiondManagedLaunchEvent,
+  SessiondManagedLaunchFreezeRequest,
+  SessiondManagedLaunchFreezeResponse,
   SessiondManagedLaunchStartRequest,
   SessiondManagedLaunchStartResponse,
   SessiondManagedLaunchStatus,
   SessiondManagedLaunchTerminateRequest,
   SessiondManagedLaunchTerminateResponse,
+  SessiondManagedLaunchThawRequest,
+  SessiondManagedLaunchThawResponse,
 } from "./sessiond-managed-launch-protocol"
 
 describe("sessiond managed launch protocol", () => {
@@ -76,12 +84,18 @@ describe("sessiond managed launch protocol", () => {
         managedLaunch: true,
         lifecycleEvents: true,
         perLaunchTermination: true,
+        launchFreeze: true,
       },
-      active: { launchId: "launch-1", mode: "game" },
+      active: { launchId: "launch-1", mode: "game", phase: "frozen" },
       restoreAttempts: 0,
     })
 
-    expect(status.active).toEqual({ launchId: "launch-1", mode: "game" })
+    expect(status.active).toEqual({
+      launchId: "launch-1",
+      mode: "game",
+      phase: "frozen",
+    })
+    expect(status.capabilities.launchFreeze).toBe(true)
   })
 
   it("decodes sanitized launch metadata on the active status", () => {
@@ -229,6 +243,62 @@ describe("sessiond managed launch protocol", () => {
       launchId: "launch-1",
       message: "launch is no longer active",
     })
+  })
+
+  it("decodes per-launch freeze and thaw payloads", () => {
+    expect(
+      Schema.decodeUnknownSync(SessiondManagedLaunchFreezeRequest)({
+        launchId: "launch-1",
+      }),
+    ).toEqual({ launchId: "launch-1" })
+    expect(
+      Schema.decodeUnknownSync(SessiondManagedLaunchThawRequest)({
+        launchId: "launch-1",
+      }),
+    ).toEqual({ launchId: "launch-1" })
+
+    expect(
+      Schema.decodeUnknownSync(SessiondManagedLaunchFreezeResponse)({
+        status: "accepted",
+        launchId: "launch-1",
+      }),
+    ).toEqual({ status: "accepted", launchId: "launch-1" })
+    expect(
+      decodeSessiondManagedLaunchFreezeResponse({
+        status: "already-frozen",
+        launchId: "launch-1",
+      }),
+    ).toEqual({ status: "already-frozen", launchId: "launch-1" })
+    expect(
+      decodeSessiondManagedLaunchFreezeResponse({
+        status: "unsupported",
+        launchId: "launch-1",
+        message: "active launch cannot be frozen",
+      }),
+    ).toEqual({
+      status: "unsupported",
+      launchId: "launch-1",
+      message: "active launch cannot be frozen",
+    })
+
+    expect(
+      Schema.decodeUnknownSync(SessiondManagedLaunchThawResponse)({
+        status: "accepted",
+        launchId: "launch-1",
+      }),
+    ).toEqual({ status: "accepted", launchId: "launch-1" })
+    expect(
+      decodeSessiondManagedLaunchThawResponse({
+        status: "already-thawed",
+        launchId: "launch-1",
+      }),
+    ).toEqual({ status: "already-thawed", launchId: "launch-1" })
+    expect(
+      decodeSessiondManagedLaunchThawRequest({ launchId: "launch-1" }),
+    ).toEqual({ launchId: "launch-1" })
+    expect(
+      decodeSessiondManagedLaunchFreezeRequest({ launchId: "launch-1" }),
+    ).toEqual({ launchId: "launch-1" })
   })
 
   // Task-009 coverage gap: the strict-decode helper for the
