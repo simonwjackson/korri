@@ -56,12 +56,25 @@ host:
     stream:
       # Use explicit dimensions only. Moonlight's `-720`/`-1080`/`-4k` presets
       # are shorthand for width/height and do not need a second public spelling.
+      # A scalar (for example `fps: 120`) locks that lever, equivalent to
+      # min = start = max. Expanded ranges use min/start/max; only `start` is
+      # rendered to Moonlight argv, while min/max feed Korri adaptive control.
       resolution:
-        width: 1280 # -width <width>
-        height: 720 # -height <height>
+        min:
+          width: 640
+          height: 360
+        start:
+          width: 1280 # -width <width>
+          height: 720 # -height <height>
+        max:
+          width: 1920
+          height: 1080
 
-      fps: 60 # -fps <fps>
-      bitrateKbps: 12000 # -bitrate <bitrate>
+      fps: 120 # -fps <fps>; scalar shorthand locks to 120
+      bitrateKbps: # -bitrate <start>
+        min: 500
+        start: 6000
+        max: 40000
       packetSizeBytes: null # -packetsize <size>
       codec: auto # -codec: auto | h264 | h265
       remoteOptimizations: false # -remote

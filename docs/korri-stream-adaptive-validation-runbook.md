@@ -90,6 +90,28 @@ streamBoundaryArgs: [
 ]
 ```
 
+Persisted stream defaults should use the unified Moonlight config surface, not
+boundary-arg strings or a separate adaptive namespace:
+
+```yaml
+host:
+  moonlight:
+    stream:
+      resolution:
+        min: { width: 640, height: 360 }
+        start: { width: 1280, height: 720 }
+        max: { width: 1920, height: 1080 }
+      fps: 120
+      bitrateKbps:
+        min: 500
+        start: 6000
+        max: 40000
+```
+
+`streamBoundaryArgs` remain a launch/RPC/manual validation override surface.
+When both are present, explicit boundary args override configured defaults for
+that launch.
+
 ## Preflight startup selection scenario
 
 When a remote Moonlight launch has an explicit bitrate ceiling but no startup, optional preflight must fill a conservative startup before source prepare:

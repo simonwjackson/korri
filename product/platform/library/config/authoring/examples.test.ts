@@ -120,9 +120,13 @@ describe("checked-in readable library example", () => {
     expect(launches.localMoonlight.moonlight).toMatchObject({
       command: "/run/current-system/sw/bin/moonlight",
       stream: {
-        resolution: { width: 1280, height: 720 },
-        fps: 60,
-        bitrateKbps: 12000,
+        resolution: {
+          min: { width: 640, height: 360 },
+          start: { width: 1280, height: 720 },
+          max: { width: 1920, height: 1080 },
+        },
+        fps: 120,
+        bitrateKbps: { min: 500, start: 6000, max: 40000 },
       },
       platform: { name: "v4l2m2m" },
       input: {
