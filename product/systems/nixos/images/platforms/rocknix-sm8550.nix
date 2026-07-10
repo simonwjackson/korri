@@ -878,7 +878,10 @@ in
       };
   };
 
-  services.korri.daemon.library.platformDefaults = sm8550PlatformDefaults;
+  services.korri.daemon = {
+    streamControl.enable = true;
+    library.platformDefaults = sm8550PlatformDefaults;
+  };
 
   systemd.user.services.korrid.environment = gamescopeControlEnvironment // {
     KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
