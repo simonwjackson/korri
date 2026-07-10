@@ -1,3 +1,9 @@
+import type {
+  NumericLeverBoundary,
+  ResolutionLeverBoundary,
+  StreamAdaptiveResolution,
+  StreamBoundaries,
+} from "@platform/stream/stream-adaptive-boundaries"
 import { Schema } from "effect"
 
 /**
@@ -62,15 +68,43 @@ const MoonlightLoggingPolicy = Schema.Struct({
   debug: Schema.optional(Schema.Boolean),
 })
 
-const MoonlightResolutionPolicy = Schema.Struct({
+const MoonlightResolutionSizePolicy = Schema.Struct({
   width: Schema.optional(PositiveInteger("stream.resolution.width")),
   height: Schema.optional(PositiveInteger("stream.resolution.height")),
 })
 
+const MoonlightResolutionRangePolicy = Schema.Struct({
+  min: Schema.optional(MoonlightResolutionSizePolicy),
+  start: MoonlightResolutionSizePolicy,
+  max: Schema.optional(MoonlightResolutionSizePolicy),
+})
+
+const MoonlightResolutionPolicy = Schema.Union([
+  MoonlightResolutionSizePolicy,
+  MoonlightResolutionRangePolicy,
+])
+
+const MoonlightNumericRangePolicy = (label: string) =>
+  Schema.Struct({
+    min: Schema.optional(PositiveInteger(`${label}.min`)),
+    start: PositiveInteger(`${label}.start`),
+    max: Schema.optional(PositiveInteger(`${label}.max`)),
+  })
+
+const MoonlightFpsPolicy = Schema.Union([
+  PositiveInteger("stream.fps"),
+  MoonlightNumericRangePolicy("stream.fps"),
+])
+
+const MoonlightBitratePolicy = Schema.Union([
+  NullablePositiveInteger("stream.bitrateKbps"),
+  MoonlightNumericRangePolicy("stream.bitrateKbps"),
+])
+
 const MoonlightStreamPolicy = Schema.Struct({
   resolution: Schema.optional(MoonlightResolutionPolicy),
-  fps: Schema.optional(PositiveInteger("stream.fps")),
-  bitrateKbps: Schema.optional(NullablePositiveInteger("stream.bitrateKbps")),
+  fps: Schema.optional(MoonlightFpsPolicy),
+  bitrateKbps: Schema.optional(MoonlightBitratePolicy),
   packetSizeBytes: Schema.optional(
     NullablePositiveInteger("stream.packetSizeBytes"),
   ),
@@ -142,6 +176,192 @@ export const MoonlightPolicy = Schema.Struct({
   extraArgs: Schema.optional(Schema.Array(Schema.String)),
 })
 export type MoonlightPolicy = Schema.Schema.Type<typeof MoonlightPolicy>
+export type MoonlightStreamPolicy = NonNullable<MoonlightPolicy["stream"]>
+export type MoonlightResolutionPolicy = NonNullable<
+  MoonlightStreamPolicy["resolution"]
+>
+export type MoonlightFpsPolicy = NonNullable<MoonlightStreamPolicy["fps"]>
+export type MoonlightBitratePolicy = NonNullable<
+  MoonlightStreamPolicy["bitrateKbps"]
+>
 
-export const decodeMoonlightPolicy = (input: unknown): MoonlightPolicy =>
-  Schema.decodeUnknownSync(MoonlightPolicy)(input, STRICT)
+export const decodeMoonlightPolicy = (input: unknown): MoonlightPolicy => {
+  const policy = Schema.decodeUnknownSync(MoonlightPolicy)(input, STRICT)
+  validateMoonlightPolicy(policy)
+  return policy
+}
+
+export function moonlightStreamBoundaries(
+  policy: Pick<MoonlightPolicy, "stream"> | undefined,
+): StreamBoundaries | undefined {
+  const stream = policy?.stream
+  if (!stream) return undefined
+
+  const levers: StreamBoundaries["levers"] = {}
+  const resolution = resolutionBoundary(stream.resolution)
+  if (resolution) levers.resolution = resolution
+  const fps = numericBoundary(stream.fps, { includeStartup: false })
+  if (fps) levers.fps = fps
+  const bitrate = numericBoundary(stream.bitrateKbps, { includeStartup: true })
+  if (bitrate) levers.bitrate = bitrate
+
+  return Object.keys(levers).length > 0 ? { levers, outcomes: {} } : undefined
+}
+
+export function moonlightLaunchResolution(
+  stream: MoonlightStreamPolicy | undefined,
+): StreamAdaptiveResolution | undefined {
+  const resolution = stream?.resolution
+  if (!resolution) return undefined
+  return isResolutionRange(resolution) ? completeResolution(resolution.start) : completeResolution(resolution)
+}
+
+export function moonlightLaunchFps(
+  stream: MoonlightStreamPolicy | undefined,
+): number | undefined {
+  return numericLaunchValue(stream?.fps)
+}
+
+export function moonlightLaunchBitrateKbps(
+  stream: MoonlightStreamPolicy | undefined,
+): number | null | undefined {
+  return numericLaunchValue(stream?.bitrateKbps)
+}
+
+export function validateMoonlightPolicy(policy: MoonlightPolicy): void {
+  const stream = policy.stream
+  if (!stream) return
+  validateResolutionPolicy(stream.resolution)
+  validateNumericPolicy(stream.fps, "stream.fps")
+  validateNumericPolicy(stream.bitrateKbps, "stream.bitrateKbps")
+}
+
+function validateResolutionPolicy(
+  resolution: MoonlightResolutionPolicy | undefined,
+): void {
+  if (!resolution) return
+  if (isResolutionRange(resolution)) {
+    validateCompleteResolution(resolution.start, "stream.resolution.start")
+    if (resolution.min)
+      validateCompleteResolution(resolution.min, "stream.resolution.min")
+    if (resolution.max)
+      validateCompleteResolution(resolution.max, "stream.resolution.max")
+    if (
+      resolution.min &&
+      resolution.max &&
+      (resolution.min.width! > resolution.max.width! ||
+        resolution.min.height! > resolution.max.height!)
+    ) {
+      throw new Error("stream.resolution min must be <= max")
+    }
+    return
+  }
+  if (resolution.width !== undefined || resolution.height !== undefined) {
+    validateCompleteResolution(resolution, "stream.resolution")
+  }
+}
+
+function validateNumericPolicy(
+  value: MoonlightFpsPolicy | MoonlightBitratePolicy | undefined,
+  label: string,
+): void {
+  if (!isNumericRange(value)) return
+  if (value.min !== undefined && value.min > value.start) {
+    throw new Error(`${label}.start must be >= ${label}.min`)
+  }
+  if (value.max !== undefined && value.start > value.max) {
+    throw new Error(`${label}.start must be <= ${label}.max`)
+  }
+}
+
+function validateCompleteResolution(
+  resolution: { readonly width?: number; readonly height?: number },
+  label: string,
+): void {
+  if (resolution.width === undefined || resolution.height === undefined) {
+    throw new Error(`${label} requires both width and height`)
+  }
+}
+
+function numericBoundary(
+  value: MoonlightFpsPolicy | MoonlightBitratePolicy | undefined,
+  options: { readonly includeStartup: boolean },
+): NumericLeverBoundary | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value === "number") return pinnedNumeric(value)
+  return definedNumeric({
+    floor: value.min,
+    ...(options.includeStartup ? { startup: value.start } : {}),
+    ceiling: value.max,
+  })
+}
+
+function resolutionBoundary(
+  value: MoonlightResolutionPolicy | undefined,
+): ResolutionLeverBoundary | undefined {
+  if (!value) return undefined
+  if (isResolutionRange(value)) {
+    return definedResolution({
+      floor: value.min ? completeResolution(value.min) : undefined,
+      ceiling: value.max ? completeResolution(value.max) : undefined,
+    })
+  }
+  const resolution = completeResolution(value)
+  return resolution
+    ? { floor: resolution, ceiling: resolution, pinned: resolution }
+    : undefined
+}
+
+function numericLaunchValue(
+  value: MoonlightFpsPolicy | MoonlightBitratePolicy | undefined,
+): number | null | undefined {
+  if (value === undefined || value === null || typeof value === "number") {
+    return value
+  }
+  return value.start
+}
+
+function completeResolution(
+  value: { readonly width?: number; readonly height?: number },
+): StreamAdaptiveResolution | undefined {
+  if (value.width === undefined || value.height === undefined) return undefined
+  return { width: value.width, height: value.height }
+}
+
+function pinnedNumeric(value: number): NumericLeverBoundary {
+  return { floor: value, ceiling: value, pinned: value }
+}
+
+function definedNumeric(lever: NumericLeverBoundary): NumericLeverBoundary {
+  return Object.fromEntries(
+    Object.entries(lever).filter(([, value]) => value !== undefined),
+  ) as NumericLeverBoundary
+}
+
+function definedResolution(
+  lever: ResolutionLeverBoundary,
+): ResolutionLeverBoundary {
+  return Object.fromEntries(
+    Object.entries(lever).filter(([, value]) => value !== undefined),
+  ) as ResolutionLeverBoundary
+}
+
+function isNumericRange(
+  value: unknown,
+): value is { readonly min?: number; readonly start: number; readonly max?: number } {
+  return isRecord(value) && typeof value.start === "number"
+}
+
+function isResolutionRange(
+  value: unknown,
+): value is {
+  readonly min?: { readonly width?: number; readonly height?: number }
+  readonly start: { readonly width?: number; readonly height?: number }
+  readonly max?: { readonly width?: number; readonly height?: number }
+} {
+  return isRecord(value) && isRecord(value.start)
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}

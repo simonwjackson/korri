@@ -1,6 +1,6 @@
 import type { LaunchSpec } from "@platform/library/launcher"
 import { plugin } from "@platform/plugin"
-import type { MoonlightPolicy } from "./config/policy"
+import { decodeMoonlightPolicy } from "./config/policy"
 import {
   type ComposeMoonlightStreamLaunchSpecOptions,
   composeMoonlightStreamLaunchSpec,
@@ -118,7 +118,7 @@ function decodeStreamLaunchInput(
     facts: decodeLaunchFacts(input.facts),
     ...(input.policy === undefined
       ? {}
-      : { policy: input.policy as MoonlightPolicy }),
+      : { policy: decodeMoonlightPolicy(input.policy) }),
   }
 }
 

@@ -114,6 +114,38 @@ describe("composeMoonlightStreamLaunchSpec", () => {
     ])
   })
 
+  it("renders launch-time start values from unified stream ranges", () => {
+    const spec = composeMoonlightStreamLaunchSpec({
+      facts: { host: "aka.local" },
+      policy: {
+        stream: {
+          resolution: {
+            min: { width: 640, height: 360 },
+            start: { width: 1280, height: 720 },
+            max: { width: 1920, height: 1080 },
+          },
+          fps: { min: 60, start: 120, max: 120 },
+          bitrateKbps: { min: 500, start: 6000, max: 40000 },
+        },
+      },
+    })
+
+    expect(spec.args).toEqual([
+      "stream",
+      "-width",
+      "1280",
+      "-height",
+      "720",
+      "-fps",
+      "120",
+      "-bitrate",
+      "6000",
+      "-app",
+      "Korri Stream",
+      "aka.local",
+    ])
+  })
+
   it("passes an IPv6 host through unchanged after caller bracket stripping", () => {
     expect(
       composeMoonlightStreamLaunchSpec({ facts: { host: "fe80::1234" } }).args,

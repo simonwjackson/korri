@@ -1,4 +1,10 @@
-import type { MoonlightPolicy } from "./config/policy"
+import {
+  moonlightLaunchBitrateKbps,
+  moonlightLaunchFps,
+  moonlightLaunchResolution,
+  validateMoonlightPolicy as validateTypedMoonlightPolicy,
+  type MoonlightPolicy,
+} from "./config/policy"
 import type { LaunchSpec } from "@platform/library/launcher"
 
 const DEFAULT_MOONLIGHT_COMMAND = "moonlight"
@@ -64,10 +70,11 @@ function renderLoggingArgs(args: ArgList, logging: MoonlightPolicy["logging"]) {
 }
 
 function renderStreamArgs(args: ArgList, stream: MoonlightPolicy["stream"]) {
-  pushValue(args, "-width", stream?.resolution?.width)
-  pushValue(args, "-height", stream?.resolution?.height)
-  pushValue(args, "-fps", stream?.fps)
-  pushValue(args, "-bitrate", stream?.bitrateKbps)
+  const resolution = moonlightLaunchResolution(stream)
+  pushValue(args, "-width", resolution?.width)
+  pushValue(args, "-height", resolution?.height)
+  pushValue(args, "-fps", moonlightLaunchFps(stream))
+  pushValue(args, "-bitrate", moonlightLaunchBitrateKbps(stream))
   pushValue(args, "-packetsize", stream?.packetSizeBytes)
   pushValue(args, "-codec", stream?.codec)
   pushBoolean(args, "-remote", stream?.remoteOptimizations)
@@ -146,13 +153,7 @@ function validateMoonlightLaunchFacts(facts: MoonlightLaunchFacts): void {
 }
 
 function validateMoonlightPolicy(policy: MoonlightPolicy): void {
-  const width = policy.stream?.resolution?.width
-  const height = policy.stream?.resolution?.height
-  if ((width === undefined) !== (height === undefined)) {
-    throw new Error(
-      "moonlight.stream.resolution requires both width and height when either is set",
-    )
-  }
+  validateTypedMoonlightPolicy(policy)
 }
 
 function pushValue(
