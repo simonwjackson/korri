@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { AppMaterializationFailed } from "@platform/library/config/errors"
 import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { Effect } from "effect"
 import {
@@ -210,6 +211,45 @@ describe("Ryubing plugin materializer", () => {
     }
   })
 
+  it("lets headless launches use existing Ryujinx input_config", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
+    try {
+      const stateRoot = join(root, "state")
+      await mkdir(join(stateRoot, "system"), { recursive: true })
+      await writeFile(join(stateRoot, "system", "prod.keys"), "keys")
+      await writeFile(
+        join(stateRoot, "Config.json"),
+        JSON.stringify({
+          version: 70,
+          input_config: [{ id: "headless-existing-controller" }],
+          custom_user_setting: true,
+        }),
+      )
+      const game = join(root, "game.nsp")
+      await writeFile(game, "game")
+
+      await Effect.runPromise(
+        materializeReadableRyubingLaunch({
+          context: context({
+            stateRoot,
+            contentPath: game,
+            policy: { state: { root: stateRoot } },
+          }),
+        }),
+      )
+
+      const config = JSON.parse(
+        await readFile(join(stateRoot, "Config.json"), "utf8"),
+      )
+      expect(config.input_config).toEqual([
+        { id: "headless-existing-controller" },
+      ])
+      expect(config.custom_user_setting).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("keeps the input_config gate for headless launches", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-ryubing-plugin-"))
     try {
@@ -315,7 +355,8 @@ async function expectMaterializationFailureReason(
   try {
     await promise
   } catch (error) {
-    expect((error as { readonly reason?: unknown }).reason).toBe(reason)
+    expect(error).toBeInstanceOf(AppMaterializationFailed)
+    expect((error as AppMaterializationFailed).reason).toBe(reason)
     return
   }
   throw new Error(`expected materialization to fail with reason: ${reason}`)
