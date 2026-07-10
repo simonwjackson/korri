@@ -339,12 +339,16 @@ describe("RPCS3 readable launch integration", () => {
             launchCompanions: {
               "@korri:input-seat": {
                 runtimeSupportsExtraSeats: true,
-                playerCount: 2,
               },
             },
             policy: {
               state: { root: stateRoot },
               firmware: { sentinel: firmwareSentinel },
+              input: {
+                derivedSeatDefaults: {
+                  sticks: { right: { multiplier: 125 } },
+                },
+              },
             },
           }),
         }),
@@ -369,12 +373,24 @@ describe("RPCS3 readable launch integration", () => {
       expect(parsed["Player 1 Input"]).toEqual({
         Handler: "Evdev",
         Device: "Korri Seat P1",
+        Config: { "Right Stick Multiplier": 125 },
       })
       expect(parsed["Player 2 Input"]).toEqual({
         Handler: "Evdev",
         Device: "Korri Seat P2",
+        Config: { "Right Stick Multiplier": 125 },
       })
-      expect(parsed["Player 3 Input"]).toEqual({ Handler: "Null" })
+      expect(parsed["Player 3 Input"]).toEqual({
+        Handler: "Evdev",
+        Device: "Korri Seat P3",
+        Config: { "Right Stick Multiplier": 125 },
+      })
+      expect(parsed["Player 4 Input"]).toEqual({
+        Handler: "Evdev",
+        Device: "Korri Seat P4",
+        Config: { "Right Stick Multiplier": 125 },
+      })
+      expect(parsed["Player 5 Input"]).toEqual({ Handler: "Null" })
     } finally {
       await rm(root, { recursive: true, force: true })
     }

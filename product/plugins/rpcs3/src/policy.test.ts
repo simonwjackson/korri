@@ -49,6 +49,24 @@ describe("decodeRpcs3Policy", () => {
     })
   })
 
+  it("decodes derived input-seat defaults", () => {
+    expect(
+      decodeRpcs3Policy({
+        input: {
+          derivedSeatDefaults: {
+            sticks: { right: { multiplier: 125 } },
+          },
+        },
+      }),
+    ).toEqual({
+      input: {
+        derivedSeatDefaults: {
+          sticks: { right: { multiplier: 125 } },
+        },
+      },
+    })
+  })
+
   it("decodes the Phase 2 power-user tranche", () => {
     expect(
       decodeRpcs3Policy({

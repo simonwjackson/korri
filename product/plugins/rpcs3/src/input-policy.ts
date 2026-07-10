@@ -132,6 +132,20 @@ const Rpcs3InputPlayer = Schema.Struct({
 })
 export type Rpcs3InputPlayer = Schema.Schema.Type<typeof Rpcs3InputPlayer>
 
+/**
+ * Defaults applied to RPCS3 players derived from Korri input seats. This lets a
+ * game tune all virtual seats without replacing the derived P1-P4 device list.
+ */
+const Rpcs3DerivedSeatDefaults = Schema.Struct({
+  buttons: Schema.optional(Rpcs3InputButtons),
+  sticks: Schema.optional(Rpcs3InputSticks),
+  triggers: Schema.optional(Rpcs3InputTriggers),
+  mouse: Schema.optional(Rpcs3InputMouse),
+})
+export type Rpcs3DerivedSeatDefaults = Schema.Schema.Type<
+  typeof Rpcs3DerivedSeatDefaults
+>
+
 /** RPCS3 `cfg_input` exposes exactly 7 player slots (Player 1..7 Input). */
 const RPCS3_MAX_PLAYERS = 7
 
@@ -150,5 +164,6 @@ export const Rpcs3InputPolicy = Schema.Struct({
       ),
     ),
   ),
+  derivedSeatDefaults: Schema.optional(Rpcs3DerivedSeatDefaults),
 })
 export type Rpcs3InputPolicy = Schema.Schema.Type<typeof Rpcs3InputPolicy>

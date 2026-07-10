@@ -29,9 +29,50 @@ describe("RPCS3 input-seat policy", () => {
     ).toEqual({ players: [{ handler: "evdev", device: "Korri Seat P1" }] })
   })
 
+  it("applies derived seat defaults to every generated Korri Seat player", () => {
+    expect(
+      rpcs3InputPolicyWithInputSeats(
+        {
+          derivedSeatDefaults: {
+            sticks: { right: { multiplier: 125 } },
+          },
+        },
+        {
+          [INPUT_SEAT_PROVIDER_ID]: { runtimeSupportsExtraSeats: true },
+        },
+      ),
+    ).toEqual({
+      players: [
+        {
+          handler: "evdev",
+          device: "Korri Seat P1",
+          sticks: { right: { multiplier: 125 } },
+        },
+        {
+          handler: "evdev",
+          device: "Korri Seat P2",
+          sticks: { right: { multiplier: 125 } },
+        },
+        {
+          handler: "evdev",
+          device: "Korri Seat P3",
+          sticks: { right: { multiplier: 125 } },
+        },
+        {
+          handler: "evdev",
+          device: "Korri Seat P4",
+          sticks: { right: { multiplier: 125 } },
+        },
+      ],
+    })
+  })
+
   it("does not override explicit RPCS3 input policy", () => {
     const explicit = {
       players: [{ handler: "evdev" as const, device: "Hand Authored Pad" }],
+      derivedSeatDefaults: {
+        sticks: { right: { multiplier: 125 } },
+      },
     }
 
     expect(
