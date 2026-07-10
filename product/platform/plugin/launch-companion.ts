@@ -1,3 +1,4 @@
+import { INPUT_SEAT_PROVIDER_ID } from "@platform/input-seat/policy"
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 import { Effect, Schema } from "effect"
@@ -68,6 +69,7 @@ export function composeLaunchCompanions(
 
     for (const [provider, policy] of companionEntries) {
       if (isDisabledLaunchCompanionPolicy(policy)) continue
+      if (isSessiondRuntimeCompanion(provider)) continue
       const plugin = input.registry.get(provider)
       if (plugin === undefined) {
         diagnostics.push(
@@ -162,6 +164,10 @@ export function launchCompanionDiagnosticSummary(
 
 function isDisabledLaunchCompanionPolicy(policy: unknown): boolean {
   return isRecord(policy) && policy.enable === false
+}
+
+function isSessiondRuntimeCompanion(provider: ProviderId): boolean {
+  return provider === INPUT_SEAT_PROVIDER_ID
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

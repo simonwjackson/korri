@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { INPUT_SEAT_PROVIDER_ID } from "@platform/input-seat/policy"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { Effect } from "effect"
 import { plugin } from "./index"
@@ -144,6 +145,25 @@ describe("composeLaunchCompanions", () => {
         launchCompanions: {
           [wrapperPlugin.id]: { enable: false },
           "@test:missing": { enable: false },
+        },
+      }),
+    )
+
+    expect(result).toEqual({
+      _tag: "LaunchCompanionsComposed",
+      spec: baseSpec,
+    })
+  })
+
+  it("passes reserved input-seat companions through to sessiond", async () => {
+    const registry = createPluginRegistry([])
+
+    const result = await Effect.runPromise(
+      composeLaunchCompanions({
+        spec: baseSpec,
+        registry,
+        launchCompanions: {
+          [INPUT_SEAT_PROVIDER_ID]: { playerCount: 1 },
         },
       }),
     )
