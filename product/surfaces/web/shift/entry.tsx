@@ -6,7 +6,7 @@ import {
 import {
   CatalogFactsError,
   CatalogFactsSource,
-  type CatalogSnapshotFacts,
+  decodeCatalogSnapshotFacts,
 } from "@platform/catalog/catalog-facts-source"
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { LaunchSpec } from "@platform/library/launcher"
@@ -163,7 +163,7 @@ function createBridgeCatalogFactsSourceLayer(bridge: KorriPlatformBridge) {
     snapshot: (scope = "fabric") =>
       Effect.tryPromise({
         try: async () =>
-          parseCatalogSnapshotFacts(
+          decodeCatalogSnapshotFacts(
             await bridge.api.rpc("app.catalog.snapshot", { scope }),
           ),
         catch: error =>
@@ -173,23 +173,6 @@ function createBridgeCatalogFactsSourceLayer(bridge: KorriPlatformBridge) {
           }),
       }),
   })
-}
-
-function parseCatalogSnapshotFacts(value: unknown): CatalogSnapshotFacts {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("entries" in value) ||
-    !Array.isArray(value.entries) ||
-    !("peers" in value) ||
-    !Array.isArray(value.peers) ||
-    !("health" in value) ||
-    typeof value.health !== "object" ||
-    value.health === null
-  ) {
-    throw new Error("app.catalog.snapshot: unexpected response shape")
-  }
-  return value as CatalogSnapshotFacts
 }
 
 function createBridgeRemoteCatalogSourceLayer(_bridge: KorriPlatformBridge) {

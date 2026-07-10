@@ -24,9 +24,14 @@ const sharedIdentity = {
 
 describe("federated catalog folding integration", () => {
   it("fetches a peer catalog over a real loopback server and folds it with local entries", async () => {
+    const peerLastPlayed = new Date("2026-07-07T04:42:08.376Z")
     await using peerServer = await withRpcServer({
       fetch: peerCatalogHttpApp([
-        peerSourceEntry("peer/f-zero", "Peer F-Zero", sharedIdentity),
+        peerSourceEntry("peer/f-zero", "Peer F-Zero", sharedIdentity, {
+          lastPlayed: peerLastPlayed,
+          playCount: 2,
+          totalPlaytimeSeconds: 258,
+        }),
       ]).fetch,
     })
 
@@ -66,6 +71,11 @@ describe("federated catalog folding integration", () => {
       title: "Local F-Zero",
       source: { isLocal: true },
       availability: "local-launchable",
+      playStats: {
+        lastPlayed: peerLastPlayed,
+        playCount: 2,
+        totalPlaytimeSeconds: 258,
+      },
     })
     expect(snapshot.peers.find(item => item.hostId === "aka")).toMatchObject({
       status: "ready",
@@ -108,9 +118,11 @@ function peerSourceEntry(
   id: string,
   title: string,
   identity: PlayableLibraryEntry["releases"][number]["identity"],
+  playStats?: PeerSourceCatalogEntry["playStats"],
 ): PeerSourceCatalogEntry {
   return {
     ...playableEntry(id, title, identity),
+    ...(playStats ? { playStats } : {}),
     source: {
       hostId: "peer",
       controlUrl: "http://peer.invalid",

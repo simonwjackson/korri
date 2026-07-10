@@ -7,9 +7,10 @@
  * so the coordinator can degrade peer failures without failing self reads.
  */
 
+import { PlayStats as PlayStatsSchema } from "@platform/library/config/records/play-log"
 import { logger } from "@platform/logger/logger"
 import { createRemoteStreamControlClient } from "@product/apps/portal/stream/remote-stream-client"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import type { CatalogEntry } from "../api/catalog/snapshot.rpc"
 import type { PeerRecord } from "./peer-discovery"
 
@@ -154,10 +155,26 @@ function peerCatalogEntryToCatalogEntry(
   } = entry
   return {
     ...catalog,
+    ...(catalog.playStats
+      ? { playStats: decodePeerPlayStats(catalog.playStats) }
+      : {}),
     source: {
       hostId: peer.hostId,
       controlUrl: peer.controlUrl,
       isLocal: false,
     },
   } satisfies CatalogEntry
+}
+
+function decodePeerPlayStats(
+  playStats: PeerSourceCatalogEntry["playStats"],
+): NonNullable<CatalogEntry["playStats"]> {
+  const decoded = Schema.decodeUnknownSync(PlayStatsSchema)(playStats)
+  if (
+    decoded.lastPlayed !== undefined &&
+    Number.isNaN(decoded.lastPlayed.getTime())
+  ) {
+    throw new Error("peer catalog playStats.lastPlayed is invalid")
+  }
+  return decoded
 }

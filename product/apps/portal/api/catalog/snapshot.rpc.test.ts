@@ -63,6 +63,37 @@ describe("CatalogSnapshot RPC schema", () => {
     ])
   })
 
+  it("decodes play stats timestamps into Date values", () => {
+    const decoded = Schema.decodeUnknownSync(CatalogSnapshotResponse)({
+      entries: [
+        {
+          ...entry("local/recent"),
+          playStats: {
+            lastPlayed: "2026-07-07T04:42:08.376Z",
+            playCount: 2,
+            totalPlaytimeSeconds: 258,
+          },
+        },
+      ],
+      peers: [peer("self", true, "ready")],
+      generation: 42,
+      updatedAt: "2026-06-13T00:00:00.000Z",
+      health: {
+        coordinatorReachable: true,
+        self: "ready",
+        loadingPeers: 0,
+        readyPeers: 0,
+        failedPeers: 0,
+        generation: 42,
+      },
+    })
+
+    expect(decoded.entries[0]?.playStats?.lastPlayed).toBeInstanceOf(Date)
+    expect(decoded.entries[0]?.playStats?.lastPlayed?.getTime()).toBe(
+      new Date("2026-07-07T04:42:08.376Z").getTime(),
+    )
+  })
+
   it("decodes optional catalog availability facts", () => {
     const decoded = Schema.decodeUnknownSync(CatalogSnapshotResponse)({
       entries: [

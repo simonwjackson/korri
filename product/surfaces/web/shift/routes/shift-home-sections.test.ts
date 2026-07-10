@@ -7,12 +7,14 @@ import { shiftHomeGamesFromCatalog } from "./ShiftHomeRoute"
 function entry(
   id: string,
   playStats?: { lastPlayed?: Date; playCount?: number },
+  extras: Partial<CatalogEntry> = {},
 ): CatalogEntry {
   return {
     id,
     title: id.toUpperCase(),
     metadata: { name: id.toUpperCase() },
     ...(playStats ? { playStats } : {}),
+    ...extras,
   } as unknown as CatalogEntry
 }
 
@@ -47,6 +49,56 @@ describe("shiftHomeGamesFromCatalog", () => {
     expect(["neverA", "neverB"]).toContain(random[0]?.id)
     // Recent comes first, Random is the tail.
     expect(games.at(-1)?.section).toBe("Random")
+  })
+
+  it("uses folded top-level play stats for Recent without inspecting alternatives", () => {
+    const recentAnywhere = new Date("2026-07-07T04:42:08.376Z")
+    const alternativeWithBogusPlayStats = {
+      id: "aka/played-there",
+      source: {
+        hostId: "aka",
+        controlUrl: "http://aka:3001",
+        isLocal: false,
+      },
+      playStats: {
+        lastPlayed: new Date("2026-07-10T00:00:00.000Z"),
+        playCount: 1,
+        totalPlaytimeSeconds: 45,
+      },
+    }
+    const games = shiftHomeGamesFromCatalog(
+      [
+        entry(
+          "folded-30xx",
+          { lastPlayed: recentAnywhere, playCount: 2 },
+          {
+            source: {
+              hostId: "self",
+              controlUrl: "http://self:3001",
+              isLocal: true,
+            },
+            launchAlternatives: [
+              {
+                id: "aka/thirty-xx",
+                source: {
+                  hostId: "aka",
+                  controlUrl: "http://aka:3001",
+                  isLocal: false,
+                },
+              },
+            ],
+          },
+        ),
+        entry("alternative-only", undefined, {
+          launchAlternatives: [alternativeWithBogusPlayStats],
+        }),
+      ],
+      pickFirst,
+    )
+
+    expect(games.filter(g => g.section === "Recent").map(g => g.id)).toEqual([
+      "folded-30xx",
+    ])
   })
 
   it("caps Recent at 8", () => {

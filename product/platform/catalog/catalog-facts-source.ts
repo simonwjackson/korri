@@ -1,6 +1,6 @@
-import type { EntrySource } from "@platform/api/rpc/entry-source"
-import type { LaunchAlternative } from "@platform/library/launch-alternative"
-import type { PlayableLibraryEntry } from "@platform/library/playable-library"
+import { EntrySource } from "@platform/api/rpc/entry-source"
+import { LaunchAlternative } from "@platform/library/launch-alternative"
+import { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { Context, Effect, Layer, Schema } from "effect"
 
 export class CatalogFactsError extends Schema.TaggedErrorClass<CatalogFactsError>()(
@@ -53,6 +53,63 @@ export interface CatalogSnapshotFacts {
   readonly generation: number
   readonly updatedAt: string
   readonly health: CatalogHealthSummary
+}
+
+const CatalogPeerStatusSchema = Schema.Literals(["loading", "ready", "failed"])
+const CatalogEntryAvailabilitySchema = Schema.Literals([
+  "local-launchable",
+  "remote-available",
+  "remote-unreachable",
+])
+
+const CatalogEntrySchema = Schema.Struct({
+  ...PlayableLibraryEntry.fields,
+  source: EntrySource,
+  availability: Schema.optional(CatalogEntryAvailabilitySchema),
+  launchAlternatives: Schema.optional(Schema.Array(LaunchAlternative)),
+})
+
+const CatalogPeerSnapshotSchema = Schema.Struct({
+  hostId: Schema.String,
+  displayName: Schema.String,
+  controlUrl: Schema.String,
+  isLocal: Schema.Boolean,
+  caps: Schema.Array(Schema.String),
+  status: CatalogPeerStatusSchema,
+  entryCount: Schema.Number,
+  updatedAt: Schema.String,
+  error: Schema.optional(Schema.String),
+})
+
+const CatalogHealthSummarySchema = Schema.Struct({
+  coordinatorReachable: Schema.Boolean,
+  self: CatalogPeerStatusSchema,
+  loadingPeers: Schema.Number,
+  readyPeers: Schema.Number,
+  failedPeers: Schema.Number,
+  lastFailure: Schema.optional(Schema.String),
+  generation: Schema.Number,
+})
+
+const CatalogSnapshotFactsSchema = Schema.Struct({
+  entries: Schema.Array(CatalogEntrySchema),
+  peers: Schema.Array(CatalogPeerSnapshotSchema),
+  generation: Schema.Number,
+  updatedAt: Schema.String,
+  health: CatalogHealthSummarySchema,
+})
+
+export function decodeCatalogSnapshotFacts(
+  value: unknown,
+): CatalogSnapshotFacts {
+  const decoded = Schema.decodeUnknownSync(CatalogSnapshotFactsSchema)(value)
+  for (const entry of decoded.entries) {
+    const lastPlayed = entry.playStats?.lastPlayed
+    if (lastPlayed !== undefined && Number.isNaN(lastPlayed.getTime())) {
+      throw new Error("app.catalog.snapshot: invalid playStats.lastPlayed")
+    }
+  }
+  return decoded
 }
 
 export interface CatalogFactsSourceService {

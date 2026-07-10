@@ -6,6 +6,7 @@ export function catalogEntryFixture(options: {
   readonly source: CatalogEntry["source"]
   readonly identity?: CatalogEntry["releases"][number]["identity"]
   readonly launchable?: boolean
+  readonly playStats?: CatalogEntry["playStats"]
 }): CatalogEntry {
   const launchable = options.launchable ?? true
   return {
@@ -25,6 +26,7 @@ export function catalogEntryFixture(options: {
     system: "snes",
     metadata: { name: options.title ?? `${options.id} title` },
     source: options.source,
+    ...(options.playStats ? { playStats: options.playStats } : {}),
   }
 }
 

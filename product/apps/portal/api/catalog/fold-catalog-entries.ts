@@ -74,9 +74,11 @@ function foldGroup(
   const display = group.find(entry => entry.source.isLocal) ?? launch
   const availability = availabilityFor(group, launch, presentPeerControlUrls)
   const launchAlternatives = launchAlternativesForGroup(group, launch)
+  const playStats = mergePlayStats(group)
 
   return {
     ...display,
+    ...(playStats !== undefined ? { playStats } : {}),
     id: launch.id,
     itemId: launch.itemId,
     containedId: launch.containedId,
@@ -85,6 +87,42 @@ function foldGroup(
     source: launch.source,
     availability,
     ...(launchAlternatives.length > 1 ? { launchAlternatives } : {}),
+  }
+}
+
+function mergePlayStats(
+  group: readonly CatalogEntry[],
+): CatalogEntry["playStats"] {
+  if (group.length === 1) return group[0].playStats
+
+  const stats = group
+    .map(entry => entry.playStats)
+    .filter(
+      (playStats): playStats is NonNullable<CatalogEntry["playStats"]> =>
+        playStats !== undefined,
+    )
+  if (stats.length === 0) return undefined
+  if (stats.length === 1) return stats[0]
+
+  let lastPlayed: Date | undefined
+  let playCount = 0
+  let totalPlaytimeSeconds = 0
+  for (const playStats of stats) {
+    playCount += playStats.playCount
+    totalPlaytimeSeconds += playStats.totalPlaytimeSeconds
+    if (
+      playStats.lastPlayed !== undefined &&
+      (lastPlayed === undefined ||
+        playStats.lastPlayed.getTime() > lastPlayed.getTime())
+    ) {
+      lastPlayed = playStats.lastPlayed
+    }
+  }
+
+  return {
+    ...(lastPlayed ? { lastPlayed } : {}),
+    playCount,
+    totalPlaytimeSeconds,
   }
 }
 

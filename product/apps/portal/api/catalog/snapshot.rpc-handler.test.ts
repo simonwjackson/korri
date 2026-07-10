@@ -220,11 +220,16 @@ describe("app.catalog.snapshot", () => {
       value:
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     }
+    const remoteLastPlayed = new Date("2026-07-07T04:42:08.376Z")
     const layer = snapshotLayerWith({
       peers: [aka],
       peerCatalogs: {
         [aka.controlUrl]: [
-          peerEntry("remote/f-zero", "Remote F-Zero", sameHash),
+          peerEntry("remote/f-zero", "Remote F-Zero", sameHash, {
+            lastPlayed: remoteLastPlayed,
+            playCount: 2,
+            totalPlaytimeSeconds: 258,
+          }),
         ],
       },
       sourceLayer: makeInMemoryLibrarySourceLayer({
@@ -262,6 +267,11 @@ describe("app.catalog.snapshot", () => {
       title: "Local F-Zero",
       source: { isLocal: true },
       availability: "local-launchable",
+      playStats: {
+        lastPlayed: remoteLastPlayed,
+        playCount: 2,
+        totalPlaytimeSeconds: 258,
+      },
     })
     expect(snapshot.peers.find(peer => peer.isLocal)?.entryCount).toBe(1)
     expect(snapshot.peers.find(peer => peer.hostId === "aka")?.entryCount).toBe(
@@ -298,6 +308,42 @@ describe("app.catalog.snapshot", () => {
       sameHash,
       sameHash,
     ])
+  })
+
+  it("keeps self entries when a peer reports malformed play stats", async () => {
+    const aka: PeerRecord = {
+      hostId: "aka",
+      displayName: "aka",
+      controlUrl: "http://aka:3001",
+      caps: ["source"],
+    }
+    const layer = snapshotLayerWith({
+      peers: [aka],
+      peerCatalogs: {
+        [aka.controlUrl]: [
+          peerEntry("remote/bad-stats", "Remote Bad Stats", undefined, {
+            lastPlayed: "not-a-date",
+            playCount: 1,
+            totalPlaytimeSeconds: 45,
+          } as unknown as PeerSourceCatalogEntry["playStats"]),
+        ],
+      },
+    })
+
+    const snapshot = await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* handleCatalogSnapshot({ scope: "fabric" })
+        yield* Effect.sleep("10 millis")
+        return yield* handleCatalogSnapshot({ scope: "fabric" })
+      }).pipe(Effect.provide(layer)),
+    )
+
+    expect(snapshot.entries.map(entry => entry.id)).toEqual(["local/stray"])
+    expect(snapshot.peers.find(peer => peer.hostId === "aka")).toMatchObject({
+      status: "failed",
+      entryCount: 0,
+    })
+    expect(snapshot.health.failedPeers).toBe(1)
   })
 
   it("keeps self entries and reports failed peer health", async () => {
@@ -353,6 +399,7 @@ function peerEntry(
   id: string,
   title: string,
   identity?: PeerSourceCatalogEntry["releases"][number]["identity"],
+  playStats?: PeerSourceCatalogEntry["playStats"],
 ): PeerSourceCatalogEntry {
   return {
     id,
@@ -372,6 +419,7 @@ function peerEntry(
     ],
     launchable: true,
     metadata: { name: title },
+    ...(playStats ? { playStats } : {}),
     source: {
       hostId: "peer",
       controlUrl: "http://peer:3001",
