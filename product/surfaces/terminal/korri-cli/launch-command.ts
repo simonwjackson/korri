@@ -29,6 +29,7 @@ import type { GamePicker } from "./game-picker"
 import { pickGameChoice } from "./interactive-pick"
 import { resolveCliMoonlightLaunchPolicy } from "./moonlight-launch-policy"
 import {
+  effectiveMoonlightAdaptiveBoundaries,
   launchMoonlight,
   type MoonlightLaunchOptions,
   type MoonlightLaunchResult,
@@ -293,9 +294,22 @@ async function launchRemoteEntry(
   if (preflightMode._tag === "Invalid") {
     return fail("usage", preflightMode.message)
   }
+  const policy = await resolveCliMoonlightLaunchPolicy(options.librarySource)
+  if (policy.status === "failed") {
+    return fail("launch-invalid", policy.message)
+  }
+  let effectiveBoundaries
+  try {
+    effectiveBoundaries = effectiveMoonlightAdaptiveBoundaries(
+      policy.options.moonlight,
+      parsedBoundaries,
+    )
+  } catch (error) {
+    return fail("launch-invalid", errorMessage(error))
+  }
   const preflight = selectStreamPreflightStartup({
     mode: preflightMode.mode,
-    boundaries: parsedBoundaries,
+    boundaries: effectiveBoundaries,
     facts: {
       sourceReachable: entry.source.status.status === "available",
       streamControlReachable:
@@ -318,10 +332,6 @@ async function launchRemoteEntry(
     `Prepared ${entry.game.displayName} from ${entry.source.name} for Korri Stream.`,
   )
   output("Attempting to open Moonlight locally...")
-  const policy = await resolveCliMoonlightLaunchPolicy(options.librarySource)
-  if (policy.status === "failed") {
-    return fail("launch-invalid", policy.message)
-  }
   const moonlight = await (options.launchMoonlight ?? launchMoonlight)({
     host: entry.source.host.id,
     ...policy.options,
@@ -408,6 +418,10 @@ function isLocalEntry(
 
 function failed(outcome: CliOutcome): ResolveTargetResult {
   return { _tag: "Failed", outcome }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function diagnosticMessage(diagnostic: SourceDiagnostic): string {

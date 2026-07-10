@@ -49,7 +49,10 @@ const host: StreamHostCandidate = {
   identityVerified: false,
 }
 
-function localSource(games: readonly GameRecord[]): LibrarySourceService {
+function localSource(
+  games: readonly GameRecord[],
+  moonlight: Readonly<Record<string, unknown>> = { platform: { name: "sdl" } },
+): LibrarySourceService {
   return {
     list: () => Effect.succeed(games),
     launchSpecFor: () => Effect.succeed(undefined),
@@ -58,7 +61,7 @@ function localSource(games: readonly GameRecord[]): LibrarySourceService {
     resolveLocalLauncherPolicy: () =>
       Effect.succeed({
         launchCompanions: {},
-        moonlight: { platform: { name: "sdl" } },
+        moonlight,
       }),
   }
 }
@@ -176,6 +179,59 @@ describe("unified launch command", () => {
     expect(code).toBe(0)
     expect(order).toEqual(["prepare", "moonlight"])
     expect(lines.join("\n")).toContain("Prepared Wario Land 4 from aka")
+  })
+
+  it("passes configured Moonlight stream ranges into remote Moonlight launch", async () => {
+    let moonlightOptions: unknown
+    const code = await runLaunchCommand({
+      gameId: SHARED_ID,
+      librarySource: localSource([], {
+        stream: {
+          resolution: {
+            min: { width: 640, height: 360 },
+            start: { width: 1280, height: 720 },
+            max: { width: 1920, height: 1080 },
+          },
+          fps: 120,
+          bitrateKbps: { min: 500, start: 6000, max: 40000 },
+        },
+      }),
+      launchLocal: async () => launchedResult(SHARED_ID),
+      discoverHosts: async () => [host],
+      clientForHost: () => remoteClient(),
+      launchMoonlight: async options => {
+        moonlightOptions = options
+        return { status: "started", command: "moonlight" }
+      },
+      output: () => {},
+      errorOutput: () => {},
+    })
+
+    expect(code).toBe(0)
+    expect(moonlightOptions).toMatchObject({
+      moonlight: {
+        stream: {
+          resolution: {
+            min: { width: 640, height: 360 },
+            start: { width: 1280, height: 720 },
+            max: { width: 1920, height: 1080 },
+          },
+          fps: 120,
+          bitrateKbps: { min: 500, start: 6000, max: 40000 },
+        },
+      },
+      adaptiveBoundaries: {
+        levers: {
+          resolution: {
+            floor: { width: 640, height: 360 },
+            ceiling: { width: 1920, height: 1080 },
+          },
+          fps: { floor: 120, ceiling: 120, pinned: 120 },
+          bitrate: { floor: 500, startup: 6000, ceiling: 40000 },
+        },
+        outcomes: {},
+      },
+    })
   })
 
   it("passes adaptive stream boundary flags into remote Moonlight launch", async () => {

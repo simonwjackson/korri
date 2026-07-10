@@ -310,6 +310,112 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     ])
   })
 
+  it("uses configured Moonlight stream ranges for remote-source launch defaults", async () => {
+    let dispatchedSpec:
+      | { command: string; args: ReadonlyArray<string> }
+      | undefined
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+
+    await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: (_controlUrl, gameId) =>
+              Effect.succeed({
+                status: "prepared" as const,
+                gameId,
+                sessionId: "sess-config-range",
+              }),
+            launchedSpec: spec => {
+              dispatchedSpec = spec
+            },
+            localPolicy: {
+              launchCompanions: {},
+              moonlight: {
+                stream: {
+                  resolution: {
+                    min: { width: 640, height: 360 },
+                    start: { width: 1280, height: 720 },
+                    max: { width: 1920, height: 1080 },
+                  },
+                  fps: 120,
+                  bitrateKbps: { min: 500, start: 6000, max: 40000 },
+                },
+              },
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(dispatchedSpec?.args).toEqual([
+      "stream",
+      "-width",
+      "1280",
+      "-height",
+      "720",
+      "-fps",
+      "120",
+      "-bitrate",
+      "6000",
+      "-app",
+      "Korri Stream",
+      "aka.local",
+    ])
+  })
+
+  it("rejects invalid configured Moonlight stream ranges before peer prepare", async () => {
+    let prepareCalls = 0
+    let launchCalls = 0
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: () => {
+              prepareCalls += 1
+              return Effect.succeed({
+                status: "prepared" as const,
+                gameId: "snes/echo.smc",
+                sessionId: "sess-invalid-config-range",
+              })
+            },
+            launchedSpec: () => {
+              launchCalls += 1
+            },
+            localPolicy: {
+              launchCompanions: {},
+              moonlight: {
+                stream: { bitrateKbps: { min: 500, max: 40000 } },
+              },
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(result.status).toBe("failed")
+    if (result.status !== "failed") throw new Error("expected failed launch")
+    expect(result.stderrTail).toContain("start")
+    expect(prepareCalls).toBe(0)
+    expect(launchCalls).toBe(0)
+  })
+
   it("fills missing remote-source startup bitrate from preflight", async () => {
     let dispatchedSpec:
       | { command: string; args: ReadonlyArray<string> }
@@ -370,7 +476,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
         id: "snes/echo.smc",
         source: remoteSource,
         streamBoundaryArgs: ["bitrate=500k..40m"],
-        streamPreflight: "required",
+        streamPreflight: "required" as never,
       }).pipe(
         Effect.provide(
           remoteSourceTestLayer({
@@ -392,6 +498,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     )
 
     expect(result.status).toBe("failed")
+    if (result.status !== "failed") throw new Error("expected failed launch")
     expect(result.stderrTail).toContain("Stream preflight rejected launch")
     expect(prepareCalls).toBe(0)
     expect(launchCalls).toBe(0)

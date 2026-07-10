@@ -14,7 +14,10 @@ import {
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
 import type { PluginRegistry } from "@platform/plugin/registry"
-import type { StreamBoundaries } from "@platform/stream/stream-adaptive-boundaries"
+import {
+  mergeStreamBoundaries,
+  type StreamBoundaries,
+} from "@platform/stream/stream-adaptive-boundaries"
 import {
   activeStreamControlSessionRegistry,
   type StartStreamRuntimeSessionOptions,
@@ -25,6 +28,10 @@ import {
   type StreamLaunchRequest,
 } from "@platform/stream/streamer-client"
 import { createFirstPartyPluginState } from "@product/plugin-host/state"
+import {
+  decodeMoonlightPolicy,
+  moonlightStreamBoundaries,
+} from "@product/plugins/moonlight/src/config/policy"
 import { Effect } from "effect"
 import { startMoonlightTouchBoundsRuntime } from "./moonlight-touch-bounds-runtime"
 
@@ -148,9 +155,19 @@ export async function launchMoonlight(
   const inputDevice = await moonlightInputDevice(options)
   if (inputDevice.status === "failed") return inputDevice
 
+  let adaptiveBoundaries: StreamBoundaries | undefined
+  try {
+    adaptiveBoundaries = effectiveMoonlightAdaptiveBoundaries(
+      options.moonlight,
+      options.adaptiveBoundaries,
+    )
+  } catch (error) {
+    return { status: "failed", message: errorMessage(error) }
+  }
+
   const policy = moonlightPolicyWithStartupBitrate(
     options.moonlight,
-    options.adaptiveBoundaries,
+    adaptiveBoundaries,
   ) as MoonlightLaunchPolicyView
   const moonlightControl = await moonlightControlHandleFromOptions(
     options.moonlightControl,
@@ -193,7 +210,7 @@ export async function launchMoonlight(
       session: installed.session,
       startStreamRuntimeSession:
         options.startStreamRuntimeSession ?? defaultStartStreamRuntimeSession,
-      adaptiveBoundaries: options.adaptiveBoundaries,
+      adaptiveBoundaries,
     })
   }
 
@@ -245,7 +262,7 @@ export async function launchMoonlight(
       session: fallback.session,
       startStreamRuntimeSession:
         options.startStreamRuntimeSession ?? defaultStartStreamRuntimeSession,
-      adaptiveBoundaries: options.adaptiveBoundaries,
+      adaptiveBoundaries,
     })
   }
 
@@ -276,6 +293,15 @@ async function composeMoonlightWithLaunchCompanions(
   } catch (error) {
     return { _tag: "failed", status: "failed", message: errorMessage(error) }
   }
+}
+
+export function effectiveMoonlightAdaptiveBoundaries(
+  policy: StreamerPolicy | undefined,
+  overrides: StreamBoundaries | undefined,
+): StreamBoundaries | undefined {
+  const configured = moonlightStreamBoundaries(decodeMoonlightPolicy(policy ?? {}))
+  if (!configured && !overrides) return undefined
+  return mergeStreamBoundaries(configured, overrides)
 }
 
 export function moonlightPolicyWithStartupBitrate(

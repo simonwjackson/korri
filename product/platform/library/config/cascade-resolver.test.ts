@@ -122,6 +122,51 @@ describe("resolveLocalLauncherCompanionPolicy", () => {
   })
 })
 
+describe("moonlight local launcher policy folding", () => {
+  it("preserves unified moonlight.stream ranges across global and launcher layers", () => {
+    const snap = snapshot({
+      global: {
+        id: "global",
+        moonlight: {
+          stream: {
+            resolution: {
+              min: { width: 640, height: 360 },
+              start: { width: 1280, height: 720 },
+              max: { width: 1920, height: 1080 },
+            },
+            fps: { min: 30, start: 60, max: 120 },
+            bitrateKbps: 12000,
+          },
+        },
+      } as GlobalConfigRecord,
+      launchers: [
+        {
+          ...launcher(undefined),
+          moonlight: {
+            stream: {
+              fps: 120,
+              bitrateKbps: { min: 500, start: 6000, max: 40000 },
+            },
+          },
+        } as LauncherRecord,
+      ],
+    })
+
+    expect(resolveLocalLauncherPolicy(snap, { launcherId: "local" }).moonlight)
+      .toEqual({
+        stream: {
+          resolution: {
+            min: { width: 640, height: 360 },
+            start: { width: 1280, height: 720 },
+            max: { width: 1920, height: 1080 },
+          },
+          fps: 120,
+          bitrateKbps: { min: 500, start: 6000, max: 40000 },
+        },
+      })
+  })
+})
+
 describe("launch preferences folding", () => {
   const withPreferences = <T extends { id: string }>(
     base: T,

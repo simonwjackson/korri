@@ -197,7 +197,11 @@ export function moonlightStreamBoundaries(
   const stream = policy?.stream
   if (!stream) return undefined
 
-  const levers: StreamBoundaries["levers"] = {}
+  const levers: {
+    resolution?: ResolutionLeverBoundary
+    fps?: NumericLeverBoundary
+    bitrate?: NumericLeverBoundary
+  } = {}
   const resolution = resolutionBoundary(stream.resolution)
   if (resolution) levers.resolution = resolution
   const fps = numericBoundary(stream.fps, { includeStartup: false })
@@ -213,13 +217,15 @@ export function moonlightLaunchResolution(
 ): StreamAdaptiveResolution | undefined {
   const resolution = stream?.resolution
   if (!resolution) return undefined
-  return isResolutionRange(resolution) ? completeResolution(resolution.start) : completeResolution(resolution)
+  return isResolutionRange(resolution)
+    ? completeResolution(resolution.start)
+    : completeResolution(resolution)
 }
 
 export function moonlightLaunchFps(
   stream: MoonlightStreamPolicy | undefined,
 ): number | undefined {
-  return numericLaunchValue(stream?.fps)
+  return numericLaunchValue(stream?.fps) ?? undefined
 }
 
 export function moonlightLaunchBitrateKbps(
@@ -262,7 +268,7 @@ function validateResolutionPolicy(
 }
 
 function validateNumericPolicy(
-  value: MoonlightFpsPolicy | MoonlightBitratePolicy | undefined,
+  value: MoonlightFpsPolicy | MoonlightBitratePolicy | null | undefined,
   label: string,
 ): void {
   if (!isNumericRange(value)) return
@@ -284,7 +290,7 @@ function validateCompleteResolution(
 }
 
 function numericBoundary(
-  value: MoonlightFpsPolicy | MoonlightBitratePolicy | undefined,
+  value: MoonlightFpsPolicy | MoonlightBitratePolicy | null | undefined,
   options: { readonly includeStartup: boolean },
 ): NumericLeverBoundary | undefined {
   if (value === undefined || value === null) return undefined
@@ -313,7 +319,7 @@ function resolutionBoundary(
 }
 
 function numericLaunchValue(
-  value: MoonlightFpsPolicy | MoonlightBitratePolicy | undefined,
+  value: MoonlightFpsPolicy | MoonlightBitratePolicy | null | undefined,
 ): number | null | undefined {
   if (value === undefined || value === null || typeof value === "number") {
     return value
