@@ -124,6 +124,17 @@ const MoonlightControlPolicy = Schema.Struct({
   allowRootPeers: Schema.optional(Schema.Boolean),
 })
 
+const MoonlightAdaptivePolicy = Schema.Struct({
+  /** Persisted defaults for the stream-quality boundary DSL. */
+  boundaries: Schema.optional(
+    Schema.Array(NonEmptyString("adaptive.boundaries[]")),
+  ),
+  /** Alias for RPC/CLI callers that already know the boundary-args name. */
+  boundaryArgs: Schema.optional(
+    Schema.Array(NonEmptyString("adaptive.boundaryArgs[]")),
+  ),
+})
+
 /**
  * Typed Moonlight Embedded stream launch policy. The stream action, fixed Korri
  * Stream app, and selected peer host are product invariants and are
@@ -139,6 +150,7 @@ export const MoonlightPolicy = Schema.Struct({
   audio: Schema.optional(MoonlightAudioPolicy),
   window: Schema.optional(MoonlightWindowPolicy),
   control: Schema.optional(MoonlightControlPolicy),
+  adaptive: Schema.optional(MoonlightAdaptivePolicy),
   extraArgs: Schema.optional(Schema.Array(Schema.String)),
 })
 export type MoonlightPolicy = Schema.Schema.Type<typeof MoonlightPolicy>

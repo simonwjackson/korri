@@ -8,12 +8,20 @@ describe("decodeMoonlightPolicy", () => {
       stream: { resolution: { width: 1920, height: 1080 }, fps: 60, codec: "h265" },
       input: { devices: ["/dev/input/event10"], rotate: 90 },
       control: { enable: true, authority: "controller" },
+      adaptive: {
+        boundaries: ["auto=on", "resolution=640x360..1920x1080", "fps=120"],
+      },
       extraArgs: ["-verbose"],
     })
 
     expect(policy.stream?.codec).toBe("h265")
     expect(policy.control?.authority).toBe("controller")
     expect(policy.input?.devices).toEqual(["/dev/input/event10"])
+    expect(policy.adaptive?.boundaries).toEqual([
+      "auto=on",
+      "resolution=640x360..1920x1080",
+      "fps=120",
+    ])
   })
 
   it("rejects retired Moonlight launch-policy vocabulary (now the plugin's job)", () => {

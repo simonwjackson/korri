@@ -23,7 +23,11 @@ import {
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
-import { parseStreamBoundaryArgs } from "@platform/stream/stream-adaptive-boundaries"
+import {
+  mergeStreamBoundaries,
+  parseStreamBoundaryArgs,
+  type StreamBoundaries,
+} from "@platform/stream/stream-adaptive-boundaries"
 import { selectStreamPreflightStartup } from "@platform/stream/stream-preflight"
 import {
   isMoonlightRuntimeSessionEnabled,
@@ -415,7 +419,42 @@ function handleRemoteSourceLaunch(
     const launcher = yield* Launcher
     const foregroundSessionHost = yield* ForegroundSessionHost
     const localLibrarySource = yield* LibrarySource
-    const preflight = streamPreflightFromPayload(payload)
+
+    const localPolicyResult =
+      yield* localLibrarySource.resolveLocalLauncherPolicy
+        ? localLibrarySource
+            .resolveLocalLauncherPolicy("moonlight", {
+              override: payload.override,
+            })
+            .pipe(
+              Effect.match({
+                onSuccess: policy => ({ _tag: "resolved" as const, policy }),
+                onFailure: (error: LibraryError) => ({
+                  _tag: "failed" as const,
+                  response: launchConfigurationFailure(error),
+                }),
+              }),
+            )
+        : Effect.succeed({
+            _tag: "failed" as const,
+            response: launchConfigurationFailure(
+              new LibraryError({
+                reason: "config",
+                message:
+                  "LibrarySource does not support local launcher policy resolution for Moonlight remote-source launches",
+              }),
+            ),
+          })
+    if (localPolicyResult._tag === "failed") return localPolicyResult.response
+    const localPolicy = localPolicyResult.policy
+
+    const boundaryResult = streamBoundariesForRemoteSourceLaunch(
+      payload,
+      localPolicy.moonlight,
+    )
+    if (boundaryResult._tag === "failed") return boundaryResult.response
+    const requestedBoundaries = boundaryResult.boundaries
+    const preflight = streamPreflightForBoundaries(payload, requestedBoundaries)
     if (preflight.status === "rejected") {
       logger.warn(
         {
@@ -432,6 +471,8 @@ function handleRemoteSourceLaunch(
         }),
       )
     }
+
+    const adaptiveBoundaries = preflight.boundaries
 
     const prepareResult = yield* remotePrepare.prepare(
       source.controlUrl,
@@ -494,34 +535,6 @@ function handleRemoteSourceLaunch(
       )
     }
 
-    const localPolicyResult =
-      yield* localLibrarySource.resolveLocalLauncherPolicy
-        ? localLibrarySource
-            .resolveLocalLauncherPolicy("moonlight", {
-              override: payload.override,
-            })
-            .pipe(
-              Effect.match({
-                onSuccess: policy => ({ _tag: "resolved" as const, policy }),
-                onFailure: (error: LibraryError) => ({
-                  _tag: "failed" as const,
-                  response: launchConfigurationFailure(error),
-                }),
-              }),
-            )
-        : Effect.succeed({
-            _tag: "failed" as const,
-            response: launchConfigurationFailure(
-              new LibraryError({
-                reason: "config",
-                message:
-                  "LibrarySource does not support local launcher policy resolution for Moonlight remote-source launches",
-              }),
-            ),
-          })
-    if (localPolicyResult._tag === "failed") return localPolicyResult.response
-    const localPolicy = localPolicyResult.policy
-    const adaptiveBoundaries = preflight.boundaries
     const moonlightPolicy = moonlightPolicyWithStartupBitrate(
       localPolicy.moonlight,
       adaptiveBoundaries,
@@ -789,17 +802,71 @@ function remotePrepareCategoryToFailureKind(
   }
 }
 
-function streamBoundariesFromPayload(payload: LaunchPayload) {
+type StreamBoundaryResolutionResult =
+  | { readonly _tag: "resolved"; readonly boundaries?: StreamBoundaries }
+  | { readonly _tag: "failed"; readonly response: FailedLaunchLibraryResponse }
+
+function streamBoundariesForRemoteSourceLaunch(
+  payload: LaunchPayload,
+  moonlightPolicy: Readonly<Record<string, unknown>> | undefined,
+): StreamBoundaryResolutionResult {
+  try {
+    const configuredBoundaries = streamBoundariesFromMoonlightPolicy(
+      moonlightPolicy,
+    )
+    const payloadBoundaries = streamBoundariesFromPayload(payload)
+    if (!configuredBoundaries && !payloadBoundaries) {
+      return { _tag: "resolved" }
+    }
+    return {
+      _tag: "resolved",
+      boundaries: mergeStreamBoundaries(configuredBoundaries, payloadBoundaries),
+    }
+  } catch (error) {
+    return {
+      _tag: "failed",
+      response: launchConfigurationFailure(
+        new LibraryError({
+          reason: "config",
+          message: errorMessage(error),
+        }),
+      ),
+    }
+  }
+}
+
+function streamBoundariesFromPayload(
+  payload: LaunchPayload,
+): StreamBoundaries | undefined {
   if (!payload.streamBoundaryArgs || payload.streamBoundaryArgs.length === 0) {
     return undefined
   }
   return parseStreamBoundaryArgs(payload.streamBoundaryArgs)
 }
 
-function streamPreflightFromPayload(payload: LaunchPayload) {
+function streamBoundariesFromMoonlightPolicy(
+  policy: Readonly<Record<string, unknown>> | undefined,
+): StreamBoundaries | undefined {
+  const adaptive = policy?.adaptive
+  if (!isRecord(adaptive)) return undefined
+  const rawBoundaryArgs = adaptive.boundaryArgs ?? adaptive.boundaries
+  if (rawBoundaryArgs === undefined) return undefined
+  if (
+    !Array.isArray(rawBoundaryArgs) ||
+    rawBoundaryArgs.some(value => typeof value !== "string")
+  ) {
+    throw new Error("moonlight.adaptive.boundaries must be an array of strings")
+  }
+  return parseStreamBoundaryArgs(rawBoundaryArgs)
+}
+
+function streamPreflightForBoundaries(
+  payload: LaunchPayload,
+  boundaries: StreamBoundaries | undefined,
+) {
   return selectStreamPreflightStartup({
     mode: payload.streamPreflight ?? "auto",
-    boundaries: streamBoundariesFromPayload(payload),
+    boundaries,
   })
 }
 
