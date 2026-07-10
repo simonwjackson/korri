@@ -164,6 +164,7 @@ describe("app.stream-control RPC handlers", () => {
             levers: { bitrate: { ceiling: 12_000 } },
             outcomes: { maxLatencyMs: 50 },
             lean: 0,
+            auto: undefined,
           },
           lastEvent: { kind: "dormant", reason: "within-hysteresis" },
         }),
@@ -273,8 +274,6 @@ describe("app.stream-control RPC handlers", () => {
       boundaries: {
         levers: { bitrate: { ceiling: 12_000 } },
         outcomes: {},
-        lean: undefined,
-        auto: undefined,
       },
     })
   })

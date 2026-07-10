@@ -393,9 +393,9 @@ async function recordCommandOutcome(
 ): Promise<StreamControlCommandResponseData> {
   const result = {
     action: input.action,
-    requested: input.requested,
+    requested: jsonSafeValue(input.requested) as StreamControlRequestedPayload,
     outcome: commandOutcome(response),
-    response,
+    response: jsonSafeValue(response),
   }
   try {
     await input.record(result)
@@ -437,7 +437,7 @@ async function readAdaptiveState(runtime: Runtime) {
   try {
     return {
       status: "ok" as const,
-      readback: control.snapshot() as unknown as Record<string, unknown>,
+      readback: jsonSafeValue(control.snapshot()) as Record<string, unknown>,
     }
   } catch (error) {
     return { status: "error" as const, error: errorMessage(error) }
@@ -610,6 +610,18 @@ function range(
           message: `${label} between ${min} and ${max} required`,
         }),
       )
+}
+
+function jsonSafeValue(value: unknown): unknown {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  if (Array.isArray(value)) return value.map(item => jsonSafeValue(item))
+  if (typeof value !== "object") return value
+  const result: Record<string, unknown> = {}
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (child !== undefined) result[key] = jsonSafeValue(child)
+  }
+  return result
 }
 
 function validateBacklightDeviceName(
