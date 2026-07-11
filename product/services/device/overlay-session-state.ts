@@ -43,6 +43,17 @@ export interface OverlaySessionProbe {
   readonly isStream: () => boolean
   /** Remote-source control URL for the active stream, when sessiond advertised it. */
   readonly sourceControlUrl: () => string | undefined
+  /** The active session's game is frozen (local phase, or host state for streams). */
+  readonly isFrozen: () => boolean
+  /** Freeze/resume can be offered for the active session. */
+  readonly freezeAvailable: () => boolean
+  /** Active managed launch id from the last refresh, when one exists. */
+  readonly activeLaunchId: () => string | undefined
+  /**
+   * Record the outcome of a remote freeze/thaw so the toggle reflects it
+   * immediately instead of waiting for the next host read.
+   */
+  readonly noteRemoteFrozen: (frozen: boolean) => void
 }
 
 export interface OverlaySessionProbeDeps {
@@ -50,6 +61,13 @@ export interface OverlaySessionProbeDeps {
   readonly readStatus: () => Promise<SessiondManagedLaunchStatus | null>
   /** Whether a Moonlight stream client process is currently running. */
   readonly isMoonlightRunning: () => Promise<boolean>
+  /**
+   * Read the stream host's frozen state via its controlUrl. Returns null when
+   * unknown (unreachable, older host); the probe then keeps the last known
+   * outcome. Optional: without it, stream frozen state relies solely on
+   * noteRemoteFrozen.
+   */
+  readonly readRemoteFrozen?: (controlUrl: string) => Promise<boolean | null>
 }
 
 export function createOverlaySessionProbe(
@@ -58,6 +76,12 @@ export function createOverlaySessionProbe(
   let active = false
   let stream = false
   let sourceControlUrl: string | undefined
+  let frozen = false
+  let freezeAvailable = false
+  let activeLaunchId: string | undefined
+  // Streams: last known host frozen state, kept across refreshes when the
+  // host read is unavailable or answers unknown (null).
+  let remoteFrozen = false
   return {
     async refresh() {
       let status: SessiondManagedLaunchStatus | null = null
@@ -79,14 +103,49 @@ export function createOverlaySessionProbe(
       }
       active = nextActive
       stream = nextStream
+      activeLaunchId = nextActive ? status?.active?.launchId : undefined
       sourceControlUrl =
         nextActive && nextStream
           ? streamSourceControlUrlFromStatus(status)
           : undefined
+
+      if (!nextActive) {
+        frozen = false
+        freezeAvailable = false
+        remoteFrozen = false
+        return
+      }
+      if (nextStream) {
+        // The local phase describes the Moonlight client, not the host game.
+        // Read host state when a reader is wired; keep the last known outcome
+        // when the host answers unknown. Streams always offer the option --
+        // the host reports unsupported when it cannot freeze.
+        freezeAvailable = true
+        if (deps.readRemoteFrozen && sourceControlUrl) {
+          try {
+            const remote = await deps.readRemoteFrozen(sourceControlUrl)
+            if (remote !== null) remoteFrozen = remote
+          } catch {
+            // Keep last known outcome.
+          }
+        }
+        frozen = remoteFrozen
+        return
+      }
+      freezeAvailable = status?.capabilities.launchFreeze === true
+      frozen = freezeAvailable && status?.active?.phase === "frozen"
+      remoteFrozen = false
     },
     isActive: () => active,
     isStream: () => stream,
     sourceControlUrl: () => sourceControlUrl,
+    isFrozen: () => frozen,
+    freezeAvailable: () => freezeAvailable,
+    activeLaunchId: () => activeLaunchId,
+    noteRemoteFrozen(nextFrozen) {
+      remoteFrozen = nextFrozen
+      if (stream) frozen = nextFrozen
+    },
   }
 }
 

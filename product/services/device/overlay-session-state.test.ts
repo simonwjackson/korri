@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test"
+import type { SessiondManagedLaunchStatus } from "@platform/library/sessiond-managed-launch-protocol"
 import {
   createOverlaySessionProbe,
   isGameSessionActive,
   streamSourceControlUrlFromStatus,
 } from "./overlay-session-state"
-import type { SessiondManagedLaunchStatus } from "@platform/library/sessiond-managed-launch-protocol"
 
 function status(
   overrides: Partial<SessiondManagedLaunchStatus>,
@@ -82,6 +82,91 @@ describe("createOverlaySessionProbe", () => {
     await probe.refresh()
     expect(probe.isActive()).toBe(true)
     expect(probe.isStream()).toBe(true)
+  })
+
+  it("reports frozen state and freeze availability for a local session", async () => {
+    const probe = createOverlaySessionProbe({
+      readStatus: async () =>
+        status({
+          mode: "game",
+          capabilities: {
+            managedLaunch: true,
+            lifecycleEvents: true,
+            perLaunchTermination: true,
+            launchFreeze: true,
+          },
+          active: { launchId: "l1", mode: "game", phase: "frozen" },
+        }),
+      isMoonlightRunning: async () => false,
+    })
+    await probe.refresh()
+    expect(probe.isFrozen()).toBe(true)
+    expect(probe.freezeAvailable()).toBe(true)
+    expect(probe.activeLaunchId()).toBe("l1")
+  })
+
+  it("reports freeze unavailable when the capability is absent on a local session", async () => {
+    const probe = createOverlaySessionProbe({
+      readStatus: async () => gameStatus,
+      isMoonlightRunning: async () => false,
+    })
+    await probe.refresh()
+    expect(probe.freezeAvailable()).toBe(false)
+    expect(probe.isFrozen()).toBe(false)
+  })
+
+  it("derives stream frozen state from the host reader, not the local phase", async () => {
+    const probe = createOverlaySessionProbe({
+      readStatus: async () =>
+        status({
+          mode: "game",
+          active: {
+            launchId: "l1",
+            mode: "game",
+            phase: "running",
+            launchMetadata: {
+              annotations: {
+                "@korri:stream": { controlUrl: "http://aka:3001" },
+              },
+            },
+          },
+        }),
+      isMoonlightRunning: async () => true,
+      readRemoteFrozen: async controlUrl =>
+        controlUrl === "http://aka:3001" ? true : null,
+    })
+    await probe.refresh()
+    expect(probe.isStream()).toBe(true)
+    expect(probe.isFrozen()).toBe(true)
+    // Streams always offer the option; the host answers unsupported if not.
+    expect(probe.freezeAvailable()).toBe(true)
+  })
+
+  it("applies noteRemoteFrozen immediately and falls back to it when the host read fails", async () => {
+    const probe = createOverlaySessionProbe({
+      readStatus: async () =>
+        status({
+          mode: "game",
+          active: {
+            launchId: "l1",
+            mode: "game",
+            launchMetadata: {
+              annotations: {
+                "@korri:stream": { controlUrl: "http://aka:3001" },
+              },
+            },
+          },
+        }),
+      isMoonlightRunning: async () => true,
+      readRemoteFrozen: async () => null,
+    })
+    await probe.refresh()
+    expect(probe.isFrozen()).toBe(false)
+    probe.noteRemoteFrozen(true)
+    expect(probe.isFrozen()).toBe(true)
+    await probe.refresh()
+    // Host read returned null (unknown): last known outcome wins.
+    expect(probe.isFrozen()).toBe(true)
   })
 
   it("caches the stream source control URL from active launch metadata", async () => {

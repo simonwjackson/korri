@@ -54,12 +54,20 @@ import {
   encodeNativeInputEvent,
   type NativeInputEvent,
 } from "@platform/input/native/wire-schema"
+import {
+  freezeSessiondManagedLaunch,
+  thawSessiondManagedLaunch,
+} from "@platform/library/sessiond-managed-launch-client"
 import { logger as defaultLogger } from "@platform/logger"
 import {
   createInputdActionDispatcher,
   type InputdActionDispatcher,
   type KorriInputdActionId,
 } from "./inputd-actions"
+import {
+  freezeRemoteGameOnHost,
+  thawRemoteGameOnHost,
+} from "./overlay-remote-freeze"
 import { stopRemoteGameOnHost } from "./overlay-remote-stop"
 import type { OverlaySessionProbe } from "./overlay-session-state"
 import { createLiveOverlaySessionProbe } from "./overlay-session-state-live"
@@ -215,6 +223,40 @@ export async function startKorriInputd(
   // When a renderer binary is provided (device), the hold gesture drives the
   // overlay: press/progress -> ring, fired -> force-quit, tap -> decision menu.
   // Otherwise inputd keeps the no-overlay behavior: only fired force-quits.
+  // Freeze/resume routes by session kind under one seamless menu option: local
+  // games go through the local sessiond client; streams go through the source
+  // host's session RPCs via the advertised controlUrl. Remote outcomes are
+  // noted on the probe so the toggle reflects them before the next host read.
+  const freezeActiveGame = async (): Promise<void> => {
+    if (sessionProbe.isStream()) {
+      const result = await freezeRemoteGameOnHost({
+        controlUrl: sessionProbe.sourceControlUrl(),
+        logger,
+      })
+      if (result._tag === "applied" || result._tag === "already") {
+        sessionProbe.noteRemoteFrozen(true)
+      }
+      return
+    }
+    const launchId = sessionProbe.activeLaunchId()
+    if (!launchId) return
+    await freezeSessiondManagedLaunch({ launchId }, { env: process.env })
+  }
+  const resumeActiveGame = async (): Promise<void> => {
+    if (sessionProbe.isStream()) {
+      const result = await thawRemoteGameOnHost({
+        controlUrl: sessionProbe.sourceControlUrl(),
+        logger,
+      })
+      if (result._tag === "applied" || result._tag === "already") {
+        sessionProbe.noteRemoteFrozen(false)
+      }
+      return
+    }
+    const launchId = sessionProbe.activeLaunchId()
+    if (!launchId) return
+    await thawSessiondManagedLaunch({ launchId }, { env: process.env })
+  }
   const overlayHoldHandler = createOverlayHoldHandlerFromEnv({
     env: process.env,
     forceQuit: () => dispatchAction(KILL_CHORD_ID),
@@ -223,6 +265,12 @@ export async function startKorriInputd(
         controlUrl: sessionProbe.sourceControlUrl(),
         logger,
       }),
+    freezeGame: freezeActiveGame,
+    resumeGame: resumeActiveGame,
+    freezeState: () => ({
+      available: sessionProbe.freezeAvailable(),
+      frozen: sessionProbe.isFrozen(),
+    }),
     isSessionActive: () => sessionProbe.isActive(),
     sessionKind: () => (sessionProbe.isStream() ? "stream" : "local"),
   })

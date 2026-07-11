@@ -67,24 +67,46 @@ function clamp(value: number, length: number): number {
 
 export type OverlaySessionKind = "local" | "stream"
 
+export interface OverlayFreezeState {
+  /** Freeze can be offered for the active session. */
+  readonly available: boolean
+  /** The active session's game is currently frozen. */
+  readonly frozen: boolean
+}
+
 /**
  * The choices for a session, with "keep playing" last as the safe default.
  * Local: Quit game / Keep playing. Stream: Close stream / Close game on host /
  * Keep playing (close-stream leaves the remote game running; close-game stops it
  * on the source and lets the stream collapse as a side effect).
+ *
+ * When freeze is available, a single seamless Freeze game / Resume game toggle
+ * sits before keep-playing. The label is deliberately identical for local and
+ * stream sessions -- where the game lives is a routing concern for the wiring
+ * layer, not something the menu disambiguates.
  */
 export function overlayMenuOptionsFor(
   kind: OverlaySessionKind,
+  freeze?: OverlayFreezeState,
 ): readonly OverlayMenuOption[] {
+  const freezeOptions: readonly OverlayMenuOption[] = freeze?.available
+    ? [
+        freeze.frozen
+          ? { id: "resume-game", label: "Resume game" }
+          : { id: "freeze-game", label: "Freeze game" },
+      ]
+    : []
   if (kind === "stream") {
     return [
       { id: "close-stream", label: "Close stream" },
       { id: "close-game", label: "Close game on host", danger: true },
+      ...freezeOptions,
       { id: "keep-playing", label: "Keep playing" },
     ]
   }
   return [
     { id: "quit-game", label: "Quit game", danger: true },
+    ...freezeOptions,
     { id: "keep-playing", label: "Keep playing" },
   ]
 }

@@ -108,6 +108,34 @@ function remoteFreezeResultFromResponse(value: unknown): RemoteFreezeResult {
   }
 }
 
+/**
+ * Read the stream host's frozen state via app.session.status. Returns null
+ * when the host is unreachable or answers with an unexpected shape, so probe
+ * callers can keep their last known outcome instead of flapping.
+ */
+export async function readRemoteFrozenState(options: {
+  readonly controlUrl: string
+  readonly fetchImpl?: typeof fetch
+  readonly timeoutMs?: number
+}): Promise<boolean | null> {
+  let value: unknown
+  try {
+    value = await callKorridRpc(
+      rpcUrlForControlUrl(options.controlUrl),
+      "app.session.status",
+      {},
+      options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+      options.timeoutMs ?? DEFAULT_REMOTE_FREEZE_TIMEOUT_MS,
+    )
+  } catch {
+    return null
+  }
+  if (!isRecord(value) || value._tag !== "SessionStatus") return null
+  const active = value.active
+  if (!isRecord(active)) return false
+  return active.phase === "frozen"
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }

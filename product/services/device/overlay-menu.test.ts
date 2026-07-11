@@ -75,4 +75,68 @@ describe("overlay menu model", () => {
     expect(safeDefaultIndex(overlayMenuOptionsFor("stream"))).toBe(2)
     expect(safeDefaultIndex(overlayMenuOptionsFor("local"))).toBe(1)
   })
+
+  it("offers a seamless freeze option before keep-playing on both kinds", () => {
+    const local = overlayMenuOptionsFor("local", {
+      available: true,
+      frozen: false,
+    })
+    expect(local.map(o => o.id)).toEqual([
+      "quit-game",
+      "freeze-game",
+      "keep-playing",
+    ])
+    const stream = overlayMenuOptionsFor("stream", {
+      available: true,
+      frozen: false,
+    })
+    expect(stream.map(o => o.id)).toEqual([
+      "close-stream",
+      "close-game",
+      "freeze-game",
+      "keep-playing",
+    ])
+    // The label is identical regardless of where the game lives.
+    expect(local.find(o => o.id === "freeze-game")?.label).toBe(
+      stream.find(o => o.id === "freeze-game")?.label,
+    )
+  })
+
+  it("toggles to resume-game when the session is frozen", () => {
+    const local = overlayMenuOptionsFor("local", {
+      available: true,
+      frozen: true,
+    })
+    expect(local.map(o => o.id)).toEqual([
+      "quit-game",
+      "resume-game",
+      "keep-playing",
+    ])
+    const stream = overlayMenuOptionsFor("stream", {
+      available: true,
+      frozen: true,
+    })
+    expect(stream.map(o => o.id)).toContain("resume-game")
+    expect(stream.map(o => o.id)).not.toContain("freeze-game")
+  })
+
+  it("omits the freeze option when freeze is unavailable", () => {
+    expect(
+      overlayMenuOptionsFor("local", { available: false, frozen: false }).map(
+        o => o.id,
+      ),
+    ).toEqual(["quit-game", "keep-playing"])
+    expect(overlayMenuOptionsFor("local").map(o => o.id)).toEqual([
+      "quit-game",
+      "keep-playing",
+    ])
+  })
+
+  it("keeps keep-playing as the safe default with the freeze option present", () => {
+    const options = overlayMenuOptionsFor("stream", {
+      available: true,
+      frozen: false,
+    })
+    expect(options[safeDefaultIndex(options)]?.id).toBe("keep-playing")
+  })
 })

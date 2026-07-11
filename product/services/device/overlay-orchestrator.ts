@@ -16,11 +16,12 @@ import type { ChordHoldUpdate } from "@platform/input/native/chord-hold-supervis
 import type { OverlayInterceptController } from "./overlay-intercept"
 import {
   createOverlayMenu,
-  overlayMenuOptionsFor,
-  safeDefaultIndex,
+  type OverlayFreezeState,
   type OverlayMenu,
   type OverlayMenuOption,
   type OverlaySessionKind,
+  overlayMenuOptionsFor,
+  safeDefaultIndex,
 } from "./overlay-menu"
 
 export interface OverlayRendererClient {
@@ -37,6 +38,10 @@ export interface OverlayActions {
   readonly forceQuit: () => void | Promise<void>
   /** Stream only: stop the game on the source; the stream collapses as a side effect. */
   readonly closeRemoteGame: () => void | Promise<void>
+  /** Freeze the active game, wherever it lives (wiring routes local vs host). */
+  readonly freezeGame?: () => void | Promise<void>
+  /** Resume (thaw) the active game, wherever it lives. */
+  readonly resumeGame?: () => void | Promise<void>
 }
 
 export interface OverlayOrchestrator {
@@ -57,6 +62,8 @@ export function createOverlayOrchestrator(deps: {
   readonly sessionKind: () => OverlaySessionKind
   /** A foreground game/stream session is active. The overlay is a no-op otherwise. */
   readonly isSessionActive: () => boolean
+  /** Freeze availability + current frozen state for the active session. */
+  readonly freezeState?: () => OverlayFreezeState
 }): OverlayOrchestrator {
   let menu: OverlayMenu | null = null
   let menuOptions: readonly OverlayMenuOption[] = []
@@ -99,7 +106,7 @@ export function createOverlayOrchestrator(deps: {
 
   function openMenu(): void {
     const kind = deps.sessionKind()
-    menuOptions = overlayMenuOptionsFor(kind)
+    menuOptions = overlayMenuOptionsFor(kind, deps.freezeState?.())
     menu = createOverlayMenu(menuOptions, safeDefaultIndex(menuOptions))
     const opened = menu
     // Draw the menu only AFTER the intercept is confirmed hot (InterceptMode 2).
@@ -129,6 +136,12 @@ export function createOverlayOrchestrator(deps: {
         return
       case "close-game":
         void deps.actions.closeRemoteGame()
+        return
+      case "freeze-game":
+        void deps.actions.freezeGame?.()
+        return
+      case "resume-game":
+        void deps.actions.resumeGame?.()
         return
       case "keep-playing":
       default:
@@ -181,7 +194,8 @@ export function createOverlayOrchestrator(deps: {
           // Full hold is explicit kill intent. For streams, stop the host game
           // first (captures the source URL synchronously) and also close the
           // local Moonlight view so the user exits immediately.
-          if (deps.sessionKind() === "stream") void deps.actions.closeRemoteGame()
+          if (deps.sessionKind() === "stream")
+            void deps.actions.closeRemoteGame()
           void deps.actions.forceQuit()
           ungate()
           return

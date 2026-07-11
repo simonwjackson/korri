@@ -10,10 +10,13 @@ import {
   type SessiondManagedLaunchClientOptions,
 } from "@platform/library/sessiond-managed-launch-client"
 import type { SessiondManagedLaunchStatus } from "@platform/library/sessiond-managed-launch-protocol"
+import { readRemoteFrozenState } from "./overlay-remote-freeze"
 import {
   createOverlaySessionProbe,
   type OverlaySessionProbe,
 } from "./overlay-session-state"
+
+const REMOTE_FROZEN_READ_INTERVAL_MS = 5_000
 
 export function createLiveOverlaySessionProbe(deps: {
   readonly sessiond?: SessiondManagedLaunchClientOptions
@@ -21,12 +24,21 @@ export function createLiveOverlaySessionProbe(deps: {
 }): OverlaySessionProbe {
   const sessiond = deps.sessiond ?? { env: process.env }
   const procRoot = deps.procRoot ?? "/proc"
+  // The probe refreshes on inputd's poll interval; bound the remote status
+  // read so a stream session does not hammer the host once a second.
+  let lastRemoteReadAt = 0
   return createOverlaySessionProbe({
     readStatus: async (): Promise<SessiondManagedLaunchStatus | null> => {
       const result = await probeSessiondManagedLaunchStatus(sessiond)
       return result.kind === "ok" ? result.status : null
     },
     isMoonlightRunning: () => moonlightProcessPresent(procRoot),
+    readRemoteFrozen: async controlUrl => {
+      const now = Date.now()
+      if (now - lastRemoteReadAt < REMOTE_FROZEN_READ_INTERVAL_MS) return null
+      lastRemoteReadAt = now
+      return await readRemoteFrozenState({ controlUrl })
+    },
   })
 }
 

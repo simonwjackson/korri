@@ -16,7 +16,7 @@ import {
   createBunInterceptSubprocess,
   createBunRendererSpawner,
 } from "./overlay-live-processes"
-import type { OverlaySessionKind } from "./overlay-menu"
+import type { OverlayFreezeState, OverlaySessionKind } from "./overlay-menu"
 import { createOverlayOrchestrator } from "./overlay-orchestrator"
 import { createOverlayRendererProcessClient } from "./overlay-renderer-client"
 
@@ -24,6 +24,9 @@ export function createOverlayHoldHandlerFromEnv(deps: {
   readonly env: Record<string, string | undefined>
   readonly forceQuit: () => void | Promise<void>
   readonly closeRemoteGame?: () => void | Promise<void>
+  readonly freezeGame?: () => void | Promise<void>
+  readonly resumeGame?: () => void | Promise<void>
+  readonly freezeState?: () => OverlayFreezeState
   readonly sessionKind?: () => OverlaySessionKind
   readonly isSessionActive?: () => boolean
 }): ((update: ChordHoldUpdate) => void) | null {
@@ -52,9 +55,12 @@ export function createOverlayHoldHandlerFromEnv(deps: {
     actions: {
       forceQuit: deps.forceQuit,
       closeRemoteGame: deps.closeRemoteGame ?? (() => {}),
+      ...(deps.freezeGame ? { freezeGame: deps.freezeGame } : {}),
+      ...(deps.resumeGame ? { resumeGame: deps.resumeGame } : {}),
     },
     sessionKind: deps.sessionKind ?? (() => "local"),
     isSessionActive: deps.isSessionActive ?? (() => true),
+    ...(deps.freezeState ? { freezeState: deps.freezeState } : {}),
   })
   const activeOrchestrator = orchestrator
   return update => activeOrchestrator.onHoldUpdate(update)

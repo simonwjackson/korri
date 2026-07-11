@@ -57,11 +57,19 @@ function hold(phase: ChordHoldUpdate["phase"], progress = 0): ChordHoldUpdate {
 
 function setup(
   kind: "local" | "stream" = "local",
-  opts: { readonly sessionActive?: () => boolean } = {},
+  opts: {
+    readonly sessionActive?: () => boolean
+    readonly freezeState?: () => { available: boolean; frozen: boolean }
+  } = {},
 ) {
   const renderer = createFakeRenderer()
   const intercept = createFakeIntercept()
-  const actions = { forceQuit: 0, closeRemoteGame: 0 }
+  const actions = {
+    forceQuit: 0,
+    closeRemoteGame: 0,
+    freezeGame: 0,
+    resumeGame: 0,
+  }
   const orchestrator = createOverlayOrchestrator({
     renderer: renderer.client,
     intercept: intercept.controller,
@@ -72,9 +80,16 @@ function setup(
       closeRemoteGame: () => {
         actions.closeRemoteGame++
       },
+      freezeGame: () => {
+        actions.freezeGame++
+      },
+      resumeGame: () => {
+        actions.resumeGame++
+      },
     },
     sessionKind: () => kind,
     isSessionActive: opts.sessionActive ?? (() => true),
+    ...(opts.freezeState ? { freezeState: opts.freezeState } : {}),
   })
   return { renderer, intercept, actions, orchestrator }
 }
@@ -218,6 +233,54 @@ describe("overlay orchestrator", () => {
     intercept.nav("accept")
     expect(actions.closeRemoteGame).toBe(1)
     expect(actions.forceQuit).toBe(0)
+  })
+
+  it("offers freeze-game when freeze is available and routes it to the action", () => {
+    const { intercept, actions, orchestrator } = setup("local", {
+      freezeState: () => ({ available: true, frozen: false }),
+    })
+    orchestrator.onHoldUpdate(hold("tap"))
+    // local options: [quit-game, freeze-game, keep-playing], default keep-playing (2)
+    intercept.nav("left") // 2 -> 1 (freeze-game)
+    intercept.nav("accept")
+    expect(actions.freezeGame).toBe(1)
+    expect(actions.forceQuit).toBe(0)
+    expect(orchestrator.isMenuOpen()).toBe(false)
+  })
+
+  it("offers resume-game when frozen and routes it to the resume action", () => {
+    const { intercept, actions, orchestrator } = setup("stream", {
+      freezeState: () => ({ available: true, frozen: true }),
+    })
+    orchestrator.onHoldUpdate(hold("tap"))
+    // stream options: [close-stream, close-game, resume-game, keep-playing]
+    intercept.nav("left") // keep-playing -> resume-game
+    intercept.nav("accept")
+    expect(actions.resumeGame).toBe(1)
+    expect(actions.freezeGame).toBe(0)
+  })
+
+  it("omits the freeze option when freeze is unavailable", () => {
+    const { intercept, actions, orchestrator } = setup("local", {
+      freezeState: () => ({ available: false, frozen: false }),
+    })
+    orchestrator.onHoldUpdate(hold("tap"))
+    // Without freeze the local menu is [quit-game, keep-playing]; one step
+    // left of the safe default must land on quit-game, not freeze-game.
+    intercept.nav("left")
+    intercept.nav("accept")
+    expect(actions.forceQuit).toBe(1)
+    expect(actions.freezeGame).toBe(0)
+  })
+
+  it("chord hold (fired) still force-quits and never freezes", () => {
+    const { actions, orchestrator } = setup("local", {
+      freezeState: () => ({ available: true, frozen: false }),
+    })
+    orchestrator.onHoldUpdate(hold("fired", 1))
+    expect(actions.forceQuit).toBe(1)
+    expect(actions.freezeGame).toBe(0)
+    expect(actions.resumeGame).toBe(0)
   })
 
   describe("session scoping", () => {
