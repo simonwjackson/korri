@@ -21,8 +21,21 @@ async function tempRoot() {
   return path
 }
 
+interface HarnessSessiondState {
+  readonly active?: {
+    readonly launchId: string
+    readonly phase?: string
+    readonly streamControlUrl?: string
+  }
+  readonly launchFreeze?: boolean
+}
+
 async function makeHarness(
-  options: { readonly createRequestDir?: boolean } = {},
+  options: {
+    readonly createRequestDir?: boolean
+    readonly sessiondState?: HarnessSessiondState
+    readonly freezeRemoteGame?: (controlUrl: string) => Promise<void>
+  } = {},
 ) {
   const root = await tempRoot()
   const runtimeDir = join(root, "runtime")
@@ -33,6 +46,64 @@ async function makeHarness(
   if (options.createRequestDir !== false) await mkdir(requestDir)
 
   const commands: FakeSuspendCommand[] = []
+  const sessiondRequests: Array<{
+    readonly path: string
+    readonly body?: string
+  }> = []
+  const state = options.sessiondState
+  const sessiond = state
+    ? {
+        url: "http://sessiond",
+        fetchImpl: (async (input: string, init?: RequestInit) => {
+          const path = new URL(String(input)).pathname
+          sessiondRequests.push({
+            path,
+            body: init?.body ? String(init.body) : undefined,
+          })
+          if (path === "/managed-launch/status") {
+            return Response.json({
+              schemaVersion: 1,
+              mode: state.active ? "game" : "home",
+              capabilities: {
+                managedLaunch: true,
+                lifecycleEvents: true,
+                perLaunchTermination: true,
+                ...(state.launchFreeze !== undefined
+                  ? { launchFreeze: state.launchFreeze }
+                  : {}),
+              },
+              ...(state.active
+                ? {
+                    active: {
+                      launchId: state.active.launchId,
+                      mode: "game",
+                      ...(state.active.phase
+                        ? { phase: state.active.phase }
+                        : {}),
+                      ...(state.active.streamControlUrl !== undefined
+                        ? {
+                            launchMetadata: {
+                              annotations: {
+                                "@korri:stream": {
+                                  controlUrl: state.active.streamControlUrl,
+                                },
+                              },
+                            },
+                          }
+                        : {}),
+                    },
+                  }
+                : {}),
+              restoreAttempts: 0,
+            })
+          }
+          return Response.json({
+            status: "accepted",
+            launchId: state.active?.launchId ?? "unknown",
+          })
+        }) as typeof fetch,
+      }
+    : { env: {} as NodeJS.ProcessEnv }
   const controller = createFakeSuspendController({
     runtimeDir,
     requestDir,
@@ -42,10 +113,21 @@ async function makeHarness(
     commandRunner: async command => {
       commands.push(command)
     },
-    sessiond: { env: {} as NodeJS.ProcessEnv },
+    sessiond,
+    ...(options.freezeRemoteGame
+      ? { freezeRemoteGame: options.freezeRemoteGame }
+      : {}),
   })
 
-  return { root, runtimeDir, requestDir, resultDir, commands, controller }
+  return {
+    root,
+    runtimeDir,
+    requestDir,
+    resultDir,
+    commands,
+    controller,
+    sessiondRequests,
+  }
 }
 
 describe("fake suspend controller", () => {
@@ -133,5 +215,140 @@ describe("fake suspend controller", () => {
     const result = await controller.run("toggle")
 
     expect(result).toEqual({ status: "noop", reason: "lid-closed" })
+  })
+
+  it("freezes an active local game on suspend instead of terminating it", async () => {
+    const { controller, sessiondRequests } = await makeHarness({
+      sessiondState: {
+        active: { launchId: "local-1" },
+        launchFreeze: true,
+      },
+    })
+
+    await controller.run("suspend")
+
+    const paths = sessiondRequests.map(request => request.path)
+    expect(paths).toContain("/managed-launch/freeze")
+    expect(paths).not.toContain("/managed-launch/terminate")
+    const freeze = sessiondRequests.find(
+      request => request.path === "/managed-launch/freeze",
+    )
+    expect(JSON.parse(freeze?.body ?? "{}")).toEqual({ launchId: "local-1" })
+  })
+
+  it("skips the local freeze when sessiond lacks the launchFreeze capability", async () => {
+    const { controller, sessiondRequests } = await makeHarness({
+      sessiondState: { active: { launchId: "local-1" } },
+    })
+
+    await controller.run("suspend")
+
+    const paths = sessiondRequests.map(request => request.path)
+    expect(paths).not.toContain("/managed-launch/freeze")
+    expect(paths).not.toContain("/managed-launch/terminate")
+  })
+
+  it("remote-freezes the host game then terminates the local stream launch on suspend", async () => {
+    const remoteCalls: string[] = []
+    const { controller, sessiondRequests } = await makeHarness({
+      sessiondState: {
+        active: {
+          launchId: "stream-1",
+          streamControlUrl: "http://aka:3001",
+        },
+        launchFreeze: true,
+      },
+      freezeRemoteGame: async controlUrl => {
+        remoteCalls.push(controlUrl)
+      },
+    })
+
+    await controller.run("suspend")
+
+    expect(remoteCalls).toEqual(["http://aka:3001"])
+    const terminate = sessiondRequests.find(
+      request => request.path === "/managed-launch/terminate",
+    )
+    expect(JSON.parse(terminate?.body ?? "{}")).toEqual({
+      launchId: "stream-1",
+    })
+    expect(sessiondRequests.map(request => request.path)).not.toContain(
+      "/managed-launch/freeze",
+    )
+  })
+
+  it("still terminates the local stream launch when the remote freeze fails", async () => {
+    const { controller, sessiondRequests } = await makeHarness({
+      sessiondState: {
+        active: {
+          launchId: "stream-1",
+          streamControlUrl: "http://aka:3001",
+        },
+      },
+      freezeRemoteGame: async () => {
+        throw new Error("host unreachable")
+      },
+    })
+
+    await controller.run("suspend")
+
+    expect(sessiondRequests.map(request => request.path)).toContain(
+      "/managed-launch/terminate",
+    )
+  })
+
+  it("terminates without a remote freeze when the stream has no controlUrl", async () => {
+    const remoteCalls: string[] = []
+    // streamControlUrl absent but the launch is still stream-annotated.
+    const { controller, sessiondRequests } = await makeHarness({
+      sessiondState: {
+        active: { launchId: "stream-1", streamControlUrl: "" },
+      },
+      freezeRemoteGame: async controlUrl => {
+        remoteCalls.push(controlUrl)
+      },
+    })
+
+    await controller.run("suspend")
+
+    expect(remoteCalls).toEqual([])
+    expect(sessiondRequests.map(request => request.path)).toContain(
+      "/managed-launch/terminate",
+    )
+  })
+
+  it("thaws a frozen local game on resume", async () => {
+    const { controller, sessiondRequests } = await makeHarness({
+      sessiondState: {
+        active: { launchId: "local-1", phase: "frozen" },
+        launchFreeze: true,
+      },
+    })
+
+    await controller.run("suspend")
+    sessiondRequests.length = 0
+    await controller.run("resume")
+
+    const thaw = sessiondRequests.find(
+      request => request.path === "/managed-launch/thaw",
+    )
+    expect(JSON.parse(thaw?.body ?? "{}")).toEqual({ launchId: "local-1" })
+  })
+
+  it("does not thaw on resume when nothing is frozen", async () => {
+    const { controller, sessiondRequests } = await makeHarness({
+      sessiondState: {
+        active: { launchId: "local-1", phase: "running" },
+        launchFreeze: true,
+      },
+    })
+
+    await controller.run("suspend")
+    sessiondRequests.length = 0
+    await controller.run("resume")
+
+    expect(sessiondRequests.map(request => request.path)).not.toContain(
+      "/managed-launch/thaw",
+    )
   })
 })

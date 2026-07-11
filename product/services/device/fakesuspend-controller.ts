@@ -10,10 +10,14 @@ import {
 } from "node:fs/promises"
 import { join } from "node:path"
 import {
+  freezeSessiondManagedLaunch,
   probeSessiondManagedLaunchStatus,
   type SessiondManagedLaunchClientOptions,
   terminateSessiondManagedLaunch,
+  thawSessiondManagedLaunch,
 } from "@platform/library/sessiond-managed-launch-client"
+import { logger as defaultLogger } from "@platform/logger"
+import { freezeRemoteGameOnHost } from "./overlay-remote-freeze"
 
 export type FakeSuspendAction = "toggle" | "suspend" | "resume"
 
@@ -43,6 +47,12 @@ export interface FakeSuspendControllerOptions {
   readonly commandRunner?: FakeSuspendCommandRunner
   readonly sessiond?: SessiondManagedLaunchClientOptions
   readonly env?: NodeJS.ProcessEnv
+  /**
+   * Best-effort freeze of the host game for an active stream session before
+   * the local Moonlight launch is terminated. Injectable for tests; defaults
+   * to the app.session.freeze remote call via the stream's controlUrl.
+   */
+  readonly freezeRemoteGame?: (controlUrl: string) => Promise<void>
 }
 
 export interface FakeSuspendController {
@@ -76,6 +86,11 @@ export function createFakeSuspendController(
   const now = options.now ?? Date.now
   const commandRunner = options.commandRunner ?? runCommand
   const sessiond = options.sessiond ?? { env }
+  const freezeRemoteGame =
+    options.freezeRemoteGame ??
+    (async (controlUrl: string) => {
+      await freezeRemoteGameOnHost({ controlUrl, logger: defaultLogger })
+    })
 
   async function run(action: FakeSuspendAction): Promise<FakeSuspendResult> {
     switch (action) {
@@ -122,20 +137,49 @@ export function createFakeSuspendController(
     const result = await requestResult("exit")
     await setSwayPower("on")
     await rm(activeMarker, { force: true })
+    await coordinateResume()
     return result
   }
 
+  // Lid close: freeze by default. Local games freeze in place (state kept for
+  // the wake thaw). Streams freeze the HOST game best-effort via controlUrl,
+  // then terminate the local Moonlight client as before -- the client process
+  // cannot survive suspend; the host game is what freeze preserves. Any remote
+  // failure degrades to exactly the old terminate-only behavior.
   async function coordinateActiveSession(): Promise<void> {
     const status = await probeSessiondManagedLaunchStatus(sessiond)
     if (status.kind !== "ok") return
     const active = status.status.active
     if (!active) return
     if (isStreamActive(active.launchMetadata)) {
+      const controlUrl = streamControlUrl(active.launchMetadata)
+      if (controlUrl) {
+        try {
+          await freezeRemoteGame(controlUrl)
+        } catch {
+          // Best-effort: the network may already be gone at lid close; the
+          // host-side stream watcher is the fallback freeze path.
+        }
+      }
       await terminateSessiondManagedLaunch(
         { launchId: active.launchId },
         sessiond,
       )
+      return
     }
+    if (status.status.capabilities.launchFreeze === true) {
+      await freezeSessiondManagedLaunch({ launchId: active.launchId }, sessiond)
+    }
+  }
+
+  // Lid open: thaw a locally frozen game so play resumes with the display.
+  async function coordinateResume(): Promise<void> {
+    const status = await probeSessiondManagedLaunchStatus(sessiond)
+    if (status.kind !== "ok") return
+    const active = status.status.active
+    if (!active || active.phase !== "frozen") return
+    if (isStreamActive(active.launchMetadata)) return
+    await thawSessiondManagedLaunch({ launchId: active.launchId }, sessiond)
   }
 
   async function setSwayPower(power: "off" | "on"): Promise<void> {
@@ -209,6 +253,18 @@ function isStreamActive(metadata: unknown): boolean {
   const annotations = (metadata as { annotations?: unknown }).annotations
   if (!annotations || typeof annotations !== "object") return false
   return Object.keys(annotations).some(key => key === "@korri:stream")
+}
+
+function streamControlUrl(metadata: unknown): string | undefined {
+  if (!metadata || typeof metadata !== "object") return undefined
+  const annotations = (metadata as { annotations?: unknown }).annotations
+  if (!annotations || typeof annotations !== "object") return undefined
+  const annotation = (annotations as Record<string, unknown>)["@korri:stream"]
+  if (!annotation || typeof annotation !== "object") return undefined
+  const controlUrl = (annotation as { controlUrl?: unknown }).controlUrl
+  if (typeof controlUrl !== "string") return undefined
+  const trimmed = controlUrl.trim()
+  return trimmed.length > 0 ? trimmed : undefined
 }
 
 async function firstSwaySocket(
