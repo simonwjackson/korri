@@ -59,7 +59,9 @@ export async function stopRemoteGameOnHost(
   )
 }
 
-async function callKorridRpc(
+// Shared with overlay-remote-freeze.ts: one transport for posting Effect RPC
+// frames to a stream source's controlUrl.
+export async function callKorridRpc(
   rpcUrl: string,
   tag: string,
   payload: unknown,
