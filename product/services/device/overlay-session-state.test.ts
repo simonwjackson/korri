@@ -132,14 +132,38 @@ describe("createOverlaySessionProbe", () => {
           },
         }),
       isMoonlightRunning: async () => true,
-      readRemoteFrozen: async controlUrl =>
-        controlUrl === "http://aka:3001" ? true : null,
+      readRemoteFreeze: async controlUrl =>
+        controlUrl === "http://aka:3001"
+          ? { freezeCapable: true, frozen: true }
+          : null,
     })
     await probe.refresh()
     expect(probe.isStream()).toBe(true)
     expect(probe.isFrozen()).toBe(true)
-    // Streams always offer the option; the host answers unsupported if not.
     expect(probe.freezeAvailable()).toBe(true)
+  })
+
+  it("hides the stream freeze option when the host does not advertise the capability", async () => {
+    const probe = createOverlaySessionProbe({
+      readStatus: async () =>
+        status({
+          mode: "game",
+          active: {
+            launchId: "l1",
+            mode: "game",
+            launchMetadata: {
+              annotations: {
+                "@korri:stream": { controlUrl: "http://aka:3001" },
+              },
+            },
+          },
+        }),
+      isMoonlightRunning: async () => true,
+      readRemoteFreeze: async () => ({ freezeCapable: false, frozen: null }),
+    })
+    await probe.refresh()
+    expect(probe.isStream()).toBe(true)
+    expect(probe.freezeAvailable()).toBe(false)
   })
 
   it("does not offer freeze for a stream without a source control URL", async () => {
@@ -174,10 +198,12 @@ describe("createOverlaySessionProbe", () => {
           },
         }),
       isMoonlightRunning: async () => true,
-      readRemoteFrozen: async () => null,
+      readRemoteFreeze: async () => null,
     })
     await probe.refresh()
     expect(probe.isFrozen()).toBe(false)
+    // Unknown capability stays optimistic until the host answers.
+    expect(probe.freezeAvailable()).toBe(true)
     probe.noteRemoteFrozen(true)
     expect(probe.isFrozen()).toBe(true)
     await probe.refresh()

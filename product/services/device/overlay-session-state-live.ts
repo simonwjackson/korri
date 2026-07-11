@@ -10,7 +10,7 @@ import {
   type SessiondManagedLaunchClientOptions,
 } from "@platform/library/sessiond-managed-launch-client"
 import type { SessiondManagedLaunchStatus } from "@platform/library/sessiond-managed-launch-protocol"
-import { readRemoteFrozenState } from "./overlay-remote-freeze"
+import { readRemoteFreezeState } from "./overlay-remote-freeze"
 import {
   createOverlaySessionProbe,
   type OverlaySessionProbe,
@@ -33,11 +33,11 @@ export function createLiveOverlaySessionProbe(deps: {
       return result.kind === "ok" ? result.status : null
     },
     isMoonlightRunning: () => moonlightProcessPresent(procRoot),
-    readRemoteFrozen: async controlUrl => {
+    readRemoteFreeze: async controlUrl => {
       const now = Date.now()
       if (now - lastRemoteReadAt < REMOTE_FROZEN_READ_INTERVAL_MS) return null
       lastRemoteReadAt = now
-      return await readRemoteFrozenState({ controlUrl })
+      return await readRemoteFreezeState({ controlUrl })
     },
   })
 }

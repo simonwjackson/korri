@@ -53,7 +53,7 @@ describe("app.server.status handler", () => {
       serverId: "aka",
       displayName: "Korri Stream on aka",
       protocolVersion: "1",
-      capabilities: ["source", "stream"],
+      capabilities: ["source", "stream", "session.freeze"],
       status: "available",
       streamControl: "enabled",
       catalog: "available",

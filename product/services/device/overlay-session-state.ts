@@ -62,12 +62,15 @@ export interface OverlaySessionProbeDeps {
   /** Whether a Moonlight stream client process is currently running. */
   readonly isMoonlightRunning: () => Promise<boolean>
   /**
-   * Read the stream host's frozen state via its controlUrl. Returns null when
-   * unknown (unreachable, older host); the probe then keeps the last known
-   * outcome. Optional: without it, stream frozen state relies solely on
-   * noteRemoteFrozen.
+   * Read the stream host's freeze capability and frozen state via its
+   * controlUrl. Returns null when unknown (unreachable); the probe then keeps
+   * the last known outcome. Optional: without it, stream frozen state relies
+   * solely on noteRemoteFrozen and availability on controlUrl presence.
    */
-  readonly readRemoteFrozen?: (controlUrl: string) => Promise<boolean | null>
+  readonly readRemoteFreeze?: (controlUrl: string) => Promise<{
+    readonly freezeCapable: boolean
+    readonly frozen: boolean | null
+  } | null>
 }
 
 export function createOverlaySessionProbe(
@@ -79,9 +82,10 @@ export function createOverlaySessionProbe(
   let frozen = false
   let freezeAvailable = false
   let activeLaunchId: string | undefined
-  // Streams: last known host frozen state, kept across refreshes when the
-  // host read is unavailable or answers unknown (null).
+  // Streams: last known host frozen state and freeze capability, kept across
+  // refreshes when the host read is unavailable or answers unknown (null).
   let remoteFrozen = false
+  let remoteFreezeCapable: boolean | undefined
   return {
     async refresh() {
       let status: SessiondManagedLaunchStatus | null = null
@@ -113,29 +117,37 @@ export function createOverlaySessionProbe(
         frozen = false
         freezeAvailable = false
         remoteFrozen = false
+        remoteFreezeCapable = undefined
         return
       }
       if (nextStream) {
         // The local phase describes the Moonlight client, not the host game.
-        // Read host state when a reader is wired; keep the last known outcome
-        // when the host answers unknown. The option requires a reachable
-        // control URL -- without one the remote route can only be skipped, so
-        // offering the toggle would be a dead control.
-        freezeAvailable = sourceControlUrl !== undefined
-        if (deps.readRemoteFrozen && sourceControlUrl) {
+        // Read the host's capability + frozen state when a reader is wired;
+        // keep the last known outcome when the host answers unknown. The
+        // option requires a reachable control URL, and a host that does not
+        // advertise "session.freeze" (older build) hides the toggle. Until
+        // the first successful read, capability is optimistic -- the action
+        // path degrades gracefully on unsupported hosts.
+        if (deps.readRemoteFreeze && sourceControlUrl) {
           try {
-            const remote = await deps.readRemoteFrozen(sourceControlUrl)
-            if (remote !== null) remoteFrozen = remote
+            const remote = await deps.readRemoteFreeze(sourceControlUrl)
+            if (remote !== null) {
+              remoteFreezeCapable = remote.freezeCapable
+              if (remote.frozen !== null) remoteFrozen = remote.frozen
+            }
           } catch {
             // Keep last known outcome.
           }
         }
+        freezeAvailable =
+          sourceControlUrl !== undefined && (remoteFreezeCapable ?? true)
         frozen = remoteFrozen
         return
       }
       freezeAvailable = status?.capabilities.launchFreeze === true
       frozen = freezeAvailable && status?.active?.phase === "frozen"
       remoteFrozen = false
+      remoteFreezeCapable = undefined
     },
     isActive: () => active,
     isStream: () => stream,

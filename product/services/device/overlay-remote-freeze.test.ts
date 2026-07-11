@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import {
   freezeRemoteGameOnHost,
+  readRemoteFreezeState,
   thawRemoteGameOnHost,
 } from "./overlay-remote-freeze"
 
@@ -127,6 +128,54 @@ describe("freezeRemoteGameOnHost", () => {
         })) as unknown as typeof fetch,
     })
     expect(hostUnavailable).toMatchObject({ _tag: "failed" })
+  })
+})
+
+describe("readRemoteFreezeState", () => {
+  it("reads capability and frozen phase from app.server.status", async () => {
+    const calls: Array<{ init?: RequestInit }> = []
+    const result = await readRemoteFreezeState({
+      controlUrl: "http://aka:3001",
+      fetchImpl: (async (_input: unknown, init?: RequestInit) => {
+        calls.push({ init })
+        return exitFrame({
+          serverId: "aka",
+          capabilities: ["source", "stream", "session.freeze"],
+          sessiond: {
+            mode: "game",
+            active: { launchId: "l1", mode: "game", phase: "frozen" },
+            restoreAttempts: 0,
+          },
+        })
+      }) as unknown as typeof fetch,
+    })
+    expect(result).toEqual({ freezeCapable: true, frozen: true })
+    expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
+      tag: "app.server.status",
+    })
+  })
+
+  it("reports an older host as not freeze-capable", async () => {
+    const result = await readRemoteFreezeState({
+      controlUrl: "http://aka:3001",
+      fetchImpl: (async () =>
+        exitFrame({
+          serverId: "aka",
+          capabilities: ["source", "stream"],
+          sessiond: { mode: "idle", restoreAttempts: 0 },
+        })) as unknown as typeof fetch,
+    })
+    expect(result).toEqual({ freezeCapable: false, frozen: false })
+  })
+
+  it("returns null when the host is unreachable", async () => {
+    const result = await readRemoteFreezeState({
+      controlUrl: "http://aka:3001",
+      fetchImpl: (async () => {
+        throw new Error("down")
+      }) as unknown as typeof fetch,
+    })
+    expect(result).toBeNull()
   })
 })
 

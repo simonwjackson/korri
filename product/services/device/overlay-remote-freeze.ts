@@ -108,21 +108,30 @@ function remoteFreezeResultFromResponse(value: unknown): RemoteFreezeResult {
   }
 }
 
+export interface RemoteFreezeState {
+  /** The host advertises the app.session.freeze/thaw RPCs. */
+  readonly freezeCapable: boolean
+  /** The host's active launch is frozen; null when the host did not say. */
+  readonly frozen: boolean | null
+}
+
 /**
- * Read the stream host's frozen state via app.session.status. Returns null
- * when the host is unreachable or answers with an unexpected shape, so probe
- * callers can keep their last known outcome instead of flapping.
+ * Read the stream host's freeze capability and frozen state in one
+ * app.server.status round-trip. Returns null when the host is unreachable or
+ * answers with an unexpected shape, so probe callers keep their last known
+ * outcome instead of flapping. Hosts predating the freeze RPCs answer with a
+ * capabilities list that lacks "session.freeze".
  */
-export async function readRemoteFrozenState(options: {
+export async function readRemoteFreezeState(options: {
   readonly controlUrl: string
   readonly fetchImpl?: typeof fetch
   readonly timeoutMs?: number
-}): Promise<boolean | null> {
+}): Promise<RemoteFreezeState | null> {
   let value: unknown
   try {
     value = await callKorridRpc(
       rpcUrlForControlUrl(options.controlUrl),
-      "app.session.status",
+      "app.server.status",
       {},
       options.fetchImpl ?? globalThis.fetch.bind(globalThis),
       options.timeoutMs ?? DEFAULT_REMOTE_FREEZE_TIMEOUT_MS,
@@ -130,10 +139,16 @@ export async function readRemoteFrozenState(options: {
   } catch {
     return null
   }
-  if (!isRecord(value) || value._tag !== "SessionStatus") return null
-  const active = value.active
-  if (!isRecord(active)) return false
-  return active.phase === "frozen"
+  if (!isRecord(value)) return null
+  const capabilities = Array.isArray(value.capabilities)
+    ? value.capabilities
+    : []
+  const freezeCapable = capabilities.includes("session.freeze")
+  const sessiond = value.sessiond
+  if (!isRecord(sessiond)) return { freezeCapable, frozen: null }
+  const active = sessiond.active
+  if (!isRecord(active)) return { freezeCapable, frozen: false }
+  return { freezeCapable, frozen: active.phase === "frozen" }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

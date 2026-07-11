@@ -81,7 +81,10 @@ const buildServerStatusEffect = (overrides: ServerStatusOverrides) =>
       serverId,
       displayName,
       protocolVersion: "1",
-      capabilities: ["source", "stream"],
+      // "session.freeze" advertises the app.session.freeze/thaw RPCs so
+      // newer clients can preflight older hosts instead of interpreting an
+      // unknown-tag failure. Builds without the RPCs omit the string.
+      capabilities: ["source", "stream", "session.freeze"],
       status: enabled ? "available" : "stream-unavailable",
       streamControl: enabled ? "enabled" : "disabled",
       catalog: enabled ? "available" : "unavailable",
