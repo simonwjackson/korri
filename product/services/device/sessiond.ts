@@ -103,6 +103,8 @@ import {
   discoverSwaySocketEnv,
   discoverSwaySocketPath,
 } from "./sessiond-sway-socket"
+import type { SunshineStreamWatcher } from "./sunshine-stream-watcher"
+import { startSunshineStreamWatcherFromEnv } from "./sunshine-stream-watcher-live"
 
 export interface KorriSessiondLogger {
   debug: (input: unknown, message?: string) => void
@@ -1829,6 +1831,18 @@ async function main() {
         })
       : undefined
 
+  // Source machines watch Sunshine for client disconnect/reconnect signals
+  // and freeze/thaw the active launch by default. The watcher drives its
+  // freeze/thaw through this daemon's own managed-launch endpoints so there
+  // is exactly one lifecycle authority.
+  const sunshineWatcher: SunshineStreamWatcher | null =
+    roleId === "source-machine"
+      ? startSunshineStreamWatcherFromEnv({
+          env: process.env,
+          logger: defaultLogger,
+        })
+      : null
+
   const handle = await startKorriSessiond({
     ...(socketPath ? { socketPath } : { port }),
     ...(role ? { role } : {}),
@@ -1840,6 +1854,7 @@ async function main() {
   const shutdown = async (signal: string) => {
     defaultLogger.info({ signal }, "sessiond shutting down")
     swayLaneSupervisor?.stop()
+    sunshineWatcher?.stop()
     await handle.stop()
     process.exit(0)
   }
