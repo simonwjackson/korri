@@ -4,8 +4,10 @@ import {
   type KorriControlService,
 } from "@platform/control/korri-control"
 import { Effect, Layer } from "effect"
+import { handleFreezeSession } from "./freeze.rpc-handler"
 import { handleSessionStatus } from "./status.rpc-handler"
 import { handleStopSession } from "./stop.rpc-handler"
+import { handleThawSession } from "./thaw.rpc-handler"
 
 describe("app.session RPC handlers", () => {
   it("returns focused session lifecycle status from KorriControl", async () => {
@@ -89,6 +91,49 @@ describe("app.session RPC handlers", () => {
     })
   })
 
+  it("passes freeze requests through to KorriControl and returns the outcome", async () => {
+    const calls: Array<unknown> = []
+    const result = await Effect.runPromise(
+      handleFreezeSession({ launchId: "launch-1" }).pipe(
+        Effect.provide(
+          controlLayer({
+            freezeSession: request => {
+              calls.push(request)
+              return Effect.succeed({
+                _tag: "Frozen",
+                launchId: "launch-1",
+              })
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(calls).toEqual([{ launchId: "launch-1" }])
+    expect(result).toEqual({ _tag: "Frozen", launchId: "launch-1" })
+  })
+
+  it("passes thaw requests through and preserves structured outcomes", async () => {
+    const outcomes = [
+      { _tag: "AlreadyThawed", launchId: "launch-1" },
+      { _tag: "Unsupported", message: "launch cannot be frozen" },
+      { _tag: "NothingActive" },
+      { _tag: "SessiondNotConfigured" },
+      { _tag: "HostUnavailable", message: "offline" },
+    ] as const
+
+    for (const outcome of outcomes) {
+      const result = await Effect.runPromise(
+        handleThawSession({}).pipe(
+          Effect.provide(
+            controlLayer({ thawSession: () => Effect.succeed(outcome) }),
+          ),
+        ),
+      )
+      expect(result).toEqual(outcome)
+    }
+  })
+
   it("surfaces missing confirmation as a structured no-mutation result", async () => {
     const result = await Effect.runPromise(
       handleStopSession({ force: true }).pipe(
@@ -131,6 +176,8 @@ function controlLayer(
       }),
     sessionStatus: () => Effect.succeed({ _tag: "SessiondNotConfigured" }),
     stopSession: () => Effect.succeed({ _tag: "NothingToStop" }),
+    freezeSession: () => Effect.succeed({ _tag: "NothingActive" }),
+    thawSession: () => Effect.succeed({ _tag: "NothingActive" }),
     daemonStatus: () =>
       Effect.succeed({
         _tag: "DaemonAvailable",

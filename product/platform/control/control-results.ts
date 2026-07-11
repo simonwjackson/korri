@@ -158,6 +158,22 @@ export type ControlStopSessionResult =
       readonly action: "stop-session" | "force-stop-session"
     }
 
+export type ControlFreezeSessionResult =
+  | { readonly _tag: "Frozen"; readonly launchId: string }
+  | { readonly _tag: "AlreadyFrozen"; readonly launchId: string }
+  | { readonly _tag: "NothingActive" }
+  | { readonly _tag: "Unsupported"; readonly message?: string }
+  | { readonly _tag: "SessiondNotConfigured" }
+  | { readonly _tag: "HostUnavailable"; readonly message?: string }
+
+export type ControlThawSessionResult =
+  | { readonly _tag: "Thawed"; readonly launchId: string }
+  | { readonly _tag: "AlreadyThawed"; readonly launchId: string }
+  | { readonly _tag: "NothingActive" }
+  | { readonly _tag: "Unsupported"; readonly message?: string }
+  | { readonly _tag: "SessiondNotConfigured" }
+  | { readonly _tag: "HostUnavailable"; readonly message?: string }
+
 export type ControlDaemonStatusResult =
   | {
       readonly _tag: "DaemonAvailable"
@@ -180,6 +196,8 @@ export type ControlResult =
   | ControlLaunchResult
   | ControlSessionStatusResult
   | ControlStopSessionResult
+  | ControlFreezeSessionResult
+  | ControlThawSessionResult
   | ControlDaemonStatusResult
   | ControlStreamRuntimeSettingsStatusResult
 
@@ -194,10 +212,18 @@ export function semanticsForControlResult(
     case "SessionStatus":
     case "Stopped":
     case "NothingToStop":
+    case "Frozen":
+    case "Thawed":
+    case "AlreadyFrozen":
+    case "AlreadyThawed":
+    case "NothingActive":
     case "DaemonAvailable":
     case "StreamRuntimeSettingsAvailable":
       return successSemantics(
-        result._tag === "Launched" || result._tag === "Stopped",
+        result._tag === "Launched" ||
+          result._tag === "Stopped" ||
+          result._tag === "Frozen" ||
+          result._tag === "Thawed",
       )
     case "AmbiguousGame":
     case "MissingQuery":
@@ -219,6 +245,7 @@ export function semanticsForControlResult(
     case "DaemonUnavailable":
     case "StreamRuntimeSettingsUnavailable":
       return failureSemantics("host-unavailable")
+    case "Unsupported":
     case "PreflightRejected":
     case "DaemonRejected":
     case "LaunchFailed":

@@ -15,10 +15,14 @@ import {
 } from "@platform/library/library-services"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import {
+  freezeSessiondManagedLaunch,
   probeSessiondManagedLaunchStatus,
   type SessiondManagedLaunchClientOptions,
+  type SessiondManagedLaunchFreezeResult,
   type SessiondManagedLaunchStatusResult,
+  type SessiondManagedLaunchThawResult,
   terminateSessiondManagedLaunch,
+  thawSessiondManagedLaunch,
 } from "@platform/library/sessiond-managed-launch-client"
 import { isLaunchReadyMode } from "@platform/library/sessiond-managed-launch-protocol"
 import {
@@ -39,17 +43,21 @@ import {
 import { Cause, Effect, Layer } from "effect"
 import type {
   ControlDryRunLaunchRequest,
+  ControlFreezeSessionRequest,
   ControlLaunchRequest,
   ControlStopSessionRequest,
+  ControlThawSessionRequest,
 } from "./control-requests"
 import type {
   ControlDryRunLaunchResult,
   ControlFindGameResult,
+  ControlFreezeSessionResult,
   ControlLaunchResult,
   ControlListGamesResult,
   ControlSessionReadiness,
   ControlSessionStatusResult,
   ControlStopSessionResult,
+  ControlThawSessionResult,
 } from "./control-results"
 import {
   findPlayableEntry,
@@ -205,6 +213,8 @@ export function makeKorriControlLive(options: {
         pollCount: stopSessionSettlePolls,
         pollDelayMs: stopSessionSettlePollDelayMs,
       }),
+    freezeSession: request => freezeSession(request, sessiond),
+    thawSession: request => thawSession(request, sessiond),
     daemonStatus: () =>
       Effect.succeed({
         _tag: "DaemonAvailable" as const,
@@ -481,6 +491,109 @@ function stopSession(
       })
     }
     return { _tag: "NothingToStop" as const }
+  })
+}
+
+function freezeSession(
+  request: ControlFreezeSessionRequest,
+  options: SessiondManagedLaunchClientOptions | undefined,
+): Effect.Effect<ControlFreezeSessionResult, never> {
+  return freezeControlCall({
+    request,
+    options,
+    call: (launchId, clientOptions) =>
+      freezeSessiondManagedLaunch({ launchId }, clientOptions),
+    already: "already-frozen",
+    alreadyTag: "AlreadyFrozen",
+    appliedTag: "Frozen",
+  })
+}
+
+function thawSession(
+  request: ControlThawSessionRequest,
+  options: SessiondManagedLaunchClientOptions | undefined,
+): Effect.Effect<ControlThawSessionResult, never> {
+  return freezeControlCall({
+    request,
+    options,
+    call: (launchId, clientOptions) =>
+      thawSessiondManagedLaunch({ launchId }, clientOptions),
+    already: "already-thawed",
+    alreadyTag: "AlreadyThawed",
+    appliedTag: "Thawed",
+  })
+}
+
+// Shared control flow for the freeze/thaw mutations: probe status, gate on
+// the launchFreeze capability, resolve the target launch, then map the
+// sessiond response union onto the control result union. The two commands
+// differ only in the client call and tag vocabulary.
+function freezeControlCall<
+  AppliedTag extends "Frozen" | "Thawed",
+  AlreadyTag extends "AlreadyFrozen" | "AlreadyThawed",
+>(input: {
+  readonly request: ControlFreezeSessionRequest
+  readonly options: SessiondManagedLaunchClientOptions | undefined
+  readonly call: (
+    launchId: string,
+    options: SessiondManagedLaunchClientOptions,
+  ) => Promise<
+    SessiondManagedLaunchFreezeResult | SessiondManagedLaunchThawResult
+  >
+  readonly already: "already-frozen" | "already-thawed"
+  readonly alreadyTag: AlreadyTag
+  readonly appliedTag: AppliedTag
+}): Effect.Effect<
+  | { readonly _tag: AppliedTag; readonly launchId: string }
+  | { readonly _tag: AlreadyTag; readonly launchId: string }
+  | { readonly _tag: "NothingActive" }
+  | { readonly _tag: "Unsupported"; readonly message?: string }
+  | { readonly _tag: "SessiondNotConfigured" }
+  | { readonly _tag: "HostUnavailable"; readonly message?: string },
+  never
+> {
+  return Effect.gen(function* () {
+    const status = yield* probeSessiond(input.options)
+    const statusTerminal = sessiondTerminalFromFailure(status)
+    if (statusTerminal) return statusTerminal
+    if (status.kind !== "ok") return unexpectedSessiondProbe(status)
+    if (status.status.capabilities.launchFreeze !== true) {
+      return {
+        _tag: "Unsupported" as const,
+        message: "sessiond does not support launch freeze",
+      }
+    }
+    const launchId = input.request.launchId ?? status.status.active?.launchId
+    if (!launchId) return { _tag: "NothingActive" as const }
+
+    const outcome = yield* Effect.promise(() =>
+      input.call(launchId, input.options ?? {}),
+    ).pipe(
+      Effect.catchCause(cause =>
+        Effect.succeed({
+          kind: "unavailable" as const,
+          message: errorMessage(Cause.squash(cause)),
+        }),
+      ),
+    )
+
+    const outcomeTerminal = sessiondTerminalFromFailure(outcome)
+    if (outcomeTerminal) return outcomeTerminal
+    if (outcome.kind !== "ok") return unexpectedSessiondProbe(outcome)
+    const response = outcome.response
+    switch (response.status) {
+      case "accepted":
+        return { _tag: input.appliedTag, launchId: response.launchId }
+      case "not-found":
+        return { _tag: "NothingActive" as const }
+      case "unsupported":
+        return { _tag: "Unsupported" as const, message: response.message }
+      default:
+        // already-frozen / already-thawed -- the only remaining variants.
+        return response.status === input.already
+          ? { _tag: input.alreadyTag, launchId: response.launchId }
+          : { _tag: "NothingActive" as const }
+    }
   })
 }
 

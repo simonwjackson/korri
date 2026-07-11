@@ -5,20 +5,24 @@ import type {
   ControlDaemonStatusRequest,
   ControlDryRunLaunchRequest,
   ControlFindGameRequest,
+  ControlFreezeSessionRequest,
   ControlLaunchRequest,
   ControlListGamesRequest,
   ControlStopSessionRequest,
   ControlStreamRuntimeSettingsStatusRequest,
+  ControlThawSessionRequest,
 } from "./control-requests"
 import type {
   ControlDaemonStatusResult,
   ControlDryRunLaunchResult,
   ControlFindGameResult,
+  ControlFreezeSessionResult,
   ControlLaunchResult,
   ControlListGamesResult,
   ControlSessionStatusResult,
   ControlStopSessionResult,
   ControlStreamRuntimeSettingsStatusResult,
+  ControlThawSessionResult,
 } from "./control-results"
 
 export interface KorriControlService {
@@ -38,6 +42,12 @@ export interface KorriControlService {
   readonly stopSession: (
     request: ControlStopSessionRequest,
   ) => Effect.Effect<ControlStopSessionResult, never>
+  readonly freezeSession: (
+    request: ControlFreezeSessionRequest,
+  ) => Effect.Effect<ControlFreezeSessionResult, never>
+  readonly thawSession: (
+    request: ControlThawSessionRequest,
+  ) => Effect.Effect<ControlThawSessionResult, never>
   readonly daemonStatus: (
     request?: ControlDaemonStatusRequest,
   ) => Effect.Effect<ControlDaemonStatusResult, never>

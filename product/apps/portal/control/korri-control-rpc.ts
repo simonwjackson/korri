@@ -160,6 +160,34 @@ export function createKorriControlRpc(
           onSuccess: response => response,
         }),
       ),
+    freezeSession: request =>
+      runRpc(
+        RpcClient.make(serverRpcGroup).pipe(
+          Effect.flatMap(client => client["app.session.freeze"](request)),
+        ),
+      ).pipe(
+        Effect.match({
+          onFailure: error => ({
+            _tag: "HostUnavailable" as const,
+            message: errorMessage(error),
+          }),
+          onSuccess: response => response,
+        }),
+      ),
+    thawSession: request =>
+      runRpc(
+        RpcClient.make(serverRpcGroup).pipe(
+          Effect.flatMap(client => client["app.session.thaw"](request)),
+        ),
+      ).pipe(
+        Effect.match({
+          onFailure: error => ({
+            _tag: "HostUnavailable" as const,
+            message: errorMessage(error),
+          }),
+          onSuccess: response => response,
+        }),
+      ),
     daemonStatus: () =>
       runRpc(
         RpcClient.make(serverRpcGroup).pipe(

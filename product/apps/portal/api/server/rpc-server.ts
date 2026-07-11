@@ -45,8 +45,10 @@ import { handleRequestPluginInstall } from "../plugin-install/request.rpc-handle
 import { handlePluginInstallStatus } from "../plugin-install/status.rpc-handler"
 import { handleCollectPluginLifecycle } from "../plugin-lifecycle/collect.rpc-handler"
 import { handleFulfillPluginResource } from "../plugins/fulfill-resource.rpc-handler"
+import { handleFreezeSession } from "../session/freeze.rpc-handler"
 import { handleSessionStatus } from "../session/status.rpc-handler"
 import { handleStopSession } from "../session/stop.rpc-handler"
+import { handleThawSession } from "../session/thaw.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
 import { handlePrepareStream } from "../stream/prepare.rpc-handler"
 import { handleGetStreamControlConfig } from "../stream-control/get-config.rpc-handler"
@@ -152,6 +154,8 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.server.status": handleServerStatus,
     "app.session.status": handleSessionStatus,
     "app.session.stop": handleStopSession,
+    "app.session.freeze": handleFreezeSession,
+    "app.session.thaw": handleThawSession,
     "app.server.stream.prepare": handleServerPrepareStream,
     "app.stream.prepare": handlePrepareStream,
     "app.stream-control.config.get": handleGetStreamControlConfig,

@@ -27,6 +27,16 @@ export interface ControlStopSessionRequest {
   readonly confirmed?: boolean
 }
 
+export interface ControlFreezeSessionRequest {
+  /** Absent means "the active managed launch". */
+  readonly launchId?: string
+}
+
+export interface ControlThawSessionRequest {
+  /** Absent means "the active managed launch". */
+  readonly launchId?: string
+}
+
 export type ControlDaemonStatusRequest = Record<string, never>
 
 export type ControlStreamRuntimeSettingsStatusRequest = Record<string, never>

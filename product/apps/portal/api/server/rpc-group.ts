@@ -20,8 +20,10 @@ import { RequestPluginInstallRpc as appPluginInstallRequest } from "../plugin-in
 import { PluginInstallStatusRpc as appPluginInstallStatus } from "../plugin-install/status.rpc"
 import { CollectPluginLifecycleRpc as appPluginLifecycleCollect } from "../plugin-lifecycle/collect.rpc"
 import { FulfillPluginResourceRpc as appPluginResourceFulfill } from "../plugins/fulfill-resource.rpc"
+import { FreezeSessionRpc as appSessionFreeze } from "../session/freeze.rpc"
 import { SessionStatusRpc as appSessionStatus } from "../session/status.rpc"
 import { StopSessionRpc as appSessionStop } from "../session/stop.rpc"
+import { ThawSessionRpc as appSessionThaw } from "../session/thaw.rpc"
 import { SourceStatusRpc as appSourceStatus } from "../source/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "../stream/prepare.rpc"
 import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "../stream-control/get-config.rpc"
@@ -55,6 +57,8 @@ export const serverRpcGroup = RpcGroup.make(
   appServerStatus,
   appSessionStatus,
   appSessionStop,
+  appSessionFreeze,
+  appSessionThaw,
   appServerStreamPrepare,
   appStreamPrepare,
   appStreamControlConfigGet,

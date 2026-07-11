@@ -579,6 +579,154 @@ describe("KorriControl live implementation", () => {
       force: true,
     })
   })
+
+  it("freezes the active launch through sessiond", async () => {
+    const requests: Array<{ readonly input: string; readonly body?: string }> =
+      []
+    const control = makeKorriControlLive({
+      librarySource: librarySource(),
+      launcher: launcher(),
+      sessiond: {
+        url: "http://sessiond",
+        fetchImpl: async (input, init) => {
+          requests.push({ input, body: init?.body?.toString() })
+          if (input.endsWith("/managed-launch/status")) {
+            return Response.json({
+              schemaVersion: 1,
+              mode: "game",
+              capabilities: {
+                managedLaunch: true,
+                lifecycleEvents: true,
+                perLaunchTermination: true,
+                launchFreeze: true,
+              },
+              active: { launchId: "launch-1", mode: "game", phase: "running" },
+              restoreAttempts: 0,
+            })
+          }
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        },
+      },
+    })
+
+    await expect(Effect.runPromise(control.freezeSession({}))).resolves.toEqual(
+      { _tag: "Frozen", launchId: "launch-1" },
+    )
+    expect(requests.map(request => request.input)).toEqual([
+      "http://sessiond/managed-launch/status",
+      "http://sessiond/managed-launch/freeze",
+    ])
+    expect(JSON.parse(requests[1].body ?? "{}")).toEqual({
+      launchId: "launch-1",
+    })
+  })
+
+  it("thaws the active launch and maps already-thawed", async () => {
+    const responses = [
+      {
+        schemaVersion: 1,
+        mode: "game",
+        capabilities: {
+          managedLaunch: true,
+          lifecycleEvents: true,
+          perLaunchTermination: true,
+          launchFreeze: true,
+        },
+        active: { launchId: "launch-1", mode: "game", phase: "frozen" },
+        restoreAttempts: 0,
+      },
+      { status: "already-thawed", launchId: "launch-1" },
+    ]
+    const control = makeKorriControlLive({
+      librarySource: librarySource(),
+      launcher: launcher(),
+      sessiond: {
+        url: "http://sessiond",
+        fetchImpl: async () => Response.json(responses.shift()),
+      },
+    })
+
+    await expect(Effect.runPromise(control.thawSession({}))).resolves.toEqual({
+      _tag: "AlreadyThawed",
+      launchId: "launch-1",
+    })
+  })
+
+  it("reports Unsupported when sessiond lacks the launchFreeze capability", async () => {
+    const control = makeKorriControlLive({
+      librarySource: librarySource(),
+      launcher: launcher(),
+      sessiond: {
+        url: "http://sessiond",
+        fetchImpl: async () =>
+          Response.json({
+            schemaVersion: 1,
+            mode: "game",
+            capabilities: {
+              managedLaunch: true,
+              lifecycleEvents: true,
+              perLaunchTermination: true,
+            },
+            active: { launchId: "launch-1", mode: "game" },
+            restoreAttempts: 0,
+          }),
+      },
+    })
+
+    await expect(
+      Effect.runPromise(control.freezeSession({})),
+    ).resolves.toMatchObject({ _tag: "Unsupported" })
+  })
+
+  it("reports NothingActive when no launch is active to freeze", async () => {
+    const control = makeKorriControlLive({
+      librarySource: librarySource(),
+      launcher: launcher(),
+      sessiond: {
+        url: "http://sessiond",
+        fetchImpl: async () =>
+          Response.json({
+            schemaVersion: 1,
+            mode: "home",
+            capabilities: {
+              managedLaunch: true,
+              lifecycleEvents: true,
+              perLaunchTermination: true,
+              launchFreeze: true,
+            },
+            restoreAttempts: 0,
+          }),
+      },
+    })
+
+    await expect(Effect.runPromise(control.freezeSession({}))).resolves.toEqual(
+      { _tag: "NothingActive" },
+    )
+  })
+
+  it("maps freeze transport failures to structured terminals", async () => {
+    const control = makeKorriControlLive({
+      librarySource: librarySource(),
+      launcher: launcher(),
+      sessiond: {
+        url: "http://sessiond",
+        fetchImpl: async () => {
+          throw new Error("sessiond offline")
+        },
+      },
+    })
+    await expect(
+      Effect.runPromise(control.freezeSession({})),
+    ).resolves.toMatchObject({ _tag: "HostUnavailable" })
+
+    const unconfigured = makeKorriControlLive({
+      librarySource: librarySource(),
+      launcher: launcher(),
+    })
+    await expect(
+      Effect.runPromise(unconfigured.freezeSession({})),
+    ).resolves.toEqual({ _tag: "SessiondNotConfigured" })
+  })
 })
 
 function librarySource(

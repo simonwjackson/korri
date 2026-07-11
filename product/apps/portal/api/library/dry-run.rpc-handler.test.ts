@@ -59,6 +59,8 @@ function controlLayer(
       }),
     sessionStatus: () => Effect.succeed({ _tag: "SessiondNotConfigured" }),
     stopSession: () => Effect.succeed({ _tag: "NothingToStop" }),
+    freezeSession: () => Effect.succeed({ _tag: "NothingActive" }),
+    thawSession: () => Effect.succeed({ _tag: "NothingActive" }),
     daemonStatus: () =>
       Effect.succeed({
         _tag: "DaemonAvailable",
