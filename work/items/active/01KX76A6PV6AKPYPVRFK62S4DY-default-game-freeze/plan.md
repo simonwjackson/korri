@@ -1,7 +1,7 @@
 ---
 title: "feat: Default game freeze on stream disconnect, lid close, and chord modal"
 type: feat
-status: active
+status: completed
 date: 2026-07-10
 origin: work/items/active/01KX76A6PV6AKPYPVRFK62S4DY-default-game-freeze/item.md
 verify_command: "bun test product/services/device product/platform/library product/apps/portal/api/session"

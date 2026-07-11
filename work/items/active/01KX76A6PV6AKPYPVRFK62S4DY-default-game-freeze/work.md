@@ -9,4 +9,5 @@
 - **Builds on:** commit `ee2bf514` — `feat(sessiond): add managed launch freeze cycle`
 - **Artifacts:**
   - `item.md` — graduated parking-lot capture
-  - `plan.md` — implementation plan
+  - `plan.md` — implementation plan (status: completed)
+- **Status note (2026-07-10):** All 7 implementation units plus Tier 2 review fixes landed on trunk (`5643856a..dc67be01`). Remaining: deploy to aka (push + mountainous flake bump) and the on-device acceptance run from `item.md` (hard network cut, lid close/open cycle, ≥1h freeze soak).
