@@ -187,6 +187,22 @@ in
       description = "Optional source-machine runner-shaped status sidecar path.";
     };
 
+    sunshineLogPath = mkOption {
+      type = types.nullOr types.str;
+      # Sunshine is a systemd *user* service; its log lives under the session
+      # user's home. Default only on streaming source machines so kiosk hosts
+      # never start a watcher.
+      default =
+        if streamingEnabled then "${runtime.home or "/home/korri"}/.config/sunshine/sunshine.log" else null;
+      defaultText = lib.literalExpression ''"''${services.korri.runtime.home}/.config/sunshine/sunshine.log" when services.korri.daemon.streaming.enable, else null'';
+      example = "/home/korri/.config/sunshine/sunshine.log";
+      description = ''
+        Sunshine log file the source-machine sessiond tails for client
+        disconnect/reconnect signals, freezing/thawing the active managed
+        launch by default. Set to null to disable the stream watcher.
+      '';
+    };
+
     extraEnvironment = mkOption {
       type = types.attrsOf types.str;
       default = { };
@@ -286,6 +302,9 @@ in
       })
       // (lib.optionalAttrs (cfg.sunshineRuntimeStatusPath != null) {
         KORRI_GAME_STREAM_STATUS_PATH = cfg.sunshineRuntimeStatusPath;
+      })
+      // (lib.optionalAttrs (cfg.sunshineLogPath != null) {
+        KORRI_SUNSHINE_LOG_PATH = cfg.sunshineLogPath;
       })
       // cfg.extraEnvironment;
       serviceConfig = {

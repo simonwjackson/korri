@@ -74,6 +74,13 @@ let
     services.korri.sessiond.enable = true;
     services.korri.input.inputSeat.enable = true;
   };
+  sunshineWatcherDisabled = evaluateWith {
+    services.korri.sessiond = {
+      enable = true;
+      sunshineLogPath = null;
+    };
+    services.korri.daemon.streaming.enable = true;
+  };
 
   check = message: assertion: { inherit message assertion; };
   checks = [
@@ -107,6 +114,17 @@ let
       && lib.hasSuffix "/bin/korri-uinput-seat-helper" inputSeatEnabled.security.wrappers.korri-uinput-seat-helper.source
     ))
     (check "token env not exported" (!((unitEnv baselineKiosk) ? KORRI_SESSIOND_TOKEN) && !((unitEnv baselineKiosk) ? KORRI_SESSIOND_TOKEN_FILE)))
+    # Default-freeze stream watcher: source machines tail the Sunshine log;
+    # kiosk hosts must not start a watcher; explicit null disables it.
+    (check "sunshine log path exported on streaming source machines" (
+      (unitEnv sourceMachine).KORRI_SUNSHINE_LOG_PATH == "/home/korri/.config/sunshine/sunshine.log"
+    ))
+    (check "sunshine log path absent on kiosk hosts" (
+      !((unitEnv baselineKiosk) ? KORRI_SUNSHINE_LOG_PATH)
+    ))
+    (check "sunshine log path can be disabled explicitly" (
+      !((unitEnv sunshineWatcherDisabled) ? KORRI_SUNSHINE_LOG_PATH)
+    ))
   ];
   failures = builtins.filter (c: !c.assertion) checks;
 in
