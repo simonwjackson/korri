@@ -1695,6 +1695,119 @@ describe("game stream runner sessiond foreground branch", () => {
     await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
   })
 
+  it("reports failure when the resumed launch becomes unobservable (null exit)", async () => {
+    const { sessiondLauncher } = createSessiondLauncherHarness([])
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        launchMetadata: {
+          annotations: { "@korri:game": { id: "snes/echo.smc" } },
+        },
+      }),
+      sessiondLauncher,
+      frozenResume: {
+        probeStatus: async () => ({
+          kind: "ok",
+          status: {
+            schemaVersion: 1,
+            mode: "game",
+            capabilities: {
+              managedLaunch: true,
+              lifecycleEvents: true,
+              perLaunchTermination: true,
+              launchFreeze: true,
+            },
+            active: {
+              launchId: "frozen-1",
+              mode: "game",
+              phase: "frozen",
+              launchMetadata: {
+                annotations: { "@korri:game": { id: "snes/echo.smc" } },
+              },
+            },
+            restoreAttempts: 0,
+          },
+        }),
+        thaw: async launchId => ({
+          kind: "ok",
+          response: { status: "accepted", launchId },
+        }),
+        waitForExit: async () => ({ exitCode: null }),
+        terminate: async () => undefined,
+      },
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {
+        ...sessionEnv,
+        KORRI_SESSIOND_SOCKET: "/run/user/2000/korri/sessiond.sock",
+      },
+    })
+
+    await expect(runner.run()).resolves.toMatchObject({
+      status: "failed",
+      exitCode: 125,
+      message: "resumed managed launch became unobservable",
+    })
+  })
+
+  it("does not resume a frozen launch for a different variant of the same game", async () => {
+    const spawnedSpecs: LaunchSpec[] = []
+    const { sessiondLauncher, controller } =
+      createSessiondLauncherHarness(spawnedSpecs)
+    const thawCalls: string[] = []
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        launchMetadata: {
+          annotations: {
+            "@korri:game": { id: "snes/echo.smc", profileId: "speedrun" },
+          },
+        },
+      }),
+      sessiondLauncher,
+      frozenResume: {
+        probeStatus: async () => ({
+          kind: "ok",
+          status: {
+            schemaVersion: 1,
+            mode: "game",
+            capabilities: {
+              managedLaunch: true,
+              lifecycleEvents: true,
+              perLaunchTermination: true,
+              launchFreeze: true,
+            },
+            active: {
+              launchId: "frozen-1",
+              mode: "game",
+              phase: "frozen",
+              launchMetadata: {
+                annotations: { "@korri:game": { id: "snes/echo.smc" } },
+              },
+            },
+            restoreAttempts: 0,
+          },
+        }),
+        thaw: async launchId => {
+          thawCalls.push(launchId)
+          return { kind: "ok", response: { status: "accepted", launchId } }
+        },
+        waitForExit: async () => ({ exitCode: 0 }),
+        terminate: async () => undefined,
+      },
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {
+        ...sessionEnv,
+        KORRI_SESSIOND_SOCKET: "/run/user/2000/korri/sessiond.sock",
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => spawnedSpecs.length > 0)
+    expect(thawCalls).toEqual([])
+    controller.exit(0)
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+  })
+
   it("spawns normally when nothing is frozen and falls back to spawn when thaw fails", async () => {
     for (const scenario of ["not-frozen", "thaw-fails"] as const) {
       const spawnedSpecs: LaunchSpec[] = []

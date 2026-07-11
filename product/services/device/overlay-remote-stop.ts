@@ -72,7 +72,10 @@ export async function callKorridRpc(
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   if ("unref" in timeout && typeof timeout.unref === "function") timeout.unref()
+  // Keep the abort timeout active through the body read: a host that sends
+  // headers but stalls the body must not hang freeze/thaw/stop callers.
   let response: Response
+  let text: string
   try {
     response = await fetchImpl(rpcUrl, {
       method: "POST",
@@ -86,11 +89,10 @@ export async function callKorridRpc(
       }),
       signal: controller.signal,
     })
+    text = await response.text()
   } finally {
     clearTimeout(timeout)
   }
-
-  const text = await response.text()
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`)
   }

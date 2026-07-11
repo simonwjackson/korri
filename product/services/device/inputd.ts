@@ -240,7 +240,13 @@ export async function startKorriInputd(
     }
     const launchId = sessionProbe.activeLaunchId()
     if (!launchId) return
-    await freezeSessiondManagedLaunch({ launchId }, { env: process.env })
+    const result = await freezeSessiondManagedLaunch(
+      { launchId },
+      { env: process.env },
+    )
+    if (result.kind !== "ok") {
+      logger.warn({ launchId, result }, "inputd: local freeze failed")
+    }
   }
   const resumeActiveGame = async (): Promise<void> => {
     if (sessionProbe.isStream()) {
@@ -255,7 +261,13 @@ export async function startKorriInputd(
     }
     const launchId = sessionProbe.activeLaunchId()
     if (!launchId) return
-    await thawSessiondManagedLaunch({ launchId }, { env: process.env })
+    const result = await thawSessiondManagedLaunch(
+      { launchId },
+      { env: process.env },
+    )
+    if (result.kind !== "ok") {
+      logger.warn({ launchId, result }, "inputd: local thaw failed")
+    }
   }
   const overlayHoldHandler = createOverlayHoldHandlerFromEnv({
     env: process.env,

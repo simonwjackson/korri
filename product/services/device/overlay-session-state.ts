@@ -118,9 +118,10 @@ export function createOverlaySessionProbe(
       if (nextStream) {
         // The local phase describes the Moonlight client, not the host game.
         // Read host state when a reader is wired; keep the last known outcome
-        // when the host answers unknown. Streams always offer the option --
-        // the host reports unsupported when it cannot freeze.
-        freezeAvailable = true
+        // when the host answers unknown. The option requires a reachable
+        // control URL -- without one the remote route can only be skipped, so
+        // offering the toggle would be a dead control.
+        freezeAvailable = sourceControlUrl !== undefined
         if (deps.readRemoteFrozen && sourceControlUrl) {
           try {
             const remote = await deps.readRemoteFrozen(sourceControlUrl)

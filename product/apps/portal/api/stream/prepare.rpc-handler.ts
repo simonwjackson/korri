@@ -98,12 +98,20 @@ export function prepareStreamLaunch(
     })
     // Game identity annotation: lets the host runner match a frozen managed
     // launch to a re-entry request for the same game (thaw-and-reattach)
-    // instead of dead-ending on session-busy after a lid-close freeze.
+    // instead of dead-ending on session-busy after a lid-close freeze. The
+    // variant discriminators keep a different release/profile/preset of the
+    // same game from resuming the wrong frozen launch.
     const launchMetadata = {
       ...(resolved.launchMetadata ?? {}),
       annotations: {
         ...(resolved.launchMetadata?.annotations ?? {}),
-        "@korri:game": { id: gameId },
+        "@korri:game": {
+          id: gameId,
+          ...(options.releaseId ? { releaseId: options.releaseId } : {}),
+          ...(options.userId ? { userId: options.userId } : {}),
+          ...(options.profileId ? { profileId: options.profileId } : {}),
+          ...(options.presetId ? { presetId: options.presetId } : {}),
+        },
       },
     }
     const intent = yield* Effect.try({

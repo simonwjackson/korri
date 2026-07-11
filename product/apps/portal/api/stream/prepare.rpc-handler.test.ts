@@ -109,6 +109,49 @@ describe("app.stream.prepare handler", () => {
     })
   })
 
+  it("carries launch variant discriminators in the game identity annotation", async () => {
+    const intentDir = await mkdtemp(
+      join(tmpdir(), "korri-stream-prepare-variant-"),
+    )
+    await chmod(intentDir, 0o700)
+    cleanups.push(() => rm(intentDir, { recursive: true, force: true }))
+    process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
+    process.env.KORRI_GAME_STREAM_INTENT_PATH = join(
+      intentDir,
+      "next-launch.json",
+    )
+    delete process.env.XDG_RUNTIME_DIR
+
+    const result = await Effect.runPromise(
+      handlePrepareStream({ id: "steam/sonic", profileId: "speedrun" }).pipe(
+        Effect.provide(
+          makeInMemoryLibrarySourceLayer({
+            games: [{ id: "steam/sonic", system: "steam" }],
+            resolvedLaunchById: new Map([
+              [
+                "steam/sonic",
+                {
+                  spec: {
+                    command: "/run/current-system/sw/bin/steam",
+                    args: ["-applaunch", "584400"],
+                  },
+                },
+              ],
+            ]),
+          }),
+        ),
+      ),
+    )
+
+    const intent = decodeLaunchIntent(
+      JSON.parse(await readFile(result.intentPath, "utf8")),
+    )
+    expect(intent.launchMetadata?.annotations?.["@korri:game"]).toEqual({
+      id: "steam/sonic",
+      profileId: "speedrun",
+    })
+  })
+
   it("writes provider-qualified metadata for Steam plugin launches", async () => {
     const intentDir = await mkdtemp(
       join(tmpdir(), "korri-stream-prepare-steam-"),

@@ -72,12 +72,18 @@ export function startSunshineStreamWatcherFromEnv(deps: {
 async function* openLogTailLines(path: string): AsyncGenerator<string> {
   const handle = await open(path, "r")
   try {
-    let offset = (await handle.stat()).size
+    const opened = await handle.stat()
+    let offset = opened.size
     let carry = ""
     const chunk = new Uint8Array(64 * 1024)
     const decoder = new TextDecoder()
     while (true) {
       const current = await stat(path)
+      if (current.ino !== opened.ino || current.dev !== opened.dev) {
+        // Rotation replaced the path with a new file; even a same-or-larger
+        // size would strand this handle at the old inode's EOF forever.
+        throw new Error("sunshine log rotated (inode changed)")
+      }
       if (current.size < offset) {
         throw new Error("sunshine log truncated (rotation)")
       }

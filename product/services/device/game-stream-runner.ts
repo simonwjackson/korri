@@ -328,11 +328,21 @@ export function createGameStreamRunner(
       { launchId: active.launchId, gameId: requestedGameId },
       "game-stream-runner: thawed frozen launch; reattaching",
     )
+    const terminateResumed = (force?: boolean) =>
+      void frozenResume.terminate(active.launchId, force).catch(error => {
+        logger.warn(
+          { err: error, launchId: active.launchId },
+          "game-stream-runner: terminate of resumed launch failed",
+        )
+      })
     activeSessiondSession = {
-      terminate: () => void frozenResume.terminate(active.launchId),
-      terminateNow: () => void frozenResume.terminate(active.launchId, true),
+      terminate: () => terminateResumed(),
+      terminateNow: () => terminateResumed(true),
     }
     state = markGameStreamRunning(state, 0)
+    // A stop() that arrived between the thaw and the session registration
+    // would otherwise be lost -- deliver it now that the handle exists.
+    if (stopRequested) terminateResumed()
     await completeLaunchClaim(launchClaim)
 
     let exited: { readonly exitCode: number | null }
@@ -344,7 +354,17 @@ export function createGameStreamRunner(
     }
     activeSessiondSession = undefined
 
-    const exitCode = exited.exitCode ?? 0
+    if (exited.exitCode === null) {
+      state = completeGameStreamExit(state, 125)
+      await cleanupLaunchClaimArtifacts(launchClaim)
+      return {
+        status: "failed",
+        stage: "game",
+        exitCode: 125,
+        message: "resumed managed launch became unobservable",
+      }
+    }
+    const exitCode = exited.exitCode
     const reportedExitCode = stopRequested && exitCode === 0 ? 143 : exitCode
     state = completeGameStreamExit(state, reportedExitCode)
     await cleanupLaunchClaimArtifacts(launchClaim)
@@ -1009,7 +1029,12 @@ function isFileExistsError(error: unknown): boolean {
   )
 }
 
-/** Extract the `@korri:game` identity annotation's id, when present. */
+/**
+ * Canonical launch identity from the `@korri:game` annotation. Includes the
+ * variant discriminators (release/user/profile/preset) so a frozen launch is
+ * only resumed for the exact same launch selection, never a different
+ * variant of the same game.
+ */
 function gameIdentityAnnotation(
   metadata:
     | { readonly annotations?: { readonly [key: string]: unknown } }
@@ -1017,8 +1042,18 @@ function gameIdentityAnnotation(
 ): string | undefined {
   const annotation = metadata?.annotations?.["@korri:game"]
   if (!annotation || typeof annotation !== "object") return undefined
-  const id = (annotation as { id?: unknown }).id
-  return typeof id === "string" && id.length > 0 ? id : undefined
+  const record = annotation as Record<string, unknown>
+  const id = record.id
+  if (typeof id !== "string" || id.length === 0) return undefined
+  const pick = (key: string) =>
+    typeof record[key] === "string" ? (record[key] as string) : undefined
+  return JSON.stringify([
+    id,
+    pick("releaseId"),
+    pick("userId"),
+    pick("profileId"),
+    pick("presetId"),
+  ])
 }
 
 function defaultFrozenResumeSeam(

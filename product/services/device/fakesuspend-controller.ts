@@ -61,6 +61,7 @@ export interface FakeSuspendController {
 
 const DEFAULT_DEBOUNCE_MS = 2_000
 const DEFAULT_ACK_TIMEOUT_MS = 1_500
+const LID_CLOSE_REMOTE_FREEZE_TIMEOUT_MS = 2_000
 const ACTIVE_MARKER_TEXT = "suspended\n"
 
 export function createFakeSuspendController(
@@ -89,7 +90,14 @@ export function createFakeSuspendController(
   const freezeRemoteGame =
     options.freezeRemoteGame ??
     (async (controlUrl: string) => {
-      await freezeRemoteGameOnHost({ controlUrl, logger: defaultLogger })
+      // Lid close races network teardown: bound the remote freeze tightly so
+      // suspend proceeds promptly whether or not the host answered. The
+      // host-side stream watcher is the fallback freeze path.
+      await freezeRemoteGameOnHost({
+        controlUrl,
+        logger: defaultLogger,
+        timeoutMs: LID_CLOSE_REMOTE_FREEZE_TIMEOUT_MS,
+      })
     })
 
   async function run(action: FakeSuspendAction): Promise<FakeSuspendResult> {

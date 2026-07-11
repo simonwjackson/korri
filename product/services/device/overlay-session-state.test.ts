@@ -142,6 +142,22 @@ describe("createOverlaySessionProbe", () => {
     expect(probe.freezeAvailable()).toBe(true)
   })
 
+  it("does not offer freeze for a stream without a source control URL", async () => {
+    const probe = createOverlaySessionProbe({
+      readStatus: async () =>
+        status({
+          mode: "game",
+          active: { launchId: "l1", mode: "game" },
+        }),
+      isMoonlightRunning: async () => true,
+    })
+    await probe.refresh()
+    expect(probe.isStream()).toBe(true)
+    // Without a controlUrl the remote route can only skip; the toggle would
+    // be a dead control.
+    expect(probe.freezeAvailable()).toBe(false)
+  })
+
   it("applies noteRemoteFrozen immediately and falls back to it when the host read fails", async () => {
     const probe = createOverlaySessionProbe({
       readStatus: async () =>
