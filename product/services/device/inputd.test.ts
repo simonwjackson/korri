@@ -88,6 +88,10 @@ function activeSessionProbe() {
     isActive: () => true,
     isStream: () => false,
     sourceControlUrl: () => undefined,
+    isFrozen: () => false,
+    freezeAvailable: () => false,
+    activeLaunchId: () => undefined,
+    noteRemoteFrozen: () => {},
   }
 }
 
@@ -562,6 +566,10 @@ B: KEY=40000000
         isActive: () => false,
         isStream: () => false,
         sourceControlUrl: () => undefined,
+        isFrozen: () => false,
+        freezeAvailable: () => false,
+        activeLaunchId: () => undefined,
+        noteRemoteFrozen: () => {},
       },
     })
 

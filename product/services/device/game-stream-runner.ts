@@ -25,7 +25,6 @@ import {
   composeLaunchCompanions,
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
-import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -341,7 +340,7 @@ export function createGameStreamRunner(
       exited = await frozenResume.waitForExit(active.launchId)
     } catch (error) {
       activeSessiondSession = undefined
-      return await fail("game", errorMessage(error), 125)
+      return await fail("spawn", errorMessage(error), 125)
     }
     activeSessiondSession = undefined
 
@@ -1012,7 +1011,9 @@ function isFileExistsError(error: unknown): boolean {
 
 /** Extract the `@korri:game` identity annotation's id, when present. */
 function gameIdentityAnnotation(
-  metadata: LaunchMetadata | undefined,
+  metadata:
+    | { readonly annotations?: { readonly [key: string]: unknown } }
+    | undefined,
 ): string | undefined {
   const annotation = metadata?.annotations?.["@korri:game"]
   if (!annotation || typeof annotation !== "object") return undefined

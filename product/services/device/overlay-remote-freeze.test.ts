@@ -65,7 +65,7 @@ describe("freezeRemoteGameOnHost", () => {
         exitFrame({
           _tag: "AlreadyFrozen",
           launchId: "remote-1",
-        })) as typeof fetch,
+        })) as unknown as typeof fetch,
     })
     expect(result).toEqual({ _tag: "already", launchId: "remote-1" })
   })
@@ -79,7 +79,7 @@ describe("freezeRemoteGameOnHost", () => {
         exitFrame({
           _tag: "Unsupported",
           message: "no freeze",
-        })) as typeof fetch,
+        })) as unknown as typeof fetch,
     })
     expect(unsupported).toEqual({ _tag: "unsupported", message: "no freeze" })
 
@@ -87,7 +87,7 @@ describe("freezeRemoteGameOnHost", () => {
       controlUrl: "http://aka:3001",
       logger: log.logger,
       fetchImpl: (async () =>
-        exitFrame({ _tag: "NothingActive" })) as typeof fetch,
+        exitFrame({ _tag: "NothingActive" })) as unknown as typeof fetch,
     })
     expect(nothing).toEqual({ _tag: "nothing-active" })
   })
@@ -124,7 +124,7 @@ describe("freezeRemoteGameOnHost", () => {
         exitFrame({
           _tag: "HostUnavailable",
           message: "sessiond offline",
-        })) as typeof fetch,
+        })) as unknown as typeof fetch,
     })
     expect(hostUnavailable).toMatchObject({ _tag: "failed" })
   })
