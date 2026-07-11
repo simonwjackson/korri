@@ -12,11 +12,20 @@ import {
   type ManagedLaunchResult,
 } from "@platform/library/launcher"
 import { createSessionLauncherFromEnv } from "@platform/library/session-launcher"
+import {
+  probeSessiondManagedLaunchStatus,
+  type SessiondManagedLaunchStatusResult,
+  type SessiondManagedLaunchThawResult,
+  terminateSessiondManagedLaunch,
+  thawSessiondManagedLaunch,
+} from "@platform/library/sessiond-managed-launch-client"
+import { observeSessiondManagedLaunchEvents } from "@platform/library/sessiond-managed-launch-event-observer"
 import { logger as defaultLogger } from "@platform/logger"
 import {
   composeLaunchCompanions,
   launchCompanionDiagnosticSummary,
 } from "@platform/plugin/launch-companion"
+import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -116,6 +125,26 @@ export interface GameStreamRunnerOptions {
    * carry launcher-anchor / wait-monitor semantics.
    */
   readonly sessiondLauncher?: Launcher
+  /**
+   * Frozen-launch re-entry seam. When the host's active managed launch is
+   * frozen for the SAME game as the claimed intent (matched via the
+   * `@korri:game` identity annotation), the runner thaws and reattaches to
+   * the existing launch instead of spawning a new one -- the wake path after
+   * a lid-close/disconnect freeze. Different or unidentified games fall
+   * through to the normal spawn, where sessiond rejects busy as before.
+   * Defaults to the sessiond managed-launch client when a sessiondLauncher
+   * is configured; injectable for tests.
+   */
+  readonly frozenResume?: GameStreamFrozenResumeSeam
+}
+
+export interface GameStreamFrozenResumeSeam {
+  readonly probeStatus: () => Promise<SessiondManagedLaunchStatusResult>
+  readonly thaw: (launchId: string) => Promise<SessiondManagedLaunchThawResult>
+  readonly waitForExit: (
+    launchId: string,
+  ) => Promise<{ readonly exitCode: number | null }>
+  readonly terminate: (launchId: string, force?: boolean) => Promise<unknown>
 }
 
 export interface GameStreamRunner {
@@ -135,6 +164,11 @@ export function createGameStreamRunner(
   const logger = options.logger ?? defaultLogger
   const spawner = options.spawner ?? createBunManagedChildSpawner()
   const sessiondLauncher = options.sessiondLauncher
+  const frozenResume =
+    options.frozenResume ??
+    (sessiondLauncher
+      ? defaultFrozenResumeSeam(options.processEnv ?? process.env)
+      : undefined)
   const processInfo = options.processInfo ?? {
     pid: process.pid,
     uid: typeof process.getuid === "function" ? process.getuid() : undefined,
@@ -243,6 +277,88 @@ export function createGameStreamRunner(
     return { status: "failed", stage, exitCode, message: reason }
   }
 
+  /**
+   * Wake-path re-entry: when the active managed launch is frozen for the
+   * same game as the claimed intent, thaw it and reattach to its lifecycle
+   * instead of spawning. Returns undefined to fall through to the normal
+   * spawn path (including when the thaw fails -- sessiond then reports the
+   * structured busy rejection through the existing branch).
+   */
+  async function tryFrozenResume(
+    launchClaim: ClaimedGameStreamLaunchIntent,
+  ): Promise<GameStreamRunResult | undefined> {
+    if (!frozenResume) return undefined
+    const requestedGameId = gameIdentityAnnotation(
+      launchClaim.intent.launchMetadata,
+    )
+    if (!requestedGameId) return undefined
+
+    let status: SessiondManagedLaunchStatusResult
+    try {
+      status = await frozenResume.probeStatus()
+    } catch {
+      return undefined
+    }
+    if (status.kind !== "ok") return undefined
+    const active = status.status.active
+    if (!active || active.phase !== "frozen") return undefined
+    const frozenGameId = gameIdentityAnnotation(active.launchMetadata)
+    if (frozenGameId !== requestedGameId) {
+      logger.info(
+        { requestedGameId, frozenGameId, launchId: active.launchId },
+        "game-stream-runner: different game frozen; deferring to sessiond rejection",
+      )
+      return undefined
+    }
+
+    let thawed: SessiondManagedLaunchThawResult
+    try {
+      thawed = await frozenResume.thaw(active.launchId)
+    } catch {
+      return undefined
+    }
+    if (
+      thawed.kind !== "ok" ||
+      (thawed.response.status !== "accepted" &&
+        thawed.response.status !== "already-thawed")
+    ) {
+      return undefined
+    }
+
+    logger.info(
+      { launchId: active.launchId, gameId: requestedGameId },
+      "game-stream-runner: thawed frozen launch; reattaching",
+    )
+    activeSessiondSession = {
+      terminate: () => void frozenResume.terminate(active.launchId),
+      terminateNow: () => void frozenResume.terminate(active.launchId, true),
+    }
+    state = markGameStreamRunning(state, 0)
+    await completeLaunchClaim(launchClaim)
+
+    let exited: { readonly exitCode: number | null }
+    try {
+      exited = await frozenResume.waitForExit(active.launchId)
+    } catch (error) {
+      activeSessiondSession = undefined
+      return await fail("game", errorMessage(error), 125)
+    }
+    activeSessiondSession = undefined
+
+    const exitCode = exited.exitCode ?? 0
+    const reportedExitCode = stopRequested && exitCode === 0 ? 143 : exitCode
+    state = completeGameStreamExit(state, reportedExitCode)
+    await cleanupLaunchClaimArtifacts(launchClaim)
+
+    if (reportedExitCode === 0) return { status: "launched", exitCode: 0 }
+    return {
+      status: "failed",
+      stage: "game",
+      exitCode: reportedExitCode,
+      message: "resumed managed launch exited non-zero",
+    }
+  }
+
   function resetForNoPendingLaunchIntent(): GameStreamRunResult {
     // A missing one-shot intent is not a new runner observation: return a
     // failure to Sunshine/Moonlight, but do not write status over the last
@@ -268,6 +384,9 @@ export function createGameStreamRunner(
       await requeueLaunchClaim(launchClaim, "sessiond unconfigured spawn")
       return await fail("spawn", "sessiond launcher missing managed spawn", 125)
     }
+
+    const resumed = await tryFrozenResume(launchClaim)
+    if (resumed) return resumed
 
     // Phase 4D / Track A. Forward the intent's lifecycle + optional
     // wait spec to sessiond via the LaunchExtras second arg shipped in
@@ -889,6 +1008,39 @@ function isFileExistsError(error: unknown): boolean {
   return (
     error instanceof Error && (error as NodeJS.ErrnoException).code === "EEXIST"
   )
+}
+
+/** Extract the `@korri:game` identity annotation's id, when present. */
+function gameIdentityAnnotation(
+  metadata: LaunchMetadata | undefined,
+): string | undefined {
+  const annotation = metadata?.annotations?.["@korri:game"]
+  if (!annotation || typeof annotation !== "object") return undefined
+  const id = (annotation as { id?: unknown }).id
+  return typeof id === "string" && id.length > 0 ? id : undefined
+}
+
+function defaultFrozenResumeSeam(
+  env: NodeJS.ProcessEnv,
+): GameStreamFrozenResumeSeam {
+  const options = { env }
+  return {
+    probeStatus: () => probeSessiondManagedLaunchStatus(options),
+    thaw: launchId => thawSessiondManagedLaunch({ launchId }, options),
+    waitForExit: launchId =>
+      observeSessiondManagedLaunchEvents({
+        fetchImpl: (input, init) => fetch(input, init),
+        ...(env.KORRI_SESSIOND_SOCKET
+          ? { socketPath: env.KORRI_SESSIOND_SOCKET }
+          : {}),
+        launchId,
+      }).exited,
+    terminate: (launchId, force) =>
+      terminateSessiondManagedLaunch(
+        { launchId, ...(force ? { force } : {}) },
+        options,
+      ),
+  }
 }
 
 function errorMessage(error: unknown): string {

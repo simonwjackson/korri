@@ -96,11 +96,21 @@ export function prepareStreamLaunch(
       try: () => intentPathForOptions(options),
       catch: error => toWriteError(error),
     })
+    // Game identity annotation: lets the host runner match a frozen managed
+    // launch to a re-entry request for the same game (thaw-and-reattach)
+    // instead of dead-ending on session-busy after a lid-close freeze.
+    const launchMetadata = {
+      ...(resolved.launchMetadata ?? {}),
+      annotations: {
+        ...(resolved.launchMetadata?.annotations ?? {}),
+        "@korri:game": { id: gameId },
+      },
+    }
     const intent = yield* Effect.try({
       try: () =>
         createLaunchIntent(resolved.spec, {
           launchCompanions: resolved.launchCompanions,
-          launchMetadata: resolved.launchMetadata,
+          launchMetadata,
           artifacts: resolved.artifacts,
         }),
       catch: error => toDataError(error, "invalid stream launch target"),

@@ -102,6 +102,11 @@ describe("app.stream.prepare handler", () => {
         extraArgs: ["--nested-refresh", "60"],
       },
     })
+    // Game identity annotation lets the host runner match a frozen launch
+    // to a re-entry request (thaw-and-reattach) instead of rejecting busy.
+    expect(intent.launchMetadata?.annotations?.["@korri:game"]).toEqual({
+      id: "snes/echo.smc",
+    })
   })
 
   it("writes provider-qualified metadata for Steam plugin launches", async () => {
@@ -142,7 +147,10 @@ describe("app.stream.prepare handler", () => {
     const intent = decodeLaunchIntent(
       JSON.parse(await readFile(result.intentPath, "utf8")),
     )
-    expect(intent.launchMetadata).toEqual({ appProviderId: "@korri:steam" })
+    expect(intent.launchMetadata).toEqual({
+      appProviderId: "@korri:steam",
+      annotations: { "@korri:game": { id: "steam/sonic" } },
+    })
     expect(
       JSON.parse(await readFile(result.intentPath, "utf8")),
     ).not.toHaveProperty("appIntegration")
