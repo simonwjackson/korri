@@ -182,6 +182,28 @@ export const SHIFT_DESIGN_PARTS = {
   // Shared leaf atoms.
   coverArt: { id: "shift.cover-art", layer: "atom", name: "Cover Art" },
   monogram: { id: "shift.monogram", layer: "atom", name: "Monogram" },
+  // Shared slide-out side sheet (surface-agnostic overlay primitive).
+  sheet: { id: "shift.sheet", layer: "organism", name: "Sheet" },
+  sheetPanel: {
+    id: "shift.sheet-panel",
+    layer: "organism",
+    name: "Sheet Panel",
+  },
+  sheetAction: {
+    id: "shift.sheet-action",
+    layer: "molecule",
+    name: "Sheet Action",
+  },
+  sheetGroup: {
+    id: "shift.sheet-group",
+    layer: "molecule",
+    name: "Sheet Group",
+  },
+  gameActionsSheet: {
+    id: "shift.game-actions-sheet",
+    layer: "organism",
+    name: "Game Actions Sheet",
+  },
   // Reel internals.
   reelTitle: {
     id: "shift.reel-title",

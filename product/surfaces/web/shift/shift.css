@@ -127,6 +127,9 @@
 	--shift-accent: var(--shift-focus-glow);
 	--shift-on-accent: #04222a;
 
+	/* Destructive intent (Remove, cool-down copy) — shared across surfaces. */
+	--shift-danger: #ff7a78;
+
 	/* On-media ink + scrim, for text laid over cover art (companion screen).
 	 * These are deliberately light/dark regardless of mode — art is the
 	 * backdrop, not a Shift surface. */
@@ -887,10 +890,6 @@
 }
 
 /* ----- Cinematic launch feedback (in-scene; see launch-failure-copy.ts) ----- */
-[data-shift-home] {
-	--shift-danger: #ff7a78;
-}
-
 /* The world cools when a launch fails — the game didn't come up. */
 [data-shift-home] .shift-cine-bg[data-cooled] {
 	filter: saturate(0.32) brightness(0.5);
@@ -2588,4 +2587,226 @@
 	letter-spacing: -0.03em;
 	color: hsl(var(--shift-monogram-hue, 210) 82% 88%);
 	user-select: none;
+}
+
+/* ==========================================================================
+ * Sheet — a surface-agnostic slide-out side sheet (overlay primitive).
+ *
+ * Lifted out of the store's refine panel so any surface can present a contextual
+ * panel: a right/left-anchored sheet over a dimming scrim. Unscoped on purpose
+ * (no [data-shift-*] prefix) so home, library, and store all reuse it; the
+ * --shift-* tokens resolve by inheritance from whatever Shift surface hosts it.
+ * The panel is absolutely positioned, so the host must be a positioned, clipping
+ * box — every Shift surface root already is; standalone hosts add
+ * `shift-sheet-host`.
+ * ========================================================================== */
+.shift-sheet-host {
+	position: relative;
+	overflow: hidden;
+}
+
+.shift-sheet-scrim {
+	position: absolute;
+	inset: 0;
+	z-index: 40;
+	background: var(--shift-scrim-mid);
+	animation: shift-sheet-scrim-in 160ms ease both;
+}
+
+.shift-sheet-panel {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: min(85%, 26em);
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-3);
+	padding: var(--shift-space-5) var(--shift-space-4);
+	background: var(--shift-surface-raised);
+	box-shadow: 0 0 46px rgba(0, 0, 0, 0.5);
+	overflow-y: auto;
+}
+
+.shift-sheet-panel[data-side="right"] {
+	right: 0;
+	border-left: 1px solid var(--shift-rule);
+	animation: shift-sheet-in-right 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.shift-sheet-panel[data-side="left"] {
+	left: 0;
+	border-right: 1px solid var(--shift-rule);
+	animation: shift-sheet-in-left 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.shift-sheet-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--shift-space-2);
+}
+
+.shift-sheet-head-slot {
+	min-width: 0;
+}
+
+.shift-sheet-title {
+	font-size: var(--shift-text-title);
+	font-weight: 800;
+	letter-spacing: -0.01em;
+	color: var(--shift-ink);
+}
+
+.shift-sheet-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	cursor: pointer;
+	color: var(--shift-ink-faint);
+	background: transparent;
+	border: 0;
+	padding: var(--shift-space-1);
+	border-radius: 9999px;
+	outline: none;
+	transition: color 140ms ease;
+}
+
+.shift-sheet-close svg {
+	width: 1.2em;
+	height: 1.2em;
+}
+
+.shift-sheet-close:is(:focus, [data-korri-active-focus]) {
+	color: var(--shift-ink);
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+.shift-sheet-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-4);
+	overflow-y: auto;
+}
+
+/* Menu-style content: a full-width action row. Focus/hover lifts it; the danger
+ * tone recolours destructive rows (Remove) without changing the layout. */
+.shift-sheet-action {
+	display: flex;
+	align-items: center;
+	gap: var(--shift-space-3);
+	width: 100%;
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--shift-text-body);
+	font-weight: 600;
+	text-align: left;
+	color: var(--shift-ink);
+	background: transparent;
+	border: 0;
+	border-radius: var(--shift-radius-panel);
+	padding: var(--shift-space-3) var(--shift-space-3);
+	outline: none;
+	transition:
+		background 140ms ease,
+		box-shadow 140ms ease,
+		color 140ms ease;
+}
+
+.shift-sheet-action:is(:hover, :focus, [data-korri-active-focus]) {
+	background: var(--shift-pill-bg);
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+}
+
+.shift-sheet-action[data-tone="danger"] {
+	color: var(--shift-danger);
+}
+
+/* Present-but-inert: shown so the full command surface is visible, but not
+ * wired or not applicable to this game. Dim, non-interactive, and (via the
+ * native `disabled` attribute) skipped by focus. */
+.shift-sheet-action:disabled {
+	opacity: 0.38;
+	cursor: default;
+}
+
+.shift-sheet-action:disabled:is(:hover, :focus) {
+	background: transparent;
+	box-shadow: none;
+}
+
+/* Titled section inside the sheet body (Play / Organize / Content / …). */
+.shift-sheet-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+}
+
+.shift-sheet-group-title {
+	padding: 0 var(--shift-space-3);
+	font-size: var(--shift-text-fine);
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--shift-ink-faint);
+}
+
+.shift-sheet-group-rows {
+	display: flex;
+	flex-direction: column;
+	gap: var(--shift-space-1);
+}
+
+.shift-sheet-action-icon {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+}
+
+.shift-sheet-action-icon svg {
+	width: 1.3em;
+	height: 1.3em;
+}
+
+.shift-sheet-action-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+@keyframes shift-sheet-scrim-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes shift-sheet-in-right {
+	from {
+		transform: translateX(100%);
+	}
+	to {
+		transform: none;
+	}
+}
+
+@keyframes shift-sheet-in-left {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.shift-sheet-scrim,
+	.shift-sheet-panel[data-side="right"],
+	.shift-sheet-panel[data-side="left"] {
+		animation: none;
+	}
 }
