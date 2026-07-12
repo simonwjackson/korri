@@ -159,6 +159,10 @@ pkgs.lib.optionalAttrs isX86Linux {
         inherit pkgs;
         korriRocknixGuestDeviceAccessModule = self.nixosModules.korri-rocknix-guest-device-access;
       };
+  korri-fan-control-module = import ../../../../tools/testing/nix/korri-fan-control-module-check.nix {
+    inherit pkgs;
+    korriFanControlModule = self.nixosModules.korri-fan-control;
+  };
   korri-module-identity-audit =
     import ../../../../tools/testing/nix/korri-module-identity-audit-check.nix
       {
@@ -427,6 +431,10 @@ pkgs.lib.optionalAttrs isX86Linux {
       }
       {
         name = "korri-rocknix-guest-device-access-module";
+        owner = "module";
+      }
+      {
+        name = "korri-fan-control-module";
         owner = "module";
       }
       {
