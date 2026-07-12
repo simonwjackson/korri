@@ -8,6 +8,7 @@ import { Effect } from "effect"
 import {
   acquireArtifact,
   acquisitionArtifactStagingRoot,
+  rejectNonArtifactPayload,
 } from "./artifact-acquisition"
 import { createAcquisitionPluginContext } from "./plugin-runtime"
 import {
@@ -254,11 +255,11 @@ describe("resolve-download acquire fallback", () => {
     }
   }
 
-  const fakeFetch: typeof fetch = async () =>
+  const fakeFetch = (async () =>
     new Response(romBytes, {
       status: 200,
       headers: { "content-type": "application/octet-stream" },
-    })
+    })) as unknown as typeof fetch
 
   it("stages a fetched artifact for a provider without acquireArtifact", async () => {
     await withTempRoot(async root => {
@@ -341,6 +342,109 @@ describe("resolve-download acquire fallback", () => {
         ),
       )
       expect(error).toMatchObject({ reason: "infrastructure" })
+    })
+  })
+})
+
+describe("rejectNonArtifactPayload", () => {
+  const zipBytes = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00])
+
+  it("accepts a plausible binary payload", () => {
+    expect(
+      rejectNonArtifactPayload({
+        bytes: zipBytes,
+        contentType: "application/zip",
+        extension: "zip",
+      }),
+    ).toBeUndefined()
+  })
+
+  it("rejects HTML served with a game filename", () => {
+    const page = Buffer.from(
+      '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">\n<html lang="en">',
+    )
+    expect(
+      rejectNonArtifactPayload({ bytes: page, extension: "zip" }),
+    ).toContain("web page")
+    expect(
+      rejectNonArtifactPayload({
+        bytes: zipBytes,
+        contentType: "text/html; charset=utf-8",
+        extension: "zip",
+      }),
+    ).toContain("web page")
+  })
+
+  it("rejects payloads whose magic does not match the extension", () => {
+    expect(
+      rejectNonArtifactPayload({
+        bytes: Buffer.from("MZ not a zip at all"),
+        extension: "zip",
+      }),
+    ).toContain(".zip")
+  })
+
+  it("rejects empty payloads and passes unknown extensions through", () => {
+    expect(
+      rejectNonArtifactPayload({ bytes: Buffer.alloc(0), extension: "sfc" }),
+    ).toContain("empty")
+    expect(
+      rejectNonArtifactPayload({
+        bytes: Buffer.from("raw rom bytes"),
+        extension: "sfc",
+      }),
+    ).toBeUndefined()
+  })
+})
+
+describe("resolve-download payload verification", () => {
+  it("fails the acquire when the source serves a web page", async () => {
+    await withTempRoot(async root => {
+      const registry = createAcquisitionPluginRegistry([
+        {
+          metadata: {
+            providerId: "@local:fixture-roms",
+            displayName: "Fixture ROMs",
+            module: "local/fixture-roms",
+            builtIn: false,
+            enabledByDefault: true,
+            legalRisk: "high",
+            credentialRequired: false,
+          },
+          resolveDownload: (_context, request) =>
+            Effect.succeed({
+              _tag: "FinalDownload" as const,
+              providerId: request.providerId,
+              url: "https://downloads.example.com/files/sonic.zip",
+              filename: "sonic.zip",
+            }),
+        },
+      ])
+      const htmlFetch = (async () =>
+        new Response("<!DOCTYPE html><html><body>ads</body></html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        })) as unknown as typeof fetch
+      const error = await Effect.runPromise(
+        acquireArtifact({
+          registry,
+          context: createAcquisitionPluginContext(),
+          stagingRoot: root,
+          fetchImpl: htmlFetch,
+          request: {
+            providerId: "@local:fixture-roms",
+            id: "sonic",
+            url: "https://roms.example.com/roms/sonic",
+          },
+        }).pipe(
+          Effect.match({ onFailure: e => e, onSuccess: () => undefined }),
+        ),
+      )
+      expect(error).toMatchObject({ reason: "infrastructure" })
+      expect(String((error as { message?: string })?.message)).toContain(
+        "did not deliver the file",
+      )
+      expect(await readdir(root, { recursive: true })).toEqual([])
     })
   })
 })

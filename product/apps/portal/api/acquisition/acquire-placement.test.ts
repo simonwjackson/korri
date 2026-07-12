@@ -46,7 +46,7 @@ describe("applyImportMetadata", () => {
         title: "Dank Tomb 1.1b",
         sha256: digest,
       })
-      expect(changed).toBe(true)
+      expect(changed).toBe("patched")
 
       const doc = parse(await readFile(configPath, "utf8"))
       const entry = doc.library["dank-tomb-0"]
@@ -73,7 +73,7 @@ describe("applyImportMetadata", () => {
         relativePath: "pico8/dank_tomb-0.p8.png",
         sha256: digest,
       })
-      expect(changed).toBe(true)
+      expect(changed).toBe("patched")
 
       const doc = parse(await readFile(configPath, "utf8"))
       const entry = doc.library["dank-tomb-0"]
@@ -99,7 +99,7 @@ describe("applyImportMetadata", () => {
         relativePath: "pico8/dank_tomb-0.p8.png",
         sha256: digest,
       })
-      expect(changed).toBe(false)
+      expect(changed).toBe("unchanged")
 
       const doc = parse(await readFile(configPath, "utf8"))
       expect(doc.library["dank-tomb-0"].releases[0].identity.value).toBe(
@@ -116,7 +116,7 @@ describe("applyImportMetadata", () => {
         relativePath: "pico8/dank_tomb-0.p8.png",
         title: "dank tomb 0",
       })
-      expect(changed).toBe(false)
+      expect(changed).toBe("unchanged")
     })
   })
 
@@ -129,7 +129,7 @@ describe("applyImportMetadata", () => {
         title: "Other",
         sha256: digest,
       })
-      expect(changed).toBe(false)
+      expect(changed).toBe("missing")
     })
   })
 })

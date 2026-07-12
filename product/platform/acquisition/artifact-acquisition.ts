@@ -171,6 +171,20 @@ function acquireViaResolvedDownload({
         downloadUrlBasename(resolution.url),
     )
     const extension = artifactFileExtension(fileName)
+    const rejection = rejectNonArtifactPayload({
+      bytes: fetched.bytes,
+      contentType: fetched.contentType ?? undefined,
+      ...(extension ? { extension } : {}),
+    })
+    if (rejection !== undefined) {
+      return yield* Effect.fail(
+        new AcquisitionError({
+          reason: "infrastructure",
+          message: `the source did not deliver the file: ${rejection}`,
+          providerId: request.providerId,
+        }),
+      )
+    }
     return yield* stageFetchedArtifactBytes({
       bytes: fetched.bytes,
       providerId: request.providerId,
@@ -184,6 +198,60 @@ function acquireViaResolvedDownload({
       formatId: request.artifactFormat ?? extension ?? "binary",
     })
   })
+}
+
+/** Leading file-magic bytes for artifact container extensions we can vouch for. */
+const ARTIFACT_MAGIC: Readonly<Record<string, readonly (readonly number[])[]>> =
+  {
+    zip: [
+      [0x50, 0x4b, 0x03, 0x04],
+      [0x50, 0x4b, 0x05, 0x06],
+      [0x50, 0x4b, 0x07, 0x08],
+    ],
+    "7z": [[0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]],
+    rar: [[0x52, 0x61, 0x72, 0x21, 0x1a, 0x07]],
+    gz: [[0x1f, 0x8b]],
+    png: [[0x89, 0x50, 0x4e, 0x47]],
+  }
+
+const HTML_LEAD = /^\s*<(!doctype\s|html[\s>]|head[\s>]|body[\s>]|script[\s>])/i
+
+/**
+ * Sniffs a fetched payload for the "web page instead of a game" failure mode:
+ * ROM sites serve HTML interstitials/ad pages with a 200 status and the
+ * requested filename, which would otherwise be staged and placed as if they
+ * were the real artifact. Returns a human-readable rejection, or undefined
+ * when the payload is plausible.
+ */
+export function rejectNonArtifactPayload(options: {
+  readonly bytes: Buffer
+  readonly contentType?: string
+  readonly extension?: string
+}): string | undefined {
+  const contentType = options.contentType?.toLowerCase() ?? ""
+  const htmlContentType =
+    contentType.startsWith("text/html") ||
+    contentType.startsWith("application/xhtml")
+  const lead = options.bytes.subarray(0, 512).toString("latin1")
+  const looksLikeHtml = HTML_LEAD.test(lead.replace(/^\uFEFF/, ""))
+  if (htmlContentType || looksLikeHtml) {
+    return "received a web page instead of the requested file"
+  }
+  const magic = options.extension
+    ? ARTIFACT_MAGIC[options.extension]
+    : undefined
+  if (magic) {
+    const matches = magic.some(signature =>
+      signature.every((byte, index) => options.bytes[index] === byte),
+    )
+    if (!matches) {
+      return `payload does not look like a .${options.extension} file`
+    }
+  }
+  if (options.bytes.byteLength === 0) {
+    return "received an empty file"
+  }
+  return undefined
 }
 
 export function sanitizeArtifactFileName(raw: string): string {

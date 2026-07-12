@@ -24,7 +24,10 @@ import type {
   AcquiredArtifact,
 } from "@platform/protocol/acquisition/artifact-acquisition"
 import { parse, stringify } from "yaml"
-import type { AcquirePlacementRunner } from "./acquire-jobs"
+import type {
+  AcquirePlacementRunner,
+  PlaceAndImportResult,
+} from "./acquire-jobs"
 
 export interface AcquirePlacementOptions {
   readonly env?: NodeJS.ProcessEnv
@@ -70,7 +73,7 @@ export function createAcquirePlacementRunner(
     async placeAndImport(
       artifact: AcquiredArtifact,
       request: AcquireArtifactRequest,
-    ): Promise<PlacedArtifact> {
+    ): Promise<PlaceAndImportResult> {
       const storages = await readStorages()
       const placed = await placeAcquiredArtifact({
         artifact,
@@ -88,7 +91,7 @@ export function createAcquirePlacementRunner(
       const configPath = scoutMergeConfigPath(env)
       await runScan(configPath)
       const title = placed.alreadyPresent ? undefined : request.title
-      await applyImportMetadata({
+      const outcome = await applyImportMetadata({
         configPath,
         storageId: placed.storageId,
         relativePath: placed.relativePath,
@@ -97,10 +100,15 @@ export function createAcquirePlacementRunner(
         // alreadyPresent placements are byte-identical by that same digest,
         // so the identity is correct for the placed file in both paths.
         sha256: artifact.digests.sha256,
-      }).catch(() => {
-        // Metadata is cosmetic; a failed patch must not fail the import.
+      }).catch((): ImportMetadataOutcome => {
+        // Metadata is cosmetic; a failed patch must not fail the import. The
+        // entry may still exist, so do not report the import as missing.
+        return "unchanged"
       })
-      return placed
+      // "In your Library" must be true: the scan can place a file the
+      // discovery rules do not recognize (wrong folder, unknown extension),
+      // in which case no entry references it and the job must say so.
+      return { placed, imported: outcome !== "missing" }
     },
   }
 }
@@ -133,18 +141,25 @@ interface PatchableEntry {
  * the file from the library. Claim art must flow through the game-assets
  * assignment system instead.
  */
+/**
+ * "patched": entry found and updated. "unchanged": entry found, nothing to
+ * write. "missing": no library entry references the placed file — the import
+ * did not actually happen from the user's point of view.
+ */
+export type ImportMetadataOutcome = "patched" | "unchanged" | "missing"
+
 export async function applyImportMetadata(options: {
   readonly configPath: string
   readonly storageId: string
   readonly relativePath: string
   readonly title?: string
   readonly sha256?: string
-}): Promise<boolean> {
+}): Promise<ImportMetadataOutcome> {
   const doc = parse(await readFile(options.configPath, "utf8")) as {
     library?: Record<string, PatchableEntry>
   } | null
   const library = doc?.library
-  if (!doc || !library) return false
+  if (!doc || !library) return "missing"
 
   let entry: PatchableEntry | undefined
   let release: PatchableRelease | undefined
@@ -159,7 +174,7 @@ export async function applyImportMetadata(options: {
       break
     }
   }
-  if (!entry || !release) return false
+  if (!entry || !release) return "missing"
 
   let changed = false
   if (options.title && entry.title !== options.title) {
@@ -170,7 +185,7 @@ export async function applyImportMetadata(options: {
     release.identity = { kind: "hash", value: `sha256:${options.sha256}` }
     changed = true
   }
-  if (!changed) return false
+  if (!changed) return "unchanged"
 
   const tempPath = join(
     dirname(options.configPath),
@@ -184,7 +199,7 @@ export async function applyImportMetadata(options: {
     await rm(tempPath, { force: true }).catch(() => undefined)
     throw error
   }
-  return true
+  return "patched"
 }
 
 /**

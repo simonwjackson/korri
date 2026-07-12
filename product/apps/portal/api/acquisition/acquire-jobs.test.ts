@@ -36,7 +36,7 @@ const placed: PlacedArtifact = {
 }
 
 const importingPlacement: AcquirePlacementRunner = {
-  placeAndImport: async () => placed,
+  placeAndImport: async () => ({ placed, imported: true }),
 }
 
 async function settle(): Promise<void> {
@@ -62,6 +62,23 @@ describe("acquire job store", () => {
     expect(finished?.fileName).toBe("Drill Dozer (U).gba")
     expect(finished?.stagedPath).toBe("/tmp/staging/sha256/aa/file.gba")
     expect(finished?.placedPath).toBe(placed.absolutePath)
+  })
+
+  it("settles as staged when the library did not recognize the file", async () => {
+    const store = makeAcquireJobStore()
+    const job = await Effect.runPromise(
+      startAcquireJob(
+        { acquireArtifact: () => Effect.succeed(artifact) },
+        request,
+        { placeAndImport: async () => ({ placed, imported: false }) },
+        store,
+      ),
+    )
+    await settle()
+    const finished = getAcquireJob(job.jobId, store)
+    expect(finished?.state).toBe("staged")
+    expect(finished?.placedPath).toBe(placed.absolutePath)
+    expect(finished?.message).toContain("did not recognize")
   })
 
   it("settles as staged with a message when placement fails", async () => {

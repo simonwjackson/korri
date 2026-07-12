@@ -36,11 +36,17 @@ export interface AcquireJobSnapshot {
 }
 
 /** Placement + import step, injected by the composition root. */
+export interface PlaceAndImportResult {
+  readonly placed: PlacedArtifact
+  /** True only when a library entry actually references the placed file. */
+  readonly imported: boolean
+}
+
 export interface AcquirePlacementRunner {
   readonly placeAndImport: (
     artifact: AcquiredArtifact,
     request: AcquireArtifactRequest,
-  ) => Promise<PlacedArtifact>
+  ) => Promise<PlaceAndImportResult>
 }
 
 interface AcquireJobStore {
@@ -111,11 +117,19 @@ export function startAcquireJob(
         placement.placeAndImport(artifact, request),
       ).pipe(
         Effect.map(
-          (placed): AcquireJobSnapshot => ({
-            ...staged,
-            state: "imported",
-            placedPath: placed.absolutePath,
-          }),
+          (result): AcquireJobSnapshot =>
+            result.imported
+              ? {
+                  ...staged,
+                  state: "imported",
+                  placedPath: result.placed.absolutePath,
+                }
+              : {
+                  ...staged,
+                  placedPath: result.placed.absolutePath,
+                  message:
+                    "Downloaded, but the Library did not recognize it as a playable game.",
+                },
         ),
         Effect.catchCause(cause =>
           Effect.succeed<AcquireJobSnapshot>({
