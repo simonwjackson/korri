@@ -6,9 +6,13 @@
  * selecting the provider-qualified entry id from those claims.
  */
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react"
-import type { RemoteCatalogError } from "@platform/acquisition/remote-catalog-source"
+import type {
+  RemoteCatalogAcquireStatus,
+  RemoteCatalogError,
+} from "@platform/acquisition/remote-catalog-source"
 import type { SearchResponse } from "@platform/protocol/acquisition/claim"
 import {
+  storeAcquireFn,
   storeSearchQueryAtom,
   storeSearchResultsAtom,
 } from "@platform/react/acquisition/remote-catalog-atoms"
@@ -50,6 +54,22 @@ export function ShiftStoreDetailRoute() {
       replace: false,
     })
 
+  const acquire = useAtomSet(storeAcquireFn)
+  const acquireResult = useAtomValue(storeAcquireFn)
+  const acquireView = storeAcquireView(acquireResult)
+
+  const onPrimary = () => {
+    if (!entry?.providerId || !entry.providerItemId) return
+    if (acquireView.state === "acquiring" || acquireView.state === "staged") {
+      return
+    }
+    acquire({
+      providerId: entry.providerId,
+      id: entry.providerItemId,
+      ...(entry.claimUrl ? { url: entry.claimUrl } : {}),
+    })
+  }
+
   return (
     <ShiftStoreDetailBody
       query={query}
@@ -57,8 +77,43 @@ export function ShiftStoreDetailRoute() {
       result={result}
       onRetry={retry}
       onBack={onBack}
+      onPrimary={onPrimary}
+      acquireView={acquireView}
     />
   )
+}
+
+export interface StoreAcquireView {
+  readonly state: "idle" | "acquiring" | "staged" | "failed"
+  readonly message?: string
+}
+
+/** Projects the acquire mutation's AsyncResult into the detail page verbs. */
+export function storeAcquireView(
+  result: AsyncResult.AsyncResult<
+    RemoteCatalogAcquireStatus,
+    RemoteCatalogError
+  >,
+): StoreAcquireView {
+  if (result.waiting) return { state: "acquiring" }
+  return AsyncResult.matchWithError(result, {
+    onInitial: (): StoreAcquireView => ({ state: "idle" }),
+    onError: (error): StoreAcquireView => ({
+      state: "failed",
+      message: error.message ?? "The download failed.",
+    }),
+    onDefect: (): StoreAcquireView => ({
+      state: "failed",
+      message: "Something went wrong downloading.",
+    }),
+    onSuccess: (success): StoreAcquireView =>
+      success.value.state === "staged"
+        ? { state: "staged" }
+        : {
+            state: "failed",
+            message: success.value.message ?? "The download failed.",
+          },
+  })
 }
 
 export function findStoreDetailEntry(
@@ -83,12 +138,16 @@ function ShiftStoreDetailBody({
   result,
   onRetry,
   onBack,
+  onPrimary,
+  acquireView,
 }: {
   readonly query: string
   readonly entry: ShiftStoreEntry | undefined
   readonly result: AsyncResult.AsyncResult<SearchResponse, RemoteCatalogError>
   readonly onRetry: () => void
   readonly onBack: () => void
+  readonly onPrimary: () => void
+  readonly acquireView: StoreAcquireView
 }) {
   return AsyncResult.matchWithError(result, {
     onInitial: () => (
@@ -111,11 +170,39 @@ function ShiftStoreDetailBody({
     ),
     onSuccess: () =>
       entry ? (
-        <ShiftStoreDetail entry={entry} onBack={onBack} />
+        <ShiftStoreDetail
+          entry={entry}
+          onBack={onBack}
+          onPrimary={onPrimary}
+          {...storeAcquirePresentation(acquireView)}
+        />
       ) : (
         <StoreDetailStatus message="Store item not found." />
       ),
   })
+}
+
+function storeAcquirePresentation(view: StoreAcquireView): {
+  readonly primaryOverride?: { readonly label: string; readonly hint: string }
+  readonly notice?: string
+} {
+  switch (view.state) {
+    case "acquiring":
+      return {
+        primaryOverride: { label: "Getting…", hint: "Getting…" },
+      }
+    case "staged":
+      return {
+        primaryOverride: { label: "Downloaded", hint: "Downloaded" },
+        notice: "Downloaded to this device.",
+      }
+    case "failed":
+      return {
+        notice: view.message ?? "The download failed. Try Get again.",
+      }
+    default:
+      return {}
+  }
 }
 
 function StoreDetailStatus({ message }: { readonly message: string }) {

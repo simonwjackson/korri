@@ -23,19 +23,25 @@ export interface ShiftStoreDetailProps {
   readonly entry: ShiftStoreEntry
   readonly onBack?: () => void
   readonly onPrimary?: (id: string) => void
+  /** Overrides the status-derived primary action (e.g. a live acquire job). */
+  readonly primaryOverride?: { readonly label: string; readonly hint: string }
+  /** One-line status/outcome message under the actions (e.g. failure). */
+  readonly notice?: string
 }
 
 export function ShiftStoreDetail({
   entry,
   onBack,
   onPrimary,
+  primaryOverride,
+  notice,
 }: ShiftStoreDetailProps) {
   useInputAction("back", () => onBack?.())
 
   const tags = [shiftStoreSourcesLabel(entry.sources), entry.platform]
     .filter(Boolean)
     .join(" · ")
-  const action = shiftStorePrimaryAction(entry)
+  const action = primaryOverride ?? shiftStorePrimaryAction(entry)
 
   return (
     <div
@@ -62,6 +68,7 @@ export function ShiftStoreDetail({
             onClick={() => onPrimary?.(entry.id)}
           />
         </div>
+        {notice ? <p className="shift-detail-synopsis">{notice}</p> : null}
         <div
           className="shift-detail-buttonbar"
           {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.detailHints)}

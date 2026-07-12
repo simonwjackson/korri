@@ -21,6 +21,8 @@ import { createFirstPartyPluginState } from "@product/plugin-host/state"
 import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
+import { handleAcquisitionAcquire } from "../acquisition/acquire.rpc-handler"
+import { handleAcquisitionAcquireStatus } from "../acquisition/acquire-status.rpc-handler"
 import { handleAcquisitionDetails } from "../acquisition/details.rpc-handler"
 import { handleAcquisitionPlugins } from "../acquisition/plugins.rpc-handler"
 import { handleAcquisitionResolveDownload } from "../acquisition/resolve-download.rpc-handler"
@@ -136,6 +138,8 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.acquisition.providers": handleAcquisitionPlugins,
     "app.acquisition.validate-providers": handleAcquisitionValidateProviders,
     "app.acquisition.resolve-download": handleAcquisitionResolveDownload,
+    "app.acquisition.acquire": handleAcquisitionAcquire,
+    "app.acquisition.acquire-status": handleAcquisitionAcquireStatus,
     "app.hello.get": handleGetHello,
     "app.game-assets.candidates.list": handleListGameAssetCandidates,
     "app.game-assets.assign": handleAssignGameAsset,

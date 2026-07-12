@@ -229,3 +229,118 @@ describe("artifact acquisition staging", () => {
     })
   })
 })
+
+describe("resolve-download acquire fallback", () => {
+  const romBytes = Buffer.from("GBA ROM PAYLOAD BYTES")
+
+  function resolveOnlyPlugin(): AcquisitionPluginDefinition {
+    return {
+      metadata: {
+        providerId: "@local:fixture-roms",
+        displayName: "Fixture ROMs",
+        module: "local/fixture-roms",
+        builtIn: false,
+        enabledByDefault: true,
+        legalRisk: "high",
+        credentialRequired: false,
+      },
+      resolveDownload: (_context, request) =>
+        Effect.succeed({
+          _tag: "FinalDownload" as const,
+          providerId: request.providerId,
+          url: "https://downloads.example.com/files/Drill%20Dozer%20(U).gba",
+          filename: "Drill Dozer (U).gba",
+        }),
+    }
+  }
+
+  const fakeFetch: typeof fetch = async () =>
+    new Response(romBytes, {
+      status: 200,
+      headers: { "content-type": "application/octet-stream" },
+    })
+
+  it("stages a fetched artifact for a provider without acquireArtifact", async () => {
+    await withTempRoot(async root => {
+      const registry = createAcquisitionPluginRegistry([resolveOnlyPlugin()])
+
+      const acquired = await Effect.runPromise(
+        acquireArtifact({
+          registry,
+          context: createAcquisitionPluginContext(),
+          stagingRoot: root,
+          fetchImpl: fakeFetch,
+          request: {
+            providerId: "@local:fixture-roms",
+            id: "drill-dozer",
+            url: "https://roms.example.com/roms/drill-dozer",
+          },
+        }),
+      )
+
+      expect(acquired.id).toMatch(/^sha256:[a-f0-9]{64}$/)
+      expect(acquired.file.name).toBe("Drill Dozer (U).gba")
+      expect(acquired.file.extension).toBe("gba")
+      expect(acquired.format.id).toBe("gba")
+      expect(acquired.stagedPath).toStartWith(root)
+      expect(await readFile(acquired.stagedPath)).toEqual(romBytes)
+    })
+  })
+
+  it("fails clearly when no claim url is provided for the fallback", async () => {
+    await withTempRoot(async root => {
+      const registry = createAcquisitionPluginRegistry([resolveOnlyPlugin()])
+      const error = await Effect.runPromise(
+        acquireArtifact({
+          registry,
+          context: createAcquisitionPluginContext(),
+          stagingRoot: root,
+          fetchImpl: fakeFetch,
+          request: { providerId: "@local:fixture-roms", id: "drill-dozer" },
+        }).pipe(
+          Effect.match({
+            onFailure: error => error,
+            onSuccess: () => undefined,
+          }),
+        ),
+      )
+      expect(error).toMatchObject({ reason: "defective-provider" })
+    })
+  })
+
+  it("fails when the plugin resolves a non-final download", async () => {
+    await withTempRoot(async root => {
+      const registry = createAcquisitionPluginRegistry([
+        {
+          ...resolveOnlyPlugin(),
+          resolveDownload: (_context, request) =>
+            Effect.succeed({
+              _tag: "NonFinalDownload" as const,
+              providerId: request.providerId,
+              reason: "interstitial" as const,
+              url: request.candidateUrl,
+            }),
+        },
+      ])
+      const error = await Effect.runPromise(
+        acquireArtifact({
+          registry,
+          context: createAcquisitionPluginContext(),
+          stagingRoot: root,
+          fetchImpl: fakeFetch,
+          request: {
+            providerId: "@local:fixture-roms",
+            id: "drill-dozer",
+            url: "https://roms.example.com/roms/drill-dozer",
+          },
+        }).pipe(
+          Effect.match({
+            onFailure: error => error,
+            onSuccess: () => undefined,
+          }),
+        ),
+      )
+      expect(error).toMatchObject({ reason: "infrastructure" })
+    })
+  })
+})

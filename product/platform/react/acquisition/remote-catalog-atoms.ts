@@ -11,6 +11,8 @@
  */
 import {
   loadingForeverRemoteCatalogSourceLayer,
+  type RemoteCatalogAcquireRequest,
+  type RemoteCatalogAcquireStatus,
   RemoteCatalogSource,
 } from "@platform/acquisition/remote-catalog-source"
 import { Effect } from "effect"
@@ -39,3 +41,25 @@ export const storeSearchResultsAtom = remoteCatalogRuntime.atom(get => {
     return yield* source.search({ query })
   })
 })
+
+const ACQUIRE_POLL_INTERVAL = "1200 millis"
+
+/**
+ * The Get mutation: starts an acquire job and polls it to a terminal state.
+ * Writing a request runs the whole lifecycle; readers observe an AsyncResult
+ * that is waiting while the download runs and resolves with the terminal
+ * status (staged or failed-with-message).
+ */
+export const storeAcquireFn =
+  remoteCatalogRuntime.fn<RemoteCatalogAcquireRequest>()(
+    (request: RemoteCatalogAcquireRequest) =>
+      Effect.gen(function* () {
+        const source = yield* RemoteCatalogSource
+        let status: RemoteCatalogAcquireStatus = yield* source.acquire(request)
+        while (status.state === "acquiring") {
+          yield* Effect.sleep(ACQUIRE_POLL_INTERVAL)
+          status = yield* source.acquireStatus(status.jobId)
+        }
+        return status
+      }),
+  )

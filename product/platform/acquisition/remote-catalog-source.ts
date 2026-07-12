@@ -23,10 +23,35 @@ export class RemoteCatalogError extends Schema.TaggedErrorClass<RemoteCatalogErr
   },
 ) {}
 
+/** Client-side view of an acquire job: mirrors app.acquisition.acquire. */
+export interface RemoteCatalogAcquireRequest {
+  readonly providerId: string
+  readonly id: string
+  readonly url?: string
+  readonly fileName?: string
+}
+
+export interface RemoteCatalogAcquireStatus {
+  readonly jobId: string
+  readonly providerId: string
+  readonly id: string
+  readonly state: "acquiring" | "staged" | "failed"
+  readonly fileName?: string
+  readonly stagedPath?: string
+  readonly system?: string
+  readonly message?: string
+}
+
 export interface RemoteCatalogSourceService {
   readonly search: (
     request: SearchRequest,
   ) => Effect.Effect<SearchResponse, RemoteCatalogError>
+  readonly acquire: (
+    request: RemoteCatalogAcquireRequest,
+  ) => Effect.Effect<RemoteCatalogAcquireStatus, RemoteCatalogError>
+  readonly acquireStatus: (
+    jobId: string,
+  ) => Effect.Effect<RemoteCatalogAcquireStatus, RemoteCatalogError>
 }
 
 export class RemoteCatalogSource extends Context.Service<
@@ -39,6 +64,8 @@ export const loadingForeverRemoteCatalogSourceLayer = Layer.succeed(
   RemoteCatalogSource,
 )({
   search: () => Effect.never,
+  acquire: () => Effect.never,
+  acquireStatus: () => Effect.never,
 })
 
 /**
@@ -48,6 +75,8 @@ export const loadingForeverRemoteCatalogSourceLayer = Layer.succeed(
 export function makeInMemoryRemoteCatalogSourceLayer(
   claims: SearchResponse["claims"],
 ) {
+  let jobSequence = 0
+  const jobs = new Map<string, RemoteCatalogAcquireStatus>()
   return Layer.succeed(RemoteCatalogSource)({
     search: request => {
       const query = request.query.trim().toLowerCase()
@@ -57,13 +86,41 @@ export function makeInMemoryRemoteCatalogSourceLayer(
         ),
       })
     },
+    // Acquires resolve immediately in-memory: one poll observes "staged".
+    acquire: request => {
+      const jobId = `in-memory-${++jobSequence}`
+      const status: RemoteCatalogAcquireStatus = {
+        jobId,
+        providerId: request.providerId,
+        id: request.id,
+        state: "staged",
+        fileName: request.fileName ?? `${request.id}.bin`,
+        stagedPath: `/tmp/in-memory-staging/${jobId}`,
+      }
+      jobs.set(jobId, status)
+      return Effect.succeed(status)
+    },
+    acquireStatus: jobId => {
+      const status = jobs.get(jobId)
+      return status
+        ? Effect.succeed(status)
+        : Effect.fail(
+            new RemoteCatalogError({
+              reason: "invalid",
+              message: `unknown in-memory acquire job ${jobId}`,
+            }),
+          )
+    },
   })
 }
 
 /** Always-failing layer for exercising the search error state. */
 export function makeFailingRemoteCatalogSourceLayer(message: string) {
+  const fail = () =>
+    Effect.fail(new RemoteCatalogError({ reason: "unavailable", message }))
   return Layer.succeed(RemoteCatalogSource)({
-    search: () =>
-      Effect.fail(new RemoteCatalogError({ reason: "unavailable", message })),
+    search: fail,
+    acquire: fail,
+    acquireStatus: fail,
   })
 }

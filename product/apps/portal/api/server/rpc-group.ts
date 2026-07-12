@@ -1,5 +1,7 @@
 import { FeatureGatesMiddleware } from "@platform/gates/middleware"
 import { RpcGroup } from "effect/unstable/rpc"
+import { AcquisitionAcquireRpc as appAcquisitionAcquire } from "../acquisition/acquire.rpc"
+import { AcquisitionAcquireStatusRpc as appAcquisitionAcquireStatus } from "../acquisition/acquire-status.rpc"
 import { AcquisitionDetailsRpc as appAcquisitionDetails } from "../acquisition/details.rpc"
 import { AcquisitionPluginsRpc as appAcquisitionPlugins } from "../acquisition/plugins.rpc"
 import { AcquisitionResolveDownloadRpc as appAcquisitionResolveDownload } from "../acquisition/resolve-download.rpc"
@@ -39,6 +41,8 @@ export const serverRpcGroup = RpcGroup.make(
   appAcquisitionPlugins,
   appAcquisitionValidateProviders,
   appAcquisitionResolveDownload,
+  appAcquisitionAcquire,
+  appAcquisitionAcquireStatus,
   appHelloGet,
   appGameAssetsCandidatesList,
   appGameAssetsAssign,

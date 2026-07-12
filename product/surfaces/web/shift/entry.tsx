@@ -1,5 +1,7 @@
 import { useAtomRefresh } from "@effect/atom-react"
 import {
+  type RemoteCatalogAcquireRequest,
+  type RemoteCatalogAcquireStatus,
   RemoteCatalogError,
   RemoteCatalogSource,
 } from "@platform/acquisition/remote-catalog-source"
@@ -176,17 +178,47 @@ function createBridgeCatalogFactsSourceLayer(bridge: KorriPlatformBridge) {
 }
 
 function createBridgeRemoteCatalogSourceLayer(_bridge: KorriPlatformBridge) {
+  const viaRpc = <A,>(run: () => Promise<A>) =>
+    Effect.tryPromise({
+      try: run,
+      catch: error =>
+        new RemoteCatalogError({
+          reason: "unavailable",
+          message: error instanceof Error ? error.message : String(error),
+        }),
+    })
   return Layer.succeed(RemoteCatalogSource)({
     search: request =>
-      Effect.tryPromise({
-        try: async () => searchRemoteCatalogViaSameOriginRpc(request),
-        catch: error =>
-          new RemoteCatalogError({
-            reason: "unavailable",
-            message: error instanceof Error ? error.message : String(error),
-          }),
-      }),
+      viaRpc(() => searchRemoteCatalogViaSameOriginRpc(request)),
+    acquire: request =>
+      viaRpc(() =>
+        callSameOriginRpc<RemoteCatalogAcquireStatus>(
+          "app.acquisition.acquire",
+          request,
+          parseAcquireStatus,
+        ),
+      ),
+    acquireStatus: jobId =>
+      viaRpc(() =>
+        callSameOriginRpc<RemoteCatalogAcquireStatus>(
+          "app.acquisition.acquire-status",
+          { jobId },
+          parseAcquireStatus,
+        ),
+      ),
   })
+}
+
+function parseAcquireStatus(value: unknown): RemoteCatalogAcquireStatus {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("jobId" in value) ||
+    !("state" in value)
+  ) {
+    throw new Error("acquire: unexpected response shape")
+  }
+  return value as RemoteCatalogAcquireStatus
 }
 
 let storeSearchRequestSequence = 0
@@ -201,6 +233,20 @@ export async function searchRemoteCatalogViaSameOriginRpc(
   request: SearchRequest,
   fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
 ): Promise<SearchResponse> {
+  return callSameOriginRpc(
+    "app.acquisition.search",
+    request,
+    parseSearchResponse,
+    fetchImpl,
+  )
+}
+
+async function callSameOriginRpc<A>(
+  tag: string,
+  payload: unknown,
+  parse: (value: unknown) => A,
+  fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
+): Promise<A> {
   const response = await fetchImpl("/api/rpc", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -210,8 +256,8 @@ export async function searchRemoteCatalogViaSameOriginRpc(
         // effect/rpc parses request ids as BigInt on the server side; keep
         // direct hand-written envelopes numeric like the generated client.
         id: String(++storeSearchRequestSequence),
-        tag: "app.acquisition.search",
-        payload: request,
+        tag,
+        payload,
         traceId: "00000000000000000000000000000000",
         spanId: "0000000000000000",
         sampled: false,
@@ -221,13 +267,16 @@ export async function searchRemoteCatalogViaSameOriginRpc(
   })
 
   if (!response.ok) {
-    throw new Error(`app.acquisition.search: HTTP ${response.status}`)
+    throw new Error(`${tag}: HTTP ${response.status}`)
   }
 
-  return parseSearchResponse(readRpcSuccessValue(await response.json()))
+  return parse(readRpcSuccessValue(await response.json(), tag))
 }
 
-function readRpcSuccessValue(value: unknown): unknown {
+function readRpcSuccessValue(
+  value: unknown,
+  tag = "app.acquisition.search",
+): unknown {
   const frame = Array.isArray(value) ? value[0] : value
   if (
     typeof frame === "object" &&
@@ -241,7 +290,7 @@ function readRpcSuccessValue(value: unknown): unknown {
   ) {
     return frame.exit.value
   }
-  throw new Error("app.acquisition.search: unexpected RPC response shape")
+  throw new Error(`${tag}: unexpected RPC response shape`)
 }
 
 function parseSearchResponse(value: unknown): SearchResponse {

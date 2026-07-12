@@ -16,6 +16,8 @@ import { handleAcquisitionSearch } from "./search.rpc-handler"
 import { handleAcquisitionValidateProviders } from "./validate-providers.rpc-handler"
 
 const acquisitionTags = [
+  "app.acquisition.acquire",
+  "app.acquisition.acquire-status",
   "app.acquisition.details",
   "app.acquisition.providers",
   "app.acquisition.resolve-download",

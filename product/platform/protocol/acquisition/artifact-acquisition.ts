@@ -25,6 +25,12 @@ const ProviderId = Schema.String.pipe(
 export const AcquireArtifactRequest = Schema.Struct({
   providerId: ProviderId,
   id: Schema.String,
+  /**
+   * Claim page URL. Providers without an `artifact.acquire` handler are
+   * acquired through the generic fallback: resolve-download against this URL,
+   * then the daemon fetches the final artifact itself.
+   */
+  url: Schema.optional(Schema.String),
   fileName: Schema.optional(Schema.String),
   size: Schema.optional(Schema.String),
   artifactFormat: Schema.optional(Schema.String),

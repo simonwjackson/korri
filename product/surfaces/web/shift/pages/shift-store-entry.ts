@@ -20,6 +20,12 @@ export interface ShiftStoreEntry {
   readonly id: string
   readonly title: string
   readonly artUrl: string
+  /** Acquisition identity: the plugin that produced the claim and the claim's
+   * provider-scoped item id + page URL, needed to start an acquire. Absent on
+   * pure fixture entries. */
+  readonly providerId?: string
+  readonly providerItemId?: string
+  readonly claimUrl?: string
   /**
    * Human-readable remote sources this release can be acquired from. A grouped
    * release has MANY (the same game mirrored across providers); a plain one has
@@ -77,6 +83,9 @@ export function shiftStoreEntryFromClaim(
     id: claim.id,
     title: claim.title,
     artUrl: claim.thumbnailUrl ?? "",
+    providerId: claim.providerId,
+    providerItemId: claim.id,
+    claimUrl: claim.url,
     sources: [shiftStoreSourceLabel(claim.providerId)],
     ...(claim.platform ? { platform: claim.platform } : {}),
     status: "available",

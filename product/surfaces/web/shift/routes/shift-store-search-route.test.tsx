@@ -208,6 +208,29 @@ describe("Shift store route — remote catalog search", () => {
     expect(screen.getByText(/available from itch\.io/)).toBeDefined()
   })
 
+  it("acquires from the detail page Get button", async () => {
+    const entryId = "@korri:itchio:pico-park"
+    render(
+      <RegistryProvider>
+        <StoreAt
+          entry={`/store/${shiftStoreEntryIdToRouteToken(entryId)}?q=pico`}
+          layer={makeInMemoryRemoteCatalogSourceLayer(CLAIMS)}
+        />
+      </RegistryProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Get" })).toBeDefined()
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Get" }))
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Downloaded" })).toBeDefined()
+    })
+    expect(screen.getByText("Downloaded to this device.")).toBeDefined()
+  })
+
   it("shows the search error with a retry affordance", async () => {
     render(
       <RegistryProvider>
