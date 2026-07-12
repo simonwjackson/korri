@@ -923,6 +923,12 @@ in
       for_window [class="steam"] move container to workspace korri:steam-debug
       for_window [app_id="steam"] move container to workspace korri:steam-debug
 
+      # Pin the Korri kiosk web surface (Chromium app window) to the hub
+      # workspace, which is bound to the primary/top output. Without this the
+      # renderer can map onto whatever workspace/output Sway last focused
+      # (e.g. the bottom panel).
+      for_window [app_id="^chrome-127\.0\.0\.1__.*"] move container to workspace korri:hub
+
       ${renderSwayDisplay}
     '';
   };
