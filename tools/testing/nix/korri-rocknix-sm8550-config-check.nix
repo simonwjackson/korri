@@ -838,13 +838,22 @@ let
         inputdEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"
         && !(inputdEnv ? KORRI_INPUTD_KILL_CURRENT_GAME)
       ))
+      (check "${name}: KEY_F24 toggles bottom screen without keyboard" (
+        if name == "Thor" then
+          (inputdEnv.KORRI_INPUTD_KEY_F24_ACTION or null) == "toggle-bottom-screen"
+          && lib.hasSuffix "/bin/korri-bandai-bottom-screen-toggle" (inputdEnv.KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN or "")
+          && lib.hasInfix ''$runtime_dir/sway-ipc.sock'' sm8550PlatformAdapterSource
+          && lib.hasInfix "events \${state}" sm8550PlatformAdapterSource
+          && !(lib.hasInfix "korri:bottom-keyboard" sm8550PlatformAdapterSource)
+          && !(lib.hasInfix "korri-bottom-keyboard.log" sm8550PlatformAdapterSource)
+          && !(lib.hasInfix "korri-bandai-bottom-keyboard-toggle" sm8550PlatformAdapterSource)
+        else
+          !(inputdEnv ? KORRI_INPUTD_KEY_F24_ACTION)
+          && !(inputdEnv ? KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN)
+      ))
       (check "${name}: Android Back toggles the active-workspace keyboard" (
         (inputdEnv.KORRI_INPUTD_BACK_TAP_ACTION or null) == "toggle-bottom-keyboard"
         && lib.hasSuffix "/bin/korri-bandai-keyboard-toggle" (inputdEnv.KORRI_INPUTD_BOTTOM_KEYBOARD or "")
-        && !(inputdEnv ? KORRI_INPUTD_KEY_F24_ACTION)
-        && !(inputdEnv ? KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN)
-        && !(lib.hasInfix "korri:bottom-keyboard" sm8550PlatformAdapterSource)
-        && !(lib.hasInfix "korri-bandai-bottom-keyboard-toggle" sm8550PlatformAdapterSource)
       ))
       (check "${name}: inputd PATH includes swaymsg for foreground shortcuts" (
         builtins.elem compositor.sway.package inputdPath

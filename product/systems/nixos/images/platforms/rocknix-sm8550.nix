@@ -151,6 +151,58 @@ let
   # of fake suspend. The substrate verb owns radios + governors + NM recovery;
   # this package only drops enter/exit request markers into the neutral channel.
   korriFakesuspendToggle = korri.packages.${targetSystem}.korri-fakesuspend-toggle;
+  # Bandai bottom-screen toggle. Thor's bottom-screen hardware button emits
+  # KEY_F24 and owns only the DSI-1 power/touch state; keyboard visibility is
+  # intentionally handled by Android Back below.
+  korriBandaiBottomScreenToggle =
+    if displayBottomConnector == null then
+      null
+    else
+      pkgs.writeShellApplication {
+        name = "korri-bandai-bottom-screen-toggle";
+        runtimeInputs = with pkgs; [
+          coreutils
+          findutils
+          gnugrep
+          sway
+        ];
+        text = ''
+      set -u
+
+      runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
+      find_sway_sock() {
+        if [ -n "''${SWAYSOCK:-}" ] && [ -S "$SWAYSOCK" ]; then
+          printf '%s\n' "$SWAYSOCK"
+          return 0
+        fi
+        if [ -S "$runtime_dir/sway-ipc.sock" ]; then
+          printf '%s\n' "$runtime_dir/sway-ipc.sock"
+          return 0
+        fi
+        find "$runtime_dir" -maxdepth 1 -type s -name 'sway-ipc.*.sock' -print -quit 2>/dev/null || true
+      }
+      sock=$(find_sway_sock | head -n 1)
+      [ -n "$sock" ] || exit 0
+      export SWAYSOCK="$sock"
+
+      bottom_is_on() {
+        swaymsg -t get_outputs \
+          | grep -A30 '"name": "${displayBottomConnector}"' \
+          | grep -q '"power": true'
+      }
+
+      if bottom_is_on; then
+        swaymsg 'focus output ${displayPrimaryConnector}' >/dev/null 2>&1 || true
+        ${renderBottomTouchEvents "disabled"}
+        swaymsg 'output ${displayBottomConnector} power off' >/dev/null 2>&1 || true
+        exit 0
+      fi
+
+      swaymsg 'output ${displayBottomConnector} power on' >/dev/null 2>&1 || true
+      ${renderBottomTouchEvents "enabled"}
+      swaymsg 'focus output ${displayPrimaryConnector}' >/dev/null 2>&1 || true
+    '';
+      };
   # Bandai keyboard toggle. Android Back dispatches inputd's keyboard action,
   # and wvkbd opens on the currently focused workspace/output instead of being
   # coupled to second-screen power policy.
@@ -823,9 +875,13 @@ in
   #   - volume up/down -> inputd's built-in `pactl set-sink-volume` default
   #     (PULSE_SERVER below points it at the Korri user-session graph); no
   #     override needed now that the substrate volume handler is gone.
+  #   - KEY_F24 -> bottom-screen power/touch toggle only; no keyboard side effect.
   #   - Back -> keyboard toggle. The Android Back key is the hardware gesture for
   #     the active-workspace on-screen keyboard on Bandai.
-  services.korri.input.inputd.environment = {
+  services.korri.input.inputd.environment = lib.optionalAttrs (displayBottomConnector != null) {
+    KORRI_INPUTD_KEY_F24_ACTION = "toggle-bottom-screen";
+    KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN = "${korriBandaiBottomScreenToggle}/bin/korri-bandai-bottom-screen-toggle";
+  } // {
     KORRI_INPUTD_BACK_TAP_ACTION = "toggle-bottom-keyboard";
     KORRI_INPUTD_BOTTOM_KEYBOARD = "${korriBandaiKeyboardToggle}/bin/korri-bandai-keyboard-toggle";
     KORRI_INPUTD_POWER_SUSPEND = "${korriFakesuspendToggle}/bin/korri-fakesuspend-toggle";
