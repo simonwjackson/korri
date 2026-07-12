@@ -1,19 +1,27 @@
 /**
  * In-memory acquire job store.
  *
- * `app.acquisition.acquire` starts a background download (staging an artifact
- * through the Acquisition service) and returns immediately with a job
- * snapshot; `app.acquisition.acquire-status` polls it. Mirrors the
- * plugin-install request/status pattern: acquisitions outlive the RPC that
- * started them, and repeated Get presses on the same claim reuse the running
- * job instead of downloading twice.
+ * `app.acquisition.acquire` starts a background pipeline — stage the artifact
+ * through the Acquisition service, place it into a configured library
+ * storage, then run the configured Scout scan so the release imports — and
+ * returns immediately with a job snapshot; `app.acquisition.acquire-status`
+ * polls it. Mirrors the plugin-install request/status pattern: acquisitions
+ * outlive the RPC that started them, and repeated Get presses on the same
+ * claim reuse the running job instead of downloading twice.
+ *
+ * Terminal states: `imported` (in the library), `staged` (downloaded but
+ * import unavailable/failed — message says why, bytes are kept), `failed`.
  */
 import { randomUUID } from "node:crypto"
 import type { AcquisitionService } from "@platform/acquisition/acquisition-service"
-import type { AcquireArtifactRequest } from "@platform/protocol/acquisition/artifact-acquisition"
+import type { PlacedArtifact } from "@platform/acquisition/artifact-placement"
+import type {
+  AcquireArtifactRequest,
+  AcquiredArtifact,
+} from "@platform/protocol/acquisition/artifact-acquisition"
 import { Effect } from "effect"
 
-export type AcquireJobState = "acquiring" | "staged" | "failed"
+export type AcquireJobState = "acquiring" | "staged" | "imported" | "failed"
 
 export interface AcquireJobSnapshot {
   readonly jobId: string
@@ -22,8 +30,17 @@ export interface AcquireJobSnapshot {
   readonly state: AcquireJobState
   readonly fileName?: string
   readonly stagedPath?: string
+  readonly placedPath?: string
   readonly system?: string
   readonly message?: string
+}
+
+/** Placement + import step, injected by the composition root. */
+export interface AcquirePlacementRunner {
+  readonly placeAndImport: (
+    artifact: AcquiredArtifact,
+    request: AcquireArtifactRequest,
+  ) => Promise<PlacedArtifact>
 }
 
 interface AcquireJobStore {
@@ -49,6 +66,7 @@ export function getAcquireJob(
 export function startAcquireJob(
   acquisition: Pick<AcquisitionService, "acquireArtifact">,
   request: AcquireArtifactRequest,
+  placement: AcquirePlacementRunner | undefined,
   store: AcquireJobStore = defaultStore,
 ): Effect.Effect<AcquireJobSnapshot> {
   return Effect.gen(function* () {
@@ -70,16 +88,44 @@ export function startAcquireJob(
     store.jobs.set(jobId, job)
     store.activeByClaim.set(key, jobId)
 
-    yield* acquisition.acquireArtifact(request).pipe(
-      Effect.map(artifact => {
+    const pipeline = Effect.gen(function* () {
+      const artifact = yield* acquisition.acquireArtifact(request)
+      const staged: AcquireJobSnapshot = {
+        ...job,
+        state: "staged",
+        fileName: artifact.file.name,
+        stagedPath: artifact.stagedPath,
+        ...(artifact.system ? { system: artifact.system } : {}),
+      }
+      store.jobs.set(jobId, staged)
+
+      if (!placement) {
         store.jobs.set(jobId, {
-          ...job,
-          state: "staged",
-          fileName: artifact.file.name,
-          stagedPath: artifact.stagedPath,
-          ...(artifact.system ? { system: artifact.system } : {}),
+          ...staged,
+          message: "Downloaded; library import is not configured on this host.",
         })
-      }),
+        return
+      }
+
+      const imported = yield* Effect.tryPromise(() =>
+        placement.placeAndImport(artifact, request),
+      ).pipe(
+        Effect.map(
+          (placed): AcquireJobSnapshot => ({
+            ...staged,
+            state: "imported",
+            placedPath: placed.absolutePath,
+          }),
+        ),
+        Effect.catchCause(cause =>
+          Effect.succeed<AcquireJobSnapshot>({
+            ...staged,
+            message: `Downloaded, but library import failed: ${summarizeAcquireFailure(cause)}`,
+          }),
+        ),
+      )
+      store.jobs.set(jobId, imported)
+    }).pipe(
       Effect.catchCause(cause =>
         Effect.sync(() => {
           store.jobs.set(jobId, {
@@ -96,9 +142,9 @@ export function startAcquireJob(
           }
         }),
       ),
-      Effect.forkDetach,
     )
 
+    yield* Effect.forkDetach(pipeline)
     return job
   })
 }

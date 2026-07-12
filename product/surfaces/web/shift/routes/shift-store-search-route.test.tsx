@@ -226,9 +226,41 @@ describe("Shift store route — remote catalog search", () => {
     fireEvent.click(screen.getByRole("button", { name: "Get" }))
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Downloaded" })).toBeDefined()
+      expect(
+        screen.getByRole("button", { name: "In your Library" }),
+      ).toBeDefined()
     })
-    expect(screen.getByText("Downloaded to this device.")).toBeDefined()
+    expect(screen.getByText("Added to your Library.")).toBeDefined()
+  })
+
+  it("shows a searching state while a re-search is in flight", async () => {
+    render(
+      <RegistryProvider>
+        <StoreAt
+          entry="/store?q=celeste"
+          layer={makeInMemoryRemoteCatalogSourceLayer(CLAIMS, {
+            searchDelayMillis: 400,
+          })}
+        />
+      </RegistryProvider>,
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Celeste Classic" }),
+      ).toBeDefined()
+    })
+
+    await typeStoreSearch("pico")
+
+    // While the debounced re-search runs, the stale celeste results must be
+    // replaced by an explicit Searching… state, then the new results land.
+    await waitFor(() => {
+      expect(screen.queryByText("Searching…")).not.toBeNull()
+    })
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Pico Park" })).toBeDefined()
+    })
   })
 
   it("shows the search error with a retry affordance", async () => {

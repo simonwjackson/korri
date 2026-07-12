@@ -60,13 +60,14 @@ export function ShiftStoreDetailRoute() {
 
   const onPrimary = () => {
     if (!entry?.providerId || !entry.providerItemId) return
-    if (acquireView.state === "acquiring" || acquireView.state === "staged") {
+    if (acquireView.state !== "idle" && acquireView.state !== "failed") {
       return
     }
     acquire({
       providerId: entry.providerId,
       id: entry.providerItemId,
       ...(entry.claimUrl ? { url: entry.claimUrl } : {}),
+      ...(entry.system ? { system: entry.system } : {}),
     })
   }
 
@@ -84,7 +85,7 @@ export function ShiftStoreDetailRoute() {
 }
 
 export interface StoreAcquireView {
-  readonly state: "idle" | "acquiring" | "staged" | "failed"
+  readonly state: "idle" | "acquiring" | "staged" | "imported" | "failed"
   readonly message?: string
 }
 
@@ -106,13 +107,19 @@ export function storeAcquireView(
       state: "failed",
       message: "Something went wrong downloading.",
     }),
-    onSuccess: (success): StoreAcquireView =>
-      success.value.state === "staged"
-        ? { state: "staged" }
-        : {
-            state: "failed",
-            message: success.value.message ?? "The download failed.",
-          },
+    onSuccess: (success): StoreAcquireView => {
+      if (success.value.state === "imported") return { state: "imported" }
+      if (success.value.state === "staged") {
+        return {
+          state: "staged",
+          message: success.value.message ?? "Downloaded, but not imported yet.",
+        }
+      }
+      return {
+        state: "failed",
+        message: success.value.message ?? "The download failed.",
+      }
+    },
   })
 }
 
@@ -191,10 +198,15 @@ function storeAcquirePresentation(view: StoreAcquireView): {
       return {
         primaryOverride: { label: "Getting…", hint: "Getting…" },
       }
+    case "imported":
+      return {
+        primaryOverride: { label: "In your Library", hint: "In your Library" },
+        notice: "Added to your Library.",
+      }
     case "staged":
       return {
         primaryOverride: { label: "Downloaded", hint: "Downloaded" },
-        notice: "Downloaded to this device.",
+        notice: view.message ?? "Downloaded to this device.",
       }
     case "failed":
       return {

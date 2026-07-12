@@ -56,7 +56,12 @@ export const storeAcquireFn =
       Effect.gen(function* () {
         const source = yield* RemoteCatalogSource
         let status: RemoteCatalogAcquireStatus = yield* source.acquire(request)
-        while (status.state === "acquiring") {
+        // "staged" mid-pipeline resolves to imported/failed or terminal staged
+        // with a message; keep polling until a settled snapshot.
+        while (
+          status.state === "acquiring" ||
+          (status.state === "staged" && !status.message)
+        ) {
           yield* Effect.sleep(ACQUIRE_POLL_INTERVAL)
           status = yield* source.acquireStatus(status.jobId)
         }

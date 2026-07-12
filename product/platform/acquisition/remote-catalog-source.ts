@@ -29,15 +29,17 @@ export interface RemoteCatalogAcquireRequest {
   readonly id: string
   readonly url?: string
   readonly fileName?: string
+  readonly system?: string
 }
 
 export interface RemoteCatalogAcquireStatus {
   readonly jobId: string
   readonly providerId: string
   readonly id: string
-  readonly state: "acquiring" | "staged" | "failed"
+  readonly state: "acquiring" | "staged" | "imported" | "failed"
   readonly fileName?: string
   readonly stagedPath?: string
+  readonly placedPath?: string
   readonly system?: string
   readonly message?: string
 }
@@ -74,28 +76,33 @@ export const loadingForeverRemoteCatalogSourceLayer = Layer.succeed(
  */
 export function makeInMemoryRemoteCatalogSourceLayer(
   claims: SearchResponse["claims"],
+  options: { readonly searchDelayMillis?: number } = {},
 ) {
   let jobSequence = 0
   const jobs = new Map<string, RemoteCatalogAcquireStatus>()
   return Layer.succeed(RemoteCatalogSource)({
     search: request => {
       const query = request.query.trim().toLowerCase()
-      return Effect.succeed({
+      const response = Effect.succeed({
         claims: claims.filter(claim =>
           claim.title.toLowerCase().includes(query),
         ),
       })
+      return options.searchDelayMillis
+        ? response.pipe(Effect.delay(`${options.searchDelayMillis} millis`))
+        : response
     },
-    // Acquires resolve immediately in-memory: one poll observes "staged".
+    // Acquires resolve immediately in-memory: one poll observes "imported".
     acquire: request => {
       const jobId = `in-memory-${++jobSequence}`
       const status: RemoteCatalogAcquireStatus = {
         jobId,
         providerId: request.providerId,
         id: request.id,
-        state: "staged",
+        state: "imported",
         fileName: request.fileName ?? `${request.id}.bin`,
         stagedPath: `/tmp/in-memory-staging/${jobId}`,
+        placedPath: `/tmp/in-memory-library/${jobId}`,
       }
       jobs.set(jobId, status)
       return Effect.succeed(status)

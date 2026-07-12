@@ -34,6 +34,8 @@ export const AcquireArtifactRequest = Schema.Struct({
   fileName: Schema.optional(Schema.String),
   size: Schema.optional(Schema.String),
   artifactFormat: Schema.optional(Schema.String),
+  /** Library system hint (e.g. "gba", "pico8") used to organize placement. */
+  system: Schema.optional(Schema.String),
 })
 export type AcquireArtifactRequest = Schema.Schema.Type<
   typeof AcquireArtifactRequest

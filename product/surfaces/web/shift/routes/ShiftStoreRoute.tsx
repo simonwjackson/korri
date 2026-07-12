@@ -96,45 +96,60 @@ export function ShiftStoreSearchView({
 
   useInputAction("back", () => onBack?.())
 
-  const body = AsyncResult.matchWithError(result, {
-    onInitial: () =>
-      query === "" ? (
-        <ShiftStoreEmpty message="Type to search the remote catalogs." />
-      ) : (
-        <ShiftStoreEmpty message="Searching…" />
-      ),
-    onError: error => (
-      <div className="shift-store-status">
-        <ShiftStoreEmpty
-          message={error.message ?? "The remote catalogs are unreachable."}
-        />
-        {onRetry ? (
-          <button type="button" className="shift-store-retry" onClick={onRetry}>
-            Retry
-          </button>
-        ) : null}
-      </div>
-    ),
-    onDefect: () => (
-      <ShiftStoreEmpty message="Something went wrong searching." />
-    ),
-    onSuccess: () => {
-      if (query === "")
-        return <ShiftStoreEmpty message="Type to search the remote catalogs." />
-      if (visible.length === 0) return <ShiftStoreEmpty />
-      return (
-        <div className="shift-store-tiles">
-          {visible.map(entry => (
-            <ShiftStoreBrowseTile
-              key={entry.id}
-              entry={entry}
-              onOpen={onOpen}
-            />
-          ))}
+  // A re-search keeps the previous AsyncResult value while the new fan-out
+  // runs; without this the page silently shows stale results (or a stale
+  // "Nothing found") with no indication anything is happening.
+  const searching = result.waiting && query !== ""
+
+  const body = searching ? (
+    <ShiftStoreEmpty message="Searching…" />
+  ) : (
+    AsyncResult.matchWithError(result, {
+      onInitial: () =>
+        query === "" ? (
+          <ShiftStoreEmpty message="Type to search the remote catalogs." />
+        ) : (
+          <ShiftStoreEmpty message="Searching…" />
+        ),
+      onError: error => (
+        <div className="shift-store-status">
+          <ShiftStoreEmpty
+            message={error.message ?? "The remote catalogs are unreachable."}
+          />
+          {onRetry ? (
+            <button
+              type="button"
+              className="shift-store-retry"
+              onClick={onRetry}
+            >
+              Retry
+            </button>
+          ) : null}
         </div>
-      )
-    },
-  })
+      ),
+      onDefect: () => (
+        <ShiftStoreEmpty message="Something went wrong searching." />
+      ),
+      onSuccess: () => {
+        if (query === "")
+          return (
+            <ShiftStoreEmpty message="Type to search the remote catalogs." />
+          )
+        if (visible.length === 0) return <ShiftStoreEmpty />
+        return (
+          <div className="shift-store-tiles">
+            {visible.map(entry => (
+              <ShiftStoreBrowseTile
+                key={entry.id}
+                entry={entry}
+                onOpen={onOpen}
+              />
+            ))}
+          </div>
+        )
+      },
+    })
+  )
 
   return (
     <div data-shift-store className="shift-store shift-store-browse intrinsic">

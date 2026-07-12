@@ -26,6 +26,8 @@ export interface ShiftStoreEntry {
   readonly providerId?: string
   readonly providerItemId?: string
   readonly claimUrl?: string
+  /** Library system hint from the claim's playable release (e.g. "gba"). */
+  readonly system?: string
   /**
    * Human-readable remote sources this release can be acquired from. A grouped
    * release has MANY (the same game mirrored across providers); a plain one has
@@ -86,6 +88,9 @@ export function shiftStoreEntryFromClaim(
     providerId: claim.providerId,
     providerItemId: claim.id,
     claimUrl: claim.url,
+    ...(claim.playable?.releases?.[0]?.system
+      ? { system: claim.playable.releases[0].system }
+      : {}),
     sources: [shiftStoreSourceLabel(claim.providerId)],
     ...(claim.platform ? { platform: claim.platform } : {}),
     status: "available",

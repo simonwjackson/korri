@@ -254,7 +254,9 @@ function createClaimedContentIndex(): ClaimedContentIndex {
   }
 }
 
-function findArgsForScan(args: Pick<RomScanArgs, "root" | "maxDepth">): string[] {
+function findArgsForScan(
+  args: Pick<RomScanArgs, "root" | "maxDepth">,
+): string[] {
   const findArgs = [args.root]
   if (args.maxDepth !== undefined) {
     findArgs.push("-maxdepth", String(args.maxDepth))
@@ -547,6 +549,25 @@ interface ConfiguredScanSnapshot {
   readonly claimedIndex: ClaimedContentIndex
   readonly storageRootById: ReadonlyMap<string, string>
   readonly overlapWarningsByStorage: ReadonlyMap<string, readonly string[]>
+}
+
+/**
+ * Configured content storages (id + absolute root) from the effective config
+ * graph. Exposed for acquisition placement: the daemon copies acquired
+ * artifacts into one of these roots before triggering a configured scan.
+ */
+export async function readConfiguredStorageRoots(
+  options: {
+    readonly roots?: readonly KorriConfigGraphRoot[]
+    readonly env?: NodeJS.ProcessEnv
+  } = {},
+): Promise<readonly { readonly id: string; readonly root: string }[]> {
+  const roots = options.roots ?? resolveAllConfigGraphRoots(options.env)
+  const snapshot = await readConfiguredScanSnapshot(roots)
+  return snapshot.storages.map(storage => ({
+    id: storage.id,
+    root: storage.root,
+  }))
 }
 
 async function readConfiguredScanSnapshot(

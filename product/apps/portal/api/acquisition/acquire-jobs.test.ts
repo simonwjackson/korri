@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test"
+import type { PlacedArtifact } from "@platform/acquisition/artifact-placement"
 import { AcquisitionError } from "@platform/acquisition/errors"
 import type { AcquiredArtifact } from "@platform/protocol/acquisition/artifact-acquisition"
 import { Deferred, Effect } from "effect"
 import {
+  type AcquirePlacementRunner,
   getAcquireJob,
   makeAcquireJobStore,
   startAcquireJob,
@@ -25,17 +27,30 @@ const artifact = {
   },
 } as unknown as AcquiredArtifact
 
+const placed: PlacedArtifact = {
+  storageId: "roms",
+  storageRoot: "/run/media/korri/card/roms",
+  relativePath: "gba/Drill Dozer (U).gba",
+  absolutePath: "/run/media/korri/card/roms/gba/Drill Dozer (U).gba",
+  alreadyPresent: false,
+}
+
+const importingPlacement: AcquirePlacementRunner = {
+  placeAndImport: async () => placed,
+}
+
 async function settle(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 20))
 }
 
 describe("acquire job store", () => {
-  it("stages a job and exposes the artifact fields", async () => {
+  it("imports a job through placement and exposes the placed path", async () => {
     const store = makeAcquireJobStore()
     const job = await Effect.runPromise(
       startAcquireJob(
         { acquireArtifact: () => Effect.succeed(artifact) },
         request,
+        importingPlacement,
         store,
       ),
     )
@@ -43,12 +58,52 @@ describe("acquire job store", () => {
 
     await settle()
     const finished = getAcquireJob(job.jobId, store)
-    expect(finished?.state).toBe("staged")
+    expect(finished?.state).toBe("imported")
     expect(finished?.fileName).toBe("Drill Dozer (U).gba")
+    expect(finished?.stagedPath).toBe("/tmp/staging/sha256/aa/file.gba")
+    expect(finished?.placedPath).toBe(placed.absolutePath)
+  })
+
+  it("settles as staged with a message when placement fails", async () => {
+    const store = makeAcquireJobStore()
+    const job = await Effect.runPromise(
+      startAcquireJob(
+        { acquireArtifact: () => Effect.succeed(artifact) },
+        request,
+        {
+          placeAndImport: async () => {
+            throw new Error("no configured library storage root is available")
+          },
+        },
+        store,
+      ),
+    )
+
+    await settle()
+    const finished = getAcquireJob(job.jobId, store)
+    expect(finished?.state).toBe("staged")
+    expect(finished?.message).toContain("library import failed")
     expect(finished?.stagedPath).toBe("/tmp/staging/sha256/aa/file.gba")
   })
 
-  it("records failures with a readable message", async () => {
+  it("settles as staged with a message when placement is not configured", async () => {
+    const store = makeAcquireJobStore()
+    const job = await Effect.runPromise(
+      startAcquireJob(
+        { acquireArtifact: () => Effect.succeed(artifact) },
+        request,
+        undefined,
+        store,
+      ),
+    )
+
+    await settle()
+    const finished = getAcquireJob(job.jobId, store)
+    expect(finished?.state).toBe("staged")
+    expect(finished?.message).toContain("not configured")
+  })
+
+  it("records download failures with a readable message", async () => {
     const store = makeAcquireJobStore()
     const job = await Effect.runPromise(
       startAcquireJob(
@@ -62,6 +117,7 @@ describe("acquire job store", () => {
             ),
         },
         request,
+        importingPlacement,
         store,
       ),
     )
@@ -80,19 +136,19 @@ describe("acquire job store", () => {
     }
 
     const first = await Effect.runPromise(
-      startAcquireJob(acquisition, request, store),
+      startAcquireJob(acquisition, request, importingPlacement, store),
     )
     const second = await Effect.runPromise(
-      startAcquireJob(acquisition, request, store),
+      startAcquireJob(acquisition, request, importingPlacement, store),
     )
     expect(second.jobId).toBe(first.jobId)
 
     await Effect.runPromise(Deferred.succeed(gate, artifact))
     await settle()
-    expect(getAcquireJob(first.jobId, store)?.state).toBe("staged")
+    expect(getAcquireJob(first.jobId, store)?.state).toBe("imported")
 
     const third = await Effect.runPromise(
-      startAcquireJob(acquisition, request, store),
+      startAcquireJob(acquisition, request, importingPlacement, store),
     )
     expect(third.jobId).not.toBe(first.jobId)
   })
