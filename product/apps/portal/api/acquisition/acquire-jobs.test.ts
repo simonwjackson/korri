@@ -143,6 +143,9 @@ describe("acquire job store", () => {
     const finished = getAcquireJob(job.jobId, store)
     expect(finished?.state).toBe("failed")
     expect(finished?.message).toContain("download failed: HTTP 503")
+    // Never leak Effect cause plumbing onto the kiosk screen.
+    expect(finished?.message).not.toContain("Cause(")
+    expect(finished?.message).not.toContain("Fail(")
   })
 
   it("reuses the running job for repeated requests on the same claim", async () => {

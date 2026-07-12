@@ -165,8 +165,12 @@ export function startAcquireJob(
 
 function summarizeAcquireFailure(cause: unknown): string {
   const rendered = String(cause)
-  const match = rendered.match(/message:\s*"([^"]+)"/)
-  if (match?.[1]) return match[1]
+  const quoted = rendered.match(/message:\s*"([^"]+)"/)
+  if (quoted?.[1]) return quoted[1]
+  // Effect cause renderings wrap tagged errors as
+  // Cause([Fail(AcquisitionError: <message>)]) — surface just the message.
+  const tagged = rendered.match(/(?:AcquisitionError|Error):\s*([^)\]]+)/)
+  if (tagged?.[1]) return tagged[1].trim()
   return rendered.slice(0, 300)
 }
 
