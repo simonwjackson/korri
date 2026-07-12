@@ -21,10 +21,13 @@
 #
 # Sandboxing note: `ProtectSystem=strict` exempts the /sys API filesystem
 # (writability of /sys is governed by ProtectKernelTunables, which this unit
-# intentionally omits), so no /sys entry is needed in ReadWritePaths. Whether
-# the ROCKNIX guest's inherited /sys mount permits hwmon writes at all is a
-# device fact validated on hardware; if it does not, the required writable-
-# sysfs policy belongs at the substrate layer, not as a runtime remount here.
+# intentionally omits), so no /sys entry is needed in ReadWritePaths. ROCKNIX
+# guests additionally mount /sys read-only at the mount level (verified on
+# SM8550: `sysfs /sys sysfs ro`), which no unit hardening option can undo. The
+# scripts therefore best-effort `mount -o remount,rw /sys` before writing.
+# Because the unit's sandbox gives each executed script a private mount
+# namespace, the remount is scoped to this unit — the system-wide /sys stays
+# read-only.
 {
   config,
   lib,
@@ -78,10 +81,21 @@ let
     # every service stop (clean stop, crash, SIGKILL) and from the loop's own
     # exit trap. Must never fail the unit.
     set -u
-    export PATH=${lib.makeBinPath [ pkgs.coreutils ]}
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.util-linux
+      ]
+    }
 
     sysfs_root="''${KORRI_FAN_SYSFS_ROOT:-/sys}"
     hwmon_name=${lib.escapeShellArg cfg.hwmonName}
+
+    if [ "$sysfs_root" = "/sys" ]; then
+      # Guest kernels can mount /sys read-only; remount inside this unit's
+      # private mount namespace only. No-op when /sys is already writable.
+      mount -o remount,rw /sys 2>/dev/null || true
+    fi
 
     for dir in "$sysfs_root"/class/hwmon/hwmon*; do
       [ -r "$dir/name" ] || continue
@@ -101,10 +115,21 @@ let
     #                            0 = run forever). Iterations sleep only when
     #                            running unbounded.
     set -u
-    export PATH=${lib.makeBinPath [ pkgs.coreutils ]}
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.util-linux
+      ]
+    }
 
     sysfs_root="''${KORRI_FAN_SYSFS_ROOT:-/sys}"
     max_iterations="''${KORRI_FAN_MAX_ITERATIONS:-0}"
+
+    if [ "$sysfs_root" = "/sys" ]; then
+      # Guest kernels can mount /sys read-only; remount inside this unit's
+      # private mount namespace only. No-op when /sys is already writable.
+      mount -o remount,rw /sys 2>/dev/null || true
+    fi
 
     hwmon_name=${lib.escapeShellArg cfg.hwmonName}
     profile_name=${lib.escapeShellArg cfg.profileName}
