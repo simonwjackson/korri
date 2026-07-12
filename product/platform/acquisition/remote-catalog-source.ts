@@ -30,6 +30,8 @@ export interface RemoteCatalogAcquireRequest {
   readonly url?: string
   readonly fileName?: string
   readonly system?: string
+  readonly title?: string
+  readonly artUrl?: string
 }
 
 export interface RemoteCatalogAcquireStatus {

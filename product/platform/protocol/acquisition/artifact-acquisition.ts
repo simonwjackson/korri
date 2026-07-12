@@ -36,6 +36,10 @@ export const AcquireArtifactRequest = Schema.Struct({
   artifactFormat: Schema.optional(Schema.String),
   /** Library system hint (e.g. "gba", "pico8") used to organize placement. */
   system: Schema.optional(Schema.String),
+  /** Claim display title, applied to the imported library entry. */
+  title: Schema.optional(Schema.String),
+  /** Claim thumbnail URL, applied as the imported entry's tile art. */
+  artUrl: Schema.optional(Schema.String),
 })
 export type AcquireArtifactRequest = Schema.Schema.Type<
   typeof AcquireArtifactRequest

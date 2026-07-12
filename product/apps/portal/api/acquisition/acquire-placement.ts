@@ -6,6 +6,9 @@
  * boot-time unit uses, so the placed file materializes as a launchable
  * library release and korrid's config watchers broadcast the change.
  */
+import { randomUUID } from "node:crypto"
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { dirname, join } from "node:path"
 import {
   type ConfiguredStorageRoot,
   type PlacedArtifact,
@@ -20,6 +23,7 @@ import type {
   AcquireArtifactRequest,
   AcquiredArtifact,
 } from "@platform/protocol/acquisition/artifact-acquisition"
+import { parse, stringify } from "yaml"
 import type { AcquirePlacementRunner } from "./acquire-jobs"
 
 export interface AcquirePlacementOptions {
@@ -81,10 +85,109 @@ export function createAcquirePlacementRunner(
           : {}),
         ...(request.system ? { system: request.system } : {}),
       })
-      await runScan(scoutMergeConfigPath(env))
+      const configPath = scoutMergeConfigPath(env)
+      await runScan(configPath)
+      if (!placed.alreadyPresent && (request.title || request.artUrl)) {
+        await applyClaimMetadataToImport({
+          configPath,
+          storageId: placed.storageId,
+          relativePath: placed.relativePath,
+          ...(request.title ? { title: request.title } : {}),
+          ...(request.artUrl ? { artUrl: request.artUrl } : {}),
+          ...(request.url ? { claimUrl: request.url } : {}),
+        }).catch(() => {
+          // Metadata is cosmetic; a failed patch must not fail the import.
+        })
+      }
       return placed
     },
   }
+}
+
+/**
+ * Post-import metadata patch: the Scout merge derives titles from file names
+ * ("dank tomb 0"), but the Store knows the claim's real title and thumbnail.
+ * Finds the just-imported entry by its release target (storage + path) and
+ * applies the claim title and a tile image, without touching entries that
+ * already carry authored values.
+ */
+export async function applyClaimMetadataToImport(options: {
+  readonly configPath: string
+  readonly storageId: string
+  readonly relativePath: string
+  readonly title?: string
+  readonly artUrl?: string
+  readonly claimUrl?: string
+}): Promise<boolean> {
+  const doc = parse(await readFile(options.configPath, "utf8")) as {
+    library?: Record<
+      string,
+      {
+        title?: string
+        metadata?: { media?: unknown[] } & Record<string, unknown>
+        releases?: readonly {
+          readonly target?: {
+            readonly storage?: string
+            readonly path?: string
+          }
+        }[]
+      }
+    >
+  } | null
+  const library = doc?.library
+  if (!doc || !library) return false
+
+  const entry = Object.values(library).find(item =>
+    item?.releases?.some(
+      release =>
+        release?.target?.storage === options.storageId &&
+        release?.target?.path === options.relativePath,
+    ),
+  )
+  if (!entry) return false
+
+  let changed = false
+  if (options.title && entry.title !== options.title) {
+    entry.title = options.title
+    changed = true
+  }
+  if (options.artUrl) {
+    const metadata = (entry.metadata ??= {})
+    const media = (metadata.media ??= [])
+    const hasTile = media.some(
+      item =>
+        typeof item === "object" &&
+        item !== null &&
+        (item as { role?: string }).role === "tile",
+    )
+    if (!hasTile) {
+      media.push({
+        type: "image",
+        uri: options.artUrl,
+        role: "tile",
+        source: {
+          provider: "korri",
+          ...(options.claimUrl ? { url: options.claimUrl } : {}),
+        },
+      })
+      changed = true
+    }
+  }
+  if (!changed) return false
+
+  const tempPath = join(
+    dirname(options.configPath),
+    `.claim-metadata.${process.pid}.${randomUUID()}.tmp`,
+  )
+  await mkdir(dirname(options.configPath), { recursive: true })
+  try {
+    await writeFile(tempPath, stringify(doc), { flag: "wx" })
+    await rename(tempPath, options.configPath)
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined)
+    throw error
+  }
+  return true
 }
 
 /**

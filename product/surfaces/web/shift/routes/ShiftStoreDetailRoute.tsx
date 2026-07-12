@@ -68,6 +68,8 @@ export function ShiftStoreDetailRoute() {
       id: entry.providerItemId,
       ...(entry.claimUrl ? { url: entry.claimUrl } : {}),
       ...(entry.system ? { system: entry.system } : {}),
+      title: entry.title,
+      ...(entry.artUrl ? { artUrl: entry.artUrl } : {}),
     })
   }
 
