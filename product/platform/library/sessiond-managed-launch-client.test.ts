@@ -100,6 +100,67 @@ describe("sessiond managed-launch client", () => {
     })
   })
 
+  it("forwards resolved hooks on managed-launch start requests", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    const hooks = {
+      before: [
+        {
+          run: "swaymsg output DSI-2 mode 1080x1920@60Hz",
+          name: "display-60hz",
+        },
+      ],
+      after: [
+        {
+          run: "swaymsg output DSI-2 mode 1080x1920@120Hz",
+          name: "display-120hz",
+        },
+      ],
+    }
+    const result = await requestSessiondManagedLaunchStart(
+      {
+        spec: { command: "/bin/game", args: ["rom"] },
+        hooks,
+      },
+      {
+        socketPath: "/run/user/1000/korri/sessiond.sock",
+        fetchImpl: async (input, init) => {
+          requests.push({ input, init })
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        },
+      },
+    )
+
+    expect(result).toEqual({
+      kind: "ok",
+      response: { status: "accepted", launchId: "launch-1" },
+    })
+    expect(JSON.parse(String(requests[0].init?.body))).toEqual({
+      spec: { command: "/bin/game", args: ["rom"] },
+      hooks,
+    })
+  })
+
+  it("omits the hooks key entirely from start requests without hooks", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    await requestSessiondManagedLaunchStart(
+      { spec: { command: "/bin/game", args: ["rom"] } },
+      {
+        socketPath: "/run/user/1000/korri/sessiond.sock",
+        fetchImpl: async (input, init) => {
+          requests.push({ input, init })
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        },
+      },
+    )
+
+    const body = JSON.parse(String(requests[0].init?.body)) as Record<
+      string,
+      unknown
+    >
+    expect(Object.keys(body)).toEqual(["spec"])
+    expect(body).not.toHaveProperty("hooks")
+  })
+
   it("posts Home lane toggle requests", async () => {
     const requests: Array<{ input: string; init?: RequestInit }> = []
     const result = await toggleSessiondHomeLane({

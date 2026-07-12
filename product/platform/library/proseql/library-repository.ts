@@ -20,7 +20,6 @@ import {
   type LaunchCompanionMap,
   launchCompanionsFromLaunch,
 } from "@platform/library/config/inheritable-fields"
-import type { StreamerPolicy } from "@platform/library/config/streamer-policy"
 import {
   listPlayableEntries as derivePlayableEntries,
   launchableReleases,
@@ -65,8 +64,12 @@ import {
   DEFAULT_USER_ID,
   type UserRecord,
 } from "@platform/library/config/records/user"
-import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
+import type {
+  ReadableResolvedLaunchContext,
+  ResolvedLaunchHooks,
+} from "@platform/library/config/resolved-launch-context"
 import { resolveReleaseTarget } from "@platform/library/config/source-target-resolution"
+import type { StreamerPolicy } from "@platform/library/config/streamer-policy"
 import { defaultReleaseContentIdentityResolver } from "@platform/library/content-identity/release-content-identity"
 import { isGameAssetBlobValid } from "@platform/library/game-assets/game-asset-blob-cache"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
@@ -101,6 +104,8 @@ export interface ResolvedLaunchOutput {
   readonly spec: LaunchSpec
   readonly launchCompanions?: LaunchCompanionMap
   readonly launchMetadata?: LaunchMetadata
+  /** Cascade-folded launch hooks from the resolved readable context. */
+  readonly hooks?: ResolvedLaunchHooks
   readonly moonlight?: StreamerPolicy
   readonly app: {
     readonly id: string
@@ -455,6 +460,7 @@ export function createLibraryRepository(
         return {
           spec,
           launchCompanions: context.launchCompanions,
+          ...(context.hooks ? { hooks: context.hooks } : {}),
           ...(materialized.launchPrepare
             ? { launchPrepare: materialized.launchPrepare }
             : {}),

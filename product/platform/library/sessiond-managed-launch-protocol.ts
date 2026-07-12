@@ -1,6 +1,9 @@
 import { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
+import { ResolvedLaunchHooks } from "@platform/library/config/resolved-launch-context"
 import { Schema } from "effect"
 import { LaunchFailureKind, LaunchSpec } from "./launcher"
+
+export { ResolvedLaunchHooks } from "@platform/library/config/resolved-launch-context"
 
 /**
  * # Sessiond managed-launch protocol evolution rule (task-013 AC #5)
@@ -120,6 +123,13 @@ export const SessiondManagedLaunchCapabilities = Schema.Struct({
    * daemons omit this field; clients must treat absence as false.
    */
   launchFreeze: Schema.optional(Schema.Boolean),
+  /**
+   * When true, the daemon accepts a resolved `hooks` payload on the start
+   * request and executes before/after launch hooks around the managed child.
+   * Older daemons omit this field; clients must treat absence as false and
+   * must NOT send the `hooks` field (old daemons strict-decode the request).
+   */
+  launchHooks: Schema.optional(Schema.Boolean),
 })
 export type SessiondManagedLaunchCapabilities = Schema.Schema.Type<
   typeof SessiondManagedLaunchCapabilities
@@ -244,6 +254,16 @@ export const SessiondManagedLaunchStartRequest = Schema.Struct({
    * structural and leaves runtime semantics to sessiond.
    */
   wait: Schema.optional(LaunchSpec),
+  /**
+   * Cascade-resolved launch hooks (launch-context policy, deliberately a
+   * sibling of — not part of — `spec`). Only sent when the daemon reports
+   * `capabilities.launchHooks === true`; clients must omit the field
+   * otherwise so older strict-decoding daemons never see the unknown key.
+   * Ordering contract lives on `ResolvedLaunchHooks`: `before` is execution
+   * order, `after` is inheritance order and the daemon reverses it at run
+   * time.
+   */
+  hooks: Schema.optional(ResolvedLaunchHooks),
 })
 export type SessiondManagedLaunchStartRequest = Schema.Schema.Type<
   typeof SessiondManagedLaunchStartRequest
@@ -293,6 +313,12 @@ export const SessiondManagedLaunchEventType = Schema.Literals([
   "seat-allocation-failed",
   "child-frozen",
   "child-thawed",
+  // Launch-hooks observability. Emitted when a before/after hook fails
+  // (non-zero exit or timeout); carries the additive `hook` payload with
+  // the step's name (or synthetic `before[N]`/`after[N]` label) and phase.
+  // A before-hook abort additionally surfaces as a `failed` terminal with
+  // failureKind `hook-failed`; after-hook failures are this event only.
+  "hook-failed",
 ])
 export type SessiondManagedLaunchEventType = Schema.Schema.Type<
   typeof SessiondManagedLaunchEventType
@@ -317,6 +343,19 @@ export type SessiondManagedLaunchReadiness = Schema.Schema.Type<
   typeof SessiondManagedLaunchReadiness
 >
 
+/**
+ * Identity of the hook step behind a `hook-failed` event. `name` is the
+ * authored step name when present, otherwise the executor's synthetic
+ * positional label (`before[N]` / `after[N]`).
+ */
+export const SessiondManagedLaunchHookRef = Schema.Struct({
+  name: Schema.String,
+  phase: Schema.Literals(["before", "after"]),
+})
+export type SessiondManagedLaunchHookRef = Schema.Schema.Type<
+  typeof SessiondManagedLaunchHookRef
+>
+
 export const SessiondManagedLaunchEvent = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   sequence: Schema.Number,
@@ -327,6 +366,7 @@ export const SessiondManagedLaunchEvent = Schema.Struct({
   terminal: Schema.optional(SessiondManagedLaunchTerminal),
   readiness: Schema.optional(SessiondManagedLaunchReadiness),
   seat: Schema.optional(SessiondManagedLaunchInputSeat),
+  hook: Schema.optional(SessiondManagedLaunchHookRef),
 })
 export type SessiondManagedLaunchEvent = Schema.Schema.Type<
   typeof SessiondManagedLaunchEvent

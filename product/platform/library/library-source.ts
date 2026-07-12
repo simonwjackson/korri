@@ -10,6 +10,7 @@ import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
+import type { ResolvedLaunchHooks } from "@platform/library/config/resolved-launch-context"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type { LaunchPrepareMap } from "@platform/plugin/launch-prepare"
 import type { LaunchArtifacts } from "./launch-artifacts"
@@ -33,6 +34,8 @@ export interface ResolvedLaunch {
   readonly launchCompanions?: LaunchCompanionMap
   readonly launchPrepare?: LaunchPrepareMap
   readonly launchMetadata?: LaunchMetadata
+  /** Cascade-folded launch hooks from the resolved readable context. */
+  readonly hooks?: ResolvedLaunchHooks
   readonly artifacts?: LaunchArtifacts
   readonly app?: {
     readonly id: string

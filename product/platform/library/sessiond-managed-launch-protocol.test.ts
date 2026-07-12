@@ -7,6 +7,7 @@ import {
   decodeSessiondManagedLaunchHomeToggleResponse,
   decodeSessiondManagedLaunchInputSeatLeaveRequest,
   decodeSessiondManagedLaunchInputSeatLeaveResponse,
+  decodeSessiondManagedLaunchStartRequest,
   decodeSessiondManagedLaunchStatus,
   decodeSessiondManagedLaunchTerminateResponse,
   decodeSessiondManagedLaunchThawRequest,
@@ -767,6 +768,173 @@ describe("sessiond managed launch protocol", () => {
       }),
     )
     expect(events.map(e => e.type)).toEqual(sequence)
+  })
+})
+
+describe("sessiond managed launch hooks protocol", () => {
+  it("decodes capabilities advertising launchHooks support", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "home",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+        launchHooks: true,
+      },
+      restoreAttempts: 0,
+    })
+    expect(status.capabilities.launchHooks).toBe(true)
+  })
+
+  it("decodes capabilities omitting launchHooks (older daemon back-compat)", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "home",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+      },
+      restoreAttempts: 0,
+    })
+    expect(status.capabilities.launchHooks).toBeUndefined()
+  })
+
+  it("round-trips a start request carrying resolved hooks", () => {
+    const input = {
+      launchId: "launch-h1",
+      spec: { command: "/bin/game", args: ["rom.smc"] },
+      hooks: {
+        before: [
+          {
+            run: "swaymsg output DSI-2 mode 1080x1920@60Hz",
+            name: "display-60hz",
+            "on-failure": "warn",
+          },
+          { run: "echo 1171200 | sudo -n tee /sys/x", timeout: 10 },
+        ],
+        after: [
+          {
+            run: "swaymsg output DSI-2 mode 1080x1920@120Hz",
+            name: "display-120hz",
+          },
+        ],
+      },
+    } as const
+
+    const decoded = decodeSessiondManagedLaunchStartRequest(input)
+    expect(decoded.hooks?.before).toHaveLength(2)
+    expect(decoded.hooks?.before[0]?.name).toBe("display-60hz")
+    expect(decoded.hooks?.after[0]?.name).toBe("display-120hz")
+
+    const encoded = Schema.encodeSync(SessiondManagedLaunchStartRequest)(
+      decoded,
+    )
+    expect(encoded).toEqual(input)
+  })
+
+  it("serializes a start request without hooks with no hooks key at all", () => {
+    // Old-daemon strict-decode safety: an omitted optional must not
+    // materialize as `hooks: undefined` in the encoded wire object.
+    const decoded = decodeSessiondManagedLaunchStartRequest({
+      launchId: "launch-h2",
+      spec: { command: "/bin/game", args: ["rom.smc"] },
+    })
+    expect(decoded).not.toHaveProperty("hooks")
+
+    const encoded = Schema.encodeSync(SessiondManagedLaunchStartRequest)(
+      decoded,
+    ) as Record<string, unknown>
+    expect(Object.keys(encoded)).not.toContain("hooks")
+    expect(JSON.parse(JSON.stringify(encoded))).toEqual({
+      launchId: "launch-h2",
+      spec: { command: "/bin/game", args: ["rom.smc"] },
+    })
+  })
+
+  it("rejects on-failure on an after hook step in the start request", () => {
+    expect(() =>
+      decodeSessiondManagedLaunchStartRequest({
+        spec: { command: "/bin/game", args: [] },
+        hooks: {
+          before: [],
+          after: [{ run: "echo restore", "on-failure": "warn" }],
+        },
+      }),
+    ).toThrow()
+  })
+
+  it("decodes a hook-failed event carrying name and phase", () => {
+    const event = decodeSessiondManagedLaunchEvent({
+      schemaVersion: 1,
+      sequence: 11,
+      launchId: "launch-h1",
+      type: "hook-failed",
+      at: "2026-07-11T00:00:00.000Z",
+      hook: { name: "cap-clocks", phase: "before" },
+    })
+    expect(event.type).toBe("hook-failed")
+    expect(event.hook).toEqual({ name: "cap-clocks", phase: "before" })
+  })
+
+  it("decodes a hook-failed event with a synthetic after-phase label", () => {
+    const event = decodeSessiondManagedLaunchEvent({
+      schemaVersion: 1,
+      sequence: 12,
+      launchId: "launch-h1",
+      type: "hook-failed",
+      at: "2026-07-11T00:00:01.000Z",
+      hook: { name: "after[0]", phase: "after" },
+    })
+    expect(event.hook?.phase).toBe("after")
+  })
+
+  it("rejects unknown hook phases with strict decode", () => {
+    expect(() =>
+      decodeSessiondManagedLaunchEvent({
+        schemaVersion: 1,
+        sequence: 13,
+        launchId: "launch-h1",
+        type: "hook-failed",
+        at: "2026-07-11T00:00:02.000Z",
+        hook: { name: "cap-clocks", phase: "during" },
+      }),
+    ).toThrow()
+  })
+
+  it("round-trips the hook-failed failure kind on the start response and terminal payload", () => {
+    expect(
+      Schema.decodeUnknownSync(SessiondManagedLaunchStartResponse)({
+        status: "failed",
+        failureKind: "hook-failed",
+        message: "before hook cap-clocks exited 1",
+      }),
+    ).toEqual({
+      status: "failed",
+      failureKind: "hook-failed",
+      message: "before hook cap-clocks exited 1",
+    })
+
+    const event = decodeSessiondManagedLaunchEvent({
+      schemaVersion: 1,
+      sequence: 14,
+      launchId: "launch-h1",
+      type: "failed",
+      at: "2026-07-11T00:00:03.000Z",
+      terminal: { exitCode: 1, failureKind: "hook-failed" },
+    })
+    expect(event.terminal?.failureKind).toBe("hook-failed")
+
+    const encoded = Schema.encodeSync(SessiondManagedLaunchEvent)(event)
+    expect(encoded).toEqual({
+      schemaVersion: 1,
+      sequence: 14,
+      launchId: "launch-h1",
+      type: "failed",
+      at: "2026-07-11T00:00:03.000Z",
+      terminal: { exitCode: 1, failureKind: "hook-failed" },
+    })
   })
 })
 

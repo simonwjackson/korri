@@ -15,6 +15,7 @@
  */
 
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
+import type { ResolvedLaunchHooks } from "@platform/library/config/resolved-launch-context"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type { ForegroundManagedSessionHandle } from "@platform/session/foreground-session-owner"
 import { Schema } from "effect"
@@ -80,6 +81,9 @@ export const LaunchFailureKind = Schema.Literals([
   "input-ambiguous",
   "session-busy",
   "fake-suspend-active",
+  // A launch hook (before/after) failed. Before-hook aborts fail the launch
+  // with this kind; the hook's identity travels on the `hook-failed` event.
+  "hook-failed",
 ])
 export type LaunchFailureKind = Schema.Schema.Type<typeof LaunchFailureKind>
 
@@ -94,6 +98,7 @@ export const LAUNCH_FAILURE_EXIT_CODES = {
   "input-ambiguous": 122,
   "session-busy": 121,
   "fake-suspend-active": 120,
+  "hook-failed": 119,
 } satisfies Record<LaunchFailureKind, number>
 
 export function launchFailureExitCode(kind: LaunchFailureKind): number {
@@ -116,6 +121,12 @@ export type ManagedLaunchResult =
       readonly status: "started"
       readonly session: ManagedLaunchSessionHandle
       readonly result: Promise<LaunchResult>
+      /**
+       * Set when resolved hooks existed but were omitted from the start
+       * request because the daemon does not advertise
+       * `capabilities.launchHooks` (mixed-version rollout degradation).
+       */
+      readonly hooksSkipped?: boolean
     }
   | {
       readonly status: "failed"
@@ -142,6 +153,13 @@ export interface LaunchExtras {
   readonly launchCompanions?: LaunchCompanionMap
   readonly wait?: LaunchSpec
   readonly launchId?: string
+  /**
+   * Cascade-resolved launch hooks. Sessiond-backed launchers forward them
+   * on the start request only when the daemon advertises
+   * `capabilities.launchHooks`; otherwise the launch proceeds with hooks
+   * skipped (warning logged, `hooksSkipped` marked on the result).
+   */
+  readonly hooks?: ResolvedLaunchHooks
 }
 
 /**

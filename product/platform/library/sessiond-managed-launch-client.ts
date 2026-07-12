@@ -1,4 +1,5 @@
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
+import type { ResolvedLaunchHooks } from "@platform/library/config/resolved-launch-context"
 import type { LaunchMetadata } from "@platform/plugin/launch-metadata"
 import type { LaunchSpec } from "./launcher"
 import {
@@ -88,6 +89,12 @@ export interface SessiondManagedLaunchStartInput {
   readonly launchMetadata?: LaunchMetadata
   readonly launchCompanions?: LaunchCompanionMap
   readonly wait?: LaunchSpec
+  /**
+   * Resolved launch hooks. Callers must only set this when the daemon
+   * reports `capabilities.launchHooks === true`; older daemons strict-decode
+   * the start request and would reject the unknown key.
+   */
+  readonly hooks?: ResolvedLaunchHooks
 }
 
 export interface SessiondManagedLaunchTerminateInput {
@@ -133,6 +140,7 @@ export async function requestSessiondManagedLaunchStart(
   if (input.launchMetadata) body.launchMetadata = input.launchMetadata
   if (input.launchCompanions) body.launchCompanions = input.launchCompanions
   if (input.wait) body.wait = input.wait
+  if (input.hooks) body.hooks = input.hooks
 
   const response = await requestSessiondManagedLaunchJson(
     options,

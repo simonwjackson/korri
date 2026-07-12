@@ -55,6 +55,7 @@ const FAILURE_REASON: Record<LaunchFailureKind, string> = {
   "input-ambiguous": "Pick a controller",
   "session-busy": "Another game is running",
   "fake-suspend-active": "Wake the device first",
+  "hook-failed": "A launch hook didn't finish",
 }
 
 /** Kinds where retrying without changing anything is pointless. */

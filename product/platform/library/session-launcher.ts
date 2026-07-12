@@ -1,3 +1,4 @@
+import { logger } from "@platform/logger"
 import {
   type LaunchExtras,
   type Launcher,
@@ -109,6 +110,10 @@ async function spawnViaSessiond(
   const launchCompanions = extras.launchCompanions
   const wait = extras.wait
   const launchId = extras.launchId
+  const resolvedHooks =
+    extras.hooks && (extras.hooks.before.length || extras.hooks.after.length)
+      ? extras.hooks
+      : undefined
   const fetchImpl = options.fetchImpl ?? fetch
   const url =
     options.url ?? (options.socketPath ? "http://korri-sessiond" : undefined)
@@ -155,6 +160,22 @@ async function spawnViaSessiond(
     )
   }
 
+  // Capability gate: older daemons strict-decode the start request, so the
+  // hooks field is only sent when the daemon advertises launchHooks.
+  // Missing capability = warn + launch (rollout degradation), never a block.
+  const daemonSupportsHooks = status.capabilities.launchHooks === true
+  const hooks = daemonSupportsHooks ? resolvedHooks : undefined
+  const hooksSkipped = resolvedHooks !== undefined && !daemonSupportsHooks
+  if (hooksSkipped) {
+    logger.warn(
+      {
+        beforeCount: resolvedHooks.before.length,
+        afterCount: resolvedHooks.after.length,
+      },
+      "sessiond does not advertise launchHooks; launching without hooks",
+    )
+  }
+
   const startResult = await requestSessiondManagedLaunchStart(
     {
       spec,
@@ -163,6 +184,7 @@ async function spawnViaSessiond(
       ...(launchMetadata ? { launchMetadata } : {}),
       ...(launchCompanions ? { launchCompanions } : {}),
       ...(wait ? { wait } : {}),
+      ...(hooks ? { hooks } : {}),
     },
     {
       ...(options.socketPath ? { socketPath: options.socketPath } : { url }),
@@ -217,6 +239,7 @@ async function spawnViaSessiond(
       terminateNow,
     },
     result: observer.result,
+    ...(hooksSkipped ? { hooksSkipped: true } : {}),
   }
 }
 

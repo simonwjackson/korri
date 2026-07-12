@@ -719,7 +719,8 @@ function launchExtrasForResolvedLaunch(
   if (
     !resolved.extras &&
     !resolved.launchMetadata &&
-    !resolved.launchCompanions
+    !resolved.launchCompanions &&
+    !resolved.hooks
   )
     return undefined
   return {
@@ -730,6 +731,7 @@ function launchExtrasForResolvedLaunch(
     ...(resolved.launchCompanions
       ? { launchCompanions: resolved.launchCompanions }
       : {}),
+    ...(resolved.hooks ? { hooks: resolved.hooks } : {}),
   }
 }
 

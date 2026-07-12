@@ -207,6 +207,186 @@ describe("session launcher", () => {
     })
   })
 
+  it("forwards resolved hooks when the daemon advertises launchHooks", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    const launcher = createSessionLauncher({
+      socketPath: "/run/user/1000/korri/sessiond.sock",
+      fetchImpl: async (input, init) => {
+        requests.push({ input, init })
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(
+            managedStatus({
+              mode: "home",
+              capabilities: {
+                managedLaunch: true,
+                lifecycleEvents: true,
+                perLaunchTermination: true,
+                sessionLifecycle: true,
+                launchHooks: true,
+              },
+            }),
+          )
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-1",
+              type: "child-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-1",
+              type: "home-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const hooks = {
+      before: [{ run: "echo before", name: "cap-clocks" }],
+      after: [{ run: "echo after", name: "restore-clocks" }],
+    }
+    const result = await spawn(spec, { hooks })
+
+    expect(result.status).toBe("started")
+    const startRequest = requests.find(
+      request => new URL(request.input).pathname === "/managed-launch",
+    )
+    expect(JSON.parse(String(startRequest?.init?.body))).toMatchObject({
+      hooks,
+    })
+  })
+
+  it("omits hooks and marks the skip when the daemon lacks launchHooks", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    const launcher = createSessionLauncher({
+      socketPath: "/run/user/1000/korri/sessiond.sock",
+      fetchImpl: async (input, init) => {
+        requests.push({ input, init })
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          // Older daemon: no launchHooks capability advertised.
+          return Response.json(managedStatus({ mode: "home" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-1",
+              type: "child-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-1",
+              type: "home-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec, {
+      hooks: {
+        before: [{ run: "echo before", name: "cap-clocks" }],
+        after: [],
+      },
+    })
+
+    expect(result.status).toBe("started")
+    if (result.status === "started") {
+      expect(result.hooksSkipped).toBe(true)
+    }
+    const startRequest = requests.find(
+      request => new URL(request.input).pathname === "/managed-launch",
+    )
+    const body = JSON.parse(String(startRequest?.init?.body)) as Record<
+      string,
+      unknown
+    >
+    expect(body).not.toHaveProperty("hooks")
+  })
+
+  it("omits hooks when the capability is advertised but no hooks resolved", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    const launcher = createSessionLauncher({
+      socketPath: "/run/user/1000/korri/sessiond.sock",
+      fetchImpl: async (input, init) => {
+        requests.push({ input, init })
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(
+            managedStatus({
+              mode: "home",
+              capabilities: {
+                managedLaunch: true,
+                lifecycleEvents: true,
+                perLaunchTermination: true,
+                sessionLifecycle: true,
+                launchHooks: true,
+              },
+            }),
+          )
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-1",
+              type: "child-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-1",
+              type: "home-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+
+    expect(result.status).toBe("started")
+    if (result.status === "started") {
+      expect(result.hooksSkipped).toBeUndefined()
+    }
+    const startRequest = requests.find(
+      request => new URL(request.input).pathname === "/managed-launch",
+    )
+    const body = JSON.parse(String(startRequest?.init?.body)) as Record<
+      string,
+      unknown
+    >
+    expect(body).not.toHaveProperty("hooks")
+  })
+
   it("reconnects when the lifecycle event stream closes before a terminal event", async () => {
     // A healthy long-running launch can close the events SSE stream
     // mid-flight if the upstream Bun.serve idleTimeout fires before
@@ -1204,6 +1384,7 @@ function managedStatus(options: {
     readonly lifecycleEvents: boolean
     readonly perLaunchTermination: boolean
     readonly sessionLifecycle?: boolean
+    readonly launchHooks?: boolean
   }
 }) {
   return {
