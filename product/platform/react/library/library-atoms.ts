@@ -12,13 +12,17 @@ import { ForegroundSessionStatusSource } from "@platform/session/foreground-sess
 import { Duration, Effect, Layer } from "effect"
 import * as Atom from "effect/unstable/reactivity/Atom"
 
+// keepAlive on all seeded layer atoms: composition roots seed these ONCE via
+// useAtomInitialValues; without keepAlive the registry disposes unsubscribed
+// nodes and later reads silently fall back to the defaults (see
+// remote-catalog-atoms.ts for the incident this guards against).
 export const librarySourceLayerAtom = Atom.make(
   loadingForeverLibrarySourceLayer,
-)
+).pipe(Atom.keepAlive)
 
 export const launcherLayerAtom = Atom.make(
   makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }),
-)
+).pipe(Atom.keepAlive)
 
 const readyForegroundSessionGateState = {
   _tag: "Ready",
@@ -28,7 +32,7 @@ export const foregroundSessionStatusLayerAtom = Atom.make(
   Layer.succeed(ForegroundSessionStatusSource)({
     get: () => Effect.succeed(readyForegroundSessionGateState),
   }),
-)
+).pipe(Atom.keepAlive)
 
 export const libraryRuntime = Atom.runtime(get =>
   Layer.merge(get(librarySourceLayerAtom), get(launcherLayerAtom)),

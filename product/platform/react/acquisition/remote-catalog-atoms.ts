@@ -16,9 +16,14 @@ import {
 import { Effect } from "effect"
 import * as Atom from "effect/unstable/reactivity/Atom"
 
+// keepAlive: composition roots seed this layer ONCE via useAtomInitialValues.
+// Without keepAlive the registry disposes the unsubscribed node (e.g. while the
+// user sits on Home), and the Store route later re-creates it from the
+// loading-forever default — search hangs silently and the UI keeps a stale
+// empty result. Seeded layer atoms must survive unsubscribed periods.
 export const remoteCatalogSourceLayerAtom = Atom.make(
   loadingForeverRemoteCatalogSourceLayer,
-)
+).pipe(Atom.keepAlive)
 
 export const remoteCatalogRuntime = Atom.runtime(get =>
   get(remoteCatalogSourceLayerAtom),

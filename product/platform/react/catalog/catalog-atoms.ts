@@ -5,9 +5,12 @@ import {
 import { Duration, Effect } from "effect"
 import * as Atom from "effect/unstable/reactivity/Atom"
 
+// keepAlive: seeded once by the composition root; must survive periods with no
+// subscribers or the registry re-creates it from the loading-forever default
+// (see remote-catalog-atoms.ts for the incident this guards against).
 export const catalogFactsSourceLayerAtom = Atom.make(
   loadingForeverCatalogFactsSourceLayer,
-)
+).pipe(Atom.keepAlive)
 
 export const catalogFactsRuntime = Atom.runtime(get =>
   get(catalogFactsSourceLayerAtom),
