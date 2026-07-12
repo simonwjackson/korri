@@ -343,8 +343,11 @@ function unsupportedSystemFor(
   if (extension === "wua") return "wiiu"
   if (["gcz", "rvz", "wad", "wbfs"].includes(extension)) return "wii"
   if (folder === "wii" && extension === "iso") return "wii"
+  // melonDS needs raw .nds — zipped DS dumps stay unsupported. Zipped GBA is
+  // deliberately NOT vetoed here: the retroarch plugin's discovery claims
+  // gba/*.zip (mGBA loads compressed ROMs), and an Unsupported classification
+  // would discard that provider candidate.
   if (folder === "nds" && extension === "zip") return "nds"
-  if (folder === "gba" && extension === "zip") return "gba"
   const extensionSystem = systemByExtension.get(extension)
   if (extensionSystem === "archive" || extensionSystem === "disc-image") {
     return undefined

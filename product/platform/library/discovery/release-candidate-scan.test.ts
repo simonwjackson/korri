@@ -54,6 +54,30 @@ const testGbaDiscoveryProvider = releaseDiscoveryProvider({
 })
 const testGbaDiscoveryProviders = [testGbaDiscoveryProvider]
 
+const testGbaZipDiscoveryProvider = releaseDiscoveryProvider({
+  id: "@korri:test/gba-zip-files",
+  title: "Test zipped GBA files",
+  discover: ({ files }) =>
+    files
+      .filter(
+        file =>
+          file.extension.toLowerCase() === ".zip" &&
+          file.relativePath.toLowerCase().startsWith("gba/"),
+      )
+      .map(file => ({
+        kind: "file-release",
+        confidence: "high",
+        source: file,
+        release: {
+          id: "gba",
+          system: "gba",
+          app: "@korri:retroarch/retroarch",
+          runtime: "@korri:retroarch/mgba",
+        },
+        evidence: [{ kind: "extension", value: ".zip" }],
+      })),
+})
+
 const testNdsDiscoveryProvider = releaseDiscoveryProvider({
   id: "@korri:test/nds-files",
   title: "Test NDS files",
@@ -172,9 +196,16 @@ describe("classifyRomScanPath", () => {
       _tag: "Unsupported",
       system: "wii",
     })
+    // Zipped GBA is claimable by the retroarch plugin's archive discovery
+    // (mGBA loads compressed ROMs); the classifier must not veto it, or the
+    // provider candidate is discarded and Store Gets vanish into staged.
     expect(classifyRomScanPath("gba/dkkc3.zip")).toMatchObject({
+      _tag: "Ignored",
+      reason: "extension:zip",
+    })
+    expect(classifyRomScanPath("nds/game.zip")).toMatchObject({
       _tag: "Unsupported",
-      system: "gba",
+      system: "nds",
     })
   })
 
@@ -424,6 +455,36 @@ describe("scanReleaseCandidates", () => {
     const metroid = decodeLibraryItemPayload(parsed.library["metroid-fusion"])
     expect(metroid.releases[0]?.target).toMatchObject({
       discovery: { "first-seen-at": "2026-06-29T12:34:56.000Z" },
+    })
+  })
+
+  it("lets provider-claimed zipped GBA files become candidates", async () => {
+    await using fixture = await withTempRomRoot({
+      "gba/Pokemon Emerald (J).zip": "",
+      "nds/Some DS Game.zip": "",
+    })
+
+    const result = await scanReleaseCandidates({
+      discoveryProviders: [testGbaZipDiscoveryProvider],
+      root: fixture.root,
+      storage: "sd-roms",
+      now: () => "2026-06-29T12:34:56.000Z",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    // The gba zip is provider-claimed; the classifier must not veto it. The
+    // nds zip stays unsupported (melonDS needs raw .nds).
+    expect(result.report).toMatchObject({ candidates: 1, unsupported: 1 })
+    const parsed = parse(result.yaml) as {
+      readonly library: Record<string, unknown>
+    }
+    expect(Object.keys(parsed.library)).toEqual(["pokemon-emerald-j"])
+    const entry = decodeLibraryItemPayload(parsed.library["pokemon-emerald-j"])
+    expect(entry.releases[0]).toMatchObject({
+      system: "gba",
+      target: { path: "gba/Pokemon Emerald (J).zip" },
+      launch: { runtime: "@korri:retroarch/mgba" },
     })
   })
 
