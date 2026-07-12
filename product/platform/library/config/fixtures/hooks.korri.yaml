@@ -24,6 +24,10 @@ hooks:
 host:
   title: Hooks fixture host
   hooks:
+    # Host-only opt-in: uncomment to let removable/untrusted config roots
+    # (SD-card *.korri.yaml) keep inline hooks on their library entries.
+    # Named profiles in the top-level `hooks:` section stay trusted-root-only.
+    # trust-removable: true
     before:
       - name: display-60hz
         run: swaymsg output DSI-2 mode 1080x1920@60Hz

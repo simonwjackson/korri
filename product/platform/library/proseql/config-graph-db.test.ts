@@ -1007,6 +1007,281 @@ describe("openKorriConfigGraph — collection-scoped trust", () => {
   })
 })
 
+describe("openKorriConfigGraph — host.hooks trust-removable", () => {
+  const launchStackLines = [
+    "storage:",
+    "  roms:",
+    "    root: /roms",
+    "systems:",
+    "  snes:",
+    "    name: Super Nintendo",
+    "runtimes:",
+    "  snes9x:",
+    "    kind: libretro-core",
+    "    path: /cores/snes9x_libretro.so",
+    "launchers:",
+    `  "${KORRI_RETROARCH_APP_ID}":`,
+    `    plugin: "${KORRI_RETROARCH_PLUGIN_ID}"`,
+    "    command: retroarch",
+    '    args: ["-L", "{runtime.path}", "{content.path}"]',
+    "    settings:",
+    "      plugin:",
+    "        paths:",
+    "          systemDirectory: /bios",
+  ]
+
+  const trustingHostFragment = [
+    "host:",
+    "  hooks:",
+    "    trust-removable: true",
+    ...launchStackLines,
+    "",
+  ].join("\n")
+
+  const cardHookedLibraryLines = [
+    "library:",
+    "  zelda:",
+    "    title: Card Zelda",
+    "    hooks:",
+    "      before:",
+    "        - name: card-item-before",
+    "          run: echo card-item",
+    "    releases:",
+    "      - id: snes",
+    "        system: snes",
+    "        target:",
+    "          kind: file",
+    "          storage: roms",
+    "          path: snes/zelda.sfc",
+    "        launch:",
+    `          use: "${KORRI_RETROARCH_APP_ID}"`,
+    "          runtime: snes9x",
+    "        hooks:",
+    "          before:",
+    "            - name: card-release-before",
+    "              run: echo card-release",
+    "          after:",
+    "            - name: card-release-after",
+    "              run: echo card-after",
+  ]
+
+  const cardHookedLibraryFragment = [...cardHookedLibraryLines, ""].join("\n")
+
+  it("keeps removable-root inline hooks and resolves them through the cascade when the trusted host opts in", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(
+        join(trusted!, "korri.yaml"),
+        trustingHostFragment,
+        "utf8",
+      )
+      await writeFile(
+        join(card!, "card.korri.yaml"),
+        cardHookedLibraryFragment,
+        "utf8",
+      )
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                {
+                  root: card!,
+                  id: "removable-card",
+                  collections: REMOVABLE_CONFIG_COLLECTIONS,
+                },
+              ],
+            })
+            const repository = createLibraryRepository(db, {
+              launchIntegrations: [retroarchReadableLaunchIntegration],
+            })
+            return {
+              item: yield* db.library.findById("zelda"),
+              resolved: yield* repository.resolveLaunchForPlayable("zelda"),
+            }
+          }),
+        ),
+      )
+
+      // Inline hooks survive the graph load intact…
+      expect(loaded.item.hooks?.before?.[0]?.name).toBe("card-item-before")
+      expect(loaded.item.releases[0]?.hooks?.before?.[0]?.name).toBe(
+        "card-release-before",
+      )
+      // …and fold through the readable cascade in inheritance order.
+      expect(loaded.resolved.hooks?.before.map(step => step.name)).toEqual([
+        "card-item-before",
+        "card-release-before",
+      ])
+      expect(loaded.resolved.hooks?.after.map(step => step.name)).toEqual([
+        "card-release-after",
+      ])
+    })
+  })
+
+  it("still strips removable-root hooks when the trusted host sets trust-removable false", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(
+        join(trusted!, "korri.yaml"),
+        ["host:", "  hooks:", "    trust-removable: false", ""].join("\n"),
+        "utf8",
+      )
+      await writeFile(
+        join(card!, "card.korri.yaml"),
+        cardHookedLibraryFragment,
+        "utf8",
+      )
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                {
+                  root: card!,
+                  id: "removable-card",
+                  collections: REMOVABLE_CONFIG_COLLECTIONS,
+                },
+              ],
+            })
+            return {
+              host: yield* db.host.findById(LOCAL_HOST_KEY),
+              item: yield* db.library.findById("zelda"),
+            }
+          }),
+        ),
+      )
+
+      // The trusted host decodes (the flag is legal host vocabulary) but the
+      // strip stays in force exactly as with an absent flag.
+      expect(loaded.host.hooks?.["trust-removable"]).toBe(false)
+      expect(loaded.item.title).toBe("Card Zelda")
+      expect(loaded.item.hooks).toBeUndefined()
+      expect(loaded.item.releases[0]?.hooks).toBeUndefined()
+    })
+  })
+
+  it("ignores trust-removable carried by the removable root itself (no self-grant)", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(
+        join(trusted!, "korri.yaml"),
+        ["host:", "  title: Trusted Host", ""].join("\n"),
+        "utf8",
+      )
+      await writeFile(
+        join(card!, "card.korri.yaml"),
+        [
+          "host:",
+          "  hooks:",
+          "    trust-removable: true",
+          ...cardHookedLibraryLines,
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                {
+                  root: card!,
+                  id: "removable-card",
+                  collections: REMOVABLE_CONFIG_COLLECTIONS,
+                },
+              ],
+            })
+            return {
+              host: yield* db.host.findById(LOCAL_HOST_KEY),
+              item: yield* db.library.findById("zelda"),
+              diagnostics: yield* db.$documentGraph.getDiagnostics(),
+            }
+          }),
+        ),
+      )
+
+      // The card's host section is frozen (ignored-collection) and its flag
+      // never unlocks its own hooks: the strip still applies.
+      expect(loaded.host.hooks).toBeUndefined()
+      expect(loaded.item.hooks).toBeUndefined()
+      expect(loaded.item.releases[0]?.hooks).toBeUndefined()
+      expect(
+        loaded.diagnostics.some(
+          diagnostic =>
+            diagnostic.action === "ignored-collection" &&
+            diagnostic.rootId === "removable-card" &&
+            diagnostic.collection === "host",
+        ),
+      ).toBe(true)
+    })
+  })
+
+  it("keeps the top-level hooks profile collection frozen even with trust-removable true", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(
+        join(trusted!, "korri.yaml"),
+        trustingHostFragment,
+        "utf8",
+      )
+      await writeFile(
+        join(card!, "card.korri.yaml"),
+        [
+          "hooks:",
+          "  evil:",
+          "    before:",
+          "      - name: pwn",
+          "        run: echo evil",
+          ...cardHookedLibraryLines,
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                {
+                  root: card!,
+                  id: "removable-card",
+                  collections: REMOVABLE_CONFIG_COLLECTIONS,
+                },
+              ],
+            })
+            return {
+              profiles: yield* Effect.promise(
+                () => db.hooks.query().runPromise,
+              ),
+              item: yield* db.library.findById("zelda"),
+              diagnostics: yield* db.$documentGraph.getDiagnostics(),
+            }
+          }),
+        ),
+      )
+
+      // Profiles are definitions, not per-entry data: the flag governs only
+      // inline hooks, so the card's profile section stays frozen…
+      expect(loaded.profiles).toEqual([])
+      expect(
+        loaded.diagnostics.some(
+          diagnostic =>
+            diagnostic.action === "ignored-collection" &&
+            diagnostic.rootId === "removable-card" &&
+            diagnostic.collection === "hooks",
+        ),
+      ).toBe(true)
+      // …while its per-entry inline hooks survive.
+      expect(loaded.item.hooks?.before?.[0]?.name).toBe("card-item-before")
+    })
+  })
+})
+
 describe("openKorriConfigGraph — read-only", () => {
   it("rejects writes to graph-backed collections", async () => {
     await withTempRoots(1, async ([root]) => {

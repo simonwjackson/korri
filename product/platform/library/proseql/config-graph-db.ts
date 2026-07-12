@@ -83,7 +83,11 @@ export interface KorriConfigGraphRoot {
  * the (future) trusted-marker escalation. Hooks are arbitrary shell run
  * around game sessions, so the top-level `hooks` profile section is frozen
  * AND per-entry `hooks` fields inside the data collections a card may
- * contribute are stripped pre-merge (see the transform below).
+ * contribute are stripped pre-merge (see the transform below) — unless the
+ * TRUSTED root's host record opts in via `host.hooks.trust-removable: true`,
+ * which keeps per-entry inline hooks from removable roots. The top-level
+ * `hooks` profile collection stays frozen regardless of the flag: profiles
+ * are executable definitions, the flag only governs per-entry inline hooks.
  */
 export const REMOVABLE_CONFIG_COLLECTIONS: readonly string[] = [
   "library",
@@ -190,6 +194,15 @@ function makeKorriConfigGraphTransform(
   // call), so staleness across rebuilds is not a concern. Do not hoist it
   // outside this factory closure.
   const realRootCache = new Map<string, string>()
+  // Host-level opt-in observed from TRUSTED (unrestricted) roots during this
+  // build pass. ProseQL processes roots in declaration order and removable
+  // roots are appended after the trusted static roots (see
+  // resolveAllConfigGraphRoots), so every trusted host fragment is
+  // transformed before any restricted fragment consults the flag. Restricted
+  // roots never record it — their `host` section is frozen by collection
+  // scoping and this closure only reads unrestricted fragments — so a card
+  // cannot self-grant. Fail-safe direction: an unset/unseen flag strips.
+  let removableHooksTrusted = false
   const realRootOf = (rootId: string): string | undefined => {
     const cached = realRootCache.get(rootId)
     if (cached !== undefined) return cached
@@ -242,31 +255,46 @@ function makeKorriConfigGraphTransform(
       }
       let scoped = document
       if (allowed !== undefined && isRecord(document)) {
-        // Executable hooks never cross the trust boundary: even inside the
-        // data collections a restricted root may contribute, per-entry
-        // `hooks` fields are stripped with a warning before merge. Sections
-        // outside the allowlist (including a top-level `hooks` profile map)
-        // are left for ProseQL's collection scoping to ignore with an
-        // `ignored-collection` diagnostic.
-        let stripped = false
-        const next: Record<string, unknown> = { ...document }
-        for (const section of allowed) {
-          if (next[section] === undefined) continue
-          const result = stripUntrustedHookFields(next[section])
-          if (result.stripped) {
-            stripped = true
-            next[section] = result.value
+        // Executable hooks never cross the trust boundary by default: even
+        // inside the data collections a restricted root may contribute,
+        // per-entry `hooks` fields are stripped with a warning before merge
+        // — unless the trusted host opted in via
+        // `host.hooks.trust-removable: true` (recorded below from trusted
+        // fragments only). Sections outside the allowlist (including a
+        // top-level `hooks` profile map) are left for ProseQL's collection
+        // scoping to ignore with an `ignored-collection` diagnostic in
+        // either case.
+        if (!removableHooksTrusted) {
+          let stripped = false
+          const next: Record<string, unknown> = { ...document }
+          for (const section of allowed) {
+            if (next[section] === undefined) continue
+            const result = stripUntrustedHookFields(next[section])
+            if (result.stripped) {
+              stripped = true
+              next[section] = result.value
+            }
           }
-        }
-        if (stripped) {
-          logger.warn(
-            { rootId: context.rootId, path: context.path },
-            "config-graph: stripped executable hooks fields from a restricted-root fragment",
-          )
-          scoped = next
+          if (stripped) {
+            logger.warn(
+              { rootId: context.rootId, path: context.path },
+              "config-graph: stripped executable hooks fields from a restricted-root fragment",
+            )
+            scoped = next
+          }
         }
       }
       const validated = validateReadableDocumentStrictly(scoped, allowed)
+      if (allowed === undefined && isRecord(document)) {
+        // Record the trusted host's removable-hooks opt-in only after strict
+        // validation succeeds (a skipped fragment must not grant trust).
+        // Scalar last-wins across trusted fragments mirrors deep-merge.
+        const host = document.host
+        if (isRecord(host) && isRecord(host.hooks)) {
+          const flag = host.hooks["trust-removable"]
+          if (typeof flag === "boolean") removableHooksTrusted = flag
+        }
+      }
       return Result.succeed(wrapPlainHostForProseql(validated))
     } catch (error) {
       return Result.fail(

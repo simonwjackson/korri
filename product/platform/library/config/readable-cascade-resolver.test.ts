@@ -1456,6 +1456,30 @@ describe("resolveReadableLaunchContext hooks fold", () => {
     expect(context.hooks?.after.map(step => step.name)).toEqual(["host-after"])
   })
 
+  it("folds host hooks while ignoring the host-only trust-removable flag", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        hookedSnapshot({
+          hostHooks: {
+            "trust-removable": true,
+            before: [hookStep("host-before")],
+            after: [hookStep("host-after")],
+          },
+        }),
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    // The trust flag is graph-load policy, not a hook step contribution:
+    // the fold takes only before/after and the resolved artifact carries
+    // no trace of the flag.
+    expect(context.hooks?.before.map(step => step.name)).toEqual([
+      "host-before",
+    ])
+    expect(context.hooks?.after.map(step => step.name)).toEqual(["host-after"])
+    expect(context.hooks).not.toHaveProperty("trust-removable")
+  })
+
   it("resolves hooks declared only at the release layer", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(

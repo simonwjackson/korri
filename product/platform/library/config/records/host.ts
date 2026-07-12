@@ -1,8 +1,25 @@
 import { Schema } from "effect"
 
-import { InheritableLayer } from "../inheritable-fields"
+import { HooksPolicy, InheritableLayer } from "../inheritable-fields"
 
 const STRICT = { onExcessProperty: "error" } as const
+
+/**
+ * Host-only hooks vocabulary: the shared HooksPolicy fields plus the
+ * `trust-removable` opt-in. When the TRUSTED root's host sets it to `true`,
+ * removable/untrusted config roots (SD-card `*.korri.yaml`) keep the inline
+ * `hooks` fields on their library entries instead of having them stripped
+ * at config-graph load. It is graph-load policy, not a cascade
+ * contribution — the readable fold reads only before/after/use. Every
+ * non-host record keeps the strict HooksPolicy shape and rejects this key
+ * at decode, so a removable fragment can never carry it anywhere the graph
+ * would accept.
+ */
+export const HostHooksPolicy = Schema.Struct({
+  ...HooksPolicy.fields,
+  "trust-removable": Schema.optional(Schema.Boolean),
+})
+export type HostHooksPolicy = Schema.Schema.Type<typeof HostHooksPolicy>
 
 export const HostPayload = Schema.Struct({
   title: Schema.optional(Schema.String),
@@ -17,7 +34,7 @@ export const HostPayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
-  hooks: InheritableLayer.fields.hooks,
+  hooks: Schema.optional(HostHooksPolicy),
 })
 export type HostPayload = Schema.Schema.Type<typeof HostPayload>
 

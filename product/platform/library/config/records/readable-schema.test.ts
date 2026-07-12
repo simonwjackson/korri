@@ -415,6 +415,48 @@ describe("readable library schema records", () => {
     expect(host.hooks?.use).toEqual(["battery-saver-30fps"])
   })
 
+  it("accepts hooks trust-removable on the host payload only", () => {
+    const hooks = { "trust-removable": true }
+
+    // Host-only opt-in: removable-root library entries may keep inline hooks.
+    expect(decodeHostPayload({ hooks }).hooks?.["trust-removable"]).toBe(true)
+    expect(
+      decodeHostPayload({ hooks: { "trust-removable": false } }).hooks?.[
+        "trust-removable"
+      ],
+    ).toBe(false)
+
+    // Every non-host layer keeps the strict HooksPolicy vocabulary.
+    expect(() => decodeUserPayload({ hooks })).toThrow()
+    expect(() => decodeAppPayload({ hooks })).toThrow()
+    expect(() => decodeGlobalConfigPayload({ hooks })).toThrow()
+    expect(() => decodeProfilePayload({ hooks })).toThrow()
+    expect(() =>
+      decodeLibraryItemPayload({
+        hooks,
+        releases: [
+          {
+            id: "default",
+            system: "stream",
+            target: { kind: "url", value: "peer" },
+          },
+        ],
+      }),
+    ).toThrow()
+    expect(() =>
+      decodeLibraryItemPayload({
+        releases: [
+          {
+            id: "default",
+            system: "stream",
+            target: { kind: "url", value: "peer" },
+            hooks,
+          },
+        ],
+      }),
+    ).toThrow()
+  })
+
   it("rejects malformed hook steps at decode time", () => {
     // Unknown key inside a step surfaces the typo, not silent stripping.
     expect(() =>
