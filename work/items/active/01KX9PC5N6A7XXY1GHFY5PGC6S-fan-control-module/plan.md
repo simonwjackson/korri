@@ -1,7 +1,7 @@
 ---
 title: "feat: Systemic NixOS fan-control module with per-device curves"
 type: feat
-status: active
+status: completed
 date: 2026-07-12
 origin: work/items/active/01KX9PC5N6A7XXY1GHFY5PGC6S-fan-control-module/item.md
 verify_command: "nix build .#checks.x86_64-linux.korri-fan-control-module --no-link"
