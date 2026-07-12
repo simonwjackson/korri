@@ -30,7 +30,10 @@ import {
 export interface MoonlightStateReadback {
   readonly bitrate: number | null
   readonly fps: number | null
-  readonly resolution: { readonly width: number; readonly height: number } | null
+  readonly resolution: {
+    readonly width: number
+    readonly height: number
+  } | null
 }
 
 type Connect = (options: {

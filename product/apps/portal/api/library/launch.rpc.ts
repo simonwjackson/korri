@@ -26,9 +26,7 @@ export class LaunchLibraryPayload extends Schema.Class<LaunchLibraryPayload>(
   presetId: Schema.optional(Schema.Union([Schema.String, Schema.Null])),
   override: Schema.optional(EphemeralOverride),
   streamBoundaryArgs: Schema.optional(Schema.Array(Schema.String)),
-  streamPreflight: Schema.optional(
-    Schema.Literal("skip", "auto", "required"),
-  ),
+  streamPreflight: Schema.optional(Schema.Literal("skip", "auto", "required")),
   launchAlternatives: Schema.optional(Schema.Array(LaunchAlternative)),
 }) {}
 

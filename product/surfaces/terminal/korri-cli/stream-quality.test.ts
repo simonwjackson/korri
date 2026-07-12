@@ -372,17 +372,20 @@ describe("runStreamAdaptiveSet", () => {
   test("applies flat key=value adaptive boundaries through stream-control RPC", async () => {
     const out: string[] = []
     const calls: unknown[] = []
-    const code = await runStreamAdaptiveSet(["bitrate=..12000", "lean=responsive"], {
-      client: {
-        getState: async () => ({}),
-        applyAction: async payload => {
-          calls.push(payload)
-          return { outcome: { kind: "single", status: "applied" } }
+    const code = await runStreamAdaptiveSet(
+      ["bitrate=..12000", "lean=responsive"],
+      {
+        client: {
+          getState: async () => ({}),
+          applyAction: async payload => {
+            calls.push(payload)
+            return { outcome: { kind: "single", status: "applied" } }
+          },
+          setBrightness: async () => ({}),
         },
-        setBrightness: async () => ({}),
+        write: line => out.push(line),
       },
-      write: line => out.push(line),
-    })
+    )
 
     expect(code).toBe(0)
     expect(calls).toEqual([
@@ -403,7 +406,11 @@ describe("runStreamAdaptiveSet", () => {
         getState: async () => ({}),
         applyAction: async payload => {
           calls.push(payload)
-          return { response: { decision: { kind: "dormant", reason: "within-hysteresis" } } }
+          return {
+            response: {
+              decision: { kind: "dormant", reason: "within-hysteresis" },
+            },
+          }
         },
         setBrightness: async () => ({}),
       },
@@ -452,7 +459,9 @@ describe("runStreamAdaptiveShow", () => {
             readback: {
               enabled: true,
               boundaries: {
-                levers: { bitrate: { floor: 500, startup: 6000, ceiling: 40000 } },
+                levers: {
+                  bitrate: { floor: 500, startup: 6000, ceiling: 40000 },
+                },
                 outcomes: {},
                 lean: 0.5,
               },
@@ -491,7 +500,9 @@ describe("runStreamAdaptiveShow", () => {
     })
 
     expect(code).toBe(0)
-    expect(JSON.parse(out.join("\n"))).toEqual({ adaptive: { status: "disabled" } })
+    expect(JSON.parse(out.join("\n"))).toEqual({
+      adaptive: { status: "disabled" },
+    })
   })
 })
 

@@ -1,4 +1,7 @@
-import type { NumericLeverBoundary, StreamBoundaries } from "./stream-adaptive-boundaries"
+import type {
+  NumericLeverBoundary,
+  StreamBoundaries,
+} from "./stream-adaptive-boundaries"
 
 export type StreamPreflightMode = "skip" | "auto" | "required"
 
@@ -108,7 +111,8 @@ export function selectStreamPreflightStartup(
   }
   const floorBinding = startup > profile.startupKbps
   return {
-    status: floorBinding || profile.status !== "available" ? "warning" : "selected",
+    status:
+      floorBinding || profile.status !== "available" ? "warning" : "selected",
     reasonCode: floorBinding ? "floor-binding" : profile.reasonCode,
     message: floorBinding
       ? `Configured bitrate floor ${floor} kbps is above preflight's safe ${profile.startupKbps} kbps profile; respecting the floor`
@@ -130,7 +134,10 @@ function clampStartup(
   floor: number,
   ceiling: number | undefined,
 ): number {
-  return Math.max(floor, ceiling === undefined ? startup : Math.min(startup, ceiling))
+  return Math.max(
+    floor,
+    ceiling === undefined ? startup : Math.min(startup, ceiling),
+  )
 }
 
 function skipped(
@@ -173,7 +180,10 @@ function preflightProfile(facts: StreamPreflightFacts | undefined): {
       message: "Stream preflight timed out",
     }
   }
-  if (facts.sourceReachable === false || facts.streamControlReachable === false) {
+  if (
+    facts.sourceReachable === false ||
+    facts.streamControlReachable === false
+  ) {
     return {
       status: "fallback",
       reasonCode: "source-unreachable",

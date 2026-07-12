@@ -309,7 +309,10 @@ describe("unified launch command", () => {
       clientForHost: () => remoteClient({ prepared }),
       streamBoundaryArgs: ["bitrate=500k..40m"],
       streamPreflight: "required",
-      launchMoonlight: async () => ({ status: "started", command: "moonlight" }),
+      launchMoonlight: async () => ({
+        status: "started",
+        command: "moonlight",
+      }),
       output: line => lines.push(line),
       errorOutput: line => lines.push(line),
     })

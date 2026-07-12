@@ -389,9 +389,7 @@ describe("inputd actions", () => {
 
     await dispatcher.dispatch("toggle-steam-visibility")
 
-    expect(commands).toEqual([
-      { command: "steam-visible", args: ["toggle"] },
-    ])
+    expect(commands).toEqual([{ command: "steam-visible", args: ["toggle"] }])
   })
 
   it("runs configured volume and brightness commands", async () => {

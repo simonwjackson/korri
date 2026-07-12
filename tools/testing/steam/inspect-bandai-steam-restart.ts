@@ -136,16 +136,34 @@ const consoleMarkers = filterSteamWindow(sections.CONSOLE_RESTART_MARKERS ?? [])
 const contentMarkers = filterSteamWindow(sections.CONTENT_APP_MARKERS ?? [])
 const compatMarkers = filterSteamWindow(sections.COMPAT_APP_MARKERS ?? [])
 
-const guardRefusals = countMatches(serviceJournal, /refusing Steam Gamepad UI|uimode=4|Gamepad UI/)
+const guardRefusals = countMatches(
+  serviceJournal,
+  /refusing Steam Gamepad UI|uimode=4|Gamepad UI/,
+)
 const serviceStarts = countMatches(serviceJournal, /Started|Starting/)
-const serviceStops = countMatches(serviceJournal, /Stopped|stopping|Main process exited|status=/)
+const serviceStops = countMatches(
+  serviceJournal,
+  /Stopped|stopping|Main process exited|status=/,
+)
 const consoleStarts = countMatches(consoleMarkers, /Console Log Start/)
 const clientVersions = countMatches(contentMarkers, /Client version:/)
-const appCanceled = countMatches(contentMarkers, new RegExp(`AppID ${appId} update canceled`))
-const appFullyInstalled = countMatches(contentMarkers, new RegExp(`AppID ${appId} state changed : Fully Installed`))
-const appStillUpdating = countMatches(contentMarkers, new RegExp(`AppID ${appId} state changed : .*Update`))
+const appCanceled = countMatches(
+  contentMarkers,
+  new RegExp(`AppID ${appId} update canceled`),
+)
+const appFullyInstalled = countMatches(
+  contentMarkers,
+  new RegExp(`AppID ${appId} state changed : Fully Installed`),
+)
+const appStillUpdating = countMatches(
+  contentMarkers,
+  new RegExp(`AppID ${appId} state changed : .*Update`),
+)
 const cachyRegistered = countMatches(compatMarkers, /proton-cachyos/)
-const legacyProtonMapping = countMatches(compatMarkers, /Mapping AppID 1029210 to tool "proton-8.0-3"/)
+const legacyProtonMapping = countMatches(
+  compatMarkers,
+  /Mapping AppID 1029210 to tool "proton-8.0-3"/,
+)
 
 const classification = (() => {
   if (guardRefusals > 0) {

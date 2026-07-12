@@ -66,8 +66,10 @@ export async function prepareSteamAppInstallState(
       lifecycle: input.lifecycle ?? noopSteamLifecycle,
       lock: input.lock,
       shutdownGuard: async () => {
-        const busy = await (input.collectBusy ??
-          (() => collectSteamBusySnapshot({ steamHome: input.stateRoot })))()
+        const busy = await (
+          input.collectBusy ??
+          (() => collectSteamBusySnapshot({ steamHome: input.stateRoot }))
+        )()
         if (busy.state === "idle") return { allowed: true }
         return {
           allowed: false,

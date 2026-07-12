@@ -23,15 +23,13 @@ function makePort() {
   let counter = 0
 
   const record =
-    (command: string) =>
-    async (params: Readonly<Record<string, number>>) => {
+    (command: string) => async (params: Readonly<Record<string, number>>) => {
       const next = programmed.shift()
       if (next?.kind === "reject") {
         calls.push({ command, params, requestId: undefined })
         throw new Error("transport failed")
       }
-      const requestId =
-        next?.kind === "id" ? next.id : `req-${(counter += 1)}`
+      const requestId = next?.kind === "id" ? next.id : `req-${(counter += 1)}`
       calls.push({ command, params, requestId })
       return requestId
     }

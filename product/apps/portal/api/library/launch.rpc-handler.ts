@@ -788,7 +788,10 @@ type MoonlightLocalPolicyResolution =
   | { readonly _tag: "failed"; readonly response: FailedLaunchLibraryResponse }
 
 type StreamBoundaryResolution =
-  | { readonly _tag: "resolved"; readonly boundaries?: ReturnType<typeof streamBoundariesFromPayload> }
+  | {
+      readonly _tag: "resolved"
+      readonly boundaries?: ReturnType<typeof streamBoundariesFromPayload>
+    }
   | { readonly _tag: "failed"; readonly response: FailedLaunchLibraryResponse }
 
 function resolveMoonlightLocalPolicy(

@@ -20,7 +20,8 @@ const host = args.get("host") ?? "bandai-guest-ip"
 const sshConfig = args.get("ssh-config") ?? "/tmp/bandai-deploy/ssh_config_ip"
 const rpcUrl = args.get("rpc-url") ?? "http://bandai:3001/api/rpc"
 const appId = args.get("app-id") ?? "1029210"
-const helper = args.get("helper") ?? "/run/current-system/sw/bin/korri-steam-app-install"
+const helper =
+  args.get("helper") ?? "/run/current-system/sw/bin/korri-steam-app-install"
 
 function rpcRequestId(): string {
   return `${Date.now()}000001`
@@ -60,12 +61,16 @@ async function callRpc(tag: string, payload: unknown): Promise<unknown> {
   const exit = frames.find(isExitFrame)
   if (!exit) throw new Error(`RPC response missing Exit frame: ${text}`)
   if (exit.exit._tag === "Success") return exit.exit.value
-  throw new Error(`RPC failure: ${JSON.stringify(exit.exit.cause ?? exit.exit)}`)
+  throw new Error(
+    `RPC failure: ${JSON.stringify(exit.exit.cause ?? exit.exit)}`,
+  )
 }
 
 function isExitFrame(value: unknown): value is {
   readonly _tag: "Exit"
-  readonly exit: { readonly _tag: "Success"; readonly value: unknown } | { readonly _tag: "Failure"; readonly cause?: unknown }
+  readonly exit:
+    | { readonly _tag: "Success"; readonly value: unknown }
+    | { readonly _tag: "Failure"; readonly cause?: unknown }
 } {
   return (
     typeof value === "object" &&

@@ -180,11 +180,14 @@ function parseNumericLever(
       )
     }
     const floor = parts[0] === "" ? undefined : parseLeverNumber(parts[0], key)
-    const startup = parts[1] === "" ? undefined : parseLeverNumber(parts[1], key)
+    const startup =
+      parts[1] === "" ? undefined : parseLeverNumber(parts[1], key)
     const ceiling =
       parts[2] === "" ? undefined : parseLeverNumber(parts[2], key)
     if (startup === undefined) {
-      throw new Error("bitrate startup must be provided in floor..startup..ceiling")
+      throw new Error(
+        "bitrate startup must be provided in floor..startup..ceiling",
+      )
     }
     if (floor !== undefined && floor > startup) {
       throw new Error("bitrate startup must be >= floor")

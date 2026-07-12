@@ -95,7 +95,8 @@ describe("shift home state axes", () => {
   })
 
   const home = () =>
-    resolveLabSurfaceAdapter(labTestRegistry(), "shift").axesForScreen?.("/") ?? []
+    resolveLabSurfaceAdapter(labTestRegistry(), "shift").axesForScreen?.("/") ??
+    []
 
   const homeAxis = (id: string) => {
     const axis = home().find(candidate => candidate.id === id)
@@ -377,7 +378,9 @@ describe("shift home state axes", () => {
   it("exposes no axes for screens without a state machine", () => {
     expect(home().length).toBe(2)
     expect(
-      resolveLabSurfaceAdapter(labTestRegistry(), "shift").axesForScreen?.("/game/hollow-knight"),
+      resolveLabSurfaceAdapter(labTestRegistry(), "shift").axesForScreen?.(
+        "/game/hollow-knight",
+      ),
     ).toEqual([])
   })
 })
@@ -393,7 +396,9 @@ describe("shift capture-back coordinate", () => {
   })
 
   const capture = () =>
-    resolveLabSurfaceAdapter(labTestRegistry(), "shift").captureCoordinate?.("/")
+    resolveLabSurfaceAdapter(labTestRegistry(), "shift").captureCoordinate?.(
+      "/",
+    )
 
   it("captures the seed's resting coordinate when nothing is pinned", () => {
     expect(capture()).toEqual({

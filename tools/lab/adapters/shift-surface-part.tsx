@@ -49,7 +49,10 @@ import { ShiftPartFrame } from "@product/surfaces/web/shift/ui/ShiftPartFrame"
 import type { ReactNode } from "react"
 import type { Story } from "@simonwjackson/caliper"
 import { LAB_VARIANT_INPUT_ID } from "@simonwjackson/caliper/adapter-kit"
-import type { LabInputControl, LabInputValue } from "@simonwjackson/caliper/adapter-kit"
+import type {
+  LabInputControl,
+  LabInputValue,
+} from "@simonwjackson/caliper/adapter-kit"
 import {
   shiftCatalogLayerForBinding,
   shiftEntriesForBinding,

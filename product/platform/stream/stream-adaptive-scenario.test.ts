@@ -5,10 +5,17 @@ import {
 } from "./stream-adaptive-scenario"
 import type { StreamHealthSummary } from "./stream-health"
 
-const numeric = (mean?: number, trend: "rising" | "falling" | "flat" | "unknown" = "flat") =>
-  mean === undefined ? { trend: "unknown" as const } : { mean, variance: 0, trend }
+const numeric = (
+  mean?: number,
+  trend: "rising" | "falling" | "flat" | "unknown" = "flat",
+) =>
+  mean === undefined
+    ? { trend: "unknown" as const }
+    : { mean, variance: 0, trend }
 
-function summary(overrides: Partial<StreamHealthSummary> = {}): StreamHealthSummary {
+function summary(
+  overrides: Partial<StreamHealthSummary> = {},
+): StreamHealthSummary {
   return {
     freshness: "fresh",
     sampleCount: 5,
@@ -37,12 +44,22 @@ const initial = {
 describe("stream adaptive scenario replay", () => {
   it("replays a cliff as fast shed followed by slow recovery", () => {
     const steps: StreamAdaptiveScenarioStep[] = [
-      { summary: summary({ bitrateDeliveryRatio: 0.25, lossFraction: numeric(0.12, "rising"), rttMs: numeric(140, "rising") }) },
+      {
+        summary: summary({
+          bitrateDeliveryRatio: 0.25,
+          lossFraction: numeric(0.12, "rising"),
+          rttMs: numeric(140, "rising"),
+        }),
+      },
       { summary: summary() },
       { summary: summary() },
     ]
 
-    const result = runStreamAdaptiveScenario({ initial, objectiveBias: 0.5, steps })
+    const result = runStreamAdaptiveScenario({
+      initial,
+      objectiveBias: 0.5,
+      steps,
+    })
 
     expect(result[0]?.decision.kind).toBe("target")
     expect(result[0]?.mode).toBe("shed")
@@ -61,7 +78,14 @@ describe("stream adaptive scenario replay", () => {
         outcomes: {},
         lean: 0.5,
       },
-      steps: [{ summary: summary({ bitrateDeliveryRatio: 0.25, lossFraction: numeric(0.12) }) }],
+      steps: [
+        {
+          summary: summary({
+            bitrateDeliveryRatio: 0.25,
+            lossFraction: numeric(0.12),
+          }),
+        },
+      ],
     })
 
     expect(result[0]?.settings.bitrateKbps).toBe(20_000)
@@ -72,7 +96,11 @@ describe("stream adaptive scenario replay", () => {
       initial: { ...initial, bitrateKbps: 8_000 },
       objectiveBias: 0.8,
       phase: "establishing",
-      boundaries: { levers: { bitrate: { ceiling: 20_000 } }, outcomes: {}, lean: 0.8 },
+      boundaries: {
+        levers: { bitrate: { ceiling: 20_000 } },
+        outcomes: {},
+        lean: 0.8,
+      },
       steps: [
         { summary: summary({ sampleCount: 1 }) },
         { summary: summary({ sampleCount: 8 }) },

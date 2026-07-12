@@ -312,12 +312,14 @@ async function launchRemoteEntry(
     boundaries: effectiveBoundaries,
     facts: {
       sourceReachable: entry.source.status.status === "available",
-      streamControlReachable:
-        entry.source.status.streamControl === "enabled",
+      streamControlReachable: entry.source.status.streamControl === "enabled",
     },
   })
   if (preflight.status === "rejected") {
-    return fail("launch-invalid", `Stream preflight rejected launch: ${preflight.message}`)
+    return fail(
+      "launch-invalid",
+      `Stream preflight rejected launch: ${preflight.message}`,
+    )
   }
   if (preflight.status === "selected" || preflight.status === "warning") {
     output(`Stream preflight: ${preflight.message}`)
@@ -335,7 +337,9 @@ async function launchRemoteEntry(
   const moonlight = await (options.launchMoonlight ?? launchMoonlight)({
     host: entry.source.host.id,
     ...policy.options,
-    ...(preflight.boundaries ? { adaptiveBoundaries: preflight.boundaries } : {}),
+    ...(preflight.boundaries
+      ? { adaptiveBoundaries: preflight.boundaries }
+      : {}),
   })
   if (moonlight.status === "started") {
     return ok([`Moonlight launch attempted via ${moonlight.command}.`])
@@ -351,12 +355,12 @@ function streamPreflightMode(
 ):
   | { readonly _tag: "Valid"; readonly mode: StreamPreflightMode }
   | { readonly _tag: "Invalid"; readonly message: string } {
-  if (raw === undefined || raw === "auto") return { _tag: "Valid", mode: "auto" }
+  if (raw === undefined || raw === "auto")
+    return { _tag: "Valid", mode: "auto" }
   if (raw === "skip" || raw === "required") return { _tag: "Valid", mode: raw }
   return {
     _tag: "Invalid",
-    message:
-      "Invalid stream preflight mode; use auto, required, or skip",
+    message: "Invalid stream preflight mode; use auto, required, or skip",
   }
 }
 

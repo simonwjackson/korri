@@ -286,8 +286,7 @@ function runAdaptiveSet(
     Effect.flatMap(args =>
       Effect.try({
         try: () => parseStreamBoundaryArgs(args),
-        catch: error =>
-          new ValidationError({ message: errorMessage(error) }),
+        catch: error => new ValidationError({ message: errorMessage(error) }),
       }),
     ),
     Effect.flatMap(boundaries => {
@@ -318,7 +317,10 @@ function runAdaptiveSet(
           )
         },
         catch: error =>
-          new DataError({ reason: "Unavailable", message: errorMessage(error) }),
+          new DataError({
+            reason: "Unavailable",
+            message: errorMessage(error),
+          }),
       })
     }),
   )
@@ -408,12 +410,14 @@ async function recordCommandOutcome(
 async function readState(
   runtime: Runtime,
 ): Promise<StreamControlStateResponseData> {
-  const [adaptive, brightness, battery, pluginDescriptions] = await Promise.all([
-    readAdaptiveState(runtime),
-    readBrightnessState(runtime),
-    readBatteryState(runtime),
-    describePluginStreamControls(runtime),
-  ])
+  const [adaptive, brightness, battery, pluginDescriptions] = await Promise.all(
+    [
+      readAdaptiveState(runtime),
+      readBrightnessState(runtime),
+      readBatteryState(runtime),
+      describePluginStreamControls(runtime),
+    ],
+  )
   const result = {
     adaptive,
     brightness,

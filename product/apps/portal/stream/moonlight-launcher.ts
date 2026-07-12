@@ -299,7 +299,9 @@ export function effectiveMoonlightAdaptiveBoundaries(
   policy: StreamerPolicy | undefined,
   overrides: StreamBoundaries | undefined,
 ): StreamBoundaries | undefined {
-  const configured = moonlightStreamBoundaries(decodeMoonlightPolicy(policy ?? {}))
+  const configured = moonlightStreamBoundaries(
+    decodeMoonlightPolicy(policy ?? {}),
+  )
   if (!configured && !overrides) return undefined
   return mergeStreamBoundaries(configured, overrides)
 }

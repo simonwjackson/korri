@@ -3,7 +3,10 @@ import { ShiftStoreSpotlightStates } from "@product/surfaces/web/shift/pages/Shi
 import { cleanup, render, screen, waitFor } from "@testing-library/react"
 import { LabDraggablePart } from "@simonwjackson/caliper/test-support"
 import { LabPartPreview } from "@simonwjackson/caliper/test-support"
-import { LabContext, type LabContextValue } from "@simonwjackson/caliper/test-support"
+import {
+  LabContext,
+  type LabContextValue,
+} from "@simonwjackson/caliper/test-support"
 import type { LabCalibrationController } from "@simonwjackson/caliper/test-support"
 import { clearLabSurfaceRegistries } from "@simonwjackson/caliper/adapter-kit"
 import { shiftLabSurfaceAdapter } from "./shift"

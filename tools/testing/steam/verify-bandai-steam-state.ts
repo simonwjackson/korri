@@ -54,7 +54,8 @@ for (let index = 2; index < Bun.argv.length; index += 1) {
 
 const host = args.get("host") ?? "bandai-guest-ip"
 const sshConfig = args.get("ssh-config") ?? "/tmp/bandai-deploy/ssh_config_ip"
-const expectedSteamWorkspace = args.get("steam-workspace") ?? "korri:steam-debug"
+const expectedSteamWorkspace =
+  args.get("steam-workspace") ?? "korri:steam-debug"
 
 async function runRemote(script: string): Promise<RemoteResult> {
   const proc = Bun.spawn(["ssh", "-F", sshConfig, host, "bash", "-s"], {
@@ -106,10 +107,16 @@ function findSwayMatches(root: SwayNode | null): readonly SwayMatch[] {
   const steamPattern = /steam|gamescope/i
 
   function walk(node: SwayNode, workspace = "?"): void {
-    const currentWorkspace = node.type === "workspace" ? (node.name ?? "?") : workspace
+    const currentWorkspace =
+      node.type === "workspace" ? (node.name ?? "?") : workspace
     if (node.type === "con" || node.type === "floating_con") {
       const className = node.window_properties?.class ?? null
-      const haystack = [node.name, node.app_id, className, node.window_properties?.instance]
+      const haystack = [
+        node.name,
+        node.app_id,
+        className,
+        node.window_properties?.instance,
+      ]
         .filter(Boolean)
         .join(" ")
       if (steamPattern.test(haystack)) {
@@ -131,8 +138,12 @@ function findSwayMatches(root: SwayNode | null): readonly SwayMatch[] {
   return matches
 }
 
-const currentSystem = await remoteText("readlink /run/current-system 2>/dev/null || true\n")
-const serviceState = await remoteText("systemctl is-active korri-steam-gamescope.service 2>/dev/null || true\n")
+const currentSystem = await remoteText(
+  "readlink /run/current-system 2>/dev/null || true\n",
+)
+const serviceState = await remoteText(
+  "systemctl is-active korri-steam-gamescope.service 2>/dev/null || true\n",
+)
 const interceptMode = await remoteText(
   "busctl --system get-property org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/CompositeDevice0 org.shadowblip.Input.CompositeDevice InterceptMode 2>/dev/null || true\n",
 )
@@ -159,16 +170,24 @@ for p in $(pgrep -x sway 2>/dev/null || true); do
 done
 `)
 const workspaces = swaySocket
-  ? await remoteJson<readonly SwayWorkspace[]>(`SWAYSOCK=${JSON.stringify(swaySocket)} swaymsg -t get_workspaces\n`)
+  ? await remoteJson<readonly SwayWorkspace[]>(
+      `SWAYSOCK=${JSON.stringify(swaySocket)} swaymsg -t get_workspaces\n`,
+    )
   : null
 const tree = swaySocket
-  ? await remoteJson<SwayNode>(`SWAYSOCK=${JSON.stringify(swaySocket)} swaymsg -t get_tree\n`)
+  ? await remoteJson<SwayNode>(
+      `SWAYSOCK=${JSON.stringify(swaySocket)} swaymsg -t get_tree\n`,
+    )
   : null
 const swayMatches = findSwayMatches(tree)
 const focusedWorkspace = workspaces?.find(workspace => workspace.focused)
 
-const webhelpers = processes.filter(process => process.cmdline.includes("steamwebhelper"))
-const liveUimodes = [...new Set(webhelpers.map(process => process.uimode).filter(Boolean))]
+const webhelpers = processes.filter(process =>
+  process.cmdline.includes("steamwebhelper"),
+)
+const liveUimodes = [
+  ...new Set(webhelpers.map(process => process.uimode).filter(Boolean)),
+]
 const gamescopeProcesses = processes.filter(process =>
   /gamescope .*korri-steam-guest|gamescopereaper .*korri-steam-guest/.test(
     process.cmdline,
@@ -197,8 +216,12 @@ if (webhelpers.length > 0 && !liveUimodes.includes("7")) {
 if (swayMatches.some(match => /big picture/i.test(match.name ?? ""))) {
   failures.push("Steam/Gamescope Sway container title is Big Picture")
 }
-if (!gamescopeProcesses.some(process => process.cmdline.includes("-nobigpicture"))) {
-  failures.push("managed Gamescope Steam command does not include -nobigpicture")
+if (
+  !gamescopeProcesses.some(process => process.cmdline.includes("-nobigpicture"))
+) {
+  failures.push(
+    "managed Gamescope Steam command does not include -nobigpicture",
+  )
 }
 if (
   !gamescopeProcesses.some(process =>

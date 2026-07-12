@@ -5,7 +5,10 @@ import {
   parseProcBusInputDevices,
   type DiscoveredDevice,
 } from "@platform/input/native/discover-devices"
-import type { InputSeatGamepadState, RequestedInputSeat } from "./seat-runtime-port"
+import type {
+  InputSeatGamepadState,
+  RequestedInputSeat,
+} from "./seat-runtime-port"
 import type { UinputSeatBackend, UinputSeatHandle } from "./uinput-seat-runtime"
 
 export type UinputSeatBackendCommand =
@@ -47,7 +50,9 @@ export interface UinputSeatBackendOptions {
   readonly helperPath: string
   readonly transport?: UinputSeatBackendTransport
   readonly procDevicesPath?: string
-  readonly discoverDevices?: () => Promise<readonly DiscoveredDevice[]> | readonly DiscoveredDevice[]
+  readonly discoverDevices?: () =>
+    | Promise<readonly DiscoveredDevice[]>
+    | readonly DiscoveredDevice[]
   readonly isDeviceReadable?: (eventPath: string) => Promise<boolean> | boolean
   readonly helperRequestTimeoutMs?: number
 }
@@ -57,7 +62,8 @@ export const createUinputSeatBackend = (
 ): ProductionUinputSeatBackend => {
   assertProductionHelperPath(options.helperPath)
 
-  const transport = options.transport ?? createNdjsonHelperTransport(options.helperPath)
+  const transport =
+    options.transport ?? createNdjsonHelperTransport(options.helperPath)
   const procDevicesPath = options.procDevicesPath ?? "/proc/bus/input/devices"
   const helperRequestTimeoutMs = options.helperRequestTimeoutMs ?? 5_000
 
@@ -131,7 +137,8 @@ export const createUinputSeatBackend = (
       if (!response.ok) throw helperUnavailableError()
     },
     isDeviceReadable: async eventPath => {
-      if (options.isDeviceReadable) return await options.isDeviceReadable(eventPath)
+      if (options.isDeviceReadable)
+        return await options.isDeviceReadable(eventPath)
       try {
         await access(eventPath, constants.R_OK)
         return true
@@ -147,19 +154,24 @@ export const createUinputSeatBackend = (
 
 const REDACTED_HELPER_UNAVAILABLE = "input-seat uinput backend unavailable"
 
-const helperUnavailableError = (): Error => new Error(REDACTED_HELPER_UNAVAILABLE)
+const helperUnavailableError = (): Error =>
+  new Error(REDACTED_HELPER_UNAVAILABLE)
 
 const NIXOS_UINPUT_HELPER_WRAPPER = "/run/wrappers/bin/korri-uinput-seat-helper"
 
 export const assertProductionHelperPath = (helperPath: string): void => {
   if (!helperPath || helperPath.trim() !== helperPath) {
-    throw new Error("input-seat helper path must be a trimmed absolute production path")
+    throw new Error(
+      "input-seat helper path must be a trimmed absolute production path",
+    )
   }
   if (!isAbsolute(helperPath)) {
     throw new Error("input-seat helper path must be absolute")
   }
   if (helperPath.includes("%")) {
-    throw new Error("input-seat helper path must not contain systemd specifiers")
+    throw new Error(
+      "input-seat helper path must not contain systemd specifiers",
+    )
   }
   if (helperPath.startsWith("/nix/store/")) return
   if (helperPath === NIXOS_UINPUT_HELPER_WRAPPER) return
@@ -247,7 +259,9 @@ export const createNdjsonHelperTransport = (
           pending.delete(response.id)
           if (response.ok) {
             waiter.resolve(
-              response.token ? { ok: true, token: response.token } : { ok: true },
+              response.token
+                ? { ok: true, token: response.token }
+                : { ok: true },
             )
           } else {
             waiter.resolve({ ok: false, error: response.error })
@@ -255,7 +269,11 @@ export const createNdjsonHelperTransport = (
         }
       }
     } catch (error) {
-      failPending(error instanceof Error ? error : new Error("uinput helper stdout failed"))
+      failPending(
+        error instanceof Error
+          ? error
+          : new Error("uinput helper stdout failed"),
+      )
     }
   })()
 
@@ -275,7 +293,11 @@ export const createNdjsonHelperTransport = (
           stdin.write(encoder.encode(`${JSON.stringify(envelope)}\n`))
         } catch (error: unknown) {
           pending.delete(id)
-          reject(error instanceof Error ? error : new Error("uinput helper write failed"))
+          reject(
+            error instanceof Error
+              ? error
+              : new Error("uinput helper write failed"),
+          )
         }
       })
     },

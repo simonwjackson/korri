@@ -21,7 +21,8 @@ export async function collectSteamBusySnapshot(
   const steamHome =
     input.steamHome ?? process.env.KORRI_STEAM_HOME ?? "/var/lib/korri/steam"
   const listManifestPaths =
-    input.listSteamAppManifestPaths ?? (() => listSteamAppManifestPaths(steamHome))
+    input.listSteamAppManifestPaths ??
+    (() => listSteamAppManifestPaths(steamHome))
   const readText = input.readText ?? readTextOrUndefined
 
   let manifestPaths: readonly string[]
@@ -48,7 +49,9 @@ export async function collectSteamBusySnapshot(
       const stateFlags = numberField(appState, "StateFlags")
       const bytesDownloaded = numberField(appState, "BytesDownloaded")
       const bytesToDownload = numberField(appState, "BytesToDownload")
-      if (manifestIndicatesBusy({ stateFlags, bytesDownloaded, bytesToDownload })) {
+      if (
+        manifestIndicatesBusy({ stateFlags, bytesDownloaded, bytesToDownload })
+      ) {
         busyAppIds.push(appId)
         evidence.push(
           `AppID ${appId}: StateFlags=${stateFlags ?? "unknown"}` +
@@ -84,7 +87,9 @@ async function listSteamAppManifestPaths(
   const steamapps = join(steamHome, "steamapps")
   const entries = await readdir(steamapps, { withFileTypes: true })
   return entries
-    .filter(entry => entry.isFile() && /^appmanifest_\d+\.acf$/i.test(entry.name))
+    .filter(
+      entry => entry.isFile() && /^appmanifest_\d+\.acf$/i.test(entry.name),
+    )
     .map(entry => join(steamapps, entry.name))
     .sort()
 }

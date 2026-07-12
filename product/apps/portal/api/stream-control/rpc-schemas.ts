@@ -119,7 +119,11 @@ const UnknownOkStateEntry = Schema.Struct({
 })
 
 export const StreamControlStateResponseFields = {
-  adaptive: Schema.Union([DisabledStateEntry, UnknownOkStateEntry, ErrorStateEntry]),
+  adaptive: Schema.Union([
+    DisabledStateEntry,
+    UnknownOkStateEntry,
+    ErrorStateEntry,
+  ]),
   brightness: Schema.Union([
     DisabledStateEntry,
     Schema.Struct({

@@ -267,7 +267,16 @@ const launchCommand = Command.make(
     yes: Flag.boolean("yes").pipe(Flag.withDefault(false)),
     ...streamBoundaryFlags,
   },
-  ({ gameId, host, releaseId, appId, profileId, streamPreflight, yes, ...flags }) =>
+  ({
+    gameId,
+    host,
+    releaseId,
+    appId,
+    profileId,
+    streamPreflight,
+    yes,
+    ...flags
+  }) =>
     Effect.gen(function* () {
       const control = yield* KorriControl
       const librarySource = yield* LibrarySource

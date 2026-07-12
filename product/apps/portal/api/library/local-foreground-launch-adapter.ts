@@ -147,7 +147,8 @@ export async function prepareSteamAppIdForegroundTransition(
   input: PrepareSteamAppIdForegroundTransitionInput,
 ): Promise<LaunchLibraryResponse | undefined> {
   if (!isSteamAppIdLaunchSpec(input.spec)) return undefined
-  const lock = input.withLock ?? (run => withSteamTransitionLock("steam-appid", run))
+  const lock =
+    input.withLock ?? (run => withSteamTransitionLock("steam-appid", run))
   return await lock(() => prepareSteamAppIdForegroundTransitionUnlocked(input))
 }
 
@@ -157,20 +158,24 @@ async function prepareSteamAppIdForegroundTransitionUnlocked(
   const probe = input.probe ?? (() => probeSessiondManagedLaunchStatus())
   const first = await probe()
   if (first.kind !== "ok") return hostUnavailableFromSessiond(first.message)
-  if (isLaunchReadyMode(first.status.mode) || !first.status.active) return undefined
+  if (isLaunchReadyMode(first.status.mode) || !first.status.active)
+    return undefined
 
   const terminate =
     input.terminate ??
-    (terminateInput => terminateSessiondManagedLaunch(terminateInput, sessiondOptions()))
+    (terminateInput =>
+      terminateSessiondManagedLaunch(terminateInput, sessiondOptions()))
   const terminated = await terminate({ launchId: first.status.active.launchId })
-  if (terminated.kind !== "ok") return hostUnavailableFromSessiond(terminated.message)
+  if (terminated.kind !== "ok")
+    return hostUnavailableFromSessiond(terminated.message)
 
   const sleep = input.sleep ?? sleepMs
   const deadline = Date.now() + (input.timeoutMs ?? 15_000)
   const pollMs = input.pollMs ?? 250
   while (Date.now() <= deadline) {
     const current = await probe()
-    if (current.kind !== "ok") return hostUnavailableFromSessiond(current.message)
+    if (current.kind !== "ok")
+      return hostUnavailableFromSessiond(current.message)
     if (isLaunchReadyMode(current.status.mode) && !current.status.active) {
       return undefined
     }
@@ -211,7 +216,8 @@ async function withSteamTransitionLock<A>(
     return await run()
   } finally {
     release()
-    if (steamTransitionLocks.get(key) === queued) steamTransitionLocks.delete(key)
+    if (steamTransitionLocks.get(key) === queued)
+      steamTransitionLocks.delete(key)
   }
 }
 
@@ -219,7 +225,9 @@ function sessiondOptions(): SessiondManagedLaunchClientOptions {
   return { env: process.env }
 }
 
-function hostUnavailableFromSessiond(message: string | undefined): LaunchLibraryResponse {
+function hostUnavailableFromSessiond(
+  message: string | undefined,
+): LaunchLibraryResponse {
   return {
     _tag: "HostUnavailable",
     status: "failed",

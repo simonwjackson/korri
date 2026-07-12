@@ -39,12 +39,16 @@ export function normalizeHandoffTrigger(
 ): StreamHandoffHint | undefined {
   if (!signal) return undefined
   if (signal.handoffInProgress) return { kind: "collapse-likely", severity: 1 }
-  if (signal.signalPercent === undefined || signal.signalPercent >= 30) return undefined
-  const severity = Math.round(clamp01((30 - signal.signalPercent) / 21) * 10) / 10
+  if (signal.signalPercent === undefined || signal.signalPercent >= 30)
+    return undefined
+  const severity =
+    Math.round(clamp01((30 - signal.signalPercent) / 21) * 10) / 10
   return { kind: "collapse-likely", severity }
 }
 
-export function handoffHintPressure(hint: StreamHandoffHint): StreamAdaptivePressure {
+export function handoffHintPressure(
+  hint: StreamHandoffHint,
+): StreamAdaptivePressure {
   const pressure = clamp01(hint.severity * 0.5)
   return { bandwidth: pressure, latency: pressure, decode: 0 }
 }
@@ -55,7 +59,12 @@ export function detectEarlyStreamDownshift(
 ): StreamEarlyDownshiftDecision {
   const evidence = healthEvidence(summary, hint)
   if (summary.freshness === "no-data") {
-    return { kind: "ignored", reasonCode: "no-data", hintRole: hint ? "context-only" : "none", evidence }
+    return {
+      kind: "ignored",
+      reasonCode: "no-data",
+      hintRole: hint ? "context-only" : "none",
+      evidence,
+    }
   }
   if (summary.freshness === "stale") {
     return triggered("stale-health", "none", summary, hint, evidence)
@@ -74,12 +83,17 @@ export function detectEarlyStreamDownshift(
   const corroboratedRtt =
     rttRising &&
     rtt >= 80 &&
-    (bitrateRatio <= 0.82 || fpsRatio <= 0.9 || variance >= 25 || loss >= 0.01 || queue >= 3)
+    (bitrateRatio <= 0.82 ||
+      fpsRatio <= 0.9 ||
+      variance >= 25 ||
+      loss >= 0.01 ||
+      queue >= 3)
   if (corroboratedRtt) {
     return triggered("rtt-slope-delivery-drop", "none", summary, hint, evidence)
   }
 
-  const fpsCollapse = fpsRatio <= 0.78 && (rtt >= 65 || queueRising || lossRising)
+  const fpsCollapse =
+    fpsRatio <= 0.78 && (rtt >= 65 || queueRising || lossRising)
   if (fpsCollapse) {
     return triggered("fps-delivery-drop", "none", summary, hint, evidence)
   }
@@ -92,7 +106,13 @@ export function detectEarlyStreamDownshift(
     loss >= 0.005 ||
     queue >= 2
   if (hint && mildDegradation) {
-    return triggered("hint-corroborated", "corroborating", summary, hint, evidence)
+    return triggered(
+      "hint-corroborated",
+      "corroborating",
+      summary,
+      hint,
+      evidence,
+    )
   }
 
   if (hint) {
@@ -116,18 +136,26 @@ function triggered(
   const bandwidth = Math.max(0.9, 1 - (summary.bitrateDeliveryRatio ?? 1))
   const latency = Math.max(
     0.75,
-    (summary.rttMs.mean ?? 45) >= 80 || summary.rttMs.trend === "rising" ? 0.8 : 0,
+    (summary.rttMs.mean ?? 45) >= 80 || summary.rttMs.trend === "rising"
+      ? 0.8
+      : 0,
     hint ? handoffHintPressure(hint).latency : 0,
   )
   const decode = Math.max(
-    summary.queueDepth.trend === "rising" || (summary.queueDepth.mean ?? 0) >= 3 ? 0.6 : 0,
+    summary.queueDepth.trend === "rising" || (summary.queueDepth.mean ?? 0) >= 3
+      ? 0.6
+      : 0,
     (summary.frameDropFraction ?? 0) * 4,
   )
   return {
     kind: "triggered",
     reasonCode,
     hintRole,
-    pressure: { bandwidth: clamp01(bandwidth), latency: clamp01(latency), decode: clamp01(decode) },
+    pressure: {
+      bandwidth: clamp01(bandwidth),
+      latency: clamp01(latency),
+      decode: clamp01(decode),
+    },
     evidence,
   }
 }

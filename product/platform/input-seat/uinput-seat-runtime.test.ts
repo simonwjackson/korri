@@ -7,7 +7,10 @@ import {
   type UinputSeatBackend,
 } from "./uinput-seat-runtime"
 
-const gamepadDevice = (slot: number, eventNode = `event${slot}`): DiscoveredDevice => ({
+const gamepadDevice = (
+  slot: number,
+  eventNode = `event${slot}`,
+): DiscoveredDevice => ({
   deviceId: `korri-seat-p${slot}`,
   class: "gamepad",
   name: inputSeatNameForSlot(slot),
@@ -72,7 +75,10 @@ const createPhysOnlyBackend = (
 describe("uinput seat runtime", () => {
   it("allocates seats only after unique gamepad identities are discovered", async () => {
     const backend = createBackend(() => [gamepadDevice(1), gamepadDevice(2)])
-    const runtime = createUinputSeatRuntime({ backend, inputRoot: "/dev/input" })
+    const runtime = createUinputSeatRuntime({
+      backend,
+      inputRoot: "/dev/input",
+    })
 
     const result = await runtime.allocate({
       launchId: "launch-1",
@@ -95,7 +101,10 @@ describe("uinput seat runtime", () => {
   })
 
   it("rejects ambiguous duplicate Korri seat names and releases created seats", async () => {
-    const backend = createBackend(() => [gamepadDevice(1, "event1"), gamepadDevice(1, "event9")])
+    const backend = createBackend(() => [
+      gamepadDevice(1, "event1"),
+      gamepadDevice(1, "event9"),
+    ])
     const runtime = createUinputSeatRuntime({ backend })
 
     const result = await runtime.allocate({
@@ -115,7 +124,10 @@ describe("uinput seat runtime", () => {
         uniqueId: undefined,
       },
     ])
-    const runtime = createUinputSeatRuntime({ backend, inputRoot: "/dev/input" })
+    const runtime = createUinputSeatRuntime({
+      backend,
+      inputRoot: "/dev/input",
+    })
     const result = await runtime.allocate({
       launchId: "launch-1",
       seats: [makeRequestedSeat(1)],

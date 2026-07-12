@@ -21,7 +21,10 @@ export interface StreamOutageSupervisorOptions {
 }
 
 export interface StreamOutageSupervisor {
-  readonly observe: (nowMs: number, sample: StreamOutageSample) => StreamOutageAction
+  readonly observe: (
+    nowMs: number,
+    sample: StreamOutageSample,
+  ) => StreamOutageAction
   readonly state: () => StreamOutageState
   readonly markReestablished: () => void
   readonly markReconnectFailed: (message: string) => void
@@ -38,7 +41,10 @@ export function createStreamOutageSupervisor(
   let state: StreamOutageState = "connected"
   let lossStartedAtMs: number | undefined
 
-  function observe(nowMs: number, sample: StreamOutageSample): StreamOutageAction {
+  function observe(
+    nowMs: number,
+    sample: StreamOutageSample,
+  ): StreamOutageAction {
     const lost = isLost(sample)
     const returned = hasReturned(sample)
 
@@ -82,13 +88,18 @@ export function createStreamOutageSupervisor(
 }
 
 function isLost(sample: StreamOutageSample): boolean {
-  if (sample.freshness === "no-data" || sample.freshness === "stale") return true
+  if (sample.freshness === "no-data" || sample.freshness === "stale")
+    return true
   const bitrate = sample.bitrateDeliveryRatio ?? 1
   const fps = sample.fpsDeliveryRatio ?? 1
   return bitrate <= LOSS_RATIO && fps <= LOSS_RATIO
 }
 
 function hasReturned(sample: StreamOutageSample): boolean {
-  if (sample.freshness === "no-data" || sample.freshness === "stale") return false
-  return (sample.bitrateDeliveryRatio ?? 0) > RETURN_RATIO || (sample.fpsDeliveryRatio ?? 0) > RETURN_RATIO
+  if (sample.freshness === "no-data" || sample.freshness === "stale")
+    return false
+  return (
+    (sample.bitrateDeliveryRatio ?? 0) > RETURN_RATIO ||
+    (sample.fpsDeliveryRatio ?? 0) > RETURN_RATIO
+  )
 }

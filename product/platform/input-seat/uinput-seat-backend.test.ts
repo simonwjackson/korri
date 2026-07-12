@@ -26,7 +26,8 @@ describe("uinput seat backend", () => {
   it("creates deterministic Korri seat identities through the helper", async () => {
     const transport = createRecordingTransport()
     const backend = createUinputSeatBackend({
-      helperPath: "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
+      helperPath:
+        "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
       transport,
       discoverDevices: () => [gamepadDevice(1)],
     })
@@ -52,7 +53,8 @@ describe("uinput seat backend", () => {
   it("writes bounded gamepad state and releases seats through the helper", async () => {
     const transport = createRecordingTransport()
     const backend = createUinputSeatBackend({
-      helperPath: "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
+      helperPath:
+        "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
       transport,
       discoverDevices: () => [gamepadDevice(1)],
     })
@@ -102,14 +104,17 @@ describe("uinput seat backend", () => {
       "/usr/bin/korri-uinput-seat-helper",
       "/run/wrappers/bin/not-korri-uinput-seat-helper",
     ]) {
-      expect(() => createUinputSeatBackend({ helperPath })).toThrow(/helper path/)
+      expect(() => createUinputSeatBackend({ helperPath })).toThrow(
+        /helper path/,
+      )
     }
   })
 
   it("stops the helper transport after shutdown", async () => {
     const transport = createRecordingTransport()
     const backend = createUinputSeatBackend({
-      helperPath: "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
+      helperPath:
+        "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
       transport,
       discoverDevices: () => [],
     })
@@ -126,7 +131,8 @@ describe("uinput seat backend", () => {
       ndjsonHelperFixture,
     ])
     const backend = createUinputSeatBackend({
-      helperPath: "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
+      helperPath:
+        "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
       transport,
       discoverDevices: () => [gamepadDevice(1)],
     })
@@ -151,7 +157,8 @@ describe("uinput seat backend", () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-uinput-readable-"))
     const path = join(dir, "event1")
     const backend = createUinputSeatBackend({
-      helperPath: "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
+      helperPath:
+        "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
       transport: createRecordingTransport(),
       discoverDevices: () => [],
     })
@@ -169,7 +176,8 @@ describe("uinput seat backend", () => {
 
   it("redacts helper failures before allocation errors reach sessiond", async () => {
     const backend = createUinputSeatBackend({
-      helperPath: "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
+      helperPath:
+        "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
       transport: {
         request: async () => ({ ok: false, error: "uinput open failed" }),
       },
@@ -184,7 +192,8 @@ describe("uinput seat backend", () => {
   it("times out a stuck helper request and stops the transport", async () => {
     let stopped = false
     const backend = createUinputSeatBackend({
-      helperPath: "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
+      helperPath:
+        "/nix/store/test-korri-uinput-seat-helper/bin/korri-uinput-seat-helper",
       helperRequestTimeoutMs: 1,
       transport: {
         request: async () => await new Promise(() => {}),

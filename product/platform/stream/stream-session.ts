@@ -306,7 +306,9 @@ function startAdaptiveRunner(input: {
     },
     dryRun: previewBoundaries =>
       computeStreamAdaptiveDecision({
-        summary: input.health.latestSummary((input.options.nowMs ?? Date.now)()),
+        summary: input.health.latestSummary(
+          (input.options.nowMs ?? Date.now)(),
+        ),
         current: adaptiveCurrentSettings(recovery, initialSettings),
         objectiveBias: adaptive.objectiveBias,
         boundaries: previewBoundaries ?? boundaries,

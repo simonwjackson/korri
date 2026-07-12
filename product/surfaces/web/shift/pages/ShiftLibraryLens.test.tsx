@@ -89,11 +89,17 @@ describe("ShiftLibraryLens", () => {
   it("reflects a controlled sort and reports changes", () => {
     const onSortChange = mock(() => undefined)
     render(
-      <ShiftLibraryLens games={games} sort="title" onSortChange={onSortChange} />,
+      <ShiftLibraryLens
+        games={games}
+        sort="title"
+        onSortChange={onSortChange}
+      />,
     )
 
     // Controlled sort shows its placard label (title = A\u2013Z).
-    expect(screen.getByRole("button", { name: /^Sorted by A\u2013Z/ })).toBeDefined()
+    expect(
+      screen.getByRole("button", { name: /^Sorted by A\u2013Z/ }),
+    ).toBeDefined()
 
     fireEvent.click(screen.getByRole("button", { name: /^Sorted by A\u2013Z/ }))
     // title cycles to playtime, reported up.

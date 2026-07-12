@@ -13,7 +13,9 @@ const numeric = (
     ? { trend: "unknown" as const }
     : { mean, variance: 0, trend }
 
-function summary(overrides: Partial<StreamHealthSummary> = {}): StreamHealthSummary {
+function summary(
+  overrides: Partial<StreamHealthSummary> = {},
+): StreamHealthSummary {
   return {
     freshness: "fresh",
     sampleCount: 5,

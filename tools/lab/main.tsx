@@ -7,19 +7,19 @@
  * the whole seam — swap data at the last-mile edge, never the mechanism.
  */
 
-import "@simonwjackson/caliper/style.css";
-import "@platform/react/primitives/theme/styles.css";
+import "@simonwjackson/caliper/style.css"
+import "@platform/react/primitives/theme/styles.css"
 
-import { startSpatialNavigation } from "@platform/browser/navigation/start";
-import { createCaliperApp } from "@simonwjackson/caliper";
-import { surfacePartModules } from "@product/surfaces/web/parts-glob";
-import { boxbusterLabSurfaceAdapter } from "./adapters/boxbuster";
-import { picoLabSurfaceAdapter } from "./adapters/pico";
-import { shiftLabSurfaceAdapter } from "./adapters/shift";
+import { startSpatialNavigation } from "@platform/browser/navigation/start"
+import { createCaliperApp } from "@simonwjackson/caliper"
+import { surfacePartModules } from "@product/surfaces/web/parts-glob"
+import { boxbusterLabSurfaceAdapter } from "./adapters/boxbuster"
+import { picoLabSurfaceAdapter } from "./adapters/pico"
+import { shiftLabSurfaceAdapter } from "./adapters/shift"
 
-const host = document.getElementById("root");
+const host = document.getElementById("root")
 if (!host) {
-  throw new Error("Missing #root element for the korri Caliper lab");
+  throw new Error("Missing #root element for the korri Caliper lab")
 }
 
 createCaliperApp(host, {
@@ -36,6 +36,6 @@ createCaliperApp(host, {
     startSpatialNavigation({
       scope: () =>
         document.querySelector<HTMLElement>("[data-lab-surface-mount]"),
-    });
+    })
   },
-});
+})

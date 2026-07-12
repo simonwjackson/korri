@@ -49,7 +49,10 @@ describe("composeMoonlightLaunchSpec", () => {
 
   it("fails closed when no streamer plugin is enabled", async () => {
     await expect(
-      composeMoonlightLaunchSpec({ host: "aka.local", registry: emptyRegistry }),
+      composeMoonlightLaunchSpec({
+        host: "aka.local",
+        registry: emptyRegistry,
+      }),
     ).rejects.toThrow(/streamer capability/)
   })
 

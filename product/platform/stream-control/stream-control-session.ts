@@ -18,7 +18,8 @@ import { Effect } from "effect"
  * the streamer's wire payloads are its own concern; callers that need typed
  * readback normalize at their seam.
  */
-export const STREAM_CONTROL_CONNECT_OPERATION = "stream-control.connect" as const
+export const STREAM_CONTROL_CONNECT_OPERATION =
+  "stream-control.connect" as const
 
 export interface StreamControlTouchBounds {
   readonly x: number

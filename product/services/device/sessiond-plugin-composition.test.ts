@@ -39,7 +39,9 @@ describe("sessiond plugin composition", () => {
   })
 
   it("uses a writable input-seat runtime and stable Sunshine mirror paths when runtime dir is configured", async () => {
-    const runtimeDir = await mkdtemp(join(tmpdir(), "korri-input-seat-runtime-"))
+    const runtimeDir = await mkdtemp(
+      join(tmpdir(), "korri-input-seat-runtime-"),
+    )
     const backend = createReadySeatBackend()
     const gates = sessiondPreSpawnGatesFromEnv(
       { KORRI_INPUT_SEAT_RUNTIME_DIR: runtimeDir },
@@ -69,12 +71,19 @@ describe("sessiond plugin composition", () => {
   })
 
   it("fails input-seat launches closed when runtime dir has no production helper", async () => {
-    const runtimeDir = await mkdtemp(join(tmpdir(), "korri-input-seat-runtime-"))
+    const runtimeDir = await mkdtemp(
+      join(tmpdir(), "korri-input-seat-runtime-"),
+    )
     try {
-      for (const helperPath of [undefined, "/usr/bin/korri-uinput-seat-helper"]) {
+      for (const helperPath of [
+        undefined,
+        "/usr/bin/korri-uinput-seat-helper",
+      ]) {
         const [gate] = sessiondPreSpawnGatesFromEnv({
           KORRI_INPUT_SEAT_RUNTIME_DIR: runtimeDir,
-          ...(helperPath ? { KORRI_INPUT_SEAT_BACKEND_HELPER: helperPath } : {}),
+          ...(helperPath
+            ? { KORRI_INPUT_SEAT_BACKEND_HELPER: helperPath }
+            : {}),
         })
 
         await expect(

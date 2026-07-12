@@ -57,10 +57,13 @@ export function classifyGamescopeAbortWindow(
   const gameRemoved = new RegExp(
     `Game process removed ?: AppID ${escapeRegExp(input.appId)}`,
   ).test(steamText)
-  const guardExit = /uimode=4|refusing Steam Gamepad UI|RestartPreventExitStatus=77/i.test(
+  const guardExit =
+    /uimode=4|refusing Steam Gamepad UI|RestartPreventExitStatus=77/i.test(
+      serviceText,
+    )
+  const stopTimeout = /stop timed out|deactivating|TimeoutStop/i.test(
     serviceText,
   )
-  const stopTimeout = /stop timed out|deactivating|TimeoutStop/i.test(serviceText)
 
   const classification = (() => {
     if (guardExit) return "gamepad-ui-guard-exit" as const

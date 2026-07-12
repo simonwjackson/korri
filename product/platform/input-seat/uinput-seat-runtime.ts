@@ -23,7 +23,9 @@ export interface UinputSeatHandle {
 export interface UinputSeatBackend {
   readonly createSeat: (seat: RequestedInputSeat) => Promise<UinputSeatHandle>
   readonly releaseSeat: (handle: UinputSeatHandle) => Promise<void> | void
-  readonly discoverDevices: () => Promise<readonly DiscoveredDevice[]> | readonly DiscoveredDevice[]
+  readonly discoverDevices: () =>
+    | Promise<readonly DiscoveredDevice[]>
+    | readonly DiscoveredDevice[]
   readonly writeGamepadState: (
     handle: UinputSeatHandle,
     state: InputSeatGamepadState,
@@ -92,7 +94,10 @@ export const createUinputSeatRuntime = (
             status: "unavailable",
             reason: "allocation-failed",
             slot: seat.slot,
-            message: error instanceof Error ? error.message : `seat ${seat.slot} allocation failed`,
+            message:
+              error instanceof Error
+                ? error.message
+                : `seat ${seat.slot} allocation failed`,
           }
         }
 
@@ -148,11 +153,17 @@ type SeatReadinessResult =
   | { readonly status: "ready"; readonly identity: InputSeatIdentity }
   | {
       readonly status: "unavailable"
-      readonly result: Extract<SeatAllocationResult, { readonly status: "unavailable" }>
+      readonly result: Extract<
+        SeatAllocationResult,
+        { readonly status: "unavailable" }
+      >
     }
   | {
       readonly status: "ambiguous"
-      readonly result: Extract<SeatAllocationResult, { readonly status: "ambiguous" }>
+      readonly result: Extract<
+        SeatAllocationResult,
+        { readonly status: "ambiguous" }
+      >
     }
 
 const waitForSeatIdentity = async (
@@ -165,7 +176,8 @@ const waitForSeatIdentity = async (
   let sawUnreadableDevice = false
 
   while (options.nowMs() <= deadline) {
-    if (request.signal?.aborted) return { status: "unavailable", result: cancelledResult() }
+    if (request.signal?.aborted)
+      return { status: "unavailable", result: cancelledResult() }
 
     const devices = await options.backend.discoverDevices()
     const expectedPhysicalPath =
@@ -210,7 +222,8 @@ const waitForSeatIdentity = async (
       }
 
       const eventPath = `${options.inputRoot}/${device.eventNode}`
-      const readable = await (options.backend.isDeviceReadable?.(eventPath) ?? true)
+      const readable = await (options.backend.isDeviceReadable?.(eventPath) ??
+        true)
       if (!readable) {
         sawUnreadableDevice = true
         await options.sleepMs(options.pollIntervalMs)
@@ -282,12 +295,42 @@ const validateGamepadState = (
   state: InputSeatGamepadState,
 ): InputSeatGamepadState => ({
   buttons: validateIntegerRange("buttons", state.buttons, 0, UINT32_MAX),
-  leftTrigger: validateIntegerRange("leftTrigger", state.leftTrigger, 0, UINT8_MAX),
-  rightTrigger: validateIntegerRange("rightTrigger", state.rightTrigger, 0, UINT8_MAX),
-  leftStickX: validateIntegerRange("leftStickX", state.leftStickX, INT16_MIN, INT16_MAX),
-  leftStickY: validateIntegerRange("leftStickY", state.leftStickY, INT16_MIN, INT16_MAX),
-  rightStickX: validateIntegerRange("rightStickX", state.rightStickX, INT16_MIN, INT16_MAX),
-  rightStickY: validateIntegerRange("rightStickY", state.rightStickY, INT16_MIN, INT16_MAX),
+  leftTrigger: validateIntegerRange(
+    "leftTrigger",
+    state.leftTrigger,
+    0,
+    UINT8_MAX,
+  ),
+  rightTrigger: validateIntegerRange(
+    "rightTrigger",
+    state.rightTrigger,
+    0,
+    UINT8_MAX,
+  ),
+  leftStickX: validateIntegerRange(
+    "leftStickX",
+    state.leftStickX,
+    INT16_MIN,
+    INT16_MAX,
+  ),
+  leftStickY: validateIntegerRange(
+    "leftStickY",
+    state.leftStickY,
+    INT16_MIN,
+    INT16_MAX,
+  ),
+  rightStickX: validateIntegerRange(
+    "rightStickX",
+    state.rightStickX,
+    INT16_MIN,
+    INT16_MAX,
+  ),
+  rightStickY: validateIntegerRange(
+    "rightStickY",
+    state.rightStickY,
+    INT16_MIN,
+    INT16_MAX,
+  ),
 })
 
 const validateIntegerRange = (

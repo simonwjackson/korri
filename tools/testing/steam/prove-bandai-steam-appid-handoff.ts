@@ -104,37 +104,58 @@ export function classifyProbeTranscript(
   const sessiond = (sections.SESSIOND ?? []).join("\n")
   const sway = (sections.SWAY ?? []).join("\n")
   const screenshot = (sections.SCREENSHOT ?? []).join("\n")
-  const all = [service, processes, consoleLog, journal, sessiond, sway, screenshot].join("\n")
+  const all = [
+    service,
+    processes,
+    consoleLog,
+    journal,
+    sessiond,
+    sway,
+    screenshot,
+  ].join("\n")
   const appId = escapeRegExp(app.appId)
   const expectedExe = escapeRegExp(app.expectedExe)
 
   const expectedProcess = new RegExp(expectedExe, "i").test(processes)
-  const swayAppWindow = new RegExp(`steam_app_${appId}|${expectedExe}`, "i").test(sway)
-  const removalHint = new RegExp(`Game process removed ?: AppID ${appId}`).test(consoleLog)
+  const swayAppWindow = new RegExp(
+    `steam_app_${appId}|${expectedExe}`,
+    "i",
+  ).test(sway)
+  const removalHint = new RegExp(`Game process removed ?: AppID ${appId}`).test(
+    consoleLog,
+  )
 
   return {
     serviceActive: /(^|\n)active($|\n)|ActiveState=active/.test(service),
     steamDesktopPersona: /steamwebhelper[^\n]*-uimode=7/.test(processes),
     steamGamepadPersona: /steamwebhelper[^\n]*-uimode=4/.test(processes),
-    gameProcessAdded: new RegExp(`Game process added ?: AppID ${appId}|SteamLaunch AppId=${appId}`).test(
-      all,
-    ),
+    gameProcessAdded: new RegExp(
+      `Game process added ?: AppID ${appId}|SteamLaunch AppId=${appId}`,
+    ).test(all),
     expectedProcess,
     appLauncherAlive: new RegExp(`korri-steam-app\\s+${appId}`).test(processes),
-    sessionRestoring: /\b(restoring|cleanup|cleaning Steam foreground processes|stopping foreground)\b/i.test(
-      sessiond,
-    ),
-    wrapperRemovedNonTerminal: removalHint && (expectedProcess || swayAppWindow),
+    sessionRestoring:
+      /\b(restoring|cleanup|cleaning Steam foreground processes|stopping foreground)\b/i.test(
+        sessiond,
+      ),
+    wrapperRemovedNonTerminal:
+      removalHint && (expectedProcess || swayAppWindow),
     realProtonCachyos:
       /compatibilitytools\.d\/proton-cachyos-11\.0-20260601-slr-arm64(?:\/.*)?\/proton/.test(
         all,
-      ) || /\/nix\/store\/[^\s]*proton-cachyos-arm64[^\s]*\/dist'?\/proton/.test(all),
+      ) ||
+      /\/nix\/store\/[^\s]*proton-cachyos-arm64[^\s]*\/dist'?\/proton/.test(
+        all,
+      ),
     screenshotCaptured: /SCREENSHOT_OK/.test(screenshot),
     swayTitleObserved:
       new RegExp(escapeRegExp(app.name), "i").test(sway) ||
       new RegExp(expectedExe, "i").test(sway) ||
       /Steam|gamescope/i.test(sway),
-    gamescopeAbort: /status=134|Main process exited.*status=134|\bABRT\b|\bAborted\b/.test(journal),
+    gamescopeAbort:
+      /status=134|Main process exited.*status=134|\bABRT\b|\bAborted\b/.test(
+        journal,
+      ),
   }
 }
 
@@ -153,7 +174,9 @@ export function stepPassed(classification: ProbeClassification): boolean {
   )
 }
 
-export function proofPassed(proof: Pick<StepProof, "classification" | "holdSatisfied">): boolean {
+export function proofPassed(
+  proof: Pick<StepProof, "classification" | "holdSatisfied">,
+): boolean {
   return proof.holdSatisfied && stepPassed(proof.classification)
 }
 
@@ -183,10 +206,13 @@ async function copyRemoteFile(
   remotePath: string,
   localPath: string,
 ): Promise<boolean> {
-  const proc = Bun.spawn(["scp", "-F", sshConfig, `${host}:${remotePath}`, localPath], {
-    stdout: "pipe",
-    stderr: "pipe",
-  })
+  const proc = Bun.spawn(
+    ["scp", "-F", sshConfig, `${host}:${remotePath}`, localPath],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  )
   return (await proc.exited) === 0
 }
 
@@ -199,8 +225,7 @@ mark=$(date '+%Y-%m-%d %H:%M:%S')
 echo "MARK=$mark"
 nohup /run/current-system/sw/bin/korri-steam-app "$app_id" >"$log" 2>&1 &
 echo "PID=$!"
-`
-    .replaceAll("__APP_ID__", shellSingleQuote(app.appId))
+`.replaceAll("__APP_ID__", shellSingleQuote(app.appId))
 }
 
 function probeScript(
@@ -321,9 +346,15 @@ async function proveStep(options: {
   readonly holdSeconds: number
   readonly artifactDir: string
 }): Promise<StepProof> {
-  const launch = await runRemote(options.sshConfig, options.host, launchScript(options.app))
+  const launch = await runRemote(
+    options.sshConfig,
+    options.host,
+    launchScript(options.app),
+  )
   if (launch.exitCode !== 0) {
-    throw new Error(`launch ${options.app.appId} failed: ${launch.stderr}\n${launch.stdout}`)
+    throw new Error(
+      `launch ${options.app.appId} failed: ${launch.stderr}\n${launch.stdout}`,
+    )
   }
 
   const launchLines = launch.stdout.trim().split("\n")
@@ -331,7 +362,8 @@ async function proveStep(options: {
     launchLines.find(line => line.startsWith("MARK="))?.slice("MARK=".length) ??
     new Date().toISOString().slice(0, 19).replace("T", " ")
   const launchPid =
-    launchLines.find(line => line.startsWith("PID="))?.slice("PID=".length) ?? "unknown"
+    launchLines.find(line => line.startsWith("PID="))?.slice("PID=".length) ??
+    "unknown"
   const screenshotRemotePath = `/tmp/korri-steam-proof-${options.runId}-${options.step}-${options.app.appId}.png`
   let lastProbe = ""
   let lastClassification: ProbeClassification | undefined
@@ -374,7 +406,8 @@ async function proveStep(options: {
     launchMark,
     screenshotRemotePath,
     ...(copied ? { screenshotLocalPath: localPath } : {}),
-    classification: lastClassification ?? classifyProbeTranscript(lastProbe, options.app),
+    classification:
+      lastClassification ?? classifyProbeTranscript(lastProbe, options.app),
     holdSatisfied,
     sections: parseSections(lastProbe),
   }
@@ -388,8 +421,10 @@ async function main(argv: readonly string[]): Promise<number> {
   const pollSeconds = Number(args.get("poll-seconds") ?? "5")
   const holdSeconds = Number(args.get("hold-seconds") ?? "75")
   const sequence = parseSequence(args.get("sequence"))
-  const runId = args.get("run-id") ?? new Date().toISOString().replace(/[:.]/g, "-")
-  const artifactDir = args.get("artifact-dir") ?? `/tmp/korri-steam-proof-${runId}`
+  const runId =
+    args.get("run-id") ?? new Date().toISOString().replace(/[:.]/g, "-")
+  const artifactDir =
+    args.get("artifact-dir") ?? `/tmp/korri-steam-proof-${runId}`
   const resetFirst = args.get("reset-first") !== "false"
 
   await mkdir(artifactDir, { recursive: true })

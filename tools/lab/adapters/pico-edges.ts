@@ -15,7 +15,10 @@ import {
 } from "@product/surfaces/web/pico/pico-power-state"
 import type { Story } from "@simonwjackson/caliper"
 import { eachLabTargetRegistry } from "@simonwjackson/caliper/adapter-kit"
-import type { LabSurfaceEvent, LabSurfacePartInput } from "@simonwjackson/caliper"
+import type {
+  LabSurfaceEvent,
+  LabSurfacePartInput,
+} from "@simonwjackson/caliper"
 import {
   isPicoDeviceFactStory,
   PICO_CLOCK_INPUT_CONTROL,

@@ -252,10 +252,9 @@ describe("Sunshine remote input source adapter", () => {
       })
     }
 
-    expect(adapter.forwardedEvents().map(event => event.frame.buttons)).toEqual([
-      2,
-      3,
-    ])
+    expect(adapter.forwardedEvents().map(event => event.frame.buttons)).toEqual(
+      [2, 3],
+    )
   })
 
   it("strictly decodes bounded gamepad frames", () => {

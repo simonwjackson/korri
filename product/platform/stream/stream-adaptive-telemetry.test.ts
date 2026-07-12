@@ -34,9 +34,8 @@ describe("stream adaptive telemetry", () => {
     recorder.record(entry(1))
     recorder.record(entry(2))
 
-    expect(parseStreamAdaptiveTrace(recorder.exportJsonl()).map(e => e.tMs)).toEqual([
-      1000,
-      2000,
-    ])
+    expect(
+      parseStreamAdaptiveTrace(recorder.exportJsonl()).map(e => e.tMs),
+    ).toEqual([1000, 2000])
   })
 })

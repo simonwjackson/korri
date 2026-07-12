@@ -76,7 +76,10 @@ export function classifyTranscript(
   const realProtonCachyos =
     /compatibilitytools\.d\/proton-cachyos-11\.0-20260601-slr-arm64(?:\/.*)?\/proton/.test(
       currentTranscript,
-    ) || /\/nix\/store\/[^\s]*proton-cachyos-arm64[^\s]*\/dist\/proton/.test(currentTranscript)
+    ) ||
+    /\/nix\/store\/[^\s]*proton-cachyos-arm64[^\s]*\/dist\/proton/.test(
+      currentTranscript,
+    )
   const steamLinuxRuntime4 = /SteamLinuxRuntime_4\//.test(currentTranscript)
   const steamLinuxRuntimeSniper = /SteamLinuxRuntime_sniper\//.test(
     currentTranscript,
@@ -90,17 +93,20 @@ export function classifyTranscript(
   const runtimeHelperExecFormat =
     execFormat && /pressure-vessel|pv-adverb|srt-bwrap/.test(currentTranscript)
   const removalHint = options.appId
-    ? new RegExp(`Game process removed ?:? AppID ${escapeRegExp(options.appId)}`).test(
-        currentTranscript,
-      )
+    ? new RegExp(
+        `Game process removed ?:? AppID ${escapeRegExp(options.appId)}`,
+      ).test(currentTranscript)
     : /Game process removed ?:? AppID \d+/.test(currentTranscript)
-  const liveEvidenceTranscript = options.liveEvidenceTranscript ?? currentTranscript
+  const liveEvidenceTranscript =
+    options.liveEvidenceTranscript ?? currentTranscript
   const appStillRunning = options.appId
-    ? new RegExp(`SteamLaunch AppId=${escapeRegExp(options.appId)}|steam_app_${escapeRegExp(options.appId)}`).test(
-        liveEvidenceTranscript,
-      ) ||
+    ? new RegExp(
+        `SteamLaunch AppId=${escapeRegExp(options.appId)}|steam_app_${escapeRegExp(options.appId)}`,
+      ).test(liveEvidenceTranscript) ||
       (options.expectedExe
-        ? new RegExp(escapeRegExp(options.expectedExe), "i").test(liveEvidenceTranscript)
+        ? new RegExp(escapeRegExp(options.expectedExe), "i").test(
+            liveEvidenceTranscript,
+          )
         : false)
     : false
   const wrapperRemoved = removalHint && appStillRunning

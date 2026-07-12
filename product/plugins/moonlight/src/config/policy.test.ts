@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import {
-  decodeMoonlightPolicy,
-  moonlightStreamBoundaries,
-} from "./policy"
+import { decodeMoonlightPolicy, moonlightStreamBoundaries } from "./policy"
 
 describe("decodeMoonlightPolicy", () => {
   it("decodes a valid typed Moonlight policy", () => {
@@ -66,10 +63,14 @@ describe("decodeMoonlightPolicy", () => {
 
   it("rejects invalid unified stream ranges", () => {
     expect(() =>
-      decodeMoonlightPolicy({ stream: { bitrateKbps: { min: 500, max: 40000 } } }),
+      decodeMoonlightPolicy({
+        stream: { bitrateKbps: { min: 500, max: 40000 } },
+      }),
     ).toThrow(/start/)
     expect(() =>
-      decodeMoonlightPolicy({ stream: { fps: { min: 120, start: 60, max: 120 } } }),
+      decodeMoonlightPolicy({
+        stream: { fps: { min: 120, start: 60, max: 120 } },
+      }),
     ).toThrow(/start.*min|min.*start/)
     expect(() =>
       decodeMoonlightPolicy({
@@ -113,9 +114,7 @@ describe("decodeMoonlightPolicy", () => {
   })
 
   it("rejects invalid codec and rotation values", () => {
-    expect(() =>
-      decodeMoonlightPolicy({ stream: { codec: "av1" } }),
-    ).toThrow()
+    expect(() => decodeMoonlightPolicy({ stream: { codec: "av1" } })).toThrow()
     expect(() => decodeMoonlightPolicy({ input: { rotate: 45 } })).toThrow()
   })
 })

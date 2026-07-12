@@ -1,10 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { createPluginRegistry } from "@platform/plugin/registry"
 import { moonlightPlugin } from "@product/plugins/moonlight"
-import {
-  dispatchStreamLaunch,
-  resolveStreamLauncher,
-} from "./streamer-client"
+import { dispatchStreamLaunch, resolveStreamLauncher } from "./streamer-client"
 
 const withMoonlight = createPluginRegistry([moonlightPlugin], {
   enabledPluginIds: [moonlightPlugin.id],

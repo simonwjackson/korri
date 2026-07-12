@@ -142,13 +142,14 @@ const startSunshineMirrorIfConfigured = async (input: {
 }): Promise<SunshineInputSeatMirrorSocketHandle | undefined> => {
   if (!input.options) return undefined
   const socketPath =
-    input.options.socketPath ?? input.options.socketPathForLaunch?.(input.launchId)
+    input.options.socketPath ??
+    input.options.socketPathForLaunch?.(input.launchId)
   if (!socketPath) {
     throw new Error("input-seat Sunshine mirror socket path is not configured")
   }
 
   const mirrorToken = input.options.activeLaunchSidecarPath
-    ? input.options.mirrorTokenFactory?.() ?? randomUUID()
+    ? (input.options.mirrorTokenFactory?.() ?? randomUUID())
     : undefined
   const sidecarPath = input.options.activeLaunchSidecarPath
 
@@ -159,7 +160,8 @@ const startSunshineMirrorIfConfigured = async (input: {
       socketPath,
       seatCount: input.seatCount,
       maxEventsPerSecond:
-        input.options.maxEventsPerSecond ?? DEFAULT_MAX_SUNSHINE_EVENTS_PER_SECOND,
+        input.options.maxEventsPerSecond ??
+        DEFAULT_MAX_SUNSHINE_EVENTS_PER_SECOND,
       ...(input.options.maxFrameBytes !== undefined
         ? { maxFrameBytes: input.options.maxFrameBytes }
         : {}),
@@ -251,7 +253,9 @@ const rejectSymlink = async (path: string): Promise<void> => {
   try {
     const current = await lstat(path)
     if (current.isSymbolicLink()) {
-      throw new Error("input-seat active-launch sidecar path must not be a symlink")
+      throw new Error(
+        "input-seat active-launch sidecar path must not be a symlink",
+      )
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return

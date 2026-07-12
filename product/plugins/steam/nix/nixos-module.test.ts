@@ -13,7 +13,9 @@ function generatedShellFunction(name: string): string {
   expect(start).toBeGreaterThanOrEqual(0)
   const end = moduleSource.indexOf("\n    }\n\n", start)
   expect(end).toBeGreaterThan(start)
-  return moduleSource.slice(start, end + "\n    }".length).replace(/^    /gm, "")
+  return moduleSource
+    .slice(start, end + "\n    }".length)
+    .replace(/^    /gm, "")
 }
 
 async function runGeneratedServiceFailureClassifier(input: {
@@ -23,7 +25,9 @@ async function runGeneratedServiceFailureClassifier(input: {
 }) {
   const dir = await mkdtemp(join(tmpdir(), "korri-steam-classifier-"))
   const scriptPath = join(dir, "classify.sh")
-  const classifier = generatedShellFunction("service_failure_classification").replaceAll(
+  const classifier = generatedShellFunction(
+    "service_failure_classification",
+  ).replaceAll(
     "${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl",
     "systemctl",
   )
@@ -94,7 +98,9 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain(
       'pkgs.writeShellScriptBin "korri-steam-app-install"',
     )
-    expect(moduleSource).toContain('policy_stamp="$STEAM_HOME/.korri/install-policy-prepared/$appid"')
+    expect(moduleSource).toContain(
+      'policy_stamp="$STEAM_HOME/.korri/install-policy-prepared/$appid"',
+    )
     expect(moduleSource).toContain("Steam install policy has not been prepared")
     expect(moduleSource).toContain(
       'korri-steam-guest ${steamClientArgs} -console +app_install "$appid"',
@@ -124,7 +130,9 @@ describe("Steam plugin Nix module", () => {
     )
     expect(moduleSource).not.toContain("KORRI_STEAM_SERVICE")
     expect(moduleSource).toContain("systemd.services.korri-steam-gamescope")
-    expect(moduleSource).toContain('type = types.enum [ "gamescope" "desktop" ]')
+    expect(moduleSource).toContain(
+      'type = types.enum [ "gamescope" "desktop" ]',
+    )
     expect(moduleSource).toContain('default = "gamescope"')
     expect(moduleSource).toContain('cfg.presentationMode == "gamescope"')
     expect(moduleSource).not.toMatch(/systemd\.services\.korri-steam\s*=/)
@@ -198,22 +206,42 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("steam_desktop_ui_ready")
     expect(moduleSource).toContain("steam_service_control_group")
     expect(moduleSource).toContain("pid_in_service_control_group")
-    expect(moduleSource).toContain("KORRI_STEAM_APP_DESKTOP_UI_READY_STABLE_SECONDS")
+    expect(moduleSource).toContain(
+      "KORRI_STEAM_APP_DESKTOP_UI_READY_STABLE_SECONDS",
+    )
     expect(moduleSource).toContain("KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-600")
-    expect(moduleSource).toContain("KORRI_STEAM_APP_STARTUP_UPDATE_TIMEOUT:-900")
+    expect(moduleSource).toContain(
+      "KORRI_STEAM_APP_STARTUP_UPDATE_TIMEOUT:-900",
+    )
     expect(moduleSource).toContain("desktop_ready_since=0")
     expect(moduleSource).toContain("steam_ready_log_present")
     expect(moduleSource).toContain("steam_startup_update_active")
-    expect(moduleSource).toContain("observed Steam startup self-update; extending readiness wait")
+    expect(moduleSource).toContain(
+      "observed Steam startup self-update; extending readiness wait",
+    )
     expect(moduleSource).toContain('*steamwebhelper*" -uimode=7"*) return 0')
     expect(moduleSource).toContain("big_picture_surface_present")
-    expect(moduleSource).toContain("note_big_picture_surface \"managed Steam readiness\"")
-    expect(moduleSource).toContain("note_big_picture_surface \"AppID $appid launch forwarding\"")
-    expect(moduleSource).toContain("note_big_picture_surface \"AppID $appid launch observation\"")
-    expect(moduleSource).toContain('[ "$require_gamescope_socket" != "1" ] || [ -S "$gamescope_socket" ]')
-    expect(moduleSource).toContain("if steam_surface_ready && steam_desktop_ui_ready")
-    expect(moduleSource).toContain('if steam_surface_ready && { [ "$desktop_ui_ready" -eq 1 ] || steam_ready_log_present')
-    expect(moduleSource).not.toContain('if [ -S "$gamescope_socket" ] \\\n          && printf')
+    expect(moduleSource).toContain(
+      'note_big_picture_surface "managed Steam readiness"',
+    )
+    expect(moduleSource).toContain(
+      'note_big_picture_surface "AppID $appid launch forwarding"',
+    )
+    expect(moduleSource).toContain(
+      'note_big_picture_surface "AppID $appid launch observation"',
+    )
+    expect(moduleSource).toContain(
+      '[ "$require_gamescope_socket" != "1" ] || [ -S "$gamescope_socket" ]',
+    )
+    expect(moduleSource).toContain(
+      "if steam_surface_ready && steam_desktop_ui_ready",
+    )
+    expect(moduleSource).toContain(
+      'if steam_surface_ready && { [ "$desktop_ui_ready" -eq 1 ] || steam_ready_log_present',
+    )
+    expect(moduleSource).not.toContain(
+      'if [ -S "$gamescope_socket" ] \\\n          && printf',
+    )
     expect(moduleSource).toContain("Waiting for compat in post-logon")
     expect(moduleSource).toContain("Loaded Config for Local Selection Path")
     expect(moduleSource).not.toContain("steam_big_picture_window_present")
@@ -241,13 +269,19 @@ describe("Steam plugin Nix module", () => {
   })
 
   it("exposes explicit service drain and reset operations for AppID handoff", () => {
-    expect(moduleSource).toContain("usage: korri-steam-service-control <start|stop|drain|reset>")
-    expect(moduleSource).toContain('drain) drain_service ;;')
-    expect(moduleSource).toContain('reset) reset_service ;;')
-    expect(moduleSource).toContain("systemctl show korri-steam-gamescope.service")
+    expect(moduleSource).toContain(
+      "usage: korri-steam-service-control <start|stop|drain|reset>",
+    )
+    expect(moduleSource).toContain("drain) drain_service ;;")
+    expect(moduleSource).toContain("reset) reset_service ;;")
+    expect(moduleSource).toContain(
+      "systemctl show korri-steam-gamescope.service",
+    )
     expect(moduleSource).toContain("InvocationID")
     expect(moduleSource).toContain("NRestarts")
-    expect(moduleSource).toContain("systemctl kill -s SIGKILL --kill-whom=all korri-steam-gamescope.service")
+    expect(moduleSource).toContain(
+      "systemctl kill -s SIGKILL --kill-whom=all korri-steam-gamescope.service",
+    )
     expect(moduleSource).not.toContain("pkill -f gamescope")
     expect(moduleSource).not.toContain("pkill -f steam")
   })
@@ -270,14 +304,16 @@ describe("Steam plugin Nix module", () => {
   it("resets stale Steam AppID foreground state before marking the new launch", () => {
     expect(moduleSource).toContain("active_steam_appids()")
     expect(moduleSource).toContain("SteamLaunch AppId=")
-    expect(moduleSource).toContain("active_steam_appids|grep|gawk|awk|sed|korri-steam-app")
-    expect(moduleSource).toContain("reset_for_exclusive_appid_handoff")
-    expect(moduleSource).toContain('control_steam_service reset')
-    expect(moduleSource).toContain("mark_current_console_log")
-    expect(moduleSource.indexOf("reset_for_exclusive_appid_handoff")).toBeLessThan(
-      moduleSource.indexOf("mark_current_console_log"),
+    expect(moduleSource).toContain(
+      "active_steam_appids|grep|gawk|awk|sed|korri-steam-app",
     )
-    expect(moduleSource).toContain('SteamLaunch AppId=')
+    expect(moduleSource).toContain("reset_for_exclusive_appid_handoff")
+    expect(moduleSource).toContain("control_steam_service reset")
+    expect(moduleSource).toContain("mark_current_console_log")
+    expect(
+      moduleSource.indexOf("reset_for_exclusive_appid_handoff"),
+    ).toBeLessThan(moduleSource.indexOf("mark_current_console_log"))
+    expect(moduleSource).toContain("SteamLaunch AppId=")
   })
 
   it("bounds AppID URL forwarding before launch observation", () => {
@@ -285,9 +321,7 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain(
       'korri-steam-guest ${steamClientArgs} -applaunch "$appid"',
     )
-    expect(moduleSource).not.toContain(
-      'korri-steam-guest -applaunch "$appid"',
-    )
+    expect(moduleSource).not.toContain('korri-steam-guest -applaunch "$appid"')
     expect(moduleSource).toContain("timed out forwarding AppID $appid to Steam")
   })
 
@@ -322,26 +356,22 @@ describe("Steam plugin Nix module", () => {
       'ExecStart = "${steamServiceRunner}/bin/korri-steam-service-run"',
     )
     expect(moduleSource).toContain(
-      '"' +
-        "$" +
-        "{pkgs.gamescope}/bin/gamescope " +
-        "$" +
-        "{gamescopeArgs}",
+      '"' + "$" + "{pkgs.gamescope}/bin/gamescope " + "$" + "{gamescopeArgs}",
     )
     expect(moduleSource).toContain(
       "-- ${pkgs.coreutils}/bin/env -u GAMESCOPE_WAYLAND_DISPLAY -u LIBEI_SOCKET -u STEAM_GAME_DISPLAY_0 -u ENABLE_GAMESCOPE_WSI -u WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway",
     )
     expect(moduleSource).toContain("korri-steam-service-run")
-    expect(moduleSource).not.toContain('set_guide_intercept')
+    expect(moduleSource).not.toContain("set_guide_intercept")
     expect(moduleSource).not.toContain('InterceptMode u \"$mode\"')
     expect(moduleSource).toContain('steam_workspace=\"')
-    expect(moduleSource).toContain('KORRI_STEAM_WORKSPACE:-korri:steam-debug')
-    expect(moduleSource).toContain('place_gamescope_workspace')
+    expect(moduleSource).toContain("KORRI_STEAM_WORKSPACE:-korri:steam-debug")
+    expect(moduleSource).toContain("place_gamescope_workspace")
     expect(moduleSource).toContain('"[pid=$pid] move container to workspace')
-    expect(moduleSource).toContain('workspace_placed=0')
+    expect(moduleSource).toContain("workspace_placed=0")
     expect(moduleSource).toContain('accepted_ui_pid=\"\"')
-    expect(moduleSource).toContain('while true; do')
-    expect(moduleSource).toContain('guard_status=77')
+    expect(moduleSource).toContain("while true; do")
+    expect(moduleSource).toContain("guard_status=77")
     expect(moduleSource).toContain('steamwebhelper*\" -uimode=4\"*')
     expect(moduleSource).toContain('stop_gamescope \"$gamescope_pid\"')
   })
@@ -370,18 +400,16 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain(
       "steam_client_''${STEAM_BETA}_linuxarm64.installed",
     )
-    expect(moduleSource).toContain('printf \'%s\\n\' "$STEAM_BETA"')
+    expect(moduleSource).toContain("printf '%s\\n' \"$STEAM_BETA\"")
     expect(moduleSource).toContain("${pkgs.gawk}/bin/awk -F'[,;]'")
-    expect(moduleSource).toContain('NR == 1 && $3 ~ /^[0-9]+$/')
+    expect(moduleSource).toContain("NR == 1 && $3 ~ /^[0-9]+$/")
     expect(moduleSource).toContain("${pkgs.curl}/bin/curl -fsSL")
     expect(moduleSource).toContain(
       "https://client-update.fastly.steamstatic.com/steam_client_''${STEAM_BETA}_linuxarm64",
     )
     expect(moduleSource).toContain('!replaced && $1 == "\\"version\\""')
     expect(moduleSource).toContain('"linuxarm64"')
-    expect(moduleSource).not.toContain(
-      "steam_client_linuxarm64.manifest",
-    )
+    expect(moduleSource).not.toContain("steam_client_linuxarm64.manifest")
   })
 
   it("keeps recovery from mutating Steam Runtime helper files", () => {
@@ -403,7 +431,7 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain(
       "korri-steam-app: observed Steam Big Picture-titled surface during $phase; continuing unless uimode=4 appears",
     )
-    expect(moduleSource).toContain("steamwebhelper*\" -uimode=4\"*")
+    expect(moduleSource).toContain('steamwebhelper*" -uimode=4"*')
     expect(moduleSource).toContain("refusing Steam Gamepad UI descendant")
   })
 
@@ -434,13 +462,17 @@ describe("Steam plugin Nix module", () => {
   })
 
   it("lets cold AppID launch waits survive Steam startup self-update", () => {
-    expect(moduleSource).toContain('bootstrap_log="$STEAM_HOME/logs/bootstrap_log.txt"')
+    expect(moduleSource).toContain(
+      'bootstrap_log="$STEAM_HOME/logs/bootstrap_log.txt"',
+    )
     expect(moduleSource).toContain("bootstrap_mark=0")
     expect(moduleSource).toContain("steam_log_since_mark")
     expect(moduleSource).toContain("Checking for update on startup")
     expect(moduleSource).toContain("Found pending update")
     expect(moduleSource).toContain("Extracting package")
-    expect(moduleSource).toContain("ready_deadline=$((now + startup_update_timeout))")
+    expect(moduleSource).toContain(
+      "ready_deadline=$((now + startup_update_timeout))",
+    )
     expect(moduleSource).toContain(
       "leaving managed Steam running to finish startup self-update",
     )
@@ -468,12 +500,20 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("app_running_evidence_present()")
     expect(moduleSource).toContain("app_exit_confirmed_after_removal()")
     expect(moduleSource).toContain("service_failure_classification()")
-    expect(moduleSource).toContain("korri-steam-app: Steam reported AppID $appid process removal; waiting for corroborating stopped evidence")
-    expect(moduleSource).toContain("korri-steam-app: SteamLaunch wrapper for AppID $appid is gone; continuing while AppID evidence remains live")
-    expect(moduleSource).toContain("korri-steam-app: SteamLaunch wrapper for AppID $appid is gone and no AppID evidence remains; treating as game exit")
+    expect(moduleSource).toContain(
+      "korri-steam-app: Steam reported AppID $appid process removal; waiting for corroborating stopped evidence",
+    )
+    expect(moduleSource).toContain(
+      "korri-steam-app: SteamLaunch wrapper for AppID $appid is gone; continuing while AppID evidence remains live",
+    )
+    expect(moduleSource).toContain(
+      "korri-steam-app: SteamLaunch wrapper for AppID $appid is gone and no AppID evidence remains; treating as game exit",
+    )
     expect(moduleSource).toContain("if app_running_evidence_present; then")
     expect(moduleSource).not.toContain('*"/steamapps/"*".exe"*) return 0')
-    expect(moduleSource).not.toContain('grep -F "SteamLaunch AppId=$appid" | ${pkgs.gnugrep}/bin/grep -v -F "grep -F" >/dev/null; then\n          hide_steam_hat\n          exit 0')
+    expect(moduleSource).not.toContain(
+      'grep -F "SteamLaunch AppId=$appid" | ${pkgs.gnugrep}/bin/grep -v -F "grep -F" >/dev/null; then\n          hide_steam_hat\n          exit 0',
+    )
   })
 
   it("interrupts best-effort launch focus and audio waits only after corroborated game exit", () => {
@@ -485,10 +525,18 @@ describe("Steam plugin Nix module", () => {
 
   it("classifies post-running service failures as non-successful terminal states", () => {
     expect(moduleSource).toContain("service_failure_classification()")
-    expect(moduleSource).toContain("77) printf '%s\\n' \"gamepad-ui-guard\"; return 0")
-    expect(moduleSource).toContain("134) printf '%s\\n' \"gamescope-abort\"; return 0")
-    expect(moduleSource).toContain("failed:*|*:core-dump|*:signal|*:exit-code) printf '%s\\n' \"service-failed\"; return 0")
-    expect(moduleSource).toContain("korri-steam-app: managed Steam service failed during AppID $appid observation: $failure_kind")
+    expect(moduleSource).toContain(
+      "77) printf '%s\\n' \"gamepad-ui-guard\"; return 0",
+    )
+    expect(moduleSource).toContain(
+      "134) printf '%s\\n' \"gamescope-abort\"; return 0",
+    )
+    expect(moduleSource).toContain(
+      "failed:*|*:core-dump|*:signal|*:exit-code) printf '%s\\n' \"service-failed\"; return 0",
+    )
+    expect(moduleSource).toContain(
+      "korri-steam-app: managed Steam service failed during AppID $appid observation: $failure_kind",
+    )
     expect(moduleSource).toContain("exit 126")
   })
 

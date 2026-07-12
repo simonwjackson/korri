@@ -23,7 +23,10 @@ import { VariantCartridgeShelf } from "@product/surfaces/web/pico/VariantCartrid
 import { VariantGameDetail } from "@product/surfaces/web/pico/VariantGameDetail"
 import type { ReactNode } from "react"
 import type { Story } from "@simonwjackson/caliper"
-import type { LabInputControl, LabInputValue } from "@simonwjackson/caliper/adapter-kit"
+import type {
+  LabInputControl,
+  LabInputValue,
+} from "@simonwjackson/caliper/adapter-kit"
 import type { LabSurfacePartMountSpec } from "@simonwjackson/caliper"
 
 /**

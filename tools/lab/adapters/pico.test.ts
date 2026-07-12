@@ -49,7 +49,9 @@ describe("pico lab surface adapter", () => {
 describe("pico home data axis", () => {
   afterEach(() => setPicoDataPreview(null))
 
-  const home = () => resolveLabSurfaceAdapter(labTestRegistry(), "pico").axesForScreen?.("/") ?? []
+  const home = () =>
+    resolveLabSurfaceAdapter(labTestRegistry(), "pico").axesForScreen?.("/") ??
+    []
 
   it("exposes a single Data axis derived from the pico data tags", () => {
     const axes = home()
@@ -72,7 +74,9 @@ describe("pico home data axis", () => {
 
   it("exposes no axes for the game detail screen", () => {
     expect(
-      resolveLabSurfaceAdapter(labTestRegistry(), "pico").axesForScreen?.("/game/hollow-knight"),
+      resolveLabSurfaceAdapter(labTestRegistry(), "pico").axesForScreen?.(
+        "/game/hollow-knight",
+      ),
     ).toEqual([])
   })
 })

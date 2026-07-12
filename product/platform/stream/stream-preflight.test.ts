@@ -5,7 +5,11 @@ import { selectStreamPreflightStartup } from "./stream-preflight"
 describe("stream preflight", () => {
   it("selects a higher startup profile for excellent facts inside the ceiling", () => {
     const decision = selectStreamPreflightStartup({
-      facts: { sourceReachable: true, streamControlReachable: true, latencyMs: 18 },
+      facts: {
+        sourceReachable: true,
+        streamControlReachable: true,
+        latencyMs: 18,
+      },
       boundaries: parseStreamBoundaryArgs(["bitrate=500k..40m"]),
     })
 
@@ -35,7 +39,11 @@ describe("stream preflight", () => {
 
   it("honors explicit startup in optional mode but warns when unsafe", () => {
     const decision = selectStreamPreflightStartup({
-      facts: { sourceReachable: true, streamControlReachable: true, latencyMs: 120 },
+      facts: {
+        sourceReachable: true,
+        streamControlReachable: true,
+        latencyMs: 120,
+      },
       boundaries: parseStreamBoundaryArgs(["bitrate=500k..6m..40m"]),
     })
 
@@ -51,7 +59,11 @@ describe("stream preflight", () => {
   it("rejects unsafe explicit startup when preflight is required", () => {
     const decision = selectStreamPreflightStartup({
       mode: "required",
-      facts: { sourceReachable: true, streamControlReachable: true, latencyMs: 120 },
+      facts: {
+        sourceReachable: true,
+        streamControlReachable: true,
+        latencyMs: 120,
+      },
       boundaries: parseStreamBoundaryArgs(["bitrate=500k..6m..40m"]),
     })
 
@@ -71,7 +83,11 @@ describe("stream preflight", () => {
 
   it("respects a configured floor above the safe profile", () => {
     const decision = selectStreamPreflightStartup({
-      facts: { sourceReachable: true, streamControlReachable: true, latencyMs: 140 },
+      facts: {
+        sourceReachable: true,
+        streamControlReachable: true,
+        latencyMs: 140,
+      },
       boundaries: parseStreamBoundaryArgs(["bitrate=5m..40m"]),
     })
 

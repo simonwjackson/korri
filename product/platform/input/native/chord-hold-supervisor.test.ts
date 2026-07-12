@@ -46,7 +46,11 @@ function createFakeTimers(): FakeTimers {
   }
 }
 
-function makeSupervisor(overrides?: { holdMs?: number; tapMs?: number; tickMs?: number }) {
+function makeSupervisor(overrides?: {
+  holdMs?: number
+  tapMs?: number
+  tickMs?: number
+}) {
   const updates: ChordHoldUpdate<"kill">[] = []
   const timers = createFakeTimers()
   const supervisor = createChordHoldSupervisor<"kill">({

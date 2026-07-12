@@ -35,7 +35,9 @@ const PositiveInteger = (label: string) =>
 
 const NonEmptyString = (label: string) =>
   Schema.String.pipe(
-    Schema.check(Schema.isMinLength(1, { message: `${label} must be non-empty` })),
+    Schema.check(
+      Schema.isMinLength(1, { message: `${label} must be non-empty` }),
+    ),
   )
 
 const NullablePositiveInteger = (label: string) =>
@@ -327,9 +329,10 @@ function numericLaunchValue(
   return value.start
 }
 
-function completeResolution(
-  value: { readonly width?: number; readonly height?: number },
-): StreamAdaptiveResolution | undefined {
+function completeResolution(value: {
+  readonly width?: number
+  readonly height?: number
+}): StreamAdaptiveResolution | undefined {
   if (value.width === undefined || value.height === undefined) return undefined
   return { width: value.width, height: value.height }
 }
@@ -354,13 +357,15 @@ function definedResolution(
 
 function isNumericRange(
   value: unknown,
-): value is { readonly min?: number; readonly start: number; readonly max?: number } {
+): value is {
+  readonly min?: number
+  readonly start: number
+  readonly max?: number
+} {
   return isRecord(value) && typeof value.start === "number"
 }
 
-function isResolutionRange(
-  value: unknown,
-): value is {
+function isResolutionRange(value: unknown): value is {
   readonly min?: { readonly width?: number; readonly height?: number }
   readonly start: { readonly width?: number; readonly height?: number }
   readonly max?: { readonly width?: number; readonly height?: number }

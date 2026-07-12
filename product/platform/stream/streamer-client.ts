@@ -64,7 +64,11 @@ export async function dispatchStreamLaunch(
     )
   }
   return await Effect.runPromise(
-    runPluginHandler<typeof STREAM_LAUNCH_OPERATION, StreamLaunchRequest, LaunchSpec>(
+    runPluginHandler<
+      typeof STREAM_LAUNCH_OPERATION,
+      StreamLaunchRequest,
+      LaunchSpec
+    >(
       resolved.handler as PluginHandler<
         typeof STREAM_LAUNCH_OPERATION,
         StreamLaunchRequest,

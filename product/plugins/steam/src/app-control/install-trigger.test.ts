@@ -5,7 +5,10 @@ import {
   type SteamStateFileSystem,
 } from "../state-materializer"
 import { resetSteamInstallRequestLedgerForTests } from "./install-request-ledger"
-import { prepareSteamAppInstallState, requestSteamAppInstall } from "./install-trigger"
+import {
+  prepareSteamAppInstallState,
+  requestSteamAppInstall,
+} from "./install-trigger"
 
 afterEach(() => resetSteamInstallRequestLedgerForTests())
 
@@ -23,7 +26,8 @@ const memoryFs = () => {
     },
     mkdirp: async () => {},
     listDirectories: async () => [],
-    pathExists: async path => path === toolRoot || path === `${toolRoot}/proton`,
+    pathExists: async path =>
+      path === toolRoot || path === `${toolRoot}/proton`,
     isExecutableFile: async path => path === `${toolRoot}/proton`,
   }
   return { fs, files }
@@ -54,13 +58,19 @@ describe("Steam install trigger", () => {
       stateRoot: "/steam-home",
       compatTool: "proton-cachyos-arm64",
       fs,
-      collectBusy: async () => ({ state: "idle", busyAppIds: [], evidence: [] }),
+      collectBusy: async () => ({
+        state: "idle",
+        busyAppIds: [],
+        evidence: [],
+      }),
     })
 
-    expect(files.get("/steam-home/.korri/install-policy-prepared/360740")).toContain(
-      "proton-cachyos-arm64",
-    )
-    expect(parseVdf(files.get(steamConfigPath("/steam-home")) ?? "")).toMatchObject({
+    expect(
+      files.get("/steam-home/.korri/install-policy-prepared/360740"),
+    ).toContain("proton-cachyos-arm64")
+    expect(
+      parseVdf(files.get(steamConfigPath("/steam-home")) ?? ""),
+    ).toMatchObject({
       InstallConfigStore: {
         Software: {
           Valve: {

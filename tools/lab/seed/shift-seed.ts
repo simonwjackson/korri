@@ -38,7 +38,10 @@ import {
   shiftPowerReadingAtom,
 } from "@product/surfaces/web/shift/shift-power-state"
 import { Layer } from "effect"
-import type { LabInputValue, LabSourceOption } from "@simonwjackson/caliper/adapter-kit"
+import type {
+  LabInputValue,
+  LabSourceOption,
+} from "@simonwjackson/caliper/adapter-kit"
 import { makeSeededProseqlLibrarySource } from "./shift-proseql-seed"
 
 export const SEED_ENTRY_SOURCE = new EntrySource({

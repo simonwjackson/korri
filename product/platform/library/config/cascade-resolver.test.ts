@@ -152,18 +152,19 @@ describe("moonlight local launcher policy folding", () => {
       ],
     })
 
-    expect(resolveLocalLauncherPolicy(snap, { launcherId: "local" }).moonlight)
-      .toEqual({
-        stream: {
-          resolution: {
-            min: { width: 640, height: 360 },
-            start: { width: 1280, height: 720 },
-            max: { width: 1920, height: 1080 },
-          },
-          fps: 120,
-          bitrateKbps: { min: 500, start: 6000, max: 40000 },
+    expect(
+      resolveLocalLauncherPolicy(snap, { launcherId: "local" }).moonlight,
+    ).toEqual({
+      stream: {
+        resolution: {
+          min: { width: 640, height: 360 },
+          start: { width: 1280, height: 720 },
+          max: { width: 1920, height: 1080 },
         },
-      })
+        fps: 120,
+        bitrateKbps: { min: 500, start: 6000, max: 40000 },
+      },
+    })
   })
 })
 

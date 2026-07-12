@@ -76,7 +76,9 @@ const DEFAULT_MAX_PENDING_GAMEPAD_WRITES = 256
 const framePayloadForAuthorization = (
   parsed: unknown,
   authorizeFrame: ((mirrorToken: string | undefined) => boolean) | undefined,
-): { readonly status: "accepted"; readonly frame: unknown } | { readonly status: "rejected" } => {
+):
+  | { readonly status: "accepted"; readonly frame: unknown }
+  | { readonly status: "rejected" } => {
   if (!authorizeFrame) return { status: "accepted", frame: parsed }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     return { status: "rejected" }
@@ -266,10 +268,13 @@ export const startSunshineInputSeatMirrorSocket = async (
   const forwarder = createBoundedGamepadForwarder({
     onGamepadState: options.onGamepadState
       ? state => {
-          const seat = adapter.seats().find(candidate => candidate.slot === state.slot)
+          const seat = adapter
+            .seats()
+            .find(candidate => candidate.slot === state.slot)
           if (
             seat?.tag !== "occupied-connected" ||
-            seat.sourceId !== `sunshine:controller-${state.frame.controllerNumber}`
+            seat.sourceId !==
+              `sunshine:controller-${state.frame.controllerNumber}`
           ) {
             return
           }
