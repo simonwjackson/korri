@@ -75,6 +75,13 @@ interface RetroarchReleaseRule {
   readonly runtime: string
   readonly extensions: ReadonlySet<string>
   readonly folderHints?: ReadonlySet<string>
+  /**
+   * Compressed containers the core loads natively (RetroArch decompresses
+   * for block_extract cores). Ambiguous by nature — a .zip says nothing about
+   * its console — so these only match inside the system's folder
+   * (folderHints, or the system id itself), never storage-wide.
+   */
+  readonly archiveExtensions?: ReadonlySet<string>
 }
 
 const retroarchRules: readonly RetroarchReleaseRule[] = [
@@ -82,6 +89,7 @@ const retroarchRules: readonly RetroarchReleaseRule[] = [
     system: KORRI_RETROARCH_GBA_SYSTEM_ID,
     runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
     extensions: new Set(["gba"]),
+    archiveExtensions: new Set(["zip"]),
   },
   {
     system: KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
@@ -104,11 +112,13 @@ const retroarchRules: readonly RetroarchReleaseRule[] = [
     system: KORRI_RETROARCH_N64_SYSTEM_ID,
     runtime: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
     extensions: new Set(["z64", "n64", "v64"]),
+    archiveExtensions: new Set(["zip"]),
   },
   {
     system: KORRI_RETROARCH_NES_SYSTEM_ID,
     runtime: KORRI_RETROARCH_MESEN_RUNTIME_ID,
     extensions: new Set(["nes", "fds"]),
+    archiveExtensions: new Set(["zip"]),
   },
   {
     system: KORRI_RETROARCH_PC98_SYSTEM_ID,
@@ -131,6 +141,7 @@ const retroarchRules: readonly RetroarchReleaseRule[] = [
     system: KORRI_RETROARCH_SNES_SYSTEM_ID,
     runtime: KORRI_RETROARCH_BSNES_RUNTIME_ID,
     extensions: new Set(["sfc", "smc"]),
+    archiveExtensions: new Set(["zip"]),
   },
   {
     system: KORRI_RETROARCH_TG16_SYSTEM_ID,
@@ -176,13 +187,17 @@ function ruleMatchesFile(
   rootPath: string,
 ): boolean {
   const normalized = normalizedExtension(extension)
-  if (!rule.extensions.has(normalized)) return false
-  if (rule.folderHints === undefined) return true
   const rootHint = pathSegments(rootPath).at(-1)
   const segments = [
     ...(rootHint !== undefined ? [rootHint] : []),
     ...pathSegments(relativePath),
   ]
+  if (!rule.extensions.has(normalized)) {
+    if (rule.archiveExtensions?.has(normalized) !== true) return false
+    const archiveFolders = rule.folderHints ?? new Set([rule.system])
+    return segments.some(segment => archiveFolders.has(segment))
+  }
+  if (rule.folderHints === undefined) return true
   if (
     rule.system === KORRI_RETROARCH_GENESIS_SYSTEM_ID &&
     normalized === "md" &&

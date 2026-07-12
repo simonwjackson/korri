@@ -271,3 +271,59 @@ describe("retroarchDiscoveryProviders", () => {
     expect(observations).toEqual([])
   })
 })
+
+describe("archive (zip) discovery scoping", () => {
+  it("claims a zip inside the system folder for that system only", async () => {
+    const observations = await discover({
+      ...baseFile,
+      absolutePath: "/media/sdcard/snes/Super Mario All-Stars (E).zip",
+      relativePath: "snes/Super Mario All-Stars (E).zip",
+      name: "Super Mario All-Stars (E).zip",
+      extension: ".zip",
+    })
+    expect(observations.map(o => o.release.system)).toEqual([
+      KORRI_RETROARCH_SNES_SYSTEM_ID,
+    ])
+  })
+
+  it("never claims a zip outside a recognized system folder", async () => {
+    const observations = await discover({
+      ...baseFile,
+      absolutePath: "/media/sdcard/downloads/mystery.zip",
+      relativePath: "downloads/mystery.zip",
+      name: "mystery.zip",
+      extension: ".zip",
+    })
+    expect(observations).toEqual([])
+  })
+
+  it("claims zips for cart systems via their folder", async () => {
+    for (const [folder, system] of [
+      ["gba", KORRI_RETROARCH_GBA_SYSTEM_ID],
+      ["nes", KORRI_RETROARCH_NES_SYSTEM_ID],
+      ["n64", KORRI_RETROARCH_N64_SYSTEM_ID],
+    ] as const) {
+      const observations = await discover({
+        ...baseFile,
+        absolutePath: `/media/sdcard/${folder}/game.zip`,
+        relativePath: `${folder}/game.zip`,
+        name: "game.zip",
+        extension: ".zip",
+      })
+      expect(observations.map(o => o.release.system)).toEqual([system])
+    }
+  })
+
+  it("still discovers raw ROM extensions anywhere", async () => {
+    const observations = await discover({
+      ...baseFile,
+      absolutePath: "/media/sdcard/some/random/place/game.sfc",
+      relativePath: "some/random/place/game.sfc",
+      name: "game.sfc",
+      extension: ".sfc",
+    })
+    expect(observations.map(o => o.release.system)).toEqual([
+      KORRI_RETROARCH_SNES_SYSTEM_ID,
+    ])
+  })
+})
