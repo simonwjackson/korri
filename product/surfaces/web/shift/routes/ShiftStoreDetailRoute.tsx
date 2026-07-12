@@ -19,7 +19,10 @@ import {
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { useEffect, useMemo } from "react"
-import { ShiftStoreDetail } from "../pages/ShiftStoreDetail"
+import {
+  ShiftStoreDetail,
+  shiftStoreEntryGetable,
+} from "../pages/ShiftStoreDetail"
 import { ShiftStoreEmpty } from "../pages/ShiftStoreEmpty"
 import type { ShiftStoreEntry } from "../pages/shift-store-entry"
 import { shiftStoreEntryIdFromRouteToken } from "./paths"
@@ -60,6 +63,9 @@ export function ShiftStoreDetailRoute() {
 
   const onPrimary = () => {
     if (!entry?.providerId || !entry.providerItemId) return
+    // Mirror the page-level gate: no system means the download could never
+    // be recognized by the Library, so Get is not offered at all.
+    if (!shiftStoreEntryGetable(entry)) return
     if (acquireView.state !== "idle" && acquireView.state !== "failed") {
       return
     }

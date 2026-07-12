@@ -42,6 +42,7 @@ export function ShiftStoreDetail({
     .filter(Boolean)
     .join(" · ")
   const action = primaryOverride ?? shiftStorePrimaryAction(entry)
+  const getable = shiftStoreEntryGetable(entry)
 
   return (
     <div
@@ -58,27 +59,46 @@ export function ShiftStoreDetail({
           {shiftStoreDetailSynopsis(entry)}
         </ShiftDetailSynopsis>
         <ShiftDetailStats lastPlayedLabel="Not acquired" />
-        <div
-          className="shift-detail-actions"
-          {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.detailActions)}
-        >
-          <ShiftDetailButton
-            primary
-            label={action.label}
-            onClick={() => onPrimary?.(entry.id)}
-          />
-        </div>
+        {getable ? (
+          <div
+            className="shift-detail-actions"
+            {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.detailActions)}
+          >
+            <ShiftDetailButton
+              primary
+              label={action.label}
+              onClick={() => onPrimary?.(entry.id)}
+            />
+          </div>
+        ) : (
+          <p className="shift-detail-synopsis">
+            {SHIFT_STORE_UNGETABLE_MESSAGE}
+          </p>
+        )}
         {notice ? <p className="shift-detail-synopsis">{notice}</p> : null}
         <div
           className="shift-detail-buttonbar"
           {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.detailHints)}
         >
-          <ShiftDetailHint glyph="A" label={action.hint} />
+          {getable ? <ShiftDetailHint glyph="A" label={action.hint} /> : null}
           <ShiftDetailHint glyph="B" label="Back" />
         </div>
       </div>
     </div>
   )
+}
+
+export const SHIFT_STORE_UNGETABLE_MESSAGE =
+  "This source doesn't say which console this game is for, so it can't be downloaded yet."
+
+/**
+ * A claim without a library system can be placed but never recognized by
+ * discovery — the download would silently vanish into a folder the Library
+ * ignores. Ready entries are always actionable (Play). Everything else needs
+ * a system before Get is offered.
+ */
+export function shiftStoreEntryGetable(entry: ShiftStoreEntry): boolean {
+  return entry.status === "ready" || Boolean(entry.system)
 }
 
 export function shiftStorePrimaryAction(entry: ShiftStoreEntry): {
