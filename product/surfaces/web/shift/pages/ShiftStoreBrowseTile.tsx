@@ -33,7 +33,7 @@ export function ShiftStoreBrowseTile({
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.storeBrowseTile, entry.id)}
     >
       <span className="shift-store-tile-art">
-        <ShiftCoverArt src={entry.artUrl} loading="lazy" />
+        <ShiftCoverArt src={entry.artUrl} loading="lazy" title={entry.title} />
       </span>
       <span className="shift-store-tile-body">
         <span className="shift-store-tile-title">{entry.title}</span>

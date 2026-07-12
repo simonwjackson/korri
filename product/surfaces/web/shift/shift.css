@@ -2556,3 +2556,36 @@
 	.shift-store-index-chevron {
 	color: var(--shift-accent);
 }
+
+/* ==========================================================================
+ * Monogram — the cover-art fallback for games without tile art.
+ *
+ * Surface-agnostic (home rail, library grid, store shelves) because it stands
+ * in for `ShiftCoverArt` wherever box art is shown. It fills its art slot the
+ * same way the cover `<img>` does, and self-sizes off the slot via container
+ * units so the initials stay proportional from a rail tile to a store thumb.
+ * The `--shift-monogram-hue` custom prop is set per game so each glyph carries a
+ * stable, distinct tint; ink and gradient tones are two readings of that hue.
+ * ========================================================================== */
+.shift-monogram {
+	container-type: size;
+	display: grid;
+	place-items: center;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	background: linear-gradient(
+		155deg,
+		hsl(var(--shift-monogram-hue, 210) 48% 34%),
+		hsl(var(--shift-monogram-hue, 210) 42% 17%)
+	);
+}
+
+.shift-monogram-initials {
+	font-size: 46cqmin;
+	font-weight: 800;
+	line-height: 1;
+	letter-spacing: -0.03em;
+	color: hsl(var(--shift-monogram-hue, 210) 82% 88%);
+	user-select: none;
+}

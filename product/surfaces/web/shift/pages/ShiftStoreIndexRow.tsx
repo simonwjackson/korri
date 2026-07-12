@@ -36,7 +36,7 @@ export function ShiftStoreIndexRow({ entry, onOpen }: ShiftStoreIndexRowProps) {
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.storeIndexRow, entry.id)}
     >
       <span className="shift-store-index-thumb">
-        <ShiftCoverArt src={entry.artUrl} loading="lazy" />
+        <ShiftCoverArt src={entry.artUrl} loading="lazy" title={entry.title} />
       </span>
       <span className="shift-store-index-body">
         <span className="shift-store-index-title">{entry.title}</span>

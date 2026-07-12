@@ -181,6 +181,7 @@ export const SHIFT_DESIGN_PARTS = {
   },
   // Shared leaf atoms.
   coverArt: { id: "shift.cover-art", layer: "atom", name: "Cover Art" },
+  monogram: { id: "shift.monogram", layer: "atom", name: "Monogram" },
   // Reel internals.
   reelTitle: {
     id: "shift.reel-title",

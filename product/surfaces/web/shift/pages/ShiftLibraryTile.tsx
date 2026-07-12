@@ -38,7 +38,7 @@ export function ShiftLibraryTile({
       onClick={() => onSelect?.(game.id)}
     >
       <span className="shift-lib-tile-art">
-        <ShiftCoverArt src={game.artUrl} loading="lazy" />
+        <ShiftCoverArt src={game.artUrl} loading="lazy" title={game.title} />
         {game.favorite ? <ShiftLibraryTileBadge /> : null}
       </span>
       <ShiftLibraryTileTitle title={game.title} />

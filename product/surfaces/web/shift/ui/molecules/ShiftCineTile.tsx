@@ -45,7 +45,9 @@ export function ShiftCineTile({
       onFocus={onFocus}
       onClick={onActivate}
     >
-      {renderImage ? <ShiftCoverArt src={artUrl} loading="eager" /> : null}
+      {renderImage ? (
+        <ShiftCoverArt src={artUrl} loading="eager" title={title} />
+      ) : null}
       {fresh ? <span className="shift-cine-tile-fresh">Fresh</span> : null}
     </button>
   )
