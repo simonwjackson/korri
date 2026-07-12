@@ -1,7 +1,7 @@
 ---
 title: "feat: Add launch.hooks before/after command primitives to the readable config"
 type: feat
-status: active
+status: completed
 date: 2026-07-12
 verify_command: "just typecheck && just test-unit"
 ---

@@ -30,3 +30,8 @@ reboot.
   `SessiondManagedLaunchStartRequest` gated by `capabilities.launchHooks`;
   before-hooks run immediately pre-spawn, after-hooks in sessiond teardown
   (always-runs).
+
+- **Implementation DONE** — 2026-07-12, branch `feat/launch-hooks` (U1-U6 as
+  planned + Tier 2 review hardening). All suites green (known pre-existing
+  failures only). Residual: strict status-decode capability skew is
+  pre-existing, backlogged as `01KXAHKGE6BXXMP5WG5C0XJK79`.
