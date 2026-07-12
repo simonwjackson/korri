@@ -203,13 +203,19 @@ let
       swaymsg 'focus output ${displayPrimaryConnector}' >/dev/null 2>&1 || true
     '';
       };
-  # Bandai keyboard toggle. Android Back dispatches inputd's keyboard action,
-  # and wvkbd opens on the currently focused workspace/output instead of being
-  # coupled to second-screen power policy.
+  # Bandai keyboard toggle. wvkbd opens on whatever output Sway currently
+  # reports as the bottom-most *active* screen (largest bottom edge), so the
+  # keyboard follows the physically lower panel instead of being pinned to a
+  # fixed connector or the focused workspace.
+  korriBandaiKeyboardHeight = 560;
   korriBandaiKeyboardToggle = pkgs.writeShellApplication {
     name = "korri-bandai-keyboard-toggle";
     runtimeInputs = with pkgs; [
+      coreutils
+      findutils
+      jq
       procps
+      sway
       wvkbd
     ];
     text = ''
@@ -221,7 +227,32 @@ let
         exit 0
       fi
 
-      wvkbd-mobintl -L 360 --fn 'sans 18' >/tmp/korri-keyboard.log 2>&1 &
+      runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
+      find_sway_sock() {
+        if [ -n "''${SWAYSOCK:-}" ] && [ -S "$SWAYSOCK" ]; then
+          printf '%s\n' "$SWAYSOCK"
+          return 0
+        fi
+        if [ -S "$runtime_dir/sway-ipc.sock" ]; then
+          printf '%s\n' "$runtime_dir/sway-ipc.sock"
+          return 0
+        fi
+        find "$runtime_dir" -maxdepth 1 -type s -name 'sway-ipc.*.sock' -print -quit 2>/dev/null || true
+      }
+      sock=$(find_sway_sock | head -n 1)
+      if [ -n "$sock" ]; then
+        export SWAYSOCK="$sock"
+        # Pick the active output whose bottom edge sits lowest on screen.
+        bottom_output=$(
+          swaymsg -t get_outputs -r 2>/dev/null \
+            | jq -r '[.[] | select(.active == true)] | sort_by(.rect.y + .rect.height) | last | .name // empty' 2>/dev/null || true
+        )
+        if [ -n "$bottom_output" ]; then
+          swaymsg "focus output $bottom_output" >/dev/null 2>&1 || true
+        fi
+      fi
+
+      wvkbd-mobintl -L ${toString korriBandaiKeyboardHeight} -H ${toString korriBandaiKeyboardHeight} --fn 'sans 18' >/tmp/korri-keyboard.log 2>&1 &
     '';
   };
   # The substrate exposes an explicit audio route strategy under
