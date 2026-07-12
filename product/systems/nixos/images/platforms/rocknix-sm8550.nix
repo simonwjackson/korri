@@ -242,10 +242,12 @@ let
       sock=$(find_sway_sock | head -n 1)
       if [ -n "$sock" ]; then
         export SWAYSOCK="$sock"
-        # Pick the active output whose bottom edge sits lowest on screen.
+        # Pick the powered-on output whose bottom edge sits lowest on screen.
+        # Only outputs that are actually lit (power true) are eligible so the
+        # keyboard never lands on a blanked panel like a dark bottom screen.
         bottom_output=$(
           swaymsg -t get_outputs -r 2>/dev/null \
-            | jq -r '[.[] | select(.active == true)] | sort_by(.rect.y + .rect.height) | last | .name // empty' 2>/dev/null || true
+            | jq -r '[.[] | select(.active == true and .power == true)] | sort_by(.rect.y + .rect.height) | last | .name // empty' 2>/dev/null || true
         )
         if [ -n "$bottom_output" ]; then
           swaymsg "focus output $bottom_output" >/dev/null 2>&1 || true
