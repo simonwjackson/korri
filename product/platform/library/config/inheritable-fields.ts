@@ -31,6 +31,14 @@
  * - `cwd`                → scalar; most-specific path wins
  * - `argsAppend`         → list concat in inheritance order
  * - `patches`            → list concat in inheritance order
+ * - `hooks.before`       → list concat in inheritance order (outermost
+ *                         first: host → … → release)
+ * - `hooks.after`        → list concat in inheritance order; execution
+ *                         runs the resolved list reversed (most-specific
+ *                         first, host last) for try/finally semantics
+ * - `hooks.use`          → references named hook profiles; referenced
+ *                         profiles expand before the layer's inline
+ *                         entries, in reference order
  * - `byLauncher[L]`      → merged when the resolved launcher equals L
  */
 
@@ -154,6 +162,37 @@ export const Preferences = Schema.Struct({
 })
 export type Preferences = Schema.Schema.Type<typeof Preferences>
 
+/**
+ * Launch hook steps — user-authored shell commands that run around a
+ * game session. `run` is a raw shell string (YAML block scalars give
+ * multiline scripts for free); `timeout` is whole seconds (default 30,
+ * applied by the executor, not the schema). Before-steps carry
+ * `on-failure: abort | warn` (default abort); after-steps never block
+ * teardown, so `on-failure` on an after-step is a decode error — the
+ * step schemas are intentionally distinct.
+ */
+export const HookBeforeStep = Schema.Struct({
+  run: NonEmptyString("hooks step run"),
+  name: Schema.optional(NonEmptyString("hooks step name")),
+  timeout: Schema.optional(PositiveInteger("hooks step timeout")),
+  "on-failure": Schema.optional(Schema.Literals(["abort", "warn"])),
+})
+export type HookBeforeStep = Schema.Schema.Type<typeof HookBeforeStep>
+
+export const HookAfterStep = Schema.Struct({
+  run: NonEmptyString("hooks step run"),
+  name: Schema.optional(NonEmptyString("hooks step name")),
+  timeout: Schema.optional(PositiveInteger("hooks step timeout")),
+})
+export type HookAfterStep = Schema.Schema.Type<typeof HookAfterStep>
+
+export const HooksPolicy = Schema.Struct({
+  before: Schema.optional(Schema.Array(HookBeforeStep)),
+  after: Schema.optional(Schema.Array(HookAfterStep)),
+  use: Schema.optional(Schema.Array(NonEmptyString("hooks use reference"))),
+})
+export type HooksPolicy = Schema.Schema.Type<typeof HooksPolicy>
+
 export const InheritableLayer = Schema.Struct({
   launch: Schema.optional(LaunchPolicy),
   moonlight: Schema.optional(StreamerPolicy),
@@ -163,6 +202,7 @@ export const InheritableLayer = Schema.Struct({
   cwd: Schema.optional(Schema.String),
   argsAppend: Schema.optional(Schema.Array(Schema.String)),
   patches: Schema.optional(Schema.Array(Schema.String)),
+  hooks: Schema.optional(HooksPolicy),
 })
 export type InheritableLayer = Schema.Schema.Type<typeof InheritableLayer>
 

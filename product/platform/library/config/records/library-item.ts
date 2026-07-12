@@ -175,6 +175,7 @@ export const LibraryReleasePayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
+  hooks: InheritableLayer.fields.hooks,
 }).pipe(
   Schema.check(
     Schema.makeFilter(release => {
@@ -258,6 +259,7 @@ export const ContainedPlayablePayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
+  hooks: InheritableLayer.fields.hooks,
 })
 export type ContainedPlayablePayload = Schema.Schema.Type<
   typeof ContainedPlayablePayload
@@ -300,6 +302,7 @@ export const LibraryItemPayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
+  hooks: InheritableLayer.fields.hooks,
 })
 export type LibraryItemPayload = Schema.Schema.Type<typeof LibraryItemPayload>
 

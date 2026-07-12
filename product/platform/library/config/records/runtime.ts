@@ -52,6 +52,7 @@ export const RuntimePayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
+  hooks: InheritableLayer.fields.hooks,
 })
 export type RuntimePayload = Schema.Schema.Type<typeof RuntimePayload>
 

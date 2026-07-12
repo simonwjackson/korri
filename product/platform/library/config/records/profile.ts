@@ -25,6 +25,7 @@ export const ProfilePayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
+  hooks: InheritableLayer.fields.hooks,
 })
 export type ProfilePayload = Schema.Schema.Type<typeof ProfilePayload>
 

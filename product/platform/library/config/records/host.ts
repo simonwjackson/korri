@@ -17,6 +17,7 @@ export const HostPayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
+  hooks: InheritableLayer.fields.hooks,
 })
 export type HostPayload = Schema.Schema.Type<typeof HostPayload>
 

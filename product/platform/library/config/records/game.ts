@@ -139,6 +139,7 @@ const GamePayloadFields = {
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
+  hooks: InheritableLayer.fields.hooks,
 }
 
 const GameContentReferenceFilter = Schema.makeFilter<{

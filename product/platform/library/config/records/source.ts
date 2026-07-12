@@ -56,6 +56,7 @@ export const SourcePayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
+  hooks: InheritableLayer.fields.hooks,
 }).check(SourceStorageFilter)
 export type SourcePayload = Schema.Schema.Type<typeof SourcePayload>
 

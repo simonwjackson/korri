@@ -291,6 +291,158 @@ describe("readable library schema records", () => {
     }
   })
 
+  it("decodes hooks policy on readable cascade records", () => {
+    const hooks = {
+      before: [{ name: "cap-clocks", run: "echo 1171200 | tee /sys/x" }],
+      after: [{ run: "echo 2803200 | tee /sys/x" }],
+    }
+
+    const cases: Array<readonly [string, () => { hooks?: unknown }]> = [
+      ["global", () => decodeGlobalConfigPayload({ hooks })],
+      ["host", () => decodeHostPayload({ hooks })],
+      ["user", () => decodeUserPayload({ hooks })],
+      [
+        "launcher",
+        () =>
+          decodeLauncherPayload({
+            command: "retroarch",
+            args: [],
+            systems: [],
+            hooks,
+          }),
+      ],
+      ["preset", () => decodePresetPayload({ hooks })],
+      ["app", () => decodeAppPayload({ hooks })],
+      [
+        "runtime",
+        () => decodeRuntimePayload({ kind: "tool", path: "/bin/tool", hooks }),
+      ],
+      ["source", () => decodeSourcePayload({ kind: ["service"], hooks })],
+      ["profile", () => decodeProfilePayload({ hooks })],
+      [
+        "library-item",
+        () =>
+          decodeLibraryItemPayload({
+            hooks,
+            releases: [
+              {
+                id: "default",
+                system: "stream",
+                target: { kind: "url", value: "peer" },
+                launch: { use: "@korri:moonlight/moonlight" },
+              },
+            ],
+          }),
+      ],
+      [
+        "library-release",
+        () =>
+          decodeLibraryItemPayload({
+            releases: [
+              {
+                id: "default",
+                system: "stream",
+                target: { kind: "url", value: "peer" },
+                launch: { use: "@korri:moonlight/moonlight" },
+                hooks,
+              },
+            ],
+          }).releases[0] ?? {},
+      ],
+      [
+        "contained-playable",
+        () =>
+          decodeLibraryItemPayload({
+            contains: { child: { hooks } },
+            releases: [
+              {
+                id: "default",
+                system: "stream",
+                target: { kind: "url", value: "peer" },
+                launch: { use: "@korri:moonlight/moonlight" },
+              },
+            ],
+          }).contains?.child ?? {},
+      ],
+      [
+        "game",
+        () =>
+          decodeGamePayload({ system: "stream", contentPath: "peer", hooks }),
+      ],
+    ]
+
+    for (const [, decode] of cases) {
+      expect(decode().hooks).toEqual(hooks)
+    }
+  })
+
+  it("round-trips multiline hook run commands intact", () => {
+    const yaml = [
+      "hooks:",
+      "  before:",
+      "    - name: cap-clocks",
+      "      run: |",
+      "        echo 1171200 | sudo -n tee /sys/devices/system/cpu/cpufreq/policy3/scaling_max_freq",
+      "        echo 220000000 | sudo -n tee /sys/class/devfreq/gpu/max_freq",
+      "      on-failure: warn",
+    ].join("\n")
+
+    const host = decodeHostPayload(parse(yaml))
+    expect(host.hooks?.before?.[0]?.run).toBe(
+      "echo 1171200 | sudo -n tee /sys/devices/system/cpu/cpufreq/policy3/scaling_max_freq\necho 220000000 | sudo -n tee /sys/class/devfreq/gpu/max_freq\n",
+    )
+    expect(host.hooks?.before?.[0]?.["on-failure"]).toBe("warn")
+  })
+
+  it("decodes empty hooks blocks and empty step lists", () => {
+    expect(decodeHostPayload({ hooks: {} }).hooks).toEqual({})
+    expect(
+      decodeHostPayload({ hooks: { before: [], after: [] } }).hooks,
+    ).toEqual({ before: [], after: [] })
+  })
+
+  it("decodes hook timeouts and use references on a layer payload", () => {
+    const host = decodeHostPayload({
+      hooks: {
+        before: [
+          { run: "swaymsg output DSI-2 mode 1080x1920@60Hz", timeout: 5 },
+        ],
+        use: ["battery-saver-30fps"],
+      },
+    })
+
+    expect(host.hooks?.before?.[0]?.timeout).toBe(5)
+    expect(host.hooks?.use).toEqual(["battery-saver-30fps"])
+  })
+
+  it("rejects malformed hook steps at decode time", () => {
+    // Unknown key inside a step surfaces the typo, not silent stripping.
+    expect(() =>
+      decodeHostPayload({
+        hooks: { before: [{ run: "true", comand: "typo" }] },
+      }),
+    ).toThrow()
+    // on-failure is a before-step policy only; after steps never block teardown.
+    expect(() =>
+      decodeHostPayload({
+        hooks: { after: [{ run: "true", "on-failure": "warn" }] },
+      }),
+    ).toThrow()
+    // Only abort | warn are legal before-step policies.
+    expect(() =>
+      decodeHostPayload({
+        hooks: { before: [{ run: "true", "on-failure": "retry" }] },
+      }),
+    ).toThrow()
+    // run is required on every step.
+    expect(() =>
+      decodeHostPayload({ hooks: { before: [{ name: "no-run" }] } }),
+    ).toThrow()
+    expect(() =>
+      decodeHostPayload({ hooks: { after: [{ name: "no-run" }] } }),
+    ).toThrow()
+  })
+
   it("decodes RetroArch policy only inside plugin-owned policy maps", () => {
     const retroarch = {
       configFile: { mode: "generated" },
