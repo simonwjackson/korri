@@ -37,6 +37,7 @@ import {
   type CollectionApi,
   collectionsSchema,
   InvalidSingletonHostError,
+  isRecord,
   type KorriLibraryDb,
   LOCAL_HOST_KEY,
   loadSidecarSnapshot,
@@ -78,14 +79,58 @@ export interface KorriConfigGraphRoot {
 /**
  * Data collections an unmarked removable config root may contribute. The
  * execution-privileged collections (`host`, `launchers`, `runtimes`, `profiles`,
- * …) stay frozen to trusted static roots; full-power cards require the
- * (future) trusted-marker escalation.
+ * `hooks`, …) stay frozen to trusted static roots; full-power cards require
+ * the (future) trusted-marker escalation. Hooks are arbitrary shell run
+ * around game sessions, so the top-level `hooks` profile section is frozen
+ * AND per-entry `hooks` fields inside the data collections a card may
+ * contribute are stripped pre-merge (see the transform below).
  */
 export const REMOVABLE_CONFIG_COLLECTIONS: readonly string[] = [
   "library",
   "collections",
   "users",
 ]
+
+/**
+ * Recursively strip executable `hooks` fields from a restricted root's
+ * contributed section payloads before validation/merge. Layer-bearing hooks
+ * can hide at any depth of a contributed record (library item, contained
+ * playable, release, preset, byLauncher scope), so the strip is structural:
+ * every `hooks` key below the section payloads is removed. The top-level
+ * `hooks` collection itself is NOT handled here — it is outside
+ * {@link REMOVABLE_CONFIG_COLLECTIONS}, so ProseQL's native per-root
+ * collection scoping drops it with an `ignored-collection` diagnostic.
+ * Returns the (possibly rebuilt) value and whether anything was stripped so
+ * the caller can warn once per fragment.
+ */
+export const stripUntrustedHookFields = (
+  value: unknown,
+): { readonly value: unknown; readonly stripped: boolean } => {
+  if (Array.isArray(value)) {
+    let stripped = false
+    const next = value.map(entry => {
+      const result = stripUntrustedHookFields(entry)
+      if (result.stripped) stripped = true
+      return result.value
+    })
+    return stripped ? { value: next, stripped } : { value, stripped: false }
+  }
+  if (typeof value !== "object" || value === null) {
+    return { value, stripped: false }
+  }
+  let stripped = false
+  const next: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "hooks") {
+      stripped = true
+      continue
+    }
+    const result = stripUntrustedHookFields(entry)
+    if (result.stripped) stripped = true
+    next[key] = result.value
+  }
+  return stripped ? { value: next, stripped } : { value, stripped: false }
+}
 
 export interface KorriConfigGraphOptions {
   readonly roots: readonly KorriConfigGraphRoot[]
@@ -195,7 +240,33 @@ function makeKorriConfigGraphTransform(
           )
         }
       }
-      const validated = validateReadableDocumentStrictly(document, allowed)
+      let scoped = document
+      if (allowed !== undefined && isRecord(document)) {
+        // Executable hooks never cross the trust boundary: even inside the
+        // data collections a restricted root may contribute, per-entry
+        // `hooks` fields are stripped with a warning before merge. Sections
+        // outside the allowlist (including a top-level `hooks` profile map)
+        // are left for ProseQL's collection scoping to ignore with an
+        // `ignored-collection` diagnostic.
+        let stripped = false
+        const next: Record<string, unknown> = { ...document }
+        for (const section of allowed) {
+          if (next[section] === undefined) continue
+          const result = stripUntrustedHookFields(next[section])
+          if (result.stripped) {
+            stripped = true
+            next[section] = result.value
+          }
+        }
+        if (stripped) {
+          logger.warn(
+            { rootId: context.rootId, path: context.path },
+            "config-graph: stripped executable hooks fields from a restricted-root fragment",
+          )
+          scoped = next
+        }
+      }
+      const validated = validateReadableDocumentStrictly(scoped, allowed)
       return Result.succeed(wrapPlainHostForProseql(validated))
     } catch (error) {
       return Result.fail(
@@ -347,6 +418,7 @@ const withConfigGraphReadOnlyGuards = (
     launchers: readOnlyCollection(db.launchers, "launchers"),
     runtimes: readOnlyCollection(db.runtimes, "runtimes"),
     profiles: readOnlyCollection(db.profiles, "profiles"),
+    hooks: readOnlyCollection(db.hooks, "hooks"),
     collections: readOnlyCollection(db.collections, "collections"),
     users: readOnlyCollection(db.users, "users"),
     library: readOnlyCollection(db.library, "library"),

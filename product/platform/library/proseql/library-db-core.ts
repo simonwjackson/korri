@@ -3,8 +3,8 @@
  *
  * Persisted YAML uses the human-curatable top-level sections
  * `host`, `storage`, `providers`, `provider-links`, `systems`, `launchers`,
- * `runtimes`, `profiles`, `collections`, `users`, and `library`. This is the
- * application contract: old canonical collection names (`apps`, `config`,
+ * `runtimes`, `profiles`, `hooks`, `collections`, `users`, and `library`.
+ * This is the application contract: old canonical collection names (`apps`, `config`,
  * `games`, `modules`) are intentionally not declared.
  *
  * ProseQL document sources are map-keyed internally. Korri's `host`
@@ -41,6 +41,10 @@ import {
   GlobalConfigPayload,
   GlobalConfigRecord,
 } from "@platform/library/config/records/global"
+import {
+  HookProfilePayload,
+  HookProfileRecord,
+} from "@platform/library/config/records/hook-profile"
 import { HostPayload, HostRecord } from "@platform/library/config/records/host"
 import {
   LauncherPayload,
@@ -117,6 +121,7 @@ export const collectionsSchema = {
   launchers: keyedCollection(AppPayload),
   runtimes: keyedCollection(RuntimePayload),
   profiles: keyedCollection(ProfilePayload),
+  hooks: keyedCollection(HookProfilePayload),
   collections: keyedCollection(CollectionPayload),
   users: keyedCollection(UserPayload),
   library: keyedCollection(LibraryItemPayload),
@@ -139,6 +144,7 @@ const strictMapPayloadSchemas = {
   launchers: AppPayload,
   runtimes: RuntimePayload,
   profiles: ProfilePayload,
+  hooks: HookProfilePayload,
   collections: CollectionPayload,
   users: UserPayload,
   library: LibraryItemPayload,
@@ -259,6 +265,8 @@ export {
   GLOBAL_CONFIG_KEY,
   GlobalConfigPayload,
   GlobalConfigRecord,
+  HookProfilePayload,
+  HookProfileRecord,
   HostPayload,
   HostRecord,
   LauncherPayload,
@@ -322,6 +330,7 @@ export interface KorriLibraryDb {
   readonly launchers: CollectionApi<Schema.Schema.Type<typeof AppPayload>>
   readonly runtimes: CollectionApi<Schema.Schema.Type<typeof RuntimePayload>>
   readonly profiles: CollectionApi<Schema.Schema.Type<typeof ProfilePayload>>
+  readonly hooks: CollectionApi<Schema.Schema.Type<typeof HookProfilePayload>>
   readonly collections: CollectionApi<
     Schema.Schema.Type<typeof CollectionPayload>
   >

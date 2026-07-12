@@ -26,6 +26,7 @@ describe("makeKorriLibraryDbConfig", () => {
     const names = Object.keys(config.collections).sort()
     expect(names).toEqual([
       "collections",
+      "hooks",
       "host",
       "launchers",
       "library",

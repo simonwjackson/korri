@@ -64,6 +64,7 @@ describe("makeKorriConfigGraphConfig", () => {
     const config = makeKorriConfigGraphConfig([{ root: "/x" }])
     expect(Object.keys(config.collections).sort()).toEqual([
       "collections",
+      "hooks",
       "host",
       "launchers",
       "library",
@@ -826,6 +827,182 @@ describe("openKorriConfigGraph — collection-scoped trust", () => {
         ),
       )
       expect(host.moonlight?.command).toBe("trusted-moonlight")
+    })
+  })
+
+  it("keeps the top-level hooks collection frozen against restricted roots", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(
+        join(trusted!, "korri.yaml"),
+        [
+          "hooks:",
+          "  battery-saver:",
+          "    before:",
+          "      - name: cap-clocks",
+          "        run: echo trusted-cap",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+      await writeFile(
+        join(card!, "card.korri.yaml"),
+        [
+          "hooks:",
+          "  evil:",
+          "    before:",
+          "      - name: pwn",
+          "        run: echo evil",
+          "library:",
+          "  zelda:",
+          "    title: Card Zelda",
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target:",
+          "          kind: file",
+          "          storage: roms",
+          "          path: snes/zelda.sfc",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                {
+                  root: card!,
+                  id: "removable-card",
+                  collections: REMOVABLE_CONFIG_COLLECTIONS,
+                },
+              ],
+            })
+            return {
+              profiles: yield* Effect.promise(
+                () => db.hooks.query().runPromise,
+              ),
+              item: yield* db.library.findById("zelda"),
+              diagnostics: yield* db.$documentGraph.getDiagnostics(),
+            }
+          }),
+        ),
+      )
+
+      // The trusted root's profile loads; the card's profile is ignored
+      // via the same frozen-collection mechanism that protects host.
+      expect(loaded.profiles.map(profile => profile.id)).toEqual([
+        "battery-saver",
+      ])
+      expect(loaded.item.title).toBe("Card Zelda")
+      expect(
+        loaded.diagnostics.some(
+          diagnostic =>
+            diagnostic.action === "ignored-collection" &&
+            diagnostic.rootId === "removable-card" &&
+            diagnostic.collection === "hooks",
+        ),
+      ).toBe(true)
+    })
+  })
+
+  it("strips per-entry hook fields from a restricted root while trusted hooks load", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(
+        join(trusted!, "korri.yaml"),
+        [
+          "library:",
+          "  mario:",
+          "    title: Trusted Mario",
+          "    hooks:",
+          "      before:",
+          "        - name: trusted-item-hook",
+          "          run: echo trusted",
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target:",
+          "          kind: file",
+          "          storage: roms",
+          "          path: snes/mario.sfc",
+          "        hooks:",
+          "          before:",
+          "            - name: trusted-release-hook",
+          "              run: echo trusted-release",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+      await writeFile(
+        join(card!, "card.korri.yaml"),
+        [
+          "library:",
+          "  zelda:",
+          "    title: Card Zelda",
+          "    hooks:",
+          "      before:",
+          "        - name: card-item-hook",
+          "          run: echo evil",
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target:",
+          "          kind: file",
+          "          storage: roms",
+          "          path: snes/zelda.sfc",
+          "        hooks:",
+          "          after:",
+          "            - name: card-release-hook",
+          "              run: echo evil-after",
+          "users:",
+          "  mallory:",
+          "    displayName: Mallory",
+          "    hooks:",
+          "      before:",
+          "        - name: card-user-hook",
+          "          run: echo evil-user",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                {
+                  root: card!,
+                  id: "removable-card",
+                  collections: REMOVABLE_CONFIG_COLLECTIONS,
+                },
+              ],
+            })
+            return {
+              trustedItem: yield* db.library.findById("mario"),
+              cardItem: yield* db.library.findById("zelda"),
+              cardUser: yield* db.users.findById("mallory"),
+            }
+          }),
+        ),
+      )
+
+      // Trusted-root hooks survive intact.
+      expect(loaded.trustedItem.hooks?.before?.[0]?.name).toBe(
+        "trusted-item-hook",
+      )
+      expect(loaded.trustedItem.releases[0]?.hooks?.before?.[0]?.name).toBe(
+        "trusted-release-hook",
+      )
+      // The card's entries load, but every executable hook field is stripped.
+      expect(loaded.cardItem.title).toBe("Card Zelda")
+      expect(loaded.cardItem.hooks).toBeUndefined()
+      expect(loaded.cardItem.releases[0]?.hooks).toBeUndefined()
+      expect(loaded.cardUser.displayName).toBe("Mallory")
+      expect(loaded.cardUser.hooks).toBeUndefined()
     })
   })
 })

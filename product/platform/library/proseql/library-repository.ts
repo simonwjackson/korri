@@ -1203,6 +1203,7 @@ function loadReadableSnapshot(
       persistedLaunchers,
       runtimes,
       profiles,
+      hookProfiles,
       library,
     ] = yield* Effect.all(
       [
@@ -1215,6 +1216,7 @@ function loadReadableSnapshot(
         readCollection(db.launchers),
         readCollection(db.runtimes),
         readCollection(db.profiles),
+        readCollection(db.hooks),
         readCollection(db.library),
       ],
       { concurrency: "unbounded" },
@@ -1237,6 +1239,7 @@ function loadReadableSnapshot(
       readableLaunchers: mergeRecordMaps(plugin.launchers, persistedLaunchers),
       runtimes: mergeRecordMaps(plugin.runtimes, runtimes),
       profiles: new Map(profiles.map(record => [record.id, record])),
+      hooks: new Map(hookProfiles.map(record => [record.id, record])),
       library: new Map(library.map(record => [record.id, record])),
     }
   })

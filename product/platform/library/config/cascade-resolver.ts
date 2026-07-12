@@ -59,6 +59,7 @@ import { type AppRecord, appRecordKind } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
+import type { HookProfileRecord } from "./records/hook-profile"
 import type { HostRecord } from "./records/host"
 import type { LauncherRecord } from "./records/launcher"
 import type {
@@ -713,6 +714,14 @@ export interface ReadableConfigSnapshot {
   readonly readableLaunchers: ReadonlyMap<string, AppRecord>
   readonly runtimes: ReadonlyMap<string, RuntimeRecord>
   readonly profiles: ReadonlyMap<string, ProfileRecord>
+  /**
+   * Named hook profiles from the top-level `hooks:` section, referenced by
+   * layers via `hooks.use`. Only trusted (execution-privileged) config roots
+   * contribute here — the collection is frozen against removable roots at
+   * config-graph load. Optional so snapshot builders without hooks stay
+   * unchanged; absent means "no named profiles".
+   */
+  readonly hooks?: ReadonlyMap<string, HookProfileRecord>
   readonly storage: ReadonlyMap<string, StorageRecord>
   readonly library: ReadonlyMap<string, LibraryItemRecord>
 }
