@@ -519,6 +519,39 @@ in
   # xt_mark/xt_MARK/nft_compat/x_tables/iptable_filter/iptable_nat. While this
   # bridge exists, daemon firewall openings stay interface-scoped and this
   # adapter must not advertise subnet routes or exit-node service.
+  # Closed-loop fan control (module arrives via the korri aggregate). The
+  # stock SM8550 thermal policy maps max cooling to a quiet pwm 70/255 and
+  # lets gaming loads reach ~90C; this curve follows public Thor guidance.
+  # Hardware identities verified on Thor/Bandai: fan hwmon name `pwmfan`
+  # (tach present), prime-core zone `cpu7-top-thermal` as the temp source.
+  # Devices without a `pwmfan` hwmon (if any SM8550 variant lacks one)
+  # no-op cleanly at runtime.
+  services.korri.fanControl = {
+    enable = lib.mkDefault true;
+    hwmonName = "pwmfan";
+    tempSource = {
+      kind = "thermal-zone";
+      zoneType = "cpu7-top-thermal";
+    };
+    curve = [
+      {
+        tempC = 45;
+        pwmPercent = 45;
+      }
+      {
+        tempC = 65;
+        pwmPercent = 70;
+      }
+      {
+        tempC = 85;
+        pwmPercent = 100;
+      }
+    ];
+    # Stock quiet level is pwm 70/255 (~27%); keep idle no louder than stock.
+    idlePwmPercent = 27;
+    profileName = "thor-gaming";
+  };
+
   services.korri.tailnet.enable = lib.mkDefault true;
   services.tailscale = {
     extraUpFlags = [ "--netfilter-mode=off" ];
