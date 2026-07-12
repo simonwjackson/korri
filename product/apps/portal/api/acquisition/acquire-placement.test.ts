@@ -37,59 +37,35 @@ const importedYaml = [
 ].join("\n")
 
 describe("applyClaimMetadataToImport", () => {
-  it("applies the claim title and tile art to the imported entry", async () => {
+  it("applies the claim title to the imported entry", async () => {
     await withTempConfig(importedYaml, async configPath => {
       const changed = await applyClaimMetadataToImport({
         configPath,
         storageId: "roms",
         relativePath: "pico8/dank_tomb-0.p8.png",
         title: "Dank Tomb 1.1b",
-        artUrl: "https://img.example.com/dank-tomb.png",
-        claimUrl: "https://www.lexaloffle.com/bbs/?pid=42",
       })
       expect(changed).toBe(true)
 
       const doc = parse(await readFile(configPath, "utf8"))
       const entry = doc.library["dank-tomb-0"]
       expect(entry.title).toBe("Dank Tomb 1.1b")
-      expect(entry.metadata.media).toEqual([
-        {
-          type: "image",
-          uri: "https://img.example.com/dank-tomb.png",
-          role: "tile",
-          source: {
-            provider: "korri",
-            url: "https://www.lexaloffle.com/bbs/?pid=42",
-          },
-        },
-      ])
+      // Persisted metadata.media is forbidden by the readable schema; writing
+      // it rejects the whole config fragment and empties the library. The
+      // patch must never introduce a metadata section.
+      expect(entry.metadata).toBeUndefined()
     })
   })
 
-  it("does not clobber an existing tile image", async () => {
-    const authored = importedYaml.replace(
-      "    releases:",
-      [
-        "    metadata:",
-        "      media:",
-        "        - type: image",
-        "          uri: https://authored.example.com/tile.png",
-        "          role: tile",
-        "    releases:",
-      ].join("\n"),
-    )
-    await withTempConfig(authored, async configPath => {
-      await applyClaimMetadataToImport({
+  it("is a no-op when the title already matches", async () => {
+    await withTempConfig(importedYaml, async configPath => {
+      const changed = await applyClaimMetadataToImport({
         configPath,
         storageId: "roms",
         relativePath: "pico8/dank_tomb-0.p8.png",
-        artUrl: "https://img.example.com/other.png",
+        title: "dank tomb 0",
       })
-      const doc = parse(await readFile(configPath, "utf8"))
-      expect(doc.library["dank-tomb-0"].metadata.media).toHaveLength(1)
-      expect(doc.library["dank-tomb-0"].metadata.media[0].uri).toBe(
-        "https://authored.example.com/tile.png",
-      )
+      expect(changed).toBe(false)
     })
   })
 

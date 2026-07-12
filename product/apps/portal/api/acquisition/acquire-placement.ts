@@ -87,14 +87,12 @@ export function createAcquirePlacementRunner(
       })
       const configPath = scoutMergeConfigPath(env)
       await runScan(configPath)
-      if (!placed.alreadyPresent && (request.title || request.artUrl)) {
+      if (!placed.alreadyPresent && request.title) {
         await applyClaimMetadataToImport({
           configPath,
           storageId: placed.storageId,
           relativePath: placed.relativePath,
-          ...(request.title ? { title: request.title } : {}),
-          ...(request.artUrl ? { artUrl: request.artUrl } : {}),
-          ...(request.url ? { claimUrl: request.url } : {}),
+          title: request.title,
         }).catch(() => {
           // Metadata is cosmetic; a failed patch must not fail the import.
         })
@@ -106,25 +104,27 @@ export function createAcquirePlacementRunner(
 
 /**
  * Post-import metadata patch: the Scout merge derives titles from file names
- * ("dank tomb 0"), but the Store knows the claim's real title and thumbnail.
- * Finds the just-imported entry by its release target (storage + path) and
- * applies the claim title and a tile image, without touching entries that
- * already carry authored values.
+ * ("dank tomb 0"), but the Store knows the claim's real title. Finds the
+ * just-imported entry by its release target (storage + path) and applies the
+ * claim title.
+ *
+ * Deliberately title-only: persisted `metadata.media` is FORBIDDEN by the
+ * readable schema ("persisted game metadata must not contain media entries")
+ * and writing it rejects the entire config fragment, dropping every entry in
+ * the file from the library. Claim art must flow through the game-assets
+ * assignment system instead.
  */
 export async function applyClaimMetadataToImport(options: {
   readonly configPath: string
   readonly storageId: string
   readonly relativePath: string
-  readonly title?: string
-  readonly artUrl?: string
-  readonly claimUrl?: string
+  readonly title: string
 }): Promise<boolean> {
   const doc = parse(await readFile(options.configPath, "utf8")) as {
     library?: Record<
       string,
       {
         title?: string
-        metadata?: { media?: unknown[] } & Record<string, unknown>
         releases?: readonly {
           readonly target?: {
             readonly storage?: string
@@ -145,35 +145,8 @@ export async function applyClaimMetadataToImport(options: {
     ),
   )
   if (!entry) return false
-
-  let changed = false
-  if (options.title && entry.title !== options.title) {
-    entry.title = options.title
-    changed = true
-  }
-  if (options.artUrl) {
-    const metadata = (entry.metadata ??= {})
-    const media = (metadata.media ??= [])
-    const hasTile = media.some(
-      item =>
-        typeof item === "object" &&
-        item !== null &&
-        (item as { role?: string }).role === "tile",
-    )
-    if (!hasTile) {
-      media.push({
-        type: "image",
-        uri: options.artUrl,
-        role: "tile",
-        source: {
-          provider: "korri",
-          ...(options.claimUrl ? { url: options.claimUrl } : {}),
-        },
-      })
-      changed = true
-    }
-  }
-  if (!changed) return false
+  if (entry.title === options.title) return false
+  entry.title = options.title
 
   const tempPath = join(
     dirname(options.configPath),
