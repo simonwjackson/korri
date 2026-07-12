@@ -25,7 +25,7 @@
  * can pipe the error union into their own Effect chains.
  */
 
-import { Data, Effect } from "effect"
+import { Data, Effect, Result } from "effect"
 import {
   getBuiltInAppDescriptor,
   mergeAppLaunchCompanions,
@@ -39,7 +39,14 @@ import {
   UserNotFound,
 } from "./errors"
 import {
+  expandHookProfiles,
+  type UnknownHookProfile,
+} from "./hook-profile-expansion"
+import {
   type ByLauncherPayload,
+  type HookAfterStep,
+  type HookBeforeStep,
+  type HooksPolicy,
   type LaunchCompanionMap,
   type LaunchPolicy,
   launchCompanionsFromLaunch,
@@ -59,7 +66,10 @@ import { type AppRecord, appRecordKind } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
-import type { HookProfileRecord } from "./records/hook-profile"
+import type {
+  HookProfilePayload,
+  HookProfileRecord,
+} from "./records/hook-profile"
 import type { HostRecord } from "./records/host"
 import type { LauncherRecord } from "./records/launcher"
 import type {
@@ -785,6 +795,7 @@ export interface ResolveReadableLaunchInputs {
 }
 
 interface ReadableLayerView {
+  readonly inherit?: boolean
   readonly launch?: LaunchPolicy
   readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: StreamerPolicy
@@ -795,12 +806,19 @@ interface ReadableLayerView {
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
   readonly patches?: readonly string[]
+  /**
+   * Layer hook contributions. Raw (may still carry `use`) on extracted
+   * views; the `expandReadableLayerHooks` pre-pass replaces it with the
+   * fully-expanded `{ before, after }` shape before the merge folds it.
+   */
+  readonly hooks?: HooksPolicy
   readonly overrides?: LaunchOverrides
 }
 
 const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
   user
     ? {
+        inherit: user.inherit,
         launchCompanions: launchCompanionsFromLaunch(user),
         moonlight: user.moonlight,
         preferences: user.preferences,
@@ -809,6 +827,7 @@ const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
         cwd: user.cwd,
         argsAppend: user.argsAppend,
         patches: user.patches,
+        hooks: user.hooks,
       }
     : {}
 
@@ -864,6 +883,7 @@ const stripReleaseScopedRootOverrides = (
 const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
   app
     ? {
+        inherit: app.inherit,
         launchCompanions: launchCompanionsFromLaunch(app),
         moonlight: app.moonlight,
         preferences: app.preferences,
@@ -873,6 +893,7 @@ const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
         cwd: app.cwd,
         argsAppend: app.argsAppend,
         patches: app.patches,
+        hooks: app.hooks,
       }
     : {}
 
@@ -1041,6 +1062,7 @@ const readableViewOfRuntime = (
         cwd: runtime.cwd,
         argsAppend: runtime.argsAppend,
         patches: runtime.patches,
+        hooks: runtime.hooks,
       }
     : {}
 
@@ -1055,6 +1077,7 @@ const readableViewOfLibraryItem = (
   cwd: item.cwd,
   argsAppend: item.argsAppend,
   patches: item.patches,
+  hooks: item.hooks,
 })
 
 const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
@@ -1068,6 +1091,7 @@ const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
   cwd: entry.contained?.cwd,
   argsAppend: entry.contained?.argsAppend,
   patches: entry.contained?.patches,
+  hooks: entry.contained?.hooks,
 })
 
 const readableViewOfRelease = (
@@ -1087,6 +1111,7 @@ const readableViewOfRelease = (
   cwd: release.launch?.cwd ?? release.cwd,
   argsAppend: release.launch?.argsAppend ?? release.argsAppend,
   patches: release.patches,
+  hooks: release.hooks,
   // Raw escape hatch — release-scoped only (never the ephemeral layer).
   overrides: release.launch?.overrides,
 })
@@ -1104,6 +1129,7 @@ const readableViewOfProfile = (
         cwd: profile.cwd,
         argsAppend: profile.argsAppend,
         patches: profile.patches,
+        hooks: profile.hooks,
       }
     : {}
 
@@ -1123,9 +1149,50 @@ const readableViewOfOverride = (
       }
     : {}
 
+/**
+ * Expand each readable layer's `hooks.use` references against the
+ * snapshot's named-profile map before the fold. Layers without hooks
+ * pass through untouched; layers whose expansion yields no steps drop
+ * the field entirely so empty contributions add no noise. Unknown
+ * profile ids fail the whole resolve with the referencing layer's label.
+ */
+const expandReadableLayerHooks = (
+  layers: ReadonlyArray<readonly [ReadableLayerView, string]>,
+  profiles: ReadonlyMap<string, HookProfilePayload> | undefined,
+): Effect.Effect<readonly ReadableLayerView[], UnknownHookProfile> => {
+  const expanded: ReadableLayerView[] = []
+  for (const [view, label] of layers) {
+    if (view.hooks === undefined) {
+      expanded.push(view)
+      continue
+    }
+    const result = expandHookProfiles(view.hooks, profiles ?? new Map(), {
+      layer: label,
+    })
+    if (Result.isFailure(result)) return Effect.fail(result.failure)
+    const hooks = Result.getOrThrow(result)
+    expanded.push(
+      hooks.before.length === 0 && hooks.after.length === 0
+        ? { ...view, hooks: undefined }
+        : { ...view, hooks },
+    )
+  }
+  return Effect.succeed(expanded)
+}
+
 const mergeReadableLayers = (
   layers: readonly ReadableLayerView[],
 ): ReadableLayerView => {
+  // Apply inherit:false truncation — drop all layers strictly less-specific
+  // than the truncating layer (uniform across every inheritable field).
+  let active: readonly ReadableLayerView[] = layers
+  for (let i = layers.length - 1; i >= 0; i--) {
+    if (layers[i]?.inherit === false) {
+      active = layers.slice(i)
+      break
+    }
+  }
+
   let launchCompanions: LaunchCompanionMap | undefined
   let moonlight: StreamerPolicy | undefined
   let preferences: Preferences | undefined
@@ -1135,9 +1202,11 @@ const mergeReadableLayers = (
   let cwd: string | undefined
   let argsAppend: string[] | undefined
   let patches: string[] | undefined
+  let hooksBefore: HookBeforeStep[] | undefined
+  let hooksAfter: HookAfterStep[] | undefined
   let overrides: LaunchOverrides | undefined
 
-  for (const layer of layers) {
+  for (const layer of active) {
     const layerCompanions =
       layer.launchCompanions ?? launchCompanionsFromLaunch(layer)
     if (layerCompanions !== undefined) {
@@ -1163,6 +1232,14 @@ const mergeReadableLayers = (
     if (layer.patches !== undefined) {
       patches = [...(patches ?? []), ...layer.patches]
     }
+    // Both phases concatenate in inheritance order (outermost first);
+    // the executor reverses `after` at run time for try/finally semantics.
+    if (layer.hooks?.before !== undefined) {
+      hooksBefore = [...(hooksBefore ?? []), ...layer.hooks.before]
+    }
+    if (layer.hooks?.after !== undefined) {
+      hooksAfter = [...(hooksAfter ?? []), ...layer.hooks.after]
+    }
     if (layer.overrides !== undefined) {
       overrides = foldLaunchOverrides(overrides, layer.overrides)
     }
@@ -1178,6 +1255,9 @@ const mergeReadableLayers = (
     cwd,
     argsAppend,
     patches,
+    ...((hooksBefore?.length ?? 0) > 0 || (hooksAfter?.length ?? 0) > 0
+      ? { hooks: { before: hooksBefore ?? [], after: hooksAfter ?? [] } }
+      : {}),
     overrides,
   }
 }
@@ -1316,18 +1396,24 @@ export const resolveReadableLaunchContext = (
       systemId: release.system,
     })
 
-    const folded = mergeReadableLayers([
-      snapshot.host ?? {},
-      readableViewOfUser(user),
-      readableViewOfSystem(system),
-      readableViewOfApp(app),
-      readableViewOfRuntime(runtime),
-      readableViewOfLibraryItem(item),
-      readableViewOfContained(entry),
-      readableViewOfRelease(release, app),
-      readableViewOfProfile(profile),
-      readableViewOfOverride(inputs.override),
-    ])
+    const layerViews: ReadonlyArray<readonly [ReadableLayerView, string]> = [
+      [snapshot.host ?? {}, "host"],
+      [readableViewOfUser(user), `user '${inputs.userId ?? ""}'`],
+      [readableViewOfSystem(system), `system '${release.system}'`],
+      [readableViewOfApp(app), `app '${appId}'`],
+      [readableViewOfRuntime(runtime), `runtime '${runtimeId ?? ""}'`],
+      [readableViewOfLibraryItem(item), `library item '${item.id}'`],
+      [
+        readableViewOfContained(entry),
+        `contained playable '${parsed.containedId ?? ""}'`,
+      ],
+      [readableViewOfRelease(release, app), `release '${release.id}'`],
+      [readableViewOfProfile(profile), `profile '${inputs.profileId ?? ""}'`],
+      [readableViewOfOverride(inputs.override), "override"],
+    ]
+    const folded = mergeReadableLayers(
+      yield* expandReadableLayerHooks(layerViews, snapshot.hooks),
+    )
 
     const target = release.target
     if (target === undefined) {
@@ -1365,5 +1451,13 @@ export const resolveReadableLaunchContext = (
       ...(folded.argsAppend ? { argsAppend: folded.argsAppend } : {}),
       ...(folded.patches ? { patches: folded.patches } : {}),
       ...(folded.overrides ? { overrides: folded.overrides } : {}),
+      ...(folded.hooks
+        ? {
+            hooks: {
+              before: folded.hooks.before ?? [],
+              after: folded.hooks.after ?? [],
+            },
+          }
+        : {}),
     }
   })

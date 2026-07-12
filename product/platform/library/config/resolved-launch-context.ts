@@ -23,6 +23,8 @@ import { ArtifactId } from "@platform/protocol/artifact/artifact"
 import { Schema } from "effect"
 
 import {
+  HookAfterStep,
+  HookBeforeStep,
   LaunchCompanionMap,
   PluginPolicyMap,
   Preferences,
@@ -73,6 +75,24 @@ export type ResolvedLaunchContext = Schema.Schema.Type<
   typeof ResolvedLaunchContext
 >
 
+/**
+ * Launch hooks after the cascade fold — fully expanded steps only (named
+ * `use` profile references are resolved away before the fold).
+ *
+ * Ordering semantics:
+ * - `before` is execution order: inheritance order, outermost first
+ *   (host → … → release).
+ * - `after` is ALSO stored in inheritance order — the resolved artifact
+ *   stays declarative. The executor (sessiond) reverses it at run time so
+ *   teardown unwinds most-specific first (release → … → host), giving
+ *   nested try/finally semantics.
+ */
+export const ResolvedLaunchHooks = Schema.Struct({
+  before: Schema.Array(HookBeforeStep),
+  after: Schema.Array(HookAfterStep),
+})
+export type ResolvedLaunchHooks = Schema.Schema.Type<typeof ResolvedLaunchHooks>
+
 export const ReadableResolvedLaunchContext = Schema.Struct({
   playableId: Schema.String,
   itemId: Schema.String,
@@ -105,6 +125,12 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
    * ephemeral override layer). Consumed by launcher materializers.
    */
   overrides: Schema.optional(LaunchOverrides),
+  /**
+   * Cascade-folded launch hooks; omitted when no layer contributes any.
+   * See `ResolvedLaunchHooks` for the ordering contract (`before` =
+   * execution order; `after` = inheritance order, executor-reversed).
+   */
+  hooks: Schema.optional(ResolvedLaunchHooks),
 })
 export type ReadableResolvedLaunchContext = Schema.Schema.Type<
   typeof ReadableResolvedLaunchContext

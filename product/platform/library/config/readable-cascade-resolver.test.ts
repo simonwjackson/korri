@@ -7,7 +7,9 @@ import {
   type ReadableConfigSnapshot,
   resolveReadableLaunchContext,
 } from "./cascade-resolver"
+import { UnknownHookProfile } from "./hook-profile-expansion"
 import type { AppRecord } from "./records/app"
+import type { HookProfileRecord } from "./records/hook-profile"
 import type { HostRecord } from "./records/host"
 import type { LibraryItemRecord } from "./records/library-item"
 import type { ProfileRecord } from "./records/profile"
@@ -1342,5 +1344,252 @@ describe("resolveReadableLaunchContext", () => {
 
     expect(exit._tag).toBe("Failure")
     expect(String(exit)).toContain("ReleaseNotLaunchable")
+  })
+})
+
+describe("resolveReadableLaunchContext hooks fold", () => {
+  const hookStep = (name: string) => ({ name, run: `echo ${name}` })
+
+  const sonicWithReleaseHooks = (
+    hooks: HostRecord["hooks"],
+  ): LibraryItemRecord => ({
+    ...sonic,
+    releases: [
+      {
+        id: "genesis",
+        system: "genesis",
+        target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
+        launch: {
+          use: "@korri:retroarch/retroarch",
+          runtime: "genesis-plus-gx",
+        },
+        hooks,
+      },
+    ],
+  })
+
+  const hookedSnapshot = (input: {
+    readonly hostHooks?: HostRecord["hooks"]
+    readonly appHooks?: AppRecord["hooks"]
+    readonly appInherit?: boolean
+    readonly releaseHooks?: HostRecord["hooks"]
+    readonly profiles?: Readonly<Record<string, HookProfileRecord>>
+  }): ReadableConfigSnapshot => ({
+    ...snapshot(
+      input.releaseHooks !== undefined
+        ? sonicWithReleaseHooks(input.releaseHooks)
+        : sonic,
+    ),
+    host: { ...host, hooks: input.hostHooks },
+    readableLaunchers: new Map([
+      [
+        "@korri:retroarch/retroarch",
+        { ...app, hooks: input.appHooks, inherit: input.appInherit },
+      ],
+    ]),
+    ...(input.profiles !== undefined
+      ? { hooks: new Map(Object.entries(input.profiles)) }
+      : {}),
+  })
+
+  it("folds host, app, and release hooks in inheritance order for both phases", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        hookedSnapshot({
+          hostHooks: {
+            before: [hookStep("host-before")],
+            after: [hookStep("host-after")],
+          },
+          appHooks: {
+            before: [hookStep("app-before")],
+            after: [hookStep("app-after")],
+          },
+          releaseHooks: {
+            before: [hookStep("release-before")],
+            after: [hookStep("release-after")],
+          },
+        }),
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    expect(context.hooks?.before.map(step => step.name)).toEqual([
+      "host-before",
+      "app-before",
+      "release-before",
+    ])
+    // `after` stays in inheritance order too — the resolved artifact is
+    // declarative; sessiond reverses it at execution time (try/finally).
+    expect(context.hooks?.after.map(step => step.name)).toEqual([
+      "host-after",
+      "app-after",
+      "release-after",
+    ])
+  })
+
+  it("omits hooks from the context when no layer contributes any", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(snapshot(), {
+        playableId: "sonic-the-hedgehog",
+      }),
+    )
+
+    expect(context.hooks).toBeUndefined()
+  })
+
+  it("resolves hooks declared only at the host layer", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        hookedSnapshot({
+          hostHooks: {
+            before: [hookStep("host-before")],
+            after: [hookStep("host-after")],
+          },
+        }),
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    expect(context.hooks?.before.map(step => step.name)).toEqual([
+      "host-before",
+    ])
+    expect(context.hooks?.after.map(step => step.name)).toEqual(["host-after"])
+  })
+
+  it("resolves hooks declared only at the release layer", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        hookedSnapshot({
+          releaseHooks: { before: [hookStep("release-before")] },
+        }),
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    expect(context.hooks?.before.map(step => step.name)).toEqual([
+      "release-before",
+    ])
+    expect(context.hooks?.after).toEqual([])
+  })
+
+  it("drops less-specific hook contributions below an inherit:false layer", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        hookedSnapshot({
+          hostHooks: {
+            before: [hookStep("host-before")],
+            after: [hookStep("host-after")],
+          },
+          appHooks: { before: [hookStep("app-before")] },
+          appInherit: false,
+          releaseHooks: { before: [hookStep("release-before")] },
+        }),
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    expect(context.hooks?.before.map(step => step.name)).toEqual([
+      "app-before",
+      "release-before",
+    ])
+    expect(context.hooks?.after).toEqual([])
+  })
+
+  it("expands a release-level use reference ahead of the release's inline steps", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        hookedSnapshot({
+          hostHooks: { before: [hookStep("host-before")] },
+          releaseHooks: {
+            use: ["battery-saver"],
+            before: [hookStep("release-inline-before")],
+            after: [hookStep("release-inline-after")],
+          },
+          profiles: {
+            "battery-saver": {
+              id: "battery-saver",
+              before: [hookStep("profile-before")],
+              after: [hookStep("profile-after")],
+            },
+          },
+        }),
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    expect(context.hooks?.before.map(step => step.name)).toEqual([
+      "host-before",
+      "profile-before",
+      "release-inline-before",
+    ])
+    expect(context.hooks?.after.map(step => step.name)).toEqual([
+      "profile-after",
+      "release-inline-after",
+    ])
+  })
+
+  it("fails resolution with the profile id and layer for an unknown use reference", async () => {
+    const error = await Effect.runPromise(
+      Effect.flip(
+        resolveReadableLaunchContext(
+          hookedSnapshot({
+            releaseHooks: { use: ["no-such-profile"] },
+          }),
+          { playableId: "sonic-the-hedgehog" },
+        ),
+      ),
+    )
+
+    expect(error).toBeInstanceOf(UnknownHookProfile)
+    expect(error).toMatchObject({
+      _tag: "UnknownHookProfile",
+      profileId: "no-such-profile",
+      layer: "release 'genesis'",
+    })
+  })
+
+  it("resolves a snapshot with named profiles plus layered hooks end to end", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        hookedSnapshot({
+          hostHooks: {
+            use: ["display-60"],
+            after: [hookStep("host-inline-after")],
+          },
+          appHooks: { before: [hookStep("app-before")] },
+          releaseHooks: {
+            use: ["battery-saver"],
+            before: [hookStep("release-inline-before")],
+          },
+          profiles: {
+            "display-60": {
+              id: "display-60",
+              before: [hookStep("display-60hz")],
+              after: [hookStep("display-120hz")],
+            },
+            "battery-saver": {
+              id: "battery-saver",
+              before: [hookStep("cap-clocks")],
+              after: [hookStep("restore-clocks")],
+            },
+          },
+        }),
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    expect(context.hooks?.before.map(step => step.name)).toEqual([
+      "display-60hz",
+      "app-before",
+      "cap-clocks",
+      "release-inline-before",
+    ])
+    expect(context.hooks?.after.map(step => step.name)).toEqual([
+      "display-120hz",
+      "host-inline-after",
+      "restore-clocks",
+    ])
+    // Fully expanded — no `use` remnants on the resolved artifact.
+    expect(context.hooks).not.toHaveProperty("use")
   })
 })
