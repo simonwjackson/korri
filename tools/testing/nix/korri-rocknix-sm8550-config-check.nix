@@ -851,9 +851,9 @@ let
           !(inputdEnv ? KORRI_INPUTD_KEY_F24_ACTION)
           && !(inputdEnv ? KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN)
       ))
-      (check "${name}: Android Back toggles the active-workspace keyboard" (
-        (inputdEnv.KORRI_INPUTD_BACK_TAP_ACTION or null) == "toggle-bottom-keyboard"
-        && lib.hasSuffix "/bin/korri-bandai-keyboard-toggle" (inputdEnv.KORRI_INPUTD_BOTTOM_KEYBOARD or "")
+      (check "${name}: keyboard toggle stays on Home+X without Back tap" (
+        lib.hasSuffix "/bin/korri-bandai-keyboard-toggle" (inputdEnv.KORRI_INPUTD_BOTTOM_KEYBOARD or "")
+        && !(inputdEnv ? KORRI_INPUTD_BACK_TAP_ACTION)
       ))
       (check "${name}: inputd PATH includes swaymsg for foreground shortcuts" (
         builtins.elem compositor.sway.package inputdPath

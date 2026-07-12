@@ -882,7 +882,6 @@ in
     KORRI_INPUTD_KEY_F24_ACTION = "toggle-bottom-screen";
     KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN = "${korriBandaiBottomScreenToggle}/bin/korri-bandai-bottom-screen-toggle";
   } // {
-    KORRI_INPUTD_BACK_TAP_ACTION = "toggle-bottom-keyboard";
     KORRI_INPUTD_BOTTOM_KEYBOARD = "${korriBandaiKeyboardToggle}/bin/korri-bandai-keyboard-toggle";
     KORRI_INPUTD_POWER_SUSPEND = "${korriFakesuspendToggle}/bin/korri-fakesuspend-toggle";
     KORRI_INPUTD_LID_CLOSED = "${korriFakesuspendToggle}/bin/korri-fakesuspend-toggle suspend";
