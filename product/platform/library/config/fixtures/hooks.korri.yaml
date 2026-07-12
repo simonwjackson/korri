@@ -1,0 +1,68 @@
+# Executable fixture for launch hooks authoring v1 — the canonical reference
+# for the authored shape. Exercises the top-level `hooks:` named-profile
+# section, host-level inline hooks, a release referencing a profile via
+# `use:` alongside inline steps, a multiline `run` block scalar, and
+# `on-failure: warn` on a before step.
+#
+# Resolved ordering contract: `before` folds in inheritance order (host →
+# … → release, profile steps ahead of the referencing layer's inline
+# steps); `after` is stored in inheritance order and reversed by the
+# executor so teardown unwinds most-specific first.
+
+hooks:
+  battery-saver:
+    before:
+      - name: cap-clocks
+        run: |
+          echo 1171200 | sudo -n tee /sys/devices/system/cpu/cpufreq/policy3/scaling_max_freq
+          echo 220000000 | sudo -n tee /sys/class/devfreq/gpu/max_freq
+        on-failure: warn
+    after:
+      - name: restore-clocks
+        run: echo 2803200 | sudo -n tee /sys/devices/system/cpu/cpufreq/policy3/scaling_max_freq
+
+host:
+  title: Hooks fixture host
+  hooks:
+    before:
+      - name: display-60hz
+        run: swaymsg output DSI-2 mode 1080x1920@60Hz
+    after:
+      - name: display-120hz
+        run: swaymsg output DSI-2 mode 1080x1920@120Hz
+
+storage:
+  roms:
+    root: /roms
+
+systems:
+  gba:
+    name: Game Boy Advance
+
+launchers:
+  mgba-standalone:
+    plugin: "@korri:process"
+    command: /run/current-system/sw/bin/mgba
+    args: ["{content.path}"]
+    systems: [gba]
+
+library:
+  wonder-demo:
+    title: Wonder Demo
+    releases:
+      - id: gba
+        system: gba
+        target:
+          kind: file
+          storage: roms
+          path: gba/wonder-demo.gba
+        launch:
+          use: mgba-standalone
+        hooks:
+          use: [battery-saver]
+          before:
+            - name: mark-session
+              run: touch /tmp/korri-wonder-demo-session
+          after:
+            - name: clear-session
+              run: rm -f /tmp/korri-wonder-demo-session

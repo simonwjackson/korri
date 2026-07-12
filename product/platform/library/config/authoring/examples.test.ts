@@ -13,6 +13,8 @@ import { decodeRuntimePayload } from "../records/runtime"
 import { decodeSystemPayload } from "../records/system"
 
 const EXAMPLE_PATH = "korri-catalog-display-metadata.example.yaml"
+const HOOKS_FIXTURE_PATH =
+  "product/platform/library/config/fixtures/hooks.korri.yaml"
 const RETROARCH_EXAMPLE_PATHS = [
   "docs/brainstorms/2026-06-08-004-retroarch-policy-minimal-v1.example.yaml",
   "docs/brainstorms/2026-06-08-003-retroarch-policy-one-to-one.example.yaml",
@@ -34,10 +36,11 @@ async function withExampleLibrary<T>(
     readonly root: string
     readonly repository: ReturnType<typeof createLibraryRepository>
   }) => Effect.Effect<T, unknown>,
+  examplePath: string = EXAMPLE_PATH,
 ): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), "korri-readable-example-"))
   try {
-    const example = await readFile(EXAMPLE_PATH, "utf8")
+    const example = await readFile(examplePath, "utf8")
     await writeFile(join(root, "library.yaml"), example, "utf8")
     return await Effect.runPromise(
       Effect.scoped(
@@ -250,6 +253,47 @@ describe("checked-in readable library example", () => {
     }
   })
 
+  it("round-trips the hooks authoring fixture with the documented fold ordering", async () => {
+    const resolved = await withExampleLibrary(
+      ({ repository }) =>
+        repository.resolveLaunchForPlayable("wonder-demo", {
+          releaseId: "gba",
+        }),
+      HOOKS_FIXTURE_PATH,
+    )
+
+    // `before` is execution order: host inline hooks outermost, then the
+    // release layer — profile steps (via `use`) ahead of its inline steps.
+    expect(resolved.hooks?.before.map(step => step.name)).toEqual([
+      "display-60hz",
+      "cap-clocks",
+      "mark-session",
+    ])
+    // `after` stays in inheritance order; the executor reverses it so
+    // teardown unwinds release → host.
+    expect(resolved.hooks?.after.map(step => step.name)).toEqual([
+      "display-120hz",
+      "restore-clocks",
+      "clear-session",
+    ])
+
+    const capClocks = resolved.hooks?.before.find(
+      step => step.name === "cap-clocks",
+    )
+    // Multiline block scalar survives the round trip as one script.
+    expect(capClocks?.run).toContain(
+      "echo 1171200 | sudo -n tee /sys/devices/system/cpu/cpufreq/policy3/scaling_max_freq\n",
+    )
+    expect(capClocks?.run).toContain(
+      "echo 220000000 | sudo -n tee /sys/class/devfreq/gpu/max_freq",
+    )
+    expect(capClocks?.["on-failure"]).toBe("warn")
+
+    // Named `use` references resolve away before the fold — the resolved
+    // artifact carries fully-expanded steps only.
+    expect(resolved.hooks).not.toHaveProperty("use")
+  })
+
   it("does not contain retired persisted-schema vocabulary", async () => {
     const example = await readFile(EXAMPLE_PATH, "utf8")
     const forbidden = [
@@ -277,6 +321,13 @@ describe("checked-in readable library example", () => {
 
     for (const pattern of forbidden) {
       expect(example).not.toMatch(pattern)
+    }
+
+    // Regression guard: `hooks` is live vocabulary — the hooks authoring
+    // fixture must never trip the retired-vocabulary list.
+    const hooksFixture = await readFile(HOOKS_FIXTURE_PATH, "utf8")
+    for (const pattern of forbidden) {
+      expect(hooksFixture).not.toMatch(pattern)
     }
 
     const lines = example.split("\n")
