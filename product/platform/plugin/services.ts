@@ -80,6 +80,13 @@ export interface PluginClaimCandidate {
   readonly title: string
   readonly url: string
   readonly platform?: string
+  /**
+   * Korri library system id (e.g. "snes", "gba") — the plugin's own mapping
+   * from its site's platform naming. When present the claim carries a
+   * playable release hint, which is what makes the Store offer Get and lets
+   * placement file the download where discovery will find it.
+   */
+  readonly system?: string
   readonly description?: string
   readonly downloadPageUrl?: string
   readonly thumbnailUrl?: string
@@ -212,6 +219,22 @@ export function createProviderScopedPluginServices(
         ...(candidate.thumbnailUrl
           ? { thumbnailUrl: candidate.thumbnailUrl }
           : {}),
+        ...(candidate.system
+          ? {
+              playable: {
+                id: candidate.id ?? urlId(candidate.url),
+                title: candidate.title,
+                providerId,
+                releases: [
+                  {
+                    id: candidate.system,
+                    providerId,
+                    system: candidate.system,
+                  },
+                ],
+              },
+            }
+          : {}),
         artifact: acquisitionHint(candidate),
         fetchedAt: nowIso(),
       }),
@@ -286,7 +309,7 @@ export function createProviderScopedPluginServices(
 function acquisitionHint(candidate: PluginClaimCandidate): object {
   return {
     kind: "content",
-    system: candidate.platform ?? "unknown",
+    system: candidate.system ?? candidate.platform ?? "unknown",
     format: {
       id: candidate.format ?? fileExtension(candidate.fileName) ?? "zip",
     },

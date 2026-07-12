@@ -173,6 +173,38 @@ describe("PluginServices", () => {
     })
   })
 
+  it("emits a playable release hint when the plugin maps a system", () => {
+    const services = createProviderScopedPluginServices(
+      { time: { nowIso: () => "2026-07-06T00:00:00.000Z" } },
+      "@local:plain",
+    )
+
+    const claim = services.claims?.claim?.({
+      title: "Plain Game",
+      url: "https://example.test/game",
+      platform: "super-nintendo",
+      system: "snes",
+      fileName: "plain.zip",
+    })
+    expect(claim).toMatchObject({
+      _tag: "ProviderClaim",
+      playable: {
+        id: encodeURIComponent("https://example.test/game"),
+        title: "Plain Game",
+        providerId: "@local:plain",
+        releases: [{ id: "snes", providerId: "@local:plain", system: "snes" }],
+      },
+      artifact: { system: "snes" },
+    })
+
+    const withoutSystem = services.claims?.claim?.({
+      title: "Plain Game",
+      url: "https://example.test/game",
+      platform: "super-nintendo",
+    }) as { playable?: unknown }
+    expect(withoutSystem.playable).toBeUndefined()
+  })
+
   it("throws a plugin-service error when a required service is absent", () => {
     expect(() => requirePluginService({}, "http", "claims.search")).toThrow(
       "Plugin operation claims.search requires service http",
