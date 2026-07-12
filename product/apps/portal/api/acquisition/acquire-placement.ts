@@ -46,6 +46,10 @@ export function createAcquirePlacementRunner(
         env,
         findBinary: optionalEnv(env, "KORRI_FIND_BIN"),
         discoveryProviders: options.discoveryProviders,
+        // Interactive Get must not hash the whole existing library: identity
+        // backfill sha256s every identity-less claimed release (multi-GB
+        // images included), which stalls imports for tens of minutes.
+        identityPolicy: "skip",
       })
       if (result.status !== "ok") {
         const detail =

@@ -96,6 +96,14 @@ interface RomScanArgs {
   readonly claimedIndex?: ClaimedContentIndex
   readonly discoveryProviders?: readonly ReleaseDiscoveryProvider[]
   readonly maxDepth?: number
+  /**
+   * Content-identity policy. "backfill" (default) hashes candidate files to
+   * match hash claims and backfills identity onto claimed releases missing
+   * one — correct for boot scans but arbitrarily slow (full sha256 of every
+   * identity-less claim, including multi-GB images). "skip" performs only
+   * path/provider-ref matching, for interactive callers like acquire-import.
+   */
+  readonly identityPolicy?: "backfill" | "skip"
 }
 
 export interface MergeReleaseCandidateConfigArgs {
@@ -124,6 +132,8 @@ export interface ScanConfiguredReleaseCandidatesArgs {
   readonly timeoutMs?: number
   readonly now?: () => string
   readonly discoveryProviders?: readonly ReleaseDiscoveryProvider[]
+  /** See RomScanArgs.identityPolicy; default "backfill". */
+  readonly identityPolicy?: "backfill" | "skip"
 }
 
 export type ConfiguredStorageScanResult =
@@ -487,6 +497,7 @@ export async function scanConfiguredReleaseCandidates(
       claimedIndex,
       discoveryProviders: args.discoveryProviders,
       maxDepth: scanMaxDepthForStorage(storage),
+      ...(args.identityPolicy ? { identityPolicy: args.identityPolicy } : {}),
     })
     if (scan.status === "diagnostic") {
       results.push({
@@ -1119,6 +1130,7 @@ async function reconcileRomCandidates(
 }> {
   const claimedIndex = args.claimedIndex
   if (claimedIndex === undefined) return { candidates, backfills: [] }
+  const skipIdentity = args.identityPolicy === "skip"
 
   const kept: RomScanCandidate[] = []
   const backfills: ReleaseIdentityBackfill[] = []
@@ -1136,6 +1148,14 @@ async function reconcileRomCandidates(
     })
     if (match.kind === "provider-ref") continue
     if (match.claim.identity === undefined) {
+      if (skipIdentity) {
+        backfills.push({
+          claim: match.claim,
+          skipped: true,
+          reason: "identity policy skip",
+        })
+        continue
+      }
       const identity = await resolveFreshFileHash(
         join(args.root, candidate.path),
       )
@@ -1181,7 +1201,7 @@ async function matchCandidate(
     return { kind: "absolute-path", claim: byAbsolutePath }
   }
 
-  if (index.byHash.size > 0) {
+  if (index.byHash.size > 0 && args.identityPolicy !== "skip") {
     const identity =
       await defaultReleaseContentIdentityResolver.resolveFileHash(absolutePath)
     if (identity !== undefined) {

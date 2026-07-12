@@ -1200,6 +1200,72 @@ describe("scanConfiguredReleaseCandidates", () => {
     ).toBe(sha256Artifact("metroid-bytes"))
   })
 
+  it("skips identity hashing and backfill under identityPolicy skip", async () => {
+    await using fixture = await withTempRomRoot({
+      "roms/gba/Metroid Fusion.gba": "metroid-bytes",
+    })
+    const config = join(fixture.root, "korri.yaml")
+    await writeFile(
+      config,
+      [
+        "storage:",
+        "  sd-releases:",
+        `    root: ${join(fixture.root, "roms")}`,
+        "library:",
+        "  metroid-fusion-authored:",
+        "    title: Authored Metroid",
+        "    releases:",
+        "      - id: gba",
+        "        system: gba",
+        "        target:",
+        "          kind: file",
+        "          storage: sd-releases",
+        "          path: gba/Metroid Fusion.gba",
+        "        launch:",
+        '          use: "@korri:retroarch/retroarch"',
+        '          runtime: "@korri:retroarch/mgba"',
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const result = await scanConfiguredReleaseCandidates({
+      discoveryProviders: testGbaDiscoveryProviders,
+      configPath: config,
+      roots: [{ root: fixture.root, optional: false }],
+      findBinary: resolveFromPath("find"),
+      identityPolicy: "skip",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") return
+    // The same-path claim still deduplicates (no duplicate entry), but no
+    // identity is computed or written — interactive imports must not hash the
+    // existing library.
+    expect(result.results[0]).toMatchObject({
+      storage: "sd-releases",
+      status: "scanned",
+      report: { deduplicated: 1 },
+      merge: { libraryAdded: 0, identityBackfilled: 0 },
+    })
+    const parsed = parse(await readFile(config, "utf8")) as {
+      readonly library: Record<
+        string,
+        {
+          readonly releases?: readonly [
+            { readonly identity?: { readonly value?: string } },
+          ]
+        }
+      >
+    }
+    expect(Object.keys(parsed.library).sort()).toEqual([
+      "metroid-fusion-authored",
+    ])
+    expect(
+      parsed.library["metroid-fusion-authored"]?.releases?.[0]?.identity,
+    ).toBeUndefined()
+  })
+
   it("deduplicates provider-ref candidates against authored provider-ref releases", async () => {
     await using fixture = await withTempRomRoot({
       "steam/steamapps/appmanifest_1029210.acf": "acf",
