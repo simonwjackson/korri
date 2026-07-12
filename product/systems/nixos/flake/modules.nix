@@ -42,6 +42,10 @@ rec {
   korri-rocknix-guest-device-access = import ../modules/korri-rocknix-guest-device-access.nix;
   korri-rocknix-guest-profile = import ../modules/korri-rocknix-guest-profile.nix;
   korri-auto-timezone = import ../modules/korri-auto-timezone.nix;
+  # Fleet-wide closed-loop fan control. Part of the korri aggregate so every
+  # image carries the module default-disabled (systemic contract: fan-equipped
+  # devices enable it and declare hardware identity; fanless devices no-op).
+  korri-fan-control = import ../modules/korri-fan-control.nix;
   korri-setup = import ../modules/korri-setup.nix;
   # Per-platform opt-in: removable-media mounting + card-wins config-root
   # exposure through config-roots.d. Bundles korri-runtime so the module's
@@ -133,6 +137,7 @@ rec {
       korri-compositor
       korri-input
       korri-daemon
+      korri-fan-control
     ];
   };
   default = korri;
