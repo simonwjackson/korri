@@ -890,6 +890,22 @@ describe("sessiond managed launch hooks protocol", () => {
     expect(event.hook?.phase).toBe("after")
   })
 
+  it("decodes a hook-failed event without a hook payload (optional-by-default)", () => {
+    // Protocol rule 3: additive fields stay optional so decoders tolerate
+    // emitters at other versions. The emission side (sessiond's
+    // pushHookFailureEvents) always attaches `hook`, but the wire contract
+    // deliberately does not require it — consumers must handle absence.
+    const event = decodeSessiondManagedLaunchEvent({
+      schemaVersion: 1,
+      sequence: 14,
+      launchId: "launch-h1",
+      type: "hook-failed",
+      at: "2026-07-11T00:00:03.000Z",
+    })
+    expect(event.type).toBe("hook-failed")
+    expect(event.hook).toBeUndefined()
+  })
+
   it("rejects unknown hook phases with strict decode", () => {
     expect(() =>
       decodeSessiondManagedLaunchEvent({

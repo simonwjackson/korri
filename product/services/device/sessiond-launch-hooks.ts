@@ -107,6 +107,12 @@ export interface LaunchHooksRunner {
 
 const DEFAULT_TIMEOUT_SECONDS = 30
 const DEFAULT_KILL_GRACE_MS = 1500
+/**
+ * Post-exit output collection bound. A background child that inherited the
+ * step's stdout/stderr keeps the pipes open past the step's own exit; the
+ * tails are best-effort diagnostics, so give them a short window and move on.
+ */
+const OUTPUT_DRAIN_DEADLINE_MS = 250
 const DEFAULT_SHELL_COMMAND = "/bin/sh"
 const DEFAULT_SETSID_COMMAND = "setsid"
 const OUTPUT_TAIL_BYTES = 4 * 1024
@@ -137,6 +143,13 @@ export function createLaunchHooksRunner(
     for (const [key, value] of Object.entries(options.launchEnv ?? {})) {
       env[key] = value
     }
+    // Scrub inherited launch-identity vars before injecting: hooks must
+    // never see stale values leaked from sessiond's own environment.
+    // "KORRI_GAME_ID unset when the launch has no game annotation" is the
+    // documented contract for user scripts.
+    delete env.KORRI_GAME_ID
+    delete env.KORRI_LAUNCH_ID
+    delete env.KORRI_HOOK_PHASE
     // KORRI_* vars injected last: a frozen external contract for user scripts.
     if (options.gameId !== undefined) env.KORRI_GAME_ID = options.gameId
     env.KORRI_LAUNCH_ID = options.launchId
@@ -215,16 +228,27 @@ export function createLaunchHooksRunner(
     const stderrTailPromise = readTail(pipeOf(proc.stderr), OUTPUT_TAIL_BYTES)
     const stdoutTailPromise = readTail(pipeOf(proc.stdout), OUTPUT_TAIL_BYTES)
 
-    // Completion comes from the process exit event only.
-    const exitCode = await proc.exited
-    exited = true
-    clearTimeout(timeoutTimer)
-    killRunningStep = undefined
+    // Completion comes from the process exit event only. Stream close is
+    // never a completion signal: a background child inheriting the step's
+    // stdout/stderr keeps the pipes open indefinitely.
+    let exitCode: number
+    try {
+      exitCode = await proc.exited
+    } finally {
+      exited = true
+      clearTimeout(timeoutTimer)
+      killRunningStep = undefined
+      // Reap the step's process group even on normal exit so descendants
+      // (background children) never outlive the step. Post-exit there is
+      // nothing left to shut down gracefully — go straight to SIGKILL.
+      killGroup("SIGKILL")
+    }
 
-    const [stderrTail, stdoutTail] = await Promise.all([
-      stderrTailPromise,
-      stdoutTailPromise,
+    const drained = await Promise.race([
+      Promise.all([stderrTailPromise, stdoutTailPromise]),
+      drainDeadline(OUTPUT_DRAIN_DEADLINE_MS),
     ])
+    const [stderrTail, stdoutTail] = drained ?? []
 
     const status: LaunchHookOutcomeStatus = abortedDuringStep
       ? "aborted"
@@ -319,6 +343,14 @@ export function createLaunchHooksRunner(
       killRunningStep?.(mode)
     },
   }
+}
+
+/** Bounded wait used to race best-effort output drains after process exit. */
+function drainDeadline(ms: number): Promise<undefined> {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(undefined), ms)
+    if (typeof timer.unref === "function") timer.unref()
+  })
 }
 
 function pipeOf(

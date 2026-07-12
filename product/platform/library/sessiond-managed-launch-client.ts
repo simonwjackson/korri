@@ -90,9 +90,11 @@ export interface SessiondManagedLaunchStartInput {
   readonly launchCompanions?: LaunchCompanionMap
   readonly wait?: LaunchSpec
   /**
-   * Resolved launch hooks. Callers must only set this when the daemon
-   * reports `capabilities.launchHooks === true`; older daemons strict-decode
-   * the start request and would reject the unknown key.
+   * Resolved launch hooks. This client serializes `hooks` whenever present
+   * and performs NO capability check itself — callers MUST gate on the
+   * daemon's `capabilities.launchHooks === true` before setting this field
+   * (see `session-launcher.ts` for the reference caller). Older daemons
+   * strict-decode the start request and would reject the unknown key.
    */
   readonly hooks?: ResolvedLaunchHooks
 }

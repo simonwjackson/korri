@@ -1548,6 +1548,49 @@ describe("resolveReadableLaunchContext hooks fold", () => {
     })
   })
 
+  it("keeps app-layer hooks contributed by a built-in app override", async () => {
+    // Built-in app descriptors (mame/dolphin/solarus) are reconstructed in
+    // resolveReadableLauncherRecord; the override's hooks must survive that
+    // reconstruction instead of being silently dropped.
+    const mameItem: LibraryItemRecord = {
+      id: "pac-man",
+      releases: [
+        {
+          id: "arcade",
+          system: "arcade",
+          target: { kind: "file", storage: "roms", path: "arcade/pacman.zip" },
+          launch: { use: "mame" },
+        },
+      ],
+    }
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        {
+          ...snapshot(mameItem),
+          systems: new Map([["arcade", { id: "arcade" }]]),
+          readableLaunchers: new Map([
+            [
+              "mame",
+              {
+                id: "mame",
+                hooks: {
+                  before: [hookStep("mame-before")],
+                  after: [hookStep("mame-after")],
+                },
+              },
+            ],
+          ]),
+        },
+        { playableId: "pac-man" },
+      ),
+    )
+
+    expect(context.hooks?.before.map(step => step.name)).toEqual([
+      "mame-before",
+    ])
+    expect(context.hooks?.after.map(step => step.name)).toEqual(["mame-after"])
+  })
+
   it("resolves a snapshot with named profiles plus layered hooks end to end", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(

@@ -675,6 +675,23 @@ export function createKorriSessiondCore(
         launchCompanions,
         activeManagedLaunch,
       )
+      if (
+        !result &&
+        hooks &&
+        hooks.before.length > 0 &&
+        activeManagedLaunch?.launchId === launchId &&
+        activeManagedLaunch.cancelRequested !== undefined
+      ) {
+        // Terminate raced in before the hooks runner existed (e.g. during
+        // beforeChildLaunch or a pre-spawn gate). A runner created now would
+        // not inherit the cancellation, so skip before-hooks entirely and
+        // surface the terminated result; after-hooks still run in teardown.
+        result = {
+          status: "failed",
+          exitCode: 130,
+          stderrTail: "launch terminated before before-hooks started",
+        }
+      }
       if (!result && hooks && hooks.before.length > 0) {
         // Before-hooks run after the role prepared the environment and all
         // pre-spawn gates passed, immediately before spawn. An aborting

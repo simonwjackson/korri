@@ -938,6 +938,7 @@ const resolveReadableLauncherRecord = (
     cwd: override?.cwd ?? builtIn.cwd,
     argsAppend: override?.argsAppend ?? builtIn.argsAppend,
     patches: override?.patches,
+    hooks: override?.hooks,
     inherit: override?.inherit,
     presets: override?.presets ?? builtIn.presets,
   }

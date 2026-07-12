@@ -1037,6 +1037,57 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     })
   })
 
+  it("forwards cascade-resolved launch hooks from ResolvedLaunch to the launcher", async () => {
+    // Portal-initiated launches must carry the resolved hooks payload into
+    // LaunchExtras so sessiond-backed launchers can forward it (mirrors the
+    // korri-control-live extras assembly).
+    let capturedExtras: unknown = "not-called"
+    const hooks = {
+      before: [{ name: "cap-clocks", run: "echo before" }],
+      after: [{ name: "restore-clocks", run: "echo after" }],
+    }
+    const sourceLayer = Layer.succeed(LibrarySource)({
+      list: () =>
+        Effect.succeed([{ id: "game", system: "s", contentPath: "rom" }]),
+      launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
+      resolveLaunchForGame: () =>
+        Effect.succeed({
+          spec: { command: "/bin/game", args: ["rom"] },
+          hooks,
+        }),
+    })
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: () => Effect.succeed({ status: "failed" as const, exitCode: 1 }),
+      spawn: (_spec, options) => {
+        capturedExtras = options?.extras
+        return Effect.succeed({
+          status: "started" as const,
+          result: Promise.resolve({ status: "launched" as const }),
+          session: completedSessionHandle(),
+        })
+      },
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            sourceLayer,
+            launcherLayer,
+            Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+            remoteStreamPrepareNeverCalledLayer,
+          ),
+        ),
+      ),
+    )
+
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
+    expect(capturedExtras).toEqual({
+      launchId: expect.any(String),
+      hooks,
+    })
+  })
+
   it("forwards provider launch metadata to managed session cleanup", async () => {
     let capturedExtras: unknown = "not-called"
     const sourceLayer = Layer.succeed(LibrarySource)({

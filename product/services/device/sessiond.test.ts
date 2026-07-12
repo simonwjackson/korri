@@ -3749,6 +3749,147 @@ describe("korri sessiond", () => {
     }
   })
 
+  it("terminate before before-hooks start skips them and still runs after-hooks", async () => {
+    // The terminate request lands while a pre-spawn gate is still running —
+    // before the hooks runner exists. The launch must not run before-hooks
+    // afterwards; after-hooks still run to undo partial state.
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-hooks-"))
+    const log = join(dir, "hooks.log")
+    try {
+      let spawned = false
+      const gateEntered = deferred<void>()
+      const gateRelease = deferred<void>()
+      const { core } = startHarness({
+        spawnLaunch: async () => {
+          spawned = true
+          return {
+            result: Promise.resolve({ status: "launched" } as LaunchResult),
+            terminate: () => {},
+            terminateNow: () => {},
+          }
+        },
+        preSpawnGates: [
+          {
+            id: "blocking-gate",
+            start: async () => {
+              gateEntered.resolve()
+              await gateRelease.promise
+            },
+          },
+        ],
+      })
+      await request(core, "/control/start", authorized({ method: "POST" }))
+
+      await request(
+        core,
+        "/managed-launch",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            launchId: "launch-stop-before-hooks",
+            spec: { ...spec, env: { HOOK_LOG: log } },
+            hooks: {
+              before: [
+                { name: "never-runs", run: `echo before >> "$HOOK_LOG"` },
+              ],
+              after: [{ name: "undo", run: `echo undone >> "$HOOK_LOG"` }],
+            },
+          }),
+        }),
+      )
+      await gateEntered.promise
+      const terminated = await request(
+        core,
+        "/managed-launch/terminate",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ launchId: "launch-stop-before-hooks" }),
+        }),
+      )
+      expect(await terminated.json()).toEqual({
+        status: "accepted",
+        launchId: "launch-stop-before-hooks",
+      })
+      gateRelease.resolve()
+      await waitForSessionMode(core, "home")
+
+      expect(spawned).toBe(false)
+      // Before-hook skipped; after-hook still ran.
+      expect((await Bun.file(log).text()).trim()).toBe("undone")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("runs after-hooks when the user stops a running child", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-hooks-"))
+    const log = join(dir, "hooks.log")
+    try {
+      const child = deferred<LaunchResult>()
+      const { core } = startHarness({
+        spawnLaunch: async () => ({
+          result: child.promise,
+          terminate: () => {
+            child.resolve({ status: "failed", exitCode: 130 })
+          },
+          terminateNow: () => {
+            child.resolve({ status: "failed", exitCode: 137 })
+          },
+        }),
+      })
+      await request(core, "/control/start", authorized({ method: "POST" }))
+
+      await request(
+        core,
+        "/managed-launch",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            launchId: "launch-stop-running",
+            spec: { ...spec, env: { HOOK_LOG: log } },
+            hooks: {
+              before: [],
+              after: [{ name: "undo", run: `echo undone >> "$HOOK_LOG"` }],
+            },
+          }),
+        }),
+      )
+      // Wait until the child is running, then user-stop it.
+      await waitForSessionMode(core, "game")
+      await request(
+        core,
+        "/managed-launch/terminate",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ launchId: "launch-stop-running" }),
+        }),
+      )
+      await waitForSessionMode(core, "home")
+
+      // After-hooks ran during teardown of the user-stopped child — the
+      // dispatcher awaits them before the restoring path completes, so by
+      // home-ready the undo step is observable.
+      expect((await Bun.file(log).text()).trim()).toBe("undone")
+      const lifecycle = parseSseEvents(
+        await (
+          await request(
+            core,
+            "/managed-launch/events?launchId=launch-stop-running",
+            authorized(),
+          )
+        ).text(),
+      )
+      const childExited = lifecycle.find(event => event.type === "child-exited")
+      expect(childExited?.terminal?.exitCode).toBe(130)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("does not run any hooks for launches without a hooks payload", async () => {
     const { core, events } = startHarness({
       spawnLaunch: async () => ({

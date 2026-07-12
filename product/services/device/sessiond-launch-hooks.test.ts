@@ -190,6 +190,79 @@ describe("sessiond launch hooks runner", () => {
     })
   })
 
+  it("completes promptly and reaps a background child inheriting the step's fds", async () => {
+    // A backgrounded `sleep 30` inherits the step's stdout/stderr pipes.
+    // Completion must come from the step's own exit — not stream close —
+    // and the step's process group must be reaped even on normal exit so
+    // the orphaned sleep does not outlive the step.
+    await withTempDir(async dir => {
+      const pidFile = join(dir, "bg.pid")
+      const hooks = runner({ launchEnv: { KORRI_TEST_PID: pidFile } })
+
+      const started = Date.now()
+      const result = await hooks.runBeforeHooks([
+        {
+          name: "forks",
+          run: `sleep 30 & echo $! > "$KORRI_TEST_PID"; echo started`,
+        },
+      ])
+      const elapsed = Date.now() - started
+
+      expect(result.aborted).toBeUndefined()
+      expect(result.outcomes.map(outcome => outcome.status)).toEqual(["ok"])
+      // Bounded: exit is immediate; only the short drain deadline may add.
+      expect(elapsed).toBeLessThan(5_000)
+
+      // The background child's process group must be gone. Poll briefly:
+      // SIGKILL delivery to the group is asynchronous.
+      const backgroundPid = Number((await readFile(pidFile, "utf8")).trim())
+      expect(Number.isInteger(backgroundPid)).toBe(true)
+      const childGone = () => {
+        try {
+          process.kill(backgroundPid, 0)
+          return false
+        } catch {
+          return true
+        }
+      }
+      let gone = childGone()
+      for (let index = 0; index < 40 && !gone; index += 1) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+        gone = childGone()
+      }
+      expect(gone).toBe(true)
+    })
+  })
+
+  it("scrubs inherited KORRI_* launch-identity vars from the hook env", async () => {
+    await withTempDir(async dir => {
+      const out = join(dir, "env.log")
+      // Simulate sessiond's own environment leaking stale launch identity.
+      const hooks = runner({
+        baseEnv: {
+          ...process.env,
+          KORRI_GAME_ID: "stale/game",
+          KORRI_LAUNCH_ID: "stale-launch",
+          KORRI_HOOK_PHASE: "stale-phase",
+        },
+        launchEnv: { KORRI_TEST_OUT: out },
+      })
+
+      // No gameId on this runner: KORRI_GAME_ID must be unset, not stale.
+      const result = await hooks.runBeforeHooks([
+        {
+          name: "env-probe",
+          run: `echo "game=\${KORRI_GAME_ID-unset}:launch=$KORRI_LAUNCH_ID:phase=$KORRI_HOOK_PHASE" >> "$KORRI_TEST_OUT"`,
+        },
+      ])
+
+      expect(result.outcomes.map(outcome => outcome.status)).toEqual(["ok"])
+      expect((await readFile(out, "utf8")).trim()).toBe(
+        "game=unset:launch=launch-hooks-test:phase=before",
+      )
+    })
+  })
+
   it("runs remaining after-hooks when one fails and never throws", async () => {
     await withTempDir(async dir => {
       const out = join(dir, "after-fail.log")
@@ -205,6 +278,33 @@ describe("sessiond launch hooks runner", () => {
       expect(outcomes[0]?.exitCode).toBe(9)
       expect(outcomes[0]?.stderrTail).toContain("nope")
       expect((await readFile(out, "utf8")).trim()).toBe("restored")
+    })
+  })
+
+  it("does not let an after-hook timeout block the remaining after-hooks", async () => {
+    await withTempDir(async dir => {
+      const out = join(dir, "after-timeout.log")
+      const hooks = runner({ launchEnv: { KORRI_TEST_OUT: out } })
+
+      const started = Date.now()
+      // Reversed execution: `hangs` (last declared) runs first and times
+      // out; `still-runs` must still execute afterwards.
+      const outcomes = await hooks.runAfterHooks([
+        { name: "still-runs", run: `echo ran >> "$KORRI_TEST_OUT"` },
+        { name: "hangs", run: "sleep 30", timeout: 0.2 },
+      ])
+      const elapsed = Date.now() - started
+
+      expect(outcomes.map(outcome => outcome.status)).toEqual([
+        "timed-out",
+        "ok",
+      ])
+      expect(outcomes.map(outcome => outcome.name)).toEqual([
+        "hangs",
+        "still-runs",
+      ])
+      expect(elapsed).toBeLessThan(5_000)
+      expect((await readFile(out, "utf8")).trim()).toBe("ran")
     })
   })
 
