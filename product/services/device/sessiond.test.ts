@@ -3459,6 +3459,329 @@ describe("korri sessiond", () => {
       "stream surface never appeared",
     )
   })
+
+  // Launch hooks (U5) -- before/after hook execution around the managed child.
+
+  it("advertises launchHooks in managed-launch capabilities", async () => {
+    const { core } = startHarness()
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    const response = await request(core, "/managed-launch/status", authorized())
+    const body = await response.json()
+    expect(body.capabilities.launchHooks).toBe(true)
+  })
+
+  it("runs before-hooks before spawn and after-hooks after child exit", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-hooks-"))
+    const log = join(dir, "hooks.log")
+    try {
+      const order: string[] = []
+      const child = deferred<LaunchResult>()
+      const { core } = startHarness({
+        spawnLaunch: async () => {
+          order.push("spawn")
+          return {
+            result: child.promise,
+            terminate: () => {},
+            terminateNow: () => {},
+          }
+        },
+      })
+      await request(core, "/control/start", authorized({ method: "POST" }))
+
+      const start = await request(
+        core,
+        "/managed-launch",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            launchId: "launch-hooks",
+            spec: { ...spec, env: { HOOK_LOG: log } },
+            launchMetadata: {
+              annotations: {
+                "@korri:game": { id: "snes/echo.smc" },
+              },
+            },
+            hooks: {
+              before: [
+                {
+                  name: "prepare",
+                  run: `echo "before:$KORRI_HOOK_PHASE:$KORRI_GAME_ID:$KORRI_LAUNCH_ID" >> "$HOOK_LOG"`,
+                },
+              ],
+              after: [
+                {
+                  name: "restore",
+                  run: `echo "after:$KORRI_HOOK_PHASE" >> "$HOOK_LOG"`,
+                },
+              ],
+            },
+          }),
+        }),
+      )
+      expect(await start.json()).toEqual({
+        status: "accepted",
+        launchId: "launch-hooks",
+      })
+
+      // Wait until spawn happened, proving before-hooks completed first.
+      for (let index = 0; index < 100 && order.length === 0; index += 1) {
+        await new Promise(resolve => setTimeout(resolve, 5))
+      }
+      expect(order).toEqual(["spawn"])
+      const beforeLines = (await Bun.file(log).text()).trim().split("\n")
+      expect(beforeLines).toEqual(["before:before:snes/echo.smc:launch-hooks"])
+
+      child.resolve({ status: "launched" })
+      await waitForSessionMode(core, "home")
+
+      const lines = (await Bun.file(log).text()).trim().split("\n")
+      expect(lines).toEqual([
+        "before:before:snes/echo.smc:launch-hooks",
+        "after:after",
+      ])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("aborts on before-hook failure, skips spawn, emits hook-failed, and still runs after-hooks", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-hooks-"))
+    const log = join(dir, "hooks.log")
+    try {
+      let spawned = false
+      const { core } = startHarness({
+        spawnLaunch: async () => {
+          spawned = true
+          return {
+            result: Promise.resolve({ status: "launched" } as LaunchResult),
+            terminate: () => {},
+            terminateNow: () => {},
+          }
+        },
+      })
+      await request(core, "/control/start", authorized({ method: "POST" }))
+
+      await request(
+        core,
+        "/managed-launch",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            launchId: "launch-hook-abort",
+            spec: { ...spec, env: { HOOK_LOG: log } },
+            hooks: {
+              before: [{ name: "cap-clocks", run: "echo denied >&2; exit 1" }],
+              after: [{ name: "undo", run: `echo undone >> "$HOOK_LOG"` }],
+            },
+          }),
+        }),
+      )
+      await waitForSessionMode(core, "home")
+
+      expect(spawned).toBe(false)
+      const lifecycle = parseSseEvents(
+        await (
+          await request(
+            core,
+            "/managed-launch/events?launchId=launch-hook-abort",
+            authorized(),
+          )
+        ).text(),
+      )
+      const hookFailed = lifecycle.find(event => event.type === "hook-failed")
+      expect(hookFailed?.hook).toEqual({ name: "cap-clocks", phase: "before" })
+      const childExited = lifecycle.find(event => event.type === "child-exited")
+      expect(childExited?.terminal?.failureKind).toBe("hook-failed")
+      expect(childExited?.terminal?.exitCode).toBe(
+        launchFailureExitCode("hook-failed"),
+      )
+      // After-hooks still ran to undo partial state.
+      expect((await Bun.file(log).text()).trim()).toBe("undone")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("runs after-hooks when the child crashes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-hooks-"))
+    const log = join(dir, "hooks.log")
+    try {
+      const { core } = startHarness({
+        spawnLaunch: async () => ({
+          result: Promise.resolve({
+            status: "failed",
+            exitCode: 139,
+            stderrTail: "segfault",
+          } as LaunchResult),
+          terminate: () => {},
+          terminateNow: () => {},
+        }),
+      })
+      await request(core, "/control/start", authorized({ method: "POST" }))
+
+      await request(
+        core,
+        "/managed-launch",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            launchId: "launch-hook-crash",
+            spec: { ...spec, env: { HOOK_LOG: log } },
+            hooks: {
+              before: [],
+              after: [{ name: "undo", run: `echo undone >> "$HOOK_LOG"` }],
+            },
+          }),
+        }),
+      )
+      await waitForSessionMode(core, "home")
+
+      expect((await Bun.file(log).text()).trim()).toBe("undone")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("emits hook-failed for a failing after-hook without failing the launch", async () => {
+    const { core } = startHarness({
+      spawnLaunch: async () => ({
+        result: Promise.resolve({ status: "launched" } as LaunchResult),
+        terminate: () => {},
+        terminateNow: () => {},
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "launch-hook-after-fail",
+          spec,
+          hooks: {
+            before: [],
+            after: [{ run: "echo broken >&2; exit 7" }],
+          },
+        }),
+      }),
+    )
+    await waitForSessionMode(core, "home")
+
+    const lifecycle = parseSseEvents(
+      await (
+        await request(
+          core,
+          "/managed-launch/events?launchId=launch-hook-after-fail",
+          authorized(),
+        )
+      ).text(),
+    )
+    const hookFailed = lifecycle.find(event => event.type === "hook-failed")
+    expect(hookFailed?.hook).toEqual({ name: "after[0]", phase: "after" })
+    const childExited = lifecycle.find(event => event.type === "child-exited")
+    expect(childExited?.terminal?.exitCode).toBe(0)
+    expect(lifecycle.some(event => event.type === "home-ready")).toBe(true)
+  })
+
+  it("terminating during a before-hook skips spawn and still runs after-hooks", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-hooks-"))
+    const log = join(dir, "hooks.log")
+    try {
+      let spawned = false
+      const { core } = startHarness({
+        spawnLaunch: async () => {
+          spawned = true
+          return {
+            result: Promise.resolve({ status: "launched" } as LaunchResult),
+            terminate: () => {},
+            terminateNow: () => {},
+          }
+        },
+      })
+      await request(core, "/control/start", authorized({ method: "POST" }))
+
+      await request(
+        core,
+        "/managed-launch",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            launchId: "launch-hook-stop",
+            spec: { ...spec, env: { HOOK_LOG: log } },
+            hooks: {
+              before: [
+                { name: "slow", run: "sleep 30" },
+                { name: "never-runs", run: `echo skipped >> "$HOOK_LOG"` },
+              ],
+              after: [{ name: "undo", run: `echo undone >> "$HOOK_LOG"` }],
+            },
+          }),
+        }),
+      )
+      // Give the slow before-hook a moment to start, then stop the launch.
+      await new Promise(resolve => setTimeout(resolve, 100))
+      const terminated = await request(
+        core,
+        "/managed-launch/terminate",
+        authorized({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ launchId: "launch-hook-stop" }),
+        }),
+      )
+      expect(await terminated.json()).toEqual({
+        status: "accepted",
+        launchId: "launch-hook-stop",
+      })
+      await waitForSessionMode(core, "home")
+
+      expect(spawned).toBe(false)
+      expect((await Bun.file(log).text()).trim()).toBe("undone")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("does not run any hooks for launches without a hooks payload", async () => {
+    const { core, events } = startHarness({
+      spawnLaunch: async () => ({
+        result: Promise.resolve({ status: "launched" } as LaunchResult),
+        terminate: () => {},
+        terminateNow: () => {},
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-no-hooks", spec }),
+      }),
+    )
+    await waitForSessionMode(core, "home")
+
+    expect(events).toContain("launch-game:/bin/game")
+    const lifecycle = parseSseEvents(
+      await (
+        await request(
+          core,
+          "/managed-launch/events?launchId=launch-no-hooks",
+          authorized(),
+        )
+      ).text(),
+    )
+    expect(lifecycle.some(event => event.type === "hook-failed")).toBe(false)
+  })
 })
 
 function deferred<T>() {

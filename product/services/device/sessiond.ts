@@ -1,5 +1,6 @@
 import { access, unlink } from "node:fs/promises"
 import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
+import type { ResolvedLaunchHooks } from "@platform/library/config/resolved-launch-context"
 import {
   type LaunchResult,
   type LaunchSpec,
@@ -46,6 +47,11 @@ import {
   realChromiumRunner,
 } from "./sessiond-chromium"
 import { createKorriLaneController } from "./sessiond-lanes"
+import {
+  createLaunchHooksRunner,
+  type LaunchHookOutcome,
+  type LaunchHooksRunner,
+} from "./sessiond-launch-hooks"
 import {
   sessiondPreSpawnGatesFromEnv,
   sessionLifecycleHooksFromEnv,
@@ -271,6 +277,7 @@ export function createKorriSessiondCore(
         launchMetadata?: LaunchMetadata
         sessionHookHandles?: readonly KorriSessiondLifecycleHookHandle[]
         preSpawnAbortController?: AbortController
+        hooksRunner?: LaunchHooksRunner
         preSpawnGateHandles?: readonly KorriSessiondPreSpawnGateHandle[]
         inputSeats?: SessiondManagedLaunchInputSeatSummary
       }
@@ -363,6 +370,9 @@ export function createKorriSessiondCore(
         lifecycleEvents: true,
         perLaunchTermination: typeof launcher.spawn === "function",
         launchFreeze: typeof launcher.spawn === "function",
+        // Launch hooks: the daemon accepts a resolved `hooks` payload on the
+        // start request and executes before/after hooks around the child.
+        launchHooks: true,
         // Phase 4D / Track A. Sessiond now understands
         // lifecycle: "session" start requests and emits
         // launcher-exited / wait-monitor-{running,exited} /
@@ -375,6 +385,20 @@ export function createKorriSessiondCore(
           : {}),
       },
     })
+  }
+
+  function pushHookFailureEvents(
+    launchId: string,
+    outcomes: readonly LaunchHookOutcome[],
+  ) {
+    for (const outcome of outcomes) {
+      if (outcome.status === "ok" || outcome.status === "aborted") continue
+      pushLifecycleEvent(launchId, {
+        type: "hook-failed",
+        hook: { name: outcome.name, phase: outcome.phase },
+        ...(outcome.stderrTail ? { message: outcome.stderrTail } : {}),
+      })
+    }
   }
 
   function pushLifecycleEvent(
@@ -449,6 +473,7 @@ export function createKorriSessiondCore(
       readonly launchMetadata?: LaunchMetadata
       readonly launchCompanions?: LaunchCompanionMap
       readonly wait?: LaunchSpec
+      readonly hooks?: ResolvedLaunchHooks
     } = {},
   ): Promise<{
     readonly response: SessiondManagedLaunchStartResponse
@@ -623,12 +648,22 @@ export function createKorriSessiondCore(
       readonly launchMetadata?: LaunchMetadata
       readonly launchCompanions?: LaunchCompanionMap
       readonly wait?: LaunchSpec
+      readonly hooks?: ResolvedLaunchHooks
     } = {},
   ): Promise<LaunchResult> {
     const lifecycle = lifecycleOptions.lifecycle ?? "foreground"
     const wait = lifecycleOptions.wait
     const launchMetadata = lifecycleOptions.launchMetadata
     const launchCompanions = lifecycleOptions.launchCompanions
+    const hooks = lifecycleOptions.hooks
+    const hookGameId = gameIdFromLaunchMetadata(launchMetadata)
+    const makeHooksRunner = () =>
+      createLaunchHooksRunner({
+        launchId,
+        ...(hookGameId !== undefined ? { gameId: hookGameId } : {}),
+        ...(spec.env ? { launchEnv: spec.env } : {}),
+        logger,
+      })
     let result: LaunchResult | undefined
 
     try {
@@ -640,8 +675,40 @@ export function createKorriSessiondCore(
         launchCompanions,
         activeManagedLaunch,
       )
+      if (!result && hooks && hooks.before.length > 0) {
+        // Before-hooks run after the role prepared the environment and all
+        // pre-spawn gates passed, immediately before spawn. An aborting
+        // failure follows the structured pre-spawn failure path: result is
+        // set, spawn is skipped, after-hooks still run in teardown.
+        const hooksRunner = makeHooksRunner()
+        if (activeManagedLaunch?.launchId === launchId) {
+          activeManagedLaunch.hooksRunner = hooksRunner
+        }
+        const beforeResult = await hooksRunner.runBeforeHooks(hooks.before)
+        pushHookFailureEvents(launchId, beforeResult.outcomes)
+        if (beforeResult.aborted) {
+          result =
+            beforeResult.aborted.status === "aborted"
+              ? {
+                  status: "failed",
+                  exitCode: 130,
+                  stderrTail: `launch terminated during before-hook ${beforeResult.aborted.name}`,
+                }
+              : {
+                  status: "failed",
+                  exitCode: launchFailureExitCode("hook-failed"),
+                  failureKind: "hook-failed",
+                  stderrTail: `launch hook ${beforeResult.aborted.name} ${beforeResult.aborted.status}${
+                    beforeResult.aborted.stderrTail
+                      ? `: ${beforeResult.aborted.stderrTail}`
+                      : ""
+                  }`,
+                }
+        }
+      }
       if (result) {
-        // Skip spawn; the readiness gate already produced a launch failure.
+        // Skip spawn; a readiness gate or before-hook already produced a
+        // launch failure.
       } else {
         if (role.emitsRendererStopped) {
           pushLifecycleEvent(launchId, { type: "renderer-stopped" })
@@ -799,6 +866,16 @@ export function createKorriSessiondCore(
       launchMetadata,
       launchCompanions,
     )
+
+    if (hooks && hooks.after.length > 0) {
+      // After-hooks always run when the request carried hooks — including
+      // before-hook abort, spawn failure, crash, and user stop — because
+      // hooks mutate device state (clocks, display) that must be undone.
+      // The runner reverses the inheritance-ordered list and never throws.
+      const hooksRunner = activeForRestore?.hooksRunner ?? makeHooksRunner()
+      const afterOutcomes = await hooksRunner.runAfterHooks(hooks.after)
+      pushHookFailureEvents(launchId, afterOutcomes)
+    }
 
     if (isRemapDirtyCleanupResult(result, launchCompanions)) {
       const message =
@@ -1183,8 +1260,10 @@ export function createKorriSessiondCore(
     activeManagedLaunch.cancelRequested = force ? "force" : "graceful"
     if (force) {
       activeManagedLaunch.preSpawnAbortController?.abort()
+      activeManagedLaunch.hooksRunner?.abort("force")
       activeManagedLaunch.terminateNow?.()
     } else {
+      activeManagedLaunch.hooksRunner?.abort("graceful")
       activeManagedLaunch.terminate?.()
     }
     // Phase 4D / Track A. When sessiond is in the session-anchored
@@ -1407,6 +1486,7 @@ export function createKorriSessiondCore(
                 ? { launchCompanions: body.value.launchCompanions }
                 : {}),
               ...(body.value.wait ? { wait: body.value.wait } : {}),
+              ...(body.value.hooks ? { hooks: body.value.hooks } : {}),
             },
           )
           return json(started.response)
@@ -1563,6 +1643,21 @@ function failedLaunchResult(
     failureKind: response.failureKind,
     stderrTail: response.message,
   }
+}
+
+/**
+ * Closest stable game identity for the hook env contract
+ * (`KORRI_GAME_ID`). The `@korri:game` annotation is the canonical launch
+ * identity carried on launch metadata (see `game-stream-runner.ts`'s
+ * frozen-launch matching); its `id` is the playable/game id.
+ */
+function gameIdFromLaunchMetadata(
+  metadata: LaunchMetadata | undefined,
+): string | undefined {
+  const annotation = metadata?.annotations?.["@korri:game"]
+  if (!annotation || typeof annotation !== "object") return undefined
+  const id = (annotation as Record<string, unknown>).id
+  return typeof id === "string" && id.length > 0 ? id : undefined
 }
 
 function isRemapDirtyCleanupResult(
