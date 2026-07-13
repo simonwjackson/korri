@@ -40,7 +40,6 @@ import { ShiftCineLibraryHero } from "../ui/organisms/ShiftCineLibraryHero"
 import { ShiftCineRail } from "../ui/organisms/ShiftCineRail"
 import { ShiftCineStoreHero } from "../ui/organisms/ShiftCineStoreHero"
 import { ShiftCineSurpriseHero } from "../ui/organisms/ShiftCineSurpriseHero"
-import { ShiftGameActionsSheet } from "../ui/organisms/ShiftGameActionsSheet"
 
 export interface ShiftCinematicGame {
   readonly id: string
@@ -149,9 +148,6 @@ export interface ShiftCinematicHomeProps {
   /** Pick a random game. When provided, a trailing "Surprise" affordance is
    * appended to the rail (before Library); confirming it fires this. */
   readonly onSurprise?: () => void
-  /** Open the focused game's detail screen. Wires the actions sheet's "Open
-   * details" row; omitted = that row renders disabled. */
-  readonly onOpenDetails?: (gameId: string) => void
 }
 
 export function ShiftCinematicHome({
@@ -168,15 +164,9 @@ export function ShiftCinematicHome({
   onOpenLibrary,
   onOpenStore,
   onSurprise,
-  onOpenDetails,
 }: ShiftCinematicHomeProps) {
   const [index, setIndex] = useState(0)
   const [trackX, setTrackX] = useState(0)
-  // The focused game the actions sheet is open for (null = closed). Frozen at
-  // open time so moving focus behind the panel doesn't retarget it.
-  const [actionsGame, setActionsGame] = useState<ShiftCinematicGame | null>(
-    null,
-  )
   const stageRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const preloadedImageUrlsRef = useRef<Set<string>>(new Set())
@@ -319,12 +309,6 @@ export function ShiftCinematicHome({
   // the tile's onClick → launch/retry, so subscribing would double-fire it.
   // No-op when no input system is running (standalone fixture render).
   useInputAction("back", dismiss)
-
-  // `options` opens the command sheet for the focused game. Ignored on the
-  // trailing affordances and while a launch status owns the scene.
-  useInputAction("options", () => {
-    if (!activeAffordance && !status && game) setActionsGame(game)
-  })
 
   // Keep the focused tile centered: shift the whole track so the active tile's
   // center lands at the stage center (the cursor is fixed, the rail moves).
@@ -472,40 +456,6 @@ export function ShiftCinematicHome({
           }
         />
       </div>
-
-      <ShiftGameActionsSheet
-        open={actionsGame !== null}
-        gameTitle={actionsGame?.title ?? ""}
-        state={{
-          favorite: actionsGame?.favorite ?? false,
-          played: Boolean(actionsGame?.lastPlayedLabel),
-          running: false,
-          releaseCount: 1,
-          hasProviderLink: false,
-          local: false,
-        }}
-        handlers={{
-          ...(onLaunch && actionsGame
-            ? {
-                onPlay: () => {
-                  const id = actionsGame.id
-                  setActionsGame(null)
-                  onLaunch(id)
-                },
-              }
-            : {}),
-          ...(onOpenDetails && actionsGame
-            ? {
-                onOpenDetails: () => {
-                  const id = actionsGame.id
-                  setActionsGame(null)
-                  onOpenDetails(id)
-                },
-              }
-            : {}),
-        }}
-        onClose={() => setActionsGame(null)}
-      />
     </div>
   )
 }

@@ -300,7 +300,6 @@ function NavigatingReadyBody({
           onDismiss={() => setAcked(true)}
           onOpenLibrary={() => navigate({ to: "/library" })}
           onOpenStore={() => navigate({ to: "/store" })}
-          onOpenDetails={id => navigate({ to: "/game/$id", params: { id } })}
         />
       ) : null,
   })

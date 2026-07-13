@@ -71,12 +71,6 @@ describe("ShiftCinematicHome onLaunch", () => {
     expect(tileB.getAttribute("data-focused")).toBe("true")
   })
 
-  it("keeps the game actions sheet closed until options is pressed", () => {
-    render(<ShiftCinematicHome games={games} onLaunch={() => {}} />)
-    // The sheet integrates but starts closed; `options` (device-only) opens it.
-    expect(screen.queryByRole("dialog")).toBeNull()
-  })
-
   it("renders available metadata and play-state chips", () => {
     render(
       <ShiftCinematicHome

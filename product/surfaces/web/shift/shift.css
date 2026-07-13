@@ -2605,10 +2605,23 @@
 	overflow: hidden;
 }
 
+/* App-level actions layer: a transparent, viewport-pinned token scope that hosts
+ * the game command sheet on every screen. Click-through when idle; the scrim
+ * re-enables pointer events for itself while the sheet is open. */
+.shift-game-actions-layer {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	background: transparent;
+	pointer-events: none;
+	overflow: hidden;
+}
+
 .shift-sheet-scrim {
 	position: absolute;
 	inset: 0;
 	z-index: 40;
+	pointer-events: auto;
 	background: var(--shift-scrim-mid);
 	animation: shift-sheet-scrim-in 160ms ease both;
 }

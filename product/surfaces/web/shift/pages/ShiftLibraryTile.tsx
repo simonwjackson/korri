@@ -33,6 +33,7 @@ export function ShiftLibraryTile({
       className="shift-lib-tile"
       aria-label={game.title}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.libraryTile, game.id)}
+      data-shift-game-id={game.id}
       data-favorite={game.favorite || undefined}
       onFocus={() => onFocus?.(game.id)}
       onClick={() => onSelect?.(game.id)}

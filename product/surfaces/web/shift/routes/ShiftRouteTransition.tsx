@@ -21,6 +21,7 @@ import {
   type Variants,
 } from "framer-motion"
 import { useEffect, useRef } from "react"
+import { ShiftGameActionsController } from "./ShiftGameActionsController"
 import { shiftRouteDepth, shiftSlideDirection } from "./shift-route-depth"
 
 export function ShiftRouteTransition() {
@@ -73,6 +74,7 @@ export function ShiftRouteTransition() {
       >
         <Outlet />
       </motion.div>
+      <ShiftGameActionsController />
     </div>
   )
 }

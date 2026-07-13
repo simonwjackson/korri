@@ -94,6 +94,7 @@ export function ShiftCineRail({
     <ShiftCineTile
       key={game.id}
       index={i}
+      gameId={game.id}
       title={game.title}
       artUrl={game.tileArtUrl}
       aspectRatio={game.tileArtAspectRatio}

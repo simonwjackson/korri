@@ -11,6 +11,9 @@ import { ShiftCoverArt } from "../atoms/ShiftCoverArt"
  * key handling. `index` feeds the rail's centering math via `data-cine-index`. */
 export interface ShiftCineTileProps {
   readonly index: number
+  /** Game id, published as `data-shift-game-id` so the app-level actions
+   * controller can open the command sheet for this tile on Options. */
+  readonly gameId?: string
   readonly title: string
   readonly artUrl: string
   readonly aspectRatio?: string
@@ -24,6 +27,7 @@ export interface ShiftCineTileProps {
 
 export function ShiftCineTile({
   index,
+  gameId,
   title,
   artUrl,
   aspectRatio,
@@ -38,6 +42,7 @@ export function ShiftCineTile({
       type="button"
       data-cine-index={index}
       data-focused={focused || undefined}
+      {...(gameId ? { "data-shift-game-id": gameId } : {})}
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.tile, title)}
       className="shift-cine-tile"
       style={tileAspectStyle(aspectRatio)}
