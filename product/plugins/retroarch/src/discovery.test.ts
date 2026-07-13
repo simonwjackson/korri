@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
+import type { ReleaseDiscoveryObservation } from "@platform/plugin/discovery"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_BSNES_RUNTIME_ID,
@@ -36,21 +37,25 @@ const baseFile = {
   extension: ".gba",
 }
 
-async function discover(file: typeof baseFile, rootPath = "/media/sdcard") {
-  return (
-    await Promise.all(
-      retroarchDiscoveryProviders.map(provider =>
-        Promise.resolve(
-          provider.discover({
-            pluginId: "@korri:retroarch",
-            storageId: "sdcard",
-            rootPath,
-            files: [file],
-          }),
-        ),
+async function discover(
+  file: typeof baseFile,
+  rootPath = "/media/sdcard",
+): Promise<readonly ReleaseDiscoveryObservation[]> {
+  const results = await Promise.all(
+    retroarchDiscoveryProviders.map(provider =>
+      Promise.resolve(
+        provider.discover({
+          pluginId: "@korri:retroarch",
+          storageId: "sdcard",
+          rootPath,
+          files: [file],
+        }),
       ),
-    )
-  ).flat()
+    ),
+  )
+  return results
+    .flat()
+    .filter((o): o is ReleaseDiscoveryObservation => "release" in o)
 }
 
 describe("retroarchDiscoveryProviders", () => {
@@ -325,5 +330,47 @@ describe("archive (zip) discovery scoping", () => {
     expect(observations.map(o => o.release.system)).toEqual([
       KORRI_RETROARCH_SNES_SYSTEM_ID,
     ])
+  })
+
+  it("claims a 7z inside a cart system folder (RetroArch extracts 7zip)", async () => {
+    for (const [folder, system] of [
+      ["snes", KORRI_RETROARCH_SNES_SYSTEM_ID],
+      ["gba", KORRI_RETROARCH_GBA_SYSTEM_ID],
+      ["nes", KORRI_RETROARCH_NES_SYSTEM_ID],
+      ["n64", KORRI_RETROARCH_N64_SYSTEM_ID],
+      ["genesis", KORRI_RETROARCH_GENESIS_SYSTEM_ID],
+      ["sms", KORRI_RETROARCH_SMS_SYSTEM_ID],
+    ] as const) {
+      const observations = await discover({
+        ...baseFile,
+        absolutePath: `/media/sdcard/${folder}/game.7z`,
+        relativePath: `${folder}/game.7z`,
+        name: "game.7z",
+        extension: ".7z",
+      })
+      expect(observations.map(o => o.release.system)).toEqual([system])
+    }
+  })
+
+  it("never claims a 7z outside a recognized system folder", async () => {
+    const observations = await discover({
+      ...baseFile,
+      absolutePath: "/media/sdcard/downloads/mystery.7z",
+      relativePath: "downloads/mystery.7z",
+      name: "mystery.7z",
+      extension: ".7z",
+    })
+    expect(observations).toEqual([])
+  })
+
+  it("does not claim a 7z for disc-based systems (block_extract)", async () => {
+    const observations = await discover({
+      ...baseFile,
+      absolutePath: "/media/sdcard/psx/game.7z",
+      relativePath: "psx/game.7z",
+      name: "game.7z",
+      extension: ".7z",
+    })
+    expect(observations).toEqual([])
   })
 })

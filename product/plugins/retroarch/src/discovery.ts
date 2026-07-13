@@ -89,7 +89,7 @@ const retroarchRules: readonly RetroarchReleaseRule[] = [
     system: KORRI_RETROARCH_GBA_SYSTEM_ID,
     runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
     extensions: new Set(["gba"]),
-    archiveExtensions: new Set(["zip"]),
+    archiveExtensions: new Set(["zip", "7z"]),
   },
   {
     system: KORRI_RETROARCH_ZXSPECTRUM_SYSTEM_ID,
@@ -99,26 +99,26 @@ const retroarchRules: readonly RetroarchReleaseRule[] = [
   {
     system: KORRI_RETROARCH_GENESIS_SYSTEM_ID,
     runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
-    extensions: new Set(["md", "gen", "smd", "bin", "zip"]),
+    extensions: new Set(["md", "gen", "smd", "bin", "zip", "7z"]),
     folderHints: new Set(["genesis", "megadrive", "md"]),
   },
   {
     system: KORRI_RETROARCH_SMS_SYSTEM_ID,
     runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
-    extensions: new Set(["sms", "gg", "sg", "zip"]),
+    extensions: new Set(["sms", "gg", "sg", "zip", "7z"]),
     folderHints: new Set(["sms", "mastersystem", "gamegear", "sg1000"]),
   },
   {
     system: KORRI_RETROARCH_N64_SYSTEM_ID,
     runtime: KORRI_RETROARCH_MUPEN64PLUS_NEXT_RUNTIME_ID,
     extensions: new Set(["z64", "n64", "v64"]),
-    archiveExtensions: new Set(["zip"]),
+    archiveExtensions: new Set(["zip", "7z"]),
   },
   {
     system: KORRI_RETROARCH_NES_SYSTEM_ID,
     runtime: KORRI_RETROARCH_MESEN_RUNTIME_ID,
     extensions: new Set(["nes", "fds"]),
-    archiveExtensions: new Set(["zip"]),
+    archiveExtensions: new Set(["zip", "7z"]),
   },
   {
     system: KORRI_RETROARCH_PC98_SYSTEM_ID,
@@ -141,7 +141,7 @@ const retroarchRules: readonly RetroarchReleaseRule[] = [
     system: KORRI_RETROARCH_SNES_SYSTEM_ID,
     runtime: KORRI_RETROARCH_BSNES_RUNTIME_ID,
     extensions: new Set(["sfc", "smc"]),
-    archiveExtensions: new Set(["zip"]),
+    archiveExtensions: new Set(["zip", "7z"]),
   },
   {
     system: KORRI_RETROARCH_TG16_SYSTEM_ID,
