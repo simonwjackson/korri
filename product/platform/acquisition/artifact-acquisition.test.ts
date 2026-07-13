@@ -344,6 +344,85 @@ describe("resolve-download acquire fallback", () => {
       expect(error).toMatchObject({ reason: "infrastructure" })
     })
   })
+
+  it("forwards FinalDownload requestHeaders on the byte-fetch", async () => {
+    await withTempRoot(async root => {
+      const seen: { headers?: Record<string, string> } = {}
+      const headerFetch = (async (_url: unknown, init?: RequestInit) => {
+        seen.headers = init?.headers as Record<string, string>
+        return new Response(romBytes, {
+          status: 200,
+          headers: { "content-type": "application/octet-stream" },
+        })
+      }) as unknown as typeof fetch
+      const plugin: AcquisitionPluginDefinition = {
+        ...resolveOnlyPlugin(),
+        resolveDownload: (_context, request) =>
+          Effect.succeed({
+            _tag: "FinalDownload" as const,
+            providerId: request.providerId,
+            url: "https://downloads.example.com/files/game.gba",
+            filename: "game.gba",
+            requestHeaders: {
+              referer: "https://roms.example.com/roms/drill-dozer",
+              cookie: "session=s1",
+            },
+          }),
+      }
+      const registry = createAcquisitionPluginRegistry([plugin])
+
+      await Effect.runPromise(
+        acquireArtifact({
+          registry,
+          context: createAcquisitionPluginContext(),
+          stagingRoot: root,
+          fetchImpl: headerFetch,
+          request: {
+            providerId: "@local:fixture-roms",
+            id: "drill-dozer",
+            url: "https://roms.example.com/roms/drill-dozer",
+          },
+        }),
+      )
+
+      expect(seen.headers).toEqual({
+        referer: "https://roms.example.com/roms/drill-dozer",
+        cookie: "session=s1",
+      })
+    })
+  })
+
+  it("sends no headers when the FinalDownload carries none", async () => {
+    await withTempRoot(async root => {
+      const seen: { headers?: unknown; called: number } = { called: 0 }
+      const plainFetch = (async (_url: unknown, init?: RequestInit) => {
+        seen.called += 1
+        seen.headers = init?.headers
+        return new Response(romBytes, {
+          status: 200,
+          headers: { "content-type": "application/octet-stream" },
+        })
+      }) as unknown as typeof fetch
+      const registry = createAcquisitionPluginRegistry([resolveOnlyPlugin()])
+
+      await Effect.runPromise(
+        acquireArtifact({
+          registry,
+          context: createAcquisitionPluginContext(),
+          stagingRoot: root,
+          fetchImpl: plainFetch,
+          request: {
+            providerId: "@local:fixture-roms",
+            id: "drill-dozer",
+            url: "https://roms.example.com/roms/drill-dozer",
+          },
+        }),
+      )
+
+      expect(seen.called).toBe(1)
+      expect(seen.headers).toBeUndefined()
+    })
+  })
 })
 
 describe("rejectNonArtifactPayload", () => {

@@ -139,7 +139,12 @@ function acquireViaResolvedDownload({
 
     const fetched = yield* Effect.tryPromise({
       try: async () => {
-        const response = await fetchImpl(resolution.url, { redirect: "follow" })
+        const response = await fetchImpl(resolution.url, {
+          redirect: "follow",
+          ...(resolution.requestHeaders
+            ? { headers: resolution.requestHeaders }
+            : {}),
+        })
         if (!response.ok) {
           throw new Error(`download failed: HTTP ${response.status}`)
         }

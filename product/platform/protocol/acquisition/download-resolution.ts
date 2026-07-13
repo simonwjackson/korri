@@ -22,6 +22,11 @@ export const FinalDownloadResolution = Schema.TaggedStruct("FinalDownload", {
   url: Schema.String,
   filename: Schema.optional(Schema.String),
   contentType: Schema.optional(Schema.String),
+  /**
+   * Headers the daemon forwards when fetching the bytes (e.g. Referer or the
+   * provider session Cookie collected during resolve-download).
+   */
+  requestHeaders: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 })
 
 export const DownloadChoice = Schema.Struct({
