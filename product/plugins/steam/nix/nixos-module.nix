@@ -504,33 +504,35 @@ let
         fi
       fi
 
-      if [ -n "$client_version" ]; then
-        if ${pkgs.curl}/bin/curl -fsSL --connect-timeout 10 --max-time 30 \
-          "https://client-update.fastly.steamstatic.com/steam_client_''${STEAM_BETA}_linuxarm64" \
-          -o "$downloaded_manifest" 2>/dev/null; then
-          ${pkgs.gawk}/bin/awk -v version="$client_version" '
-            BEGIN { replaced = 0 }
-            !replaced && $1 == "\"version\"" {
-              print "\t\"version\"\t\t\"" version "\""
-              replaced = 1
-              next
-            }
-            { print }
-          ' "$downloaded_manifest" > "$manifest_tmp"
-          rm -f "$downloaded_manifest"
-        else
-          rm -f "$downloaded_manifest"
-          cat > "$manifest_tmp" <<EOF
+      if ${pkgs.curl}/bin/curl -fsSL --connect-timeout 10 --max-time 30 \
+        "https://client-update.fastly.steamstatic.com/steam_client_''${STEAM_BETA}_linuxarm64" \
+        -o "$downloaded_manifest" 2>/dev/null \
+        && ${pkgs.gnugrep}/bin/grep -aq '"version"' "$downloaded_manifest"; then
+        # Online: adopt the current server manifest verbatim. Earlier revisions
+        # rewrote the manifest version to the locally-installed value, which
+        # pinned Steam to a stale seeded client (e.g. 1782782836): every cold
+        # start re-installed the stale local package and never fetched the
+        # current client, looping the updater forever. Keeping the server
+        # manifest lets Steam self-update to the current version and converge,
+        # after which cold starts skip the update.
+        mv -f "$downloaded_manifest" "$manifest_file"
+        rm -f "$manifest_tmp"
+      elif [ -n "$client_version" ]; then
+        # Offline fallback only: without a reachable server manifest, write a
+        # minimal beta-channel manifest so Steam does not drop back to the
+        # generic linuxarm64 endpoint (which 404s) and loop. This still pins the
+        # installed version, but only when the network is unavailable.
+        rm -f "$downloaded_manifest"
+        cat > "$manifest_tmp" <<EOF
 "linuxarm64"
 {
 	"version"		"$client_version"
 }
 EOF
-        fi
         mv -f "$manifest_tmp" "$manifest_file"
       else
         rm -f "$manifest_tmp" "$downloaded_manifest"
-        echo "korri-steam-guest: no ARM64 client version found; manifest repair skipped" >&2
+        echo "korri-steam-guest: no server manifest and no installed version; manifest repair skipped" >&2
       fi
     }
 

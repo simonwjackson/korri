@@ -397,22 +397,24 @@ describe("Steam plugin Nix module", () => {
     )
   })
 
-  it("repairs the channel-specific ARM64 client manifest before launch", () => {
+  it("adopts the current server ARM64 client manifest instead of pinning the stale installed version", () => {
     expect(moduleSource).toContain("repair_arm64_client_manifest()")
     expect(moduleSource).toContain(
       "steam_client_''${STEAM_BETA}_linuxarm64.manifest",
     )
-    expect(moduleSource).toContain(
-      "steam_client_''${STEAM_BETA}_linuxarm64.installed",
-    )
-    expect(moduleSource).toContain("printf '%s\\n' \"$STEAM_BETA\"")
-    expect(moduleSource).toContain("${pkgs.gawk}/bin/awk -F'[,;]'")
-    expect(moduleSource).toContain("NR == 1 && $3 ~ /^[0-9]+$/")
     expect(moduleSource).toContain("${pkgs.curl}/bin/curl -fsSL")
     expect(moduleSource).toContain(
       "https://client-update.fastly.steamstatic.com/steam_client_''${STEAM_BETA}_linuxarm64",
     )
-    expect(moduleSource).toContain('!replaced && $1 == "\\"version\\""')
+    // Online: adopt the server manifest verbatim so Steam can self-update and
+    // converge on the current client version.
+    expect(moduleSource).toContain('mv -f "$downloaded_manifest" "$manifest_file"')
+    // The stale version-pinning rewrite must be gone: it caused the perpetual
+    // updater loop by forcing Steam back to the seeded client version.
+    expect(moduleSource).not.toContain('!replaced && $1 == "\\"version\\""')
+    // Offline fallback still writes a minimal beta-channel manifest to avoid the
+    // generic linuxarm64 404 loop.
+    expect(moduleSource).toContain("Offline fallback only")
     expect(moduleSource).toContain('"linuxarm64"')
     expect(moduleSource).not.toContain("steam_client_linuxarm64.manifest")
   })
