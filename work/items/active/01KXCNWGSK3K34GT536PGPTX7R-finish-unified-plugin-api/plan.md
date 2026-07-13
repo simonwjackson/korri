@@ -1,7 +1,7 @@
 ---
 title: "feat: Finish the unified plugin API (one capable HTTP surface, no bundled bypass)"
 type: feat
-status: active
+status: completed
 date: 2026-07-12
 origin: work/items/parking-lot/01KXC8EAAD647X5PBTYMP06T6E-enable-rom-site-downloads-via-plugin-http-capability-additio.md
 verify_command: "bun test product/platform/plugin product/platform/acquisition product/plugins/itchio"
