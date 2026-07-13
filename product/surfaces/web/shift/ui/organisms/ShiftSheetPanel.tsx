@@ -13,7 +13,7 @@
  * being closed (see `ShiftStoreDrawer`) to avoid double-handling.
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
-import type { ReactNode } from "react"
+import { type ReactNode, useEffect, useRef } from "react"
 import {
   SHIFT_DESIGN_PARTS,
   shiftDesignPartAttrs,
@@ -26,10 +26,22 @@ export interface ShiftSheetPanelProps {
 
 export function ShiftSheetPanel({ children }: ShiftSheetPanelProps) {
   const { open, side, label, close } = useShiftSheet()
+  const panelRef = useRef<HTMLElement>(null)
 
   useInputAction("back", () => {
     if (open) close()
   })
+
+  // Move focus into the dialog when it opens so directional input lands in the
+  // panel, not on the surface behind it. The first enabled control wins.
+  useEffect(() => {
+    if (!open) return
+    panelRef.current
+      ?.querySelector<HTMLElement>(
+        "button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
+      )
+      ?.focus({ preventScroll: true })
+  }, [open])
 
   if (!open) return null
 
@@ -40,6 +52,7 @@ export function ShiftSheetPanel({ children }: ShiftSheetPanelProps) {
       {...shiftDesignPartAttrs(SHIFT_DESIGN_PARTS.sheet)}
     >
       <aside
+        ref={panelRef}
         className="shift-sheet-panel"
         data-side={side}
         role="dialog"
