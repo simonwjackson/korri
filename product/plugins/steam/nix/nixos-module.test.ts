@@ -474,9 +474,13 @@ describe("Steam plugin Nix module", () => {
     )
     expect(moduleSource).toContain("bootstrap_mark=0")
     expect(moduleSource).toContain("steam_log_since_mark")
-    expect(moduleSource).toContain("Checking for update on startup")
     expect(moduleSource).toContain("Found pending update")
     expect(moduleSource).toContain("Extracting package")
+    // The update gate must NOT match Steam's benign background update checks,
+    // or AppID readiness would block forever while the client is stable.
+    expect(moduleSource).not.toContain(
+      "Checking for available updates|Downloading manifest",
+    )
     expect(moduleSource).toContain(
       "ready_deadline=$((now + startup_update_timeout))",
     )

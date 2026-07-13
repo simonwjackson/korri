@@ -1030,10 +1030,17 @@ EOF
     }
 
     steam_startup_update_active() {
+      # Only treat a *disruptive* client update as active: one that installs a
+      # pending package and relaunches the client. Steam's benign background
+      # update loop constantly logs "Checking for available updates" and
+      # "Downloading manifest" (including the generic linuxarm64 404 probe) even
+      # when the client is up and stable at uimode=7; matching those would block
+      # AppID readiness forever. Match only the install/extract signals that
+      # precede a client shutdown+relaunch.
       {
         steam_log_since_mark "$bootstrap_log" "$bootstrap_mark"
         steam_log_since_mark "$console_log" "$mark"
-      } | ${pkgs.gnugrep}/bin/grep -a -E -q 'Checking for update on startup|Checking for available updates|Downloading manifest|Downloaded new manifest|Found pending update|Installing update|Extracting package|Set status message: (Checking for available updates|Download complete|Installing update|Extracting package)|Looks like steam didn'"'"'t shutdown cleanly'
+      } | ${pkgs.gnugrep}/bin/grep -a -E -q 'Found pending update|Installing update\.\.\.|Extracting package|Set status message: (Installing update|Extracting package)'
     }
 
     cleanup() {
