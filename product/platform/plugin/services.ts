@@ -404,14 +404,32 @@ function createProviderHttpSession(
   }
 }
 
+// Headers a plugin may not set on the daemon byte-fetch: the session Cookie
+// is owned by the host-scoped jar, so a plugin cannot smuggle an arbitrary
+// Cookie/Authorization to a different host than the one that set it.
+const FORBIDDEN_DOWNLOAD_HEADERS = new Set([
+  "cookie",
+  "set-cookie",
+  "authorization",
+  "proxy-authorization",
+])
+
 function mergeRequestHeaders(
   cookie: string | undefined,
   explicit: Readonly<Record<string, string>> | undefined,
 ): Readonly<Record<string, string>> | undefined {
-  if (cookie === undefined && explicit === undefined) return undefined
+  const safeExplicit = explicit
+    ? Object.fromEntries(
+        Object.entries(explicit).filter(
+          ([key]) => !FORBIDDEN_DOWNLOAD_HEADERS.has(key.toLowerCase()),
+        ),
+      )
+    : undefined
+  const hasExplicit = safeExplicit && Object.keys(safeExplicit).length > 0
+  if (cookie === undefined && !hasExplicit) return undefined
   return {
     ...(cookie !== undefined ? { cookie } : {}),
-    ...explicit,
+    ...(hasExplicit ? safeExplicit : {}),
   }
 }
 

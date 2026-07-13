@@ -153,6 +153,60 @@ describe("plugin http request()", () => {
     ).toEqual({ ok: true })
   })
 
+  it("blocks a redirect that targets a private host before fetching it", async () => {
+    const urls: string[] = []
+    const services = servicesWithFetch(async url => {
+      urls.push(String(url))
+      if (String(url).includes("/start")) {
+        return fakeResponse({
+          status: 302,
+          headers: { location: "http://127.0.0.1/secret" },
+        })
+      }
+      return fakeResponse({ body: "should never reach here" })
+    })
+
+    expect(
+      services.http!.request!("https://example.test/start"),
+    ).rejects.toThrow(/not allowed/i)
+    // The private redirect target must never be fetched.
+    expect(urls).toEqual(["https://example.test/start"])
+  })
+
+  it("follows a validated public redirect", async () => {
+    const services = servicesWithFetch(async url => {
+      if (String(url).includes("/start")) {
+        return fakeResponse({
+          status: 301,
+          headers: { location: "https://cdn.example.test/final" },
+        })
+      }
+      return fakeResponse({ body: "landed" })
+    })
+
+    const response = await services.http!.request!("https://example.test/start")
+    expect(await response.text()).toBe("landed")
+  })
+
+  it("sends only the selected bytes of a subarray body", async () => {
+    let sentBody: BodyInit | null | undefined
+    const services = servicesWithFetch(async (_url, init) => {
+      sentBody = init?.body
+      return fakeResponse({ body: "ok" })
+    })
+    const backing = new Uint8Array([0, 0, 0x50, 0x4b, 0, 0])
+    const view = backing.subarray(2, 4)
+
+    await services.http!.request!("https://example.test/upload", {
+      method: "POST",
+      body: view,
+    })
+
+    expect(new Uint8Array(sentBody as ArrayBuffer)).toEqual(
+      new Uint8Array([0x50, 0x4b]),
+    )
+  })
+
   it("still applies query and timeout options through request()", async () => {
     const seen: { url?: string } = {}
     const services = servicesWithFetch(async url => {

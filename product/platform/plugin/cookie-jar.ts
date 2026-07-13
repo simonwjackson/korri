@@ -88,8 +88,15 @@ function parseSetCookie(
     const key = attrName?.trim().toLowerCase()
     const attrValue = attrRest.join("=").trim()
     if (key === "domain" && attrValue.length > 0) {
-      domain = attrValue.replace(/^\./, "").toLowerCase()
-      hostOnly = false
+      const requested = attrValue.replace(/^\./, "").toLowerCase()
+      // Only honor a Domain that domain-matches the origin host and is not a
+      // bare public suffix; otherwise a response could plant a cookie for an
+      // unrelated host (e.g. Domain=other.test or Domain=com). Reject by
+      // leaving the cookie host-only on the origin.
+      if (domainIsAcceptable(requested, target.hostname.toLowerCase())) {
+        domain = requested
+        hostOnly = false
+      }
     } else if (key === "path" && attrValue.startsWith("/")) {
       path = attrValue
     } else if (key === "secure") {
@@ -110,6 +117,22 @@ function parseSetCookie(
     deleted,
     cookie: { name, value, domain, hostOnly, path, secure },
   }
+}
+
+function domainIsAcceptable(domain: string, host: string): boolean {
+  // Must contain a dot (rejects single-label suffixes like "com") and the
+  // origin host must be the domain or a subdomain of it.
+  if (!domain.includes(".")) return false
+  if (isIpv4(domain)) return false
+  return host === domain || host.endsWith(`.${domain}`)
+}
+
+function isIpv4(host: string): boolean {
+  const parts = host.split(".")
+  return (
+    parts.length === 4 &&
+    parts.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255)
+  )
 }
 
 function defaultPath(pathname: string): string {

@@ -329,6 +329,58 @@ describe("provider-scoped http session", () => {
     expect(final.requestHeaders).toBeUndefined()
   })
 
+  it("rejects a Set-Cookie Domain for an unrelated host", async () => {
+    const base = fakeBaseHttp({
+      setCookiesByUrl: {
+        "https://roms.test/game": ["s=1; Domain=other.test; Path=/"],
+      },
+    })
+    const services = createProviderScopedPluginServices(
+      { http: base.http },
+      "@local:roms",
+    )
+
+    await services.http!.request!("https://roms.test/game")
+    await services.http!.request!("https://other.test/download")
+
+    expect(base.calls[1]?.headers["cookie"]).toBeUndefined()
+  })
+
+  it("honors a Set-Cookie Domain for a parent of the origin host", async () => {
+    const base = fakeBaseHttp({
+      setCookiesByUrl: {
+        "https://api.roms.test/login": ["s=1; Domain=roms.test; Path=/"],
+      },
+    })
+    const services = createProviderScopedPluginServices(
+      { http: base.http },
+      "@local:roms",
+    )
+
+    await services.http!.request!("https://api.roms.test/login")
+    await services.http!.request!("https://roms.test/download")
+
+    expect(base.calls[1]?.headers["cookie"]).toBe("s=1")
+  })
+
+  it("strips plugin-supplied Cookie/Authorization from FinalDownload headers", () => {
+    const services = createProviderScopedPluginServices(
+      { time: { nowIso: () => "2026-07-06T00:00:00.000Z" } },
+      "@local:plain",
+    )
+    const final = services.downloads?.final?.({
+      url: "https://example.test/game.zip",
+      requestHeaders: {
+        referer: "https://example.test/game",
+        cookie: "evil=1",
+        authorization: "Bearer nope",
+      },
+    }) as { requestHeaders?: Record<string, string> }
+    expect(final.requestHeaders).toEqual({
+      referer: "https://example.test/game",
+    })
+  })
+
   it("passes base http through unchanged when it has no capable request", async () => {
     const services = createProviderScopedPluginServices(
       { http: { text: async () => "legacy" } },

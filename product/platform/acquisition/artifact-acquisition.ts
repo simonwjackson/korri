@@ -11,6 +11,7 @@ import type {
 import { decodeAcquiredArtifact } from "@platform/protocol/acquisition/artifact-acquisition"
 import { Effect } from "effect"
 import { resolveAcquisitionDownload } from "./download-resolution/download-resolution"
+import { fetchWithValidatedRedirects } from "./download-resolution/safe-fetch"
 import { validateOutboundHttpUrl } from "./download-resolution/url-policy"
 import { acquisitionTry } from "./effect"
 import { AcquisitionError } from "./errors"
@@ -139,12 +140,16 @@ function acquireViaResolvedDownload({
 
     const fetched = yield* Effect.tryPromise({
       try: async () => {
-        const response = await fetchImpl(resolution.url, {
-          redirect: "follow",
-          ...(resolution.requestHeaders
+        // Manual, policy-validated redirect following so forwarded
+        // Referer/Cookie headers can never chase a redirect into a private
+        // host (SSRF/exfil guard).
+        const response = await fetchWithValidatedRedirects(
+          fetchImpl,
+          resolution.url,
+          resolution.requestHeaders
             ? { headers: resolution.requestHeaders }
-            : {}),
-        })
+            : {},
+        )
         if (!response.ok) {
           throw new Error(`download failed: HTTP ${response.status}`)
         }

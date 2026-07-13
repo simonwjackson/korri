@@ -4,7 +4,7 @@ import type {
   PluginHttpResponse,
   PluginServices,
 } from "@platform/plugin/services"
-import { validateOutboundHttpUrl } from "./download-resolution/url-policy"
+import { fetchWithValidatedRedirects } from "./download-resolution/safe-fetch"
 import type { AcquisitionLogger } from "./logger"
 import { silentAcquisitionLogger } from "./logger"
 
@@ -111,17 +111,12 @@ function createPluginHttpRequest(
 ) => Promise<PluginHttpResponse> {
   return async (url, options) => {
     const target = withQuery(url, options?.query)
-    validateOutboundHttpUrl(String(target))
-    const response = await fetchImpl(target, {
+    const response = await fetchWithValidatedRedirects(fetchImpl, target, {
       method: options?.method ?? "GET",
       headers: options?.headers,
       body: requestBody(options?.body),
       signal: timeoutSignal(options?.timeoutMs),
-      redirect: "follow",
     })
-    if (response.url !== "" && response.url !== String(target)) {
-      validateOutboundHttpUrl(response.url)
-    }
     return toPluginHttpResponse(response, String(target))
   }
 }
@@ -130,8 +125,13 @@ function requestBody(
   body: PluginHttpRequestOptions["body"],
 ): BodyInit | undefined {
   if (body === undefined) return undefined
+  // Slice by the view's own offset/length so a Buffer.subarray() body never
+  // leaks the unrelated bytes of a shared backing ArrayBuffer.
   if (body instanceof Uint8Array) {
-    return body.slice().buffer as ArrayBuffer
+    return body.buffer.slice(
+      body.byteOffset,
+      body.byteOffset + body.byteLength,
+    ) as ArrayBuffer
   }
   return body
 }
@@ -144,44 +144,32 @@ function toPluginHttpResponse(
   response.headers.forEach((value, key) => {
     headers[key.toLowerCase()] = value
   })
-  const guardPayloadSize = () => {
-    const declared = Number(response.headers.get("content-length") ?? "0")
-    if (declared > MAX_PLUGIN_HTTP_RESPONSE_BYTES) {
-      throw new Error(
-        `Response from ${response.url || requestedUrl} is too large`,
-      )
+  const source = response.url || requestedUrl
+  const declaredTooLarge = () =>
+    Number(response.headers.get("content-length") ?? "0") >
+    MAX_PLUGIN_HTTP_RESPONSE_BYTES
+  // All body consumers read through readBytes so the cap is enforced on the
+  // ACTUAL byte length, never on Content-Length alone or UTF-16 text length.
+  const readBytes = async (): Promise<Uint8Array> => {
+    if (declaredTooLarge())
+      throw new Error(`Response from ${source} is too large`)
+    const buffer = await response.arrayBuffer()
+    if (buffer.byteLength > MAX_PLUGIN_HTTP_RESPONSE_BYTES) {
+      throw new Error(`Response from ${source} is too large`)
     }
+    return new Uint8Array(buffer)
   }
+  const readText = async (): Promise<string> =>
+    new TextDecoder().decode(await readBytes())
   return {
     status: response.status,
     ok: response.ok,
-    url: response.url || requestedUrl,
+    url: source,
     headers,
     setCookies: response.headers.getSetCookie?.() ?? [],
-    text: async () => {
-      guardPayloadSize()
-      const text = await response.text()
-      if (text.length > MAX_PLUGIN_HTTP_RESPONSE_BYTES) {
-        throw new Error(
-          `Response from ${response.url || requestedUrl} is too large`,
-        )
-      }
-      return text
-    },
-    json: async <T>() => {
-      guardPayloadSize()
-      return (await response.json()) as T
-    },
-    bytes: async () => {
-      guardPayloadSize()
-      const buffer = await response.arrayBuffer()
-      if (buffer.byteLength > MAX_PLUGIN_HTTP_RESPONSE_BYTES) {
-        throw new Error(
-          `Response from ${response.url || requestedUrl} is too large`,
-        )
-      }
-      return new Uint8Array(buffer)
-    },
+    text: readText,
+    json: async <T>() => JSON.parse(await readText()) as T,
+    bytes: readBytes,
   }
 }
 
