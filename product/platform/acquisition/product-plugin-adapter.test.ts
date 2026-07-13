@@ -142,3 +142,111 @@ describe("acquisitionPluginDefinitionsFromPluginRegistry", () => {
     ).toEqual([])
   })
 })
+
+describe("self-managed download session through the unified http", () => {
+  it("carries the provider session cookie from resolve-download into the daemon byte-fetch", async () => {
+    const { mkdtemp, rm } = await import("node:fs/promises")
+    const { tmpdir } = await import("node:os")
+    const { join } = await import("node:path")
+    const { acquireArtifact } = await import("./artifact-acquisition")
+    const { createAcquisitionPluginContext } = await import("./plugin-runtime")
+
+    const fetchLog: Array<{ url: string; headers?: Record<string, string> }> =
+      []
+    const fakeFetch = (async (url: unknown, init?: RequestInit) => {
+      const target = String(url)
+      fetchLog.push({
+        url: target,
+        headers: init?.headers as Record<string, string> | undefined,
+      })
+      if (target.endsWith("/game")) {
+        return {
+          status: 200,
+          ok: true,
+          url: target,
+          headers: {
+            forEach: () => undefined,
+            get: () => null,
+            getSetCookie: () => ["session=jar1; Path=/"],
+          },
+          text: async () => "<html>form</html>",
+          json: async () => ({}),
+          arrayBuffer: async () => new ArrayBuffer(0),
+        } as unknown as Response
+      }
+      return new Response(Buffer.from("ROMBYTES"), {
+        status: 200,
+        headers: { "content-type": "application/octet-stream" },
+      })
+    }) as unknown as typeof fetch
+
+    const romSitePlugin = plugin({
+      namespace: "@local",
+      name: "romsite",
+      title: "ROM Site",
+      contributes: {
+        handlers: [
+          {
+            id: "romsite.resolve",
+            operation: "artifact.resolve-download",
+            capabilities: ["artifact.resolve-download"],
+            run: async context => {
+              const http = requirePluginService(
+                context.services,
+                "http",
+                context.operation,
+              )
+              const downloads = requirePluginService(
+                context.services,
+                "downloads",
+                context.operation,
+              )
+              // Page fetch sets the session cookie in the provider jar.
+              await http.request!("https://roms.example.com/game")
+              return downloads.final!({
+                url: "https://roms.example.com/files/game.gba",
+                filename: "game.gba",
+                requestHeaders: { referer: "https://roms.example.com/game" },
+              })
+            },
+          },
+        ],
+      },
+    })
+
+    const productRegistry = createPluginRegistry([romSitePlugin], {
+      enabledPluginIds: [romSitePlugin.id],
+    })
+    const definitions =
+      acquisitionPluginDefinitionsFromPluginRegistry(productRegistry)
+    const registry = createStaticAcquisitionPluginRegistry(definitions)
+
+    const root = await mkdtemp(join(tmpdir(), "korri-session-test-"))
+    try {
+      const acquired = await Effect.runPromise(
+        acquireArtifact({
+          registry,
+          context: createAcquisitionPluginContext({ fetchImpl: fakeFetch }),
+          stagingRoot: root,
+          fetchImpl: fakeFetch,
+          request: {
+            providerId: "@local:romsite",
+            id: "game",
+            url: "https://roms.example.com/game",
+          },
+        }),
+      )
+      expect(acquired.file.name).toBe("game.gba")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+
+    const byteFetch = fetchLog.find(entry =>
+      entry.url.includes("/files/game.gba"),
+    )
+    expect(byteFetch?.headers).toEqual({
+      cookie: "session=jar1",
+      referer: "https://roms.example.com/game",
+    })
+  })
+})
