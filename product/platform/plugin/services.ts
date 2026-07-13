@@ -1,6 +1,11 @@
+import { createCookieJar } from "./cookie-jar"
 import type { ProviderId } from "./index"
 
 export interface PluginHttpRequestOptions {
+  /** HTTP method. Defaults to GET. */
+  readonly method?: string
+  /** Request body for POST/PUT/PATCH. */
+  readonly body?: string | Uint8Array | URLSearchParams
   readonly query?: Readonly<
     Record<string, string | number | boolean | undefined>
   >
@@ -8,15 +13,43 @@ export interface PluginHttpRequestOptions {
   readonly timeoutMs?: number
 }
 
+export interface PluginHttpResponse {
+  readonly status: number
+  readonly ok: boolean
+  /** Final URL after redirects. */
+  readonly url: string
+  readonly headers: Readonly<Record<string, string>>
+  /** Raw Set-Cookie header values (may be several per response). */
+  readonly setCookies: readonly string[]
+  readonly text: () => PromiseLike<string>
+  readonly json: <T = unknown>() => PromiseLike<T>
+  readonly bytes: () => PromiseLike<Uint8Array>
+}
+
 export interface PluginHttpServices {
+  /**
+   * Convenience wrapper over `request` returning the decoded body text.
+   */
   readonly text?: (
     url: string | URL,
     options?: PluginHttpRequestOptions,
   ) => string | PromiseLike<string>
+  /**
+   * Convenience wrapper over `request` returning the decoded JSON body.
+   */
   readonly json?: <T = unknown>(
     url: string | URL,
     options?: PluginHttpRequestOptions,
   ) => T | PromiseLike<T>
+  /**
+   * Capable HTTP client: any method, request body, binary responses, and
+   * response status/header visibility. All plugin tiers share this one
+   * surface — bundled plugins must not reach for a global fetch instead.
+   */
+  readonly request?: (
+    url: string | URL,
+    options?: PluginHttpRequestOptions,
+  ) => PluginHttpResponse | PromiseLike<PluginHttpResponse>
 }
 
 export interface PluginCacheQueryOptions {
@@ -109,6 +142,12 @@ export interface PluginDownloadServices {
     readonly url: string
     readonly filename?: string
     readonly contentType?: string
+    /**
+     * Headers the daemon must send when fetching the bytes (e.g. Referer).
+     * Cookies collected by the provider's session jar are merged in
+     * automatically by the provider-scoped services.
+     */
+    readonly requestHeaders?: Readonly<Record<string, string>>
   }) => object
   readonly nonFinal?: (
     reason: "interstitial" | "requires-user-action" | "unsupported",
@@ -196,8 +235,10 @@ export function createProviderScopedPluginServices(
   const urlId = services?.crypto?.urlId ?? encodeURIComponent
   const urlFromId = services?.crypto?.urlFromId ?? decodeURIComponent
   const nowIso = services?.time?.nowIso ?? (() => new Date().toISOString())
+  const session = createProviderHttpSession(services?.http)
   return {
     ...services,
+    ...(session.http ? { http: session.http } : {}),
     crypto: {
       ...services?.crypto,
       stableId,
@@ -267,13 +308,20 @@ export function createProviderScopedPluginServices(
     downloads: {
       ...services?.downloads,
       providerId,
-      final: input => ({
-        _tag: "FinalDownload",
-        providerId,
-        url: input.url,
-        ...(input.filename ? { filename: input.filename } : {}),
-        ...(input.contentType ? { contentType: input.contentType } : {}),
-      }),
+      final: input => {
+        const requestHeaders = mergeRequestHeaders(
+          session.cookieHeader(input.url),
+          input.requestHeaders,
+        )
+        return {
+          _tag: "FinalDownload",
+          providerId,
+          url: input.url,
+          ...(input.filename ? { filename: input.filename } : {}),
+          ...(input.contentType ? { contentType: input.contentType } : {}),
+          ...(requestHeaders ? { requestHeaders } : {}),
+        }
+      },
       nonFinal: (reason, url) => ({
         _tag: "NonFinalDownload",
         providerId,
@@ -303,6 +351,67 @@ export function createProviderScopedPluginServices(
         message,
       }),
     },
+  }
+}
+
+interface ProviderHttpSession {
+  readonly http?: PluginHttpServices
+  readonly cookieHeader: (url: string) => string | undefined
+}
+
+/**
+ * Wraps the base http service with a per-provider session cookie jar.
+ * Requires the capable `request` surface (which exposes Set-Cookie); when
+ * the base http only offers legacy text/json it is passed through untouched.
+ */
+function createProviderHttpSession(
+  base: PluginHttpServices | undefined,
+): ProviderHttpSession {
+  const baseRequest = base?.request
+  if (baseRequest === undefined) {
+    return { cookieHeader: () => undefined }
+  }
+  const jar = createCookieJar()
+  const request: NonNullable<PluginHttpServices["request"]> = async (
+    url,
+    options,
+  ) => {
+    const target = String(url)
+    const cookie = jar.cookieHeader(target)
+    const headers =
+      cookie === undefined ? options?.headers : { cookie, ...options?.headers }
+    const response = await baseRequest(url, { ...options, headers })
+    jar.store(response.url || target, response.setCookies)
+    return response
+  }
+  return {
+    http: {
+      ...base,
+      request,
+      text: async (url, options) => {
+        const response = await request(url, options)
+        return response.text()
+      },
+      json: async <T>(
+        url: string | URL,
+        options?: PluginHttpRequestOptions,
+      ) => {
+        const response = await request(url, options)
+        return response.json<T>()
+      },
+    },
+    cookieHeader: url => jar.cookieHeader(url),
+  }
+}
+
+function mergeRequestHeaders(
+  cookie: string | undefined,
+  explicit: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> | undefined {
+  if (cookie === undefined && explicit === undefined) return undefined
+  return {
+    ...(cookie !== undefined ? { cookie } : {}),
+    ...explicit,
   }
 }
 

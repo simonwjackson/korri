@@ -211,3 +211,130 @@ describe("PluginServices", () => {
     )
   })
 })
+
+describe("provider-scoped http session", () => {
+  type Call = { url: string; headers: Record<string, string> }
+
+  function fakeBaseHttp(responses: {
+    readonly setCookiesByUrl?: Record<string, readonly string[]>
+  }) {
+    const calls: Call[] = []
+    const request = async (
+      url: string | URL,
+      options?: { headers?: Readonly<Record<string, string>> },
+    ) => {
+      const target = String(url)
+      calls.push({ url: target, headers: { ...(options?.headers ?? {}) } })
+      return {
+        status: 200,
+        ok: true,
+        url: target,
+        headers: {},
+        setCookies: responses.setCookiesByUrl?.[target] ?? [],
+        text: async () => "body",
+        json: async () => ({}) as never,
+        bytes: async () => new Uint8Array(),
+      }
+    }
+    return { calls, http: { request } }
+  }
+
+  it("carries Set-Cookie from one request into the next on the same host", async () => {
+    const base = fakeBaseHttp({
+      setCookiesByUrl: {
+        "https://roms.test/game": ["session=s1; Path=/"],
+      },
+    })
+    const services = createProviderScopedPluginServices(
+      { http: base.http },
+      "@local:roms",
+    )
+
+    await services.http!.request!("https://roms.test/game")
+    await services.http!.request!("https://roms.test/download")
+
+    expect(base.calls[1]?.headers["cookie"]).toBe("session=s1")
+  })
+
+  it("does not leak cookies to a different host", async () => {
+    const base = fakeBaseHttp({
+      setCookiesByUrl: {
+        "https://roms.test/game": ["session=s1; Path=/"],
+      },
+    })
+    const services = createProviderScopedPluginServices(
+      { http: base.http },
+      "@local:roms",
+    )
+
+    await services.http!.request!("https://roms.test/game")
+    await services.http!.request!("https://other.test/download")
+
+    expect(base.calls[1]?.headers["cookie"]).toBeUndefined()
+  })
+
+  it("keeps text and json sugar inside the same cookie session", async () => {
+    const base = fakeBaseHttp({
+      setCookiesByUrl: {
+        "https://roms.test/game": ["session=s1; Path=/"],
+      },
+    })
+    const services = createProviderScopedPluginServices(
+      { http: base.http },
+      "@local:roms",
+    )
+
+    await services.http!.text!("https://roms.test/game")
+    await services.http!.text!("https://roms.test/page2")
+
+    expect(base.calls[1]?.headers["cookie"]).toBe("session=s1")
+  })
+
+  it("embeds the session cookie into FinalDownload requestHeaders for the download URL", async () => {
+    const base = fakeBaseHttp({
+      setCookiesByUrl: {
+        "https://roms.test/game": ["session=s1; Path=/"],
+      },
+    })
+    const services = createProviderScopedPluginServices(
+      { http: base.http },
+      "@local:roms",
+    )
+
+    await services.http!.request!("https://roms.test/game")
+
+    expect(
+      services.downloads?.final?.({
+        url: "https://roms.test/files/game.zip",
+        requestHeaders: { referer: "https://roms.test/game" },
+      }),
+    ).toMatchObject({
+      _tag: "FinalDownload",
+      url: "https://roms.test/files/game.zip",
+      requestHeaders: {
+        referer: "https://roms.test/game",
+        cookie: "session=s1",
+      },
+    })
+  })
+
+  it("omits requestHeaders entirely when there are no cookies or explicit headers", () => {
+    const services = createProviderScopedPluginServices(
+      { time: { nowIso: () => "2026-07-06T00:00:00.000Z" } },
+      "@local:plain",
+    )
+    const final = services.downloads?.final?.({
+      url: "https://example.test/plain.zip",
+    }) as { requestHeaders?: unknown }
+    expect(final.requestHeaders).toBeUndefined()
+  })
+
+  it("passes base http through unchanged when it has no capable request", async () => {
+    const services = createProviderScopedPluginServices(
+      { http: { text: async () => "legacy" } },
+      "@local:legacy",
+    )
+    expect(await services.http!.text!("https://example.test")).toBe("legacy")
+    expect(services.http!.request).toBeUndefined()
+  })
+})

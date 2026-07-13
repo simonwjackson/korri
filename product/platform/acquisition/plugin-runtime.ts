@@ -1,7 +1,19 @@
 import type { XdgPathEnv } from "@platform/config/xdg-paths"
-import type { PluginServices } from "@platform/plugin/services"
+import type {
+  PluginHttpRequestOptions,
+  PluginHttpResponse,
+  PluginServices,
+} from "@platform/plugin/services"
+import { validateOutboundHttpUrl } from "./download-resolution/url-policy"
 import type { AcquisitionLogger } from "./logger"
 import { silentAcquisitionLogger } from "./logger"
+
+export const MAX_PLUGIN_HTTP_RESPONSE_BYTES = 2 * 1024 * 1024 * 1024
+
+export type PluginFetchLike = (
+  url: string | URL,
+  init?: RequestInit,
+) => Promise<Response>
 
 export interface AcquisitionClock {
   readonly nowIso: () => string
@@ -19,6 +31,7 @@ export interface AcquisitionRuntimeOptions {
   readonly logger?: AcquisitionLogger
   readonly env?: XdgPathEnv
   readonly services?: PluginServices
+  readonly fetchImpl?: PluginFetchLike
 }
 
 export function createAcquisitionPluginContext(
@@ -31,7 +44,11 @@ export function createAcquisitionPluginContext(
     logger,
     env: options.env ?? process.env,
     services: {
-      ...createAcquisitionPluginServices({ clock, logger }),
+      ...createAcquisitionPluginServices({
+        clock,
+        logger,
+        fetchImpl: options.fetchImpl,
+      }),
       ...options.services,
     },
   }
@@ -40,7 +57,9 @@ export function createAcquisitionPluginContext(
 export function createAcquisitionPluginServices(input: {
   readonly clock: AcquisitionClock
   readonly logger: AcquisitionLogger
+  readonly fetchImpl?: PluginFetchLike
 }): PluginServices {
+  const request = createPluginHttpRequest(input.fetchImpl ?? fetch)
   return {
     time: {
       nowIso: input.clock.nowIso,
@@ -68,20 +87,100 @@ export function createAcquisitionPluginServices(input: {
       error: (message, data) => input.logger.error(message, logFields(data)),
     },
     http: {
+      request,
       text: async (url, options) => {
-        const response = await fetch(withQuery(url, options?.query), {
-          headers: options?.headers,
-          signal: timeoutSignal(options?.timeoutMs),
-        })
+        const response = await request(url, options)
         return response.text()
       },
-      json: async (url, options) => {
-        const response = await fetch(withQuery(url, options?.query), {
-          headers: options?.headers,
-          signal: timeoutSignal(options?.timeoutMs),
-        })
-        return response.json()
+      json: async <T>(
+        url: string | URL,
+        options?: PluginHttpRequestOptions,
+      ) => {
+        const response = await request(url, options)
+        return response.json<T>()
       },
+    },
+  }
+}
+
+function createPluginHttpRequest(
+  fetchImpl: PluginFetchLike,
+): (
+  url: string | URL,
+  options?: PluginHttpRequestOptions,
+) => Promise<PluginHttpResponse> {
+  return async (url, options) => {
+    const target = withQuery(url, options?.query)
+    validateOutboundHttpUrl(String(target))
+    const response = await fetchImpl(target, {
+      method: options?.method ?? "GET",
+      headers: options?.headers,
+      body: requestBody(options?.body),
+      signal: timeoutSignal(options?.timeoutMs),
+      redirect: "follow",
+    })
+    if (response.url !== "" && response.url !== String(target)) {
+      validateOutboundHttpUrl(response.url)
+    }
+    return toPluginHttpResponse(response, String(target))
+  }
+}
+
+function requestBody(
+  body: PluginHttpRequestOptions["body"],
+): BodyInit | undefined {
+  if (body === undefined) return undefined
+  if (body instanceof Uint8Array) {
+    return body.slice().buffer as ArrayBuffer
+  }
+  return body
+}
+
+function toPluginHttpResponse(
+  response: Response,
+  requestedUrl: string,
+): PluginHttpResponse {
+  const headers: Record<string, string> = {}
+  response.headers.forEach((value, key) => {
+    headers[key.toLowerCase()] = value
+  })
+  const guardPayloadSize = () => {
+    const declared = Number(response.headers.get("content-length") ?? "0")
+    if (declared > MAX_PLUGIN_HTTP_RESPONSE_BYTES) {
+      throw new Error(
+        `Response from ${response.url || requestedUrl} is too large`,
+      )
+    }
+  }
+  return {
+    status: response.status,
+    ok: response.ok,
+    url: response.url || requestedUrl,
+    headers,
+    setCookies: response.headers.getSetCookie?.() ?? [],
+    text: async () => {
+      guardPayloadSize()
+      const text = await response.text()
+      if (text.length > MAX_PLUGIN_HTTP_RESPONSE_BYTES) {
+        throw new Error(
+          `Response from ${response.url || requestedUrl} is too large`,
+        )
+      }
+      return text
+    },
+    json: async <T>() => {
+      guardPayloadSize()
+      return (await response.json()) as T
+    },
+    bytes: async () => {
+      guardPayloadSize()
+      const buffer = await response.arrayBuffer()
+      if (buffer.byteLength > MAX_PLUGIN_HTTP_RESPONSE_BYTES) {
+        throw new Error(
+          `Response from ${response.url || requestedUrl} is too large`,
+        )
+      }
+      return new Uint8Array(buffer)
     },
   }
 }
