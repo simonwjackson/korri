@@ -217,7 +217,12 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("steam_ready_log_present")
     expect(moduleSource).toContain("steam_startup_update_active")
     expect(moduleSource).toContain(
-      "observed Steam startup self-update; extending readiness wait",
+      "observed Steam startup self-update; deferring AppID forward until it completes",
+    )
+    // Readiness must not be accepted while a Steam startup update is active.
+    expect(moduleSource).toContain("update_active=1")
+    expect(moduleSource).toContain(
+      'if [ "$update_active" -eq 0 ] && steam_surface_ready && steam_desktop_ui_ready; then',
     )
     expect(moduleSource).toContain('*steamwebhelper*" -uimode=7"*) return 0')
     expect(moduleSource).toContain("big_picture_surface_present")
@@ -234,10 +239,10 @@ describe("Steam plugin Nix module", () => {
       '[ "$require_gamescope_socket" != "1" ] || [ -S "$gamescope_socket" ]',
     )
     expect(moduleSource).toContain(
-      "if steam_surface_ready && steam_desktop_ui_ready",
+      'if [ "$update_active" -eq 0 ] && steam_surface_ready && steam_desktop_ui_ready; then',
     )
     expect(moduleSource).toContain(
-      'if steam_surface_ready && { [ "$desktop_ui_ready" -eq 1 ] || steam_ready_log_present',
+      'if [ "$update_active" -eq 0 ] && steam_surface_ready \\\n          && { [ "$desktop_ui_ready" -eq 1 ] || steam_ready_log_present',
     )
     expect(moduleSource).not.toContain(
       'if [ -S "$gamescope_socket" ] \\\n          && printf',

@@ -44,9 +44,11 @@ describe("Steam plugin descriptor", () => {
       id: KORRI_STEAM_APP_ID,
       plugin: KORRI_STEAM_PLUGIN_ID,
       command: "steam",
+      // korri-steam-app owns the inner Gamescope service; the outer host-level
+      // Gamescope companion is explicitly disabled to avoid double-wrapping.
       launch: {
         with: {
-          [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: true },
+          [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: false },
         },
       },
       settings: {
@@ -54,6 +56,13 @@ describe("Steam plugin descriptor", () => {
           state: { root: `{storage:${KORRI_STEAM_STORAGE_ID}}` },
         },
       },
+    })
+  })
+
+  it("opts the Steam launcher out of the outer Gamescope companion", () => {
+    const app = decodeAppRecord(steamPlugin.contributes.config.launchers?.steam)
+    expect(app.launch?.with?.[KORRI_GAMESCOPE_PLUGIN_ID]).toEqual({
+      enable: false,
     })
   })
 

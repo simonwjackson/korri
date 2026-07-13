@@ -152,9 +152,15 @@ export const steamPlugin = plugin({
           plugin: KORRI_STEAM_PLUGIN_ID,
           command: "steam",
           systems: ["steam"],
+          // The managed korri-steam-app wrapper already runs Steam inside its
+          // own Gamescope service (korri-steam-gamescope.service) for gamepad
+          // compatibility. Explicitly opt out of the host-level @korri:gamescope
+          // launch companion so Steam AppID launches are not wrapped in a second
+          // outer Gamescope, which caused gamescope-0/gamescope-1 socket
+          // collisions and false readiness during cold Steam startup.
           launch: {
             with: {
-              [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: true },
+              [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: false },
             },
           },
           settings: { plugin: defaultSteamPluginPolicy },

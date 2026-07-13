@@ -1133,8 +1133,23 @@ EOF
           fi
         fi
         now="$(${pkgs.coreutils}/bin/date +%s)"
+        # A Steam startup self-update relaunches the client: uimode=7 can appear
+        # briefly for the pre-update client, then Steam shuts down to install the
+        # update and restarts. Never accept readiness while an update is active,
+        # and restart the desktop-UI stable window so we only forward AppIDs to a
+        # post-update, stable Steam client.
+        update_active=0
+        if steam_startup_update_active; then
+          update_active=1
+          desktop_ready_since=0
+          if [ "$steam_startup_update_observed" -eq 0 ]; then
+            steam_startup_update_observed=1
+            echo "korri-steam-app: observed Steam startup self-update; deferring AppID forward until it completes" >&2
+          fi
+          ready_deadline=$((now + startup_update_timeout))
+        fi
         desktop_ui_ready=0
-        if steam_surface_ready && steam_desktop_ui_ready; then
+        if [ "$update_active" -eq 0 ] && steam_surface_ready && steam_desktop_ui_ready; then
           if [ "$desktop_ready_since" -eq 0 ]; then
             desktop_ready_since="$now"
           fi
@@ -1144,20 +1159,17 @@ EOF
         else
           desktop_ready_since=0
         fi
-        if steam_surface_ready && { [ "$desktop_ui_ready" -eq 1 ] || steam_ready_log_present "$ready_log"; }; then
+        if [ "$update_active" -eq 0 ] && steam_surface_ready \
+          && { [ "$desktop_ui_ready" -eq 1 ] || steam_ready_log_present "$ready_log"; }; then
           return 0
-        fi
-        if steam_startup_update_active; then
-          if [ "$steam_startup_update_observed" -eq 0 ]; then
-            steam_startup_update_observed=1
-            ready_deadline=$((now + startup_update_timeout))
-            echo "korri-steam-app: observed Steam startup self-update; extending readiness wait" >&2
-          fi
         fi
         service_state="$(steam_service_state)"
         case "$service_state" in
           active|activating|deactivating|reloading) ;;
           inactive)
+            # A Steam self-update exits the managed service with a relaunch code;
+            # if that happens mid-readiness, restart it and keep waiting instead
+            # of failing the launch.
             if ! request_steam_service_start; then
               return 1
             fi
