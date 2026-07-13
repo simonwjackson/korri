@@ -566,14 +566,17 @@ in
       kind = "thermal-zone";
       zoneType = "cpu7-top-thermal";
     };
+    # Mid-range tuned for docked-play quietness: gaming loads in the
+    # 60–75C band run several fan-percent quieter than the first cut
+    # (65C knee was 70%); the 85C => 100% safety ceiling is unchanged.
     curve = [
       {
         tempC = 45;
-        pwmPercent = 45;
+        pwmPercent = 35;
       }
       {
-        tempC = 65;
-        pwmPercent = 70;
+        tempC = 70;
+        pwmPercent = 55;
       }
       {
         tempC = 85;

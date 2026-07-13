@@ -228,12 +228,12 @@ let
         && fan.tempSource.zoneType == "cpu7-top-thermal"
         && map (point: point.tempC) fan.curve == [
           45
-          65
+          70
           85
         ]
         && map (point: point.pwmPercent) fan.curve == [
-          45
-          70
+          35
+          55
           100
         ]
         && fan.idlePwmPercent == 27
