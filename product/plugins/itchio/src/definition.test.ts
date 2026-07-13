@@ -1717,3 +1717,68 @@ describe("itch.io acquisition plugin", () => {
     })
   })
 })
+
+describe("unified plugin http sourcing", () => {
+  it("routes definition fetches through context.services.http, never global fetch", async () => {
+    const globalFetch = globalThis.fetch
+    let globalCalls = 0
+    let serviceCalls = 0
+    globalThis.fetch = (async () => {
+      globalCalls += 1
+      return new Response("nope", { status: 500 })
+    }) as unknown as typeof fetch
+    try {
+      const definition = createItchioPluginDefinition()
+      const claims = await Effect.runPromise(
+        definition.search!(
+          {
+            ...context,
+            services: {
+              http: {
+                request: async () => {
+                  serviceCalls += 1
+                  return {
+                    status: 200,
+                    ok: true,
+                    url: "https://itch.io/feed/new.xml",
+                    headers: { "content-type": "application/rss+xml" },
+                    setCookies: [],
+                    text: async () => platformerFeed,
+                    json: async () => ({}) as never,
+                    bytes: async () => new Uint8Array(),
+                  }
+                },
+              },
+            },
+          },
+          { query: "celeste" },
+        ),
+      )
+
+      expect(serviceCalls).toBeGreaterThan(0)
+      expect(globalCalls).toBe(0)
+      expect(claims.length).toBeGreaterThan(0)
+    } finally {
+      globalThis.fetch = globalFetch
+    }
+  })
+
+  it("fails clearly when neither fetchImpl nor services.http is available", async () => {
+    const definition = createItchioPluginDefinition()
+    const outcome = await Effect.runPromise(
+      definition.validateProvider!({ ...context, checkedAt }),
+    )
+    expect(outcome).toMatchObject({
+      _tag: "UnhealthyProvider",
+      reason: "provider-error",
+    })
+  })
+
+  it("keeps no global-fetch fallback in the definition source", async () => {
+    const source = await readFile(
+      new URL("./definition.ts", import.meta.url),
+      "utf8",
+    )
+    expect(source).not.toContain("?? fetch")
+  })
+})

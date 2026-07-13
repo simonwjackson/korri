@@ -33,6 +33,79 @@ const MAX_PUBLIC_ARTIFACT_BYTES = 256 * 1024 * 1024
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 
+/**
+ * Adapts the unified plugin http service (context.services.http.request) to
+ * the definition's internal FetchLike seam. This is the only production
+ * source of network access — the definition never reaches for global fetch.
+ */
+function pluginHttpFetchLike(context: AcquisitionPluginContext): FetchLike {
+  const request = context.services?.http?.request
+  if (request === undefined) {
+    throw new AcquisitionError({
+      reason: "infrastructure",
+      providerId: PROVIDER_ID,
+      message:
+        "itch.io plugin requires the unified plugin http service (services.http.request)",
+    })
+  }
+  return async (url, init) => {
+    const response = await request(url, {
+      ...(init?.method ? { method: init.method } : {}),
+      ...(init?.headers ? { headers: headersRecord(init.headers) } : {}),
+      ...(init?.body !== undefined && init.body !== null
+        ? { body: bodyForPluginHttp(init.body) }
+        : {}),
+    })
+    const headerGet = (name: string): string | null =>
+      response.headers[name.toLowerCase()] ?? null
+    return {
+      ok: response.ok,
+      status: response.status,
+      url: response.url,
+      headers: {
+        get: headerGet,
+        getSetCookie: () => [...response.setCookies],
+      },
+      text: async () => response.text(),
+      json: async () => response.json(),
+      arrayBuffer: async () => {
+        const bytes = await response.bytes()
+        return bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        ) as ArrayBuffer
+      },
+    } as unknown as Response
+  }
+}
+
+function headersRecord(headers: HeadersInit): Record<string, string> {
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers as ReadonlyArray<[string, string]>)
+  }
+  if (typeof (headers as Headers).forEach === "function") {
+    const record: Record<string, string> = {}
+    ;(headers as Headers).forEach((value, key) => {
+      record[key] = value
+    })
+    return record
+  }
+  return { ...(headers as Record<string, string>) }
+}
+
+function bodyForPluginHttp(
+  body: BodyInit,
+): string | Uint8Array | URLSearchParams {
+  if (typeof body === "string" || body instanceof URLSearchParams) return body
+  if (body instanceof Uint8Array) return body
+  if (body instanceof ArrayBuffer) return new Uint8Array(body)
+  throw new AcquisitionError({
+    reason: "infrastructure",
+    providerId: PROVIDER_ID,
+    message: "itch.io plugin sent an unsupported request body type",
+  })
+}
+
 interface ItchioPluginOptions {
   readonly fetchImpl?: FetchLike
   readonly apiKey?: string
@@ -111,7 +184,8 @@ interface ItchioOwnedKey {
 export function createItchioPluginDefinition(
   options: ItchioPluginOptions = {},
 ): AcquisitionPluginDefinition {
-  const fetchImpl = options.fetchImpl ?? fetch
+  const resolveFetch = (context: AcquisitionPluginContext): FetchLike =>
+    options.fetchImpl ?? pluginHttpFetchLike(context)
   const apiBaseUrl = options.apiBaseUrl ?? "https://api.itch.io"
   const butlerClient = options.butlerClient ?? createButlerClient()
 
@@ -129,7 +203,7 @@ export function createItchioPluginDefinition(
     search: (context, request) =>
       Effect.tryPromise(async () =>
         searchItchio(
-          fetchImpl,
+          resolveFetch(context),
           apiBaseUrl,
           authFrom(context, options),
           request,
@@ -139,13 +213,15 @@ export function createItchioPluginDefinition(
           Effect.succeed([] satisfies readonly ProviderClaim[]),
         ),
       ),
-    details: (_context, request) =>
-      publicPageDetails(fetchImpl, request.id).pipe(Effect.map(detailsFor)),
+    details: (context, request) =>
+      publicPageDetails(resolveFetch(context), request.id).pipe(
+        Effect.map(detailsFor),
+      ),
     validateProvider: context =>
       Effect.tryPromise({
         try: () =>
           validateItchioProvider(
-            fetchImpl,
+            resolveFetch(context),
             apiBaseUrl,
             authFrom(context, options),
             context.checkedAt,
@@ -171,7 +247,7 @@ export function createItchioPluginDefinition(
     resolveDownload: (context, request) =>
       Effect.tryPromise(() =>
         resolveItchioDownload(
-          fetchImpl,
+          resolveFetch(context),
           apiBaseUrl,
           authFrom(context, options),
           butlerClient,
@@ -187,7 +263,7 @@ export function createItchioPluginDefinition(
       Effect.tryPromise({
         try: () =>
           acquireItchioArtifact(
-            fetchImpl,
+            resolveFetch(context),
             apiBaseUrl,
             authFrom(context, options),
             butlerClient,

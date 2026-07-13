@@ -13,11 +13,20 @@ const noopLogger = {
   error: () => undefined,
 }
 
-function acquisitionContext(): AcquisitionPluginContext {
+/**
+ * Bridges the unified run(context) services into the definition's context.
+ * The handler harness provides provider-scoped services (capable http with
+ * the provider cookie session); the definition sources all network access
+ * from them — there is no global-fetch fallback.
+ */
+function acquisitionContext(
+  services: AcquisitionPluginContext["services"],
+): AcquisitionPluginContext {
   return {
     clock: { nowIso: () => new Date().toISOString() },
     logger: noopLogger,
     env: process.env,
+    ...(services ? { services } : {}),
   }
 }
 
@@ -40,9 +49,9 @@ export const itchioPlugin = plugin({
       {
         id: "itchio-claims-search",
         operation: "claims.search",
-        run: ({ input }) =>
+        run: ({ input, services }) =>
           definition.search?.(
-            acquisitionContext(),
+            acquisitionContext(services),
             input as {
               readonly query: string
               readonly platforms?: readonly string[]
@@ -62,20 +71,20 @@ export const itchioPlugin = plugin({
       {
         id: "itchio-claims-details",
         operation: "claims.details",
-        run: ({ input }) =>
-          definition.details?.(acquisitionContext(), input as never) ??
+        run: ({ input, services }) =>
+          definition.details?.(acquisitionContext(services), input as never) ??
           Effect.die("missing itch.io details handler"),
       },
       {
         id: "itchio-provider-validate",
         operation: "provider.validate",
-        run: ({ input }) => {
+        run: ({ input, services }) => {
           const checkedAt =
             (input as { readonly checkedAt?: unknown }).checkedAt ??
             new Date().toISOString()
           return (
             definition.validateProvider?.({
-              ...acquisitionContext(),
+              ...acquisitionContext(services),
               checkedAt: String(checkedAt),
             }) ?? Effect.die("missing itch.io validate handler")
           )
@@ -84,16 +93,20 @@ export const itchioPlugin = plugin({
       {
         id: "itchio-artifact-resolve-download",
         operation: "artifact.resolve-download",
-        run: ({ input }) =>
-          definition.resolveDownload?.(acquisitionContext(), input as never) ??
-          Effect.die("missing itch.io resolve-download handler"),
+        run: ({ input, services }) =>
+          definition.resolveDownload?.(
+            acquisitionContext(services),
+            input as never,
+          ) ?? Effect.die("missing itch.io resolve-download handler"),
       },
       {
         id: "itchio-artifact-acquire",
         operation: "artifact.acquire",
-        run: ({ input }) =>
-          definition.acquireArtifact?.(acquisitionContext(), input as never) ??
-          Effect.die("missing itch.io acquire handler"),
+        run: ({ input, services }) =>
+          definition.acquireArtifact?.(
+            acquisitionContext(services),
+            input as never,
+          ) ?? Effect.die("missing itch.io acquire handler"),
       },
     ],
   },
