@@ -11,6 +11,11 @@
  * Input precedence: while open the sheet claims `back`. The `back` bus fans out
  * to every subscriber, so a host must gate its own `back` handling on the sheet
  * being closed (see `ShiftStoreDrawer`) to avoid double-handling.
+ *
+ * Focus: the panel is an `lrud-container` with `data-block-exit`, so directional
+ * input stays inside the sheet instead of wandering to the surface behind it,
+ * and on open focus lands on the first real content control (not the close
+ * button) so a single confirm runs the primary action.
  */
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { type ReactNode, useEffect, useRef } from "react"
@@ -32,15 +37,19 @@ export function ShiftSheetPanel({ children }: ShiftSheetPanelProps) {
     if (open) close()
   })
 
-  // Move focus into the dialog when it opens so directional input lands in the
-  // panel, not on the surface behind it. The first enabled control wins.
+  // Move focus into the dialog when it opens, onto the first real content
+  // control rather than the close button, so a single confirm runs the primary
+  // action (e.g. Play) without navigating first.
   useEffect(() => {
     if (!open) return
-    panelRef.current
-      ?.querySelector<HTMLElement>(
-        "button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
-      )
-      ?.focus({ preventScroll: true })
+    const focusables = panelRef.current?.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
+    )
+    const ordered = Array.from(focusables ?? [])
+    const target =
+      ordered.find(el => !el.classList.contains("shift-sheet-close")) ??
+      ordered[0]
+    target?.focus({ preventScroll: true })
   }, [open])
 
   if (!open) return null
@@ -53,8 +62,9 @@ export function ShiftSheetPanel({ children }: ShiftSheetPanelProps) {
     >
       <aside
         ref={panelRef}
-        className="shift-sheet-panel"
+        className="shift-sheet-panel lrud-container"
         data-side={side}
+        data-block-exit="true"
         role="dialog"
         aria-modal="true"
         aria-label={label}
