@@ -264,13 +264,35 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain(
       "systemctl reset-failed korri-steam-gamescope.service",
     )
+    // Start is routed through the always-present user-manager ensure unit, which
+    // reliably elevates where the transient sessiond launch child cannot.
     expect(moduleSource).toContain(
+      "systemctl --user start korri-steam-ensure.service",
+    )
+    expect(moduleSource).not.toContain(
       "systemctl --user restart korri-steam-warm.service",
     )
     expect(moduleSource).not.toContain("overridden service $service_name")
     expect(moduleSource).toContain("inactive)")
     expect(moduleSource).toContain("if ! request_steam_service_start; then")
     expect(moduleSource).toContain("RemainAfterExit = false")
+  })
+
+  it("provides an always-present on-demand ensure unit for AppID launches", () => {
+    // Unlike korri-steam-warm (gated on keepWarm), the ensure unit must always
+    // exist so keepWarm = false hosts can still start managed Steam on a
+    // launch, and it must not auto-start at boot (no wantedBy) to preserve the
+    // no-warm-Steam-at-boot policy.
+    expect(moduleSource).toContain(
+      "systemd.user.services.korri-steam-ensure = {",
+    )
+    const ensureBlock = moduleSource.match(
+      /systemd\.user\.services\.korri-steam-ensure = \{[\s\S]*?\n    \};/,
+    )?.[0]
+    expect(ensureBlock).toBeDefined()
+    expect(ensureBlock).not.toContain("wantedBy")
+    expect(ensureBlock).not.toContain("lib.mkIf cfg.keepWarm")
+    expect(ensureBlock).toContain('ExecStart = "${steamWarmup}/bin/korri-steam-warm"')
   })
 
   it("exposes explicit service drain and reset operations for AppID handoff", () => {

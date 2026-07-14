@@ -946,21 +946,22 @@ EOF
         return $?
       fi
       if [ -x /run/wrappers/bin/sudo ]; then
-        if ${pkgs.coreutils}/bin/timeout "$control_timeout" /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control "$action"; then
-          return 0
-        fi
-        sudo_status="$?"
         if [ "$action" = "start" ]; then
-          # Launch children can have a narrower privilege context than the
-          # kiosk user manager. If direct sudo service-control cannot start the
-          # system broker, rerun the warmup unit; it performs the same start
-          # request from the long-lived user manager context. This makes AppID
-          # launches an idempotent ensure instead of depending on boot warmth.
-          if ${pkgs.coreutils}/bin/timeout "$control_timeout" ${pkgs.systemd}/bin/systemctl --user restart korri-steam-warm.service; then
+          # The transient sessiond-spawned launch child cannot reliably elevate
+          # to start the managed Steam system broker — in practice it never even
+          # issues sudo in that context, so a direct sudo here silently no-ops.
+          # The long-lived korri user manager CAN elevate, so route the start
+          # through the always-present korri-steam-ensure oneshot, which performs
+          # the same start request from that context. It has no boot wantedBy,
+          # so hosts with keepWarm = false stay cold until a launch triggers it.
+          if ${pkgs.coreutils}/bin/timeout "$control_timeout" ${pkgs.systemd}/bin/systemctl --user start korri-steam-ensure.service; then
             return 0
           fi
         fi
-        return "$sudo_status"
+        if ${pkgs.coreutils}/bin/timeout "$control_timeout" /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control "$action"; then
+          return 0
+        fi
+        return "$?"
       fi
       echo "korri-steam-app: warning: sudo wrapper unavailable; cannot $action $service_name" >&2
       return 1
@@ -1589,6 +1590,21 @@ in
       description = "Warm the Korri guest-native Steam client for AppID launches";
       wantedBy = [ "korri-session.target" ];
       after = [ "korri-compositor.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${steamWarmup}/bin/korri-steam-warm";
+        RemainAfterExit = false;
+      };
+    };
+
+    # On-demand start path for AppID launches. Unlike korri-steam-warm this unit
+    # is always present (not gated on keepWarm) and has no wantedBy, so it never
+    # warms Steam at boot — it runs only when korri-steam-app triggers it for a
+    # game launch. It runs in the korri user manager context, which can elevate
+    # to start the managed Steam system broker where the transient
+    # sessiond-spawned launch child cannot.
+    systemd.user.services.korri-steam-ensure = {
+      description = "Ensure managed Steam is started for an on-demand AppID launch";
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${steamWarmup}/bin/korri-steam-warm";
