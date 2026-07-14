@@ -1076,6 +1076,13 @@ EOF
       [ -n "$state" ] && printf '%s\n' "$state" || printf 'unknown\n'
     }
 
+    steam_service_invocation() {
+      # systemd assigns a fresh InvocationID every (re)start, so a changed value
+      # is an unambiguous signal that the managed Steam service restarted (e.g.
+      # after a gamescope abort) since we last checked.
+      ${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl show "$service_name" -p InvocationID --value 2>/dev/null || true
+    }
+
     localconfig_files() {
       ${pkgs.findutils}/bin/find "$STEAM_HOME/userdata" -mindepth 3 -maxdepth 3 -path '*/config/localconfig.vdf' -type f -print 2>/dev/null || true
     }
@@ -1209,15 +1216,22 @@ EOF
     # Keep Steam hidden by default. First-launch gates are pre-seeded by the
     # Steam state reconciler; this wrapper no longer reacts to ShowInterstitials
     # console-log prompts.
-    focus_korri_output
-    hide_steam_hat
-    note_big_picture_surface "AppID $appid launch forwarding"
-    steam_launch_forwarded=1
-    if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs} -applaunch "$appid" >/dev/null; then
+    forward_appid() {
+      focus_korri_output
+      hide_steam_hat
+      note_big_picture_surface "AppID $appid launch forwarding"
+      steam_launch_forwarded=1
+      if ! ${pkgs.coreutils}/bin/timeout "$forward_timeout" ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs} -applaunch "$appid" >/dev/null; then
+        return 1
+      fi
+      hide_steam_hat
+      return 0
+    }
+
+    if ! forward_appid; then
       echo "korri-steam-app: timed out forwarding AppID $appid to Steam" >&2
       exit 125
     fi
-    hide_steam_hat
 
     log_has() {
       haystack="$1"
@@ -1300,6 +1314,14 @@ EOF
     saw_added=0
     observed_app_removed=0
     wrapper_handoff_reported=0
+    # Record which managed Steam run received the -applaunch. If gamescope aborts
+    # before the game appears (upstream Wayland-backend race #1456, triggered by
+    # Steam's cold-start updater window churn), Restart=on-failure recovers the
+    # service under a new InvocationID and the forwarded launch dies with the old
+    # client. We re-forward to the recovered client up to reforward_limit times.
+    reforward_count=0
+    reforward_limit="''${KORRI_STEAM_APP_REFORWARD_LIMIT:-3}"
+    launch_invocation="$(steam_service_invocation)"
     while true; do
       note_big_picture_surface "AppID $appid launch observation"
       new_log=""
@@ -1355,10 +1377,30 @@ EOF
             exit 0
           fi
         fi
-      elif [ "$(${pkgs.coreutils}/bin/date +%s)" -gt "$deadline" ]; then
-        hide_steam_hat
-        echo "korri-steam-app: timed out waiting for Steam AppID $appid to launch" >&2
-        exit 124
+      else
+        current_invocation="$(steam_service_invocation)"
+        if [ -n "$launch_invocation" ] && [ -n "$current_invocation" ] \
+          && [ "$current_invocation" != "$launch_invocation" ]; then
+          # Managed Steam restarted before AppID $appid ever launched: the
+          # forwarded -applaunch died with the aborted gamescope/Steam instance.
+          # Wait for the recovered client and re-forward, bounded by
+          # reforward_limit so a persistent crash still terminates.
+          if [ "$reforward_count" -ge "$reforward_limit" ]; then
+            hide_steam_hat
+            echo "korri-steam-app: managed Steam kept restarting before AppID $appid launched; giving up after $reforward_limit re-forwards" >&2
+            exit 126
+          fi
+          reforward_count=$((reforward_count + 1))
+          echo "korri-steam-app: managed Steam restarted before AppID $appid launched (gamescope abort recovery $reforward_count/$reforward_limit); re-forwarding" >&2
+          if wait_for_steam_ready && forward_appid; then
+            launch_invocation="$(steam_service_invocation)"
+            deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + launch_timeout ))
+          fi
+        elif [ "$(${pkgs.coreutils}/bin/date +%s)" -gt "$deadline" ]; then
+          hide_steam_hat
+          echo "korri-steam-app: timed out waiting for Steam AppID $appid to launch" >&2
+          exit 124
+        fi
       fi
 
       ${pkgs.coreutils}/bin/sleep 1

@@ -295,6 +295,32 @@ describe("Steam plugin Nix module", () => {
     expect(ensureBlock).toContain('ExecStart = "${steamWarmup}/bin/korri-steam-warm"')
   })
 
+  it("re-forwards the AppID when gamescope aborts before the game launches", () => {
+    // Upstream gamescope Wayland-backend abort race (#1456) restarts the managed
+    // Steam service with a new InvocationID before the game appears, killing the
+    // forwarded -applaunch. The wrapper must detect the restart and re-forward
+    // to the recovered client instead of waiting out the launch timeout.
+    expect(moduleSource).toContain("steam_service_invocation()")
+    expect(moduleSource).toContain("launch_invocation=")
+    expect(moduleSource).toContain("reforward_limit=")
+    expect(moduleSource).toContain('KORRI_STEAM_APP_REFORWARD_LIMIT:-3')
+    // The re-forward path waits for readiness and re-issues the launch, bounded
+    // by the limit so a persistent crash still terminates rather than looping.
+    expect(moduleSource).toContain(
+      'if wait_for_steam_ready && forward_appid; then',
+    )
+    expect(moduleSource).toContain(
+      'giving up after $reforward_limit re-forwards',
+    )
+    // The restart is detected by a changed systemd InvocationID.
+    expect(moduleSource).toContain(
+      'current_invocation="$(steam_service_invocation)"',
+    )
+    expect(moduleSource).toContain(
+      '[ "$current_invocation" != "$launch_invocation" ]',
+    )
+  })
+
   it("exposes explicit service drain and reset operations for AppID handoff", () => {
     expect(moduleSource).toContain(
       "usage: korri-steam-service-control <start|stop|drain|reset>",
