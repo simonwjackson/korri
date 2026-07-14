@@ -596,6 +596,17 @@ describe("Steam plugin Nix module", () => {
     expect(focusBlock).not.toContain('[class=\\"steam_app_$appid\\"] scratchpad show')
   })
 
+  it("resolves the canonical sway-ipc socket so wrapper sway commands are not no-ops", () => {
+    // The sessiond-spawned wrapper has no SWAYSOCK, and the compositor's socket
+    // is $XDG_RUNTIME_DIR/sway-ipc.sock (single dot). The old glob
+    // 'sway-ipc.*.sock' never matched it, so every sway() call silently did
+    // nothing. find_sway_sock must resolve the canonical single-dot path.
+    const sockBlock = moduleSource.match(/find_sway_sock\(\) \{[\s\S]*?\n    \}/)?.[0]
+    expect(sockBlock).toBeDefined()
+    expect(sockBlock).toContain('[ -S "$XDG_RUNTIME_DIR/sway-ipc.sock" ]')
+    expect(sockBlock).toContain("-name 'sway-ipc.sock'")
+  })
+
   it("classifies post-running service failures as non-successful terminal states", () => {
     expect(moduleSource).toContain("service_failure_classification()")
     expect(moduleSource).toContain(

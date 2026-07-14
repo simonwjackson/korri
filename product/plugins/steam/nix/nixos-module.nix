@@ -837,7 +837,17 @@ EOF
         printf '%s\n' "$SWAYSOCK"
         return 0
       fi
-      ${pkgs.findutils}/bin/find "$XDG_RUNTIME_DIR" -maxdepth 1 -type s -name 'sway-ipc.*.sock' -print -quit 2>/dev/null || true
+      # The managed compositor exposes a canonical single-instance socket at
+      # $XDG_RUNTIME_DIR/sway-ipc.sock (the exact path the service-run helper
+      # hardcodes for gamescope placement). The sessiond-spawned wrapper has no
+      # SWAYSOCK in its env, and the old glob 'sway-ipc.*.sock' never matched the
+      # single-dot 'sway-ipc.sock' name, so every sway() call was a silent no-op.
+      if [ -S "$XDG_RUNTIME_DIR/sway-ipc.sock" ]; then
+        printf '%s\n' "$XDG_RUNTIME_DIR/sway-ipc.sock"
+        return 0
+      fi
+      # Fall back to sway's per-instance naming (sway-ipc.<uid>.<pid>.sock).
+      ${pkgs.findutils}/bin/find "$XDG_RUNTIME_DIR" -maxdepth 1 -type s \( -name 'sway-ipc.sock' -o -name 'sway-ipc.*.sock' \) -print -quit 2>/dev/null || true
     }
 
     sway() {
