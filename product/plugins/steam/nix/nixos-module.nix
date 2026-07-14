@@ -818,6 +818,9 @@ EOF
     startup_update_timeout="''${KORRI_STEAM_APP_STARTUP_UPDATE_TIMEOUT:-900}"
     desktop_ui_stable_seconds="''${KORRI_STEAM_APP_DESKTOP_UI_READY_STABLE_SECONDS:-5}"
     service_name="korri-steam-gamescope.service"
+    # Same workspace identity the service-run helper places managed Gamescope on;
+    # focus_game switches Sway to this workspace to reveal the running game.
+    steam_workspace="''${KORRI_STEAM_WORKSPACE:-korri:steam-debug}"
     gamescope_display="''${GAMESCOPE_WAYLAND_DISPLAY:-gamescope-0}"
     gamescope_socket="$XDG_RUNTIME_DIR/$gamescope_display"
     require_gamescope_socket="${if cfg.presentationMode == "gamescope" then "1" else "0"}"
@@ -874,24 +877,28 @@ EOF
     }
 
     focus_game() {
-      # Steam logs "Game process added" before the Xwayland window is always
-      # mapped. Wait for the real game surface, then normalize it to a regular
-      # fullscreen tiled container on the kiosk output. Doing this once after
-      # map keeps Steam Input focused on the AppID; repeatedly replaying the
-      # Steam-hide policy can put the frontend back on top and drop controls.
+      # The game renders INSIDE the nested Gamescope surface, which Sway sees as
+      # a single container on the managed Steam workspace ($steam_workspace).
+      # Sway cannot address the inner "steam_app_$appid" X window, so the old
+      # [class=steam_app_$appid] selectors never matched and the display was
+      # left on the kiosk while the game ran hidden. Reveal the game by
+      # switching Sway to the managed Steam workspace once the game process is
+      # actually up. Doing this once keeps Steam Input focused on the AppID.
       i=0
       while [ "$i" -lt 30 ]; do
         if app_exit_confirmed_after_removal; then
           return 10
         fi
-        if sway_tree | ${pkgs.gnugrep}/bin/grep -a -F "\"class\": \"steam_app_$appid\"" >/dev/null 2>&1; then
-          sway "[class=\"steam_app_$appid\"] scratchpad show"
-          sway "[class=\"steam_app_$appid\"] floating disable, move to workspace 1, fullscreen enable, focus"
+        if app_running_evidence_present; then
+          sway "workspace \"$steam_workspace\""
           return 0
         fi
         i=$((i + 1))
         ${pkgs.coreutils}/bin/sleep 1
       done
+      # Fall back to switching anyway so a running game is never left hidden
+      # behind the kiosk output.
+      sway "workspace \"$steam_workspace\""
       return 0
     }
 

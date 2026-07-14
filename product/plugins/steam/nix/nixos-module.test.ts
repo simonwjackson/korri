@@ -582,6 +582,20 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("if ! repair_game_audio; then")
   })
 
+  it("reveals the running game by switching to the managed Gamescope workspace", () => {
+    // The game renders inside the nested Gamescope surface, so Sway cannot see
+    // the inner steam_app_$appid window; focus_game must switch to the managed
+    // Steam workspace (the container Sway can actually address) rather than
+    // relying on a steam_app_$appid selector, which never matched.
+    const focusBlock = moduleSource.match(/focus_game\(\) \{[\s\S]*?\n    \}/)?.[0]
+    expect(focusBlock).toBeDefined()
+    expect(focusBlock).toContain('sway "workspace \\"$steam_workspace\\""')
+    expect(focusBlock).toContain("if app_running_evidence_present; then")
+    // The invisible inner-window selector must no longer be the focus mechanism.
+    expect(focusBlock).not.toContain("move to workspace 1")
+    expect(focusBlock).not.toContain('[class=\\"steam_app_$appid\\"] scratchpad show')
+  })
+
   it("classifies post-running service failures as non-successful terminal states", () => {
     expect(moduleSource).toContain("service_failure_classification()")
     expect(moduleSource).toContain(
