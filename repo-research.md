@@ -1,561 +1,427 @@
-# Repository Research Summary — Stream Quality Product Follow-Up
+# Repository Research — Multi-User Readiness Assessment
 
-**Focus:** Extend `floor..ceiling` adaptive range grammar to `floor..startup..ceiling`; wire startup into the launch/Moonlight policy while keeping floor/ceiling boundaries; preflight launch-quality selection; health-driven and handoff-aware early downshift.
+**Date:** 2026-07-14  
+**Scope:** Korri codebase — how close it is to being modeled as a multi-user system  
+**Method:** Read-only survey of `product/`, `packages/`, `docs/`, `work/`
 
 ---
 
-## Technology & Infrastructure
+## 1. Existing User / Account / Identity Concepts
 
-- **Languages:** TypeScript (68 %), TSX (16 %), Nix (9 %), CSS (4 %), Shell (0.7 %)
-- **Runtime:** Bun (unit tests via `bun test`, scripts via `tsx`/`bun`)
-- **Build:** Vite + `@tailwindcss/vite` for web; Bun for API; Nix flakes for reproducible toolchain
-- **Formatter/Linter:** Biome (`just lint`, `just format`)
-- **Type checking:** strict TypeScript, whole-repo only (`just typecheck`) because of path aliases
-- **Test runner:** `bun test` for unit tests; Playwright for E2E/component; `just test-nix` for Nix checks
-- **Web framework:** TanStack Router + React + Effect v4 atoms (`@effect/atom-react`)
-- **API server:** Hono (`@hono/node-server`)
-- **Effect runtime:** `effect` library — services, layers, schemas, RPC used throughout
-- **Verification commands:** `just typecheck && just test-unit && just lint && just format`
+### 1a. `UserRecord` and `UserPayload` — Schema already exists
 
-### Module Organisation
+**File:** `product/platform/library/config/records/user.ts`
 
-| Alias | Location | Role |
+```ts
+export const DEFAULT_USER_ID = "default"
+// Comment: "Stand-in user id used wherever a concrete user is required but no
+// per-request user is resolved yet (single-user alpha). Play history and
+// other per-user data are keyed by this until real current-user resolution lands."
+```
+
+`UserPayload` carries:
+- `displayName?: string`
+- `favorites?: PlayableId[]`
+- `hidden?: PlayableId[]`
+- `launch?: LaunchBlock` — per-user default launcher
+- `presets?: PresetMapPayload`
+- All inheritable policy fields (`moonlight`, `preferences`, `plugin`, `env`, `cwd`, `argsAppend`, `patches`, `hooks`)
+
+`UserRecord` = `{ id: string, ...UserPayload }`.
+
+The schema is rich and intentional. A `UserNotFound` error class also exists:
+
+**File:** `product/platform/library/config/errors.ts`
+
+```ts
+export class UserNotFound extends Data.TaggedError("UserNotFound")<{
+  readonly userId: string
+}> {}
+```
+
+### 1b. `PlayLog` — already user-keyed at the schema layer
+
+**File:** `product/platform/library/config/records/play-log.ts`
+
+```ts
+export interface PlayHistoryKey {
+  readonly userId: string
+  readonly gameId: string
+}
+// Comment: "Identity of a play log: play history is personal, so it is keyed by
+// the (user, game) pair — never by the game or release alone."
+```
+
+`PlayLog` schema has `userId: Schema.String` as a required field.
+
+### 1c. Play-log file store — per-user directory partitioning already wired
+
+**File:** `product/platform/library/play-log-store.ts`
+
+```ts
+const dirFor = (key: PlayHistoryKey) =>
+  join(root, encodeURIComponent(key.userId))
+const pathFor = (key: PlayHistoryKey) =>
+  join(dirFor(key), `${encodeURIComponent(key.gameId)}.json`)
+```
+
+The on-disk structure `<root>/<userId>/<gameId>.json` is already per-user. This is the single seam that has the strongest multi-user readiness.
+
+### 1d. `users` collection in `ConfigSnapshot` and `ReadableConfigSnapshot`
+
+**File:** `product/platform/library/config/cascade-resolver.ts`
+
+```ts
+export interface ConfigSnapshot {
+  readonly users: ReadonlyMap<string, UserRecord>
+  // ...
+}
+export interface ReadableConfigSnapshot {
+  readonly users: ReadonlyMap<string, UserRecord>
+  // ...
+}
+```
+
+The cascade resolver treats `users` as a first-class layer. Both cascade sequences thread userId:
+
+- Seven-layer: `global → user → system → launcher → game → preset → override`
+- Readable: `host → user → system → app → runtime → library-item → contained → release → profile → override`
+
+`ResolveInputs` and `ResolveReadableLaunchInputs` both have `userId?: string`.
+
+---
+
+## 2. Where Single-User Assumptions Are Baked In
+
+### 2a. `DEFAULT_USER_ID` fallback in the launch RPC handler
+
+**File:** `product/apps/portal/api/library/launch.rpc-handler.ts:175`
+
+```ts
+import { DEFAULT_USER_ID } from "@platform/library/config/records/user"
+// ...
+foregroundSessionHost.playRecordingCoordinator?.beginLaunch({
+  launchId,
+  userId: payload.userId ?? DEFAULT_USER_ID,  // ← hard fallback
+  gameId: payload.id,
+  ...
+})
+```
+
+If no `userId` is passed to `app.library.launch`, play history records under `"default"`. This is the primary single-user collapse point on the write path.
+
+### 2b. `DEFAULT_USER_ID` fallback in the library list (play stats read)
+
+**File:** `product/platform/library/proseql/library-repository.ts:1090`
+
+```ts
+store.load({ userId: DEFAULT_USER_ID, gameId: entry.id }),
+```
+
+This is inside `attachPlayStats()` — the function that decorates `PlayableLibraryEntry` list results with `playStats`. It always loads history for the default user, regardless of any request context. Play stats shown in the library UI are always the default user's stats.
+
+### 2c. Feature gates — `userId` defaults to `"local"`, not wired to identity
+
+**File:** `product/platform/react/gates/FeatureGatesProvider.tsx`
+
+```tsx
+interface FeatureGatesProviderProps extends PropsWithChildren {
+  readonly userId?: string
+}
+export function FeatureGatesProvider({ userId = "local", ... })
+```
+
+localStorage key is `gates:${environment}:${userId}`. The `userId` prop is never populated from any real user identity at the composition root; it defaults to the static string `"local"`.
+
+### 2d. Favorites in the shift UI are ephemeral widget state
+
+**File:** `product/surfaces/web/shift/pages/ShiftLibraryDeck.tsx`
+
+```tsx
+const [favorites, setFavorites] = useState<ReadonlySet<string>>(
+  () => new Set(games.filter(game => game.favorite).map(game => game.id)),
+)
+```
+
+Favorites toggling is in-memory only (`useState`). `UserRecord.favorites` and `UserRecord.hidden` fields exist in the schema but are not read from the user record in the library projection, and mutations are not persisted back to the config cascade.
+
+### 2e. Sessiond sessions carry no user identity
+
+**File:** `product/apps/portal/api/session/status.rpc.ts`
+
+```ts
+export class SessionStatusPayload extends Schema.Class<SessionStatusPayload>(
+  "SessionStatusPayload",
+)({}) {}  // ← no userId field
+```
+
+Sessions are identified by `launchId` only. The sessiond operator model is explicitly one daemon per host (not per user):
+
+> "One sessiond per foreground-capable host. Sessiond owns the truth about whether the host can launch a managed app, what is currently running, and whether the host is back to its role-specific idle state."  
+> — `docs/solutions/architecture-patterns/sessiond-operator-model-2026-05-29.md`
+
+Task-008 explicitly defers per-user session ownership:
+> "**task-008** — multi-user support (sessiond ownership becomes per-user)."
+
+### 2f. XDG / storage paths are single-user (single `$HOME`)
+
+**File:** `product/platform/config/xdg-paths.ts`
+
+```ts
+export function korriStatePath(env, ...segments): string {
+  return join(requireXdgStateHome(env), "korri", ...segments)
+}
+// requireXdgStateHome → env.XDG_STATE_HOME ?? join(env.HOME, ".local", "state")
+```
+
+All Korri state, config, cache, and data paths resolve against the process environment's `$HOME` / `XDG_*` variables. There is no user-keyed directory partitioning in these helpers (except the play-log store, which explicitly adds `encodeURIComponent(key.userId)`).
+
+Affected paths:
+- Peer store: `korriStatePath(env, "peers.json")` — singleton, not per-user
+- Chromium state: `korriStatePath(env, "chromium")` — singleton
+- Game-stream intent file: `join(XDG_RUNTIME_DIR, "korri-game-stream", "next-launch.json")`
+
+### 2g. Steam plugin state root is global
+
+**File:** `product/plugins/steam/src/plugin.ts`
+
+```ts
+export const steamRuntimePaths = {
+  stateRoot: "/var/lib/korri/steam",
+} as const
+// and:
+stateRoot: process.env.STEAM_HOME ?? "/var/lib/korri/steam",
+```
+
+The Steam home, log dir, and app manifests all live under a single global path. No per-user segregation.
+
+### 2h. Install-control authorization is a shared secret, not user-scoped
+
+**File:** `product/apps/portal/api/plugin-install/install-control-authorization.ts`
+
+```ts
+export const INSTALL_CONTROL_COOKIE = "korri_install_control"
+// authorized = constantTimeEqual(token, KORRI_INSTALL_CONTROL_SECRET)
+```
+
+Install control is a binary authorized/not-authorized gate keyed on a single shared secret per host. No per-user install authorization.
+
+### 2i. `app.plugin.install.request` and `.status` carry no userId
+
+**File:** `product/apps/portal/api/plugin-install/request.rpc.ts`
+
+```ts
+export class RequestPluginInstallPayload extends Schema.Class<...>()({
+  providerId: Schema.String,
+  appId: Schema.String,
+  playableId: Schema.optional(Schema.String),
+  mode: Schema.optional(Schema.Literals(["install", "update"])),
+  source: Schema.optional(EntrySource),
+}) {}
+```
+
+Plugin install state is device-global; no user dimension.
+
+### 2j. Stream-control RPCs carry no userId
+
+`app.stream-control.config.get`, `app.stream-control.state.get`, `app.stream-control.action.set`, `app.stream-control.controls.get` — all have empty payload objects or device-global payloads. Stream control is per-host, not per-user.
+
+### 2k. `app.session.stop/freeze/thaw` carry no userId
+
+Sessions are stopped/frozen/thawed by `launchId` alone, not by user.
+
+---
+
+## 3. RPC Surface — userId Inventory
+
+| RPC tag | userId present? | Notes |
 |---|---|---|
-| `@platform/*` | `product/platform/` | Contracts, pure logic, streamer-agnostic interfaces |
-| `@product/apps/portal/*` | `product/apps/portal/` | Hono API, React surfaces, RPC handlers |
-| `@product/plugins/moonlight/*` | `product/plugins/moonlight/` | Moonlight-specific implementation (removable) |
-| `@product/surfaces/terminal/korri-cli/*` | `product/surfaces/terminal/korri-cli/` | CLI commands |
-| `@product/plugin-host/*` | `product/plugin-host/` | Plugin composition root |
+| `app.library.launch` | ✅ optional | Falls back to `DEFAULT_USER_ID` at handler |
+| `app.library.launch.dry-run` | ✅ optional | Passed to cascade resolver |
+| `app.server.stream.prepare` | ✅ optional | Forwarded to `prepareStreamLaunch` |
+| `app.stream.prepare` | ✅ optional | Passed to cascade resolver |
+| `app.catalog.snapshot` | ❌ | Machine-scope; `source.hostId` is machine identity |
+| `app.session.status` | ❌ | No user context |
+| `app.session.stop/freeze/thaw` | ❌ | `launchId` only |
+| `app.source.status` | ❌ | Machine status only |
+| `app.server.status` | ❌ | `serverId`/`displayName` are machine fields |
+| `app.plugin.install.request` | ❌ | No user context |
+| `app.plugin.install.status` | ❌ | No user context |
+| `app.stream-control.*` | ❌ | All device-global |
+| `app.acquisition.*` | ❌ | No user context |
+
+**Summary:** userId penetrates the launch and stream-prepare RPCs but stops at the session, plugin, catalog, and device-control surfaces.
 
 ---
 
-## Architecture & Structure
+## 4. Session Lifecycle Model — Single-Occupant by Design
 
-### Strict Platform/Plugin Layering
+Sessiond's foreground session model is single-occupant per host by explicit design:
 
-The governing architectural constraint is **removability**: no shipped code imports the Moonlight plugin. The platform owns contracts; the plugin implements them through a registry. This is enforced via a removability gate (see `work/items/active/01KWN49HEG9X0HFJBMK2KRJ8CM-moonlight-streaming-plugin/plan.md`).
+**File:** `product/platform/session/foreground-session-owner.ts` (doc comment):
+> "ForegroundSessionOwner is an adapter pipeline orchestrator with preflight re-entry protection: it owns `prepare → spawn → foreground → teardown → verifyReady` for a single launch."
 
-```
-CLI / Portal RPC Handlers
-  └─ platform contracts (streamer-agnostic seams)
-       └─ plugin registry dispatch
-            └─ @korri:moonlight plugin (implements: stream.launch, stream-control.connect/apply/describe)
-```
+**File:** `product/platform/library/sessiond-managed-launch-protocol.ts` — the `SessiondManagedLaunchMode` union represents one slot:
+`"stopped" | "starting" | "home" | "idle" | "launching" | "game" | "restoring" | "recovering"`
 
-### Stream Quality Subsystem — Layer Map
+There is exactly one mode; concurrent sessions for different users are architecturally impossible without revisiting this model.
 
-The stream quality work is layered in explicit numbered "layers" with Layer 5 (adaptive controller) currently the newest landed layer:
-
-| Layer | Description | Status |
-|---|---|---|
-| L2 | Accept-and-adapt (Moonlight coerces requests to achievable values) | Complete |
-| L3 | Safety net (recovery supervisor, decode-stall watchdog) | Complete |
-| L4 | Senses: numeric health telemetry via `quality.sample` native events | Active (`01KWNSXR8H87GJ720M51K1HH31`) |
-| L5 | Adaptive controller (brain + runner) | Landed (`01KWPW23JPV3F01BAJC3NJYKE8`) |
-| L6 | GUI/slider surfacing | Deferred |
+`launchId` is a session correlator but carries no user identity. The launch RPC starts recording `(userId, gameId)` before spawn, but that userId never propagates into the sessiond protocol itself.
 
 ---
 
-## Implementation Patterns
+## 5. Federation / Source-Machine — Machine Identity, Not User Identity
 
-### Stream Boundary Grammar — Current Design
-
-**File:** `product/platform/stream/stream-adaptive-boundaries.ts`
-
-The grammar is a flat `key=value` expression set, passed as `string[]` and parsed by `parseStreamBoundaryArgs(args)`. Each lever uses `..` as the range separator:
-
-```
-bitrate=5000..20000    → floor 5000, ceiling 20000
-bitrate=8000           → pinned (floor=ceiling=pinned=8000)
-bitrate=5000..         → floor only
-bitrate=..20000        → ceiling only
-bitrate=auto           → free (no constraint)
-bitrate=..             → free (no constraint)
-```
-
-**Key interface:**
-```ts
-// product/platform/stream/stream-adaptive-boundaries.ts
-export interface NumericLeverBoundary {
-  readonly floor?: number
-  readonly ceiling?: number
-  readonly pinned?: number
-  readonly free?: boolean
-  // NOTE: no `startup` field yet — this is the extension point
-}
-
-export interface StreamAdaptiveLeverBoundaries {
-  readonly bitrate?: NumericLeverBoundary
-  readonly fps?: NumericLeverBoundary
-  readonly resolution?: ResolutionLeverBoundary
-}
-
-export interface StreamBoundaries {
-  readonly levers: StreamAdaptiveLeverBoundaries
-  readonly outcomes: StreamAdaptiveOutcomeBoundaries
-  readonly lean?: number  // 0=responsiveness, 1=picture
-  readonly auto?: "on" | "off"
-}
-```
-
-**Current parser** (`parseNumericLever`):
-```ts
-// Splits on ".." — more than 2 parts currently throws "invalid range"
-const parts = value.split("..")
-if (parts.length > 2) throw new Error(`invalid range for ${key}: ${value}`)
-```
-
-**Extension point for `floor..startup..ceiling`:** `parts.length === 3` is currently an error. Handling it as startup requires:
-1. Adding `startup?: number` to `NumericLeverBoundary`
-2. Recognising 3-part as `[floor, startup, ceiling]` in `parseNumericLever`
-3. Updating `serializeNumericLever` to emit the middle segment when `startup` is set
-4. Updating `definedNumericLever` to pass through `startup`
-
-**Serialisation** (current — would need startup in the middle):
-```ts
-// Current: "floor..ceiling"
-// With startup: "floor..startup..ceiling"
-function serializeNumericLever(lever: NumericLeverBoundary): string {
-  if (lever.free) return "auto"
-  if (lever.pinned !== undefined) return formatNumber(lever.pinned)
-  return `${floor}..${ceiling}`  // startup would go between the two dots
-}
-```
-
-### Adaptive Controller — Current Cold-Start / Establish Phase
-
-**File:** `product/platform/stream/stream-adaptive-controller.ts`
-
-The controller has two phases (`StreamAdaptiveControllerPhase = "steady" | "establishing"`) and three modes (`"establish" | "fine-tune" | "shed"`). During `establish` mode, it uses a baked-in `coldStartBitrateKbps` param (default 8 000 kbps) as the conservative opening target:
+**File:** `product/platform/api/rpc/entry-source.ts`
 
 ```ts
-// Current establish logic — uses params.coldStartBitrateKbps
-if (mode === "establish") {
-  const conservative = Math.min(
-    bitrateCeiling(boundaries, params),
-    params.coldStartBitrateKbps,   // ← this is the extension point for startup
-  )
-  if (summary.sampleCount < params.coldStartSampleCount) {
-    maybeSetBitrate(target, current, conservative, boundaries, params, true)
-  } else if (healthyEnoughForGrowth(pressure)) {
-    maybeSetBitrate(
-      target, current,
-      Math.round(current.bitrateKbps * (1 + params.coldStartIncreaseFraction)),
-      boundaries, params,
-    )
-  }
-}
+// hostId is the advertised host identifier (KORRI_STREAM_ADVERTISE_HOST_ID)
+// controlUrl is the absolute URL of the server that owns this entry
+// isLocal is true when the entry was produced by THIS server
 ```
 
-**Default params (code constants, not user-configurable today):**
-```ts
-const DEFAULTS = {
-  coldStartSampleCount: 3,
-  coldStartBitrateKbps: 8_000,   // ← startup boundary would override this
-  coldStartIncreaseFraction: 0.28,
-  playableBitrateKbps: 1_500,    // ← floor (soft rescue target)
-  panicBitrateKbps: 500,          // ← severe shed target
-  playableFps: 30,
-  playableResolutionWidth: 640,
-}
-```
+The federation model is:
+- **Peers** are discovered by mDNS and identified by `hostId` (machine identifier)
+- `EntrySource { hostId, controlUrl, isLocal }` is a machine pointer, not a user pointer
+- Peer store (`peers.json`) is a singleton: one file per machine, listing known peer machines
+- Remote launch routing uses `source.hostId` to select the peer's control URL
 
-**Boundary helper functions to extend:**
-```ts
-// Current boundary helpers in stream-adaptive-controller.ts
-function bitrateFloor(boundaries, params): number {
-  return boundaries?.levers.bitrate?.floor ?? params.minBitrateKbps
-}
-function bitrateCeiling(boundaries, params): number {
-  return boundaries?.levers.bitrate?.ceiling ?? params.maxBitrateKbps
-}
-// NEW: bitrateStartup would follow the same pattern
-function bitrateStartup(boundaries, params): number {
-  return boundaries?.levers.bitrate?.startup ?? params.coldStartBitrateKbps
-}
-```
-
-### Runner — Effective Boundaries and Moonlight Envelope
-
-**File:** `product/platform/stream/stream-adaptive-runner.ts`
-
-The runner calls `effectiveBoundaries()` before passing to the controller. This function **caps ceilings at the Moonlight launch settings** if no explicit ceiling was provided:
-
-```ts
-function effectiveBoundaries(
-  boundaries: StreamBoundaries | undefined,
-  initial: StreamAdaptiveSettings,  // ← set from Moonlight launch bitrate/fps/resolution
-): StreamBoundaries {
-  return {
-    ...boundaries,
-    levers: {
-      ...(boundaries?.levers ?? {}),
-      bitrate: {
-        ...(boundaries?.levers.bitrate ?? {}),
-        ceiling: boundaries?.levers.bitrate?.ceiling ?? initial.bitrateKbps,
-      },
-      fps: {
-        ...(boundaries?.levers.fps ?? {}),
-        ceiling: boundaries?.levers.fps?.ceiling ?? initial.fps,
-      },
-      resolution: {
-        ...(boundaries?.levers.resolution ?? {}),
-        ceiling: boundaries?.levers.resolution?.ceiling ?? initial.baselineResolution,
-      },
-    },
-    outcomes: boundaries?.outcomes ?? {},
-  }
-}
-```
-
-**Key insight:** Moonlight's launch FPS/resolution already acts as the adaptive ceiling/envelope automatically — no duplicate configuration needed. The startup bitrate can be conservative, and the runtime will ramp toward the ceiling as health permits.
-
-### CLI Flag Wiring — Stream Boundaries
-
-**File:** `product/surfaces/terminal/korri-cli/korri-cli.ts`
-
-```ts
-// Individual flags for each lever
-const streamBoundaryFlags = {
-  bitrate: Flag.string("bitrate").pipe(Flag.optional),
-  fps:     Flag.string("fps").pipe(Flag.optional),
-  resolution: Flag.string("resolution").pipe(Flag.optional),
-  lean:    Flag.string("lean").pipe(Flag.optional),
-  minFps:  Flag.string("min-fps").pipe(Flag.optional),
-}
-
-// Converts flags to key=value args array
-function streamAdaptiveArgs(flags) {
-  return [
-    optionArg("bitrate", flags.bitrate),
-    optionArg("fps",     flags.fps),
-    optionArg("resolution", flags.resolution),
-    optionArg("lean",    flags.lean),
-    optionArg("min-fps", flags.minFps),
-  ].filter(Boolean)
-}
-```
-
-**Data flow:** `--bitrate=3000..8000..30000` (after extension) → `streamAdaptiveArgs()` → `["bitrate=3000..8000..30000"]` → `parseStreamBoundaryArgs(args)` → `StreamBoundaries` → `launchMoonlight({ adaptiveBoundaries })` → `runtimeSessionAdaptiveOptions(boundaries)` → `StreamAdaptiveRunner`.
-
-**File:** `product/surfaces/terminal/korri-cli/launch-command.ts`
-```ts
-// Line 297-303: boundary parsing and pass-through in the launch command
-const adaptiveBoundaries = options.streamBoundaryArgs
-  ? parseStreamBoundaryArgs(options.streamBoundaryArgs)
-  : undefined
-// ...passed to launchMoonlight({ adaptiveBoundaries })
-```
-
-### Adaptive Runner — Phase Tracking (Missing Piece)
-
-The runner (`stream-adaptive-runner.ts`) currently does **not** pass a `phase` argument to `computeStreamAdaptiveDecision`. The controller's `phase` input is optional; when absent it defaults to `"steady"` (fine-tune mode). To activate the `establish` phase, the runner needs to track whether the stream is in its startup window and pass `phase: "establishing"` during that window.
-
-### Handoff Trigger — Existing Foundation
-
-**File:** `product/platform/stream/stream-handoff-trigger.ts`
-
-The handoff trigger module already exists but is not yet wired into the runner:
-
-```ts
-export interface StreamHandoffSignal {
-  readonly signalPercent?: number   // Wi-Fi signal strength %
-  readonly handoffInProgress?: boolean
-}
-
-export function normalizeHandoffTrigger(signal?: StreamHandoffSignal): StreamHandoffHint | undefined
-export function handoffHintPressure(hint: StreamHandoffHint): StreamAdaptivePressure
-// { bandwidth: 0..1, latency: 0..1, decode: 0 }
-```
-
-The runner would accept a `handoff?: () => StreamHandoffSignal` option and use `handoffHintPressure()` to inject artificial pressure that bypasses the normal health-window latency and immediately drives a floor downshift.
+There is no concept of "user on peer machine". An entry from peer B carries B's `hostId`, but which user on B owns it is not modeled.
 
 ---
 
-## Issue Conventions
+## 6. Seams That Already Abstract Ownership vs. Seams That Hardcode a Single User
 
-No `.github/ISSUE_TEMPLATE/` directory found — issues are tracked as markdown files in `work/items/`.
+### Seams already abstracted (multi-user ready)
 
-**Work item format** (`work/items/parking-lot/*.md`):
-```yaml
----
-id: 01KWX9Q78A1BQ5AAAANNM4SCRJ
-slug: add-preflight-probe-for-stream-launch-quality-selection
-title: Add preflight probe for stream launch quality selection
-origin: parked
-status: To Do
-priority: medium
-labels:
-  - stream-control
-  - adaptive
-  - preflight
-created: 2026-07-07
-source: user
----
-```
-
-**Active plan format** (`work/items/active/<id>-<slug>/plan.md`):
-YAML frontmatter with `title`, `type`, `status`, `date`, `verify_command`. Body uses `##` for sections: Summary, Problem Frame, Requirements (R1…), Scope Boundaries, Context & Research, Key Technical Decisions, Open Questions, High-Level Technical Design (Mermaid), Implementation Units (U1…), System-Wide Impact, Risks & Dependencies, Documentation / Operational Notes.
-
----
-
-## Documentation Insights
-
-### Coding Standards
-- Biome formatting (2-space indent, double quotes, semicolons as needed)
-- Strict TypeScript at all module boundaries
-- No `any`, no barrel exports except documented entrypoints
-- `@shared/logger` not `console.log` in runtime code (platform uses `@platform/logger/logger`)
-- Test files colocated with source: `stream-adaptive-controller.test.ts` beside `stream-adaptive-controller.ts`
-
-### Test Posture
-- Unit tests via `bun test` — pure functions, no mocks, real implementations with injected config
-- No `Mock*`/`Stub*`/`Fake*` — test doubles are real implementations with `behavior`/`config` args
-- Nix checks for Nix-owned contracts only; TS tests for runtime/domain behavior
-
-### Platform Boundary Rules
-- `product/platform/*` MUST NOT import from `product/plugins/*` or any product-layer code
-- Plugin-specific types are redeclared locally in platform modules (see `stream-health.ts`, `runtime-recovery.ts`)
-- The plugin provides implementations via registry dispatch only
-
-### Key Solution Docs (durable reference)
-- `docs/acceptance/runtime-settings-protocol-contract.md` — accept-and-adapt, scale-only geometry, applied truth, recovery ownership
-- `docs/solutions/architecture-patterns/stream-control-command-outcome-contract-2026-06-03.md` — `command.accepted` ≠ applied; recovery trusts readback
-- `docs/korri-stream-layer3-safety-net-scope.md` — no external watcher, decode truth in Moonlight, recovery policy in Korri
-
----
-
-## Templates Found
-
-No formal GitHub templates. The project uses its own planning document schema:
-
-- **Parking-lot item:** `work/items/parking-lot/<id>-<slug>.md` — YAML frontmatter + `# Title`, `## Why it matters`, `## Acceptance Criteria`, `## Related`, `## Notes`
-- **Active plan:** `work/items/active/<id>-<slug>/plan.md` — full plan format with sections
-- **Work log:** `work/items/active/<id>-<slug>/work.md` — execution journal
-
----
-
-## Active Plans Relevant to This Work
-
-### Currently Active (must not conflict)
-
-| Plan | ID | Status | Relevance |
-|---|---|---|---|
-| Moonlight streaming plugin refactor | `01KWN49HEG9X0HFJBMK2KRJ8CM` | completed | Established removable plugin architecture; CLI consumers now use platform `StreamControlSession` interface |
-| Senses: stream health telemetry | `01KWNSXR8H87GJ720M51K1HH31` | active | Defines `StreamHealthSample` protocol, `quality.sample` native events, `StreamHealthMonitor` — inputs to the adaptive controller |
-| Adaptive stream brain/watchdog | `01KWPW23JPV3F01BAJC3NJYKE8` | landed | Built the complete controller stack: `stream-adaptive-controller.ts`, `stream-adaptive-runner.ts`, `runtime-recovery-supervisor.ts`, `stream-health.ts` |
-| CLI interface unification | `01KWMVFMNJJ0TYPBF2H9Q1QPGD` | completed | Unified `launch` verb, established canonical exit-code table; `stream` retains live-tuning verbs only |
-| Stream game lifecycle chord | `01KWMNX6R2N1BNCY124TWH94XF` | active | Chord-hold supervisor; shares inputd/overlay infra; independent of stream quality |
-
-### Parked Items Directly in Scope for This Plan
-
-| Item | ID | Labels |
-|---|---|---|
-| Add preflight probe for stream launch quality selection | `01KWX9Q78A1BQ5AAAANNM4SCRJ` | stream-control, adaptive, preflight |
-| Add handoff-aware preemptive stream downshift | `01KWX9Q78CY3QNQ5BXV1BJ47ER` | stream-control, adaptive, handoff |
-| Explore replacing explicit stream emergency mode with unified controller | `01KWX6X2C5RZ08BTG9FSXYBHNY` | stream-control, adaptive, design-debt |
-
-### Other Parked Items Composing Well (awareness)
-
-| Item | ID | Notes |
-|---|---|---|
-| Boundary persistence: named presets and per-game memory | `01KWTQJS39SZGCWQRKH3Z8QE0W` | Deferred persistence; same flat key=value schema |
-| Adapt streaming to handheld device state (battery, thermal) | `01KWTQ750V3HJZ9AMQKH6H5W13` | Composes with same lever/outcome machinery |
-| Reconsider 'stream' as first-class CLI noun | `01KWTMPE4MJXVR940R4X9GB0PR` | CLI noun model decision; currently `stream` is retained for live-tuning |
-
----
-
-## Recommendations
-
-### Grammar Extension (`floor..startup..ceiling`)
-
-**Files to touch:**
-1. `product/platform/stream/stream-adaptive-boundaries.ts` — sole parser/serializer; extend `NumericLeverBoundary`, `parseNumericLever`, `serializeNumericLever`, `definedNumericLever`, `mergeStreamBoundaries`
-2. `product/platform/stream/stream-adaptive-boundaries.test.ts` — add: 3-part parse, invalid 4-part rejection, startup-only omit, serialise round-trip with startup
-
-**Interface extension:**
-```ts
-export interface NumericLeverBoundary {
-  readonly floor?: number
-  readonly startup?: number   // ← new: conservative opening target
-  readonly ceiling?: number
-  readonly pinned?: number
-  readonly free?: boolean
-}
-```
-
-**Parser extension in `parseNumericLever`:** Handle `parts.length === 3` as `[floor, startup, ceiling]`. Validate `floor ≤ startup ≤ ceiling`. Empty middle segment (`5000..…..20000` with blank middle) should be treated as no startup (not an error — keep backward compatibility).
-
-**Serialiser extension in `serializeNumericLever`:** Emit `floor..startup..ceiling` when `startup` is defined (and neither `free` nor `pinned`).
-
-**Open grammar questions to resolve in plan:**
-- Is `..startup..` (startup-only, no floor or ceiling) a valid form? Probably yes — it just sets the opening target with floor/ceiling defaulting to params.
-- Is `startup..ceiling` (no floor) valid? Probably yes — startup is conservative opener, floor is rescue floor.
-
-### Controller Integration
-
-**File:** `product/platform/stream/stream-adaptive-controller.ts`
-
-Add `bitrateStartup()` helper alongside `bitrateFloor` / `bitrateCeiling`:
-```ts
-function bitrateStartup(
-  boundaries: StreamBoundaries | undefined,
-  params: Required<StreamAdaptiveControllerParams>,
-): number {
-  return boundaries?.levers.bitrate?.startup ?? params.coldStartBitrateKbps
-}
-```
-
-Replace the `conservative` calculation in the `establish` branch:
-```ts
-// Before:
-const conservative = Math.min(bitrateCeiling(boundaries, params), params.coldStartBitrateKbps)
-// After:
-const conservative = Math.min(bitrateCeiling(boundaries, params), bitrateStartup(boundaries, params))
-```
-
-**Tests to add in `stream-adaptive-controller.test.ts`:**
-- `bitrate=3000..8000..30000` → startup 8000 used during establish phase, not params.coldStartBitrateKbps
-- `bitrate=..8000..30000` → floor defaults, startup 8000, ceiling 30000
-- Startup is clamped by ceiling (e.g. startup 40000 with ceiling 30000 → min = 30000)
-- After cold-start sample count passes, ramps from startup toward ceiling
-- Floor still applies for shed/rescue regardless of startup
-
-### Runner — Phase Tracking
-
-**File:** `product/platform/stream/stream-adaptive-runner.ts`
-
-The runner currently does not pass `phase` to the controller. To activate the `establish` phase during stream startup, the runner needs to track:
-- Whether the stream just started (e.g. sample count below `coldStartSampleCount`)
-- Or an explicit startup window (e.g. first N seconds)
-
-A `startedAtMs?: number` could be seeded in `createStreamAdaptiveRunner` options and compared in `tick()` to gate the `phase: "establishing"` argument. This keeps the phase determination in the runner (closer to session lifecycle) rather than the controller (which should remain pure/stateless).
-
-### Moonlight Launch Policy — Startup as Conservative Opening Move
-
-**File:** `product/apps/portal/stream/moonlight-launcher.ts`
-
-The Moonlight **launch** FPS and resolution (set from the policy/config, e.g. 1080p60) act as the runtime envelope via `effectiveBoundaries()`. No changes needed there. The startup bitrate is the conservative opening bitrate within that envelope. The user's mental model:
-
-```
-korri launch <game> --host <host> --bitrate=3000..8000..30000 --fps=..60 --resolution=..1920x1080
-```
-
-- Moonlight launches at 1920×1080@60fps (the ceiling/envelope)
-- Adaptive controller opens at 8000 kbps (startup)
-- Ramps toward 30000 kbps ceiling as health permits
-- Falls back to 3000 kbps floor if health deteriorates
-- Never exceeds 60fps or 1920×1080 (enforced by `effectiveBoundaries`)
-
-**No changes needed in `moonlight-launcher.ts`** — the boundaries flow through as `adaptiveBoundaries` already. Startup is purely a controller-layer concern.
-
-### Preflight Launch Quality Selection
-
-**Parking-lot item:** `01KWX9Q78A1BQ5AAAANNM4SCRJ`
-
-**Files:**
-- `product/apps/portal/api/library/launch.rpc-handler.ts` — RPC handler call site; preflight probe would run before `composeMoonlightLaunchSpec()`
-- `product/apps/portal/api/library/remote-stream-prepare.ts` — remote prepare seam
-- `product/apps/portal/stream/moonlight-launcher.ts` — `launchMoonlight()` receives `adaptiveBoundaries`; the preflight result could adjust this
-
-**Design approach:**
-- A `probeStreamQuality(host)` function runs a lightweight measurement (RTT/loss probe; possibly iperf3 vs product-owned approach to be decided per the parking-lot item)
-- Maps probe results to an explicit launch profile (`{ bitrateKbps: number, fps: number, resolution: StreamAdaptiveResolution }`) — not a named tier enum, but derived values
-- The profile contributes to `adaptiveBoundaries` (e.g. sets startup, maybe ceiling) and Moonlight launch FPS/resolution policy
-- The probe runs at the CLI launch command level or RPC handler level (before `composeMoonlightLaunchSpec`)
-- Keep preflight opt-in (not automatic); bad preflight condition avoids launching into an unrecoverable high-bitrate choke
-
-### Handoff-Aware Preemptive Downshift
-
-**Parking-lot item:** `01KWX9Q78CY3QNQ5BXV1BJ47ER`
-
-**Files:**
-- `product/platform/stream/stream-handoff-trigger.ts` — existing `normalizeHandoffTrigger()`, `handoffHintPressure()`; the machinery exists, it just needs wiring into the runner
-- `product/platform/stream/stream-adaptive-runner.ts` — accept a `handoff?: () => StreamHandoffSignal` option
-
-**Integration in the runner:**
-```ts
-// In tick(), before normal decision path:
-const handoffHint = options.handoff
-  ? normalizeHandoffTrigger(options.handoff())
-  : undefined
-if (handoffHint) {
-  // Bypass health windows: immediately target floor
-  const floorBitrate = bitrateFloor(currentBoundaries(options.boundaries), DEFAULTS)
-  await dispatchTarget({ bitrateKbps: floorBitrate, fps: DEFAULTS.playableFps }, "shed")
-  return
-}
-```
-
-The severity field on `StreamHandoffHint` allows graduated response: a mild handoff hint could inject artificial pressure via `handoffHintPressure(hint)` rather than immediately shedding to floor (only `severity === 1` / `handoffInProgress: true` triggers the preemptive shed).
-
-**Signal sources to decide (per parking-lot item):**
-- Wi-Fi signal strength (existing `signalPercent` field in `StreamHandoffSignal`)
-- Network interface change detection (route/interface events)
-- Abrupt RTT/loss spike exceeding a threshold (could be derived from the existing health monitor)
-
-### Unified Controller Investigation
-
-**Parking-lot item:** `01KWX6X2C5RZ08BTG9FSXYBHNY`
-
-The current `shed` mode is the explicit emergency path. The parking-lot item asks whether it can be replaced by the continuous controller naturally reaching floor under sufficient pressure. This is a **design exploration**, not an immediate implementation. The `bitrateFloor`, startup, and ceiling boundaries are the building blocks. Key question: can `panicBitrateKbps` (500 kbps) emerge from the controller math under severe pressure without a separate shed branch? The `applyPlayabilityShed` function is the unit to evaluate.
-
-**Recommendation:** Defer this exploration to after startup/preflight/handoff land. The shed path is a safety invariant; changing it carries risk and needs the device validation gate from L5 to be proven first.
-
----
-
-## Key Files for This Plan (All Repo-Relative)
-
-### Grammar Extension
-- `product/platform/stream/stream-adaptive-boundaries.ts` — extend `NumericLeverBoundary` + parser + serialiser
-- `product/platform/stream/stream-adaptive-boundaries.test.ts` — add startup round-trip tests
-
-### Controller Integration
-- `product/platform/stream/stream-adaptive-controller.ts` — add `bitrateStartup()`, wire into establish branch
-- `product/platform/stream/stream-adaptive-controller.test.ts` — startup boundary test cases
-
-### Runner Phase Tracking
-- `product/platform/stream/stream-adaptive-runner.ts` — add startup-window tracking, pass `phase: "establishing"`
-- `product/platform/stream/stream-adaptive-runner.test.ts` — phase-handoff test cases
-
-### Handoff Wiring
-- `product/platform/stream/stream-handoff-trigger.ts` — existing; use as-is
-- `product/platform/stream/stream-adaptive-runner.ts` — add `handoff?` option
-
-### Preflight
-- `product/apps/portal/api/library/launch.rpc-handler.ts` — RPC handler call site
-- `product/apps/portal/api/library/remote-stream-prepare.ts` — remote prepare seam
-- `product/apps/portal/stream/moonlight-launcher.ts` — `adaptiveBoundaries` injection point
-
-### CLI Surface
-- `product/surfaces/terminal/korri-cli/korri-cli.ts` — `streamBoundaryFlags` (all boundary flags already present; startup rides on `--bitrate` grammar extension, no new flags needed)
-- `product/surfaces/terminal/korri-cli/launch-command.ts` — `streamBoundaryArgs` passed through; no new wiring needed
-- `product/surfaces/terminal/korri-cli/stream-quality.ts` — adaptive set/show/watch commands
-
-### Live Telemetry (already landed, consumed by controller)
-- `product/platform/stream/stream-health.ts`
-- `product/platform/stream/stream-health-monitor.ts`
-- `product/platform/stream/stream-health-session.ts`
-- `product/platform/stream/runtime-recovery.ts`
-- `product/platform/stream/runtime-recovery-supervisor.ts`
-
-### Plan Docs to Update or Reference
-- `work/items/parking-lot/01KWX9Q78A1BQ5AAAANNM4SCRJ-add-preflight-probe-for-stream-launch-quality-selection.md`
-- `work/items/parking-lot/01KWX9Q78CY3QNQ5BXV1BJ47ER-add-handoff-aware-preemptive-stream-downshift.md`
-- `work/items/parking-lot/01KWX6X2C5RZ08BTG9FSXYBHNY-explore-replacing-explicit-stream-emergency-mode-with-unifie.md`
-
----
-
-## Constraint Summary for the Plan
-
-| Constraint | Evidence |
+| Seam | Evidence |
 |---|---|
-| CLI first, no GUI | `01KWPW23JPV3F01BAJC3NJYKE8` scope boundaries explicitly state "No GUI, portal slider, or in-session overlay controls" for the controller; GUI is Layer 6 |
-| No autodetect ceiling | Per user requirement; ceiling must be explicit; `effectiveBoundaries()` already caps at Moonlight launch settings |
-| Explicit ceiling input | User provides `--bitrate=floor..startup..ceiling` on launch; no inference |
-| Moonlight launch resolution/FPS as envelope | `effectiveBoundaries()` in runner uses launch `initial.fps`/`initial.bitrateKbps`/`initial.baselineResolution` as ceiling when not explicitly overridden |
-| Startup can be conservative | Maps to `boundaries.levers.bitrate.startup` overriding `params.coldStartBitrateKbps` |
-| Floor = playable-first rescue | `bitrateFloor()`, `playableBitrateKbps=1500`, `panicBitrateKbps=500` in controller |
-| Platform must stay streamer-agnostic | No Moonlight imports in `product/platform/stream/*` |
-| Test with `bun test` | `just test-unit` covers the pure platform layer; Nix tests cover package/module wiring |
-| Whole-repo typecheck | `just typecheck` is the only valid TS type gate |
+| Config cascade resolver | `ResolveInputs.userId?: string`; `ConfigSnapshot.users: ReadonlyMap`; seven-layer fold |
+| Play-log schema | `PlayHistoryKey { userId, gameId }`; `PlayLog.userId: string` |
+| Play-log file store | `<root>/<userId>/<gameId>.json` — per-user directory |
+| Play-recording coordinator | `LaunchRecordingContext.userId: string`; coordinator is userId-aware |
+| `UserRecord` schema | `id`, `displayName`, `favorites`, `hidden`, full inheritable policy |
+| `UserNotFound` error | Propagated through resolution error union |
+| Launch + dry-run RPC schemas | `userId?: string` in payload |
+| `ControlLaunchRequest` / result | `userId?: string` in control surface |
+
+### Seams that hardcode a single user (the gaps)
+
+| Seam | File | Gap |
+|---|---|---|
+| Play stats attach on list | `library-repository.ts:1090` | Always `DEFAULT_USER_ID` |
+| Play recording default | `launch.rpc-handler.ts:175` | `payload.userId ?? DEFAULT_USER_ID` |
+| Feature gate storage key | `FeatureGatesProvider.tsx` | `userId` defaults to `"local"` |
+| Favorites persistence | `ShiftLibraryDeck.tsx` | useState only, no UserRecord write-back |
+| UserRecord hidden/favorites read | `library-repository.ts` | Fields exist in schema, never read in projection |
+| Session identity | `sessiond.ts`, protocol | `launchId` carries no userId |
+| Storage paths (XDG, peers, chromium) | `xdg-paths.ts`, `peer-store.ts` | All keyed on process `$HOME` |
+| Steam home | `steam/src/plugin.ts` | Single global `/var/lib/korri/steam` |
+| Install control | `install-control-authorization.ts` | Shared secret, not per-user |
+| Plugin install state | `plugin-install/*.rpc.ts` | No user dimension on wire |
+| Stream control | `stream-control/*.rpc.ts` | Device-global, no userId |
+
+---
+
+## 7. Explicit Deferral Documentation
+
+### Parking lot item
+
+**File:** `work/parking-lot/01KSRGFP074RDRTVJ584FHN90A-multi-user-support.md`
+
+> "Korri currently assumes a single implicit user on the device. Add a real multi-user model: per-user identity, per-user library/save state, per-user sessions, and per-user paired hosts."
+>
+> Acceptance criteria:
+> - Identity model documented in `docs/solutions/`
+> - Library, session, and save-state surfaces are scoped to a user (no implicit global state)
+> - Portal UI for user selection / switching
+> - Live-USB VM smoke covers at least two users without state bleed
+>
+> "Large; promote to `se-plan` before execution."
+
+### Sessiond operator model doc
+
+**File:** `docs/solutions/architecture-patterns/sessiond-operator-model-2026-05-29.md`
+
+> "**task-008** — multi-user support (sessiond ownership becomes per-user)."
+
+### Config cascade brief
+
+**File:** `docs/briefs/2026-05-21-korri-config-cascade-brief.md`
+
+> "Single-user-today, future multi-user. The Korri owner configures his game library by hand-editing YAML."
+> "Introduce `users` as a first-class layer now, even with only a `default` user, to avoid retrofitting later."
+> "Structure is in place for multi-user."
+
+### Physical-host lifecycle truth doc
+
+**File:** `docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md`
+
+> "If a future deployment shape ever authenticates `/api/rpc` (see `../work/parking-lot/...stop-running-as-root` and `...multi-user-support`), the policy can flip from 'redact' to 'include and authenticate' without changing the wire schema."
+
+---
+
+## 8. Rough Readiness Assessment
+
+### What is already multi-user aware (no change needed)
+
+- **Config cascade resolver** — structurally sound; `userId` is an optional first-class input. Passing a real `userId` threads it through the seven-layer fold correctly. `UserNotFound` is already a typed error.
+- **Play history** — schema, file layout, and coordinator are all per-user. The `(userId, gameId)` keying is correct.
+- **Launch and dry-run RPC schemas** — `userId` is already an optional field on wire.
+- **UserRecord schema** — `favorites`, `hidden`, `displayName`, launch policy, presets — all defined and decode-validated.
+
+### What requires one targeted change to un-hardcode
+
+- **Play stats on library list** (`library-repository.ts:1090`): pass a real `userId` from the request context instead of `DEFAULT_USER_ID`. Requires the list RPC/handler to accept and thread a `userId`.
+- **Play recording default** (`launch.rpc-handler.ts:175`): same; the fallback to `DEFAULT_USER_ID` can be removed once callers always supply a `userId`.
+- **Feature gate storage key** (`FeatureGatesProvider.tsx`): wire the `userId` prop from the authenticated user context instead of defaulting to `"local"`.
+
+### What requires new design work
+
+| Domain | Gap | Design needed |
+|---|---|---|
+| **Current-user resolution** | Nothing in the system resolves "who is the current user right now". No session token, no identity seam, no authenticated request header. | Add a current-user context seam (session cookie, header, atom, or layer). |
+| **Favorites / hidden write-back** | `UserRecord.favorites` and `.hidden` are schema-ready but never read from or written to by the library projection or UI. | Add a `user.library.update` RPC (or mutation on existing user surface); read favorites from snapshot in library list. |
+| **Sessiond sessions — no userId** | `launchId` correlates a session but carries no user. Task-008 explicitly says "sessiond ownership becomes per-user". | Propagate `userId` into session start request and managed-launch protocol; correlate in the session status response. |
+| **XDG paths** | `korriStatePath`, `korriDataPath`, etc. are per-process-user, not per-Korri-user. Peers, chromium state, and other singletons are not partitioned. | Decide whether Korri users map to OS users (simplest) or add a `userId` segment to Korri-managed paths. |
+| **Steam home** | `/var/lib/korri/steam` is global. | Either per-OS-user (if Korri users = OS users) or `STEAM_HOME/<userId>`. |
+| **Install control** | Shared secret, not per-user. | Extend to user-scoped authorization (after deciding the identity model). |
+| **Plugin install state** | No userId on wire. | Add optional `userId` to `app.plugin.install.request` and `.status`. |
+| **Federation / source machines** | `hostId` is machine identity. A remote entry carries no info about which user on the remote machine owns it. | Decide whether per-user library federation is in scope; if so, `EntrySource` may need a `userId` dimension. |
+| **Portal UI** | No user selection / switching UI exists. | Task-008 AC3: "Portal UI for user selection / switching." |
+
+### Overall readiness: **Foundation laid, identity seam missing**
+
+The config cascade, play-history data model, and launch RPC schemas are deliberately structured for multi-user. The `DEFAULT_USER_ID` constant is explicitly named a temporary stand-in and is used in only two places. The schema work is complete.
+
+The blocking gap is that **there is no current-user resolution seam** — nothing in the request lifecycle resolves "which user is making this request" into a concrete `userId`. Until that seam exists, the `userId` fields in the RPC payloads are dead weight (callers have nothing to put there). The sessiond lifecycle and XDG path conventions are also single-user by design and will need coordinated treatment alongside the identity seam.
+
+---
+
+## 9. File Map (key paths cited)
+
+| Path | Relevance |
+|---|---|
+| `product/platform/library/config/records/user.ts` | `UserRecord`, `UserPayload`, `DEFAULT_USER_ID` constant + alpha comment |
+| `product/platform/library/config/records/play-log.ts` | `PlayHistoryKey`, `PlayLog` — per-user keying |
+| `product/platform/library/play-log-store.ts` | File store with per-user directory (`encodeURIComponent(key.userId)`) |
+| `product/platform/library/config/cascade-resolver.ts` | `ConfigSnapshot.users`, `ResolveInputs.userId`, cascade fold |
+| `product/platform/library/config/errors.ts` | `UserNotFound` error class |
+| `product/platform/library/proseql/library-repository.ts:1090` | `DEFAULT_USER_ID` hardcode in play stats attach |
+| `product/apps/portal/api/library/launch.rpc-handler.ts:175` | `DEFAULT_USER_ID` hardcode in play recording |
+| `product/apps/portal/api/library/launch.rpc.ts` | `LaunchLibraryPayload.userId?: string` |
+| `product/apps/portal/api/library/dry-run.rpc.ts` | `DryRunLaunchPayload.userId?: string` |
+| `product/apps/portal/api/server/prepare.rpc.ts` | `ServerPrepareStreamPayload.userId?: string` |
+| `product/apps/portal/api/stream/prepare.rpc.ts` | `PrepareStreamPayload.userId?: string` |
+| `product/apps/portal/api/library/play-recording-coordinator.ts` | `LaunchRecordingContext.userId: string` |
+| `product/apps/portal/api/plugin-install/install-control-authorization.ts` | Shared-secret gate, no user dimension |
+| `product/apps/portal/api/session/status.rpc.ts` | Empty payload — no userId |
+| `product/platform/api/rpc/entry-source.ts` | `EntrySource.hostId` — machine identity only |
+| `product/platform/config/xdg-paths.ts` | `korriStatePath`, `korriDataPath` — single-user paths |
+| `product/platform/react/gates/FeatureGatesProvider.tsx` | `userId` defaults to `"local"`, not wired |
+| `product/plugins/steam/src/plugin.ts` | `stateRoot: "/var/lib/korri/steam"` — global |
+| `product/surfaces/web/shift/pages/ShiftLibraryDeck.tsx` | Favorites in `useState` — not persisted |
+| `product/platform/library/playable-library.ts` | `PlayableLibraryEntry.userData` (open schema) and `playStats` |
+| `work/parking-lot/01KSRGFP074RDRTVJ584FHN90A-multi-user-support.md` | Explicit backlog item; full acceptance criteria |
+| `docs/briefs/2026-05-21-korri-config-cascade-brief.md` | "Single-user-today, future multi-user"; structure documented |
+| `docs/solutions/architecture-patterns/sessiond-operator-model-2026-05-29.md` | task-008 cross-cutting backlog entry |
