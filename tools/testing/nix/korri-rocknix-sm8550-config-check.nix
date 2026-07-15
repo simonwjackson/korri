@@ -236,7 +236,7 @@ let
           55
           100
         ]
-        && fan.idlePwmPercent == 27
+        && fan.idlePwmPercent == 0
         && fan.profileName == "thor-gaming"
       ))
       (check "${name}: korri has appliance device groups" (

@@ -583,8 +583,10 @@ in
         pwmPercent = 100;
       }
     ];
-    # Stock quiet level is pwm 70/255 (~27%); keep idle no louder than stock.
-    idlePwmPercent = 27;
+    # Idle floor of 0 lets the fan stop entirely below the 45C knee, so the
+    # device is silent whenever it is cool enough not to need active cooling
+    # (the 45C => 35% knee still spins it up as soon as load arrives).
+    idlePwmPercent = 0;
     profileName = "thor-gaming";
   };
 
