@@ -218,7 +218,7 @@ let
       (check "${name}: runtime user is korri and non-root" (
         runtime.user == "korri" && (korriUser.uid or 0) != 0 && (korriUser.isNormalUser or false)
       ))
-      (check "${name}: fan control runs the Thor gaming curve" (
+      (check "${name}: fan control runs the Thor whisper curve" (
         let
           fan = cfg.services.korri.fanControl;
         in
@@ -227,17 +227,17 @@ let
         && fan.tempSource.kind == "thermal-zone"
         && fan.tempSource.zoneType == "cpu7-top-thermal"
         && map (point: point.tempC) fan.curve == [
-          45
+          58
           70
           85
         ]
         && map (point: point.pwmPercent) fan.curve == [
-          35
+          8
           55
           100
         ]
         && fan.idlePwmPercent == 0
-        && fan.profileName == "thor-gaming"
+        && fan.profileName == "thor-whisper"
       ))
       (check "${name}: korri has appliance device groups" (
         builtins.all (g: builtins.elem g (korriUser.extraGroups or [ ])) [

@@ -566,13 +566,17 @@ in
       kind = "thermal-zone";
       zoneType = "cpu7-top-thermal";
     };
-    # Mid-range tuned for docked-play quietness: gaming loads in the
-    # 60–75C band run several fan-percent quieter than the first cut
-    # (65C knee was 70%); the 85C => 100% safety ceiling is unchanged.
+    # Whisper posture: silent for as long as possible, then ramp hard.
+    # Measured on Thor/Bandai: the fan spins reliably down to 8% (pwm 20,
+    # ~950 RPM, near-inaudible), stalls below ~6%, and restarts from a dead
+    # stop on an 8% command — so the 0% idle floor is safe (the loop's 5s
+    # re-write doubles as the restart kick). Underclocked gaming (~53-58C)
+    # runs with the fan off or whispering; from 70C up the protection is
+    # identical to the earlier gaming curve (70C => 55%, 85C => 100%).
     curve = [
       {
-        tempC = 45;
-        pwmPercent = 35;
+        tempC = 58;
+        pwmPercent = 8;
       }
       {
         tempC = 70;
@@ -583,11 +587,10 @@ in
         pwmPercent = 100;
       }
     ];
-    # Idle floor of 0 lets the fan stop entirely below the 45C knee, so the
-    # device is silent whenever it is cool enough not to need active cooling
-    # (the 45C => 35% knee still spins it up as soon as load arrives).
+    # Fan fully off below 58C — measured: underclocked gaming holds ~53-58C
+    # even with the fan stopped; the 8% knee catches it as soon as it drifts.
     idlePwmPercent = 0;
-    profileName = "thor-gaming";
+    profileName = "thor-whisper";
   };
 
   services.korri.tailnet.enable = lib.mkDefault true;
