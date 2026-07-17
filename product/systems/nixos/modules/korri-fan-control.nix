@@ -25,9 +25,11 @@
 # guests additionally mount /sys read-only at the mount level (verified on
 # SM8550: `sysfs /sys sysfs ro`), which no unit hardening option can undo. The
 # scripts therefore best-effort `mount -o remount,rw /sys` before writing.
-# Because the unit's sandbox gives each executed script a private mount
-# namespace, the remount is scoped to this unit — the system-wide /sys stays
-# read-only.
+# Observed on the SM8550 guest: the unit's sandbox does NOT reliably isolate
+# this remount in a private mount namespace — an external `remount,ro /sys`
+# from another shell flipped the loop's writes to EROFS mid-run. The loop
+# therefore re-attempts the remount and retries the write on every failed
+# iteration rather than trusting the startup remount.
 {
   config,
   lib,
@@ -332,7 +334,19 @@ let
         if printf '%s\n' "$target" > "$fan_dir/pwm1" 2>/dev/null; then
           last_pwm="$target"
         else
-          log "failed to write pwm value $target to $fan_dir/pwm1"
+          # Self-heal: an external actor can flip /sys back to read-only at
+          # any time (observed live: an interactive `mount -o remount,ro
+          # /sys` froze the loop's writes). Re-attempt the remount and retry
+          # once per iteration instead of trusting the startup remount.
+          if [ "$sysfs_root" = "/sys" ]; then
+            mount -o remount,rw /sys 2>/dev/null || true
+          fi
+          if printf '%s\n' "$target" > "$fan_dir/pwm1" 2>/dev/null; then
+            printf '1\n' > "$fan_dir/pwm1_enable" 2>/dev/null || true
+            last_pwm="$target"
+          else
+            log "failed to write pwm value $target to $fan_dir/pwm1"
+          fi
         fi
       fi
 
