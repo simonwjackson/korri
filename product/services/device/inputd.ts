@@ -46,6 +46,7 @@ import {
   createSystemShortcutEngine,
   type SystemShortcutControl,
   type SystemShortcutDefinition,
+  type SystemShortcutInputEvent,
   type SystemTapDefinition,
 } from "@platform/input/native/system-shortcut-engine"
 import {
@@ -64,6 +65,11 @@ import {
   type InputdActionDispatcher,
   type KorriInputdActionId,
 } from "./inputd-actions"
+import {
+  type DbusShortcutSource,
+  startDbusShortcutSource,
+} from "./inputd-dbus-shortcut-source"
+import { createBunInterceptSubprocess } from "./overlay-live-processes"
 import {
   freezeRemoteGameOnHost,
   thawRemoteGameOnHost,
@@ -175,6 +181,17 @@ function systemTapsFromEnv(
   return backAction
     ? [...DEFAULT_SYSTEM_TAPS, { id: backAction, control: "back" }]
     : DEFAULT_SYSTEM_TAPS
+}
+
+// Stable device id for chord controls that arrive over InputPlumber's DBus
+// target (A') rather than the raw, grabbable virtual pad.
+const DBUS_SHORTCUT_DEVICE_ID = "inputplumber-dbus"
+
+// A' grab-immune shortcut input is on by default on the device; set
+// KORRI_INPUTD_DBUS_SHORTCUTS=0 to fall back to raw-evdev-only chord detection.
+function dbusShortcutsEnabled(env: NodeJS.ProcessEnv): boolean {
+  const raw = env.KORRI_INPUTD_DBUS_SHORTCUTS?.trim().toLowerCase()
+  return raw !== "0" && raw !== "false"
 }
 
 // Quitting a game is destructive, so the kill chord must be a deliberate HOLD
@@ -501,18 +518,13 @@ export async function startKorriInputd(
     }
   }
 
-  function handlePolicyEvent(
-    device: DiscoveredDevice,
-    event: EvdevEvent,
-  ): boolean {
-    const policyControl = policyControlForEvent(event)
-    const matches = shortcutEngine.handleEvent({
-      deviceId: device.deviceId,
-      deviceClass: device.class,
-      type: event.type,
-      code: event.code,
-      value: event.value,
-    })
+  // Feed one input frame into the shortcut engine and dispatch any matches.
+  // Shared by the raw-evdev path (handlePolicyEvent) and the grab-immune
+  // InputPlumber DBus shortcut source, so chords fire identically from either
+  // source. The engine dedupes fired shortcuts, so a control that arrives on
+  // both the evdev pad and the DBus channel fires its chord only once.
+  function applyShortcutInput(input: SystemShortcutInputEvent): number {
+    const matches = shortcutEngine.handleEvent(input)
 
     for (const match of matches) {
       if (match.id === KILL_CHORD_ID) {
@@ -528,17 +540,34 @@ export async function startKorriInputd(
 
     // Releasing any chord control before the hold threshold cancels the pending
     // kill (a tap); releasing after it has fired is a no-op in the supervisor.
-    if (
-      event.type === EV_KEY &&
-      event.value === 0 &&
-      policyControl !== null &&
-      KILL_CHORD_CONTROLS.has(policyControl) &&
-      killHoldSupervisor.isHolding(KILL_CHORD_ID)
-    ) {
-      killHoldSupervisor.release(KILL_CHORD_ID)
+    if (input.type === EV_KEY && input.value === 0) {
+      const control = policyControlForEvent(input)
+      if (
+        control !== null &&
+        KILL_CHORD_CONTROLS.has(control) &&
+        killHoldSupervisor.isHolding(KILL_CHORD_ID)
+      ) {
+        killHoldSupervisor.release(KILL_CHORD_ID)
+      }
     }
 
-    if (matches.length > 0) return true
+    return matches.length
+  }
+
+  function handlePolicyEvent(
+    device: DiscoveredDevice,
+    event: EvdevEvent,
+  ): boolean {
+    const policyControl = policyControlForEvent(event)
+    const matchCount = applyShortcutInput({
+      deviceId: device.deviceId,
+      deviceClass: device.class,
+      type: event.type,
+      code: event.code,
+      value: event.value,
+    })
+
+    if (matchCount > 0) return true
 
     if (event.type === EV_KEY) {
       const systemAction = systemKeyAction(event.code, event.value, process.env)
@@ -689,6 +718,28 @@ export async function startKorriInputd(
 
   await sessionProbe.refresh().catch(() => {})
 
+  // A': read the shortcut chords from InputPlumber's grab-immune DBus target so
+  // a foreground game grabbing the virtual pad can no longer starve them. Only
+  // started on the device (tests inject openEventSource); disable with
+  // KORRI_INPUTD_DBUS_SHORTCUTS=0.
+  const dbusShortcutSource: DbusShortcutSource | undefined =
+    options.openEventSource || !dbusShortcutsEnabled(process.env)
+      ? undefined
+      : startDbusShortcutSource({
+          spawnLines: createBunInterceptSubprocess({ env: process.env })
+            .spawnLines,
+          gdbus: process.env.KORRI_GDBUS_BIN,
+          objectPath: process.env.KORRI_INPUTD_DBUS_TARGET_PATH,
+          onShortcutEvent: event =>
+            applyShortcutInput({
+              deviceId: DBUS_SHORTCUT_DEVICE_ID,
+              deviceClass: "gamepad",
+              type: event.type,
+              code: event.code,
+              value: event.value,
+            }),
+        })
+
   const pollTimer = setInterval(() => {
     refreshDevices().catch(error => {
       logger.warn({ err: error }, "inputd: device refresh failed")
@@ -707,6 +758,7 @@ export async function startKorriInputd(
     stop: async () => {
       stopped = true
       clearInterval(pollTimer)
+      dbusShortcutSource?.close()
       clients.clear()
       shortcutEngine.reset()
       killHoldSupervisor.reset()
@@ -747,9 +799,11 @@ function realEventNodeExists(eventNode: string): boolean {
   return existsSync(`/dev/input/${eventNode}`)
 }
 
-function policyControlForEvent(
-  event: EvdevEvent,
-): SystemShortcutControl | null {
+function policyControlForEvent(event: {
+  readonly type: number
+  readonly code: number
+  readonly value: number
+}): SystemShortcutControl | null {
   if (event.type === EV_KEY) {
     if (event.code === BTN_MODE) return "home"
     if (event.code === BTN_TL) return "l1"
