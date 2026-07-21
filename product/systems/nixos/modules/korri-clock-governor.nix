@@ -37,6 +37,7 @@ let
     export PATH=${
       lib.makeBinPath [
         pkgs.coreutils
+        pkgs.gnugrep
         pkgs.util-linux
       ]
     }
