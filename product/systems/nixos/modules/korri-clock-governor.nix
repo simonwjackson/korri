@@ -69,7 +69,8 @@ let
           return 0
         fi
       fi
-      log "set $(dirname "$1" | xargs basename) governor to '$2'"
+      parent="''${1%/*}"
+      log "set ''${parent##*/} governor to '$2'"
     }
 
     remount_rw
