@@ -107,6 +107,16 @@ runtime_pressure_vessel_roots'' runtimePrepScript)
       && lib.hasInfix "Some Linux ioctls" inputGuardSource
       && !(lib.hasInfix "if (_IOC_DIR(request) != _IOC_NONE)" inputGuardSource)
     ))
+    (check "steam-korri input guard neutralizes EVIOCGRAB under FEX via an inherited seccomp filter" (
+      # The libc ioctl() interposer above cannot see the raw syscalls a FEX
+      # x86 payload issues, so an emulated game can still EVIOCGRAB the shared
+      # InputPlumber pad and starve Korri's shortcut chords. A load-time
+      # seccomp filter closes that gap and is inherited by the FEX host tree.
+      lib.hasInfix "__attribute__((constructor))" inputGuardSource
+      && lib.hasInfix "SECCOMP_MODE_FILTER" inputGuardSource
+      && lib.hasInfix "PR_GET_NO_NEW_PRIVS" inputGuardSource
+      && lib.hasInfix "KORRI_STEAM_INPUT_GUARD_SECCOMP" inputGuardSource
+    ))
   ];
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;
