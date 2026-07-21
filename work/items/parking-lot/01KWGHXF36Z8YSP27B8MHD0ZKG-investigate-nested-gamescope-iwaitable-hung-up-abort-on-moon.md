@@ -9,6 +9,7 @@ labels:
   - korri
   - gamescope
   - moonlight
+  - steam
   - crash
   - sm8550
 created: 2026-07-02
@@ -105,3 +106,42 @@ launch's `-O DSI-2` physical-output grab colliding with the outer compositor), w
 clean standalone harness does not exercise. Re-centers the fix on launch sequencing /
 serializing the hub->stream handoff, matching the original teardown-race note. Next: capture
 a real UI launch's timing (renderer-stop vs gamescope-spawn vs X-socket release).
+
+## Evidence 2026-07-21 (bandai, Steam launch path — folds in 01KY3CACRF)
+
+The SAME SIGABRT (systemd `status=134`) reproduces on the **Steam**
+`korri-steam-gamescope` path, not just Moonlight — so this is one nested
+gamescope-korri crash across both stream clients. Confirms the labels should
+include `steam` as well as `moonlight`.
+
+- Signature under Steam: `korri-steam-service-run: line 13: <pid> Aborted
+  .../gamescope-korri-3.16.23-korri/bin/gamescope -f -W 1920 -H 1080 -O DSI-2 --`
+  -> `korri-steam-gamescope.service: Main process exited, code=exited,
+  status=134`; the `gamescopereaper` then "Killing children", tearing down
+  Steam + the running game. Preceded by
+  `[gamescope] [Error] xdg_backend: Compositor released us but we were not
+  acquired. Oh no.` — the Steam-path manifestation of the same nested-backend
+  waitable failure.
+- **Strong support for the teardown/handoff-race conclusion above.** The aborts
+  in this session all fired during **live sway surface reconfiguration** of the
+  nested gamescope surface — `swaymsg` workspace moves, `fullscreen` toggles, and
+  the pid-based `place_gamescope_workspace` move all reconfigure gamescope's xdg
+  surface, and that is when it hit `Compositor released us`/`status=134`.
+- On a **clean boot with NO live compositor poking**, gamescope did **not** abort
+  across multiple Steam launches (only the benign `xwm: got the same buffer
+  committed twice` + a non-fatal `Compositor released us` warning). So the crash
+  is not intrinsic to gamescope-korri 3.16.23 startup — it is triggered by
+  surface reconfiguration / the handoff race, exactly as the 07-05 standalone
+  harness concluded. Corollary lesson (also `01KY2W3HG2`): do NOT debug this by
+  poking the live compositor — it manufactures the very crash.
+- The `-O DSI-2` physical-output grab colliding with the outer compositor (noted
+  07-05) is consistent with the Steam path too: the Steam service's gamescope
+  also grabs `-O DSI-2`.
+- Cross-ref: this crash is symptom **S3** in the launch-failure epic
+  `docs/plans/2026-07-21-001-fix-steam-fex-gamescope-launch-cluster-plan.md`.
+  A separate resilience item (`01KWGHX442`) covers surviving the abort; a
+  candidate mitigation is to avoid live surface moves during launch (the Steam
+  workspace reconcile `ee3e1cfc` reconfigures the surface — evaluate placing via
+  workspace assignment before the surface maps rather than a live move).
+- Superseded/folded: `01KY3CACRF` (gamescope-korri SIGABRT under sway nested
+  backend) — same crash, removed as a duplicate of this item.
