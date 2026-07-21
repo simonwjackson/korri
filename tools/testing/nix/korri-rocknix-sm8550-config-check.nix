@@ -934,6 +934,8 @@ let
         && lib.hasInfix "korri-steam-service-run" steamGamescopeExec
         && (steamGamescopeUnit.serviceConfig.RestartPreventExitStatus or [ ]) == [ 77 ]
         && (steamGamescopeUnit.environment.GAMESCOPE_WAYLAND_DISPLAY or null) == "gamescope-0"
+        && ((steam.gamescopePackage or null) != null)
+        && (steam.gamescopePackage.pname or "") == "gamescope-korri"
       ))
       (check "${name}: Korri Steam is not warmed at boot" (
         !(userServices ? korri-steam-warm)

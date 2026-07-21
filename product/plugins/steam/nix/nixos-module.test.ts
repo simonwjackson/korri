@@ -152,6 +152,17 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).not.toContain("direct_steam_pid")
   })
 
+  it("presents through the plugin-owned patched gamescope-korri package", () => {
+    // Touch delivery and nested-presentation fixes live in gamescope-korri's
+    // patch series. Steam must not silently fall back to an unpatched nixpkgs
+    // gamescope: the wrapper is the only touch-facing gamescope surface, so a
+    // raw pkgs.gamescope reference reintroduces the dropped-touch regression.
+    expect(moduleSource).toContain("gamescopePackage = mkOption")
+    expect(moduleSource).toContain("default = pkgs.gamescope-korri or pkgs.gamescope")
+    expect(moduleSource).toContain("${cfg.gamescopePackage}/bin/gamescope")
+    expect(moduleSource).not.toContain("${pkgs.gamescope}/bin/gamescope")
+  })
+
   it("keeps Gamescope output selection device-configurable without SteamOS integration", () => {
     expect(moduleSource).toContain("gamescopePreferOutput")
     expect(moduleSource).toContain("types.nullOr types.str")
@@ -409,7 +420,7 @@ describe("Steam plugin Nix module", () => {
       'ExecStart = "${steamServiceRunner}/bin/korri-steam-service-run"',
     )
     expect(moduleSource).toContain(
-      '"' + "$" + "{pkgs.gamescope}/bin/gamescope " + "$" + "{gamescopeArgs}",
+      '"' + "$" + "{cfg.gamescopePackage}/bin/gamescope " + "$" + "{gamescopeArgs}",
     )
     expect(moduleSource).toContain(
       "-- ${pkgs.coreutils}/bin/env -u GAMESCOPE_WAYLAND_DISPLAY -u LIBEI_SOCKET -u STEAM_GAME_DISPLAY_0 -u ENABLE_GAMESCOPE_WSI -u WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway",

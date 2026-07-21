@@ -74,7 +74,7 @@ let
       # Gamescope-owned Xwayland DISPLAY, but it should not see Gamescope's
       # Wayland/libei integration path that pushes native ARM64 Steam toward
       # gamepadui.
-      "${pkgs.gamescope}/bin/gamescope ${gamescopeArgs} -- ${pkgs.coreutils}/bin/env -u GAMESCOPE_WAYLAND_DISPLAY -u LIBEI_SOCKET -u STEAM_GAME_DISPLAY_0 -u ENABLE_GAMESCOPE_WSI -u WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway ${steamInputGuardEnv} ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}"
+      "${cfg.gamescopePackage}/bin/gamescope ${gamescopeArgs} -- ${pkgs.coreutils}/bin/env -u GAMESCOPE_WAYLAND_DISPLAY -u LIBEI_SOCKET -u STEAM_GAME_DISPLAY_0 -u ENABLE_GAMESCOPE_WSI -u WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway ${steamInputGuardEnv} ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}"
     else
       "${pkgs.coreutils}/bin/env ${steamInputGuardEnv} ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs}";
 
@@ -1519,6 +1519,18 @@ in
         Steam inside the broker used by AppID launch experiments. `desktop`
         runs Steam directly as a Sway client, which preserves the desktop Steam
         UI (`steamwebhelper -uimode=7`) for development/debugging on SM8550.
+      '';
+    };
+
+    gamescopePackage = mkOption {
+      type = types.package;
+      default = pkgs.gamescope-korri or pkgs.gamescope;
+      description = ''
+        Gamescope package used for the Steam presentation wrapper. Defaults to
+        the plugin-owned patched gamescope-korri when its overlay is present.
+        Korri's nested-Wayland patches (render-only Vulkan device support,
+        explicit-sync opt-out, touch input) only exist in gamescope-korri, so
+        device profiles should keep this aligned with the compositor package.
       '';
     };
 

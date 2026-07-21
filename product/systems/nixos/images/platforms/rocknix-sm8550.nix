@@ -792,6 +792,11 @@ in
     # client: useGamepadUi=false keeps steamwebhelper in desktop UI while
     # presentationMode=gamescope preserves controller/display ownership.
     presentationMode = "gamescope";
+    # Present through the same plugin-owned patched gamescope as the rest of
+    # the platform. The nixpkgs fallback lacks Korri's nested-Wayland patch
+    # series (render-only Vulkan device, explicit-sync opt-out, touch input),
+    # and Steam's wrapper is the only touch-facing gamescope surface here.
+    inherit gamescopePackage;
     gamescopePreferOutput = resolvedHomeOutput;
     # Steam's Gamepad UI can grab controller focus from the foreground AppID
     # game; keep the warm client in desktop UI without -gamepadui.
