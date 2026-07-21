@@ -597,17 +597,27 @@ in
     profileName = "thor-whisper";
   };
 
-  # Load-following clock governors. Stock SM8550 posture pins every CPU
-  # cluster and the GPU at maximum via `performance` governors (and the
-  # fake-suspend wake path re-asserts that), burning power and heat at idle.
-  # Measured on Thor/Bandai: schedutil + simple_ondemand track real demand
-  # per cluster with no perceptible frame cost (2D title: GPU chose 220MHz
-  # 29/30s vs a constant 680MHz pin). The loop re-asserts every 30s so
-  # wake-path resets self-heal; per-game launch hooks keep ownership of
-  # min/max frequency caps.
+  # Load-following CPU governors, GPU pinned to performance.
+  #
+  # CPU: schedutil tracks real demand per cluster (measured ~30C cooler and
+  # quieter under light load on Thor/Bandai) with no measurable frame cost.
+  #
+  # GPU: `simple_ondemand` scaling is UNSAFE on this SoC. Its per-frame
+  # frequency/bandwidth votes go through the Adreno A740 GMU
+  # (`HFI_H2F_MSG_GX_BW_PERF_VOTE`), and that vote intermittently stalls the
+  # GMU (`a6xx_gmu_set_oob GPU_SET timeout` -> `hangcheck recover`), wedging
+  # the GPU and freezing the display -- reproducibly on game launch (the
+  # low->high ramp). `performance` issues no vote churn, so the GPU stays
+  # stable and full 680MHz peak is always available. At true idle the GPU
+  # still runtime-suspends, so the pin's only cost is watts while actively
+  # rendering light work. This is an interim pin: the real fix is GMU
+  # vote/HFI reliability at the driver/firmware level, after which the GPU
+  # can return to load-following. See work item
+  # 01KY2YNGFQ (SM8550 Adreno A740 GMU DVFS vote-stall).
   services.korri.clockGovernor = {
     enable = lib.mkDefault true;
     gpuDevfreqNodes = [ "3d00000.gpu" ];
+    gpuGovernor = "performance";
   };
 
   services.korri.tailnet.enable = lib.mkDefault true;

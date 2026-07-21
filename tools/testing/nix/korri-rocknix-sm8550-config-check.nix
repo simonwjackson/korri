@@ -239,13 +239,19 @@ let
         && fan.idlePwmPercent == 0
         && fan.profileName == "thor-whisper"
       ))
-      (check "${name}: clock governors follow load instead of pinning max" (
+      (check "${name}: CPU follows load; GPU pinned performance (GMU vote-stall)" (
         let
           clocks = cfg.services.korri.clockGovernor;
         in
+        # CPU schedutil tracks load. GPU MUST stay `performance`: simple_ondemand
+        # frequency/bandwidth votes intermittently stall the Adreno A740 GMU
+        # (a6xx_gmu_set_oob GPU_SET timeout -> hangcheck -> display freeze),
+        # reproducibly on game launch. Interim pin until GMU DVFS reliability is
+        # fixed at the driver/firmware level; do not revert to a scaling GPU
+        # governor without that fix.
         clocks.enable
         && clocks.cpuGovernor == "schedutil"
-        && clocks.gpuGovernor == "simple_ondemand"
+        && clocks.gpuGovernor == "performance"
         && clocks.gpuDevfreqNodes == [ "3d00000.gpu" ]
       ))
       (check "${name}: korri has appliance device groups" (
