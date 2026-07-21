@@ -239,6 +239,15 @@ let
         && fan.idlePwmPercent == 0
         && fan.profileName == "thor-whisper"
       ))
+      (check "${name}: clock governors follow load instead of pinning max" (
+        let
+          clocks = cfg.services.korri.clockGovernor;
+        in
+        clocks.enable
+        && clocks.cpuGovernor == "schedutil"
+        && clocks.gpuGovernor == "simple_ondemand"
+        && clocks.gpuDevfreqNodes == [ "3d00000.gpu" ]
+      ))
       (check "${name}: korri has appliance device groups" (
         builtins.all (g: builtins.elem g (korriUser.extraGroups or [ ])) [
           "audio"

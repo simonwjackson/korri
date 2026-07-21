@@ -46,6 +46,10 @@ rec {
   # image carries the module default-disabled (systemic contract: fan-equipped
   # devices enable it and declare hardware identity; fanless devices no-op).
   korri-fan-control = import ../modules/korri-fan-control.nix;
+  # Fleet-wide CPU/GPU governor policy. Same systemic contract as fan
+  # control: every image carries it default-disabled; devices whose stock
+  # posture pins clocks at maximum enable it with their GPU node identity.
+  korri-clock-governor = import ../modules/korri-clock-governor.nix;
   korri-setup = import ../modules/korri-setup.nix;
   # Per-platform opt-in: removable-media mounting + card-wins config-root
   # exposure through config-roots.d. Bundles korri-runtime so the module's
@@ -138,6 +142,7 @@ rec {
       korri-input
       korri-daemon
       korri-fan-control
+      korri-clock-governor
     ];
   };
   default = korri;

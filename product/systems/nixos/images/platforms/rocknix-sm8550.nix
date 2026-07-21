@@ -593,6 +593,19 @@ in
     profileName = "thor-whisper";
   };
 
+  # Load-following clock governors. Stock SM8550 posture pins every CPU
+  # cluster and the GPU at maximum via `performance` governors (and the
+  # fake-suspend wake path re-asserts that), burning power and heat at idle.
+  # Measured on Thor/Bandai: schedutil + simple_ondemand track real demand
+  # per cluster with no perceptible frame cost (2D title: GPU chose 220MHz
+  # 29/30s vs a constant 680MHz pin). The loop re-asserts every 30s so
+  # wake-path resets self-heal; per-game launch hooks keep ownership of
+  # min/max frequency caps.
+  services.korri.clockGovernor = {
+    enable = lib.mkDefault true;
+    gpuDevfreqNodes = [ "3d00000.gpu" ];
+  };
+
   services.korri.tailnet.enable = lib.mkDefault true;
   services.tailscale = {
     extraUpFlags = [ "--netfilter-mode=off" ];
