@@ -158,7 +158,9 @@ describe("Steam plugin Nix module", () => {
     // gamescope: the wrapper is the only touch-facing gamescope surface, so a
     // raw pkgs.gamescope reference reintroduces the dropped-touch regression.
     expect(moduleSource).toContain("gamescopePackage = mkOption")
-    expect(moduleSource).toContain("default = pkgs.gamescope-korri or pkgs.gamescope")
+    expect(moduleSource).toContain(
+      "default = pkgs.gamescope-korri or pkgs.gamescope",
+    )
     expect(moduleSource).toContain("${cfg.gamescopePackage}/bin/gamescope")
     expect(moduleSource).not.toContain("${pkgs.gamescope}/bin/gamescope")
   })
@@ -303,7 +305,9 @@ describe("Steam plugin Nix module", () => {
     expect(ensureBlock).toBeDefined()
     expect(ensureBlock).not.toContain("wantedBy")
     expect(ensureBlock).not.toContain("lib.mkIf cfg.keepWarm")
-    expect(ensureBlock).toContain('ExecStart = "${steamWarmup}/bin/korri-steam-warm"')
+    expect(ensureBlock).toContain(
+      'ExecStart = "${steamWarmup}/bin/korri-steam-warm"',
+    )
   })
 
   it("re-forwards the AppID when gamescope aborts before the game launches", () => {
@@ -314,14 +318,14 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).toContain("steam_service_invocation()")
     expect(moduleSource).toContain("launch_invocation=")
     expect(moduleSource).toContain("reforward_limit=")
-    expect(moduleSource).toContain('KORRI_STEAM_APP_REFORWARD_LIMIT:-3')
+    expect(moduleSource).toContain("KORRI_STEAM_APP_REFORWARD_LIMIT:-3")
     // The re-forward path waits for readiness and re-issues the launch, bounded
     // by the limit so a persistent crash still terminates rather than looping.
     expect(moduleSource).toContain(
-      'if wait_for_steam_ready && forward_appid; then',
+      "if wait_for_steam_ready && forward_appid; then",
     )
     expect(moduleSource).toContain(
-      'giving up after $reforward_limit re-forwards',
+      "giving up after $reforward_limit re-forwards",
     )
     // The restart is detected by a changed systemd InvocationID.
     expect(moduleSource).toContain(
@@ -420,7 +424,11 @@ describe("Steam plugin Nix module", () => {
       'ExecStart = "${steamServiceRunner}/bin/korri-steam-service-run"',
     )
     expect(moduleSource).toContain(
-      '"' + "$" + "{cfg.gamescopePackage}/bin/gamescope " + "$" + "{gamescopeArgs}",
+      '"' +
+        "$" +
+        "{cfg.gamescopePackage}/bin/gamescope " +
+        "$" +
+        "{gamescopeArgs}",
     )
     expect(moduleSource).toContain(
       "-- ${pkgs.coreutils}/bin/env -u GAMESCOPE_WAYLAND_DISPLAY -u LIBEI_SOCKET -u STEAM_GAME_DISPLAY_0 -u ENABLE_GAMESCOPE_WSI -u WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway",
@@ -430,9 +438,27 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).not.toContain('InterceptMode u \"$mode\"')
     expect(moduleSource).toContain('steam_workspace=\"')
     expect(moduleSource).toContain("KORRI_STEAM_WORKSPACE:-korri:steam-debug")
-    expect(moduleSource).toContain("place_gamescope_workspace")
-    expect(moduleSource).toContain('"[pid=$pid] move container to workspace')
-    expect(moduleSource).toContain("workspace_placed=0")
+    // Placement must be a continuous reconcile, not one-shot. Gamescope
+    // recreates its surface when the game starts rendering, so Sway remaps the
+    // window onto the focused hub workspace after the initial move; a latched
+    // placement (workspace_placed) never corrected that and left the running
+    // game invisibly behind the Korri GUI.
+    expect(moduleSource).not.toContain("workspace_placed")
+    expect(moduleSource).toContain(
+      'reconcile_gamescope_workspace "$gamescope_pid"',
+    )
+    const reconcileBlock = moduleSource.match(
+      /reconcile_gamescope_workspace\(\) \{[\s\S]*?\n    \}/,
+    )?.[0]
+    expect(reconcileBlock).toBeDefined()
+    // Idempotent: once the window is already on the managed workspace, do
+    // nothing and do NOT steal focus, so Home+L1/R1 can leave the user on the
+    // Korri GUI while the game keeps running there.
+    expect(reconcileBlock).toContain('[ "$current_ws" = "$steam_workspace" ]')
+    // On drift (initial hub map or a post-launch surface remap), move it back
+    // fullscreen AND reveal it by switching Sway to the managed workspace.
+    expect(reconcileBlock).toContain('"[pid=$pid] move container to workspace')
+    expect(reconcileBlock).toContain('"workspace \\"$steam_workspace\\""')
     expect(moduleSource).toContain('accepted_ui_pid=\"\"')
     expect(moduleSource).toContain("while true; do")
     expect(moduleSource).toContain("guard_status=77")
@@ -467,7 +493,9 @@ describe("Steam plugin Nix module", () => {
     )
     // Online: adopt the server manifest verbatim so Steam can self-update and
     // converge on the current client version.
-    expect(moduleSource).toContain('mv -f "$downloaded_manifest" "$manifest_file"')
+    expect(moduleSource).toContain(
+      'mv -f "$downloaded_manifest" "$manifest_file"',
+    )
     // The stale version-pinning rewrite must be gone: it caused the perpetual
     // updater loop by forcing Steam back to the seeded client version.
     expect(moduleSource).not.toContain('!replaced && $1 == "\\"version\\""')
@@ -598,13 +626,17 @@ describe("Steam plugin Nix module", () => {
     // the inner steam_app_$appid window; focus_game must switch to the managed
     // Steam workspace (the container Sway can actually address) rather than
     // relying on a steam_app_$appid selector, which never matched.
-    const focusBlock = moduleSource.match(/focus_game\(\) \{[\s\S]*?\n    \}/)?.[0]
+    const focusBlock = moduleSource.match(
+      /focus_game\(\) \{[\s\S]*?\n    \}/,
+    )?.[0]
     expect(focusBlock).toBeDefined()
     expect(focusBlock).toContain('sway "workspace \\"$steam_workspace\\""')
     expect(focusBlock).toContain("if app_running_evidence_present; then")
     // The invisible inner-window selector must no longer be the focus mechanism.
     expect(focusBlock).not.toContain("move to workspace 1")
-    expect(focusBlock).not.toContain('[class=\\"steam_app_$appid\\"] scratchpad show')
+    expect(focusBlock).not.toContain(
+      '[class=\\"steam_app_$appid\\"] scratchpad show',
+    )
   })
 
   it("resolves the canonical sway-ipc socket so wrapper sway commands are not no-ops", () => {
@@ -612,7 +644,9 @@ describe("Steam plugin Nix module", () => {
     // is $XDG_RUNTIME_DIR/sway-ipc.sock (single dot). The old glob
     // 'sway-ipc.*.sock' never matched it, so every sway() call silently did
     // nothing. find_sway_sock must resolve the canonical single-dot path.
-    const sockBlock = moduleSource.match(/find_sway_sock\(\) \{[\s\S]*?\n    \}/)?.[0]
+    const sockBlock = moduleSource.match(
+      /find_sway_sock\(\) \{[\s\S]*?\n    \}/,
+    )?.[0]
     expect(sockBlock).toBeDefined()
     expect(sockBlock).toContain('[ -S "$XDG_RUNTIME_DIR/sway-ipc.sock" ]')
     expect(sockBlock).toContain("-name 'sway-ipc.sock'")

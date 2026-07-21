@@ -107,21 +107,37 @@ let
 
     steam_workspace="''${KORRI_STEAM_WORKSPACE:-korri:steam-debug}"
     sway_sock="/run/user/${toString runtime.uid}/sway-ipc.sock"
-    place_gamescope_workspace() {
+    reconcile_gamescope_workspace() {
       pid="$1"
       [ -S "$sway_sock" ] || return 1
-      # swaymsg returns exit 0 even when the [pid=..] criteria match no window,
-      # so a bare move would "succeed" on the first loop iteration -- before the
-      # Gamescope window has mapped in sway -- latch workspace_placed=1, and
-      # never isolate the window once it actually appears (it then tiles on the
-      # active hub workspace). Only proceed once the window is present in the
-      # tree; the caller retries every iteration until this returns 0.
-      SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg -t get_tree 2>/dev/null \
-        | ${pkgs.gnugrep}/bin/grep -aqE "\"pid\"[[:space:]]*:[[:space:]]*$pid([,} ]|$)" \
-        || return 1
+      # Placement cannot be one-shot. Gamescope recreates its surface when the
+      # game starts rendering ("Compositor released us but we were not
+      # acquired"), so Sway remaps the window onto the focused hub workspace
+      # after the initial move. A latched placement never corrected that and
+      # stranded the running game invisibly behind the fullscreen Korri GUI, so
+      # the user saw the GUI and assumed Steam had crashed. Run every supervisor
+      # iteration and reconcile the window toward the managed workspace.
+      tree="$(SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg -t get_tree 2>/dev/null)" || return 1
+      [ -n "$tree" ] || return 1
+      current_ws="$(printf '%s' "$tree" | ${pkgs.jq}/bin/jq -r --argjson p "$pid" '
+        [ .. | objects | select(.type == "workspace")
+          | select(([ recurse(.nodes[]?, .floating_nodes[]?) | .pid ] | index($p)) != null)
+          | .name ] | first // empty' 2>/dev/null || true)"
+      # Window not mapped in Sway yet -- retry next iteration.
+      [ -n "$current_ws" ] || return 1
+      # Already isolated on the managed workspace: do nothing, and in particular
+      # do NOT steal focus -- so the Home+L1/R1 chords can leave the user on the
+      # Korri GUI while the game keeps running here.
+      [ "$current_ws" = "$steam_workspace" ] && return 0
+      # Drifted (initial hub map, or a post-launch surface remap): move it back
+      # fullscreen AND reveal it, mirroring the working manual recovery.
       SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg \
         "[pid=$pid] move container to workspace \"$steam_workspace\", fullscreen enable, border none" \
         >/dev/null 2>&1
+      SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg \
+        "workspace \"$steam_workspace\"" >/dev/null 2>&1
+      echo "korri-steam-service-run: reconciled managed Gamescope pid=$pid onto workspace $steam_workspace (was $current_ws)" >&2
+      return 0
     }
 
     has_big_picture_surface() {
@@ -136,17 +152,13 @@ let
     trap 'stop_gamescope "$gamescope_pid"; wait "$gamescope_pid" 2>/dev/null; exit 143' TERM INT
 
     accepted_ui_pid=""
-    workspace_placed=0
     while true; do
       if ! kill -0 "$gamescope_pid" 2>/dev/null; then
         wait "$gamescope_pid"
         exit "$?"
       fi
 
-      if [ "$workspace_placed" -eq 0 ] && place_gamescope_workspace "$gamescope_pid"; then
-        echo "korri-steam-service-run: moved managed Gamescope pid=$gamescope_pid to workspace $steam_workspace" >&2
-        workspace_placed=1
-      fi
+      reconcile_gamescope_workspace "$gamescope_pid"
 
       if has_big_picture_surface; then
         echo "korri-steam-service-run: observed Steam Big Picture-titled surface while Steam remains managed; continuing unless uimode=4 appears" >&2
