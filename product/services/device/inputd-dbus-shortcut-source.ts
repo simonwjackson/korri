@@ -41,6 +41,8 @@ export interface DbusShortcutSourceDeps {
   /** Feed a mapped shortcut event into the engine + dispatch. */
   readonly onShortcutEvent: (event: ShortcutEvdevEvent) => void
   readonly gdbus?: string
+  /** Path to coreutils `stdbuf`, used to force line-buffered monitor output. */
+  readonly stdbuf?: string
   readonly objectPath?: string
 }
 
@@ -52,11 +54,26 @@ export function startDbusShortcutSource(
   deps: DbusShortcutSourceDeps,
 ): DbusShortcutSource {
   const gdbus = deps.gdbus ?? "gdbus"
+  const stdbuf = deps.stdbuf ?? "stdbuf"
   const objectPath = deps.objectPath ?? DEFAULT_DBUS_TARGET_PATH
 
+  // gdbus block-buffers stdout when it is a pipe (not a tty), so without
+  // line-buffering inputd receives the ui_* events in delayed ~4KB batches and
+  // the chord engine never sees a press in time. Wrap the monitor in
+  // `stdbuf -oL` -- exactly like the overlay intercept monitor -- so every
+  // InputEvent line is delivered to inputd immediately.
   const stop = deps.spawnLines(
-    gdbus,
-    ["monitor", "--system", "--dest", BUS_NAME, "--object-path", objectPath],
+    stdbuf,
+    [
+      "-oL",
+      gdbus,
+      "monitor",
+      "--system",
+      "--dest",
+      BUS_NAME,
+      "--object-path",
+      objectPath,
+    ],
     line => {
       const parsed = parseInputEventLine(line)
       if (!parsed) return

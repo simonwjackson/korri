@@ -10,9 +10,11 @@ function harness() {
   const events: ShortcutEvdevEvent[] = []
   let captured: ((line: string) => void) | null = null
   let stopped = false
+  let spawnCommand = ""
   let spawnArgs: readonly string[] = []
   const source = startDbusShortcutSource({
-    spawnLines: (_command, args, onLine) => {
+    spawnLines: (command, args, onLine) => {
+      spawnCommand = command
       spawnArgs = args
       captured = onLine
       return () => {
@@ -25,6 +27,9 @@ function harness() {
     events,
     source,
     emit: (line: string) => captured?.(line),
+    get spawnCommand() {
+      return spawnCommand
+    },
     get spawnArgs() {
       return spawnArgs
     },
@@ -42,6 +47,19 @@ describe("startDbusShortcutSource", () => {
     const h = harness()
     expect(h.spawnArgs).toContain("monitor")
     expect(h.spawnArgs).toContain(DEFAULT_DBUS_TARGET_PATH)
+  })
+
+  it("line-buffers the monitor with stdbuf -oL so events arrive immediately", () => {
+    // gdbus block-buffers a piped stdout; without stdbuf -oL inputd receives
+    // ui_* events in delayed batches and chords never fire in time.
+    const h = harness()
+    expect(h.spawnCommand).toBe("stdbuf")
+    expect(h.spawnArgs[0]).toBe("-oL")
+    expect(h.spawnArgs[1]).toBe("gdbus")
+    // -oL must precede gdbus so it applies to the gdbus process.
+    expect(h.spawnArgs.indexOf("-oL")).toBeLessThan(
+      h.spawnArgs.indexOf("gdbus"),
+    )
   })
 
   it("maps InputEvent signals to shortcut events for the engine", () => {
