@@ -15,6 +15,11 @@
 #   - Re-asserting every poll makes external resets (suspend/resume hooks,
 #     vendor scripts) self-healing within one interval, mirroring the fan
 #     module's posture toward the same wake-path interference.
+#   - It may also hold specific cpuidle states disabled (`cpuIdleDisable`) to
+#     work around SoC errata where a deep CPU idle state stalls a co-processor.
+#     On SM8550 this is load-bearing: cpu0's state1 (cpu-sleep-0-0) stalls the
+#     Adreno GMU HFI vote handshake, freezing the GPU under devfreq scaling;
+#     disabling it lets the GPU run `simple_ondemand` safely (ROCKNIX PR #2876).
 #
 # Sandboxing note: identical to korri-fan-control — ROCKNIX guests mount /sys
 # read-only at the mount level, so the loop best-effort remounts it writable
@@ -95,6 +100,13 @@ let
         fi
       '') cfg.gpuDevfreqNodes}
 
+      # Hold configured cpuidle states disabled (write 1 to their `disable`).
+      # Re-asserted every poll because suspend/resume re-enables them.
+      ${lib.concatMapStringsSep "\n      " (entry: ''
+        idle_file="$sysfs_root/devices/system/cpu/${lib.escapeShellArg entry}/disable"
+        [ -e "$idle_file" ] && write_governor "$idle_file" "1"
+      '') cfg.cpuIdleDisable}
+
       if [ "$max_iterations" -gt 0 ] && [ "$iteration" -ge "$max_iterations" ]; then
         break
       fi
@@ -129,6 +141,20 @@ in
       description = ''
         devfreq node names under /sys/class/devfreq to manage. Empty means
         CPU-only; platform adapters supply their SoC's GPU node identity.
+      '';
+    };
+
+    cpuIdleDisable = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "cpu0/cpuidle/state1" ];
+      description = ''
+        cpuidle states to hold disabled, each as `cpuN/cpuidle/stateM` relative
+        to /sys/devices/system/cpu. The loop writes 1 to each state's `disable`
+        file every poll (suspend/resume re-enables them). Used to work around
+        SoC errata where a deep CPU idle state stalls a co-processor -- on
+        SM8550, cpu0's state1 stalls the Adreno GMU HFI handshake and freezes
+        the GPU under devfreq scaling.
       '';
     };
   };

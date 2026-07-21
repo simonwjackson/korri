@@ -239,20 +239,21 @@ let
         && fan.idlePwmPercent == 0
         && fan.profileName == "thor-whisper"
       ))
-      (check "${name}: CPU follows load; GPU pinned performance (GMU vote-stall)" (
+      (check "${name}: CPU+GPU follow load; cpu0 idle state1 disabled (GMU)" (
         let
           clocks = cfg.services.korri.clockGovernor;
         in
-        # CPU schedutil tracks load. GPU MUST stay `performance`: simple_ondemand
-        # frequency/bandwidth votes intermittently stall the Adreno A740 GMU
-        # (a6xx_gmu_set_oob GPU_SET timeout -> hangcheck -> display freeze),
-        # reproducibly on game launch. Interim pin until GMU DVFS reliability is
-        # fixed at the driver/firmware level; do not revert to a scaling GPU
-        # governor without that fix.
+        # CPU schedutil + GPU simple_ondemand both follow load. GPU scaling is
+        # only safe because cpu0's deep idle state1 is held disabled: otherwise
+        # cpu0 fails to service the GMU HFI vote interrupt in time, the vote
+        # times out (a6xx_gmu_set_oob / GX_BW_PERF_VOTE) and the GPU freezes.
+        # Do NOT drop cpuIdleDisable while gpuGovernor scales (ROCKNIX PR #2876;
+        # kernel-level fix arrives with the ROCKNIX pin bump, PR #3044).
         clocks.enable
         && clocks.cpuGovernor == "schedutil"
-        && clocks.gpuGovernor == "performance"
+        && clocks.gpuGovernor == "simple_ondemand"
         && clocks.gpuDevfreqNodes == [ "3d00000.gpu" ]
+        && clocks.cpuIdleDisable == [ "cpu0/cpuidle/state1" ]
       ))
       (check "${name}: korri has appliance device groups" (
         builtins.all (g: builtins.elem g (korriUser.extraGroups or [ ])) [

@@ -597,27 +597,27 @@ in
     profileName = "thor-whisper";
   };
 
-  # Load-following CPU governors, GPU pinned to performance.
+  # Load-following CPU + GPU governors, with a GMU-stall workaround.
   #
-  # CPU: schedutil tracks real demand per cluster (measured ~30C cooler and
-  # quieter under light load on Thor/Bandai) with no measurable frame cost.
+  # CPU schedutil + GPU simple_ondemand track real demand (measured ~30C cooler
+  # and quieter under light load on Thor/Bandai) with full 680MHz peak still
+  # reached under load.
   #
-  # GPU: `simple_ondemand` scaling is UNSAFE on this SoC. Its per-frame
-  # frequency/bandwidth votes go through the Adreno A740 GMU
-  # (`HFI_H2F_MSG_GX_BW_PERF_VOTE`), and that vote intermittently stalls the
-  # GMU (`a6xx_gmu_set_oob GPU_SET timeout` -> `hangcheck recover`), wedging
-  # the GPU and freezing the display -- reproducibly on game launch (the
-  # low->high ramp). `performance` issues no vote churn, so the GPU stays
-  # stable and full 680MHz peak is always available. At true idle the GPU
-  # still runtime-suspends, so the pin's only cost is watts while actively
-  # rendering light work. This is an interim pin: the real fix is GMU
-  # vote/HFI reliability at the driver/firmware level, after which the GPU
-  # can return to load-following. See work item
-  # 01KY2YNGFQ (SM8550 Adreno A740 GMU DVFS vote-stall).
+  # GMU workaround (load-bearing): GPU devfreq scaling routes frequency/
+  # bandwidth votes through the Adreno A740 GMU. When cpu0 sits in its deep
+  # idle state (state1 / cpu-sleep-0-0) it fails to service the GMU HFI
+  # response interrupt in time, so the vote times out
+  # (`a6xx_gmu_set_oob GPU_SET timeout` / `GX_BW_PERF_VOTE timed out`) and the
+  # GPU wedges -> display freeze (reproduced on game launch). Holding cpu0
+  # state1 disabled keeps it responsive; verified on-device: Flinthook scaled
+  # 220<->680MHz with zero GMU stalls. This mirrors ROCKNIX upstream PR #2876;
+  # the kernel-level fix (PR #3044 gpucc power-domains + rpmhpd rail declamp)
+  # arrives with a future ROCKNIX pin bump, after which this can drop. See work
+  # item 01KY37Z75K.
   services.korri.clockGovernor = {
     enable = lib.mkDefault true;
     gpuDevfreqNodes = [ "3d00000.gpu" ];
-    gpuGovernor = "performance";
+    cpuIdleDisable = [ "cpu0/cpuidle/state1" ];
   };
 
   services.korri.tailnet.enable = lib.mkDefault true;
