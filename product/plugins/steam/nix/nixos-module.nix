@@ -110,6 +110,15 @@ let
     place_gamescope_workspace() {
       pid="$1"
       [ -S "$sway_sock" ] || return 1
+      # swaymsg returns exit 0 even when the [pid=..] criteria match no window,
+      # so a bare move would "succeed" on the first loop iteration -- before the
+      # Gamescope window has mapped in sway -- latch workspace_placed=1, and
+      # never isolate the window once it actually appears (it then tiles on the
+      # active hub workspace). Only proceed once the window is present in the
+      # tree; the caller retries every iteration until this returns 0.
+      SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg -t get_tree 2>/dev/null \
+        | ${pkgs.gnugrep}/bin/grep -aqE "\"pid\"[[:space:]]*:[[:space:]]*$pid([,} ]|$)" \
+        || return 1
       SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg \
         "[pid=$pid] move container to workspace \"$steam_workspace\", fullscreen enable, border none" \
         >/dev/null 2>&1
