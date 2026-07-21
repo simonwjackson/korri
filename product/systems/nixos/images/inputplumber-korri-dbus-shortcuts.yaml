@@ -1,0 +1,93 @@
+  # --- Korri A': grab-immune shortcut routing to the InputPlumber DBus target ---
+  # Appended to the Default profile's `mapping:` list. Home/Guide is reserved to
+  # the DBus channel (so it never double-sources the Home tap); the shoulders,
+  # stick-clicks, d-pad, start and select go to the gamepad AND the DBus channel
+  # so gameplay is preserved while Korri's inputd reads a grab-immune copy of the
+  # shortcut chords. A foreground game grabbing the virtual pad cannot EVIOCGRAB
+  # a D-Bus signal channel, so Home+L1/R1 (etc.) keep working.
+  - name: Korri Home to DBus
+    source_event:
+      gamepad:
+        button: Guide
+    target_events:
+      - dbus: ui_guide
+  - name: Korri L1 to gamepad and DBus
+    source_event:
+      gamepad:
+        button: LeftBumper
+    target_events:
+      - gamepad:
+          button: LeftBumper
+      - dbus: ui_l1
+  - name: Korri R1 to gamepad and DBus
+    source_event:
+      gamepad:
+        button: RightBumper
+    target_events:
+      - gamepad:
+          button: RightBumper
+      - dbus: ui_r1
+  - name: Korri L3 to gamepad and DBus
+    source_event:
+      gamepad:
+        button: LeftStick
+    target_events:
+      - gamepad:
+          button: LeftStick
+      - dbus: ui_l3
+  - name: Korri R3 to gamepad and DBus
+    source_event:
+      gamepad:
+        button: RightStick
+    target_events:
+      - gamepad:
+          button: RightStick
+      - dbus: ui_r3
+  - name: Korri DPad Up to gamepad and DBus
+    source_event:
+      gamepad:
+        button: DPadUp
+    target_events:
+      - gamepad:
+          button: DPadUp
+      - dbus: ui_up
+  - name: Korri DPad Down to gamepad and DBus
+    source_event:
+      gamepad:
+        button: DPadDown
+    target_events:
+      - gamepad:
+          button: DPadDown
+      - dbus: ui_down
+  - name: Korri DPad Left to gamepad and DBus
+    source_event:
+      gamepad:
+        button: DPadLeft
+    target_events:
+      - gamepad:
+          button: DPadLeft
+      - dbus: ui_left
+  - name: Korri DPad Right to gamepad and DBus
+    source_event:
+      gamepad:
+        button: DPadRight
+    target_events:
+      - gamepad:
+          button: DPadRight
+      - dbus: ui_right
+  - name: Korri Start to gamepad and DBus
+    source_event:
+      gamepad:
+        button: Start
+    target_events:
+      - gamepad:
+          button: Start
+      - dbus: ui_option
+  - name: Korri Select to gamepad and DBus
+    source_event:
+      gamepad:
+        button: Select
+    target_events:
+      - gamepad:
+          button: Select
+      - dbus: ui_select

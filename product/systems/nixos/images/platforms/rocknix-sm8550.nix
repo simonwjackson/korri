@@ -303,6 +303,10 @@ let
         cp -a ${substratePackages.inputplumber} $out
         chmod -R u+w $out
         ${inputplumberHelpers.patchInputplumberXb360Target { targetDeviceYaml = "02-ayn-controller.yaml"; }}
+        ${inputplumberHelpers.addKorriDbusShortcutRouting {
+          targetDeviceYaml = "02-ayn-controller.yaml";
+          mappingsFragment = ../inputplumber-korri-dbus-shortcuts.yaml;
+        }}
       '';
   sm8550DualPanelPlatformDefaults = lib.optionalAttrs (displayBottomConnector != null) {
     # Keep this as a complete launcher-shaped overlay rather than a tiny
