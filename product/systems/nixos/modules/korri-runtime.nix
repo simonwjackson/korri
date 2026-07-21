@@ -23,6 +23,16 @@ let
     if [ "''${USER:-}" = "${cfg.user}" ]; then
       export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 
+      # Korri owns freedesktop discovery via XDG_RUNTIME_DIR (see the module
+      # header contract). Drop stale cross-user escape-hatch values that a
+      # substrate may export system-wide (e.g. nix-on-rocks' main-space audio
+      # graph points PULSE_SERVER/PIPEWIRE_RUNTIME_DIR/DBUS at /run/user/0), so
+      # PipeWire/Pulse/D-Bus resolve to THIS session instead of root's. These
+      # are derived from the session's own uid, never a hardcoded value.
+      unset PULSE_SERVER
+      unset PIPEWIRE_RUNTIME_DIR
+      export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+
       if [ -z "''${WAYLAND_DISPLAY:-}" ]; then
         for candidate in "$XDG_RUNTIME_DIR"/wayland-*; do
           case "$candidate" in

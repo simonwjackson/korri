@@ -803,6 +803,15 @@ let
           "main-space-audio-sink-bootstrap"
         ]
       ))
+      (check "${name}: korri session shell init resets substrate runtime/audio env leak" (
+        # nix-on-rocks exports PULSE_SERVER/PIPEWIRE_RUNTIME_DIR/DBUS at
+        # /run/user/0 system-wide; the korri session shell init must neutralize
+        # them so freedesktop discovery resolves to the session's own uid.
+        lib.hasInfix "unset PULSE_SERVER" (cfg.environment.loginShellInit or "")
+        && lib.hasInfix "unset PIPEWIRE_RUNTIME_DIR" (cfg.environment.loginShellInit or "")
+        && lib.hasInfix "unix:path=$XDG_RUNTIME_DIR/bus" (cfg.environment.loginShellInit or "")
+        && lib.hasInfix "unset PULSE_SERVER" (cfg.environment.interactiveShellInit or "")
+      ))
       (check "${name}: user audio graph receives substrate UCM and Pulse env" (
         pipewireEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
         && pipewirePulseEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
