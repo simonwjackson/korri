@@ -25,6 +25,12 @@ gamescope.overrideAttrs (oldAttrs: {
     # is slow enough that precompiling every permutation freezes the first
     # frames for minutes; on-demand compile + disk cache is fast.
     ./patches/0003-rendervulkan-optional-pipeline-precompile.patch
+    # Forward wl_touch input from the host compositor to nested clients.
+    # Upstream's nested Wayland backend never binds wl_seat.get_touch, so
+    # touchscreen events die at the gamescope surface (upstream #1606).
+    # Required for touch to reach Steam and games inside nested gamescope
+    # on Korri kiosks; --default-touch-mode semantics apply via wlserver.
+    ./patches/0004-waylandbackend-forward-wl-touch-input.patch
   ];
 
   postInstall = (oldAttrs.postInstall or "") + ''
@@ -33,7 +39,7 @@ gamescope.overrideAttrs (oldAttrs: {
       printf '%s\n' 'pname=gamescope-korri'
       printf '%s\n' 'version=${oldAttrs.version or gamescope.version}-korri'
       printf '%s\n' 'upstream-version=${oldAttrs.version or gamescope.version}'
-      printf '%s\n' 'korri-patches=0001-rendervulkan-allow-render-only-vulkan-device 0002-waylandbackend-optional-explicit-sync 0003-rendervulkan-optional-pipeline-precompile'
+      printf '%s\n' 'korri-patches=0001-rendervulkan-allow-render-only-vulkan-device 0002-waylandbackend-optional-explicit-sync 0003-rendervulkan-optional-pipeline-precompile 0004-waylandbackend-forward-wl-touch-input'
       printf '%s\n' 'launch-option-source=gamescope-3.16.23 src/main.cpp src/backend.h'
       printf '%s\n' 'launch-extra-args=gamescope.extraArgs appended-before-child-separator'
       printf '%s\n' 'control-api=korri-gamescope-control-bridge-v1'

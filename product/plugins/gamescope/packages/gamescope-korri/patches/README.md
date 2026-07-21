@@ -6,6 +6,16 @@ in `product/plugins/gamescope/packages/gamescope-korri/default.nix`:
 - `0001-rendervulkan-allow-render-only-vulkan-device.patch`
 - `0002-waylandbackend-optional-explicit-sync.patch`
 - `0003-rendervulkan-optional-pipeline-precompile.patch`
+- `0004-waylandbackend-forward-wl-touch-input.patch`
+
+`0004` binds `wl_seat.get_touch` in the nested Wayland backend's input thread
+and forwards touch down/up/motion to `wlserver_touch*`, using the same
+plane-state coordinate transform as the pointer handlers. Upstream never
+implemented touch for the Wayland backend (ValveSoftware/gamescope#1606), so
+without this patch touchscreen input is silently dropped whenever gamescope
+runs nested under Sway — the Steam wrapper on SM8550 being the touch-facing
+case. `--default-touch-mode` values (including `4` passthrough) are applied
+by `wlserver`, so click-mode semantics match the SDL backend.
 
 ## Launch option inventory
 
