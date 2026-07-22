@@ -165,6 +165,15 @@ describe("Steam plugin Nix module", () => {
     expect(moduleSource).not.toContain("${pkgs.gamescope}/bin/gamescope")
   })
 
+  it("pins managed Gamescope to the nested Wayland backend", () => {
+    const argsStart = moduleSource.indexOf("gamescopeArgs =")
+    const argsEnd = moduleSource.indexOf("steamClientArgs =", argsStart)
+    const gamescopeArgs = moduleSource.slice(argsStart, argsEnd)
+
+    expect(gamescopeArgs).toContain('"--backend"')
+    expect(gamescopeArgs).toContain('"wayland"')
+  })
+
   it("keeps Gamescope output selection device-configurable without SteamOS integration", () => {
     expect(moduleSource).toContain("gamescopePreferOutput")
     expect(moduleSource).toContain("types.nullOr types.str")

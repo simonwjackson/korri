@@ -44,6 +44,11 @@ let
   ];
   gamescopeArgs = lib.escapeShellArgs (
     [
+      # Managed Steam is always nested under the Korri Sway session. Leaving
+      # Gamescope on auto has previously selected DRM/headless backends and
+      # contended with the outer compositor instead of mapping a Wayland surface.
+      "--backend"
+      "wayland"
       "-f"
       "-W"
       "1920"
