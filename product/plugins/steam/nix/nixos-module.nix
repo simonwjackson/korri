@@ -111,6 +111,7 @@ let
     }
 
     steam_workspace="''${KORRI_STEAM_WORKSPACE:-korri:steam-debug}"
+    hub_workspace="''${KORRI_HUB_WORKSPACE:-korri:hub}"
     sway_sock="/run/user/${toString runtime.uid}/sway-ipc.sock"
     reconcile_gamescope_workspace() {
       pid="$1"
@@ -145,6 +146,28 @@ let
       return 0
     }
 
+    is_steam_game_launch_cmd() {
+      # A running Steam game is wrapped by Steam's reaper as
+      # "... reaper SteamLaunch AppId=<id> -- <game>". The idle Steam client,
+      # steamwebhelper, gamescopereaper, and background winedevice.exe processes
+      # do NOT carry this marker, so it cleanly distinguishes "in a game" from
+      # "Steam warm, no game running".
+      case "$1" in
+        *"SteamLaunch AppId="*) return 0 ;;
+        *) return 1 ;;
+      esac
+    }
+
+    return_to_hub_workspace() {
+      # Called on the game-running -> not-running transition so that quitting a
+      # game (while Steam stays warm) returns the compositor to the Korri hub
+      # instead of stranding the user on the now-gameless Steam workspace.
+      [ -S "$sway_sock" ] || return 0
+      SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg \
+        "workspace \"$hub_workspace\"" >/dev/null 2>&1 || true
+      echo "korri-steam-service-run: game exited while Steam stays warm; returned compositor to $hub_workspace" >&2
+    }
+
     has_big_picture_surface() {
       [ -S "$sway_sock" ] || return 1
       SWAYSOCK="$sway_sock" ${pkgs.sway}/bin/swaymsg -t get_tree 2>/dev/null \
@@ -157,6 +180,7 @@ let
     trap 'stop_gamescope "$gamescope_pid"; wait "$gamescope_pid" 2>/dev/null; exit 143' TERM INT
 
     accepted_ui_pid=""
+    game_running_prev=0
     while true; do
       if ! kill -0 "$gamescope_pid" 2>/dev/null; then
         wait "$gamescope_pid"
@@ -169,12 +193,14 @@ let
         echo "korri-steam-service-run: observed Steam Big Picture-titled surface while Steam remains managed; continuing unless uimode=4 appears" >&2
       fi
 
+      game_running_now=0
       for cmdline in /proc/[0-9]*/cmdline; do
         [ -r "$cmdline" ] || continue
         pid="''${cmdline#/proc/}"
         pid="''${pid%/cmdline}"
         is_descendant_of "$pid" "$gamescope_pid" || continue
         cmd="$(${pkgs.coreutils}/bin/tr '\0' ' ' < "$cmdline" 2>/dev/null || true)"
+        if is_steam_game_launch_cmd "$cmd"; then game_running_now=1; fi
         case "$cmd" in
           *steamwebhelper*" -uimode=4"*)
             echo "korri-steam-service-run: refusing Steam Gamepad UI descendant pid=$pid; stopping managed Gamescope pid=$gamescope_pid" >&2
@@ -190,6 +216,11 @@ let
             ;;
         esac
       done
+
+      if [ "$game_running_prev" = 1 ] && [ "$game_running_now" = 0 ]; then
+        return_to_hub_workspace
+      fi
+      game_running_prev="$game_running_now"
 
       ${pkgs.coreutils}/bin/sleep 1
     done

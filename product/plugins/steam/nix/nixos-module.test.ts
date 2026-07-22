@@ -74,7 +74,58 @@ printf 'no-failure\\n'
   return { stdout: stdout.trim(), stderr, exitCode }
 }
 
+async function runIsSteamGameLaunchCmd(cmd: string): Promise<number> {
+  const dir = await mkdtemp(join(tmpdir(), "korri-steam-gamecmd-"))
+  const scriptPath = join(dir, "gamecmd.sh")
+  const fn = generatedShellFunction("is_steam_game_launch_cmd")
+  await writeFile(
+    scriptPath,
+    `#!/usr/bin/env bash
+set -eu
+${fn}
+if is_steam_game_launch_cmd "$1"; then exit 0; else exit 1; fi
+`,
+  )
+  const proc = Bun.spawn(["bash", scriptPath, cmd], {
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const exitCode = await proc.exited
+  await rm(dir, { recursive: true, force: true })
+  return exitCode
+}
+
 describe("Steam plugin Nix module", () => {
+  it("returns to the hub workspace when a game exits while Steam stays warm", async () => {
+    expect(moduleSource).toContain("KORRI_HUB_WORKSPACE")
+    expect(moduleSource).toContain("game_running_prev=0")
+    expect(moduleSource).toContain(
+      'if is_steam_game_launch_cmd "$cmd"; then game_running_now=1; fi',
+    )
+    expect(moduleSource).toContain(
+      'if [ "$game_running_prev" = 1 ] && [ "$game_running_now" = 0 ]; then',
+    )
+    const fn = generatedShellFunction("return_to_hub_workspace")
+    expect(fn).toContain("$hub_workspace")
+    expect(fn).toContain("swaymsg")
+
+    // A running Steam game (reaper SteamLaunch AppId=...) is detected as in-game.
+    expect(
+      await runIsSteamGameLaunchCmd(
+        "/var/lib/korri/steam/steamrtarm64/reaper SteamLaunch AppId=848030 -- proton waitforexitandrun Roundguard.exe",
+      ),
+    ).toBe(0)
+
+    // Idle Steam client, gamescopereaper, and background wine are not in-game.
+    for (const idle of [
+      "/nix/store/x-gamescope-korri/bin/gamescopereaper -- env korri-steam-guest",
+      "C:\\windows\\system32\\winedevice.exe",
+      "steamwebhelper -uimode= -lang=en_US",
+      "/var/lib/korri/steam/linuxarm64/steam -clientbeta steamdeck_stable",
+    ]) {
+      expect(await runIsSteamGameLaunchCmd(idle)).toBe(1)
+    }
+  })
   it("uses the Nix-provided systemctl in the AppID launcher", () => {
     expect(moduleSource).not.toContain(
       'if /bin/systemctl is-active --quiet "$service_name"',
