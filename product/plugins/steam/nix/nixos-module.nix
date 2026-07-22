@@ -654,7 +654,59 @@ EOF
       exit 78
     fi
 
-    exec ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs} -console +app_install "$appid"
+    # The install must run through the managed, gamescope-wrapped Steam. A bare
+    # "steam +app_install" started outside korri-steam-gamescope.service renders
+    # the desktop client straight to Sway (bypassing gamescope) and holds the
+    # Steam single-instance lock, which crash-loops the managed service. Mirror
+    # korri-steam-app: ensure the managed service owns Steam, wait until its
+    # single-instance IPC is up, then FORWARD +app_install to it. Never exec an
+    # ad-hoc, un-wrapped Steam.
+    service_name="korri-steam-gamescope.service"
+    steam_ipc="/dev/shm/u${toString runtime.uid}-ValveIPCSharedObj-Steam"
+    install_ready_timeout="''${KORRI_STEAM_INSTALL_READY_TIMEOUT:-600}"
+    install_forward_timeout="''${KORRI_STEAM_INSTALL_FORWARD_TIMEOUT:-30}"
+
+    ensure_managed_service() {
+      if ${pkgs.coreutils}/bin/timeout 5 ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name"; then
+        return 0
+      fi
+      /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control start
+    }
+
+    managed_steam_ready() {
+      [ -e "$steam_ipc" ] || return 1
+      ${pkgs.procps}/bin/pgrep -x steam >/dev/null 2>&1 || return 1
+      return 0
+    }
+
+    wait_managed_steam_ready() {
+      waited=0
+      while [ "$waited" -lt "$install_ready_timeout" ]; do
+        if managed_steam_ready; then
+          return 0
+        fi
+        ensure_managed_service || true
+        ${pkgs.coreutils}/bin/sleep 1
+        waited=$((waited + 1))
+      done
+      return 1
+    }
+
+    if ! ensure_managed_service; then
+      echo "korri-steam-app-install: could not start managed Steam service $service_name" >&2
+      exit 125
+    fi
+
+    if ! wait_managed_steam_ready; then
+      echo "korri-steam-app-install: managed Steam single-instance IPC not ready; refusing ad-hoc install of $appid" >&2
+      exit 125
+    fi
+
+    # Steam runs under the managed service; +app_install forwards to it and
+    # returns. The timeout guarantees forward-and-exit rather than lingering as
+    # an un-wrapped Steam if the single-instance handoff ever fails.
+    exec ${pkgs.coreutils}/bin/timeout "$install_forward_timeout" \
+      ${steamLauncher}/bin/korri-steam-guest ${steamClientArgs} -console +app_install "$appid"
   '';
 
   steamServiceControl = pkgs.writeShellScriptBin "korri-steam-service-control" ''

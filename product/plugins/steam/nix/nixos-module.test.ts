@@ -74,6 +74,34 @@ printf 'no-failure\\n'
   return { stdout: stdout.trim(), stderr, exitCode }
 }
 
+async function runManagedSteamReady(input: {
+  readonly ipcExists: boolean
+  readonly steamRunning: boolean
+}): Promise<number> {
+  const dir = await mkdtemp(join(tmpdir(), "korri-steam-install-ready-"))
+  const scriptPath = join(dir, "ready.sh")
+  const ipcPath = join(dir, "ipc-obj")
+  if (input.ipcExists) await writeFile(ipcPath, "")
+  const fn = generatedShellFunction("managed_steam_ready").replaceAll(
+    "${pkgs.procps}/bin/pgrep",
+    "pgrep",
+  )
+  await writeFile(
+    scriptPath,
+    `#!/usr/bin/env bash
+set -eu
+steam_ipc=${JSON.stringify(ipcPath)}
+pgrep() { return ${input.steamRunning ? "0" : "1"}; }
+${fn}
+if managed_steam_ready; then exit 0; else exit 1; fi
+`,
+  )
+  const proc = Bun.spawn(["bash", scriptPath], { stdout: "pipe", stderr: "pipe" })
+  const exitCode = await proc.exited
+  await rm(dir, { recursive: true, force: true })
+  return exitCode
+}
+
 async function runIsSteamGameLaunchCmd(cmd: string): Promise<number> {
   const dir = await mkdtemp(join(tmpdir(), "korri-steam-gamecmd-"))
   const scriptPath = join(dir, "gamecmd.sh")
@@ -161,6 +189,34 @@ describe("Steam plugin Nix module", () => {
     )
     expect(moduleSource).toContain("KORRI_STEAM_APP_INSTALL_HELPER")
     expect(moduleSource).toContain("environment.KORRI_STEAM_APP_INSTALL_HELPER")
+  })
+
+  it("installs only through the managed gamescope-wrapped Steam, never ad-hoc", async () => {
+    const helperStart = moduleSource.indexOf(
+      'pkgs.writeShellScriptBin "korri-steam-app-install"',
+    )
+    const helperEnd = moduleSource.indexOf("steamServiceControl =", helperStart)
+    const helper = moduleSource.slice(helperStart, helperEnd)
+
+    // The helper must ensure the managed service owns Steam and wait for its
+    // single-instance IPC before forwarding, so it never spawns a bare Steam.
+    expect(helper).toContain("ensure_managed_service() {")
+    expect(helper).toContain("wait_managed_steam_ready() {")
+    expect(helper).toContain(
+      "korri-steam-service-control start",
+    )
+    expect(helper).toContain(
+      "u${toString runtime.uid}-ValveIPCSharedObj-Steam",
+    )
+    // Forward is wrapped in a timeout, and there is no bare exec of the launcher.
+    expect(helper).toContain('timeout "$install_forward_timeout"')
+    expect(helper).not.toContain("exec ${steamLauncher}/bin/korri-steam-guest")
+
+    // managed_steam_ready requires BOTH the IPC object and a live steam process.
+    expect(await runManagedSteamReady({ ipcExists: false, steamRunning: false })).toBe(1)
+    expect(await runManagedSteamReady({ ipcExists: false, steamRunning: true })).toBe(1)
+    expect(await runManagedSteamReady({ ipcExists: true, steamRunning: false })).toBe(1)
+    expect(await runManagedSteamReady({ ipcExists: true, steamRunning: true })).toBe(0)
   })
 
   it("keeps Steam visible only through an explicit launch-debug switch", () => {
