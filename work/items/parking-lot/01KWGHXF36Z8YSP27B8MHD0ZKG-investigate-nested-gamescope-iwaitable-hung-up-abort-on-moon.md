@@ -3,7 +3,7 @@ id: 01KWGHXF36Z8YSP27B8MHD0ZKG
 slug: investigate-nested-gamescope-iwaitable-hung-up-abort-on-moon
 title: "Investigate nested gamescope 'IWaitable hung up' abort on Moonlight launch"
 origin: parked
-status: In Progress
+status: Resolved
 priority: high
 labels:
   - korri
@@ -274,3 +274,36 @@ the host connection enters an error state (candidate: gamescope's own
 double-commit in its wayland-backend present path). Mitigation angle (keeps
 gamescope): harden gamescope to not `abort()` on a recoverable host-connection
 error (upstream #1456).
+
+## RESOLVED 2026-07-22 (patch 0005 — commit `8ed348ea`)
+
+Root cause (fully proven via symbolized gdb + `wl_display_get_error`): the
+nested Wayland backend forwards a `wp_viewport` source/destination extent every
+frame; when a game hangs/hiccups and re-commits a degenerate 0-height surface,
+`ClipPlane` yields a non-positive extent (and divides the source scale by a zero
+base). The host rejects it as a fatal `wp_viewport` `bad_value` (EPROTO, object
+`wp_viewport`, code 0); the input thread's `wl_display_read_events()` returns
+EPROTO and `CWaylandInputThread::ThreadFunc` `abort()`s (status 134). Present
+and unfixed upstream through gamescope 3.16.25.
+
+Fix `product/plugins/gamescope/packages/gamescope-korri/patches/0005-waylandbackend-guard-viewport-dimensions.patch`:
+clamp `ClipPlane` clipped extents to non-negative, guard its divide against a
+zero base, and **skip the entire per-frame present (viewport + attach) when the
+source/destination width or height is not strictly positive**, keeping the last
+valid frame. (An earlier viewport-only skip was insufficient — it shifted the
+error to `out_of_buffer`; the whole degenerate present must be dropped.)
+
+Validation on Bandai (SM8550):
+- The exact killer frame recurred (`src 283x0 dst 283x0`, zero height) and was
+  caught: `Korri: skipped present of degenerate frame ... keeping last frame`.
+- gamescope did **not** abort (same PID, 0 restarts, Sway stable); Roundguard
+  848030 ran **27+ min** under gdb watch and **35+ min** total (deploy ended
+  it), versus 1-17 min crashes on every prior attempt. The degenerate frame was
+  transient — the game recovered and kept playing.
+- Landed as a stripped release build (debug symbols + gdb dropped) in generation
+  `spvj60800hycrlxav8fabv4kgczh4jc9`.
+
+Residual / follow-up (non-fatal now): the *reason* a game momentarily emits a
+0-height frame (Unity/Mono/DXVK/FEX hiccup) is still uncharacterized, but it is
+no longer fatal — the compositor survives it. Consider upstreaming patch 0005 to
+ValveSoftware/gamescope#1456.

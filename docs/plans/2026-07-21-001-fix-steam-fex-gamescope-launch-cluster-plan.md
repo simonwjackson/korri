@@ -135,6 +135,14 @@ the Steam-runtime / FEX / gamescope layer, not in Proton.
 - Next: **symbolized gamescope-korri debug build** for the `abort()` backtrace.
   Evidence: `/tmp/korri-diag/sway112-abort-evidence.out`.
 
+**RESOLVED 2026-07-22 (commit `8ed348ea`, patch 0005):** symbolized gdb pinned
+the abort to `CWaylandInputThread::ThreadFunc` on a `wp_viewport` `bad_value`
+(EPROTO) from a degenerate 0-height frame; upstream, unfixed through 3.16.25.
+Patch 0005 clamps `ClipPlane` and skips the entire per-frame present on
+non-positive dims. Validated: Roundguard ran 35+ min (vs 1-17 min crashes),
+gamescope never aborted, the exact `283x0` frame was caught and survived, the
+game recovered. S3 closed; details in `01KWGHXF36`.
+
 ### P4 — Validation matrix
 - Per title (Flinthook, FEZ, VVVVVV, SFxMM), **cold and warm** boot: process
   stays alive > 60 s **and** a DSI-2 screenshot shows real gameplay (not black),
