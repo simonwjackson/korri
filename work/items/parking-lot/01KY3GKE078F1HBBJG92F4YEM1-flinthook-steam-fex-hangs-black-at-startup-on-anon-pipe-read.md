@@ -3,7 +3,7 @@ id: 01KY3GKE078F1HBBJG92F4YEM1
 slug: flinthook-steam-fex-hangs-black-at-startup-on-anon-pipe-read
 title: Flinthook (Steam/FEX) hangs black at startup on anon_pipe_read before rendering
 origin: parked
-status: To Do
+status: Closed
 priority: medium
 labels:
   - sm8550
@@ -40,3 +40,13 @@ Steam games under gamescope-korri + proton-cachyos-arm64 + FEX are intermittentl
 - `01KVHC64M78S` (FEZ short-lived exit -- same S1 class, FNA+Proton+FEX)
 - `01KVHBZ2BB8Z` (VVVVVV instant exit -- same S1 class, native x86 SDL+FEX)
 - `01KVDZ7JFJ3M80` (Street Fighter X Mega Man black screen -- same S2 class, Wine)
+
+## Closed 2026-07-22 (not reproducing)
+
+The `anon_pipe_read` premise was disproven earlier this session (a healthy Wine
+process blocks there during normal RPC), and Flinthook was observed launching
+cleanly and running for hours on multiple occasions. The startup-black-hang
+described here does not reproduce. Distinct from the S3 nested-gamescope abort
+(`01KWGHXF36`), which was a separate, now-fixed mid-run failure. Closing as
+not-reproducing; reopen with a fresh capture if a real Flinthook startup hang
+recurs.

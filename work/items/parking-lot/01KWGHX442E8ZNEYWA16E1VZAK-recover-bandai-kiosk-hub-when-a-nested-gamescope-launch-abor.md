@@ -3,8 +3,8 @@ id: 01KWGHX442E8ZNEYWA16E1VZAK
 slug: recover-bandai-kiosk-hub-when-a-nested-gamescope-launch-abor
 title: Recover Bandai kiosk hub when a nested gamescope launch aborts
 origin: parked
-status: In Progress
-priority: high
+status: To Do
+priority: low
 labels:
   - korri
   - sessiond
@@ -46,3 +46,12 @@ without reproducing the crash (inject a throwing sway + assert renderer relaunch
 - `product/services/device/sessiond.ts`
 - `product/services/device/sessiond-sway.ts`
 - `product/services/device/sessiond-source-machine.ts`
+
+## Update 2026-07-22 (downgraded high -> low)
+
+The primary driver for this item -- frequent nested gamescope aborts taking the
+kiosk down -- is resolved by patch 0005 (commit `8ed348ea`, see `01KWGHXF36`):
+gamescope no longer aborts on a degenerate/frozen game frame. In validation Sway
+survived the failure and Home+L1 already recovered to the hub. This item is kept
+open only as defense-in-depth (a compositor should recover from ANY child abort,
+whatever the cause), hence the downgrade to low priority.
