@@ -119,6 +119,22 @@ the Steam-runtime / FEX / gamescope layer, not in Proton.
   and `Compositor released us but we were not acquired`.
 - Evaluate the gamescope-korri 3.16.23 vs stock delta and patch 0004.
 
+**Update 2026-07-22 (Roundguard 848030, `01KWGHXF36`):**
+- **Sway 1.12 disproven as the fix.** Clean-boot Sway 1.12 (wlroots 0.20.1,
+  commit `1aa3fc85`) still aborts `status=134` at ~10.7 min of steady gameplay.
+- **Outer Sway does NOT crash** (`sway` PID stable, outer Xwayland survives) —
+  the AKA "abort is downstream of Sway segfault" model does not apply to Bandai.
+  The fault is internal to the **nested** gamescope.
+- **Consistent precursor is `xwm: got the same buffer committed twice`**, not
+  `IWaitable` (absent this run). Root-cause search re-centers on gamescope's
+  steamcompmgr/xwm **buffer double-commit** path.
+- GPU clock ruled out (reproduced at 220 MHz cap and at 680 MHz).
+- Reproduced in steady-state with no *manual* compositor poking — but audit
+  whether the continuous `reconcile_gamescope_workspace()` (`ee3e1cfc`) issues
+  automatic periodic surface moves that keep churning the surface.
+- Next: **symbolized gamescope-korri debug build** for the `abort()` backtrace.
+  Evidence: `/tmp/korri-diag/sway112-abort-evidence.out`.
+
 ### P4 — Validation matrix
 - Per title (Flinthook, FEZ, VVVVVV, SFxMM), **cold and warm** boot: process
   stays alive > 60 s **and** a DSI-2 screenshot shows real gameplay (not black),

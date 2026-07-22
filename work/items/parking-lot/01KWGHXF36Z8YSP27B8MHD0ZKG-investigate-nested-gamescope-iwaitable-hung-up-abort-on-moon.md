@@ -145,3 +145,47 @@ include `steam` as well as `moonlight`.
   workspace assignment before the surface maps rather than a live move).
 - Superseded/folded: `01KY3CACRF` (gamescope-korri SIGABRT under sway nested
   backend) — same crash, removed as a duplicate of this item.
+
+## Evidence 2026-07-22 (bandai, Roundguard 848030 — Sway 1.12 disproven; Sway does NOT crash)
+
+Reproduced the S3 abort on a **clean-boot Sway 1.12** generation (`1aa3fc85`,
+gamescope-korri 3.16.23, explicit `--backend wayland`) during steady Roundguard
+gameplay. Two prior back-to-back Roundguard runs this session also aborted
+(~1 min and ~15 min). Key disproofs:
+
+- **Sway 1.12 does NOT fix it.** Bumped outer Sway 1.11 -> 1.12 (wlroots 0.20.1)
+  specifically to test the AKA hypothesis that the abort is downstream of a Sway
+  segfault. Abort still fired at **elapsed ~640 s (~10.7 min)**, `status=134`.
+- **Outer Sway did NOT crash.** `initial_sway=final_sway=1385` across the whole
+  run; outer Xwayland (`1564`) also survived. Only the nested gamescope (`5099`)
+  + its own Xwayland (`5209`) died. So on Bandai this is **not** the AKA
+  Sway-segfault-at-0xb8 failure mode — the fault is internal to the nested
+  gamescope, not the outer compositor. The Sway-crash hypothesis is disproven
+  for this device.
+- **Consistent precursor is the xwm double-commit, not IWaitable.** This abort
+  had NO `IWaitable hung up` line — only
+  `[gamescope] xwm: got the same buffer committed twice, ignoring` at
+  11:05:15.189, then `5099 Aborted` at 11:05:15.275, then the nested Xwayland
+  logged `failed to read Wayland events: Connection reset by peer` (a
+  *consequence* of gamescope dying). Across all captured aborts the common
+  denominator is `got the same buffer committed twice` (steamcompmgr/xwm
+  buffer-commit path), not the waitable/input thread. Re-center the root-cause
+  search on gamescope's XWM double-commit handling.
+- **No kernel fault, no GMU stall, no DSI page-flip EBUSY, no coredump** in the
+  abort window (11:04:30–11:05:40).
+- **GPU clock is NOT causal.** This abort happened while GPU `max_freq` was
+  capped at 220 MHz (a concurrent perf-bisection experiment); the earlier
+  Sway-1.11 Roundguard abort happened at full 680 MHz. Same signature at both
+  → clock ruled out.
+- **Caveat re: the "only during live surface reconfiguration" 07-21 note.** No
+  *manual* `swaymsg` poking occurred this run, yet it still aborted in
+  steady-state. BUT the continuous `reconcile_gamescope_workspace()` reconciler
+  (`ee3e1cfc`) may still issue periodic surface moves automatically — audit
+  whether that reconciler is a live-reconfig source that keeps the surface
+  churning during gameplay. If it is, the "teardown/handoff race" and
+  "steady-state" framings converge on the same automatic-reconfig trigger.
+- Sway 1.12 bump kept as a modernization (no regressions; device booted clean,
+  all services `NRestarts=0`), NOT as the fix.
+- **Next step:** symbolized gamescope-korri debug build to capture the `abort()`
+  backtrace behind `got the same buffer committed twice`, rather than further
+  config changes. Evidence file: `/tmp/korri-diag/sway112-abort-evidence.out`.
