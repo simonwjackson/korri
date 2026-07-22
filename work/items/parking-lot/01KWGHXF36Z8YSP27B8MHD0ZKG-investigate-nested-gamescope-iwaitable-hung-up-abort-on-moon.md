@@ -249,3 +249,28 @@ CWaylandInputThread abort (status 134)**. gamescope is the victim.
 3. Upstream-hardening: gamescope should not `abort()` on a recoverable host-
    connection error (#1456).
 Evidence: `/tmp/gamescope-abort-bt-20260722-112342.txt` (full symbolized bt).
+
+### CORRECTION 2026-07-22 (explicit-sync experiment decouples EBUSY from abort)
+
+Ran `GAMESCOPE_DISABLE_EXPLICIT_SYNC=1` (runtime drop-in) under Roundguard on
+Adreno. Result **corrects the causal claim above**:
+- DSI-2 EBUSY dropped from a ~50-68/min storm to **2 events total** ->
+  explicit sync ON is what generates the DSI-2 flip-pacing EBUSY.
+- **The abort STILL fired (~90 s), identical signature** (`xwm: got the same
+  buffer committed twice` -> gamescope Aborted 134 -> nested Xwayland
+  `Connection reset by peer`). So the **DSI-2 EBUSY storm is a correlated
+  co-symptom of explicit-sync flip pacing, NOT the direct cause of the abort.**
+- Disabling explicit sync is **not a fix**: on Adreno (working syncobj) it
+  aborts sooner. Reverted.
+- Sway logs **no** server-side protocol error to the gamescope client at the
+  abort -> the connection is not killed by a Sway-side protocol rejection;
+  gamescope's input thread aborts on a local `wl_display` error state.
+
+**Revised lead:** the consistent direct precursor across every abort is
+`xwm: got the same buffer committed twice, ignoring` immediately followed by
+the gamescope<->Sway wl connection erroring. Next: re-capture under gdb and
+inspect `wl_display_get_error()` / the errored proxy at the abort to learn WHY
+the host connection enters an error state (candidate: gamescope's own
+double-commit in its wayland-backend present path). Mitigation angle (keeps
+gamescope): harden gamescope to not `abort()` on a recoverable host-connection
+error (upstream #1456).
