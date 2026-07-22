@@ -189,3 +189,63 @@ gameplay. Two prior back-to-back Roundguard runs this session also aborted
 - **Next step:** symbolized gamescope-korri debug build to capture the `abort()`
   backtrace behind `got the same buffer committed twice`, rather than further
   config changes. Evidence file: `/tmp/korri-diag/sway112-abort-evidence.out`.
+
+## ROOT CAUSE 2026-07-22 (symbolized gdb backtrace + DSI-2 flip-stall chain)
+
+Deployed a symbolized gamescope-korri (`mesonBuildType=debugoptimized`,
+`dontStrip`) + gdb, attached gdb to the nested gamescope during Roundguard
+848030, and caught the SIGABRT. **This is the definitive root cause.**
+
+### The abort site (proven)
+```
+Thread ".gamescope-wrap" received signal SIGABRT
+#2  abort ()
+#3  gamescope::CWaylandInputThread::ThreadFunc () at src/Backends/WaylandBackend.cpp:2880
+```
+The nested Wayland backend's **input thread** aborts when its poll on the
+host-Wayland connection errors (`m_Waiter.PollEvents() < 0` or
+`wl_display_read_events() < 0` -> `abort()`). This IS the historical
+`IWaitable hung up. Aborting.` It is **upstream code** (matches
+ValveSoftware/gamescope#1456 "wayland backend: high chance of aborting");
+gamescope hard-`abort()`s on a host-connection error instead of recovering.
+
+### The trigger (proven correlate)
+At the abort instant the OUTER Sway compositor is in a sustained storm of
+`connector DSI-2: Atomic commit failed: Device or resource busy` /
+`Page-flip failed on output DSI-2`. No kernel DRM driver error accompanies it
+-> EBUSY "previous page-flip still pending" (DSI-2 flip-done/vblank not
+delivered in time). The display pipeline wedges -> the nested gamescope's
+host-Wayland link errors -> input-thread `abort()`. Sway survives (PID
+stable). Chain: **DSI-2 flip stall -> gamescope wl link error ->
+CWaylandInputThread abort (status 134)**. gamescope is the victim.
+
+### Presentation-path discriminator (proven)
+- Plain Korri hub (Chromium, **direct to Sway**) ran 14 min this boot with
+  **zero** DSI-2 EBUSY; the first EBUSY appeared the instant the nested
+  gamescope `--backend wayland` Steam session started.
+- `CWaylandInputThread` only exists in the nested `--backend wayland` config
+  (Korri default) used by **Steam + Moonlight**. Direct-to-Sway apps never
+  instantiate it. Ryubing/Switch and melonDS dual-screen present direct to
+  Sway -> immune even under heavy load. **Raw thermal/CPU load is NOT the
+  trigger; the nested-gamescope Wayland presentation path is.**
+
+### Korri patches EXONERATED (device-verified)
+- 0004 (wl_touch): abort documented 2026-07-13, patch dated 2026-07-20 -> cannot
+  have introduced it.
+- 0002 (explicit-sync) / 0003 (precompile): env gates set only in
+  `rk3566RuntimeEnvironment` (Mali); confirmed UNSET on the deployed SM8550
+  steam gamescope service -> inert on Bandai.
+- 0001 (render-only device): Adreno has a primary node -> inert.
+- Abort site is unmodified upstream code. No patch introduces this.
+
+### Next levers (gamescope stays; fix must be in-path)
+1. `GAMESCOPE_DISABLE_EXPLICIT_SYNC=1` experiment: explicit sync governs when
+   Sway treats a gamescope buffer as ready to flip; test whether implicit
+   dmabuf-fence sync changes the DSI-2 EBUSY/abort (patch 0002 already exposes
+   it; zero new code).
+2. Investigate why DSI-2 flip-done/vblank stalls under nested double-composite
+   load (`irqaffinity=0-2` vs FEX core saturation; MDSS/DPU clock; wlroots
+   commit pacing).
+3. Upstream-hardening: gamescope should not `abort()` on a recoverable host-
+   connection error (#1456).
+Evidence: `/tmp/gamescope-abort-bt-20260722-112342.txt` (full symbolized bt).
