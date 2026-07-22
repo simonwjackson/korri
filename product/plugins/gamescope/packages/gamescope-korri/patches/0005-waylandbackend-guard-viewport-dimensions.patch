@@ -1,0 +1,128 @@
+From: Korri downstream <maintainers@korri.invalid>
+Date: Wed, 22 Jul 2026 00:00:00 +0000
+Subject: [PATCH] WaylandBackend: guard non-positive wp_viewport dimensions
+
+The nested Wayland backend presents each frame to the host compositor
+(Sway/wlroots) by setting a wp_viewport source/destination extent and attaching
+the buffer. When a game hangs and re-commits a zero-height (or off-output)
+surface, ClipPlane produces a non-positive extent (and divides the source scale
+factor by a zero base, yielding NaN). Forwarding that frame makes the host
+reject the wp_viewport request as a fatal bad_value protocol error (or, if only
+the viewport is skipped, rejects the mismatched buffer as out_of_buffer); either
+drops the connection and the backend input thread wl_display_read_events()
+returns EPROTO, aborting the whole process (status 134) and tearing down
+Steam/Moonlight and the game. This is the mechanism behind
+ValveSoftware/gamescope#1456 as observed on the Korri SM8550 nested path.
+
+Clamp the clipped destination extents to non-negative and guard the source
+scale-factor divide against a zero base in ClipPlane, and skip the ENTIRE
+per-frame present (viewport + attach + damage) when the computed source or
+destination width/height is not strictly positive, leaving the surface last
+committed state untouched (a frozen but recoverable frame) and logging once.
+Off the nested Wayland backend this code is unreachable; behaviour on valid
+frames is unchanged.
+---
+ src/Backends/WaylandBackend.cpp | 60 +++++++++++++++++++++++++++++++----
+ 1 file changed, 54 insertions(+), 6 deletions(-)
+
+--- a/src/Backends/WaylandBackend.cpp
++++ b/src/Backends/WaylandBackend.cpp
+@@ -151,8 +151,16 @@
+     {
+         int32_t nClippedDstWidth  = std::min<int32_t>( g_nOutputWidth,  state.nDstWidth  + state.nDestX ) - state.nDestX;
+         int32_t nClippedDstHeight = std::min<int32_t>( g_nOutputHeight, state.nDstHeight + state.nDestY ) - state.nDestY;
+-        double flClippedSrcWidth  = state.flSrcWidth  * ( nClippedDstWidth  / double( state.nDstWidth ) );
+-        double flClippedSrcHeight = state.flSrcHeight * ( nClippedDstHeight / double( state.nDstHeight ) );
++        // Korri: a plane positioned partly/fully off the output (or with a zero
++        // base size) produces a non-positive clipped extent here, and dividing
++        // the source scale factor by a zero base yields NaN. The host
++        // wp_viewport rejects <= 0 width/height as a fatal bad_value protocol
++        // error, dropping the connection and aborting the nested input thread.
++        // Never emit a negative clipped extent and never divide by a zero base.
++        nClippedDstWidth  = std::max<int32_t>( 0, nClippedDstWidth );
++        nClippedDstHeight = std::max<int32_t>( 0, nClippedDstHeight );
++        double flClippedSrcWidth  = state.nDstWidth  > 0 ? state.flSrcWidth  * ( nClippedDstWidth  / double( state.nDstWidth ) )  : 0.0;
++        double flClippedSrcHeight = state.nDstHeight > 0 ? state.flSrcHeight * ( nClippedDstHeight / double( state.nDstHeight ) ) : 0.0;
+ 
+         WaylandPlaneState outState = state;
+         outState.nDstWidth   = nClippedDstWidth;
+@@ -1565,30 +1573,58 @@
+             // Fraction with denominator of 120 per. spec
+             const uint32_t uScale = oState->uFractionalScale;
+ 
+-            wp_viewport_set_source(
+-                m_pViewport,
+-                wl_fixed_from_double( oState->flSrcX ),
+-                wl_fixed_from_double( oState->flSrcY ),
+-                wl_fixed_from_double( oState->flSrcWidth ),
+-                wl_fixed_from_double( oState->flSrcHeight ) );
+-            wp_viewport_set_destination(
+-                m_pViewport,
+-                WaylandScaleToLogical( oState->nDstWidth, uScale ),
+-                WaylandScaleToLogical( oState->nDstHeight, uScale ) );
++            // Korri: a frozen or zero-size game surface produces a degenerate
++            // frame (non-positive source/destination extent). wp_viewport
++            // rejects zero/negative width or height as a fatal bad_value
++            // protocol error, and attaching the mismatched buffer under a stale
++            // viewport is likewise rejected (out_of_buffer) -- either drops the
++            // host connection and aborts the nested input thread
++            // (ValveSoftware/gamescope#1456, observed on the Korri SM8550 path
++            // when a game hangs and re-commits a 0-height buffer). Skip the
++            // ENTIRE present for such a frame, leaving the surface's last
++            // committed state untouched (frozen but alive), instead of
++            // forwarding an illegal update that kills the compositor.
++            const int32_t nLogicalDstWidth  = WaylandScaleToLogical( oState->nDstWidth,  uScale );
++            const int32_t nLogicalDstHeight = WaylandScaleToLogical( oState->nDstHeight, uScale );
++            if ( oState->flSrcWidth > 0.0 && oState->flSrcHeight > 0.0 &&
++                 nLogicalDstWidth > 0 && nLogicalDstHeight > 0 )
++            {
++                wp_viewport_set_source(
++                    m_pViewport,
++                    wl_fixed_from_double( oState->flSrcX ),
++                    wl_fixed_from_double( oState->flSrcY ),
++                    wl_fixed_from_double( oState->flSrcWidth ),
++                    wl_fixed_from_double( oState->flSrcHeight ) );
++                wp_viewport_set_destination(
++                    m_pViewport,
++                    nLogicalDstWidth,
++                    nLogicalDstHeight );
+ 
+-            if ( m_pSubsurface )
++                if ( m_pSubsurface )
++                {
++                    wl_subsurface_set_position(
++                        m_pSubsurface,
++                        WaylandScaleToLogical( oState->nDestX, uScale ),
++                        WaylandScaleToLogical( oState->nDestY, uScale ) );
++                }
++                // The x/y here does nothing? Why? What is it for...
++                // Use the subsurface set_position thing instead.
++                wl_surface_attach( m_pSurface, oState->pBuffer, 0, 0 );
++                wl_surface_damage( m_pSurface, 0, 0, INT32_MAX, INT32_MAX );
++                wl_surface_set_opaque_region( m_pSurface, oState->bOpaque ? m_pBackend->GetFullRegion() : nullptr );
++                wl_surface_set_buffer_scale( m_pSurface, 1 );
++            }
++            else
+             {
+-                wl_subsurface_set_position(
+-                    m_pSubsurface,
+-                    WaylandScaleToLogical( oState->nDestX, uScale ),
+-                    WaylandScaleToLogical( oState->nDestY, uScale ) );
++                static bool s_bWarnedDegenerate = false;
++                if ( !s_bWarnedDegenerate )
++                {
++                    s_bWarnedDegenerate = true;
++                    xdg_log.errorf( "Korri: skipped present of degenerate frame with non-positive dims "
++                        "(src %gx%g dst %dx%d); keeping last frame instead of a bad_value/out_of_buffer abort",
++                        oState->flSrcWidth, oState->flSrcHeight, nLogicalDstWidth, nLogicalDstHeight );
++                }
+             }
+-            // The x/y here does nothing? Why? What is it for...
+-            // Use the subsurface set_position thing instead.
+-            wl_surface_attach( m_pSurface, oState->pBuffer, 0, 0 );
+-            wl_surface_damage( m_pSurface, 0, 0, INT32_MAX, INT32_MAX );
+-            wl_surface_set_opaque_region( m_pSurface, oState->bOpaque ? m_pBackend->GetFullRegion() : nullptr );
+-            wl_surface_set_buffer_scale( m_pSurface, 1 );
+         }
+         else
+         {

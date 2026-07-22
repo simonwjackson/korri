@@ -31,6 +31,14 @@ gamescope.overrideAttrs (oldAttrs: {
     # Required for touch to reach Steam and games inside nested gamescope
     # on Korri kiosks; --default-touch-mode semantics apply via wlserver.
     ./patches/0004-waylandbackend-forward-wl-touch-input.patch
+    # Guard non-positive wp_viewport source/destination extents. gamescope's
+    # nested Wayland backend otherwise sends a zero/negative viewport (from an
+    # off-output or zero-size frame via ClipPlane) to the host compositor,
+    # which rejects it as a fatal bad_value protocol error and drops the
+    # connection -> the backend input thread abort()s (status 134), tearing
+    # down Steam/Moonlight and the game. Upstream ValveSoftware/gamescope#1456;
+    # unfixed through 3.16.25.
+    ./patches/0005-waylandbackend-guard-viewport-dimensions.patch
   ];
 
   postInstall = (oldAttrs.postInstall or "") + ''
@@ -39,7 +47,7 @@ gamescope.overrideAttrs (oldAttrs: {
       printf '%s\n' 'pname=gamescope-korri'
       printf '%s\n' 'version=${oldAttrs.version or gamescope.version}-korri'
       printf '%s\n' 'upstream-version=${oldAttrs.version or gamescope.version}'
-      printf '%s\n' 'korri-patches=0001-rendervulkan-allow-render-only-vulkan-device 0002-waylandbackend-optional-explicit-sync 0003-rendervulkan-optional-pipeline-precompile 0004-waylandbackend-forward-wl-touch-input'
+      printf '%s\n' 'korri-patches=0001-rendervulkan-allow-render-only-vulkan-device 0002-waylandbackend-optional-explicit-sync 0003-rendervulkan-optional-pipeline-precompile 0004-waylandbackend-forward-wl-touch-input 0005-waylandbackend-guard-viewport-dimensions'
       printf '%s\n' 'launch-option-source=gamescope-3.16.23 src/main.cpp src/backend.h'
       printf '%s\n' 'launch-extra-args=gamescope.extraArgs appended-before-child-separator'
       printf '%s\n' 'control-api=korri-gamescope-control-bridge-v1'
