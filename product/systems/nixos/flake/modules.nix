@@ -27,10 +27,9 @@ rec {
     };
   };
 
-  # Auto-attached sway pin for the x86 compositor runtime contract.
-  # Imported by korri-compositor below so downstream consumers inherit the
-  # known-good sway version without touching nixpkgs.overlays themselves.
-  # No-ops on non-x86 systems via the overlay itself.
+  # Auto-attached Sway pin for the compositor runtime contract.
+  # Imported by korri-compositor below so x86 and aarch64 consumers inherit
+  # the known-good version without touching nixpkgs.overlays themselves.
   korri-x86-compositor-overlay = import ../modules/korri-x86-compositor-overlay.nix {
     overlay = import ../overlays/korri-x86-compositor.nix;
   };

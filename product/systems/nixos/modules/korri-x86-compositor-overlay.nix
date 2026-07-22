@@ -1,13 +1,11 @@
-# Auto-injected nixpkgs overlay for the Korri x86 compositor runtime
-# contract. Bundled into korri-compositor's imports so any downstream
-# consumer — mountainous host config, korri image builds, bespoke
-# nixosSystem — automatically picks up the known-good Sway the Korri
-# compositor was validated against, without having to wire the pin themselves.
+# Auto-injected nixpkgs overlay for the Korri compositor runtime contract.
+# Bundled into korri-compositor's imports so every downstream consumer —
+# mountainous host config, Korri image build, or bespoke nixosSystem — picks
+# up the known-good Sway version without wiring the pin itself.
 #
-# The overlay (see product/systems/nixos/overlays/korri-x86-compositor.nix) is a no-op on
-# non-x86 systems, so this module is safe to include from
-# architecture-agnostic module aggregates (korri-compositor is also
-# imported on aarch64 ROCKNIX builds).
+# The historical filename is retained for compatibility, but the overlay now
+# applies to both x86 and aarch64 compositor hosts so ROCKNIX devices do not
+# remain on the older Sway lifecycle implementation.
 #
 # Module identity: NixOS dedupes module imports by referential identity.
 # This file is imported exactly once from flake.nix's nixosModules

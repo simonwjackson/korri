@@ -361,6 +361,9 @@ let
       (check "${name}: compositor uses logind runtime" (
         compositor.runtimeDir == "%t" && compositor.home == "/home/korri"
       ))
+      (check "${name}: compositor uses Sway 1.12 or newer" (
+        lib.versionAtLeast (compositor.sway.package.version or "0") "1.12"
+      ))
       (check "${name}: renders the primary output and touch default from neutral facts" (
         # Korri renders the Sway from rocknix.device.display.* rather than
         # splicing a substrate Sway string. Assert the primary connector's
