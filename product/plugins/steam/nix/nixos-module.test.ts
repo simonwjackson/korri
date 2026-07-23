@@ -307,7 +307,13 @@ describe("Steam plugin Nix module", () => {
   it("guards Home/Guide at the Steam process boundary", () => {
     expect(moduleSource).toContain("steamInputGuardEnv = lib.escapeShellArgs")
     expect(moduleSource).toContain('"KORRI_STEAM_INPUT_GUARD=1"')
+    // Leading ':' so Steam's separator-less overlay concatenation onto
+    // ubuntu12_32/gameoverlayrenderer.so still yields a valid, distinct path
+    // instead of a malformed entry that ld.so rejects and logs.
     expect(moduleSource).toContain(
+      '"LD_PRELOAD=:${cfg.package}/lib/libkorri-steam-input-guard.so"',
+    )
+    expect(moduleSource).not.toContain(
       '"LD_PRELOAD=${cfg.package}/lib/libkorri-steam-input-guard.so"',
     )
     expect(moduleSource).toContain(

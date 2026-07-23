@@ -355,9 +355,7 @@ function definedResolution(
   ) as ResolutionLeverBoundary
 }
 
-function isNumericRange(
-  value: unknown,
-): value is {
+function isNumericRange(value: unknown): value is {
   readonly min?: number
   readonly start: number
   readonly max?: number

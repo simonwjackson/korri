@@ -68,9 +68,19 @@ let
     ++ (lib.optional cfg.useGamepadUi "-gamepadui")
     ++ cfg.defaultArgs
   );
+  # Steam's ARM overlay injection splices the Steam client's LD_PRELOAD into each
+  # game's LD_PRELOAD twice: once cleanly at the front (which loads the guard),
+  # and again concatenated directly onto ubuntu12_32/gameoverlayrenderer.so with
+  # NO separator, e.g. ".../gameoverlayrenderer.so/nix/store/...-input-guard.../
+  # libkorri-steam-input-guard.so". That malformed entry is rejected by ld.so
+  # ("cannot be preloaded ... ignored") and spams the launch log. Leading the
+  # value with ':' makes Steam's separator-less concatenation land on a colon, so
+  # every spliced copy parses as a distinct path. glibc ignores empty LD_PRELOAD
+  # entries, so the leading ':' is a no-op for the Steam client itself, and the
+  # guard (already loaded via the clean front entry) keeps working.
   steamInputGuardEnv = lib.escapeShellArgs [
     "KORRI_STEAM_INPUT_GUARD=1"
-    "LD_PRELOAD=${cfg.package}/lib/libkorri-steam-input-guard.so"
+    "LD_PRELOAD=:${cfg.package}/lib/libkorri-steam-input-guard.so"
   ];
   steamServiceExec =
     if cfg.presentationMode == "gamescope" then
