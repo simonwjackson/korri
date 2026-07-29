@@ -272,109 +272,141 @@ public class KorriShellActivity extends AppCompatActivity {
             }
         }
 
-        // --- Spike-era surface below: not yet part of the treaty ---
-
+        /** JSON-encoded QueryStreamHostsResult. */
         @JavascriptInterface
-        public String listPairedHosts() {
-            JSONArray hosts = new JSONArray();
+        public String queryStreamHosts() {
             try {
-                ComputerManagerService.ComputerManagerBinder binder = awaitBinder(5);
-                if (binder == null) return hosts.toString();
-                // The binder view merges DB rows with live poll state.
+                JSONArray items = new JSONArray();
                 com.limelight.computers.ComputerDatabaseManager db =
                         new com.limelight.computers.ComputerDatabaseManager(KorriShellActivity.this);
                 try {
                     List<ComputerDetails> computers = db.getAllComputers();
                     for (ComputerDetails details : computers) {
                         JSONObject host = new JSONObject();
-                        host.put("name", details.name);
                         host.put("uuid", details.uuid);
-                        host.put("paired", details.pairState == PairingManager.PairState.PAIRED);
-                        hosts.put(host);
+                        host.put("name", details.name);
+                        // DB rows never carry live pairState (stays UNKNOWN);
+                        // a stored server certificate exists only after a
+                        // successful pairing, so it is the durable signal.
+                        host.put("paired", details.serverCert != null);
+                        items.put(host);
                     }
                 } finally {
                     db.close();
                 }
+                JSONObject ok = new JSONObject();
+                ok.put("_tag", "StreamHosts");
+                ok.put("items", items);
+                return ok.toString();
             } catch (Exception e) {
-                e.printStackTrace();
+                return queryFailed(e);
             }
-            return hosts.toString();
         }
 
+        /** JSON-encoded QueryStreamAppsResult. */
         @JavascriptInterface
-        public String listApps(String hostUuid) {
-            JSONArray apps = new JSONArray();
+        public String queryStreamApps(String hostUuid) {
             try {
+                JSONArray items = new JSONArray();
+                // Empty cache is a normal state before the host was ever browsed.
                 for (NvApp app : cachedAppList(hostUuid)) {
                     JSONObject entry = new JSONObject();
-                    entry.put("name", app.getAppName());
                     entry.put("id", app.getAppId());
-                    entry.put("uuid", app.getAppUUID());
-                    apps.put(entry);
+                    entry.put("name", app.getAppName());
+                    items.put(entry);
                 }
+                JSONObject ok = new JSONObject();
+                ok.put("_tag", "StreamApps");
+                ok.put("items", items);
+                return ok.toString();
             } catch (Exception e) {
-                // Empty cache is a normal state before the host was ever browsed.
-                e.printStackTrace();
+                return queryFailed(e);
             }
-            return apps.toString();
         }
 
         /**
-         * Direct, same-task stream launch: resolve the host through
-         * ComputerManagerService (poll until ONLINE if needed), resolve the
-         * Sunshine app from the applist cache, then start the Game activity.
-         * No ShortcutTrampoline, no intermediate screen.
+         * JSON-encoded StartStreamResult. Direct, same-task stream launch:
+         * resolve the host through ComputerManagerService (poll until ONLINE
+         * if needed), resolve the app from the applist cache, then start the
+         * native Game activity.
          */
+        @JavascriptInterface
+        public String startStream(String hostUuid, int appId) {
+            try {
+                ComputerManagerService.ComputerManagerBinder binder = awaitBinder(10);
+                if (binder == null) {
+                    return streamFailed("StartFailed", "computer manager not ready");
+                }
+
+                ComputerDetails computer = awaitOnlineComputer(binder, hostUuid, 12);
+                if (computer == null) {
+                    return streamFailed("HostUnreachable", "host is not reachable");
+                }
+                if (computer.pairState != PairingManager.PairState.PAIRED) {
+                    return streamFailed("NotPaired",
+                            "host is not paired — pair once in Artemis setup");
+                }
+
+                NvApp app = null;
+                for (NvApp cached : cachedAppList(hostUuid)) {
+                    if (cached.getAppId() == appId) {
+                        app = cached;
+                        break;
+                    }
+                }
+                if (app == null) {
+                    return streamFailed("AppNotFound",
+                            "app " + appId + " not in cache — open the host once in Artemis setup");
+                }
+
+                final Intent intent = ServerHelper.createStartIntent(
+                        KorriShellActivity.this, app, computer, binder);
+                runOnUiThread(() -> startActivity(intent));
+                return "{\"_tag\":\"StreamStarted\"}";
+            } catch (Exception e) {
+                return streamFailed("StartFailed",
+                        e.getMessage() != null ? e.getMessage() : "start failed");
+            }
+        }
+
+        private String queryFailed(Exception e) {
+            try {
+                JSONObject failed = new JSONObject();
+                failed.put("_tag", "QueryFailed");
+                failed.put("message",
+                        e.getMessage() != null ? e.getMessage() : "query failed");
+                return failed.toString();
+            } catch (Exception inner) {
+                return "{\"_tag\":\"QueryFailed\",\"message\":\"query failed\"}";
+            }
+        }
+
+        private String streamFailed(String reason, String message) {
+            try {
+                JSONObject failed = new JSONObject();
+                failed.put("_tag", "StreamFailed");
+                failed.put("reason", reason);
+                failed.put("message", message);
+                return failed.toString();
+            } catch (Exception e) {
+                return "{\"_tag\":\"StreamFailed\",\"reason\":\"" + reason
+                        + "\",\"message\":\"\"}";
+            }
+        }
+
+        // --- Spike-era surface below: not yet part of the treaty ---
+
+        /** Superseded by startStream; kept briefly for the spike page. */
         @JavascriptInterface
         public String launchGame(String requestJson) {
             try {
                 JSONObject request = new JSONObject(requestJson);
                 String hostUuid = request.optString("hostUuid", "");
-                if (hostUuid.isEmpty()) {
-                    return errorResult("hostUuid is required");
-                }
-
-                ComputerManagerService.ComputerManagerBinder binder = awaitBinder(10);
-                if (binder == null) {
-                    return errorResult("computer manager not ready");
-                }
-
-                ComputerDetails computer = awaitOnlineComputer(binder, hostUuid, 12);
-                if (computer == null) {
-                    return errorResult("host is not reachable");
-                }
-                if (computer.pairState != PairingManager.PairState.PAIRED) {
-                    return errorResult("host is not paired — pair once in Artemis setup");
-                }
-
                 int appId = request.optInt("appId", -1);
-                String appName = request.optString("appName", "");
-                String appUuid = null;
-                if (appId <= 0 && !appName.isEmpty()) {
-                    for (NvApp app : cachedAppList(hostUuid)) {
-                        if (app.getAppName().equalsIgnoreCase(appName)) {
-                            appId = app.getAppId();
-                            appUuid = app.getAppUUID();
-                            break;
-                        }
-                    }
-                    if (appId <= 0) {
-                        return errorResult("app '" + appName
-                                + "' not in cache — open the host once in Artemis setup");
-                    }
+                if (hostUuid.isEmpty() || appId <= 0) {
+                    return errorResult("hostUuid and appId are required");
                 }
-                if (appId <= 0) {
-                    return errorResult("appId or appName is required");
-                }
-
-                NvApp app = new NvApp(appName.isEmpty() ? "app" : appName, appUuid, appId, false);
-                final Intent intent = ServerHelper.createStartIntent(
-                        KorriShellActivity.this, app, computer, binder);
-                runOnUiThread(() -> startActivity(intent));
-
-                JSONObject ok = new JSONObject();
-                ok.put("status", "accepted");
-                return ok.toString();
+                return startStream(hostUuid, appId);
             } catch (Exception e) {
                 return errorResult(e.getMessage() != null ? e.getMessage() : "launch failed");
             }
