@@ -46,6 +46,12 @@ export type LaunchablesState =
       readonly entries: readonly PortalEntry[]
       readonly selectedIndex: number
       readonly notice: string | null
+      /**
+       * Title of the game korrid is preparing, or null. Fills the gap
+       * between confirm and the stream Activity taking over; cleared when
+       * prepare or the stream start fails.
+       */
+      readonly preparing: string | null
     }
 
 /** Minimal local Maybe until Effect's Option arrives with the RPC slice. */
@@ -126,8 +132,15 @@ export const LaunchablesState = {
       entries,
       selectedIndex: 0,
       notice: failures.length > 0 ? failures.join(" · ") : null,
+      preparing: null,
     }
   },
+
+  /** Confirm on a game: show prepare progress until the activity swap. */
+  beginPreparing: (state: LaunchablesState, title: string): LaunchablesState =>
+    state._tag === "Ready"
+      ? { ...state, preparing: title, notice: null }
+      : state,
 
   moveSelection: (
     state: LaunchablesState,
@@ -168,7 +181,11 @@ export const LaunchablesState = {
     if (state._tag !== "Ready") return state
     return result._tag === "StreamStarted"
       ? { ...state, notice: null }
-      : { ...state, notice: `${result.reason}: ${result.message}` }
+      : {
+          ...state,
+          preparing: null,
+          notice: `${result.reason}: ${result.message}`,
+        }
   },
 
   withPrepareOutcome: (
@@ -178,7 +195,11 @@ export const LaunchablesState = {
     if (state._tag !== "Ready") return state
     return outcome._tag === "Ok"
       ? { ...state, notice: null }
-      : { ...state, notice: `${outcome.payload.code}: ${outcome.payload.message}` }
+      : {
+          ...state,
+          preparing: null,
+          notice: `${outcome.payload.code}: ${outcome.payload.message}`,
+        }
   },
 
   /** Group the flat entry list into titled sections for rendering. */

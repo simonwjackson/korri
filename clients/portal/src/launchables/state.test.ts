@@ -169,6 +169,49 @@ describe("LaunchablesState action results", () => {
   })
 })
 
+describe("LaunchablesState preparing", () => {
+  it("confirm on a game enters a visible preparing state", () => {
+    if (ready._tag !== "Ready") throw new Error("unreachable")
+    expect(ready.preparing).toBeNull()
+    const preparing = LaunchablesState.beginPreparing(ready, "Skate 3")
+    if (preparing._tag !== "Ready") throw new Error("unreachable")
+    expect(preparing.preparing).toBe("Skate 3")
+  })
+
+  it("prepare Err restores the list with a notice", () => {
+    const preparing = LaunchablesState.beginPreparing(ready, "Skate 3")
+    const failed = LaunchablesState.withPrepareOutcome(preparing, {
+      _tag: "Err",
+      payload: { code: "UpstreamUnreachable", message: "host offline" },
+    })
+    if (failed._tag !== "Ready") throw new Error("unreachable")
+    expect(failed.preparing).toBeNull()
+    expect(failed.notice).toBe("UpstreamUnreachable: host offline")
+  })
+
+  it("prepare Ok keeps preparing visible until the activity swap", () => {
+    const preparing = LaunchablesState.beginPreparing(ready, "Skate 3")
+    const prepared = LaunchablesState.withPrepareOutcome(preparing, {
+      _tag: "Ok",
+      payload: { gameId: "skate3" },
+    })
+    if (prepared._tag !== "Ready") throw new Error("unreachable")
+    expect(prepared.preparing).toBe("Skate 3")
+  })
+
+  it("a stream start failure clears preparing with a notice", () => {
+    const preparing = LaunchablesState.beginPreparing(ready, "Skate 3")
+    const failed = LaunchablesState.withStartStreamResult(preparing, {
+      _tag: "StreamFailed",
+      reason: "HostUnreachable",
+      message: "no route",
+    })
+    if (failed._tag !== "Ready") throw new Error("unreachable")
+    expect(failed.preparing).toBeNull()
+    expect(failed.notice).toBe("HostUnreachable: no route")
+  })
+})
+
 describe("LaunchablesState.sections", () => {
   it("groups the flat list into titled sections preserving indices", () => {
     if (ready._tag !== "Ready") throw new Error("unreachable")

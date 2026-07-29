@@ -104,7 +104,11 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
         })
       } else {
         // The Korri launch model: brain prepares the game, then the shell
-        // attaches to the stable stream app that now embodies it.
+        // attaches to the stable stream app that now embodies it. Preparing
+        // is visible immediately so there is no dead gap before the swap.
+        setState(current =>
+          LaunchablesState.beginPreparing(current, entry.game.title),
+        )
         void korrid.sessionPrepare(entry.game.id).then(async outcome => {
           if (outcome._tag !== "Ok") {
             setState(current =>
@@ -151,7 +155,15 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
           <p className="text-zinc-400">{state.message}</p>
         </div>
       )}
-      {state._tag === "Ready" && <LaunchablesList state={state} />}
+      {state._tag === "Ready" && state.preparing !== null && (
+        <div className="space-y-2 text-center">
+          <p className="text-xl font-semibold">Preparing {state.preparing}…</p>
+          <p className="text-zinc-400">Your stream will start in a moment</p>
+        </div>
+      )}
+      {state._tag === "Ready" && state.preparing === null && (
+        <LaunchablesList state={state} />
+      )}
     </main>
   )
 }
