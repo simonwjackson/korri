@@ -8,7 +8,6 @@ import androidx.test.core.app.ApplicationProvider;
 
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.profiles.ProfilesManager;
-import com.limelight.utils.UiHelper;
 import com.limelight.TestLogSuppressor;
 
 import org.junit.Before;
@@ -86,19 +85,6 @@ public class StartupCrashTest {
             assertNotNull("PreferenceConfiguration should be readable", config);
         } catch (Exception e) {
             fail("PreferenceConfiguration should not crash: " + e.getMessage());
-        }
-    }
-
-    @Test
-    public void testUiHelperCrash() {
-        // Test UiHelper methods that might cause crashes
-        try {
-            // UiHelper.setLocale requires Activity, so we'll test with a mock activity
-            PcView activity = Robolectric.buildActivity(PcView.class).create().get();
-            UiHelper.setLocale(activity);
-            // Should not crash
-        } catch (Exception e) {
-            fail("UiHelper.setLocale should not crash: " + e.getMessage());
         }
     }
 

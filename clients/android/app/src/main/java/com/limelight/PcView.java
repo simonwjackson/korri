@@ -24,7 +24,6 @@ import com.limelight.ui.AdapterFragment;
 import com.limelight.ui.AdapterFragmentCallbacks;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.ServerHelper;
-import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.UiHelper;
 
 import android.app.ActivityManager;
@@ -71,7 +70,6 @@ import javax.microedition.khronos.opengles.GL10;
 public class PcView extends AppCompatActivity implements AdapterFragmentCallbacks {
     private RelativeLayout noPcFoundLayout;
     private PcGridAdapter pcGridAdapter;
-    private ShortcutHelper shortcutHelper;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private boolean freezeUpdates, runningPolling, inForeground, completeOnCreateCalled;
     private ComputerDetails.AddressTuple pendingPairingAddress;
@@ -244,7 +242,6 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     private void completeOnCreate() {
         completeOnCreateCalled = true;
 
-        shortcutHelper = new ShortcutHelper(this);
 
 
         // Bind to the computer manager service
@@ -272,11 +269,6 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
                             }
                         });
 
-                        // Add a launcher shortcut for this PC (off the main thread to prevent ANRs)
-                        if (details.pairState == PairState.PAIRED) {
-                            shortcutHelper.createAppViewShortcutForOnlineHost(details);
-//                        } else
-                        }
                             if (pendingPairingAddress != null) {
                             if (
                                 details.state == ComputerDetails.State.ONLINE &&
@@ -788,10 +780,6 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(i);
 
             if (details.equals(computer.details)) {
-                // Disable or delete shortcuts referencing this PC
-                shortcutHelper.disableComputerShortcut(details,
-                        getResources().getString(R.string.scut_deleted_pc));
-
                 pcGridAdapter.removeComputer(computer);
                 pcGridAdapter.notifyDataSetChanged();
 

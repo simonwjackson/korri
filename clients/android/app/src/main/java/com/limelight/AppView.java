@@ -18,20 +18,15 @@ import com.limelight.ui.AdapterFragmentCallbacks;
 import com.limelight.utils.CacheHelper;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.ServerHelper;
-import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.SpinnerDialog;
 import com.limelight.utils.UiHelper;
 
-import android.app.Activity;
 import android.app.Service;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -43,12 +38,10 @@ import android.view.ContextMenu.ContextMenuInfo;
 import android.widget.AbsListView;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
-import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.AdapterView.AdapterContextMenuInfo;
 
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import org.xmlpull.v1.XmlPullParserException;
@@ -56,7 +49,6 @@ import org.xmlpull.v1.XmlPullParserException;
 public class AppView extends AppCompatActivity implements AdapterFragmentCallbacks {
     private AppGridAdapter appGridAdapter;
     private String uuidString;
-    private ShortcutHelper shortcutHelper;
 
     private ComputerDetails computer;
     private ComputerManagerService.ApplistPoller poller;
@@ -74,8 +66,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
     private final static int QUIT_ID = 2;
     private final static int START_WITH_QUIT = 4;
     private final static int VIEW_DETAILS_ID = 5;
-    private final static int CREATE_SHORTCUT_ID = 6;
-    private final static int EXPORT_LAUNCHER_FILE_ID = 7;
     private final static int HIDE_APP_ID = 8;
 
     public final static String HIDDEN_APPS_PREF_FILENAME = "HiddenApps";
@@ -104,10 +94,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
                         finish();
                         return;
                     }
-
-                    // Add a launcher shortcut for this PC (forced, since this is user interaction)
-                    shortcutHelper.createAppViewShortcut(computer, true, getIntent().getBooleanExtra(NEW_PAIR_EXTRA, false));
-                    shortcutHelper.reportComputerShortcutUsed(computer);
 
                     try {
                         appGridAdapter = new AppGridAdapter(AppView.this,
@@ -225,10 +211,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
                     AppView.this.runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            // Disable shortcuts referencing this PC for now
-                            shortcutHelper.disableComputerShortcut(details,
-                                    getResources().getString(R.string.scut_not_paired));
-
                             // Display a toast to the user and quit the activity
                             Toast.makeText(AppView.this, R.string.scut_not_paired, Toast.LENGTH_SHORT).show();
                             finish();
@@ -296,7 +278,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
         // between binding to CMS and onResume()
         inForeground = true;
 
-        shortcutHelper = new ShortcutHelper(this);
 
 
         setContentView(R.layout.activity_app_view);
@@ -399,25 +380,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        if (requestCode == ShortcutHelper.REQUEST_CODE_EXPORT_ART_FILE) {
-            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
-                Uri uri = data.getData();
-                ShortcutHelper.writeArtFileToUri(this, uri);
-            } else {
-                // Clear the content if the user cancelled or if there was an error before this point
-                ShortcutHelper.artFileContentToExport = null;
-                // Show "File export cancelled." toast only if the user explicitly cancelled.
-                if (resultCode == Activity.RESULT_CANCELED) {
-                    Toast.makeText(this, R.string.file_export_cancelled, Toast.LENGTH_SHORT).show();
-                }
-            }
-        }
-    }
-
-    @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
         super.onCreateContextMenu(menu, v, menuInfo);
 
@@ -446,22 +408,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
         }
 
         menu.add(Menu.NONE, VIEW_DETAILS_ID, 4, getResources().getString(R.string.applist_menu_details));
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Only add an option to create shortcut if box art is loaded
-            // and when we're in grid-mode (not list-mode).
-            ImageView appImageView = info.targetView.findViewById(R.id.grid_image);
-            if (appImageView != null) {
-                // We have a grid ImageView, so we must be in grid-mode
-                BitmapDrawable drawable = (BitmapDrawable)appImageView.getDrawable();
-                if (drawable != null && drawable.getBitmap() != null) {
-                    // We have a bitmap loaded too
-                    menu.add(Menu.NONE, CREATE_SHORTCUT_ID, 5, getResources().getString(R.string.applist_menu_scut));
-                }
-            }
-        }
-
-        menu.add(Menu.NONE, EXPORT_LAUNCHER_FILE_ID, 6, getResources().getString(R.string.applist_menu_export_launcher));
     }
 
     @Override
@@ -527,32 +473,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
                     hiddenAppIds.add(app.app.getAppId());
                 }
                 updateHiddenApps(false);
-                return true;
-            }
-
-            case CREATE_SHORTCUT_ID: {
-                ImageView appImageView = info.targetView.findViewById(R.id.grid_image);
-                Bitmap appBits = ((BitmapDrawable) appImageView.getDrawable()).getBitmap();
-                if (!shortcutHelper.createPinnedGameShortcut(computer, app.app, appBits)) {
-                    Toast.makeText(AppView.this, getResources().getString(R.string.unable_to_pin_shortcut), Toast.LENGTH_LONG).show();
-                }
-                return true;
-            }
-
-            case EXPORT_LAUNCHER_FILE_ID: {
-                if (app.app.getAppUUID() == null || (app.app.getAppUUID() != null && app.app.getAppUUID().isEmpty())) {
-                    UiHelper.displayConfirmationDialog(
-                            AppView.this,
-                            getResources().getString(R.string.title_export_sunshine_launcher_file),
-                            getResources().getString(R.string.message_export_sunshine_launcher_file),
-                            getResources().getString(R.string.proceed),
-                            getResources().getString(R.string.cancel),
-                            () -> shortcutHelper.exportLauncherFile(computer, app.app),
-                            null
-                    );
-                } else {
-                    shortcutHelper.exportLauncherFile(computer, app.app);
-                }
                 return true;
             }
 
@@ -628,12 +548,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
                     if (!foundExistingApp) {
                         // This app must be new
                         appGridAdapter.addApp(new AppObject(app));
-
-                        // We could have a leftover shortcut from last time this PC was paired
-                        // or if this app was removed then added again. Enable those shortcuts
-                        // again if present.
-                        shortcutHelper.enableAppShortcut(computer, app);
-
                         updated = true;
                     }
                 }
@@ -654,7 +568,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
 
                     // This app was removed in the latest app list
                     if (!foundExistingApp) {
-                        shortcutHelper.disableAppShortcut(computer, existingApp.app, getString(R.string.app_removed_from_pc));
                         appGridAdapter.removeApp(existingApp);
                         updated = true;
 

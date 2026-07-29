@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Shortcut strings -->
-    <string name="scut_deleted_pc">PC deleted</string>
     <string name="scut_not_paired">PC not paired</string>
-    <string name="scut_pc_not_found">PC not found</string>
-    <string name="scut_invalid_uuid">Provided PC is not valid</string>
-    <string name="scut_invalid_app_id">Provided App is not valid</string>
 
     <string name="menu_button">Menu</string>
     <string name="configuration_mode_move_buttons">Move buttons mode</string>
@@ -87,7 +83,6 @@
     <string name="title_decoding_reset">Video Settings Reset</string>
     <string name="message_decoding_reset">Your device\'s video decoder continues to crash at your selected streaming settings. Your streaming settings have been reset to default.</string>
     <string name="error_usb_prohibited">USB access is prohibited by your device administrator. Check your Knox or MDM settings.</string>
-    <string name="unable_to_pin_shortcut">Your current launcher does not allow for creating pinned shortcuts.</string>
     <string name="video_decoder_init_failed">Video decoder failed to initialize. Your device may not support the selected resolution or frame rate.</string>
     <string name="no_video_received_error">No video received from host.</string>
     <string name="no_frame_received_error">Your network connection isn\'t performing well. Reduce your video bitrate setting or try a faster connection.</string>
@@ -139,8 +134,6 @@
     <string name="applist_menu_quit_and_start">Quit Current Game and Start</string>
     <string name="applist_menu_cancel">Cancel</string>
     <string name="applist_menu_details">View Details</string>
-    <string name="applist_menu_scut">Create Shortcut</string>
-    <string name="applist_menu_export_launcher">Export Launcher File</string>
     <string name="applist_menu_tv_channel">Add to Channel</string>
     <string name="applist_menu_hide_app">Hide App</string>
     <string name="applist_refresh_title">App List</string>
@@ -506,22 +499,7 @@
     <string name="category_basic_settings" />
     <string name="title_checkbox_stretch_video" />
 
-    <!-- ShortcutHelper Toast Messages -->
-    <string name="export_launcher_computer_details_incomplete">Cannot export: Computer details are incomplete.</string>
-    <string name="export_launcher_app_details_incomplete">Cannot export: App details are incomplete.</string>
-    <string name="failed_to_initiate_file_export">Failed to initiate file export: %s</string>
-    <string name="file_export_failed_no_location_selected">File export failed: No location selected.</string>
-    <string name="file_export_failed_no_content_to_write">File export failed: No content to write.</string>
-    <string name="file_exported_successfully">File exported successfully.</string>
-    <string name="failed_to_open_file_for_writing">Failed to open file for writing.</string>
-    <string name="error_writing_file">Error writing file: %s</string>
-    <string name="unexpected_error_during_file_export">An unexpected error occurred during file export.</string>
-
     <!-- AppView Toast Messages -->
-    <string name="file_export_cancelled">File export cancelled.</string>
-    <string name="app_removed_from_pc">App removed from PC</string>
-    <string name="title_export_sunshine_launcher_file">Export Launcher File for Sunshine</string>
-    <string name="message_export_sunshine_launcher_file">Exporting launcher file for Sunshine is unstable, and may break at any moment. You\'ll need to export again every time if you changed the app name or image.\nUse Apollo for a more stable experience.</string>
 
     <string name="title_enable_commit_text">Enable commit-text input (swipe/voice)</string>
     <string name="summary_enable_commit_text">Forward multi-character text from soft keyboards (gesture typing, predictions, voice dictation). May break games that rely on key-by-key input.</string>
