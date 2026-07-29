@@ -130,7 +130,12 @@ public class KorriSessionOverlay {
         if (rawStage == null) return "initializing";
         if (rawStage.equals(appName)) return "launching-app";
         String stage = rawStage.toLowerCase(Locale.ROOT);
-        if (stage.contains("platform") || stage.contains("name resolution")) {
+        // "audio stream initialization" fires BEFORE the RTSP handshake in
+        // moonlight-common-c's stage order, so it belongs to the pre-
+        // handshake phase; the remaining stream init/establishment stages
+        // come after it.
+        if (stage.contains("platform") || stage.contains("name resolution")
+                || stage.contains("audio stream initialization")) {
             return "initializing";
         }
         if (stage.contains("rtsp")) return "handshaking";

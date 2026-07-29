@@ -68,6 +68,7 @@ describe("createSessionLifecycleAdapter", () => {
           events: [
             { type: "stage-starting", stage: "launching-app" },
             { type: "stage-complete", stage: "launching-app" },
+            { type: "stage-starting", stage: "initializing" },
           ],
         }),
       exitToPortal: () => {},
@@ -80,6 +81,7 @@ describe("createSessionLifecycleAdapter", () => {
     const seeded = states.at(-1)
     if (seeded?._tag !== "Connecting") throw new Error("expected Connecting")
     expect(seeded.completed).toEqual(["launching-app"])
+    expect(seeded.currentStage).toBe("initializing")
 
     const host = window as unknown as Record<string, unknown>
     const push = host.__korriSessionEvent as (json: string) => void
@@ -93,6 +95,51 @@ describe("createSessionLifecycleAdapter", () => {
 
     stop()
     expect(host.__korriSessionEvent).toBeUndefined()
+  })
+
+  it("registers the push global before pulling the snapshot", () => {
+    // An event pushed during the boot window must not vanish: the handler
+    // has to exist before the snapshot is pulled, and replaying snapshot
+    // events afterwards is idempotent through the monotonic fold.
+    const host = window as unknown as Record<string, unknown>
+    let handlerPresentDuringPull = false
+    const surface: KorriSessionBridgeSurface = {
+      lifecycleSnapshot: () => {
+        handlerPresentDuringPull = typeof host.__korriSessionEvent === "function"
+        // Simulate a push landing while the snapshot is being produced.
+        ;(host.__korriSessionEvent as (json: string) => void)(
+          JSON.stringify({ type: "stage-starting", stage: "handshaking" }),
+        )
+        return JSON.stringify({
+          events: [{ type: "stage-starting", stage: "launching-app" }],
+        })
+      },
+      exitToPortal: () => {},
+    }
+    const states: SessionLifecycleState[] = []
+    const stop = createSessionLifecycleAdapter(surface).start(state =>
+      states.push(state),
+    )
+    expect(handlerPresentDuringPull).toBe(true)
+    const final = states.at(-1)
+    if (final?._tag !== "Connecting") throw new Error("expected Connecting")
+    // The replayed older snapshot event must not regress the pushed stage.
+    expect(final.currentStage).toBe("handshaking")
+    stop()
+  })
+
+  it("only removes the push global it registered", () => {
+    const host = window as unknown as Record<string, unknown>
+    const surface: KorriSessionBridgeSurface = {
+      lifecycleSnapshot: () => JSON.stringify({ events: [] }),
+      exitToPortal: () => {},
+    }
+    const stop = createSessionLifecycleAdapter(surface).start(() => {})
+    const replacement = () => {}
+    host.__korriSessionEvent = replacement
+    stop()
+    expect(host.__korriSessionEvent).toBe(replacement)
+    delete host.__korriSessionEvent
   })
 
   it("tolerates a malformed snapshot by starting from the initial state", () => {

@@ -83,29 +83,28 @@ export const SessionLifecycleState = {
     if (state._tag === "Connected") return state
     if (event.type === "connected") return { _tag: "Connected" }
 
-    const highestSeen = Math.max(
-      state.currentStage === null ? -1 : stageIndex(state.currentStage),
-      ...state.completed.map(stageIndex),
-    )
+    // Many raw Moonlight stages coalesce onto one semantic stage, so a
+    // stage-complete event must not finish a semantic stage by itself —
+    // a sibling raw stage may still be coming. Progression is driven by
+    // stage-starting: starting a later stage completes everything before
+    // it. stage-complete only refreshes detail for the active stage.
+    const currentIndex =
+      state.currentStage === null ? -1 : stageIndex(state.currentStage)
     if (event.type === "stage-starting") {
+      const index = stageIndex(event.stage)
       // Replay/duplicate guard: never move backwards.
-      if (stageIndex(event.stage) <= highestSeen) return state
+      if (index < currentIndex) return state
+      if (index === currentIndex) {
+        return { ...state, detail: event.detail ?? null }
+      }
       return {
         ...state,
+        completed: STAGE_ORDER.slice(0, index),
         currentStage: event.stage,
         detail: event.detail ?? null,
       }
     }
-    // stage-complete: record it (idempotently) without regressing.
-    if (state.completed.includes(event.stage)) return state
-    if (stageIndex(event.stage) < highestSeen) return state
-    return {
-      ...state,
-      completed: [...state.completed, event.stage],
-      currentStage:
-        state.currentStage === event.stage ? null : state.currentStage,
-      detail: null,
-    }
+    return state
   },
 
   fromEvents: (

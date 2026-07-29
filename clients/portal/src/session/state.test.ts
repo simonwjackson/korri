@@ -24,11 +24,12 @@ describe("SessionLifecycleState.fromEvents", () => {
     expect(seeded.currentStage).toBe("initializing")
 
     const advanced = SessionLifecycleState.applyEvent(seeded, {
-      type: "stage-complete",
-      stage: "initializing",
+      type: "stage-starting",
+      stage: "handshaking",
     })
     if (advanced._tag !== "Connecting") throw new Error("expected Connecting")
     expect(advanced.completed).toEqual(["launching-app", "initializing"])
+    expect(advanced.currentStage).toBe("handshaking")
   })
 
   test("replayed or duplicate stage events do not regress the timeline", () => {
@@ -42,7 +43,33 @@ describe("SessionLifecycleState.fromEvents", () => {
     ])
     if (state._tag !== "Connecting") throw new Error("expected Connecting")
     expect(state.currentStage).toBe("handshaking")
-    expect(state.completed).toEqual(["launching-app"])
+    expect(state.completed).toEqual(["launching-app", "initializing"])
+  })
+
+  test("coalesced raw stages sharing one semantic stage do not complete it early", () => {
+    // The shell maps many raw Moonlight stages onto one semantic id. A raw
+    // stage-complete (e.g. "platform initialization") must not mark the
+    // semantic stage done while a sibling raw stage ("name resolution") is
+    // still coming — completion is driven by the next stage-starting.
+    const state = SessionLifecycleState.fromEvents([
+      { type: "stage-starting", stage: "launching-app" },
+      { type: "stage-complete", stage: "launching-app" },
+      { type: "stage-starting", stage: "initializing", detail: "platform initialization" },
+      { type: "stage-complete", stage: "initializing", detail: "platform initialization" },
+      { type: "stage-starting", stage: "initializing", detail: "name resolution" },
+      { type: "stage-complete", stage: "initializing", detail: "name resolution" },
+      { type: "stage-starting", stage: "initializing", detail: "audio stream initialization" },
+      { type: "stage-starting", stage: "handshaking", detail: "RTSP handshake" },
+      { type: "stage-starting", stage: "establishing-streams", detail: "control stream initialization" },
+    ])
+    if (state._tag !== "Connecting") throw new Error("expected Connecting")
+    expect(state.completed).toEqual([
+      "launching-app",
+      "initializing",
+      "handshaking",
+    ])
+    expect(state.currentStage).toBe("establishing-streams")
+    expect(state.detail).toBe("control stream initialization")
   })
 
   test("connected is terminal: later stage events are ignored", () => {

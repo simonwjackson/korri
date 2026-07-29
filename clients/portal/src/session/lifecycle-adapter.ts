@@ -4,7 +4,7 @@ import type {
   StreamLifecycleEvent,
   StreamStageId,
 } from "@contracts/bridge/korri-native-bridge"
-import { SessionLifecycleState } from "./state"
+import { SessionLifecycleState, STAGE_ORDER } from "./state"
 
 /**
  * Session lifecycle adapter: implements the treaty's pull-then-push overlay
@@ -16,12 +16,7 @@ import { SessionLifecycleState } from "./state"
 
 const GLOBAL_NAME = "__korriSessionEvent"
 
-const stages = new Set<StreamStageId>([
-  "launching-app",
-  "initializing",
-  "handshaking",
-  "establishing-streams",
-])
+const stages = new Set<StreamStageId>(STAGE_ORDER)
 
 const reasons = new Set<StreamFailureReason>([
   "AppLaunchFailed",
@@ -123,20 +118,28 @@ export function createSessionLifecycleAdapter(
 ): SessionLifecycleAdapter {
   return {
     start(onState) {
-      let state = SessionLifecycleState.fromEvents(
-        parseSnapshotEvents(surface.lifecycleSnapshot()),
-      )
-      onState(state)
+      let state = SessionLifecycleState.initial()
 
+      // Register the push global before pulling the snapshot so an event
+      // fired during the boot window is never lost: it lands either in the
+      // live handler, in the snapshot, or in both — and the monotonic fold
+      // makes double-application idempotent.
       const host = window as unknown as Record<string, unknown>
-      host[GLOBAL_NAME] = (json: string) => {
+      const handler = (json: string) => {
         const event = parseStreamLifecycleEvent(json)
         if (event === null) return
         state = SessionLifecycleState.applyEvent(state, event)
         onState(state)
       }
+      host[GLOBAL_NAME] = handler
+
+      for (const event of parseSnapshotEvents(surface.lifecycleSnapshot())) {
+        state = SessionLifecycleState.applyEvent(state, event)
+      }
+      onState(state)
+
       return () => {
-        delete host[GLOBAL_NAME]
+        if (host[GLOBAL_NAME] === handler) delete host[GLOBAL_NAME]
       }
     },
   }
