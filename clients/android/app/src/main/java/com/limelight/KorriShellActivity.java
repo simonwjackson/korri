@@ -88,8 +88,70 @@ public class KorriShellActivity extends AppCompatActivity {
         }
 
         webView.addJavascriptInterface(new KorriNativeBridge(), "KorriNative");
-        webView.loadUrl("file:///android_asset/korri-shell/index.html");
+        webView.loadUrl(portalUrl());
         setContentView(webView);
+    }
+
+    /**
+     * The portal ships as bundled assets (built by `just portal-bundle`).
+     * Debug builds may override with -PkorriPortalUrl=http://<ip>:5173 for
+     * a live Vite dev-server loop on the device.
+     */
+    private String portalUrl() {
+        String devUrl = BuildConfig.PORTAL_DEV_URL;
+        if (BuildConfig.DEBUG && devUrl != null && !devUrl.isEmpty()) {
+            return devUrl;
+        }
+        return "file:///android_asset/portal/index.html";
+    }
+
+    /**
+     * Semantic input seam — the WebView never sees a key code.
+     *
+     * Hardware truth (key codes, controller quirks) stays here: navigation-
+     * relevant keys are translated into the semantic vocabulary defined in
+     * contracts/bridge/korri-native-bridge.ts (BridgeInputEvent) and pushed
+     * to the portal via window.__korriInput. Everything else falls through
+     * to normal dispatch.
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        String semanticJson = toSemanticInputJson(event.getKeyCode());
+        if (semanticJson == null) {
+            return super.dispatchKeyEvent(event);
+        }
+        if (event.getAction() == KeyEvent.ACTION_DOWN && webView != null) {
+            webView.evaluateJavascript(
+                    "window.__korriInput && window.__korriInput('"
+                            + semanticJson + "')", null);
+        }
+        return true;
+    }
+
+    private static String toSemanticInputJson(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+                return "{\"type\":\"direction\",\"direction\":\"up\",\"source\":\"gamepad\"}";
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                return "{\"type\":\"direction\",\"direction\":\"down\",\"source\":\"gamepad\"}";
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                return "{\"type\":\"direction\",\"direction\":\"left\",\"source\":\"gamepad\"}";
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                return "{\"type\":\"direction\",\"direction\":\"right\",\"source\":\"gamepad\"}";
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_BUTTON_A:
+                return "{\"type\":\"confirm\",\"source\":\"gamepad\"}";
+            case KeyEvent.KEYCODE_BUTTON_B:
+            case KeyEvent.KEYCODE_BACK:
+                return "{\"type\":\"back\",\"source\":\"gamepad\"}";
+            case KeyEvent.KEYCODE_BUTTON_START:
+            case KeyEvent.KEYCODE_MENU:
+                return "{\"type\":\"menu\",\"source\":\"gamepad\"}";
+            case KeyEvent.KEYCODE_BUTTON_SELECT:
+                return "{\"type\":\"options\",\"source\":\"gamepad\"}";
+            default:
+                return null;
+        }
     }
 
     @Override
