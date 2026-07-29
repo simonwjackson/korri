@@ -224,6 +224,24 @@ describe("LaunchablesState now playing", () => {
     expect(state.entries.every(entry => entry.kind !== "now-playing")).toBe(true)
   })
 
+  it("treats a wire-level `active: null` as nothing playing", () => {
+    // Rust serde serializes Option::None as an explicit null; the
+    // generated type says `active?` but the wire still carries the key.
+    const nullActive = {
+      _tag: "Ok",
+      payload: { active: null },
+    } as unknown as SessionStatusOutcome
+    const state = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      nullActive,
+    )
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.every(entry => entry.kind !== "now-playing")).toBe(true)
+  })
+
   it("degrades a status failure silently: no banner, no notice", () => {
     const state = LaunchablesState.fromSources(
       localOk,

@@ -106,8 +106,10 @@ export const LaunchablesState = {
 
     // An active host session renders first as a now-playing banner. A
     // status failure degrades silently — no banner, no notice — rather
-    // than blocking the list.
-    if (session?._tag === "Ok" && session.payload.active !== undefined) {
+    // than blocking the list. Note `!= null`: Rust serde serializes
+    // Option::None as an explicit null even though the generated type
+    // spells the field optional.
+    if (session?._tag === "Ok" && session.payload.active != null) {
       entries.push({ kind: "now-playing", session: session.payload.active })
     }
 
