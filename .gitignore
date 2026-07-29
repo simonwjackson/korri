@@ -12,3 +12,6 @@ local.env
 .fallow/
 .tmp/
 .resession.json
+/.nix-bin
+/.pi/git
+/.tanstack/tmp

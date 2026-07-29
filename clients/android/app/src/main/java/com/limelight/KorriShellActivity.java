@@ -1,0 +1,403 @@
+package com.limelight;
+
+import android.annotation.SuppressLint;
+import android.content.ComponentName;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+
+import androidx.appcompat.app.AppCompatActivity;
+
+import com.limelight.computers.ComputerManagerListener;
+import com.limelight.computers.ComputerManagerService;
+import com.limelight.nvstream.http.ComputerDetails;
+import com.limelight.nvstream.http.NvApp;
+import com.limelight.nvstream.http.NvHTTP;
+import com.limelight.nvstream.http.PairingManager;
+import com.limelight.utils.CacheHelper;
+import com.limelight.utils.ServerHelper;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.json.JSONTokener;
+
+import java.io.StringReader;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
+/**
+ * SPIKE: Korri web-shell launcher embedded in the Artemis APK.
+ *
+ * Proves the one-APK architecture: a WebView owns the launcher surface and a
+ * narrow typed bridge (not art:// deep links) drives the orchestrated Korri
+ * flow — korrid catalog -> korrid prepare -> native Game activity against the
+ * stable "Korri Stream" Sunshine app. No trampoline hop, no second launcher
+ * icon: the streaming Activity is an implementation detail of one app.
+ */
+public class KorriShellActivity extends AppCompatActivity {
+    private WebView webView;
+    private ComputerManagerService.ComputerManagerBinder managerBinder;
+    private final CountDownLatch binderReady = new CountDownLatch(1);
+
+    private final ServiceConnection serviceConnection = new ServiceConnection() {
+        public void onServiceConnected(ComponentName className, IBinder binder) {
+            final ComputerManagerService.ComputerManagerBinder localBinder =
+                    (ComputerManagerService.ComputerManagerBinder) binder;
+            new Thread(() -> {
+                localBinder.waitForReady();
+                managerBinder = localBinder;
+                binderReady.countDown();
+            }).start();
+        }
+
+        public void onServiceDisconnected(ComponentName className) {
+            managerBinder = null;
+        }
+    };
+
+    @SuppressLint("SetJavaScriptEnabled")
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        bindService(new Intent(this, ComputerManagerService.class),
+                serviceConnection, BIND_AUTO_CREATE);
+
+        webView = new WebView(this);
+        webView.getSettings().setJavaScriptEnabled(true);
+        webView.getSettings().setDomStorageEnabled(true);
+        webView.setBackgroundColor(0xFF101018);
+        webView.setWebViewClient(new WebViewClient());
+        if (BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(true);
+        }
+
+        webView.addJavascriptInterface(new KorriNativeBridge(), "KorriNative");
+        webView.loadUrl("file:///android_asset/korri-shell/index.html");
+        setContentView(webView);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (managerBinder != null) {
+            unbindService(serviceConnection);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Returning from a stream: let the web surface refresh its state.
+        if (webView != null) {
+            webView.evaluateJavascript(
+                    "window.dispatchEvent(new Event('korri-shell-resumed'))", null);
+        }
+    }
+
+    /**
+     * Narrow spike contract between the Korri web surface and the Android
+     * runtime. Deals in Korri-shaped concepts (hosts, apps, launch requests),
+     * never in raw intent extras or pairing material.
+     */
+    private class KorriNativeBridge {
+
+        @JavascriptInterface
+        public String listPairedHosts() {
+            JSONArray hosts = new JSONArray();
+            try {
+                ComputerManagerService.ComputerManagerBinder binder = awaitBinder(5);
+                if (binder == null) return hosts.toString();
+                // The binder view merges DB rows with live poll state.
+                com.limelight.computers.ComputerDatabaseManager db =
+                        new com.limelight.computers.ComputerDatabaseManager(KorriShellActivity.this);
+                try {
+                    List<ComputerDetails> computers = db.getAllComputers();
+                    for (ComputerDetails details : computers) {
+                        JSONObject host = new JSONObject();
+                        host.put("name", details.name);
+                        host.put("uuid", details.uuid);
+                        host.put("paired", details.pairState == PairingManager.PairState.PAIRED);
+                        hosts.put(host);
+                    }
+                } finally {
+                    db.close();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return hosts.toString();
+        }
+
+        @JavascriptInterface
+        public String listApps(String hostUuid) {
+            JSONArray apps = new JSONArray();
+            try {
+                for (NvApp app : cachedAppList(hostUuid)) {
+                    JSONObject entry = new JSONObject();
+                    entry.put("name", app.getAppName());
+                    entry.put("id", app.getAppId());
+                    entry.put("uuid", app.getAppUUID());
+                    apps.put(entry);
+                }
+            } catch (Exception e) {
+                // Empty cache is a normal state before the host was ever browsed.
+                e.printStackTrace();
+            }
+            return apps.toString();
+        }
+
+        /**
+         * Direct, same-task stream launch: resolve the host through
+         * ComputerManagerService (poll until ONLINE if needed), resolve the
+         * Sunshine app from the applist cache, then start the Game activity.
+         * No ShortcutTrampoline, no intermediate screen.
+         */
+        @JavascriptInterface
+        public String launchGame(String requestJson) {
+            try {
+                JSONObject request = new JSONObject(requestJson);
+                String hostUuid = request.optString("hostUuid", "");
+                if (hostUuid.isEmpty()) {
+                    return errorResult("hostUuid is required");
+                }
+
+                ComputerManagerService.ComputerManagerBinder binder = awaitBinder(10);
+                if (binder == null) {
+                    return errorResult("computer manager not ready");
+                }
+
+                ComputerDetails computer = awaitOnlineComputer(binder, hostUuid, 12);
+                if (computer == null) {
+                    return errorResult("host is not reachable");
+                }
+                if (computer.pairState != PairingManager.PairState.PAIRED) {
+                    return errorResult("host is not paired — pair once in Artemis setup");
+                }
+
+                int appId = request.optInt("appId", -1);
+                String appName = request.optString("appName", "");
+                String appUuid = null;
+                if (appId <= 0 && !appName.isEmpty()) {
+                    for (NvApp app : cachedAppList(hostUuid)) {
+                        if (app.getAppName().equalsIgnoreCase(appName)) {
+                            appId = app.getAppId();
+                            appUuid = app.getAppUUID();
+                            break;
+                        }
+                    }
+                    if (appId <= 0) {
+                        return errorResult("app '" + appName
+                                + "' not in cache — open the host once in Artemis setup");
+                    }
+                }
+                if (appId <= 0) {
+                    return errorResult("appId or appName is required");
+                }
+
+                NvApp app = new NvApp(appName.isEmpty() ? "app" : appName, appUuid, appId, false);
+                final Intent intent = ServerHelper.createStartIntent(
+                        KorriShellActivity.this, app, computer, binder);
+                runOnUiThread(() -> startActivity(intent));
+
+                JSONObject ok = new JSONObject();
+                ok.put("status", "accepted");
+                return ok.toString();
+            } catch (Exception e) {
+                return errorResult(e.getMessage() != null ? e.getMessage() : "launch failed");
+            }
+        }
+
+        /**
+         * Korrid control-plane RPC (Effect RPC over HTTP, single request).
+         * Runs on the WebView JS-bridge thread, so a blocking call is fine.
+         * The page drives the orchestrated flow:
+         *   app.catalog.snapshot -> app.server.stream.prepare -> launchGame("Korri Stream")
+         */
+        @JavascriptInterface
+        public String korriRpc(String rpcUrl, String tag, String payloadJson) {
+            try {
+                JSONObject body = new JSONObject();
+                body.put("_tag", "Request");
+                // Effect RPC request ids must parse as BigInt on the server.
+                body.put("id", String.valueOf(System.currentTimeMillis() * 1000
+                        + (long) (Math.random() * 1000)));
+                body.put("tag", tag);
+                body.put("payload", new JSONObject(payloadJson));
+                body.put("headers", new JSONArray());
+
+                OkHttpClient client = new OkHttpClient.Builder()
+                        .callTimeout(20, TimeUnit.SECONDS)
+                        .build();
+                Request request = new Request.Builder()
+                        .url(rpcUrl)
+                        .post(RequestBody.create(body.toString(),
+                                MediaType.get("application/json")))
+                        .build();
+
+                try (Response response = client.newCall(request).execute()) {
+                    String text = response.body() != null ? response.body().string() : "";
+                    if (!response.isSuccessful()) {
+                        return errorResult("HTTP " + response.code() + ": " + text);
+                    }
+                    Object parsed = new JSONTokener(text).nextValue();
+                    JSONArray frames = parsed instanceof JSONArray
+                            ? (JSONArray) parsed
+                            : new JSONArray().put(parsed);
+                    for (int i = 0; i < frames.length(); i++) {
+                        JSONObject frame = frames.optJSONObject(i);
+                        if (frame == null) continue;
+                        JSONObject exit = frame.optJSONObject("exit");
+                        if (exit == null) continue;
+                        if ("Success".equals(exit.optString("_tag"))) {
+                            JSONObject ok = new JSONObject();
+                            ok.put("status", "ok");
+                            ok.put("value", exit.opt("value"));
+                            return ok.toString();
+                        }
+                        return errorResult("rpc-failure: " + exit);
+                    }
+                    return errorResult("no Exit frame in RPC response");
+                }
+            } catch (Exception e) {
+                return errorResult(e.getMessage() != null ? e.getMessage() : "rpc failed");
+            }
+        }
+
+        @JavascriptInterface
+        public void openArtemisUi() {
+            // Escape hatch into the stock Artemis PcView for pairing/setup.
+            runOnUiThread(() -> startActivity(
+                    new Intent(KorriShellActivity.this, PcView.class)));
+        }
+
+        @JavascriptInterface
+        public void openArtemisSettings() {
+            // Escape hatch into Artemis streaming settings for tinkering.
+            runOnUiThread(() -> startActivity(new Intent(KorriShellActivity.this,
+                    com.limelight.preferences.StreamSettings.class)));
+        }
+
+        @JavascriptInterface
+        public String launchLocalRetro(String romFileName) {
+            // SPIKE: local emulation transport — RetroArch as headless runtime.
+            // Korri owns the config + save tree under /sdcard/korri-retro/;
+            // RA never shows its own UI (kiosk config) and quits on focus loss.
+            try {
+                Intent intent = new Intent();
+                intent.setClassName("com.retroarch.aarch64",
+                        "com.retroarch.browser.retroactivity.RetroActivityFuture");
+                intent.putExtra("ROM", "/storage/emulated/0/korri-retro/roms/" + romFileName);
+                intent.putExtra("LIBRETRO",
+                        "/data/data/com.retroarch.aarch64/cores/mgba_libretro_android.so");
+                intent.putExtra("CONFIGFILE", "/storage/emulated/0/korri-retro/retroarch.cfg");
+                // No QUITFOCUS: RA suspends in the background on focus loss
+                // (pause_nonactive) so switching away and back resumes the
+                // game in place instead of restarting it. Quit semantics move
+                // to the session control plane (network cmd QUIT) later.
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                runOnUiThread(() -> startActivity(intent));
+                return "{\"status\":\"launched\"}";
+            } catch (Exception e) {
+                return errorResult("RetroArch launch failed: " + e.getMessage());
+            }
+        }
+
+        // --- Korri settings contract (theme-free; web surface owns all UI) ---
+
+        @JavascriptInterface
+        public String getSettingsSchema() {
+            return KorriSettingsBridge.schemaJson(KorriShellActivity.this);
+        }
+
+        @JavascriptInterface
+        public String getSettingsValues() {
+            return KorriSettingsBridge.valuesJson(KorriShellActivity.this);
+        }
+
+        @JavascriptInterface
+        public String setSetting(String key, String jsonValue) {
+            return KorriSettingsBridge.applySetting(KorriShellActivity.this, key, jsonValue);
+        }
+
+        private String errorResult(String message) {
+            try {
+                JSONObject error = new JSONObject();
+                error.put("status", "failed");
+                error.put("message", message);
+                return error.toString();
+            } catch (Exception e) {
+                return "{\"status\":\"failed\"}";
+            }
+        }
+    }
+
+    private ComputerManagerService.ComputerManagerBinder awaitBinder(int seconds) {
+        try {
+            binderReady.await(seconds, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return managerBinder;
+    }
+
+    /**
+     * Return the computer once it is ONLINE with an active address, polling
+     * briefly when needed. This replaces the trampoline's visible spinner
+     * screen with an in-shell wait.
+     */
+    private ComputerDetails awaitOnlineComputer(
+            ComputerManagerService.ComputerManagerBinder binder,
+            String hostUuid,
+            int timeoutSeconds) {
+        ComputerDetails existing = binder.getComputer(hostUuid);
+        if (existing != null
+                && existing.state == ComputerDetails.State.ONLINE
+                && existing.activeAddress != null) {
+            return existing;
+        }
+
+        binder.invalidateStateForComputer(hostUuid);
+        final CountDownLatch online = new CountDownLatch(1);
+        final ComputerDetails[] resolved = new ComputerDetails[1];
+        binder.startPolling(new ComputerManagerListener() {
+            @Override
+            public void notifyComputerUpdated(ComputerDetails details) {
+                if (!details.uuid.equalsIgnoreCase(hostUuid)) return;
+                if (details.state == ComputerDetails.State.ONLINE
+                        && details.activeAddress != null) {
+                    resolved[0] = details;
+                    online.countDown();
+                } else if (details.state == ComputerDetails.State.OFFLINE) {
+                    online.countDown();
+                }
+            }
+        });
+        try {
+            online.await(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            binder.stopPolling();
+        }
+        return resolved[0];
+    }
+
+    private List<NvApp> cachedAppList(String hostUuid) throws Exception {
+        String rawAppList = CacheHelper.readInputStreamToString(
+                CacheHelper.openCacheFileForInput(getCacheDir(), "applist", hostUuid));
+        if (rawAppList.isEmpty()) return java.util.Collections.emptyList();
+        return NvHTTP.getAppListByReader(new StringReader(rawAppList));
+    }
+}

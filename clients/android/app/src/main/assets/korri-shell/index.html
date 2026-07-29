@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Korri Shell (Spike)</title>
+  <style>
+    :root {
+      --bg: #101018;
+      --panel: #191926;
+      --panel-hover: #23233a;
+      --accent: #7c6cf0;
+      --text: #e8e8f0;
+      --muted: #8a8aa0;
+      --ok: #6fdc8c;
+      --bad: #f07c7c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: clamp(16px, 4cqi, 48px);
+      padding-bottom: 72px;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    h1 { font-size: clamp(1.4rem, 4cqi, 2.2rem); margin: 0 0 4px; }
+    .subtitle { color: var(--muted); margin: 0 0 20px; font-size: 0.95rem; }
+    h2 { font-size: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 26px 0 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid #2a2a40;
+      border-radius: 12px;
+      padding: 18px;
+      cursor: pointer;
+      transition: background 120ms;
+    }
+    .card:hover, .card:focus-visible { background: var(--panel-hover); outline: 2px solid var(--accent); }
+    .card .name { font-weight: 600; font-size: 1.05rem; }
+    .card .meta { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
+    .card.busy { opacity: 0.5; pointer-events: none; }
+    .empty { color: var(--muted); padding: 18px; background: var(--panel); border-radius: 12px; }
+    #sessionBanner {
+      display: none;
+      background: var(--panel);
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin: 0 0 18px;
+      align-items: center; gap: 14px; flex-wrap: wrap;
+    }
+    #sessionBanner.visible { display: flex; }
+    #sessionBanner .info { flex: 1; min-width: 200px; }
+    #sessionBanner .title { font-weight: 600; }
+    #sessionBanner .phase { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+    #sessionBanner button.primary {
+      background: var(--accent); border: none; color: #fff;
+      border-radius: 8px; padding: 10px 18px; font-size: 0.9rem; cursor: pointer;
+    }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    input[type=text] {
+      flex: 1; min-width: 260px;
+      background: var(--panel); color: var(--text);
+      border: 1px solid #2a2a40; border-radius: 8px;
+      padding: 10px 12px; font-size: 0.95rem;
+    }
+    select {
+      background: var(--panel); color: var(--text);
+      border: 1px solid #2a2a40; border-radius: 8px;
+      padding: 10px 12px; font-size: 0.95rem;
+    }
+    button.secondary {
+      background: none; border: 1px solid #2a2a40; color: var(--muted);
+      border-radius: 8px; padding: 10px 16px; font-size: 0.9rem; cursor: pointer;
+    }
+    #status {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 12px 16px;
+      background: #000c;
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-family: monospace;
+    }
+    #status.ok { color: var(--ok); }
+    #status.bad { color: var(--bad); }
+
+    /* settings (spike theme; any surface may restyle from scratch) */
+    #settingsPanel { margin-top: 10px; }
+    #settingsPanel h3 {
+      font-size: 0.85rem; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.08em; margin: 20px 0 8px;
+    }
+    .setting {
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      background: var(--panel); border: 1px solid #2a2a40; border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 8px;
+    }
+    .setting .label { font-size: 0.95rem; }
+    .setting .value-hint { color: var(--muted); font-size: 0.8rem; margin-left: 8px; }
+    .setting input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+    .setting input[type=range] { width: 200px; accent-color: var(--accent); }
+    .setting .control { display: flex; align-items: center; gap: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Korri</h1>
+  <p class="subtitle">Spike shell &mdash; orchestrated stream launch (korrid prepare &rarr; Korri Stream)</p>
+
+  <div id="sessionBanner">
+    <div class="info">
+      <div class="title" id="sessionTitle"></div>
+      <div class="phase" id="sessionPhase"></div>
+    </div>
+    <button class="primary" id="sessionResumeBtn" onclick="resumeSession()">Continue playing</button>
+    <button class="secondary" onclick="quitSession()">Quit game</button>
+  </div>
+
+  <h2>Korri source</h2>
+  <div class="row">
+    <input type="text" id="korridUrl" value="http://192.168.1.117:3001/api/rpc">
+    <button class="secondary" onclick="loadLibrary()">Reload library</button>
+  </div>
+
+  <h2>Stream transport (paired Sunshine host)</h2>
+  <div class="row">
+    <select id="hostSelect"></select>
+    <button class="secondary" onclick="KorriNative.openArtemisUi()">Artemis setup (pair / cache apps)</button>
+    <button class="secondary" onclick="toggleSettings()" id="settingsBtn">Settings</button>
+    <button class="secondary" onclick="KorriNative.openArtemisSettings()">Native settings (legacy)</button>
+  </div>
+
+  <div id="settingsPanel" hidden></div>
+
+  <h2>Library</h2>
+  <div id="games" class="grid"><div class="empty">Loading&hellip;</div></div>
+
+  <h2>Local play (on-device emulation)</h2>
+  <div class="grid">
+    <div class="card" onclick="launchLocalRetro('wl4.gba', this)">
+      <div class="name">Wario Land 4</div>
+      <div class="meta">GBA &middot; mGBA via RetroArch &middot; saves in korri-retro/</div>
+    </div>
+  </div>
+
+  <div id="status">ready</div>
+
+  <script>
+    const KORRI_STREAM_APP = "Korri Stream";
+    let launching = false;
+
+    function setStatus(text, cls) {
+      const el = document.getElementById('status');
+      el.textContent = text;
+      el.className = cls || '';
+    }
+
+    function rpc(tag, payload) {
+      const url = document.getElementById('korridUrl').value.trim();
+      const raw = KorriNative.korriRpc(url, tag, JSON.stringify(payload));
+      const result = JSON.parse(raw);
+      if (result.status !== 'ok') throw new Error(result.message || 'rpc failed');
+      return result.value;
+    }
+
+    function renderHosts() {
+      const hosts = JSON.parse(KorriNative.listPairedHosts());
+      const select = document.getElementById('hostSelect');
+      select.innerHTML = '';
+      for (const host of hosts) {
+        const option = document.createElement('option');
+        option.value = host.uuid;
+        option.textContent = host.name + (host.paired ? '' : ' (not paired)');
+        select.appendChild(option);
+      }
+      if (select.options.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'no paired hosts — use Artemis setup';
+        select.appendChild(option);
+      }
+    }
+
+    function loadLibrary() {
+      const container = document.getElementById('games');
+      setStatus('loading library…');
+      try {
+        const snapshot = rpc('app.catalog.snapshot', { scope: 'self' });
+        const entries = (snapshot.entries || []).filter(entry =>
+          (entry.releases || []).some(r => r.launchable && r.launch !== undefined));
+        container.innerHTML = '';
+        if (entries.length === 0) {
+          container.innerHTML = '<div class="empty">No launchable games in this source\u2019s catalog.</div>';
+          setStatus('library empty', 'bad');
+          return;
+        }
+        for (const entry of entries) {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.tabIndex = 0;
+          card.innerHTML =
+            '<div class="name">' + (entry.title || entry.id) + '</div>' +
+            '<div class="meta">' + entry.id + '</div>';
+          card.onclick = () => launch(entry, card);
+          container.appendChild(card);
+        }
+        setStatus(entries.length + ' games from korrid', 'ok');
+      } catch (e) {
+        container.innerHTML = '<div class="empty">Could not reach korrid: ' + e.message + '</div>';
+        setStatus('library load failed: ' + e.message, 'bad');
+      }
+    }
+
+    // --- active-session banner -------------------------------------------
+
+    function lastLaunch() {
+      try { return JSON.parse(localStorage.getItem('korri-last-launch')); }
+      catch (e) { return null; }
+    }
+
+    function refreshSession() {
+      const banner = document.getElementById('sessionBanner');
+      try {
+        const status = rpc('app.session.status', {});
+        const active = status && status.active;
+        if (!active) { banner.classList.remove('visible'); return; }
+        const remembered = lastLaunch();
+        // Server-provided identity (from the @korri:game launch annotation)
+        // wins; localStorage covers old daemons and pre-annotation launches.
+        // Pre-title launches still have a gameId, so prettify that (e.g.
+        // "hi-fi-rush" -> "Hi Fi Rush") rather than showing nothing.
+        const title = active.title
+          || (remembered && remembered.id === (active.gameId || remembered.id)
+              ? remembered.title : null)
+          || (active.gameId ? prettifyGameId(active.gameId) : null);
+        document.getElementById('sessionTitle').textContent =
+          title || 'A game is running on the source';
+        document.getElementById('sessionPhase').textContent =
+          active.phase === 'frozen'
+            ? 'paused on source \u2014 resumes where you left off'
+            : 'live on source (' + active.phase + ')';
+        // Resume needs a launchable id: prefer the server's gameId so we
+        // can resume sessions this client did not start.
+        const resumeId = active.gameId || (remembered && remembered.id);
+        const banner_el = document.getElementById('sessionResumeBtn');
+        banner_el.style.display = resumeId ? '' : 'none';
+        banner_el.dataset.resumeId = resumeId || '';
+        banner_el.dataset.resumeTitle = title || resumeId || '';
+        banner.classList.add('visible');
+      } catch (e) {
+        banner.classList.remove('visible');
+      }
+    }
+
+    // Best-effort display name from a playable id: strip any "system/" prefix
+    // and file extension, split on separators, title-case the words.
+    function prettifyGameId(id) {
+      let base = id.split('/').pop().replace(/\.[a-z0-9]{1,4}$/i, '');
+      return base.split(/[-_.]+/).filter(Boolean)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+    }
+
+    function resumeSession() {
+      const btn = document.getElementById('sessionResumeBtn');
+      const id = btn.dataset.resumeId;
+      if (id) launch({ id: id, title: btn.dataset.resumeTitle || id }, null);
+    }
+
+    function quitSession() {
+      try {
+        rpc('app.session.stop', {});
+        setStatus('session stopped', 'ok');
+      } catch (e) {
+        setStatus('stop failed: ' + e.message, 'bad');
+      }
+      setTimeout(refreshSession, 400);
+    }
+
+    function launchLocalRetro(rom, card) {
+      if (card) card.classList.add('busy');
+      setStatus('launching local emulation: ' + rom + '…');
+      try {
+        const result = JSON.parse(KorriNative.launchLocalRetro(rom));
+        if (result.status === 'launched') {
+          setStatus('local play: ' + rom + ' (RetroArch quits on return)', 'ok');
+        } else {
+          setStatus(result.message || 'local launch failed', 'bad');
+        }
+      } catch (e) {
+        setStatus('local launch failed: ' + e, 'bad');
+      } finally {
+        if (card) setTimeout(() => card.classList.remove('busy'), 1500);
+      }
+    }
+
+    function launch(entry, card) {
+      if (launching) return;
+      const hostUuid = document.getElementById('hostSelect').value;
+      if (!hostUuid) {
+        setStatus('pair a Sunshine host first (Artemis setup)', 'bad');
+        return;
+      }
+      launching = true;
+      if (card) card.classList.add('busy');
+      localStorage.setItem('korri-last-launch', JSON.stringify({
+        id: entry.id, title: entry.title || entry.id, at: Date.now()
+      }));
+      setStatus('preparing ' + (entry.title || entry.id) + ' on source…');
+      // Give the WebView a paint before the blocking bridge call.
+      setTimeout(() => {
+        try {
+          const prepared = rpc('app.server.stream.prepare', { id: entry.id });
+          setStatus('prepared (' + prepared.gameId + ') — connecting stream…', 'ok');
+          const result = JSON.parse(KorriNative.launchGame(JSON.stringify({
+            hostUuid: hostUuid,
+            appName: KORRI_STREAM_APP
+          })));
+          if (result.status !== 'accepted') {
+            setStatus('stream launch failed: ' + (result.message || 'unknown'), 'bad');
+          }
+        } catch (e) {
+          setStatus('prepare failed: ' + e.message, 'bad');
+        } finally {
+          launching = false;
+          if (card) card.classList.remove('busy');
+        }
+      }, 50);
+    }
+
+    // ------------------------------------------------------------------
+    // Settings data layer: the ONLY coupling to native. Theme-agnostic.
+    // Any Korri web surface (shift, pico, ...) reuses this module verbatim
+    // and brings its own renderer.
+    // ------------------------------------------------------------------
+    const KorriSettings = {
+      schema() { return JSON.parse(KorriNative.getSettingsSchema()); },
+      values() { return JSON.parse(KorriNative.getSettingsValues()); },
+      set(key, value) {
+        const result = JSON.parse(KorriNative.setSetting(key, JSON.stringify(value)));
+        if (result.status !== 'ok') throw new Error(result.message || 'setSetting failed');
+        return result.values; // fresh values incl. cascades (e.g. bitrate re-derive)
+      }
+    };
+
+    // ------------------------------------------------------------------
+    // Spike-theme renderer. Presentation only; replaceable per surface.
+    // ------------------------------------------------------------------
+    const controlUpdaters = {}; // key -> (value) => void, for cascade refresh
+
+    function refreshControls(values) {
+      for (const [key, update] of Object.entries(controlUpdaters)) {
+        if (key in values) update(values[key]);
+      }
+    }
+
+    function onSettingChange(key, value) {
+      try {
+        const values = KorriSettings.set(key, value);
+        refreshControls(values);
+        setStatus('saved ' + key, 'ok');
+      } catch (e) {
+        setStatus('save failed: ' + e.message, 'bad');
+      }
+    }
+
+    function buildControl(setting, value) {
+      const control = document.createElement('div');
+      control.className = 'control';
+      if (setting.type === 'toggle') {
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = value;
+        box.onchange = () => onSettingChange(setting.key, box.checked);
+        controlUpdaters[setting.key] = v => { box.checked = v; };
+        control.appendChild(box);
+      } else if (setting.type === 'choice') {
+        const select = document.createElement('select');
+        for (const opt of setting.options) {
+          const option = document.createElement('option');
+          option.value = opt.value;
+          option.textContent = opt.label;
+          select.appendChild(option);
+        }
+        select.value = value;
+        select.onchange = () => onSettingChange(setting.key, select.value);
+        controlUpdaters[setting.key] = v => { select.value = v; };
+        control.appendChild(select);
+      } else if (setting.type === 'range') {
+        const hint = document.createElement('span');
+        hint.className = 'value-hint';
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = setting.min; slider.max = setting.max; slider.step = setting.step;
+        slider.value = value;
+        const show = v => { hint.textContent = v + ' ' + (setting.unit || ''); };
+        show(value);
+        slider.oninput = () => show(slider.value);
+        slider.onchange = () => onSettingChange(setting.key, Number(slider.value));
+        controlUpdaters[setting.key] = v => { slider.value = v; show(v); };
+        control.appendChild(hint);
+        control.appendChild(slider);
+      }
+      return control;
+    }
+
+    function renderSettings() {
+      const panel = document.getElementById('settingsPanel');
+      panel.innerHTML = '';
+      try {
+        const schema = KorriSettings.schema();
+        const values = KorriSettings.values();
+        for (const cat of schema.categories) {
+          const heading = document.createElement('h3');
+          heading.textContent = cat.title;
+          panel.appendChild(heading);
+          for (const setting of cat.settings) {
+            const row = document.createElement('div');
+            row.className = 'setting';
+            const label = document.createElement('div');
+            label.className = 'label';
+            label.textContent = setting.title;
+            row.appendChild(label);
+            row.appendChild(buildControl(setting, values[setting.key]));
+            panel.appendChild(row);
+          }
+        }
+      } catch (e) {
+        panel.innerHTML = '<div class="empty">Settings unavailable: ' + e.message + '</div>';
+      }
+    }
+
+    function toggleSettings() {
+      const panel = document.getElementById('settingsPanel');
+      panel.hidden = !panel.hidden;
+      document.getElementById('settingsBtn').textContent = panel.hidden ? 'Settings' : 'Hide settings';
+      if (!panel.hidden) renderSettings();
+    }
+
+    window.addEventListener('korri-shell-resumed', () => {
+      setStatus('returned from stream');
+      renderHosts();
+      refreshSession();
+    });
+
+    renderHosts();
+    loadLibrary();
+    refreshSession();
+  </script>
+</body>
+</html>
