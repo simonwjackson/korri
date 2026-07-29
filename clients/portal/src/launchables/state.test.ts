@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import type { CatalogSnapshotOutcome } from "@contracts/generated/korrid"
 import { LaunchablesState } from "./state"
 
 const localOk = {
@@ -22,13 +23,30 @@ const officeApps = {
   },
 } as const
 
-const ready = LaunchablesState.fromSources(localOk, [officeApps])
+const gamesOk: CatalogSnapshotOutcome = {
+  _tag: "Ok",
+  payload: {
+    games: [
+      { id: "skate3", title: "Skate 3" },
+      { id: "neverball", title: "Neverball" },
+    ],
+  },
+}
+
+const gamesErr: CatalogSnapshotOutcome = {
+  _tag: "Err",
+  payload: { code: "UpstreamUnreachable", message: "host offline" },
+}
+
+const ready = LaunchablesState.fromSources(localOk, [officeApps], gamesOk)
 
 describe("LaunchablesState.fromSources", () => {
-  it("folds local apps and host stream apps into one ordered entry list", () => {
+  it("folds korrid games, local apps, and stream apps into one ordered list", () => {
     expect(ready._tag).toBe("Ready")
     if (ready._tag !== "Ready") throw new Error("unreachable")
     expect(ready.entries.map(e => e.kind)).toEqual([
+      "game",
+      "game",
       "local",
       "local",
       "stream",
@@ -37,10 +55,19 @@ describe("LaunchablesState.fromSources", () => {
     expect(ready.notice).toBeNull()
   })
 
+  it("degrades a failed korrid catalog to a notice while entries remain", () => {
+    const state = LaunchablesState.fromSources(localOk, [officeApps], gamesErr)
+    expect(state).toMatchObject({
+      _tag: "Ready",
+      notice: "games: UpstreamUnreachable",
+    })
+  })
+
   it("degrades failed sources to a notice while entries remain", () => {
     const state = LaunchablesState.fromSources(
       { _tag: "QueryFailed", message: "pm broke" },
       [officeApps],
+      gamesOk,
     )
     expect(state).toMatchObject({
       _tag: "Ready",
@@ -49,7 +76,7 @@ describe("LaunchablesState.fromSources", () => {
   })
 
   it("reports a hosts-query error in the notice", () => {
-    const state = LaunchablesState.fromSources(localOk, [], "db locked")
+    const state = LaunchablesState.fromSources(localOk, [], gamesOk, "db locked")
     expect(state).toMatchObject({
       _tag: "Ready",
       notice: "stream hosts: db locked",
@@ -65,10 +92,12 @@ describe("LaunchablesState.fromSources", () => {
           apps: { _tag: "QueryFailed", message: "no cache" },
         },
       ],
+      gamesErr,
     )
     expect(state).toEqual({
       _tag: "LoadError",
-      message: "this device: pm broke · Office PC: no cache",
+      message:
+        "games: UpstreamUnreachable · this device: pm broke · Office PC: no cache",
     })
   })
 })
@@ -80,7 +109,7 @@ describe("LaunchablesState selection", () => {
     state = LaunchablesState.moveSelection(state, "down")
     expect(LaunchablesState.selected(state)).toMatchObject({
       _tag: "Some",
-      value: { kind: "stream", app: { id: 1 } },
+      value: { kind: "local", launchable: { packageName: "a" } },
     })
   })
 
@@ -95,7 +124,7 @@ describe("LaunchablesState selection", () => {
 })
 
 describe("LaunchablesState action results", () => {
-  it("surfaces launch and stream failures as notices", () => {
+  it("surfaces launch, stream, and prepare failures as notices", () => {
     const launchFailed = LaunchablesState.withLaunchResult(ready, {
       _tag: "LaunchFailed",
       reason: "NotFound",
@@ -109,6 +138,14 @@ describe("LaunchablesState action results", () => {
       message: "pair first",
     })
     expect(streamFailed).toMatchObject({ notice: "NotPaired: pair first" })
+
+    const prepareFailed = LaunchablesState.withPrepareOutcome(ready, {
+      _tag: "Err",
+      payload: { code: "UpstreamFailure", message: "no such game" },
+    })
+    expect(prepareFailed).toMatchObject({
+      notice: "UpstreamFailure: no such game",
+    })
   })
 
   it("clears notices on success and on movement", () => {
@@ -119,6 +156,12 @@ describe("LaunchablesState action results", () => {
     })
     expect(
       LaunchablesState.withStartStreamResult(failed, { _tag: "StreamStarted" }),
+    ).toMatchObject({ notice: null })
+    expect(
+      LaunchablesState.withPrepareOutcome(failed, {
+        _tag: "Ok",
+        payload: { gameId: "skate3" },
+      }),
     ).toMatchObject({ notice: null })
     expect(LaunchablesState.moveSelection(failed, "down")).toMatchObject({
       notice: null,
@@ -131,8 +174,9 @@ describe("LaunchablesState.sections", () => {
     if (ready._tag !== "Ready") throw new Error("unreachable")
     const sections = LaunchablesState.sections(ready)
     expect(sections.map(s => [s.title, s.startIndex, s.entries.length])).toEqual([
-      ["This device", 0, 2],
-      ["Office PC", 2, 2],
+      ["Games", 0, 2],
+      ["This device", 2, 2],
+      ["Office PC", 4, 2],
     ])
   })
 })

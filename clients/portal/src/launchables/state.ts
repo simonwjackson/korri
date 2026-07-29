@@ -7,17 +7,23 @@ import type {
   StreamApp,
   StreamHost,
 } from "@contracts/bridge/korri-native-bridge"
+import type {
+  CatalogSnapshotOutcome,
+  Game,
+  SessionPrepareOutcome,
+} from "@contracts/generated/korrid"
 import type { Direction } from "../input/types"
 
 /**
  * Launchables screen state. Raw bridge results are converted into this ADT
  * at the seam; components never inspect bridge payloads directly.
  *
- * Entries come from two sources — apps on this device and streamable games
- * on paired hosts — but once converted they are one flat, ordered list with
- * a single selection.
+ * Entries come from three sources — korrid's game catalog, apps on this
+ * device, and streamable apps on paired hosts — but once converted they
+ * are one flat, ordered list with a single selection.
  */
 export type PortalEntry =
+  | { readonly kind: "game"; readonly game: Game }
   | { readonly kind: "local"; readonly launchable: Launchable }
   | {
       readonly kind: "stream"
@@ -54,27 +60,40 @@ export interface Section {
 }
 
 export const entryKey = (entry: PortalEntry): string =>
-  entry.kind === "local"
-    ? `local:${entry.launchable.packageName}`
-    : `stream:${entry.hostUuid}:${entry.app.id}`
+  entry.kind === "game"
+    ? `game:${entry.game.id}`
+    : entry.kind === "local"
+      ? `local:${entry.launchable.packageName}`
+      : `stream:${entry.hostUuid}:${entry.app.id}`
 
 export const entryLabel = (entry: PortalEntry): string =>
-  entry.kind === "local" ? entry.launchable.label : entry.app.name
+  entry.kind === "game"
+    ? entry.game.title
+    : entry.kind === "local"
+      ? entry.launchable.label
+      : entry.app.name
 
 export const LaunchablesState = {
   loading: (): LaunchablesState => ({ _tag: "Loading" }),
 
   /**
-   * Fold both sources into one state. Failed sources degrade to a notice;
+   * Fold all sources into one state. Failed sources degrade to a notice;
    * only a total failure (no entries, at least one error) is a LoadError.
    */
   fromSources: (
     local: QueryLaunchablesResult,
     streams: readonly StreamSource[],
+    korrid: CatalogSnapshotOutcome,
     hostsError?: string,
   ): LaunchablesState => {
     const entries: PortalEntry[] = []
     const failures: string[] = []
+
+    if (korrid._tag === "Ok") {
+      for (const game of korrid.payload.games) entries.push({ kind: "game", game })
+    } else {
+      failures.push(`games: ${korrid.payload.code}`)
+    }
 
     if (local._tag === "Launchables") {
       for (const launchable of local.items) entries.push({ kind: "local", launchable })
@@ -152,6 +171,16 @@ export const LaunchablesState = {
       : { ...state, notice: `${result.reason}: ${result.message}` }
   },
 
+  withPrepareOutcome: (
+    state: LaunchablesState,
+    outcome: SessionPrepareOutcome,
+  ): LaunchablesState => {
+    if (state._tag !== "Ready") return state
+    return outcome._tag === "Ok"
+      ? { ...state, notice: null }
+      : { ...state, notice: `${outcome.payload.code}: ${outcome.payload.message}` }
+  },
+
   /** Group the flat entry list into titled sections for rendering. */
   sections: (
     state: Extract<LaunchablesState, { _tag: "Ready" }>,
@@ -160,7 +189,12 @@ export const LaunchablesState = {
     let current: { title: string; startIndex: number; entries: PortalEntry[] } | null =
       null
     state.entries.forEach((entry, index) => {
-      const title = entry.kind === "local" ? "This device" : entry.hostName
+      const title =
+        entry.kind === "game"
+          ? "Games"
+          : entry.kind === "local"
+            ? "This device"
+            : entry.hostName
       if (current === null || current.title !== title) {
         current = { title, startIndex: index, entries: [] }
         sections.push(current)

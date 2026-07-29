@@ -43,7 +43,8 @@ describe("createKorriNativeLauncherBridge", () => {
     queryStreamApps: () =>
       JSON.stringify({ _tag: "StreamApps", items: [{ id: 7, name: "Desktop" }] }),
     startStream: () => JSON.stringify({ _tag: "StreamStarted" }),
-    bridgeVersion: () => 2,
+    korridPort: () => 43117,
+    bridgeVersion: () => 3,
     ...overrides,
   })
 

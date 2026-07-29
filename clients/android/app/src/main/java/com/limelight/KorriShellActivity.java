@@ -56,6 +56,7 @@ import okhttp3.Response;
  */
 public class KorriShellActivity extends AppCompatActivity {
     private WebView webView;
+    private int korridPort = -1;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private final CountDownLatch binderReady = new CountDownLatch(1);
 
@@ -81,7 +82,7 @@ public class KorriShellActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         // Embedded korrid: the portal talks to this localhost brain.
-        KorridServer.startAndLog();
+        korridPort = KorridServer.startAndLog();
 
         bindService(new Intent(this, ComputerManagerService.class),
                 serviceConnection, BIND_AUTO_CREATE);
@@ -213,7 +214,13 @@ public class KorriShellActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public int bridgeVersion() {
-            return 1;
+            return 3;
+        }
+
+        /** Port of the embedded korrid server, or -1 when it is not running. */
+        @JavascriptInterface
+        public int korridPort() {
+            return korridPort;
         }
 
         /** JSON-encoded QueryLaunchablesResult. */

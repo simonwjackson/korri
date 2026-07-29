@@ -34,7 +34,7 @@ for _ in $(seq 1 20); do
 done
 
 cd "$ROOT/clients/portal"
-bun src/korrid/client.ts
+bun src/korrid/smoke.ts
 
 # The installed proof is the whole app, not only its hidden RPC. Use the
 # canonical cross-area recipe so Gradle cannot silently package no portal.

@@ -1,17 +1,29 @@
-/** THROWAWAY PROTOTYPE: compile-time and runtime proof of Rust RPC types. */
+/**
+ * Portal seam to the korrid brain. Two real implementations: an HTTP
+ * client for the embedded (or remote) Rust server, and an in-memory
+ * variant for browser dev and tests. Types come from the Rust-owned
+ * generated treaty; the shared operation tag correlates each request
+ * with its response without a hand-maintained map.
+ */
 import type {
+  CatalogSnapshotOutcome,
+  Game,
+  HealthOutcome,
   RpcRequest,
   RpcResponse,
+  SessionPrepareOutcome,
 } from "@contracts/generated/korrid"
 
-/**
- * The shared operation tag correlates each request with its response without
- * a hand-maintained request/response map.
- */
 export type RpcResponseFor<Request extends RpcRequest> = Extract<
   RpcResponse,
   { readonly _tag: Request["_tag"] }
 >
+
+export interface KorridClient {
+  health(): Promise<HealthOutcome>
+  catalogSnapshot(): Promise<CatalogSnapshotOutcome>
+  sessionPrepare(gameId: string): Promise<SessionPrepareOutcome>
+}
 
 export async function callKorrid<Request extends RpcRequest>(
   baseUrl: string,
@@ -26,36 +38,108 @@ export async function callKorrid<Request extends RpcRequest>(
   return (await response.json()) as RpcResponseFor<Request>
 }
 
-export async function smokeKorrid(baseUrl: string) {
-  const health = await callKorrid(baseUrl, {
-    _tag: "system.health",
-    payload: {},
-  })
-  if (health.outcome._tag !== "Ok") {
-    throw new Error(health.outcome.payload.message)
-  }
+const unreachable = (error: unknown) => ({
+  _tag: "Err" as const,
+  payload: {
+    code: "BrainUnreachable",
+    message: error instanceof Error ? error.message : String(error),
+  },
+})
 
-  // The catalog is federated from the upstream host, which may be offline
-  // during a host-side check; report rather than fail.
-  const catalog = await callKorrid(baseUrl, {
-    _tag: "app.catalog.snapshot",
-    payload: {},
-  })
+export function createHttpKorridClient(baseUrl: string): KorridClient {
   return {
-    version: health.outcome.payload.version,
-    catalog:
-      catalog.outcome._tag === "Ok"
-        ? {
-            games: catalog.outcome.payload.games.length,
-            first: catalog.outcome.payload.games[0]?.title,
-          }
-        : { unavailable: catalog.outcome.payload.code },
+    async health() {
+      try {
+        const response = await callKorrid(baseUrl, {
+          _tag: "system.health",
+          payload: {},
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async catalogSnapshot() {
+      try {
+        const response = await callKorrid(baseUrl, {
+          _tag: "app.catalog.snapshot",
+          payload: {},
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async sessionPrepare(gameId) {
+      try {
+        const response = await callKorrid(baseUrl, {
+          _tag: "app.session.prepare",
+          payload: { gameId },
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
   }
 }
 
-if (import.meta.main) {
-  const result = await smokeKorrid(
-    process.env.KORRID_SPIKE_URL ?? "http://127.0.0.1:43117",
-  )
-  console.log(JSON.stringify(result))
+export interface InMemoryKorridClientConfig {
+  readonly behavior?: "ok" | "catalog-fail" | "prepare-fail"
+  readonly games?: readonly Game[]
+}
+
+const sampleGames: readonly Game[] = [
+  { id: "skate3", title: "Skate 3" },
+  { id: "neverball", title: "Neverball" },
+]
+
+export function createInMemoryKorridClient(
+  config: InMemoryKorridClientConfig = {},
+): KorridClient {
+  const behavior = config.behavior ?? "ok"
+  const games = config.games ?? sampleGames
+  return {
+    async health() {
+      return { _tag: "Ok", payload: { version: "korrid-in-memory" } }
+    },
+    async catalogSnapshot() {
+      if (behavior === "catalog-fail") {
+        return {
+          _tag: "Err",
+          payload: { code: "UpstreamUnreachable", message: "configured to fail" },
+        }
+      }
+      return { _tag: "Ok", payload: { games: [...games] } }
+    },
+    async sessionPrepare(gameId) {
+      if (behavior === "prepare-fail" || !games.some(game => game.id === gameId)) {
+        return {
+          _tag: "Err",
+          payload: { code: "UpstreamFailure", message: `cannot prepare ${gameId}` },
+        }
+      }
+      return { _tag: "Ok", payload: { gameId } }
+    },
+  }
+}
+
+export async function smokeKorrid(baseUrl: string) {
+  const client = createHttpKorridClient(baseUrl)
+  const health = await client.health()
+  if (health._tag !== "Ok") throw new Error(health.payload.message)
+
+  // The catalog is federated from the upstream host, which may be offline
+  // during a host-side check; report rather than fail.
+  const catalog = await client.catalogSnapshot()
+  return {
+    version: health.payload.version,
+    catalog:
+      catalog._tag === "Ok"
+        ? {
+            games: catalog.payload.games.length,
+            first: catalog.payload.games[0]?.title,
+          }
+        : { unavailable: catalog.payload.code },
+  }
 }

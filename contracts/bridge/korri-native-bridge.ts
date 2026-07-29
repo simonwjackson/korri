@@ -126,6 +126,12 @@ export interface KorriNativeBridgeSurface {
    * the stream ends (see the `korri-shell-resumed` window event).
    */
   startStream(hostUuid: string, appId: number): string
+  /**
+   * Port of the embedded korrid server on 127.0.0.1, or -1 when it is not
+   * running. The portal builds its brain base URL from this; hardware and
+   * process lifecycle stay on the Kotlin side of the treaty.
+   */
+  korridPort(): number
   /** Returns `BRIDGE_VERSION` of the shell build. */
   bridgeVersion(): number
 }

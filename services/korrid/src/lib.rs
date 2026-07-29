@@ -168,7 +168,12 @@ pub fn router() -> Router {
     let state = AppState {
         upstream: upstream::UpstreamClient::new(upstream::UpstreamConfig::from_env()),
     };
-    Router::new().route("/rpc", post(rpc)).with_state(state)
+    Router::new()
+        .route("/rpc", post(rpc))
+        // The server binds loopback only; the WebView portal calls it from
+        // a synthetic https origin, so preflights must be answered.
+        .layer(tower_http::cors::CorsLayer::permissive())
+        .with_state(state)
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -1,29 +1,42 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { SHELL_RESUMED_EVENT } from "@contracts/bridge/korri-native-bridge"
 import type { LauncherBridge } from "../bridge/launcher-bridge"
+import type { KorridClient } from "../korrid/client"
 import type { InputBus } from "../input/bus"
 import { LaunchablesList } from "./LaunchablesList"
 import { LaunchablesState, type StreamSource } from "./state"
 
+/**
+ * The stable Sunshine app every prepared game streams through. korrid's
+ * prepare step arms the host so that attaching to this app runs the
+ * selected game; per-game Sunshine entries are legacy scaffolding.
+ */
+const KORRI_STREAM_APP = "Korri Stream"
+
 interface LaunchablesRootProps {
   readonly bus: InputBus
   readonly bridge: LauncherBridge
+  readonly korrid: KorridClient
 }
 
 /**
- * Root of the launchables screen: owns the state ADT, loads both sources
- * (device apps and paired hosts' stream apps), and translates semantic
- * input actions into state transitions.
+ * Root of the launchables screen: owns the state ADT, loads all sources
+ * (korrid games, device apps, paired hosts' stream apps), and translates
+ * semantic input actions into state transitions.
  */
-export function LaunchablesRoot({ bus, bridge }: LaunchablesRootProps) {
+export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
   const [state, setState] = useState<LaunchablesState>(LaunchablesState.loading)
   const stateRef = useRef(state)
   stateRef.current = state
+  const streamsRef = useRef<readonly StreamSource[]>([])
 
   const load = useCallback(async () => {
     setState(LaunchablesState.loading())
-    const local = await bridge.queryLaunchables()
-    const hostsResult = await bridge.queryStreamHosts()
+    const [local, games, hostsResult] = await Promise.all([
+      bridge.queryLaunchables(),
+      korrid.catalogSnapshot(),
+      bridge.queryStreamHosts(),
+    ])
     const streams: readonly StreamSource[] =
       hostsResult._tag === "StreamHosts"
         ? await Promise.all(
@@ -35,14 +48,16 @@ export function LaunchablesRoot({ bus, bridge }: LaunchablesRootProps) {
               })),
           )
         : []
+    streamsRef.current = streams
     setState(
       LaunchablesState.fromSources(
         local,
         streams,
+        games,
         hostsResult._tag === "QueryFailed" ? hostsResult.message : undefined,
       ),
     )
-  }, [bridge])
+  }, [bridge, korrid])
 
   useEffect(() => {
     void load()
@@ -54,6 +69,16 @@ export function LaunchablesRoot({ bus, bridge }: LaunchablesRootProps) {
     window.addEventListener(SHELL_RESUMED_EVENT, onResumed)
     return () => window.removeEventListener(SHELL_RESUMED_EVENT, onResumed)
   }, [load])
+
+  /** Locate the stable stream app among the loaded Sunshine sources. */
+  const findKorriStreamTarget = () => {
+    for (const source of streamsRef.current) {
+      if (source.apps._tag !== "StreamApps") continue
+      const app = source.apps.items.find(app => app.name === KORRI_STREAM_APP)
+      if (app) return { hostUuid: source.host.uuid, appId: app.id }
+    }
+    return null
+  }
 
   useEffect(() => {
     const offDirection = bus.onAction("direction", action => {
@@ -71,8 +96,36 @@ export function LaunchablesRoot({ bus, bridge }: LaunchablesRootProps) {
             LaunchablesState.withLaunchResult(current, result),
           )
         })
-      } else {
+      } else if (entry.kind === "stream") {
         void bridge.startStream(entry.hostUuid, entry.app.id).then(result => {
+          setState(current =>
+            LaunchablesState.withStartStreamResult(current, result),
+          )
+        })
+      } else {
+        // The Korri launch model: brain prepares the game, then the shell
+        // attaches to the stable stream app that now embodies it.
+        void korrid.sessionPrepare(entry.game.id).then(async outcome => {
+          if (outcome._tag !== "Ok") {
+            setState(current =>
+              LaunchablesState.withPrepareOutcome(current, outcome),
+            )
+            return
+          }
+          const target = findKorriStreamTarget()
+          if (target === null) {
+            setState(current =>
+              LaunchablesState.withPrepareOutcome(current, {
+                _tag: "Err",
+                payload: {
+                  code: "NoStreamTarget",
+                  message: `no "${KORRI_STREAM_APP}" app on a paired host`,
+                },
+              }),
+            )
+            return
+          }
+          const result = await bridge.startStream(target.hostUuid, target.appId)
           setState(current =>
             LaunchablesState.withStartStreamResult(current, result),
           )
@@ -83,7 +136,7 @@ export function LaunchablesRoot({ bus, bridge }: LaunchablesRootProps) {
       offDirection()
       offConfirm()
     }
-  }, [bus, bridge])
+  }, [bus, bridge, korrid])
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 text-zinc-100">
