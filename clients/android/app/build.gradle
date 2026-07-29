@@ -14,6 +14,12 @@ android {
         versionName "20.2.6"
         versionCode = 57
 
+        // Portal dev loop: point the shell WebView at a Vite dev server on
+        // the LAN (./gradlew assembleDebug -PkorriPortalUrl=http://<ip>:5173).
+        // Empty means: load the bundled portal from android_asset/portal/.
+        buildConfigField "String", "PORTAL_DEV_URL",
+                "\"${project.findProperty('korriPortalUrl') ?: ''}\""
+
         // Generate native debug symbols to allow Google Play to symbolicate our native crashes
         ndk.debugSymbolLevel = 'FULL'
     }

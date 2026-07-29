@@ -4,8 +4,12 @@ import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.view.KeyEvent;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -112,6 +116,85 @@ public class KorriShellActivity extends AppCompatActivity {
      * never in raw intent extras or pairing material.
      */
     private class KorriNativeBridge {
+
+        // --- Treaty surface: contracts/bridge/korri-native-bridge.ts ---
+        // These methods mirror KorriNativeBridgeSurface. When the two sides
+        // disagree, the contracts file wins.
+
+        @JavascriptInterface
+        public int bridgeVersion() {
+            return 1;
+        }
+
+        /** JSON-encoded QueryLaunchablesResult. */
+        @JavascriptInterface
+        public String queryLaunchables() {
+            try {
+                PackageManager pm = getPackageManager();
+                Intent main = new Intent(Intent.ACTION_MAIN)
+                        .addCategory(Intent.CATEGORY_LAUNCHER);
+                List<ResolveInfo> resolved = pm.queryIntentActivities(main, 0);
+
+                JSONArray items = new JSONArray();
+                for (ResolveInfo info : resolved) {
+                    ApplicationInfo app = info.activityInfo.applicationInfo;
+                    if (getPackageName().equals(app.packageName)) continue;
+                    JSONObject item = new JSONObject();
+                    item.put("packageName", app.packageName);
+                    item.put("label", String.valueOf(pm.getApplicationLabel(app)));
+                    items.put(item);
+                }
+
+                JSONObject ok = new JSONObject();
+                ok.put("_tag", "Launchables");
+                ok.put("items", items);
+                return ok.toString();
+            } catch (Exception e) {
+                try {
+                    JSONObject failed = new JSONObject();
+                    failed.put("_tag", "QueryFailed");
+                    failed.put("message",
+                            e.getMessage() != null ? e.getMessage() : "query failed");
+                    return failed.toString();
+                } catch (Exception inner) {
+                    return "{\"_tag\":\"QueryFailed\",\"message\":\"query failed\"}";
+                }
+            }
+        }
+
+        /** JSON-encoded LaunchAppResult. */
+        @JavascriptInterface
+        public String launchApp(String packageName) {
+            try {
+                Intent launch = getPackageManager()
+                        .getLaunchIntentForPackage(packageName);
+                if (launch == null) {
+                    return launchFailed("NoLaunchIntent",
+                            "no launcher activity for " + packageName);
+                }
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                runOnUiThread(() -> startActivity(launch));
+                return "{\"_tag\":\"Launched\"}";
+            } catch (Exception e) {
+                return launchFailed("StartFailed",
+                        e.getMessage() != null ? e.getMessage() : "start failed");
+            }
+        }
+
+        private String launchFailed(String reason, String message) {
+            try {
+                JSONObject failed = new JSONObject();
+                failed.put("_tag", "LaunchFailed");
+                failed.put("reason", reason);
+                failed.put("message", message);
+                return failed.toString();
+            } catch (Exception e) {
+                return "{\"_tag\":\"LaunchFailed\",\"reason\":\"" + reason
+                        + "\",\"message\":\"\"}";
+            }
+        }
+
+        // --- Spike-era surface below: not yet part of the treaty ---
 
         @JavascriptInterface
         public String listPairedHosts() {

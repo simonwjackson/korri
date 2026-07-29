@@ -17,3 +17,4 @@ local.env
 /.tanstack/tmp
 .android-sdk/
 dist/
+clients/android/app/src/main/assets/portal/
