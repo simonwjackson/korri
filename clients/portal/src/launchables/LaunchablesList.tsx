@@ -31,6 +31,7 @@ export function LaunchablesList({ state }: LaunchablesListProps) {
       {state.items.length === 0 && (
         <p className="text-zinc-400">No launchable apps found.</p>
       )}
+      <p className="text-sm text-zinc-600">{__PORTAL_BUILD__}</p>
     </div>
   )
 }
