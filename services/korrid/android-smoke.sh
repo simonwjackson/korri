@@ -50,6 +50,24 @@ response="$(curl --fail --silent \
   -H 'content-type: application/json' \
   -d '{"_tag":"app.catalog.snapshot","payload":{}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
+
+# Session status must round-trip through the on-device brain: either a
+# well-formed Ok (with or without an active session) or a tagged Err code
+# — anything else means the proxy or the wire is broken.
+session_response="$(curl --fail --silent \
+  -H 'content-type: application/json' \
+  -d '{"_tag":"app.session.status","payload":{}}' \
+  "http://127.0.0.1:$HOST_PORT/rpc")"
+if ! printf '%s' "$session_response" | grep -q '"_tag":"app.session.status"'; then
+  echo "Session status probe returned an unexpected shape: $session_response" >&2
+  exit 1
+fi
+if ! printf '%s' "$session_response" | grep -qE '"_tag":"(Ok|Err)"'; then
+  echo "Session status outcome is neither Ok nor Err: $session_response" >&2
+  exit 1
+fi
+
 printf 'Android portal: %s\n' "$portal_ready"
 printf 'Android Rust RPC: %s\n' "$response"
+printf 'Android session status: %s\n' "$session_response"
 printf 'Android Rust library: %s\n' "$(adb -s "$DEVICE" shell dumpsys package "$PACKAGE" | grep versionName | head -1 | xargs)"
