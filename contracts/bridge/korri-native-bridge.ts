@@ -17,7 +17,7 @@
  *   encoded `BridgeInputEvent`. The portal registers that global.
  */
 
-export const BRIDGE_VERSION = 1
+export const BRIDGE_VERSION = 2
 
 // ── Launchables (JS -> Kotlin) ──────────────────────────────────────────
 
@@ -134,6 +134,122 @@ export interface KorriNativeBridgeSurface {
   korridPort(): number
   /** Returns `BRIDGE_VERSION` of the shell build. */
   bridgeVersion(): number
+}
+
+// ── Stream session lifecycle (v2) ────────────────────────────────────
+
+/**
+ * Korri-initiated streams narrate their pre-stream lifecycle to a
+ * portal-origin overlay WebView inside the stream Activity. The overlay is
+ * the same bundled portal app booted on the session screen: the asset-loader
+ * origin URL plus `?SESSION_SCREEN_PARAM=SESSION_SCREEN_VALUE`.
+ *
+ * Contract shape is pull-then-push, mirroring `__korriInput`:
+ * - Pull: on boot the overlay calls `KorriSession.lifecycleSnapshot()` and
+ *   folds the returned event log. This closes the race where stages fire
+ *   before the overlay's JS is ready.
+ * - Push: the shell then calls `window.__korriSessionEvent(json)` with each
+ *   new JSON-encoded `StreamLifecycleEvent`. Events may overlap with the
+ *   snapshot; consumers must treat replayed/duplicate stage events as
+ *   idempotent and never regress the timeline.
+ *
+ * Only Korri-initiated streams (launched via `startStream`) inject
+ * `KorriSession` and show the overlay; stock Artemis entry points are
+ * untouched.
+ */
+
+/** Query parameter that boots the bundled portal on the session screen. */
+export const SESSION_SCREEN_PARAM = "screen"
+export const SESSION_SCREEN_VALUE = "session"
+
+/**
+ * Semantic connection stages. Kotlin owns the mapping from raw Moonlight
+ * stage strings (moonlight-common-c `getStageName` values plus the
+ * app-launch stage, which is named after the app) into these ids; the raw
+ * native string rides along as `detail` for display only and is never a
+ * contract value.
+ */
+export type StreamStageId =
+  /** Host is launching or resuming the requested app. */
+  | "launching-app"
+  /** Platform initialization and name resolution. */
+  | "initializing"
+  /** RTSP handshake with the host. */
+  | "handshaking"
+  /** Control/video/audio/input stream bring-up. */
+  | "establishing-streams"
+
+/**
+ * Tagged failure vocabulary for pre-stream failures and terminations.
+ * Kotlin derives these from stage names, error codes, and port-test
+ * results; the numeric `errorCode` rides along for diagnostics.
+ */
+export type StreamFailureReason =
+  | "AppLaunchFailed"
+  | "HostUnreachable"
+  | "PermissionDenied"
+  | "DecoderInitFailed"
+  | "NoVideoTraffic"
+  | "ConnectionLost"
+  | "Unknown"
+
+/**
+ * One step in the stream session lifecycle, pushed by the shell as it
+ * happens and replayed in order by `lifecycleSnapshot()`.
+ *
+ * - `stage-starting` / `stage-complete` mirror Moonlight's stage callbacks.
+ * - `connected` mirrors `connectionStarted()`: frames are imminent, the
+ *   shell removes the overlay. Terminal for the overlay's happy path.
+ * - `failed` is a pre-stream stage failure; the overlay renders the tagged
+ *   reason and offers a way back to the portal.
+ * - `terminated` is a connection ending after establishment. `graceful`
+ *   distinguishes the user quitting from an error termination.
+ */
+export type StreamLifecycleEvent =
+  | {
+      readonly type: "stage-starting"
+      readonly stage: StreamStageId
+      readonly detail?: string
+    }
+  | {
+      readonly type: "stage-complete"
+      readonly stage: StreamStageId
+      readonly detail?: string
+    }
+  | { readonly type: "connected" }
+  | {
+      readonly type: "failed"
+      readonly reason: StreamFailureReason
+      readonly stage: StreamStageId
+      readonly errorCode: number
+      readonly detail?: string
+    }
+  | {
+      readonly type: "terminated"
+      readonly graceful: boolean
+      readonly reason: StreamFailureReason
+      readonly errorCode: number
+    }
+
+/** Result of `KorriSession.lifecycleSnapshot()`: the event log so far. */
+export interface StreamLifecycleSnapshot {
+  readonly events: readonly StreamLifecycleEvent[]
+}
+
+/**
+ * The `window.KorriSession` surface injected only into the session-screen
+ * overlay WebView inside the stream Activity. The launcher WebView never
+ * sees it; the overlay uses its absence to detect browser dev and render a
+ * fixture timeline instead.
+ */
+export interface KorriSessionBridgeSurface {
+  /** Returns JSON-encoded `StreamLifecycleSnapshot`. */
+  lifecycleSnapshot(): string
+  /**
+   * User acknowledged a failure (or backed out): finish the stream
+   * Activity and return to the portal Activity beneath it.
+   */
+  exitToPortal(): void
 }
 
 // ── Lifecycle (Kotlin -> JS) ────────────────────────────────────────────
