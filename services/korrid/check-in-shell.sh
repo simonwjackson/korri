@@ -11,6 +11,7 @@ ANDROID_LIBS="$ROOT/clients/android/app/src/main/jniLibs"
 cd "$CRATE"
 cargo fmt --check
 cargo check
+cargo test
 typeshare . --lang=typescript --output-file="$GENERATED_TS"
 # Typeshare 1.13 emits trailing spaces and an extra final blank line.
 sed -i -e 's/[[:space:]]\+$//' -e '${/^$/d;}' "$GENERATED_TS"

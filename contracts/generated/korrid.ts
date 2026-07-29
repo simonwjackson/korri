@@ -26,6 +26,14 @@ export interface RpcFailure {
 	message: string;
 }
 
+export interface SessionPrepareRequest {
+	gameId: string;
+}
+
+export interface SessionPrepared {
+	gameId: string;
+}
+
 export type CatalogSnapshotOutcome =
 	| { _tag: "Ok", payload: CatalogSnapshot }
 	| { _tag: "Err", payload: RpcFailure };
@@ -36,8 +44,14 @@ export type HealthOutcome =
 
 export type RpcRequest =
 	| { _tag: "app.catalog.snapshot", payload: CatalogSnapshotRequest }
+	| { _tag: "app.session.prepare", payload: SessionPrepareRequest }
 	| { _tag: "system.health", payload: HealthRequest };
 
 export type RpcResponse =
 	| { _tag: "app.catalog.snapshot", outcome: CatalogSnapshotOutcome }
+	| { _tag: "app.session.prepare", outcome: SessionPrepareOutcome }
 	| { _tag: "system.health", outcome: HealthOutcome };
+
+export type SessionPrepareOutcome =
+	| { _tag: "Ok", payload: SessionPrepared }
+	| { _tag: "Err", payload: RpcFailure };

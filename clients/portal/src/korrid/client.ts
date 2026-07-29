@@ -27,14 +27,6 @@ export async function callKorrid<Request extends RpcRequest>(
 }
 
 export async function smokeKorrid(baseUrl: string) {
-  const catalog = await callKorrid(baseUrl, {
-    _tag: "app.catalog.snapshot",
-    payload: {},
-  })
-  if (catalog.outcome._tag !== "Ok") {
-    throw new Error(catalog.outcome.payload.message)
-  }
-
   const health = await callKorrid(baseUrl, {
     _tag: "system.health",
     payload: {},
@@ -43,9 +35,21 @@ export async function smokeKorrid(baseUrl: string) {
     throw new Error(health.outcome.payload.message)
   }
 
+  // The catalog is federated from the upstream host, which may be offline
+  // during a host-side check; report rather than fail.
+  const catalog = await callKorrid(baseUrl, {
+    _tag: "app.catalog.snapshot",
+    payload: {},
+  })
   return {
-    title: catalog.outcome.payload.games[0]?.title,
     version: health.outcome.payload.version,
+    catalog:
+      catalog.outcome._tag === "Ok"
+        ? {
+            games: catalog.outcome.payload.games.length,
+            first: catalog.outcome.payload.games[0]?.title,
+          }
+        : { unavailable: catalog.outcome.payload.code },
   }
 }
 

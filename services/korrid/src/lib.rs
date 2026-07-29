@@ -31,6 +31,20 @@ pub struct CatalogSnapshot {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionPrepareRequest {
+    pub game_id: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionPrepared {
+    pub game_id: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HealthRequest {}
 
 #[typeshare]
@@ -57,6 +71,14 @@ pub enum CatalogSnapshotOutcome {
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "_tag", content = "payload")]
+pub enum SessionPrepareOutcome {
+    Ok(SessionPrepared),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
 pub enum HealthOutcome {
     Ok(Health),
     Err(RpcFailure),
@@ -68,6 +90,8 @@ pub enum HealthOutcome {
 pub enum RpcRequest {
     #[serde(rename = "app.catalog.snapshot")]
     CatalogSnapshot(CatalogSnapshotRequest),
+    #[serde(rename = "app.session.prepare")]
+    SessionPrepare(SessionPrepareRequest),
     #[serde(rename = "system.health")]
     Health(HealthRequest),
 }
@@ -78,22 +102,57 @@ pub enum RpcRequest {
 pub enum RpcResponse {
     #[serde(rename = "app.catalog.snapshot")]
     CatalogSnapshot(CatalogSnapshotOutcome),
+    #[serde(rename = "app.session.prepare")]
+    SessionPrepare(SessionPrepareOutcome),
     #[serde(rename = "system.health")]
     Health(HealthOutcome),
 }
 
 #[derive(Clone)]
-struct AppState;
+struct AppState {
+    upstream: upstream::UpstreamClient,
+}
 
-pub fn dispatch(request: RpcRequest) -> RpcResponse {
+fn upstream_failure(error: upstream::UpstreamError) -> RpcFailure {
+    let code = match &error {
+        upstream::UpstreamError::Unreachable(_) => "UpstreamUnreachable",
+        upstream::UpstreamError::Http(_) => "UpstreamHttp",
+        upstream::UpstreamError::Wire(_) => "UpstreamWire",
+        upstream::UpstreamError::Failure(_) => "UpstreamFailure",
+    };
+    RpcFailure {
+        code: code.into(),
+        message: error.to_string(),
+    }
+}
+
+pub async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
     match request {
         RpcRequest::CatalogSnapshot(_) => {
-            RpcResponse::CatalogSnapshot(CatalogSnapshotOutcome::Ok(CatalogSnapshot {
-                games: vec![Game {
-                    id: "spike.desktop".into(),
-                    title: "Desktop from Rust".into(),
-                }],
-            }))
+            let outcome = match state.upstream.catalog_snapshot().await {
+                Ok(catalog) => CatalogSnapshotOutcome::Ok(CatalogSnapshot {
+                    games: catalog
+                        .entries
+                        .into_iter()
+                        .filter(|entry| entry.launchable)
+                        .map(|entry| Game {
+                            title: entry.title.clone().unwrap_or_else(|| entry.id.clone()),
+                            id: entry.id,
+                        })
+                        .collect(),
+                }),
+                Err(error) => CatalogSnapshotOutcome::Err(upstream_failure(error)),
+            };
+            RpcResponse::CatalogSnapshot(outcome)
+        }
+        RpcRequest::SessionPrepare(request) => {
+            let outcome = match state.upstream.prepare_stream(&request.game_id).await {
+                Ok(prepared) => SessionPrepareOutcome::Ok(SessionPrepared {
+                    game_id: prepared.game_id,
+                }),
+                Err(error) => SessionPrepareOutcome::Err(upstream_failure(error)),
+            };
+            RpcResponse::SessionPrepare(outcome)
         }
         RpcRequest::Health(_) => RpcResponse::Health(HealthOutcome::Ok(Health {
             version: VERSION.into(),
@@ -101,12 +160,15 @@ pub fn dispatch(request: RpcRequest) -> RpcResponse {
     }
 }
 
-async fn rpc(State(_): State<AppState>, Json(request): Json<RpcRequest>) -> Json<RpcResponse> {
-    Json(dispatch(request))
+async fn rpc(State(state): State<AppState>, Json(request): Json<RpcRequest>) -> Json<RpcResponse> {
+    Json(dispatch(&state, request).await)
 }
 
 pub fn router() -> Router {
-    Router::new().route("/rpc", post(rpc)).with_state(AppState)
+    let state = AppState {
+        upstream: upstream::UpstreamClient::new(upstream::UpstreamConfig::from_env()),
+    };
+    Router::new().route("/rpc", post(rpc)).with_state(state)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -172,7 +234,7 @@ pub fn start_local_server() -> Result<u16, ServerError> {
                         let _ = stopped.await;
                     })
                     .await
-                    .expect("serve korrid spike");
+                    .expect("serve korrid");
             });
         })
         .map_err(|error| ServerError::StartFailed {
@@ -203,6 +265,8 @@ pub fn local_server_port() -> Option<u16> {
         .as_ref()
         .map(|server| server.port)
 }
+
+pub mod upstream;
 
 #[cfg(target_os = "android")]
 mod android;
