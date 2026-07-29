@@ -79,6 +79,24 @@ public class KorriSettingsBridgeTest {
     }
 
     @Test
+    public void removedRenderModeIsReportedAsTwoD() throws Exception {
+        prefs.edit().putString("render_mode_list", "2").commit();
+
+        JSONObject values = new JSONObject(KorriSettingsBridge.valuesJson(context));
+
+        assertEquals("0", values.getString("render_mode_list"));
+    }
+
+    @Test
+    public void sgsrRenderModeSurvivesAsStoredValue() throws Exception {
+        prefs.edit().putString("render_mode_list", "3").commit();
+
+        JSONObject values = new JSONObject(KorriSettingsBridge.valuesJson(context));
+
+        assertEquals("3", values.getString("render_mode_list"));
+    }
+
+    @Test
     public void toggleWritesBooleanPreference() throws Exception {
         JSONObject result = new JSONObject(
                 KorriSettingsBridge.applySetting(context, "checkbox_enable_hdr", "true"));

@@ -231,7 +231,7 @@ final class KorriSettingsBridge {
                         values.put(key, prefs.getBoolean(key, setting.getBoolean("default")));
                         break;
                     case "choice":
-                        values.put(key, prefs.getString(key, setting.getString("default")));
+                        values.put(key, readChoice(prefs, setting, key));
                         break;
                     case "range":
                         values.put(key, prefs.getInt(key, setting.getInt("default")));
@@ -240,6 +240,25 @@ final class KorriSettingsBridge {
             }
         }
         return values;
+    }
+
+    /**
+     * The schema is the contract: a stored value that is no longer one of the
+     * offered options (a setting whose feature was removed, say) falls back to
+     * the default rather than crossing the bridge as a choice the portal
+     * cannot render.
+     */
+    private static String readChoice(SharedPreferences prefs, JSONObject setting, String key)
+            throws JSONException {
+        String def = setting.getString("default");
+        String stored = prefs.getString(key, def);
+        JSONArray options = setting.getJSONArray("options");
+        for (int i = 0; i < options.length(); i++) {
+            if (options.getJSONObject(i).getString("value").equals(stored)) {
+                return stored;
+            }
+        }
+        return def;
     }
 
     private static JSONObject findSetting(Context context, String key) throws JSONException {
