@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { SHELL_RESUMED_EVENT } from "@contracts/bridge/korri-native-bridge"
 import type { LauncherBridge } from "../bridge/launcher-bridge"
 import type { InputBus } from "../input/bus"
 import { LaunchablesList } from "./LaunchablesList"
-import { LaunchablesState } from "./state"
+import { LaunchablesState, type StreamSource } from "./state"
 
 interface LaunchablesRootProps {
   readonly bus: InputBus
@@ -10,23 +11,49 @@ interface LaunchablesRootProps {
 }
 
 /**
- * Root of the launchables screen: owns the state ADT, loads from the
- * bridge, and translates semantic input actions into state transitions.
+ * Root of the launchables screen: owns the state ADT, loads both sources
+ * (device apps and paired hosts' stream apps), and translates semantic
+ * input actions into state transitions.
  */
 export function LaunchablesRoot({ bus, bridge }: LaunchablesRootProps) {
   const [state, setState] = useState<LaunchablesState>(LaunchablesState.loading)
   const stateRef = useRef(state)
   stateRef.current = state
 
-  useEffect(() => {
-    let cancelled = false
-    bridge.queryLaunchables().then(result => {
-      if (!cancelled) setState(LaunchablesState.fromQueryResult(result))
-    })
-    return () => {
-      cancelled = true
-    }
+  const load = useCallback(async () => {
+    setState(LaunchablesState.loading())
+    const local = await bridge.queryLaunchables()
+    const hostsResult = await bridge.queryStreamHosts()
+    const streams: readonly StreamSource[] =
+      hostsResult._tag === "StreamHosts"
+        ? await Promise.all(
+            hostsResult.items
+              .filter(host => host.paired)
+              .map(async host => ({
+                host,
+                apps: await bridge.queryStreamApps(host.uuid),
+              })),
+          )
+        : []
+    setState(
+      LaunchablesState.fromSources(
+        local,
+        streams,
+        hostsResult._tag === "QueryFailed" ? hostsResult.message : undefined,
+      ),
+    )
   }, [bridge])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  // Returning from a stream (or any shell resume): state may be stale.
+  useEffect(() => {
+    const onResumed = () => void load()
+    window.addEventListener(SHELL_RESUMED_EVENT, onResumed)
+    return () => window.removeEventListener(SHELL_RESUMED_EVENT, onResumed)
+  }, [load])
 
   useEffect(() => {
     const offDirection = bus.onAction("direction", action => {
@@ -37,11 +64,20 @@ export function LaunchablesRoot({ bus, bridge }: LaunchablesRootProps) {
     const offConfirm = bus.onAction("confirm", () => {
       const selected = LaunchablesState.selected(stateRef.current)
       if (selected._tag === "None") return
-      bridge.launchApp(selected.value.packageName).then(result => {
-        setState(current =>
-          LaunchablesState.withLaunchResult(current, result),
-        )
-      })
+      const entry = selected.value
+      if (entry.kind === "local") {
+        void bridge.launchApp(entry.launchable.packageName).then(result => {
+          setState(current =>
+            LaunchablesState.withLaunchResult(current, result),
+          )
+        })
+      } else {
+        void bridge.startStream(entry.hostUuid, entry.app.id).then(result => {
+          setState(current =>
+            LaunchablesState.withStartStreamResult(current, result),
+          )
+        })
+      }
     })
     return () => {
       offDirection()

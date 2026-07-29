@@ -1,11 +1,14 @@
-import type { LaunchablesState } from "./state"
+import { entryKey, entryLabel, LaunchablesState } from "./state"
+import type { LaunchablesState as State } from "./state"
 
 interface LaunchablesListProps {
-  readonly state: Extract<LaunchablesState, { _tag: "Ready" }>
+  readonly state: Extract<State, { _tag: "Ready" }>
 }
 
 /** Pure view of the Ready case. Selection arrives via the state ADT. */
 export function LaunchablesList({ state }: LaunchablesListProps) {
+  const sections = LaunchablesState.sections(state)
+
   return (
     <div className="w-full max-w-xl space-y-6 p-8">
       <h1 className="text-3xl font-bold tracking-tight">Korri</h1>
@@ -14,22 +17,32 @@ export function LaunchablesList({ state }: LaunchablesListProps) {
           {state.notice}
         </p>
       )}
-      <ul className="space-y-2">
-        {state.items.map((item, index) => (
-          <li
-            key={item.packageName}
-            className={
-              index === state.selectedIndex
-                ? "rounded-xl bg-zinc-100 px-5 py-4 text-lg font-semibold text-zinc-950"
-                : "rounded-xl bg-zinc-900 px-5 py-4 text-lg text-zinc-300"
-            }
-          >
-            {item.label}
-          </li>
-        ))}
-      </ul>
-      {state.items.length === 0 && (
-        <p className="text-zinc-400">No launchable apps found.</p>
+      {sections.map(section => (
+        <section key={section.title} className="space-y-2">
+          <h2 className="text-sm font-semibold tracking-wide text-zinc-500 uppercase">
+            {section.title}
+          </h2>
+          <ul className="space-y-2">
+            {section.entries.map((entry, offset) => {
+              const index = section.startIndex + offset
+              return (
+                <li
+                  key={entryKey(entry)}
+                  className={
+                    index === state.selectedIndex
+                      ? "rounded-xl bg-zinc-100 px-5 py-4 text-lg font-semibold text-zinc-950"
+                      : "rounded-xl bg-zinc-900 px-5 py-4 text-lg text-zinc-300"
+                  }
+                >
+                  {entryLabel(entry)}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ))}
+      {state.entries.length === 0 && (
+        <p className="text-zinc-400">Nothing to launch yet.</p>
       )}
       <p className="text-sm text-zinc-600">{__PORTAL_BUILD__}</p>
     </div>

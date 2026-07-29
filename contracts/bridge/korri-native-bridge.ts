@@ -41,6 +41,44 @@ export type LaunchAppResult =
       readonly message: string
     }
 
+// ── Streaming (JS -> Kotlin) ────────────────────────────────────────────
+
+/** A paired (or once-seen) stream host known to the shell. */
+export interface StreamHost {
+  readonly uuid: string
+  readonly name: string
+  readonly paired: boolean
+}
+
+/** Result of `KorriNative.queryStreamHosts()`. */
+export type QueryStreamHostsResult =
+  | { readonly _tag: "StreamHosts"; readonly items: readonly StreamHost[] }
+  | { readonly _tag: "QueryFailed"; readonly message: string }
+
+/** A streamable app on a host, from the shell's cached app list. */
+export interface StreamApp {
+  readonly id: number
+  readonly name: string
+}
+
+/** Result of `KorriNative.queryStreamApps(hostUuid)`. */
+export type QueryStreamAppsResult =
+  | { readonly _tag: "StreamApps"; readonly items: readonly StreamApp[] }
+  | { readonly _tag: "QueryFailed"; readonly message: string }
+
+/** Result of `KorriNative.startStream(hostUuid, appId)`. */
+export type StartStreamResult =
+  | { readonly _tag: "StreamStarted" }
+  | {
+      readonly _tag: "StreamFailed"
+      readonly reason:
+        | "HostUnreachable"
+        | "NotPaired"
+        | "AppNotFound"
+        | "StartFailed"
+      readonly message: string
+    }
+
 // ── Input (Kotlin -> JS) ────────────────────────────────────────────────
 
 /**
@@ -77,6 +115,26 @@ export interface KorriNativeBridgeSurface {
   queryLaunchables(): string
   /** Returns JSON-encoded `LaunchAppResult`. */
   launchApp(packageName: string): string
+  /** Returns JSON-encoded `QueryStreamHostsResult`. */
+  queryStreamHosts(): string
+  /** Returns JSON-encoded `QueryStreamAppsResult`. */
+  queryStreamApps(hostUuid: string): string
+  /**
+   * Starts the native stream Activity for an app on a paired host.
+   * Returns JSON-encoded `StartStreamResult`; "StreamStarted" means the
+   * Activity was launched, after which the portal is backgrounded until
+   * the stream ends (see the `korri-shell-resumed` window event).
+   */
+  startStream(hostUuid: string, appId: number): string
   /** Returns `BRIDGE_VERSION` of the shell build. */
   bridgeVersion(): number
 }
+
+// ── Lifecycle (Kotlin -> JS) ────────────────────────────────────────────
+
+/**
+ * When the shell Activity resumes (e.g. returning from a stream), it
+ * dispatches `window.dispatchEvent(new Event("korri-shell-resumed"))`.
+ * The portal treats this as "your state may be stale; re-query".
+ */
+export const SHELL_RESUMED_EVENT = "korri-shell-resumed"

@@ -48,6 +48,33 @@ describe("createKorriNativeLauncherBridge", () => {
     expect(await bridge.launchApp("x")).toEqual({ _tag: "Launched" })
   })
 
+  it("decodes stream results from the native surface", async () => {
+    const bridge = createKorriNativeLauncherBridge(surface({}))
+    expect(await bridge.queryStreamHosts()).toEqual({
+      _tag: "StreamHosts",
+      items: [{ uuid: "h1", name: "Office", paired: true }],
+    })
+    expect(await bridge.queryStreamApps("h1")).toEqual({
+      _tag: "StreamApps",
+      items: [{ id: 7, name: "Desktop" }],
+    })
+    expect(await bridge.startStream("h1", 7)).toEqual({ _tag: "StreamStarted" })
+  })
+
+  it("converts stream bridge explosions into tagged failures", async () => {
+    const bridge = createKorriNativeLauncherBridge(
+      surface({
+        startStream: () => {
+          throw new Error("bridge exploded")
+        },
+      }),
+    )
+    expect(await bridge.startStream("h1", 7)).toMatchObject({
+      _tag: "StreamFailed",
+      reason: "StartFailed",
+    })
+  })
+
   it("converts malformed native payloads into tagged failures", async () => {
     const bridge = createKorriNativeLauncherBridge(
       surface({
