@@ -64,6 +64,47 @@ pub struct UpstreamPrepared {
     pub session_id: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpstreamActiveSession {
+    pub launch_id: String,
+    #[serde(default)]
+    pub game_id: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub phase: Option<String>,
+}
+
+/// Legacy `app.session.status` union. Lenient: only the fields korrid
+/// forwards are decoded; everything else is tolerated and dropped.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "_tag")]
+pub enum UpstreamSessionStatus {
+    SessionStatus {
+        #[serde(default)]
+        active: Option<UpstreamActiveSession>,
+    },
+    SessiondNotConfigured {},
+    HostUnavailable {},
+}
+
+/// Legacy `app.session.stop` union, thinned to the variants korrid maps.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "_tag")]
+pub enum UpstreamSessionStop {
+    Stopped {
+        #[serde(rename = "launchId", default)]
+        launch_id: Option<String>,
+    },
+    StopPending {
+        #[serde(rename = "launchId", default)]
+        launch_id: Option<String>,
+    },
+    SessiondNotConfigured {},
+    HostUnavailable {},
+}
+
 #[derive(Clone)]
 pub struct UpstreamClient {
     config: UpstreamConfig,
@@ -90,6 +131,21 @@ impl UpstreamClient {
         let value = self
             .call("app.server.stream.prepare", json!({"id": game_id}))
             .await?;
+        serde_json::from_value(value).map_err(|error| UpstreamError::Wire(error.to_string()))
+    }
+
+    pub async fn session_status(&self) -> Result<UpstreamSessionStatus, UpstreamError> {
+        let value = self.call("app.session.status", json!({})).await?;
+        serde_json::from_value(value).map_err(|error| UpstreamError::Wire(error.to_string()))
+    }
+
+    pub async fn session_stop(&self, force: bool) -> Result<UpstreamSessionStop, UpstreamError> {
+        let payload = if force {
+            json!({"force": true})
+        } else {
+            json!({})
+        };
+        let value = self.call("app.session.stop", payload).await?;
         serde_json::from_value(value).map_err(|error| UpstreamError::Wire(error.to_string()))
     }
 
@@ -170,6 +226,83 @@ mod tests {
     fn rejects_bodies_without_an_exit_frame() {
         let error = decode_exit_value(r#"[{"_tag":"Pong"}]"#).expect_err("no exit frame");
         assert!(matches!(error, UpstreamError::Wire(_)));
+    }
+
+    #[test]
+    fn decodes_an_active_session_from_a_status_exit() {
+        let body = r#"[{"exit":{"_tag":"Success","value":{"_tag":"SessionStatus","configured":true,"mode":"stream","active":{"launchId":"l1","mode":"stream","phase":"running","gameId":"g1","title":"Skate 3"}}}}]"#;
+        let value = decode_exit_value(body).expect("success exit");
+        let status: UpstreamSessionStatus = serde_json::from_value(value).expect("status shape");
+        let UpstreamSessionStatus::SessionStatus { active } = status else {
+            panic!("expected SessionStatus");
+        };
+        let active = active.expect("active session");
+        assert_eq!(active.launch_id, "l1");
+        assert_eq!(active.game_id.as_deref(), Some("g1"));
+        assert_eq!(active.title.as_deref(), Some("Skate 3"));
+        assert_eq!(active.phase.as_deref(), Some("running"));
+    }
+
+    #[test]
+    fn decodes_nothing_playing_when_active_is_absent() {
+        let value = serde_json::json!({"_tag":"SessionStatus","configured":true,"mode":"idle"});
+        let status: UpstreamSessionStatus = serde_json::from_value(value).expect("status shape");
+        assert!(matches!(
+            status,
+            UpstreamSessionStatus::SessionStatus { active: None }
+        ));
+    }
+
+    #[test]
+    fn decodes_not_configured_and_host_unavailable_status_variants() {
+        let not_configured: UpstreamSessionStatus =
+            serde_json::from_value(serde_json::json!({"_tag":"SessiondNotConfigured"}))
+                .expect("variant");
+        assert!(matches!(
+            not_configured,
+            UpstreamSessionStatus::SessiondNotConfigured {}
+        ));
+        let unavailable: UpstreamSessionStatus =
+            serde_json::from_value(serde_json::json!({"_tag":"HostUnavailable","reason":"down"}))
+                .expect("variant");
+        assert!(matches!(
+            unavailable,
+            UpstreamSessionStatus::HostUnavailable {}
+        ));
+    }
+
+    #[test]
+    fn decodes_stopped_and_pending_stop_variants() {
+        let stopped: UpstreamSessionStop =
+            serde_json::from_value(serde_json::json!({"_tag":"Stopped","launchId":"l1"}))
+                .expect("stopped");
+        assert!(matches!(
+            stopped,
+            UpstreamSessionStop::Stopped { launch_id: Some(_) }
+        ));
+        let pending: UpstreamSessionStop = serde_json::from_value(
+            serde_json::json!({"_tag":"StopPending","launchId":"l1","deadlineMs":5000}),
+        )
+        .expect("pending");
+        assert!(matches!(pending, UpstreamSessionStop::StopPending { .. }));
+    }
+
+    #[test]
+    fn tolerates_unknown_fields_in_session_responses() {
+        let value = serde_json::json!({
+            "_tag":"SessionStatus",
+            "configured":true,
+            "mode":"stream",
+            "generation": 9,
+            "active":{"launchId":"l2","mode":"stream","extra":{"nested":true}},
+        });
+        let status: UpstreamSessionStatus = serde_json::from_value(value).expect("lenient decode");
+        let UpstreamSessionStatus::SessionStatus { active } = status else {
+            panic!("expected SessionStatus");
+        };
+        let active = active.expect("active session");
+        assert_eq!(active.launch_id, "l2");
+        assert_eq!(active.game_id, None);
     }
 
     #[test]

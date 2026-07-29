@@ -45,6 +45,47 @@ pub struct SessionPrepared {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SessionStatusRequest {}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveSession {
+    pub launch_id: String,
+    pub game_id: Option<String>,
+    pub title: Option<String>,
+    pub phase: Option<String>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SessionStatus {
+    pub active: Option<ActiveSession>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SessionStopRequest {
+    #[serde(default)]
+    pub force: Option<bool>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SessionStopPhase {
+    Stopped,
+    Pending,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SessionStopResult {
+    pub phase: SessionStopPhase,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HealthRequest {}
 
 #[typeshare]
@@ -79,6 +120,22 @@ pub enum SessionPrepareOutcome {
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "_tag", content = "payload")]
+pub enum SessionStatusOutcome {
+    Ok(SessionStatus),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum SessionStopOutcome {
+    Ok(SessionStopResult),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
 pub enum HealthOutcome {
     Ok(Health),
     Err(RpcFailure),
@@ -92,6 +149,10 @@ pub enum RpcRequest {
     CatalogSnapshot(CatalogSnapshotRequest),
     #[serde(rename = "app.session.prepare")]
     SessionPrepare(SessionPrepareRequest),
+    #[serde(rename = "app.session.status")]
+    SessionStatus(SessionStatusRequest),
+    #[serde(rename = "app.session.stop")]
+    SessionStop(SessionStopRequest),
     #[serde(rename = "system.health")]
     Health(HealthRequest),
 }
@@ -104,6 +165,10 @@ pub enum RpcResponse {
     CatalogSnapshot(CatalogSnapshotOutcome),
     #[serde(rename = "app.session.prepare")]
     SessionPrepare(SessionPrepareOutcome),
+    #[serde(rename = "app.session.status")]
+    SessionStatus(SessionStatusOutcome),
+    #[serde(rename = "app.session.stop")]
+    SessionStop(SessionStopOutcome),
     #[serde(rename = "system.health")]
     Health(HealthOutcome),
 }
@@ -123,6 +188,68 @@ fn upstream_failure(error: upstream::UpstreamError) -> RpcFailure {
     RpcFailure {
         code: code.into(),
         message: error.to_string(),
+    }
+}
+
+/// Pure mapping from the legacy status union to the korrid-shaped outcome.
+fn session_status_outcome(
+    result: Result<upstream::UpstreamSessionStatus, upstream::UpstreamError>,
+) -> SessionStatusOutcome {
+    match result {
+        Ok(upstream::UpstreamSessionStatus::SessionStatus { active }) => {
+            SessionStatusOutcome::Ok(SessionStatus {
+                active: active.map(|active| ActiveSession {
+                    launch_id: active.launch_id,
+                    game_id: active.game_id,
+                    title: active.title,
+                    phase: active.phase,
+                }),
+            })
+        }
+        Ok(upstream::UpstreamSessionStatus::SessiondNotConfigured {}) => {
+            SessionStatusOutcome::Err(RpcFailure {
+                code: "SessiondNotConfigured".into(),
+                message: "host session daemon is not configured".into(),
+            })
+        }
+        Ok(upstream::UpstreamSessionStatus::HostUnavailable {}) => {
+            SessionStatusOutcome::Err(RpcFailure {
+                code: "HostUnavailable".into(),
+                message: "host is unavailable".into(),
+            })
+        }
+        Err(error) => SessionStatusOutcome::Err(upstream_failure(error)),
+    }
+}
+
+/// Pure mapping from the legacy stop union to the korrid-shaped outcome.
+fn session_stop_outcome(
+    result: Result<upstream::UpstreamSessionStop, upstream::UpstreamError>,
+) -> SessionStopOutcome {
+    match result {
+        Ok(upstream::UpstreamSessionStop::Stopped { .. }) => {
+            SessionStopOutcome::Ok(SessionStopResult {
+                phase: SessionStopPhase::Stopped,
+            })
+        }
+        Ok(upstream::UpstreamSessionStop::StopPending { .. }) => {
+            SessionStopOutcome::Ok(SessionStopResult {
+                phase: SessionStopPhase::Pending,
+            })
+        }
+        Ok(upstream::UpstreamSessionStop::SessiondNotConfigured {}) => {
+            SessionStopOutcome::Err(RpcFailure {
+                code: "SessiondNotConfigured".into(),
+                message: "host session daemon is not configured".into(),
+            })
+        }
+        Ok(upstream::UpstreamSessionStop::HostUnavailable {}) => {
+            SessionStopOutcome::Err(RpcFailure {
+                code: "HostUnavailable".into(),
+                message: "host is unavailable".into(),
+            })
+        }
+        Err(error) => SessionStopOutcome::Err(upstream_failure(error)),
     }
 }
 
@@ -154,6 +281,15 @@ pub async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
             };
             RpcResponse::SessionPrepare(outcome)
         }
+        RpcRequest::SessionStatus(_) => RpcResponse::SessionStatus(session_status_outcome(
+            state.upstream.session_status().await,
+        )),
+        RpcRequest::SessionStop(request) => RpcResponse::SessionStop(session_stop_outcome(
+            state
+                .upstream
+                .session_stop(request.force.unwrap_or(false))
+                .await,
+        )),
         RpcRequest::Health(_) => RpcResponse::Health(HealthOutcome::Ok(Health {
             version: VERSION.into(),
         })),
@@ -275,3 +411,79 @@ pub mod upstream;
 
 #[cfg(target_os = "android")]
 mod android;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_with_active_session_maps_to_ok_with_details() {
+        let outcome = session_status_outcome(Ok(upstream::UpstreamSessionStatus::SessionStatus {
+            active: Some(upstream::UpstreamActiveSession {
+                launch_id: "l1".into(),
+                game_id: Some("g1".into()),
+                title: Some("Skate 3".into()),
+                phase: Some("running".into()),
+            }),
+        }));
+        let SessionStatusOutcome::Ok(status) = outcome else {
+            panic!("expected Ok");
+        };
+        let active = status.active.expect("active session");
+        assert_eq!(active.game_id.as_deref(), Some("g1"));
+        assert_eq!(active.title.as_deref(), Some("Skate 3"));
+        assert_eq!(active.phase.as_deref(), Some("running"));
+    }
+
+    #[test]
+    fn status_without_active_session_maps_to_nothing_playing() {
+        let outcome = session_status_outcome(Ok(upstream::UpstreamSessionStatus::SessionStatus {
+            active: None,
+        }));
+        assert!(matches!(
+            outcome,
+            SessionStatusOutcome::Ok(SessionStatus { active: None })
+        ));
+    }
+
+    #[test]
+    fn status_daemon_variants_map_to_distinct_failure_codes() {
+        let not_configured = session_status_outcome(Ok(
+            upstream::UpstreamSessionStatus::SessiondNotConfigured {},
+        ));
+        let SessionStatusOutcome::Err(failure) = not_configured else {
+            panic!("expected Err");
+        };
+        assert_eq!(failure.code, "SessiondNotConfigured");
+
+        let unavailable =
+            session_status_outcome(Ok(upstream::UpstreamSessionStatus::HostUnavailable {}));
+        let SessionStatusOutcome::Err(failure) = unavailable else {
+            panic!("expected Err");
+        };
+        assert_eq!(failure.code, "HostUnavailable");
+    }
+
+    #[test]
+    fn stop_variants_map_to_stopped_and_pending_phases() {
+        let stopped = session_stop_outcome(Ok(upstream::UpstreamSessionStop::Stopped {
+            launch_id: Some("l1".into()),
+        }));
+        assert!(matches!(
+            stopped,
+            SessionStopOutcome::Ok(SessionStopResult {
+                phase: SessionStopPhase::Stopped
+            })
+        ));
+
+        let pending = session_stop_outcome(Ok(upstream::UpstreamSessionStop::StopPending {
+            launch_id: None,
+        }));
+        assert!(matches!(
+            pending,
+            SessionStopOutcome::Ok(SessionStopResult {
+                phase: SessionStopPhase::Pending
+            })
+        ));
+    }
+}
