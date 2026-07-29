@@ -247,6 +247,17 @@ fn session_stop_outcome(
                 phase: SessionStopPhase::Pending,
             })
         }
+        Ok(upstream::UpstreamSessionStop::NothingToStop {}) => {
+            SessionStopOutcome::Ok(SessionStopResult {
+                phase: SessionStopPhase::Stopped,
+            })
+        }
+        Ok(upstream::UpstreamSessionStop::ConfirmationRequired { action }) => {
+            SessionStopOutcome::Err(RpcFailure {
+                code: "ConfirmationRequired".into(),
+                message: action.unwrap_or_else(|| "session stop requires confirmation".into()),
+            })
+        }
         Ok(upstream::UpstreamSessionStop::SessiondNotConfigured {}) => {
             SessionStopOutcome::Err(RpcFailure {
                 code: "SessiondNotConfigured".into(),
@@ -681,5 +692,22 @@ mod tests {
                 phase: SessionStopPhase::Pending
             })
         ));
+
+        let nothing = session_stop_outcome(Ok(upstream::UpstreamSessionStop::NothingToStop {}));
+        assert!(matches!(
+            nothing,
+            SessionStopOutcome::Ok(SessionStopResult {
+                phase: SessionStopPhase::Stopped
+            })
+        ));
+
+        let confirmation =
+            session_stop_outcome(Ok(upstream::UpstreamSessionStop::ConfirmationRequired {
+                action: Some("stop-session".into()),
+            }));
+        let SessionStopOutcome::Err(failure) = confirmation else {
+            panic!("expected Err");
+        };
+        assert_eq!(failure.code, "ConfirmationRequired");
     }
 }

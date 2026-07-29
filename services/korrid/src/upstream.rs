@@ -101,6 +101,11 @@ pub enum UpstreamSessionStop {
         #[serde(rename = "launchId", default)]
         launch_id: Option<String>,
     },
+    NothingToStop {},
+    ConfirmationRequired {
+        #[serde(default)]
+        action: Option<String>,
+    },
     SessiondNotConfigured {},
     HostUnavailable {},
 }
@@ -140,12 +145,12 @@ impl UpstreamClient {
     }
 
     pub async fn session_stop(&self, force: bool) -> Result<UpstreamSessionStop, UpstreamError> {
-        let payload = if force {
-            json!({"force": true})
-        } else {
-            json!({})
-        };
-        let value = self.call("app.session.stop", payload).await?;
+        // The portal's explicit stop action is the user confirmation. The
+        // legacy host refuses mutation without this bit and returns
+        // ConfirmationRequired.
+        let value = self
+            .call("app.session.stop", session_stop_payload(force))
+            .await?;
         serde_json::from_value(value).map_err(|error| UpstreamError::Wire(error.to_string()))
     }
 
@@ -178,6 +183,14 @@ impl UpstreamClient {
             .await
             .map_err(|error| UpstreamError::Wire(error.to_string()))?;
         decode_exit_value(&text)
+    }
+}
+
+fn session_stop_payload(force: bool) -> Value {
+    if force {
+        json!({"force": true, "confirmed": true})
+    } else {
+        json!({"confirmed": true})
     }
 }
 
@@ -272,6 +285,18 @@ mod tests {
     }
 
     #[test]
+    fn stop_payload_carries_explicit_user_confirmation() {
+        assert_eq!(
+            session_stop_payload(false),
+            serde_json::json!({"confirmed": true})
+        );
+        assert_eq!(
+            session_stop_payload(true),
+            serde_json::json!({"confirmed": true, "force": true})
+        );
+    }
+
+    #[test]
     fn decodes_stopped_and_pending_stop_variants() {
         let stopped: UpstreamSessionStop =
             serde_json::from_value(serde_json::json!({"_tag":"Stopped","launchId":"l1"}))
@@ -285,6 +310,20 @@ mod tests {
         )
         .expect("pending");
         assert!(matches!(pending, UpstreamSessionStop::StopPending { .. }));
+
+        let nothing: UpstreamSessionStop =
+            serde_json::from_value(serde_json::json!({"_tag":"NothingToStop"}))
+                .expect("nothing to stop");
+        assert!(matches!(nothing, UpstreamSessionStop::NothingToStop {}));
+
+        let confirmation: UpstreamSessionStop = serde_json::from_value(
+            serde_json::json!({"_tag":"ConfirmationRequired","action":"stop-session"}),
+        )
+        .expect("confirmation required");
+        assert!(matches!(
+            confirmation,
+            UpstreamSessionStop::ConfirmationRequired { .. }
+        ));
     }
 
     #[test]
