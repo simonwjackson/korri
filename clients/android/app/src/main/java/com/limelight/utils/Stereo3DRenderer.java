@@ -12,6 +12,7 @@ import android.view.Surface;
 
 import com.limelight.LimeLog;
 import com.limelight.preferences.PreferenceConfiguration;
+import com.limelight.ui.OnRenderSurfaceReadyListener;
 
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
@@ -80,7 +81,7 @@ public class Stereo3DRenderer implements GLSurfaceView.Renderer, SurfaceTexture.
     // Final Member Variables
     private final Context context;
     private final GLSurfaceView glSurfaceView;
-    private final OnSurfaceReadyListener onSurfaceReadyListener;
+    private final OnRenderSurfaceReadyListener onSurfaceReadyListener;
     private final Object frameLock = new Object();
     private final FloatBuffer quadVertexBuffer;
     private final FloatBuffer textureVertexBuffer;
@@ -129,10 +130,6 @@ public class Stereo3DRenderer implements GLSurfaceView.Renderer, SurfaceTexture.
     private float ON_DRAW_CHANGE_TRESHOLD = 2.0f;
 
 
-    public interface OnSurfaceReadyListener {
-        void onStereo3DSurfaceReady(Surface surface);
-    }
-
     static {
         if (!OpenCVLoader.initLocal()) {
             LimeLog.severe("Internal OpenCV library not found. Using OpenCV Manager for initialization");
@@ -141,7 +138,7 @@ public class Stereo3DRenderer implements GLSurfaceView.Renderer, SurfaceTexture.
         }
     }
 
-    public Stereo3DRenderer(GLSurfaceView view, OnSurfaceReadyListener listener, Context context, PreferenceConfiguration prefConfig) {
+    public Stereo3DRenderer(GLSurfaceView view, OnRenderSurfaceReadyListener listener, Context context, PreferenceConfiguration prefConfig) {
         this.glSurfaceView = view;
         this.onSurfaceReadyListener = listener;
         this.context = context;
@@ -271,7 +268,7 @@ public class Stereo3DRenderer implements GLSurfaceView.Renderer, SurfaceTexture.
         executorService = Executors.newFixedThreadPool(2);
 
         if (onSurfaceReadyListener != null) {
-            onSurfaceReadyListener.onStereo3DSurfaceReady(videoSurface);
+            onSurfaceReadyListener.onRenderSurfaceReady(videoSurface);
         }
         if (!isAiResultHandlingRunning.get()) {
             isAiResultHandlingRunning.set(true);

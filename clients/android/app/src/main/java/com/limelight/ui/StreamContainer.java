@@ -24,7 +24,7 @@ import com.limelight.utils.Stereo3DRenderer;
  * handles all input callbacks, aspect ratio scaling, and a robust surface lifecycle.
  * It uses SurfaceView for 2D and GLSurfaceView for both 3D modes.
  */
-public class StreamContainer extends FrameLayout implements SurfaceHolder.Callback, Stereo3DRenderer.OnSurfaceReadyListener {
+public class StreamContainer extends FrameLayout implements SurfaceHolder.Callback, OnRenderSurfaceReadyListener {
 
     public interface InputCallbacks {
         boolean handleKeyUp(KeyEvent event);
@@ -271,7 +271,7 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
     }
 
     @Override
-    public void onStereo3DSurfaceReady(Surface surface) {
+    public void onRenderSurfaceReady(Surface surface) {
         if (renderMode != StreamMode.MODE_2D) {
             mCurrentSurface = surface;
             notifySurfaceReady();

@@ -8,6 +8,7 @@ import android.view.Surface;
 
 import com.limelight.LimeLog;
 import com.limelight.preferences.PreferenceConfiguration;
+import com.limelight.ui.OnRenderSurfaceReadyListener;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -29,8 +30,8 @@ import javax.microedition.khronos.opengles.GL10;
  * their reference GLSL with only I/O plumbing adapted. Despite the branding it
  * is vendor-neutral GLSL ES 3.1 and runs fine on Mali/Immortalis.
  *
- * Reuses Stereo3DRenderer.OnSurfaceReadyListener so StreamContainer wiring
- * stays identical across GL render modes.
+ * Reports its decoder surface through OnRenderSurfaceReadyListener, the
+ * container-owned seam shared by every GL render mode.
  */
 public class SgsrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
     private static final int GL_TEXTURE_EXTERNAL_OES = 0x8D65;
@@ -159,7 +160,7 @@ public class SgsrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFr
             "}\n";
 
     private final GLSurfaceView glSurfaceView;
-    private final Stereo3DRenderer.OnSurfaceReadyListener onSurfaceReadyListener;
+    private final OnRenderSurfaceReadyListener onSurfaceReadyListener;
     private final int sourceWidth;
     private final int sourceHeight;
     private volatile float edgeSharpness;
@@ -182,7 +183,7 @@ public class SgsrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFr
     private int outputHeight;
 
     public SgsrRenderer(GLSurfaceView view,
-                        Stereo3DRenderer.OnSurfaceReadyListener listener,
+                        OnRenderSurfaceReadyListener listener,
                         PreferenceConfiguration prefConfig) {
         this.glSurfaceView = view;
         this.onSurfaceReadyListener = listener;
@@ -233,7 +234,7 @@ public class SgsrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFr
         LimeLog.info("SGSR renderer ready: " + sourceWidth + "x" + sourceHeight
                 + " -> display, GL_RENDERER=" + GLES20.glGetString(GLES20.GL_RENDERER));
 
-        onSurfaceReadyListener.onStereo3DSurfaceReady(videoSurface);
+        onSurfaceReadyListener.onRenderSurfaceReady(videoSurface);
     }
 
     @Override
