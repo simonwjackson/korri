@@ -1,4 +1,4 @@
-//! THROWAWAY PROTOTYPE: proves the Rust/TypeScript/Android seams only.
+//! Embedded-capable korrid server core: contracts, dispatch, and lifecycle.
 
 use axum::{extract::State, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use std::{
 use tokio::sync::oneshot;
 use typeshare::typeshare;
 
-pub const VERSION: &str = "korrid-rust-spike-v1";
+pub const VERSION: &str = "korrid-v0";
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -110,12 +110,12 @@ pub fn router() -> Router {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum SpikeError {
-    #[error("korrid spike server is already running")]
+pub enum ServerError {
+    #[error("korrid server is already running")]
     AlreadyRunning,
-    #[error("korrid spike server is not running")]
+    #[error("korrid server is not running")]
     NotRunning,
-    #[error("failed to start korrid spike server: {details}")]
+    #[error("failed to start korrid server: {details}")]
     StartFailed { details: String },
 }
 
@@ -131,37 +131,37 @@ fn server_slot() -> &'static Mutex<Option<ServerHandle>> {
     SERVER.get_or_init(|| Mutex::new(None))
 }
 
-pub fn korrid_spike_version() -> String {
+pub fn korrid_version() -> String {
     VERSION.into()
 }
 
 /// Starts the exact same Axum router used by the Linux binary on localhost.
-pub fn start_local_server() -> Result<u16, SpikeError> {
+pub fn start_local_server() -> Result<u16, ServerError> {
     let mut slot = server_slot().lock().expect("server mutex poisoned");
     if slot.is_some() {
-        return Err(SpikeError::AlreadyRunning);
+        return Err(ServerError::AlreadyRunning);
     }
 
     let listener =
         StdTcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)).map_err(|error| {
-            SpikeError::StartFailed {
+            ServerError::StartFailed {
                 details: error.to_string(),
             }
         })?;
     listener
         .set_nonblocking(true)
-        .map_err(|error| SpikeError::StartFailed {
+        .map_err(|error| ServerError::StartFailed {
             details: error.to_string(),
         })?;
     let port = listener
         .local_addr()
-        .map_err(|error| SpikeError::StartFailed {
+        .map_err(|error| ServerError::StartFailed {
             details: error.to_string(),
         })?
         .port();
     let (stop, stopped) = oneshot::channel();
     let thread = std::thread::Builder::new()
-        .name("korrid-spike".into())
+        .name("korrid".into())
         .spawn(move || {
             let runtime = tokio::runtime::Runtime::new().expect("create Tokio runtime");
             runtime.block_on(async move {
@@ -175,7 +175,7 @@ pub fn start_local_server() -> Result<u16, SpikeError> {
                     .expect("serve korrid spike");
             });
         })
-        .map_err(|error| SpikeError::StartFailed {
+        .map_err(|error| ServerError::StartFailed {
             details: error.to_string(),
         })?;
 
@@ -183,14 +183,14 @@ pub fn start_local_server() -> Result<u16, SpikeError> {
     Ok(port)
 }
 
-pub fn stop_local_server() -> Result<(), SpikeError> {
+pub fn stop_local_server() -> Result<(), ServerError> {
     let handle = server_slot()
         .lock()
         .expect("server mutex poisoned")
         .take()
-        .ok_or(SpikeError::NotRunning)?;
+        .ok_or(ServerError::NotRunning)?;
     let _ = handle.stop.send(());
-    handle.thread.join().map_err(|_| SpikeError::StartFailed {
+    handle.thread.join().map_err(|_| ServerError::StartFailed {
         details: "server thread panicked".into(),
     })?;
     Ok(())

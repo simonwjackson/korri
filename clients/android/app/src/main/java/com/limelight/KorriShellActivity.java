@@ -28,7 +28,7 @@ import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
 import com.limelight.utils.CacheHelper;
 import com.limelight.utils.ServerHelper;
-import com.simonwjackson.korri.spike.RustKorridSpike;
+import com.simonwjackson.korri.korrid.KorridServer;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -80,8 +80,8 @@ public class KorriShellActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // THROWAWAY PROTOTYPE: prove Rust/Tokio/Axum runs in this APK.
-        RustKorridSpike.startAndLog();
+        // Embedded korrid: the portal talks to this localhost brain.
+        KorridServer.startAndLog();
 
         bindService(new Intent(this, ComputerManagerService.class),
                 serviceConnection, BIND_AUTO_CREATE);
@@ -183,7 +183,7 @@ public class KorriShellActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        RustKorridSpike.stop();
+        KorridServer.stop();
         super.onDestroy();
         if (managerBinder != null) {
             unbindService(serviceConnection);

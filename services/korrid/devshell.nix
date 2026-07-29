@@ -23,7 +23,7 @@ pkgs.mkShell {
   GRADLE_OPTS = androidShell.GRADLE_OPTS;
 
   shellHook = androidShell.shellHook + ''
-    export CARGO_TARGET_DIR="$PWD/.cache/korrid-spike-target"
-    echo "Korri Rust spike toolchain ready"
+    export CARGO_TARGET_DIR="$PWD/.cache/korrid-target"
+    echo "Korrid toolchain ready"
   '';
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env nix-shell
 #! nix-shell -i bash -p bash curl gnugrep gnused android-tools unzip
-# THROWAWAY PROTOTYPE: install the spike APK and call Rust Axum over adb forward.
+# Install the built APK and call Rust Axum over adb forward.
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -21,7 +21,7 @@ adb -s "$DEVICE" shell am start -S -n "$PACKAGE/com.limelight.KorriShellActivity
 port=""
 portal_ready=""
 for _ in $(seq 1 20); do
-  line="$(adb -s "$DEVICE" logcat -d -s RustKorridSpike:I 2>/dev/null | grep 'listening on 127.0.0.1:' | tail -1 || true)"
+  line="$(adb -s "$DEVICE" logcat -d -s KorridServer:I 2>/dev/null | grep 'listening on 127.0.0.1:' | tail -1 || true)"
   port="$(printf '%s' "$line" | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p')"
   portal_ready="$(adb -s "$DEVICE" logcat -d -s KorriPortal:I 2>/dev/null | grep 'title="Korri"' | tail -1 || true)"
   if [[ -n "$port" && -n "$portal_ready" ]]; then

@@ -2,7 +2,7 @@
 import type {
   RpcRequest,
   RpcResponse,
-} from "@contracts/generated/korrid-spike"
+} from "@contracts/generated/korrid"
 
 /**
  * The shared operation tag correlates each request with its response without

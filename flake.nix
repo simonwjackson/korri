@@ -29,7 +29,7 @@
       {
         devShells.android = import ./clients/android/devshell.nix { inherit pkgs; };
         devShells.portal = import ./clients/portal/devshell.nix { inherit pkgs; };
-        devShells.korrid-spike = import ./services/korrid-spike/devshell.nix { inherit pkgs; };
+        devShells.korrid = import ./services/korrid/devshell.nix { inherit pkgs; };
       }
     );
 }

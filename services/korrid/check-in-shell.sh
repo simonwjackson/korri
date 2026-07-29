@@ -4,8 +4,8 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-CRATE="$ROOT/services/korrid-spike"
-GENERATED_TS="$ROOT/contracts/generated/korrid-spike.ts"
+CRATE="$ROOT/services/korrid"
+GENERATED_TS="$ROOT/contracts/generated/korrid.ts"
 ANDROID_LIBS="$ROOT/clients/android/app/src/main/jniLibs"
 
 cd "$CRATE"
@@ -19,8 +19,8 @@ cd "$ROOT/clients/portal"
 bun run typecheck
 
 cd "$CRATE"
-cargo build --release --bin korrid-spike
-"$CARGO_TARGET_DIR/release/korrid-spike" &
+cargo build --release --bin korrid
+"$CARGO_TARGET_DIR/release/korrid" &
 server_pid=$!
 trap 'kill "$server_pid" 2>/dev/null || true' EXIT
 for _ in $(seq 1 20); do
@@ -33,7 +33,7 @@ for _ in $(seq 1 20); do
 done
 
 cd "$ROOT/clients/portal"
-bun src/spike/rust-korrid-client.ts
+bun src/korrid/client.ts
 
 # The installed proof is the whole app, not only its hidden RPC. Use the
 # canonical cross-area recipe so Gradle cannot silently package no portal.
@@ -50,7 +50,7 @@ APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
 unzip -l "$APK" | grep -q 'assets/portal/index.html'
 
 printf 'Rust cdylib: '
-du -h "$ANDROID_LIBS/arm64-v8a/libkorrid_spike.so" | cut -f1
+du -h "$ANDROID_LIBS/arm64-v8a/libkorrid.so" | cut -f1
 printf 'APK: '
 du -h app/build/outputs/apk/debug/app-arm64-v8a-debug.apk | cut -f1
 
