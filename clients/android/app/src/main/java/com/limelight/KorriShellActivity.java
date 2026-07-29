@@ -118,7 +118,7 @@ public class KorriShellActivity extends AppCompatActivity {
         if (BuildConfig.DEBUG && devUrl != null && !devUrl.isEmpty()) {
             return devUrl;
         }
-        return "file:///android_asset/portal/index.html";
+        return "https://appassets.androidplatform.net/assets/portal/index.html";
     }
 
     /**
