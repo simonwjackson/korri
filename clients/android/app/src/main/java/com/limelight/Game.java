@@ -31,7 +31,6 @@ import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.preferences.GlPreferences;
 import com.limelight.preferences.PreferenceConfiguration;
-import com.limelight.profiles.ProfilesManager;
 import com.limelight.ui.GameGestures;
 import com.limelight.ui.StreamContainer;
 import com.limelight.utils.Dialog;
@@ -3847,8 +3846,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
             return;
         }
 
-        String savedMouseModeIndexStr = ProfilesManager.getInstance()
-                .getOverlayingSharedPreferences(this)
+        String savedMouseModeIndexStr = PreferenceManager.getDefaultSharedPreferences(this)
                 .getString("mouse_mode_list", "0");
 
         int savedMouseModeIndex;
@@ -3893,7 +3891,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                     } else {
                         applyMouseMode(selected.index);
                         if (prefConfig.rememberMouseMode) {
-                            ProfilesManager.getInstance().getOverlayingSharedPreferences(this)
+                            PreferenceManager.getDefaultSharedPreferences(this)
                                     .edit()
                                     .putString("mouse_mode_list", String.valueOf(selected.index))
                                     .apply();
@@ -4026,7 +4024,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
         applyMouseMode(index);
         if (prefConfig.rememberMouseMode) {
-            ProfilesManager.getInstance().getOverlayingSharedPreferences(this)
+            PreferenceManager.getDefaultSharedPreferences(this)
                     .edit()
                     .putString("mouse_mode_list", String.valueOf(index))
                     .apply();

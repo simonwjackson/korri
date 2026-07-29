@@ -7,7 +7,6 @@ import android.content.SharedPreferences;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.limelight.preferences.PreferenceConfiguration;
-import com.limelight.profiles.ProfilesManager;
 import com.limelight.TestLogSuppressor;
 
 import org.junit.Before;
@@ -34,19 +33,7 @@ public class StartupCrashTest {
 
     @Before
     public void setUp() {
-        // Reset ProfilesManager instance using reflection since it's package-private
-        try {
-            java.lang.reflect.Field instanceField = ProfilesManager.class.getDeclaredField("instance");
-            instanceField.setAccessible(true);
-            instanceField.set(null, null);
-        } catch (Exception e) {
-            // Ignore reflection errors
-        }
         context = ApplicationProvider.getApplicationContext();
-
-        // Clean up any existing state
-        File profilesDir = new File(context.getFilesDir(), "profiles");
-        deleteRecursively(profilesDir);
     }
 
     @Test
@@ -149,29 +136,6 @@ public class StartupCrashTest {
             assertNotNull("Should handle invalid UUID", activity);
         } catch (Exception e) {
             fail("Invalid UUID should be handled gracefully: " + e.getMessage());
-        }
-    }
-
-    @Test
-    public void testFileSystemPermissionDenied() {
-        // Test startup when file system access is denied
-        // Make profiles directory read-only
-        File profilesDir = new File(context.getFilesDir(), "profiles");
-        profilesDir.mkdirs();
-        profilesDir.setReadOnly();
-
-        try {
-            ProfilesManager manager = ProfilesManager.getInstance();
-            manager.load(context);
-            manager.save(context);
-
-            // Should not crash even if file operations fail
-            assertNotNull("ProfilesManager should handle file permission issues", manager.getProfiles());
-        } catch (Exception e) {
-            fail("File permission issues should be handled gracefully: " + e.getMessage());
-        } finally {
-            // Restore permissions for cleanup
-            profilesDir.setWritable(true);
         }
     }
 

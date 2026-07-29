@@ -5,7 +5,6 @@ import android.content.Intent;
 
 import androidx.test.core.app.ApplicationProvider;
 
-import com.limelight.profiles.ProfilesManager;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -33,31 +32,7 @@ public class StartupTest {
 
     @Before
     public void setUp() {
-        // Reset ProfilesManager instance using reflection since it's package-private
-        try {
-            java.lang.reflect.Field instanceField = ProfilesManager.class.getDeclaredField("instance");
-            instanceField.setAccessible(true);
-            instanceField.set(null, null);
-        } catch (Exception e) {
-            // Ignore reflection errors
-        }
         context = ApplicationProvider.getApplicationContext();
-
-        // Clean up any existing profiles
-        File profilesDir = new File(context.getFilesDir(), "profiles");
-        deleteRecursively(profilesDir);
-    }
-
-    @Test
-    public void testApplicationStartup() {
-        // Test ArtemisApplication creation and initialization
-        ArtemisApplication app = new ArtemisApplication();
-        app.onCreate();
-
-        // Verify ProfilesManager was initialized
-        ProfilesManager manager = ProfilesManager.getInstance();
-        assertNotNull("ProfilesManager should be initialized", manager);
-        assertNotNull("ProfilesManager should have loaded profiles", manager.getProfiles());
     }
 
     @Test
@@ -94,19 +69,6 @@ public class StartupTest {
         assertFalse("Activity should not be finishing", activity.isFinishing());
     }
 
-    @Test
-    public void testProfilesManagerFileSystemAccess() {
-        // Test ProfilesManager file operations that might cause crashes
-        ProfilesManager manager = ProfilesManager.getInstance();
-
-        // Test with context that has no file access
-        try {
-            manager.load(context);
-            manager.save(context);
-        } catch (Exception e) {
-            fail("ProfilesManager should handle file access gracefully: " + e.getMessage());
-        }
-    }
 
     @Test
     public void testMissingPermissions() {
@@ -126,42 +88,6 @@ public class StartupTest {
         }
     }
 
-    @Test
-    public void testCorruptedProfilesFile() {
-        // Test startup with corrupted profiles file
-        File profilesDir = new File(context.getFilesDir(), "profiles");
-        profilesDir.mkdirs();
-        File profilesFile = new File(profilesDir, "profiles.json");
-
-        try {
-            // Write corrupted JSON
-            java.io.FileWriter writer = new java.io.FileWriter(profilesFile);
-            writer.write("{ corrupted json content");
-            writer.close();
-
-            ProfilesManager manager = ProfilesManager.getInstance();
-            manager.load(context);
-
-            // Should not crash and should return empty list
-            assertNotNull("Profiles should be initialized even with corrupted file", manager.getProfiles());
-        } catch (Exception e) {
-            fail("ProfilesManager should handle corrupted files gracefully: " + e.getMessage());
-        }
-    }
-
-    @Test
-    public void testNullContextHandling() {
-        // Test ProfilesManager with null context – should be handled gracefully
-        ProfilesManager manager = ProfilesManager.getInstance();
-
-        try {
-            manager.load(null);
-            // If no exception is thrown, the method handled null context correctly
-            assertTrue("Should handle null context gracefully", true);
-        } catch (Exception e) {
-            fail("Should handle null context gracefully: " + e.getMessage());
-        }
-    }
 
     @Test
     public void testLowMemoryConditions() {

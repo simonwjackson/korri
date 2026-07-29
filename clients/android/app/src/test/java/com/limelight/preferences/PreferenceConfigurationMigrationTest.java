@@ -9,8 +9,6 @@ import android.content.SharedPreferences;
 import androidx.preference.PreferenceManager;
 import androidx.test.core.app.ApplicationProvider;
 
-import com.limelight.profiles.ProfilesManager;
-import com.limelight.profiles.SettingsProfile;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -18,27 +16,17 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 @Config(sdk = 33)
 @RunWith(RobolectricTestRunner.class)
 public class PreferenceConfigurationMigrationTest {
     private SharedPreferences basePrefs;
-    private ProfilesManager profilesManager;
 
     @Before
     public void setUp() {
         Context context = ApplicationProvider.getApplicationContext();
         basePrefs = PreferenceManager.getDefaultSharedPreferences(context);
         basePrefs.edit().clear().commit();
-
-        profilesManager = ProfilesManager.getInstance();
-        for (SettingsProfile profile : profilesManager.getProfiles()) {
-            profilesManager.delete(profile.getUuid());
-        }
-        profilesManager.setActive(null);
     }
 
     @Test
@@ -65,22 +53,17 @@ public class PreferenceConfigurationMigrationTest {
     }
 
     @Test
-    public void activeProfileLegacyOpacityOverridesBaseWithoutLeaking() {
-        basePrefs.edit().putInt("seekbar_keyboard_axi_opacity", 70).commit();
+    public void resolvesLegacyOpacityAheadOfCurrentKeyWithoutWriting() {
+        basePrefs.edit()
+                .putInt("seekbar_keyboard_axi_opacity", 70)
+                .putInt("seekbar_osc_opacity", 25)
+                .commit();
 
-        Map<String, Object> options = new HashMap<>();
-        options.put("seekbar_osc_opacity", 25);
-        SettingsProfile profile = new SettingsProfile(
-                UUID.randomUUID(), "Legacy", System.currentTimeMillis(), System.currentTimeMillis(), options);
-        profilesManager.add(profile);
-        profilesManager.setActive(profile.getUuid());
-
-        SharedPreferences overlay = profilesManager.getOverlayingSharedPreferences(
-                ApplicationProvider.getApplicationContext());
-
-        assertEquals(25, PreferenceConfiguration.resolveKeyboardOpacity(overlay));
+        // The read path is separate from migration: it must honour the legacy
+        // key when present and leave the store untouched.
+        assertEquals(25, PreferenceConfiguration.resolveKeyboardOpacity(basePrefs));
         assertEquals(70, basePrefs.getInt("seekbar_keyboard_axi_opacity", -1));
-        assertFalse(basePrefs.contains("seekbar_osc_opacity"));
+        assertEquals(25, basePrefs.getInt("seekbar_osc_opacity", -1));
     }
 
     @Test
@@ -105,17 +88,11 @@ public class PreferenceConfigurationMigrationTest {
     }
 
     @Test
-    public void resolvesRemovedStereoRenderModeToTwoDInProfileOverlay() {
-        Map<String, Object> options = new HashMap<>();
-        options.put("render_mode_list", "2");
-        SettingsProfile profile = new SettingsProfile(
-                UUID.randomUUID(), "Stereo", System.currentTimeMillis(), System.currentTimeMillis(), options);
-        profilesManager.add(profile);
-        profilesManager.setActive(profile.getUuid());
+    public void resolvesRemovedStereoRenderModeWithoutWriting() {
+        basePrefs.edit().putString("render_mode_list", "2").commit();
 
-        SharedPreferences overlay = profilesManager.getOverlayingSharedPreferences(
-                ApplicationProvider.getApplicationContext());
-
-        assertEquals(0, PreferenceConfiguration.resolveRenderMode(overlay));
+        // Reading a removed mode reports 2D; only migration rewrites the store.
+        assertEquals(0, PreferenceConfiguration.resolveRenderMode(basePrefs));
+        assertEquals("2", basePrefs.getString("render_mode_list", null));
     }
 }
