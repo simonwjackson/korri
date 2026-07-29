@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test"
-import type { CatalogSnapshotOutcome } from "@contracts/generated/korrid"
+import type {
+  CatalogSnapshotOutcome,
+  SessionStatusOutcome,
+  SessionStopOutcome,
+} from "@contracts/generated/korrid"
+import { SessionStopPhase } from "@contracts/generated/korrid"
 import { LaunchablesState } from "./state"
 
 const localOk = {
@@ -166,6 +171,94 @@ describe("LaunchablesState action results", () => {
     expect(LaunchablesState.moveSelection(failed, "down")).toMatchObject({
       notice: null,
     })
+  })
+})
+
+const sessionActive: SessionStatusOutcome = {
+  _tag: "Ok",
+  payload: {
+    active: { launchId: "l1", gameId: "skate3", title: "Skate 3", phase: "running" },
+  },
+}
+
+const sessionIdle: SessionStatusOutcome = { _tag: "Ok", payload: {} }
+
+const sessionErr: SessionStatusOutcome = {
+  _tag: "Err",
+  payload: { code: "HostUnavailable", message: "host is unavailable" },
+}
+
+describe("LaunchablesState now playing", () => {
+  it("renders an active session as a selectable banner entry first", () => {
+    const state = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      sessionActive,
+    )
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries[0]).toEqual({
+      kind: "now-playing",
+      session: {
+        launchId: "l1",
+        gameId: "skate3",
+        title: "Skate 3",
+        phase: "running",
+      },
+    })
+    expect(state.selectedIndex).toBe(0)
+    const selected = LaunchablesState.selected(state)
+    expect(selected._tag).toBe("Some")
+  })
+
+  it("shows no banner when nothing is playing", () => {
+    const state = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      sessionIdle,
+    )
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.every(entry => entry.kind !== "now-playing")).toBe(true)
+  })
+
+  it("degrades a status failure silently: no banner, no notice", () => {
+    const state = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      sessionErr,
+    )
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.every(entry => entry.kind !== "now-playing")).toBe(true)
+    expect(state.notice).toBeNull()
+  })
+
+  it("stop Ok clears any notice; stop failure surfaces as a notice", () => {
+    const withBanner = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      sessionActive,
+    )
+    const ok: SessionStopOutcome = {
+      _tag: "Ok",
+      payload: { phase: SessionStopPhase.Stopped },
+    }
+    const stopped = LaunchablesState.withStopOutcome(withBanner, ok)
+    if (stopped._tag !== "Ready") throw new Error("unreachable")
+    expect(stopped.notice).toBeNull()
+
+    const failed = LaunchablesState.withStopOutcome(withBanner, {
+      _tag: "Err",
+      payload: { code: "HostUnavailable", message: "host is unavailable" },
+    })
+    if (failed._tag !== "Ready") throw new Error("unreachable")
+    expect(failed.notice).toBe("HostUnavailable: host is unavailable")
   })
 })
 

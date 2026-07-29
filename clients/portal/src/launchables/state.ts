@@ -8,9 +8,12 @@ import type {
   StreamHost,
 } from "@contracts/bridge/korri-native-bridge"
 import type {
+  ActiveSession,
   CatalogSnapshotOutcome,
   Game,
   SessionPrepareOutcome,
+  SessionStatusOutcome,
+  SessionStopOutcome,
 } from "@contracts/generated/korrid"
 import type { Direction } from "../input/types"
 
@@ -23,6 +26,7 @@ import type { Direction } from "../input/types"
  * are one flat, ordered list with a single selection.
  */
 export type PortalEntry =
+  | { readonly kind: "now-playing"; readonly session: ActiveSession }
   | { readonly kind: "game"; readonly game: Game }
   | { readonly kind: "local"; readonly launchable: Launchable }
   | {
@@ -66,18 +70,22 @@ export interface Section {
 }
 
 export const entryKey = (entry: PortalEntry): string =>
-  entry.kind === "game"
-    ? `game:${entry.game.id}`
-    : entry.kind === "local"
-      ? `local:${entry.launchable.packageName}`
-      : `stream:${entry.hostUuid}:${entry.app.id}`
+  entry.kind === "now-playing"
+    ? `now-playing:${entry.session.launchId}`
+    : entry.kind === "game"
+      ? `game:${entry.game.id}`
+      : entry.kind === "local"
+        ? `local:${entry.launchable.packageName}`
+        : `stream:${entry.hostUuid}:${entry.app.id}`
 
 export const entryLabel = (entry: PortalEntry): string =>
-  entry.kind === "game"
-    ? entry.game.title
-    : entry.kind === "local"
-      ? entry.launchable.label
-      : entry.app.name
+  entry.kind === "now-playing"
+    ? (entry.session.title ?? entry.session.gameId ?? "Current session")
+    : entry.kind === "game"
+      ? entry.game.title
+      : entry.kind === "local"
+        ? entry.launchable.label
+        : entry.app.name
 
 export const LaunchablesState = {
   loading: (): LaunchablesState => ({ _tag: "Loading" }),
@@ -91,9 +99,17 @@ export const LaunchablesState = {
     streams: readonly StreamSource[],
     korrid: CatalogSnapshotOutcome,
     hostsError?: string,
+    session?: SessionStatusOutcome,
   ): LaunchablesState => {
     const entries: PortalEntry[] = []
     const failures: string[] = []
+
+    // An active host session renders first as a now-playing banner. A
+    // status failure degrades silently — no banner, no notice — rather
+    // than blocking the list.
+    if (session?._tag === "Ok" && session.payload.active !== undefined) {
+      entries.push({ kind: "now-playing", session: session.payload.active })
+    }
 
     if (korrid._tag === "Ok") {
       for (const game of korrid.payload.games) entries.push({ kind: "game", game })
@@ -202,6 +218,21 @@ export const LaunchablesState = {
         }
   },
 
+  /** Fold a stop attempt into the notice mechanism. The banner itself
+   * disappears on the next fold, when status reports nothing playing. */
+  withStopOutcome: (
+    state: LaunchablesState,
+    outcome: SessionStopOutcome,
+  ): LaunchablesState => {
+    if (state._tag !== "Ready") return state
+    return outcome._tag === "Ok"
+      ? { ...state, notice: null }
+      : {
+          ...state,
+          notice: `${outcome.payload.code}: ${outcome.payload.message}`,
+        }
+  },
+
   /** Group the flat entry list into titled sections for rendering. */
   sections: (
     state: Extract<LaunchablesState, { _tag: "Ready" }>,
@@ -211,11 +242,13 @@ export const LaunchablesState = {
       null
     state.entries.forEach((entry, index) => {
       const title =
-        entry.kind === "game"
-          ? "Games"
-          : entry.kind === "local"
-            ? "This device"
-            : entry.hostName
+        entry.kind === "now-playing"
+          ? "Now playing"
+          : entry.kind === "game"
+            ? "Games"
+            : entry.kind === "local"
+              ? "This device"
+              : entry.hostName
       if (current === null || current.title !== title) {
         current = { title, startIndex: index, entries: [] }
         sections.push(current)

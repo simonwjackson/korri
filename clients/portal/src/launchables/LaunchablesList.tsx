@@ -35,6 +35,11 @@ export function LaunchablesList({ state }: LaunchablesListProps) {
                   }
                 >
                   {entryLabel(entry)}
+                  {entry.kind === "now-playing" && (
+                    <span className="mt-1 block text-sm font-normal opacity-60">
+                      Confirm resumes · Select stops
+                    </span>
+                  )}
                 </li>
               )
             })}

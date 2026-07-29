@@ -6,13 +6,17 @@
  * with its response without a hand-maintained map.
  */
 import type {
+  ActiveSession,
   CatalogSnapshotOutcome,
   Game,
   HealthOutcome,
   RpcRequest,
   RpcResponse,
   SessionPrepareOutcome,
+  SessionStatusOutcome,
+  SessionStopOutcome,
 } from "@contracts/generated/korrid"
+import { SessionStopPhase } from "@contracts/generated/korrid"
 
 export type RpcResponseFor<Request extends RpcRequest> = Extract<
   RpcResponse,
@@ -23,6 +27,8 @@ export interface KorridClient {
   health(): Promise<HealthOutcome>
   catalogSnapshot(): Promise<CatalogSnapshotOutcome>
   sessionPrepare(gameId: string): Promise<SessionPrepareOutcome>
+  sessionStatus(): Promise<SessionStatusOutcome>
+  sessionStop(): Promise<SessionStopOutcome>
 }
 
 export async function callKorrid<Request extends RpcRequest>(
@@ -81,12 +87,41 @@ export function createHttpKorridClient(baseUrl: string): KorridClient {
         return unreachable(error)
       }
     },
+    async sessionStatus() {
+      try {
+        const response = await callKorrid(baseUrl, {
+          _tag: "app.session.status",
+          payload: {},
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
+    async sessionStop() {
+      try {
+        const response = await callKorrid(baseUrl, {
+          _tag: "app.session.stop",
+          payload: {},
+        })
+        return response.outcome
+      } catch (error) {
+        return unreachable(error)
+      }
+    },
   }
 }
 
 export interface InMemoryKorridClientConfig {
-  readonly behavior?: "ok" | "catalog-fail" | "prepare-fail"
+  readonly behavior?:
+    | "ok"
+    | "catalog-fail"
+    | "prepare-fail"
+    | "status-fail"
+    | "stop-fail"
   readonly games?: readonly Game[]
+  /** Seed an active host session for now-playing flows. */
+  readonly activeSession?: ActiveSession
 }
 
 const sampleGames: readonly Game[] = [
@@ -99,6 +134,7 @@ export function createInMemoryKorridClient(
 ): KorridClient {
   const behavior = config.behavior ?? "ok"
   const games = config.games ?? sampleGames
+  let activeSession = config.activeSession
   return {
     async health() {
       return { _tag: "Ok", payload: { version: "korrid-in-memory" } }
@@ -120,6 +156,27 @@ export function createInMemoryKorridClient(
         }
       }
       return { _tag: "Ok", payload: { gameId } }
+    },
+    async sessionStatus() {
+      if (behavior === "status-fail") {
+        return {
+          _tag: "Err",
+          payload: { code: "HostUnavailable", message: "configured to fail" },
+        }
+      }
+      return activeSession === undefined
+        ? { _tag: "Ok", payload: {} }
+        : { _tag: "Ok", payload: { active: activeSession } }
+    },
+    async sessionStop() {
+      if (behavior === "stop-fail") {
+        return {
+          _tag: "Err",
+          payload: { code: "HostUnavailable", message: "configured to fail" },
+        }
+      }
+      activeSession = undefined
+      return { _tag: "Ok", payload: { phase: SessionStopPhase.Stopped } }
     },
   }
 }

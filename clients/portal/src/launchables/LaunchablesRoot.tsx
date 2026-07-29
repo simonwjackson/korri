@@ -32,10 +32,11 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
 
   const load = useCallback(async () => {
     setState(LaunchablesState.loading())
-    const [local, games, hostsResult] = await Promise.all([
+    const [local, games, hostsResult, session] = await Promise.all([
       bridge.queryLaunchables(),
       korrid.catalogSnapshot(),
       bridge.queryStreamHosts(),
+      korrid.sessionStatus(),
     ])
     const streams: readonly StreamSource[] =
       hostsResult._tag === "StreamHosts"
@@ -55,6 +56,7 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
         streams,
         games,
         hostsResult._tag === "QueryFailed" ? hostsResult.message : undefined,
+        session,
       ),
     )
   }, [bridge, korrid])
@@ -90,7 +92,26 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
       const selected = LaunchablesState.selected(stateRef.current)
       if (selected._tag === "None") return
       const entry = selected.value
-      if (entry.kind === "local") {
+      if (entry.kind === "now-playing") {
+        // Resume: the host session is already prepared — attach straight
+        // to the stable stream app without re-preparing.
+        const target = findKorriStreamTarget()
+        if (target === null) {
+          setState(current =>
+            LaunchablesState.withStartStreamResult(current, {
+              _tag: "StreamFailed",
+              reason: "AppNotFound",
+              message: `no "${KORRI_STREAM_APP}" app on a paired host`,
+            }),
+          )
+          return
+        }
+        void bridge.startStream(target.hostUuid, target.appId).then(result => {
+          setState(current =>
+            LaunchablesState.withStartStreamResult(current, result),
+          )
+        })
+      } else if (entry.kind === "local") {
         void bridge.launchApp(entry.launchable.packageName).then(result => {
           setState(current =>
             LaunchablesState.withLaunchResult(current, result),
@@ -136,11 +157,24 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
         })
       }
     })
+    // Stop lives on the existing semantic vocabulary: "options" on the
+    // now-playing banner asks korrid to stop the host session, then
+    // reloads so the banner reflects the outcome truthfully.
+    const offOptions = bus.onAction("options", () => {
+      const selected = LaunchablesState.selected(stateRef.current)
+      if (selected._tag === "None" || selected.value.kind !== "now-playing")
+        return
+      void korrid.sessionStop().then(outcome => {
+        setState(current => LaunchablesState.withStopOutcome(current, outcome))
+        if (outcome._tag === "Ok") void load()
+      })
+    })
     return () => {
       offDirection()
       offConfirm()
+      offOptions()
     }
-  }, [bus, bridge, korrid])
+  }, [bus, bridge, korrid, load])
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 text-zinc-100">
