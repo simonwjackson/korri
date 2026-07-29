@@ -8,6 +8,8 @@ android {
     namespace 'com.limelight'
 
     defaultConfig {
+        applicationId "com.simonwjackson.korri"
+
         minSdk 21
         targetSdk 34
 
@@ -24,40 +26,8 @@ android {
         ndk.debugSymbolLevel = 'FULL'
     }
 
-    flavorDimensions.add("root")
-
     buildFeatures {
         buildConfig = true
-    }
-
-    productFlavors {
-        root {
-            // Android O has native mouse capture, so don't show the rooted
-            // version to devices running O on the Play Store.
-            maxSdk 25
-
-            externalNativeBuild {
-                ndkBuild {
-                    arguments "PRODUCT_FLAVOR=root"
-                }
-            }
-
-            applicationId "com.simonwjackson.korri.root"
-            dimension "root"
-            buildConfigField "boolean", "ROOT_BUILD", "true"
-        }
-
-        nonRoot_game {
-            externalNativeBuild {
-                ndkBuild {
-                    arguments "PRODUCT_FLAVOR=nonRoot"
-                }
-            }
-
-            applicationId "com.simonwjackson.korri"
-            dimension "root"
-            buildConfigField "boolean", "ROOT_BUILD", "false"
-        }
     }
 
     compileOptions {
@@ -95,8 +65,6 @@ android {
         debug {
             applicationIdSuffix ".debug"
             resValue "string", "app_label", "Korri (Debug)"
-            resValue "string", "app_label_root", "Korri (Root Debug)"
-            resValue "string", "app_label_game", "Korri (Game Debug)"
 
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
@@ -105,8 +73,6 @@ android {
             // Korri owns its application ID (upstream Moonlight/Artemis ids
             // are left behind entirely), so no release suffix is needed.
             resValue "string", "app_label", "Korri"
-            resValue "string", "app_label_root", "Korri (Root)"
-            resValue "string", "app_label_game", "Korri (Game)"
 
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

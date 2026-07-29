@@ -12,7 +12,6 @@ import com.limelight.binding.input.capture.InputCaptureProvider;
 import com.limelight.binding.input.touch.AbsoluteTouchContext;
 import com.limelight.binding.input.touch.RelativeTouchContext;
 import com.limelight.binding.input.driver.UsbDriverService;
-import com.limelight.binding.input.evdev.EvdevListener;
 import com.limelight.binding.input.touch.TouchContext;
 import com.limelight.binding.input.touch.TrackpadContext;
 import com.limelight.binding.input.virtual_controller.keyboard.KeyBoardController;
@@ -115,7 +114,7 @@ import android.view.ViewGroup;
 
 
 public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
-        OnGenericMotionListener, OnTouchListener, NvConnectionListener, EvdevListener,
+        OnGenericMotionListener, OnTouchListener, NvConnectionListener,
         OnSystemUiVisibilityChangeListener, GameGestures, StreamContainer.InputCallbacks,
         PerfOverlayListener, UsbDriverService.UsbDriverStateListener, View.OnKeyListener {
     public static Game instance;
@@ -646,7 +645,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         performanceOverlayBig = findViewById(R.id.performanceOverlayBig);
 
-        inputCaptureProvider = InputCaptureManager.getInputCaptureProvider(this, this);
+        inputCaptureProvider = InputCaptureManager.getInputCaptureProvider(this);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             streamContainer.setOnCapturedPointerListener(new View.OnCapturedPointerListener() {
@@ -3688,30 +3687,39 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
     }
 
-    @Override
     public void mouseMove(int deltaX, int deltaY) {
         conn.sendMouseMove((short) deltaX, (short) deltaY);
     }
 
-    @Override
+    /**
+     * Mouse-button ids used by virtual-keyboard layouts. These values are
+     * persisted inside saved layouts, so they are a stored contract and must
+     * keep their numbering.
+     */
+    private static final int MOUSE_BUTTON_LEFT = 1;
+    private static final int MOUSE_BUTTON_MIDDLE = 2;
+    private static final int MOUSE_BUTTON_RIGHT = 3;
+    private static final int MOUSE_BUTTON_X1 = 4;
+    private static final int MOUSE_BUTTON_X2 = 5;
+
     public void mouseButtonEvent(int buttonId, boolean down) {
         byte buttonIndex;
 
         switch (buttonId)
         {
-            case EvdevListener.BUTTON_LEFT:
+            case MOUSE_BUTTON_LEFT:
                 buttonIndex = MouseButtonPacket.BUTTON_LEFT;
                 break;
-            case EvdevListener.BUTTON_MIDDLE:
+            case MOUSE_BUTTON_MIDDLE:
                 buttonIndex = MouseButtonPacket.BUTTON_MIDDLE;
                 break;
-            case EvdevListener.BUTTON_RIGHT:
+            case MOUSE_BUTTON_RIGHT:
                 buttonIndex = MouseButtonPacket.BUTTON_RIGHT;
                 break;
-            case EvdevListener.BUTTON_X1:
+            case MOUSE_BUTTON_X1:
                 buttonIndex = MouseButtonPacket.BUTTON_X1;
                 break;
-            case EvdevListener.BUTTON_X2:
+            case MOUSE_BUTTON_X2:
                 buttonIndex = MouseButtonPacket.BUTTON_X2;
                 break;
             default:
@@ -3724,34 +3732,6 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
         else {
             conn.sendMouseButtonUp(buttonIndex);
-        }
-    }
-
-    @Override
-    public void mouseVScroll(byte amount) {
-        conn.sendMouseScroll(amount);
-    }
-
-    @Override
-    public void mouseHScroll(byte amount) {
-        conn.sendMouseHScroll(amount);
-    }
-
-    @Override
-    public void keyboardEvent(boolean buttonDown, short keyCode) {
-        short keyMap = keyboardTranslator.translate(keyCode, 0, -1);
-        if (keyMap != 0) {
-            // handleSpecialKeys() takes the Android keycode
-            if (handleSpecialKeys(keyCode, buttonDown)) {
-                return;
-            }
-
-            if (buttonDown) {
-                conn.sendKeyboardInput(keyMap, KeyboardPacket.KEY_DOWN, getModifierState(), (byte)0);
-            }
-            else {
-                conn.sendKeyboardInput(keyMap, KeyboardPacket.KEY_UP, getModifierState(), (byte)0);
-            }
         }
     }
 
