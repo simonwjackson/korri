@@ -1,0 +1,14 @@
+node_modules/
+out/
+result
+result-*
+.direnv/
+.cache/
+.env
+.env.local
+*.local.md
+local.env
+.worktrees/
+.fallow/
+.tmp/
+.resession.json
