@@ -23,6 +23,7 @@
       in
       {
         devShells.android = import ./clients/android/devshell.nix { inherit pkgs; };
+        devShells.portal = import ./clients/portal/devshell.nix { inherit pkgs; };
       }
     );
 }

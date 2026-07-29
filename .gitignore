@@ -16,3 +16,4 @@ local.env
 /.pi/git
 /.tanstack/tmp
 .android-sdk/
+dist/
