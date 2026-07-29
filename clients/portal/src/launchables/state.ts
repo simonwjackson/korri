@@ -42,21 +42,33 @@ export interface StreamSource {
   readonly apps: QueryStreamAppsResult
 }
 
+interface LaunchablesContent {
+  readonly entries: readonly PortalEntry[]
+  readonly selectedIndex: number
+  readonly notice: string | null
+}
+
+type ReadyState = { readonly _tag: "Ready" } & LaunchablesContent
+type PreparingState = {
+  readonly _tag: "Preparing"
+  readonly title: string
+} & LaunchablesContent
+type LaunchingState = {
+  readonly _tag: "Launching"
+  readonly title: string
+} & LaunchablesContent
+type StoppingState = {
+  readonly _tag: "Stopping"
+  readonly launchId: string
+} & LaunchablesContent
+
 export type LaunchablesState =
   | { readonly _tag: "Loading" }
   | { readonly _tag: "LoadError"; readonly message: string }
-  | {
-      readonly _tag: "Ready"
-      readonly entries: readonly PortalEntry[]
-      readonly selectedIndex: number
-      readonly notice: string | null
-      /**
-       * Title of the game korrid is preparing, or null. Fills the gap
-       * between confirm and the stream Activity taking over; cleared when
-       * prepare or the stream start fails.
-       */
-      readonly preparing: string | null
-    }
+  | ReadyState
+  | PreparingState
+  | LaunchingState
+  | StoppingState
 
 /** Minimal local Maybe until Effect's Option arrives with the RPC slice. */
 export type Maybe<A> =
@@ -68,6 +80,16 @@ export interface Section {
   readonly startIndex: number
   readonly entries: readonly PortalEntry[]
 }
+
+const readyFrom = (
+  state: LaunchablesContent,
+  notice: string | null,
+): ReadyState => ({
+  _tag: "Ready",
+  entries: state.entries,
+  selectedIndex: state.selectedIndex,
+  notice,
+})
 
 export const entryKey = (entry: PortalEntry): string =>
   entry.kind === "now-playing"
@@ -106,9 +128,8 @@ export const LaunchablesState = {
 
     // An active host session renders first as a now-playing banner. A
     // status failure degrades silently — no banner, no notice — rather
-    // than blocking the list. Note `!= null`: Rust serde serializes
-    // Option::None as an explicit null even though the generated type
-    // spells the field optional.
+    // than blocking the list. `!= null` also remains compatible with older
+    // korrid builds that emitted Option::None as explicit null.
     if (session?._tag === "Ok" && session.payload.active != null) {
       entries.push({ kind: "now-playing", session: session.payload.active })
     }
@@ -150,14 +171,19 @@ export const LaunchablesState = {
       entries,
       selectedIndex: 0,
       notice: failures.length > 0 ? failures.join(" · ") : null,
-      preparing: null,
     }
   },
 
-  /** Confirm on a game: show prepare progress until the activity swap. */
+  /** Confirm on a game: enter an input-locked case until activity swap. */
   beginPreparing: (state: LaunchablesState, title: string): LaunchablesState =>
     state._tag === "Ready"
-      ? { ...state, preparing: title, notice: null }
+      ? { ...state, _tag: "Preparing", title, notice: null }
+      : state,
+
+  /** Lock all direct local/stream/resume starts before their Promise runs. */
+  beginLaunching: (state: LaunchablesState, title: string): LaunchablesState =>
+    state._tag === "Ready"
+      ? { ...state, _tag: "Launching", title, notice: null }
       : state,
 
   moveSelection: (
@@ -186,54 +212,88 @@ export const LaunchablesState = {
     state: LaunchablesState,
     result: LaunchAppResult,
   ): LaunchablesState => {
-    if (state._tag !== "Ready") return state
+    if (state._tag !== "Launching") return state
     return result._tag === "Launched"
       ? { ...state, notice: null }
-      : { ...state, notice: `${result.reason}: ${result.message}` }
+      : readyFrom(state, `${result.reason}: ${result.message}`)
   },
 
   withStartStreamResult: (
     state: LaunchablesState,
     result: StartStreamResult,
   ): LaunchablesState => {
-    if (state._tag !== "Ready") return state
-    return result._tag === "StreamStarted"
-      ? { ...state, notice: null }
-      : {
-          ...state,
-          preparing: null,
-          notice: `${result.reason}: ${result.message}`,
-        }
+    if (state._tag !== "Launching" && state._tag !== "Preparing") return state
+    if (result._tag === "StreamStarted") return { ...state, notice: null }
+    return readyFrom(state, `${result.reason}: ${result.message}`)
   },
 
   withPrepareOutcome: (
     state: LaunchablesState,
     outcome: SessionPrepareOutcome,
   ): LaunchablesState => {
-    if (state._tag !== "Ready") return state
-    return outcome._tag === "Ok"
-      ? { ...state, notice: null }
-      : {
-          ...state,
-          preparing: null,
-          notice: `${outcome.payload.code}: ${outcome.payload.message}`,
-        }
+    if (state._tag !== "Preparing") return state
+    if (outcome._tag === "Ok") return { ...state, notice: null }
+    return readyFrom(
+      state,
+      `${outcome.payload.code}: ${outcome.payload.message}`,
+    )
   },
 
-  /** Fold a stop attempt into the notice mechanism. The banner itself
-   * disappears on the next fold, when status reports nothing playing. */
+  /** Lock input before the asynchronous stop request leaves the portal. */
+  beginStopping: (state: LaunchablesState): LaunchablesState => {
+    if (state._tag !== "Ready") return state
+    const selected = state.entries[state.selectedIndex]
+    if (selected?.kind !== "now-playing") return state
+    return {
+      ...state,
+      _tag: "Stopping",
+      launchId: selected.session.launchId,
+      notice: null,
+    }
+  },
+
+  /** A successful stop request is not the same as an ended session. */
   withStopOutcome: (
     state: LaunchablesState,
     outcome: SessionStopOutcome,
   ): LaunchablesState => {
-    if (state._tag !== "Ready") return state
+    if (state._tag !== "Stopping") return state
     return outcome._tag === "Ok"
-      ? { ...state, notice: null }
-      : {
-          ...state,
-          notice: `${outcome.payload.code}: ${outcome.payload.message}`,
-        }
+      ? state
+      : readyFrom(
+          state,
+          `${outcome.payload.code}: ${outcome.payload.message}`,
+        )
   },
+
+  /** Fold a status poll while stopping; only idle removes the banner. */
+  withStatusAfterStop: (
+    state: LaunchablesState,
+    status: SessionStatusOutcome,
+  ): LaunchablesState => {
+    if (state._tag !== "Stopping") return state
+    if (status._tag === "Err") {
+      return readyFrom(
+        state,
+        `${status.payload.code}: ${status.payload.message}`,
+      )
+    }
+    if (
+      status.payload.active != null &&
+      status.payload.active.launchId === state.launchId
+    ) {
+      return state
+    }
+    return {
+      ...readyFrom(state, null),
+      entries: state.entries.filter(entry => entry.kind !== "now-playing"),
+    }
+  },
+
+  stopTimedOut: (state: LaunchablesState): LaunchablesState =>
+    state._tag === "Stopping"
+      ? readyFrom(state, "StopPending: session is still stopping")
+      : state,
 
   /** Group the flat entry list into titled sections for rendering. */
   sections: (

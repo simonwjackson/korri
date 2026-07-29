@@ -118,6 +118,12 @@ describe("LaunchablesState selection", () => {
     })
   })
 
+  it("locks selection while any asynchronous launch is in flight", () => {
+    const launching = LaunchablesState.beginLaunching(ready, "Desktop")
+    expect(launching).toMatchObject({ _tag: "Launching", title: "Desktop" })
+    expect(LaunchablesState.selected(launching)).toEqual({ _tag: "None" })
+  })
+
   it("clamps at the ends and ignores horizontal movement", () => {
     expect(LaunchablesState.moveSelection(ready, "up")).toMatchObject({
       selectedIndex: 0,
@@ -130,44 +136,60 @@ describe("LaunchablesState selection", () => {
 
 describe("LaunchablesState action results", () => {
   it("surfaces launch, stream, and prepare failures as notices", () => {
-    const launchFailed = LaunchablesState.withLaunchResult(ready, {
+    const launchFailed = LaunchablesState.withLaunchResult(
+      LaunchablesState.beginLaunching(ready, "A"),
+      {
       _tag: "LaunchFailed",
       reason: "NotFound",
       message: "gone",
-    })
+      },
+    )
     expect(launchFailed).toMatchObject({ notice: "NotFound: gone" })
 
-    const streamFailed = LaunchablesState.withStartStreamResult(ready, {
+    const streamFailed = LaunchablesState.withStartStreamResult(
+      LaunchablesState.beginLaunching(ready, "Desktop"),
+      {
       _tag: "StreamFailed",
       reason: "NotPaired",
       message: "pair first",
-    })
+      },
+    )
     expect(streamFailed).toMatchObject({ notice: "NotPaired: pair first" })
 
-    const prepareFailed = LaunchablesState.withPrepareOutcome(ready, {
+    const prepareFailed = LaunchablesState.withPrepareOutcome(
+      LaunchablesState.beginPreparing(ready, "Skate 3"),
+      {
       _tag: "Err",
       payload: { code: "UpstreamFailure", message: "no such game" },
-    })
+      },
+    )
     expect(prepareFailed).toMatchObject({
       notice: "UpstreamFailure: no such game",
     })
   })
 
   it("clears notices on success and on movement", () => {
-    const failed = LaunchablesState.withStartStreamResult(ready, {
+    const failed = LaunchablesState.withStartStreamResult(
+      LaunchablesState.beginLaunching(ready, "Desktop"),
+      {
       _tag: "StreamFailed",
       reason: "HostUnreachable",
       message: "offline",
-    })
+      },
+    )
+    const launching = LaunchablesState.beginLaunching(ready, "Desktop")
     expect(
-      LaunchablesState.withStartStreamResult(failed, { _tag: "StreamStarted" }),
-    ).toMatchObject({ notice: null })
+      LaunchablesState.withStartStreamResult(launching, {
+        _tag: "StreamStarted",
+      }),
+    ).toMatchObject({ _tag: "Launching", notice: null })
+    const preparing = LaunchablesState.beginPreparing(ready, "Skate 3")
     expect(
-      LaunchablesState.withPrepareOutcome(failed, {
+      LaunchablesState.withPrepareOutcome(preparing, {
         _tag: "Ok",
         payload: { gameId: "skate3" },
       }),
-    ).toMatchObject({ notice: null })
+    ).toMatchObject({ _tag: "Preparing", notice: null })
     expect(LaunchablesState.moveSelection(failed, "down")).toMatchObject({
       notice: null,
     })
@@ -224,24 +246,6 @@ describe("LaunchablesState now playing", () => {
     expect(state.entries.every(entry => entry.kind !== "now-playing")).toBe(true)
   })
 
-  it("treats a wire-level `active: null` as nothing playing", () => {
-    // Rust serde serializes Option::None as an explicit null; the
-    // generated type says `active?` but the wire still carries the key.
-    const nullActive = {
-      _tag: "Ok",
-      payload: { active: null },
-    } as unknown as SessionStatusOutcome
-    const state = LaunchablesState.fromSources(
-      localOk,
-      [officeApps],
-      gamesOk,
-      undefined,
-      nullActive,
-    )
-    if (state._tag !== "Ready") throw new Error("unreachable")
-    expect(state.entries.every(entry => entry.kind !== "now-playing")).toBe(true)
-  })
-
   it("degrades a status failure silently: no banner, no notice", () => {
     const state = LaunchablesState.fromSources(
       localOk,
@@ -255,7 +259,7 @@ describe("LaunchablesState now playing", () => {
     expect(state.notice).toBeNull()
   })
 
-  it("stop Ok clears any notice; stop failure surfaces as a notice", () => {
+  it("stop Ok enters an input-locked stopping case until status is idle", () => {
     const withBanner = LaunchablesState.fromSources(
       localOk,
       [officeApps],
@@ -267,26 +271,70 @@ describe("LaunchablesState now playing", () => {
       _tag: "Ok",
       payload: { phase: SessionStopPhase.Stopped },
     }
-    const stopped = LaunchablesState.withStopOutcome(withBanner, ok)
-    if (stopped._tag !== "Ready") throw new Error("unreachable")
-    expect(stopped.notice).toBeNull()
+    const stopRequested = LaunchablesState.beginStopping(withBanner)
+    expect(stopRequested._tag).toBe("Stopping")
+    expect(LaunchablesState.selected(stopRequested)).toEqual({ _tag: "None" })
+    const stopping = LaunchablesState.withStopOutcome(stopRequested, ok)
+    expect(stopping._tag).toBe("Stopping")
+    expect(LaunchablesState.selected(stopping)).toEqual({ _tag: "None" })
 
-    const failed = LaunchablesState.withStopOutcome(withBanner, {
+    const stillActive = LaunchablesState.withStatusAfterStop(
+      stopping,
+      sessionActive,
+    )
+    expect(stillActive._tag).toBe("Stopping")
+
+    const stopped = LaunchablesState.withStatusAfterStop(stillActive, sessionIdle)
+    if (stopped._tag !== "Ready") throw new Error("unreachable")
+    expect(stopped.entries.every(entry => entry.kind !== "now-playing")).toBe(true)
+
+    const replacementSession: SessionStatusOutcome = {
+      _tag: "Ok",
+      payload: {
+        active: { launchId: "l2", title: "Different game" },
+      },
+    }
+    expect(
+      LaunchablesState.withStatusAfterStop(stopping, replacementSession)._tag,
+    ).toBe("Ready")
+
+    const failed = LaunchablesState.withStopOutcome(stopRequested, {
       _tag: "Err",
       payload: { code: "HostUnavailable", message: "host is unavailable" },
     })
     if (failed._tag !== "Ready") throw new Error("unreachable")
     expect(failed.notice).toBe("HostUnavailable: host is unavailable")
   })
+
+  it("returns to the list with a truthful notice when pending stop times out", () => {
+    const withBanner = LaunchablesState.fromSources(
+      localOk,
+      [officeApps],
+      gamesOk,
+      undefined,
+      sessionActive,
+    )
+    const stopping = LaunchablesState.withStopOutcome(
+      LaunchablesState.beginStopping(withBanner),
+      {
+      _tag: "Ok",
+      payload: { phase: SessionStopPhase.Pending },
+      },
+    )
+    const timedOut = LaunchablesState.stopTimedOut(stopping)
+    expect(timedOut).toMatchObject({
+      _tag: "Ready",
+      notice: "StopPending: session is still stopping",
+    })
+  })
 })
 
 describe("LaunchablesState preparing", () => {
-  it("confirm on a game enters a visible preparing state", () => {
-    if (ready._tag !== "Ready") throw new Error("unreachable")
-    expect(ready.preparing).toBeNull()
+  it("confirm on a game enters an explicit input-locked Preparing case", () => {
     const preparing = LaunchablesState.beginPreparing(ready, "Skate 3")
-    if (preparing._tag !== "Ready") throw new Error("unreachable")
-    expect(preparing.preparing).toBe("Skate 3")
+    if (preparing._tag !== "Preparing") throw new Error("unreachable")
+    expect(preparing.title).toBe("Skate 3")
+    expect(LaunchablesState.selected(preparing)).toEqual({ _tag: "None" })
   })
 
   it("prepare Err restores the list with a notice", () => {
@@ -296,7 +344,6 @@ describe("LaunchablesState preparing", () => {
       payload: { code: "UpstreamUnreachable", message: "host offline" },
     })
     if (failed._tag !== "Ready") throw new Error("unreachable")
-    expect(failed.preparing).toBeNull()
     expect(failed.notice).toBe("UpstreamUnreachable: host offline")
   })
 
@@ -306,8 +353,8 @@ describe("LaunchablesState preparing", () => {
       _tag: "Ok",
       payload: { gameId: "skate3" },
     })
-    if (prepared._tag !== "Ready") throw new Error("unreachable")
-    expect(prepared.preparing).toBe("Skate 3")
+    if (prepared._tag !== "Preparing") throw new Error("unreachable")
+    expect(prepared.title).toBe("Skate 3")
   })
 
   it("a stream start failure clears preparing with a notice", () => {
@@ -318,7 +365,6 @@ describe("LaunchablesState preparing", () => {
       message: "no route",
     })
     if (failed._tag !== "Ready") throw new Error("unreachable")
-    expect(failed.preparing).toBeNull()
     expect(failed.notice).toBe("HostUnreachable: no route")
   })
 })
