@@ -21,12 +21,14 @@ bun run typecheck
 
 cd "$CRATE"
 cargo build --release --bin korrid
+export KORRID_RPC_CAPABILITY="check-capability"
 "$CARGO_TARGET_DIR/release/korrid" &
 server_pid=$!
 trap 'kill "$server_pid" 2>/dev/null || true' EXIT
 for _ in $(seq 1 20); do
   if curl --fail --silent http://127.0.0.1:43117/rpc \
       -H 'content-type: application/json' \
+      -H "authorization: Bearer $KORRID_RPC_CAPABILITY" \
       -d '{"_tag":"system.health","payload":{}}' >/dev/null; then
     break
   fi

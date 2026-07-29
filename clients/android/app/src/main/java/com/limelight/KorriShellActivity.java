@@ -7,6 +7,7 @@ import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
@@ -57,6 +58,7 @@ import okhttp3.Response;
 public class KorriShellActivity extends AppCompatActivity {
     private WebView webView;
     private int korridPort = -1;
+    private String korridCapability = "";
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private final CountDownLatch binderReady = new CountDownLatch(1);
 
@@ -81,8 +83,16 @@ public class KorriShellActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Embedded korrid: the portal talks to this localhost brain.
-        korridPort = KorridServer.startAndLog();
+        // Embedded korrid: only this exact portal origin may present the
+        // per-server capability to the localhost brain.
+        final String portalUrl = portalUrl();
+        korridPort = KorridServer.startAndLog(portalOrigin(portalUrl));
+        korridCapability = KorridServer.capability();
+        if (BuildConfig.DEBUG) {
+            // Device smoke needs to probe the protected endpoint. Release
+            // builds never expose the capability through logcat.
+            Log.i("KorridServer", "debug capability=" + korridCapability);
+        }
 
         bindService(new Intent(this, ComputerManagerService.class),
                 serviceConnection, BIND_AUTO_CREATE);
@@ -116,7 +126,7 @@ public class KorriShellActivity extends AppCompatActivity {
         }
 
         webView.addJavascriptInterface(new KorriNativeBridge(), "KorriNative");
-        webView.loadUrl(portalUrl());
+        webView.loadUrl(portalUrl);
         setContentView(webView);
     }
 
@@ -131,6 +141,14 @@ public class KorriShellActivity extends AppCompatActivity {
             return devUrl;
         }
         return "https://appassets.androidplatform.net/assets/portal/index.html";
+    }
+
+    private static String portalOrigin(String url) {
+        Uri uri = Uri.parse(url);
+        if (uri.getScheme() == null || uri.getEncodedAuthority() == null) {
+            throw new IllegalArgumentException("portal URL has no origin: " + url);
+        }
+        return uri.getScheme() + "://" + uri.getEncodedAuthority();
     }
 
     /**
@@ -215,13 +233,19 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 4;
+            return 5;
         }
 
         /** Port of the embedded korrid server, or -1 when it is not running. */
         @JavascriptInterface
         public int korridPort() {
             return korridPort;
+        }
+
+        /** Per-server bearer capability for the localhost korrid RPC. */
+        @JavascriptInterface
+        public String korridCapability() {
+            return korridCapability;
         }
 
         /** JSON-encoded QueryLaunchablesResult. */

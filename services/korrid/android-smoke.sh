@@ -21,19 +21,22 @@ adb -s "$DEVICE" logcat -c
 adb -s "$DEVICE" shell am start -S -n "$PACKAGE/com.limelight.KorriShellActivity" >/dev/null
 
 port=""
+capability=""
 portal_ready=""
 for _ in $(seq 1 20); do
   line="$(adb -s "$DEVICE" logcat -d -s KorridServer:I 2>/dev/null | grep 'listening on 127.0.0.1:' | tail -1 || true)"
   port="$(printf '%s' "$line" | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p')"
+  capability_line="$(adb -s "$DEVICE" logcat -d -s KorridServer:I 2>/dev/null | grep 'debug capability=' | tail -1 || true)"
+  capability="$(printf '%s' "$capability_line" | sed -n 's/.*debug capability=\([0-9a-f][0-9a-f]*\).*/\1/p')"
   portal_ready="$(adb -s "$DEVICE" logcat -d -s KorriPortal:I 2>/dev/null | grep 'title="Korri"' | tail -1 || true)"
-  if [[ -n "$port" && -n "$portal_ready" ]]; then
+  if [[ -n "$port" && -n "$capability" && -n "$portal_ready" ]]; then
     break
   fi
   sleep 1
 done
 
-if [[ -z "$port" || -z "$portal_ready" ]]; then
-  echo "Complete app smoke failed (Rust port='$port', portal='$portal_ready')" >&2
+if [[ -z "$port" || -z "$capability" || -z "$portal_ready" ]]; then
+  echo "Complete app smoke failed (Rust port='$port', capability=${capability:+present}, portal='$portal_ready')" >&2
   adb -s "$DEVICE" logcat -d -t 300 >&2
   exit 1
 fi
@@ -48,8 +51,20 @@ if adb -s "$DEVICE" logcat -d 2>/dev/null | grep -qE 'INFO:CONSOLE.*(blocked|Err
 fi
 
 adb -s "$DEVICE" forward "tcp:$HOST_PORT" "tcp:$port"
+
+# Localhost alone is not authority: an unauthenticated caller must be rejected.
+unauthorized_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  -H 'content-type: application/json' \
+  -d '{"_tag":"system.health","payload":{}}' \
+  "http://127.0.0.1:$HOST_PORT/rpc")"
+if [[ "$unauthorized_status" != "401" ]]; then
+  echo "Unauthenticated RPC returned HTTP $unauthorized_status, expected 401" >&2
+  exit 1
+fi
+
 response="$(curl --fail --silent \
   -H 'content-type: application/json' \
+  -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.catalog.snapshot","payload":{}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
 
@@ -58,6 +73,7 @@ response="$(curl --fail --silent \
 # — anything else means the proxy or the wire is broken.
 session_response="$(curl --fail --silent \
   -H 'content-type: application/json' \
+  -H "authorization: Bearer $capability" \
   -d '{"_tag":"app.session.status","payload":{}}' \
   "http://127.0.0.1:$HOST_PORT/rpc")"
 if ! printf '%s' "$session_response" | grep -q '"_tag":"app.session.status"'; then

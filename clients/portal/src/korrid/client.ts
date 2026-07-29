@@ -33,11 +33,15 @@ export interface KorridClient {
 
 export async function callKorrid<Request extends RpcRequest>(
   baseUrl: string,
+  capability: string,
   request: Request,
 ): Promise<RpcResponseFor<Request>> {
   const response = await fetch(`${baseUrl}/rpc`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${capability}`,
+    },
     body: JSON.stringify(request),
   })
   if (!response.ok) throw new Error(`korrid returned HTTP ${response.status}`)
@@ -52,11 +56,14 @@ const unreachable = (error: unknown) => ({
   },
 })
 
-export function createHttpKorridClient(baseUrl: string): KorridClient {
+export function createHttpKorridClient(
+  baseUrl: string,
+  capability: string,
+): KorridClient {
   return {
     async health() {
       try {
-        const response = await callKorrid(baseUrl, {
+        const response = await callKorrid(baseUrl, capability, {
           _tag: "system.health",
           payload: {},
         })
@@ -67,7 +74,7 @@ export function createHttpKorridClient(baseUrl: string): KorridClient {
     },
     async catalogSnapshot() {
       try {
-        const response = await callKorrid(baseUrl, {
+        const response = await callKorrid(baseUrl, capability, {
           _tag: "app.catalog.snapshot",
           payload: {},
         })
@@ -78,7 +85,7 @@ export function createHttpKorridClient(baseUrl: string): KorridClient {
     },
     async sessionPrepare(gameId) {
       try {
-        const response = await callKorrid(baseUrl, {
+        const response = await callKorrid(baseUrl, capability, {
           _tag: "app.session.prepare",
           payload: { gameId },
         })
@@ -89,7 +96,7 @@ export function createHttpKorridClient(baseUrl: string): KorridClient {
     },
     async sessionStatus() {
       try {
-        const response = await callKorrid(baseUrl, {
+        const response = await callKorrid(baseUrl, capability, {
           _tag: "app.session.status",
           payload: {},
         })
@@ -100,7 +107,7 @@ export function createHttpKorridClient(baseUrl: string): KorridClient {
     },
     async sessionStop() {
       try {
-        const response = await callKorrid(baseUrl, {
+        const response = await callKorrid(baseUrl, capability, {
           _tag: "app.session.stop",
           payload: {},
         })
@@ -181,8 +188,8 @@ export function createInMemoryKorridClient(
   }
 }
 
-export async function smokeKorrid(baseUrl: string) {
-  const client = createHttpKorridClient(baseUrl)
+export async function smokeKorrid(baseUrl: string, capability: string) {
+  const client = createHttpKorridClient(baseUrl, capability)
   const health = await client.health()
   if (health._tag !== "Ok") throw new Error(health.payload.message)
 

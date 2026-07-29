@@ -1,6 +1,11 @@
 //! Embedded-capable korrid server core: contracts, dispatch, and lifecycle.
 
-use axum::{extract::State, routing::post, Json, Router};
+use axum::{
+    extract::State,
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
+    routing::post,
+    Json, Router,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     net::{Ipv4Addr, SocketAddrV4, TcpListener as StdTcpListener},
@@ -52,21 +57,25 @@ pub struct SessionStatusRequest {}
 #[serde(rename_all = "camelCase")]
 pub struct ActiveSession {
     pub launch_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,
 }
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SessionStatus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active: Option<ActiveSession>,
 }
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SessionStopRequest {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub force: Option<bool>,
 }
 
@@ -176,6 +185,7 @@ pub enum RpcResponse {
 #[derive(Clone)]
 struct AppState {
     upstream: upstream::UpstreamClient,
+    rpc_capability: String,
 }
 
 fn upstream_failure(error: upstream::UpstreamError) -> RpcFailure {
@@ -253,7 +263,7 @@ fn session_stop_outcome(
     }
 }
 
-pub async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
+async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
     match request {
         RpcRequest::CatalogSnapshot(_) => {
             let outcome = match state.upstream.catalog_snapshot().await {
@@ -296,20 +306,46 @@ pub async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
     }
 }
 
-async fn rpc(State(state): State<AppState>, Json(request): Json<RpcRequest>) -> Json<RpcResponse> {
-    Json(dispatch(&state, request).await)
+async fn rpc(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<RpcRequest>,
+) -> Result<Json<RpcResponse>, StatusCode> {
+    let expected = format!("Bearer {}", state.rpc_capability);
+    if headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        != Some(expected.as_str())
+    {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(Json(dispatch(&state, request).await))
 }
 
-pub fn router() -> Router {
+/// Build the localhost router protected by a per-server bearer capability.
+/// The exact portal origin is the only browser origin allowed to send it.
+pub fn router_with_capability(rpc_capability: &str, allowed_origin: &str) -> Router {
     let state = AppState {
         upstream: upstream::UpstreamClient::new(upstream::UpstreamConfig::from_env()),
+        rpc_capability: rpc_capability.into(),
     };
+    let origin: HeaderValue = allowed_origin
+        .parse()
+        .expect("allowed portal origin must be a valid header value");
+    let cors = tower_http::cors::CorsLayer::new()
+        .allow_origin(origin)
+        .allow_methods([Method::POST])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
     Router::new()
         .route("/rpc", post(rpc))
-        // The server binds loopback only; the WebView portal calls it from
-        // a synthetic https origin, so preflights must be answered.
-        .layer(tower_http::cors::CorsLayer::permissive())
+        .layer(cors)
         .with_state(state)
+}
+
+/// Generate an unguessable capability for one server lifetime.
+pub fn generate_rpc_capability() -> String {
+    let bytes: [u8; 32] = rand::random();
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -324,6 +360,7 @@ pub enum ServerError {
 
 struct ServerHandle {
     port: u16,
+    rpc_capability: String,
     stop: oneshot::Sender<()>,
     thread: JoinHandle<()>,
 }
@@ -339,7 +376,7 @@ pub fn korrid_version() -> String {
 }
 
 /// Starts the exact same Axum router used by the Linux binary on localhost.
-pub fn start_local_server() -> Result<u16, ServerError> {
+pub fn start_local_server(allowed_origin: &str) -> Result<u16, ServerError> {
     let mut slot = server_slot().lock().expect("server mutex poisoned");
     if slot.is_some() {
         return Err(ServerError::AlreadyRunning);
@@ -362,6 +399,9 @@ pub fn start_local_server() -> Result<u16, ServerError> {
             details: error.to_string(),
         })?
         .port();
+    let rpc_capability = generate_rpc_capability();
+    let server_capability = rpc_capability.clone();
+    let allowed_origin = allowed_origin.to_owned();
     let (stop, stopped) = oneshot::channel();
     let thread = std::thread::Builder::new()
         .name("korrid".into())
@@ -370,19 +410,27 @@ pub fn start_local_server() -> Result<u16, ServerError> {
             runtime.block_on(async move {
                 let listener = tokio::net::TcpListener::from_std(listener)
                     .expect("convert localhost listener");
-                axum::serve(listener, router())
-                    .with_graceful_shutdown(async {
-                        let _ = stopped.await;
-                    })
-                    .await
-                    .expect("serve korrid");
+                axum::serve(
+                    listener,
+                    router_with_capability(&server_capability, &allowed_origin),
+                )
+                .with_graceful_shutdown(async {
+                    let _ = stopped.await;
+                })
+                .await
+                .expect("serve korrid");
             });
         })
         .map_err(|error| ServerError::StartFailed {
             details: error.to_string(),
         })?;
 
-    *slot = Some(ServerHandle { port, stop, thread });
+    *slot = Some(ServerHandle {
+        port,
+        rpc_capability,
+        stop,
+        thread,
+    });
     Ok(port)
 }
 
@@ -407,6 +455,14 @@ pub fn local_server_port() -> Option<u16> {
         .map(|server| server.port)
 }
 
+pub fn local_server_capability() -> Option<String> {
+    server_slot()
+        .lock()
+        .expect("server mutex poisoned")
+        .as_ref()
+        .map(|server| server.rpc_capability.clone())
+}
+
 pub mod upstream;
 
 #[cfg(target_os = "android")]
@@ -415,6 +471,11 @@ mod android;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{
+        body::{to_bytes, Body},
+        http::{header, Request, StatusCode},
+    };
+    use tower::ServiceExt;
 
     #[test]
     fn status_with_active_session_maps_to_ok_with_details() {
@@ -444,6 +505,141 @@ mod tests {
             outcome,
             SessionStatusOutcome::Ok(SessionStatus { active: None })
         ));
+    }
+
+    #[test]
+    fn absent_optional_fields_are_omitted_from_the_wire() {
+        assert_eq!(
+            serde_json::to_value(SessionStatus { active: None }).unwrap(),
+            serde_json::json!({})
+        );
+        assert_eq!(
+            serde_json::to_value(ActiveSession {
+                launch_id: "l1".into(),
+                game_id: None,
+                title: None,
+                phase: None,
+            })
+            .unwrap(),
+            serde_json::json!({ "launchId": "l1" })
+        );
+        assert_eq!(
+            serde_json::to_value(SessionStopRequest { force: None }).unwrap(),
+            serde_json::json!({})
+        );
+    }
+
+    #[tokio::test]
+    async fn rpc_rejects_missing_or_wrong_capability() {
+        let app = router_with_capability("right-token", "https://portal.example");
+        for authorization in [None, Some("Bearer wrong-token")] {
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("/rpc")
+                .header(header::CONTENT_TYPE, "application/json");
+            if let Some(value) = authorization {
+                request = request.header(header::AUTHORIZATION, value);
+            }
+            let response = app
+                .clone()
+                .oneshot(
+                    request
+                        .body(Body::from(r#"{"_tag":"system.health","payload":{}}"#))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    #[tokio::test]
+    async fn rpc_accepts_the_capability_and_exact_portal_origin() {
+        let app = router_with_capability("right-token", "https://portal.example");
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, "Bearer right-token")
+                    .header(header::ORIGIN, "https://portal.example")
+                    .body(Body::from(r#"{"_tag":"system.health","payload":{}}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap(),
+            "https://portal.example"
+        );
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("system.health"));
+    }
+
+    #[tokio::test]
+    async fn cors_allows_authorized_preflight_only_for_the_exact_origin() {
+        let app = router_with_capability("right-token", "https://portal.example");
+        let allowed = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/rpc")
+                    .header(header::ORIGIN, "https://portal.example")
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                    .header(
+                        header::ACCESS_CONTROL_REQUEST_HEADERS,
+                        "content-type,authorization",
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(allowed.status(), StatusCode::OK);
+        assert_eq!(
+            allowed
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap(),
+            "https://portal.example"
+        );
+        assert!(allowed
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_HEADERS)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("authorization"));
+
+        let foreign = app
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/rpc")
+                    .header(header::ORIGIN, "https://evil.example")
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                    .header(
+                        header::ACCESS_CONTROL_REQUEST_HEADERS,
+                        "content-type,authorization",
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(
+            foreign
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap(),
+            "https://evil.example"
+        );
     }
 
     #[test]

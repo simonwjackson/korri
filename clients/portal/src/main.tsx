@@ -46,9 +46,13 @@ const bridge = window.KorriNative
 // Loopback http from the synthetic https origin is exempt from WebView
 // mixed-content blocking (verified on device).
 const korridPort = window.KorriNative?.korridPort() ?? -1
+const korridCapability = window.KorriNative?.korridCapability() ?? ""
 const korrid =
-  korridPort > 0
-    ? createHttpKorridClient(`http://127.0.0.1:${korridPort}`)
+  korridPort > 0 && korridCapability !== ""
+    ? createHttpKorridClient(
+        `http://127.0.0.1:${korridPort}`,
+        korridCapability,
+      )
     : createInMemoryKorridClient()
 
 const rootElement = document.getElementById("app")

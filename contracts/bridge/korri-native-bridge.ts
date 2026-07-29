@@ -18,9 +18,9 @@
  */
 
 // 2 and 3 are skipped: the shipped shell reported 3 while this file lagged
-// at 1. 4 supersedes both drifted values; the session lifecycle below is
-// the v4 surface.
-export const BRIDGE_VERSION = 4
+// at 1. 4 introduced the session lifecycle; 5 adds the per-server korrid
+// capability required to protect localhost session-control RPCs.
+export const BRIDGE_VERSION = 5
 
 // ── Launchables (JS -> Kotlin) ──────────────────────────────────────────
 
@@ -135,6 +135,11 @@ export interface KorriNativeBridgeSurface {
    * process lifecycle stay on the Kotlin side of the treaty.
    */
   korridPort(): number
+  /**
+   * Unguessable capability for this embedded korrid server lifetime. The
+   * portal sends it as a bearer token; it must never be persisted.
+   */
+  korridCapability(): string
   /** Returns `BRIDGE_VERSION` of the shell build. */
   bridgeVersion(): number
 }

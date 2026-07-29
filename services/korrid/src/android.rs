@@ -1,9 +1,9 @@
-//! Android edge: three JNI functions mirroring
+//! Android edge: four JNI functions mirroring
 //! clients/android/.../korrid/KorridServer.java.
 
-use crate::{korrid_version, start_local_server, stop_local_server};
+use crate::{korrid_version, local_server_capability, start_local_server, stop_local_server};
 use jni::{
-    objects::JClass,
+    objects::{JClass, JString},
     sys::{jint, jstring},
     JNIEnv,
 };
@@ -27,12 +27,40 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_version(
 pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_start(
     mut env: JNIEnv,
     _class: JClass,
+    allowed_origin: JString,
 ) -> jint {
-    match start_local_server() {
+    let allowed_origin: String = match env.get_string(&allowed_origin) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return -1;
+        }
+    };
+    match start_local_server(&allowed_origin) {
         Ok(port) => port.into(),
         Err(error) => {
             let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
             -1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_capability(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    match local_server_capability() {
+        Some(capability) => match env.new_string(capability) {
+            Ok(value) => value.into_raw(),
+            Err(error) => {
+                let _ = env.throw_new("java/lang/IllegalStateException", error.to_string());
+                ptr::null_mut()
+            }
+        },
+        None => {
+            let _ = env.throw_new("java/lang/IllegalStateException", "korrid is not running");
+            ptr::null_mut()
         }
     }
 }

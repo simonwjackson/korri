@@ -9,8 +9,15 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .expect("bind korrid spike server");
+    let capability = std::env::var("KORRID_RPC_CAPABILITY")
+        .expect("KORRID_RPC_CAPABILITY must be set for the standalone server");
+    let allowed_origin = std::env::var("KORRID_PORTAL_ORIGIN")
+        .unwrap_or_else(|_| "https://appassets.androidplatform.net".into());
     println!("korrid listening on http://{address}/rpc");
-    axum::serve(listener, korrid::router())
-        .await
-        .expect("serve korrid spike");
+    axum::serve(
+        listener,
+        korrid::router_with_capability(&capability, &allowed_origin),
+    )
+    .await
+    .expect("serve korrid spike");
 }
