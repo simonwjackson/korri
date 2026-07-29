@@ -35,7 +35,15 @@ describe("createKorriNativeLauncherBridge", () => {
     queryLaunchables: () =>
       JSON.stringify({ _tag: "Launchables", items: [{ packageName: "x", label: "X" }] }),
     launchApp: () => JSON.stringify({ _tag: "Launched" }),
-    bridgeVersion: () => 1,
+    queryStreamHosts: () =>
+      JSON.stringify({
+        _tag: "StreamHosts",
+        items: [{ uuid: "h1", name: "Office", paired: true }],
+      }),
+    queryStreamApps: () =>
+      JSON.stringify({ _tag: "StreamApps", items: [{ id: 7, name: "Desktop" }] }),
+    startStream: () => JSON.stringify({ _tag: "StreamStarted" }),
+    bridgeVersion: () => 2,
     ...overrides,
   })
 
