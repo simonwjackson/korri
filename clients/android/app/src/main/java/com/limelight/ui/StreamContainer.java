@@ -17,7 +17,6 @@ import com.limelight.Game;
 import com.limelight.LimeLog;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.utils.SgsrRenderer;
-import com.limelight.utils.Stereo3DRenderer;
 
 /**
  * A container that manages different stream display modes and now correctly
@@ -35,14 +34,14 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
 
     public enum StreamMode {
         MODE_2D,
-        MODE_AI_3D,
-        MODE_AI_3D_MOVIE,
         MODE_SGSR
     }
 
+    /** Persisted value of the SGSR render mode; see mapIntToStreamMode. */
+    private static final int RENDER_MODE_VALUE_SGSR = 3;
+
     private Game game;
     private PreferenceConfiguration prefConfig;
-    private Stereo3DRenderer mStereoRenderer;
     private SgsrRenderer mSgsrRenderer;
 
     private SurfaceView mSurfaceView;
@@ -73,8 +72,6 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
         this.prefConfig = prefConfig;
         this.renderMode = mapIntToStreamMode(prefConfig.renderMode);
 
-        Stereo3DRenderer.isMovieMode = renderMode == StreamMode.MODE_AI_3D_MOVIE;
-
         isSurfaceReady = false;
         mCurrentSurface = null;
 
@@ -90,14 +87,6 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
             glSurfaceView.setEGLContextClientVersion(3);
             mSgsrRenderer = new SgsrRenderer(glSurfaceView, this, prefConfig);
             glSurfaceView.setRenderer(mSgsrRenderer);
-            glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
-            mSurfaceView = glSurfaceView;
-            addView(mSurfaceView, childParams);
-        } else if (renderMode != StreamMode.MODE_2D) {
-            GLSurfaceView glSurfaceView = new GLSurfaceView(context);
-            glSurfaceView.setEGLContextClientVersion(3);
-            mStereoRenderer = new Stereo3DRenderer(glSurfaceView, this, context, prefConfig);
-            glSurfaceView.setRenderer(mStereoRenderer);
             glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
             mSurfaceView = glSurfaceView;
             addView(mSurfaceView, childParams);
@@ -129,12 +118,6 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        // SGSR keeps the stream's aspect ratio like 2D; only the 3D modes
-        // intentionally fill/stretch the display.
-        if (renderMode != StreamMode.MODE_2D && renderMode != StreamMode.MODE_SGSR) {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-            return;
-        }
         if (desiredAspectRatio == 0) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
             return;
@@ -227,13 +210,17 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
         return mSurfaceView;
     }
 
+    /**
+     * Stored render-mode values are a stable wire format, not enum ordinals:
+     * SGSR has always persisted as 3, and it keeps that value now that the
+     * depth-estimation modes (1 and 2) are gone. Mapping by ordinal would
+     * silently re-point existing installs at the wrong mode.
+     */
     public StreamMode mapIntToStreamMode(int modeIndex) {
-        StreamContainer.StreamMode[] modes = StreamContainer.StreamMode.values();
-        if (modeIndex >= 0 && modeIndex < modes.length) {
-            return modes[modeIndex];
-        } else {
-            return StreamContainer.StreamMode.MODE_2D;
+        if (modeIndex == RENDER_MODE_VALUE_SGSR) {
+            return StreamMode.MODE_SGSR;
         }
+        return StreamMode.MODE_2D;
     }
 
     private void notifySurfaceReady() {
@@ -263,8 +250,6 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
             mCurrentSurface = null;
         } else if (mSgsrRenderer != null) {
             mSgsrRenderer.onSurfaceDestroyed();
-        } else if (mStereoRenderer != null) {
-            mStereoRenderer.onSurfaceDestroyed();
         }
 
         game.surfaceDestroyed(holder);
@@ -281,9 +266,6 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
     public void onDestroy() {
         if (mSgsrRenderer != null) {
             mSgsrRenderer.onSurfaceDestroyed();
-        }
-        if (mStereoRenderer != null) {
-            mStereoRenderer.onSurfaceDestroyed();
         }
     }
 }

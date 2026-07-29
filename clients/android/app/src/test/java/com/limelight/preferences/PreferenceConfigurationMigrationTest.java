@@ -82,4 +82,40 @@ public class PreferenceConfigurationMigrationTest {
         assertEquals(70, basePrefs.getInt("seekbar_keyboard_axi_opacity", -1));
         assertFalse(basePrefs.contains("seekbar_osc_opacity"));
     }
+
+    @Test
+    public void migratesRemovedStereoRenderModesToTwoD() {
+        for (String removed : new String[]{"1", "2"}) {
+            basePrefs.edit().putString("render_mode_list", removed).commit();
+
+            PreferenceConfiguration.migrateRemovedStereoRenderModes(basePrefs);
+
+            assertEquals("0", basePrefs.getString("render_mode_list", null));
+        }
+    }
+
+    @Test
+    public void preservesSgsrRenderModeAcrossMigration() {
+        basePrefs.edit().putString("render_mode_list", "3").commit();
+
+        PreferenceConfiguration.migrateRemovedStereoRenderModes(basePrefs);
+
+        assertEquals("3", basePrefs.getString("render_mode_list", null));
+        assertEquals(3, PreferenceConfiguration.resolveRenderMode(basePrefs));
+    }
+
+    @Test
+    public void resolvesRemovedStereoRenderModeToTwoDInProfileOverlay() {
+        Map<String, Object> options = new HashMap<>();
+        options.put("render_mode_list", "2");
+        SettingsProfile profile = new SettingsProfile(
+                UUID.randomUUID(), "Stereo", System.currentTimeMillis(), System.currentTimeMillis(), options);
+        profilesManager.add(profile);
+        profilesManager.setActive(profile.getUuid());
+
+        SharedPreferences overlay = profilesManager.getOverlayingSharedPreferences(
+                ApplicationProvider.getApplicationContext());
+
+        assertEquals(0, PreferenceConfiguration.resolveRenderMode(overlay));
+    }
 }

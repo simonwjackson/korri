@@ -90,8 +90,7 @@ final class KorriSettingsBridge {
                         {"cap-fps", "Balanced with FPS limit"}, {"smoothness", "Smoothest video"},
                 }, null),
                 choice("render_mode_list", "Render mode", "0", new String[][]{
-                        {"0", "Default (2D)"}, {"1", "3D side-by-side"},
-                        {"2", "AI 2D to 3D"}, {"3", "SGSR upscale"},
+                        {"0", "Default (2D)"}, {"3", "SGSR upscale"},
                 }, null),
                 range("seekbar_sgsr_sharpness", "SGSR edge sharpness", 20, 0, 50, 1, "x0.1").put("live", true),
                 range("seekbar_sgsr_edge_threshold", "SGSR edge threshold", 8, 1, 32, 1, "/255").put("live", true),

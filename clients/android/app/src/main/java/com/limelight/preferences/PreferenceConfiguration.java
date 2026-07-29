@@ -11,6 +11,10 @@ import androidx.preference.PreferenceManager;
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.profiles.ProfilesManager;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 public class PreferenceConfiguration {
 
     public enum ScaleMode {
@@ -235,11 +239,6 @@ public class PreferenceConfiguration {
     public boolean enableHdr;
     public boolean enablePip;
 
-    public float parallax_depth;
-
-    public float convergence_ratio;
-    public float balance_shift;
-
     // SGSR upscaling tuning (see SgsrRenderer)
     public float sgsrSharpness;
     public float sgsrEdgeThreshold;
@@ -348,14 +347,17 @@ public class PreferenceConfiguration {
     private static final String CHECKBOX_REMEMBER_ZOOM_PAN = "checkbox_remember_zoom_pan";
     private static final String NUMBER_ZOOM_SCALE = "number_zoom_scale";
 
-    private static final String PARALLAX_DEPTH = "parallax_depth";
     private static final String SGSR_SHARPNESS = "seekbar_sgsr_sharpness";
     private static final String SGSR_EDGE_THRESHOLD = "seekbar_sgsr_edge_threshold";
 
-    private static final String CONVERGENCE_RATIO = "convergence_ratio";
-    private static final String BALANCE_SHIFT = "balance_shift";
     private static final String NUMBER_PAN_OFFSET_X = "number_pan_offset_x";
     private static final String NUMBER_PAN_OFFSET_Y = "number_pan_offset_y";
+
+    private static final String RENDER_MODE_PREF_STRING = "render_mode_list";
+    private static final String DEFAULT_RENDER_MODE = "0";
+    // Indices of the removed depth-estimation modes: SBS 3D and AI 2D-to-3D.
+    private static final List<String> LEGACY_STEREO_RENDER_MODES =
+            Collections.unmodifiableList(Arrays.asList("1", "2"));
 
     public static boolean isNativeResolution(int width, int height) {
         // It's not a native resolution if it matches an existing resolution option
@@ -689,6 +691,31 @@ private static int getFramePacingValue(Context context) {
         }
     }
 
+    /**
+     * The depth-estimation render modes (SBS 3D and AI 2D-to-3D) are gone, so
+     * any device still holding one of their stored values is moved back to 2D.
+     * Values are read by index, so leaving them in place would select the wrong
+     * mode rather than merely a missing one.
+     */
+    static void migrateRemovedStereoRenderModes(SharedPreferences basePrefs) {
+        String stored = basePrefs.getString(RENDER_MODE_PREF_STRING, DEFAULT_RENDER_MODE);
+        if (LEGACY_STEREO_RENDER_MODES.contains(stored)) {
+            basePrefs.edit().putString(RENDER_MODE_PREF_STRING, DEFAULT_RENDER_MODE).apply();
+        }
+    }
+
+    static int resolveRenderMode(SharedPreferences prefs) {
+        String stored = prefs.getString(RENDER_MODE_PREF_STRING, DEFAULT_RENDER_MODE);
+        if (LEGACY_STEREO_RENDER_MODES.contains(stored)) {
+            stored = DEFAULT_RENDER_MODE;
+        }
+        try {
+            return Integer.parseInt(stored);
+        } catch (NumberFormatException e) {
+            return Integer.parseInt(DEFAULT_RENDER_MODE);
+        }
+    }
+
     static int resolveKeyboardOpacity(SharedPreferences prefs) {
         if (prefs.contains(LEGACY_OSC_OPACITY_PREF_STRING)) {
             return prefs.getInt(LEGACY_OSC_OPACITY_PREF_STRING, DEFAULT_OPACITY);
@@ -700,6 +727,7 @@ private static int getFramePacingValue(Context context) {
         if (prefs == null) {
             SharedPreferences basePrefs = PreferenceManager.getDefaultSharedPreferences(context);
             migrateLegacyKeyboardOpacity(basePrefs);
+            migrateRemovedStereoRenderModes(basePrefs);
             prefs = ProfilesManager.getInstance().getOverlayingSharedPreferences(context);
         }
         PreferenceConfiguration config = new PreferenceConfiguration();
@@ -870,9 +898,7 @@ private static int getFramePacingValue(Context context) {
         config.usbDriver = prefs.getBoolean(USB_DRIVER_PREF_SRING, DEFAULT_USB_DRIVER);
         config.fullScreen = prefs.getBoolean(FULL_SCREEN_PREF_STRING, DEFAULT_FULL_SCREEN);
 
-        String renderMode = prefs.getString("render_mode_list", "0");
-        int renderModeInt = Integer.parseInt(renderMode);
-        config.renderMode = renderModeInt;
+        config.renderMode = resolveRenderMode(prefs);
 
         // Read mouse mode and set touch settings accordingly
         String mouseMode = prefs.getString("mouse_mode_list", "0");
@@ -997,10 +1023,6 @@ private static int getFramePacingValue(Context context) {
         config.zoomScale = prefs.getFloat(NUMBER_ZOOM_SCALE, DEFAULT_ZOOM_SCALE);
         config.panOffsetX = prefs.getFloat(NUMBER_PAN_OFFSET_X, DEFAULT_PAN_OFFSET);
         config.panOffsetY = prefs.getFloat(NUMBER_PAN_OFFSET_Y, DEFAULT_PAN_OFFSET);
-
-        config.parallax_depth = prefs.getInt(PARALLAX_DEPTH, 50) / 100f;
-        config.convergence_ratio = prefs.getInt(CONVERGENCE_RATIO, 50) / 100f;
-        config.balance_shift = prefs.getInt(BALANCE_SHIFT, 50) / 100f;
 
         // Sharpness slider 0-50 maps to SGSR edgeSharpness 0.0-5.0 (reference
         // default 2.0 = 20). Edge threshold slider is in 1/255 units
