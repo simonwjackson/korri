@@ -214,7 +214,8 @@ public class KorriShellActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public int bridgeVersion() {
-            return 3;
+            // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
+            return 4;
         }
 
         /** Port of the embedded korrid server, or -1 when it is not running. */
@@ -380,6 +381,9 @@ public class KorriShellActivity extends AppCompatActivity {
 
                 final Intent intent = ServerHelper.createStartIntent(
                         KorriShellActivity.this, app, computer, binder);
+                // Korri-initiated: the stream Activity narrates its lifecycle
+                // through the web overlay instead of the native spinner.
+                intent.putExtra(Game.EXTRA_KORRI_SESSION, true);
                 runOnUiThread(() -> startActivity(intent));
                 return "{\"_tag\":\"StreamStarted\"}";
             } catch (Exception e) {

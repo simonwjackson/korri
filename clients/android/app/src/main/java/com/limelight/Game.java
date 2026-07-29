@@ -237,6 +237,9 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     public static final String EXTRA_PC_NAME = "PcName";
     public static final String EXTRA_APP_HDR = "HDR";
     public static final String EXTRA_SERVER_CERT = "ServerCert";
+    // Set only by KorriShellActivity.startStream: the pre-stream lifecycle
+    // renders as a portal-origin overlay instead of the native spinner.
+    public static final String EXTRA_KORRI_SESSION = "KorriSession";
     public static final String EXTRA_WIDTH = "Width";
     public static final String EXTRA_HEIGHT = "Height";
     public static final String EXTRA_FPS = "Fps";
@@ -271,6 +274,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     private NvHTTP httpConn;
 
     private KorriGameOverlay korriOverlay;
+
+    // Korri-initiated sessions only (EXTRA_KORRI_SESSION): web lifecycle
+    // overlay replacing the native spinner. Null for stock entry points.
+    private KorriSessionOverlay korriSessionOverlay;
 
     public boolean isInputOnly = true;
     public boolean allowChangeMouseMode = true;
@@ -524,9 +531,17 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         // Inflate the content
         setContentView(R.layout.activity_game);
 
-        // Start the spinner
-        spinner = SpinnerDialog.displayDialog(this, getResources().getString(R.string.conn_establishing_title),
-                getResources().getString(R.string.conn_establishing_msg), true);
+        // Start the spinner — unless this is a Korri-initiated session, in
+        // which case the web overlay narrates the lifecycle instead (see
+        // contracts/bridge/korri-native-bridge.ts). Stock entry points are
+        // untouched.
+        if (getIntent().getBooleanExtra(EXTRA_KORRI_SESSION, false)) {
+            korriSessionOverlay = new KorriSessionOverlay(this);
+            korriSessionOverlay.attach();
+        } else {
+            spinner = SpinnerDialog.displayDialog(this, getResources().getString(R.string.conn_establishing_title),
+                    getResources().getString(R.string.conn_establishing_msg), true);
+        }
 
 
         Display currentDisplay = getWindowManager().getDefaultDisplay();
@@ -3279,6 +3294,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public void stageStarting(final String stage) {
+        if (korriSessionOverlay != null) {
+            korriSessionOverlay.publish(
+                    KorriSessionOverlay.stageStartingEvent(stage, appName));
+        }
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -3291,6 +3310,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public void stageComplete(String stage) {
+        if (korriSessionOverlay != null) {
+            korriSessionOverlay.publish(
+                    KorriSessionOverlay.stageCompleteEvent(stage, appName));
+        }
     }
 
     private void stopConnection() {
@@ -3332,7 +3355,11 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         final int portTestResult = MoonBridge.testClientConnectivity(ServerHelper.CONNECTION_TEST_SERVER, 443, portFlags);
 
         if (errorCode == 0 && portFlags != 0 && (portTestResult == MoonBridge.ML_TEST_RESULT_INCONCLUSIVE || portTestResult == 0)) {
-            spinner.setMessage(getResources().getString(R.string.unlocking_or_starting));
+            // Korri sessions have no spinner; the retry is silent under the
+            // overlay's current stage.
+            if (spinner != null) {
+                spinner.setMessage(getResources().getString(R.string.unlocking_or_starting));
+            }
             return true;
         }
 
@@ -3347,6 +3374,16 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 if (!displayedFailureDialog) {
                     displayedFailureDialog = true;
                     LimeLog.severe(stage + " failed: " + errorCode);
+
+                    // Korri sessions: the overlay renders the tagged failure
+                    // and owns the return to the portal; no native dialog.
+                    if (korriSessionOverlay != null) {
+                        boolean portsBlocked = portTestResult != MoonBridge.ML_TEST_RESULT_INCONCLUSIVE
+                                && portTestResult != 0;
+                        korriSessionOverlay.publish(KorriSessionOverlay.failedEvent(
+                                stage, appName, errorCode, portsBlocked || portFlags != 0));
+                        return;
+                    }
 
                     // If video initialization failed and the surface is still valid, display extra information for the user
                     Surface currentSurface = streamContainer.getSurface();
@@ -3411,6 +3448,21 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                     displayedFailureDialog = true;
                     LimeLog.severe("Connection terminated: " + errorCode);
                     stopConnection();
+
+                    // Korri sessions: graceful ends go straight back to the
+                    // portal; failures render in the overlay (re-attached
+                    // when the stream had already been revealed — the event
+                    // log replays through the boot-time snapshot pull).
+                    if (korriSessionOverlay != null) {
+                        if (errorCode == MoonBridge.ML_ERROR_GRACEFUL_TERMINATION) {
+                            finish();
+                        } else {
+                            korriSessionOverlay.publish(
+                                    KorriSessionOverlay.terminatedEvent(false, errorCode));
+                            korriSessionOverlay.attach();
+                        }
+                        return;
+                    }
 
                     // Display the error dialog if it was an unexpected termination.
                     // Otherwise, just finish the activity immediately.
@@ -3509,6 +3561,13 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 if (spinner != null) {
                     spinner.dismiss();
                     spinner = null;
+                }
+
+                // Korri sessions: the stream is rendering beneath — announce
+                // and remove the overlay (the sanctioned reveal signal).
+                if (korriSessionOverlay != null) {
+                    korriSessionOverlay.publish(KorriSessionOverlay.connectedEvent());
+                    korriSessionOverlay.reveal();
                 }
 
                 connected = true;

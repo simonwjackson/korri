@@ -17,7 +17,10 @@
  *   encoded `BridgeInputEvent`. The portal registers that global.
  */
 
-export const BRIDGE_VERSION = 2
+// 2 and 3 are skipped: the shipped shell reported 3 while this file lagged
+// at 1. 4 supersedes both drifted values; the session lifecycle below is
+// the v4 surface.
+export const BRIDGE_VERSION = 4
 
 // ── Launchables (JS -> Kotlin) ──────────────────────────────────────────
 
@@ -136,7 +139,7 @@ export interface KorriNativeBridgeSurface {
   bridgeVersion(): number
 }
 
-// ── Stream session lifecycle (v2) ────────────────────────────────────
+// ── Stream session lifecycle (v4) ────────────────────────────────────
 
 /**
  * Korri-initiated streams narrate their pre-stream lifecycle to a
