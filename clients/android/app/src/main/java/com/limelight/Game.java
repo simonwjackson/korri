@@ -1740,6 +1740,14 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         instance = null;
         timerHandler.removeCallbacksAndMessages(null);
 
+        // Korri session overlay: make sure the WebView is destroyed even
+        // when the Activity dies before the reveal (or after a failure
+        // re-attach).
+        if (korriSessionOverlay != null) {
+            korriSessionOverlay.reveal();
+            korriSessionOverlay = null;
+        }
+
         if (controllerHandler != null) {
             controllerHandler.destroy();
         }
