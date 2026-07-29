@@ -9,7 +9,9 @@ APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
 PACKAGE="com.simonwjackson.korri.debug"
 HOST_PORT=43118
 
-if ! unzip -l "$APK" | grep -q 'assets/portal/index.html'; then
+# grep must drain the whole listing: with pipefail, `grep -q` exiting at
+# the first match SIGPIPEs unzip and fails the pipeline spuriously.
+if ! unzip -l "$APK" | grep 'assets/portal/index.html' >/dev/null; then
   echo "APK is missing assets/portal/index.html" >&2
   exit 1
 fi

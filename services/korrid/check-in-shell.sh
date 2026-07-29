@@ -48,7 +48,9 @@ cargo ndk -t arm64-v8a -o "$ANDROID_LIBS" build --release --lib
 cd "$ROOT/clients/android"
 ./gradlew assembleDebug
 APK="$ROOT/clients/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
-unzip -l "$APK" | grep -q 'assets/portal/index.html'
+# grep must drain the whole listing: with pipefail, `grep -q` exiting at
+# the first match SIGPIPEs unzip and fails the pipeline spuriously.
+unzip -l "$APK" | grep 'assets/portal/index.html' >/dev/null
 
 printf 'Rust cdylib: '
 du -h "$ANDROID_LIBS/arm64-v8a/libkorrid.so" | cut -f1
