@@ -68,6 +68,42 @@ export function projectManagedLaunchStatus(
   }
 }
 
+export interface SessiondLaunchGameIdentity {
+  readonly gameId?: string
+  readonly title?: string
+}
+
+/**
+ * Client-facing game identity from the `@korri:game` launch annotation.
+ * The annotation is stamped by the prepare/launch handlers at the one
+ * moment the playable is resolved, rides sessiond's launch record (so it
+ * survives freeze/thaw and daemon restarts), and is surfaced here for
+ * status responses. Variant discriminators (release/user/profile/preset)
+ * are deliberately not exposed — they are host-side resume-matching
+ * concerns (see game-stream-runner's gameIdentityAnnotation).
+ */
+export function gameIdentityFromLaunchMetadata(
+  metadata:
+    | { readonly annotations?: { readonly [key: string]: unknown } }
+    | undefined,
+): SessiondLaunchGameIdentity {
+  const annotation = metadata?.annotations?.["@korri:game"]
+  if (!annotation || typeof annotation !== "object") return {}
+  const record = annotation as Record<string, unknown>
+  const gameId =
+    typeof record.id === "string" && record.id.length > 0
+      ? record.id
+      : undefined
+  const title =
+    typeof record.title === "string" && record.title.length > 0
+      ? record.title
+      : undefined
+  return {
+    ...(gameId ? { gameId } : {}),
+    ...(title ? { title } : {}),
+  }
+}
+
 export function projectSessiondLifecycleSummary(
   status: SessiondManagedLaunchStatus,
   options: { readonly failureReason?: (value: string) => string } = {},

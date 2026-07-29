@@ -2,7 +2,10 @@ import { readFile, stat } from "node:fs/promises"
 import { hostname } from "node:os"
 import { join } from "node:path"
 import { DataError } from "@platform/api/rpc/errors"
-import { projectSessiondLifecycleSummary } from "@platform/library/sessiond-lifecycle-projections"
+import {
+  gameIdentityFromLaunchMetadata,
+  projectSessiondLifecycleSummary,
+} from "@platform/library/sessiond-lifecycle-projections"
 import {
   probeSessiondManagedLaunchStatus as probeSessiondManagedLaunchClientStatus,
   type SessiondManagedLaunchClientFailure,
@@ -303,7 +306,16 @@ async function probeSessiondManagedLaunchStatus(
       mode: summary.mode,
       restoreAttempts: summary.restoreAttempts,
       ...(summary.active
-        ? { active: new SessiondLifecycleActive(summary.active) }
+        ? {
+            active: new SessiondLifecycleActive({
+              launchId: summary.active.launchId,
+              mode: summary.active.mode,
+              ...(summary.active.phase ? { phase: summary.active.phase } : {}),
+              ...gameIdentityFromLaunchMetadata(
+                summary.active.launchMetadata,
+              ),
+            }),
+          }
         : {}),
       ...(summary.failureReason
         ? { failureReason: summary.failureReason }

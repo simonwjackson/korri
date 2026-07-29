@@ -24,6 +24,7 @@ import {
   terminateSessiondManagedLaunch,
   thawSessiondManagedLaunch,
 } from "@platform/library/sessiond-managed-launch-client"
+import { gameIdentityFromLaunchMetadata } from "@platform/library/sessiond-lifecycle-projections"
 import { isLaunchReadyMode } from "@platform/library/sessiond-managed-launch-protocol"
 import {
   composeLaunchCompanions,
@@ -431,6 +432,12 @@ function sessionStatus(
                 ...(probe.status.active.phase
                   ? { phase: probe.status.active.phase }
                   : {}),
+                // Game identity from the @korri:game launch annotation;
+                // populates the (previously always-empty) gameId/title
+                // fields on ControlSessionActive.
+                ...gameIdentityFromLaunchMetadata(
+                  probe.status.active.launchMetadata,
+                ),
               },
             }
           : {}),

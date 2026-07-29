@@ -14,6 +14,13 @@ const SessionActive = Schema.Struct({
   launchId: Schema.String,
   mode: SessionLifecycleMode,
   phase: Schema.optional(SessionLifecyclePhase),
+  /**
+   * Game identity from the `@korri:game` launch annotation. Optional-first
+   * per the sessiond protocol evolution rules: absent for launches that
+   * predate the annotation or daemons that have not been updated.
+   */
+  gameId: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
 })
 
 const SessionStatusOk = Schema.Struct({

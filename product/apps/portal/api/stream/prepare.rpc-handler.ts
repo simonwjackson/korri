@@ -73,12 +73,14 @@ export function prepareStreamLaunch(
       .pipe(
         Effect.mapError(error => toDataError(error, "library prepare failed")),
       )
-    if (!games.some(entry => entry.id === gameId)) {
+    const game = games.find(entry => entry.id === gameId)
+    if (!game) {
       logger.warn({ id: gameId }, "app.stream.prepare: unknown id")
       return yield* Effect.fail(
         new NotFoundError({ message: `Unknown game id: ${gameId}` }),
       )
     }
+    const gameTitle = game.metadata?.name
 
     const resolved = yield* source
       .resolveLaunchForGame(gameId, {
@@ -107,6 +109,9 @@ export function prepareStreamLaunch(
         ...(resolved.launchMetadata?.annotations ?? {}),
         "@korri:game": {
           id: gameId,
+          // Human-readable identity for session-status consumers (shell
+          // banners, agents). Not part of the frozen-resume match key.
+          ...(gameTitle ? { title: gameTitle } : {}),
           ...(options.releaseId ? { releaseId: options.releaseId } : {}),
           ...(options.userId ? { userId: options.userId } : {}),
           ...(options.profileId ? { profileId: options.profileId } : {}),

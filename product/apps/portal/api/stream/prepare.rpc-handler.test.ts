@@ -103,9 +103,11 @@ describe("app.stream.prepare handler", () => {
       },
     })
     // Game identity annotation lets the host runner match a frozen launch
-    // to a re-entry request (thaw-and-reattach) instead of rejecting busy.
+    // to a re-entry request (thaw-and-reattach) instead of rejecting busy,
+    // and carries the human-readable title for session-status consumers.
     expect(intent.launchMetadata?.annotations?.["@korri:game"]).toEqual({
       id: "snes/echo.smc",
+      title: "Echo",
     })
   })
 

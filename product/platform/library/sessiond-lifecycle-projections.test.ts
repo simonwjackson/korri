@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { foregroundSessionGateStateFromSnapshot } from "@platform/session/foreground-session-gate-state"
 import {
+  gameIdentityFromLaunchMetadata,
   projectForegroundSessionStatusSnapshot,
   projectManagedLaunchStatus,
   projectSessiondLifecycleSummary,
@@ -154,5 +155,45 @@ describe("sessiond lifecycle projections", () => {
         serverTimestamp: "2026-05-30T00:00:00.000Z",
       }),
     ).toMatchObject({ state: "IdleReady", recentEvents: [] })
+  })
+})
+
+describe("gameIdentityFromLaunchMetadata", () => {
+  it("extracts id and title from the @korri:game annotation", () => {
+    expect(
+      gameIdentityFromLaunchMetadata({
+        annotations: {
+          "@korri:game": { id: "skate-3", title: "Skate 3", releaseId: "r1" },
+        },
+      }),
+    ).toEqual({ gameId: "skate-3", title: "Skate 3" })
+  })
+
+  it("omits missing or empty fields", () => {
+    expect(
+      gameIdentityFromLaunchMetadata({
+        annotations: { "@korri:game": { id: "skate-3", title: "" } },
+      }),
+    ).toEqual({ gameId: "skate-3" })
+    expect(
+      gameIdentityFromLaunchMetadata({
+        annotations: { "@korri:game": { title: "No Id" } },
+      }),
+    ).toEqual({ title: "No Id" })
+  })
+
+  it("returns empty identity for absent or malformed metadata", () => {
+    expect(gameIdentityFromLaunchMetadata(undefined)).toEqual({})
+    expect(gameIdentityFromLaunchMetadata({})).toEqual({})
+    expect(
+      gameIdentityFromLaunchMetadata({
+        annotations: { "@korri:game": "not-an-object" },
+      }),
+    ).toEqual({})
+    expect(
+      gameIdentityFromLaunchMetadata({
+        annotations: { "@other:provider": { id: "x" } },
+      }),
+    ).toEqual({})
   })
 })

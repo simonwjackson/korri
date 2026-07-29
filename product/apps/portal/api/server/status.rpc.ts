@@ -57,6 +57,9 @@ export class SessiondLifecycleActive extends Schema.Class<SessiondLifecycleActiv
   launchId: Schema.String,
   mode: SessiondLifecycleMode,
   phase: Schema.optional(SessiondLifecyclePhase),
+  /** Game identity from the `@korri:game` launch annotation (optional-first). */
+  gameId: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
 }) {}
 
 export class SessiondLifecycleSummary extends Schema.Class<SessiondLifecycleSummary>(
