@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { SHELL_RESUMED_EVENT } from "@contracts/bridge/korri-native-bridge"
+import type { SessionStatusOutcome } from "@contracts/generated/korrid"
 import type { LauncherBridge } from "../bridge/launcher-bridge"
 import type { KorridClient } from "../korrid/client"
 import type { InputBus } from "../input/bus"
@@ -12,6 +13,13 @@ import { LaunchablesState, type StreamSource } from "./state"
  * selected game; per-game Sunshine entries are legacy scaffolding.
  */
 const KORRI_STREAM_APP = "Korri Stream"
+
+/**
+ * The now-playing banner is garnish, not core content: a slow or hung
+ * status query must not hold the whole list hostage. Past this deadline
+ * the status degrades to the same silent no-banner path as a failure.
+ */
+const SESSION_STATUS_TIMEOUT_MS = 3000
 
 interface LaunchablesRootProps {
   readonly bus: InputBus
@@ -30,13 +38,41 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
   stateRef.current = state
   const streamsRef = useRef<readonly StreamSource[]>([])
 
+  const loadSeq = useRef(0)
+
+  const sessionStatusWithTimeout =
+    useCallback(async (): Promise<SessionStatusOutcome> => {
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const timeout = new Promise<SessionStatusOutcome>(resolve => {
+        timer = setTimeout(
+          () =>
+            resolve({
+              _tag: "Err",
+              payload: {
+                code: "StatusTimeout",
+                message: "session status timed out",
+              },
+            }),
+          SESSION_STATUS_TIMEOUT_MS,
+        )
+      })
+      try {
+        return await Promise.race([korrid.sessionStatus(), timeout])
+      } finally {
+        clearTimeout(timer)
+      }
+    }, [korrid])
+
   const load = useCallback(async () => {
+    // Overlapping loads (shell resume racing the initial load): only the
+    // latest invocation may write state, or a stale response wins.
+    const seq = ++loadSeq.current
     setState(LaunchablesState.loading())
     const [local, games, hostsResult, session] = await Promise.all([
       bridge.queryLaunchables(),
       korrid.catalogSnapshot(),
       bridge.queryStreamHosts(),
-      korrid.sessionStatus(),
+      sessionStatusWithTimeout(),
     ])
     const streams: readonly StreamSource[] =
       hostsResult._tag === "StreamHosts"
@@ -49,6 +85,7 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
               })),
           )
         : []
+    if (seq !== loadSeq.current) return
     streamsRef.current = streams
     setState(
       LaunchablesState.fromSources(
@@ -59,7 +96,7 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
         session,
       ),
     )
-  }, [bridge, korrid])
+  }, [bridge, korrid, sessionStatusWithTimeout])
 
   useEffect(() => {
     void load()
@@ -89,7 +126,11 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
       )
     })
     const offConfirm = bus.onAction("confirm", () => {
-      const selected = LaunchablesState.selected(stateRef.current)
+      const current = stateRef.current
+      // A prepare is already in flight: repeated confirms must not start
+      // duplicate prepared streams.
+      if (current._tag === "Ready" && current.preparing !== null) return
+      const selected = LaunchablesState.selected(current)
       if (selected._tag === "None") return
       const entry = selected.value
       if (entry.kind === "now-playing") {
@@ -161,7 +202,9 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
     // now-playing banner asks korrid to stop the host session, then
     // reloads so the banner reflects the outcome truthfully.
     const offOptions = bus.onAction("options", () => {
-      const selected = LaunchablesState.selected(stateRef.current)
+      const current = stateRef.current
+      if (current._tag === "Ready" && current.preparing !== null) return
+      const selected = LaunchablesState.selected(current)
       if (selected._tag === "None" || selected.value.kind !== "now-playing")
         return
       void korrid.sessionStop().then(outcome => {
