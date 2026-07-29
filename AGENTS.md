@@ -18,13 +18,16 @@ the `legacy` branch apply here unless this file says so.
 ```
 clients/android/   Kotlin/Java shell: Artemis streaming core, native pairing,
                    WebView host, bridge implementation (all hardware truth)
-clients/portal/    TS launcher UI + in-process brain, runs in the shell's
-                   WebView; browser dev via in-memory bridge + keyboard input
+clients/portal/    TS launcher UI, runs in the shell's WebView; talks to the
+                   korrid brain over localhost RPC; browser dev via in-memory
+                   bridge + keyboard input
 contracts/         treaties between deployables; imports nothing outside
-                   contracts/; when sides disagree, the contract file wins
-services/korrid/   (future) host-side daemon — thin hosting of the brain
-platform/ts/       (future) brain modules shared by portal and korrid; a
-                   module moves here when it has a second real consumer
+                   contracts/; when sides disagree, the contract file wins.
+                   contracts/bridge/ is hand-written; contracts/generated/ is
+                   Typeshare output from Rust (read-only)
+services/korrid/   Rust brain. Ships two ways: a standalone binary (dev/host)
+                   and a cdylib embedded in the Android app, both serving RPC
+                   on localhost
 ```
 
 One shared model of how Korri behaves; each platform meets it as well as it
@@ -41,6 +44,12 @@ can, and the gap is absorbed at the edge — never leaked into the core or UI.
   live in `<area>/devshell.nix`. No inline derivations or shells.
 - The `justfile` owns cross-area glue (e.g. bundling the portal into APK
   assets); per-area commands stay inside their area.
-- Effect is not in the tree yet; it arrives with the korrid RPC slice.
-  Seams (bridge services, state ADTs) are shaped so that conversion to
-  Effect services/layers/atoms is mechanical.
+- Services are Rust. Wire types live in Rust and are exported through
+  Typeshare into `contracts/generated/` — those files are read-only;
+  regenerate them via `services/korrid/check.sh`, never edit by hand.
+- The portal's brain is always korrid at `http://127.0.0.1:<port>`; the
+  portal never talks to host daemons or any other backend directly. On
+  Android the shell embeds korrid as a cdylib and injects the port.
+- The Effect-RPC envelope client in `services/korrid/src/upstream.rs` is
+  scaffolding for talking to the legacy host daemon; it dies with the
+  host-side Rust rewrite. Do not grow abstractions around it.
