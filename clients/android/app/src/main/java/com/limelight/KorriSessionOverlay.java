@@ -192,6 +192,19 @@ public class KorriSessionOverlay {
         }
     }
 
+    /** Failure before Moonlight can emit a native connection stage. */
+    public static JSONObject decoderUnsupportedEvent() {
+        try {
+            return new JSONObject()
+                    .put("type", "failed")
+                    .put("reason", "DecoderInitFailed")
+                    .put("stage", "initializing")
+                    .put("detail", "hardware accelerated H.264 is unavailable");
+        } catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     public static JSONObject failedEvent(
             String rawStage, String appName, int errorCode, boolean portsBlocked) {
         try {

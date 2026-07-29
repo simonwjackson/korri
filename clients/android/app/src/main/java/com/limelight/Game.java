@@ -959,9 +959,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 spinner = null;
             }
 
-            // If we can't find an AVC decoder, we can't proceed
-            Dialog.displayDialog(this, getResources().getString(R.string.conn_error_title),
-                    "This device or ROM doesn't support hardware accelerated H.264 playback.", true);
+            // If we can't find an AVC decoder, we can't proceed. Korri
+            // sessions keep the failure in the web lifecycle; stock Artemis
+            // entry points preserve their native dialog.
+            if (korriSessionOverlay != null) {
+                korriSessionOverlay.publish(KorriSessionOverlay.decoderUnsupportedEvent());
+            } else {
+                Dialog.displayDialog(this, getResources().getString(R.string.conn_error_title),
+                        "This device or ROM doesn't support hardware accelerated H.264 playback.", true);
+            }
             return;
         }
 
