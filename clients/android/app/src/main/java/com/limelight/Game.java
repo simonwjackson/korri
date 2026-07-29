@@ -325,7 +325,6 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         instance = this;
         timerHandler = new Handler(Looper.getMainLooper());
 
-        UiHelper.setLocale(this);
 
         // We don't want a title bar
         requestWindowFeature(Window.FEATURE_NO_TITLE);

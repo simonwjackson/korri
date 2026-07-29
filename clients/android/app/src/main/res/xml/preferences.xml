@@ -806,14 +806,6 @@
         app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
 
-        <com.limelight.preferences.LanguagePreference
-            android:defaultValue="default"
-            android:entries="@array/language_names"
-            android:entryValues="@array/language_values"
-            android:icon="@drawable/ic_language"
-            android:key="list_languages"
-            android:summary="@string/summary_language_list"
-            android:title="@string/title_language_list" />
 
         <Preference
             android:key="import_special_button_file"

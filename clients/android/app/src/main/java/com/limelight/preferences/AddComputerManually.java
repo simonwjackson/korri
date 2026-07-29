@@ -447,7 +447,6 @@ public class AddComputerManually extends AppCompatActivity {
             server = null;
         }
 
-        UiHelper.setLocale(this);
 
         setContentView(R.layout.activity_add_computer_manually);
 

@@ -87,7 +87,6 @@ public class StreamSettings extends AppCompatActivity {
 
         previousPrefs = PreferenceConfiguration.readPreferences(this);
 
-        UiHelper.setLocale(this);
 
         setContentView(R.layout.activity_stream_settings);
 
@@ -134,23 +133,6 @@ public class StreamSettings extends AppCompatActivity {
     // NOTE: This will NOT be called on Android 13+ with android:enableOnBackInvokedCallback="true"
     public void onBackPressed() {
         finish();
-
-        // Language changes are handled via configuration changes in Android 13+,
-        // so manual activity relaunching is no longer required.
-        PreferenceConfiguration newPrefs = PreferenceConfiguration.readPreferences(this);
-        if (!newPrefs.language.equals(previousPrefs.language)) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                // Restart the PC view to apply UI changes
-                Intent intent = new Intent(this, PcView.class);
-                intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(intent, null);
-            } else {
-                if (newPrefs.language == PreferenceConfiguration.DEFAULT_LANGUAGE) {
-                    Toast.makeText(this, "Language has been reset to default, please restart the app!", Toast.LENGTH_LONG).show();
-                    System.exit(0);
-                }
-            }
-        }
     }
 
     public static class SettingsFragment extends PreferenceFragmentCompat {

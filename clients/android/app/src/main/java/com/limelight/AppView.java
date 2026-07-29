@@ -298,7 +298,6 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
 
         shortcutHelper = new ShortcutHelper(this);
 
-        UiHelper.setLocale(this);
 
         setContentView(R.layout.activity_app_view);
 
