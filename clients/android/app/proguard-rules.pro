@@ -31,6 +31,11 @@
 -keep class org.bouncycastle.jce.** {*;}
 -dontwarn javax.naming.**
 
+# THROWAWAY Rust/JNI spike: native symbols include their Java method names.
+-keepclasseswithmembernames,includedescriptorclasses class * {
+    native <methods>;
+}
+
 # jMDNS
 -dontwarn javax.jmdns.impl.DNSCache
 -dontwarn org.slf4j.**

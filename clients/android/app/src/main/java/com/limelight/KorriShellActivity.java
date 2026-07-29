@@ -9,6 +9,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
@@ -27,6 +28,7 @@ import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
 import com.limelight.utils.CacheHelper;
 import com.limelight.utils.ServerHelper;
+import com.simonwjackson.korri.spike.RustKorridSpike;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -78,6 +80,9 @@ public class KorriShellActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // THROWAWAY PROTOTYPE: prove Rust/Tokio/Axum runs in this APK.
+        RustKorridSpike.startAndLog();
+
         bindService(new Intent(this, ComputerManagerService.class),
                 serviceConnection, BIND_AUTO_CREATE);
 
@@ -97,6 +102,12 @@ public class KorriShellActivity extends AppCompatActivity {
             public WebResourceResponse shouldInterceptRequest(
                     WebView view, WebResourceRequest request) {
                 return assetLoader.shouldInterceptRequest(request.getUrl());
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                view.evaluateJavascript("document.title", title ->
+                        Log.i("KorriPortal", "title=" + title));
             }
         });
         if (BuildConfig.DEBUG) {
@@ -172,6 +183,7 @@ public class KorriShellActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        RustKorridSpike.stop();
         super.onDestroy();
         if (managerBinder != null) {
             unbindService(serviceConnection);

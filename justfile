@@ -24,3 +24,11 @@ android-apk:
 # just android-apk-dev http://192.168.1.50:5173
 android-apk-dev url:
     nix develop .#android --command bash -c 'cd clients/android && ./gradlew assembleDebug -PkorriPortalUrl={{url}}'
+
+# THROWAWAY: prove one Rust core across Linux, TypeScript, and Android.
+korrid-rust-spike:
+    ./services/korrid-spike/run-spike.sh
+
+# Same proof, installed and queried on the configured Android target.
+korrid-rust-spike-device:
+    ./services/korrid-spike/run-spike.sh --device

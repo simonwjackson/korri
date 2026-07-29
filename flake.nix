@@ -4,16 +4,21 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   # This flake is an index: it wires inputs and composes per-area nix
   # expressions that live next to the code they serve. No derivations or
   # shells are defined inline here.
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
           inherit system;
+          overlays = [ rust-overlay.overlays.default ];
           # Required by the Android SDK composition in clients/android.
           config = {
             android_sdk.accept_license = true;
@@ -24,6 +29,7 @@
       {
         devShells.android = import ./clients/android/devshell.nix { inherit pkgs; };
         devShells.portal = import ./clients/portal/devshell.nix { inherit pkgs; };
+        devShells.korrid-spike = import ./services/korrid-spike/devshell.nix { inherit pkgs; };
       }
     );
 }
