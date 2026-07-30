@@ -20,8 +20,10 @@ Artifact: `upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoeni
 
 - Upstream: `github.com/libretro/RetroArch` tag `v1.22.2` = commit `69a4f0e`
   — the exact commit the buildbot APK from the transport spike reports.
-- Shallow-cloned into `upstream/` (gitignored). A pinned fetch script replaces
-  the manual clone when this graduates from spike to build recipe.
+- `fetch-upstream.sh` shallow-fetches and verifies this exact commit into the
+  gitignored, generated `upstream/` worktree, resets tracked files to the pin,
+  and applies `patches/NNNN-*.patch` in lexical order with exact `git apply`
+  checks. Ignored build outputs survive reset for incremental builds.
 
 ## Toolchain facts (why devshell.nix looks like this)
 
@@ -38,6 +40,20 @@ Artifact: `upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoeni
 - `jcenter()` in RA's buildscript: deprecation warning only, resolution still
   succeeds. If it ever dies, a repo swap becomes patch 0000 of the series.
 - Flavor `aarch64` uses `play-core-stub` — no Play Services dependency.
+
+## Repeatable build
+
+From the repository root:
+
+```sh
+just ra-fetch  # verify the pin and apply the series
+just ra-build  # fetch/apply, then build the arm64 release APK
+just ra-check  # pipeline failure tests + complete build + artifact check
+```
+
+The source pin and published patch series are the corresponding-source form of
+Korri's GPL-3.0 distribution. Do not edit `upstream/` directly; changes belong
+in one numbered patch and its `patches/README.md` entry.
 
 ## Caveats / next steps
 

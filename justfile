@@ -32,3 +32,20 @@ korrid-check:
 # Same checks, then install and verify on the configured Android target.
 korrid-check-device:
     ./services/korrid/check.sh --device
+
+# Recreate the managed RetroArch source tree at the verified pin and apply the
+# ordered Korri patch series exactly.
+ra-fetch:
+    ./runtimes/retroarch/fetch-upstream.sh
+
+# Build the patched arm64 Android runtime.
+ra-build: ra-fetch
+    cd runtimes/retroarch && nix develop . --command bash -c 'cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
+
+# Validate the fetch failure modes, rebuild the exact patch series, and require
+# the fork APK artifact.
+ra-check:
+    ./runtimes/retroarch/test-fetch-upstream.sh
+    ./runtimes/retroarch/fetch-upstream.sh
+    cd runtimes/retroarch && nix develop . --command bash -c 'cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
+    test -f runtimes/retroarch/upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoenix-aarch64-release.apk
