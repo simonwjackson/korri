@@ -58,10 +58,12 @@ nix run nixpkgs#just -- ra-accept <adb-serial>
 signed per-server `GET_STATUS`/`QUIT` token, rejects missing/stale tokens and
 extra verbs, proves HOME synchronously refreshes a non-empty auto-state,
 relaunches, quits gracefully, and checks that stock RetroArch stayed installed
-and stopped. On device `100.65.66.40:39991`, the gate reported
+and stopped. On device `100.65.66.40:39991`, the gate wiped fork-private
+state, re-extracted the bundled core, reported
 `GET_STATUS PLAYING mGBA,wl4,crc32=d6141609`, wrote a non-empty pause state,
-relaunched successfully, refreshed the state again on graceful `QUIT`, returned
-to Korri, and preserved `com.retroarch.aarch64`.
+logged a successful auto-state load on relaunch, refreshed the state again on
+graceful `QUIT`, returned to Korri on display 0, and preserved
+`com.retroarch.aarch64`.
 
 The source pin and published patch series are the corresponding-source form of
 Korri's GPL-3.0 distribution. Do not edit `upstream/` directly; changes belong

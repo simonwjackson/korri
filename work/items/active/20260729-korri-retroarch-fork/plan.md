@@ -1,9 +1,9 @@
 ---
 title: "feat: com.korri.retroarch — patch-series RetroArch fork"
 type: feat
-status: active
+status: completed
 date: 2026-07-29
-verify_command: "just ra-check"
+verify_command: "nix run nixpkgs#just -- ra-check"
 ---
 
 # feat: com.korri.retroarch — patch-series RetroArch fork
