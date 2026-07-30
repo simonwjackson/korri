@@ -1,5 +1,7 @@
 package com.limelight;
 
+import android.content.Intent;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -49,6 +51,7 @@ public class KorriLocalLaunchSpecTest {
                 parsed.extras.get("ROM"));
         assertEquals(4, parsed.directories.size());
         assertEquals(1, parsed.files.size());
+        assertEquals(0, parsed.intent().getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK);
         assertFalse(KorriLocalLaunchSpec.supportsStorageProvisioning(29));
         assertTrue(KorriLocalLaunchSpec.supportsStorageProvisioning(30));
         assertTrue(KorriLocalLaunchSpec.requiresStorageGrant(parsed, 30, false));

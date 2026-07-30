@@ -1,8 +1,8 @@
 diff --git a/pkg/android/phoenix/AndroidManifest.xml b/pkg/android/phoenix/AndroidManifest.xml
-index ba4201e..ed6f2b7 100644
+index ba4201e..9d1a931 100644
 --- a/pkg/android/phoenix/AndroidManifest.xml
 +++ b/pkg/android/phoenix/AndroidManifest.xml
-@@ -27,14 +27,7 @@
+@@ -27,15 +27,8 @@
          android:extractNativeLibs="true"
          android:requestLegacyExternalStorage="true"
          tools:ignore="UnusedAttribute">
@@ -14,10 +14,12 @@ index ba4201e..ed6f2b7 100644
 -                <category android:name="tv.ouya.intent.category.GAME" />
 -            </intent-filter>
 -        </activity>
+-        <activity android:name="com.retroarch.browser.retroactivity.RetroActivityFuture" android:exported="true" android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:launchMode="singleInstance">
 +        <activity android:name="com.retroarch.browser.mainmenu.MainMenuActivity" android:exported="false" android:launchMode="singleInstance" />
-         <activity android:name="com.retroarch.browser.retroactivity.RetroActivityFuture" android:exported="true" android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:launchMode="singleInstance">
++        <activity android:name="com.retroarch.browser.retroactivity.RetroActivityFuture" android:exported="true" android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:launchMode="standard">
              <meta-data android:name="android.app.lib_name" android:value="retroarch-activity" />
              <meta-data android:name="android.app.func_name" android:value="ANativeActivity_onCreate" />
+         </activity>
 diff --git a/pkg/android/phoenix/build.gradle b/pkg/android/phoenix/build.gradle
 index 6b0660c..558608b 100644
 --- a/pkg/android/phoenix/build.gradle

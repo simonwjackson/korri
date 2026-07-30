@@ -1,5 +1,5 @@
 diff --git a/config.def.h b/config.def.h
-index a2f36da..4ffbb01 100644
+index a2f36da..2a5e2b4 100644
 --- a/config.def.h
 +++ b/config.def.h
 @@ -571,7 +571,11 @@
@@ -47,7 +47,19 @@ index a2f36da..4ffbb01 100644
  #define DEFAULT_OVERLAY_ENABLE_AUTOPREFERRED true
  #else
  #define DEFAULT_OVERLAY_ENABLE_AUTOPREFERRED false
-@@ -1418,8 +1430,13 @@
+@@ -976,7 +988,11 @@
+ #define DEFAULT_ALL_USERS_CONTROL_MENU false
+ #endif
+ 
++#if defined(ANDROID)
++#define DEFAULT_QUIT_PRESS_TWICE false
++#else
+ #define DEFAULT_QUIT_PRESS_TWICE true
++#endif
+ 
+ #define DEFAULT_LOG_TO_FILE false
+ 
+@@ -1418,8 +1434,13 @@
   * The path is $SRAM_PATH.auto.
   * RetroArch will automatically load any savestate with this path on
   * startup if savestate_auto_load is set. */

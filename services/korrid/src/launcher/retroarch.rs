@@ -39,6 +39,7 @@ video_font_enable = "true"
 
 # Korri owns lifecycle and config
 quit_on_close_content = "true"
+quit_press_twice = "false"
 config_save_on_exit = "false"
 pause_nonactive = "true"
 
@@ -220,6 +221,7 @@ mod tests {
         assert!(config.contains("video_driver = \"gl\""));
         assert!(config.contains("kiosk_mode_enable = \"true\""));
         assert!(config.contains("autosave_interval = \"10\""));
+        assert!(config.contains("quit_press_twice = \"false\""));
         assert!(config.contains(&format!(
             "savefile_directory = \"{}\"",
             root.path().join("saves").display()

@@ -332,11 +332,9 @@ public class KorriShellActivity extends AppCompatActivity {
                 return launchFailed(error.reason, error.getMessage());
             }
 
-            final Intent intent = new Intent().setComponent(spec.component)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            for (Map.Entry<String, String> extra : spec.extras.entrySet()) {
-                intent.putExtra(extra.getKey(), extra.getValue());
-            }
+            // Keep local gameplay in the shell's task. The fork uses a
+            // standard activity, so graceful exit reveals and resumes Korri.
+            final Intent intent = spec.intent();
 
             // Validate package availability before any external-storage write.
             try {

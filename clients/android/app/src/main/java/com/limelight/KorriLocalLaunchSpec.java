@@ -1,6 +1,7 @@
 package com.limelight;
 
 import android.content.ComponentName;
+import android.content.Intent;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -53,6 +54,14 @@ final class KorriLocalLaunchSpec {
             this.extras = Collections.unmodifiableMap(extras);
             this.directories = Collections.unmodifiableList(directories);
             this.files = Collections.unmodifiableList(files);
+        }
+
+        Intent intent() {
+            Intent intent = new Intent().setComponent(component);
+            for (Map.Entry<String, String> extra : extras.entrySet()) {
+                intent.putExtra(extra.getKey(), extra.getValue());
+            }
+            return intent;
         }
     }
 
