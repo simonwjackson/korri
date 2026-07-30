@@ -27,7 +27,10 @@ impl UpstreamConfig {
             // Scaffolding default: aka's LAN control URL. Replaced by
             // pairing-derived discovery when the shell owns upstream wiring.
             base_url: std::env::var("KORRID_UPSTREAM_URL")
-                .unwrap_or_else(|_| "http://192.168.1.117:3001".into()),
+                // Every device is on Tailscale, so peers are named rather
+                // than addressed: a LAN IP only works on one network and
+                // breaks the moment a device leaves the house.
+                .unwrap_or_else(|_| "http://aka:3001".into()),
         }
     }
 }

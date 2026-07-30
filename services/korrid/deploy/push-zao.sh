@@ -47,7 +47,7 @@ scp "${ssh_options[@]}" \
 scp "${ssh_options[@]}" "$revision_file" "zao:$remote_tmp/revision"
 ssh "${ssh_options[@]}" zao "$remote_tmp/zao-remote.sh" install "$package" "$remote_tmp"
 
-zao_url="${ZAO_KORRID_URL:-http://100.114.19.92:43117}"
+zao_url="${ZAO_KORRID_URL:-http://zao:43117}"
 for _ in $(seq 1 40); do
   if response="$(curl --fail --silent --connect-timeout 1 --max-time 2 \
     "$zao_url/rpc" \
