@@ -13,8 +13,8 @@ full native build for two ABIs). Incremental rebuilds are minutes or less.
 Artifact: `upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoenix-aarch64-release.apk`
 - 14 MB, 21 files
 - `lib/arm64-v8a/libretroarch-activity.so` (20.8 MB uncompressed) + `lib/x86_64/`
-- applicationId `com.retroarch.aarch64`, debug-key signed (RA's release
-  config falls back to debug signing without `RELEASE_STORE_FILE`)
+- applicationId `com.korri.retroarch`, arm64-v8a only, debug-key signed (RA's
+  release config falls back to debug signing without `RELEASE_STORE_FILE`)
 
 ## Pin
 
@@ -66,16 +66,12 @@ asset synchronously before native startup to
 compares the bundled bytes with the build output. This avoids buildbot binary
 debt and keeps the core's corresponding source pin reproducible.
 
-## Caveats / next steps
+## Caveats
 
 - **No menu asset pack bundled**: buildbot's 184 MB APK includes RA's asset pack added
   during their packaging; our 14 MB APK is the bare frontend. RA can fetch
   assets at runtime; the fork decides whether to bundle (likely yes, alongside
   bundled cores — kiosk mode needs no menu assets at all).
-- **Do not install this over the tablet's buildbot RA**: same applicationId,
-  different signing key → requires uninstall, which deletes the mGBA core
-  installed inside RA's private dir and breaks the local-play device state.
-  First device install of our build happens when the fork renames the package
-  to `com.korri.retroarch` (patch ~0002), which sidesteps the conflict entirely.
-- `assembleAarch64Release` builds x86_64 too; the fork can drop it to halve
-  native build time if we never target x86 Android.
+- The fork is intentionally installed beside the stock buildbot package. Do
+  not repoint Korri launch metadata to `com.retroarch.aarch64`; that package
+  remains user-owned stock RetroArch.

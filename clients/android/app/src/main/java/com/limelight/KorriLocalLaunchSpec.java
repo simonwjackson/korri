@@ -17,7 +17,7 @@ import java.util.Map;
 final class KorriLocalLaunchSpec {
     private static final String RETROARCH = "retroarch";
     private static final ComponentName RETROARCH_COMPONENT = new ComponentName(
-            "com.retroarch.aarch64",
+            "com.korri.retroarch",
             "com.retroarch.browser.retroactivity.RetroActivityFuture");
     static final class Invalid extends Exception {
         final String reason;

@@ -21,13 +21,13 @@ public class KorriLocalLaunchSpecTest {
         return new JSONObject()
                 .put("launcherId", "retroarch")
                 .put("component", new JSONObject()
-                        .put("packageName", "com.retroarch.aarch64")
+                        .put("packageName", "com.korri.retroarch")
                         .put("className",
                                 "com.retroarch.browser.retroactivity.RetroActivityFuture"))
                 .put("extras", new JSONObject()
                         .put("ROM", "/storage/emulated/0/korri-retro/roms/wl4.gba")
                         .put("LIBRETRO",
-                                "/data/data/com.retroarch.aarch64/cores/mgba_libretro_android.so")
+                                "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so")
                         .put("CONFIGFILE",
                                 "/storage/emulated/0/korri-retro/retroarch.cfg"))
                 .put("directories", new JSONArray()

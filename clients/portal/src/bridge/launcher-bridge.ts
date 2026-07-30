@@ -110,7 +110,7 @@ export interface InMemoryLauncherBridgeConfig {
 }
 
 const sampleItems: readonly Launchable[] = [
-  { packageName: "com.retroarch.aarch64", label: "RetroArch" },
+  { packageName: "com.korri.retroarch", label: "Korri RetroArch" },
   { packageName: "org.ppsspp.ppsspp", label: "PPSSPP" },
   { packageName: "com.android.settings", label: "Settings" },
 ]

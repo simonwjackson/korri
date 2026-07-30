@@ -119,7 +119,7 @@ describe("local games", () => {
       _tag: "Ok",
       payload: {
         launcherId: "retroarch",
-        component: { packageName: "com.retroarch.aarch64" },
+        component: { packageName: "com.korri.retroarch" },
         extras: { ROM: "/browser-dev/korri-retro/roms/wl4.gba" },
       },
     })

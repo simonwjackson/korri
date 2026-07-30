@@ -237,14 +237,14 @@ export function createInMemoryKorridClient(
         payload: {
           launcherId: "retroarch",
           component: {
-            packageName: "com.retroarch.aarch64",
+            packageName: "com.korri.retroarch",
             className:
               "com.retroarch.browser.retroactivity.RetroActivityFuture",
           },
           extras: {
             ROM: "/browser-dev/korri-retro/roms/wl4.gba",
             LIBRETRO:
-              "/data/data/com.retroarch.aarch64/cores/mgba_libretro_android.so",
+              "/data/data/com.korri.retroarch/cores/mgba_libretro_android.so",
             CONFIGFILE: "/browser-dev/korri-retro/retroarch.cfg",
           },
           directories: [],

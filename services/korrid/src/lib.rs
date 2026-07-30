@@ -979,7 +979,7 @@ command = ["sh", "-c", "sleep 1"]
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body = String::from_utf8_lossy(&body);
         assert!(body.contains("app.local-games.launch"));
-        assert!(body.contains("com.retroarch.aarch64"));
+        assert!(body.contains("com.korri.retroarch"));
         assert!(root.path().join("retroarch.cfg").is_file());
     }
 
