@@ -30,6 +30,8 @@ pkgs.mkShell {
   buildInputs = with pkgs; [
     pinnedJDK
     gnumake
+    cmake
+    ninja
     git
     which
     file

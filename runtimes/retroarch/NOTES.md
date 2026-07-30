@@ -55,14 +55,23 @@ The source pin and published patch series are the corresponding-source form of
 Korri's GPL-3.0 distribution. Do not edit `upstream/` directly; changes belong
 in one numbered patch and its `patches/README.md` entry.
 
+## Bundled mGBA core
+
+`cores/mgba/build.sh` pins mGBA 0.10.5 at
+`26b7884bc25a5933960f3cdcd98bac1ae14d42e2`, cross-compiles only the arm64
+libretro core with the same NDK 22 toolchain, and stages the exact output as
+`assets/cores/mgba_libretro_android.so`. Patch 0003 copies that immutable APK
+asset synchronously before native startup to
+`/data/data/com.korri.retroarch/cores/mgba_libretro_android.so`. APK validation
+compares the bundled bytes with the build output. This avoids buildbot binary
+debt and keeps the core's corresponding source pin reproducible.
+
 ## Caveats / next steps
 
-- **No assets bundled**: buildbot's 184 MB APK includes RA's asset pack added
+- **No menu asset pack bundled**: buildbot's 184 MB APK includes RA's asset pack added
   during their packaging; our 14 MB APK is the bare frontend. RA can fetch
   assets at runtime; the fork decides whether to bundle (likely yes, alongside
   bundled cores — kiosk mode needs no menu assets at all).
-- **No cores built** (by design — cores are separate per-repo builds; the
-  bundled-mGBA patch is its own small build target later).
 - **Do not install this over the tablet's buildbot RA**: same applicationId,
   different signing key → requires uninstall, which deletes the mGBA core
   installed inside RA's private dir and breaks the local-play device state.

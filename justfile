@@ -38,9 +38,14 @@ korrid-check-device:
 ra-fetch:
     ./runtimes/retroarch/fetch-upstream.sh
 
-# Build the patched arm64 Android runtime.
+# Build the pinned arm64 mGBA libretro core and stage it into the generated
+# RetroArch source tree.
+ra-core-mgba: ra-fetch
+    cd runtimes/retroarch && nix develop . --command ./cores/mgba/build.sh
+
+# Build the patched arm64 Android runtime with its pinned core.
 ra-build: ra-fetch
-    cd runtimes/retroarch && nix develop . --command bash -c 'cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
+    cd runtimes/retroarch && nix develop . --command bash -c './cores/mgba/build.sh && cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
 
 # Validate the fetch failure modes, rebuild the exact patch series, and require
 # the fork APK artifact.
@@ -48,6 +53,6 @@ ra-check:
     ./runtimes/retroarch/test-fetch-upstream.sh
     ./runtimes/retroarch/fetch-upstream.sh
     ./runtimes/retroarch/test-source-contract.sh
-    cd runtimes/retroarch && nix develop . --command bash -c 'cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
+    cd runtimes/retroarch && nix develop . --command bash -c './cores/mgba/build.sh && cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
     test -f runtimes/retroarch/upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoenix-aarch64-release.apk
     cd runtimes/retroarch && nix develop . --command ./test-apk-contract.sh

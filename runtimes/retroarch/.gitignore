@@ -1,2 +1,5 @@
 upstream/
 .android-sdk/
+cores/*/upstream/
+cores/*/build/
+cores/*/out/
