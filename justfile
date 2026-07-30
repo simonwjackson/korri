@@ -29,6 +29,11 @@ android-apk-dev url:
 korrid-check:
     ./services/korrid/check.sh
 
+# Prove korrid's TS/JS plugin runtime still crosses the NDK: build the probe for
+# arm64, run the example plugin on the device, assert the declaration returns.
+korrid-script-device serial:
+    nix develop .#korrid --command ./services/korrid/script-device-check.sh {{serial}}
+
 # Same checks, then install and verify on the configured Android target.
 korrid-check-device:
     ./services/korrid/check.sh --device

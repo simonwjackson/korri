@@ -80,6 +80,13 @@ content — shape for federation, build no more than the cases demand.
   `http://127.0.0.1:<port>`; the portal never talks to another device's korrid
   or any other backend directly. On Android the shell embeds korrid as a
   cdylib and injects the port.
+- Plugins are TypeScript or JavaScript **source**, transpiled and evaluated by
+  korrid at runtime — never compiled ahead of time, never shipped as native
+  code. A plugin returns a declaration and performs no effects; korrid acts on
+  it. The sandbox is empty by construction, which is what keeps a plugin
+  portable across every device. See `services/korrid/SCRIPTING.md`. The shell
+  does not call it yet: wiring waits for a real consumer, because the capability
+  model it would declare against does not exist.
 - Peer korrids speak the native tagged `/rpc` wire. The Effect-RPC envelope
   client in `services/korrid/src/upstream.rs` exists only for aka until it is
   migrated; it dies at switchover. Do not grow abstractions around it.
