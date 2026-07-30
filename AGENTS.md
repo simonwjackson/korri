@@ -69,14 +69,15 @@ content — shape for federation, build no more than the cases demand.
   Kotlin owns all hardware translation.
 - The JS↔Kotlin bridge treaty lives in `contracts/bridge/`; the Kotlin
   implementation mirrors it by hand and cites it.
-- `flake.nix` is an index: inputs + per-area composition only. Toolchains
-  live in `<area>/devshell.nix`. No inline derivations or shells.
+- `flake.nix` is an index: inputs + per-area composition only. Shared
+  toolchain composition lives in per-area Nix expressions; `devshell.nix`
+  owns the interactive shell. No inline derivations or shells.
 - Nix apps are the scripted task surface; run `nix run .#help` to discover
   them. Definitions and cross-area glue live in `nix/tasks.nix`; per-area
   behavior stays in scripts beside the code it serves.
 - Services are Rust. Wire types live in Rust and are exported through
   Typeshare into `contracts/generated/` — those files are read-only;
-  regenerate them via `services/korrid/check.sh`, never edit by hand.
+  regenerate them via `nix run .#korrid-check`, never edit by hand.
 - The portal's brain is always the korrid on its own device at
   `http://127.0.0.1:<port>`; the portal never talks to another device's korrid
   or any other backend directly. On Android the shell embeds korrid as a

@@ -37,7 +37,7 @@ Tablet SM-X930 (Android 16, aarch64), running the example plugin: transpile
 1.78 ms, evaluate 1.22 ms. Runtime transpilation is not a performance concern
 at plugin size.
 
-`script-device-check.sh <adb-serial>` re-runs that check any time. It uses the
+`nix run .#korrid-script-device -- <adb-serial>` re-runs that check any time. It uses the
 standalone `script_probe` binary, so it verifies the arm64 path without adding
 anything to the APK.
 

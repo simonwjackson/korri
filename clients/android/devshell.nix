@@ -19,14 +19,15 @@ pkgs.mkShell {
   JAVA_HOME = android.jdk;
   # aapt2FromMavenOverride: NixOS cannot run Gradle's downloaded dynamically
   # linked aapt2; use the Nix-provided one (same pattern as hiper).
-  GRADLE_OPTS = "-Dorg.gradle.daemon=false -Dorg.gradle.project.android.aapt2FromMavenOverride=${android.sdkRoot}/build-tools/${android.buildToolsVersion}/aapt2";
+  GRADLE_OPTS = android.gradleOpts;
 
   shellHook = ''
     export KORRI_NIX_SDK="${android.sdkRoot}"
     export KORRI_NDK_VERSION="${android.ndkVersion}"
-    export KORRI_ROOT="$(git rev-parse --show-toplevel)"
+    export KORRI_ANDROID_SDK_NAME="android"
+    export KORRI_ROOT="''${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
     # shellcheck source=/dev/null
-    source ${./sdk-env.sh}
+    source ${../../nix/android-sdk-env.sh} || exit 1
 
     echo ""
     echo "Korri Android Development Environment"

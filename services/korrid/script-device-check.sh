@@ -14,16 +14,23 @@ PLUGIN="$CRATE/examples/catalog.plugin.ts"
 SERIAL="${1:?usage: script-device-check.sh <adb-serial>}"
 ADB=(adb -s "$SERIAL")
 
-# Network adb targets drop between runs; fail loudly here rather than midway.
-if [[ "$SERIAL" == *:* ]]; then
-  adb connect "$SERIAL" >/dev/null || true
-fi
-"${ADB[@]}" wait-for-device
+ensure_device() {
+  if [[ "$SERIAL" == *:* ]]; then
+    timeout 15 adb connect "$SERIAL" >/dev/null || true
+  fi
+  if ! timeout 15 "${ADB[@]}" wait-for-device; then
+    echo "Android target is not reachable: $SERIAL" >&2
+    exit 1
+  fi
+}
 
+# Fail before the expensive build, then reconnect immediately before mutation.
+ensure_device
 cd "$CRATE"
 cargo ndk -t arm64-v8a build --release --bin script_probe
 PROBE="${CARGO_TARGET_DIR:-$CRATE/target}/aarch64-linux-android/release/script_probe"
 
+ensure_device
 "${ADB[@]}" push "$PROBE" /data/local/tmp/korri_script_probe >/dev/null
 "${ADB[@]}" push "$PLUGIN" /data/local/tmp/korri_example.plugin.ts >/dev/null
 "${ADB[@]}" shell chmod 755 /data/local/tmp/korri_script_probe

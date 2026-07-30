@@ -3,7 +3,7 @@
 # THROWAWAY PROTOTYPE implementation; invoked by run-spike.sh in its devshell.
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+ROOT="${KORRI_ROOT:-$(git rev-parse --show-toplevel)}"
 CRATE="$ROOT/services/korrid"
 GENERATED_TS="$ROOT/contracts/generated/korrid.ts"
 ANDROID_LIBS="$ROOT/clients/android/app/src/main/jniLibs"
@@ -73,7 +73,11 @@ bun src/korrid/smoke.ts
 # The installed proof is the whole app, not only its hidden RPC. Use the
 # canonical cross-area task so Gradle cannot silently package no portal.
 cd "$ROOT"
-nix run "$ROOT#portal-bundle"
+if [[ -n "${KORRI_PORTAL_BUNDLE:-}" ]]; then
+  "$KORRI_PORTAL_BUNDLE"
+else
+  nix run "$ROOT#portal-bundle"
+fi
 test -f "$ROOT/clients/android/app/src/main/assets/portal/index.html"
 
 cd "$CRATE"

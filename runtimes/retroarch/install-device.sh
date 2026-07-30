@@ -24,7 +24,14 @@ expected_version_name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<<"$badgin
   exit 1
 }
 
+if [[ "$SERIAL" == *:* ]]; then
+  timeout 15 adb connect "$SERIAL" >/dev/null || true
+fi
 ADB=(adb -s "$SERIAL")
+if ! timeout 15 "${ADB[@]}" wait-for-device; then
+  echo "Android target is not reachable: $SERIAL" >&2
+  exit 1
+fi
 [[ "$("${ADB[@]}" get-state)" == device ]] || {
   echo "Android target is not ready: $SERIAL" >&2
   exit 1

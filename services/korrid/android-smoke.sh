@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p bash curl gnugrep gnused android-tools unzip jq
+#! nix-shell -i bash -p bash coreutils curl gnugrep gnused android-tools unzip jq
 # Install the built APK and call Rust Axum over adb forward.
 set -euo pipefail
 
@@ -10,6 +10,21 @@ PACKAGE="com.simonwjackson.korri.debug"
 HOST_PORT=43118
 UPSTREAMS_CONFIG="${KORRI_ANDROID_UPSTREAMS_CONFIG:-$ROOT/services/korrid/deploy/upstreams.android.json}"
 CURL=(curl --connect-timeout 2 --max-time 5 --retry 2 --retry-connrefused)
+ADB_BIN="$(command -v adb)"
+adb() {
+  if ! timeout 15 "$ADB_BIN" "$@"; then
+    echo "adb command failed or timed out: $*" >&2
+    return 1
+  fi
+}
+
+if [[ "$DEVICE" == *:* ]]; then
+  timeout 15 adb connect "$DEVICE" >/dev/null || true
+fi
+if ! timeout 15 adb -s "$DEVICE" wait-for-device; then
+  echo "Android target is not reachable: $DEVICE" >&2
+  exit 1
+fi
 
 # grep must drain the whole listing: with pipefail, `grep -q` exiting at
 # the first match SIGPIPEs unzip and fails the pipeline spuriously.
@@ -48,11 +63,13 @@ if [[ -z "$port" || -z "$capability" || -z "$portal_ready" ]]; then
   exit 1
 fi
 
-if adb -s "$DEVICE" logcat -d -s WebViewAssetLoader:E 2>/dev/null | grep -q 'Error opening asset path'; then
+webview_errors="$(adb -s "$DEVICE" logcat -d -s WebViewAssetLoader:E)"
+if grep -q 'Error opening asset path' <<<"$webview_errors"; then
   echo "WebViewAssetLoader reported missing portal assets" >&2
   exit 1
 fi
-if adb -s "$DEVICE" logcat -d 2>/dev/null | grep -qE 'INFO:CONSOLE.*(blocked|Error|error)'; then
+console_logs="$(adb -s "$DEVICE" logcat -d)"
+if grep -qE 'INFO:CONSOLE.*(blocked|Error|error)' <<<"$console_logs"; then
   echo "Portal emitted a console error" >&2
   exit 1
 fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p bash curl gnugrep gnused android-tools
+#! nix-shell -i bash -p bash coreutils curl gnugrep gnused android-tools
 set -euo pipefail
 
 SERIAL="${1:-${ANDROID_SERIAL:-}}"
@@ -14,7 +14,14 @@ if [[ -z "$SERIAL" ]]; then
   echo 'usage: device-acceptance.sh <adb-serial> (or set ANDROID_SERIAL)' >&2
   exit 2
 fi
+if [[ "$SERIAL" == *:* ]]; then
+  timeout 15 adb connect "$SERIAL" >/dev/null || true
+fi
 ADB=(adb -s "$SERIAL")
+if ! timeout 15 "${ADB[@]}" wait-for-device; then
+  echo "Android target is not reachable: $SERIAL" >&2
+  exit 1
+fi
 [[ "$("${ADB[@]}" get-state)" == device ]] || {
   echo "Android target is not ready: $SERIAL" >&2
   exit 1

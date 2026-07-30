@@ -36,7 +36,8 @@ rec {
   androidSdk = androidComposition.androidsdk;
   sdkRoot = "${androidSdk}/libexec/android-sdk";
   # cargo-ndk needs only the NDK. Gradle uses the writable SDK farm created by
-  # sdk-env.sh because AGP expects sdk/ndk/<version>.
+  # nix/android-sdk-env.sh because AGP expects sdk/ndk/<version>.
   ndkRoot = "${sdkRoot}/ndk-bundle";
   jdk = pkgs.jdk17;
+  gradleOpts = "-Dorg.gradle.daemon=false -Dorg.gradle.project.android.aapt2FromMavenOverride=${sdkRoot}/build-tools/${buildToolsVersion}/aapt2";
 }

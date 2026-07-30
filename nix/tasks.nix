@@ -8,24 +8,7 @@ let
     targets = [ "aarch64-linux-android" ];
   };
 
-  retroarchBuildToolsVersion = "30.0.3";
-  retroarchNdkVersion = "22.0.7026061";
-  retroarchComposition = pkgs.androidenv.composeAndroidPackages {
-    buildToolsVersions = [ retroarchBuildToolsVersion ];
-    platformVersions = [ "30" ];
-    ndkVersions = [ retroarchNdkVersion ];
-    includeEmulator = false;
-    includeSystemImages = false;
-    includeSources = false;
-    includeNDK = true;
-    extraLicenses = [
-      "android-sdk-license"
-      "android-sdk-preview-license"
-    ];
-  };
-  retroarchSdk = retroarchComposition.androidsdk;
-  retroarchSdkRoot = "${retroarchSdk}/libexec/android-sdk";
-  retroarchJdk = pkgs.jdk11;
+  retroarch = import ../runtimes/retroarch/sdk.nix { inherit pkgs; };
 
   androidInputs = [
     android.jdk
@@ -39,43 +22,46 @@ let
   ];
   androidEnv = {
     JAVA_HOME = "${android.jdk}";
-    GRADLE_OPTS = "-Dorg.gradle.daemon=false -Dorg.gradle.project.android.aapt2FromMavenOverride=${android.sdkRoot}/build-tools/${android.buildToolsVersion}/aapt2";
+    GRADLE_OPTS = android.gradleOpts;
+    KORRI_ANDROID_SDK_NAME = "android";
     KORRI_NIX_SDK = android.sdkRoot;
     KORRI_NDK_VERSION = android.ndkVersion;
   };
   androidSetup = ''
     # shellcheck source=/dev/null
-    source "$KORRI_ROOT/clients/android/sdk-env.sh"
+    source "$KORRI_ROOT/nix/android-sdk-env.sh"
   '';
 
   retroarchInputs = [
-    retroarchJdk
-    retroarchSdk
+    retroarch.jdk
+    retroarch.androidSdk
     pkgs.cmake
     pkgs.coreutils
+    pkgs.diffutils
     pkgs.file
     pkgs.git
+    pkgs.gnugrep
     pkgs.gnumake
+    pkgs.gnused
     pkgs.ninja
     pkgs.unzip
     pkgs.which
   ];
   retroarchEnv = {
-    JAVA_HOME = "${retroarchJdk}";
-    GRADLE_OPTS = "-Dorg.gradle.daemon=false -Dorg.gradle.project.android.aapt2FromMavenOverride=${retroarchSdkRoot}/build-tools/${retroarchBuildToolsVersion}/aapt2";
-    KORRI_NIX_SDK = retroarchSdkRoot;
-    KORRI_NDK_VERSION = retroarchNdkVersion;
+    JAVA_HOME = "${retroarch.jdk}";
+    GRADLE_OPTS = retroarch.gradleOpts;
+    KORRI_ANDROID_SDK_NAME = "retroarch";
+    KORRI_NIX_SDK = retroarch.sdkRoot;
+    KORRI_NDK_VERSION = retroarch.ndkVersion;
   };
   retroarchSetup = ''
     # shellcheck source=/dev/null
-    source "$KORRI_ROOT/clients/android/sdk-env.sh"
+    source "$KORRI_ROOT/nix/android-sdk-env.sh"
   '';
 
-  adbPreflight = taskName: ''
-    serial="''${1:?usage: ${taskName} <adb-serial>}"
-    shift
+  adbPreflight = ''
     if [[ "$serial" == *:* ]]; then
-      adb connect "$serial" >/dev/null || true
+      timeout 15 adb connect "$serial" >/dev/null || true
     fi
     if ! timeout 15 adb -s "$serial" wait-for-device; then
       echo "Android target is not reachable: $serial" >&2
@@ -85,7 +71,7 @@ let
 
   definitions = {
     android-apk = {
-      description = "Build the debug Android APK.";
+      description = "Build the debug Android APK (run portal-bundle first for bundled assets).";
       runtimeInputs = androidInputs;
       env = androidEnv;
       script = ''
@@ -99,7 +85,7 @@ let
       description = "Build the debug APK against a live portal URL.";
       runtimeInputs = androidInputs;
       env = androidEnv;
-      takesArgs = true;
+      usageSuffix = " -- <portal-url>";
       script = ''
         url="''${1:?usage: android-apk-dev <portal-url>}"
         shift
@@ -112,6 +98,7 @@ let
     korrid-check = {
       description = "Run the full host, contracts, portal, and Android check.";
       runtimeInputs = [ pkgs.nix ];
+      env.KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
       script = ''
         exec "$KORRI_ROOT/services/korrid/check.sh" "$@"
       '';
@@ -124,16 +111,11 @@ let
         pkgs.coreutils
         pkgs.nix
       ];
+      env.KORRI_PORTAL_BUNDLE = "${packages.portal-bundle}/bin/portal-bundle";
       script = ''
-        device="''${KORRI_ANDROID_DEVICE:-100.65.66.40:39991}"
-        if [[ "$device" == *:* ]]; then
-          adb connect "$device" >/dev/null || true
-        fi
-        if ! timeout 15 adb -s "$device" wait-for-device; then
-          echo "Android target is not reachable: $device" >&2
-          exit 1
-        fi
-        export KORRI_ANDROID_DEVICE="$device"
+        serial="''${KORRI_ANDROID_DEVICE:-100.65.66.40:39991}"
+        ${adbPreflight}
+        export KORRI_ANDROID_DEVICE="$serial"
         exec "$KORRI_ROOT/services/korrid/check.sh" --device
       '';
     };
@@ -157,11 +139,10 @@ let
         HOST_CC = "${pkgs.clang}/bin/clang";
         LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
       };
-      takesArgs = true;
+      usageSuffix = " -- <adb-serial>";
       script = ''
-        ${adbPreflight "korrid-script-device"}
         export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
-        exec "$KORRI_ROOT/services/korrid/script-device-check.sh" "$serial" "$@"
+        exec "$KORRI_ROOT/services/korrid/script-device-check.sh" "$@"
       '';
     };
 
@@ -222,12 +203,12 @@ let
         pkgs.gnugrep
         pkgs.gnused
       ];
-      takesArgs = true;
+      usageSuffix = " -- <adb-serial>";
       script = ''
         serial="''${1:?usage: ra-accept <adb-serial>}"
         shift
         ${packages.ra-deploy}/bin/ra-deploy "$serial"
-        exec "$KORRI_ROOT/runtimes/retroarch/device-acceptance.sh" "$serial" "$@"
+        exec ${pkgs.bash}/bin/bash "$KORRI_ROOT/runtimes/retroarch/device-acceptance.sh" "$serial" "$@"
       '';
     };
 
@@ -272,9 +253,11 @@ let
       description = "Build, validate, and install the RetroArch fork on Android.";
       runtimeInputs = retroarchInputs ++ [ pkgs.android-tools ];
       env = retroarchEnv;
-      takesArgs = true;
+      usageSuffix = " -- <adb-serial>";
       script = ''
-        ${adbPreflight "ra-deploy"}
+        serial="''${1:?usage: ra-deploy <adb-serial>}"
+        shift
+        ${adbPreflight}
         ${packages.ra-build}/bin/ra-build
         ${retroarchSetup}
         exec "$KORRI_ROOT/runtimes/retroarch/install-device.sh" "$serial" "$@"
@@ -304,9 +287,26 @@ let
     name: task:
     pkgs.writeShellApplication {
       inherit name;
-      runtimeInputs = [ pkgs.git ] ++ task.runtimeInputs;
+      runtimeInputs = [
+        pkgs.bash
+        pkgs.coreutils
+        pkgs.git
+      ]
+      ++ task.runtimeInputs;
       text = ''
-        KORRI_ROOT="$(git rev-parse --show-toplevel)"
+        if [[ -n "''${KORRI_ROOT:-}" ]]; then
+          korri_root="$KORRI_ROOT"
+        else
+          korri_root="$PWD"
+          while [[ "$korri_root" != / && ! -f "$korri_root/nix/tasks.nix" ]]; do
+            korri_root="$(dirname "$korri_root")"
+          done
+        fi
+        if [[ ! -f "$korri_root/flake.nix" || ! -f "$korri_root/nix/tasks.nix" ]]; then
+          echo "Korri checkout not found; run inside it or set KORRI_ROOT" >&2
+          exit 1
+        fi
+        KORRI_ROOT="$(cd "$korri_root" && pwd -P)"
         export KORRI_ROOT
         ${exports.${name}}
         ${task.script}
@@ -317,10 +317,7 @@ let
 
   helpText = pkgs.lib.concatStringsSep "\n" (
     pkgs.lib.mapAttrsToList (
-      name: task:
-      "  nix run .#${name}${
-          pkgs.lib.optionalString (task ? takesArgs) " -- <args>"
-        }\n      ${task.description}"
+      name: task: "  nix run .#${name}${task.usageSuffix or ""}\n      ${task.description}"
     ) definitions
   );
 

@@ -30,7 +30,7 @@ pkgs.mkShell {
   LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
 
   shellHook = androidShell.shellHook + ''
-    export CARGO_TARGET_DIR="$PWD/.cache/korrid-target"
+    export CARGO_TARGET_DIR="$KORRI_ROOT/.cache/korrid-target"
     # SPIKE: cargo-ndk exports CC globally, so host-targeted C compiles (build
     # scripts, host artifacts) would pick up the NDK clang and fail to find
     # glibc headers. Pin the host compiler explicitly.
