@@ -68,10 +68,9 @@ describe("LaunchablesState.fromSources", () => {
       "local-game",
       "game",
       "game",
-      "local",
-      "local",
       "stream",
       "stream",
+      "pairing",
     ])
     expect(state.entries[0]).toMatchObject({
       kind: "local-game",
@@ -85,10 +84,10 @@ describe("LaunchablesState.fromSources", () => {
     expect(ready.entries.map(e => e.kind)).toEqual([
       "game",
       "game",
-      "local",
-      "local",
       "stream",
       "stream",
+      // Pairing closes every list: it is how a device joins at all.
+      "pairing",
     ])
     expect(ready.notice).toBeNull()
   })
@@ -139,15 +138,15 @@ describe("LaunchablesState.fromSources", () => {
     })
   })
 
-  it("degrades failed sources to a notice while entries remain", () => {
+  it("degrades a failed stream source to a notice while entries remain", () => {
     const state = LaunchablesState.fromSources(
-      { _tag: "QueryFailed", message: "pm broke" },
-      [officeApps],
+      localOk,
+      [{ host: officeHost, apps: { _tag: "QueryFailed", message: "no cache" } }],
       gamesOk,
     )
     expect(state).toMatchObject({
       _tag: "Ready",
-      notice: "this device: pm broke",
+      notice: "Office PC: no cache",
     })
   })
 
@@ -170,11 +169,14 @@ describe("LaunchablesState.fromSources", () => {
       ],
       gamesErr,
     )
-    expect(state).toEqual({
-      _tag: "LoadError",
-      message:
-        "games: UpstreamUnreachable · this device: pm broke · Office PC: no cache",
-    })
+    // A fresh install fails every source — which is exactly when pairing
+    // matters most. The list stays usable instead of collapsing into an
+    // error screen the user cannot act on.
+    if (state._tag !== "Ready") throw new Error("unreachable")
+    expect(state.entries.map(entry => entry.kind)).toEqual(["pairing"])
+    expect(state.notice).toBe(
+      "games: UpstreamUnreachable · Office PC: no cache",
+    )
   })
 })
 
@@ -241,7 +243,7 @@ describe("LaunchablesState selection", () => {
     state = LaunchablesState.moveSelection(state, "down")
     expect(LaunchablesState.selected(state)).toMatchObject({
       _tag: "Some",
-      value: { kind: "local", launchable: { packageName: "a" } },
+      value: { kind: "stream", app: { name: "Desktop" } },
     })
   })
 
@@ -522,8 +524,8 @@ describe("LaunchablesState.sections", () => {
     const sections = LaunchablesState.sections(ready)
     expect(sections.map(s => [s.title, s.startIndex, s.entries.length])).toEqual([
       ["Games", 0, 2],
-      ["This device", 2, 2],
-      ["Office PC", 4, 2],
+      ["Office PC", 2, 2],
+      ["Devices", 4, 1],
     ])
   })
 })

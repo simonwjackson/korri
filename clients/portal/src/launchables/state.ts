@@ -38,6 +38,12 @@ export type PortalEntry =
    * focus and confirm would be unreachable without a touchscreen.
    */
   | { readonly kind: "storage-access" }
+  /**
+   * Reaching the native pairing screen. Always present: pairing is how a
+   * device joins the federation at all, so it must not be hidden behind
+   * already having a device to show.
+   */
+  | { readonly kind: "pairing" }
   | { readonly kind: "now-playing"; readonly session: ActiveSession }
   | { readonly kind: "local-game"; readonly game: LocalGame }
   | { readonly kind: "game"; readonly game: Game }
@@ -115,6 +121,8 @@ export const entryKey = (entry: PortalEntry): string => {
   switch (entry.kind) {
     case "storage-access":
       return "storage-access"
+    case "pairing":
+      return "pairing"
     case "now-playing":
       return `now-playing:${entry.session.launchId}`
     case "local-game":
@@ -133,6 +141,8 @@ export const entryKey = (entry: PortalEntry): string => {
 export const entryLabel = (entry: PortalEntry): string =>
   entry.kind === "storage-access"
     ? "Korri needs file access — open settings"
+    : entry.kind === "pairing"
+      ? "Pair a device"
     : entry.kind === "now-playing"
     ? (entry.session.title ?? entry.session.gameId ?? "Current session")
     : entry.kind === "local-game" || entry.kind === "game"
@@ -192,11 +202,6 @@ export const LaunchablesState = {
       failures.push(`games: ${korrid.payload.code}`)
     }
 
-    if (local._tag === "Launchables") {
-      for (const launchable of local.items) entries.push({ kind: "local", launchable })
-    } else {
-      failures.push(`this device: ${local.message}`)
-    }
 
     if (hostsError !== undefined) failures.push(`stream hosts: ${hostsError}`)
 
@@ -214,6 +219,10 @@ export const LaunchablesState = {
         failures.push(`${source.host.name}: ${source.apps.message}`)
       }
     }
+
+    // Pairing is always reachable. It is how a device joins at all, so
+    // it cannot be conditional on already having something to show.
+    entries.push({ kind: "pairing" })
 
     if (entries.length === 0 && failures.length > 0) {
       return { _tag: "LoadError", message: failures.join(" · ") }
@@ -422,6 +431,8 @@ export const LaunchablesState = {
       const title =
         entry.kind === "storage-access"
           ? "Needs your attention"
+          : entry.kind === "pairing"
+          ? "Devices"
           : entry.kind === "now-playing"
           ? "Now playing"
           : entry.kind === "local-game"

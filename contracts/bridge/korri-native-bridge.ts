@@ -23,7 +23,7 @@ import type { LaunchSpec as GeneratedLaunchSpec } from "../generated/korrid"
 // at 1. 4 introduced the session lifecycle; 5 adds the per-server korrid
 // capability required to protect localhost session-control RPCs. 6 adds the
 // launcher-neutral local launch instruction.
-export const BRIDGE_VERSION = 7
+export const BRIDGE_VERSION = 8
 
 // ── Launchables (JS -> Kotlin) ──────────────────────────────────────────
 
@@ -184,6 +184,15 @@ export interface KorriNativeBridgeSurface {
    * `storageAccess()` on `korri-shell-resumed`.
    */
   openStorageAccessSettings(): string
+  /**
+   * Open the screen where the user pairs with another device, returning a
+   * JSON-encoded `OpenPairingResult`.
+   *
+   * Pairing still lives in native UI: it involves a PIN exchange and
+   * certificate storage the portal has no business holding. This is the
+   * portal's way to reach it, not to replace it.
+   */
+  openPairing(): string
   /** Returns `BRIDGE_VERSION` of the shell build. */
   bridgeVersion(): number
 }
@@ -202,6 +211,14 @@ export type StorageAccessResult =
   /** Korri cannot read or write its own files until this is granted. */
   | { readonly _tag: "Denied" }
   | { readonly _tag: "QueryFailed"; readonly message: string }
+
+/**
+ * Result of asking the shell to open the pairing screen. `Opened` means the
+ * screen was shown, never that a device was paired.
+ */
+export type OpenPairingResult =
+  | { readonly _tag: "Opened" }
+  | { readonly _tag: "Unavailable"; readonly message: string }
 
 /** Result of asking the shell to open the grant screen. */
 export type OpenStorageSettingsResult =

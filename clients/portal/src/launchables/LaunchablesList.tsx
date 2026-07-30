@@ -49,6 +49,11 @@ export function LaunchablesList({ state }: LaunchablesListProps) {
                       {entry.game.system} · This device
                     </span>
                   )}
+                  {entry.kind === "pairing" && (
+                    <span className="mt-1 block text-sm font-normal opacity-60">
+                      Connect another device to stream from or play on.
+                    </span>
+                  )}
                   {entry.kind === "storage-access" && (
                     <span className="mt-1 block text-sm font-normal opacity-60">
                       Korri keeps your settings and plugins in a folder you can

@@ -48,7 +48,8 @@ describe("createKorriNativeLauncherBridge", () => {
     korridCapability: () => "test-capability",
     storageAccess: () => JSON.stringify({ _tag: "Granted" }),
     openStorageAccessSettings: () => JSON.stringify({ _tag: "Opened" }),
-    bridgeVersion: () => 7,
+    openPairing: () => JSON.stringify({ _tag: "Opened" }),
+    bridgeVersion: () => 8,
     ...overrides,
   })
 

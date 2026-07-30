@@ -4,6 +4,7 @@ import type {
   Launchable,
   LaunchLocalResult,
   LocalLaunchSpec,
+  OpenPairingResult,
   OpenStorageSettingsResult,
   QueryLaunchablesResult,
   QueryStreamAppsResult,
@@ -34,6 +35,8 @@ export interface LauncherBridge {
   storageAccess(): Promise<StorageAccessResult>
   /** Take the user to the system screen where that access is granted. */
   openStorageAccessSettings(): Promise<OpenStorageSettingsResult>
+  /** Take the user to the native pairing screen. */
+  openPairing(): Promise<OpenPairingResult>
 }
 
 export function createKorriNativeLauncherBridge(
@@ -110,6 +113,13 @@ export function createKorriNativeLauncherBridge(
         return JSON.parse(
           surface.openStorageAccessSettings(),
         ) as OpenStorageSettingsResult
+      } catch (error) {
+        return { _tag: "Unavailable", message: describe(error) }
+      }
+    },
+    async openPairing() {
+      try {
+        return JSON.parse(surface.openPairing()) as OpenPairingResult
       } catch (error) {
         return { _tag: "Unavailable", message: describe(error) }
       }
@@ -235,6 +245,13 @@ export function createInMemoryLauncherBridge(
       // that honestly rather than pretend the grant flow started.
       return behavior === "storage-settings-unavailable"
         ? { _tag: "Unavailable", message: "no settings screen in browser dev" }
+        : { _tag: "Opened" }
+    },
+    async openPairing() {
+      await delay()
+      // Browser dev has no native pairing screen to reach.
+      return behavior === "storage-settings-unavailable"
+        ? { _tag: "Unavailable", message: "no pairing screen in browser dev" }
         : { _tag: "Opened" }
     },
   }

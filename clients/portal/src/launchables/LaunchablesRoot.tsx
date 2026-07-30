@@ -155,7 +155,22 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
       if (selected._tag === "None") return
       const entry = selected.value
       const operation = ++actionSeq.current
-      if (entry.kind === "storage-access") {
+      if (entry.kind === "pairing") {
+        // Native owns pairing: it exchanges a PIN and stores certificates.
+        void bridge.openPairing().then(result => {
+          if (!mountedRef.current || operation !== actionSeq.current) return
+          if (result._tag === "Unavailable") {
+            const now = stateRef.current
+            if (now._tag !== "Ready") return
+            const next = LaunchablesState.withNotice(
+              now,
+              `cannot open pairing: ${result.message}`,
+            )
+            stateRef.current = next
+            setState(next)
+          }
+        })
+      } else if (entry.kind === "storage-access") {
         // The shell can only take the user to the system screen; it cannot
         // grant anything. Whether they said yes is discovered on resume,
         // when the sources are re-read.

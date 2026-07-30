@@ -246,7 +246,24 @@ public class KorriShellActivity extends AppCompatActivity {
         @JavascriptInterface
         public int bridgeVersion() {
             // Mirrors BRIDGE_VERSION in contracts/bridge/korri-native-bridge.ts.
-            return 7;
+            return 8;
+        }
+
+        /**
+         * Open the native pairing surface. Pairing exchanges a PIN and stores
+         * certificates, which stays out of the portal; this only gets the user
+         * there.
+         */
+        @JavascriptInterface
+        public String openPairing() {
+            try {
+                runOnUiThread(() -> startActivity(
+                        new Intent(KorriShellActivity.this, PcView.class)));
+                return "{\"_tag\":\"Opened\"}";
+            } catch (Throwable error) {
+                return "{\"_tag\":\"Unavailable\",\"message\":"
+                        + JSONObject.quote(String.valueOf(error.getMessage())) + "}";
+            }
         }
 
         /**
