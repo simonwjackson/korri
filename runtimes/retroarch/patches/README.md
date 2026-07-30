@@ -13,3 +13,8 @@ Korri's GPL-3.0 RetroArch distribution. Upstream source remains available from
 
 Patches are applied in lexical order. Add one independently reviewable concern
 per `NNNN-description.patch` and record its upstream-facing rationale here.
+
+- `0001-korri-package-identity.patch` — gives the arm64 flavor the side-by-side
+  `com.korri.retroarch` application id and “Korri RetroArch” label, removes all
+  launcher categories while retaining the exported explicit gameplay activity,
+  and limits the flavor to the one supported arm64 ABI.

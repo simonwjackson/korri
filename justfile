@@ -49,3 +49,4 @@ ra-check:
     ./runtimes/retroarch/fetch-upstream.sh
     cd runtimes/retroarch && nix develop . --command bash -c 'cd upstream/pkg/android/phoenix && ./gradlew assembleAarch64Release'
     test -f runtimes/retroarch/upstream/pkg/android/phoenix/build/outputs/apk/aarch64/release/phoenix-aarch64-release.apk
+    cd runtimes/retroarch && nix develop . --command ./test-apk-contract.sh

@@ -1,0 +1,26 @@
+diff --git a/pkg/android/phoenix/AndroidManifest.xml b/pkg/android/phoenix/AndroidManifest.xml
+index ba4201e..ed6f2b7 100644
+--- a/pkg/android/phoenix/AndroidManifest.xml
++++ b/pkg/android/phoenix/AndroidManifest.xml
+@@ -30,8 +30 @@
+-        <activity android:name="com.retroarch.browser.mainmenu.MainMenuActivity" android:exported="true" android:launchMode="singleInstance">
+-            <intent-filter>
+-                <action android:name="android.intent.action.MAIN" />
+-                <category android:name="android.intent.category.LAUNCHER" />
+-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+-                <category android:name="tv.ouya.intent.category.GAME" />
+-            </intent-filter>
+-        </activity>
++        <activity android:name="com.retroarch.browser.mainmenu.MainMenuActivity" android:exported="false" android:launchMode="singleInstance" />
+diff --git a/pkg/android/phoenix/build.gradle b/pkg/android/phoenix/build.gradle
+index 6b0660c..558608b 100644
+--- a/pkg/android/phoenix/build.gradle
++++ b/pkg/android/phoenix/build.gradle
+@@ -54,2 +54,2 @@ android {
+-      applicationIdSuffix '.aarch64'
+-      resValue "string", "app_name", "RetroArch (AArch64)"
++      applicationId 'com.korri.retroarch'
++      resValue "string", "app_name", "Korri RetroArch"
+@@ -60 +60 @@ android {
+-        abiFilters 'arm64-v8a', 'x86_64'
++        abiFilters 'arm64-v8a'
