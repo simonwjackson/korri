@@ -1,39 +1,5 @@
-use serde::{Deserialize, Serialize};
+use super::{AndroidComponent, FileProvisionMode, LaunchSpec, LocalGame, ProvisionedFile};
 use std::{collections::HashMap, fs, path::Path};
-use typeshare::typeshare;
-
-#[typeshare]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct LocalGame {
-    pub id: String,
-    pub title: String,
-    pub system: String,
-}
-
-#[typeshare]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AndroidComponent {
-    pub package_name: String,
-    pub class_name: String,
-}
-
-#[typeshare]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct ProvisionedFile {
-    pub path: String,
-    pub content: String,
-}
-
-#[typeshare]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LaunchSpec {
-    pub launcher_id: String,
-    pub component: AndroidComponent,
-    pub extras: HashMap<String, String>,
-    pub files: Vec<ProvisionedFile>,
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum LaunchError {
@@ -41,6 +7,8 @@ pub enum LaunchError {
     UnknownGame(String),
     #[error("local ROM is missing: {0}")]
     RomMissing(String),
+    #[error("local storage is unavailable: {0}")]
+    StorageAccess(String),
     #[error("failed to provision RetroArch config: {0}")]
     Config(String),
 }
@@ -88,8 +56,6 @@ run_ahead_secondary_instance = "true"
 # stock Vulkan crashes on Mali/Immortalis
 video_driver = "gl"
 
-network_cmd_enable = "true"
-network_cmd_port = "55355"
 "#,
         system = root.join("system").display(),
         saves = root.join("saves").display(),
@@ -98,29 +64,46 @@ network_cmd_port = "55355"
     )
 }
 
-pub fn launch_game(root: &Path, game_id: &str) -> Result<LaunchSpec, LaunchError> {
+pub fn launch_game(
+    root: &Path,
+    game_id: &str,
+    provision_mode: FileProvisionMode,
+) -> Result<LaunchSpec, LaunchError> {
     if game_id != "wl4" {
         return Err(LaunchError::UnknownGame(game_id.into()));
     }
     let rom = root.join("roms/wl4.gba");
-    if !rom.is_file() {
-        return Err(LaunchError::RomMissing(rom.display().to_string()));
+    match fs::metadata(&rom) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => return Err(LaunchError::RomMissing(rom.display().to_string())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(LaunchError::RomMissing(rom.display().to_string()));
+        }
+        Err(error) => return Err(LaunchError::StorageAccess(error.to_string())),
     }
-    for directory in ["system", "saves", "states", "screenshots"] {
-        fs::create_dir_all(root.join(directory))
-            .map_err(|error| LaunchError::Config(error.to_string()))?;
-    }
+
     let config = root.join("retroarch.cfg");
     let content = config_content(root);
-    let files = match fs::write(&config, &content) {
-        Ok(()) => Vec::new(),
-        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+    let provisioned_directories = ["system", "saves", "states", "screenshots"];
+    let (directories, files) = match provision_mode {
+        FileProvisionMode::Direct => {
+            for directory in provisioned_directories {
+                fs::create_dir_all(root.join(directory))
+                    .map_err(|error| LaunchError::Config(error.to_string()))?;
+            }
+            fs::write(&config, &content).map_err(|error| LaunchError::Config(error.to_string()))?;
+            (Vec::new(), Vec::new())
+        }
+        FileProvisionMode::Deferred => (
+            provisioned_directories
+                .into_iter()
+                .map(|directory| root.join(directory).display().to_string())
+                .collect(),
             vec![ProvisionedFile {
                 path: config.display().to_string(),
                 content,
-            }]
-        }
-        Err(error) => return Err(LaunchError::Config(error.to_string())),
+            }],
+        ),
     };
 
     Ok(LaunchSpec {
@@ -137,13 +120,22 @@ pub fn launch_game(root: &Path, game_id: &str) -> Result<LaunchSpec, LaunchError
             ),
             ("CONFIGFILE".into(), config.display().to_string()),
         ]),
+        directories,
         files,
+        integrity: String::new(),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn root_with_rom() -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("roms")).unwrap();
+        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        root
+    }
 
     #[test]
     fn lists_the_single_wario_land_4_entry() {
@@ -159,11 +151,9 @@ mod tests {
 
     #[test]
     fn launches_wario_land_with_paths_rooted_in_korri_storage() {
-        let root = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(root.path().join("roms")).unwrap();
-        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        let root = root_with_rom();
 
-        let spec = launch_game(root.path(), "wl4").expect("launch spec");
+        let spec = launch_game(root.path(), "wl4", FileProvisionMode::Direct).expect("launch spec");
 
         assert_eq!(spec.launcher_id, "retroarch");
         assert_eq!(spec.component.package_name, "com.retroarch.aarch64");
@@ -185,36 +175,46 @@ mod tests {
         );
         assert!(!spec.extras.contains_key("QUITFOCUS"));
         assert!(spec.files.is_empty());
+        let config = std::fs::read_to_string(root.path().join("retroarch.cfg")).unwrap();
+        assert!(config.contains("video_driver = \"gl\""));
     }
 
-    #[cfg(unix)]
     #[test]
-    fn returns_config_bytes_for_the_android_edge_when_direct_write_is_denied() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let root = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(root.path().join("roms")).unwrap();
-        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+    fn defers_config_bytes_to_the_android_storage_edge_without_mutating() {
+        let root = root_with_rom();
         let config = root.path().join("retroarch.cfg");
-        std::fs::write(&config, b"owned elsewhere").unwrap();
-        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o400)).unwrap();
+        std::fs::write(&config, b"existing config").unwrap();
 
-        let spec = launch_game(root.path(), "wl4").expect("fallback spec");
+        let spec =
+            launch_game(root.path(), "wl4", FileProvisionMode::Deferred).expect("deferred spec");
 
+        assert_eq!(std::fs::read(&config).unwrap(), b"existing config");
+        assert_eq!(
+            spec.directories,
+            ["system", "saves", "states", "screenshots"].map(|directory| root
+                .path()
+                .join(directory)
+                .display()
+                .to_string())
+        );
+        assert!(spec
+            .directories
+            .iter()
+            .all(|directory| !std::path::Path::new(directory).exists()));
         assert_eq!(spec.files.len(), 1);
         assert_eq!(spec.files[0].path, config.display().to_string());
         assert!(spec.files[0].content.contains("video_driver = \"gl\""));
-        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(spec.files[0]
+            .content
+            .contains("kiosk_mode_enable = \"true\""));
     }
 
     #[test]
     fn deterministically_provisions_the_kiosk_config_and_save_tree() {
-        let root = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(root.path().join("roms")).unwrap();
-        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        let root = root_with_rom();
         std::fs::write(root.path().join("retroarch.cfg"), b"user setting").unwrap();
 
-        launch_game(root.path(), "wl4").expect("launch spec");
+        launch_game(root.path(), "wl4", FileProvisionMode::Direct).expect("launch spec");
 
         let config = std::fs::read_to_string(root.path().join("retroarch.cfg")).unwrap();
         assert!(config.contains("video_driver = \"gl\""));
@@ -234,12 +234,25 @@ mod tests {
     fn rejects_missing_rom_and_unknown_game_with_distinct_errors() {
         let root = tempfile::tempdir().unwrap();
         assert!(matches!(
-            launch_game(root.path(), "wl4"),
+            launch_game(root.path(), "wl4", FileProvisionMode::Direct),
             Err(LaunchError::RomMissing(_))
         ));
         assert!(matches!(
-            launch_game(root.path(), "unknown"),
+            launch_game(root.path(), "unknown", FileProvisionMode::Direct),
             Err(LaunchError::UnknownGame(_))
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn distinguishes_unreadable_storage_from_a_missing_rom() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = root_with_rom();
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o000)).unwrap();
+        let result = launch_game(root.path(), "wl4", FileProvisionMode::Direct);
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+
+        assert!(matches!(result, Err(LaunchError::StorageAccess(_))));
     }
 }

@@ -42,7 +42,10 @@ export interface LaunchSpec {
 	launcherId: string;
 	component: AndroidComponent;
 	extras: Record<string, string>;
+	directories: string[];
 	files: ProvisionedFile[];
+	/** Per-server HMAC. The portal transports it opaquely; native verifies it. */
+	integrity: string;
 }
 
 export interface LocalGame {

@@ -229,12 +229,15 @@ struct AppState {
     upstream: upstream::UpstreamClient,
     rpc_capability: String,
     local_storage_root: PathBuf,
+    local_file_provision: launcher::FileProvisionMode,
+    local_launch_signing_key: Vec<u8>,
 }
 
 fn local_launch_failure(error: launcher::LaunchError) -> RpcFailure {
     let code = match &error {
         launcher::LaunchError::UnknownGame(_) => "LocalGameNotFound",
         launcher::LaunchError::RomMissing(_) => "LocalRomMissing",
+        launcher::LaunchError::StorageAccess(_) => "LocalStorageUnavailable",
         launcher::LaunchError::Config(_) => "LocalConfigWriteFailed",
     };
     RpcFailure {
@@ -372,9 +375,14 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
             }))
         }
         RpcRequest::LocalGameLaunch(request) => {
-            let outcome = launcher::launch_game(&state.local_storage_root, &request.game_id)
-                .map(LocalGameLaunchOutcome::Ok)
-                .unwrap_or_else(|error| LocalGameLaunchOutcome::Err(local_launch_failure(error)));
+            let outcome = launcher::launch_game(
+                &state.local_storage_root,
+                &request.game_id,
+                state.local_file_provision,
+            )
+            .map(|spec| spec.sign(&state.local_launch_signing_key))
+            .map(LocalGameLaunchOutcome::Ok)
+            .unwrap_or_else(|error| LocalGameLaunchOutcome::Err(local_launch_failure(error)));
             RpcResponse::LocalGameLaunch(outcome)
         }
         RpcRequest::Health(_) => RpcResponse::Health(HealthOutcome::Ok(Health {
@@ -420,10 +428,28 @@ pub fn router_with_capability_and_local_root(
     allowed_origin: &str,
     local_storage_root: impl AsRef<Path>,
 ) -> Router {
+    router_with_capability_local_root_and_provision(
+        rpc_capability,
+        allowed_origin,
+        local_storage_root,
+        launcher::FileProvisionMode::Direct,
+        generate_launch_signing_key(),
+    )
+}
+
+fn router_with_capability_local_root_and_provision(
+    rpc_capability: &str,
+    allowed_origin: &str,
+    local_storage_root: impl AsRef<Path>,
+    local_file_provision: launcher::FileProvisionMode,
+    local_launch_signing_key: Vec<u8>,
+) -> Router {
     let state = AppState {
         upstream: upstream::UpstreamClient::new(upstream::UpstreamConfig::from_env()),
         rpc_capability: rpc_capability.into(),
         local_storage_root: local_storage_root.as_ref().to_owned(),
+        local_file_provision,
+        local_launch_signing_key,
     };
     let origin: HeaderValue = allowed_origin
         .parse()
@@ -444,6 +470,11 @@ pub fn generate_rpc_capability() -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+fn generate_launch_signing_key() -> Vec<u8> {
+    let bytes: [u8; 32] = rand::random();
+    bytes.to_vec()
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
     #[error("korrid server is already running")]
@@ -457,6 +488,7 @@ pub enum ServerError {
 struct ServerHandle {
     port: u16,
     rpc_capability: String,
+    launch_signing_key: Vec<u8>,
     stop: oneshot::Sender<()>,
     thread: JoinHandle<()>,
 }
@@ -500,6 +532,8 @@ pub fn start_local_server(
         .port();
     let rpc_capability = generate_rpc_capability();
     let server_capability = rpc_capability.clone();
+    let launch_signing_key = generate_launch_signing_key();
+    let server_signing_key = launch_signing_key.clone();
     let allowed_origin = allowed_origin.to_owned();
     let local_storage_root = local_storage_root.to_owned();
     let (stop, stopped) = oneshot::channel();
@@ -512,10 +546,12 @@ pub fn start_local_server(
                     .expect("convert localhost listener");
                 axum::serve(
                     listener,
-                    router_with_capability_and_local_root(
+                    router_with_capability_local_root_and_provision(
                         &server_capability,
                         &allowed_origin,
                         &local_storage_root,
+                        launcher::FileProvisionMode::Deferred,
+                        server_signing_key,
                     ),
                 )
                 .with_graceful_shutdown(async {
@@ -532,6 +568,7 @@ pub fn start_local_server(
     *slot = Some(ServerHandle {
         port,
         rpc_capability,
+        launch_signing_key,
         stop,
         thread,
     });
@@ -565,6 +602,18 @@ pub fn local_server_capability() -> Option<String> {
         .expect("server mutex poisoned")
         .as_ref()
         .map(|server| server.rpc_capability.clone())
+}
+
+/// Verify that a launcher-neutral instruction came from this embedded server.
+pub fn verify_local_launch_spec(spec_json: &str) -> bool {
+    let Ok(spec) = serde_json::from_str::<launcher::LaunchSpec>(spec_json) else {
+        return false;
+    };
+    server_slot()
+        .lock()
+        .expect("server mutex poisoned")
+        .as_ref()
+        .is_some_and(|server| spec.verify(&server.launch_signing_key))
 }
 
 pub mod launcher;
@@ -661,6 +710,191 @@ mod tests {
         let body = String::from_utf8_lossy(&body);
         assert!(body.contains("app.local-games.list"));
         assert!(body.contains("Wario Land 4"));
+    }
+
+    #[tokio::test]
+    async fn local_launch_rpc_uses_the_configured_root_and_returns_a_spec() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("roms")).unwrap();
+        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        let app = router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, "Bearer right-token")
+                    .body(Body::from(
+                        r#"{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8_lossy(&body);
+        assert!(body.contains("app.local-games.launch"));
+        assert!(body.contains("com.retroarch.aarch64"));
+        assert!(root.path().join("retroarch.cfg").is_file());
+    }
+
+    #[tokio::test]
+    async fn embedded_local_launch_rpc_defers_the_config_and_save_tree() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("roms")).unwrap();
+        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        let app = router_with_capability_local_root_and_provision(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+            launcher::FileProvisionMode::Deferred,
+            b"test signing key".to_vec(),
+        );
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, "Bearer right-token")
+                    .body(Body::from(
+                        r#"{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let spec = &body["outcome"]["payload"];
+        assert_eq!(spec["files"].as_array().unwrap().len(), 1);
+        assert_eq!(spec["directories"].as_array().unwrap().len(), 4);
+        assert!(!spec["integrity"].as_str().unwrap().is_empty());
+        assert!(!root.path().join("retroarch.cfg").exists());
+        assert!(!root.path().join("saves").exists());
+    }
+
+    #[tokio::test]
+    async fn running_server_verifies_only_its_untampered_launch_spec() {
+        struct StopServer;
+        impl Drop for StopServer {
+            fn drop(&mut self) {
+                let _ = stop_local_server();
+            }
+        }
+
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("roms")).unwrap();
+        std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+        let port = start_local_server(
+            "https://portal.example",
+            root.path().to_str().expect("UTF-8 temp path"),
+        )
+        .unwrap();
+        let _stop = StopServer;
+        let capability = local_server_capability().unwrap();
+        let client = reqwest::Client::new();
+        let url = format!("http://127.0.0.1:{port}/rpc");
+        let mut response = None;
+        for _ in 0..20 {
+            match client
+                .post(&url)
+                .bearer_auth(&capability)
+                .json(&serde_json::json!({
+                    "_tag": "app.local-games.launch",
+                    "payload": { "gameId": "wl4" }
+                }))
+                .send()
+                .await
+            {
+                Ok(value) => {
+                    response = Some(value.json::<serde_json::Value>().await.unwrap());
+                    break;
+                }
+                Err(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            }
+        }
+        let response = response.expect("embedded server response");
+        let mut spec = response["outcome"]["payload"].clone();
+        let spec_json = serde_json::to_string(&spec).unwrap();
+        assert!(verify_local_launch_spec(&spec_json));
+
+        spec["files"][0]["content"] = serde_json::Value::String("tampered".into());
+        assert!(!verify_local_launch_spec(
+            &serde_json::to_string(&spec).unwrap()
+        ));
+    }
+
+    #[tokio::test]
+    async fn local_launch_rpc_maps_missing_and_unknown_games_to_distinct_codes() {
+        for (game_id, code) in [("wl4", "LocalRomMissing"), ("unknown", "LocalGameNotFound")] {
+            let root = tempfile::tempdir().unwrap();
+            let app = router_with_capability_and_local_root(
+                "right-token",
+                "https://portal.example",
+                root.path(),
+            );
+            let body = format!(
+                r#"{{"_tag":"app.local-games.launch","payload":{{"gameId":"{game_id}"}}}}"#
+            );
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/rpc")
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header(header::AUTHORIZATION, "Bearer right-token")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            assert!(String::from_utf8_lossy(&body).contains(code));
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn local_launch_rpc_distinguishes_storage_read_and_config_write_failures() {
+        use std::os::unix::fs::PermissionsExt;
+
+        for (mode, code) in [
+            (0o000, "LocalStorageUnavailable"),
+            (0o500, "LocalConfigWriteFailed"),
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            std::fs::create_dir_all(root.path().join("roms")).unwrap();
+            std::fs::write(root.path().join("roms/wl4.gba"), b"rom").unwrap();
+            let app = router_with_capability_and_local_root(
+                "right-token",
+                "https://portal.example",
+                root.path(),
+            );
+            std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(mode)).unwrap();
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/rpc")
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header(header::AUTHORIZATION, "Bearer right-token")
+                        .body(Body::from(
+                            r#"{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}"#,
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            assert!(String::from_utf8_lossy(&body).contains(code));
+        }
     }
 
     #[tokio::test]

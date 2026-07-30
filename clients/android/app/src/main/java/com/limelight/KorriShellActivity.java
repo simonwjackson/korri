@@ -8,9 +8,11 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.webkit.JavascriptInterface;
@@ -41,8 +43,8 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
-import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -319,63 +321,66 @@ public class KorriShellActivity extends AppCompatActivity {
         /** JSON-encoded LaunchLocalResult. */
         @JavascriptInterface
         public String launchLocal(String specJson) {
-            final Intent intent;
-            final JSONArray files;
-            try {
-                JSONObject spec = new JSONObject(specJson);
-                String launcherId = spec.getString("launcherId");
-                if (!"retroarch".equals(launcherId)) {
-                    return launchFailed("UnsupportedLauncher",
-                            "unsupported local launcher: " + launcherId);
-                }
-
-                JSONObject componentJson = spec.getJSONObject("component");
-                ComponentName component = new ComponentName(
-                        componentJson.getString("packageName"),
-                        componentJson.getString("className"));
-                ComponentName expected = new ComponentName(
-                        "com.retroarch.aarch64",
-                        "com.retroarch.browser.retroactivity.RetroActivityFuture");
-                if (!expected.equals(component)) {
-                    return launchFailed("InvalidSpec",
-                            "component does not match launcher " + launcherId);
-                }
-
-                JSONObject extras = spec.getJSONObject("extras");
-                intent = new Intent().setComponent(component)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                Iterator<String> keys = extras.keys();
-                while (keys.hasNext()) {
-                    String key = keys.next();
-                    Object value = extras.get(key);
-                    if (!(value instanceof String)) {
-                        return launchFailed("InvalidSpec",
-                                "local launch extras must be strings");
-                    }
-                    intent.putExtra(key, (String) value);
-                }
-                files = spec.getJSONArray("files");
-            } catch (Exception error) {
+            if (!KorridServer.verifyLaunchSpec(specJson)) {
                 return launchFailed("InvalidSpec",
-                        error.getMessage() != null ? error.getMessage() : "invalid launch spec");
+                        "local launch instruction failed integrity verification");
+            }
+            final KorriLocalLaunchSpec.Parsed spec;
+            try {
+                spec = KorriLocalLaunchSpec.parse(specJson, new File(localStorageRoot()));
+            } catch (KorriLocalLaunchSpec.Invalid error) {
+                return launchFailed(error.reason, error.getMessage());
             }
 
+            final Intent intent = new Intent().setComponent(spec.component)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            for (Map.Entry<String, String> extra : spec.extras.entrySet()) {
+                intent.putExtra(extra.getKey(), extra.getValue());
+            }
+
+            // Validate package availability before any external-storage write.
             try {
-                for (int index = 0; index < files.length(); index++) {
-                    JSONObject file = files.getJSONObject(index);
-                    provisionFile(file.getString("path"), file.getString("content"));
+                getPackageManager().getActivityInfo(intent.getComponent(), 0);
+            } catch (PackageManager.NameNotFoundException error) {
+                return launchFailed("NotInstalled", "local launcher is not installed");
+            }
+
+            boolean hasProvisioning = !spec.directories.isEmpty() || !spec.files.isEmpty();
+            if (hasProvisioning
+                    && !KorriLocalLaunchSpec.supportsStorageProvisioning(Build.VERSION.SDK_INT)) {
+                return launchFailed(
+                        "ProvisionFailed",
+                        "Local game storage provisioning requires Android 11 or newer");
+            }
+            boolean hasAllFilesAccess = Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+                    || Environment.isExternalStorageManager();
+            if (KorriLocalLaunchSpec.requiresStorageGrant(
+                    spec,
+                    Build.VERSION.SDK_INT,
+                    hasAllFilesAccess)) {
+                try {
+                    requestAllFilesAccess();
+                } catch (Exception error) {
+                    return launchFailed(
+                            "ProvisionFailed",
+                            "Unable to open Android all files access settings");
+                }
+                return launchFailed(
+                        "ProvisionFailed",
+                        "Grant Korri all files access, then return and retry");
+            }
+            try {
+                for (String directory : spec.directories) {
+                    provisionDirectory(directory);
+                }
+                for (KorriLocalLaunchSpec.FileSpec file : spec.files) {
+                    provisionFile(file.path, file.content);
                 }
             } catch (Exception error) {
                 return launchFailed("ProvisionFailed",
                         error.getMessage() != null
                                 ? error.getMessage()
                                 : "local file provisioning failed");
-            }
-
-            try {
-                getPackageManager().getActivityInfo(intent.getComponent(), 0);
-            } catch (PackageManager.NameNotFoundException error) {
-                return launchFailed("NotInstalled", "local launcher is not installed");
             }
 
             CountDownLatch started = new CountDownLatch(1);
@@ -405,12 +410,47 @@ public class KorriShellActivity extends AppCompatActivity {
             return "{\"_tag\":\"Launched\"}";
         }
 
-        /** Write a korrid-provided file at the Android storage edge. */
-        private void provisionFile(String targetPath, String content) throws Exception {
-            if (!Environment.isExternalStorageManager()) {
-                throw new SecurityException(
-                        "allow Korri all files access to provision local game config");
+        private void requestAllFilesAccess() throws Exception {
+            CountDownLatch opened = new CountDownLatch(1);
+            AtomicReference<Exception> settingsError = new AtomicReference<>();
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(
+                            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                            Uri.parse("package:" + getPackageName())));
+                } catch (Exception appSettingsError) {
+                    try {
+                        startActivity(new Intent(
+                                Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+                    } catch (Exception globalSettingsError) {
+                        settingsError.set(globalSettingsError);
+                    }
+                } finally {
+                    opened.countDown();
+                }
+            });
+            try {
+                if (!opened.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("all files access settings timed out");
+                }
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                throw error;
             }
+            if (settingsError.get() != null) {
+                throw settingsError.get();
+            }
+        }
+
+        private void provisionDirectory(String targetPath) throws Exception {
+            File directory = new File(targetPath);
+            if (!directory.isDirectory() && !directory.mkdirs()) {
+                throw new IllegalStateException("cannot create provisioned directory");
+            }
+        }
+
+        /** Write a validated korrid-provided file at the Android storage edge. */
+        private void provisionFile(String targetPath, String content) throws Exception {
             File korriRoot = new File(localStorageRoot()).getCanonicalFile();
             File target = new File(targetPath).getCanonicalFile();
             String rootPrefix = korriRoot.getPath() + File.separator;
@@ -650,31 +690,6 @@ public class KorriShellActivity extends AppCompatActivity {
             // Escape hatch into Artemis streaming settings for tinkering.
             runOnUiThread(() -> startActivity(new Intent(KorriShellActivity.this,
                     com.limelight.preferences.StreamSettings.class)));
-        }
-
-        @JavascriptInterface
-        public String launchLocalRetro(String romFileName) {
-            // SPIKE: local emulation transport — RetroArch as headless runtime.
-            // Korri owns the config + save tree under /sdcard/korri-retro/;
-            // RA never shows its own UI (kiosk config) and quits on focus loss.
-            try {
-                Intent intent = new Intent();
-                intent.setClassName("com.retroarch.aarch64",
-                        "com.retroarch.browser.retroactivity.RetroActivityFuture");
-                intent.putExtra("ROM", "/storage/emulated/0/korri-retro/roms/" + romFileName);
-                intent.putExtra("LIBRETRO",
-                        "/data/data/com.retroarch.aarch64/cores/mgba_libretro_android.so");
-                intent.putExtra("CONFIGFILE", "/storage/emulated/0/korri-retro/retroarch.cfg");
-                // No QUITFOCUS: RA suspends in the background on focus loss
-                // (pause_nonactive) so switching away and back resumes the
-                // game in place instead of restarting it. Quit semantics move
-                // to the session control plane (network cmd QUIT) later.
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                runOnUiThread(() -> startActivity(intent));
-                return "{\"status\":\"launched\"}";
-            } catch (Exception e) {
-                return errorResult("RetroArch launch failed: " + e.getMessage());
-            }
         }
 
         // --- Korri settings contract (theme-free; web surface owns all UI) ---

@@ -1,3 +1,5 @@
+import type { LaunchSpec as GeneratedLaunchSpec } from "../generated/korrid"
+
 /**
  * Treaty between the portal (TS, in the WebView) and the Android shell
  * (Kotlin, KorriShellActivity). This file is the source of truth for every
@@ -45,29 +47,11 @@ export type LaunchAppResult =
       readonly message: string
     }
 
-/** Android component supplied by a korrid launcher instruction. */
-export interface LocalLaunchComponent {
-  readonly packageName: string
-  readonly className: string
-}
-
 /**
- * Launcher-neutral instruction produced by korrid. The shell validates the
- * launcher id/component pair and copies opaque string extras into an explicit
- * Android intent; launcher-specific paths and keys never originate here.
+ * Launcher-neutral instruction produced by korrid. Its Rust/Typeshare shape is
+ * the single source of truth for both the HTTP response and native bridge.
  */
-export interface LocalProvisionedFile {
-  readonly path: string
-  readonly content: string
-}
-
-export interface LocalLaunchSpec {
-  readonly launcherId: string
-  readonly component: LocalLaunchComponent
-  readonly extras: Readonly<Record<string, string>>
-  /** Generic files korrid generated but the Android storage edge must write. */
-  readonly files: readonly LocalProvisionedFile[]
-}
+export type LocalLaunchSpec = GeneratedLaunchSpec
 
 /** Result of `KorriNative.launchLocal(specJson)`. */
 export type LaunchLocalResult =

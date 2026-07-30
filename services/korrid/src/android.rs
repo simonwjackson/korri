@@ -1,10 +1,13 @@
-//! Android edge: four JNI functions mirroring
+//! Android edge: five JNI functions mirroring
 //! clients/android/.../korrid/KorridServer.java.
 
-use crate::{korrid_version, local_server_capability, start_local_server, stop_local_server};
+use crate::{
+    korrid_version, local_server_capability, start_local_server, stop_local_server,
+    verify_local_launch_spec,
+};
 use jni::{
     objects::{JClass, JString},
-    sys::{jint, jstring},
+    sys::{jboolean, jint, jstring},
     JNIEnv,
 };
 use std::ptr;
@@ -71,6 +74,22 @@ pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_capabili
             ptr::null_mut()
         }
     }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_simonwjackson_korri_korrid_KorridServer_verifyLaunchSpec(
+    mut env: JNIEnv,
+    _class: JClass,
+    spec_json: JString,
+) -> jboolean {
+    let spec_json: String = match env.get_string(&spec_json) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error.to_string());
+            return 0;
+        }
+    };
+    verify_local_launch_spec(&spec_json).into()
 }
 
 #[no_mangle]

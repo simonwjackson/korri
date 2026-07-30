@@ -84,6 +84,20 @@ if ! printf '%s' "$local_games_response" | grep -q '"title":"Wario Land 4"'; the
   exit 1
 fi
 
+# Embedded Android must return a signed, deferred instruction. Rust must not
+# attempt the external-storage write that scoped storage denies.
+local_launch_response="$(curl --fail --silent \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer $capability" \
+  -d '{"_tag":"app.local-games.launch","payload":{"gameId":"wl4"}}' \
+  "http://127.0.0.1:$HOST_PORT/rpc")"
+for expected in '"launcherId":"retroarch"' '"directories":[' '"files":[' '"integrity":"'; do
+  if ! printf '%s' "$local_launch_response" | grep -F "$expected" >/dev/null; then
+    echo "Deferred local launch is missing $expected: $local_launch_response" >&2
+    exit 1
+  fi
+done
+
 # Session status must round-trip through the on-device brain: either a
 # well-formed Ok (with or without an active session) or a tagged Err code
 # — anything else means the proxy or the wire is broken.
@@ -104,5 +118,6 @@ fi
 printf 'Android portal: %s\n' "$portal_ready"
 printf 'Android Rust RPC: %s\n' "$response"
 printf 'Android local games: %s\n' "$local_games_response"
+printf 'Android local launch: %s\n' "$local_launch_response"
 printf 'Android session status: %s\n' "$session_response"
 printf 'Android Rust library: %s\n' "$(adb -s "$DEVICE" shell dumpsys package "$PACKAGE" | grep versionName | head -1 | xargs)"

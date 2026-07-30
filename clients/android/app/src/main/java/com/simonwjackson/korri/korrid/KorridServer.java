@@ -18,6 +18,8 @@ public final class KorridServer {
     private static native String version();
     private static native int start(String allowedOrigin, String localStorageRoot);
     public static native String capability();
+    /** True only for an untampered instruction from the running embedded server. */
+    public static native boolean verifyLaunchSpec(String specJson);
     public static native void stop();
 
     public static int startAndLog(String allowedOrigin, String localStorageRoot) {
