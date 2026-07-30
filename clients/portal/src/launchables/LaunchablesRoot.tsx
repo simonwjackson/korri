@@ -138,6 +138,15 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
       stateRef.current = next
       setState(next)
     })
+    // A tap says which entry was chosen. Move selection there, then take the
+    // ordinary confirm path — the bus dispatches synchronously, so the
+    // confirm listener below reads the selection this just set.
+    const offActivate = bus.onAction("activate", action => {
+      const next = LaunchablesState.selectIndex(stateRef.current, action.index)
+      stateRef.current = next
+      setState(next)
+      bus.emit({ type: "confirm", source: action.source })
+    })
     const offConfirm = bus.onAction("confirm", () => {
       const current = stateRef.current
       // selected() only accepts Ready, so Preparing/Stopping are input-
@@ -399,6 +408,7 @@ export function LaunchablesRoot({ bus, bridge, korrid }: LaunchablesRootProps) {
     })
     return () => {
       offDirection()
+      offActivate()
       offConfirm()
       offOptions()
     }

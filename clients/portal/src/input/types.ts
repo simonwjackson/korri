@@ -32,6 +32,20 @@ export type InputAction =
       readonly source?: InputSource
     }
   | { readonly type: "confirm"; readonly source?: InputSource }
+  /**
+   * A pointer fused selection and activation into one gesture: the user
+   * touched a specific thing rather than moving to it and then confirming.
+   *
+   * This exists because a bare `confirm` from a tap would activate whatever
+   * was selected *before* the tap. Consumers move selection to `index` and
+   * then take the same path a controller's `confirm` takes — so nothing
+   * downstream needs to know a finger was involved.
+   */
+  | {
+      readonly type: "activate"
+      readonly index: number
+      readonly source?: InputSource
+    }
   | { readonly type: "back"; readonly source?: InputSource }
   | { readonly type: "options"; readonly source?: InputSource }
   | { readonly type: "menu"; readonly source?: InputSource }

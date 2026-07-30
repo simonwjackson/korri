@@ -28,6 +28,10 @@ export function LaunchablesList({ state }: LaunchablesListProps) {
               return (
                 <li
                   key={entryKey(entry)}
+                  // Opts this row into the pointer adapter. The component
+                  // stays input-agnostic: it publishes which entry it is,
+                  // never what a tap should do.
+                  data-entry-index={index}
                   className={
                     index === state.selectedIndex
                       ? "rounded-xl bg-zinc-100 px-5 py-4 text-lg font-semibold text-zinc-950"

@@ -596,3 +596,27 @@ describe("storage access prompt", () => {
     expect(entryKey({ kind: "storage-access" })).toBe("storage-access")
   })
 })
+
+describe("LaunchablesState.selectIndex", () => {
+  it("moves selection to the tapped entry", () => {
+    if (ready._tag !== "Ready") throw new Error("unreachable")
+    const next = LaunchablesState.selectIndex(ready, 3)
+    if (next._tag !== "Ready") throw new Error("unreachable")
+    expect(next.selectedIndex).toBe(3)
+  })
+
+  it("ignores a stale index rather than activating a neighbour", () => {
+    // A list that changed under the user must not launch the wrong thing.
+    if (ready._tag !== "Ready") throw new Error("unreachable")
+    expect(LaunchablesState.selectIndex(ready, 99)).toBe(ready)
+    expect(LaunchablesState.selectIndex(ready, -1)).toBe(ready)
+  })
+
+  it("clears a stale notice when selection moves", () => {
+    if (ready._tag !== "Ready") throw new Error("unreachable")
+    const withNotice = LaunchablesState.withNotice(ready, "old failure")
+    const next = LaunchablesState.selectIndex(withNotice, 2)
+    if (next._tag !== "Ready") throw new Error("unreachable")
+    expect(next.notice).toBeNull()
+  })
+})

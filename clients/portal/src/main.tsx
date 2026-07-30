@@ -12,6 +12,7 @@ import {
 import { createInputBus } from "./input/bus"
 import { createKeyboardAdapter } from "./input/keyboard-adapter"
 import { createKorriNativeAdapter } from "./input/korri-native-adapter"
+import { createPointerAdapter } from "./input/pointer-adapter"
 import {
   createHttpKorridClient,
   createInMemoryKorridClient,
@@ -37,6 +38,7 @@ declare global {
 const bus = createInputBus()
 bus.use(createKeyboardAdapter())
 bus.use(createKorriNativeAdapter())
+bus.use(createPointerAdapter())
 
 const bridge = window.KorriNative
   ? createKorriNativeLauncherBridge(window.KorriNative)

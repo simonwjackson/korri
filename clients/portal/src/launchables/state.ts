@@ -280,6 +280,19 @@ export const LaunchablesState = {
       : { ...state, selectedIndex: next, notice: null }
   },
 
+  /**
+   * Move selection to an exact entry, as a pointer does. Out-of-range indices
+   * are ignored rather than clamped: a stale index from a list that changed
+   * under the user should do nothing, not activate a neighbour.
+   */
+  selectIndex: (state: LaunchablesState, index: number): LaunchablesState => {
+    if (state._tag !== "Ready") return state
+    if (index < 0 || index >= state.entries.length) return state
+    return index === state.selectedIndex
+      ? state
+      : { ...state, selectedIndex: index, notice: null }
+  },
+
   selected: (state: LaunchablesState): Maybe<PortalEntry> => {
     if (state._tag !== "Ready") return { _tag: "None" }
     const entry = state.entries[state.selectedIndex]
