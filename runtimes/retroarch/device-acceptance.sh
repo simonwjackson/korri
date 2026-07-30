@@ -25,6 +25,10 @@ stock_before="$("${ADB[@]}" shell pm path "$STOCK_PACKAGE" 2>/dev/null || true)"
   echo 'stock RetroArch must be installed for the coexistence gate' >&2
   exit 1
 }
+[[ -z "$("${ADB[@]}" shell pidof "$STOCK_PACKAGE" | tr -d '\r')" ]] || {
+  echo 'stock RetroArch must be stopped before the coexistence gate' >&2
+  exit 1
+}
 [[ "$("${ADB[@]}" shell pm path "$FORK_PACKAGE" 2>/dev/null || true)" == package:* ]] || {
   echo 'Korri RetroArch is not installed' >&2
   exit 1
@@ -111,11 +115,21 @@ wait_stopped() {
   echo 'fork did not stop after graceful QUIT' >&2
   return 1
 }
+launch_first_entry() {
+  # The page title precedes completion of the async source fold. Retry confirm
+  # only while no fork process exists, so a slow host-status request cannot
+  # turn one intended launch into multiple standard activities.
+  for _ in $(seq 1 10); do
+    "${ADB[@]}" shell input -d 0 keyevent KEYCODE_ENTER
+    sleep 2
+    [[ -n "$("${ADB[@]}" shell pidof "$FORK_PACKAGE" | tr -d '\r')" ]] && return 0
+  done
+  echo 'portal did not launch the first local-game entry' >&2
+  return 1
+}
 
-# Wario Land 4 is the first entry when there is no active host session. The
-# page title precedes completion of the async source fold, so allow it to settle.
-sleep 2
-"${ADB[@]}" shell input -d 0 keyevent KEYCODE_ENTER
+# Wario Land 4 is the first entry when there is no active host session.
+launch_first_entry
 status_first="$(wait_playing)"
 pid_first="$("${ADB[@]}" shell pidof "$FORK_PACKAGE" | tr -d '\r')"
 [[ -n "$pid_first" ]] || { echo 'fork process is missing after launch' >&2; exit 1; }
@@ -152,8 +166,7 @@ fi
 # Relaunch through Korri again; verbose runtime logging proves the non-empty
 # auto-state was loaded successfully rather than merely left on disk.
 "${ADB[@]}" shell am start --display 0 -n "$KORRI_ACTIVITY" >/dev/null
-sleep 2
-"${ADB[@]}" shell input -d 0 keyevent KEYCODE_ENTER
+launch_first_entry
 status_second="$(wait_playing)"
 "${ADB[@]}" shell "test -s '$STATE_FILE'"
 auto_load_log="$("${ADB[@]}" logcat -d 2>/dev/null | \
@@ -180,7 +193,10 @@ grep -q "$KORRI_PACKAGE/com.limelight.KorriShellActivity" <<<"$resumed" || {
   echo "Korri did not resume on display 0 after graceful quit: $resumed" >&2
   exit 1
 }
-[[ -z "$("${ADB[@]}" shell pidof "$STOCK_PACKAGE" | tr -d '\r')" ]]
+[[ -z "$("${ADB[@]}" shell pidof "$STOCK_PACKAGE" | tr -d '\r')" ]] || {
+  echo 'acceptance unexpectedly left stock RetroArch running' >&2
+  exit 1
+}
 stock_after="$("${ADB[@]}" shell pm path "$STOCK_PACKAGE" 2>/dev/null || true)"
 [[ "$stock_after" == "$stock_before" ]] || {
   echo 'stock RetroArch package path changed during acceptance' >&2
