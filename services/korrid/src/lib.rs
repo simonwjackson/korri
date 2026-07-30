@@ -9,6 +9,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::{
     net::{Ipv4Addr, SocketAddrV4, TcpListener as StdTcpListener},
+    path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     thread::JoinHandle,
 };
@@ -95,6 +96,39 @@ pub struct SessionStopResult {
 
 #[typeshare]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LocalGamesListRequest {}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LocalGames {
+    pub games: Vec<launcher::LocalGame>,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalGameLaunchRequest {
+    pub game_id: String,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum LocalGamesListOutcome {
+    Ok(LocalGames),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "_tag", content = "payload")]
+pub enum LocalGameLaunchOutcome {
+    Ok(launcher::LaunchSpec),
+    Err(RpcFailure),
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HealthRequest {}
 
 #[typeshare]
@@ -162,6 +196,10 @@ pub enum RpcRequest {
     SessionStatus(SessionStatusRequest),
     #[serde(rename = "app.session.stop")]
     SessionStop(SessionStopRequest),
+    #[serde(rename = "app.local-games.list")]
+    LocalGamesList(LocalGamesListRequest),
+    #[serde(rename = "app.local-games.launch")]
+    LocalGameLaunch(LocalGameLaunchRequest),
     #[serde(rename = "system.health")]
     Health(HealthRequest),
 }
@@ -178,6 +216,10 @@ pub enum RpcResponse {
     SessionStatus(SessionStatusOutcome),
     #[serde(rename = "app.session.stop")]
     SessionStop(SessionStopOutcome),
+    #[serde(rename = "app.local-games.list")]
+    LocalGamesList(LocalGamesListOutcome),
+    #[serde(rename = "app.local-games.launch")]
+    LocalGameLaunch(LocalGameLaunchOutcome),
     #[serde(rename = "system.health")]
     Health(HealthOutcome),
 }
@@ -186,6 +228,19 @@ pub enum RpcResponse {
 struct AppState {
     upstream: upstream::UpstreamClient,
     rpc_capability: String,
+    local_storage_root: PathBuf,
+}
+
+fn local_launch_failure(error: launcher::LaunchError) -> RpcFailure {
+    let code = match &error {
+        launcher::LaunchError::UnknownGame(_) => "LocalGameNotFound",
+        launcher::LaunchError::RomMissing(_) => "LocalRomMissing",
+        launcher::LaunchError::Config(_) => "LocalConfigWriteFailed",
+    };
+    RpcFailure {
+        code: code.into(),
+        message: error.to_string(),
+    }
 }
 
 fn upstream_failure(error: upstream::UpstreamError) -> RpcFailure {
@@ -311,6 +366,17 @@ async fn dispatch(state: &AppState, request: RpcRequest) -> RpcResponse {
                 .session_stop(request.force.unwrap_or(false))
                 .await,
         )),
+        RpcRequest::LocalGamesList(_) => {
+            RpcResponse::LocalGamesList(LocalGamesListOutcome::Ok(LocalGames {
+                games: launcher::local_games(),
+            }))
+        }
+        RpcRequest::LocalGameLaunch(request) => {
+            let outcome = launcher::launch_game(&state.local_storage_root, &request.game_id)
+                .map(LocalGameLaunchOutcome::Ok)
+                .unwrap_or_else(|error| LocalGameLaunchOutcome::Err(local_launch_failure(error)));
+            RpcResponse::LocalGameLaunch(outcome)
+        }
         RpcRequest::Health(_) => RpcResponse::Health(HealthOutcome::Ok(Health {
             version: VERSION.into(),
         })),
@@ -333,12 +399,31 @@ async fn rpc(
     Ok(Json(dispatch(&state, request).await))
 }
 
+fn default_local_storage_root() -> PathBuf {
+    std::env::var_os("KORRI_LOCAL_STORAGE_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("korri-retro"))
+}
+
 /// Build the localhost router protected by a per-server bearer capability.
 /// The exact portal origin is the only browser origin allowed to send it.
 pub fn router_with_capability(rpc_capability: &str, allowed_origin: &str) -> Router {
+    router_with_capability_and_local_root(
+        rpc_capability,
+        allowed_origin,
+        default_local_storage_root(),
+    )
+}
+
+pub fn router_with_capability_and_local_root(
+    rpc_capability: &str,
+    allowed_origin: &str,
+    local_storage_root: impl AsRef<Path>,
+) -> Router {
     let state = AppState {
         upstream: upstream::UpstreamClient::new(upstream::UpstreamConfig::from_env()),
         rpc_capability: rpc_capability.into(),
+        local_storage_root: local_storage_root.as_ref().to_owned(),
     };
     let origin: HeaderValue = allowed_origin
         .parse()
@@ -474,6 +559,7 @@ pub fn local_server_capability() -> Option<String> {
         .map(|server| server.rpc_capability.clone())
 }
 
+pub mod launcher;
 pub mod upstream;
 
 #[cfg(target_os = "android")]
@@ -538,6 +624,35 @@ mod tests {
             serde_json::to_value(SessionStopRequest { force: None }).unwrap(),
             serde_json::json!({})
         );
+    }
+
+    #[tokio::test]
+    async fn local_games_rpc_lists_wario_land_from_the_device_brain() {
+        let root = tempfile::tempdir().unwrap();
+        let app = router_with_capability_and_local_root(
+            "right-token",
+            "https://portal.example",
+            root.path(),
+        );
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, "Bearer right-token")
+                    .body(Body::from(
+                        r#"{"_tag":"app.local-games.list","payload":{}}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8_lossy(&body);
+        assert!(body.contains("app.local-games.list"));
+        assert!(body.contains("Wario Land 4"));
     }
 
     #[tokio::test]

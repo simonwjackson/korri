@@ -9,6 +9,11 @@ export interface ActiveSession {
 	phase?: string;
 }
 
+export interface AndroidComponent {
+	packageName: string;
+	className: string;
+}
+
 export interface Game {
 	id: string;
 	title: string;
@@ -26,6 +31,29 @@ export interface Health {
 }
 
 export interface HealthRequest {
+}
+
+export interface LaunchSpec {
+	launcherId: string;
+	component: AndroidComponent;
+	extras: Record<string, string>;
+}
+
+export interface LocalGame {
+	id: string;
+	title: string;
+	system: string;
+}
+
+export interface LocalGameLaunchRequest {
+	gameId: string;
+}
+
+export interface LocalGames {
+	games: LocalGame[];
+}
+
+export interface LocalGamesListRequest {
 }
 
 export interface RpcFailure {
@@ -69,11 +97,21 @@ export type HealthOutcome =
 	| { _tag: "Ok", payload: Health }
 	| { _tag: "Err", payload: RpcFailure };
 
+export type LocalGameLaunchOutcome =
+	| { _tag: "Ok", payload: LaunchSpec }
+	| { _tag: "Err", payload: RpcFailure };
+
+export type LocalGamesListOutcome =
+	| { _tag: "Ok", payload: LocalGames }
+	| { _tag: "Err", payload: RpcFailure };
+
 export type RpcRequest =
 	| { _tag: "app.catalog.snapshot", payload: CatalogSnapshotRequest }
 	| { _tag: "app.session.prepare", payload: SessionPrepareRequest }
 	| { _tag: "app.session.status", payload: SessionStatusRequest }
 	| { _tag: "app.session.stop", payload: SessionStopRequest }
+	| { _tag: "app.local-games.list", payload: LocalGamesListRequest }
+	| { _tag: "app.local-games.launch", payload: LocalGameLaunchRequest }
 	| { _tag: "system.health", payload: HealthRequest };
 
 export type RpcResponse =
@@ -81,6 +119,8 @@ export type RpcResponse =
 	| { _tag: "app.session.prepare", outcome: SessionPrepareOutcome }
 	| { _tag: "app.session.status", outcome: SessionStatusOutcome }
 	| { _tag: "app.session.stop", outcome: SessionStopOutcome }
+	| { _tag: "app.local-games.list", outcome: LocalGamesListOutcome }
+	| { _tag: "app.local-games.launch", outcome: LocalGameLaunchOutcome }
 	| { _tag: "system.health", outcome: HealthOutcome };
 
 export type SessionPrepareOutcome =
